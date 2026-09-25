@@ -1,5 +1,7 @@
 import { Buffer } from "node:buffer";
-import { hashBytes, isChangeableOwnerArtifact, parseBundleRelativePath, parseLowerHexSha256, parseVaultRelativePathText, planOwnedFileTree } from "@developer-os/core";
+import { createHash } from "node:crypto";
+
+import { compareUtf8, isChangeableOwnerArtifact, parseBundleRelativePath, parseLowerHexSha256, parseVaultRelativePathText, planOwnedFileTree } from "@developer-os/core/planner-protocol";
 import type {
   BundleRelativePathV1,
   OwnerRelativePathV1,
@@ -10,7 +12,6 @@ import type {
   PlannerManifestSnapshotV1,
   PlannerPathTokenV1,
 } from "@developer-os/core";
-import { compareCodePoints } from "@developer-os/workflow-schema";
 import { MARKETPLACE_RELATIVE_PATH, PLUGIN_TREE_PREFIX } from "../plugin.js";
 import type { MarketplaceRootArtifact } from "../plugin.js";
 
@@ -28,12 +29,12 @@ function marketplaceRelative(path: string): OwnerRelativePathV1 {
  */
 export function codexTargetEntries(tree: readonly MarketplaceRootArtifact[], bundlePrefix: BundleRelativePathV1): readonly OwnerTargetEntryV1[] {
   return [...tree]
-    .sort((left, right) => compareCodePoints(left.path, right.path))
+    .sort((left, right) => compareUtf8(left.path, right.path))
     .map((artifact): OwnerTargetEntryV1 => {
       const bytes = Buffer.from(artifact.contents, "utf8");
       return {
         path: marketplaceRelative(artifact.path),
-        content: { kind: "target_bundle", path: parseBundleRelativePath(`${bundlePrefix}/${artifact.path}`), bytes: bytes.byteLength, sha256: parseLowerHexSha256(hashBytes(bytes)) },
+        content: { kind: "target_bundle", path: parseBundleRelativePath(`${bundlePrefix}/${artifact.path}`), bytes: bytes.byteLength, sha256: parseLowerHexSha256(createHash("sha256").update(bytes).digest("hex")) },
       };
     });
 }

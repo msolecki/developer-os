@@ -197,11 +197,17 @@ function findNumberValuedStats(
 
 /**
  * Spec 2 §2's capability-absence gate. No shipped planner bundle exists yet, so the entry
- * list is the compiled protocol module every target planner imports; the bundle's own
- * planner entrypoint joins it when the release packer produces one. `lint` builds before
- * this runs, so a missing entrypoint is a failure, never a skip.
+ * list is the compiled protocol module every target planner imports plus the owner and
+ * migration planners a bundle composes; the bundle's own planner entrypoint joins it when the
+ * release packer produces one. `lint` builds before this runs, so a missing entrypoint is a
+ * failure, never a skip.
  */
-const PLANNER_ENTRYPOINTS: readonly string[] = ["packages/core/dist/update/planner.js"];
+const PLANNER_ENTRYPOINTS: readonly string[] = [
+  "packages/core/dist/update/planner.js",
+  "packages/adapter-claude/dist/update/plan.js",
+  "packages/adapter-codex/dist/update/plan.js",
+  "packages/brain/dist/migrations/update/plan.js",
+];
 
 function findPlannerCapabilities(root: string): readonly string[] {
   const problems: string[] = [];

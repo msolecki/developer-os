@@ -57,6 +57,12 @@ interface CheckOutcome {
  * the cases above keep testing only their own rule.
  */
 const PLANNER_ENTRY = "packages/core/dist/update/planner.js";
+/** The owner and migration planners every target planner bundle composes (Spec 2 §2). */
+const PROVIDER_PLANNER_ENTRIES: readonly string[] = [
+  "packages/adapter-claude/dist/update/plan.js",
+  "packages/adapter-codex/dist/update/plan.js",
+  "packages/brain/dist/migrations/update/plan.js",
+];
 
 /**
  * The opt-in authority gate is total the same way: a checkout in which no file constructs a
@@ -77,7 +83,9 @@ async function sandbox(
   sandboxes.push(root);
 
   await run("git", ["init", "-q"], { cwd: root });
-  const planner = options.planner === false || PLANNER_ENTRY in files ? {} : { [PLANNER_ENTRY]: "export const planned = 1;\n" };
+  const planner = options.planner === false
+    ? {}
+    : Object.fromEntries([PLANNER_ENTRY, ...PROVIDER_PLANNER_ENTRIES].map((entry) => [entry, "export const planned = 1;\n"]));
   const optIn = options.optIn === false ? {} : OPT_IN_SEEDS;
   for (const [path, content] of Object.entries({ ...planner, ...optIn, ...files })) {
     const full = join(root, path);
@@ -315,6 +323,15 @@ describe("the repository check gate", () => {
 
     expect(outcome.exitCode).toBe(1);
     expect(outcome.stderr).toContain(`${PLANNER_ENTRY}: ${capability}`);
+  });
+
+  it.each(PROVIDER_PLANNER_ENTRIES)("fails on a filesystem import in the %s provider planner graph", async (entry) => {
+    const root = await sandbox({ [entry]: 'import { readFileSync } from "node:fs";\nexport const read = readFileSync;\n' });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain(`${entry}: ${entry}: filesystem`);
   });
 
   it("follows the planner graph transitively", async () => {

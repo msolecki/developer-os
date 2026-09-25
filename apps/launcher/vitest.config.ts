@@ -5,6 +5,9 @@ import { defineProject } from "vitest/config";
 export default defineProject({
   resolve: {
     alias: {
+      "@developer-os/core/planner-protocol": fileURLToPath(
+        new URL("../../packages/core/src/planner-protocol.ts", import.meta.url),
+      ),
       "@developer-os/core": fileURLToPath(
         new URL("../../packages/core/src/index.ts", import.meta.url),
       ),

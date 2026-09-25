@@ -1,4 +1,4 @@
-import { compareCodePoints } from "@developer-os/workflow-schema";
+import { compareUtf8 } from "@developer-os/core/planner-protocol";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 
 /**
@@ -135,7 +135,7 @@ export function buildPluginTree(
     throw new Error("refusing to build a plugin tree with no skills");
   }
   const tree = [...skills, renderCodexManifest()].sort((left, right) =>
-    compareCodePoints(left.path, right.path),
+    compareUtf8(left.path, right.path),
   );
   /**
    * Two artifacts on one path is one file on disk and two entries in the

@@ -1,12 +1,12 @@
-import {
-  planSchemaMigrations,
-  type BrainConfigV1,
-  type PlannedSchemaMigrationsV1,
-  type PositiveUInt32V1,
-  type SchemaMigrationProviderV1,
-  type SchemaMigrationSubjectV1,
-  type UpdatePlannerRequestV1,
+import type {
+  BrainConfigV1,
+  PlannedSchemaMigrationsV1,
+  PositiveUInt32V1,
+  SchemaMigrationProviderV1,
+  SchemaMigrationSubjectV1,
+  UpdatePlannerRequestV1,
 } from "@developer-os/core";
+import { planSchemaMigrations } from "@developer-os/core/planner-protocol";
 
 /**
  * Discovery's `PRIVATE_FOLDERS`, restated because importing discovery would pull Security's
