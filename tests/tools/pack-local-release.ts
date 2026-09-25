@@ -12,9 +12,10 @@
  * must not exist. It prints the directory's realpath, which is the spelling
  * admission requires.
  */
+import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { lstat, readdir, readFile } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { argv, cwd, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -36,17 +37,24 @@ export function assertRepositoryRoot(workingDirectory: string, repositoryRoot: s
   }
 }
 
-/** Every regular file under `root/directory`, as bundle files at `directory/…`, mode 0600. */
+function git(root: string, args: readonly string[]): string {
+  return execFileSync("git", [...args], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+}
+
+/**
+ * Every committed file under `root/directory`, as bundle files at `directory/…`, mode 0600. Git,
+ * not the working tree, names them: an ignored `.DS_Store` or an untracked draft is never packed,
+ * and an uncommitted edit refuses, so the release is the checkout's committed state.
+ */
 export async function collectTree(root: string, directory: string): Promise<readonly ReleaseFileV1[]> {
-  const base = join(root, directory);
+  if (git(root, ["status", "--porcelain", "--untracked-files=no", "--", directory]).length > 0) {
+    throw new Error(`refusing to pack: ${directory}/ has uncommitted changes`);
+  }
   const files: ReleaseFileV1[] = [];
-  for (const entry of await readdir(base, { recursive: true, withFileTypes: true })) {
-    const path = join(entry.parentPath, entry.name);
-    const stats = await lstat(path);
-    if (stats.isDirectory()) continue;
-    if (!stats.isFile()) throw new Error(`refusing to pack a non-regular file: ${path}`);
-    const relativePath = relative(base, path).split(sep).join("/");
-    files.push({ relativePath: `${directory}/${relativePath}`, bytes: await readFile(path), mode: 0o600 });
+  for (const relativePath of git(root, ["ls-files", "-z", "--", directory]).split("\0").filter((name) => name.length > 0)) {
+    const path = join(root, ...relativePath.split("/"));
+    if (!(await lstat(path)).isFile()) throw new Error(`refusing to pack a non-regular file: ${path}`);
+    files.push({ relativePath, bytes: await readFile(path), mode: 0o600 });
   }
   return files;
 }

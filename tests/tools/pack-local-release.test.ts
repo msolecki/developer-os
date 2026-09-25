@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,7 @@ import { PRODUCT_VERSION } from "@developer-os/cli/dist/context.js";
 import { LOCAL_BUNDLE_CLI_ENTRY } from "@developer-os/cli/dist/update/local-release.js";
 import { admitUnsignedLocalPackagedRelease } from "@developer-os/cli/dist/update/packaged-release.js";
 
-import { pack, THIRD_PARTY_LICENSES, thirdPartyPackageDirectory } from "./pack-local-release.js";
+import { collectTree, pack, THIRD_PARTY_LICENSES, thirdPartyPackageDirectory } from "./pack-local-release.js";
 
 /** This file is `tests/tools/…`, whether run from source or from `tests/dist/tools/…`'s sibling. */
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -43,6 +43,41 @@ async function tree(root: string): Promise<ReadonlyMap<string, string>> {
   }
   return files;
 }
+
+describe("release trees", () => {
+  function git(root: string, ...args: string[]): void {
+    const result = spawnSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", ...args], { cwd: root, encoding: "utf8" });
+    if (result.status !== 0) throw new Error(result.stderr);
+  }
+
+  async function checkout(): Promise<string> {
+    const root = await temporary();
+    git(root, "init", "-q");
+    await mkdir(join(root, "instructions", "nested"), { recursive: true });
+    await writeFile(join(root, ".gitignore"), "instructions/.DS_Store\n");
+    await writeFile(join(root, "instructions", "nested", "tracked.md"), "tracked\n");
+    git(root, "add", ".");
+    git(root, "commit", "-q", "-m", "fixture");
+    return root;
+  }
+
+  it("packs only tracked files, never an ignored or untracked one", async () => {
+    const root = await checkout();
+    await writeFile(join(root, "instructions", ".DS_Store"), "finder\n");
+    await writeFile(join(root, "instructions", "draft.md"), "private draft\n");
+
+    const files = await collectTree(root, "instructions");
+
+    expect(files.map((file) => file.relativePath)).toStrictEqual(["instructions/nested/tracked.md"]);
+  });
+
+  it("refuses a tree with uncommitted changes to a tracked file", async () => {
+    const root = await checkout();
+    await writeFile(join(root, "instructions", "nested", "tracked.md"), "edited\n");
+
+    await expect(collectTree(root, "instructions")).rejects.toThrow(/uncommitted/u);
+  });
+});
 
 describe("third-party package directory", () => {
   it("finds the installed package of a bundled input, scoped or not, and skips workspace files", () => {
