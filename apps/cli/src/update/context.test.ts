@@ -78,6 +78,18 @@ describe("readHome", () => {
     });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("refuses an unparseable executor record the V1 ledger cannot see as recovery-required, read-only", async () => {
+    const fixture = await installed("update-home-executor-third-state");
+    await nodeFs.writeFile(join(fixture.paths.stateDir, "update-executor.json"), "\u0000not json");
+    const before = await inventoryDigest(fixture.root);
+
+    expect(await refusal(createCliUpdateContext(fixture.context).readHome())).toMatchObject({
+      reason: "update_lifecycle_not_clear",
+      code: EXIT_CODES.recoveryRequired,
+    });
+    expect(await inventoryDigest(fixture.root)).toEqual(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("refuses when the composition root supplied no lifecycle ports", async () => {
     const fixture = await createCommandFixture("update-home-no-lifecycle");
     const context = createCliUpdateContext({ ...fixture.context, lifecycle: undefined });

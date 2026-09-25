@@ -251,6 +251,28 @@ describe("the mutation gate beside update residue", () => {
     });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it.each([
+    ["an orphan executing executor record", "executing"],
+    ["garbage bytes at the executor record", "garbage"],
+  ] as const)("refuses a Spec 1 mutation beside %s, a third state closure V2 reports as recovery-required", async (_label, kind) => {
+    const fixture = await sharedV2Home();
+    const id = await coordinatorIdOf(fixture);
+    const home = parseCanonicalAbsolutePathText(fixture.paths.home);
+    const { initial } = executorRecords(id, release(home, "1.1.0", "2"), release(home, "1.0.0", "1"));
+    const bytes = kind === "executing" ? updateRecoveryExecutorRecordBytes(initial) : new TextEncoder().encode("\u0000not json");
+
+    await withPlanted(join(fixture.paths.stateDir, "update-executor.json"), bytes, async () => {
+      const before = await inventoryDigest(fixture.paths.home);
+
+      expect(await refusalOf(mutate(fixture, `beside-${kind}-executor-record`))).toStrictEqual({
+        reason: "lifecycle_update_recovery_required",
+        code: EXIT_CODES.recoveryRequired,
+        recovery: "developer-os doctor",
+      });
+      expect(await inventoryDigest(fixture.paths.home)).toStrictEqual(before);
+    });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("admits the mutation again once the residue is gone", async () => {
     const fixture = await sharedV2Home();
 

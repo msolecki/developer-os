@@ -208,8 +208,9 @@ async function readHome(context: CliContext): Promise<UpdateHomeV1> {
       }),
     ),
   );
-  const ledger = await lifecycle.inspectLedger(lifecycleHomeKeyFromAdmission(admitted, paths), residue);
-  if (ledger.closure.kind !== "clear") refuse("update_lifecycle_not_clear", EXIT_CODES.recoveryRequired, [paths.home], "developer-os doctor");
+  // Closure V2: the V1 ledger cannot see a lone executor record or malformed update residue.
+  const { closure } = await lifecycle.inspectClosureV2(lifecycleHomeKeyFromAdmission(admitted, paths), residue);
+  if (closure.kind !== "clear") refuse("update_lifecycle_not_clear", EXIT_CODES.recoveryRequired, [paths.home], "developer-os doctor");
 
   const evidence = createCanonicalPathEvidence();
   const activePath = join(paths.stateDir, "active-release.json");

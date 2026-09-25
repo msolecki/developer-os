@@ -58,6 +58,8 @@ interface ApplyFixtureOptions {
   readonly overflow?: boolean;
   readonly home?: (home: UpdateHomeV1) => UpdateHomeV1;
   readonly secondPlanner?: CliUpdateContext["planner"];
+  /** Closure V2 reports a third state (an orphan executor record, malformed V2 residue). */
+  readonly thirdStateClosure?: boolean;
 }
 
 interface ApplyFixture {
@@ -239,6 +241,7 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
 
   const closure = (): Promise<LifecycleJournalClosureV2> => {
     alive();
+    if (options.thirdStateClosure === true) return Promise.resolve({ kind: "lifecycle_recovery_required" });
     if (world.coordinator !== null) {
       return Promise.resolve({ kind: "update_recovery", coordinatorId: COORDINATOR, operation: "update_apply", direction: world.coordinator.journal.direction });
     }
@@ -369,6 +372,15 @@ describe("applyUpdate revalidation", () => {
     expect(refusal.reason).toBe("update_state_changed");
     expect(refusal.code).toBe(EXIT_CODES.operationalFailure);
     expect(fixture.allocatorReservations).toBe(0);
+  });
+
+  it("refuses a closure V2 third state under the lock before any reservation", async () => {
+    const fixture = await applyFixture({ thirdStateClosure: true });
+    const refusal = await refusalOf(applyUpdate(fixture.update, fixture.prepared));
+    expect(refusal.reason).toBe("update_ledger_not_clear");
+    expect(refusal.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(fixture.allocatorReservations).toBe(0);
+    expect(fixture.world.construction).toBe("absent");
   });
 
   it("consumes only an allocator gap when the exact post-allocation projection overflows", async () => {

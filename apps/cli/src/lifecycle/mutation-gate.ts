@@ -33,8 +33,8 @@ import type {
   ExitCode,
   HeldLifecycleStableLockV1,
   LifecycleBookkeepingResidueV1,
-  LifecycleJournalClosureV2,
   LifecycleLedgerSnapshotV1,
+  LifecycleLedgerV2SnapshotV1,
   LifecycleParticipantAdaptersV1,
   ManifestAdmissionContextV1,
   PlannedFileMutation,
@@ -482,7 +482,21 @@ function requireResolvedClosure(
  * may resume it, so the recovery names that command. A lone executor record is invisible to the
  * V1 scan, which is why this reads closure V2 rather than trusting the V1 snapshot.
  */
-function refuseUpdateResidue(closure: LifecycleJournalClosureV2, paths: RuntimePaths): void {
+function refuseUpdateResidue({ closure, observation }: LifecycleLedgerV2SnapshotV1<unknown>, paths: RuntimePaths): void {
+  const updateResidue =
+    observation.malformed ||
+    observation.updateCoordinators.length + observation.constructions.length > 0 ||
+    observation.executorRecord !== null;
+  if (closure.kind === "lifecycle_recovery_required" && updateResidue) {
+    // §9.2's third states (malformed V2 residue, an orphan executor record, two envelopes) are
+    // ordinary recovery-required, which the V1 snapshot cannot see: preserve the evidence.
+    throw new LifecycleMutationRefusal({
+      reason: "lifecycle_update_recovery_required",
+      code: EXIT_CODES.recoveryRequired,
+      paths: [paths.home],
+      recovery: "developer-os doctor",
+    });
+  }
   if (closure.kind !== "update_recovery" && closure.kind !== "update_construction_cleanup" && closure.kind !== "update_executor_cleanup") {
     return;
   }
@@ -547,7 +561,7 @@ export async function withLifecycleMutation<T>(
         }),
       ),
     );
-    refuseUpdateResidue((await lifecycle.inspectClosureV2(key, residue)).closure, context.paths);
+    refuseUpdateResidue(await lifecycle.inspectClosureV2(key, residue), context.paths);
     await cleanAllocatorTemp(context, lifecycle, key, residue, held);
     await deriveManifestAnchor(context, lifecycle, key, residue);
 

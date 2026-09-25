@@ -141,11 +141,12 @@ export function recoverUpdate(update: CliUpdateContext): Promise<UpdateRecoveryR
 }
 
 /**
- * Spec 2 §9.1: the guarded home, the retained rollback evidence, and a fresh planner run over the
+ * Spec 2 §9.1: a clear V2 closure, the guarded home, the retained rollback evidence, and a fresh planner run over the
  * same verified scratch must reproduce the pre-lock candidate exactly; then aggregate feasibility
  * is rechecked against a fresh capacity observation. Nothing is reserved or written before this.
  */
-async function revalidate(update: CliUpdateContext, prepared: PreparedUpdateApplyV1): Promise<{ readonly home: UpdateHomeV1; readonly materialized: MaterializedUpdateV1 }> {
+async function revalidate(update: CliUpdateContext, ports: UpdateApplyPortsV1, prepared: PreparedUpdateApplyV1): Promise<{ readonly home: UpdateHomeV1; readonly materialized: MaterializedUpdateV1 }> {
+  if ((await ports.closure()).kind !== "clear") refuse("update_ledger_not_clear", EXIT_CODES.recoveryRequired, "developer-os doctor");
   const home = await update.readHome();
   if (!sameJson(home, prepared.home)) refuse("update_state_changed", EXIT_CODES.operationalFailure, RERUN);
   const retained = home.rollback === null ? null : await update.readRollbackEvidence(home, home.rollback);
@@ -208,7 +209,7 @@ export async function applyUpdate(update: CliUpdateContext, prepared: PreparedUp
   try {
     const ports = updateApplyPorts(update);
     return await ports.withGlobalLock(async () => {
-      const { home, materialized } = await revalidate(update, prepared);
+      const { home, materialized } = await revalidate(update, ports, prepared);
       const coordinatorId = await ports.allocate();
       const composition = await ports.compose({ coordinatorId, home, inputs: prepared.inputs, materialized });
       const plan = composition.construction;
