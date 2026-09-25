@@ -303,6 +303,38 @@ describe("selectLauncherCandidate", () => {
     });
   });
 
+  it("admits the retained rollback release's metadata beside the active release's", async () => {
+    const { fs, active } = activeFixture();
+    const installed = Object.fromEntries(Object.entries(active).filter(([key]) => key !== "schemaVersion" && key !== "activatedAt"));
+    const previous = {
+      ...installed,
+      version: "1.0.0",
+      releaseSequence: "1",
+      releaseIdentityHash: sha256(Buffer.from("previous-identity")),
+      delegationHash: sha256(Buffer.from("previous-delegation")),
+      releaseIndexHash: sha256(Buffer.from("previous-index")),
+      bundleManifestHash: sha256(Buffer.from("previous-bundle")),
+      bundleRoot: `${PRODUCT_HOME}/releases/1.0.0/darwin-arm64`,
+    };
+    fs.setFile(`${PRODUCT_HOME}/state/update-rollback.json`, canonicalBytes({
+      schemaVersion: 1,
+      installed,
+      previous,
+      executionBindingHash: sha256(Buffer.from("execution-binding")),
+      rollbackBindingHash: sha256(Buffer.from("rollback-binding")),
+      payloadId: `rb_${"d".repeat(64)}_1`,
+      payloadInventoryHash: sha256(Buffer.from("inventory")),
+      inversePlanHash: sha256(Buffer.from("inverse-plan")),
+      createdAt: "2026-09-22T00:00:00.000Z",
+    }));
+    for (const [store, hash] of [["delegations", previous.delegationHash], ["indexes", previous.releaseIndexHash], ["bundles", previous.bundleManifestHash]] as const) {
+      fs.setFile(`${PRODUCT_HOME}/state/release-metadata/${store}/${hash}.json`, canonicalBytes({ previous: true }));
+      fs.addChild(`${PRODUCT_HOME}/state/release-metadata/${store}`, `${hash}.json`);
+    }
+
+    await expect(selectLauncherCandidate(baseRequest(fs))).resolves.toMatchObject({ kind: "active_release" });
+  });
+
   it("refuses when the retained delegation store holds an extra file", async () => {
     const { fs } = activeFixture();
     const directory = `${PRODUCT_HOME}/state/release-metadata/delegations`;

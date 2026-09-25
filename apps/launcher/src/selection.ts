@@ -4,10 +4,12 @@ import {
   decodeUpdateExecutorRecordSlot,
   isUnsignedLocalTrust,
   LifecycleRecoveryRequiredError,
+  MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
   parseCanonicalAbsolutePathText,
   validateActiveReleaseRecord,
   validateBundleManifest,
   validateReleaseTrustState,
+  validateRollbackRecord,
 } from "@developer-os/core";
 import type {
   ActiveReleaseRecordV1,
@@ -17,6 +19,7 @@ import type {
   LowerHexSha256,
   ReleaseBundleManifestV1,
   ReleaseIdentityV1,
+  RollbackRecordV1,
   UpdateRecoveryExecutorRecordV1,
 } from "@developer-os/core";
 import {
@@ -294,18 +297,42 @@ async function admitActiveRelease(
     recoveryRequired("launcher_active_release_not_dominated_by_trust", trustPath);
   }
 
-  return admitRetainedRelease(request, active, "exact_stores");
+  const rollback = await readRollbackRecord(request);
+  if (rollback !== null && rollback.installed.releaseIdentityHash !== active.releaseIdentityHash) {
+    recoveryRequired("launcher_rollback_record_foreign", derive(productHome, "state/update-rollback.json"));
+  }
+  return admitRetainedRelease(request, active, { retainedBeside: rollback?.previous ?? null });
+}
+
+/** Absent, or fresh `init`'s empty reservation: no rollback identity is retained. */
+async function readRollbackRecord(request: LauncherSelectionRequestV1): Promise<RollbackRecordV1 | null> {
+  const path = derive(request.productHome, "state/update-rollback.json");
+  const entry = await request.fs.lstat(path);
+  if (entry === null) return null;
+  if (entry.kind !== "regular_file" || entry.ownerUid !== request.effectiveUid || entry.mode !== 0o600 || entry.nlink !== 1 || BigInt(entry.size) > BigInt(MAXIMUM_ROLLBACK_DOCUMENT_BYTES)) {
+    recoveryRequired("launcher_rollback_record_invalid", path);
+  }
+  if (entry.size === "0") return null;
+  try {
+    return validateRollbackRecord(
+      decodeCanonicalJson(await request.fs.readRegular(entry, MAXIMUM_ROLLBACK_DOCUMENT_BYTES), MAXIMUM_ROLLBACK_DOCUMENT_BYTES),
+      createCanonicalPathEvidence(),
+    );
+  } catch {
+    return recoveryRequired("launcher_rollback_record_invalid", path);
+  }
 }
 
 /**
  * The retained-metadata and bundle admission shared by the active and recorded-executor routes.
- * Only a clear state has exact store-set equality; while an update executes, the target's
- * metadata already sits beside the current release's, so the executing route checks by hash.
+ * Only a clear state has exact store-set equality, to the active plus the retained rollback
+ * release; while an update executes, the target's metadata already sits beside the current
+ * release's, so the executing route checks by hash.
  */
 async function admitRetainedRelease(
   request: LauncherSelectionRequestV1,
   active: ReleaseIdentityV1,
-  stores: "exact_stores" | "contains_release",
+  stores: { readonly retainedBeside: ReleaseIdentityV1 | null } | "contains_release",
 ): Promise<AdmittedReleaseBundleV1> {
   const { fs, productHome, effectiveUid, verifyRetainedDocument } = request;
   const delegationsRoot = derive(productHome, "state/release-metadata/delegations");
@@ -317,10 +344,13 @@ async function admitRetainedRelease(
     recoveryRequired("launcher_release_root_invalid", active.bundleRoot);
   }
 
-  if (stores === "exact_stores") {
-    await assertExactStoreSet(fs, delegationsRoot, [`${active.delegationHash}.json`], effectiveUid);
-    await assertExactStoreSet(fs, indexesRoot, [`${active.releaseIndexHash}.json`], effectiveUid);
-    await assertExactStoreSet(fs, bundlesRoot, [`${active.bundleManifestHash}.json`], effectiveUid);
+  if (stores !== "contains_release") {
+    const identities = stores.retainedBeside === null ? [active] : [active, stores.retainedBeside];
+    const names = (hash: (identity: ReleaseIdentityV1) => LowerHexSha256): readonly string[] =>
+      [...new Set(identities.map((identity) => `${hash(identity)}.json`))];
+    await assertExactStoreSet(fs, delegationsRoot, names((identity) => identity.delegationHash), effectiveUid);
+    await assertExactStoreSet(fs, indexesRoot, names((identity) => identity.releaseIndexHash), effectiveUid);
+    await assertExactStoreSet(fs, bundlesRoot, names((identity) => identity.bundleManifestHash), effectiveUid);
   }
 
   await admitRetainedDocument(
