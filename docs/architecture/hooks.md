@@ -434,7 +434,8 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   so in both the second line runs while the guards read it as part of the first. Closing it
   changes normative spec text.
 - **`recursive-delete-root`, `force-push` and `hook-bypass` read only a segment's first token.**
-  `sudo rm -rf /`, `rm -rf /*`, `env git push -f`, `FOO=1 git push -f`, `(git push -f)` and
+  `sudo rm -rf /`, `rm -rf /*`, `env git push -f`, `FOO=1 git push -f`, `(git push -f)`,
+  `(cd a` ⏎ `git push --force)` (the last token reads `--force)`), ``x=`git push --force` `` and
   `git -c core.hooksPath=/dev/null commit` pass them. Task 2's parity check decides the rules;
   `it.todo` rows in the guard tests list the cases.
 - **`pipe-to-shell` is a heuristic, not a shell parser.** `| /bin/sh` is blocked (the rule admits

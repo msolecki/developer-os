@@ -148,5 +148,7 @@ describe("a prefixed git call (residual in hooks.md §3.8)", () => {
   it.todo("blocks force-push: env git push -f");
   it.todo("blocks force-push: FOO=1 git push -f");
   it.todo("blocks force-push: (git push -f)");
+  it.todo("blocks force-push: a subshell whose last line ends in `--force)`");
+  it.todo("blocks force-push: x=`git push --force`");
   it.todo("blocks hook-bypass: git -c core.hooksPath=/dev/null commit");
 });
