@@ -242,6 +242,16 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   resolved against the canonical `cwd`; Spec 1 §4.2 (`specs/2026-08-21-developer-os-opt-in-surfaces-design.md`)
   refuses a backslash in `GitConfigQuotedPathV1`, matching Core's `CanonicalAbsolutePathV1`. Also
   decided: Spec 2 apply is parked (NEW-110) and the full suite runs now on `59b2c17`.
+- **D62 (2026-09-25), after the whole-phase reviews.** (1) Hooks spec §5.2 step 3 is amended: every
+  run of LF/CR/CRLF collapses to one LF, and `shellSegments` treats an unquoted LF like `;`, so a
+  command on its own line reaches `force-push`, `hook-bypass` and `recursive-delete-root` (phase 6
+  review C1). (2) Spec wording follows code already accepted by review: G1's executable charset admits
+  `@` (Homebrew `node@24`); §11 records `| /bin/sh` as blocked; the 32-record firing-record cap cleanup
+  stays open; A12 conflict-evidence bounds are 1 MiB / 1,000 lines; A12b loads the redaction key before
+  vendor selection. (3) Plan 1b Git sync: fix I2 (adoption publishes missing fan-out directories in the
+  `enable` effect) and I3 (push advertises the destination ref and sends only new objects, no
+  `--thin`); I4 (packed history refuses `git_commit_not_loose`) is an accepted residual until A16.
+  (4) A fourth full-suite run follows these changes and the re-reviews of phases 4b, 6 and 9.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
