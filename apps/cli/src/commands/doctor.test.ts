@@ -1,7 +1,8 @@
 import * as nodeFs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
   encodeCanonicalJson,
@@ -1316,8 +1317,20 @@ describe("instruction checks", () => {
 });
 
 describe("hooks and external-hooks", () => {
-  const HOOK_EXECUTABLE = { node: "/synthetic/bin/node", entrypoint: "/synthetic/bin/developer-os" };
-  const EXECUTABLE = `${HOOK_EXECUTABLE.node} ${HOOK_EXECUTABLE.entrypoint}`;
+  // Real files: doctor checks that the installed command still names an existing Node and entrypoint.
+  let binDirectory = "";
+  let HOOK_EXECUTABLE = { node: "", entrypoint: "" };
+  let EXECUTABLE = "";
+  beforeAll(async () => {
+    binDirectory = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-doctor-hooks-bin-")));
+    HOOK_EXECUTABLE = { node: join(binDirectory, "node"), entrypoint: join(binDirectory, "developer-os") };
+    EXECUTABLE = `${HOOK_EXECUTABLE.node} ${HOOK_EXECUTABLE.entrypoint}`;
+    await nodeFs.writeFile(HOOK_EXECUTABLE.node, "#!/bin/sh\n", { mode: 0o755 });
+    await nodeFs.writeFile(HOOK_EXECUTABLE.entrypoint, "// synthetic entrypoint\n", { mode: 0o644 });
+  });
+  afterAll(async () => {
+    await nodeFs.rm(binDirectory, { recursive: true, force: true });
+  });
   const NOW = new Date("2026-09-22T12:00:00.000Z");
   const CODEX_EXTERNAL = "codex=unknown (config.toml is not read (codex-adapter.md §2.3))";
 
@@ -1338,8 +1351,8 @@ describe("hooks and external-hooks", () => {
     await nodeFs.writeFile(path, contents, { mode: 0o600 });
   }
 
-  async function plantHooks(fixture: CommandFixture, drop?: string): Promise<void> {
-    const rendered = JSON.parse(renderClaudeHooks(HOOK_EXECUTABLE).contents) as {
+  async function plantHooks(fixture: CommandFixture, drop?: string, executable = HOOK_EXECUTABLE): Promise<void> {
+    const rendered = JSON.parse(renderClaudeHooks(executable).contents) as {
       hooks: Record<string, { hooks: { command: string }[] }[]>;
     };
     if (drop !== undefined) {
@@ -1350,6 +1363,13 @@ describe("hooks and external-hooks", () => {
       }
     }
     await plant(hooksFile(fixture), `${JSON.stringify(rendered, null, 2)}\n`);
+  }
+
+  /** `mtime` defaults to before every record the tests plant, so no record reads as stale. */
+  async function plantCodexHooks(fixture: CommandFixture, mtime = new Date("2026-09-20T00:00:00.000Z")): Promise<void> {
+    const path = join(fixture.paths.home, ...PLUGIN_TREE_SEGMENTS, CODEX_HOOKS_PATH);
+    await plant(path, renderCodexHooks(HOOK_EXECUTABLE).contents);
+    await nodeFs.utimes(path, mtime, mtime);
   }
 
   async function plantRecord(
@@ -1421,7 +1441,7 @@ describe("hooks and external-hooks", () => {
   it("warns with the fixed trust step while an installed Codex hook has not fired, and passes once each has", async () => {
     const fixture = await hooksFixture("doctor-hooks-codex");
     expect(CODEX_HOOK_ROWS).toHaveLength(8);
-    await plant(join(fixture.paths.home, ...PLUGIN_TREE_SEGMENTS, CODEX_HOOKS_PATH), renderCodexHooks(HOOK_EXECUTABLE).contents);
+    await plantCodexHooks(fixture);
 
     const unfired = (await checksOf(fixture)).hooks;
     expect(unfired.status).toBe("warn");
@@ -1439,7 +1459,7 @@ describe("hooks and external-hooks", () => {
 
   it("warns with the trust step when Codex path never fired although command shares its event", async () => {
     const fixture = await hooksFixture("doctor-hooks-codex-path");
-    await plant(join(fixture.paths.home, ...PLUGIN_TREE_SEGMENTS, CODEX_HOOKS_PATH), renderCodexHooks(HOOK_EXECUTABLE).contents);
+    await plantCodexHooks(fixture);
     for (const row of CODEX_HOOK_ROWS) {
       if (row.verb !== "path") await plantRecord(fixture, row.verb, "2026-09-22T11:00:00.000Z", "codex");
     }
@@ -1449,6 +1469,33 @@ describe("hooks and external-hooks", () => {
     expect(hooks.status).toBe("warn");
     expect(hooks.message).toContain("command=1h");
     expect(hooks.message).toContain("path=never");
+    expect(hooks.message).toContain(CODEX_UNTRUSTED_HOOK_MESSAGE);
+    expect(hooks.recovery).toBe(CODEX_HOOK_TRUST_STEP);
+  });
+
+  it.each([
+    ["node", () => ({ ...HOOK_EXECUTABLE, node: join(binDirectory, "gone", "node") })],
+    ["entrypoint", () => ({ ...HOOK_EXECUTABLE, entrypoint: join(binDirectory, "gone", "developer-os") })],
+  ])("warns with the re-run init step when the installed command's %s no longer exists", async (_name, executable) => {
+    const fixture = await hooksFixture("doctor-hooks-dead-executable");
+    await plantHooks(fixture, undefined, executable());
+
+    const { hooks } = await checksOf(fixture);
+
+    expect(hooks.status).toBe("warn");
+    expect(hooks.message).toContain("claude=installed");
+    expect(hooks.message).toContain("executable=missing");
+    expect(hooks.recovery).toBe("developer-os init");
+  });
+
+  it("counts a Codex verb whose only record predates the installed hooks file as not fired", async () => {
+    const fixture = await hooksFixture("doctor-hooks-codex-stale");
+    await plantCodexHooks(fixture, new Date("2026-09-22T11:30:00.000Z"));
+    for (const row of CODEX_HOOK_ROWS) await plantRecord(fixture, row.verb, "2026-09-22T11:00:00.000Z", "codex");
+
+    const { hooks } = await checksOf(fixture);
+
+    expect(hooks.status).toBe("warn");
     expect(hooks.message).toContain(CODEX_UNTRUSTED_HOOK_MESSAGE);
     expect(hooks.recovery).toBe(CODEX_HOOK_TRUST_STEP);
   });

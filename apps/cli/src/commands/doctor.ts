@@ -654,6 +654,8 @@ async function checkCodexCapabilities(
 }
 
 export const CODEX_UNTRUSTED_HOOK_MESSAGE = "installed; not observed firing — approve it in Codex if you have not";
+/** A Node upgrade that removes the rendered path makes every hook exit 127, which both vendors ignore. */
+const HOOK_EXECUTABLE_RECOVERY = "developer-os init";
 export const MAX_CLAUDE_SETTINGS_BYTES = 1_048_576;
 const CODEX_EXTERNAL_HOOKS = "codex=unknown (config.toml is not read (codex-adapter.md §2.3))";
 const HOUR_MS = 3_600_000;
@@ -667,6 +669,10 @@ interface InstalledHooks {
   readonly conflicting: boolean;
   /** The prefix every product entry shares; `null` unless exactly one was found. */
   readonly executable: string | null;
+  /** False when the shared prefix names a Node or entrypoint that no longer exists. */
+  readonly executableLive: boolean;
+  /** When the hooks file was last written; a firing record older than this predates the current commands. */
+  readonly writtenAt: number | null;
 }
 
 function field(value: unknown, key: string): unknown {
@@ -685,6 +691,16 @@ function commandsOf(group: unknown): readonly string[] {
     .filter((command): command is string => typeof command === "string");
 }
 
+/** G1 admits no space in either path, so the prefix is exactly `<node> <entrypoint>`. */
+async function executableLive(context: CliContext, prefix: string): Promise<boolean> {
+  try {
+    const [node, entrypoint] = await Promise.all(prefix.split(" ").map((path) => context.fs.stat(path)));
+    return node !== undefined && entrypoint !== undefined && node.isFile() && (node.mode & 0o111) !== 0 && entrypoint.isFile();
+  } catch {
+    return false;
+  }
+}
+
 async function readInstalledHooks(context: CliContext, vendor: HookVendor): Promise<InstalledHooks> {
   let path: string | null = null;
   try {
@@ -696,7 +712,7 @@ async function readInstalledHooks(context: CliContext, vendor: HookVendor): Prom
       text = await readUntrustedText(context, path, MAX_CLAUDE_SETTINGS_BYTES);
     } catch (error) {
       if (error instanceof UntrustedFileRefusal && error.reason === "not_found") {
-        return { state: "not-installed", path, missing: [], conflicting: false, executable: null };
+        return { state: "not-installed", path, missing: [], conflicting: false, executable: null, executableLive: true, writtenAt: null };
       }
       throw error;
     }
@@ -713,15 +729,18 @@ async function readInstalledHooks(context: CliContext, vendor: HookVendor): Prom
       for (const command of commands) prefixes.add(command.slice(0, -suffix.length));
     }
     const [executable] = prefixes;
+    const shared = prefixes.size === 1 && executable !== undefined ? executable : null;
     return {
       state: "installed",
       path,
       missing,
       conflicting: prefixes.size > 1,
-      executable: prefixes.size === 1 && executable !== undefined ? executable : null,
+      executable: shared,
+      executableLive: shared === null || (await executableLive(context, shared)),
+      writtenAt: (await context.fs.stat(path)).mtimeMs,
     };
   } catch {
-    return { state: "unknown", path, missing: [], conflicting: false, executable: null };
+    return { state: "unknown", path, missing: [], conflicting: false, executable: null, executableLive: true, writtenAt: null };
   }
 }
 
@@ -729,6 +748,7 @@ interface VendorHooksReport {
   readonly text: string;
   readonly healthy: boolean;
   readonly unfired: boolean;
+  readonly dead: boolean;
 }
 
 async function reportVendorHooks(
@@ -738,7 +758,7 @@ async function reportVendorHooks(
   installed: InstalledHooks,
 ): Promise<VendorHooksReport> {
   if (installed.state !== "installed") {
-    return { text: `${vendor}=${installed.state}`, healthy: installed.state === "not-installed", unfired: false };
+    return { text: `${vendor}=${installed.state}`, healthy: installed.state === "not-installed", unfired: false, dead: false };
   }
   const lastSeen = new Map<string, number>();
   for (const { verb, record } of (await readHookFiringObservations(stateDirectory, vendor)).records) {
@@ -755,14 +775,21 @@ async function reportVendorHooks(
     ...ages,
     ...(installed.missing.length === 0 ? [] : [`missing=${installed.missing.join(",")}`]),
     ...(installed.conflicting ? ["executable=inconsistent"] : []),
+    ...(installed.executableLive ? [] : ["executable=missing"]),
   ];
   // Spec §8.2: an untrusted Codex hook never fires, and Codex says nothing about it (hooks.md §1 question 6).
   // Per verb: `path` shares `PreToolUse` with `command`, and an untrusted `path` must not hide behind it.
-  const unfired = vendor === "codex" && rows.some((row) => !lastSeen.has(row.verb));
+  // A record older than the hooks file was left by the previous command bytes, which Codex re-gates.
+  const writtenAt = installed.writtenAt ?? -Infinity;
+  const unfired = vendor === "codex" && rows.some((row) => {
+    const seen = lastSeen.get(row.verb);
+    return seen === undefined || seen < writtenAt;
+  });
   return {
     text: unfired ? `${parts.join(" ")} (${CODEX_UNTRUSTED_HOOK_MESSAGE})` : parts.join(" "),
-    healthy: installed.missing.length === 0 && !installed.conflicting && !unfired,
+    healthy: installed.missing.length === 0 && !installed.conflicting && installed.executableLive && !unfired,
     unfired,
+    dead: !installed.executableLive,
   };
 }
 
@@ -775,7 +802,9 @@ async function checkProductHooks(
   const claude = await reportVendorHooks(context, stateDirectory, "claude", installed.claude);
   const codex = await reportVendorHooks(context, stateDirectory, "codex", installed.codex);
   const finding = (claude.healthy && codex.healthy ? pass : warn)("hooks", `${claude.text}; ${codex.text}`, paths);
-  return codex.unfired ? { ...finding, check: { ...finding.check, recovery: CODEX_HOOK_TRUST_STEP } } : finding;
+  // A dead command fires for nobody, so re-rendering it comes before any trust step.
+  const recovery = claude.dead || codex.dead ? HOOK_EXECUTABLE_RECOVERY : codex.unfired ? CODEX_HOOK_TRUST_STEP : null;
+  return recovery === null ? finding : { ...finding, check: { ...finding.check, recovery } };
 }
 
 /** Spec §8.2 (Q2-A): structural only; no command string ever reaches the message. */
