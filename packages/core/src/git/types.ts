@@ -589,7 +589,7 @@ export function validateGitTreeFingerprint(value: unknown, effectiveUid: number)
   const root = exact(input.root, ["ownerUid", "mode", "dev", "ino"], `${label}.root`);
   if (!Array.isArray(input.entries)) fail(`${label}.entries`);
   const rawEntries = input.entries as readonly unknown[];
-  if (rawEntries.length < 1 || rawEntries.length > GIT_TREE_FINGERPRINT_MAX_ENTRIES) fail(`${label}.entries: count`);
+  if (rawEntries.length > GIT_TREE_FINGERPRINT_MAX_ENTRIES) fail(`${label}.entries: count`);
   const entries = rawEntries.map((entry) => parseTreeFingerprintEntry(entry, effectiveUid));
   for (let index = 1; index < entries.length; index += 1) {
     const previous = entries[index - 1] as GitTreeFingerprintEntryV1;
@@ -639,7 +639,7 @@ export function validateGuardedGitPathState(value: unknown, effectiveUid: number
   return {
     state: "directory_tree",
     treeHash: parseLowerHexSha256(input.treeHash),
-    entryCount: integer(input.entryCount, 1, GIT_TREE_FINGERPRINT_MAX_ENTRIES, `${label}.entryCount`),
+    entryCount: integer(input.entryCount, 0, GIT_TREE_FINGERPRINT_MAX_ENTRIES, `${label}.entryCount`),
     ownerUid: parseEffectiveUid(input.ownerUid, effectiveUid),
     mode: parseMode(input.mode, `${label}.mode`),
     dev: parseUInt64Decimal(input.dev),
@@ -670,7 +670,7 @@ export function validatePlannedGitPathState(value: unknown, effectiveUid: number
   return {
     state: "directory_tree",
     treeHash: parseLowerHexSha256(input.treeHash),
-    entryCount: integer(input.entryCount, 1, GIT_TREE_FINGERPRINT_MAX_ENTRIES, `${label}.entryCount`),
+    entryCount: integer(input.entryCount, 0, GIT_TREE_FINGERPRINT_MAX_ENTRIES, `${label}.entryCount`),
     ownerUid: parseEffectiveUid(input.ownerUid, effectiveUid),
     mode: parseMode(input.mode, `${label}.mode`),
     symbolicHead: parseFullBranchRef(input.symbolicHead),

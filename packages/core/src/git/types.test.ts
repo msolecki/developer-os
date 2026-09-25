@@ -286,10 +286,11 @@ describe("GitTreeFingerprintV1 and path states", () => {
     expect(gitTreeFingerprintHash(admitted)).toBe(gitTreeFingerprintHash(validateGitTreeFingerprint(value, UID)));
   });
 
-  it("refuses unsorted, duplicate, empty, oversized, foreign-owner and hard-linked records", () => {
+  it("refuses unsorted, duplicate, oversized, foreign-owner and hard-linked records and admits an empty tree", () => {
     expect(() => validateGitTreeFingerprint(fingerprint([fileEntry("b"), fileEntry("a")]), UID)).toThrow("order");
     expect(() => validateGitTreeFingerprint(fingerprint([fileEntry("a"), fileEntry("a")]), UID)).toThrow("order");
-    expect(() => validateGitTreeFingerprint(fingerprint([]), UID)).toThrow("count");
+    // An empty tree is an enable fan-out directory; the effect plan admits it only at `objects/xx` (D62 (3)).
+    expect(validateGitTreeFingerprint(fingerprint([]), UID).entries).toEqual([]);
     const many = Array.from({ length: 512 }, (_, index) => fileEntry(`f${String(index).padStart(4, "0")}`));
     expect(() => validateGitTreeFingerprint(fingerprint(many), UID)).toThrow("count");
     expect(() => validateGitTreeFingerprint(fingerprint([fileEntry("a")]), UID + 1)).toThrow("EffectiveUidV1");

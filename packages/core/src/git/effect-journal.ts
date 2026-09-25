@@ -219,6 +219,12 @@ function plannedMatchesGuarded(planned: PlannedGitPathStateV1, guarded: GuardedG
   return false;
 }
 
+/** An empty `objects/xx` directory enable publishes for an existing repository (D62 (3)). */
+function isFanOutDirectory(plan: Pick<GitEffectPlanV1, "gitDirectory">, path: CanonicalAbsolutePathV1): boolean {
+  const prefix = `${plan.gitDirectory}/objects/`;
+  return path.startsWith(prefix) && /^[0-9a-f]{2}$/u.test(path.slice(prefix.length));
+}
+
 function assertTransitionShape(
   label: string,
   plan: Pick<GitEffectPlanV1, "side" | "gitDirectory" | "quarantineRoot">,
@@ -229,8 +235,10 @@ function assertTransitionShape(
   if (!transition.role.startsWith(`${plan.side}_`)) fail(`${at}.role: side`);
   const tree = transition.role === "source_git_directory_tree";
   if (tree) {
-    if (transition.path !== plan.gitDirectory || transition.operation !== "create") fail(`${at}: git directory tree`);
+    const fanOut = isFanOutDirectory(plan, transition.path);
+    if ((transition.path !== plan.gitDirectory && !fanOut) || transition.operation !== "create") fail(`${at}: git directory tree`);
     if (transition.after.state !== "directory_tree") fail(`${at}.after`);
+    if ((transition.after.entryCount === 0) !== fanOut) fail(`${at}.after: tree entries`);
   } else if (!transition.path.startsWith(`${plan.gitDirectory}/`)) {
     fail(`${at}.path: containment`);
   }
@@ -673,7 +681,7 @@ export function gitEffectStagingChildren(plan: GitEffectPlanV1): readonly string
       children.add(`${root}/${index.toString(10)}`);
     }
     const staged = evidence.stagedPostimage;
-    if (transition.role === "source_git_directory_tree" && staged?.state === "directory_tree") {
+    if (transition.role === "source_git_directory_tree" && transition.path === plan.gitDirectory && staged?.state === "directory_tree") {
       const branch = staged.symbolicHead.slice("refs/heads/".length) as ValidatedGitBranchV1;
       for (const relative of initialGitDirectoryPaths(branch)) children.add(`post/${index.toString(10)}/${relative}`);
     }

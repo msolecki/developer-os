@@ -861,6 +861,28 @@ async function stageInitialTree(
   };
 }
 
+/** One empty loose-object fan-out directory, as Git itself would create it. */
+async function stageEmptyDirectory(root: EffectRootV1, index: number, branch: string, effectiveUid: number): Promise<GuardedGitPathStateV1> {
+  await ensureDirectory(join(root.quarantineRoot, "post"));
+  const path = root.evidence("post", index);
+  await mkdirOwned(path, 0o755);
+  const identity = await identityOf(path);
+  const fingerprint = validateGitTreeFingerprint(
+    { root: { ownerUid: identity.ownerUid, mode: identity.mode, dev: identity.dev, ino: identity.ino }, entries: [] },
+    effectiveUid,
+  );
+  return {
+    state: "directory_tree",
+    treeHash: gitTreeFingerprintHash(fingerprint),
+    entryCount: 0,
+    ownerUid: fingerprint.root.ownerUid,
+    mode: identity.mode,
+    dev: identity.dev,
+    ino: identity.ino,
+    symbolicHead: parseFullBranchRef(`refs/heads/${branch}`),
+  };
+}
+
 // ---------------------------------------------------------------------------------------------
 // Coordinator plumbing
 
@@ -1239,7 +1261,7 @@ export async function stageManifestPayload(productHome: CanonicalAbsolutePathV1,
   return { dev: identity.dev, ino: identity.ino };
 }
 
-/** §4.1: initialize publishes the minimal tree, adopt adds only the absent fixed remote; otherwise nothing moves. */
+/** §4.1: initialize publishes the minimal tree; an existing repository gains the absent fixed remote and each absent `objects/xx` (D62 (3)). */
 async function stageEnableEffect(
   lifecycle: CliLifecycleContext,
   runtime: GitRuntimeV1,
@@ -1262,6 +1284,18 @@ async function stageEnableEffect(
       evidence: { stagedPostimagePath: root.evidence("post", 0), stagedPostimage: staged, beforeTombstonePath: null, afterTombstonePath: null },
     });
   } else {
+    for (const change of git.changes) {
+      if (change.operation !== "create" || !change.targetPath.startsWith(`${gitDirectory}/objects/`)) continue;
+      const staged = await stageEmptyDirectory(root, transitions.length, git.branch, lifecycle.effectiveUid);
+      transitions.push({
+        role: "source_git_directory_tree",
+        path: change.targetPath,
+        operation: "create",
+        before: { state: "absent" },
+        after: plannedOf(staged),
+        evidence: { stagedPostimagePath: root.evidence("post", transitions.length), stagedPostimage: staged, beforeTombstonePath: null, afterTombstonePath: null },
+      });
+    }
     const configChange = git.changes.find((change) => change.targetPath === `${gitDirectory}/config` && change.operation === "replace");
     if (configChange !== undefined) {
       const configPath = canonical(`${gitDirectory}/config`);
@@ -1270,7 +1304,7 @@ async function stageEnableEffect(
         refuse("lifecycle_preview_stale", EXIT_CODES.decisionRequired, [configPath], "developer-os git enable --remote <url>");
       }
       const after = appendGitRemoteSection(before.bytes, git.remote.declaredUrl);
-      transitions.push(await stageRegularTransition(root, 0, "source_config", configPath, before.state, after, before.state.mode, { kind: "none" }));
+      transitions.push(await stageRegularTransition(root, transitions.length, "source_config", configPath, before.state, after, before.state.mode, { kind: "none" }));
     }
   }
   return effectPlanOf(

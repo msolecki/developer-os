@@ -301,6 +301,9 @@ function sameJson(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(json(left)) === encodeCanonicalJson(json(right));
 }
 
+export const GIT_LOOSE_OBJECT_FAN_OUT: readonly string[] = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, "0"));
+const EMPTY_DIRECTORY_PREVIEW: LifecyclePreviewFileStateV1 = { state: "present", hash: sha256(new Uint8Array()), size: 0 };
+
 function child(parent: CanonicalAbsolutePathV1, relative: string): CanonicalAbsolutePathV1 {
   return parseCanonicalAbsolutePathText(`${parent}/${relative}`);
 }
@@ -787,7 +790,10 @@ export class GitPlanner {
     const source = await this.#inspect(root, request.branch ?? recorded?.branch ?? null);
     if (source.head.semantic.kind !== "symbolic_ref") throw new GitMetadataRefusalError("detached_head");
     const branch = parseValidatedGitBranch(source.head.semantic.value.slice("refs/heads/".length));
-    const changes: LifecyclePreviewFileChangeV1[] = [await this.#remoteChange(gitDirectory, source, remote)];
+    const changes: LifecyclePreviewFileChangeV1[] = [
+      await this.#remoteChange(gitDirectory, source, remote),
+      ...(await this.#missingFanOut(gitDirectory)),
+    ];
     if (recorded !== null && recorded.scope.fingerprint !== scope.fingerprint) {
       changes.push(...(await this.#retirements(request, source)));
     }
@@ -1010,6 +1016,21 @@ export class GitPlanner {
     }
     if (state.pushUrls !== 0 || url !== remote.declaredUrl) refuseGitPlanning("remote_conflict");
     return { role: "source_git", targetPath: configPath, operation: "keep", before, after: before };
+  }
+
+  /**
+   * Git creates `objects/xx` only when an object lands there, and a sync effect publishes no
+   * directory; enable publishes each absent one as an empty directory so every later loose object
+   * has its parent (D62 (3), review I2).
+   */
+  async #missingFanOut(gitDirectory: CanonicalAbsolutePathV1): Promise<LifecyclePreviewFileChangeV1[]> {
+    const changes: LifecyclePreviewFileChangeV1[] = [];
+    for (const prefix of GIT_LOOSE_OBJECT_FAN_OUT) {
+      const targetPath = child(gitDirectory, `objects/${prefix}`);
+      if ((await this.#dependencies.fs.lstat(targetPath)) !== null) continue;
+      changes.push({ role: "source_git", targetPath, operation: "create", before: { state: "absent" }, after: EMPTY_DIRECTORY_PREVIEW });
+    }
+    return changes;
   }
 
   /**

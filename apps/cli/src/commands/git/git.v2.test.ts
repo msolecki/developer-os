@@ -8,7 +8,21 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { EXIT_CODES, encodeCanonicalJson, loadConfig, parseLifecycleActivationRecord, serializeConfig } from "@developer-os/core";
+import {
+  EXIT_CODES,
+  buildGitTree,
+  encodeCanonicalJson,
+  gitCommitObject,
+  gitIndexBytes,
+  gitIndexEntry,
+  gitObject,
+  gitTreeNodes,
+  loadConfig,
+  looseObjectBytes,
+  looseObjectRelativePath,
+  parseLifecycleActivationRecord,
+  serializeConfig,
+} from "@developer-os/core";
 import type { CanonicalJsonValue } from "@developer-os/core";
 
 import { createBootstrapEvidenceInspectionRequest } from "../../bootstrap/context.js";
@@ -444,6 +458,62 @@ describe("git on a real V2 home", () => {
       expect(await readOrNull(join(home.gitDirectory, "refs", "heads", "main"))).toBe(head);
       expect(kindOf(await runGit(home.context, { subcommand: "sync" }))).toBe("git_disabled");
       expect(await closureOf(home)).toBe("clear");
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+});
+
+/** A synthetic one-commit repository with exactly the layout `git init` plus one commit leaves. */
+async function createOneCommitRepository(worktree: string): Promise<void> {
+  const gitDirectory = join(worktree, ".git");
+  for (const directory of ["objects/info", "objects/pack", "refs/heads", "refs/tags", "logs/refs/heads"]) {
+    await nodeFs.mkdir(join(gitDirectory, directory), { recursive: true, mode: 0o755 });
+  }
+  const content = new TextEncoder().encode("adopted\n");
+  await nodeFs.writeFile(join(worktree, "README.md"), content, { mode: 0o644 });
+  const blob = gitObject("blob", content);
+  const entry = gitIndexEntry(new TextEncoder().encode("README.md"), 0o100644, blob.oid, content.byteLength);
+  const root = buildGitTree([entry]);
+  const commit = gitCommitObject(root.object.oid, null, { name: "Synthetic Tester", email: "tester@example.invalid", unixSeconds: 1767225600, utcOffset: "+0000" });
+  for (const object of [blob, ...gitTreeNodes(root).map((node) => node.object), commit]) {
+    const path = join(gitDirectory, looseObjectRelativePath(object.oid));
+    // Git creates a fan-out directory only when an object lands in it.
+    await nodeFs.mkdir(join(path, ".."), { recursive: true, mode: 0o755 });
+    await nodeFs.writeFile(path, looseObjectBytes(object), { mode: 0o444 });
+  }
+  await nodeFs.writeFile(join(gitDirectory, "index"), gitIndexBytes([entry], null), { mode: 0o644 });
+  await nodeFs.writeFile(join(gitDirectory, "HEAD"), "ref: refs/heads/main\n", { mode: 0o644 });
+  await nodeFs.writeFile(join(gitDirectory, "refs", "heads", "main"), `${commit.oid}\n`, { mode: 0o644 });
+  await nodeFs.writeFile(
+    join(gitDirectory, "config"),
+    "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n[user]\n\tname = Synthetic Tester\n\temail = tester@example.invalid\n",
+    { mode: 0o644 },
+  );
+}
+
+describe("git on an adopted repository", () => {
+  it(
+    "publishes the missing loose-object fan-out directories at enable, so the first sync pushes",
+    async () => {
+      const home = await createCommandFixture("git-v2-adopt", {
+        root: await createLowEntropyFixtureRoot("git-v2-adopt"),
+        bootstrapAvailable: true,
+        effectPorts: scriptedEffectPorts(runtime, rejectDestination),
+      });
+      await nodeFs.mkdir(home.paths.brain, { recursive: true, mode: 0o700 });
+      const init = await runInit(home.context, { dryRun: false, assumeYes: true });
+      expect(init.ok, JSON.stringify(init)).toBe(true);
+      await createOneCommitRepository(home.paths.brain);
+      const remote = await createBareRemote(join(home.root, "remote.git"));
+      expect(dataOf(await runGit(home.context, { subcommand: "enable", remote, branch: null, apply: true }))).toMatchObject({
+        kind: "applied",
+        operation: "git_enable",
+      });
+      await writeNote({ ...home, remote, gitDirectory: join(home.paths.brain, ".git") }, "adopted");
+      expect(dataOf(await runGit(home.context, { subcommand: "sync" }))).toMatchObject({ kind: "sync", outcome: "pushed" });
+      const fanOut = (await nodeFs.readdir(join(home.paths.brain, ".git", "objects"))).filter((name) => /^[0-9a-f]{2}$/u.test(name));
+      expect(fanOut).toHaveLength(256);
+      expect(await closureOf({ ...home, remote, gitDirectory: join(home.paths.brain, ".git") })).toBe("clear");
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );

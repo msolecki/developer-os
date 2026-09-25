@@ -230,6 +230,39 @@ describe("the enable tree's staging children", () => {
   });
 });
 
+describe("an enable fan-out directory (D62 (3))", () => {
+  function treeCreate(at: CanonicalAbsolutePathV1, entryCount: number): GitEffectTransitionV1 {
+    const tree = { treeHash: HASH, entryCount, ownerUid: UID, mode: 0o755, symbolicHead: "refs/heads/main" as const };
+    return {
+      role: "source_git_directory_tree",
+      path: at,
+      operation: "create",
+      before: { state: "absent" },
+      after: { state: "directory_tree", ...tree },
+      evidence: {
+        stagedPostimagePath: evidence("post", 0),
+        stagedPostimage: { state: "directory_tree", ...tree, dev: parseUInt64Decimal("16777220"), ino: parseUInt64Decimal("9") },
+        beforeTombstonePath: null,
+        afterTombstonePath: null,
+      },
+    } as unknown as GitEffectTransitionV1;
+  }
+
+  it("publishes an empty objects/xx through the tree role with only its own staging leaf", () => {
+    const plan = buildPlan([treeCreate(path("objects/3a"), 0), configReplace(1)]);
+    expect(validateGitEffectPlan(roundTrip(plan), UID)).toEqual(plan);
+    expect([...parseEffectStagingChildren(gitEffectStagingChildren(plan))].sort()).toEqual(
+      ["after", "after/1", "before", "before/1", "post", "post/0", "post/1"].sort(),
+    );
+  });
+
+  it("refuses an empty .git, a non-empty fan-out directory, and a tree anywhere else", () => {
+    for (const transition of [treeCreate(GIT, 0), treeCreate(path("objects/3a"), 1), treeCreate(path("objects/info"), 0), treeCreate(path("refs/3a"), 0)]) {
+      expect(() => validateGitEffectPlan(roundTrip(buildPlan([transition])), UID)).toThrow("GitEffectPlanV1");
+    }
+  });
+});
+
 describe("journal feasibility", () => {
   it("bounds the widest reachable journal of a feasible plan", () => {
     const transitions = Array.from({ length: 1000 }, (_, index) => objectCreate(index));
