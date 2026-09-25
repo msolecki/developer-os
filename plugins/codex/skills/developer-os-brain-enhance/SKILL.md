@@ -52,7 +52,7 @@ Effect: `brain.readNote`
 
 ### draft
 
-Write the whole revised note, frontmatter and body. Keep every frontmatter key you do not mean to change exactly as it is, created included, and set updated to today's date. Improve the summary, tags, aliases and links to the related notes you read; do not invent facts no note states. Then pass the whole note to the next step, with --note naming the note being revised, on stdin through a quoted heredoc: developer-os capture --note <note> <<'NOTE' ... NOTE
+Write the whole revised note, frontmatter and body. Keep every frontmatter key you do not mean to change exactly as it is, created included, and set updated to today's date. Improve the summary, tags, aliases and links to the related notes you read; do not invent facts no note states. Then pass the whole note to the next step, with --note naming the note being revised, on stdin through a quoted heredoc: developer-os capture --note '<note>' <<'<word>' ... <word>, where <word> is a delimiter that appears on no line of the text.
 
 ### capture
 

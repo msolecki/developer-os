@@ -50,11 +50,14 @@ steps:
       finding, write one new note of type compiled-note on that tag, with
       sources listing the notes it draws on, at a path no note occupies. Pass
       each note to the next step with --note naming its path, on stdin through
-      a quoted heredoc: developer-os capture --note <path> <<'NOTE' ... NOTE.
+      a quoted heredoc: developer-os capture --note '<path>' <<'<word>' ...
+      <word>, where <word> is a delimiter that appears on no line of the text.
       Propose at most limit captures, and at most one per note. For a
-      duplicates finding, do not capture anything: print the developer-os brain
-      refactor --merge or brain retire command with --dry-run for the person
-      to run, and never run either without --dry-run.
+      duplicates finding, do not capture anything: print
+      developer-os brain refactor --merge '<source>' '<target>' --dry-run or
+      developer-os brain retire '<path>' --dry-run for the person to run, and
+      never run either without --dry-run. Keep every path in single quotes, and
+      skip a note whose path contains a single quote.
   - id: propose
     do: capture.writeNote
 validators:

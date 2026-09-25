@@ -245,4 +245,11 @@ describe("isUnsafeProposedNotePath", () => {
     expect(isUnsafeProposedNotePath("DEV/a.md")).toBe(false);
     expect(isUnsafeProposedNotePath("../a.md")).toBe(true);
   });
+
+  it("refuses a single quote and a newline: a skill prints the path single-quoted into a shell command", () => {
+    for (const path of ["DEV/it's.md", "DEV/a'$(id)'.md", "DEV/a\nb.md"]) {
+      expect(isUnsafeProposedNotePath(path), JSON.stringify(path)).toBe(true);
+      expect(parseIngestProposal(proposal({ ...NOTE, path }))).toMatchObject({ ok: false, reason: "unsafe-path" });
+    }
+  });
 });

@@ -55,7 +55,8 @@ steps:
       the related notes you read; do not invent facts no note states. Then
       pass the whole note to the next step, with --note naming the note being
       revised, on stdin through a quoted heredoc:
-      developer-os capture --note <note> <<'NOTE' ... NOTE
+      developer-os capture --note '<note>' <<'<word>' ... <word>,
+      where <word> is a delimiter that appears on no line of the text.
   - id: capture
     do: capture.writeNote
 validators:

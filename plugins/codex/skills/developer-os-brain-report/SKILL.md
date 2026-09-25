@@ -60,7 +60,7 @@ Write the report in four sections: what the vault knows, with a source path for 
 
 ### file-back-gate
 
-Run the next step only when file-back is true. Otherwise the workflow ends here and writes nothing. When it runs, pass the report on stdin through a quoted heredoc: developer-os capture <<'CAPTURE' ... CAPTURE
+Run the next step only when file-back is true. Otherwise the workflow ends here and writes nothing. When it runs, pass the report on stdin through a quoted heredoc: developer-os capture <<'<word>' ... <word>, where <word> is a delimiter that appears on no line of the text.
 
 ### file-back
 

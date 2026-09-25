@@ -52,7 +52,7 @@ Answer only from the notes you read. Name the vault-relative source path for eve
 
 ### file-back-gate
 
-Run the next step only when file-back is true. Otherwise the workflow ends here and writes nothing. When it runs, pass the answer with its source paths on stdin through a quoted heredoc: developer-os capture <<'CAPTURE' ... CAPTURE
+Run the next step only when file-back is true. Otherwise the workflow ends here and writes nothing. When it runs, pass the answer with its source paths on stdin through a quoted heredoc: developer-os capture <<'<word>' ... <word>, where <word> is a delimiter that appears on no line of the text.
 
 ### file-back
 

@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
-import { access } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { access, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { CliResult } from "@developer-os/core";
@@ -221,4 +222,46 @@ export async function runJson<T>(
     throw new Error(`developer-os ${args.join(" ")} timed out`);
   }
   return { ...run, result: parseJsonResult<T>(run) };
+}
+
+/**
+ * Runs `script` through `/bin/sh -c`, in the same sealed environment as
+ * `runCli`, with a `developer-os` executable on its PATH that runs the
+ * compiled binary. For the one thing `runCli` exists to rule out: proving what
+ * a command line a skill prints does once a shell reads it.
+ */
+export async function runShell(
+  home: TempHome,
+  script: string,
+  options: Pick<RunOptions, "env" | "timeoutMs" | "cwd"> = {},
+): Promise<CliRun> {
+  await assertBinaryBuilt();
+  const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+  await writeFile(
+    join(home.binDir, "developer-os"),
+    `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(CLI_ENTRY)} "$@"\n`,
+    { mode: 0o755 },
+  );
+  return new Promise<CliRun>((resolve) => {
+    execFile(
+      "/bin/sh",
+      ["-c", script],
+      {
+        cwd: options.cwd ?? home.root,
+        env: environmentFor(home, options.env),
+        timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        killSignal: "SIGKILL",
+      },
+      (error, stdout, stderr) => {
+        const failure = error as (Error & { code?: unknown; killed?: boolean; signal?: NodeJS.Signals }) | null;
+        resolve({
+          exitCode: failure === null ? 0 : typeof failure.code === "number" ? failure.code : -1,
+          signal: failure?.signal ?? null,
+          stdout,
+          stderr,
+          timedOut: failure?.killed === true,
+        });
+      },
+    );
+  });
 }

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -10,7 +10,7 @@ import type {
 } from "@developer-os/cli/dist/commands/brain.js";
 import type { CaptureResultV1 } from "@developer-os/cli/dist/commands/capture.js";
 
-import { runJson } from "../../helpers/run-cli.js";
+import { runJson, runShell } from "../../helpers/run-cli.js";
 import { addedPaths, inventory, removeTempHome } from "../../helpers/temp-home.js";
 import {
   acceptAndIngest,
@@ -101,6 +101,54 @@ describe("brain-compile, played from its rendered skill", () => {
 
       const lint = await runJson<BrainLintResultV1>(sandbox, ["brain", "lint", "--json"]);
       expect(okData(lint.result).errorCount).toBe(0);
+    } finally {
+      await removeTempHome(sandbox);
+    }
+  });
+
+  it("keeps a hostile note path and a bare heredoc word inert when a shell runs the printed command", async () => {
+    const { home: sandbox, contentRoot } = await installedVault();
+    try {
+      await installForbiddenVendor(sandbox, "claude");
+      await installForbiddenVendor(sandbox, "codex");
+      /** `:` is a shell builtin: the sandbox PATH holds no `touch`. */
+      const hostilePath = "INFRA/x$(:>pwned).md";
+      const tail = "The line after a bare NOTE is still part of the note.";
+      const body = [COMPILED_NOTE, "NOTE", tail].join("\n");
+
+      const skill = await readFile(
+        new URL("../../../plugins/claude/skills/developer-os-brain-compile/SKILL.md", import.meta.url),
+        "utf8",
+      );
+      const printed = /developer-os capture --note \S+ <<'[^']*' \.\.\. \S+/u.exec(skill)?.[0];
+      expect(printed).toBeDefined();
+      const [head = "", word = ""] = (printed ?? "").split(" ... ");
+      /** The agent's choice the prose asks for: a word on no line of the note. */
+      const chosen = "END_OF_COMPILED_NOTE";
+      expect(body.split("\n")).not.toContain(chosen);
+      const script = [
+        head.replace("<path>", hostilePath).replace("<word>", chosen),
+        body,
+        word.replace("<word>", chosen),
+        "",
+      ].join("\n");
+
+      const before = await inventory(sandbox.root);
+      const run = await runShell(sandbox, script);
+      expect(run.exitCode, run.stderr).toBe(EXIT_CODES.success);
+      await expect(access(join(sandbox.root, "pwned"))).rejects.toThrow();
+      const added = addedPaths(before, await inventory(sandbox.root));
+      expect(quarantineOnly(added, contentRoot)).toBe(true);
+      const quarantine = join(contentRoot, "_raw", "quarantine");
+      const stored = (
+        await Promise.all(
+          added
+            .filter((path) => path.startsWith(quarantine))
+            .map(async (path) => readFile(path, "utf8").catch(() => "")),
+        )
+      ).join("\n");
+      expect(stored).toContain(tail);
+      expect(stored).toContain(JSON.stringify(hostilePath).slice(1, -1));
     } finally {
       await removeTempHome(sandbox);
     }

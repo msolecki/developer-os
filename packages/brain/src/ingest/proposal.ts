@@ -131,6 +131,9 @@ export function isUnsafeProposedNotePath(path: string): boolean {
   if (path.length === 0 || path.length > MAX_PROPOSED_PATH_CHARS) return true;
   if (!path.endsWith(NOTE_EXTENSION) || path === NOTE_EXTENSION) return true;
   if (path.includes("\\") || PATH_CONTROL.test(path)) return true;
+  // The Brain skills print a note path single-quoted into a shell command
+  // line; a quote is the one byte that could end that quoting.
+  if (path.includes("'")) return true;
   return path
     .split("/")
     .some((segment) => segment === "" || segment === "." || segment === "..");

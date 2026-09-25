@@ -54,7 +54,8 @@ steps:
       a configured topic folder, that no note occupies yet. Stop with the
       input-invalid refusal when fewer than two notes were read. Then pass the
       note to the next step on stdin through a quoted heredoc:
-      developer-os capture --note <path> <<'NOTE' ... NOTE
+      developer-os capture --note '<path>' <<'<word>' ... <word>,
+      where <word> is a delimiter that appears on no line of the text.
   - id: capture
     do: capture.writeNote
 validators:

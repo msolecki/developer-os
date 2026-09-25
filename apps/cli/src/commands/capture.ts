@@ -386,7 +386,7 @@ async function resolveNoteTarget(
 ): Promise<CaptureNoteTargetV1> {
   if (isUnsafeProposedNotePath(notePath)) {
     throw new CaptureNoteInvalidError(
-      "--note must be a content-root-relative .md path with no empty, . or .. segment, no backslash and no control character",
+      "--note must be a content-root-relative .md path with no empty, . or .. segment, no backslash, no single quote and no control character",
     );
   }
 
