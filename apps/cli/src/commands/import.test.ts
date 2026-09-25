@@ -703,6 +703,21 @@ describe("import --claude-memory", () => {
     expect(await digests(fixture)).toEqual(before);
   });
 
+  it("never follows a project directory that is a symbolic link", async () => {
+    const fixture = await installed("import-memory-project-link");
+    const outside = join(fixture.root, "outside-project");
+    await plant(outside, { "memory/escaped.md": "outside the vendor home" });
+    await plant(projectsOf(fixture), { "-synthetic-alpha/memory/one.md": "alpha memory one" });
+    await nodeFs.symlink(outside, join(projectsOf(fixture), "-synthetic-link"));
+    const probe = spied(fixture.context);
+
+    const data = dataOf(await importMemory(fixture, probe.context));
+
+    expect(data.files.map((file) => file.path.split("/").pop())).toEqual(["one.md"]);
+    const touched = [...probe.listings, ...probe.stats, ...probe.reads];
+    expect(touched.filter((path) => path.includes("-synthetic-link/"))).toEqual([]);
+  });
+
   it("imports memory files, never lists a project directory, and names no vendor path", async () => {
     const fixture = await installed("import-memory");
     await plantMemoryTree(fixture);

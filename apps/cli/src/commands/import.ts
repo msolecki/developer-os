@@ -278,6 +278,8 @@ export async function enumerateClaudeMemory(
     const memory = join(projects, name, layout.memoryDirectory);
     let stats;
     try {
+      // A linked project directory would lead the memory lstat out of the vendor home.
+      if (!(await context.fs.lstat(join(projects, name), { bigint: true })).isDirectory()) continue;
       stats = await context.fs.lstat(memory, { bigint: true });
     } catch (error) {
       if (isMissingEntry(error)) continue;
