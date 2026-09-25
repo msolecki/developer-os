@@ -22,12 +22,22 @@ import { ENTRYPOINT_DIRECTORY, entrypointPath, LOCAL_BUNDLE_CLI_ENTRY } from "./
 const MAX_ACTIVE_RELEASE_BYTES = 16 * 1024;
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 
-/** A file URL, so a `#`, `%` or space in the home cannot change what the specifier names. */
+/**
+ * A file URL, so a `#`, `%` or space in the home cannot change what the specifier names. A release
+ * that cannot load exits 2 for the three security guards: Node's own exit 1 is non-blocking to both
+ * vendors, so a missing bundle would silently allow every guarded call.
+ */
 export function renderEntrypoint(bundleRoot: string): Uint8Array {
   const target = pathToFileURL(join(bundleRoot, LOCAL_BUNDLE_CLI_ENTRY)).href;
   return new TextEncoder().encode(
     "// Developer OS entrypoint, written by `developer-os init`: it loads the active release.\n" +
-      `import ${JSON.stringify(target)};\n`,
+      "try {\n" +
+      `  await import(${JSON.stringify(target)});\n` +
+      "} catch {\n" +
+      "  const [verb, kind] = process.argv.slice(2);\n" +
+      '  process.stderr.write("developer-os: the active release could not be loaded\\n");\n' +
+      '  process.exitCode = verb === "guard" && ["command", "path", "commit"].includes(kind) ? 2 : 1;\n' +
+      "}\n",
   );
 }
 

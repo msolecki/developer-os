@@ -152,7 +152,7 @@ describe("init --local-release writes the version-free entrypoint (D53)", () => 
     const productHome = join(home, ".developer-os");
     const entrypoint = entrypointPath(productHome);
     const target = join(await bundleRoot(home), LOCAL_BUNDLE_CLI_ENTRY);
-    expect(await nodeFs.readFile(entrypoint, "utf8")).toContain(`import ${JSON.stringify(pathToFileURL(target).href)};`);
+    expect(await nodeFs.readFile(entrypoint, "utf8")).toContain(`await import(${JSON.stringify(pathToFileURL(target).href)});`);
     expect((await nodeFs.stat(entrypoint)).mode & 0o777).toBe(0o600);
     expect((await nodeFs.stat(join(productHome, "bin"))).mode & 0o777).toBe(0o700);
     const { manifest } = await readManifest(home);
