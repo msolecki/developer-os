@@ -13,6 +13,7 @@ import type { ProcessRequest, ProcessResult, ProcessRunner } from "@developer-os
 import { ADAPTERS_NEXT_STEP } from "../instructions/apply.js";
 import type { AdapterSelectionV1 } from "../instructions/apply.js";
 import { UNPROVEN_CLAUDE_CATEGORIES } from "../instructions/attach.js";
+import { codexHomeRecordPath } from "../instructions/vendor-homes.js";
 import { loadReleaseWorkflows } from "../instructions/sources.js";
 import { inspectPackagedRelease } from "../update/packaged-release.js";
 import type { ReleaseFileV1 } from "../update/local-release.js";
@@ -251,6 +252,19 @@ describe("init --adapters: fresh install and reconcile (one chained home)", () =
     const config = loadConfig(await nodeFs.readFile(fixture.paths.configFile, "utf8"));
     expect(config.adapters).toStrictEqual({ claude: true, codex: false });
     expect(existsSync(join(installed.claudePlugin, ".claude-plugin", "plugin.json"))).toBe(true);
+    expect(existsSync(codexHomeRecordPath(fixture.paths.home))).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("re-attaches codex under a new CODEX_HOME once it was deselected", async () => {
+    const { fixture } = installed;
+    const moved = join(fixture.userHome, "moved", "codex");
+    await nodeFs.mkdir(dirname(moved), { mode: 0o700 });
+
+    const result = await runInit({ ...fixture.context, env: { ...fixture.context.env, CODEX_HOME: moved } }, options(["claude", "codex"]));
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(existsSync(join(moved, "AGENTS.md"))).toBe(true);
+    expect(existsSync(join(installed.codexHome, "AGENTS.md"))).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 

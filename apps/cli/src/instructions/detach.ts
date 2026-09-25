@@ -23,6 +23,7 @@ import type {
   PlannedFileMutation,
 } from "@developer-os/core";
 
+import { codexHomeRecordPath } from "./vendor-homes.js";
 import type { VendorHomesV1 } from "./vendor-homes.js";
 
 type Vendor = "claude" | "codex";
@@ -141,8 +142,10 @@ function depth(path: string): number {
 export async function planInstructionDetach(input: InstructionDetachInputV1): Promise<InstructionDetachPlanV1> {
   const { homes, fs } = input;
   const vendors = new Set<string>(input.vendors);
+  // The recorded Codex home leaves with the Codex rows, so a later attach may choose another.
+  const record = vendors.has("codex") ? codexHomeRecordPath(homes.productHome) : null;
   const rows = input.manifest.artifacts.filter(
-    (artifact) => vendors.has(artifact.owner) && !within(homes.productHome, artifact.path),
+    (artifact) => vendors.has(artifact.owner) && (!within(homes.productHome, artifact.path) || artifact.path === record),
   );
 
   const mutations: PlannedFileMutation[] = [];

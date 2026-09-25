@@ -383,12 +383,11 @@ export async function applyInstructions(context: CliContext, input: {
   if (selection.includes("codex") && explicitCodexHome !== undefined && isAbsolute(explicitCodexHome)) {
     const requested = codexHomeFromEnv(context.env, context.userHome);
     if (requested !== homes.codexHome) {
-      // ponytail: the record lives with P/codex until uninstall, so moving C means uninstall first.
       throw new InstructionRefusal({
         reason: "codex_home_mismatch",
         code: EXIT_CODES.decisionRequired,
         paths: [homes.codexHome, requested],
-        recovery: `unset CODEX_HOME or set it to ${homes.codexHome}, the Codex home this installation recorded; to move it, uninstall first`,
+        recovery: `unset CODEX_HOME or set it to ${homes.codexHome}, the Codex home this installation recorded; to move it, deselect codex (init --adapters <the others>) first`,
       });
     }
   }
