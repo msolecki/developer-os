@@ -261,6 +261,13 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   heredocs or `$'…'`. A false block is accepted when such text sits inside a heredoc body. Three review
   rounds kept finding tokenizer-versus-bash divergences; this removes the tokenizer from the trust
   path for these rules.
+- **D64 (2026-09-25), closes the guard review rounds.** One last hardening of the D63 line pass: for
+  every line containing `'` or `"`, each fragment between quote characters and the line with `\`, a
+  `$` before `'` and all quotes removed are also candidates (accepted false block: quoted text that
+  starts with a banned command, such as `-m "git push --force is banned"`). After it the command guards
+  are frozen: they stop accidental harmful commands, not an agent that deliberately crafts shell syntax
+  to evade them; further crafted bypasses are recorded as residuals in `docs/architecture/hooks.md`
+  §3.8, not fixed by further tokenizer rounds.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
