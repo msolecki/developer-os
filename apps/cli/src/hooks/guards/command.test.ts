@@ -148,11 +148,11 @@ describe("a command on its own line", () => {
     expect(shellSegments("cd a\nrm -rf b")).toStrictEqual([["cd", "a"], ["rm", "-rf", "b"]]);
     expect(shellSegments("echo 'a\nrm -rf ~' \"b\nc\"")).toStrictEqual([["echo", "a\nrm -rf ~", "b\nc"]]);
     expect(shellSegments("cat <<EOF >f\nrm -rf ~\nEOF\nls")).toStrictEqual([
-      ["cat", "<<EOF", ">f", "rm", "-rf", "~", "EOF"],
+      ["cat", "<<EOF", ">f"],
       ["ls"],
     ]);
     expect(shellSegments("cat <<- 'EOF'\nrm -rf ~\n\tEOF\nls")).toStrictEqual([
-      ["cat", "<<-", "EOF", "rm", "-rf", "~", "EOF"],
+      ["cat", "<<-", "EOF"],
       ["ls"],
     ]);
   });
@@ -165,6 +165,14 @@ describe("a command on its own line", () => {
   it("still splits after a << whose delimiter line never comes", async () => {
     expect(await run("echo $((1<<2))\nrm -rf ~")).toMatchObject({ kind: "block", ruleId: "recursive-delete-root" });
     expect(await run("cat <<EOF\nrm -rf ~")).toMatchObject({ kind: "block", ruleId: "recursive-delete-root" });
+  });
+});
+
+// Phase review N1: an apostrophe in a heredoc body opens no quote.
+it("blocks recursive-delete-root after a heredoc body with an apostrophe", async () => {
+  expect(await run("cat <<'EOF' > n.md\nit's\nEOF\nrm -rf ~\n# that's it")).toMatchObject({
+    kind: "block",
+    ruleId: "recursive-delete-root",
   });
 });
 

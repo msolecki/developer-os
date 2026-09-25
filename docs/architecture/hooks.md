@@ -422,11 +422,12 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 
 ### 3.8 Residuals
 
-- **A heredoc body is read as arguments of its command.** Since D62 the normalizer collapses every
-  run of LF/CR/CRLF to one LF and `shellSegments` splits at an unquoted LF, but the LFs of a heredoc
-  body (up to its delimiter line) read as spaces, so `bash <<EOF` ⏎ `rm -rf ~` passes as it did
-  before. A `<<` whose delimiter line never comes arms nothing, so later LFs still split. A quote
-  inside a heredoc body still counts, so `don't` in a body blocks as `unterminated-quote`.
+- **A heredoc body is data, never a command.** Since D62 the normalizer collapses every run of
+  LF/CR/CRLF to one LF and `shellSegments` splits at an unquoted LF, but it skips a heredoc body up
+  to its delimiter line, so `bash <<EOF` ⏎ `rm -rf ~` passes as it did before. A `<<` whose
+  delimiter line never comes arms nothing, so later LFs still split. A quote inside a heredoc body
+  opens nothing, and a `#` that starts a word comments out the rest of its line, so an apostrophe
+  or a `<<` there neither swallows nor hides a later line.
 - **`recursive-delete-root`, `force-push` and `hook-bypass` read only a segment's first token.**
   `sudo rm -rf /`, `rm -rf /*`, `env git push -f`, `FOO=1 git push -f`, `(git push -f)` and
   `git -c core.hooksPath=/dev/null commit` pass them. Task 2's parity check decides the rules;

@@ -111,6 +111,22 @@ describe("a command on its own line", () => {
   });
 });
 
+// Phase review N1: an apostrophe in a comment or a heredoc body opens no quote, and a `<<` in a
+// comment arms no heredoc, so the command on the next line still splits off.
+describe("a quote in a comment or a heredoc body", () => {
+  it.each([
+    "# Don't forget\ngit push --force\n# that's it",
+    "cat <<EOF > notes.md\nDon't panic\nEOF\ngit push --force\necho done # that's all",
+    "echo hi # <<EOF\ngit push --force\nEOF",
+  ])("blocks force-push: %j", async (command) => {
+    expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
+  });
+
+  it("allows an apostrophe in a heredoc body", async () => {
+    expect(await run("cat <<EOF > f\nit's\nEOF\ngit status")).toStrictEqual({ kind: "allow" });
+  });
+});
+
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
 describe("a prefixed git call (residual in hooks.md §3.8)", () => {
   it.todo("blocks force-push: env git push -f");

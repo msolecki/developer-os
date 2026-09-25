@@ -12,9 +12,9 @@ export interface ShellRule<Id extends string> {
 /**
  * Splits a normalized command at `;`, `&`, `|` (and `&&`, `||`) and an unquoted LF into tokenized
  * segments, honoring quotes: single quotes are literal, double quotes take backslash escapes, and a
- * backslash outside quotes makes the next character literal. A heredoc body stays in the segment of
- * its command, its LFs read as spaces. Returns null for an unterminated quote so the guards can
- * fail closed.
+ * backslash outside quotes makes the next character literal. A `#` that starts a word comments out
+ * the rest of its line, and a heredoc body is skipped, so neither opens a quote or arms a heredoc.
+ * Returns null for an unterminated quote so the guards can fail closed.
  */
 export function shellSegments(normalized: string): readonly (readonly string[])[] | null {
   const segments: string[][] = [];
@@ -25,7 +25,6 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
   // A `<<` arms a heredoc; the delimiter is the rest of that token, or the next token.
   let armed: { readonly stripTabs: boolean; readonly from: number } | null = null;
   const heredocs: { readonly delimiter: string; readonly stripTabs: boolean }[] = [];
-  let bodyEnd = -1;
   const endToken = (): void => {
     if (armed !== null && started && token.length > armed.from) {
       heredocs.push({ delimiter: token.slice(armed.from), stripTabs: armed.stripTabs });
@@ -75,10 +74,15 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
       started = true;
     } else if (char === "\n") {
       endToken();
-      if (i < bodyEnd) continue;
-      if (heredocs.length > 0) bodyEnd = heredocBodyEnd(i + 1);
+      const bodyEnd = heredocs.length > 0 ? heredocBodyEnd(i + 1) : -1;
       heredocs.length = 0;
-      if (bodyEnd <= i) endSegment();
+      // A heredoc body is data, not shell text: skip it to the LF that ends its delimiter line.
+      if (bodyEnd > i) i = bodyEnd - 1;
+      else endSegment();
+    } else if (char === "#" && !started) {
+      // A comment runs to the next LF, which still ends the segment.
+      const lineEnd = normalized.indexOf("\n", i);
+      i = (lineEnd === -1 ? normalized.length : lineEnd) - 1;
     } else if (/\s/u.test(char)) {
       endToken();
     } else if (char === ";" || char === "&" || char === "|") {
