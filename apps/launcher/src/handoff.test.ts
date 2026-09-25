@@ -265,7 +265,7 @@ describe("the FD 3 handoff end to end", () => {
         trust,
       );
 
-      expect(outcome).toEqual({ code: 0, signal: null });
+      expect(outcome).toBe(0);
       expect(JSON.parse(await readFile(output, "utf8"))).toEqual(trust);
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -288,11 +288,20 @@ describe("the FD 3 handoff end to end", () => {
       );
 
       expect(held.fd).toBeGreaterThan(11);
-      expect(outcome).toEqual({ code: 0, signal: null });
+      expect(outcome).toBe(0);
     } finally {
       await held.close();
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it("mirrors a child killed by a signal as 128 plus the signal number", async () => {
+    const outcome = await execAdmittedRelease(
+      { executable: process.execPath as never, argv: ["-e", "process.kill(process.pid, 'SIGTERM')"], env, extraDescriptors: [] },
+      null,
+    );
+
+    expect(outcome).toBe(143);
   });
 
   it("the CLI dispatches a command behind the launcher's trust flag", async () => {
@@ -301,6 +310,6 @@ describe("the FD 3 handoff end to end", () => {
       configuredTrust(),
     );
 
-    expect(outcome).toEqual({ code: 0, signal: null });
+    expect(outcome).toBe(0);
   });
 });

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { constants } from "node:os";
 
 import { validateOfflineReleaseTrust, validateReleaseIndex, validateReleaseKeyDelegation } from "@developer-os/core";
 import type {
@@ -127,12 +128,13 @@ export async function writeOfflineReleaseTrustHandoff(
  * this uses `spawn`'s extra `stdio` slot: the launcher writes the rendered
  * trust bytes into its own write end and ends the stream (closing it)
  * before the child is expected to have read past EOF, then waits for the
- * child's own exit, which the caller mirrors as its own.
+ * child's own exit status, which the caller mirrors as its own: the child's
+ * code, or 128 plus the number of the signal that killed it, as a shell does.
  */
 export async function execAdmittedRelease(
   request: LauncherProcessRequestV1,
   trust: OfflineReleaseTrustV1 | null,
-): Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }> {
+): Promise<number> {
   const child = spawn(request.executable, [...request.argv], {
     env: { ...request.env },
     stdio: trust === null ? ["inherit", "inherit", "inherit"] : ["inherit", "inherit", "inherit", "pipe"],
@@ -160,5 +162,6 @@ export async function execAdmittedRelease(
     await writeOfflineReleaseTrustHandoff(pipe as NodeJS.WritableStream, trust);
   }
 
-  return exit;
+  const { code, signal } = await exit;
+  return code ?? (signal === null ? 1 : 128 + constants.signals[signal]);
 }

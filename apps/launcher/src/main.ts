@@ -100,8 +100,7 @@ async function main(): Promise<void> {
   });
   const request = buildLauncherProcessRequest(selection, env, process.argv.slice(2), trust !== null);
 
-  const outcome = await execAdmittedRelease(request, trust);
-  process.exitCode = outcome.code ?? (outcome.signal === null ? 1 : 128);
+  process.exitCode = await execAdmittedRelease(request, trust);
 }
 
 function exitCodeOf(error: unknown): number {
