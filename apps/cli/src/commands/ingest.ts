@@ -60,6 +60,7 @@ import {
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
+import { isTopicNotePath } from "./capture.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
 import { outputSchemaPath } from "./output-schemas.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
@@ -1630,6 +1631,14 @@ async function ingestOne(
     const { note } = envelope;
     if (note !== null) {
       /** Before staging: `staged` is still null, so a refusal here leaves the capture accepted. */
+      if (!isTopicNotePath(note.path, brainConfig)) {
+        throw new IngestRefusal(
+          EXIT_CODES.securityRefusal,
+          "the note this capture names is outside every configured topic folder, so it was not applied",
+          [note.path],
+          `developer-os review --id ${envelope.captureId} --decision reject`,
+        );
+      }
       await assertNoteUnchanged(context, environment.contentRoot, note, envelope.captureId);
     }
     staged = envelope;

@@ -2793,6 +2793,24 @@ describe("runIngest, note captures applied verbatim (spec §3.4)", () => {
     expect(await fixture.statusOf(id)).toBe("accepted");
   });
 
+  it("refuses a hand-edited note target outside every topic folder and writes nothing there", async () => {
+    const fixture = await installedFixture("verbatim-outside-topic", NO_VENDOR);
+    const id = await seedNote(fixture, "DEV/new-note.md", NEW_NOTE);
+    const quarantine = join(fixture.content, "_raw", "quarantine");
+    const [file] = (await nodeFs.readdir(quarantine)).filter((name) => name.includes(id));
+    expect(file).toBeDefined();
+    const capture = join(quarantine, file ?? "");
+    const text = await nodeFs.readFile(capture, "utf8");
+    expect(text).toContain("path: DEV/new-note.md");
+    await nodeFs.writeFile(capture, text.replace("path: DEV/new-note.md", "path: ELSEWHERE/new-note.md"));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    expect(await exists(join(fixture.content, "ELSEWHERE"))).toBe(false);
+    expect(await fixture.statusOf(id)).toBe("accepted");
+  });
+
   it("maps an apply-time precondition failure to the same refusal and rolls the capture back to accepted", async () => {
     const fixture = await installedFixture("verbatim-apply-race", NO_VENDOR);
     const target = join(fixture.content, EXAMPLE_NOTE);

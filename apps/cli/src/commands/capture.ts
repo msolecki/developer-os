@@ -21,7 +21,7 @@ import {
   PRIVATE_FOLDERS,
   resolveBrainConfig,
 } from "@developer-os/brain";
-import type { CaptureNoteTargetV1, CaptureStatus } from "@developer-os/brain";
+import type { BrainConfigV1, CaptureNoteTargetV1, CaptureStatus } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
 import { createRedactor } from "@developer-os/security";
 import type { Redactor } from "@developer-os/security";
@@ -370,6 +370,31 @@ function isMissingEntry(error: unknown): boolean {
 }
 
 /**
+ * The string half of `--note`'s containment: inside a configured topic folder, and no segment
+ * a dot-folder, a private folder or the indexes directory. `ingest` asks it again of the
+ * envelope, which a person can edit between capture and ingest.
+ */
+export function isTopicNotePath(notePath: string, brainConfig: BrainConfigV1): boolean {
+  const segments = notePath.split("/");
+  const [topicFolder] = segments;
+  const forbidden = new Set(
+    [...PRIVATE_FOLDERS, brainConfig.indexesDir].map((name) =>
+      name.normalize("NFC").toLowerCase(),
+    ),
+  );
+  return (
+    topicFolder !== undefined &&
+    segments.length >= 2 &&
+    brainConfig.topicFolders.includes(topicFolder) &&
+    !segments.some(
+      (segment) =>
+        segment.startsWith(".") ||
+        forbidden.has(segment.normalize("NFC").toLowerCase()),
+    )
+  );
+}
+
+/**
  * `--note <path>`, spec §3.1 steps 1 and 3: the destination proven inside a
  * topic folder, and bound to the SHA-256 of its bytes when it exists. Runs
  * before the redaction key is loaded, so a refused path writes nothing at all.
@@ -392,22 +417,8 @@ async function resolveNoteTarget(
 
   const brainConfig = resolveBrainConfig(config);
   const segments = notePath.split("/");
-  const [topicFolder] = segments;
-  const forbidden = new Set(
-    [...PRIVATE_FOLDERS, brainConfig.indexesDir].map((name) =>
-      name.normalize("NFC").toLowerCase(),
-    ),
-  );
-  if (
-    topicFolder === undefined ||
-    segments.length < 2 ||
-    !brainConfig.topicFolders.includes(topicFolder) ||
-    segments.some(
-      (segment) =>
-        segment.startsWith(".") ||
-        forbidden.has(segment.normalize("NFC").toLowerCase()),
-    )
-  ) {
+  const [topicFolder = ""] = segments;
+  if (!isTopicNotePath(notePath, brainConfig)) {
     throw new CaptureNotePathRefusedError(
       `--note must name a note inside a configured topic folder (${brainConfig.topicFolders.join(", ")}), outside every private folder and the indexes directory`,
     );
