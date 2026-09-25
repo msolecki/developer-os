@@ -199,6 +199,23 @@ describe("runProjectCheck", () => {
     expect(Math.max(...requests)).toBeLessThanOrEqual(PROJECT_CHECK_MAX_READ_BYTES + 1);
   });
 
+  it("warns, never fails, on an instruction file it does not read", async () => {
+    const fixture = await projectFixture("project-check-symlink", {
+      "AGENTS.md": CLEAN["AGENTS.md"],
+      "CONTEXT.md": CLEAN["CONTEXT.md"],
+    });
+    await nodeFs.symlink("AGENTS.md", join(fixture.project, "CLAUDE.md"));
+
+    const result = await fixture.check();
+
+    expect(result.code).toBe(EXIT_CODES.success);
+    const report = await reportOf(fixture);
+    const secrets = report.checks.find((check) => check.id === "instruction-secrets");
+    expect(secrets?.status).toBe("warn");
+    expect(secrets?.message).toContain("CLAUDE.md");
+    expect(secrets?.paths).toEqual([join(fixture.project, "CLAUDE.md")]);
+  });
+
   it("writes nothing and creates no key", async () => {
     const fixture = await projectFixture("project-check-no-write", CLEAN);
     const before = await inventoryDigest(fixture.root);

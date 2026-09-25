@@ -120,6 +120,7 @@ export async function runProjectCheck(
     const present = new Set<string>();
     const oversized: string[] = [];
     const problems: Problem[] = [];
+    const unread: Problem[] = [];
 
     for (const name of names) {
       const path = join(root, name);
@@ -143,7 +144,12 @@ export async function runProjectCheck(
         text = await readUntrustedText(context, path, PROJECT_CHECK_MAX_READ_BYTES);
       } catch (error) {
         if (!(error instanceof UntrustedFileRefusal)) throw error;
-        problems.push({ line: `${name}: ${error.message}`, path, code: error.code });
+        // Spec §7: only a redactor finding (5) or the read bound (1) fails; an unread link or special file warns.
+        (error.reason === "too_large" ? problems : unread).push({
+          line: `${name}: ${error.message}`,
+          path,
+          code: error.code,
+        });
         continue;
       }
       for (const line of secretFindings(name, text, redact)) {
@@ -175,15 +181,22 @@ export async function runProjectCheck(
             `${oversized.join(", ")} exceeds ${String(PROJECT_INSTRUCTION_WARN_BYTES)} bytes`,
             oversized.map((name) => join(root, name)),
           ),
-      problems.length === 0
-        ? finding("instruction-secrets", "pass", "no secret was found in the scanned files", [])
-        : finding(
+      problems.length > 0
+        ? finding(
             "instruction-secrets",
             "fail",
             problems.map((problem) => problem.line).join("; "),
             [...new Set(problems.map((problem) => problem.path))],
             secretsCode,
-          ),
+          )
+        : unread.length > 0
+          ? finding(
+              "instruction-secrets",
+              "warn",
+              `not scanned: ${unread.map((entry) => entry.line).join("; ")}`,
+              unread.map((entry) => entry.path),
+            )
+          : finding("instruction-secrets", "pass", "no secret was found in the scanned files", []),
       missingTemplates.length === 0
         ? finding("template-set", "pass", "every project template file is present", [])
         : finding(
