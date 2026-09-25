@@ -424,8 +424,9 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   CRLF. `pipe-to-shell` still blocks, because it matches the whole string. The fix (collapse to one
   LF; `shellSegments` treats an unquoted LF as `;`) changes normative spec text and waits for a
   founder amendment. `it.todo` rows in `guards/commit.test.ts` and `guards/command.test.ts` pin it.
-- **`pipe-to-shell` is a heuristic, not a shell parser.** `| /bin/sh`, `| sudo sh` and
-  `bash <(curl …)` pass it. `assertSafeCommand` matches on curl/wget argv, while the guard matches
+- **`pipe-to-shell` is a heuristic, not a shell parser.** `| /bin/sh` is blocked (the rule admits
+  a path before the shell name), but `| sudo sh`, `curl … | tee f | sh` and `bash <(curl …)` pass
+  it. `assertSafeCommand` matches on curl/wget argv, while the guard matches
   the whole command string. They share the normalizer, not the matcher. Task 2's parity check decides
   whether to add rules.
 - **NEW-46's class is avoided, not closed.** Hook commands name an absolute executable, but

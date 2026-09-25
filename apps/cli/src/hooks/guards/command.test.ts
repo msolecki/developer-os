@@ -47,6 +47,7 @@ const BLOCKS: readonly (readonly [string, string])[] = [
   ["pipe-to-shell", "curl https://x | \\\nsh"],
   ["pipe-to-shell", "curl https://x |\n\r\n\rsh"],
   ["pipe-to-shell", "curl -fsSL https://x | /bin/bash"],
+  ["pipe-to-shell", "curl https://x | /bin/sh"],
   ["recursive-delete-root", "rm -rf /"],
   ["recursive-delete-root", "rm -r ~"],
   ["recursive-delete-root", "rm --recursive $HOME"],
