@@ -300,6 +300,23 @@ async function reconcileRegistration(
   return "registered";
 }
 
+/**
+ * `process.execPath` is always the resolved path, and a Homebrew one names its version
+ * (`<prefix>/Cellar/node@24/24.16.0/bin/node`), which the cleanup after an upgrade deletes: every
+ * hook would then exit 127, which neither vendor blocks on. The version-free `<prefix>/opt/<formula>`
+ * link is used only when it resolves to this very Node, so the rendered command runs what init ran.
+ */
+export async function stableNodePath(execPath: string): Promise<string> {
+  const cellar = /^(.*)\/Cellar\/([^/]+)\/[^/]+\/bin\/node$/u.exec(execPath);
+  if (cellar === null) return execPath;
+  const candidate = `${cellar[1] ?? ""}/opt/${cellar[2] ?? ""}/bin/node`;
+  try {
+    return (await nodeFs.realpath(candidate)) === (await nodeFs.realpath(execPath)) ? candidate : execPath;
+  } catch {
+    return execPath;
+  }
+}
+
 const EMPTY_REPORT: InstructionApplyReportV1 = { installed: [], restored: [], unchanged: [], emulated: [], unsupported: [], heldBack: [] };
 
 /**
@@ -341,7 +358,7 @@ export async function applyInstructions(context: CliContext, input: {
    * A13 Tasks 14 and 15: both vendors' hooks run `<this Node> <product-home>/bin/developer-os.mjs`.
    * Checked once, before any transaction, so an unsafe home refuses with exit 2 and nothing written.
    */
-  const hookExecutable: HookCommandExecutable = { node: process.execPath, entrypoint: entrypointPath(home) };
+  const hookExecutable: HookCommandExecutable = { node: await stableNodePath(process.execPath), entrypoint: entrypointPath(home) };
   if (selection.length > 0) {
     assertHookNodePath(hookExecutable.node);
     assertHookExecutablePath(hookExecutable.entrypoint);

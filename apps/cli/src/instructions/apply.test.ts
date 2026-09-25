@@ -1,4 +1,5 @@
 import * as nodeFs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
@@ -11,7 +12,7 @@ import { createCommandFixture, removeCommandFixtures } from "../commands/testing
 import type { CommandFixture } from "../commands/testing.js";
 import { inspectPackagedRelease } from "../update/packaged-release.js";
 import type { AdmittedPackagedReleaseV1 } from "../update/packaged-release.js";
-import { applyInstructions, instructionRefusalDetails, parseAdaptersFlag } from "./apply.js";
+import { applyInstructions, instructionRefusalDetails, parseAdaptersFlag, stableNodePath } from "./apply.js";
 import { InstructionRefusal } from "./attach.js";
 
 afterAll(removeCommandFixtures);
@@ -247,5 +248,40 @@ describe("applyInstructions: refusals before any mutation", () => {
       expect(planted.fixture.stableLockEvents).toStrictEqual([]);
       await vendorHomesUntouched(planted.fixture);
     }
+  });
+});
+
+describe("stableNodePath", () => {
+  async function homebrew(optTarget: string): Promise<{ root: string; cellar: string }> {
+    const root = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-stable-node-")));
+    for (const version of ["24.16.0", "24.17.0"]) {
+      await nodeFs.mkdir(join(root, "Cellar", "node@24", version, "bin"), { recursive: true });
+      await nodeFs.writeFile(join(root, "Cellar", "node@24", version, "bin", "node"), "", { mode: 0o755 });
+    }
+    await nodeFs.mkdir(join(root, "opt"));
+    await nodeFs.symlink(join("..", "Cellar", "node@24", optTarget), join(root, "opt", "node@24"));
+    return { root, cellar: join(root, "Cellar", "node@24", "24.16.0", "bin", "node") };
+  }
+
+  it("names Homebrew's version-free opt link when it resolves to the running Node", async () => {
+    const { root, cellar } = await homebrew("24.16.0");
+    try {
+      expect(await stableNodePath(cellar)).toBe(join(root, "opt", "node@24", "bin", "node"));
+    } finally {
+      await nodeFs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the running Node when the opt link names another version", async () => {
+    const { root, cellar } = await homebrew("24.17.0");
+    try {
+      expect(await stableNodePath(cellar)).toBe(cellar);
+    } finally {
+      await nodeFs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a Node outside a Homebrew cellar", async () => {
+    expect(await stableNodePath("/synthetic/bin/node")).toBe("/synthetic/bin/node");
   });
 });
