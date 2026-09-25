@@ -41,6 +41,17 @@ function publish(oid: LowerHexSha1): void {
   run(["push", "-q", remote, `${oid}:${BRANCH}`], source);
 }
 
+/** Moves every object of the source into one pack, as a clone or `git gc` leaves it. */
+function packHistory(): void {
+  run(["repack", "-a", "-d", "-q"], source);
+  run(["prune-packed"], source);
+}
+
+/** Every object `commitOid` reaches: the size of a push that excludes nothing. */
+function historyObjectCount(commitOid: LowerHexSha1): number {
+  return run(["rev-list", "--objects", commitOid], source).split("\n").length;
+}
+
 async function push(commitOid: LowerHexSha1): Promise<GitLocalPushPreparationV1> {
   quarantines += 1;
   const quarantineRoot = parseCanonicalAbsolutePathText(`${root}/staging/q${String(quarantines)}`);
@@ -125,17 +136,49 @@ describe("local push through the production gateway graph on the pinned Git dist
     expect(preparation.processNodes).toEqual(["receive-pack"]);
   });
 
-  it("stops the boundary at packed history below a loose target", async () => {
+  it("pushes the whole history when a subtree of the loose target is packed", async () => {
     await mkdir(`${source}/notes`);
     await commitFile("notes/a.md", "alpha\n");
-    run(["repack", "-a", "-d", "-q"], source);
-    run(["prune-packed"], source);
+    packHistory();
     const target = await commitFile("b.md", "beta\n");
     publish(target);
     const head = await commitFile("b.md", "gamma\n");
     const { preparation } = await push(head);
     expect(preparation.kind).toBe("pack_received");
-    // The new blob, the new root tree and the new commit; the packed notes/ subtree stays behind.
-    expect(preparation.packReaderBudget?.packHeaderObjectCount).toBe(3);
+    // The packed notes/ subtree cannot bound the pack, so the shadow advertises nothing.
+    expect(preparation.packReaderBudget?.packHeaderObjectCount).toBe(historyObjectCount(head));
+  });
+
+  it("pushes the whole history when a file changes inside a packed subtree of the target", async () => {
+    await mkdir(`${source}/notes`);
+    await writeFile(`${source}/notes/c.md`, "kept\n");
+    run(["add", "--", "notes/c.md"], source);
+    await commitFile("notes/a.md", "alpha\n");
+    packHistory();
+    const target = await commitFile("b.md", "beta\n");
+    publish(target);
+    const head = await commitFile("notes/a.md", "gamma\n");
+    const { preparation } = await push(head);
+    expect(preparation.kind).toBe("pack_received");
+    expect(preparation.packReaderBudget?.packHeaderObjectCount).toBe(historyObjectCount(head));
+  });
+
+  it("pushes the whole history when the target commit itself is packed", async () => {
+    const target = await commitFile("a.md", "alpha\n");
+    publish(target);
+    packHistory();
+    const head = await commitFile("b.md", "beta\n");
+    const { preparation } = await push(head);
+    expect(preparation.kind).toBe("pack_received");
+    expect(preparation.packReaderBudget?.packHeaderObjectCount).toBe(historyObjectCount(head));
+  });
+
+  it("takes the up-to-date arm for an already-pushed packed commit", async () => {
+    const head = await commitFile("a.md", "alpha\n");
+    publish(head);
+    packHistory();
+    const { preparation } = await push(head);
+    expect(preparation.kind).toBe("up_to_date");
+    expect(preparation.destinationTransitions).toEqual([]);
   });
 });

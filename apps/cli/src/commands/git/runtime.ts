@@ -277,20 +277,24 @@ async function readCommit(
  * The destination-owned objects a pack may name without carrying: the target commit and its
  * snapshot. `pack-objects --revs` given `^target` leaves out exactly the target's commit and tree
  * objects, so an older blob a sync brings back travels again. Blobs are named by their tree entry
- * and never read; a packed subtree the loose reader cannot open is kept as an opaque member, and
- * a pack that names something beneath it still refuses in the pack reader's closure walk.
+ * and never read. `null` when the target commit or any subtree is not loose (a clone, `git gc`):
+ * the loose reader cannot bound that snapshot, so the push excludes nothing and sends the whole
+ * history instead of refusing.
  */
-async function targetSnapshotObjects(gitDirectory: CanonicalAbsolutePathV1, targetOid: LowerHexSha1): Promise<ReadonlySet<LowerHexSha1>> {
+async function targetSnapshotObjects(gitDirectory: CanonicalAbsolutePathV1, targetOid: LowerHexSha1): Promise<ReadonlySet<LowerHexSha1> | null> {
+  const notLoose = (error: unknown): null => {
+    if (error instanceof SecurityRefusalError && error.message === "git_commit_not_loose") return null;
+    throw error;
+  };
+  const commit = await readCommit(gitDirectory, targetOid).catch(notLoose);
+  if (commit === null) return null;
   const reached = new Set<LowerHexSha1>([targetOid]);
-  const trees = [(await readCommit(gitDirectory, targetOid)).tree];
+  const trees = [commit.tree];
   for (let tree = trees.pop(); tree !== undefined; tree = trees.pop()) {
     if (reached.has(tree)) continue;
     reached.add(tree);
-    const object = await readLooseObject(gitDirectory, tree).catch((error: unknown) => {
-      if (error instanceof SecurityRefusalError && error.message === "git_commit_not_loose") return null;
-      throw error;
-    });
-    if (object === null) continue;
+    const object = await readLooseObject(gitDirectory, tree).catch(notLoose);
+    if (object === null) return null;
     if (object.type !== "tree") refuse("git_object_corrupt");
     for (let offset = 0; offset < object.content.byteLength; ) {
       const nul = object.content.indexOf(0, offset);
@@ -787,12 +791,15 @@ async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLoca
       effectiveUid: request.effectiveUid,
     });
     const { target } = request.destination;
+    const boundary = target.state === "present" ? await targetSnapshotObjects(request.sourceGitDirectory, target.oid) : null;
+    // An unbounded target stays unadvertised, except the up-to-date arm, which sends no pack.
+    const advertised = target.state === "present" && (boundary !== null || target.oid === request.commitOid) ? target.oid : null;
     const destinationShadow = await materializeSanitizedBareDestinationShadow({
       gitDir: canonical(join(request.quarantineRoot, "shadow.git")),
       template: DESTINATION_SHADOW_TEMPLATE,
       opaqueLocalToken: null,
       head: request.destination.head,
-      refs: target.state === "present" ? [{ ref: request.branchRef, bytes: new TextEncoder().encode(`${target.oid}\n`) }] : [],
+      refs: advertised === null ? [] : [{ ref: request.branchRef, bytes: new TextEncoder().encode(`${advertised}\n`) }],
       effectiveUid: request.effectiveUid,
     });
     const sourceSlots: GitEnvironmentSlotValuesV1 = {
@@ -876,7 +883,7 @@ async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLoca
       destinationShadow,
       destination: { gitDirectory: request.destination.gitDirectory, branchRef: request.branchRef, target: request.destination.target },
       commitOid: request.commitOid,
-      boundary: target.state === "present" ? await targetSnapshotObjects(request.sourceGitDirectory, target.oid) : new Set(),
+      boundary: boundary ?? new Set(),
       phase: pushPhase,
       effectiveUid: request.effectiveUid,
       receive: async () => {
