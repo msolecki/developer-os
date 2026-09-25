@@ -9,6 +9,8 @@ import {
   assertInstructionText,
   assertInstructionVendorBounds,
   assertNotWorkflowId,
+  INSTRUCTION_BLOCK_BEGIN,
+  INSTRUCTION_BLOCK_END,
   INSTRUCTION_BOUNDS_V1,
   InstructionCatalogInvalidError,
   InstructionSourceInvalidError,
@@ -90,6 +92,13 @@ function orderFiles(category: SourceCategory, files: InstructionSourceFileV1[]):
   );
 }
 
+/** Rule text enters a marked block, where a marker would make the render throw instead of refusing. */
+function assertNoBlockMarker(path: string, bytes: Uint8Array): void {
+  const lines = strictUtf8.decode(bytes).split("\n");
+  const index = lines.findIndex((line) => line.includes(INSTRUCTION_BLOCK_BEGIN) || line.includes(INSTRUCTION_BLOCK_END));
+  if (index !== -1) throw new InstructionSourceInvalidError(path, index + 1);
+}
+
 /** The §2.3 checks shared by defaults and overrides; `where` names the artifact in a refusal. */
 function assertArtifact(where: string, category: SourceCategory, files: readonly InstructionSourceFileV1[]): void {
   for (const file of files) {
@@ -97,6 +106,7 @@ function assertArtifact(where: string, category: SourceCategory, files: readonly
     assertInstructionRelativePath(file.relativePath);
     assertInstructionText(path, file.bytes);
     if (category === "scoped-rule") parseScopedRulePaths(path, strictUtf8.decode(file.bytes));
+    if (category === "rule" || category === "scoped-rule") assertNoBlockMarker(path, file.bytes);
   }
   if (category === "skill" && !files.some((file) => file.relativePath === "SKILL.md")) {
     throw new InstructionSourceInvalidError(`${where}/SKILL.md`);

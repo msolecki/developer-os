@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   EXIT_CODES,
+  INSTRUCTION_BLOCK_BEGIN,
+  INSTRUCTION_BLOCK_END,
   InstructionCatalogInvalidError,
   InstructionSourceInvalidError,
   parseInstructionId,
@@ -243,6 +245,16 @@ describe("loadInstructionOverrides", () => {
   it.each(["._foo", ".DS_Store2"])("refuses a %s file", async (name) => {
     await write(join(vendorRoot(), name), `${SENTINEL}\n`);
     expect((await refusal(overrides())).path).toBe(join(vendorRoot(), name));
+  });
+
+  it("refuses a rule or scoped rule holding a block marker, naming the line", async () => {
+    await write(join(vendorRoot(), "rules", "marker.md"), `${SENTINEL}\n${INSTRUCTION_BLOCK_END}\n`);
+    const rule = await refusal(overrides());
+    expect(rule.path).toContain("marker");
+    expect(rule.line).toBe(2);
+    await nodeFs.rm(join(vendorRoot(), "rules"), { recursive: true });
+    await write(join(vendorRoot(), "scoped-rules", "typescript.md"), `---\npaths: ["**/*.ts"]\n---\n${SENTINEL} ${INSTRUCTION_BLOCK_BEGIN}\n`);
+    expect((await refusal(overrides())).line).toBe(4);
   });
 
   it("refuses an unknown category directory", async () => {
