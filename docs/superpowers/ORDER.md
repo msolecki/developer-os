@@ -133,7 +133,7 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-`BACKLOG.md` §1 holds 66 open numbered rows (NEW-110 added 2026-09-23, NEW-111 2026-09-25; §6 lists the phase-close handoffs by phase) (NEW-101..103 added 2026-09-22, NEW-104..109
+`BACKLOG.md` §1 holds 67 open numbered rows (NEW-110 added 2026-09-23, NEW-111 2026-09-25; §6 lists the phase-close handoffs by phase) (NEW-101..103 added 2026-09-22, NEW-104..109
 2026-09-23). Rows implemented this session stay open until their tests pass at phase close: NEW-49,
 NEW-85 (Phase 4b); NEW-60, NEW-61, NEW-65, NEW-95, NEW-102 (A12); NEW-104 (A13, D57); NEW-98, NEW-109 (A14, D57).
 Owners: NEW-85 is owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
