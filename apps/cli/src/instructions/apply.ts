@@ -408,11 +408,12 @@ export async function applyInstructions(context: CliContext, input: {
         if (warning !== null) warnings.push(warning);
       }
       await context.executor.execute({ kind: "instructions", mutations: plan.mutations });
+      const kept = [...plan.preserved];
       for (const directory of plan.directories) {
-        // Exact-empty only: rmdir never removes content, and a refused one stays for doctor to name.
-        await nodeFs.rmdir(directory).catch(() => undefined);
+        // Exact-empty only: rmdir never removes content. Its row is already gone, so a refusal is reported here.
+        await nodeFs.rmdir(directory).catch(() => kept.push(directory));
       }
-      warnings.push(...plan.preserved.map((directory) => `kept ${directory}: it holds entries Developer OS did not create`));
+      warnings.push(...kept.map((directory) => `kept ${directory}: it holds entries Developer OS did not create`));
     });
   }
 

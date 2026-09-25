@@ -472,3 +472,35 @@ describe("init --adapters codex records CODEX_HOME for every later command (one 
     expect(existsSync(join(recorded, "AGENTS.md"))).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
+
+describe("init --adapters: deselecting a vendor reports a directory it could not remove (one chained home)", () => {
+  it("names the kept directory when an entry appears in it after the detach was planned", async () => {
+    const planted = await home("init-detach-kept");
+    const { fixture } = planted;
+    expect((await runInit(fixture.context, options(["codex"]))).ok).toBe(true);
+    const executor = fixture.context.executor;
+    let late = false;
+    const context = {
+      ...fixture.context,
+      executor: {
+        resume: (id: string) => executor.resume(id),
+        rollback: (id: string) => executor.rollback(id),
+        execute: async (plan: Parameters<typeof executor.execute>[0]) => {
+          const journal = await executor.execute(plan);
+          if (plan.kind === "instructions" && !late) {
+            late = true;
+            await nodeFs.writeFile(join(planted.codexHome, "late.txt"), "written by Codex meanwhile\n", { mode: 0o600 });
+          }
+          return journal;
+        },
+      },
+    };
+
+    const result = await runInit(context, options(["claude"]));
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(late).toBe(true);
+    expect(existsSync(join(planted.codexHome, "late.txt"))).toBe(true);
+    expect(result.ok && result.warnings.some((warning) => warning.startsWith(`kept ${planted.codexHome}:`))).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
