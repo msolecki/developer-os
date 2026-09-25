@@ -7,6 +7,7 @@ import {
   listInstructionFiles,
   loadInstructionHosts,
   parsePatternFile,
+  runInstructionScan,
   scanInstructionDefaults,
 } from "./scan-instruction-defaults.js";
 
@@ -149,5 +150,31 @@ describe("scanInstructionDefaults", () => {
 
   it("loads the checked-in host allowlist", () => {
     expect(Array.isArray(loadInstructionHosts())).toBe(true);
+  });
+});
+
+describe("runInstructionScan", () => {
+  function run(root: string): { readonly code: number; readonly output: string } {
+    let output = "";
+    const code = runInstructionScan(root, ["instructions", "templates/project"], [], (text) => {
+      output += text;
+    });
+    return { code, output };
+  }
+
+  it("prints the scanned-file count per root and passes a clean non-empty set", () => {
+    const result = run(fixture({ "instructions/a.md": "Neutral prose.\n", "templates/project/b.md": "More prose.\n" }));
+    expect(result.output).toContain("instructions: 1 files scanned\n");
+    expect(result.output).toContain("templates/project: 1 files scanned\n");
+    expect(result.output).toContain("0 findings\n");
+    expect(result.code).toBe(0);
+  });
+
+  it("fails when a root holds no file, even with zero findings", () => {
+    const root = fixture({ "templates/project/b.md": "More prose.\n" });
+    mkdirSync(join(root, "instructions"));
+    const result = run(root);
+    expect(result.output).toContain("instructions: 0 files scanned\n");
+    expect(result.code).toBe(1);
   });
 });

@@ -203,6 +203,36 @@ function isEntryPoint(entry: string | undefined): boolean {
   }
 }
 
+/**
+ * The CLI body: every root's findings and its scanned-file count. A root with no file fails,
+ * because a gate that enumerated nothing proves nothing. Returns the exit code.
+ */
+export function runInstructionScan(
+  repository: string,
+  roots: readonly string[],
+  extra: readonly RegExp[],
+  write: (text: string) => void,
+): number {
+  let code = 0;
+  const findings: InstructionFinding[] = [];
+  for (const root of roots) {
+    const count = listInstructionFiles(join(repository, root)).length;
+    write(`${root}: ${String(count)} files scanned\n`);
+    if (count === 0) code = 1;
+    findings.push(
+      ...scanInstructionDefaults(join(repository, root), extra).map((finding) => ({
+        ...finding,
+        path: `${root}/${finding.path}`,
+      })),
+    );
+  }
+  for (const finding of findings) {
+    write(`${finding.path}:${String(finding.line)} ${finding.rule}\n`);
+  }
+  write(`${String(findings.length)} findings\n`);
+  return findings.length > 0 ? 1 : code;
+}
+
 if (isEntryPoint(argv[1])) {
   const flag = argv.indexOf("--patterns");
   const patternFile = flag >= 0 ? argv[flag + 1] : undefined;
@@ -211,15 +241,5 @@ if (isEntryPoint(argv[1])) {
   }
   const extra =
     patternFile === undefined ? [] : parsePatternFile(readFileSync(resolve(patternFile), "utf8"));
-  const findings = INSTRUCTION_SCAN_ROOTS.flatMap((root) =>
-    scanInstructionDefaults(join(repositoryRoot(), root), extra).map((finding) => ({
-      ...finding,
-      path: `${root}/${finding.path}`,
-    })),
-  );
-  for (const finding of findings) {
-    stdout.write(`${finding.path}:${String(finding.line)} ${finding.rule}\n`);
-  }
-  stdout.write(`${String(findings.length)} findings\n`);
-  if (findings.length > 0) process.exitCode = 1;
+  process.exitCode = runInstructionScan(repositoryRoot(), INSTRUCTION_SCAN_ROOTS, extra, (text) => stdout.write(text));
 }
