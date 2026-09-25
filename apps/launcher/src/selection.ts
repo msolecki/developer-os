@@ -3,6 +3,7 @@ import {
   admitReleaseIdentity,
   decodeCanonicalJson,
   decodeUpdateExecutorRecordSlot,
+  hashBytes,
   isUnsignedLocalTrust,
   LifecycleRecoveryRequiredError,
   MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
@@ -153,23 +154,53 @@ function createCanonicalPathEvidence(): CanonicalPathEvidenceV1 {
   };
 }
 
-async function ownedRegular(
-  fs: LauncherGuardedReaderV1,
+/** Product state files are written exactly 0600; a package-installed file's mode is not the product's. */
+const STATE_FILE_MODE = 0o600;
+
+function admitOwnedRegular(
+  entry: LifecycleGuardedEntryV1 | null,
   path: CanonicalAbsolutePathV1,
   effectiveUid: number,
   maximumBytes: number,
+  mode: number | null,
   reason: string,
-): Promise<LifecycleGuardedEntryV1> {
-  const entry = await fs.lstat(path);
+): LifecycleGuardedEntryV1 {
   if (
     entry === null ||
     entry.kind !== "regular_file" ||
     entry.ownerUid !== effectiveUid ||
+    (mode !== null && entry.mode !== mode) ||
+    entry.nlink !== 1 ||
     BigInt(entry.size) > BigInt(maximumBytes)
   ) {
     recoveryRequired(reason, path);
   }
   return entry;
+}
+
+async function ownedRegular(
+  fs: LauncherGuardedReaderV1,
+  path: CanonicalAbsolutePathV1,
+  effectiveUid: number,
+  maximumBytes: number,
+  mode: number | null,
+  reason: string,
+): Promise<LifecycleGuardedEntryV1> {
+  return admitOwnedRegular(await fs.lstat(path), path, effectiveUid, maximumBytes, mode, reason);
+}
+
+/** Read once: the bytes a caller hash-pins are the bytes it parses. */
+async function readOwnedRegular(
+  fs: LauncherGuardedReaderV1,
+  path: CanonicalAbsolutePathV1,
+  effectiveUid: number,
+  maximumBytes: number,
+  mode: number | null,
+  reason: string,
+): Promise<{ readonly bytes: Uint8Array; readonly hash: LowerHexSha256 }> {
+  const entry = await ownedRegular(fs, path, effectiveUid, maximumBytes, mode, reason);
+  const bytes = await fs.readRegular(entry, maximumBytes);
+  return { bytes, hash: hashBytes(bytes) as LowerHexSha256 };
 }
 
 async function ownedDirectory(
@@ -179,7 +210,7 @@ async function ownedDirectory(
   reason: string,
 ): Promise<LifecycleGuardedEntryV1> {
   const entry = await fs.lstat(path);
-  if (entry === null || entry.kind !== "directory" || entry.ownerUid !== effectiveUid) {
+  if (entry === null || entry.kind !== "directory" || entry.ownerUid !== effectiveUid || entry.mode !== 0o700) {
     recoveryRequired(reason, path);
   }
   return entry;
@@ -256,31 +287,32 @@ async function readRetainedDocument(
   maximumBytes: number,
   effectiveUid: number,
 ): Promise<LauncherRetainedDocumentV1> {
-  const entry = await ownedRegular(fs, path, effectiveUid, maximumBytes, "launcher_retained_document_missing");
-  const hash = await fs.hashRegular(entry, BigInt(maximumBytes));
+  const { bytes, hash } = await readOwnedRegular(fs, path, effectiveUid, maximumBytes, STATE_FILE_MODE, "launcher_retained_document_missing");
   if (hash !== expectedHash) recoveryRequired("launcher_retained_document_hash_mismatch", path);
-  const bytes = await fs.readRegular(entry, maximumBytes);
   return parseRetainedDocumentEnvelope(bytes, path, maximumBytes);
 }
 
-async function admitPackagedFallback(request: LauncherSelectionRequestV1): Promise<AdmittedReleaseBundleV1> {
+async function admitPackagedFallback(
+  request: LauncherSelectionRequestV1,
+): Promise<{ readonly bundle: AdmittedReleaseBundleV1; readonly manifestHash: LowerHexSha256 }> {
   const { fs, packagedFallback, platform, effectiveUid } = request;
-  const manifestEntry = await ownedRegular(
+  const { bytes, hash } = await readOwnedRegular(
     fs,
     packagedFallback.manifestPath,
     effectiveUid,
     MAX_BUNDLE_MANIFEST_BYTES,
+    null,
     "launcher_packaged_fallback_manifest_missing",
   );
-  const manifestBytes = await fs.readRegular(manifestEntry, MAX_BUNDLE_MANIFEST_BYTES);
-  const manifest = parseBundleManifest(manifestBytes, packagedFallback.manifestPath, MAX_BUNDLE_MANIFEST_BYTES);
-  return new LauncherBundleAdmission().admit({
+  const manifest = parseBundleManifest(bytes, packagedFallback.manifestPath, MAX_BUNDLE_MANIFEST_BYTES);
+  const bundle = await new LauncherBundleAdmission().admit({
     platform,
     bundleRoot: packagedFallback.bundleRoot,
     manifest,
     effectiveUid,
     fs,
   });
+  return { bundle, manifestHash: hash };
 }
 
 async function admitActiveRelease(
@@ -289,12 +321,13 @@ async function admitActiveRelease(
 ): Promise<AdmittedReleaseBundleV1> {
   const { fs, productHome, effectiveUid } = request;
 
-  const activeBytes = await fs.readRegular(activeEntry, MAX_ACTIVE_BYTES);
+  const admittedEntry = admitOwnedRegular(activeEntry, activeEntry.path, effectiveUid, MAX_ACTIVE_BYTES, STATE_FILE_MODE, "launcher_active_release_record_invalid");
+  const activeBytes = await fs.readRegular(admittedEntry, MAX_ACTIVE_BYTES);
   const active = parseActive(activeBytes, activeEntry.path);
 
   const trustPath = derive(productHome, "state/release-trust.json");
-  const trustEntry = await ownedRegular(fs, trustPath, effectiveUid, MAX_TRUST_BYTES, "launcher_release_trust_missing");
-  const trust = parseTrust(await fs.readRegular(trustEntry, MAX_TRUST_BYTES), trustPath);
+  const trustRead = await readOwnedRegular(fs, trustPath, effectiveUid, MAX_TRUST_BYTES, STATE_FILE_MODE, "launcher_release_trust_missing");
+  const trust = parseTrust(trustRead.bytes, trustPath);
   if (isUnsignedLocalTrust(trust)) recoveryRequired("launcher_retained_document_unverified", trustPath);
   try {
     admitReleaseAgainstTrust(trust, active, "guarded_active");
@@ -376,18 +409,17 @@ async function admitRetainedRelease(
   if (stores !== "contains_release" && stores.trust !== null) assertTrustNamesDelegation(stores.trust, active, chain.delegation);
 
   const bundleManifestPath = derive(bundlesRoot, `${active.bundleManifestHash}.json`);
-  const bundleManifestEntry = await ownedRegular(
+  const { bytes: manifestBytes, hash: bundleManifestHash } = await readOwnedRegular(
     fs,
     bundleManifestPath,
     effectiveUid,
     MAX_BUNDLE_MANIFEST_BYTES,
+    STATE_FILE_MODE,
     "launcher_bundle_manifest_missing",
   );
-  const bundleManifestHash = await fs.hashRegular(bundleManifestEntry, BigInt(MAX_BUNDLE_MANIFEST_BYTES));
   if (bundleManifestHash !== active.bundleManifestHash) {
     recoveryRequired("launcher_bundle_manifest_hash_mismatch", bundleManifestPath);
   }
-  const manifestBytes = await fs.readRegular(bundleManifestEntry, MAX_BUNDLE_MANIFEST_BYTES);
   const manifest = parseBundleManifest(manifestBytes, bundleManifestPath, MAX_BUNDLE_MANIFEST_BYTES);
   bindReleaseIdentity(productHome, active, chain, manifest, bundleManifestHash, bundleManifestPath);
 
@@ -499,8 +531,7 @@ async function routeUpdateExecutor(
     return { kind: "update_executor", bundle, release: record.executor.release };
   }
   if (envelope.kind === "present" && !ownEnvelope) recoveryRequired("launcher_update_executor_foreign", recordPath);
-  const manifestHash = await packagedFallbackManifestHash(request);
-  const bundle = await admitPackagedFallback(request);
+  const { manifestHash, bundle } = await admitPackagedFallback(request);
   if (
     manifestHash !== record.executor.bundleManifestHash ||
     bundle.manifest.launcherProtocol !== record.executor.launcherProtocol ||
@@ -509,17 +540,6 @@ async function routeUpdateExecutor(
     recoveryRequired("launcher_update_fallback_mismatch", request.packagedFallback.manifestPath);
   }
   return { kind: "package_fallback", bundle };
-}
-
-async function packagedFallbackManifestHash(request: LauncherSelectionRequestV1): Promise<LowerHexSha256> {
-  const entry = await ownedRegular(
-    request.fs,
-    request.packagedFallback.manifestPath,
-    request.effectiveUid,
-    MAX_BUNDLE_MANIFEST_BYTES,
-    "launcher_packaged_fallback_manifest_missing",
-  );
-  return request.fs.hashRegular(entry, BigInt(MAX_BUNDLE_MANIFEST_BYTES));
 }
 
 /**
@@ -548,12 +568,12 @@ export async function selectLauncherCandidate(
     if (activeEntry !== null) {
       recoveryRequired("launcher_active_published_before_launchability_suffix", activePath);
     }
-    const bundle = await admitPackagedFallback(request);
+    const { bundle } = await admitPackagedFallback(request);
     return { kind: "bootstrap_recovery", bundle, argv: ["init"] };
   }
 
   if (activeEntry === null) {
-    const bundle = await admitPackagedFallback(request);
+    const { bundle } = await admitPackagedFallback(request);
     return { kind: "package_fallback", bundle };
   }
   if (activeEntry.kind !== "regular_file") {

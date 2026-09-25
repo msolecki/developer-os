@@ -35,7 +35,7 @@ const FALLBACK_MANIFEST = `${FALLBACK_ROOT}.manifest.json` as CanonicalAbsoluteP
 
 type FakeNode =
   | { readonly kind: "directory"; readonly ownerUid: number; readonly mode: number; readonly children: readonly string[] }
-  | { readonly kind: "regular_file"; readonly ownerUid: number; readonly mode: number; readonly content: Buffer };
+  | { readonly kind: "regular_file"; readonly ownerUid: number; readonly mode: number; readonly content: Buffer; readonly nlink?: number };
 
 function sha256(content: Buffer): LowerHexSha256 {
   return createHash("sha256").update(content).digest("hex") as LowerHexSha256;
@@ -47,7 +47,7 @@ function entryOf(path: string, node: FakeNode): LifecycleGuardedEntryV1 {
     kind: node.kind,
     ownerUid: node.ownerUid,
     mode: node.mode,
-    nlink: node.kind === "directory" ? 2 : 1,
+    nlink: node.kind === "directory" ? 2 : (node.nlink ?? 1),
     size: (node.kind === "regular_file" ? node.content.byteLength : 0).toString() as UInt64DecimalV1,
     dev: "1" as UInt64DecimalV1,
     ino: "1" as UInt64DecimalV1,
@@ -55,6 +55,9 @@ function entryOf(path: string, node: FakeNode): LifecycleGuardedEntryV1 {
 }
 
 class FakeFileSystem implements LauncherGuardedReaderV1 {
+  /** Bytes `readRegular` hands back in place of the file's content, which `hashRegular` still hashes. */
+  readonly substitutedReads = new Map<string, Buffer>();
+
   constructor(private readonly nodes: Map<string, FakeNode>) {}
 
   lstat(path: CanonicalAbsolutePathV1): Promise<LifecycleGuardedEntryV1 | null> {
@@ -65,7 +68,7 @@ class FakeFileSystem implements LauncherGuardedReaderV1 {
   readRegular(entry: LifecycleGuardedEntryV1): Promise<Uint8Array> {
     const node = this.nodes.get(entry.path);
     if (node === undefined || node.kind !== "regular_file") throw new Error("not a file");
-    return Promise.resolve(new Uint8Array(node.content));
+    return Promise.resolve(new Uint8Array(this.substitutedReads.get(entry.path) ?? node.content));
   }
 
   hashRegular(entry: LifecycleGuardedEntryV1): Promise<LowerHexSha256> {
@@ -84,8 +87,8 @@ class FakeFileSystem implements LauncherGuardedReaderV1 {
     })();
   }
 
-  setFile(path: string, content: Buffer, ownerUid = EFFECTIVE_UID, mode = 0o600): void {
-    this.nodes.set(path, { kind: "regular_file", ownerUid, mode, content });
+  setFile(path: string, content: Buffer, ownerUid = EFFECTIVE_UID, mode = 0o600, nlink = 1): void {
+    this.nodes.set(path, { kind: "regular_file", ownerUid, mode, content, nlink });
   }
 
   setDirectory(path: string, children: readonly string[], ownerUid = EFFECTIVE_UID, mode = 0o700): void {
@@ -407,6 +410,28 @@ describe("selectLauncherCandidate", () => {
     const fixture = activeFixture();
     retainIndex(fixture, signedIndex(indexEntry("2.0.0", "2", sha256(Buffer.from("another-manifest")))));
     await expect(selectLauncherCandidate(baseRequest(fixture.fs))).rejects.toMatchObject({ code: 6 });
+  });
+
+  it("parses the retained bundle manifest bytes it hash-pinned, not a second read", async () => {
+    const { fs, active } = activeFixture();
+    const path = `${PRODUCT_HOME}/state/release-metadata/bundles/${active.bundleManifestHash}.json`;
+    const manifest = JSON.parse(fs.readBytes(path).toString("utf8")) as Record<string, unknown>;
+    fs.substitutedReads.set(path, canonicalBytes({ ...manifest, entrypoint: "bin/planner" }));
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6 });
+  });
+
+  it("refuses a hard-linked retained document", async () => {
+    const { fs, active } = activeFixture();
+    const path = `${PRODUCT_HOME}/state/release-metadata/delegations/${active.delegationHash}.json`;
+    fs.setFile(path, fs.readBytes(path), EFFECTIVE_UID, 0o600, 2);
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6 });
+  });
+
+  it("refuses a group-readable active release record", async () => {
+    const { fs } = activeFixture();
+    const path = `${PRODUCT_HOME}/state/active-release.json`;
+    fs.setFile(path, fs.readBytes(path), EFFECTIVE_UID, 0o644);
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6 });
   });
 
   it("refuses when the retained delegation store holds an extra file", async () => {

@@ -13,24 +13,14 @@
  * active/fallback selection, never past `LauncherBundleAdmission`'s guarded
  * checks) but not yet the full §6 recovery routing.
  */
-import { constants } from "node:fs";
-import type { BigIntStats } from "node:fs";
-import * as nodeFs from "node:fs/promises";
-import { createHash } from "node:crypto";
 import { arch, platform as nodePlatform } from "node:os";
 
-import {
-  admitLauncherPlatformIdentity,
-  type LauncherGuardedReaderV1,
-} from "@developer-os/platform-macos";
+import { admitLauncherPlatformIdentity } from "@developer-os/platform-macos";
 import { resolveRuntimePaths } from "@developer-os/core";
 import type {
   CanonicalAbsolutePathV1,
-  LifecycleGuardedEntryV1,
-  LowerHexSha256,
   OfflineReleaseTrustV1,
   OfflineRootKeyV1,
-  UInt64DecimalV1,
 } from "@developer-os/core";
 
 import { buildLauncherEnvironment } from "./environment.js";
@@ -39,10 +29,8 @@ import {
   createLauncherRetainedDocumentVerifier,
   execAdmittedRelease,
 } from "./handoff.js";
+import { createNodeLauncherReader } from "./reader.js";
 import { buildLauncherProcessRequest, selectLauncherCandidate } from "./selection.js";
-
-const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW;
-const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 
 /**
  * ponytail: the founder has not yet decided the production offline root key
@@ -58,90 +46,6 @@ const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O
  */
 const LAUNCHER_OFFLINE_RELEASE_ROOTS: readonly OfflineRootKeyV1[] = [];
 const LAUNCHER_METADATA_REDIRECT_ORIGINS: OfflineReleaseTrustV1["metadataRedirectOrigins"] = [];
-
-/**
- * A read-only guarded reader over the real filesystem: no-follow opens,
- * exact 64-bit stats. It implements only `LauncherGuardedReaderV1` — the
- * four read methods `selectLauncherCandidate` calls — deliberately narrower
- * than `packages/core`'s full `LifecycleGuardedFileSystemV1`, which also
- * carries a mutation surface (`writeExclusive`, `renameNoReplace`, ...) this
- * read-only admission has no use for and should not need to wire.
- */
-function createNodeLauncherReader(): LauncherGuardedReaderV1 {
-  function toEntry(path: CanonicalAbsolutePathV1, stats: BigIntStats): LifecycleGuardedEntryV1 {
-    const kind = stats.isSymbolicLink()
-      ? "symlink"
-      : stats.isDirectory()
-        ? "directory"
-        : stats.isFile()
-          ? "regular_file"
-          : "other";
-    return {
-      path,
-      kind,
-      ownerUid: Number(stats.uid),
-      mode: Number(stats.mode & 0o777n),
-      nlink: Number(stats.nlink),
-      size: stats.size.toString(10) as UInt64DecimalV1,
-      dev: stats.dev.toString(10) as UInt64DecimalV1,
-      ino: stats.ino.toString(10) as UInt64DecimalV1,
-    };
-  }
-
-  return {
-    async lstat(path) {
-      try {
-        return toEntry(path, await nodeFs.lstat(path, { bigint: true }));
-      } catch (error) {
-        if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
-          return null;
-        }
-        throw error;
-      }
-    },
-    async readRegular(entry, maximumBytes) {
-      const handle = await nodeFs.open(entry.path, READ_FLAGS);
-      try {
-        const bytes = new Uint8Array(await handle.readFile());
-        if (bytes.byteLength > maximumBytes) throw new Error(`file exceeds the admitted bound: ${entry.path}`);
-        return bytes;
-      } finally {
-        await handle.close();
-      }
-    },
-    async hashRegular(entry, maximumBytes) {
-      const handle = await nodeFs.open(entry.path, READ_FLAGS);
-      try {
-        const digest = createHash("sha256");
-        let total = 0n;
-        const chunk = Buffer.allocUnsafe(1_048_576);
-        for (;;) {
-          const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
-          if (bytesRead === 0) break;
-          total += BigInt(bytesRead);
-          if (total > maximumBytes) throw new Error(`file exceeds the admitted bound: ${entry.path}`);
-          digest.update(chunk.subarray(0, bytesRead));
-        }
-        return digest.digest("hex") as LowerHexSha256;
-      } finally {
-        await handle.close();
-      }
-    },
-    async *names(directory) {
-      const handle = await nodeFs.open(directory.path, DIRECTORY_FLAGS);
-      try {
-        const opened = await nodeFs.opendir(directory.path);
-        try {
-          for await (const child of opened) yield child.name;
-        } finally {
-          await opened.close().catch(() => undefined);
-        }
-      } finally {
-        await handle.close();
-      }
-    },
-  };
-}
 
 async function main(): Promise<void> {
   const platform = admitLauncherPlatformIdentity({ platform: nodePlatform(), architecture: arch() });
@@ -166,8 +70,8 @@ async function main(): Promise<void> {
     brainOverride: process.env.DEVELOPER_OS_BRAIN ?? null,
   });
 
-  const fs = createNodeLauncherReader();
   const effectiveUid = process.getuid?.() ?? -1;
+  const fs = createNodeLauncherReader(effectiveUid);
 
   // ponytail: the package-manager-owned fallback location is Homebrew formula
   // work (Spec 2 §2, A16) and not yet wired; resolved relative to this

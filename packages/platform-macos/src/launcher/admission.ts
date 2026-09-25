@@ -122,7 +122,7 @@ export class LauncherBundleAdmission {
       }
       return;
     }
-    if (guarded.kind !== "regular_file" || guarded.mode !== entryDecl.mode || guarded.size !== entryDecl.bytes) {
+    if (guarded.kind !== "regular_file" || guarded.mode !== entryDecl.mode || guarded.nlink !== 1 || guarded.size !== entryDecl.bytes) {
       refuseBundle(`A bundle file does not match its manifest entry: ${path}`);
     }
     const sha256 = await fs.hashRegular(guarded, MAX_BUNDLE_FILE_BYTES);

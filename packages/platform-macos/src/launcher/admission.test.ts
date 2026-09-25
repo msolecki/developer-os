@@ -23,7 +23,7 @@ const BUNDLE_ROOT = "/Users/test/.developer-os/releases/2.0.0/darwin-arm64" as C
 
 type FakeNode =
   | { readonly kind: "directory"; readonly ownerUid: number; readonly mode: number; readonly children: readonly string[] }
-  | { readonly kind: "regular_file"; readonly ownerUid: number; readonly mode: number; readonly content: Buffer };
+  | { readonly kind: "regular_file"; readonly ownerUid: number; readonly mode: number; readonly content: Buffer; readonly nlink?: number };
 
 function sha256(content: Buffer): LowerHexSha256 {
   return createHash("sha256").update(content).digest("hex") as LowerHexSha256;
@@ -35,7 +35,7 @@ function entryOf(path: string, node: FakeNode): LifecycleGuardedEntryV1 {
     kind: node.kind,
     ownerUid: node.ownerUid,
     mode: node.mode,
-    nlink: node.kind === "directory" ? 2 : 1,
+    nlink: node.kind === "directory" ? 2 : (node.nlink ?? 1),
     size: (node.kind === "regular_file" ? node.content.byteLength : 0).toString() as UInt64DecimalV1,
     dev: "1" as UInt64DecimalV1,
     ino: "1" as UInt64DecimalV1,
@@ -251,6 +251,23 @@ describe("LauncherBundleAdmission", () => {
         fs: makeReader(nodes),
       }),
     ).rejects.toMatchObject({ code: 6 });
+  });
+
+  it("refuses a hard-linked member", async () => {
+    const { bundleRoot, manifest, nodes } = validBundleFixture("arm64");
+    const cli = nodes.get(`${bundleRoot}/bin/cli`);
+    if (cli?.kind === "regular_file") nodes.set(`${bundleRoot}/bin/cli`, { ...cli, nlink: 2 });
+
+    const admission = new LauncherBundleAdmission();
+    await expect(
+      admission.admit({
+        platform: { platform: "darwin", architecture: "arm64" },
+        bundleRoot,
+        manifest,
+        effectiveUid: EFFECTIVE_UID,
+        fs: makeReader(nodes),
+      }),
+    ).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
   });
 
   it("refuses a member owned by a different uid", async () => {
