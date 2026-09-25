@@ -8,6 +8,15 @@ notes are the archive.
 
 ## NOW
 
+**Full-suite evidence (2026-09-25).** Three full local runs (`lint`, `test:lifecycle`, `test:e2e`,
+`test:suite`, `test:bootstrap`, `build`) found and fixed 17 product defects and ~200 test defects in
+the D44/D47/D56 work. Run 3 on `ee388e4`: lint, `test:bootstrap` (94), `test:e2e` (60) and build green;
+`test:suite` 301/302 files (9752 tests) and `test:lifecycle` 20/21 files (191/192 tests), the two red
+cases fixed by `2ad6013` (timeout bound) and `d1287a3` (empty executor reservation beside a
+journal-less update envelope), both re-run green on `d1287a3` with `ledger-v2.test.ts` (50 tests).
+Vendor suites (`test:vendor-ingest`, `test:vendor-brain`) and `test:pinned-host` were not run. Still
+owed per phase: one whole-phase fresh-context review and one PR each (D44).
+
 **Phase close for A11–A14.** Every phase from 4b through 7 has its implementation committed and is
 waiting on evidence, not code. Under D44/D47 no test ran during implementation — each commit ran only
 `npm run lint` — so every "run the tests" step and every review is owed at the close of its phase.
