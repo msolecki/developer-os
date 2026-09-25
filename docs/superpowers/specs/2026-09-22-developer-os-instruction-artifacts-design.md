@@ -444,8 +444,10 @@ proposedBlock: Uint8Array }, fs, guards, redactDiagnostic }`, and it returns the
 - `baselineBackupRelativePath` = the row's whole-file backup, or `null`
 - `currentHash` = the hash of the extracted current block
 - `proposedHash`
-- a redacted unified diff from current to proposed, produced by the same bounded diff body (4 MiB
-  and 20,000-line notices unchanged)
+- a redacted unified diff from current to proposed, produced by the same bounded diff body (1 MiB
+  and 1,000-line notices unchanged). **Amended 2026-09-25 (D62)**, replacing "4 MiB and
+  20,000-line": these are the shared body's bounds (`MAX_DIFF_BYTES` and
+  `MAX_DIFF_LINES` in `packages/core/src/manifest/drift.ts`)
 
 **Diff shape.** The diff stays **two-way**, and the block's base bytes are not retained. It shows
 exactly what the user changed against what the product would write, and all three hashes are

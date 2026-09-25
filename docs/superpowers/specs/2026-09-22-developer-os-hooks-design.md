@@ -32,6 +32,11 @@ places on disk".
   - it has no empty, `.` or `..` segment;
   - no segment looks like a version (`^\d+\.\d+\.\d+`) or a hash (`^[0-9a-f]{16,}$`).
 
+  **Amended 2026-09-25 (D62).** The charset is `^/[A-Za-z0-9._+@/-]+$`: it admits `@`, so a
+  Homebrew cellar Node path such as `node@24` renders. In sh, bash and zsh `@` means nothing unless
+  a `(` follows it, and the charset excludes `(`. The version and hash rule still applies to the
+  entrypoint only (`packages/core/src/hooks/contract.ts`, `assertHookNodePath`).
+
   The charset rule exists because vendors run the command string through a shell. The product refuses
   unsafe paths rather than quoting them. The version and hash rule enforces §4.1's byte stability.
   **Invariant 1 ("no PATH lookup, no interpreter line") cannot hold for a `#!/usr/bin/env node`
@@ -360,12 +365,19 @@ takes these steps, in order:
 
 1. Refuse a NUL byte. The outcome is `block`.
 2. Delete each backslash–newline continuation (`\` followed by LF, CRLF or CR).
-3. Replace each run of LF, CR or CRLF with one space.
+3. Replace each run of LF, CR or CRLF with one LF. **Amended 2026-09-25 (D62)**, replacing "with
+   one space": `shellSegments` treats an unquoted LF like `;`, so a command on its own line
+   (`cd repo` ⏎ `git push --force`, `git commit -n`, `rm -rf ~`) starts its own segment and reaches
+   `force-push`, `hook-bypass` and `recursive-delete-root`. Under the old step a space made it read
+   as arguments of the previous command, and all three rules allowed it (phase 6 review C1).
 4. Match only after steps 1–3. No pattern is ever applied to the raw string, and no pattern is
    line-anchored.
 
 The known bypass is a pipe-to-shell split across a line break (`curl … |` ⏎ `sh`). The fixtures in
-§10 pin the LF, CRLF, lone-CR and continuation variants.
+§10 pin the LF, CRLF, lone-CR and continuation variants. `pipe-to-shell` and `assertSafeCommand`
+match with `\s`, which an LF satisfies, so step 3's LF leaves them blocking. The own-line cases are
+pinned as `it.todo` rows in `apps/cli/src/hooks/guards/commit.test.ts` and
+`apps/cli/src/hooks/guards/command.test.ts`; the code change is owed at the A13 phase close.
 
 Default rules (public, closed, IDs stable; Task 2 may add, never silently remove):
 
@@ -488,6 +500,14 @@ firing, and only then deletes `state/hooks/`. A leftover `<name>.tmp-*` file in 
 shape-admitted by fresh `init` and by the absent-manifest walks, like the D23 bookkeeping set. A
 hook that fires in the middle of an uninstall can then never turn into an exit-6 refusal.
 
+**Amended 2026-09-25 (D62): the legacy-record cleanup stays open.** The admitted shape caps
+`state/hooks` at `MAX_HOOK_FIRING_RECORD_CHILDREN` (32) children, records and temp files together
+(`packages/core/src/hooks/firing-records.ts`). Nothing but uninstall removes a per-event record an
+earlier build left, so those records eat into that margin. A write may happen only after the gate
+admits, and the gate refuses a directory over the cap, so cleanup after the gate cannot repair it and
+cleanup before the gate would break this section. The founder decides; until then the margin is
+accepted because no build with per-event records was released.
+
 ## 8. Capabilities and `doctor`
 
 ### 8.1 Capability keys
@@ -604,8 +624,9 @@ Residuals:
   product home is added when someone asks for one.
 - **NEW-46's class is avoided, not closed.** The hook commands use an absolute launcher path, but
   `capture`'s ambient-marker spawn still resolves through `PATH`.
-- **`pipe-to-shell` is a heuristic, not a shell parser.** `| /bin/sh`, `| sudo sh` and
-  `bash <(curl …)` pass it. The parity task (§2) decides whether to add rules for them.
+- **`pipe-to-shell` is a heuristic, not a shell parser.** **Amended 2026-09-25 (D62):** `| /bin/sh`
+  is blocked, because the rule admits a path before the shell name. `| sudo sh`, `curl … | tee f | sh`
+  and `bash <(curl …)` pass it. The parity task (§2) decides whether to add rules for them.
   `assertSafeCommand` matches on curl/wget argv, while the guard matches the whole command string.
   The two share the normalizer, not the matcher.
 - **The latency budget is machine-relative** until the Phase 11 release matrix measures it on the

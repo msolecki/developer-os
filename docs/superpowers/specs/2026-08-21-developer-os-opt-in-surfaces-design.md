@@ -35,9 +35,13 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-17 | founder, NEW-67 amendment with every recommended option | A1 D18 applied (V1 homes keep Foundation paths); A2 retention on the pre-product bootstrap paths only; A3 absent-manifest uninstall without a coordinator envelope; A4 reservation ownership; A5 types shipped by Spec 2 consumed; A6 migration collision codes withdrawn; A7 structural admission and a recovery-only uninstall arm; A8 counting-seam ceiling gates; A9 uninstall→init round-trip gates; A10 `launchctl` re-pin deferred to Spec 1b (no text change); A11 this table; A12 bookkeeping set kept by uninstall and admitted by shape; A13 closure admits retained bootstrap evidence. The 2026-08-27 flat pre-product recovery envelope, first-creation temp grammar and key-absent coordinator are superseded by A3. | header, §2.1, §2.3, §2.4, §6, §7, §8 |
 | 2026-09-17 | founder, plan 1a blocking questions | A14 (D24) closed variant `uninstall/present_manifest_without_launchd` for a present-manifest uninstall with no launchd evidence, derived and never chosen; A15 (D25) `M(finalize_tombstones)` removes the preimage manifest's empty directory rows before it deletes the manifest tombstone; A16 (D28) the allocated `mf` manifest participant ID is reserved last in a composite's ID block | §2.1, §2.2, §2.4, §5.3, §6, §7 |
 | 2026-09-22 | founder, A13 Q3-A (D47) | `state/hooks` reserved runtime path for hook firing records: owner, admitted shape, best-effort write exception, uninstall order | §2.1, §6 |
+| 2026-09-23 | founder, plan 1b questions (D59) | Git and launchd rows re-pinned to the measured machine (NEW-84); `certification` field; stale launchd row refuses with the manual `bootout` (residual 10); HTTPS and SSH refuse `unsupported_git_distribution` until their process traces are recorded; pinned-host tests | §4.2, §5.3, §7, §8.3 |
+| 2026-09-24 | founder (D61) | backslash handling settled: `GitConfigQuotedPathV1` refuses a backslash, matching Core's `CanonicalAbsolutePathV1` | §4.2 |
+| 2026-09-25 | founder, after the whole-phase reviews (D62) | packed history refuses `git_commit_not_loose` until A16 (residual 11) | §8.3 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
-change is marked "Amended 2026-09-22 (A13 Q3-A)".
+change is marked "Amended 2026-09-22 (A13 Q3-A)"; the later ones are marked with their decision
+number, "Amended 2026-09-23 (D59)", "Amended 2026-09-24 (D61)" and "Added 2026-09-25 (D62)".
 
 ---
 
@@ -4406,3 +4410,10 @@ filesystem/process/clock dependencies rather than reaching global state directly
     preserves every file. Residual 6 covers the same drift for Git. **Owner: DOS-P9 compatibility
     documentation; `bootout` on an unsupported build needs a new reviewed design. Amended 2026-09-23
     (D59).**
+11. **Sync reads only a loose tip commit.** `git sync` reads the adopted branch's tip commit as a
+    loose object; once `git gc` or a repack has moved it into a pack, sync refuses
+    `git_commit_not_loose` and changes nothing (`apps/cli/src/commands/git/runtime.ts`,
+    `readLooseObject`). The refusal is unambiguous, but a vault whose history was packed (adopt,
+    `git gc`, a manual commit, `git sync`) cannot sync. A commit reader that understands packs is not
+    built in version 1. **Owner: A16, which either adds the pack
+    reader or documents the limit. Added 2026-09-25 (D62).**

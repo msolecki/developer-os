@@ -205,7 +205,12 @@ accepting a capture sees which note it changes and whether redaction rewrote any
 
 - **makes no vendor call.** Its proposal is built deterministically:
   `{ schemaVersion: 1, notes: [{ path: note.path, contents: content + "\n", sourceCaptureId: captureId }] }`.
-  Vendor resolution, and the exit-4 capability refusal, apply only when the batch holds a plain capture;
+  Vendor resolution, and the exit-4 capability refusal, apply only when the batch holds a plain capture.
+  **Amended 2026-09-25 (D62):** the redaction key is loaded, or created, before `selectCaptures` and
+  therefore before vendor selection, because selection needs it to parse captures and tell plain ones
+  from note captures. A batch of note captures, or a run refused at exit 4, can therefore still create
+  `state/redaction.key`: a fresh random key, derived from no data (`apps/cli/src/commands/ingest.ts`,
+  `loadOrCreateRedactionKey`);
 - **checks its precondition before validating.** When `beforeSha256` is non-null and the destination's
   current bytes hash differently (or it is gone), or when it is `null` and the destination is now
   occupied, the capture is refused with exit 3 `note_changed_since_capture`, stays `accepted`, and the
