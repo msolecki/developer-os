@@ -382,7 +382,7 @@ async function checkPostconditions(
   }
 
   /**
-   * (c) edges by (source, target), self-edges dropped. Counted as distinct
+   * (c) edges by (source, target), self-edges (after mapping) dropped. Counted as distinct
    * pairs, not the spec's multiset: `buildIndex` keeps one edge per distinct
    * link *text*, so `[[DEV/b]]` and `[[b]]` in one note are two edges before a
    * move and one after both rewrite to `[[b]]` — a multiset refuses that
@@ -391,9 +391,10 @@ async function checkPostconditions(
   const edgeKey = (source: string, target: string): string => JSON.stringify([source, target]);
   const preEdges: string[] = [];
   for (const edge of state.build.graph.edges) {
-    if (edge.source === edge.target) continue;
     const source = mapped(edge.source);
     const target = mapped(edge.target);
+    // After mapping: a merge collapses S->T and T->S into T->T, a self-edge.
+    if (source === target) continue;
     // A retired note leaves the index, and its outgoing edges with it.
     if (source.startsWith(graveyard) || target.startsWith(graveyard)) continue;
     preEdges.push(edgeKey(source, target));

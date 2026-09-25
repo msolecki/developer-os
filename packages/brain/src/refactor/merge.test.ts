@@ -32,6 +32,28 @@ describe("planMerge", () => {
     expect(plan.rewrittenLinks).toBe(1);
   });
 
+  it("merges a pair that links each other: the collapsed link becomes a self-edge, not a lost link", async () => {
+    const plan = await planRefactor(
+      { mode: "merge", source: "DEV/s.md", target: "DEV/t.md" },
+      memoryInput({
+        "DEV/s.md": noteText({ title: "Source", body: "see [[t]]" }),
+        "DEV/t.md": noteText({ title: "Target", body: "see [[s]]" }),
+      }),
+    );
+    expect(plan.mutations.map((m) => [m.operation, m.path])).toContainEqual(["remove", "DEV/s.md"]);
+  });
+
+  it("merges a source that links its target", async () => {
+    const plan = await planRefactor(
+      { mode: "merge", source: "DEV/s.md", target: "DEV/t.md" },
+      memoryInput({
+        "DEV/s.md": noteText({ title: "Source", body: "see [[t]]" }),
+        "DEV/t.md": T_TEXT,
+      }),
+    );
+    expect(plan.mutations.map((m) => [m.operation, m.path])).toContainEqual(["remove", "DEV/s.md"]);
+  });
+
   it("refuses merging a note into itself as brain_refactor_input_invalid", async () => {
     await expect(
       planRefactor(
