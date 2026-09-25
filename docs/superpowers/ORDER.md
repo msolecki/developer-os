@@ -14,8 +14,12 @@ the D44/D47/D56 work. Run 3 on `ee388e4`: lint, `test:bootstrap` (94), `test:e2e
 `test:suite` 301/302 files (9752 tests) and `test:lifecycle` 20/21 files (191/192 tests), the two red
 cases fixed by `2ad6013` (timeout bound) and `d1287a3` (empty executor reservation beside a
 journal-less update envelope), both re-run green on `d1287a3` with `ledger-v2.test.ts` (50 tests).
-Vendor suites (`test:vendor-ingest`, `test:vendor-brain`) and `test:pinned-host` were not run. Still
-owed per phase: one whole-phase fresh-context review and one PR each (D44).
+Vendor suites (`test:vendor-ingest`, `test:vendor-brain`) and `test:pinned-host` were not run.
+
+**Whole-phase reviews (2026-09-25).** Each phase from 4b through 9 had its fresh-context review, and
+fix sessions landed the accepted findings; what they deferred is in `BACKLOG.md` §6 under its phase.
+D62 settled the spec questions they raised. Still owed (D62 (4)): the re-reviews of Phases 4b, 6
+and 9, a fourth full-suite run after them, and one PR per phase (D44).
 
 **Phase close for A11–A14.** Every phase from 4b through 7 has its implementation committed and is
 waiting on evidence, not code. Under D44/D47 no test ran during implementation — each commit ran only
@@ -23,10 +27,11 @@ waiting on evidence, not code. Under D44/D47 no test ran during implementation �
 The next product work after these closes is the founder cutover A15.
 
 Phase 4b (A11, `plans/2026-08-29-developer-os-release-update.md`): code done — Task 10 (`1e214ce`),
-Task 11 (`3f640b3`), NEW-85 (`d2cc737`), launcher trust-fd fix (`c7bc459`), side track NEW-49
+Task 11 (`3a5f200`), NEW-85 (`d2cc737`), launcher trust-fd fix (`c7bc459`), side track NEW-49
 (`6254586`). Task 11b is parked by D46 (no signing keys), so the bootstrap pin at
-`apps/cli/src/context.ts:812` still answers every run without a packaged release; A12's unsigned
-local build (`init --local-release`, D47) is the install source until then.
+`apps/cli/src/context.ts:823-824` still answers every run without a packaged release; A12's unsigned
+local build (`init --local-release`, D47) is the install source until then. The launcher's two stubs
+are NEW-111.
 
 Phase 5 (A12, `plans/2026-09-22-developer-os-instruction-artifacts.md`): Tasks 1–28 committed; D48–D55
 recorded; production-facing follow-ups committed with it — D52 isolated Codex ingest home (`5afa493`),
@@ -95,7 +100,7 @@ Strict sequence; do not start a blocked row early.
 
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
-| A11 | DOS-P7, pre-cutover part (D16): Spec 2 Tasks 10–11 (Task 9 closed 2026-09-17; Spec 1a closed 2026-09-22) | nothing | a fresh production `init` runs V2 through the launcher; `config get\|set`, coordinator recovery and drained uninstall ship | phase close owed; Task 11b parked (D46) |
+| A11 | DOS-P7, pre-cutover part (D16): Spec 2 Tasks 10–11 (Task 9 closed 2026-09-17; Spec 1a closed 2026-09-22) | nothing | a fresh `init --local-release <dir>` runs V2 through the local entrypoint `<product-home>/bin/developer-os.mjs` (D47, D53); `config get\|set`, coordinator recovery and drained uninstall ship. The launcher path waits for Task 11b: it refuses every `unsigned-local` home (`apps/launcher/src/selection.ts:331`, D46) | phase close owed; Task 11b parked (D46) |
 | A12 | DOS-P10 Managed instruction artifacts — spec, plan, implementation | A11 | every artifact in `docs/migration/instruction-inventory.md` §1–§3, §6 installs, drift-checks, and uninstalls on both vendors | committed; phase close owed |
 | A12b | Brain workflows — spec, plan, implementation | A12 | every workflow and verb in the inventory §7 is proven on the synthetic vault | committed; phase close owed |
 | A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | committed (Codex half under D57); phase close owed |
@@ -111,6 +116,8 @@ The full closure conditions are in `BACKLOG.md` §1.
 Startable without another product gate:
 
 - NEW-46 — close the same-uid `PATH` spawn surface or design persisted executable identity.
+- NEW-90 — key the D31 stat-option exemption on the receiver type, not the file, or widen
+  `IDENTITY_RENDERING` (re-homed from Phase 4b, 2026-09-25).
 
 Needs a human, a policy decision, or an external application:
 
@@ -124,11 +131,11 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-`BACKLOG.md` §1 holds 65 open numbered rows (NEW-110 added 2026-09-23; §6 lists the 2026-09-23 phase-close handoffs) (NEW-101..103 added 2026-09-22, NEW-104..109
+`BACKLOG.md` §1 holds 66 open numbered rows (NEW-110 added 2026-09-23, NEW-111 2026-09-25; §6 lists the phase-close handoffs by phase) (NEW-101..103 added 2026-09-22, NEW-104..109
 2026-09-23). Rows implemented this session stay open until their tests pass at phase close: NEW-49,
 NEW-85 (Phase 4b); NEW-60, NEW-61, NEW-65, NEW-95, NEW-102 (A12); NEW-104 (A13, D57); NEW-98, NEW-109 (A14, D57).
-Owners: NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
-NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-91 by plan 1a Task 16; NEW-90 and NEW-92 by Phase 4b; NEW-97 by Phase 4b and NEW-98 by A14 Task 6 (repository tooling, D47), both opened by plan 1a Task 22; NEW-99 is owned by plan 1a Task 23b (D38); NEW-100 by a later sharding of `test:lifecycle` (D39); NEW-101, NEW-103 and NEW-109 by the founder; NEW-104 by A13 Task 15; NEW-105 to NEW-107 by A12's follow-ups; NEW-108 by each phase close.
+Owners: NEW-85 is owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
+NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-91 by plan 1a Task 16; NEW-98 by A14 Task 6 (repository tooling, D47), opened by plan 1a Task 22. Re-homed 2026-09-25 by the orchestrator, because the Phase 4b close cannot claim them (phase 4b review M6): NEW-86 and NEW-92 to Phase 8, NEW-97 to Phase 9 (plan 1b Task 21), and NEW-90 to startable repository work with no phase; NEW-111 is owned by Spec 2 Task 11b (D46); NEW-99 is owned by plan 1a Task 23b (D38); NEW-100 by a later sharding of `test:lifecycle` (D39); NEW-101, NEW-103 and NEW-109 by the founder; NEW-104 by A13 Task 15; NEW-105 to NEW-107 by A12's follow-ups; NEW-108 by each phase close.
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant; D33 lets a
 startable row run beside a wave when its files overlap no task in flight.
 
@@ -169,4 +176,4 @@ startable row run beside a wave when its files overlap no task in flight.
 - Phase closes owed: Phase 4b (release plan), A12 Task 29, A12b Task 16, A13 Task 19, A14 Task 16,
   Phase 8 (release plan "Phase 8 close") and Phase 9 (plan 1b Task 21).
 - A16 still needs its dedicated plan; A15's is `docs/migration/founder-cutover.md`.
-- Repository backlog: 65 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 66 open numbered rows, plus the Foundation watchdog decision.
