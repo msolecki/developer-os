@@ -88,7 +88,12 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
     } else if (char === ";" || char === "&" || char === "|") {
       endSegment();
       if (normalized.charAt(i + 1) === char && char !== ";") i += 1;
-    } else if (normalized.startsWith("<<", i) && !normalized.startsWith("<<<", i)) {
+    } else if (normalized.startsWith("<<<", i)) {
+      // A here-string is a plain word; consumed whole so its tail `<<` arms no heredoc.
+      token += "<<<";
+      i += 2;
+      started = true;
+    } else if (normalized.startsWith("<<", i)) {
       const stripTabs = normalized.charAt(i + 2) === "-";
       token += stripTabs ? "<<-" : "<<";
       i += stripTabs ? 2 : 1;
