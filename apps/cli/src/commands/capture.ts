@@ -495,9 +495,16 @@ function assertNoteContent(content: string): void {
     );
   }
   const parsed = parseNote(note);
-  if (!parsed.ok || parsed.issues.some((issue) => issue.severity === "error")) {
+  const first = parsed.issues.find((issue) => issue.severity === "error");
+  if (!parsed.ok || first !== undefined) {
+    // Key (already screened by the parser), class and line only: the issue's
+    // message can quote capture text, which is redacted only later.
+    const where =
+      first === undefined
+        ? ""
+        : `: ${first.key ?? "frontmatter"} (${first.code})${first.line === null ? "" : ` at line ${String(first.line)}`}`;
     throw new CaptureNoteInvalidError(
-      "a note capture must be a complete note whose frontmatter parses with no error",
+      `a note capture must be a complete note whose frontmatter parses with no error${where}`,
     );
   }
 }
