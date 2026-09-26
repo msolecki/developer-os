@@ -17,7 +17,7 @@ reviews, PR #15 merged); `ORDER.md` records the evidence.
 
 | Entry | Work still required | Blocked by |
 |---|---|---|
-| A12 · DOS-P10 | founder stops: NEW-101 billed row then `UNPROVEN_CLAUDE_CATEGORIES`, real-vendor integration files (NEW-102, NEW-103, NEW-65, NEW-61's loading half), private-pattern scan; inventory status flip | founder |
+| A12 · DOS-P10 | founder stops: NEW-101 billed row then `UNPROVEN_CLAUDE_CATEGORIES`, real-vendor integration files (NEW-102, NEW-103, NEW-65, NEW-61's loading half), private-pattern scan | founder |
 | A12b · Brain workflows | founder real-vendor run (`test:vendor-brain`); record plan decisions and residuals | founder |
 | A13 · DOS-P11 | founder stops: Task 2 legacy parity, Task 18 real-agent matrix (NEW-104) | founder |
 | A15 · DOS-P8 | execute `docs/migration/founder-cutover.md` (written; D58 dropped shadow mode) | founder, live machine |

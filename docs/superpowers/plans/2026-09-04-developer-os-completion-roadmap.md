@@ -274,8 +274,8 @@ Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
   the phase close ran: install/uninstall wiring (NEW-60) `be9b6de`, `022dc98`; loading assertions
   (NEW-65) `084f1ba`; Codex registration at install `485ca5a`.
 - [ ] Codex cache: an in-place re-render is not loaded until `codex plugin add` runs again; the update lifecycle must re-register (NEW-61). Registration at install landed; re-registration on `update` belongs with Phase 8.
-- [ ] Founder stops and the §11 spec amendments — the plan's remainder; see "Founder stops still
-  open (Phases 5–7)" below.
+- [ ] Founder stops — the plan's remainder; see "Founder stops still open (Phases 5–7)" below. The
+  §11 spec amendments and the inventory status flip ran on 2026-09-26.
 
 Gate: all inventoried artifacts install, drift-check and uninstall on both vendors; `doctor` names each as `default` or `user`.
 
@@ -311,8 +311,8 @@ Scope: inventory §5, §6.
   15 of `plans/2026-09-22-developer-os-tooling-verbs.md`; Task 14's Claude observations (NEW-109) were
   recorded under D57 (`4041286`). The phase close ran and the plan was deleted on 2026-09-26; its
   scope decisions are amended into the tooling-verbs spec §6 and §8 ("Amended 2026-09-26 (NEW-108)").
-- [ ] The `project init` templates' founder-local scan, run with A12's (see below), and the inventory
-  status flip (A12 plan remainder).
+- [ ] The `project init` templates' founder-local scan, run with A12's (see below). The inventory
+  status flip ran on 2026-09-26.
 - The automation job registry is Spec 1b's and belongs to Phase 9 (D16). It is Spec 1 §5.1's four jobs: `brain-reindex`, `brain-lint`, `doctor` and `git-sync`. `import` and `ingest` stay manual and are not registry entries (D47, Spec 1 §1).
 
 Gate: every inventoried script is a verb or a recorded refusal.

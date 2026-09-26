@@ -6,7 +6,8 @@ Completed tasks were removed on 2026-09-23 and 2026-09-26; see git history.
 
 **Remaining:** three founder stop points — Task 2 Step 3 (billed row, then emptying
 `UNPROVEN_CLAUDE_CATEGORIES`), Task 21 Step 4 (real-vendor tests) and the founder-local
-`--patterns` scan — and one repository chore, the inventory status flip.
+`--patterns` scan. The §11 spec amendments, NEW-108 and the inventory status flip were applied on
+2026-09-26.
 Tasks 1–28 are committed and the phase close ran: full suite green on `bc17550` (the agent scan
 included), the whole-phase review, PR #15.
 
@@ -79,12 +80,10 @@ A14 Task 15 Step 4.
 
 ### Task 29 remainder
 
-- [ ] **Step 1 (repository chore):** the §11 spec amendments and NEW-108 were applied on 2026-09-26.
-  Flip the `planned A12`, `planned A13` and `planned A14` rows of
-  `docs/migration/instruction-inventory.md` whose code shipped to their shipped status (the old A14
-  Task 16 Step 5, review M6); an A13 row whose firing is unobserved until Task 18 says so. `git add -f` each `docs/superpowers/` path on its own line.
 - [ ] **Step 3b (FOUNDER DECISION):** once the billed row passes, empty `UNPROVEN_CLAUDE_CATEGORIES`
-  (one-line commit, `npm run lint`). The phase gate does not close before this.
+  (one-line commit, `npm run lint`), and drop the Claude hold-back from the §1 and §2 statuses of
+  `docs/migration/instruction-inventory.md` in the same commit. The phase gate does not close before
+  this.
 - [ ] **Step 5:** when Task 2 Step 3 and Task 21 Step 4 pass, close NEW-101, NEW-102, NEW-103 and
   NEW-65 and the loading half of NEW-61 in `BACKLOG.md`, tick the roadmap Phase 5 rows, remove A12
   from `ORDER.md` and delete this plan.
