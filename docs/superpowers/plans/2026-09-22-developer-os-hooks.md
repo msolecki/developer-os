@@ -38,7 +38,11 @@ Gate: every supported hook is observed firing on Claude, and on Codex after manu
 
 ### Task 2: Legacy parity check · founder stop point
 
-**Open.** No parity list has been returned; owed by the founder.
+**Partly done (D67, 2026-09-26).** An agent produced the additions list from the legacy scripts; the
+founder approved it, and it entered the spec redacted ("Amended 2026-09-26 (D67)"). The command,
+commit, format and `.env` template rules are committed. Open: the credential-path rules, which need
+new `ProtectedPathRuleId`s and therefore a `CLAUDE_DENY_RULES` observation on a disposable home
+(D57, founder stop point), or a founder decision to decouple that table from the rule ids.
 
 Spec §2 parity obligation. The founder runs it outside this repository against the legacy scripts.
 
@@ -50,7 +54,7 @@ extra fixture pair and table row in Task 8 or Task 9, or as a follow-up task aft
 - Produces: a redacted list of rule additions (D5): rule ID, verb, what it blocks, one block example
   and one near-miss example. An empty list is a valid result.
 
-- [ ] **Step 1: FOUNDER compares §5's rule tables with `bash-danger-guard`, `secret-file-guard`,
+- [x] **Step 1: FOUNDER compares §5's rule tables with `bash-danger-guard`, `secret-file-guard`,
   `commit-guard`, `stop-gate`, `format-smart`, `skill-activator` and `shared-file-warn`,** and returns
   the redacted additions list. It must also decide the residuals §11 names: `| /bin/sh`, `| sudo sh`
   and `bash <(curl …)`, and the first-token rows held as `it.todo` in

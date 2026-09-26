@@ -279,6 +279,13 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   authenticates with the founder's Claude subscription: it reads a `claude setup-token` token from
   `DEVELOPER_OS_VENDOR_BRAIN_OAUTH_TOKEN` and passes it as `CLAUDE_CODE_OAUTH_TOKEN`;
   `DEVELOPER_OS_VENDOR_BRAIN_API_KEY` stays accepted. It remains excluded from `check`.
+- **D67 (2026-09-26), A13 plan Task 2, amends the hooks spec §5.2/§5.3.** The founder approved the
+  legacy parity additions: `pipe-to-shell` through `sudo`, new `pipe-to-interpreter`,
+  `download-process-substitution` and `sql-destructive`, root-glob operands and a `sudo`/`env`/
+  `VAR=`/subshell prefix skip for the token rules, `git -c core.hooksPath` as `hook-bypass`,
+  `biome.jsonc`, a `.env` template exemption and new credential-path rules; `shared-file-warn`'s
+  import-count check is not ported. The credential-path rules wait on a `CLAUDE_DENY_RULES`
+  observation (D57). Spec amendment block "Amended 2026-09-26 (D67)".
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
