@@ -253,7 +253,7 @@ and Phase 9 closes ran on 2026-09-26 (full suite green on `bc17550`, reviews, PR
       `BACKLOG.md` NEW-110), the lifecycle proof (Spec 2 Task 26) and the launcher-admitted
       release (Task 11b, D46).
 
-**Test:** Spec 1 §7 and Spec 2 §12 are the gate matrices; Task 26 of the release plan maps every row
+**Test:** Spec 1 §7 and Spec 2 §12 are the gate matrices; Task 26 of the release plan (closed, D68; see `BACKLOG.md` NEW-111) maps every row
 to named evidence.
 
 **Checkpoint:** The complete local product lifecycle is ready for founder shadow migration.

@@ -150,7 +150,7 @@ Added by D16 and pulled forward from Phase 8: without the launcher's root-verifi
   `BACKLOG.md` NEW-85. Plan 1a ships only the pre-allocation refusal.
 - Code landed (Task 10 `1e214ce`, Task 11 `3f640b3`, NEW-79 `503e907`, NEW-81 `7e6e641`, NEW-85
   `d2cc737`, launcher trust-fd fix `c7bc459`, side track NEW-49 `6254586`) and the phase close ran.
-  Task 11b (`plans/2026-08-29-developer-os-release-update.md`) stays parked by D46, so the production
+  Task 11b (plan closed 2026-09-26 by D68; body in `BACKLOG.md` NEW-111's pointer) stays parked by D46, so the production
   gate below waits on it; until then A12's unsigned local build is the install source.
 
 Gate: on a disposable home, a fresh `init` runs the V2 path in production through the launcher, and `init` over a V1 home refuses.
@@ -228,7 +228,7 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   trace; HTTPS and SSH refuse until the founder supplies a disposable remote), Q5-A
   (`*.pinned-host.test.ts` and `npm run test:pinned-host`, run locally). Under D56 plan 1b's waves run
   now, beside Phase 8, instead of waiting for it to close.
-- **D60 (2026-09-23).** Spec 2's apply path is closed by `plans/2026-09-23-developer-os-spec2-closure.md`,
+- **D60 (2026-09-23).** Spec 2's apply path is closed by the Spec 2 closure plan (deleted 2026-09-26, D68),
   with option A on every founder question: F1-A (update Foundation refs follow §6.3's publication rule —
   standard `<tx>/<i>.bin`, no-replace before the initial journal — and the legal staging children list
   grows by the paths the spec itself derives), F2-A (`CanonicalStateFileStateV1` postimage carries no
@@ -267,6 +267,12 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   are frozen: they stop accidental harmful commands, not an agent that deliberately crafts shell syntax
   to evade them; further crafted bypasses are recorded as residuals in `docs/architecture/hooks.md`
   §3.8, not fixed by further tokenizer rounds.
+- **D68 (2026-09-26), plan bookkeeping.** (1) The parked release plan and Spec 2 closure plan are closed:
+  nothing in them can run before NEW-110's revision pass and A15, so their open bodies move behind
+  `git show a8d2c78:` pointers in `BACKLOG.md` NEW-110 and NEW-111, and the revision pass writes a
+  fresh plan. (2) A13 Task 18 Step 1 (Claude real-agent matrix) is evidenced by the A15 cutover's
+  step 10 verification on the live machine instead of a separate disposable install; Step 2 (Codex)
+  and Step 3 still run after Codex quota returns.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
@@ -357,8 +363,9 @@ Runs after Phase 10 (D16). Tasks 10–11 moved to Phase 4b.
 
 NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the §5.3/§6.3 limit conflict is resolved, the exact-maximum gates are read against both bounds, and the `symlink` arm is accepted residual 9. Tasks 20 and 26 carry what that leaves them. Execute the baseline plan.
 
-- Tasks 12–25 of `plans/2026-08-29-developer-os-release-update.md` and Tasks 1–8 of
-  `plans/2026-09-23-developer-os-spec2-closure.md` landed under D56, and the Phase 8 close ran.
+- Tasks 12–25 of the release plan and Tasks 1–8 of the Spec 2 closure plan landed under D56, and the
+  Phase 8 close ran. Both plans were closed on 2026-09-26 (D68); their open bodies are behind the
+  `git show` pointers in `BACKLOG.md` NEW-110 and NEW-111.
 - [ ] Closure Tasks 9–10 (`update --apply` / `update rollback --apply` composition): blocked on design,
   NEW-110; parked by D61.
 - [ ] Task 26 (the lifecycle proof) and Task 11b: parked (D56, D46).
@@ -419,7 +426,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |
 | 6 | `specs/<date>-developer-os-hooks-design.md` and its plan |
 | 7 | `specs/2026-09-22-developer-os-tooling-verbs-design.md` (its plan closed and was deleted 2026-09-26) |
-| 8 | baseline plan Tasks 12–26 and `plans/2026-09-23-developer-os-spec2-closure.md` |
+| 8 | a fresh plan from NEW-110's Spec 2 revision pass (both earlier plans closed 2026-09-26) |
 | 9 | plan 1b (closed 2026-09-26) and the Spec 1 amendment NEW-113 names |
 | 10 | `docs/migration/founder-cutover.md` |
 | 11 | program plan Task 9 |
