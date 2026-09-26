@@ -4,13 +4,13 @@
 
 Completed tasks were removed on 2026-09-23 and 2026-09-26; see git history.
 
-**Open work:** Task 2 and Task 18, both **founder stop points**: they touch the live machine, spend
-model credits, or need manual Codex trust. The agent does not run them. Tasks 1 and 3–17 are
+**Open work:** Task 18, a **founder stop point**: it needs real sessions and manual Codex trust.
+Task 2 is done (D67, `c1d5790..ec3e123`); its full-suite run is A15 step 7b on `a8d2c78`. Tasks 1 and 3–17 are
 committed (Task 15, the Codex half, under D57 on a local mock Responses API) and Task 19's phase
 close ran: full suite green on `bc17550`, the whole-phase review and its re-review (D62–D64), PR #15.
 The surviving constraints are in `docs/architecture/hooks.md`.
 
-**Order:** Task 2 runs any time. Task 18 runs on a disposable local-build install.
+**Order (D68):** Task 18 Step 1 is evidenced by A15 step 10's verification on the live machine; Steps 2–3 (Codex) follow once Codex quota returns (2026-10-22).
 
 **Spec:** `docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md` (A13, approved D47), with
 the G1–G10 amendment block (`f3605a7`, `f473a91`).
@@ -64,7 +64,7 @@ extra fixture pair and table row in Task 8 or Task 9, or as a follow-up task aft
 
 ### Task 18: Real-agent matrix · founder stop point
 
-**Open.** Founder real-agent matrix; not run.
+**Open.** Founder real-agent matrix; not run. Step 1 is taken from A15 step 10 (D68).
 
 Spec §10.2 and the roadmap gate.
 

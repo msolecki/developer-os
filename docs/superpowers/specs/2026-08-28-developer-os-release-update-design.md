@@ -24,7 +24,7 @@ approved opt-in surfaces design at
 This specification owns release trust, the stable launcher and versioned bundle contract,
 `ManagedArtifactV2`/`InstallationManifestV2`, V1 migration and V2 new init, update planning and
 apply, schema migration, and rollback. Its baseline implementation plan is
-`docs/superpowers/plans/2026-08-29-developer-os-release-update.md`; Task 7 was revised against the
+`docs/superpowers/plans/2026-08-29-developer-os-release-update.md` (closed 2026-09-26, D68; `git show a8d2c78:` holds it); Task 7 was revised against the
 written §6 correction through the six-task replacement plan, accepted 2026-09-04 as
 `050fc0d..c5022a7`, before baseline Task 8 begins.
 
