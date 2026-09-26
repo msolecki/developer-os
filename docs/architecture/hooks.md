@@ -344,10 +344,10 @@ stderr line.
 |---|---|---|---|---|
 | `brain status --inject` | `SessionStart` | `SessionStart` | open | `context`: vault map, then the project note; keeps the ordinary-command gate |
 | `guard prompt` | `UserPromptSubmit` | `UserPromptSubmit` | open | `context` naming at most 3 skills from `.developer-os/skill-rules.json` |
-| `guard command` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `pipe-to-shell`, `recursive-delete-root` |
-| `guard commit` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `hook-bypass`, `force-push` (`--force-with-lease` allowed) |
+| `guard command` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `pipe-to-shell`, `pipe-to-interpreter`, `download-process-substitution`, `recursive-delete-root`, `sql-destructive` (D67) |
+| `guard commit` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `hook-bypass` (also `git -c core.hooksPath=…`, D67), `force-push` (`--force-with-lease` allowed) |
 | `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy`, for every edited path |
-| `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | project-local `biome` or `prettier` over every edited file still present; `advise` on a formatter error |
+| `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | project-local `biome` (`biome.json` or `biome.jsonc`, D67) or `prettier` over every edited file still present; `advise` on a formatter error |
 | `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | `advise` when an edited path resolves through a symlink out of the project root |
 | `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit`; `block` with the first 40 diagnostic lines |
 
@@ -440,9 +440,9 @@ After D64 a crafted bypass is recorded here as a residual, not fixed by another 
 Known classes that remain open: a command hidden on the same physical line where `shellSegments`
 diverges from bash (`${…}`, backticks and `$(…)` are not tracked); quote context carried across
 lines in a shape the D64 fragments and quote-stripped line do not reproduce; a prefix, wrapper,
-subshell or glob before a first-token rule (`sudo`, `env`, `FOO=1`, `(…)`, `rm -rf /*`); indirection
-the rules cannot see (a variable, alias, function, `eval`, `git -c core.hooksPath=…`, a script
-file); and `pipe-to-shell`'s heuristic gaps. The bullets below detail each.
+subshell or glob before a first-token rule that D67's prefix skip does not strip (a backquoted
+assignment, `nice`, `time`, `xargs`, …); indirection the rules cannot see (a variable, alias,
+function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bullets below detail each.
 
 - **A dangerous line in a heredoc body blocks.** `shellSegments` skips a heredoc body up to its
   delimiter line, but the D63 line pass reads every body line as a command, so `cat <<EOF` ⏎
@@ -467,16 +467,36 @@ file); and `pipe-to-shell`'s heuristic gaps. The bullets below detail each.
   before splitting, where bash does not join after an even run of backslashes (`echo \\` ⏎
   `git push --force`) or at the end of a comment (`# note \` ⏎ `git push --force`). The D63 line
   pass splits the raw command, so both second lines block.
-- **`recursive-delete-root`, `force-push` and `hook-bypass` read only a segment's first token.**
-  `sudo rm -rf /`, `rm -rf /*`, `env git push -f`, `FOO=1 git push -f`, `(git push -f)`,
-  `(cd a` ⏎ `git push --force)` (the last token reads `--force)`), ``x=`git push --force` `` and
-  `git -c core.hooksPath=/dev/null commit` pass them. Task 2's parity check decides the rules;
-  `it.todo` rows in the guard tests list the cases.
-- **`pipe-to-shell` is a heuristic, not a shell parser.** `| /bin/sh` is blocked (the rule admits
-  a path before the shell name), but `| sudo sh`, `curl … | tee f | sh` and `bash <(curl …)` pass
-  it. `assertSafeCommand` matches on curl/wget argv, while the guard matches
-  the whole command string. They share the normalizer, not the matcher. Task 2's parity check decides
-  whether to add rules.
+- **The token rules skip only a fixed prefix (D67).** `commandWords` drops a leading `(`, leading
+  `VAR=value` words and `sudo [options]` / `env [options]` wrappers, and strips each word's trailing
+  `)`, so `sudo rm -rf /`, `env git push -f`, `HUSKY=0 git push -f`, `(git push -f)` and
+  `(cd a` ⏎ `git push --force)` block. ``x=`git push --force` `` still passes (accepted residual):
+  the backquoted text is one assignment word. Any other wrapper (`nice`, `time`, `xargs`, `command`)
+  still hides the call. The skip knows `sudo` and `env` options that take a value only from a
+  closed list (`sudo -u root`); an unlisted one shifts the words and can hide the call.
+- **`pipe-to-shell` is a heuristic, not a shell parser.** The original regex over the whole text
+  still runs; D67 adds a token check on the segment a single `|` (or `|&`) feeds, after the prefix
+  skip, so `| sudo -E bash -` blocks and `| sudo tee f` does not. `pipe-to-interpreter` blocks a
+  download fed to `python*`, `node`, `perl` or `ruby` with no argument or only `-`, and
+  `download-process-substitution` blocks a word starting `<(curl` or `<(wget`. Only the segment
+  right after the download is read, so `curl … | tee f | sh` passes (accepted residual, D67).
+  `assertSafeCommand` matches on curl/wget argv, while the guard matches the command text. They
+  share the normalizer, not the matcher.
+- **The D67 rules add false blocks of their own.** Every rule runs on each D63 line and D64
+  fragment, so a quoted fragment on a later line that reads `bash <(curl …)` blocks, and so does a
+  first-line `grep '<(curl' f`, because the quoted word still starts `<(curl`. `sql-destructive`
+  matches `DROP TABLE`, `DROP DATABASE` or `TRUNCATE` anywhere in a `psql`, `mysql` or `sqlite3`
+  call's arguments, so `psql -c "select 'drop table'"` blocks too.
+- **The D67 path rules are not implemented yet.** Credential file names (`.git-credentials`,
+  `.netrc`, `.pgpass`, `.htpasswd`, `.envrc`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`,
+  `credentials.json`, a `secret` or `secrets` segment), home files (`.npmrc`,
+  `.docker/config.json`, `.kube/config`) and the `.pem`, `.key`, `.p12`, `.pfx` and `.tfvars`
+  suffixes each need a new `ProtectedPathRuleId`. Each id also needs a `CLAUDE_DENY_RULES` row,
+  and that table comes only from a disposable-home observation (D57), which is a founder stop
+  point. Until one runs, `guard path` lets these paths through.
+- **`.env` templates are exempt in the product only (D67).** `ProtectedPathPolicy` lets
+  `.env.example`, `.env.sample`, `.env.template` and `.env.dist` through. Claude's
+  `Read(//**/.env.*)` deny string still refuses them, so the vendor stays the stricter side.
 - **NEW-46's class is avoided, not closed.** Hook commands name an absolute executable, but
   `capture`'s ambient-marker spawn still resolves through `PATH`.
 - **A changed Codex hook stops silently.** A trusted hook whose command, matcher or timeout changes

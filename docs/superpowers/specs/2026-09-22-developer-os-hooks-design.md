@@ -101,6 +101,52 @@ places on disk".
   never *called*. The isolation test scopes §6.1 to the graph of `hooks/entry.ts`. If Task 16's p95
   is too high, the fix is a `bin.ts` pre-route that dynamic-imports only `hooks/entry.ts`.
 
+**Amended 2026-09-26 (D67, plan Task 2).** The legacy parity check (§2) returned these rule
+additions, approved by the founder. Each is normative and extends §5.2's and §5.3's tables; every
+match is token or segment based (`shellPipeline`, `commandWords` in
+`apps/cli/src/hooks/guards/shell-segments.ts`), never a substring of the whole command.
+
+- **Command and commit, implemented.**
+  - `pipe-to-shell` also blocks a `curl` or `wget` segment piped by a single `|` (or `|&`) into
+    `sudo [options] sh|bash|zsh|ksh` (`curl -fsSL https://x/i.sh | sudo -E bash -`); `| sudo tee f`
+    is allowed.
+  - `pipe-to-interpreter` (new, `command`): a download piped into `python*`, `node`, `perl` or `ruby`
+    with no argument or only `-` (`curl -sSL https://x/get.py | python3 -`); `| python3 -m json.tool`
+    is allowed.
+  - `download-process-substitution` (new, `command`): a word `<(curl …` or `<(wget …`
+    (`bash <(curl -fsSL https://x/i.sh)`); `diff <(cat a) <(cat b)` is allowed.
+  - `recursive-delete-root` also takes the operands `/*`, `~/*`, `$HOME/*` and `${HOME}/*`
+    (`rm -rf ~/*`); `rm -rf dist/*` is allowed.
+  - Prefix skip: before reading the first word, the token rules drop a leading `(`, leading
+    `VAR=value` words and `sudo [options]` / `env [options]` wrappers, and strip each word's trailing
+    `)`. `HUSKY=0 git push -f`, `env git push -f`, `sudo rm -rf /`, `(cd sub && git push -f)` and a
+    subshell whose last line ends `--force)` block; `HUSKY=0 git push` is allowed.
+  - `hook-bypass` also blocks `git -c core.hooksPath=<any>` (or `--config-env`) on `commit` or `push`;
+    `git -c user.name=x commit -m y` is allowed.
+  - `sql-destructive` (new, `command`): a `psql`, `mysql` or `sqlite3` call whose arguments hold
+    `DROP TABLE`, `DROP DATABASE` or `TRUNCATE`, case-insensitive (`psql "$DB" -c "drop table users"`);
+    `grep -rn "DROP TABLE" migrations/` is allowed.
+  - Accepted residuals, not implemented: `curl … | tee f | sh`, and ``x=`git push --force` ``.
+- **Format, implemented.** `guard format` detects `biome.jsonc` as it detects `biome.json`.
+- **Path, partly implemented.** The `.env` template exemption is in: `.env.example`, `.env.sample`,
+  `.env.template` and `.env.dist` are exempt from `read-env-variants`; `.env.local` and
+  `.env.production` stay protected. The other approved `ProtectedPathPolicy` additions are
+  **pending**, because each needs a new rule id, and each id needs a `CLAUDE_DENY_RULES` row taken
+  from a disposable-home observation (D57, a founder stop point):
+  - segment exact `.git-credentials`, `.netrc`, `.pgpass`, `.htpasswd`, `.envrc` (allow
+    `docs/netrc-setup.md`);
+  - segment exact `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519` (allow `keys/id_ed25519.pub`);
+  - segment exact `credentials.json` (allow `config/credentials.json.example`);
+  - segment exact `secrets`, `secret` (allow `src/secret-manager.ts`);
+  - home-exact `.npmrc`, `.docker/config.json`, `.kube/config` (allow `<project>/.npmrc`);
+  - a new `segment-suffix` match kind for `.pem`, `.key`, `.p12`, `.pfx`, `.tfvars` (block
+    `certs/server.key`, allow `docs/keys.md`).
+
+  They also refuse product reads, which the founder accepted.
+- **Not ported: legacy `shared-file-warn`.** Its monorepo import-count warning would read repository
+  contents on every edit, which breaks §5.3's "never opens the file" and the latency budget (§5.4).
+  The product's `guard edit` rule is a different check under the same row (§2 row 8).
+
 ## 0. Open questions for founder approval
 
 Four. Each blocks a named section; everything else in this document is decided.
@@ -212,7 +258,7 @@ leaves 11. Of those 11, 8 become verbs, 1 is absorbed by `doctor`, 1 is external
 | 5 | `stop-gate` | verb `guard stop` | §5.3 |
 | 6 | `format-smart` | verb `guard format` | §5.3 |
 | 7 | `skill-activator` | verb `guard prompt` | §5.3 |
-| 8 | `shared-file-warn` | verb `guard edit` | §5.3 |
+| 8 | `shared-file-warn` | verb `guard edit` (a symlink check; the legacy import-count warning is not ported, D67) | §5.3 |
 | 9 | `instructions-check` | absorbed: `doctor` drift of A12's managed instruction artifacts; no hook ships | A12 |
 | 10 | `dippy-guard` | refused as a product hook; `doctor` reports it as `external` | §8.2 |
 | 11 | `md-file-guard` | refused (retired in the legacy runtime on 2026-07-27) | — |
@@ -628,6 +674,8 @@ Residuals:
 - **`pipe-to-shell` is a heuristic, not a shell parser.** **Amended 2026-09-25 (D62):** `| /bin/sh`
   is blocked, because the rule admits a path before the shell name. `| sudo sh`, `curl … | tee f | sh`
   and `bash <(curl …)` pass it. The parity task (§2) decides whether to add rules for them.
+  **Amended 2026-09-26 (D67):** `| sudo sh` and `bash <(curl …)` now block; `curl … | tee f | sh`
+  and ``x=`git push --force` `` are accepted residuals.
   `assertSafeCommand` matches on curl/wget argv, while the guard matches the whole command string.
   The two share the normalizer, not the matcher.
 - **The latency budget is machine-relative** until the Phase 11 release matrix measures it on the
