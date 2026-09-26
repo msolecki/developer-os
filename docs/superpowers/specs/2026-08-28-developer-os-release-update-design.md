@@ -13,7 +13,10 @@ recovery (D20) and the bookkeeping-set admission of Spec 1's NEW-67 amendment (A
 founder and are marked "Amended 2026-09-17" in place; the 2026-09-23 founder decision D60 — lifecycle
 Foundation publication and the legal coordinator staging children (§5.3, §9), the split state
 preimage/postimage types, automatic-rollback exit classes (§9.4, §11) and the two V2 Foundation ref
-types as an accepted residual (§13.3) — is marked "Amended 2026-09-23 (D60)" in place.** This
+types as an accepted residual (§13.3) — is marked "Amended 2026-09-23 (D60)" in place; the A12
+design's §11 amendments (D47: the `unsigned-local` trust state in §3.3, `codex-registration-v1` in §5,
+and the instruction overrides and installed-home reconcile in §6.1) are marked "Amended 2026-09-26
+(A12 §11, D47)" in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -336,6 +339,9 @@ interface ReleaseTrustStateV1 {
   readonly releaseIndexHash: LowerHexSha256;
   readonly highestAcceptedReleaseSequence: UInt64DecimalV1;
   readonly releaseIdentityHash: LowerHexSha256;
+  /** Amended 2026-09-26 (A12 §11, A12 Q1-A, D47). Present, and exactly this value, only when the
+   *  admitted release is a local unsigned build; absent for a root-verified release. */
+  readonly trust?: "unsigned-local";
 }
 
 interface ReleaseIdentityV1 {
@@ -362,6 +368,13 @@ interface ReleaseMetadataIdentityV1 {
   readonly releaseIndexHash: LowerHexSha256;
 }
 ```
+
+**Amended 2026-09-26 (A12 §11, A12 Q1-A, D47).** Release signing is dropped for now (D46), so the
+product runs from a local unsigned build (`pack:local-release`). Its admission uses the same inventory
+and hash checks as a signed bundle with no signature chain, and fresh `init` records the downgrade as
+`trust: "unsigned-local"` in `ReleaseTrustStateV1` (`UnsignedLocalReleaseTrustStateV1`,
+`packages/core/src/update/release.ts`; `admitUnsignedLocalPackagedRelease`,
+`apps/cli/src/update/packaged-release.ts`). A root-verified trust state carries no `trust` member.
 
 Both persisted records are at most 16 KiB before parsing. Their validators enforce all cross-field
 equalities against `ReleaseIdentityV1`, the retained signed metadata, and the guarded bundle. Trust
@@ -724,8 +737,12 @@ type ManagedArtifactSchemaIdV1 =
   | "developer-os-config-v1"
   | "lifecycle-id-allocator-v1"
   | "active-release-record-v1"
-  | "release-trust-state-v1";
+  | "release-trust-state-v1"
+  | "codex-registration-v1";
 ```
+
+**Amended 2026-09-26 (A12 §11, D47).** `codex-registration-v1` verifies the Codex registration record
+the instruction install writes (instruction-artifacts spec §6.4; `apps/cli/src/instructions/apply.ts`).
 
 Adding a schema ID requires its strict validator, byte/semantic bounds, migration behavior, and a
 non-vacuous exact-set test in the same change. Schema drift compares type plus strict semantic
@@ -1184,6 +1201,15 @@ No network, vendor process, model, Git, launchd, or Brain migration runs. The gl
 is created only after the bootstrap-locked second inventory. Before the manifest point of no return,
 compensation may retain it only through its exact `createdPaths[0]` identity; once that point is
 durable, the lock is permanent and never becomes a retention row.
+
+**Amended 2026-09-26 (A12 §11, D47).** `admittedPreexistingPaths` also admits
+`<product-home>/instructions`, the user's instruction overrides, when it is present as an owned
+non-symlink directory; fresh `init` treats it as opaque user data and never claims it
+(`USER_DATA_HOME_ENTRIES`, `apps/cli/src/bootstrap/executor.ts`). Anything else at that name refuses
+exit 6. `init` on an already installed V2 home (`settleExistingV2`, `apps/cli/src/commands/init.ts`)
+no longer only asserts that nothing drifted: after the same checks it reconciles the instruction
+artifacts against the current overrides and adapter selection (instruction-artifacts spec §6.2, Q2
+option A). Drift in any non-instruction row still refuses.
 
 ### 6.2 V1 admission and mapping
 

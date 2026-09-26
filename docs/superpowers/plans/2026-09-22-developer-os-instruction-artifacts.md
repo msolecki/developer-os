@@ -6,7 +6,7 @@ Completed tasks were removed on 2026-09-23 and 2026-09-26; see git history.
 
 **Remaining:** three founder stop points — Task 2 Step 3 (billed row, then emptying
 `UNPROVEN_CLAUDE_CATEGORIES`), Task 21 Step 4 (real-vendor tests) and the founder-local
-`--patterns` scan — and one repository chore, the §11 spec amendments and inventory status flip.
+`--patterns` scan — and one repository chore, the inventory status flip.
 Tasks 1–28 are committed and the phase close ran: full suite green on `bc17550` (the agent scan
 included), the whole-phase review, PR #15.
 
@@ -79,10 +79,8 @@ A14 Task 15 Step 4.
 
 ### Task 29 remainder
 
-- [ ] **Step 1 (repository chore, specs):** apply the §11 spec amendments (umbrella §9.1/§9.3/§9.4,
-  Spec 1 §6, Spec 2 §6.1 and §3's `unsigned-local` trust state), each "Amended <date> (A12)", with
-  NEW-108's two drift items; re-read the Phase 5 fix session's report for any other amendment
-  (`BACKLOG.md` §6). Flip the `planned A12`, `planned A13` and `planned A14` rows of
+- [ ] **Step 1 (repository chore):** the §11 spec amendments and NEW-108 were applied on 2026-09-26.
+  Flip the `planned A12`, `planned A13` and `planned A14` rows of
   `docs/migration/instruction-inventory.md` whose code shipped to their shipped status (the old A14
   Task 16 Step 5, review M6); an A13 row whose firing is unobserved until Task 18 says so. `git add -f` each `docs/superpowers/` path on its own line.
 - [ ] **Step 3b (FOUNDER DECISION):** once the billed row passes, empty `UNPROVEN_CLAUDE_CATEGORIES`

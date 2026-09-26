@@ -17,7 +17,7 @@ reviews, PR #15 merged); `ORDER.md` records the evidence.
 
 | Entry | Work still required | Blocked by |
 |---|---|---|
-| A12 · DOS-P10 | founder stops: NEW-101 billed row then `UNPROVEN_CLAUDE_CATEGORIES`, real-vendor integration files (NEW-102, NEW-103, NEW-65, NEW-61's loading half), private-pattern scan; §11 spec amendments and inventory flip | founder |
+| A12 · DOS-P10 | founder stops: NEW-101 billed row then `UNPROVEN_CLAUDE_CATEGORIES`, real-vendor integration files (NEW-102, NEW-103, NEW-65, NEW-61's loading half), private-pattern scan; inventory status flip | founder |
 | A12b · Brain workflows | founder real-vendor run (`test:vendor-brain`); record plan decisions and residuals | founder |
 | A13 · DOS-P11 | founder stops: Task 2 legacy parity, Task 18 real-agent matrix (NEW-104) | founder |
 | A15 · DOS-P8 | execute `docs/migration/founder-cutover.md` (written; D58 dropped shadow mode) | founder, live machine |
@@ -32,7 +32,7 @@ expects are in `docs/superpowers/plans/2026-09-04-developer-os-completion-roadma
 
 ## 1. Open repository rows
 
-There are 60 numbered rows. They are not automatically ordered ahead of A15.
+There are 59 numbered rows. They are not automatically ordered ahead of A15.
 
 | ID | Owner / blocker | Work required to close |
 |---|---|---|
@@ -57,7 +57,6 @@ There are 60 numbered rows. They are not automatically ordered ahead of A15.
 | NEW-105 | ingest concurrency / D52 | **Concurrent Codex ingests share `<product-home>/state/codex-ingest-home` with no lock.** Two `ingest --agent codex` runs at once use one `CODEX_HOME`, so the children share whatever state Codex writes there, with no ordering between them. Close by holding a lock across the child's lifetime or by giving each run its own home under that path. |
 | NEW-106 | Codex isolation scope / D8, D52 | **Only `ingest` runs Codex with the isolated `CODEX_HOME`.** Every other caller of `invokeCodex`, such as a workflow `agent.prompt` step, still resolves the user's Codex home and therefore loads the product's `AGENTS.md` block and agent roles. Decide whether D8 covers those callers; if it does, route them through the same home. |
 | NEW-107 | D55 bundle determinism | **The esbuild bundle is deterministic only per checkout.** The bundled module embeds store paths of the checkout that built it, so two checkouts of one commit can produce different bytes and therefore a different release identity. Close by making the embedded paths relative (or stripping them) and pinning byte identity across two checkouts in `tests/tools/pack-local-release.test.ts`. |
-| NEW-108 | spec and plan text drift / found by the A12–A14 implementers | **Approved documents disagree with the shipped code in three known places.** (1) The A12 plan counts 44 (or 43) covered artifacts; after D51 the coverage set is 33 catalog rows (`dfd2a3d`). (2) The A13 plan's Task 17 places the "Hooks" and "Automatic capture" rows in `threat-model.md` §5; they are in §7's table. Amend each at its phase close ("Amended <date>"); change the code only if the founder picks the document's value. The conflict-evidence bounds were closed by D62 (2026-09-25): the A12 spec now names the code's 1 MiB / 1,000 lines. (3) Carried from the deleted A14 plan's scope decisions (2026-09-26): the tooling spec §8 puts `VENDOR_CONFIG_REFERENCE_DENY` in `packages/security`, while the code keeps only the product rule IDs there (`PROTECTED_PATH_RULES`, which `ProtectedPathPolicy` reads) and the observed Claude rule strings in `packages/adapter-claude` as `CLAUDE_DENY_RULES` beside `CLAUDE_MEMORY_LAYOUT`, because a vendor's syntax does not belong in the vendor-neutral package; §8 does not say what `vendor-config` does while `CLAUDE_DENY_RULES` is `null` (the code warns and reads nothing); and `project init` refuses exit 4 `project_templates_unavailable` while `PROJECT_TEMPLATE` is empty, a refusal the spec does not name. Apply with the A12 §11 amendments (A12 plan, Task 29 remainder). |
 | NEW-110 | Phase 8 / Spec 2 apply (D60) | **`update --apply` and `update rollback --apply` cannot be composed against the shipped validators.** Closure Tasks 1–8 landed; closure Task 9 (`compose`) found six contract contradictions (`plans/2026-09-23-developer-os-spec2-closure.md` "Blocked 2026-09-23"): source-parent dev/ino needed before construction creates the directory; lifecycle manifest `after`/terminal `before` dev/ino (`manifest-state.ts:380-383`) unknowable at plan time; no participant for the V2 `manifest/*` steps; no guarded source for the signed metadata bytes `planUpdate` discards; ephemeral owner rows unrepresentable in `PersistedManagedPathStateV1`; no production `OwnerExternalEffectProcessPolicyV1`. Close with one Spec 2 revision pass over the spec and every shipped validator (brainstorming/spec amendment), not piecemeal decisions; then closure Tasks 9–10 and Task 26. Even closed, the path runs only on the synthetic fixture until 11b/A16 supply release roots and planner/verifier binaries. |
 | NEW-111 | launcher stubs / Spec 2 Task 11b (D46), phase 4b review M2 | **The launcher ships two stubs that are tracked only as `ponytail:` comments.** (1) `apps/launcher/src/main.ts:93` always passes `bootstrapClosure: { kind: "handoff_complete" }`, so Spec 2 §3.1's bootstrap routing is not met; the CLI's ordinary-command gate softens this. (2) `apps/launcher/src/main.ts` never passes `updateEnvelope`, so any `executing` update record is refused as an orphan, exit 6 (`apps/launcher/src/selection.ts:529`). Close both when Task 11b wires the read-only closure and envelope readers; until then the launcher is not an install path (A11 row in `ORDER.md`). |
 | NEW-112 | Spec 2 Task 11b / A16 (launcher identity) | **`update` accepts an FD 3 offline-trust document from any parent process, not only the launcher** (phase 4b re-review R1, 2026-09-25). Spec 2 §4.2 expects the launcher to be the only source. Hidden today: `LAUNCHER_OFFLINE_RELEASE_ROOTS = []` (D46) makes every unsigned-local update refuse. Binding the parent needs a fixed installed launcher path (A16 packaging) to compare with `proc_pidpath(ppid)`; `ps -o comm=` is not reliable and a `node`-name check would give false assurance. Close before Task 11b or A16 by binding the launcher's executable identity, with a test that a non-launcher parent's FD 3 is refused. |
@@ -122,7 +121,7 @@ Required behavior:
 
 ### A12 · DOS-P10
 
-- [ ] Founder stops and the §11 spec amendments: `plans/2026-09-22-developer-os-instruction-artifacts.md`.
+- [ ] Founder stops: `plans/2026-09-22-developer-os-instruction-artifacts.md`.
 
 ### A12b · Brain workflows
 
@@ -233,9 +232,6 @@ and the full `check` on HEAD).
 
 - Phase 5 review M7 (`invocationFromAgentPrompt` in `packages/adapter-codex/src/invoke.ts` builds a
   `CodexInvocation` without `codexHome`, not live) travels with NEW-106; M1 is NEW-105.
-- The fix session's "spec amendments for the orchestrator (Task 29)" list did not reach this
-  handoff; D62 applied the conflict-evidence bounds. The A12 plan's Task 29 remainder re-reads the fix
-  session's report for any other amendment.
 
 ### Phase 5b · A12b (A12b plan remainder)
 

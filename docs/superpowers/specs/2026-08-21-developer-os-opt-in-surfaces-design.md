@@ -38,11 +38,12 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-23 | founder, plan 1b questions (D59) | Git and launchd rows re-pinned to the measured machine (NEW-84); `certification` field; stale launchd row refuses with the manual `bootout` (residual 10); HTTPS and SSH refuse `unsupported_git_distribution` until their process traces are recorded; pinned-host tests | §4.2, §5.3, §7, §8.3 |
 | 2026-09-24 | founder (D61) | backslash handling settled: `GitConfigQuotedPathV1` refuses a backslash, matching Core's `CanonicalAbsolutePathV1` | §4.2 |
 | 2026-09-25 | founder, after the whole-phase reviews (D62) | `git_commit_not_loose` refuses only when the tip commit read by the fast-forward check is packed; a packed target commit or subtree makes the shadow advertise nothing and the push sends the whole history (residual 11, until A16); §4.2 push argv carries `--no-thin` and pack-objects drops `--thin`; the gateway's pinned Git child-environment reconciliation; the destination shadow's fixed deny booleans (residual 12). Amended 2026-09-25 (D62) | §4.2, §8.3 |
+| 2026-09-26 | A12 design §11, approved 2026-09-22 (D47) | `<product-home>/instructions/` is user data in the absent-manifest walk | §6 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
 change is marked "Amended 2026-09-22 (A13 Q3-A)"; the later ones are marked with their decision
 number, "Amended 2026-09-23 (D59)", "Amended 2026-09-24 (D61)", "Added 2026-09-25 (D62)" and
-"Amended 2026-09-25 (D62)".
+"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)".
 
 ---
 
@@ -4230,6 +4231,13 @@ away and left in place:
   Active or ambiguous residue refuses as exit 6. A bootstrap leaf counts as attributable to an envelope
   only when its device and inode equal that envelope's persisted bootstrap lock identity;
 - §2.1's bookkeeping set, admitted by shape, including the lock a rolled-back first `init` leaves.
+
+**Amended 2026-09-26 (A12 §11, D47).** `<product-home>/instructions/`, the user's instruction
+overrides, is user data, never residue. The absent-manifest walks still visit it under the same
+bounds and entry rules, but it is projected away like the bootstrap leaf and left in place (a non-directory there refuses
+`absent_manifest_user_data`), and it is never a ledger or manifest row (`USER_DATA_HOME_ENTRIES`, `packages/core/src/lifecycle/absent-manifest.ts`).
+The removable partition and §2.4's grammar are unchanged, because the instruction detach step runs
+before the drained uninstall (instruction-artifacts spec §6.3).
 
 **Amended 2026-09-22 (A13 Q3-A, D47).** The absent-manifest walks also admit §2.1's reserved runtime
 path `state/hooks` by its shape: an owner-only `0700` directory owned by the effective user
