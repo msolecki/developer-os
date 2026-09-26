@@ -346,7 +346,7 @@ stderr line.
 | `guard prompt` | `UserPromptSubmit` | `UserPromptSubmit` | open | `context` naming at most 3 skills from `.developer-os/skill-rules.json` |
 | `guard command` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `pipe-to-shell`, `pipe-to-interpreter`, `download-process-substitution`, `recursive-delete-root`, `sql-destructive` (D67) |
 | `guard commit` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `hook-bypass` (also `git -c core.hooksPath=…`, D67), `force-push` (`--force-with-lease` allowed) |
-| `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy`, for every edited path |
+| `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy` and the hook-only `HOOK_PROTECTED_PATH_RULES` (D67), for every edited path |
 | `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | project-local `biome` (`biome.json` or `biome.jsonc`, D67) or `prettier` over every edited file still present; `advise` on a formatter error |
 | `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | `advise` when an edited path resolves through a symlink out of the project root |
 | `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit`; `block` with the first 40 diagnostic lines |
@@ -487,13 +487,16 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
   first-line `grep '<(curl' f`, because the quoted word still starts `<(curl`. `sql-destructive`
   matches `DROP TABLE`, `DROP DATABASE` or `TRUNCATE` anywhere in a `psql`, `mysql` or `sqlite3`
   call's arguments, so `psql -c "select 'drop table'"` blocks too.
-- **The D67 path rules are not implemented yet.** Credential file names (`.git-credentials`,
-  `.netrc`, `.pgpass`, `.htpasswd`, `.envrc`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`,
-  `credentials.json`, a `secret` or `secrets` segment), home files (`.npmrc`,
-  `.docker/config.json`, `.kube/config`) and the `.pem`, `.key`, `.p12`, `.pfx` and `.tfvars`
-  suffixes each need a new `ProtectedPathRuleId`. Each id also needs a `CLAUDE_DENY_RULES` row,
-  and that table comes only from a disposable-home observation (D57), which is a founder stop
-  point. Until one runs, `guard path` lets these paths through.
+- **The D67 credential-path rules bind `guard path` only (founder option (c)).** Credential file
+  names (`.git-credentials`, `.netrc`, `.pgpass`, `.htpasswd`, `.envrc`, `id_rsa`, `id_dsa`,
+  `id_ecdsa`, `id_ed25519`, `credentials.json`, a `secret` or `secrets` segment), home files
+  (`.npmrc`, `.docker/config.json`, `.kube/config`) and the `.pem`, `.key`, `.p12`, `.pfx` and
+  `.tfvars` suffixes live in `HOOK_PROTECTED_PATH_RULES`, not `PROTECTED_PATH_RULES`. So Claude's
+  deny list does not cover them: a `Read` of them passes on the vendor side, and `doctor`'s deny-rule
+  check, which reads only `PROTECTED_PATH_RULES`, is truthfully unchanged. Product reads do not
+  apply them either (the `.key` suffix would refuse the product's own `redaction.key`). Matching is
+  case-sensitive, as in `ProtectedPathPolicy`, and a user home whose own path holds a `secret` or
+  `secrets` segment would block every edit.
 - **`.env` templates are exempt in the product only (D67).** `ProtectedPathPolicy` lets
   `.env.example`, `.env.sample`, `.env.template` and `.env.dist` through. Claude's
   `Read(//**/.env.*)` deny string still refuses them, so the vendor stays the stricter side.

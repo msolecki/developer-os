@@ -284,8 +284,9 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   `download-process-substitution` and `sql-destructive`, root-glob operands and a `sudo`/`env`/
   `VAR=`/subshell prefix skip for the token rules, `git -c core.hooksPath` as `hook-bypass`,
   `biome.jsonc`, a `.env` template exemption and new credential-path rules; `shared-file-warn`'s
-  import-count check is not ported. The credential-path rules wait on a `CLAUDE_DENY_RULES`
-  observation (D57). Spec amendment block "Amended 2026-09-26 (D67)".
+  import-count check is not ported. The credential-path rules live in a hook-only table that
+  `guard path` alone applies (founder option (c), 2026-09-26), so `CLAUDE_DENY_RULES` (D57) is
+  untouched. Spec amendment block "Amended 2026-09-26 (D67)".
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
