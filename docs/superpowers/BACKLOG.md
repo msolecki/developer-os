@@ -17,14 +17,15 @@ reviews, PR #15 merged); `ORDER.md` records the evidence.
 
 | Entry | Work still required | Blocked by |
 |---|---|---|
-| A11 · DOS-P7 | Task 11b (launcher-admitted release; NEW-111, NEW-112) | parked, D46 |
 | A12 · DOS-P10 | founder stops: NEW-101 billed row then `UNPROVEN_CLAUDE_CATEGORIES`, real-vendor integration files (NEW-102, NEW-103, NEW-65, NEW-61's loading half), private-pattern scan; §11 spec amendments and inventory flip | founder |
 | A12b · Brain workflows | founder real-vendor run (`test:vendor-brain`); record plan decisions and residuals | founder |
 | A13 · DOS-P11 | founder stops: Task 2 legacy parity, Task 18 real-agent matrix (NEW-104) | founder |
-| A14 · DOS-P12 | none of its own; its founder-local template scan runs with A12's | — |
 | A15 · DOS-P8 | execute `docs/migration/founder-cutover.md` (written; D58 dropped shadow mode) | founder, live machine |
-| A11b · DOS-P7 remainder | closure Tasks 9–10 (NEW-110), Task 26 parked; plan 1b Task 19 (founder host) and the architecture carry-over | NEW-110, founder |
+| A11b · DOS-P7 remainder | closure Tasks 9–10 (NEW-110), Task 26 and Task 11b parked (NEW-111, NEW-112); plan 1b Task 19 (founder host) and the architecture carry-over | NEW-110, D46, founder |
 | A16 · DOS-P9 | plan decision, beta, packaging, documentation, v1 publication | A11b, L1, L2 |
+
+A11 (Phase 4b) and A14 (Phase 7) have nothing left of their own: Task 11b is tracked under A11b, and
+A14's template scan runs with A12's.
 
 The phase order, the founder decisions of 2026-09-04 and 2026-09-16 that fixed it, and the documents each phase
 expects are in `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`.
