@@ -369,8 +369,8 @@ every line after the first that holds a `'` or `"` also yields each fragment bet
 characters, and the line with every `\`, every `$` before `'` and every quote removed; otherwise
 `git push --force; echo '` or `'; git push --force; echo '` would pass as a heredoc body line. The
 first line needs neither: bash starts it unquoted, as the whole-command analysis does. Only the
-whole command is refused as `unterminated-quote`. `pipe-to-shell` is
-unanchored, so for it the extra lines change nothing; it still reads the whole text.
+whole command is refused as `unterminated-quote`. `pipe-to-shell`'s regex half is unanchored, so
+for it the extra lines change nothing; its D67 token half reads each candidate like the other rules.
 
 ### 3.5 Recursion
 
