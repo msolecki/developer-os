@@ -668,7 +668,9 @@ dummy `auth.json`; the isolated home held only the `auth.json` symlink; ingest f
   and `OPENAI_API_KEY` beside `CODEX_HOME`, and authenticated through a dead `model_providers` entry.
   The product passes `CODEX_HOME` alone and relies on the linked `auth.json`. `HOME` had to stay
   disposable, because an unset `HOME` resolves the real one.
-- **Founder re-observation needed (NEW-102, NEW-75).** Only a real authenticated `ingest --agent
+- **Re-observed 2026-09-26 with the pinned method (NEW-102 closed):** `instruction-isolation.test.ts`
+  green against Codex 0.155.1; its capture must end the child's stdin, or `codex exec` blocks on
+  "Reading additional input from stdin..." and sends nothing. **Still open (NEW-75).** Only a real authenticated `ingest --agent
   codex` can show two things. First, that the product's exact environment keeps the block out.
   Second, whether Codex refreshes a ChatGPT token by write-temp-then-rename. A rename would replace
   the link with the rotated credential. The product would then refuse the next run and name the

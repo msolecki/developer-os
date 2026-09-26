@@ -34,8 +34,7 @@ closes they governed. The next code-producing work runs `SESSION.md` §5 as writ
 **Founder stop points left by the closed phases** (each executable from the plan named):
 
 - A12 (`plans/2026-09-22-developer-os-instruction-artifacts.md`): NEW-101 billed real-agent row, then
-  emptying `UNPROVEN_CLAUDE_CATEGORIES`; the three real-vendor integration files (NEW-102, NEW-103,
-  NEW-65, NEW-61's loading half); the founder-local `--patterns` scan over `instructions/` and
+  emptying `UNPROVEN_CLAUDE_CATEGORIES`; the founder-local `--patterns` scan over `instructions/` and
   `templates/project/` (A12, and A14 Task 15).
 - A12b (`plans/2026-09-22-developer-os-brain-workflows.md`): `npm run test:vendor-brain`, all five
   workflows `pass` on Claude.
@@ -109,7 +108,7 @@ Needs a human, a policy decision, or an external application:
 
 `BACKLOG.md` §1 holds 59 open numbered rows; §6 lists what the phase closes deferred, by phase.
 Closed on 2026-09-26 with the green run: NEW-49, NEW-60, NEW-85, NEW-94 (`59a1237`), NEW-95, NEW-98 and
-NEW-109; NEW-108 by the A12 §11 spec amendments. Owners: NEW-61's loading half, NEW-65, NEW-101, NEW-102, NEW-103 and NEW-104 by the founder
+NEW-109; NEW-108 by the A12 §11 spec amendments; NEW-65, NEW-102, NEW-103 and NEW-61's loading half by the unbilled real-vendor run (A12 Task 21 Step 4 and `test:vendor-ingest`, Claude 2.1.283 and Codex 0.155.1). Owners: NEW-101 and NEW-104 by the founder
 stop points above; NEW-61's `update` half and NEW-86 by NEW-110's Spec 2 revision pass; NEW-84 superseded by NEW-113 (D65); NEW-87 travels with whichever row each mis-aimed citation
 belongs to; NEW-105 to NEW-107 by A12's follow-ups;
 NEW-111 and NEW-112 by Task 11b (D46); NEW-110 by the Spec 2 revision pass.
@@ -146,8 +145,7 @@ They are not ordered ahead of A15 unless the touched subsystem makes one relevan
 - Parked or blocked: Spec 2 closure Tasks 9–10 (NEW-110), Spec 2 Task 26, Spec 2 Task 11b (D46),
   NEW-100's round trip (opt-in-surfaces spec §7.1, post-A16, D42).
 - Founder stop points (9): A12 NEW-101 billed row, then `UNPROVEN_CLAUDE_CATEGORIES`; A12's
-  real-vendor integration files (NEW-102, NEW-103, NEW-65); the founder-local `--patterns` scan (A12,
-  A14); A12b `test:vendor-brain`; `test:vendor-ingest`; A13 Task 2; A13 Task 18; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
+  founder-local `--patterns` scan (A12, A14); A12b `test:vendor-brain`; A13 Task 2; A13 Task 18; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
 - Repository chores: none. The A12 §11 amendments with NEW-108, the inventory status flip, A12b's
   decisions and residuals and plan 1b's architecture carry-over ran on 2026-09-26.
 - Repository backlog: 59 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision

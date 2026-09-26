@@ -4,9 +4,10 @@
 
 Completed tasks were removed on 2026-09-23 and 2026-09-26; see git history.
 
-**Remaining:** three founder stop points — Task 2 Step 3 (billed row, then emptying
-`UNPROVEN_CLAUDE_CATEGORIES`), Task 21 Step 4 (real-vendor tests) and the founder-local
-`--patterns` scan. The §11 spec amendments, NEW-108 and the inventory status flip were applied on
+**Remaining:** two founder stop points — Task 2 Step 3 (billed row, then emptying
+`UNPROVEN_CLAUDE_CATEGORIES`) and the founder-local `--patterns` scan. Task 21 Step 4 ran green on
+2026-09-26 (22/22, Claude 2.1.283, Codex 0.155.1) and closed NEW-65, NEW-102, NEW-103 and NEW-61's
+loading half. The §11 spec amendments, NEW-108 and the inventory status flip were applied on
 2026-09-26.
 Tasks 1–28 are committed and the phase close ran: full suite green on `bc17550` (the agent scan
 included), the whole-phase review, PR #15.
@@ -57,16 +58,6 @@ Owed: this row (NEW-101).
   that row passes, the category is not installed (invariant 3). If a §4 row's loading proof fails,
   the plan **stops for a founder decision**; it is never downgraded to `unsupported-vendor`.
 
-### Task 21 Step 4: Real-vendor loading and isolation tests · FOUNDER STOP
-
-The Claude, Codex and isolation assertions landed in `084f1ba` (with `7b4a6aa`; NEW-102's Codex
-isolation per D52, `5afa493`).
-
-- [ ] **FOUNDER STOP:** run
-  `npx vitest run tests/integration/claude tests/integration/codex tests/integration/ingest/instruction-isolation.test.ts`.
-  This includes the Claude isolation observation (NEW-103) and the Codex re-observation (NEW-102);
-  both stay open until it runs. An isolation failure stops the phase (D8 outranks A12).
-
 ### Tasks 22–25 Step 3: Founder-local private-pattern scan · FOUNDER STOP
 
 The scan without a pattern file is `tests/repository/instruction-defaults.test.ts` over
@@ -84,6 +75,5 @@ A14 Task 15 Step 4.
   (one-line commit, `npm run lint`), and drop the Claude hold-back from the §1 and §2 statuses of
   `docs/migration/instruction-inventory.md` in the same commit. The phase gate does not close before
   this.
-- [ ] **Step 5:** when Task 2 Step 3 and Task 21 Step 4 pass, close NEW-101, NEW-102, NEW-103 and
-  NEW-65 and the loading half of NEW-61 in `BACKLOG.md`, tick the roadmap Phase 5 rows, remove A12
+- [ ] **Step 5:** when Task 2 Step 3 passes, close NEW-101 in `BACKLOG.md`, tick the roadmap Phase 5 rows, remove A12
   from `ORDER.md` and delete this plan.

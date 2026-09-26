@@ -414,7 +414,7 @@ async function captureCodex(home: TempHome, codexHome: string): Promise<string[]
 
   let output = "";
   try {
-    const result = await run(codex ?? "", args, {
+    const pending = run(codex ?? "", args, {
       cwd: work,
       env: {
         ...codexEnv(home, codexHome),
@@ -425,6 +425,10 @@ async function captureCodex(home: TempHome, codexHome: string): Promise<string[]
       killSignal: "SIGKILL",
       maxBuffer: 256 * 1024 * 1024,
     });
+    // Codex 0.155.1 blocks on "Reading additional input from stdin..." until EOF, as `invoke.ts`
+    // records; an open pipe here meant no request was ever sent (observed 2026-09-26).
+    pending.child.stdin?.end();
+    const result = await pending;
     output = `${result.stdout}\n${result.stderr}`;
   } catch (error) {
     // Expected: nothing listens on the provider port, so the run ends at the timeout.
