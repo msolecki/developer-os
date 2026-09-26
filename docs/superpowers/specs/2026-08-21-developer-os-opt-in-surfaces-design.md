@@ -4365,7 +4365,9 @@ what plan 1a Tasks 20–23b already exercise (one reinstall cycle and the NEW-99
 chain), the round trip is unproven end to end and the A9 recovery microstates below are uncovered.
 
 **Kill-point count.** NEW-100 closes with D39's cut: `A9_KILL_POINTS` 10 → 6 and nothing else. The
-four dropped points are restored once `lifecycle-v2` is sharded (D39).
+four dropped points are restored once `lifecycle-v2` is sharded (D39); the job is sharded since
+2026-09-26 (NEW-100's CI half), and at its ~31-minute local estimate this file needs a shard of its
+own rather than `rest`.
 
 **D39's selection rule:** keep one kill point per distinct recovery arm *and*
 per distinct control-file microstate the code branches on; drop only a point provably equivalent to a
