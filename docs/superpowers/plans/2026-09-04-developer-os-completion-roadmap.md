@@ -335,9 +335,7 @@ Gate: every inventoried script is a verb or a recorded refusal.
 The phase closes ran (above). What is left of them is founder work, executed from the plan named:
 
 - [ ] A12 (`plans/2026-09-22-developer-os-instruction-artifacts.md`): NEW-101 billed real-agent row,
-  then emptying `UNPROVEN_CLAUDE_CATEGORIES` (Task 29 Step 3b); NEW-103 Claude D8 isolation
-  observation and NEW-102's Codex re-observation (Task 21's three real-vendor integration files); the
-  founder-local private-pattern scan (`scan-instruction-defaults.js --patterns`) over `instructions/`
+  then emptying `UNPROVEN_CLAUDE_CATEGORIES` (Task 29 Step 3b); the founder-local private-pattern scan (`scan-instruction-defaults.js --patterns`) over `instructions/`
   and `templates/project/`, which also closes A14 Task 15 Step 4.
 - [ ] A12b (`plans/2026-09-22-developer-os-brain-workflows.md`): Task 16 real-vendor run
   (`npm run build && DEVELOPER_OS_VENDOR_BRAIN_OAUTH_TOKEN=<setup-token> npm run test:vendor-brain`, D66, all five
