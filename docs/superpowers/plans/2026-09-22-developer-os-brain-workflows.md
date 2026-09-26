@@ -2,7 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Completed tasks were removed on 2026-09-23; see git history.
+Completed tasks were removed on 2026-09-23 and 2026-09-26; see git history.
+
+**Remaining:** Task 16 Step 5, the founder's real-vendor gate, and one repository chore: record the
+Plan decisions below and the spec's §8 residuals in their canonical documents before this plan and
+the spec are deleted. Tasks 1–15 are committed; the rest of Task 16 ran (canonical-document
+amendments, `docs/releases/compatibility-matrix.md` header, full suite green on `bc17550`, whole-phase
+review, PR #15).
 
 **Goal:** Ship roadmap Phase 5b. That means five Brain workflows rendered for both vendors, note captures with verbatim ingest, the `isolated` and `gap` lint classes, and the `brain retire` and `brain refactor` verbs. Each workflow is proven end to end on a synthetic vault with a fake vendor.
 
@@ -21,39 +27,13 @@ Completed tasks were removed on 2026-09-23; see git history.
 
 ---
 
-## Founder decisions applied
+## Constraints the open work depends on
 
-- **D47 (2026-09-22).** The spec is approved with every recommended answer:
-  - Q1-A: note captures, bound to the hash at capture time.
-  - Q2-A: map the three roadmap names to the shipped classes, and add `isolated` and `gap`.
-  - Q3-A: `retire` and `refactor` apply only outside agent sessions; inside one they run as a dry run and an applied run exits 5.
-  - Q4-A: `brain-report` goes to session output only.
-  - The spec's own "decided here unless you say otherwise" defaults also apply: `--plugin-dir` for the vendor gate, no `--yes` on the refactor verbs, and `GAP_MIN_NOTES = 3` as a constant.
-  - No production release exists. The product runs from a local, unsigned build.
-- **D47 lane (Phases 5–7), which extends D44 and its 2026-09-22 amendment.**
-  - Each task commit runs `npm run lint` and nothing else. That script is `tsc -b`, then `eslint`, then the repository check, so it builds and typechecks the tests too.
-  - Implementers **write** tests but **do not run vitest**. Every run deferred that way is listed in Task 16 Step 2.
-  - Fresh-context review is deferred to one whole-phase review at close.
-  - Commits are held locally, with no push. At close they go to one branch as one PR.
-  - **Accepted risk:** a defect in a consumed interface surfaces only at close, against every task at once.
-- **Credit-spending runs are founder stop points.** No agent runs `npm run test:vendor-brain` or any `claude -p` against a real model. Task 13 writes that test; Task 16 stops and asks the founder to run it.
-
-## Global Constraints
-
-- **Per-commit gate (D47).** Run `npm run lint`. It must exit 0 before the commit. Run no `vitest`, no `npm test…` script and no `npm run check` inside a task. A red lint stops that task.
-- **No push.** Commit in the task worktree and stop. Only the orchestrator integrates (D33), and it pushes once, at Task 16, to one branch opened as one PR.
-- **Staging.** Stage exact paths only. Never use `git add -A`, `git add .` or a wildcard. Confirm with `git diff --cached --name-only` before committing.
-- **`docs/superpowers/` is globally gitignored.** Only the orchestrator edits files there. A new file there needs `git add -f` on its own line, never chained with `&&` into `git commit`, because `git add` exits 1 even for tracked files there.
-- **Citations gate.** `tests/repository/citations.test.ts` checks every `path:line` citation in tracked documents. Cite a line outside a fenced block only when it exists and stays in range; otherwise name the symbol. Code comments cite symbols, not lines.
-- **Comments.** Add a code comment only when it records a non-obvious platform fact, a dated past bug, or a rejected alternative someone would otherwise restore. Do not strip existing comments.
-- **Package direction.** `packages/brain` depends on `core` and `security` only and never writes (spec I4). `apps/cli` executes every mutation through `context.executor` (spec I3).
-- **Validators stay nine (I5).** `VALIDATOR_IDS` is not extended.
-- **Effect vocabulary (I1).** Exactly one verb is added, `capture.writeNote`, and nothing else.
-- **Determinism (I6).** Every planner is a pure function of vault bytes, arguments and the injected date. It orders with `compareCanonical`, then `compareRawBytes`.
-- **Byte-exact paths.** Paths are stored and compared byte-exact, and screened only at the terminal (`renderPath`, `screenAndCap`).
-- **Environment in tests.** In-process command tests use `createCommandFixture(label, { env })`. Its default `env` is `{}`, and no test reads `process.env`. Compiled-binary tests use `tests/helpers/run-cli.ts`, which gives the child no inherited environment. Only the §6.7 cases set an agent marker.
-- **Synthetic fixtures only.** Use temporary homes and the `templates/brain` vault that `init` installs. **`templates/brain` itself is not edited** (Plan decision 1).
-- **Enumerating tests** assert that their expected set is non-empty before asserting over it.
+- **Credit-spending runs are founder stop points.** No agent runs `npm run test:vendor-brain` or any
+  `claude -p` against a real model.
+- **Synthetic fixtures only.** Use temporary homes and the `templates/brain` vault that `init`
+  installs; `templates/brain` itself is not edited (Plan decision 1).
+- **Staging.** Exact paths only; `docs/superpowers/` needs `git add -f` on its own line.
 
 ## Plan decisions
 
@@ -79,94 +59,21 @@ These are choices where the spec is silent or its wording conflicts with the cod
 
 ---
 
-## Task 16: Phase 5b closure (phase close) · M
+## Task 16 remainder
 
-**Open.** Nothing below has run: canonical-document amendments, the D47-deferred test runs and `npm run check`, the red-first runs against `13eb18e`, the whole-phase review, and the founder's real-vendor gate.
-
-**Founder stops:** Step 3 (only if red-first runs cost more than the founder allows) and Step 5 (real-vendor gate, always).
-
-The orchestrator owns this task. Only it edits `docs/superpowers/`.
-
-**Files:**
-- Modify:
-  - `docs/architecture/brain.md`: §3 "six lint classes" → eight, §6.4 "without inventing a seventh class", §6.11 add exit 3.
-  - `docs/architecture/knowledge-pipeline.md`: §§1, 3, 5, 7, covering P2, note captures and verbatim ingest.
-  - `docs/architecture/threat-model.md`: the §5.4 row, verbatim from spec §3.6.
-  - `docs/architecture/workflow-schema.md`: §1 "six canonical workflows" → eleven, §5 "fifteen" verbs → sixteen.
-  - `docs/migration/instruction-inventory.md`: §7 status column per spec §1.1.
-  - `docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`: drifted `path:line` citations (see Step 1).
-  - `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`: Phase 5b checkboxes.
-  - `docs/superpowers/ORDER.md` and `docs/superpowers/BACKLOG.md`.
-- Create: `docs/releases/compatibility-matrix.md`, if it is still absent.
-
-- [ ] **Step 1: Amend canonical documents**
-
-Apply each amendment above.
-
-Re-locate every line citation the spec and the amended documents make into moved code, and cite the symbol where a line is unstable. Known movers: `ingest.ts:1096`, `ingest.ts:275-281`, `apps/cli/src/main.ts:531-533`, `packages/brain/src/ingest/validate.ts:401,967,980`, `lint.ts:14`, `packages/brain/src/indexes/build.ts:221-233`, `proposal.ts:129-136`, `apps/cli/src/context.ts:164`, `apps/cli/src/context.ts:263-305`.
-
-Create `docs/releases/compatibility-matrix.md` with a header row: workflow, version, vendor, vendor version, date, commit, result, command. DOS-P8 owns the rest of the matrix.
-
-- [ ] **Step 2: Run the full lane D47 deferred**
-
-Tasks 1–15 were committed on lint alone; none of their tests has run. Build first (`npm run build`), then run each deferred check:
-
-- [ ] Task 1 (`85cd3b9`): `npx vitest run --root packages/brain src/lint/lint.test.ts`
-- [ ] Task 2 (`838d435`): `npx vitest run --root packages/brain src/capture src/ingest/proposal.test.ts`
-- [ ] Task 3 (`04e2289`): `npx vitest run --root packages/brain src/refactor/links.test.ts src/indexes`
-- [ ] Task 4 (`d5782fb`): `npx vitest run --root apps/cli src/commands/capture.test.ts src/commands/review.test.ts src/main.test.ts`, plus `npm run test:e2e` (`tests/e2e/knowledge-lifecycle/lifecycle.test.ts` asserts capture and review results)
-- [ ] Task 5 (`f53a881`): `npx vitest run --root packages/brain src/ingest/validate.test.ts`
-- [ ] Tasks 6 and 9 (`02c2be7`, `71e0c70`, `9eaa3e6`): `npx vitest run --root packages/brain src/refactor`
-- [ ] Task 7 (`e15fbdc`): `npx vitest run --root apps/cli src/commands/ingest.test.ts`, plus `npx vitest run tests/security/interruption.test.ts tests/security/malformed-manifest.test.ts`
-- [ ] Task 8 (`f1b72c7`): `npx vitest run --root packages/workflow-schema src/vocabulary.test.ts`, then `npx vitest run tests/contracts/workflows tests/contracts/adapters tests/tools` (the render-drift cases live there). A12's plan also regenerates `plugins/claude/**` and `plugins/codex/**` and moves the literal counts in `tests/contracts/adapters/{claude,codex}/generated.test.ts`; if those counts fail, rerun `npm run render:claude` and `npm run render:codex`, rebase the literal counts on the actual rendered numbers, and record both plans' contributions in the comment.
-- [ ] Task 10 (`dd5ec23`): `npx vitest run --root apps/cli src/commands/refactor.test.ts src/main.test.ts` and `npx vitest run --root packages/brain src/capture/agent.test.ts`
-- [ ] Task 11 (`5be3304`): `npx vitest run tests/security/note-capture.test.ts`
-- [ ] Tasks 12 and 14 (`d3cba24`, `4db919f`): `npm run test:e2e`, after `npm run build`. Record each new `tests/e2e/brain-workflows/*` file's duration against the 40-minute `e2e` CI job.
-- [ ] Task 15 (`49f84bd`): `npx vitest run tests/security/brain-refactor.test.ts tests/security/interruption.test.ts`
-- [ ] Task 13 (`d2c999b`): not run here; it is the founder's real-vendor run in Step 5.
-
-Then the whole lane:
-
-```bash
-npm run lint
-npm run check
-```
-
-`npm run check` includes `npm test`, `npm run test:e2e`, `npm run test:vendor-ingest`, the build and `git diff --check`. It is slow; detach it the way the repository's background-gate note describes. Show failures only.
-
-- [ ] **Step 3: Handle §7.4's "watched failing first"**
-
-No test ran red per task under D47. For each new `tests/security/*` case (`tests/security/note-capture.test.ts`, `tests/security/brain-refactor.test.ts`, and the new `describe("a brain refactor interrupted at every forward phase")` in `tests/security/interruption.test.ts`), prove it fails for the stated reason by running it once against the phase's base commit plus only the test file. Use a scratch worktree at `13eb18e` with the file copied in, then `npm run build` and `npx vitest run <file>`. The cases assert exact exit code and `kind`, because on the base commit `--note` is an unknown option and the refactor verbs are unknown commands (usage, exit 2). Record each red reason in the PR body. **Founder stop:** if that costs more than the founder allows, stop and ask. The fallback is to record the deviation as an accepted D47 risk in the roadmap.
-
-- [ ] **Step 4: Fresh-context whole-phase review**
-
-Dispatch `superpowers:requesting-code-review` to an agent that authored no Phase 5b task, over `13eb18e..HEAD`. Every accepted finding gets a failing regression test first, then the fix, then `npm run lint`. Rerun only the suites the fixes touch, then `npm run check` once more. The review specifically covers:
-- anything touching `capture`, `ingest` or the executor, as a security change (`security.md` SEC-105);
-- `git status` and `git diff` compared with the commits.
-
-- [ ] **Step 5: Founder stop: the real-vendor gate**
-
-**Founder stop.** No agent runs this; it spends the founder's credits. Ask the founder to confirm Plan decision 9, which covers the API key variable and the exclusion from `check`, and to run:
+- [ ] **Step 5: FOUNDER STOP, the real-vendor gate.** No agent runs this; it spends the founder's
+  credits. The founder confirms Plan decision 9 (the API key variable and the exclusion from
+  `check`) and runs:
 
 ```bash
 npm run build
 DEVELOPER_OS_VENDOR_BRAIN_API_KEY=<key> npm run test:vendor-brain
 ```
 
-Copy `$TMPDIR/brain-vendor-rows.json` into five rows of `docs/releases/compatibility-matrix.md`. The phase gate needs `pass` on Claude for all five. Codex is not required (spec §7.3, NEW-61).
-
-- [ ] **Step 6: Bookkeeping, branch and PR**
-
-1. Tick the roadmap's two Phase 5b checkboxes.
-2. Remove A12b from `ORDER.md` once the gate evidence is committed.
-3. Record in `BACKLOG.md` every spec gap this plan's Plan decisions resolved, plus residuals R1, R2 and R8, plus the R3 extension: a `--note` capture whose normalized text equals an existing plain capture returns `duplicate: true` with that capture's id and keeps that capture's envelope.
-4. Then run:
-
-```bash
-git add docs/architecture/brain.md docs/architecture/knowledge-pipeline.md docs/architecture/threat-model.md docs/architecture/workflow-schema.md docs/migration/instruction-inventory.md docs/releases/compatibility-matrix.md
-git add -f docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md docs/superpowers/ORDER.md docs/superpowers/BACKLOG.md docs/superpowers/plans/2026-09-22-developer-os-brain-workflows.md
-git diff --cached --name-only
-git commit -m "docs: close Phase 5b (A12b brain workflows)"
-```
-
-Push the phase branch once and open one PR, as plan 1a's closure did (`#14`). Never merge.
+  Copy `$TMPDIR/brain-vendor-rows.json` into five rows of `docs/releases/compatibility-matrix.md`.
+  The phase gate needs `pass` on Claude for all five. Codex is not required (spec §7.3, NEW-61).
+- [ ] **Step 6 (repository chore):** move Plan decisions 1–10 above and the spec's §8 residuals R1–R8,
+  with the R3 extension (a `--note` capture whose normalized text equals an existing plain capture
+  returns `duplicate: true` with that capture's id and keeps that capture's envelope), into
+  `docs/architecture/brain.md` or `knowledge-pipeline.md`; the §6 "Phase 5b" items stay in
+  `BACKLOG.md`. Then tick the roadmap Phase 5b, remove A12b from `ORDER.md` and delete this plan.
