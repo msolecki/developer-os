@@ -1,17 +1,24 @@
 import { basename } from "node:path";
 
 import type { HookVerbHandler } from "../registry.js";
-import { shellRuleGuard, shellSegments } from "./shell-segments.js";
+import { commandWords, shellRuleGuard, shellSegments } from "./shell-segments.js";
 import type { ShellRule } from "./shell-segments.js";
 
 const GIT_VALUE_OPTIONS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"]);
 
-function gitSubcommand(tokens: readonly string[]): { readonly name: string; readonly rest: readonly string[] } | null {
+interface GitCall {
+  readonly name: string;
+  readonly rest: readonly string[];
+  /** The options before the subcommand, such as `-c key=value`. */
+  readonly globals: readonly string[];
+}
+
+function gitSubcommand(tokens: readonly string[]): GitCall | null {
   if (basename(tokens[0] ?? "") !== "git") return null;
   let i = 1;
   while (i < tokens.length && (tokens[i] ?? "").startsWith("-")) i += GIT_VALUE_OPTIONS.has(tokens[i] ?? "") ? 2 : 1;
   const name = tokens[i];
-  return name === undefined ? null : { name, rest: tokens.slice(i + 1) };
+  return name === undefined ? null : { name, rest: tokens.slice(i + 1), globals: tokens.slice(1, i) };
 }
 
 function options(
@@ -46,18 +53,24 @@ function options(
 const COMMIT_VALUE_LONG = new Set(["--message", "--file", "--author", "--date", "--template", "--reuse-message", "--reedit-message", "--fixup", "--squash", "--cleanup"]);
 const PUSH_VALUE_LONG = new Set(["--repo", "--push-option", "--receive-pack", "--exec"]);
 
-function gitCalls(normalized: string): readonly { readonly name: string; readonly rest: readonly string[] }[] {
-  return (shellSegments(normalized) ?? []).flatMap((tokens) => gitSubcommand(tokens) ?? []);
+function gitCalls(normalized: string): readonly GitCall[] {
+  return (shellSegments(normalized) ?? []).flatMap((tokens) => gitSubcommand(commandWords(tokens)) ?? []);
 }
+
+/** `-c core.hooksPath=…` or `--config-env core.hooksPath=…` swaps the hooks out (D67). */
+const HOOKS_PATH = /^core\.hookspath=/iu;
+const overridesHooksPath = (globals: readonly string[]): boolean =>
+  globals.some((token) => HOOKS_PATH.test(token.replace(/^--config-env=/u, "")));
 
 export const COMMIT_RULES: readonly ShellRule<"hook-bypass" | "force-push">[] = [
   {
     id: "hook-bypass",
     matches: (n) =>
-      gitCalls(n).some(({ name, rest }) =>
+      gitCalls(n).some(({ name, rest, globals }) =>
         name === "commit"
-          ? options(rest, "mFCct", COMMIT_VALUE_LONG, "Su").some((o) => o === "--no-verify" || o === "-n")
-          : name === "push" && options(rest, "o", PUSH_VALUE_LONG).includes("--no-verify"),
+          ? overridesHooksPath(globals) ||
+            options(rest, "mFCct", COMMIT_VALUE_LONG, "Su").some((o) => o === "--no-verify" || o === "-n")
+          : name === "push" && (overridesHooksPath(globals) || options(rest, "o", PUSH_VALUE_LONG).includes("--no-verify")),
       ),
   },
   {

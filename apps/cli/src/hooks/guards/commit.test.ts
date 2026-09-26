@@ -45,6 +45,15 @@ const BLOCKS: readonly (readonly [string, string])[] = [
   ["force-push", "git push -f origin main"],
   ["force-push", "git push origin +main"],
   ["force-push", "git -c color.ui=never push -uf origin main"],
+  // D67: a wrapper or subshell before `git`.
+  ["force-push", "HUSKY=0 git push -f"],
+  ["force-push", "sudo git push --force"],
+  ["force-push", "(cd sub && git push -f)"],
+  ["hook-bypass", "HUSKY=0 git commit -n -m x"],
+  // D67: `-c core.hooksPath=…` swaps the hooks out.
+  ["hook-bypass", "git -c core.hooksPath=/dev/null commit -m x"],
+  ["hook-bypass", "git -c core.hookspath= push"],
+  ["hook-bypass", "git --config-env=core.hooksPath=X commit -m x"],
 ];
 
 const ALLOWS: readonly (readonly [string, string])[] = [
@@ -62,6 +71,10 @@ const ALLOWS: readonly (readonly [string, string])[] = [
   ["hook-bypass", "git status"],
   ["hook-bypass", "git log -- -n"],
   ["hook-bypass", "echo git commit -n"],
+  ["hook-bypass", "git -c user.name=x commit -m y"],
+  ["hook-bypass", "git -c core.hooksPath=.githooks status"],
+  ["force-push", "HUSKY=0 git push"],
+  ["force-push", "env git push origin main"],
 ];
 
 describe("guard commit", () => {
@@ -206,12 +219,18 @@ it("blocks force-push after an ANSI-C quoted apostrophe", async () => {
   expect(await run("echo $'\\''\ngit push --force\n'")).toMatchObject({ kind: "block", ruleId: "unterminated-quote" });
 });
 
-// Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
-describe("a prefixed git call (residual in hooks.md §3.8)", () => {
-  it.todo("blocks force-push: env git push -f");
-  it.todo("blocks force-push: FOO=1 git push -f");
-  it.todo("blocks force-push: (git push -f)");
-  it.todo("blocks force-push: a subshell whose last line ends in `--force)`");
-  it.todo("blocks force-push: x=`git push --force`");
-  it.todo("blocks hook-bypass: git -c core.hooksPath=/dev/null commit");
+// Task 2 parity (D67): a wrapper before `git` and a subshell around it no longer hide the call.
+describe("a prefixed git call", () => {
+  it.each([
+    ["force-push", "env git push -f"],
+    ["force-push", "FOO=1 git push -f"],
+    ["force-push", "(git push -f)"],
+    ["force-push", "(cd repo\ngit push --force)"],
+    ["hook-bypass", "git -c core.hooksPath=/dev/null commit"],
+  ])("blocks %s: %j", async (ruleId, command) => {
+    expect(await run(command)).toMatchObject({ kind: "block", ruleId });
+  });
+
+  // D67 accepted residual (hooks.md §3.8): a backquoted substitution is one assignment word.
+  it.todo("blocks force-push: x=`git push --force` (accepted residual, hooks.md §3.8)");
 });

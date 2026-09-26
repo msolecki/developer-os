@@ -1,3 +1,5 @@
+import { basename } from "node:path";
+
 import { normalizeShellCommand } from "@developer-os/security";
 
 import { excerpt } from "../outcome.js";
@@ -18,7 +20,18 @@ export interface ShellRule<Id extends string> {
  * Returns null for an unterminated quote so the guards can fail closed.
  */
 export function shellSegments(normalized: string): readonly (readonly string[])[] | null {
-  const segments: string[][] = [];
+  return shellPipeline(normalized)?.map((segment) => segment.tokens) ?? null;
+}
+
+export interface ShellSegment {
+  readonly tokens: readonly string[];
+  /** True when a single `|` (or `|&`) ends the segment, so its output feeds the next one. */
+  readonly pipesToNext: boolean;
+}
+
+/** `shellSegments` plus, for each segment, whether a pipe joins it to the next. */
+export function shellPipeline(normalized: string): readonly ShellSegment[] | null {
+  const segments: ShellSegment[] = [];
   let tokens: string[] = [];
   let token = "";
   let started = false;
@@ -41,9 +54,9 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
     token = "";
     started = false;
   };
-  const endSegment = (): void => {
+  const endSegment = (pipesToNext = false): void => {
     endToken();
-    if (tokens.length > 0) segments.push(tokens);
+    if (tokens.length > 0) segments.push({ tokens, pipesToNext });
     tokens = [];
   };
   // Returns the index just past the last pending heredoc's delimiter line, or -1 when a delimiter
@@ -68,7 +81,7 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
       // Bash may see no comment (`${x:- # }`, `` ` #` ``), so a comment still splits at `;`, `&` and
       // `|` and keeps the words after a split; quotes, backslashes and `<<` in it stay plain text.
       if (char === ";" || char === "&" || char === "|") {
-        endSegment();
+        endSegment(char === "|" && normalized.charAt(i + 1) !== "|");
         comment = "tail";
         if (normalized.charAt(i + 1) === char && char !== ";") i += 1;
       } else if (/\s/u.test(char)) {
@@ -108,7 +121,7 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
     } else if (/\s/u.test(char)) {
       endToken();
     } else if (char === ";" || char === "&" || char === "|") {
-      endSegment();
+      endSegment(char === "|" && normalized.charAt(i + 1) !== "|");
       if (normalized.charAt(i + 1) === char && char !== ";") i += 1;
     } else if (normalized.startsWith("<<<", i)) {
       // A here-string is a plain word; consumed whole so its tail `<<` arms no heredoc.
@@ -129,6 +142,37 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
   if (quote !== null) return null;
   endSegment();
   return segments;
+}
+
+const SUDO_VALUE_OPTIONS = new Set(["-u", "-g", "-U", "-C", "-D", "-h", "-p", "-r", "-t", "-T"]);
+const ENV_VALUE_OPTIONS = new Set(["-u", "-C", "-S"]);
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
+
+/**
+ * A segment's words from the command it runs (D67): drops a leading `(`, leading `VAR=value`
+ * assignments and `sudo [options]` / `env [options]` wrappers, and strips each word's trailing `)`,
+ * so `HUSKY=0 git push -f`, `sudo rm -rf /` and `(cd x && git push -f)` start at the real command.
+ */
+export function commandWords(tokens: readonly string[]): readonly string[] {
+  const words = tokens
+    .map((token, at) => ({ token, word: (at === 0 ? token.replace(/^\(+/u, "") : token).replace(/\)+$/u, "") }))
+    // Drop only a word the stripping emptied; an empty quoted token (`-m ""`) keeps option values aligned.
+    .filter(({ token, word }) => word.length > 0 || token.length === 0)
+    .map(({ word }) => word);
+  let at = 0;
+  for (;;) {
+    const word = words[at] ?? "";
+    const name = basename(word);
+    if (ASSIGNMENT.test(word)) {
+      at += 1;
+    } else if (name === "sudo" || name === "env") {
+      const valued = name === "sudo" ? SUDO_VALUE_OPTIONS : ENV_VALUE_OPTIONS;
+      at += 1;
+      while ((words[at] ?? "").startsWith("-")) at += valued.has(words[at] ?? "") ? 2 : 1;
+    } else {
+      return words.slice(at);
+    }
+  }
 }
 
 export function shellRuleGuard(rules: readonly ShellRule<string>[]): HookVerbHandler {
