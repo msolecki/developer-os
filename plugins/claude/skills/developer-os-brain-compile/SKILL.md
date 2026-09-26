@@ -48,7 +48,7 @@ Effect: `brain.readNote`
 
 ### draft
 
-Write one complete note: frontmatter, then body. The frontmatter has schemaVersion 1, type compiled-note, stage emerging, author agent, reviewed null, today's date as created, tags that include the topic, a summary of at most 400 characters, and sources listing every note path you read. The body synthesises those notes and links each one with a wikilink. Choose a destination path relative to the content root, inside a configured topic folder, that no note occupies yet. Stop with the input-invalid refusal when fewer than two notes were read. Then pass the note to the next step on stdin through a quoted heredoc: developer-os capture --note '<path>' <<'<word>' ... <word>, where <word> is a delimiter that appears on no line of the text.
+Write one complete note: frontmatter, then body. The frontmatter has schemaVersion 1, type compiled-note, stage emerging, author agent, reviewed null, today's date as created, tags that include the topic, a summary of at most 400 characters, and sources listing every note path you read. Write title and summary as double-quoted strings, because a bare colon inside them breaks the frontmatter. The body synthesises those notes and links each one with a wikilink. Choose a destination path relative to the content root, inside a configured topic folder, that no note occupies yet. Stop with the input-invalid refusal when fewer than two notes were read. Then pass the note to the next step on stdin through a quoted heredoc: developer-os capture --note '<path>' <<'<word>' ... <word>, where <word> is a delimiter that appears on no line of the text.
 
 ### capture
 

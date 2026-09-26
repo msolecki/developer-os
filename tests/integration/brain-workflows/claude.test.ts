@@ -152,8 +152,12 @@ describe("the five brain workflows on a real Claude Code", () => {
         PLUGIN_DIR,
         "-p",
         prompt,
+        // stream-json, not json: `json` carries only the final message, and a
+        // workflow may deliver its cited report in an earlier one ("Report
+        // delivered above", observed 2026-09-26 on brain-report and brain-compile).
         "--output-format",
-        "json",
+        "stream-json",
+        "--verbose",
         "--allowedTools",
         "Read",
         "Bash(developer-os:*)",
@@ -165,6 +169,8 @@ describe("the five brain workflows on a real Claude Code", () => {
         cwd: temp.root,
         maxBuffer: 32 * 1024 * 1024,
       });
+      // Kept beside the rows file so a failed billed run can be diagnosed without paying again.
+      await writeFile(join(tmpdir(), `brain-vendor-${id}.jsonl`), stdout, "utf8");
       expect(stdout).toMatch(/(DEV|INFRA|PROJECTS|TOOLS)\/example-[a-z-]+\.md/u);
 
       // The vendor's own home state, the child's TMPDIR, and the product's

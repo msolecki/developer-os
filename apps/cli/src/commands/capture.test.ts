@@ -1078,6 +1078,23 @@ describe("runCapture --note", () => {
     expect(await inventory(fixture.paths.brain)).toStrictEqual(before);
   });
 
+  // A real Claude run on 2026-09-26 retried blind four times, leaving test
+  // captures in quarantine, because this refusal named no key or line.
+  it("names the key, the issue class and the line of the frontmatter error, never its text", async () => {
+    const fixture = await installedFixture("note-unparseable-detail");
+    const secret = "sk-live-do-not-echo";
+    const missing = NEW_NOTE.replace("title: A new synthetic note\n", "");
+    const malformed = NEW_NOTE.replace(/^summary: .*$/mu, `summary: ${secret} note: colon`);
+
+    expect([missing, malformed]).not.toContain(NEW_NOTE);
+    const byKey = await fixture.run(fixture.context, { text: missing, note: "DEV/new-note.md" });
+    const byLine = await fixture.run(fixture.context, { text: malformed, note: "DEV/new-note.md" });
+
+    expect(!byKey.ok && byKey.error.message).toContain("title (missing)");
+    expect(!byLine.ok && byLine.error.message).toMatch(/malformed\) at line \d+/u);
+    expect(!byLine.ok && byLine.error.message).not.toContain(secret);
+  });
+
   it("refuses an existing destination that is not a canonical note, at exit 2", async () => {
     const fixture = await installedFixture("note-not-a-note");
     await nodeFs.writeFile(
