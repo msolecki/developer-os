@@ -146,7 +146,7 @@ They are not ordered ahead of A15 unless the touched subsystem makes one relevan
 - Implementation still to build: NEW-100's CI sharding (repository, before the next PR); NEW-61's
   Codex re-registration on `update` (with Phase 8's apply path); A16's plan and work.
 - Parked or blocked: Spec 2 closure Tasks 9–10 (NEW-110), Spec 2 Task 26, Spec 2 Task 11b (D46),
-  plan 1a Task 24 (NEW-100's round trip, post-A16, D42).
+  NEW-100's round trip (opt-in-surfaces spec §7.1, post-A16, D42).
 - Founder stop points (9): A12 NEW-101 billed row, then `UNPROVEN_CLAUDE_CATEGORIES`; A12's
   real-vendor integration files (NEW-102, NEW-103, NEW-65); the founder-local `--patterns` scan (A12,
   A14); A12b `test:vendor-brain`; `test:vendor-ingest`; A13 Task 2; A13 Task 18; plan 1b Task 19 with

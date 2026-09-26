@@ -39,11 +39,12 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-24 | founder (D61) | backslash handling settled: `GitConfigQuotedPathV1` refuses a backslash, matching Core's `CanonicalAbsolutePathV1` | §4.2 |
 | 2026-09-25 | founder, after the whole-phase reviews (D62) | `git_commit_not_loose` refuses only when the tip commit read by the fast-forward check is packed; a packed target commit or subtree makes the shadow advertise nothing and the push sends the whole history (residual 11, until A16); §4.2 push argv carries `--no-thin` and pack-objects drops `--thin`; the gateway's pinned Git child-environment reconciliation; the destination shadow's fixed deny booleans (residual 12). Amended 2026-09-25 (D62) | §4.2, §8.3 |
 | 2026-09-26 | A12 design §11, approved 2026-09-22 (D47) | `<product-home>/instructions/` is user data in the absent-manifest walk | §6 |
+| 2026-09-26 | founder, D42 (2026-09-22) | plan 1a Task 24's deferred round-trip and kill-matrix contract moved here unchanged when the plan file was deleted (NEW-100) | §7.1 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
 change is marked "Amended 2026-09-22 (A13 Q3-A)"; the later ones are marked with their decision
 number, "Amended 2026-09-23 (D59)", "Amended 2026-09-24 (D61)", "Added 2026-09-25 (D62)" and
-"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)".
+"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)"; the NEW-100 row is marked "Added 2026-09-26 (NEW-100)".
 
 ---
 
@@ -4351,6 +4352,88 @@ a file named `*.pinned-host.test.ts`. On any other host it refuses by design, an
 default suite (`test:suite`) excludes these files, and `npm run test:pinned-host` runs them locally
 at phase close and at every re-pin; CI still runs every injected-runner test. A `*.pinned-host.test.ts`
 file is never also a `*.v2.test.ts` file.
+
+### 7.1 Deferred gate: uninstall → `init` round trip and A9 kill matrix (NEW-100)
+
+**Added 2026-09-26 (NEW-100).** Moved verbatim in substance from plan 1a Task 24, whose plan file was
+deleted when plan 1a closed (`git show d5185a4:docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`
+holds the original). This is the one place the contract lives until `BACKLOG.md` NEW-100 closes.
+
+**Status (D42, 2026-09-22).** Deferred to post-A16 hardening; it runs once, together with the other
+heavy e2e suites, after A11b and A12–A16 close. D42 supersedes D39 and D41. **Accepted risk:** beyond
+what plan 1a Tasks 20–23b already exercise (one reinstall cycle and the NEW-99 regression in Task 23's
+chain), the round trip is unproven end to end and the A9 recovery microstates below are uncovered.
+
+**Kill-point count.** NEW-100 closes with D39's cut: `A9_KILL_POINTS` 10 → 6 and nothing else. The
+four dropped points are restored once `lifecycle-v2` is sharded (D39).
+
+**D39's selection rule:** keep one kill point per distinct recovery arm *and*
+per distinct control-file microstate the code branches on; drop only a point provably equivalent to a
+kept one at both levels, and record which were dropped and why. `plan plus lock` and `plan only` are
+**not** equivalent (Task 23 found the fixture silently collapsing the first into the second); if only
+one survives it is `plan plus lock`. The round-trip case is never cut: its third `uninstall`, after a
+reinstall, is the single operation NEW-99 breaks on.
+
+**Candidate `A9_KILL_POINTS`:**
+- `M(preserve_before)` before its cursor advance, and after it;
+- `M(commit_absence)`;
+- `K(delete)`;
+- `M(finalize_tombstones)`;
+- the `coordinator_envelope` control files with both still present, with the allocator removed, and
+  with both removed;
+- plan plus lock;
+- plan only.
+
+A kill before durable `M(commit_absence)` compensates, so its recovery `runUninstall` restores the
+install and a second `runUninstall` completes it before `init`; the loop handles that exactly as
+Task 23's chain does.
+
+**File:** `apps/cli/src/lifecycle/uninstall-round-trip.v2.test.ts`, plus `lifecycle-v2`
+`timeout-minutes` in `.github/workflows/check.yml`. It reuses Task 23's kill-chain pattern:
+`killUninstallAt` runs `new LifecycleUninstaller({ afterBoundary })`, whose hook throws
+`SyntheticDeath` at the named boundary; the shared-home chain and `CHAIN_TIMEOUT_MS` derivation live
+in `apps/cli/src/lifecycle/uninstall-recovery.v2.test.ts`. V2 behaviour is proven through
+`createCommandFixture(name, { bootstrapAvailable: true })` and a real fresh V2 `init`.
+
+```ts
+it("round-trips init → uninstall → uninstall → init → uninstall → init without manual action", async () => {
+  const fixture = await createCommandFixture("round-trip-cycles", { bootstrapAvailable: true });
+  expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+  for (const cycle of [1, 2]) {
+    expect((await runUninstall(fixture.rebuildContext(), ACCEPTED)).ok, `uninstall ${String(cycle)}`).toBe(true);
+    if (cycle === 1) expect((await runUninstall(fixture.rebuildContext(), ACCEPTED)).ok, "uninstall again").toBe(true);
+    expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok, `init ${String(cycle + 1)}`).toBe(true);
+  }
+  expect(new Set((await fixture.bootstrapEvidenceIdentities()).map((entry) => entry.id)).size).toBe(3);
+}, REAL_FILESYSTEM_TIMEOUT_MS);
+
+it("recovers an uninstall killed at each retained A9 point and then initialises, reusing one chained home", async () => {
+  const fixture = await createCommandFixture("round-trip-kill-matrix", { bootstrapAvailable: true });
+  expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+  expect(A9_KILL_POINTS.length).toBeGreaterThan(0);
+  for (const point of A9_KILL_POINTS) {
+    await killUninstallAt(fixture, point);
+    expect((await runUninstall(fixture.rebuildContext(), ACCEPTED)).ok, `recover ${point}`).toBe(true);
+    expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok, `init after ${point}`).toBe(true);
+  }
+}, KILL_MATRIX_TIMEOUT_MS);
+```
+
+`KILL_MATRIX_TIMEOUT_MS` is file-local: measure once with `4 * REAL_FILESYSTEM_TIMEOUT_MS`, then set
+ceil(measured × 2 × 1.5) with the measurement in a one-line comment.
+
+The same file also proves:
+- the Brain, its `.git` directory and an unrelated file in the product home survive every uninstall;
+- every V2 uninstall's `transactionId` matches `lc_`;
+- closure is `clear` after every `init`;
+- no step spawns `git`, `launchctl` or a vendor.
+
+**Run and budget.** `npx vitest run --root apps/cli src/lifecycle/uninstall-round-trip.v2.test.ts`.
+A failure is a defect in the uninstall recovery code, fixed with a regression test first. The file
+runs about 14 real fresh V2 `init`s (132 s each locally on 2026-09-17): about 31 local and 62 CI
+minutes. Add its measured duration to the running local total of the `lifecycle-v2` shard it lands
+in and set that shard's `timeout-minutes` to ceil(total × 2 × 1.5); stop and ask the founder before
+committing if that exceeds 300. Closing it closes NEW-100's round-trip half.
 
 ## 8. Produced interfaces, sequencing, and residuals
 
