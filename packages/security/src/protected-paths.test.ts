@@ -88,6 +88,29 @@ describe("ProtectedPathPolicy", () => {
     await expect(policy.assertWritable(allowedPath)).resolves.toBeUndefined();
   });
 
+  // D67: a committed `.env` template holds no secret, so it is exempt from `read-env-variants`.
+  it.each([".env.example", ".env.sample", ".env.template", ".env.dist"])(
+    "allows the .env template %s",
+    async (name) => {
+      const policy = new ProtectedPathPolicy(syntheticHome);
+      const allowedPath = `/Users/test/project/${name}`;
+
+      await expect(policy.assertReadable(allowedPath)).resolves.toBeUndefined();
+      await expect(policy.assertWritable(allowedPath)).resolves.toBeUndefined();
+    },
+  );
+
+  it.each([".env.local", ".env.production", ".env.example.local"])(
+    "still rejects the .env variant %s",
+    async (name) => {
+      const policy = new ProtectedPathPolicy(syntheticHome);
+
+      await expect(
+        policy.assertWritable(`/Users/test/project/${name}`),
+      ).rejects.toBeInstanceOf(SecurityRefusalError);
+    },
+  );
+
   it("awaits a protected-path refusal before invoking the injected reader", async () => {
     const policy = new ProtectedPathPolicy(syntheticHome);
     const reader = vi.fn(() => Promise.resolve("must-not-be-read"));
