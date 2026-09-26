@@ -321,8 +321,8 @@ write-free dry run.
 
 ### 6.13 Brain workflows, note captures and the refactor verbs (A12b)
 
-Recorded 2026-09-26 from the A12b plan (`plans/2026-09-22-developer-os-brain-workflows.md`, whose
-shipped tasks are in git history) and its spec
+Recorded 2026-09-26 from the A12b plan (`plans/2026-09-22-developer-os-brain-workflows.md`, closed and
+deleted 2026-09-26; `git show c319af9:` holds it) and its spec
 (`docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`, approved by D47). The spec
 stays normative; these are the choices the plan made where the spec was silent or conflicted with the
 code, and the residuals the spec accepted.

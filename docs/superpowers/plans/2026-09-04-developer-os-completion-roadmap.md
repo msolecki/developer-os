@@ -309,9 +309,11 @@ Gate: all inventoried artifacts install, drift-check and uninstall on both vendo
 
 Scope: inventory §7. Rule: the agent never writes to the vault directly; every mutation is a capture through the validators and a transaction.
 
-- Workflows and verbs landed as Tasks 1–15 of `plans/2026-09-22-developer-os-brain-workflows.md`,
-  and the phase close ran.
-- [ ] Real-vendor gate (Task 16 Step 5, founder stop). The plan's decisions and the spec's residuals
+- Workflows and verbs landed as Tasks 1–15 of the A12b plan (closed and deleted 2026-09-26), and the
+  phase close ran.
+- [x] Real-vendor gate: five `pass` rows on Claude 2.1.283 at `c319af9` in
+  `docs/releases/compatibility-matrix.md` (2026-09-26, D66). The run found and fixed an opaque
+  `capture --note` refusal (`c319af9`). The plan's decisions and the spec's residuals
   moved to `docs/architecture/brain.md` §6.13 on 2026-09-26.
 
 Gate: each workflow proven end to end on the synthetic vault with a fake vendor and once with a real vendor in the compatibility matrix.
@@ -351,9 +353,8 @@ The phase closes ran (above). What is left of them is founder work, executed fro
 - [ ] A12 (`plans/2026-09-22-developer-os-instruction-artifacts.md`): NEW-101 billed real-agent row,
   then emptying `UNPROVEN_CLAUDE_CATEGORIES` (Task 29 Step 3b); the founder-local private-pattern scan (`scan-instruction-defaults.js --patterns`) over `instructions/`
   and `templates/project/`, which also closes A14 Task 15 Step 4.
-- [ ] A12b (`plans/2026-09-22-developer-os-brain-workflows.md`): Task 16 real-vendor run
-  (`npm run build && DEVELOPER_OS_VENDOR_BRAIN_OAUTH_TOKEN=<setup-token> npm run test:vendor-brain`, D66, all five
-  workflows `pass` on Claude). `test:vendor-ingest` is unbilled (loopback and dead-endpoint capture) and has not run.
+- [x] A12b: real-vendor run done 2026-09-26 (five `pass` rows, `c319af9`); `test:vendor-ingest` green
+  the same day.
 - [ ] A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 18 real-agent matrix on both vendors;
   Task 2 legacy parity check.
 
