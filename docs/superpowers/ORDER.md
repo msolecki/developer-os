@@ -39,7 +39,11 @@ closes they governed. The next code-producing work runs `SESSION.md` §5 as writ
   NEW-65, NEW-61's loading half); the founder-local `--patterns` scan over `instructions/` and
   `templates/project/` (A12, and A14 Task 15).
 - A12b (`plans/2026-09-22-developer-os-brain-workflows.md`): `npm run test:vendor-brain`, all five
-  workflows `pass` on Claude. `test:vendor-ingest` is billed too.
+  workflows `pass` on Claude.
+- `npm run build && npm run test:vendor-ingest` (billed, both vendors logged in on a disposable home;
+  `tests/integration/ingest/no-user-hooks.test.ts` and `instruction-isolation.test.ts`, the second
+  shared with A12's Task 21 Step 4). `npm run check` includes it, so a `check` without vendor
+  credentials is not green evidence for these two files.
 - A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 2 legacy parity check; Task 18 real-agent matrix
   on both vendors (NEW-104).
 - Phase 9 (`plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`): Task 19, certification on a
