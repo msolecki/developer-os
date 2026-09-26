@@ -18,7 +18,6 @@ reviews, PR #15 merged); `ORDER.md` records the evidence.
 | Entry | Work still required | Blocked by |
 |---|---|---|
 | A12 · DOS-P10 | founder stops: NEW-101 billed row then `UNPROVEN_CLAUDE_CATEGORIES`, private-pattern scan | founder |
-| A12b · Brain workflows | founder real-vendor run (`test:vendor-brain`) | founder |
 | A13 · DOS-P11 | founder stops: Task 2 legacy parity, Task 18 real-agent matrix (NEW-104) | founder |
 | A15 · DOS-P8 | execute `docs/migration/founder-cutover.md` (written; D58 dropped shadow mode) | founder, live machine |
 | A11b · DOS-P7 remainder | closure Tasks 9–10 (NEW-110), Task 26 and Task 11b parked (NEW-111, NEW-112); NEW-113 (D65, replaces plan 1b Task 19) | NEW-110, D46, NEW-113 |
@@ -118,10 +117,6 @@ Required behavior:
 ### A12 · DOS-P10
 
 - [ ] Founder stops: `plans/2026-09-22-developer-os-instruction-artifacts.md`.
-
-### A12b · Brain workflows
-
-- [ ] Founder real-vendor gate: `plans/2026-09-22-developer-os-brain-workflows.md`.
 
 ### A13 · DOS-P11
 
