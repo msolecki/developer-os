@@ -929,7 +929,7 @@ it.
 
 ## 10. Lifecycle kernel (Spec 1a)
 
-Plan 1a (`docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, Tasks 1–25) shipped
+Plan 1a (Tasks 1–25, `43c6876..082e098`; the plan file was deleted 2026-09-26) shipped
 the kernel this section describes, and plan 1b (Tasks 1–18 and 20, `5e6c9b2..d1b1e77`, phase close on
 `bc17550`) filled its Git, launchd, automation and network-push slots. §4's "active opt-in-surfaces
 design … normative; implementation remains pending" no longer holds for the surfaces named here; what
