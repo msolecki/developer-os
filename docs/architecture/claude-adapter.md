@@ -470,6 +470,22 @@ block whose content is `@$T/p/claude/instructions/probe-rule.md`;
   directory; no row named a path under the live `~/.claude`.
 - **`validate` still mutates `HOME`** (`$T/.claude.json`, `$T/.claude/backups/`), as §13 recorded.
 
+### 14.1 Billed real-agent row (NEW-101, spec §10.2), 2026-09-26
+
+Claude Code 2.1.283, founder's subscription through `CLAUDE_CODE_OAUTH_TOKEN` (D66). Each session ran
+as `env -i PATH="$PATH" TMPDIR="$TMPDIR" HOME="$T" CLAUDE_CODE_OAUTH_TOKEN=<token> claude -p …` from
+`$T/work`, with `$T/.claude/rules/developer-os-plain.md` (no frontmatter),
+`$T/.claude/rules/developer-os-scoped.md` (`paths: ["**/*.probe"]`),
+`$T/.claude/output-styles/developer-os-probe.md` (`name: Probe Style`) and `$T/.claude/settings.json`
+`{"outputStyle":"Probe Style"}`. Each file asks for a random token the model cannot guess.
+
+| Row | Prompt | Reply | Verdict |
+|---|---|---|---|
+| `rule` | "What is the plain probe word?" (`--max-turns 1`) | `PLAIN-7Q3` | **proven**: reaches the model |
+| `output-style` | both sessions | each reply begins `STYLE-8Z2` | **proven**: reaches the model |
+| `scoped-rule` | "Read a.probe …" (`--allowedTools Read`) | `… SCOPED-4K9`; absent from the first session, which read no `.probe` file | **proven**: reaches the model on a path match only |
+| control | the first prompt in an empty disposable `HOME` | "I don't have any probe word" | the tokens come from the files |
+
 ## 15. Observation rows used by A14
 
 A14 (`import --claude-memory` and the `doctor` check `vendor-config`) depends on two vendor facts. Both
