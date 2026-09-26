@@ -151,6 +151,6 @@ They are not ordered ahead of A15 unless the touched subsystem makes one relevan
   real-vendor integration files (NEW-102, NEW-103, NEW-65); the founder-local `--patterns` scan (A12,
   A14); A12b `test:vendor-brain`; `test:vendor-ingest`; A13 Task 2; A13 Task 18; plan 1b Task 19 with
   `test:pinned-host`; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
-- Repository chores (2): A12b's plan decisions and residuals into the architecture notes; plan 1b's architecture carry-over.
+- Repository chores (1): plan 1b's architecture carry-over.
 - Repository backlog: 59 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
   and the §6 phase-close deferrals.

@@ -285,7 +285,8 @@ Scope: inventory §7. Rule: the agent never writes to the vault directly; every 
 
 - Workflows and verbs landed as Tasks 1–15 of `plans/2026-09-22-developer-os-brain-workflows.md`,
   and the phase close ran.
-- [ ] Real-vendor gate (Task 16 Step 5, founder stop) and the plan's documentation chore.
+- [ ] Real-vendor gate (Task 16 Step 5, founder stop). The plan's decisions and the spec's residuals
+  moved to `docs/architecture/brain.md` §6.13 on 2026-09-26.
 
 Gate: each workflow proven end to end on the synthetic vault with a fake vendor and once with a real vendor in the compatibility matrix.
 
