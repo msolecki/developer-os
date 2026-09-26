@@ -6,7 +6,7 @@
 
 **Architecture:** The engine (transactions, manifest, redaction, quarantine, ingest, Brain index, both adapters) exists. What remains is the lifecycle (Spec 2 update/release, Spec 1 config/git/launchd), the instruction layer (A12), hooks (A13), tooling verbs (A14), Brain workflows (A12b), the cutover (A15) and release (A16). The order below is dictated by hard dependencies: nothing installs instruction artifacts before the manifest V2 handoff lands, and no cutover happens before the product replaces every legacy surface the founder uses daily.
 
-Completed tasks were removed on 2026-09-23 and 2026-09-24; see git history.
+Completed tasks were removed on 2026-09-23, 2026-09-24 and 2026-09-26; see git history. The phase closes of 4b, 5, 5b, 6, 7, 8 and 9 ran on 2026-09-25/26: full suite green on `bc17550`, one whole-phase review each with its findings fixed or recorded (D62–D64), PR #15 merged. What each phase still owes is listed under it.
 
 **Tech Stack:** as in `docs/superpowers/plans/2026-07-21-developer-os-program.md`.
 
@@ -148,11 +148,10 @@ Added by D16 and pulled forward from Phase 8: without the launcher's root-verifi
   spec amendment (D26 already named it as an option) and clears 634 with wide margin (7,936-mutation
   ceiling). Implementation (the loop in `apps/cli/src/lifecycle/uninstall.ts`) is still owed —
   `BACKLOG.md` NEW-85. Plan 1a ships only the pre-allocation refusal.
-- Code landed, tests unrun (D44): Task 10 `1e214ce`, Task 11 `3f640b3`, NEW-79 `503e907`, NEW-81 `7e6e641`,
-  NEW-85 `d2cc737`, launcher trust-fd fix `c7bc459`, side track NEW-49 `6254586`. Task 11b
-  (`plans/2026-08-29-developer-os-release-update.md`) stays parked by D46, so the production gate below
-  waits on it; until then A12's unsigned local build is the install source.
-- [ ] Phase close — see "Phase close (Phases 4b–7)" below.
+- Code landed (Task 10 `1e214ce`, Task 11 `3f640b3`, NEW-79 `503e907`, NEW-81 `7e6e641`, NEW-85
+  `d2cc737`, launcher trust-fd fix `c7bc459`, side track NEW-49 `6254586`) and the phase close ran.
+  Task 11b (`plans/2026-08-29-developer-os-release-update.md`) stays parked by D46, so the production
+  gate below waits on it; until then A12's unsigned local build is the install source.
 
 Gate: on a disposable home, a fresh `init` runs the V2 path in production through the launcher, and `init` over a V1 home refuses.
 
@@ -271,11 +270,12 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
-- Spec, plan and Tasks 1–28 of `plans/2026-09-22-developer-os-instruction-artifacts.md` landed,
-  tests unrun (D47): install/uninstall wiring (NEW-60) `be9b6de`, `022dc98`; loading assertions (NEW-65)
-  `084f1ba`; Codex registration at install `485ca5a`.
+- Spec, plan and Tasks 1–28 of `plans/2026-09-22-developer-os-instruction-artifacts.md` landed and
+  the phase close ran: install/uninstall wiring (NEW-60) `be9b6de`, `022dc98`; loading assertions
+  (NEW-65) `084f1ba`; Codex registration at install `485ca5a`.
 - [ ] Codex cache: an in-place re-render is not loaded until `codex plugin add` runs again; the update lifecycle must re-register (NEW-61). Registration at install landed; re-registration on `update` belongs with Phase 8.
-- [ ] Phase close — A12 Task 29, see "Phase close (Phases 4b–7)" below.
+- [ ] Founder stops and the §11 spec amendments — the plan's remainder; see "Founder stops still
+  open (Phases 5–7)" below.
 
 Gate: all inventoried artifacts install, drift-check and uninstall on both vendors; `doctor` names each as `default` or `user`.
 
@@ -284,8 +284,8 @@ Gate: all inventoried artifacts install, drift-check and uninstall on both vendo
 Scope: inventory §7. Rule: the agent never writes to the vault directly; every mutation is a capture through the validators and a transaction.
 
 - Workflows and verbs landed as Tasks 1–15 of `plans/2026-09-22-developer-os-brain-workflows.md`,
-  tests unrun (D47).
-- [ ] Phase close — A12b Task 16, see "Phase close (Phases 4b–7)" below.
+  and the phase close ran.
+- [ ] Real-vendor gate (Task 16 Step 5, founder stop) and the plan's documentation chore.
 
 Gate: each workflow proven end to end on the synthetic vault with a fake vendor and once with a real vendor in the compatibility matrix.
 
@@ -294,13 +294,12 @@ Gate: each workflow proven end to end on the synthetic vault with a fake vendor 
 Scope: inventory §4.
 
 - Spec and the Claude half landed as Tasks 3–14, 16, 17 of `plans/2026-09-22-developer-os-hooks.md`
-  (Claude hooks installed by `init`, `a156b0c`), tests unrun (D47).
+  (Claude hooks installed by `init`, `a156b0c`).
 - Task 15, the Codex half (Codex hooks bundled in the plugin manifest and trusted manually, D7), and
-  Task 1's remaining observations landed under D57 (`4041286`, `4e308d2`, `2e75574`, `2bec6a7`),
-  tests unrun.
+  Task 1's remaining observations landed under D57 (`4041286`, `4e308d2`, `2e75574`, `2bec6a7`).
+- The phase close (Task 19) ran.
 - [ ] Task 2: legacy parity check (founder stop point), never run.
 - [ ] Task 18: "observed firing" proven in the real-agent matrix on both vendors (founder stop point).
-- [ ] Phase close — Task 19, see "Phase close (Phases 4b–7)" below.
 
 Gate: every supported hook observed firing on Claude; on Codex after manual trust; capability keys `session_start_injection` and `plugin_hooks` resolve to `yes` where observed.
 
@@ -309,40 +308,29 @@ Gate: every supported hook observed firing on Claude; on Codex after manual trus
 Scope: inventory §5, §6.
 
 - `import`, `project init|check`, `doctor` `vendor-config` and the D47 refusals landed as Tasks 1–13 and
-  15 of `plans/2026-09-22-developer-os-tooling-verbs.md`, tests unrun (D47).
-- Task 14's Claude observations (NEW-109) were recorded under D57 (`4041286`), test unrun.
-- [ ] Phase close — Task 16, see "Phase close (Phases 4b–7)" below.
+  15 of `plans/2026-09-22-developer-os-tooling-verbs.md`; Task 14's Claude observations (NEW-109) were
+  recorded under D57 (`4041286`). The phase close ran and the plan was deleted on 2026-09-26; its
+  scope decisions are in `BACKLOG.md` NEW-108.
+- [ ] The `project init` templates' founder-local scan, run with A12's (see below), and the inventory
+  status flip (A12 plan remainder).
 - The automation job registry is Spec 1b's and belongs to Phase 9 (D16). It is Spec 1 §5.1's four jobs: `brain-reindex`, `brain-lint`, `doctor` and `git-sync`. `import` and `ingest` stay manual and are not registry entries (D47, Spec 1 §1).
 
 Gate: every inventoried script is a verb or a recorded refusal.
 
-### Phase close (Phases 4b–7)
+### Founder stops still open (Phases 5–7)
 
-Owed under D44/D47: no test ran during implementation, each commit ran only `npm run lint`. The
-per-phase steps are the close task of each plan (A12 Task 29, A12b Task 16, A13 Task 19, A14 Task 16;
-Phase 4b closes no plan, so D32's phase-close rule applies). For every one of these phases:
+The phase closes ran (above). What is left of them is founder work, executed from the plan named:
 
-- [ ] **FOUNDER STOP:** `npm run check` plus the plan's deferred slow suites (the `bootstrap-executor`,
-  `lifecycle-v2` and e2e files each plan lists), on the integrated tree.
-- [ ] One whole-phase fresh-context review by an agent that authored none of the phase (orchestrator
-  dispatches); accepted findings get a failing test first.
-- [ ] One branch pushed and one PR opened (D44). A direct push to `development` is refused (`GH013`).
-
-Founder stops per phase, on top of that:
-
-- [ ] A12: NEW-101 billed real-agent row, then emptying `UNPROVEN_CLAUDE_CATEGORIES` (Task 29 Step 3b);
-  NEW-103 Claude D8 isolation observation and NEW-102's Codex re-observation (Task 21's three
-  real-vendor integration files); the founder-local private-pattern scan
-  (`scan-instruction-defaults.js --patterns`) over `instructions/` and `templates/project/`. Content
-  review of the agents, command-pair and general-skill batches is not recorded (orchestrator, with the
-  phase review).
-- [ ] A12b: Task 16 real-vendor run (`npm run build && DEVELOPER_OS_VENDOR_BRAIN_API_KEY=<key> npm run test:vendor-brain`,
-  all five workflows `pass` on Claude); the red-first runs of the new security cases against `13eb18e`
-  (orchestrator).
-- [ ] A13: Task 18 real-agent matrix on both vendors; Task 2 legacy parity check. Task 15's tests
-  (NEW-104, D57) run with the phase's deferred suites.
-- [ ] A14: the `project init` templates' founder-local scan (Task 15 Step 4). Task 14's test (NEW-109,
-  D57) runs with the phase's deferred suites.
+- [ ] A12 (`plans/2026-09-22-developer-os-instruction-artifacts.md`): NEW-101 billed real-agent row,
+  then emptying `UNPROVEN_CLAUDE_CATEGORIES` (Task 29 Step 3b); NEW-103 Claude D8 isolation
+  observation and NEW-102's Codex re-observation (Task 21's three real-vendor integration files); the
+  founder-local private-pattern scan (`scan-instruction-defaults.js --patterns`) over `instructions/`
+  and `templates/project/`, which also closes A14 Task 15 Step 4.
+- [ ] A12b (`plans/2026-09-22-developer-os-brain-workflows.md`): Task 16 real-vendor run
+  (`npm run build && DEVELOPER_OS_VENDOR_BRAIN_API_KEY=<key> npm run test:vendor-brain`, all five
+  workflows `pass` on Claude). `test:vendor-ingest` is billed too and has not run.
+- [ ] A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 18 real-agent matrix on both vendors;
+  Task 2 legacy parity check.
 
 ### Phase 8 — Spec 2 Tasks 12–26: release transport, update, rollback · L
 
@@ -351,9 +339,7 @@ Runs after Phase 10 (D16). Tasks 10–11 moved to Phase 4b.
 NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the §5.3/§6.3 limit conflict is resolved, the exact-maximum gates are read against both bounds, and the `symlink` arm is accepted residual 9. Tasks 20 and 26 carry what that leaves them. Execute the baseline plan.
 
 - Tasks 12–25 of `plans/2026-08-29-developer-os-release-update.md` and Tasks 1–8 of
-  `plans/2026-09-23-developer-os-spec2-closure.md` landed under D56, tests unrun.
-- [ ] Phase close — the release plan's "Phase 8 close": every deferred test, one whole-phase review,
-  one PR.
+  `plans/2026-09-23-developer-os-spec2-closure.md` landed under D56, and the Phase 8 close ran.
 - [ ] Closure Tasks 9–10 (`update --apply` / `update rollback --apply` composition): blocked on design,
   NEW-110; parked by D61.
 - [ ] Task 26 (the lifecycle proof) and Task 11b: parked (D56, D46).
@@ -367,9 +353,11 @@ Runs after Phase 8 (D16), and takes over the automation job registry bullet from
 Preconditions (NEW-84): a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
 
 - Plan 1b (`plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`, D59) Tasks 1–18 and 20 landed
-  under D56, tests unrun; the rows were measured and re-pinned in the spec (NEW-84, D59).
-- [ ] Task 19 (FOUNDER STOP): certify the re-pinned rows on a disposable 25G83 host.
-- [ ] Phase close — plan 1b Task 21.
+  under D56; the rows were measured and re-pinned in the spec (NEW-84, D59). The phase close
+  (Task 21) ran except `npm run test:pinned-host`, which needs Task 19's host.
+- [ ] Task 19 (FOUNDER STOP): certify the re-pinned rows on a disposable 25G83 host, run
+  `npm run test:pinned-host` there and prove the gate below.
+- [ ] Architecture carry-over of plan 1b's decisions (repository chore, the plan's remainder).
 
 Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; scheduled runs observed.
 
@@ -410,7 +398,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 5 | `specs/<date>-developer-os-instruction-artifacts-design.md` and its plan |
 | 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |
 | 6 | `specs/<date>-developer-os-hooks-design.md` and its plan |
-| 7 | `specs/<date>-developer-os-tooling-verbs-design.md` and its plan |
+| 7 | `specs/2026-09-22-developer-os-tooling-verbs-design.md` (its plan closed and was deleted 2026-09-26) |
 | 8 | baseline plan Tasks 12–26 and `plans/2026-09-23-developer-os-spec2-closure.md` |
 | 9 | `plans/2026-09-23-developer-os-opt-in-surfaces-1b.md` |
 | 10 | `docs/migration/founder-cutover.md` |
