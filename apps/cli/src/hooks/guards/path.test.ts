@@ -80,6 +80,13 @@ describe("guard path", () => {
     expect(await run("src/index.ts", "MultiEdit")).toStrictEqual({ kind: "allow" });
   });
 
+  // D67: a committed `.env` template is exempt; a real variant is not.
+  it("allows an .env template and blocks .env.production", async () => {
+    expect(await run(".env.example")).toStrictEqual({ kind: "allow" });
+    expect(await run("sub/.env.dist")).toStrictEqual({ kind: "allow" });
+    expect(await run(".env.production")).toMatchObject({ kind: "block", ruleId: "protected-path" });
+  });
+
   it("ignores a tool that is not a file matcher", async () => {
     expect(await run(".env", "Read")).toStrictEqual({ kind: "allow" });
   });

@@ -19,8 +19,12 @@ export type ProtectedPathRuleId =
 export type ProtectedPathMatchV1 =
   /** Any path segment equal to `name`. */
   | { readonly kind: "segment"; readonly name: string }
-  /** Any path segment starting with `prefix`. */
-  | { readonly kind: "segment-prefix"; readonly prefix: string }
+  /** Any path segment starting with `prefix`, except a segment equal to one of `except`. */
+  | {
+      readonly kind: "segment-prefix";
+      readonly prefix: string;
+      readonly except?: readonly string[];
+    }
   /** Exactly `<home>/<relativePath>`. */
   | { readonly kind: "home-exact"; readonly relativePath: string };
 
@@ -32,7 +36,15 @@ export interface ProtectedPathRuleV1 {
 /** The single source every `ProtectedPathPolicy` refusal is derived from. */
 export const PROTECTED_PATH_RULES: readonly ProtectedPathRuleV1[] = Object.freeze([
   { id: "read-env", match: { kind: "segment", name: ".env" } },
-  { id: "read-env-variants", match: { kind: "segment-prefix", prefix: ".env." } },
+  {
+    id: "read-env-variants",
+    // D67: committed templates hold no secret. Claude's `Read(//**/.env.*)` still denies them.
+    match: {
+      kind: "segment-prefix",
+      prefix: ".env.",
+      except: [".env.example", ".env.sample", ".env.template", ".env.dist"],
+    },
+  },
   { id: "read-ssh", match: { kind: "segment", name: ".ssh" } },
   { id: "read-aws", match: { kind: "segment", name: ".aws" } },
   { id: "read-gnupg", match: { kind: "segment", name: ".gnupg" } },
@@ -52,7 +64,11 @@ function matchesSegmentRule(
     case "segment":
       return segments.includes(match.name);
     case "segment-prefix":
-      return segments.some((segment) => segment.startsWith(match.prefix));
+      return segments.some(
+        (segment) =>
+          segment.startsWith(match.prefix) &&
+          !(match.except ?? []).includes(segment),
+      );
     case "home-exact":
       return false;
   }
