@@ -25,8 +25,7 @@ documented residuals), `test:bootstrap` (94) and build. Seven whole-phase fresh-
 (4b, 5, 5b, 6, 7, 8, plan 1b); every Critical and Important finding was fixed with a red-first test
 and re-reviewed, or recorded as a founder decision (D62–D64) or a `BACKLOG.md` row (NEW-110..112).
 PR #15 merged; `development` is at `25c9a2e`. Not run: `test:vendor-ingest`, `test:vendor-brain`
-(billed; Codex quota exhausted until 2026-10-22) and `test:pinned-host` (plan 1b Task 19, founder
-host).
+(`test:vendor-brain` is billed, Claude only, D66; `test:vendor-ingest` is unbilled) and `test:pinned-host` (superseded by NEW-113, D65).
 
 **Lanes.** D44 (Phase 4b), D47 (Phases 5–7) and D56 (Phase 8, plan 1b) each expired with the phase
 closes they governed. The next code-producing work runs `SESSION.md` §5 as written, except that
@@ -40,14 +39,14 @@ closes they governed. The next code-producing work runs `SESSION.md` §5 as writ
   `templates/project/` (A12, and A14 Task 15).
 - A12b (`plans/2026-09-22-developer-os-brain-workflows.md`): `npm run test:vendor-brain`, all five
   workflows `pass` on Claude.
-- `npm run build && npm run test:vendor-ingest` (billed, both vendors logged in on a disposable home;
+- `npm run build && npm run test:vendor-ingest` (unbilled: loopback and dead-endpoint capture, both vendor CLIs installed, disposable home;
   `tests/integration/ingest/no-user-hooks.test.ts` and `instruction-isolation.test.ts`, the second
   shared with A12's Task 21 Step 4). `npm run check` includes it, so a `check` without vendor
   credentials is not green evidence for these two files.
 - A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 2 legacy parity check; Task 18 real-agent matrix
   on both vendors (NEW-104).
-- Phase 9 (`plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`): Task 19, certification on a
-  disposable 25G83 host, then `npm run test:pinned-host` and the Phase 9 gate there.
+- Phase 9: plan 1b is closed; its Task 19 is superseded by D65. The Phase 9 gate is re-proven on a
+  disposable macOS account once NEW-113 replaces the exact-build pin.
 
 Open sequence (D16, daily use before completeness):
 
@@ -75,7 +74,7 @@ Strict sequence; do not start a blocked row early.
 | A12 | DOS-P10 Managed instruction artifacts | — | every artifact in `docs/migration/instruction-inventory.md` §1–§3, §6 installs, drift-checks, and uninstalls on both vendors | phase closed; founder stops (NEW-101..103) and the §11 spec amendments owed |
 | A12b | Brain workflows | — | every workflow and verb in the inventory §7 is proven on the synthetic vault, and once with a real vendor | phase closed; founder real-vendor run owed |
 | A13 | DOS-P11 Hooks | — | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | phase closed; founder Tasks 2 and 18 owed |
-| A11b | DOS-P7 remainder (D16): Spec 2 closure Tasks 9–10, Task 26, Task 11b; plan 1b Task 19 | A15 (D56 ran Tasks 12–25 and plan 1b early) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Phase 8 and 9 closes ran; closure Tasks 9–10 blocked on design (NEW-110); Task 26 and 11b parked (D46: the launcher refuses every `unsigned-local` home, `apps/launcher/src/selection.ts:331`); Task 19 founder |
+| A11b | DOS-P7 remainder (D16): Spec 2 closure Tasks 9–10, Task 26, Task 11b; NEW-113 (D65) | A15 (D56 ran Tasks 12–25 and plan 1b early) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Phase 8 and 9 closes ran; closure Tasks 9–10 blocked on design (NEW-110); Task 26 and 11b parked (D46: the launcher refuses every `unsigned-local` home, `apps/launcher/src/selection.ts:331`); Task 19 founder |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
 
 A11 (Phase 4b) and A14 (Phase 7) have nothing left of their own: A11's Task 11b is tracked under
@@ -111,8 +110,7 @@ Needs a human, a policy decision, or an external application:
 `BACKLOG.md` §1 holds 59 open numbered rows; §6 lists what the phase closes deferred, by phase.
 Closed on 2026-09-26 with the green run: NEW-49, NEW-60, NEW-85, NEW-94 (`59a1237`), NEW-95, NEW-98 and
 NEW-109; NEW-108 by the A12 §11 spec amendments. Owners: NEW-61's loading half, NEW-65, NEW-101, NEW-102, NEW-103 and NEW-104 by the founder
-stop points above; NEW-61's `update` half and NEW-86 by NEW-110's Spec 2 revision pass; NEW-84 by plan 1b
-(Task 19); NEW-87 travels with whichever row each mis-aimed citation
+stop points above; NEW-61's `update` half and NEW-86 by NEW-110's Spec 2 revision pass; NEW-84 superseded by NEW-113 (D65); NEW-87 travels with whichever row each mis-aimed citation
 belongs to; NEW-105 to NEW-107 by A12's follow-ups;
 NEW-111 and NEW-112 by Task 11b (D46); NEW-110 by the Spec 2 revision pass.
 They are not ordered ahead of A15 unless the touched subsystem makes one relevant.
@@ -149,8 +147,7 @@ They are not ordered ahead of A15 unless the touched subsystem makes one relevan
   NEW-100's round trip (opt-in-surfaces spec §7.1, post-A16, D42).
 - Founder stop points (9): A12 NEW-101 billed row, then `UNPROVEN_CLAUDE_CATEGORIES`; A12's
   real-vendor integration files (NEW-102, NEW-103, NEW-65); the founder-local `--patterns` scan (A12,
-  A14); A12b `test:vendor-brain`; `test:vendor-ingest`; A13 Task 2; A13 Task 18; plan 1b Task 19 with
-  `test:pinned-host`; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
+  A14); A12b `test:vendor-brain`; `test:vendor-ingest`; A13 Task 2; A13 Task 18; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
 - Repository chores: none. The A12 §11 amendments with NEW-108, the inventory status flip, A12b's
   decisions and residuals and plan 1b's architecture carry-over ran on 2026-09-26.
 - Repository backlog: 59 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision

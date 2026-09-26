@@ -47,12 +47,14 @@ async function findClaude(): Promise<string | null> {
  * Resolved at module load: `it.skipIf` is evaluated while the suite is built,
  * before any hook (see `tests/integration/claude/plugin-loads.test.ts`).
  *
- * The key is handed in rather than found, because a disposable `HOME` carries
- * no Claude credentials (Plan decision 9, D47).
+ * The credential is handed in rather than found, because a disposable `HOME`
+ * carries no Claude credentials (Plan decision 9, D47): a `claude setup-token`
+ * subscription token (D66) or an API key.
  */
 const claude: string | null = await findClaude();
+const oauthToken = processEnv.DEVELOPER_OS_VENDOR_BRAIN_OAUTH_TOKEN ?? "";
 const apiKey = processEnv.DEVELOPER_OS_VENDOR_BRAIN_API_KEY ?? "";
-const live = claude !== null && apiKey.length > 0;
+const live = claude !== null && (oauthToken.length > 0 || apiKey.length > 0);
 
 const PROMPTS = {
   "brain-answer":
@@ -84,7 +86,7 @@ function vendorEnv(temp: TempHome): Record<string, string> {
     DEVELOPER_OS_BRAIN: temp.brain,
     TMPDIR: temp.tempDir,
     PATH: `${temp.binDir}:${processEnv.PATH ?? "/usr/bin:/bin"}`,
-    ANTHROPIC_API_KEY: apiKey,
+    ...(oauthToken.length > 0 ? { CLAUDE_CODE_OAUTH_TOKEN: oauthToken } : { ANTHROPIC_API_KEY: apiKey }),
   };
 }
 

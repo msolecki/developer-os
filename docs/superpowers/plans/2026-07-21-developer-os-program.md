@@ -247,9 +247,8 @@ and rollback, drift-refusing update with manifest-owned uninstall, and the failu
 committed (plan 1b Tasks 1–18 and 20; Spec 2 Tasks 12–25; Spec 2 closure Tasks 1–8), and the Phase 8
 and Phase 9 closes ran on 2026-09-26 (full suite green on `bc17550`, reviews, PR #15). What stays open:
 
-- [ ] Phase 9: plan 1b Task 19 (founder certification on a disposable 25G83 host, then
-      `npm run test:pinned-host` and the Phase 9 gate there),
-      `plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`.
+- [ ] Phase 9: the gate on a disposable macOS account after NEW-113 replaces the exact-build pin
+      (D65; plan 1b closed 2026-09-26, its Task 19 superseded).
 - [ ] Parked: `update --apply` / `update rollback --apply` composition (Spec 2 closure Tasks 9–10,
       `BACKLOG.md` NEW-110), the lifecycle proof (Spec 2 Task 26) and the launcher-admitted
       release (Task 11b, D46).

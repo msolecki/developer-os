@@ -267,6 +267,18 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   are frozen: they stop accidental harmful commands, not an agent that deliberately crafts shell syntax
   to evade them; further crafted bypasses are recorded as residuals in `docs/architecture/hooks.md`
   §3.8, not fixed by further tokenizer rounds.
+- **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
+  exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
+  user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
+  active Xcode or Command Line Tools developer directory, and `/usr/bin/ssh` at fixed system paths
+  only (never `PATH`), admit each by root ownership, no group/other write and a version floor plus a
+  capability probe, instead of a build and hash match. Needs a Spec 1 §4.2/§5.3 amendment through
+  brainstorming before code (`BACKLOG.md` NEW-113). Plan 1b Task 19 (certifying the pinned rows) is
+  moot and does not run; Phase 9's gate is re-proven after the amendment ships.
+- **D66 (2026-09-26), amends `docs/architecture/brain.md` §6.13 decision 9.** `test:vendor-brain`
+  authenticates with the founder's Claude subscription: it reads a `claude setup-token` token from
+  `DEVELOPER_OS_VENDOR_BRAIN_OAUTH_TOKEN` and passes it as `CLAUDE_CODE_OAUTH_TOKEN`;
+  `DEVELOPER_OS_VENDOR_BRAIN_API_KEY` stays accepted. It remains excluded from `check`.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
@@ -328,8 +340,8 @@ The phase closes ran (above). What is left of them is founder work, executed fro
   founder-local private-pattern scan (`scan-instruction-defaults.js --patterns`) over `instructions/`
   and `templates/project/`, which also closes A14 Task 15 Step 4.
 - [ ] A12b (`plans/2026-09-22-developer-os-brain-workflows.md`): Task 16 real-vendor run
-  (`npm run build && DEVELOPER_OS_VENDOR_BRAIN_API_KEY=<key> npm run test:vendor-brain`, all five
-  workflows `pass` on Claude). `test:vendor-ingest` is billed too and has not run.
+  (`npm run build && DEVELOPER_OS_VENDOR_BRAIN_OAUTH_TOKEN=<setup-token> npm run test:vendor-brain`, D66, all five
+  workflows `pass` on Claude). `test:vendor-ingest` is unbilled (loopback and dead-endpoint capture) and has not run.
 - [ ] A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 18 real-agent matrix on both vendors;
   Task 2 legacy parity check.
 
@@ -353,11 +365,11 @@ Runs after Phase 8 (D16), and takes over the automation job registry bullet from
 
 Preconditions (NEW-84): a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
 
-- Plan 1b (`plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`, D59) Tasks 1–18 and 20 landed
+- Plan 1b (D59; closed and deleted 2026-09-26, `git show fb8277f:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`) Tasks 1–18 and 20 landed
   under D56; the rows were measured and re-pinned in the spec (NEW-84, D59). The phase close
-  (Task 21) ran except `npm run test:pinned-host`, which needs Task 19's host.
-- [ ] Task 19 (FOUNDER STOP): certify the re-pinned rows on a disposable 25G83 host, run
-  `npm run test:pinned-host` there and prove the gate below.
+  (Task 21) ran except `npm run test:pinned-host`, which moves to NEW-113.
+- [ ] NEW-113 (D65, supersedes Task 19): replace the exact-build pin through a Spec 1 amendment, then
+  prove the gate below on a disposable macOS account.
 - The architecture carry-over of plan 1b's decisions ran on 2026-09-26 (`foundation.md` §10,
   `foundation-constraints.md`, `threat-model.md` §5.15).
 
@@ -402,7 +414,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 6 | `specs/<date>-developer-os-hooks-design.md` and its plan |
 | 7 | `specs/2026-09-22-developer-os-tooling-verbs-design.md` (its plan closed and was deleted 2026-09-26) |
 | 8 | baseline plan Tasks 12–26 and `plans/2026-09-23-developer-os-spec2-closure.md` |
-| 9 | `plans/2026-09-23-developer-os-opt-in-surfaces-1b.md` |
+| 9 | plan 1b (closed 2026-09-26) and the Spec 1 amendment NEW-113 names |
 | 10 | `docs/migration/founder-cutover.md` |
 | 11 | program plan Task 9 |
 

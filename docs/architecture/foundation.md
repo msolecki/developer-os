@@ -1078,21 +1078,21 @@ record.
   in any pinned field refuses `unsupported_git_distribution` or `unsupported_launchd_distribution`
   before any live authority. Both rows were measured read-only on 2026-09-23 (macOS 26.6.2 `25G83`,
   Xcode 27.0 `27A266a`, Apple Git-157) and are the spec's values (Spec 1 §4.2, §5.3, "Amended
-  2026-09-23 (D59)"). Two refusals stand until plan 1b Task 19 runs on a disposable host of that
-  build: the launchd row's `certification` is `null`, so every launchd mutation refuses (read-only
+  2026-09-23 (D59)"). Two refusals stand until NEW-113 (D65, 2026-09-26) replaces the exact-build pin with fixed
+  system paths, ownership and a version floor: the launchd row's `certification` is `null`, so every launchd mutation refuses (read-only
   observation, preview and `automation status` still report state, and an unsupported or uncertified
   row names the manual `launchctl bootout gui/<uid>/<label>` per installed label, residual 10); and
   only the local/file Git transport is traced, so an HTTPS or SSH remote refuses
   `unsupported_git_distribution`. Tests that exec the pinned Git or `launchctl` are
-  `*.pinned-host.test.ts` files, run by `npm run test:pinned-host` and never by hosted CI. The rule
-  for the next build:
+  `*.pinned-host.test.ts` files, run by `npm run test:pinned-host` and never by hosted CI. The re-pinning rule below is superseded by D65 and stays only
+  while the pin does:
   1. **One row per package, as data.** The Git row is the one constant `SUPPORTED_GIT_DISTRIBUTION`;
      the launchd rows are the one constants file `packages/platform-macos/src/launchd/distribution.ts`.
      No other file restates a hash, size, build or version literal; tests import the constant and
      mutate one field at a time.
   2. **Measure read-only.** The command list never runs `launchctl bootstrap`, `bootout`, `load`,
      `unload`, `enable`, `disable` or `kickstart`, and never writes under `~/Library/LaunchAgents`
-     (Task 19 captures it as `scripts/measure-distribution-rows.sh`; until then it is in
+     (it is in
      `git show d2f18b4:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`, "NEW-84").
   3. **Refuse on any drift.** OS product version or build, executable path, owner, mode, size or hash,
      Xcode selection, build-option line, link target and SSH bytes are all compared; version text is
