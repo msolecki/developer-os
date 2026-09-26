@@ -574,7 +574,8 @@ widened here). `DOCUMENTED_FLOORS` for both keys are set from the versions Task 
   the floor permits and a record exists, and to `unknown` otherwise.
 - **Recursion.** The dependency test from §6.1 passes, and the marker short-circuits every verb.
 - **Documentation.** The same change rewrites the `threat-model.md` hooks rows ("Hooks" and
-  "Automatic capture", §5 table), `claude-adapter.md` §2.1, §3 and §5, and `codex-adapter.md` §2.1,
+  "Automatic capture", §7 table; **Amended 2026-09-26 (NEW-108)**: this line first said §5, but both
+  rows are in §7, "Capabilities that are absent by construction"), `claude-adapter.md` §2.1, §3 and §5, and `codex-adapter.md` §2.1,
   §3 and §5. Hooks move from declined to shipped, and capture stays declined.
 
 ### 10.2 Real-agent matrix (observed firing)

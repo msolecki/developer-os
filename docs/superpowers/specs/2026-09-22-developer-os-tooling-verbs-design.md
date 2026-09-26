@@ -10,8 +10,9 @@ reopens it. Wherever this spec names the launcher or a packaged release as the i
 A14 (DOS-P12), roadmap Phase 7
 (`docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`). Its scope is
 `docs/migration/instruction-inventory.md` §5 (14 scripts plus 2 libraries) and the three project
-template rows of §6. The implementation plan is written against this text once it is approved:
-`plans/<date>-developer-os-tooling-verbs.md`.
+template rows of §6. Its implementation plan, `plans/2026-09-22-developer-os-tooling-verbs.md`, was
+deleted when Phase 7 closed (`git show d4592a7^:docs/superpowers/plans/2026-09-22-developer-os-tooling-verbs.md`);
+what shipped is recorded in the roadmap's Phase 7.
 
 **Gate (roadmap Phase 7):** every inventoried script is a product verb or a recorded refusal. §2 is
 the disposition table that gate is checked against.
@@ -538,6 +539,10 @@ gains `archivedTo: string | null`, a vault-relative path.
 - **Ownership.** The written files are the user's repository content. They are not manifest rows, are
   never drift-checked, and are never removed by `uninstall`. They follow the same reasoning that keeps
   captures out of the manifest (`knowledge-pipeline.md` §3).
+- **No templates in the build.** **Amended 2026-09-26 (NEW-108).** While the build's
+  `PROJECT_TEMPLATE` (`apps/cli/src/commands/project-template.ts`) is empty, `project init` refuses
+  `project_templates_unavailable`, exit 4, before any read or write. The shipped build carries three
+  templates (`AGENTS.md`, `CLAUDE.md`, `_Context.md`), so the refusal guards a build, not a user state.
 - **Result.** `ProjectInitResultV1 { schemaVersion: 1; root; created: readonly string[]; overridden:
   readonly string[]; transactionId: string | null }`. `--dry-run` writes nothing, and its
   `transactionId` is `null`.
@@ -589,6 +594,14 @@ This is inventory §6's "reporting only" row, made concrete and structural. It s
   - The exact rule strings are vendor syntax. They are pinned against the same observed Claude Code
     version as §5.5's row, not written from memory.
   - A rule counts as present only when an exact string match is found.
+- **Where the reference lives.** **Amended 2026-09-26 (NEW-108).** No `VENDOR_CONFIG_REFERENCE_DENY`
+  exists. The vendor-neutral half, the product rule IDs, is `PROTECTED_PATH_RULES` in
+  `packages/security/src/protected-paths.ts`, which `ProtectedPathPolicy` also reads. The Claude rule
+  strings are vendor syntax and live in `packages/adapter-claude/src/observations.ts` as
+  `CLAUDE_DENY_RULES`, beside `CLAUDE_MEMORY_LAYOUT`, keyed by those rule IDs and carrying the observed
+  Claude version and date; `packages/security` stays free of vendor syntax. While `CLAUDE_DENY_RULES`
+  is `null`, the check returns `warn` ("the Claude deny-rule syntax has not been observed") and reads
+  no file (`checkVendorConfig`, `apps/cli/src/commands/vendor-config.ts`).
 - **Status.** The check never returns `fail`, so it never changes `doctor`'s exit code.
 
   | Status | When |

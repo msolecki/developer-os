@@ -108,12 +108,12 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-`BACKLOG.md` §1 holds 60 open numbered rows; §6 lists what the phase closes deferred, by phase.
+`BACKLOG.md` §1 holds 59 open numbered rows; §6 lists what the phase closes deferred, by phase.
 Closed on 2026-09-26 with the green run: NEW-49, NEW-60, NEW-85, NEW-94 (`59a1237`), NEW-95, NEW-98 and
-NEW-109. Owners: NEW-61's loading half, NEW-65, NEW-101, NEW-102, NEW-103 and NEW-104 by the founder
+NEW-109; NEW-108 by the A12 §11 spec amendments. Owners: NEW-61's loading half, NEW-65, NEW-101, NEW-102, NEW-103 and NEW-104 by the founder
 stop points above; NEW-61's `update` half and NEW-86 by NEW-110's Spec 2 revision pass; NEW-84 by plan 1b
 (Task 19 and the architecture carry-over); NEW-87 travels with whichever row each mis-aimed citation
-belongs to; NEW-105 to NEW-107 by A12's follow-ups; NEW-108 by the A12 plan's Task 29 remainder;
+belongs to; NEW-105 to NEW-107 by A12's follow-ups;
 NEW-111 and NEW-112 by Task 11b (D46); NEW-110 by the Spec 2 revision pass.
 They are not ordered ahead of A15 unless the touched subsystem makes one relevant.
 
@@ -151,7 +151,7 @@ They are not ordered ahead of A15 unless the touched subsystem makes one relevan
   real-vendor integration files (NEW-102, NEW-103, NEW-65); the founder-local `--patterns` scan (A12,
   A14); A12b `test:vendor-brain`; `test:vendor-ingest`; A13 Task 2; A13 Task 18; plan 1b Task 19 with
   `test:pinned-host`; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
-- Repository chores (4): A12 §11 spec amendments with NEW-108; the inventory status flip for A12–A14;
+- Repository chores (3): the inventory status flip for A12–A14;
   A12b's plan decisions and residuals into the architecture notes; plan 1b's architecture carry-over.
-- Repository backlog: 60 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
+- Repository backlog: 59 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
   and the §6 phase-close deferrals.

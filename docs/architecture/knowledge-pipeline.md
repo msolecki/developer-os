@@ -559,7 +559,7 @@ completed design left open.
 
 | Residual | Disposition |
 |---|---|
-| 1. `buildConflictEvidence` still has no consumer | **open.** Both adapters declined the design it was built for; it waits for the first subsystem with a real three-way merge, which is not this one |
+| 1. `buildConflictEvidence` still has no consumer | **closed by A12 (Amended 2026-09-26 (A12 §11, D47)).** The instruction attach and detach (`apps/cli/src/instructions/attach.ts`, `detach.ts`) call its block arm for a drifted instruction block: three hashes and a redacted two-way diff (`claude-adapter.md` §9.8, `codex-adapter.md` §11.9) |
 | 2. the Codex supported floor is one observed version, not a range | **open.** Owner: DOS-P9 |
 | 3. a re-rendered plugin tree may not be a re-loaded one — Codex resolves skills through a cache copy | **open.** Owner: DOS-P7, whose update lifecycle re-renders in place |
 | 4. `NEW-11` and `NEW-12` are repository defects rather than pipeline ones, and are not taken here | **both left this subsystem and were decided elsewhere, which is what this row predicted.** `NEW-12` is **closed** — its prose half by Task 19's review on 2026-08-15, its path half by Track R entry R2 on 2026-08-17, and §10.1 carries the two residuals it left. `NEW-11` was decided by the founder on 2026-08-17 (an invisible tag is a lint warning) and is implemented by that same entry |

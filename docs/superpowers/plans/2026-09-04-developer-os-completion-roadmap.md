@@ -310,7 +310,7 @@ Scope: inventory §5, §6.
 - `import`, `project init|check`, `doctor` `vendor-config` and the D47 refusals landed as Tasks 1–13 and
   15 of `plans/2026-09-22-developer-os-tooling-verbs.md`; Task 14's Claude observations (NEW-109) were
   recorded under D57 (`4041286`). The phase close ran and the plan was deleted on 2026-09-26; its
-  scope decisions are in `BACKLOG.md` NEW-108.
+  scope decisions are amended into the tooling-verbs spec §6 and §8 ("Amended 2026-09-26 (NEW-108)").
 - [ ] The `project init` templates' founder-local scan, run with A12's (see below), and the inventory
   status flip (A12 plan remainder).
 - The automation job registry is Spec 1b's and belongs to Phase 9 (D16). It is Spec 1 §5.1's four jobs: `brain-reindex`, `brain-lint`, `doctor` and `git-sync`. `import` and `ingest` stay manual and are not registry entries (D47, Spec 1 §1).

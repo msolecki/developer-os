@@ -666,6 +666,14 @@ unmanaged files in a vendor directory.
 instruction files. Of the 36, 35 are rendered and `brain-search` is the product workflow. The count
 becomes 44 under Q3 option A.
 
+**Amended 2026-09-26 (NEW-108, D51).** The count that shipped is **33 catalog rows**
+(`instructions/catalog.json`; `tests/repository/instruction-coverage.test.ts` derives the same set from
+the inventory, `dfd2a3d`). D51 refused `release`, `rev-eng`, `wrap-up`, `brain-search`,
+`react-best-practices` and `claudeception` and every §7 research skill, so Q3 adds nothing; D51 added
+the three scoped rules `comments`, `testing` and `lessons-code`. The 33 are 4 rules, 7 scoped rules,
+4 output styles, 5 agents and 13 skills, 5 of them with a thin Claude command. The two vendor
+instruction files are the blocks, not catalog rows.
+
 ## 10. Verification gates
 
 ### 10.1 Plan Task 1: vendor observations (a precondition for every other task)
@@ -715,6 +723,11 @@ close. Each task still runs the cases it adds, red then green.
 
 These amendments take effect when this design is approved. Each is marked "Amended <date> (A12)" in
 place.
+
+**Applied.** The `claude-adapter.md`, `codex-adapter.md` and `threat-model.md` rows on 2026-09-22
+("Amended 2026-09-22 (A12)", threat-model §5.14 "Added 2026-09-22 (A12)"); the umbrella design, Spec 1
+and Spec 2 rows on 2026-09-26 ("Amended 2026-09-26 (A12 §11, D47)"), together with Spec 2 §5's
+`codex-registration-v1` schema ID.
 
 | Document | Clause | Change |
 |---|---|---|
