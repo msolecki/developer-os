@@ -128,11 +128,15 @@ match is token or segment based (`shellPipeline`, `commandWords` in
     `grep -rn "DROP TABLE" migrations/` is allowed.
   - Accepted residuals, not implemented: `curl … | tee f | sh`, and ``x=`git push --force` ``.
 - **Format, implemented.** `guard format` detects `biome.jsonc` as it detects `biome.json`.
-- **Path, partly implemented.** The `.env` template exemption is in: `.env.example`, `.env.sample`,
-  `.env.template` and `.env.dist` are exempt from `read-env-variants`; `.env.local` and
-  `.env.production` stay protected. The other approved `ProtectedPathPolicy` additions are
-  **pending**, because each needs a new rule id, and each id needs a `CLAUDE_DENY_RULES` row taken
-  from a disposable-home observation (D57, a founder stop point):
+- **Path, implemented.** The `.env` template exemption is in `ProtectedPathPolicy`: `.env.example`,
+  `.env.sample`, `.env.template` and `.env.dist` are exempt from `read-env-variants`; `.env.local`
+  and `.env.production` stay protected. A new `ProtectedPathRuleId` would need a
+  `CLAUDE_DENY_RULES` row from a disposable-home observation (D57), so on 2026-09-26 the founder
+  chose option (c): the other additions live in a separate hook-only table,
+  `HOOK_PROTECTED_PATH_RULES` in `apps/cli/src/hooks/guards/path.ts`. It is not keyed into
+  `ProtectedPathRuleId` or `CLAUDE_DENY_RULES`. Only `guard path` applies it, on the lexical and the
+  canonical path, blocking as `protected-path`. Product reads do not apply it, because the `.key`
+  suffix would refuse the product's own `redaction.key`:
   - segment exact `.git-credentials`, `.netrc`, `.pgpass`, `.htpasswd`, `.envrc` (allow
     `docs/netrc-setup.md`);
   - segment exact `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519` (allow `keys/id_ed25519.pub`);
@@ -142,7 +146,8 @@ match is token or segment based (`shellPipeline`, `commandWords` in
   - a new `segment-suffix` match kind for `.pem`, `.key`, `.p12`, `.pfx`, `.tfvars` (block
     `certs/server.key`, allow `docs/keys.md`).
 
-  They also refuse product reads, which the founder accepted.
+  Claude's deny list does not cover them, so `doctor`'s deny-rule check (which reads only
+  `PROTECTED_PATH_RULES`) is unchanged and still truthful.
 - **Not ported: legacy `shared-file-warn`.** Its monorepo import-count warning would read repository
   contents on every edit, which breaks §5.3's "never opens the file" and the latency budget (§5.4).
   The product's `guard edit` rule is a different check under the same row (§2 row 8).
