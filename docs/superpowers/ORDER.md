@@ -8,101 +8,58 @@ notes are the archive.
 
 ## NOW
 
-**Full-suite evidence (2026-09-26, run 4, after the whole-phase reviews).** On `bc17550`, every part
-green: lint, `test:lifecycle` (21/21 files), `test:e2e`, `test:suite` (306/306 files, 9913 tests, 8
-todo = documented residuals), `test:bootstrap` (94) and build. Seven whole-phase fresh-context reviews
-ran (4b, 5, 5b, 6, 7, 8, plan 1b), every Critical and Important finding was fixed with a red-first test
-and re-reviewed, or recorded as a founder decision (D62–D64) or a BACKLOG row (NEW-110..112). Not run:
-`test:vendor-ingest`, `test:vendor-brain` (billed; Codex quota exhausted until 2026-10-22) and
-`test:pinned-host` (plan 1b Task 19, founder host).
+**A15, the founder cutover, on the live machine** — step by step through
+`docs/migration/founder-cutover.md` (`npm run pack:local-release -- <dir>`, then
+`init --local-release <dir> --adapters claude,codex`), each step with founder approval (D56, D58).
+Git and launchd stay disabled during it; the bootstrap pin at `apps/cli/src/context.ts:823-824` still
+answers every run without a local release, because Task 11b is parked (D46).
 
-**Earlier full-suite evidence (2026-09-25).** Three full local runs (`lint`, `test:lifecycle`, `test:e2e`,
-`test:suite`, `test:bootstrap`, `build`) found and fixed 17 product defects and ~200 test defects in
-the D44/D47/D56 work. Run 3 on `ee388e4`: lint, `test:bootstrap` (94), `test:e2e` (60) and build green;
-`test:suite` 301/302 files (9752 tests) and `test:lifecycle` 20/21 files (191/192 tests), the two red
-cases fixed by `2ad6013` (timeout bound) and `d1287a3` (empty executor reservation beside a
-journal-less update envelope), both re-run green on `d1287a3` with `ledger-v2.test.ts` (50 tests).
-Vendor suites (`test:vendor-ingest`, `test:vendor-brain`) and `test:pinned-host` were not run.
+**Repository prerequisite for the next PR: NEW-100's CI sharding.** On PR #15 the hosted runner
+cancelled `bootstrap-executor` at its 330-minute and `lifecycle-v2` at its 185-minute timeout (local:
+122 and 153 minutes). Shard both jobs in `.github/workflows/check.yml` (lifecycle by file, bootstrap
+by `-t` group) before any further PR; NEW-100's round-trip file itself stays post-A16 (D42).
 
-**Whole-phase reviews (2026-09-25).** Each phase from 4b through 9 had its fresh-context review, and
-fix sessions landed the accepted findings; what they deferred is in `BACKLOG.md` §6 under its phase.
-D62 settled the spec questions they raised. Still owed (D62 (4)): the re-reviews of Phases 4b, 6
-and 9, a fourth full-suite run after them, and one PR per phase (D44).
+**Evidence the closed phases stand on (2026-09-26, run 4).** On `bc17550`, every part green: lint,
+`test:lifecycle` (21/21 files), `test:e2e`, `test:suite` (306/306 files, 9913 tests, 8 todo =
+documented residuals), `test:bootstrap` (94) and build. Seven whole-phase fresh-context reviews ran
+(4b, 5, 5b, 6, 7, 8, plan 1b); every Critical and Important finding was fixed with a red-first test
+and re-reviewed, or recorded as a founder decision (D62–D64) or a `BACKLOG.md` row (NEW-110..112).
+PR #15 merged; `development` is at `25c9a2e`. Not run: `test:vendor-ingest`, `test:vendor-brain`
+(billed; Codex quota exhausted until 2026-10-22) and `test:pinned-host` (plan 1b Task 19, founder
+host).
 
-**Phase close for A11–A14.** Every phase from 4b through 7 has its implementation committed and is
-waiting on evidence, not code. Under D44/D47 no test ran during implementation — each commit ran only
-`npm run lint` — so every "run the tests" step is owed at the close of its phase; the reviews ran
-2026-09-25 (above).
-The next product work after these closes is the founder cutover A15.
+**Lanes.** D44 (Phase 4b), D47 (Phases 5–7) and D56 (Phase 8, plan 1b) each expired with the phase
+closes they governed. The next code-producing work runs `SESSION.md` §5 as written, except that
+`development` requires a PR (see "Delivery evidence still owed").
 
-Phase 4b (A11, `plans/2026-08-29-developer-os-release-update.md`): code done — Task 10 (`1e214ce`),
-Task 11 (`3a5f200`), NEW-85 (`d2cc737`), launcher trust-fd fix (`c7bc459`), side track NEW-49
-(`6254586`). Task 11b is parked by D46 (no signing keys), so the bootstrap pin at
-`apps/cli/src/context.ts:823-824` still answers every run without a packaged release; A12's unsigned
-local build (`init --local-release`, D47) is the install source until then. The launcher's two stubs
-are NEW-111.
+**Founder stop points left by the closed phases** (each executable from the plan named):
 
-Phase 5 (A12, `plans/2026-09-22-developer-os-instruction-artifacts.md`): Tasks 1–28 committed; D48–D55
-recorded; production-facing follow-ups committed with it — D52 isolated Codex ingest home (`5afa493`),
-D53 launchable local release (`a629f77`), D54 manifest anchor (`3e5daf8`, `a5c459f`), D55 esbuild
-bundle (`811d74b`), V2 manifest reads in write commands and `status` (`b3bb8cc`, `4360abd`).
-
-Phase 5b (A12b, `plans/2026-09-22-developer-os-brain-workflows.md`): Tasks 1–15 committed.
-
-Phase 6 (A13, `plans/2026-09-22-developer-os-hooks.md`): Claude half committed — Tasks 3–14, 16, 17,
-with Claude hooks installed by `init` (`a156b0c`). Task 15 (Codex hooks) committed under D57 (`4041286`, `4e308d2`, review fixes `2e75574`, `2bec6a7`, re-review ACCEPT); Codex rows observed on a local mock Responses API because the linked Codex account had no quota.
-
-Phase 7 (A14, `plans/2026-09-22-developer-os-tooling-verbs.md`): Tasks 1–13 and 15 committed.
-
-Owed at every one of these phase closes, by the founder unless marked:
-
-- `npm run check` plus the plan's deferred slow suites (the `bootstrap-executor`, `lifecycle-v2` and
-  e2e files each plan lists), on the integrated tree.
-- The 2026-09-25 whole-phase reviews ran and their accepted findings landed (fix sessions,
-  deferrals in `BACKLOG.md` §6); re-reviews of Phases 4b, 6 and 9 are owed (D62 (4)), each by an
-  agent that authored none of the phase, and an accepted finding gets a failing test first.
-- One branch pushed and one PR opened (D44 lane). A direct push to `development` is refused by the
-  ruleset (`GH013`).
-
-Founder stops per phase, on top of that:
-
-- A12: NEW-101 billed real-agent row, then emptying `UNPROVEN_CLAUDE_CATEGORIES` (plan Task 29
-  Step 3b); NEW-103 Claude D8 isolation observation and NEW-102's Codex re-observation (the three
-  real-vendor integration files of Task 21); the founder-local private-pattern scan
-  (`scan-instruction-defaults.js --patterns`) over `instructions/` and `templates/project/`; content
-  review is not recorded for the agents, command-pair and general-skill batches (orchestrator, with
-  the phase review).
-- A12b: Task 16 real-vendor run (`npm run test:vendor-brain`, all five workflows `pass` on Claude);
-  the red-first runs of the new security cases against `13eb18e` (orchestrator).
-- A13: Task 15's tests (committed, D57); Task 18 real-agent
-  matrix on both vendors; Task 2 legacy parity check, never run.
-- A14: Task 14's recorded observations tested (committed `4041286`, D57); `project init` templates' founder-local scan (Task 15
-  Step 4).
-
-Spec 2: Tasks 1–7, 9, 10 and 11 complete, Task 8 withdrawn (D18), Task 11b parked (D46), Tasks 12–25
-committed (D56), Task 26 parked. Spec 1's open work is plan 1b; the 2026-08-28 Spec 1 plan it was
-rewritten from was deleted on 2026-09-24.
+- A12 (`plans/2026-09-22-developer-os-instruction-artifacts.md`): NEW-101 billed real-agent row, then
+  emptying `UNPROVEN_CLAUDE_CATEGORIES`; the three real-vendor integration files (NEW-102, NEW-103,
+  NEW-65, NEW-61's loading half); the founder-local `--patterns` scan over `instructions/` and
+  `templates/project/` (A12, and A14 Task 15).
+- A12b (`plans/2026-09-22-developer-os-brain-workflows.md`): `npm run test:vendor-brain`, all five
+  workflows `pass` on Claude. `test:vendor-ingest` is billed too.
+- A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 2 legacy parity check; Task 18 real-agent matrix
+  on both vendors (NEW-104).
+- Phase 9 (`plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`): Task 19, certification on a
+  disposable 25G83 host, then `npm run test:pinned-host` and the Phase 9 gate there.
 
 Open sequence (D16, daily use before completeness):
 
-1. Now: close Phases 4b, 5, 5b, 6 and 7 — evidence only, as listed above.
-2. Then: the founder cutover A15 on the live machine, step by step through
-   `docs/migration/founder-cutover.md` (`npm run pack:local-release -- <dir>`, then
-   `init --local-release <dir> --adapters claude,codex`).
-3. Beside the cutover (D56, D59): A11b's two phase closes — Phase 8 (the release plan's "Phase 8
-   close") and Phase 9 (plan 1b Task 19, founder certification, then Task 21). After them the parked
-   Spec 2 work (closure Tasks 9–10 on NEW-110's design, Task 26, Task 11b), then A16.
-
-Lane (D44, extended to Phases 5–7 by D47): a task commit runs `npm run lint` only and is held
-locally; tests, `npm run check` and fresh-context review run once per phase at its close, and the
-phase lands as one PR. D17/D33's push-per-commit rule does not hold while the ruleset requires PRs.
+1. Now: the A15 cutover, and NEW-100's CI sharding before the next PR.
+2. Beside it: the founder stop points above, and the repository chores in "Count".
+3. Then the parked Spec 2 work — closure Tasks 9–10 on NEW-110's design (one Spec 2 revision pass),
+   Task 26, Task 11b — then A16.
 
 The parent document is `plans/2026-07-21-developer-os-program.md`, which is live rather than
-superseded: its 19 open items are DOS-P7's remainder (three pointers into the A11b plans), the
-DOS-P8 cutover (A15, eight steps) and DOS-P9's release (A16 with L1, eight steps). It closes with A16 and with nothing earlier.
+superseded: its open items are DOS-P7's remainder (two pointers into the A11b plans), the DOS-P8
+cutover (A15, eight steps) and DOS-P9's release (A16 with L1, eight steps). It closes with A16 and
+with nothing earlier.
 
-Phase 4b onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (9 open phases,
-4b through 11 with a 5b, the founder decisions D1–D61, and the spec or plan each phase requires). `docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
+Everything after `NOW` is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (the
+founder decisions D1–D64 and what each phase still owes). `docs/migration/instruction-inventory.md`
+is the scope of A12, A12b, A13 and A14.
 
 ## Product path
 
@@ -110,14 +67,15 @@ Strict sequence; do not start a blocked row early.
 
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
-| A11 | DOS-P7, pre-cutover part (D16): Spec 2 Tasks 10–11 (Task 9 closed 2026-09-17; Spec 1a closed 2026-09-22) | nothing | a fresh `init --local-release <dir>` runs V2 through the local entrypoint `<product-home>/bin/developer-os.mjs` (D47, D53); `config get\|set`, coordinator recovery and drained uninstall ship. The launcher path waits for Task 11b: it refuses every `unsigned-local` home (`apps/launcher/src/selection.ts:331`, D46) | phase close owed; Task 11b parked (D46) |
-| A12 | DOS-P10 Managed instruction artifacts — spec, plan, implementation | A11 | every artifact in `docs/migration/instruction-inventory.md` §1–§3, §6 installs, drift-checks, and uninstalls on both vendors | committed; phase close owed |
-| A12b | Brain workflows — spec, plan, implementation | A12 | every workflow and verb in the inventory §7 is proven on the synthetic vault | committed; phase close owed |
-| A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | committed (Codex half under D57); phase close owed |
-| A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | inventory §5 and §6: every row is a shipped verb or a recorded refusal (D47) | committed; phase close owed |
-| A15 | DOS-P8 Founder migration (shadow mode dropped, D58) — `docs/migration/founder-cutover.md`, then execution | A14 | rollback to the legacy runtime is exercised and one stable cycle completes | runbook written; execution next |
-| A11b | DOS-P7 remainder (D16): Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) | A15 (D56: Tasks 12–25 run now) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Spec 2 Tasks 12–25 and plan 1b Tasks 1–18, 20 committed (D56); Spec 2 closure Tasks 1–8 committed, 9–10 blocked on design (NEW-110); Task 19 (founder) and both phase closes owed |
+| A15 | DOS-P8 Founder migration (shadow mode dropped, D58) — `docs/migration/founder-cutover.md`, then execution | A14 (closed) | rollback to the legacy runtime is exercised and one stable cycle completes | runbook written; execution now |
+| A12 | DOS-P10 Managed instruction artifacts | — | every artifact in `docs/migration/instruction-inventory.md` §1–§3, §6 installs, drift-checks, and uninstalls on both vendors | phase closed; founder stops (NEW-101..103) and the §11 spec amendments owed |
+| A12b | Brain workflows | — | every workflow and verb in the inventory §7 is proven on the synthetic vault, and once with a real vendor | phase closed; founder real-vendor run owed |
+| A13 | DOS-P11 Hooks | — | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | phase closed; founder Tasks 2 and 18 owed |
+| A11b | DOS-P7 remainder (D16): Spec 2 closure Tasks 9–10, Task 26, Task 11b; plan 1b Task 19 | A15 (D56 ran Tasks 12–25 and plan 1b early) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Phase 8 and 9 closes ran; closure Tasks 9–10 blocked on design (NEW-110); Task 26 and 11b parked (D46: the launcher refuses every `unsigned-local` home, `apps/launcher/src/selection.ts:331`); Task 19 founder |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
+
+A11 (Phase 4b) and A14 (Phase 7) have nothing left of their own: A11's Task 11b is tracked under
+A11b, and A14's template scan runs with A12's.
 
 ## Repository work not owned by the product sequence
 
@@ -125,9 +83,14 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate:
 
+- NEW-100 — shard `bootstrap-executor` and `lifecycle-v2` in `.github/workflows/check.yml`; blocks the
+  next PR (see `NOW`).
 - NEW-46 — close the same-uid `PATH` spawn surface or design persisted executable identity.
 - NEW-90 — key the D31 stat-option exemption on the receiver type, not the file, or widen
   `IDENTITY_RENDERING` (re-homed from Phase 4b, 2026-09-25).
+- NEW-92 and NEW-97 — re-homed from the closed Phases 8 and 9 on 2026-09-26.
+- Rows owned by the closed plan 1a (NEW-82, NEW-88, NEW-89, NEW-91, NEW-93, NEW-96, NEW-99): startable
+  when the touched subsystem is next worked.
 
 Needs a human, a policy decision, or an external application:
 
@@ -141,13 +104,14 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-`BACKLOG.md` §1 holds 67 open numbered rows (NEW-110 added 2026-09-23, NEW-111 2026-09-25; §6 lists the phase-close handoffs by phase) (NEW-101..103 added 2026-09-22, NEW-104..109
-2026-09-23). Rows implemented this session stay open until their tests pass at phase close: NEW-49,
-NEW-85 (Phase 4b); NEW-60, NEW-61, NEW-65, NEW-95, NEW-102 (A12); NEW-104 (A13, D57); NEW-98, NEW-109 (A14, D57).
-Owners: NEW-85 is owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
-NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-91 by plan 1a Task 16; NEW-98 by A14 Task 6 (repository tooling, D47), opened by plan 1a Task 22. Re-homed 2026-09-25 by the orchestrator, because the Phase 4b close cannot claim them (phase 4b review M6): NEW-86 and NEW-92 to Phase 8, NEW-97 to Phase 9 (plan 1b Task 21), and NEW-90 to startable repository work with no phase; NEW-111 is owned by Spec 2 Task 11b (D46); NEW-99 is owned by plan 1a Task 23b (D38); NEW-100 by a later sharding of `test:lifecycle` (D39); NEW-101, NEW-103 and NEW-109 by the founder; NEW-104 by A13 Task 15; NEW-105 to NEW-107 by A12's follow-ups; NEW-108 by each phase close.
-They are not ordered ahead of A11 unless the touched subsystem makes one relevant; D33 lets a
-startable row run beside a wave when its files overlap no task in flight.
+`BACKLOG.md` §1 holds 60 open numbered rows; §6 lists what the phase closes deferred, by phase.
+Closed on 2026-09-26 with the green run: NEW-49, NEW-60, NEW-85, NEW-94 (`59a1237`), NEW-95, NEW-98 and
+NEW-109. Owners: NEW-61's loading half, NEW-65, NEW-101, NEW-102, NEW-103 and NEW-104 by the founder
+stop points above; NEW-61's `update` half and NEW-86 by NEW-110's Spec 2 revision pass; NEW-84 by plan 1b
+(Task 19 and the architecture carry-over); NEW-87 travels with whichever row each mis-aimed citation
+belongs to; NEW-105 to NEW-107 by A12's follow-ups; NEW-108 by the A12 plan's Task 29 remainder;
+NEW-111 and NEW-112 by Task 11b (D46); NEW-110 by the Spec 2 revision pass.
+They are not ordered ahead of A15 unless the touched subsystem makes one relevant.
 
 ## Delivery evidence still owed
 
@@ -174,16 +138,16 @@ startable row run beside a wave when its files overlap no task in flight.
 
 ## Count
 
-- Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16. A11–A14 and A11b have
-  their implementation committed and owe phase-close evidence only (D44, D47, D56).
-- Implementation tasks still to build: NEW-61's Codex re-registration on `update` (roadmap Phase 5,
-  lands with Phase 8) and A16's plan and work. Blocked or parked: Spec 2 closure Tasks 9–10
-  (NEW-110), Spec 2 Task 26, Spec 2 Task 11b (D46) and plan 1a Task 24 (NEW-100, post-A16).
-- Founder stop points: A12 NEW-101 billed row, Task 21 Step 4 real-vendor tests (NEW-102, NEW-103),
-  the `UNPROVEN_CLAUDE_CATEGORIES` decision and the founder-local scan; A12b's real-vendor run; A13
-  Task 2 and Task 18; A14's founder-local template scan; plan 1b Task 19; the A15 cutover execution;
-  L1 and L2.
-- Phase closes owed: Phase 4b (release plan), A12 Task 29, A12b Task 16, A13 Task 19, A14 Task 16,
-  Phase 8 (release plan "Phase 8 close") and Phase 9 (plan 1b Task 21).
-- A16 still needs its dedicated plan; A15's is `docs/migration/founder-cutover.md`.
-- Repository backlog: 66 open numbered rows, plus the Foundation watchdog decision.
+- Product sequence: 6 open entries — A15 (now), A12, A12b, A13 (founder stops only), A11b, A16.
+- Implementation still to build: NEW-100's CI sharding (repository, before the next PR); NEW-61's
+  Codex re-registration on `update` (with Phase 8's apply path); A16's plan and work.
+- Parked or blocked: Spec 2 closure Tasks 9–10 (NEW-110), Spec 2 Task 26, Spec 2 Task 11b (D46),
+  plan 1a Task 24 (NEW-100's round trip, post-A16, D42).
+- Founder stop points (9): A12 NEW-101 billed row, then `UNPROVEN_CLAUDE_CATEGORIES`; A12's
+  real-vendor integration files (NEW-102, NEW-103, NEW-65); the founder-local `--patterns` scan (A12,
+  A14); A12b `test:vendor-brain`; `test:vendor-ingest`; A13 Task 2; A13 Task 18; plan 1b Task 19 with
+  `test:pinned-host`; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
+- Repository chores (4): A12 §11 spec amendments with NEW-108; the inventory status flip for A12–A14;
+  A12b's plan decisions and residuals into the architecture notes; plan 1b's architecture carry-over.
+- Repository backlog: 60 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
+  and the §6 phase-close deferrals.
