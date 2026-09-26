@@ -4,7 +4,7 @@
 
 **Goal:** Implement the approved DOS-P7 Spec 2 stable launcher, signed release trust, `InstallationManifestV2`, the V1 refusal and V2 initialization (the V1 migration was withdrawn by D18), plan-first update, managed-artifact/schema upgrade, and conservative one-version rollback.
 
-Completed tasks were removed on 2026-09-23 and 2026-09-24; see git history. What remains: the Phase 4b close (below, run first), Task 11b (parked), Task 26 (parked), and the Phase 8 close, which owes every test and the review of Tasks 12–25 and of the closure plan's Tasks 1–8.
+Completed tasks were removed on 2026-09-23, 2026-09-24 and 2026-09-26; see git history. What remains: Task 11b (parked, D46) and Task 26 (parked, D56). The Phase 4b and Phase 8 closes ran: full suite green on `bc17550`, whole-phase reviews, PR #15 merged (`ORDER.md`).
 
 **Architecture:** Core owns canonical scalar/path codecs, manifest/update schemas, pure transition tables, target-plan validation, and migration-chain contracts; Security owns signatures, fixed-origin transport, bounded Zstandard/ustar admission, guarded scratch, and planner/verifier supervision; platform-macos owns launcher executable/platform admission; the launcher owns offline root trust and exact bundle selection; the adapters and Brain expose pure target planners; the CLI composes all concrete paths, owner providers, construction/source envelopes, lifecycle participants, update/rollback commands, and recovery. Tasks 12–26 consume Spec 1's lifecycle coordinator and finish Spec 2.
 
@@ -12,18 +12,15 @@ Completed tasks were removed on 2026-09-23 and 2026-09-24; see git history. What
 
 **Spec:** `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`
 
-## Status 2026-09-23 (D56 lane)
+## Status 2026-09-26
 
-Tasks 12–25 committed, tests written and not run (D56): 12 `0d379b6`, 13 `bfa1ab8`, 14 `3fa320a`,
-15 `2d8b6e2`, 16 `3d0295a`, 17 `913cbfc`, 18 `1c46285`, 19 `0db9aa4`, 20 `6cbc08c`, 21 `8aede3b`,
-22 `8848a9c`, 23 `25755c9`, 24 `11cfbbf`, 25 `2c2c4a5`. Their bodies were deleted on 2026-09-24;
-the tests they wrote are listed under "Phase 8 close" below. The apply path is completed by
+Tasks 10–25 are committed and their Phase 4b and Phase 8 closes ran. The apply path is completed by
 `plans/2026-09-23-developer-os-spec2-closure.md` (D60), whose Tasks 9–10 are blocked on design
 (NEW-110, D61). Task 26 (the lifecycle proof) and Task 11b remain parked.
 
 ## Global Constraints
 
-- **Sequencing (D16, 2026-09-16):** Tasks 12–26 run as roadmap Phase 8, after the founder cutover (A15). The Phase 4b close below runs before them. **Amended 2026-09-23 by D56:** Tasks 12–25 run now, in parallel with the A15 cutover, under the D44/D47 lane (tests written, not run; `npm run lint` per commit; tests and review at phase close); Task 26 stays parked with 11b.
+- **Sequencing (D16, 2026-09-16):** Tasks 12–26 run as roadmap Phase 8, after the founder cutover (A15). **Amended 2026-09-23 by D56:** Tasks 12–25 run now, in parallel with the A15 cutover, under the D44/D47 lane (tests written, not run; `npm run lint` per commit; tests and review at phase close); Task 26 stays parked with 11b.
 - Package direction remains `core ← security ← platform-macos ← cli`, with the separate `apps/launcher` depending only on Core, Security, and platform-macos. Core imports no filesystem globals, HTTP, archive extraction, process, platform, adapter, or CLI implementation.
 - No command other than `developer-os update` makes an update network request. Rollback, the V1 refusal, fresh init, uninstall, config, Git, automation, Brain, adapter probes, and launcher selection make zero release-transport requests.
 - `update` and `update rollback` are plan-only unless `--apply` is present. Planning may use only one bounded attempt-owned system-temporary scratch envelope and never mutates product, Brain, vendor, launcher, manifest, trust, active-release, or allocator state.
@@ -60,6 +57,10 @@ the tests they wrote are listed under "Phase 8 close" below. The apply path is c
 ### Task 11b: Replace the production bootstrap pin with the launcher's admitted, verified release
 
 **Parked 2026-09-22 by D46, `f80f3a1`.** Release signing keys are dropped for now and the FD 3 handoff carries no packaged-release identity; A12 Tasks 1 and 4 ship the unsigned local build (`init --local-release`, D47) instead. Nothing below has started.
+
+- [ ] **FOUNDER STOP (parked, D46):** before Task 11b can resume, the founder decides which offline root key the launcher compiles in and whether public releases reuse it.
+
+Also owned here: the launcher stubs (NEW-111), the launcher-only FD 3 source (NEW-112) and the Phase 4b handoffs in `BACKLOG.md` §6.
 
 **Added 2026-09-22 (Phase 4b, `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`).**
 `apps/cli/src/context.ts:790` hardcodes `bootstrap: { state: "unavailable_until_packaged_handoff" }`
@@ -205,57 +206,3 @@ git commit -m "feat: complete release and update lifecycle"
 ```
 
 Confirm CI is green on the exact commit before merge. Do not merge; the founder owns merging. Report the completed A11 evidence and the new `NOW` action, A12.
-
-## Phase 8 close (owed; D56)
-
-Spec 2 Tasks 12–25 and the closure plan's Tasks 1–8 landed under the D56 lane: `npm run lint` per
-commit, every test written and none run, review deferred. This close is owned by roadmap Phase 8. It
-does not wait for closure Tasks 9–10 or Task 26; they get their own close when they land.
-
-- [ ] Run every deferred test file, per commit, on the integrated tree. Show failures only.
-
-  ```bash
-  # Spec 2 Task 12 (0d379b6), 13 (bfa1ab8), 14 (3fa320a), 15 (2d8b6e2)
-  npx vitest run --root packages/security src/update/transport.test.ts src/update/archive.test.ts src/update/scratch.test.ts src/update/planner-process.test.ts src/update/graph.test.ts src/index.test.ts
-  npx vitest run --root packages/core src/update/preview.test.ts src/update/capacity.test.ts src/update/planner.test.ts
-  # Spec 2 Task 16 (3d0295a), 17 (913cbfc)
-  npx vitest run --root packages/core src/update/owner.test.ts src/update/migrations.test.ts
-  npx vitest run --root packages/adapter-claude src/update/plan.test.ts src/index.test.ts
-  npx vitest run --root packages/adapter-codex src/update/plan.test.ts src/index.test.ts
-  npx vitest run --root packages/brain src/migrations/update/plan.test.ts
-  # Spec 2 Task 18 (1c46285), 19 (0db9aa4), 20 (6cbc08c), 21 (8aede3b), 22 (8848a9c)
-  npx vitest run --root packages/core src/update/construction.test.ts src/update/bundle-participant.test.ts src/update/rollback.test.ts src/update/participants.test.ts src/update/coordinator.test.ts src/update/paths.test.ts src/lifecycle/recovery.test.ts
-  npx vitest run --root apps/cli src/update/construction.test.ts src/update/bundle-source.test.ts src/update/bundle-publication.test.ts src/update/rollback-source.test.ts src/update/rollback-publication.test.ts src/update/owner-participant.test.ts src/update/external-effect.test.ts src/update/migration-participant.test.ts src/update/state-participant.test.ts src/update/coordinator.test.ts src/update/recovery.test.ts
-  npx vitest run --root apps/launcher src/selection.test.ts
-  # Spec 2 Task 23 (25755c9), 24 (11cfbbf), 25 (2c2c4a5)
-  npx vitest run --root apps/cli src/commands/update/index.test.ts src/update/planning.test.ts src/update/context.test.ts src/update/apply.test.ts src/update/rollback-apply.test.ts src/main.test.ts
-  # Closure Tasks 1-8 (404a59e 8a837d5 632b4b6, 32b7477, 2f8120b, bb5a2fd, d32a167, 3388508 73b29c1, 4bf3912)
-  npx vitest run --root packages/core src/lifecycle/ids.test.ts src/lifecycle/ledger.test.ts src/lifecycle/store.test.ts src/lifecycle/ledger-v2.test.ts src/update/retirement.test.ts src/transactions/update-foundation.test.ts src/index.test.ts
-  npx vitest run --root packages/security src/update/verifier-process.test.ts src/index.test.ts
-  npx vitest run --root apps/cli src/update/retirement-participant.test.ts src/update/foundation-port.test.ts src/update/codex-effect-ports.test.ts
-  npx vitest run --root apps/cli src/lifecycle/mutation-gate-update.v2.test.ts
-  npm run build && npx vitest run --root tests security/network.test.ts repository/check.test.ts
-  ```
-
-  Then `npm run check`. The phase does not close until it is green.
-- [ ] One fresh-context whole-phase review by an agent that authored none of Spec 2 Tasks 12–25 or
-  closure Tasks 1–8, over the phase's commits. It also takes the Spec 2 and closure items of
-  `BACKLOG.md` §6. Each accepted finding gets a failing regression test before the smallest
-  correction.
-- [ ] Push the phase's commits to one branch and open one PR (D44 lane); do not push `development`
-  directly. The founder merges.
-
-## Phase 4b close (owed now; D44/D47)
-
-Tasks 10 (`1e214ce`) and 11 (`3a5f200`) landed on `development` under the D44 lane: lint only, every test written but unrun, review deferred. The same holds for `d2cc737` (NEW-85), `c7bc459` (launcher trust-fd fix) and the side track `6254586` (NEW-49). This close is owned by roadmap Phase 4b (`plans/2026-09-04-developer-os-completion-roadmap.md`).
-
-- [ ] Run the deferred Task 10 tests: `npx vitest run --root packages/platform-macos src/launcher/admission.test.ts && npx vitest run --root apps/launcher src/environment.test.ts src/selection.test.ts`, then `pnpm --pm-on-fail=ignore build`. Expected: PASS with the launcher project in the build graph.
-- [ ] Run the deferred Task 11 tests: `npx vitest run --root packages/security src/update/signatures.test.ts src/update/handoff.test.ts && npx vitest run --root apps/launcher src/handoff.test.ts`. Expected: PASS for current/retained root and all mutation vectors.
-- [ ] Run `npm run check` once (D32: the one phase close that closes no plan; the founder may run it by hand). The phase does not close until it is green.
-- [ ] Obtain one fresh-context whole-phase review of every Phase 4b commit. Flag to the reviewer:
-  - Task 10: `packages/platform-macos/src/launcher/admission.ts` and its 12 tests were written together, not confirmed red first. Known placeholders the implementer deferred to Task 11/A16: the bootstrap-closure reader always supplies `handoff_complete` instead of reading Task 9's plan/journal state; the release-index cross-check against the active record's `releaseIdentityHash()` is not built; `main.ts` is untested and its packaged-fallback location is a `ponytail:`-marked placeholder.
-  - Task 11: `packages/security/src/update/{signatures,handoff}.ts` were written with their tests (a red check was rerun by removing the implementation); `packages/security/src/index.test.ts` changed outside the Files list for four new exports; `LAUNCHER_OFFLINE_RELEASE_ROOTS` is `[]` (D46), so the trust compiler returns `null` and retained-document verification fails closed; `execFileSync` → `spawn` in `apps/launcher/src/main.ts` also changes child exit codes; the `"release-key-delegation"`/`"release-index"` kind literals are unfixed elsewhere in the tree.
-  - Each accepted finding gets a failing regression test before the smallest correction.
-- [ ] Push the Phase 4b commits to one branch and open one PR (as plan 1a's `#14`); do not push `development` directly.
-- [ ] **FOUNDER STOP:** the founder merges the PR.
-- [ ] **FOUNDER STOP (parked, D46):** before Task 11b can resume, the founder decides which offline root key the launcher compiles in and whether public releases reuse it.

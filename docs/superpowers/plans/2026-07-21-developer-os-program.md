@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Completed tasks were removed on 2026-09-23 and 2026-09-24; see git history.
+Completed tasks were removed on 2026-09-23, 2026-09-24 and 2026-09-26; see git history.
 
 **Goal:** Deliver `developer-os` as an open-source, local-first macOS CLI that installs independent Claude Code and Codex adapters over a private Obsidian-compatible Brain.
 
@@ -244,115 +244,18 @@ token-only adapter planners, macOS adapter, and isolated integration fixtures.
 The five implementation items this section held — Git on temporary repositories and bare remotes,
 `launchd` plan/apply/status/disable, signed release metadata with dry-run update, migration staging
 and rollback, drift-refusing update with manifest-owned uninstall, and the failure-mode tests — are
-committed under D56 with their tests unrun (plan 1b Tasks 1–18 and 20; Spec 2 Tasks 12–25; Spec 2
-closure Tasks 1–8). What stays open:
+committed (plan 1b Tasks 1–18 and 20; Spec 2 Tasks 12–25; Spec 2 closure Tasks 1–8), and the Phase 8
+and Phase 9 closes ran on 2026-09-26 (full suite green on `bc17550`, reviews, PR #15). What stays open:
 
-- [ ] Phase 8 close: `plans/2026-08-29-developer-os-release-update.md`, "Phase 8 close".
-- [ ] Phase 9: plan 1b Task 19 (founder certification) and Task 21 (phase close),
+- [ ] Phase 9: plan 1b Task 19 (founder certification on a disposable 25G83 host, then
+      `npm run test:pinned-host` and the Phase 9 gate there) and the architecture carry-over,
       `plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`.
 - [ ] Parked: `update --apply` / `update rollback --apply` composition (Spec 2 closure Tasks 9–10,
       `BACKLOG.md` NEW-110), the lifecycle proof (Spec 2 Task 26) and the launcher-admitted
       release (Task 11b, D46).
 
-**Test:**
-
-- Git-disabled and automation-disabled installs perform no related process or network call; complete
-  config-only lifecycle forgeries remain inert without matching manifest-owned applied provenance and
-  a clear lifecycle-journal closure, including after every interrupted lifecycle phase.
-- All four lifecycle plan commands, including `git disable`, print deterministic byte-inert
-  `LifecyclePlanPreviewV1` without allocating IDs or staging identities; explicit apply revalidates
-  its hash before reservation and persists only the separately allocated, preview-bound
-  `LifecycleExecutionPlanV1`. Exact config get/set key/value/null/result grammars prevent lifecycle
-  writes and expose redaction patterns only as a count.
-- Push failure never records successful sync.
-- Git refuses a same-version different binary, an unsupported distribution row, any unknown gateway
-  child, and every wrong-parent, wrong-order, wrong-argv, or reused process permit before real state or
-  network authority is reached; every edge additionally enforces its hashed counted-stream, idle,
-  wall, inherited-phase, and whole-process-group termination policy. One top-level push invocation has
-  one non-resettable 600-second phase; a later exact `push_pending` invocation receives a new phase only
-  after all persisted-plan rechecks and no cumulative lifetime clock is trusted. Every persisted push
-  binds a `SanitizedGitShadowConfigTemplateV1` hash even without a source effect; source/destination
-  Git shadows de-slot fresh concrete paths/token and bind exact canonical projection/byte hashes before spawn;
-  `http.followRedirects=false` makes every redirect fail without a second destination request.
-- Local/file receive completes in private pre-intent planning, its destination closure is immutable
-  before source publication, generated config forces the sole `index-pack` branch for zero/nonzero
-  object packs when a ref-update command exists, the exact up-to-date target uses no pack/index child
-  and a zero-transition destination effect, and real-destination promotion spawns no process. Numeric
-  metadata bounds refuse source/destination config, candidate config, index, `HEAD`, loose-ref, and
-  reflog overflow before ID allocation, materialization, copy, parse, or hash. Git-config-rendered
-  paths reject controls/line breaks, enable alone may publish the initial `.git`, and every sync —
-  including the first unborn sync — uses existing-repository object/index/reflog/ref transitions.
-  Required source/destination reflog appends use exact planned committer/date bytes and CAS, bind
-  bijectively to one matching ref transition/projection, and admit a 64-MiB preimage plus only the
-  exact bounded 4-KiB append postimage. The streaming pack/ref reader requires equal decoded-header,
-  admitted-entry, and distinct transitive-closure counts and enforces its 2-GiB compressed,
-  200,001-object, 512-MiB per-object, 8-GiB
-  aggregate/delta-work, depth-50, 10-million-instruction, 256-MiB RAM, 10-GiB temp, and inherited
-  600-second limits before intent. Empty bare destinations bind
-  an exact symbolic `GitHeadStateV1` with absent target ref, and `GitAlternateObjectDirectoryV1`
-  prevents one environment value from parsing as more than one read-only object directory.
-- Terminal Foundation/lifecycle evidence, staging/backups, and per-ID locks compact crash-resumably;
-  an immutable install nonce plus monotonic allocator prevents ID reuse, partial allocator and exact
-  canonical legacy `0..4294967294`
-  planless residue plus initial coordinator/participant/effect publication temps follow their exact
-  guarded grammars, Foundation retains its implemented journal serializer and admits 16-MiB streamed
-  mutation payloads, every standalone/participant Foundation and coordinator journal proves its
-  largest reachable exact encoding fits the derived/plan-bound 1-MiB ceiling before ID reservation,
-  every Git effect proves its largest reachable cumulative journal fits the plan-bound 16-MiB ceiling,
-  the coordinator plan is unlinked last with no lock-only crash state, exact
-  aggregate reservations hold, and repeated scheduled status/log writes cannot exhaust the bounded
-  ledger.
-- Launchd command-before-observation and reverse crashes recover from the exact live-state table;
-  exact domain/service `launchctl print` probes observe the plan-derived generation label in
-  `gui/<effective-uid>`, not a plist hash or caller bootstrap namespace, and a live-only reconcile
-  performs exactly its zero-or-more `Q` transitions without Foundation or manifest mutation. The
-  allocation-free preview observation row permits at most 13 read-only `print` processes per preview
-  or revalidation pass from guarded root-owned `/private/var/empty`; its hash and the mutation-template
-  hash are exact members of the outer and nested previews. The hash-bound launchd mutation process
-  template/expanded row pins `/bin/launchctl`, sanitized environment,
-  stream/idle/wall/shared-transition limits, and SIGTERM→SIGKILL/reap behavior for `print`, FD-3
-  `/dev/fd/3` `bootstrap`, and `bootout`; bootstrap streams the verified planned real-plist bytes into
-  a private snapshot, admits a linked empty/partial/complete prefix only at its exact current effect
-  frontier, unlinks that exact inode before spawn, inherits only snapshot FD 3 and never the real source
-  descriptor, detects replacement
-  and in-place mutation of the real plist, and restores the pre-attempt open-descriptor baseline on
-  every parent/child outcome. A disposable pinned-macOS certification is mandatory and there is no
-  linked-path or mutable-path fallback. Crash fixtures kill snapshot construction after create, every
-  partial-prefix write, sync, open, and immediately before/after unlink; only the current-frontier
-  creation state may resume or be guarded-cleaned while live state remains the command preimage.
-  Exact-byte fixtures cover the five-key canonical plist XML, hourly/daily/weekly calendar mapping,
-  weekday numbers, null-sink output, escaping, and rejection of every extra key/alternate encoding.
-  Post-intent Git `EEXIST` is
-  preserved as a third state; rollback restores source/destination control state without deleting
-  published source objects, destination pack/index objects, or a newly published `.git` tree; tagged source-index absence supports only an unborn empty repository, retry
-  validates only `sourceAfter`, and the shared Git cardinality calculation fits every
-  effect/fingerprint/staging bound.
-  Launchd process root/`HOME`/`TMPDIR` follow one hash-bound path-owner-mode-device-inode staging
-  grammar with exact empty process boundaries and only the current-frontier linked snapshot prefix
-  between them. The generation projection/plist carries exact guarded
-  `--product-home`; scheduled bootstrap parses it before ordinary CLI context and ignores ambient
-  home/Brain overrides. Each scheduled runner first authenticates installed manifest/plist/generation
-  evidence independently, then under its lease/global lock either runs an actively eligible handler
-  or writes only `automation_disabled`/the Git-specific `git_disabled` with zero Brain/Git/vendor/
-  network effects. Each runner holds
-  its existing per-job lock as a lifetime lease before waiting on the global lock, and uninstall drains those leases without the
-  global lock. A missing/replaced lease is silent only for marker, manifest absence, or the exact typed
-  uninstall coordinator after verified lease removal. Fresh init and the no-manifest uninstall
-  variant use the exact transient `LifecycleBootstrapLockV1` protocol: external preflight, exact
-  inode acquisition/recheck, a complete second bounded no-follow inventory, unlink-while-held cleanup,
-  stale-inode waiter restart, exact crash-residue adoption, and bootstrap-before-global lock order for
-  concurrent init. No-manifest uninstall remains process-free; an absent redaction key returns before
-  recovery ID, plan, or coordinator allocation and leaves no file/control residue, while a present key alone derives
-  exactly `K(stage) · K(delete)` in the closed flat bootstrap envelope without creating installed
-  ledger roots. A non-crashing attempt removes its recorded empty directories; after crash the
-  indistinguishable exact empty skeleton is preserved, and first-creation nonce/allocator temps obey
-  `LifecycleBootstrapCreationTempV1`. The admitted external grammar remains exact absent/empty/empty-state/
-  key-only product-home plus absent external plists; every other known or unknown entry is preserved
-  recovery-required, and base/prefix labels are not product-owned service authority. Flat-envelope
-  recovery admits one authoritative final coordinator journal plus one exact bounded rewrite temp at
-  every post-intent cursor/phase crash.
-- Update and uninstall preserve the Brain and unrelated agent config.
-- Checksum mismatch, schema incompatibility, and drift fail before apply.
+**Test:** Spec 1 §7 and Spec 2 §12 are the gate matrices; Task 26 of the release plan maps every row
+to named evidence.
 
 **Checkpoint:** The complete local product lifecycle is ready for founder shadow migration.
 

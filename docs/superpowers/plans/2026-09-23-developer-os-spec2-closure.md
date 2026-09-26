@@ -12,16 +12,15 @@ Task 10 below therefore binds rollback's production ports and closes Task 25's r
 participants, state-postimage identities for compensation, V2 closure residue `update_rollback`,
 and Task 20's empty plan-only `externalEffects`).
 
-## Status 2026-09-24
+## Status 2026-09-26
 
-Closure Tasks 1–8 committed (`404a59e` `8a837d5` `632b4b6`, `32b7477`, `2f8120b`, `bb5a2fd`,
-`d32a167`, `3388508` `73b29c1`, `4bf3912`), tests written and not run (D56). They closed blockers
-(a)–(e), the `oe`/`rb` allocator prefixes, the duplicate journal-path helper and the verifier and
-Codex process ports; their bodies, the blocker verdicts and F1–F4 were deleted on 2026-09-24 (git
-history holds them). Their tests and review are owed at the Phase 8 close, listed in
-`plans/2026-08-29-developer-os-release-update.md` ("Phase 8 close"). **Tasks 9 and 10 are blocked on
-design (BACKLOG NEW-110)** and parked by the founder's order of work (D16: update follows the
-cutover; D61: Spec 2 apply parked).
+Closure Tasks 1–8 are committed (`404a59e` `8a837d5` `632b4b6`, `32b7477`, `2f8120b`, `bb5a2fd`,
+`d32a167`, `3388508` `73b29c1`, `4bf3912`) and their Phase 8 close ran (full suite green on
+`bc17550`, whole-phase review, PR #15). They closed blockers (a)–(e), the `oe`/`rb` allocator
+prefixes, the duplicate journal-path helper and the verifier and Codex process ports; their bodies,
+the blocker verdicts and F1–F4 were deleted on 2026-09-24 (git history holds them). **Tasks 9 and 10
+are blocked on design (BACKLOG NEW-110)** and parked by the founder's order of work (D16: update
+follows the cutover; D61: Spec 2 apply parked).
 
 ### Blocked 2026-09-23 — closure Task 9 found
 
