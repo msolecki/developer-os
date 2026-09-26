@@ -248,7 +248,7 @@ committed (plan 1b Tasks 1–18 and 20; Spec 2 Tasks 12–25; Spec 2 closure Tas
 and Phase 9 closes ran on 2026-09-26 (full suite green on `bc17550`, reviews, PR #15). What stays open:
 
 - [ ] Phase 9: plan 1b Task 19 (founder certification on a disposable 25G83 host, then
-      `npm run test:pinned-host` and the Phase 9 gate there) and the architecture carry-over,
+      `npm run test:pinned-host` and the Phase 9 gate there),
       `plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`.
 - [ ] Parked: `update --apply` / `update rollback --apply` composition (Spec 2 closure Tasks 9–10,
       `BACKLOG.md` NEW-110), the lifecycle proof (Spec 2 Task 26) and the launcher-admitted

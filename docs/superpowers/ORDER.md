@@ -52,7 +52,7 @@ closes they governed. The next code-producing work runs `SESSION.md` §5 as writ
 Open sequence (D16, daily use before completeness):
 
 1. Now: the A15 cutover, and NEW-100's CI sharding before the next PR.
-2. Beside it: the founder stop points above, and the repository chores in "Count".
+2. Beside it: the founder stop points above.
 3. Then the parked Spec 2 work — closure Tasks 9–10 on NEW-110's design (one Spec 2 revision pass),
    Task 26, Task 11b — then A16.
 
@@ -112,7 +112,7 @@ Needs a human, a policy decision, or an external application:
 Closed on 2026-09-26 with the green run: NEW-49, NEW-60, NEW-85, NEW-94 (`59a1237`), NEW-95, NEW-98 and
 NEW-109; NEW-108 by the A12 §11 spec amendments. Owners: NEW-61's loading half, NEW-65, NEW-101, NEW-102, NEW-103 and NEW-104 by the founder
 stop points above; NEW-61's `update` half and NEW-86 by NEW-110's Spec 2 revision pass; NEW-84 by plan 1b
-(Task 19 and the architecture carry-over); NEW-87 travels with whichever row each mis-aimed citation
+(Task 19); NEW-87 travels with whichever row each mis-aimed citation
 belongs to; NEW-105 to NEW-107 by A12's follow-ups;
 NEW-111 and NEW-112 by Task 11b (D46); NEW-110 by the Spec 2 revision pass.
 They are not ordered ahead of A15 unless the touched subsystem makes one relevant.
@@ -151,6 +151,7 @@ They are not ordered ahead of A15 unless the touched subsystem makes one relevan
   real-vendor integration files (NEW-102, NEW-103, NEW-65); the founder-local `--patterns` scan (A12,
   A14); A12b `test:vendor-brain`; `test:vendor-ingest`; A13 Task 2; A13 Task 18; plan 1b Task 19 with
   `test:pinned-host`; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
-- Repository chores (1): plan 1b's architecture carry-over.
+- Repository chores: none. The A12 §11 amendments with NEW-108, the inventory status flip, A12b's
+  decisions and residuals and plan 1b's architecture carry-over ran on 2026-09-26.
 - Repository backlog: 59 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
   and the §6 phase-close deferrals.

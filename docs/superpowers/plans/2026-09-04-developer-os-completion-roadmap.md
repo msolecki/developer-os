@@ -358,7 +358,8 @@ Preconditions (NEW-84): a freshly measured `launchctl` row for the current macOS
   (Task 21) ran except `npm run test:pinned-host`, which needs Task 19's host.
 - [ ] Task 19 (FOUNDER STOP): certify the re-pinned rows on a disposable 25G83 host, run
   `npm run test:pinned-host` there and prove the gate below.
-- [ ] Architecture carry-over of plan 1b's decisions (repository chore, the plan's remainder).
+- The architecture carry-over of plan 1b's decisions ran on 2026-09-26 (`foundation.md` §10,
+  `foundation-constraints.md`, `threat-model.md` §5.15).
 
 Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; scheduled runs observed.
 
