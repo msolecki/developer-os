@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { HookRuntime } from "../registry.js";
-import { guardPath } from "./path.js";
+import { guardPath, HOOK_PROTECTED_PATH_RULES } from "./path.js";
 
 let home: string;
 let project: string;
@@ -42,6 +42,40 @@ function runtime(userHome: string | null, cwd = project): HookRuntime {
     },
   };
 }
+
+// Each path is a thunk because `home` is created per test.
+const HOOK_BLOCKS: readonly (readonly [string, () => string])[] = [
+  ["credential-file", () => ".git-credentials"],
+  ["credential-file", () => "sub/.netrc"],
+  ["credential-file", () => ".pgpass"],
+  ["credential-file", () => "public/.htpasswd"],
+  ["credential-file", () => ".envrc"],
+  ["private-key", () => "keys/id_rsa"],
+  ["private-key", () => "id_dsa"],
+  ["private-key", () => "deploy/id_ecdsa"],
+  ["private-key", () => "id_ed25519"],
+  ["credentials-json", () => "config/credentials.json"],
+  ["secrets-dir", () => "secrets/db.txt"],
+  ["secrets-dir", () => "config/secret/token"],
+  ["home-config", () => join(home, ".npmrc")],
+  ["home-config", () => join(home, ".docker", "config.json")],
+  ["home-config", () => join(home, ".kube", "config")],
+  ["key-material", () => "certs/server.key"],
+  ["key-material", () => "certs/server.pem"],
+  ["key-material", () => "client.p12"],
+  ["key-material", () => "client.pfx"],
+  ["key-material", () => "infra/prod.tfvars"],
+];
+
+const HOOK_ALLOWS: readonly (readonly [string, () => string])[] = [
+  ["credential-file", () => "docs/netrc-setup.md"],
+  ["private-key", () => "keys/id_ed25519.pub"],
+  ["credentials-json", () => "config/credentials.json.example"],
+  ["secrets-dir", () => "src/secret-manager.ts"],
+  ["home-config", () => ".npmrc"],
+  ["home-config", () => "docker/config.json"],
+  ["key-material", () => "docs/keys.md"],
+];
 
 const run = (filePath: string | null, toolName = "Edit", userHome: string | null = home, cwd = project) =>
   guardPath({ cwd, toolName, command: null, filePath, prompt: null, stopHookActive: null }, runtime(userHome, cwd));
@@ -85,6 +119,29 @@ describe("guard path", () => {
     expect(await run(".env.example")).toStrictEqual({ kind: "allow" });
     expect(await run("sub/.env.dist")).toStrictEqual({ kind: "allow" });
     expect(await run(".env.production")).toMatchObject({ kind: "block", ruleId: "protected-path" });
+  });
+
+  // D67 option (c): the hook-only table, outside PROTECTED_PATH_RULES and CLAUDE_DENY_RULES.
+  it("has a block fixture and a near-miss allow fixture for every hook-only rule", () => {
+    expect(HOOK_PROTECTED_PATH_RULES.length).toBeGreaterThan(0);
+    for (const { id } of HOOK_PROTECTED_PATH_RULES) {
+      expect(HOOK_BLOCKS.some(([rule]) => rule === id), id).toBe(true);
+      expect(HOOK_ALLOWS.some(([rule]) => rule === id), id).toBe(true);
+    }
+  });
+
+  it.each(HOOK_BLOCKS)("blocks a %s path", async (_rule, filePath) => {
+    expect(await run(filePath(), "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
+  });
+
+  it.each(HOOK_ALLOWS)("allows a %s near miss", async (_rule, filePath) => {
+    expect(await run(filePath(), "Write")).toStrictEqual({ kind: "allow" });
+  });
+
+  it("blocks a project symlink that resolves to a home credential file", async () => {
+    await writeFile(join(home, ".npmrc"), "synthetic\n");
+    await symlink(join(home, ".npmrc"), join(project, "npmrc-link"));
+    expect(await run("npmrc-link", "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
   });
 
   it("ignores a tool that is not a file matcher", async () => {
