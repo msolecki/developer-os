@@ -589,6 +589,7 @@ suite that was opened. One is weaker than its claim and says so there.
 | trust boundaries, what is untrusted, and the mechanism enforcing each | `docs/architecture/threat-model.md` |
 | the three boundaries that do **not** hold, first thing | `threat-model.md` §1 |
 | the vault, its two invariants, and the discovery rules a proposal is judged against | `docs/architecture/brain.md` |
+| note captures (`capture --note`), verbatim ingest, `brain retire`/`brain refactor`: A12b's decisions and residuals | `brain.md` §6.13 |
 | the workflow contract, `extends`, and the declared-versus-derived scope arithmetic | `docs/architecture/workflow-schema.md` |
 | the capability model — two gates, three values, recorded twice on purpose | `claude-adapter.md` §3, `codex-adapter.md` §3 |
 | per-vendor residuals with owners | `codex-adapter.md` §11, `claude-adapter.md` §9 |

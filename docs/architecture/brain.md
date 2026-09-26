@@ -318,3 +318,60 @@ determinism, every lint finding, canonical drift and the retrieval funnel. Fixtu
 and never refreshed from a real vault. Integration runs reindex → lint → search and resolves every
 match to a fixture file; end-to-end cases cover all four CLI verbs, JSON output, exit codes and a
 write-free dry run.
+
+### 6.13 Brain workflows, note captures and the refactor verbs (A12b)
+
+Recorded 2026-09-26 from the A12b plan (`plans/2026-09-22-developer-os-brain-workflows.md`, whose
+shipped tasks are in git history) and its spec
+(`docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`, approved by D47). The spec
+stays normative; these are the choices the plan made where the spec was silent or conflicted with the
+code, and the residuals the spec accepted.
+
+**Implementation decisions.**
+
+1. **The garden fixture is planted per test.** `templates/brain` is what `init` ships to every user,
+   and `apps/cli/src/commands/brain-template.test.ts` pins it byte for byte, so it is not extended.
+   The e2e tests create the three-note tag after `init`, inside their own temporary vault.
+2. **`capture --note` refusal codes** (the spec names none). `capture_note_invalid`, exit 2: a bad
+   path string, a note that does not parse, a note over 64 KiB, or a destination that exists but is
+   not a canonical note. `capture_note_path_refused`, exit 5: a destination outside a configured topic
+   folder, under a private folder or the indexes directory, or reached through a symlink
+   (`apps/cli/src/commands/capture.ts`).
+3. **`note_changed_since_capture` is carried in a `reason` field**, typed
+   `"note_changed_since_capture" | null`, on each per-capture refusal (`RefusedCaptureV1` and the
+   `refused[]` entries of `RunReportV1`, `apps/cli/src/commands/ingest.ts`), beside the numeric
+   `code`. The change is additive.
+4. **`IngestResultV1.agent` and `RunReportV1.agent` are `AgentName | null`**: `null` when every
+   selected capture is a note capture, so no vendor was resolved. Additive for readers that already
+   branch on the value.
+5. **`brain refactor` mode flags are boolean options.** As string options `parseArgs` would consume
+   the note path as the flag's value. Zero mode flags, or two, is a parse refusal (usage,
+   `invalid_input`, exit 2); every other input fault is `brain_refactor_input_invalid`, exit 2
+   (`apps/cli/src/commands/refactor.ts`).
+6. **The second transaction of `brain retire` and `brain refactor` is `brain-refactor-reindex`**, the
+   same kind for both verbs; the spec names only the first transaction's kind.
+7. **`review` rows carry `redactionCount`**, because the human line prints that count. Additive.
+8. **`brain-garden`'s prose names `brain refactor` and `brain retire`**, which landed after the
+   workflows; nothing was released between the two (D47).
+9. **The real-vendor test is handed an API key.** A disposable `HOME` carries no Claude credentials,
+   so `npm run test:vendor-brain` (`tests/integration/brain-workflows/claude.test.ts`) runs only when
+   both `claude` and `DEVELOPER_OS_VENDOR_BRAIN_API_KEY` are present, and passes the key as
+   `ANTHROPIC_API_KEY` into the isolated environment. It is excluded from `test:suite` and is not part
+   of `check`. The founder confirms this at the A12b real-vendor stop.
+10. **A note another note cites in `sources` cannot be renamed, moved or merged.** No frontmatter is
+    ever edited, so the referrer's `sources` entry would stop resolving; that is a new `provenance`
+    error, and the refactor's post-condition refuses it with `refactor_postcondition_failed`. It is
+    fail-closed and goes beyond residual R6 below.
+
+**Accepted residuals** (spec §8).
+
+| # | Residual | Disposition |
+|---|---|---|
+| R1 | In an interactive session the vendor's own tools can still write the vault; the declared scope and the skill text are instructions, not enforcement | A13's `guard path` is the only mechanism that could deny it; recommended to A13, not decided by A12b |
+| R2 | `brain-enhance` binds the note's hash at **capture** time, not at the agent's read: an edit made between the agent's read and its `capture` is overwritten by a revision that never saw it | accepted; the person reviewing the capture sees the full note. Closing it needs `--note-sha256` from the agent |
+| R3 | The deduplication hash is content-only, so two note captures with identical text and different destinations are one capture. Likewise a `--note` capture whose normalized text equals an existing plain capture returns `duplicate: true` with that capture's id and keeps that capture's envelope | accepted; the second is reported as a duplicate at exit 0 |
+| R4 | The agent-session detection that keeps `brain retire` and `brain refactor` person-run (spec §6.7) is environment-based and advisory against an adversary who strips it | accepted; it targets planted instructions in ordinary sessions |
+| R5 | `brain-garden`'s `limit`, one-capture-per-note and "never apply" are prose | backstopped by review of every capture and by the §6.7 detection; a second capture against one note fails its precondition at ingest with the reject-and-rerun recovery |
+| R6 | `--merge` does not union the source's `tags`/`aliases` into the target's frontmatter | follows from "no frontmatter patcher"; links by the source's title are still rewritten |
+| R7 | Obsidian renders a note capture's inner frontmatter as body text inside quarantine | cosmetic |
+| R8 | A replacing note capture normalizes and redacts the **whole** note: line endings, normalization form, stripped control and format characters, trimmed trailing whitespace, and any high-entropy run of 40+ characters redacted | accepted as the price of "the reviewed bytes are the written bytes"; `review` shows the redaction count. Narrowing it needs a redactor that takes the class set to apply, the same change NEW-36 asks for |
