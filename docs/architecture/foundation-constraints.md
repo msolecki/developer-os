@@ -514,66 +514,105 @@ need an explicit `Number(...)` at their comparison, which is how the type checke
 
 ## Plan 1a: lifecycle kernel bounds
 
-The exact numeric and shape bounds from plan 1a's "Global Constraints" section
-(`docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md:138-149`), as the shipped
-code now enforces them. `foundation.md` §10 is the narrative account; this is the bound-by-bound
-record, in the same spirit as the Task 5–8 notes above.
+The exact numeric and shape bounds from plan 1a's "Global Constraints" section, as the shipped code
+now enforces them. That section was pruned from the plan on 2026-09-23; read it with
+`git show 082e098:docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`.
+`foundation.md` §10 is the narrative account; this is the bound-by-bound record, in the same spirit
+as the Task 5–8 notes above.
 
-- **Size bounds (plan line 138).** Foundation, coordinator and launchd-effect journals
-  ≤ 1,048,576 bytes; Git-effect journals and every immutable plan ≤ 16,777,216 bytes — enforced by
-  `LIFECYCLE_SIZE_BOUNDS.planBytes`/`journalBytes` (`packages/core/src/lifecycle/types.ts:116-117`).
+- **Size bounds.** Foundation, coordinator and launchd-effect journals ≤ 1,048,576 bytes; Git-effect journals and every immutable plan ≤ 16,777,216 bytes — enforced by
+  `LIFECYCLE_SIZE_BOUNDS.planBytes`/`journalBytes` (`packages/core/src/lifecycle/types.ts`).
   Allocated Foundation payloads 0..16,777,216 bytes and staged journal bytes 1..1,048,576 —
-  `mutationContentSize`/`stagedJournalBytes` (`packages/core/src/lifecycle/types.ts:127-128`). The
+  `mutationContentSize`/`stagedJournalBytes` (`packages/core/src/lifecycle/types.ts`). The
   allocator ≤ 1,024 bytes and `UninstallingMarkerV1` ≤ 1,024 bytes —
-  `MAX_ALLOCATOR_BYTES`/`MAX_MARKER_BYTES` (`packages/core/src/lifecycle/records.ts:26-27`). The
+  `MAX_ALLOCATOR_BYTES`/`MAX_MARKER_BYTES` (`packages/core/src/lifecycle/records.ts`). The
   nonce is exactly 64 lowercase-hex bytes plus its trailing LF
-  (`packages/core/src/lifecycle/ids.ts:8`, `installNonce`). A lifecycle record in `config.toml` is
+  (`packages/core/src/lifecycle/ids.ts`, `installNonce`). A lifecycle record in `config.toml` is
   bounded to 1,048,576 bytes before parse — `LIFECYCLE_RECORD_MAX_BYTES`
-  (`packages/core/src/config/loader.ts:359`).
-- **Ledger bounds, `LifecycleLedgerBoundsV1` (plan line 139).** 10,000 leaves per journal root;
-  100,000 Foundation staging leaves; 100,000 Foundation backup leaves; 1,000,000 lifecycle staging
+  (`packages/core/src/config/loader.ts`).
+- **Ledger bounds, `LifecycleLedgerBoundsV1`.** 10,000 leaves per journal root; 100,000 Foundation staging leaves; 100,000 Foundation backup leaves; 1,000,000 lifecycle staging
   leaves aggregate and per coordinator; 1,000,000 leaves for Foundation overflow recovery —
-  `LIFECYCLE_LEDGER_BOUNDS` (`packages/core/src/lifecycle/ids.ts:27-43`), read by
+  `LIFECYCLE_LEDGER_BOUNDS` (`packages/core/src/lifecycle/ids.ts`), read by
   `inspectLifecycleLedger`'s per-root and aggregate counters
-  (`packages/core/src/lifecycle/ledger.ts:391,781,794`) and by the overflow-recovery check
-  (`packages/core/src/lifecycle/foundation-ledger.ts:237`). Counts include regular files, temporary
+  (`packages/core/src/lifecycle/ledger.ts`) and by the overflow-recovery check
+  (`packages/core/src/lifecycle/foundation-ledger.ts`). Counts include regular files, temporary
   leaves and ID/coordinator directories; reservation refuses before an ID block
-  (`packages/core/src/lifecycle/store.ts:206`, `assertLifecycleCapacity`).
-- **Cardinalities (plan line 140).** Coordinator `steps` 1..256; Foundation refs 0..64; mutations
+  (`packages/core/src/lifecycle/store.ts`, `assertLifecycleCapacity`).
+- **Cardinalities.** Coordinator `steps` 1..256; Foundation refs 0..64; mutations
   per ref 1..256; `plistPaths` 0..4; preview `files` 0..16; `LifecycleTerminalCompactionV1.entries`
   2..70; `compactionNext` 0..70; `nextStep` 0..256; `compensationNext` −1..255 or null — one block,
-  `packages/core/src/lifecycle/types.ts:118-126`.
-- **Absent-manifest walk (plan line 141).** At most 1,000,000 directory entries, 128 path
+  `packages/core/src/lifecycle/types.ts`.
+- **Absent-manifest walk.** At most 1,000,000 directory entries, 128 path
   components, 4,096 UTF-8 path bytes — `ABSENT_MANIFEST_WALK_BOUNDS`
-  (`packages/core/src/lifecycle/absent-manifest.ts:59-63`), checked by
-  `inspectAbsentManifestProductHome`'s walk (`packages/core/src/lifecycle/absent-manifest.ts:187,190,231`).
+  (`packages/core/src/lifecycle/absent-manifest.ts`), checked by
+  `inspectAbsentManifestProductHome`'s walk (`packages/core/src/lifecycle/absent-manifest.ts`).
   Names must be valid UTF-8, unique, free of NUL/slash/backslash/`.`/`..`, and every visited
   directory owned by the effective uid — enforced inline in the same walk, not as a separate
   constant table.
-- **Redaction key (plan line 142).** `state/redaction.key` is owner `0600`, single-link, 32..1,048,576
+- **Redaction key.** `state/redaction.key` is owner `0600`, single-link, 32..1,048,576
   bytes — `MINIMUM_SECRET_BYTES`/`MAXIMUM_SECRET_BYTES`
-  (`apps/cli/src/lifecycle/redaction-key.ts:36-37`) — opened `O_NOFOLLOW | O_NONBLOCK`
-  (`SECRET_OPEN_FLAGS`, `apps/cli/src/lifecycle/redaction-key.ts:175`), never read, hashed or
+  (`apps/cli/src/lifecycle/redaction-key.ts`) — opened `O_NOFOLLOW | O_NONBLOCK`
+  (`SECRET_OPEN_FLAGS`, `apps/cli/src/lifecycle/redaction-key.ts`), never read, hashed or
   journaled: `observeSecretOpaqueKey` only `open`s and `fstat`s the descriptor
-  (`apps/cli/src/lifecycle/redaction-key.ts:200-227`). The tombstone is
+  (`apps/cli/src/lifecycle/redaction-key.ts`). The tombstone is
   `state/.redaction.key.<coordinator-id>.tombstone`
-  (`apps/cli/src/lifecycle/redaction-key.ts:92`, `redactionKeyTombstonePath`).
-- **Locks (plan line 143).** `state/.lifecycle.lock` is created only by fresh `init` and opened
+  (`apps/cli/src/lifecycle/redaction-key.ts`, `redactionKeyTombstonePath`).
+- **Locks.** `state/.lifecycle.lock` is created only by fresh `init` and opened
   elsewhere without `O_CREAT`, and never unlinked — the rule and its enforcing classes are stated
-  together in `packages/core/src/lifecycle/locks.ts:1-44`. Lock order is runner lease → global →
+  together at the top of `packages/core/src/lifecycle/locks.ts`. Lock order is runner lease → global →
   transaction-specific; uninstall acquires leases only while holding no global lock. Interactive
   contention on the global lock refuses exit 6 (`LifecycleLockBusyError`,
-  `packages/core/src/lifecycle/locks.ts:21-31`). Uninstall's lease drain has one absolute ten-minute
-  deadline — `LIFECYCLE_LEASE_DRAIN_MS = 600_000` (`packages/core/src/lifecycle/locks.ts:85`),
-  consumed at `apps/cli/src/lifecycle/uninstall.ts:654`.
-- **Bookkeeping set (plan line 144, A12).** The exact ten-path set is
-  `LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS` (`packages/core/src/lifecycle/bookkeeping.ts:8-19`); see
+  `packages/core/src/lifecycle/locks.ts`). Uninstall's lease drain has one absolute ten-minute
+  deadline — `LIFECYCLE_LEASE_DRAIN_MS = 600_000` (`packages/core/src/lifecycle/locks.ts`),
+  consumed in `apps/cli/src/lifecycle/uninstall.ts`.
+- **Bookkeeping set (A12).** The exact ten-path set is
+  `LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS` (`packages/core/src/lifecycle/bookkeeping.ts`); see
   `foundation.md` §10 for its shape-admission rule.
 - **Uninstall artifact capacity (D26; not itself a Global Constraints line, but the plan 1a bound
   the section above cross-references).** `MAX_ARTIFACT_MUTATIONS = 256`
-  (`apps/cli/src/lifecycle/uninstall.ts:103`); a release bundle above roughly 197 files cannot be
+  (`apps/cli/src/lifecycle/uninstall.ts`); a release bundle above roughly 197 files cannot be
   uninstalled until Phase 4b (`BACKLOG.md` NEW-85).
 
 Every bound above is a ceiling the code refuses past, not a target it approaches — none of these
 constants moved during plan 1a's implementation; they were fixed at the plan's writing and this
-record exists so a later change that raises one does so having read what depends on it.
+record exists so a later change that raises one does so having read what depends on it. The
+section names files and symbols, not lines: plan 1b edited several of these files, and a line
+citation would have silently moved (`BACKLOG.md` NEW-87).
+
+## Plan 1b: Git and launchd bounds
+
+The bounds plan 1b's Global Constraints fixed (`git show d2f18b4:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`,
+"Global Constraints"), as the shipped code names them. Spec 1 §2.4, §4 and §5 are normative for each
+literal; this is the index from bound to symbol. Cite symbols, not lines.
+
+- **Journal sizes.** Foundation, coordinator and launchd-effect journals ≤ 1,048,576 bytes; Git-effect
+  journals and every immutable plan ≤ 16,777,216 bytes — `LIFECYCLE_SIZE_BOUNDS`,
+  `MAX_LAUNCHD_EFFECT_JOURNAL_BYTES` and `MAX_GIT_EFFECT_JOURNAL_BYTES`
+  (`packages/core/src/lifecycle/effect-ledger.ts`).
+- **Git work.** 200,001 objects; 512 MiB inflation per object; 8 GiB aggregate inflation and delta
+  work; delta depth 50; 10,000,000 delta instructions; 256 MiB resident, larger legal streams spilling
+  to at most 10 GiB of temporary storage — the bounded pack reader
+  (`packages/security/src/git/pack-reader.ts`) and private receive
+  (`packages/security/src/git/local-receive.ts`); the object and instruction counts are also typed in
+  `packages/core/src/git/types.ts`. One inherited 600-second push phase per top-level invocation
+  (`GitPushPhaseV1`, `packages/security/src/git/supervisor.ts`; the per-phase deadlines are in
+  `packages/security/src/git/process-table.ts`). Scope: 16 MiB per file,
+  1 GiB aggregate (`packages/core/src/git/scope.ts`).
+- **launchctl calls.** 4 MiB stdout and 1 MiB stderr per call, byte-counted and discarded, never
+  parsed, hashed or stored; 30-second observation and transition deadlines; 100 ms termination grace
+  (the `stdoutMaxBytes`, `stderrMaxBytes` and `terminationGraceMs` of each profile in
+  `packages/platform-macos/src/launchd/process-table.ts`, applied by `observe.ts` and `effects.ts`).
+- **Runtime records.** 1 MiB per log slot, `AUTOMATION_LOG_SLOTS` (10) slots, 64 KiB per status —
+  `MAX_AUTOMATION_LOG_BYTES`, `MAX_AUTOMATION_STATUS_BYTES` (`apps/cli/src/lifecycle/runtime-records.ts`).
+- **Scheduled lock wait.** A scheduled run waits at most `SCHEDULED_GLOBAL_LOCK_WAIT_MS` (600,000 ms)
+  for the global lock (`apps/cli/src/commands/automation/runner.ts`); uninstall's lease drain keeps
+  plan 1a's `LIFECYCLE_LEASE_DRAIN_MS`.
+- **Lock order.** Runner lease → global → transaction-specific, unchanged from plan 1a; a scheduled
+  handler borrows the runner's held global lock rather than acquiring a second one
+  (`withLifecycleMutation`, `apps/cli/src/lifecycle/mutation-gate.ts`).
+- **Identity encoding (D31).** Every recorded `dev`/`ino` in the Git and launchd code comes from
+  `{ bigint: true }` stats; `findIdentityRenderings` and `findNumberValuedStats` in
+  `tests/repository/check.ts` enforce it at lint.
+- **Distribution rows.** `SUPPORTED_GIT_DISTRIBUTION` and `SUPPORTED_LAUNCHD_DISTRIBUTION` are the
+  only places a pinned hash, size, build or version literal appears; `foundation.md` §10 records the
+  re-pinning rule.

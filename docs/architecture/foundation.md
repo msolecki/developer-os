@@ -930,12 +930,13 @@ it.
 ## 10. Lifecycle kernel (Spec 1a)
 
 Plan 1a (`docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, Tasks 1–25) shipped
-the code this section describes. §4's "active opt-in-surfaces design … normative; implementation
-remains pending" no longer holds for the surfaces named here; what follows is the shipped contract,
-not the design intent. Git, launchd, automation reconciliation and network push are still design
-only — the last bullet below states exactly what refuses. This section cites files without lines, by
-this document's own convention; `foundation-constraints.md` and `threat-model.md` carry the exact
-`path:line` record for each claim below.
+the kernel this section describes, and plan 1b (Tasks 1–18 and 20, `5e6c9b2..d1b1e77`, phase close on
+`bc17550`) filled its Git, launchd, automation and network-push slots. §4's "active opt-in-surfaces
+design … normative; implementation remains pending" no longer holds for the surfaces named here; what
+follows is the shipped contract, not the design intent. The last two bullets state what plan 1b added
+and what still refuses. This section cites files without lines, by this document's own convention;
+`foundation-constraints.md` and `threat-model.md` carry the bound-by-bound and boundary-by-boundary
+record.
 
 - **The bookkeeping set and its shape admission.** `LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS`
   (`packages/core/src/lifecycle/bookkeeping.ts`) is the closed set — `state/.lifecycle.lock`, the
@@ -949,11 +950,11 @@ this document's own convention; `foundation-constraints.md` and `threat-model.md
 - **The two present-manifest uninstall variants and their derivation (D24).** `deriveVariant`
   (`apps/cli/src/lifecycle/uninstall.ts`) calls Core's `deriveUninstallLaunchdEvidence` on the
   observed manifest's plist rows, the validated configuration's `automation.lifecycle` record, and
-  the activation record; it never hand-computes the disjunction. Plan 1a admits only
+  the activation record; it never hand-computes the disjunction. With no launchd evidence it selects
   `uninstall/present_manifest_without_launchd` (a null launchd arm, empty `plistPaths`,
-  `previewHash: null`); the `uninstall/present_manifest` (`P`) row a plist or an active automation
-  arm would select refuses `unsupported_until_plan_1b` (roadmap plan
-  `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`, D24). The variant is
+  `previewHash: null`, D24). A plist row or an automation arm selects `uninstall/present_manifest`
+  (`P`), which plan 1a refused and plan 1b Task 18 admits: `planUninstallLaunchd` plans the unload of
+  every manifest-owned generated label through a `LaunchdEffectPlanV1` before the lease drain. The variant is
   derived once, at planning time, because the evidence it reads is gone by the time recovery would
   need to re-derive it; the plan hash binds the shape instead.
 - **The empty-directory removal inside `M(finalize_tombstones)` (D25).** `finalizeUninstallTombstones`
@@ -1006,9 +1007,9 @@ this document's own convention; `foundation-constraints.md` and `threat-model.md
   resolution, or a non-terminal uninstall coordinator, refuses exit 6 naming `developer-os repair
   --resume <id>`/`--rollback <id>` or `developer-os uninstall`. The `retry_only` closure kind
   (`packages/core/src/lifecycle/ledger.ts`, `classify`) is the healthy, retryable state of a
-  coordinator stuck on a refused `network_push`/`destination_git_effect` step — plan 1a refuses
-  those arms outright (below), so `retry_only` is reachable only through synthetic core-level tests
-  today — and commit `11f1b55` (`packages/core/src/lifecycle/recovery.ts`) fixed `recover()`'s
+  coordinator stuck on a failed `network_push`/`destination_git_effect` step. Since plan 1b it is
+  reachable in production: a `git sync` whose push fails leaves the persisted push plan and a
+  `retry_only` closure, and the next sync retries only that push. Commit `11f1b55` (`packages/core/src/lifecycle/recovery.ts`) fixed `recover()`'s
   `collectCoordinator` to leave such a coordinator alone rather than throw
   `lifecycle_coordinator_not_terminal`, by reusing the inspected snapshot's own `closure` instead of
   re-deriving the condition.
@@ -1036,9 +1037,70 @@ this document's own convention; `foundation-constraints.md` and `threat-model.md
   rechecked `dev`/`ino` identity without reading a byte of it. Any other residue — V1 Foundation
   leftovers, a plist, an attributed bootstrap leaf — refuses exit 6 with D20's archive guidance and
   changes nothing.
-- **What is refused until plan 1b.** `LifecycleUnsupportedLeafError`
-  (`apps/cli/src/lifecycle/codecs.ts`) publishes reason `unsupported_until_plan_1b` (exit 4,
-  `capabilityUnavailable`) for `UNSUPPORTED_STEP_KINDS` (`source_git_effect`, `destination_git_effect`,
-  `launchd_before_files`, `launchd_after_files`, `network_push`) and for any non-null launchd or push
-  arm. No plan 1a code path spawns Git or `launchctl`, opens a network connection, or invokes a
-  vendor.
+- **What plan 1b added: Git, launchd and scheduled automation.** The five step kinds plan 1a refused
+  (`source_git_effect`, `destination_git_effect`, `launchd_before_files`, `launchd_after_files`,
+  `network_push`) are real leaves. `LifecycleExecutionPlanV1` (`apps/cli/src/lifecycle/codecs.ts`)
+  binds `LaunchdPlanV1` and `PersistedGitPushPlanV1`, and `createLifecycleEffectAdapters`
+  (`apps/cli/src/lifecycle/adapters.ts`) wires the Git and launchd effect executors and the push into
+  the coordinator, so the mutation gate's recovery can finish a non-terminal Git or launchd
+  coordinator. The effect journals are `state/git-effect-journals` (`GitEffectJournalV1`,
+  `packages/core/src/git/effect-journal.ts`, at most `MAX_GIT_EFFECT_JOURNAL_BYTES`, 16 MiB) and
+  `state/launchd-effect-journals` (`LaunchdEffectJournalV1`,
+  `packages/platform-macos/src/launchd/effect-journal.ts`, at most `MAX_LAUNCHD_EFFECT_JOURNAL_BYTES`,
+  1 MiB), both inspected by the ledger. `LifecycleUnsupportedLeafError` is still defined in
+  `codecs.ts` but nothing throws it, so `unsupported_until_plan_1b` is no longer a reachable reason.
+  - **Commands.** `git enable|disable|status|sync` (`createGitService`,
+    `apps/cli/src/commands/git/service.ts`) and `automation enable|disable|status`
+    (`createAutomationService`, `apps/cli/src/commands/automation/service.ts`), each a byte-inert,
+    allocation-free preview and an `--apply` that re-acquires the global lock, recomputes the
+    preview hash, proves feasibility, and only then reserves IDs and persists the plan. The hidden
+    scheduled runner (`AutomationRunner`, `apps/cli/src/commands/automation/runner.ts`) runs Spec 1
+    §5.1's four jobs (`brain-reindex`, `brain-lint`, `doctor`, `git-sync`); `import` and `ingest` are
+    never scheduled (D47).
+  - **Inert until enabled.** Schema-valid `git.*`/`automation.*` configuration is never authority by
+    itself: operation needs the matching `LifecycleActivationRecordV1` arm and a clear closure. A
+    disabled Git spawns no Git process and opens no network connection; disabled automation writes no
+    plist, starts no process and writes no status.
+  - **Held-lock reuse.** Apply and sync functions take an already held global lock. A scheduled
+    handler runs under the lock its runner holds: `withLifecycleMutation` accepts the borrowed lock and
+    checks its `dev`/`ino` against the lock path instead of taking a second `lockf`, which would report
+    busy in the same process. The runner waits at most `SCHEDULED_GLOBAL_LOCK_WAIT_MS` (ten minutes)
+    and otherwise exits silently (`ScheduledSilentReasonV1`); an interactive command meeting a
+    scheduled holder refuses exit 6 `lifecycle_lock_busy` as before.
+  - **Runtime records.** `AutomationRuntimeRecordStore` (`apps/cli/src/lifecycle/runtime-records.ts`)
+    writes the per-job status (≤ `MAX_AUTOMATION_STATUS_BYTES`, 64 KiB) and ten rotated log slots
+    (`AUTOMATION_LOG_SLOTS`, ≤ `MAX_AUTOMATION_LOG_BYTES`, 1 MiB each), redacted before they are
+    bounded; each job runs under its `AutomationRunnerLeaseV1`, the lease uninstall drains.
+- **What still refuses: the distribution rows and the re-pinning rule (NEW-84, D59).** Every Git
+  operation admits the executable against `SUPPORTED_GIT_DISTRIBUTION`
+  (`packages/security/src/git/distribution.ts`) and every launchd operation admits `launchctl` against
+  `SUPPORTED_LAUNCHD_DISTRIBUTION` (`packages/platform-macos/src/launchd/distribution.ts`); a mismatch
+  in any pinned field refuses `unsupported_git_distribution` or `unsupported_launchd_distribution`
+  before any live authority. Both rows were measured read-only on 2026-09-23 (macOS 26.6.2 `25G83`,
+  Xcode 27.0 `27A266a`, Apple Git-157) and are the spec's values (Spec 1 §4.2, §5.3, "Amended
+  2026-09-23 (D59)"). Two refusals stand until plan 1b Task 19 runs on a disposable host of that
+  build: the launchd row's `certification` is `null`, so every launchd mutation refuses (read-only
+  observation, preview and `automation status` still report state, and an unsupported or uncertified
+  row names the manual `launchctl bootout gui/<uid>/<label>` per installed label, residual 10); and
+  only the local/file Git transport is traced, so an HTTPS or SSH remote refuses
+  `unsupported_git_distribution`. Tests that exec the pinned Git or `launchctl` are
+  `*.pinned-host.test.ts` files, run by `npm run test:pinned-host` and never by hosted CI. The rule
+  for the next build:
+  1. **One row per package, as data.** The Git row is the one constant `SUPPORTED_GIT_DISTRIBUTION`;
+     the launchd rows are the one constants file `packages/platform-macos/src/launchd/distribution.ts`.
+     No other file restates a hash, size, build or version literal; tests import the constant and
+     mutate one field at a time.
+  2. **Measure read-only.** The command list never runs `launchctl bootstrap`, `bootout`, `load`,
+     `unload`, `enable`, `disable` or `kickstart`, and never writes under `~/Library/LaunchAgents`
+     (Task 19 captures it as `scripts/measure-distribution-rows.sh`; until then it is in
+     `git show d2f18b4:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`, "NEW-84").
+  3. **Refuse on any drift.** OS product version or build, executable path, owner, mode, size or hash,
+     Xcode selection, build-option line, link target and SSH bytes are all compared; version text is
+     never trusted on its own.
+  4. **Re-pin in one change.** Measure the new row, amend the spec rows with a dated founder-approved
+     amendment, replace the constant, update every exact-set test that imports it, record the Git
+     process trace and run the FD 3 bootstrap certification on a disposable host at that exact
+     build, and review — one commit. A row is replaced, not added; a row is kept only while a
+     certified host for it still exists.
+  5. **Stop when unsupported.** Until certification evidence exists for the pinned launchd row, every
+     launchd mutation refuses.
