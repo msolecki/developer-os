@@ -299,7 +299,7 @@ cd <devos-checkout>
 git status --porcelain        # must be empty
 git rev-parse HEAD            # must equal the <devos-checkout> commit recorded in step 1
 npm run check
-npm run test:vendor-brain
+DEVELOPER_OS_VENDOR_BRAIN_OAUTH_TOKEN=<token from claude setup-token> npm run test:vendor-brain   # D66
 ```
 
 `npm run check` runs lint, the unit, lifecycle, e2e and vendor-ingest suites, the build and

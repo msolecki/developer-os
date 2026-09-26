@@ -37,12 +37,12 @@ review, PR #15).
 ## Task 16 remainder
 
 - [ ] **Step 5: FOUNDER STOP, the real-vendor gate.** No agent runs this; it spends the founder's
-  credits. The founder confirms `brain.md` §6.13 decision 9 (the API key variable and the exclusion
-  from `check`) and runs:
+  credits. `brain.md` §6.13 decision 9 is confirmed with the OAuth change (D66). The founder runs
+  `claude setup-token` once (interactive), then:
 
 ```bash
 npm run build
-DEVELOPER_OS_VENDOR_BRAIN_API_KEY=<key> npm run test:vendor-brain
+DEVELOPER_OS_VENDOR_BRAIN_OAUTH_TOKEN=<token from setup-token> npm run test:vendor-brain
 ```
 
   Copy `$TMPDIR/brain-vendor-rows.json` into five rows of `docs/releases/compatibility-matrix.md`.

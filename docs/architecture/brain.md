@@ -355,9 +355,10 @@ code, and the residuals the spec accepted.
    workflows; nothing was released between the two (D47).
 9. **The real-vendor test is handed an API key.** A disposable `HOME` carries no Claude credentials,
    so `npm run test:vendor-brain` (`tests/integration/brain-workflows/claude.test.ts`) runs only when
-   both `claude` and `DEVELOPER_OS_VENDOR_BRAIN_API_KEY` are present, and passes the key as
-   `ANTHROPIC_API_KEY` into the isolated environment. It is excluded from `test:suite` and is not part
-   of `check`. The founder confirms this at the A12b real-vendor stop.
+   `claude` and a credential are present: `DEVELOPER_OS_VENDOR_BRAIN_OAUTH_TOKEN`, a `claude
+   setup-token` subscription token passed as `CLAUDE_CODE_OAUTH_TOKEN` (D66, 2026-09-26), or
+   `DEVELOPER_OS_VENDOR_BRAIN_API_KEY`, passed as `ANTHROPIC_API_KEY`. It is excluded from `test:suite` and is not part
+   of `check`. Confirmed by the founder with the OAuth change (D66).
 10. **A note another note cites in `sources` cannot be renamed, moved or merged.** No frontmatter is
     ever edited, so the referrer's `sources` entry would stop resolving; that is a new `provenance`
     error, and the refactor's post-condition refuses it with `refactor_postcondition_failed`. It is
