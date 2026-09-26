@@ -14,10 +14,12 @@ notes are the archive.
 Git and launchd stay disabled during it; the bootstrap pin at `apps/cli/src/context.ts:823-824` still
 answers every run without a local release, because Task 11b is parked (D46).
 
-**Repository prerequisite for the next PR: NEW-100's CI sharding.** On PR #15 the hosted runner
-cancelled `bootstrap-executor` at its 330-minute and `lifecycle-v2` at its 185-minute timeout (local:
-122 and 153 minutes). Shard both jobs in `.github/workflows/check.yml` (lifecycle by file, bootstrap
-by `-t` group) before any further PR; NEW-100's round-trip file itself stays post-A16 (D42).
+**NEW-100's CI sharding is done (2026-09-26).** On PR #15 the hosted runner cancelled
+`bootstrap-executor` at its 330-minute and `lifecycle-v2` at its 185-minute timeout (local: 122 and
+153 minutes). `.github/workflows/check.yml` now runs `bootstrap-executor` as two `-t` shards (225 and
+280 minutes) and `lifecycle-v2` as three file shards (206, 201 and 224 minutes), all under the
+300-minute cap; the budgets are conservative estimates to confirm from the first green sharded run.
+NEW-100's round-trip file itself stays post-A16 (D42).
 
 **Evidence the closed phases stand on (2026-09-26, run 4).** On `bc17550`, every part green: lint,
 `test:lifecycle` (21/21 files), `test:e2e`, `test:suite` (306/306 files, 9913 tests, 8 todo =
@@ -49,7 +51,7 @@ closes they governed. The next code-producing work runs `SESSION.md` §5 as writ
 
 Open sequence (D16, daily use before completeness):
 
-1. Now: the A15 cutover, and NEW-100's CI sharding before the next PR.
+1. Now: the A15 cutover.
 2. Beside it: the founder stop points above.
 3. Then the parked Spec 2 work — closure Tasks 9–10 on NEW-110's design (one Spec 2 revision pass),
    Task 26, Task 11b — then A16.
@@ -85,8 +87,6 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate:
 
-- NEW-100 — shard `bootstrap-executor` and `lifecycle-v2` in `.github/workflows/check.yml`; blocks the
-  next PR (see `NOW`).
 - NEW-46 — close the same-uid `PATH` spawn surface or design persisted executable identity.
 - NEW-90 — key the D31 stat-option exemption on the receiver type, not the file, or widen
   `IDENTITY_RENDERING` (re-homed from Phase 4b, 2026-09-25).
@@ -140,8 +140,8 @@ They are not ordered ahead of A15 unless the touched subsystem makes one relevan
 ## Count
 
 - Product sequence: 6 open entries — A15 (now), A12, A12b, A13 (founder stops only), A11b, A16.
-- Implementation still to build: NEW-100's CI sharding (repository, before the next PR); NEW-61's
-  Codex re-registration on `update` (with Phase 8's apply path); A16's plan and work.
+- Implementation still to build: NEW-61's Codex re-registration on `update` (with Phase 8's apply
+  path); A16's plan and work.
 - Parked or blocked: Spec 2 closure Tasks 9–10 (NEW-110), Spec 2 Task 26, Spec 2 Task 11b (D46),
   NEW-100's round trip (opt-in-surfaces spec §7.1, post-A16, D42).
 - Founder stop points (9): A12 NEW-101 billed row, then `UNPROVEN_CLAUDE_CATEGORIES`; A12's

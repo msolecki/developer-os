@@ -50,19 +50,28 @@ concurrency:
 # preserves what the single `npm run check` step was protecting: CI cannot drift
 # from local, because neither side spells the vitest invocations itself.
 #
-# Both paths cover the same files, by different routes. Here: six parallel
-# jobs — `lint` (`npm run lint`, the build, `git diff --check`),
-# `bootstrap-executor` (`npm run test:bootstrap`), `suite`
-# (`npm run test:suite`, which excludes the executor file, `e2e/**`,
-# `integration/ingest/no-user-hooks.test.ts` and `**/*.v2.test.ts`),
-# `lifecycle-v2` (`npm run test:lifecycle`), `e2e` (`npm run test:e2e`), and
-# `vendor-ingest` (`npm run test:vendor-ingest`). Locally: `npm run check` runs
+# Both paths cover the same files, by different routes. Here: six jobs, two
+# of them matrices, all in parallel — `lint` (`npm run lint`, the build,
+# `git diff --check`), `bootstrap-executor` (two shards,
+# `npm run test:bootstrap:main` and `:fine-grained`, which together are
+# `npm run test:bootstrap`), `suite` (`npm run test:suite`, which excludes the
+# executor file, `e2e/**`, `integration/ingest/no-user-hooks.test.ts` and
+# `**/*.v2.test.ts`), `lifecycle-v2` (three shards,
+# `npm run test:lifecycle:uninstall`, `:core` and `:rest`, which together are
+# `npm run test:lifecycle`), `e2e` (`npm run test:e2e`), and `vendor-ingest`
+# (`npm run test:vendor-ingest`). Locally: `npm run check` runs
 # `npm run lint`, then `npm test` (`test:bootstrap`, `test:suite` and
 # `test:lifecycle`), then `npm run test:e2e`, then `npm run test:vendor-ingest`,
 # then the build, then `git diff --check`. `test:e2e` and `test:vendor-ingest` are spelled out in
 # `check` because `test:suite` excludes `e2e/**` and
 # `integration/ingest/no-user-hooks.test.ts` for the sharding above, so
 # `npm test` alone no longer reaches either.
+#
+# The shard scripts are the one place this drift guarantee is weaker: they
+# restate `test:bootstrap`'s and `test:lifecycle`'s filters instead of being
+# composed from them, so changing either side means changing the other and
+# re-checking, with `vitest list` per filter, that the shards still partition
+# the aggregate by test id.
 jobs:
   # macOS on every job, and not a preference. `packages/platform-macos` shells
   # out to `/usr/bin/lockf` for advisory locking, and the e2e suite drives the
@@ -103,38 +112,53 @@ jobs:
         run: git diff --check
 
   bootstrap-executor:
-    # `apps/cli/src/bootstrap/executor.test.ts` alone, in the two invocations
-    # `npm run test:bootstrap` performs. It is split from the rest because one
-    # of its 69 cases is not isolation-safe as the first row of the file, and
-    # because it dominates the suite's wall clock — a fresh V2 `init` is roughly
-    # 101s and this file runs many.
+    # `apps/cli/src/bootstrap/executor.test.ts` alone, split from the suite
+    # because it dominates the wall clock — a fresh V2 `init` is roughly 101s
+    # and this file runs many. `npm run test:bootstrap` runs it in two
+    # invocations: the one case that is not isolation-safe (`publishes a
+    # complete V2 handoff ...`) alone, then the other 93 of its 94 cases.
     #
-    # **Measured 2026-09-04 on the development laptop:** the first invocation is
-    # 96s and the second is 6963s, so `test:bootstrap` is close to two hours.
-    # Read that as a lower bound rather than a target — that run ended red, and a
-    # green run has to carry every case to completion — and a macOS hosted runner
-    # is generally slower than the machine it was measured on. Hence three hours.
+    # **Sharded by `-t` group on 2026-09-26 (NEW-100).** On PR #15 the hosted
+    # runner cancelled the unsharded job at its 330-minute bound against a
+    # 122-minute local run on `bc17550` (97.4 s + 7265.4 s), so the hosted ratio
+    # there was at least 2.7x — not the ~1.9-2x run 34125923469 measured. The
+    # shards below partition `test:bootstrap`'s 94 cases exactly (checked with
+    # `vitest list` per filter against the unsharded filters, by test id):
     #
-    # A three-hour CI job is not acceptable as a resting state; it is what makes
-    # the gate report something instead of being killed mid-phase. NEW-53's
-    # remainder owns bringing it down, and this bound should be lowered from the
-    # first green run's real figure.
+    # - `main` (`npm run test:bootstrap:main`, 54 cases): the isolated case,
+    #   then every case that is neither it nor `fine-grained death`. Local
+    #   upper bound 4486.8 s = 97.4 s + (7265.4 s - 40 x 71.9 s), 71.9 s being
+    #   the fastest fine-grained case ever observed locally.
+    # - `fine-grained` (`npm run test:bootstrap:fine-grained`, 40 cases): the
+    #   `fresh-process recovers exact terminal evidence at fine-grained death`
+    #   matrix. Local upper bound 5600 s = 40 x 140 s, 140 s being the slowest
+    #   ordinary local observation (71.9-139.6 s; two contended outliers at
+    #   734.7 s and 946.8 s are excluded, and would already break the matrix's
+    #   own 600 s per-test timeout on a hosted runner).
     #
-    # **Raised 180 -> 330 on 2026-09-07, before it was ever observed failing.**
-    # The 180 was derived from a local measurement and the note above already
-    # warned a hosted runner is slower; run 34125923469 measured how much
-    # slower — ~1.9-2x, from retained-evidence cases taking 237,571 ms against
-    # 112-120 s locally. `npm run test:bootstrap` measured 124.5 min locally on
-    # 2026-09-07, which projects to ~236 min here, over the old bound. Raising
-    # it after watching two other jobs die on the clock rather than paying a
-    # third cycle to confirm the arithmetic.
+    # No per-case timing of a green run exists; both bounds are derived from
+    # partial observations and sum to 10086.8 s against the 7362.8 s measured
+    # whole, so they overstate. Budget per shard, as for `lifecycle-v2`: local
+    # bound x 2 for a hosted runner x 1.5 headroom, which covers a hosted ratio
+    # up to 3.0x — little margin over PR #15's 2.7x. Replace both bounds with
+    # the first green sharded run's real figures.
     #
-    # A 5.5-hour bound is indefensible as a steady state and is not defended:
-    # it is the measurement bound, and NEW-53's residual is the reason it is
-    # needed. About 99% of an `init` is canonical-JSON encoding, not the 0.8 s
-    # of disk its 73 files cost, and the named call sites are in that row.
+    # About 99% of an `init` is canonical-JSON encoding, not the 0.8 s of disk
+    # its 73 files cost; NEW-53's residual owns making this smaller.
     runs-on: macos-15
-    timeout-minutes: 330
+    strategy:
+      # One red or killed shard must not cancel the other: a cancelled job
+      # reports nothing.
+      fail-fast: false
+      matrix:
+        include:
+          - shard: main
+            # ceil(4486.8 x 3 / 60)
+            timeout: 225
+          - shard: fine-grained
+            # ceil(5600 x 3 / 60)
+            timeout: 280
+    timeout-minutes: ${{ matrix.timeout }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -152,11 +176,11 @@ jobs:
       # list and resolved to a `dist` no step had built. The alias is restored,
       # but the list is something a person has to keep complete and a sixth
       # package would break this again, on CI only. A one-minute build on a
-      # job budgeted for three hours removes that whole class of failure.
+      # job budgeted for hours removes that whole class of failure.
       - name: Build
         run: pnpm --pm-on-fail=ignore build
-      - name: Bootstrap executor
-        run: npm run test:bootstrap
+      - name: Bootstrap executor (${{ matrix.shard }})
+        run: npm run test:bootstrap:${{ matrix.shard }}
 
   suite:
     # Every test file except the executor file, tests/e2e and the real-V2-home
@@ -204,64 +228,77 @@ jobs:
 
   lifecycle-v2:
     # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
-    # Running local total of that set: 3680.3 s (2026-09-21). Nine files now.
-    # The first four are 998.2 s: the 916 s recorded on 2026-09-17 for the first
-    # three plus 82.2 s for the fourth, `admission.v2.test.ts`. That 82.2 s is
-    # the maximum of seven observations spanning 54.6-82.2 s across two
-    # machines: an init-dominated file swings ~25 s run to run, so a single
-    # summary is not a safe input and the maximum is taken — the same rule that
-    # made 916 s the conservative figure of its own three measurements (724 s
-    # for the first two files plus the 192 s summary of
-    # `evidence-identity.v2.test.ts`, against a 699 s whole-job
-    # `test:lifecycle` wall clock and an 804 s sum of the three per-file
-    # summaries: 124 s fresh-layout, 488 s bookkeeping, 192 s
-    # evidence-identity). `absent-manifest-uninstall.v2.test.ts` adds 621.6 s,
-    # its two-case summary measured while a second plan-1a worktree drove real
-    # inits on the same machine; its one-case predecessor swung 218-312 s under
-    # the same contention, so the swing there is far wider than the fourth
-    # file's and the conservative figure is taken rather than a quieter
-    # re-measurement. `mutation-gate.v2.test.ts` adds 199.9 s, the maximum of
-    # two green isolated runs that day (170.4 s and 199.9 s); it drives three
-    # real fresh V2 `init` runs. `config.v2.test.ts` adds 58.9 s, the maximum of
-    # three green isolated runs (54.1 s, 56.5 s and 58.9 s); it drives one real
-    # fresh V2 `init` and runs every other case against that one home.
+    # `apps/cli` serializes its files (`fileParallelism: false`), so the
+    # per-file times add up to the wall clock.
     #
-    # Those last two files landed from parallel worktrees in one wave (D33), so
-    # each measured its own delta against the 998.2 s base and neither saw the
-    # other. The integrator summed both deltas rather than taking either task's
-    # figure: 998.2 + 621.6 + 199.9. `uninstall.v2.test.ts` adds 654.5 s, the
-    # maximum of three green runs that day (632.8 s and 643.1 s in the task's
-    # own worktree, 654.5 s on the integrated tree); it
-    # drives eight real fresh V2 `init` runs plus one reinstall, and five of its
-    # cases kill a coordinator mid-run and recover it. Its slowest single case
-    # swung 148.2-185.1 s across those two runs — the widest per-case figure in
-    # this job, and the one to watch against `REAL_FILESYSTEM_TIMEOUT_MS`.
-    # `mutation-gate.v2.test.ts` was re-measured the same day at 161.7 s after
-    # its uninstall case moved onto the coordinator, below the 199.9 s already
-    # recorded, so that file's conservative figure stands unchanged.
-    # `uninstall-recovery.v2.test.ts` adds 1147.2 s, the maximum of two green
-    # isolated runs that day (1147.2 s and 1139.3 s); it measures §6's uninstall
-    # dispatch and §2.1's recovery-only arm, and drives seven real V2 `init`
-    # runs. Almost all of it is one chained case, 1080.9 s of the 1139.3 s run:
-    # one home carried through all six kill points, each cycle killing an
-    # uninstall mid-run, recovering it and ending in the re-init the next kill
-    # point needs, so A9's round trip is asserted six times over.
+    # **Sharded by file on 2026-09-26 (NEW-100).** On PR #15 the hosted runner
+    # cancelled the unsharded job at its 185-minute bound; the same tree
+    # (`bc17550`) ran `npm run test:lifecycle` green locally in 9207.6 s
+    # (153 min, 21 files, 208 tests). The per-file figures this comment used to
+    # carry covered nine files, several since grown (`uninstall.v2.test.ts`
+    # from 13 to 36 cases), so they are replaced by the per-shard bounds below.
     #
-    # That case was 468.1 s while plan 1a Task 23 gave each kill point its own
-    # fresh home to work around NEW-99. Task 23b closed NEW-99 (2026-09-21) and
-    # restored the chain, and the same seven inits cost 2.3x more on one home:
-    # every `init` and `uninstall` inspects every retained bootstrap envelope
-    # the home has accumulated, so cycle k pays for k envelopes and the chain is
-    # quadratic in cycle count by construction — not a regression in any single
-    # operation, and the price of the coverage the fresh-home workaround gave
-    # up. It remains by far the widest per-case figure in this job, past
-    # `uninstall.v2.test.ts`'s 148.2-185.1 s, and it is the reason that case
-    # carries its own `CHAIN_TIMEOUT_MS` instead of `REAL_FILESYSTEM_TIMEOUT_MS`
-    # — 1080.9 s at a hosted ~2x is more than twice that 900 s budget.
-    # The budget is the running total x 2 for a hosted runner x 1.5 headroom,
-    # floored at 20: ceil(3680.3 x 3 / 60) = 185.
+    # No per-file timing of that green run exists. Each file's figure is the
+    # most conservative available, by source: (r) the figure this job's
+    # comment recorded on 2026-09-21; (f) a local run in which the file failed,
+    # scaled by current / then case count where the count has grown; (g) a
+    # guess rounded up from the file's case and real-`init` count (~125 s per
+    # `init`), for a file with no usable observation. The 21 figures sum to 12594.4 s against the measured
+    # 9207.6 s, so in aggregate they overstate by ~37%.
+    #
+    # - `uninstall` (`npm run test:lifecycle:uninstall`, 4 files, 51 tests):
+    #   `uninstall` 1657.9 (f), `uninstall-recovery` 1147.2 (r),
+    #   `uninstall-detach` 706.2 (f), `uninstall-launchd` 600 (g) = 4111.3 s.
+    # - `core` (`npm run test:lifecycle:core`, 6 files, 68 tests):
+    #   `absent-manifest-uninstall` 1864.8 (r, 621.6 s for 2 cases scaled to 6),
+    #   `manifest-anchor` 1251.2 (f), `mutation-gate` 586.4 (f),
+    #   `manifest-rewrite` 125 (g), `mutation-gate-update` 102.7 (f),
+    #   `admission` 82.2 (r) = 4012.3 s.
+    # - `rest` (`npm run test:lifecycle:rest`, 11 files, 89 tests): every
+    #   `*.v2.test.ts` the two shards above do not name —
+    #   `init-local-release` 832.8 (f), `runner` 690.5 (f),
+    #   `init-instructions` 683.8 (f), `bookkeeping` 525.2 (f),
+    #   `doctor-instructions` 400 (g), `instructions-user-data` 375 (g),
+    #   `git` 300 (g), `automation` 250 (g), `evidence-identity` 230.6 (f),
+    #   `fresh-layout` 124 (r), `config` 58.9 (r) = 4470.8 s.
+    #   (`git` and `automation` failed every case in their only observations,
+    #   so those figures are guesses rather than measurements.)
+    #
+    # The shards partition `test:lifecycle`'s 208 tests exactly, checked with
+    # `vitest list` per filter against the unsharded filter, by test id. The
+    # `rest` script excludes exactly the ten files the other two name, so a
+    # new `*.v2.test.ts` lands in `rest` and cannot fall through — but its
+    # budget then needs rechecking, and a file moved between shards must move
+    # in both the include list and `rest`'s exclude list.
+    #
+    # The budget per shard is its local bound x 2 for a hosted runner x 1.5
+    # headroom, floored at 20: ceil(bound x 3 / 60). It covers a hosted ratio
+    # up to 3.0x; PR #15's `bootstrap-executor` implies at least 2.7x. Replace
+    # the bounds with the first green sharded run's real per-file figures.
+    #
+    # `uninstall-recovery.v2.test.ts`'s single chained case (1080.9 s of a
+    # 1139.3 s run on 2026-09-21) carries its own `CHAIN_TIMEOUT_MS`, because
+    # at a hosted ~2x it is more than twice `REAL_FILESYSTEM_TIMEOUT_MS`'s
+    # 900 s: the chain reuses one home through six kill points, and every
+    # `init` and `uninstall` inspects every retained bootstrap envelope, so it
+    # is quadratic in cycle count by construction.
     runs-on: macos-15
-    timeout-minutes: 185
+    strategy:
+      # One red or killed shard must not cancel the others: a cancelled job
+      # reports nothing.
+      fail-fast: false
+      matrix:
+        include:
+          - shard: uninstall
+            # ceil(4111.3 x 3 / 60)
+            timeout: 206
+          - shard: core
+            # ceil(4012.3 x 3 / 60)
+            timeout: 201
+          - shard: rest
+            # ceil(4470.8 x 3 / 60)
+            timeout: 224
+    timeout-minutes: ${{ matrix.timeout }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -275,8 +312,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm --pm-on-fail=ignore build
-      - name: Lifecycle V2
-        run: npm run test:lifecycle
+      - name: Lifecycle V2 (${{ matrix.shard }})
+        run: npm run test:lifecycle:${{ matrix.shard }}
 
   e2e:
     # Separate here as it is locally: these spawn the compiled binary under a
