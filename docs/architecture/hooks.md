@@ -487,6 +487,15 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
   first-line `grep '<(curl' f`, because the quoted word still starts `<(curl`. `sql-destructive`
   matches `DROP TABLE`, `DROP DATABASE` or `TRUNCATE` anywhere in a `psql`, `mysql` or `sqlite3`
   call's arguments, so `psql -c "select 'drop table'"` blocks too.
+- **The D67 rules leave false negatives, accepted residuals (review of 2026-09-26).**
+  - `hook-bypass` reads only `-c` and `--config-env` on the same `git commit` or `git push`, so
+    both of these pass: `git config core.hooksPath /dev/null`, which persists for the repository,
+    and `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath … git commit`, whose prefix the skip
+    drops.
+  - `sql-destructive` reads the client's argv only. A heredoc body, `echo … | psql` and
+    `psql -f drop.sql` all pass; the last is structural, because a guard never opens a file.
+  - `pipe-to-interpreter` blocks only a bare interpreter or a lone `-`, so
+    `curl … | python3 - --user` passes.
 - **The D67 credential-path rules bind `guard path` only (founder option (c)).** Credential file
   names (`.git-credentials`, `.netrc`, `.pgpass`, `.htpasswd`, `.envrc`, `id_rsa`, `id_dsa`,
   `id_ecdsa`, `id_ed25519`, `credentials.json`, a `secret` or `secrets` segment), home files
