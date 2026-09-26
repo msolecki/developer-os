@@ -27,7 +27,9 @@ export const PRETTIER_CONFIG_FILES: readonly string[] = [
 async function formatterFor(
   root: string,
 ): Promise<{ readonly name: "biome" | "prettier"; readonly args: readonly string[] } | null> {
-  if (await isRegularFile(join(root, "biome.json"))) return { name: "biome", args: ["format", "--write"] };
+  for (const file of ["biome.json", "biome.jsonc"]) {
+    if (await isRegularFile(join(root, file))) return { name: "biome", args: ["format", "--write"] };
+  }
   for (const file of PRETTIER_CONFIG_FILES) {
     if (await isRegularFile(join(root, file))) return { name: "prettier", args: ["--write"] };
   }

@@ -97,6 +97,14 @@ describe("guardFormat", () => {
     expect(requests[0]?.timeoutMs).toBe(30_000);
   });
 
+  // D67: biome.jsonc counts like biome.json.
+  it("runs biome, never prettier, when biome.jsonc exists", async () => {
+    const root = await project(["biome.jsonc", ".prettierrc"]);
+    const { runtime, requests } = runtimeFor(root);
+    expect(await guardFormat(edited("a.ts"), runtime)).toStrictEqual({ kind: "allow" });
+    expect(requests.map((request) => request.args.slice(1))).toStrictEqual([["format", "--write", join(root, "a.ts")]]);
+  });
+
   it("runs prettier when only .prettierrc exists", async () => {
     const root = await project([".prettierrc"]);
     const { runtime, requests } = runtimeFor(root);
