@@ -511,19 +511,21 @@ export interface OwnerExternalEffectProcessPolicyV1 {
   readonly kind: "codex_registration_refresh";
   readonly providerProtocol: PositiveUInt32V1;
   readonly executable: "pinned_codex_cli";
+  /**
+   * D72 Q2-A: the canonical real path's identity, rechecked before spawn. A package-manager `codex`
+   * is a link into a shared tree, so neither its owner nor its link count is pinned here; the CLI
+   * resolver checks ownership and the ancestors' write bits on the filesystem.
+   */
   readonly executableIdentity: {
-    readonly ownerUid: EffectiveUidV1;
-    readonly mode: 448 | 493;
-    readonly nlink: 1;
-    readonly bytes: number;
-    readonly sha256: LowerHexSha256;
     readonly dev: UInt64DecimalV1;
     readonly ino: UInt64DecimalV1;
+    readonly mode: number;
+    readonly sha256: LowerHexSha256;
   };
   readonly argv: readonly OwnerExternalEffectArgV1[];
   readonly cwd: "managed_plugin_root";
   readonly environment: readonly [
-    { readonly name: "HOME"; readonly value: "managed_vendor_home" },
+    { readonly name: "CODEX_HOME"; readonly value: "managed_vendor_home" },
     { readonly name: "TMPDIR"; readonly value: "private_effect_tmp" },
   ];
   readonly stdin: "closed";
@@ -619,10 +621,9 @@ function validateProcessPolicy(value: unknown): OwnerExternalEffectProcessPolicy
   const input = exactKeys(value, ["kind", "providerProtocol", "executable", "executableIdentity", "argv", "cwd", "environment", "stdin", "network", "model", "stdoutBytes", "stderrBytes", "wallMilliseconds", "idleMilliseconds", "processCount"], label);
   if (input.kind !== "codex_registration_refresh" || input.executable !== "pinned_codex_cli" || input.cwd !== "managed_plugin_root") fail(`${label}: not the closed Codex refresh`);
   parsePositiveUInt32(input.providerProtocol);
-  const identity = exactKeys(input.executableIdentity, ["ownerUid", "mode", "nlink", "bytes", "sha256", "dev", "ino"], `${label}.executableIdentity`);
-  integer(identity.ownerUid, 0, 4_294_967_295, `${label}.executableIdentity.ownerUid`);
-  if ((identity.mode !== 448 && identity.mode !== 493) || identity.nlink !== 1) fail(`${label}.executableIdentity`);
-  integer(identity.bytes, 1, 536_870_912, `${label}.executableIdentity.bytes`);
+  const identity = exactKeys(input.executableIdentity, ["dev", "ino", "mode", "sha256"], `${label}.executableIdentity`);
+  const mode = integer(identity.mode, 0, 0o777, `${label}.executableIdentity.mode`);
+  if ((mode & 0o022) !== 0 || (mode & 0o100) === 0) fail(`${label}.executableIdentity.mode: writable by others or not executable`);
   parseLowerHexSha256(identity.sha256);
   parseUInt64Decimal(identity.dev);
   parseUInt64Decimal(identity.ino);
@@ -632,7 +633,7 @@ function validateProcessPolicy(value: unknown): OwnerExternalEffectProcessPolicy
     if (row.kind === "literal") parseOwnerExternalEffectLiteral(row.value);
     else if (row.kind !== "token" || !ARG_TOKENS.includes(row.value as string)) fail(`${label}.argv[${String(index)}]`);
   }
-  if (!same(input.environment, [{ name: "HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }])) fail(`${label}.environment`);
+  if (!same(input.environment, [{ name: "CODEX_HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }])) fail(`${label}.environment`);
   if (input.stdin !== "closed" || input.network !== false || input.model !== false || input.processCount !== 1) fail(`${label}: authority beyond the closed table`);
   integer(input.stdoutBytes, 1, 1_048_576, `${label}.stdoutBytes`);
   integer(input.stderrBytes, 1, 1_048_576, `${label}.stderrBytes`);

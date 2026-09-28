@@ -26,7 +26,7 @@ import { participantPlanFileHash, participantTimestamp, refuseParticipant, type 
 export interface OwnerEffectProcessRequestV1 {
   readonly executable: string;
   readonly argv: readonly string[];
-  readonly env: Readonly<Record<"HOME" | "TMPDIR", string>>;
+  readonly env: Readonly<Record<"CODEX_HOME" | "TMPDIR", string>>;
   readonly cwd: string;
   readonly stdin: "ignore";
   readonly stdoutCap: number;
@@ -82,7 +82,7 @@ export function resolveOwnerEffectProcess(policy: OwnerExternalEffectProcessPoli
   return {
     executable,
     argv: policy.argv.map((arg) => (arg.kind === "literal" ? arg.value : token[arg.value])),
-    env: { HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
+    env: { CODEX_HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
     cwd: tokens.managedPluginRoot,
     stdin: "ignore",
     stdoutCap: policy.stdoutBytes,

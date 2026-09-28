@@ -124,14 +124,15 @@ const policy: OwnerExternalEffectProcessPolicyV1 = {
   kind: "codex_registration_refresh",
   providerProtocol: parsePositiveUInt32(1),
   executable: "pinned_codex_cli",
-  executableIdentity: { ownerUid: 501 as EffectiveUidV1, mode: 493, nlink: 1, bytes: 1024, sha256: sha("codex binary"), dev, ino: ino(40) },
+  executableIdentity: { dev, ino: ino(40), mode: 0o755, sha256: sha("codex binary") },
   argv: [
     { kind: "literal", value: "plugin" as never },
     { kind: "literal", value: "add" as never },
     { kind: "token", value: "plugin_id" },
+    { kind: "literal", value: "--json" as never },
   ],
   cwd: "managed_plugin_root",
-  environment: [{ name: "HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
+  environment: [{ name: "CODEX_HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
   stdin: "closed",
   network: false,
   model: false,
@@ -278,6 +279,25 @@ describe("owner update plans", () => {
 describe("owner external effects", () => {
   it("admits the closed Codex refresh and binds its policy digest", () => {
     expect(validateOwnerExternalEffectPlan(buildEffect(), buildOwner()).processPolicyHash).toBe(ownerExternalEffectProcessPolicyHash(policy));
+  });
+
+  it.each([0o700, 0o755, 0o555, 0o500])("admits the executable mode %o (D72 Q2-A)", (mode) => {
+    expect(() => ownerExternalEffectProcessPolicyHash({ ...policy, executableIdentity: { ...policy.executableIdentity, mode } })).not.toThrow();
+  });
+
+  it.each<[string, unknown]>([
+    ["HOME instead of CODEX_HOME", { environment: [{ name: "HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }] }],
+    ["TMPDIR before CODEX_HOME", { environment: [{ name: "TMPDIR", value: "private_effect_tmp" }, { name: "CODEX_HOME", value: "managed_vendor_home" }] }],
+    ["a group-writable executable", { executableIdentity: { ...policy.executableIdentity, mode: 0o775 } }],
+    ["an other-writable executable", { executableIdentity: { ...policy.executableIdentity, mode: 0o757 } }],
+    ["an executable without the owner-execute bit", { executableIdentity: { ...policy.executableIdentity, mode: 0o644 } }],
+    ["a setuid executable", { executableIdentity: { ...policy.executableIdentity, mode: 0o4755 } }],
+    ["a negative mode", { executableIdentity: { ...policy.executableIdentity, mode: -1 } }],
+    ["the withdrawn link count", { executableIdentity: { ...policy.executableIdentity, nlink: 1 } }],
+    ["the withdrawn owner", { executableIdentity: { ...policy.executableIdentity, ownerUid: 501 } }],
+    ["a missing digest", { executableIdentity: { dev, ino: ino(40), mode: 0o755 } }],
+  ])("refuses a policy with %s (D72 Q2-A)", (_name, patch) => {
+    expect(() => ownerExternalEffectProcessPolicyHash({ ...policy, ...(patch as object) })).toThrow();
   });
 
   it.each([
