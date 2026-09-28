@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,7 @@ import { PRODUCT_VERSION } from "@developer-os/cli/dist/context.js";
 import { LOCAL_BUNDLE_CLI_ENTRY } from "@developer-os/cli/dist/update/local-release.js";
 import { admitUnsignedLocalPackagedRelease } from "@developer-os/cli/dist/update/packaged-release.js";
 
-import { collectTree, pack, THIRD_PARTY_LICENSES, thirdPartyPackageDirectory } from "./pack-local-release.js";
+import { checkoutIndependentInput, collectTree, pack,THIRD_PARTY_LICENSES, thirdPartyPackageDirectory } from "./pack-local-release.js";
 
 /** This file is `tests/tools/…`, whether run from source or from `tests/dist/tools/…`'s sibling. */
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -99,6 +99,21 @@ describe("third-party package directory", () => {
   });
 });
 
+describe("checkout-independent input (NEW-107)", () => {
+  it("cuts a store path outside the checkout back to its node_modules tail", () => {
+    expect(checkoutIndependentInput("../developer-os/node_modules/.pnpm/zod@4.4.3/node_modules/zod/index.js"))
+      .toBe("node_modules/.pnpm/zod@4.4.3/node_modules/zod/index.js");
+    expect(checkoutIndependentInput("node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/index.js"))
+      .toBe("node_modules/.pnpm/yaml@2.8.1/node_modules/yaml/dist/index.js");
+    expect(checkoutIndependentInput("packages/core/dist/index.js")).toBe("packages/core/dist/index.js");
+  });
+
+  it("refuses a workspace input outside the checkout", () => {
+    expect(() => checkoutIndependentInput("../developer-os/packages/core/dist/index.js")).toThrow(/outside the checkout/u);
+    expect(() => checkoutIndependentInput("/elsewhere/packages/core/dist/index.js")).toThrow(/outside the checkout/u);
+  });
+});
+
 describe("pack (D55: one bundled CLI module)", () => {
   it("packs the CLI as one module plus its third-party licences, and nothing else outside the release trees", async () => {
     const root = await temporary();
@@ -127,6 +142,37 @@ describe("pack (D55: one bundled CLI module)", () => {
     const second = await tree(await pack(join(root, "b"), OPTIONS));
     expect(first.size).toBeGreaterThan(0);
     expect(second).toStrictEqual(first);
+  });
+
+  /**
+   * NEW-107: the second checkout is laid out like a linked worktree — its `node_modules` links into
+   * this checkout's pnpm store, so esbuild resolves every third-party input to a path outside it.
+   */
+  it("packs byte-identical releases from two checkouts of one commit", async () => {
+    const root = await temporary();
+    const second = join(root, "second");
+    const git = (...args: string[]): string => {
+      const result = spawnSync("git", args, { encoding: "utf8" });
+      if (result.status !== 0) throw new Error(result.stderr);
+      return result.stdout.trim();
+    };
+    git("clone", "-q", "--shared", "--no-checkout", REPOSITORY_ROOT, second);
+    git("-C", second, "checkout", "-q", "--detach", git("-C", REPOSITORY_ROOT, "rev-parse", "HEAD"));
+    for (const group of ["apps", "packages"]) {
+      for (const member of await readdir(join(REPOSITORY_ROOT, group))) {
+        for (const built of ["dist", "node_modules"]) {
+          const source = join(REPOSITORY_ROOT, group, member, built);
+          if ((await stat(source).catch(() => null)) === null) continue;
+          await cp(source, join(second, group, member, built), { recursive: true, verbatimSymlinks: true });
+        }
+      }
+    }
+    await symlink(await realpath(join(REPOSITORY_ROOT, "node_modules")), join(second, "node_modules"));
+
+    const first = await tree(await pack(join(root, "a"), OPTIONS));
+    const other = await tree(await pack(join(root, "b"), { workingDirectory: second, repositoryRoot: second }));
+    expect(first.size).toBeGreaterThan(0);
+    expect(other).toStrictEqual(first);
   });
 
   it("packs a CLI that runs from the bundle alone", async () => {
