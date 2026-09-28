@@ -67,8 +67,8 @@ export const MAX_PROPOSED_NOTE_CHARS = 64 * 1024;
 export const MAX_PROPOSED_PATH_CHARS = 512;
 
 const NOTE_EXTENSION = ".md";
-const PROPOSAL_KEYS = new Set(["schemaVersion", "notes"]);
-const NOTE_KEYS = new Set(["path", "contents", "sourceCaptureId"]);
+export const PROPOSAL_KEYS: ReadonlySet<string> = new Set(["schemaVersion", "notes"]);
+export const NOTE_KEYS: ReadonlySet<string> = new Set(["path", "contents", "sourceCaptureId"]);
 
 /**
  * `\p{Cc}` and `\p{Cf}`, refused rather than screened. Every other surface in

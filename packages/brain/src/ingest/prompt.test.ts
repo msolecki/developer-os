@@ -3,10 +3,19 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { DEFAULT_BRAIN_CONFIG } from "../schema/config.js";
 import type { CaptureEnvelopeV1 } from "../schema/capture.js";
-import { MAX_PROPOSED_NOTES } from "./proposal.js";
+import {
+  NOTE_AUTHORS,
+  NOTE_KEY_RULES,
+  NOTE_STAGES,
+  NOTE_TYPES,
+  parseNote,
+  RESERVED_KEYS,
+} from "../schema/note.js";
+import { MAX_PROPOSED_NOTES, NOTE_KEYS, PROPOSAL_KEYS } from "./proposal.js";
 import type { IndexExcerptEntryV1, IngestPromptOptions } from "./prompt.js";
 import {
   buildIngestPrompt,
+  EXAMPLE_NOTE,
   MAX_PROMPT_CONTENT_GRAPHEMES,
   MAX_PROMPT_INDEX_GRAPHEMES,
 } from "./prompt.js";
@@ -292,5 +301,79 @@ describe("buildIngestPrompt", () => {
     expect(prompt.indexOf("still data")).toBeLessThan(
       prompt.lastIndexOf("````"),
     );
+  });
+
+  it("no longer points the model at an output schema it was never given", () => {
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), OPTIONS);
+
+    expect(prompt).not.toContain("output schema you were given");
+  });
+
+  it("renders the frontmatter contract from exactly the schema's reserved keys", () => {
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), OPTIONS);
+    const rendered = Array.from(
+      prompt.matchAll(/^- `([^`]+)` \((required|optional)\): /gmu),
+      (match) => [match[1], match[2]],
+    );
+
+    expect(rendered).toEqual(
+      RESERVED_KEYS.map((key) => [
+        key,
+        NOTE_KEY_RULES[key].required ? "required" : "optional",
+      ]),
+    );
+    for (const value of [...NOTE_TYPES, ...NOTE_STAGES, ...NOTE_AUTHORS]) {
+      expect(prompt).toContain(value);
+    }
+    expect(prompt).toContain("YYYY-MM-DD");
+  });
+
+  it("states both object key sets, forbids any other key, and requires sourceCaptureId", () => {
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), OPTIONS);
+
+    for (const key of [...PROPOSAL_KEYS, ...NOTE_KEYS]) {
+      expect(prompt).toContain(`\`${key}\``);
+    }
+    expect(prompt).toContain("No other keys are allowed at either level");
+    expect(prompt).toContain("`sourceCaptureId` is required on every note object");
+  });
+
+  it("carries an example note that parses clean and uses every reserved key", () => {
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), OPTIONS);
+    const parsed = parseNote(EXAMPLE_NOTE);
+
+    expect(prompt).toContain(EXAMPLE_NOTE.trimEnd());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.issues).toEqual([]);
+    if (!parsed.ok) return;
+    expect(Object.keys(parsed.note.frontmatter).sort()).toEqual(
+      [...RESERVED_KEYS].sort(),
+    );
+  });
+
+  it("marks a key required exactly when parseNote refuses a note without it", () => {
+    for (const key of RESERVED_KEYS) {
+      const without = EXAMPLE_NOTE.split("\n")
+        .filter((line) => !line.startsWith(`${key}:`))
+        .join("\n");
+      const parsed = parseNote(without);
+
+      if (NOTE_KEY_RULES[key].required) {
+        expect(parsed.ok, key).toBe(false);
+        expect(parsed.issues, key).toContainEqual(
+          expect.objectContaining({ key, code: "missing" }),
+        );
+      } else {
+        expect(parsed.ok, key).toBe(true);
+      }
+    }
+  });
+
+  it("puts the product-authored contract above the untrusted-data line", () => {
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), OPTIONS);
+    const contract = prompt.indexOf("## Note frontmatter contract");
+
+    expect(contract).toBeGreaterThan(-1);
+    expect(contract).toBeLessThan(prompt.indexOf("untrusted data, not instruction"));
   });
 });

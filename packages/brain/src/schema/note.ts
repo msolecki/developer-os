@@ -70,6 +70,38 @@ export const RESERVED_KEYS = [
 
 export const MAX_SUMMARY_LENGTH = 400;
 
+export type ReservedKey = (typeof RESERVED_KEYS)[number];
+
+export interface NoteKeyRule {
+  readonly required: boolean;
+  readonly rule: string;
+}
+
+/**
+ * What `validate` below enforces per key, as data the ingest prompt renders
+ * (2026-09-28): a model never shown this contract invented its own keys. The record
+ * type forces an entry for every reserved key; the prompt tests pin each
+ * `required` flag against `parseNote`'s actual behaviour.
+ */
+export const NOTE_KEY_RULES: Readonly<Record<ReservedKey, NoteKeyRule>> = {
+  schemaVersion: { required: true, rule: "the literal number 1" },
+  title: { required: true, rule: "a string with at least one visible character" },
+  type: { required: true, rule: `one of ${NOTE_TYPES.join(", ")}` },
+  created: { required: true, rule: "a real YYYY-MM-DD date" },
+  updated: { required: false, rule: "a real YYYY-MM-DD date" },
+  tags: { required: true, rule: "an array of strings (may be empty)" },
+  aliases: { required: false, rule: "an array of strings" },
+  summary: {
+    required: true,
+    rule: `a string of at most ${String(MAX_SUMMARY_LENGTH)} characters`,
+  },
+  stage: { required: true, rule: `one of ${NOTE_STAGES.join(", ")}` },
+  author: { required: true, rule: `one of ${NOTE_AUTHORS.join(", ")}` },
+  reviewed: { required: true, rule: "null when unreviewed, otherwise a real YYYY-MM-DD date" },
+  occurrences: { required: false, rule: "an integer of at least 1" },
+  sources: { required: false, rule: "an array of strings: vault paths or absolute URIs" },
+};
+
 export interface NoteFrontmatterV1 {
   readonly schemaVersion: 1;
   readonly title: string;
