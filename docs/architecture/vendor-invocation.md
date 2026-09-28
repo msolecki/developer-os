@@ -223,19 +223,21 @@ have missed.
 > product has. NEW-75 stays open and now names that as its closure condition.
 > The decision below is therefore unchanged.
 
-**Decision: the empty environment is retained. No variable is admitted.** Both
-adapters pass `env: {}` today (`packages/adapter-claude/src/invoke.ts:140`,
-`packages/adapter-codex/src/invoke.ts:323`), so both vendors start with **no
-environment at all** — not `HOME`, not a proxy variable, nothing inherited
-from the parent. Task 1 Step 6 recorded both binaries exiting `0` under
+**Decision: the empty environment is retained. No variable is admitted from the parent.** Claude
+is spawned with `env: {}` (`packages/adapter-claude/src/invoke.ts:140`); Codex
+gets `env: { CODEX_HOME: <isolated home> }` whenever a `codexHome` is supplied,
+which ingest always does (`packages/adapter-codex/src/invoke.ts:332`,
+`apps/cli/src/commands/ingest.ts:1058-1060`). Beyond that one product-chosen
+variable, neither vendor inherits anything from the parent — not `HOME`, not a
+proxy variable. Task 1 Step 6 recorded both binaries exiting `0` under
 `env -i … --help` (Claude row 13, Codex row 7 above), and no observation
 anywhere in this document — across Tasks 1, 4 or 6 — records either vendor
 failing for want of a variable. Per the Task 6 brief's own Step 1, this is the
 expected outcome, and it is what the plan's roadmap correction sanctions.
-`EXPECTED_VENDOR_ENVIRONMENT` in `tests/security/network.test.ts:72` remains
+`EXPECTED_VENDOR_ENVIRONMENT` in `tests/security/network.test.ts:103` remains
 the single place a future admission would be made, and it may be made only
 against a recorded observation of a vendor failing without the variable —
-never for a proxy variable, which `tests/security/network.test.ts:228`
+never for a proxy variable, which `tests/security/network.test.ts:285`
 (`"does not pass a proxy the parent process was given"`) already proves does
 not reach the child.
 
@@ -280,7 +282,7 @@ or existence reveals) is not something `env: {}` closes off. Isolation from
 the user's own settings and hooks is bought by the flags Tasks 2 and 3 added
 — `--restricted`, `--safe-mode` and `--strict-mcp-config` for Claude
 (`packages/adapter-claude/src/invoke.ts:124-126`); `--ignore-user-config` and
-`--ignore-rules` for Codex (`packages/adapter-codex/src/invoke.ts:289-297`)
+`--ignore-rules` for Codex (`packages/adapter-codex/src/invoke.ts:304-305`)
 — not by the empty environment. A future change that relaxes any of those
 flags is not compensated for by `EXPECTED_VENDOR_ENVIRONMENT` staying `{}`.
 
@@ -342,7 +344,7 @@ genuine read-scoping mechanism in Codex or the same tool-free invocation Claude
 gets; neither exists in 0.151.0 as observed here.
 
 **And `-C` is not the child's only relationship to the vault.**
-`packages/adapter-codex/src/invoke.ts:314` spawns with `cwd: cwd()` — this
+`packages/adapter-codex/src/invoke.ts:323` spawns with `cwd: cwd()` — this
 process's own working directory, which *is* the vault whenever the user runs
 `developer-os ingest` from inside it. What this decision changed is the directory
 the agent is *told* to treat as its root; the directory the child process

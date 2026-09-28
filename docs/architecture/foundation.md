@@ -12,16 +12,22 @@ product is built on top of it, by the subsystems listed in `docs/superpowers/BAC
 
 ## 1. Boundaries
 
-Four packages and one test package. The dependency direction is strictly downward; nothing
-below the CLI knows a command exists.
+Foundation is four packages and one test package. The workspace (`pnpm-workspace.yaml`) holds ten;
+the other five belong to the subsystems built on top of Foundation — `@developer-os/brain`
+(`brain.md`), `@developer-os/workflow-schema` (`workflow-schema.md`), `@developer-os/adapter-claude`
+(`claude-adapter.md`), `@developer-os/adapter-codex` (`codex-adapter.md`), and the installed launcher
+`@developer-os/launcher` (`apps/launcher`, release-update design). `brain` and `workflow-schema`
+depend on `core` and `security`; both adapters add `workflow-schema`; the launcher adds
+`platform-macos`; none of them depends on `cli`. The dependency direction is strictly downward;
+nothing below the CLI knows a command exists.
 
 | Package | Owns | May depend on |
 |---|---|---|
 | `@developer-os/core` | result and exit contracts, configuration, runtime paths, change plans, transactions, manifest and drift | nothing in this repository |
 | `@developer-os/security` | canonical paths and containment, the protected-path policy, redaction, shell-free process execution | `core` |
 | `@developer-os/platform-macos` | macOS facts, agent discovery, the transaction lock | `core`, `security` |
-| `@developer-os/cli` | argv, output, exit status, one module per command, and the composition root | all three |
-| `@developer-os/tests` | process-level evidence against the compiled binary | `core` and `security` at runtime, `cli` for types only |
+| `@developer-os/cli` | argv, output, exit status, the command modules, and the composition root | every package except `launcher` and `tests` |
+| `@developer-os/tests` | process-level evidence against the compiled binary | every package except `brain` and `launcher`; it imports `cli`'s compiled `dist/` modules at runtime, not only its types |
 
 Within those packages, one responsibility per path:
 
@@ -31,7 +37,7 @@ Within those packages, one responsibility per path:
 | `apps/cli/src/main.ts` | pure command dispatch returning `CliResult` |
 | `apps/cli/src/io.ts` | injectable user interaction |
 | `apps/cli/src/context.ts` | the composition root and the guards it supplies |
-| `apps/cli/src/commands/` | one command per module |
+| `apps/cli/src/commands/` | one module or directory per top-level command (`automation/`, `git/` and `update/` are directories; `brain.ts` dispatches `reindex.ts` and `refactor.ts`), plus shared support modules that are not commands: `brain-dependencies.ts`, `brain-template.ts`, `claude-capabilities.ts`, `codex-capabilities.ts`, `output-schemas.ts`, `project-template.ts`, `quarantine.ts`, `testing.ts`, `untrusted-file.ts` and `vendor-config.ts` |
 | `packages/core/src/result.ts` | stable exit and error contracts |
 | `packages/core/src/config/` | runtime paths and TOML configuration |
 | `packages/core/src/plans/` | exact change-plan model |
@@ -94,8 +100,9 @@ and `core/src/config/` now also owns and exports `BrainConfigV1`. The change is 
 section only when the key is present, and `exactOptionalPropertyTypes` keeps "absent"
 distinguishable from "present-and-undefined" — so a configuration written before the section
 existed still loads and still serializes byte-identically. The surviving rationale is in
-`docs/architecture/brain.md` §3; every amendment to a frozen interface is indexed in
-`docs/superpowers/BACKLOG.md` §8.
+`docs/architecture/brain.md` §3. Every amendment to a frozen interface was indexed in
+`docs/superpowers/BACKLOG.md` §8 until `d72287a` (2026-08-28) replaced that section with an
+inbound-reference index; the amendment record is §8 of `git show d72287a^:docs/superpowers/BACKLOG.md`.
 
 **A second amendment landed on 2026-08-17, on exactly the same terms.** Track R entry R2 gave
 `DeveloperOsConfigV1` an optional `redaction?: { patterns }` member — a bounded list of literal
@@ -104,8 +111,9 @@ user-extensible redaction class that was **unreachable**: `redactText` accepted 
 production caller passed it, and this schema had no key a user could set.
 Additive in the same three senses as `brain`: `.strict()` and `schemaVersion = 1` are unchanged, the
 table is emitted only when present, and a configuration predating it loads and re-serializes
-byte-identically. `BACKLOG.md` §8 carries the row, **unratified** — the founder decided to implement
-NEW-16, which is not the same as ratifying the amendment it required.
+byte-identically. The row's last record is §8 of `git show d72287a^:docs/superpowers/BACKLOG.md`,
+**unratified** — the founder decided to implement NEW-16, which is not the same as ratifying the
+amendment it required — and `d72287a` removed it without recording a ratification.
 
 **A third amendment landed on 2026-08-19, and it is the first to touch `CliError` rather than
 the configuration.** Track R entry R2 gave `CliError` an optional `data?: RedactedPayload` member, because
@@ -189,8 +197,9 @@ root. A sixth round then found five more ways to reach it — `as never`, a type
 `asserts` signature, a variable bound to the producer, and a re-export of it — so the sweep's
 coverage is a measured list rather than an argument.
 
-`BACKLOG.md` §8 carries the row, **unratified** — the founder decided to implement Foundation
-request 3, which is not the same as ratifying the amendment it required.
+The row's last record is §8 of `git show d72287a^:docs/superpowers/BACKLOG.md`, **unratified** — the
+founder decided to implement Foundation request 3, which is not the same as ratifying the amendment
+it required — and `d72287a` removed it without recording a ratification.
 
 **A fourth frozen-interface amendment was ratified for DOS-P7 on 2026-08-25, before its code
 lands.** `DeveloperOsConfigV1` keeps `schemaVersion: 1`, its required `git.enabled` and
@@ -208,7 +217,7 @@ clear Git `retry_only` outcome that may consume only its persisted push plan, an
 `uninstall_draining` outcome that grants only silent exit to a runner whose bound lease was removed.
 The active opt-in-
 surfaces design §2.2 is the full lifecycle contract, and
-`BACKLOG.md` §8 carries the same-change ratification record.
+§8 of `git show d72287a^:docs/superpowers/BACKLOG.md` carries the same-change ratification record.
 
 **The 2026-08-27 final review correction closes the command interface around that schema without
 widening it.** `config get/set` has exhaustive readable/mutable dotted-key unions, one
@@ -283,8 +292,8 @@ Launchd uses plan-derived generation labels observable through exact domain-targ
 `launchctl print gui/<uid>/<label>` service probes rather than claiming launchd exposes plist hashes or
 using the caller's implicit bootstrap namespace. Its hash-bound process table also confines
 `bootstrap`/`bootout`, streams, deadlines, and whole-group termination. Authority, pre-recorded inode
-evidence, no-replace verification/compensation, and the push-last exception are indexed in
-`BACKLOG.md` §8. Git execution is additionally confined to an exact root-owned
+evidence, no-replace verification/compensation, and the push-last exception are indexed in §8 of
+`git show d72287a^:docs/superpowers/BACKLOG.md`. Git execution is additionally confined to an exact root-owned
 `SupportedGitDistributionV1`/canonical `SupportedGitProcessTableV1` row and an owner-only
 `GitExecGatewayV1` whose Node-24 trampolines and one-shot `GitProcessSupervisorV1` graph mediate every
 dynamic child. SSH enters its internal bridge through that gateway and consumes a second supervised
@@ -502,7 +511,7 @@ only no-replace moves, and every concurrent third state is preserved rather than
 unlinked. The composite journal retains its bytes, tombstones, and backups until the manifest postimage
 and all participants are terminal, so recovery can finish or restore around every move, publication,
 or absence-commit boundary. The active opt-in-surfaces design §2.4 owns ordering and failure semantics;
-`BACKLOG.md` §8 carries the same-change ratification record.
+§8 of `git show d72287a^:docs/superpowers/BACKLOG.md` carries the same-change ratification record.
 
 For coordinator-owned Foundation participants, §2.4 also pre-stages the exact canonical initial
 `planned` journal and records its device/inode before coordinator intent is published. Under the

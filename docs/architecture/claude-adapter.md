@@ -249,7 +249,8 @@ regenerator and the drift check call the same function. A generator and its gate
 different code check nothing.
 
 **Ratified by the founder on 2026-08-11**, and reversible: restoring the CLI verb means deciding
-where it may write and how that write is owned. `BACKLOG.md` §8 carries the row.
+where it may write and how that write is owned. This section is the record; the `BACKLOG.md` §8
+row that indexed it left once ratified (`1564314`).
 
 ## 8. What the program checkpoint got, and what DOS-P6 completed
 

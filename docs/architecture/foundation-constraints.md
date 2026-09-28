@@ -465,18 +465,18 @@ recorded here because that is where a reader looks for what Foundation cannot do
 
 **Found 2026-08-07, by the fresh-context review of DOS-P2 Task 1.**
 
-`init` records `config.toml` as a managed artifact (`apps/cli/src/commands/init.ts:226`), and
+`init` records `config.toml` as a managed artifact (`apps/cli/src/commands/init.ts:474-480`), and
 drift compares its content hash. Foundation ships **no command that edits configuration**, so
 the only way to change any setting is to edit the file by hand — which is drift.
 
 The consequence is worse than inconvenient, and it is the shape of residual 1: `doctor` reports
 the drift and prints "uninstall, then initialize again" as its recovery, and `uninstall` refuses
 on that same drift (`planUninstall` in `apps/cli/src/commands/uninstall.ts`). `init` refuses too. The user's only exit is deleting the
-product home by hand. `tests/e2e/foundation.test.ts:1271-1275` already states the mechanism in its own
+product home by hand. `tests/e2e/foundation.test.ts:1349-1352` already states the mechanism in its own
 comment; what it does not say is that no supported path exists to reach the state legitimately.
 
 **This is not new with DOS-P2.** `git.enabled` and `automation.enabled` are written as fixed
-defaults by `init` (`init.ts:112`) and have had the identical problem since Foundation shipped.
+defaults by `init` (`init.ts:179-180`) and have had the identical problem since Foundation shipped.
 The `[brain]` section added by DOS-P2 is mechanically the third instance, and is unreachable
 until a command writes or reads it.
 
@@ -486,6 +486,9 @@ rewrites `config.toml` and re-records its manifest hash serves all three. **Reco
 record, not a decision**: DOS-P2 ships `[brain]` written by `init` inside the existing
 transaction and not editable afterwards; DOS-P7 adds the general command. Settle it before
 DOS-P7 starts, not during.
+
+**Superseded 2026-09-21 by `config set`** (`2a95c94`, `apps/cli/src/commands/config.ts:37`): a
+supported edit path now exists.
 
 ### Residual 10: a filesystem identity has exactly one encoding
 

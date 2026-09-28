@@ -129,16 +129,16 @@ carries both the staging flag and a real vault write — different axes, not an 
 ## 7. Workflow gaps after DOS-P6
 
 The four workflow gaps recorded here on 2026-08-10 are closed. DOS-P6 added `capture.edit` to
-`review` (`workflows/review/workflow.yaml:41`), reindexed after `ingest`
+`review` (`workflows/review/workflow.yaml:47`), reindexed after `ingest`
 (`workflows/ingest/workflow.yaml:41`), made `brain-search` read selected notes
 (`workflows/brain-search/workflow.yaml:43`), and aligned `doctor` with its report-only contract.
 DOS-P4 and DOS-P5 also made the shared preamble part of every rendered skill body
-(`packages/workflow-schema/src/skill.ts:201`). These are historical outcomes, not open work.
+(`packages/workflow-schema/src/skill.ts:203-205`). These are historical outcomes, not open work.
 
 Two genuine gaps remain:
 
 1. **`agent.prompt` has no step executor.** It is the sole item in §5 and is owned by the adapters
-   (`packages/workflow-schema/src/vocabulary.ts:119`).
+   (`packages/workflow-schema/src/vocabulary.ts:125`).
 2. **A declared trigger is not validated against an observable host capability.** DOS-P6 removed
    the unfireable `session_start` and `session_end` declarations and both shipped contracts are
    manual-only, so no current workflow exercises this gap. Reintroducing a non-manual trigger must

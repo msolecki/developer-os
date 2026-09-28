@@ -90,10 +90,17 @@ recorded, never followed. Assertions then compare that snapshot against what the
 
 ### Reference installation
 
-A fresh `init --yes` under a temporary HOME produces 8 manifest artifacts, 13 files, and 12
-directories. The 13 includes the transaction's `.<id>.lock`, which is never unlinked — one
-permanent `0600` file accumulates per transaction id, and whether that wants collection is an
-open founder question recorded in `docs/architecture/foundation-constraints.md`.
+**This is the 2026-08-01 Foundation layout, not the current one.** The fresh V2 `init` that
+replaced it creates the release, rollback, schema, lifecycle-journal, automation-status and
+log-slot paths Spec 2 §3.2 and Spec 1 §2.1 reserve; the exact current set is pinned by
+`apps/cli/src/bootstrap/fresh-layout.v2.test.ts` (`creates exactly the fresh plan path set Spec 2
+§3.2 and Spec 1 §2.1 reserve`), and this section does not restate its counts.
+
+At the checkpoint, a fresh `init --yes` under a temporary HOME recorded the 8 manifest artifacts
+tabulated below. The transaction's `.<id>.lock` was never unlinked — one permanent `0600` file
+accumulated per transaction id. That was an open founder question at the checkpoint; it was
+decided on 2026-08-26 (guarded terminal collection under the global mutation lock), and
+`docs/architecture/foundation-constraints.md` carries the decision.
 
 | Kind | `installedHash` prefix | Path, relative to HOME |
 |---|---|---|
