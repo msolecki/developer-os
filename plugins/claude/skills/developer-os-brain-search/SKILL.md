@@ -5,8 +5,6 @@ description: "Search the vault index and return ranked matches with their source
 
 <!-- Generated from workflows/brain-search/workflow.yaml (brain-search@2.0.0). Do not edit. -->
 
-<!-- preamble from shared; concatenated, not referenced -->
-
 ## Always
 
 - **Refuse** (vault-missing, exit 1): No installation was found. Run developer-os init first.
@@ -36,6 +34,8 @@ Effect: `brain.search`
 ```text
 developer-os brain search
 ```
+
+A value written `$input.<name>` stands for the workflow input `<name>`: replace it with what the user supplied for that input.
 
 ```json
 {"query":"$input.query","limit":"$input.limit"}
