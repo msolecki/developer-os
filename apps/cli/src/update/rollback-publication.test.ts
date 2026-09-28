@@ -151,7 +151,7 @@ describe("RollbackPayloadParticipant.publish", () => {
     expect(await nodeFs.readFile(`${fixture.payload.identity.root}/foreign.txt`, "utf8")).toBe("not ours\n");
   });
 
-  it.each(ROLLBACK_PUBLICATION_DEATH_POINTS.filter((point) => point !== "compensation_step" && point !== "compaction_step" && point !== "retired_leaf"))("compensates the reached prefix after death at %s", async (point) => {
+  it.each(ROLLBACK_PUBLICATION_DEATH_POINTS.filter((point) => point !== "compensation_step" && point !== "compaction_step"))("compensates the reached prefix after death at %s", async (point) => {
     const fixture = await staged();
     const plan = await publishPlan(fixture);
     const dying = participant(fixture, (reached) => {
@@ -184,7 +184,7 @@ describe("RollbackPayloadParticipant.publish", () => {
 });
 
 describe("RollbackPayloadParticipant verify-only arm", () => {
-  it("verifies the retained payload read-only, then retires it only through retire", async () => {
+  it("verifies the retained payload read-only and never compacts it", async () => {
     const fixture = await published();
     const plan = await verifyOnlyPlan(fixture);
     const root = fixture.payload.identity.root;
@@ -194,11 +194,7 @@ describe("RollbackPayloadParticipant verify-only arm", () => {
     expect(await journalOf(fixture, plan)).toMatchObject({ nextStructure: 0, nextEntry: 0, nextMetadata: 0, compensationNext: null });
     expect(await exists(root)).toBe(true);
     await expect(participant(fixture).compact(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
-
-    expect((await participant(fixture).retire(plan)).phase).toBe("finalized");
-    expect(await exists(root)).toBe(false);
-    await participant(fixture).compact(plan);
-    expect(await journalOf(fixture, plan)).toMatchObject({ phase: "compacting", compactionNext: 0 });
+    expect(await exists(root)).toBe(true);
   });
 
   it("marks itself rolled back before the point of no return without touching the payload", async () => {
@@ -224,22 +220,5 @@ describe("RollbackPayloadParticipant verify-only arm", () => {
     await nodeFs.writeFile(blob, "tampered bytes!\n");
     await expect(participant(fixture).verifyRetained(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     expect(await exists(blob)).toBe(true);
-  });
-
-  it.each([1, 5, 6, 8])("force-forwards a retirement that died after leaf %i", async (leaf) => {
-    const fixture = await published();
-    const plan = await verifyOnlyPlan(fixture);
-    await participant(fixture).verifyRetained(plan);
-    let removed = 0;
-    const dying = participant(fixture, (reached) => {
-      if (reached === "retired_leaf") {
-        removed += 1;
-        if (removed === leaf) throw new Killed(reached);
-      }
-    });
-    await expect(dying.retire(plan)).rejects.toBeInstanceOf(Killed);
-    expect((await journalOf(fixture, plan)).phase).toBe("verified");
-    expect((await participant(fixture).retire(plan)).phase).toBe("finalized");
-    expect(await exists(fixture.payload.identity.root)).toBe(false);
   });
 });
