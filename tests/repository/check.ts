@@ -244,7 +244,7 @@ export const RELEASE_TRANSPORT_COMPOSITION: readonly string[] = ["apps/cli/src/u
 
 const REMOTE_NETWORK_MODULE =
   /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
-const GLOBAL_FETCH = /(?<![.\w$])fetch\s*\(/u;
+const GLOBAL_FETCH = /(?<![.\w$])fetch\s*\(|(?<![.\w$])(?:globalThis|self|window)\.fetch\s*\(/u;
 const TRANSPORT_COMPOSER = /\b(?:nodeReleaseExchange|FixedReleaseTransport)\b/u;
 const LAUNCHER_EXEC = /\bexecAdmittedRelease\b/u;
 const PRODUCT_SOURCE = /^(?:packages|apps)\/[^/]+\/src\/.*\.ts$/u;
