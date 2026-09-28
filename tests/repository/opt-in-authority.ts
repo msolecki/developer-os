@@ -63,6 +63,8 @@ export interface OptInAuthorityReportV1 {
  * receive-pack trampoline bridge.
  */
 export const ALLOWED_SPAWN_SITES: readonly string[] = [
+  // Spec 2 P6 (D72): the one closed `codex plugin add <id> --json` refresh and its `plugin list` observation.
+  "apps/cli/src/update/apply-ports.ts::codexRuntime",
   "apps/launcher/src/handoff.ts::execAdmittedRelease",
   "packages/platform-macos/src/retained-rename.ts::SpawnRenameAtxRunner",
   "packages/platform-macos/src/transaction-lock.ts::SpawnLockfRunner",
@@ -216,7 +218,11 @@ export async function inspectOptInAuthoritySurfaces(repositoryRoot: string): Pro
       else unexpected.add(site);
     }
     const entrypoint = facts.constructsGitSupervisor || facts.namesLaunchctl;
-    for (const site of facts.supervisedSites) if (!entrypoint) unexpected.add(`${site} (${SUPERVISED_SPAWN_AUTHORITY})`);
+    for (const site of facts.supervisedSites) {
+      if (entrypoint) continue;
+      if (ALLOWED_SPAWN_SITES.includes(site)) allowed.add(site);
+      else unexpected.add(`${site} (${SUPERVISED_SPAWN_AUTHORITY})`);
+    }
   }
 
   return {

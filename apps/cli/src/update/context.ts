@@ -32,12 +32,14 @@ import type {
   ArtifactOwner,
   CanonicalAbsolutePathV1,
   CanonicalPathEvidenceV1,
+  CodexRegistrationProjectionV1,
   DeveloperOsConfigV1,
   ExitCode,
   InstallationManifestV2,
   LowerHexSha256,
   ManagedArtifactV2,
   OfflineReleaseTrustV1,
+  OwnerExternalEffectProcessPolicyV1,
   PlannerArtifactInputV1,
   PlannerBrainEntryV1,
   PlannerInputBlobRefV1,
@@ -88,7 +90,10 @@ import { admitInstalledV2Home } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../lifecycle/context.js";
 import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { gateManifestAdmission } from "../lifecycle/mutation-gate.js";
+import type { CodexRegistrationStateV1 } from "../instructions/codex-registration.js";
+import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
+import { productionUpdateApplyPorts, updateCodexPort } from "./apply-ports.js";
 import {
   MAXIMUM_ROLLBACK_RECORD_BYTES,
   UpdatePlanningRefusal,
@@ -144,14 +149,25 @@ export interface CliUpdateContext {
   readonly capacity: () => Promise<UpdateCapacityObservationV1>;
   readonly admitManifest: (value: unknown) => InstallationManifestV2;
   /**
+   * P6: the discovered Codex CLI's registration state, closed refresh policy, and current
+   * projection; null when no trusted `codex` is installed. Absent in a context with no Codex owner.
+   */
+  readonly codex?: () => Promise<UpdateCodexV1 | null>;
+  /**
    * `--apply`'s mutation authority; absent, `update --apply` and `update rollback --apply` refuse
-   * before any port is reached. Production leaves it unbound: the leaf-plan composition needs Core
-   * contracts that do not yet line up (Foundation V2 staging paths, state-postimage identities, the
-   * retirement leaf codec, and a V2-aware ledger), and rollback additionally needs its
-   * retained-inverse execution leaf, the previous/retained verification participants, and the
-   * consumed-set retirement leaves, so both orchestrations run only over injected ports for now.
+   * before any port is reached. Production binds it with no fallback handoff: the launcher's FD 3
+   * document gains `UpdateFallbackHandoffV1` only with Task 11b, so until then `--apply` refuses
+   * `update_fallback_unavailable` (exit 4) before allocation (D72 P7(d)).
    */
   readonly apply?: UpdateApplyPortsV1;
+}
+
+/** What planning needs from the installed Codex provider (P6(b)-(c)). */
+export interface UpdateCodexV1 {
+  readonly homes: VendorHomesV1;
+  readonly registration: CodexRegistrationStateV1;
+  readonly policy: OwnerExternalEffectProcessPolicyV1;
+  readonly projection: CodexRegistrationProjectionV1;
 }
 
 const MAX_RELEASE_RECORD_BYTES = 16 * 1024;
@@ -590,5 +606,7 @@ export function createCliUpdateContext(context: CliContext): CliUpdateContext {
     readRollbackEvidence: (_home, record) => readRollbackEvidence(context, record),
     capacity: () => observeCapacity(context),
     admitManifest: (value) => validateManifestV2(value, gateManifestAdmission(context)),
+    codex: updateCodexPort(context),
+    apply: productionUpdateApplyPorts(context, () => null),
   };
 }

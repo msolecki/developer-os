@@ -144,6 +144,7 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
   "apps/cli/src/update/rollback-publication.ts",
   "apps/cli/src/update/recovery.ts",
   "apps/cli/src/update/foundation-port.ts",
+  "apps/cli/src/update/apply-ports.ts",
 ];
 
 const GUARDED_PORT_RECEIVER = /(?:^|[^A-Za-z0-9_$])fs$/u;

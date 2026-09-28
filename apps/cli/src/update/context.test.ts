@@ -99,10 +99,23 @@ describe("readHome", () => {
 });
 
 describe("apply ports", () => {
-  it("leaves --apply unbound in production so the command refuses before any port", async () => {
-    const fixture = await createCommandFixture("update-apply-unbound");
-    expect(createCliUpdateContext(fixture.context).apply).toBeUndefined();
-  });
+  it("binds --apply in production with no fallback handoff, which refuses exit 4 before allocation and writes nothing (P7(d))", async () => {
+    const fixture = await installed("update-apply-no-fallback");
+    const ports = createCliUpdateContext(fixture.context).apply;
+    if (ports === undefined) throw new Error("production binds the --apply ports");
+    const before = await inventoryDigest(fixture.root);
+
+    expect(await refusal(ports.withGlobalLock(() => ports.allocate(["lc", "rb", "mf", "mf"])))).toMatchObject({ reason: "update_fallback_unavailable", code: EXIT_CODES.capabilityUnavailable });
+    expect(await inventoryDigest(fixture.root)).toEqual(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("reads a clear V2 closure through the bound ports under the global lock", async () => {
+    const fixture = await installed("update-apply-closure");
+    const ports = createCliUpdateContext(fixture.context).apply;
+    if (ports === undefined) throw new Error("production binds the --apply ports");
+
+    expect((await ports.withGlobalLock(() => ports.closure())).kind).toBe("clear");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("leaves rollback --apply unbound in production so it refuses without reading the home", async () => {
     const fixture = await createCommandFixture("update-rollback-apply-unbound");

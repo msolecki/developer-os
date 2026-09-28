@@ -8,6 +8,7 @@ import {
   updateCoordinatorOuterBytes,
 } from "@developer-os/core";
 import type {
+  LifecycleIdPrefixV1,
   LifecycleJournalClosureV2,
   ReleaseIdentityV1,
   UpdateCapacityInputV1,
@@ -24,6 +25,7 @@ import type {
 import { describe, expect, it } from "vitest";
 
 import { applyUpdate, recoverUpdate } from "./apply.js";
+import { updateApplyPrefixes } from "./compose.js";
 import type { UpdateApplyConstructionPortV1, UpdateApplyPortsV1 } from "./apply.js";
 import type { CliUpdateContext } from "./context.js";
 import { prepareUpdate, UpdatePlanningRefusal } from "./planning.js";
@@ -43,6 +45,7 @@ interface ApplyWorldV1 {
   coordinator: { readonly plan: UpdateLifecycleCoordinatorPlanV2; readonly journal: UpdateLifecycleCoordinatorJournalV2 } | null;
   executor: "absent" | "executing" | "terminal_cleanup";
   allocatorReservations: number;
+  allocatedPrefixes: readonly LifecycleIdPrefixV1[] | null;
   frames: number;
   retired: number;
   applied: UpdateLifecycleCoordinatorStepV1[];
@@ -60,6 +63,8 @@ interface ApplyFixtureOptions {
   readonly secondPlanner?: CliUpdateContext["planner"];
   /** Closure V2 reports a third state (an orphan executor record, malformed V2 residue). */
   readonly thirdStateClosure?: boolean;
+  /** Production's allocation with no launcher fallback handoff (D72 P7(d)). */
+  readonly fallbackUnavailable?: boolean;
 }
 
 interface ApplyFixture {
@@ -102,6 +107,7 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
     coordinator: null,
     executor: "absent",
     allocatorReservations: 0,
+    allocatedPrefixes: null,
     frames: 0,
     retired: 0,
     applied: [],
@@ -263,9 +269,11 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
       }
     },
     closure,
-    allocate: () => {
+    allocate: (prefixes) => {
       alive();
+      if (options.fallbackUnavailable === true) return Promise.reject(new UpdatePlanningRefusal("update_fallback_unavailable", EXIT_CODES.capabilityUnavailable));
       world.allocatorReservations += 1;
+      world.allocatedPrefixes = prefixes;
       base.events.push("allocate");
       return Promise.resolve(COORDINATOR);
     },
@@ -348,6 +356,26 @@ async function refusalOf(work: Promise<unknown>): Promise<UpdatePlanningRefusal>
   }
   throw new Error("expected a refusal");
 }
+
+describe("applyUpdate allocation (D72 P7(d)-(e))", () => {
+  it("reserves one block holding exactly the prefixes the composition consumes, coordinator first", async () => {
+    const fixture = await applyFixture();
+    await applyUpdate(fixture.update, fixture.prepared);
+    expect(fixture.world.allocatedPrefixes).toEqual(updateApplyPrefixes(fixture.prepared.materialized));
+    expect(fixture.world.allocatedPrefixes?.[0]).toBe("lc");
+    expect(fixture.allocatorReservations).toBe(1);
+  });
+
+  it("refuses exit 4 with no fallback handoff before composing or constructing anything", async () => {
+    const fixture = await applyFixture({ fallbackUnavailable: true });
+    const refusal = await refusalOf(applyUpdate(fixture.update, fixture.prepared));
+    expect(refusal).toMatchObject({ reason: "update_fallback_unavailable", code: EXIT_CODES.capabilityUnavailable });
+    expect(fixture.events).not.toContain("compose");
+    expect(fixture.world.construction).toBe("absent");
+    expect(fixture.world.coordinator).toBeNull();
+    expect(fixture.events).toContain("scratch.cleanup");
+  });
+});
 
 describe("applyUpdate revalidation", () => {
   it("reruns the planner under lock and refuses any transcript/preview change before allocation", async () => {

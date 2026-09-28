@@ -5,12 +5,14 @@ import {
   admitReleaseIdentity,
   advanceReleaseTrust,
   buildRollbackPreview,
+  codexRegistrationProjectionHash,
   decodeCanonicalJson,
   encodeCanonicalJson,
   encodeTenDigitOrdinal,
   EXIT_CODES,
   materializePlannerDraft,
   MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
+  ownerExternalEffectProcessPolicyHash,
   MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
   parseCanonicalAbsolutePathText,
   parseUInt64Decimal,
@@ -41,6 +43,7 @@ import type {
   ReleaseKeyDelegationV1,
   ReleaseMetadataIdentityV1,
   ReleaseTrustStateV1,
+  RetainedExternalEffectInversePlanV1,
   RetainedInversePathStateV1,
   RetainedOwnerInverseOperationV1,
   RetainedOwnerInverseProjectionV1,
@@ -68,6 +71,7 @@ import { verifyReleaseMetadataChain } from "@developer-os/security";
 import type { ReleaseIndexDocumentV1, ReleaseKeyDelegationDocumentV1, TargetPlannerRunResultV1, VerifiedScratchBundleV1 } from "@developer-os/security";
 
 import { compareManifestRows } from "../instructions/attach.js";
+import { requireCodexRegistered } from "./codex-refresh.js";
 import type { CliUpdateContext, UpdateScratchAttemptV1, UpdateTransportV1 } from "./context.js";
 
 /**
@@ -394,6 +398,7 @@ function prepareInverse(
   draft: TargetUpdateDraftV1,
   outputs: readonly SecretScreenedBlobV1[],
   bundleModes: ReadonlyMap<string, 384 | 448>,
+  codexEffect: RetainedExternalEffectInversePlanV1 | null,
 ): PreparedInverseV1 {
   const entries: RollbackPayloadEntryV1[] = [];
   let stagedBytes = 0;
@@ -454,9 +459,8 @@ function prepareInverse(
       id: `owner_${plan.owner}` as SafeReasonCodeV1,
       owner: plan.owner,
       operations: operations.sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
-      // The Codex refresh inverse needs the process policy and registration state hashes that only the
-      // apply-time owner provider observes; the plan-only projection carries none (Task 24 adds them).
-      externalEffects: [],
+      // P6: the drafted Codex refresh, replayed over the restored tree by a later rollback.
+      externalEffects: plan.owner === "codex" && plan.externalEffects.length > 0 && codexEffect !== null ? [codexEffect] : [],
       maximumPlanBytes: MAXIMUM_LEAF_BYTES,
     };
   });
@@ -703,7 +707,7 @@ export async function materializeUpdate(update: CliUpdateContext, home: UpdateHo
 
   const manifest = concreteManifest(update, home, snapshot, run.draft, run.outputBlobs, target);
   const bundleModes = new Map(bundleManifest.entries.flatMap((entry) => (entry.kind === "file" ? [[entry.path as string, entry.mode] as const] : [])));
-  const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs, bundleModes);
+  const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs, bundleModes, await codexEffectOf(update, run.draft));
   const inventoryBytes = prepared.entries.reduce((sum, entry) => sum + entry.bytes, 0);
   const participants = run.draft.ownerPlans.length + run.draft.migrations.length + 4;
   const observation = inputs.observation ?? await update.capacity();
@@ -733,6 +737,32 @@ export async function materializeUpdate(update: CliUpdateContext, home: UpdateHo
     }
   });
   return { snapshot, signedMetadata: inputs.signedMetadata, run, manifest, observation, capacity, candidate };
+}
+
+/**
+ * P6(c)/(e): a Codex tree change requires the owner `registered` before allocation (exit 3), and
+ * its drafted refresh carries the pinned policy and the current projection, which the refresh
+ * restores unchanged, so expected and restore states hash alike.
+ * ponytail: the proposed projection keeps the current plugin version; a version bump reports as a
+ * postimage mismatch and compensates until the target's plugin version is part of the projection.
+ */
+async function codexEffectOf(update: CliUpdateContext, draft: TargetUpdateDraftV1): Promise<RetainedExternalEffectInversePlanV1 | null> {
+  const plan = draft.ownerPlans.find((candidate) => candidate.owner === "codex");
+  const changed = plan?.proposedOperations.some((operation) => operation.operation !== "keep") ?? false;
+  if (plan === undefined || (!changed && plan.externalEffects.length === 0)) return null;
+  const codex = (await update.codex?.()) ?? refuse("update_codex_unavailable", EXIT_CODES.capabilityUnavailable, [], "install the codex CLI, then run developer-os update again");
+  requireCodexRegistered(codex.registration);
+  if (plan.externalEffects.length === 0) return null;
+  const hash = codexRegistrationProjectionHash(codex.projection);
+  return {
+    kind: "codex_registration_refresh",
+    providerProtocol: codex.policy.providerProtocol,
+    expectedCurrentStateHash: hash,
+    restoreStateHash: hash,
+    restorePayloads: [],
+    processPolicy: codex.policy,
+    processPolicyHash: ownerExternalEffectProcessPolicyHash(codex.policy),
+  };
 }
 
 /** Rollback's own direction: an update-created path is removed, an update-removed one created. */
