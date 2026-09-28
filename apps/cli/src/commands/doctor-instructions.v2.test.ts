@@ -372,7 +372,7 @@ describe("doctor names every instruction artifact", () => {
     expect(check(report, "instructions").message).toContain("block_malformed");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("flips exactly the overridden row to `user`, and lists an uninstalled override as missing, or held back on Claude", async () => {
+  it("flips exactly the overridden row to `user`, and lists an uninstalled override as missing, and an uninstalled Claude rule override too", async () => {
     const { fixture, home } = await install("doctor-instructions-override", { vendors: ["claude", "codex"], userRules: ["careful"] });
     const extra = join(home, "instructions", "claude", "rules", "extra.md");
     await nodeFs.writeFile(extra, "Another rule of mine.\n", { mode: 0o600 });
@@ -387,8 +387,8 @@ describe("doctor names every instruction artifact", () => {
     );
     expect(brief(report.instructions)).toStrictEqual([
       ...flipped.slice(0, 2),
-      // Attach withholds every Claude rule, an override included, until its loading is proven.
-      "claude rule/extra: user, held-back",
+      // Nothing is held back since the billed row (NEW-101): an uninstalled rule override is missing.
+      "claude rule/extra: user, missing",
       flipped[2],
       "claude skill/extra: user, missing",
       ...flipped.slice(3),

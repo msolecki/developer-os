@@ -108,12 +108,8 @@ export type InstructionAttachPlanV1 =
     readonly report: InstructionApplyReportV1;
   };
 
-/** Invariant 3. Task 2 Step 3's billed row empties it by founder decision at Task 29. */
-export const UNPROVEN_CLAUDE_CATEGORIES: ReadonlySet<InstructionCategoryV1> = new Set<InstructionCategoryV1>([
-  "rule",
-  "scoped-rule",
-  "output-style",
-]);
+/** Invariant 3. Emptied 2026-09-26 by the billed row (NEW-101, `claude-adapter.md` §14.1). */
+export const UNPROVEN_CLAUDE_CATEGORIES: ReadonlySet<InstructionCategoryV1> = new Set<InstructionCategoryV1>();
 
 export class InstructionRefusal extends Error {
   readonly reason: string;

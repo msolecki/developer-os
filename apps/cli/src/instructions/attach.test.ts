@@ -598,14 +598,13 @@ describe("planInstructionAttach: the §5.2 merge", () => {
 });
 
 describe("planInstructionAttach: held-back Claude categories (invariant 3)", () => {
-  it("pins the initial value", () => {
-    expect([...UNPROVEN_CLAUDE_CATEGORIES].sort()).toStrictEqual(["output-style", "rule", "scoped-rule"]);
+  it("pins the value the billed row left: nothing is held back", () => {
+    expect([...UNPROVEN_CLAUDE_CATEGORIES]).toStrictEqual([]);
   });
 
-  it("filters the unproven Claude categories out by default and reports them held back", async () => {
-    const { heldBackClaudeCategories, ...request } = input(freshState());
-    expect(heldBackClaudeCategories).toBe(NONE);
-    const plan = transaction(await planInstructionAttach(request));
+  it("filters held-back Claude categories out and reports them", async () => {
+    const heldBack = new Set<InstructionCategoryV1>(["rule", "scoped-rule", "output-style"]);
+    const plan = transaction(await planInstructionAttach(input(freshState(), { heldBackClaudeCategories: heldBack })));
     expect(plan.report.heldBack).toStrictEqual(["claude output-style/terse", "claude rule/communication", "claude scoped-rule/typescript"]);
     expect(mutationAt(plan, CLAUDE_MD)).toBeUndefined();
     expect(rowAt(plan.manifest, CLAUDE_MD)).toBeUndefined();
