@@ -535,6 +535,31 @@ describe("createProductionContext", () => {
     expect(io.err.join("\n")).toContain("cannot be compared");
   });
 
+  it("redacts vendor stdout and stderr with the configured patterns once they are bound", async () => {
+    const fixture = await createFixture("production-context-runner-patterns");
+    const context = createProductionContext({ io: NULL_IO, env: {}, userHome: fixture.homeDir });
+    const request = {
+      executable: "/bin/sh",
+      args: ["-c", "echo 'Northwind Traders log'; echo 'Northwind Traders diagnostic' >&2"],
+      cwd: fixture.homeDir,
+      stdin: "",
+      timeoutMs: 10_000,
+      env: {},
+    };
+
+    const before = await context.runner.run(request);
+    expect(before.stdout).toContain("Northwind Traders log");
+    expect(before.stderr).toContain("Northwind Traders diagnostic");
+
+    context.bindRedactionPatterns?.(["Northwind Traders"]);
+    const after = await context.runner.run(request);
+
+    expect(after.stdout).not.toContain("Northwind Traders");
+    expect(after.stderr).not.toContain("Northwind Traders");
+    expect(after.stdout).toContain("[REDACTED:user-pattern] log");
+    expect(after.stderr).toContain("[REDACTED:user-pattern] diagnostic");
+  });
+
   it("says nothing when the durable key is there", async () => {
     const fixture = await createFixture("production-context-quiet");
     const stateDir = join(fixture.homeDir, ".developer-os", "state");

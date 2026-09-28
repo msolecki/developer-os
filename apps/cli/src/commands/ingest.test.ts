@@ -2220,6 +2220,33 @@ describe("runIngest, the agent call", () => {
     expect(sent).toContain("DEV/unrelated.md");
   });
 
+  /** BACKLOG NEW-26: the vendor's stdout and stderr come back through the runner's redactor. */
+  it("binds the configured patterns to the runner before any vendor process runs", async () => {
+    const fixture = await installedFixture("ingest-runner-redaction");
+    const seeded = await fixture.seedAccepted("the migration needs a rollback plan");
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders"]\n',
+      "utf8",
+    );
+    fixture.reply(() => oneNote(seeded.id));
+    const bound: { patterns: readonly string[]; vendorCalls: number }[] = [];
+
+    const result = await runIngest(
+      {
+        ...fixture.context,
+        bindRedactionPatterns: (patterns: readonly string[]): void => {
+          bound.push({ patterns: [...patterns], vendorCalls: fixture.calls.length });
+        },
+      },
+      { agent: "codex" },
+    );
+
+    expect(result.ok, "the ingest must reach the vendor").toBe(true);
+    expect(fixture.calls.length).toBeGreaterThan(0);
+    expect(bound[0]).toEqual({ patterns: ["Northwind Traders"], vendorCalls: 0 });
+  });
+
   /**
    * **BACKLOG NEW-15, on the command whose contract is to refuse.** `ingest` hands the
    * discovered binary the user's captured observation and read access to the whole vault,

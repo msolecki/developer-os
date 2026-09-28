@@ -51,9 +51,12 @@ export async function readConfigFile(
 
   const serialized = await context.guards.readText(configFile);
 
+  let config: DeveloperOsConfigV1;
   try {
-    return loadConfig(serialized);
+    config = loadConfig(serialized);
   } catch {
     throw new ConfigurationError();
   }
+  context.bindRedactionPatterns?.(config.redaction?.patterns ?? []);
+  return config;
 }

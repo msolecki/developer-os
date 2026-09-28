@@ -56,7 +56,7 @@ import {
   createRedactor,
   SecurityRefusalError,
 } from "@developer-os/security";
-import type { ProcessRunner } from "@developer-os/security";
+import type { ProcessRunner, RedactionResult, Redactor } from "@developer-os/security";
 
 import type { CliIo } from "./io.js";
 import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js";
@@ -193,6 +193,13 @@ export interface CliContext {
    * drive a fake, which is the discipline every other dependency here follows.
    */
   readonly runner: ProcessRunner;
+  /**
+   * Rebinds `runner`'s output redactor to the user's `[redaction]` patterns once
+   * `readConfigFile` has them (BACKLOG NEW-26). Optional so a test context keeps its fake
+   * runner untouched; the key stays the composition root's, since runner output carries
+   * redaction markers and no fingerprint.
+   */
+  readonly bindRedactionPatterns?: ((patterns: readonly string[]) => void) | undefined;
   /**
    * Fresh-install authority is intentionally narrower than the command-wide
    * context. Older direct context literals stay source-compatible, while the
@@ -745,22 +752,15 @@ export function createProductionContext(
   const redactionKey = durable ?? randomBytes(REDACTION_KEY_BYTES);
   const guards = createGuards(policy, redactionKey);
   const lockProvider = new MacOsTransactionLockProvider();
+  /**
+   * Built-in classes until `readConfigFile` calls `bindRedactionPatterns`: this runner —
+   * shared with `platform` below — is built before any configuration is read, and a
+   * per-command runner would bypass the fake every command test injects (NEW-26).
+   */
+  const runnerRedactor: { current: Redactor } = { current: createRedactor(redactionKey) };
   const runner = new NodeProcessRunner({
     assertCommand: assertSafeCommand,
-    /**
-     * **Built-in classes only, and deliberately so rather than by oversight.** This
-     * runner redacts a child process's stdout and stderr — including a vendor model's
-     * proposal on the way back into `ingest` — and it is constructed here, at the
-     * composition root, *before any configuration file has been read*. The user's
-     * `[redaction]` patterns are not available yet and cannot be without making the
-     * runner per-command, which would bypass the fake runner every command test injects.
-     *
-     * **What limits the exposure**: the return leg is model output, not user content, and
-     * `validateProposal`'s `secret-scan` runs the *config-bound* redactor over every
-     * proposed note — so a proposal carrying a configured pattern is refused rather than
-     * written. Registered as `BACKLOG.md` §1 **NEW-26**.
-     */
-    redact: createRedactor(redactionKey),
+    redact: (text: string): RedactionResult => runnerRedactor.current(text),
   });
   const now = (): Date => new Date();
   const executorWith = (generateId: () => string): TransactionExecutor =>
@@ -806,6 +806,9 @@ export function createProductionContext(
     paths,
     productVersion: PRODUCT_VERSION,
     runner,
+    bindRedactionPatterns: (patterns: readonly string[]): void => {
+      runnerRedactor.current = createRedactor(redactionKey, { userPatterns: patterns });
+    },
     bootstrap: localBootstrap(options, paths, transactionExecutor, lockProvider, now),
     lifecycle,
   };

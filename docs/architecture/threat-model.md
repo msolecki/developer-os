@@ -475,7 +475,14 @@ commands that redact bind the user's patterns into a closure at their compositio
 `apps/cli/src/commands/capture.ts:570`, `apps/cli/src/commands/review.ts:742`,
 `apps/cli/src/commands/ingest.ts:2268`. `createRedactor` is the only production entry to
 `redactText`, enforced by `tests/repository/redactor-entry.test.ts`, which is what keeps a new call
-site from silently opting out of the user's own patterns. **Record: `BACKLOG.md` §1 NEW-16, closed;
+site from silently opting out of the user's own patterns. **The composition-root runner follows the
+same patterns once configuration is read (NEW-26):** `readConfigFile` calls the context's optional
+`bindRedactionPatterns` (`apps/cli/src/config-file.ts`), which swaps the production runner's
+redactor — shared with the platform adapter — so vendor stdout and stderr on every command that
+reads configuration redact the user's patterns; a test context without the member keeps its fake
+runner. Pinned by `apps/cli/src/context.test.ts` → "redacts vendor stdout and stderr with the
+configured patterns once they are bound" and `apps/cli/src/commands/ingest.test.ts` → "binds the
+configured patterns to the runner before any vendor process runs". **Record: `BACKLOG.md` §1 NEW-16, closed;
 its residuals NEW-24 and NEW-26 are open, and NEW-25 is fixed with the residual below.**
 
 **Overlapping candidates merge, except `high-entropy` (NEW-25, founder decision D71).**
