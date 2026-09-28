@@ -9,7 +9,6 @@ import { describe, expect, it } from "vitest";
 
 import { SecurityRefusalError } from "../paths.js";
 import type { RedactionResult } from "../redaction.js";
-import type { PlannerGraphV1 } from "./graph.js";
 import type { PlannerChildProcessV1, PlannerProcessSampleV1, PlannerSpawnRequestV1 } from "./planner-process.js";
 import { TargetVerifierSupervisor, targetVerifierWireBounds, type TargetVerifierRunRequestV1 } from "./verifier-process.js";
 
@@ -122,9 +121,7 @@ interface Timer {
   cancelled: boolean;
 }
 
-const cleanGraph = (entrypoint: string): PlannerGraphV1 => ({ entrypoint, modules: [entrypoint], builtins: [], forbidden: [] });
-
-function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null = { residentBytes: 1024, descendants: 0 }, inspectGraph: ((entrypoint: string) => PlannerGraphV1) | "real" = cleanGraph) {
+function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null = { residentBytes: 1024, descendants: 0 }) {
   const timers: Timer[] = [];
   const spawned: PlannerSpawnRequestV1[] = [];
   let child: FakeVerifierChild | null = null;
@@ -145,7 +142,6 @@ function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null = { r
     sample: () => Promise.resolve(sample),
     redactor: (text: string): RedactionResult => ({ text, findings: text.includes(SECRET_MARKER) ? [{ class: "provider-token", fingerprint: "synthetic" }] : [] }),
     sampleIntervalMilliseconds: SAMPLE,
-    ...(inspectGraph === "real" ? {} : { inspectGraph }),
   });
   const fire = (milliseconds: number): void => {
     for (const timer of timers.filter((entry) => !entry.cancelled && entry.milliseconds === milliseconds)) timer.callback();
@@ -284,34 +280,19 @@ describe("target verifier supervision", () => {
   });
 });
 
-describe("the verifier's capability graph", () => {
-  it("refuses a graph with a forbidden capability or no modules before spawning", async () => {
-    for (const graph of [
-      (entrypoint: string) => ({ ...cleanGraph(entrypoint), forbidden: [{ module: entrypoint, capability: "filesystem" as const, evidence: "fs" }] }),
-      (entrypoint: string) => ({ ...cleanGraph(entrypoint), modules: [] }),
-    ]) {
-      const { supervisor, spawned } = harness(answer(echo), undefined, graph);
-      await expect(supervisor.run(run())).rejects.toThrow("forbidden capability");
-      expect(spawned).toEqual([]);
-    }
-  });
-
-  it("inspects the bundle's own verifier entrypoint by default", async () => {
-    const root = await realpath(await mkdtemp(joinPath(tmpdir(), "dos-verifier-graph-")));
+// D72 Q4-A: the repository graph gate (`tests/repository/check.ts`) is the only capability gate.
+describe("the verifier entrypoint", () => {
+  it("supervises a verifier that reads its counted request from stdin to completion", async () => {
+    const root = await realpath(await mkdtemp(joinPath(tmpdir(), "dos-verifier-stdin-")));
     try {
       await mkdir(joinPath(root, "bin"));
       const entrypoint = joinPath(root, "bin", "verifier");
+      await writeFile(entrypoint, "const chunks = [];\nfor await (const chunk of process.stdin) chunks.push(chunk);\nprocess.stdout.write(Buffer.concat(chunks));\n");
       const bound = run({ plan: plan({ release: { version: "2.0.0", bundleRoot: root } }) });
-
-      await writeFile(entrypoint, "export const verified = 1;\n");
-      const clean = harness((child) => { child.stdout.push(output(echo, bound.plan)); child.exit(0); }, undefined, "real");
-      expect(await clean.supervisor.run(bound)).toEqual({ exitCode: 0, ...echo });
-      expect(clean.spawned[0]?.args).toEqual([entrypoint]);
-
-      await writeFile(entrypoint, 'import { writeFileSync } from "node:fs";\nwriteFileSync("x", "y");\n');
-      const writer = harness(answer(echo), undefined, "real");
-      await expect(writer.supervisor.run(bound)).rejects.toBeInstanceOf(SecurityRefusalError);
-      expect(writer.spawned).toEqual([]);
+      const { supervisor, spawned, child } = harness((verifier) => { verifier.stdout.push(output(echo, bound.plan)); verifier.exit(0); });
+      expect(await supervisor.run(bound)).toEqual({ exitCode: 0, ...echo });
+      expect(spawned).toEqual([{ executable: bound.runtime, args: [entrypoint], cwd: bound.cwd, env: {} }]);
+      expect(child().reaped).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

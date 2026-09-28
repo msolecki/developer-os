@@ -13,15 +13,10 @@ import type { LowerHexSha256, PlannerWireBoundsV1, TargetVerificationPlanV1 } fr
 
 import { SecurityRefusalError } from "../paths.js";
 import type { Redactor } from "../redaction.js";
-import { inspectPlannerGraph } from "./graph.js";
-import type { PlannerGraphV1 } from "./graph.js";
 import { screenPlannerFrame } from "./planner-process.js";
 import type { PlannerChildProcessV1, TargetPlannerSupervisorDependencies } from "./planner-process.js";
 
-export interface TargetVerifierSupervisorDependencies extends TargetPlannerSupervisorDependencies {
-  /** The capability-absence gate over the verifier's compiled graph; defaults to the planner's. */
-  readonly inspectGraph?: (entrypoint: string) => PlannerGraphV1;
-}
+export type TargetVerifierSupervisorDependencies = TargetPlannerSupervisorDependencies;
 
 export interface TargetVerifierRunRequestV1 {
   /** The verified target bundle's pinned runtime executable. */
@@ -86,8 +81,9 @@ function digestsOf(value: unknown): Digests | null {
  * Spec 2 §9.3/§9.4's target verifier: exactly one process of the signed bundle's verifier under
  * the plan's fixed read-only table: the pinned runtime, the verifier entrypoint, an empty cwd, no
  * environment, the planner's input framing, and one result frame echoing the three digests. A
- * breach of any byte, count, time, RSS, descendant, secret, or capability bound kills the group
- * and refuses (exit 5; the cursor stays, so a re-run resumes the exact verifier). A clean non-zero
+ * breach of any byte, count, time, RSS, descendant, or secret bound kills the group and refuses
+ * (exit 5; the cursor stays, so a re-run resumes the exact verifier). No capability scan runs at
+ * spawn time: the repository graph gate is the only one (D72 Q4-A). A clean non-zero
  * exit, or a clean exit without a well-formed echo, is the verifier disagreeing: a rejection the
  * coordinator compensates. Digest equality itself is `runTargetVerifier`'s check.
  *
@@ -103,8 +99,6 @@ export class TargetVerifierSupervisor {
     if (!isAbsolute(run.runtime) || !isAbsolute(run.cwd)) refuse("Verifier paths must be absolute");
     if (!Number.isSafeInteger(run.remainingMilliseconds) || run.remainingMilliseconds < 1) refuse("Verifier attempt budget is exhausted");
     const verifier = `${plan.release.bundleRoot}/${plan.verifierEntrypoint}`;
-    const graph = (this.dependencies.inspectGraph ?? inspectPlannerGraph)(verifier);
-    if (graph.modules.length === 0 || graph.forbidden.length > 0) refuse("Verifier graph reaches a forbidden capability");
 
     const bounds = targetVerifierWireBounds(plan);
     const { redactor } = this.dependencies;
