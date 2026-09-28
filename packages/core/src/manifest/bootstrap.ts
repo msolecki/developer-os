@@ -28,7 +28,6 @@ import {
 import type {
   BootstrapExpectedPayloadRefV1,
   FreshV2InitIdV1,
-  ManifestMigrationIdV1,
   ManifestStatePlanV1,
 } from "./manifest-state.js";
 
@@ -40,7 +39,6 @@ const MAX_JOURNAL_BYTES = 1_048_576;
 const MAX_STAGING_ENTRIES = 1_000_000;
 const MAX_PAYLOAD_BYTES = 536_870_912;
 const MAX_PLAN_DERIVED_VALUE_BYTES = 67_108_863;
-const MAX_MIGRATION_PREIMAGE_BYTES = 67_108_864;
 const MAX_CREATED_PATHS = 1_000_000;
 const MAX_LAUNCHABILITY_PATHS = 200_006;
 const MAX_COMPENSATION_NEXT = 2_200_264;
@@ -48,7 +46,6 @@ const MAX_RETENTION_NEXT = 2_200_526;
 const UUID_V4 = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const UUID_V4_RE = new RegExp(`^${UUID_V4}$`, "u");
 const FRESH_ID_RE = new RegExp(`^fi_(${UUID_V4})$`, "u");
-const MIGRATION_ID_RE = new RegExp(`^mm_(${UUID_V4})$`, "u");
 const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" as LowerHexSha256;
 const encoder = new TextEncoder();
 
@@ -101,25 +98,6 @@ export interface BootstrapExternalShapeProjectionV1 {
   ];
 }
 
-export type BootstrapMigrationPreimageAuthorityV1 =
-  | {
-      readonly kind: "v1_manifest";
-      readonly migrationId: ManifestMigrationIdV1;
-      readonly v1ManifestHash: LowerHexSha256;
-    }
-  | {
-      readonly kind: "v1_managed_artifact";
-      readonly migrationId: ManifestMigrationIdV1;
-      readonly artifactOrdinal: number;
-      readonly installedHash: LowerHexSha256;
-    }
-  | {
-      readonly kind: "v1_backup_artifact";
-      readonly migrationId: ManifestMigrationIdV1;
-      readonly artifactOrdinal: number;
-      readonly beforeHash: LowerHexSha256;
-    };
-
 export type BootstrapPayloadSourceV1 =
   | {
       readonly kind: "guarded_package_file";
@@ -150,18 +128,6 @@ export type BootstrapPayloadSourceV1 =
       readonly projectionHash: LowerHexSha256;
     }
   | {
-      readonly kind: "guarded_migration_preimage";
-      readonly authority: BootstrapMigrationPreimageAuthorityV1;
-      readonly path: CanonicalAbsolutePathV1;
-      readonly ownerUid: number;
-      readonly mode: 0o600 | 0o700;
-      readonly nlink: 1;
-      readonly bytes: number;
-      readonly sha256: LowerHexSha256;
-      readonly dev: UInt64DecimalV1;
-      readonly ino: UInt64DecimalV1;
-    }
-  | {
       readonly kind: "constant_empty";
       readonly role: "empty_reservation";
     };
@@ -173,7 +139,7 @@ export interface BootstrapPayloadPlanV1 {
 
 export interface BootstrapPayloadEvidenceV1 {
   readonly schemaVersion: 1;
-  readonly bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly bootstrapId: FreshV2InitIdV1;
   readonly ordinal: number;
   readonly stagedPathHash: LowerHexSha256;
   readonly sourceIdentityHash: LowerHexSha256;
@@ -238,7 +204,7 @@ export type PlannedCreatedPathV1 =
 
 export interface CreatedPathEvidenceV1 {
   readonly schemaVersion: 1;
-  readonly bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly bootstrapId: FreshV2InitIdV1;
   readonly scope: "ordinary" | "launchability";
   readonly ordinal: number;
   readonly pathHash: LowerHexSha256;
@@ -263,15 +229,12 @@ export interface FoundationMutationRefV1 {
 
 export type FoundationParticipantSlotV2 =
   | "fresh_init_artifacts"
-  | "v1_migration_artifacts"
   | "owner_forward_files"
   | "owner_inverse_files"
   | "schema_forward"
   | "schema_inverse";
 
-export type FoundationTransactionIdV2 =
-  | `tx_fi_${string}_${string}_${"f" | "c"}`
-  | `tx_mm_${string}_${string}_${"f" | "c"}`;
+export type FoundationTransactionIdV2 = `tx_fi_${string}_${string}_${"f" | "c"}`;
 
 export interface FoundationParticipantRefV2 {
   readonly id: FoundationTransactionIdV2;
@@ -291,7 +254,7 @@ export interface FoundationParticipantRefV2 {
 
 interface BootstrapPlanCommonV1 {
   readonly schemaVersion: 1;
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly id: FreshV2InitIdV1;
   readonly v2ManifestHash: LowerHexSha256;
   readonly bootstrapIdentity: PersistedBootstrapLockIdentityV1;
   readonly maximumPlanBytes: number;
@@ -333,23 +296,7 @@ export interface FreshV2InitPlanV1 extends BootstrapPlanCommonV1 {
   readonly stagingRoot: CanonicalAbsolutePathV1;
 }
 
-export interface ManifestMigrationPathsV1 {
-  readonly plan: ExactProductStatePathV1;
-  readonly stagingRoot: CanonicalAbsolutePathV1;
-}
-
-export interface ManifestMigrationPlanV1 extends BootstrapPlanCommonV1 {
-  readonly operation: "v1_to_v2";
-  readonly id: ManifestMigrationIdV1;
-  readonly v1ManifestHash: LowerHexSha256;
-  readonly paths: ManifestMigrationPathsV1;
-  readonly journalSlots: readonly [
-    PersistedBootstrapJournalSlotIdentityV1,
-    PersistedBootstrapJournalSlotIdentityV1,
-  ];
-}
-
-export type BootstrapExecutionPlanV1 = FreshV2InitPlanV1 | ManifestMigrationPlanV1;
+export type BootstrapExecutionPlanV1 = FreshV2InitPlanV1;
 
 export type BootstrapJournalPhaseV1 =
   | "planned"
@@ -372,7 +319,7 @@ export interface BootstrapRetentionTerminalPreimageV1 {
 
 interface BootstrapJournalCommonV1 {
   readonly schemaVersion: 1;
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly id: FreshV2InitIdV1;
   readonly planHash: LowerHexSha256;
   readonly slot: 0 | 1;
   readonly sequence: UInt64DecimalV1;
@@ -398,17 +345,13 @@ export interface FreshV2InitJournalV1 extends BootstrapJournalCommonV1 {
   readonly id: FreshV2InitIdV1;
 }
 
-export interface ManifestMigrationJournalV1 extends BootstrapJournalCommonV1 {
-  readonly id: ManifestMigrationIdV1;
-}
-
 export interface BootstrapPlanAdmissionContextV1 {
   readonly evidence: CanonicalPathEvidenceV1;
   readonly productHome: CanonicalAbsolutePathV1;
   readonly stateRoot: CanonicalAbsolutePathV1;
   readonly productStagingRoot: CanonicalAbsolutePathV1;
-  readonly operation: "fresh_v2_init" | "v1_to_v2";
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly operation: "fresh_v2_init";
+  readonly id: FreshV2InitIdV1;
   readonly bootstrapIdentity: PersistedBootstrapLockIdentityV1;
   readonly externalShape: BootstrapExternalShapeProjectionV1 | null;
   /**
@@ -542,17 +485,9 @@ function validateUuid(value: unknown): string {
   return value;
 }
 
-function operationId(
-  operation: "fresh_v2_init" | "v1_to_v2",
-  value: unknown,
-): FreshV2InitIdV1 | ManifestMigrationIdV1 {
-  if (typeof value !== "string") return refuse();
-  if (operation === "fresh_v2_init") {
-    if (FRESH_ID_RE.exec(value) === null) return refuse();
-    return value as FreshV2InitIdV1;
-  }
-  if (MIGRATION_ID_RE.exec(value) === null) return refuse();
-  return value as ManifestMigrationIdV1;
+function operationId(value: unknown): FreshV2InitIdV1 {
+  if (typeof value !== "string" || FRESH_ID_RE.exec(value) === null) return refuse();
+  return value as FreshV2InitIdV1;
 }
 
 function deriveAbsolute(productHome: CanonicalAbsolutePathV1, relative: string): CanonicalAbsolutePathV1 {
@@ -569,15 +504,15 @@ export function validateBootstrapFoundationOrdinal(value: unknown):
 
 export function deriveBootstrapEnvelopePaths(
   productHome: CanonicalAbsolutePathV1,
-  operation: "fresh_v2_init" | "v1_to_v2",
-  id: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  operation: "fresh_v2_init",
+  id: FreshV2InitIdV1,
 ): {
   readonly plan: ExactProductStatePathV1;
   readonly journalSlots: readonly [ExactProductStatePathV1, ExactProductStatePathV1];
   readonly stagingRoot: CanonicalAbsolutePathV1;
 } {
-  const admittedId = operationId(operation, id);
-  const prefix = operation === "fresh_v2_init" ? "fresh-v2-init" : "manifest-migration";
+  const admittedId = operationId(id);
+  const prefix = "fresh-v2-init";
   return {
     plan: deriveAbsolute(productHome, `state/${prefix}.${admittedId}.plan.json`) as ExactProductStatePathV1,
     journalSlots: [0, 1].map((slot) =>
@@ -599,16 +534,16 @@ export function deriveBootstrapPayloadEvidencePaths(
 
 export function deriveBootstrapCreationEvidencePaths(
   productHome: CanonicalAbsolutePathV1,
-  operation: "fresh_v2_init" | "v1_to_v2",
-  id: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  operation: "fresh_v2_init",
+  id: FreshV2InitIdV1,
   scope: "ordinary" | "launchability",
   ordinal: number,
   temporaryUuid: string,
 ): { readonly evidence: CanonicalAbsolutePathV1; readonly temporary: CanonicalAbsolutePathV1 } {
-  const admittedId = operationId(operation, id);
+  const admittedId = operationId(id);
   integer(ordinal, 0, MAX_BOOTSTRAP_ORDINAL);
   validateUuid(temporaryUuid);
-  const prefix = operation === "fresh_v2_init" ? "fresh-v2-init" : "manifest-migration";
+  const prefix = "fresh-v2-init";
   const evidence = deriveAbsolute(
     productHome,
     `state/.${prefix}.${admittedId}.${scope}.${String(ordinal).padStart(10, "0")}.creation.json`,
@@ -719,7 +654,7 @@ export function validateBootstrapPayloadEvidence(
 export function validateCreatedPathEvidence(
   value: unknown,
   planned: PlannedCreatedPathV1,
-  bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  bootstrapId: FreshV2InitIdV1,
   scope: "ordinary" | "launchability",
   ordinal: number,
 ): CreatedPathEvidenceV1 {
@@ -923,7 +858,7 @@ function validateJournalTable(
 export function validateBootstrapJournal(
   plan: BootstrapExecutionPlanV1,
   value: unknown,
-): FreshV2InitJournalV1 | ManifestMigrationJournalV1 {
+): FreshV2InitJournalV1 {
   try {
     const input = record(value);
     const retentionPhase = input.phase === "retaining" || input.phase === "retained";
@@ -1006,7 +941,7 @@ export function validateBootstrapJournal(
     validateJournalTable(journal, { payloads: plan.payloads.length, created: plan.createdPaths.length, foundation: forwardCount, launchability: plan.launchabilityPaths.length });
     if (sequence === "0" && journal.phase !== "planned") return refuse();
     if (encoder.encode(encodeCanonicalJson(journal as unknown as CanonicalJsonValue)).byteLength > plan.maximumJournalBytes) return refuse();
-    return structuredClone(journal) as FreshV2InitJournalV1 | ManifestMigrationJournalV1;
+    return structuredClone(journal);
   } catch (error) {
     return normalizeFailure(error);
   }
@@ -1082,8 +1017,8 @@ function validateJournalSlots(
 
 function validatePayloadRef(
   value: unknown,
-  operation: "fresh_v2_init" | "v1_to_v2",
-  id: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  operation: "fresh_v2_init",
+  id: FreshV2InitIdV1,
   productHome: CanonicalAbsolutePathV1,
 ): BootstrapExpectedPayloadRefV1 {
   const input = record(value);
@@ -1101,40 +1036,6 @@ function validatePayloadRef(
     bytes: integer(input.bytes, 0, MAX_PAYLOAD_BYTES),
     mode: input.mode,
   };
-}
-
-function validateMigrationAuthority(
-  value: unknown,
-  migrationId: ManifestMigrationIdV1,
-  v1ManifestHash: LowerHexSha256,
-): BootstrapMigrationPreimageAuthorityV1 {
-  const input = record(value);
-  if (input.kind === "v1_manifest") {
-    exact(input, ["kind", "migrationId", "v1ManifestHash"]);
-    if (input.migrationId !== migrationId || input.v1ManifestHash !== v1ManifestHash) return refuse();
-    return { kind: "v1_manifest", migrationId, v1ManifestHash };
-  }
-  if (input.kind === "v1_managed_artifact") {
-    exact(input, ["artifactOrdinal", "installedHash", "kind", "migrationId"]);
-    if (input.migrationId !== migrationId) return refuse();
-    return {
-      kind: "v1_managed_artifact",
-      migrationId,
-      artifactOrdinal: integer(input.artifactOrdinal, 0, MAX_BOOTSTRAP_ORDINAL),
-      installedHash: sha256(input.installedHash),
-    };
-  }
-  if (input.kind === "v1_backup_artifact") {
-    exact(input, ["artifactOrdinal", "beforeHash", "kind", "migrationId"]);
-    if (input.migrationId !== migrationId) return refuse();
-    return {
-      kind: "v1_backup_artifact",
-      migrationId,
-      artifactOrdinal: integer(input.artifactOrdinal, 0, MAX_BOOTSTRAP_ORDINAL),
-      beforeHash: sha256(input.beforeHash),
-    };
-  }
-  return refuse();
 }
 
 function validateFoundationJournalValue(
@@ -1240,7 +1141,6 @@ function foundationJournalUnbound(value: CanonicalJsonValue): {
 function validatePlanDerivedSource(
   input: Record<string, unknown>,
   ref: BootstrapExpectedPayloadRefV1,
-  operation: "fresh_v2_init" | "v1_to_v2",
   context: BootstrapPlanAdmissionContextV1,
 ): Extract<BootstrapPayloadSourceV1, { readonly kind: "plan_derived" }> {
   exact(input, ["kind", "projectionHash", "role", "value", "valueBytes"]);
@@ -1250,7 +1150,6 @@ function validatePlanDerivedSource(
   let value = input.value as CanonicalJsonValue;
   let payloadBytes: Uint8Array;
   if (role === "foundation_config") {
-    if (operation !== "fresh_v2_init") return refuse();
     try {
       payloadBytes = encoder.encode(serializeConfig(value as unknown as DeveloperOsConfigV1));
     } catch {
@@ -1298,7 +1197,6 @@ function validatePlanDerivedSource(
 function validateRequiredPlanDerivedSources(
   payloads: readonly BootstrapPayloadPlanV1[],
   foundationParticipants: readonly FoundationParticipantRefV2[],
-  operation: "fresh_v2_init" | "v1_to_v2",
   productHome: CanonicalAbsolutePathV1,
 ): void {
   const sources = payloads
@@ -1316,7 +1214,7 @@ function validateRequiredPlanDerivedSources(
     count("active_release") !== 1 ||
     count("release_trust") !== 1 ||
     count("foundation_initial_journal") !== foundationParticipants.length ||
-    count("foundation_config") !== (operation === "fresh_v2_init" ? 1 : 0) ||
+    count("foundation_config") !== 1 ||
     count("foundation_staged_digest") !== foundationParticipants.reduce(
       (total, participant) =>
         total + participant.mutations.filter((mutation) => mutation.operation !== "remove").length,
@@ -1352,23 +1250,20 @@ function validateRequiredPlanDerivedSources(
         digest.source.role !== "foundation_staged_digest" ||
         digest.source.value !== mutation.contentHash
       ) return refuse();
-      if (operation === "fresh_v2_init") {
-        const isConfig = mutation.targetPath === `${productHome}/config.toml`;
-        if (isConfig) configMutations += 1;
-        if (
-          (isConfig && (content.source.kind !== "plan_derived" || content.source.role !== "foundation_config")) ||
-          (!isConfig && content.source.kind !== "guarded_package_file")
-        ) return refuse();
-      } else if (content.source.kind !== "guarded_migration_preimage") return refuse();
+      const isConfig = mutation.targetPath === `${productHome}/config.toml`;
+      if (isConfig) configMutations += 1;
+      if (
+        (isConfig && (content.source.kind !== "plan_derived" || content.source.role !== "foundation_config")) ||
+        (!isConfig && content.source.kind !== "guarded_package_file")
+      ) return refuse();
     }
   }
-  if (operation === "fresh_v2_init" && configMutations !== 1) return refuse();
+  if (configMutations !== 1) return refuse();
 }
 
 function validatePayloadSource(
   value: unknown,
   ref: BootstrapExpectedPayloadRefV1,
-  plan: { readonly operation: "fresh_v2_init" | "v1_to_v2"; readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1; readonly v1ManifestHash?: LowerHexSha256 },
   context: BootstrapPlanAdmissionContextV1,
 ): BootstrapPayloadSourceV1 {
   const input = record(value);
@@ -1395,26 +1290,7 @@ function validatePayloadSource(
       sourceIno: uint64(input.sourceIno),
     };
   } else if (input.kind === "plan_derived") {
-    source = validatePlanDerivedSource(input, ref, plan.operation, context);
-  } else if (input.kind === "guarded_migration_preimage") {
-    exact(input, ["authority", "bytes", "dev", "ino", "kind", "mode", "nlink", "ownerUid", "path", "sha256"]);
-    if (plan.operation !== "v1_to_v2" || plan.v1ManifestHash === undefined || input.nlink !== 1) return refuse();
-    const bytes = integer(input.bytes, 0, MAX_MIGRATION_PREIMAGE_BYTES);
-    const contentHash = sha256(input.sha256);
-    const mode = input.mode === 0o600 || input.mode === 0o700 ? input.mode : refuse();
-    if (bytes !== ref.bytes || contentHash !== ref.hash || mode !== ref.mode) return refuse();
-    source = {
-      kind: "guarded_migration_preimage",
-      authority: validateMigrationAuthority(input.authority, plan.id as ManifestMigrationIdV1, plan.v1ManifestHash),
-      path: admitCanonicalAbsolutePath(input.path, context.evidence),
-      ownerUid: uid(input.ownerUid),
-      mode,
-      nlink: 1,
-      bytes,
-      sha256: contentHash,
-      dev: uint64(input.dev),
-      ino: uint64(input.ino),
-    };
+    source = validatePlanDerivedSource(input, ref, context);
   } else if (input.kind === "constant_empty") {
     exact(input, ["kind", "role"]);
     if (input.role !== "empty_reservation" || ref.bytes !== 0 || ref.hash !== EMPTY_SHA256) return refuse();
@@ -1457,8 +1333,8 @@ function validateCreatedPath(
   scope: "ordinary" | "launchability",
   ordinal: number,
   context: BootstrapPlanAdmissionContextV1,
-  bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1,
-  operation: "fresh_v2_init" | "v1_to_v2",
+  bootstrapId: FreshV2InitIdV1,
+  operation: "fresh_v2_init",
 ): PlannedCreatedPathV1 {
   const input = record(value);
   let planned: PlannedCreatedPathV1;
@@ -1509,8 +1385,8 @@ function validateParentOrder(
 
 function validateMutation(
   value: unknown,
-  operation: "fresh_v2_init" | "v1_to_v2",
-  bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  operation: "fresh_v2_init",
+  bootstrapId: FreshV2InitIdV1,
   context: BootstrapPlanAdmissionContextV1,
 ): FoundationMutationRefV1 {
   const input = record(value);
@@ -1541,14 +1417,14 @@ function validateMutation(
 
 function validateFoundationParticipant(
   value: unknown,
-  operation: "fresh_v2_init" | "v1_to_v2",
-  id: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  operation: "fresh_v2_init",
+  id: FreshV2InitIdV1,
   context: BootstrapPlanAdmissionContextV1,
 ): FoundationParticipantRefV2 {
   const input = record(value);
   exact(input, ["id", "initialJournal", "maximumJournalBytes", "mutations", "planHash", "role", "slot"]);
   if (typeof input.id !== "string" || !Array.isArray(input.mutations) || input.mutations.length < 1 || input.mutations.length > 256) return refuse();
-  const expectedSlot = operation === "fresh_v2_init" ? "fresh_init_artifacts" : "v1_migration_artifacts";
+  const expectedSlot = "fresh_init_artifacts";
   if (input.slot !== expectedSlot) return refuse();
   const roleInput = record(input.role);
   let role: FoundationParticipantRefV2["role"];
@@ -1597,14 +1473,14 @@ function validateFoundationParticipant(
 
 function validateFoundationPairs(
   refs: readonly FoundationParticipantRefV2[],
-  operation: "fresh_v2_init" | "v1_to_v2",
-  id: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  operation: "fresh_v2_init",
+  id: FreshV2InitIdV1,
 ): void {
   if (refs.length < 2 || refs.length > MAX_FOUNDATION_PARTICIPANTS || refs.length % 2 !== 0) return refuse();
   for (let index = 1; index < refs.length; index += 1) {
     if (compareUtf8((refs[index - 1] as FoundationParticipantRefV2).id, (refs[index] as FoundationParticipantRefV2).id) >= 0) return refuse();
   }
-  const prefix = operation === "fresh_v2_init" ? "tx_fi" : "tx_mm";
+  const prefix = "tx_fi";
   const uuid = String(id).slice(3);
   const forwardRefs = refs.filter((ref) => ref.role.kind === "forward");
   if (forwardRefs.length < 1 || forwardRefs.length > MAX_FOUNDATION_FORWARD_PARTICIPANTS || forwardRefs.length * 2 !== refs.length) return refuse();
@@ -1649,8 +1525,8 @@ function foundationBindingHash(ids: readonly string[]): LowerHexSha256 {
 
 function validateManifestBinding(
   value: ManifestStatePlanV1,
-  operation: "fresh_v2_init" | "v1_to_v2",
-  id: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  operation: "fresh_v2_init",
+  id: FreshV2InitIdV1,
   v2ManifestHash: LowerHexSha256,
   refs: readonly FoundationParticipantRefV2[],
   context: BootstrapPlanAdmissionContextV1,
@@ -1658,7 +1534,7 @@ function validateManifestBinding(
   const retainedValue = admitEqualValue(value, (candidate) =>
     context.admitManifestParticipant(candidate),
   );
-  const expectedKind = operation === "fresh_v2_init" ? "fresh_v2_init" : "v1_migration";
+  const expectedKind = "fresh_v2_init";
   if (retainedValue.participantId !== `mf_${id}` || retainedValue.envelope.kind !== expectedKind || retainedValue.envelope.id !== id || retainedValue.bindings.externalEffects.length !== 0 || retainedValue.after.state !== "present" || retainedValue.after.hash !== v2ManifestHash || retainedValue.after.bytes?.kind !== "bootstrap_expected" || retainedValue.after.bytes.bootstrapId !== id || retainedValue.after.bytes.hash !== v2ManifestHash) return refuse();
   const forwardIds = refs.filter((ref) => ref.role.kind === "forward").map((ref) => ref.id);
   if (retainedValue.bindings.foundationTransactions.count !== forwardIds.length || retainedValue.bindings.foundationTransactions.orderedIdsHash !== foundationBindingHash(forwardIds)) return refuse();
@@ -1765,42 +1641,32 @@ export function validateBootstrapPlan(
 ): BootstrapExecutionPlanV1 {
   try {
     const input = record(value);
-    if (input.operation !== "fresh_v2_init" && input.operation !== "v1_to_v2") return refuse();
+    if (input.operation !== "fresh_v2_init") return refuse();
     const operation = input.operation;
-    const freshKeys = ["admittedExternalShapeHash", "admittedPreexistingPaths", "bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "payloads", "planPath", "schemaVersion", "stagingRoot", "v2ManifestHash"];
-    const migrationKeys = ["bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "paths", "payloads", "schemaVersion", "v1ManifestHash", "v2ManifestHash"];
-    exact(input, operation === "fresh_v2_init" ? freshKeys : migrationKeys);
-    if (input.schemaVersion !== 1 || context.operation !== operation) return refuse();
-    const id = operationId(operation, input.id);
+    exact(input, ["admittedExternalShapeHash", "admittedPreexistingPaths", "bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "payloads", "planPath", "schemaVersion", "stagingRoot", "v2ManifestHash"]);
+    if (input.schemaVersion !== 1) return refuse();
+    const id = operationId(input.id);
     if (id !== context.id) return refuse();
     if (admitCanonicalAbsolutePath(context.productHome, context.evidence) !== context.productHome || context.stateRoot !== `${context.productHome}/state` || context.productStagingRoot !== `${context.productHome}/staging`) return refuse();
     const bootstrapIdentity = validateBootstrapIdentity(input.bootstrapIdentity, context);
     const paths = deriveBootstrapEnvelopePaths(context.productHome, operation, id);
     const journalSlots = validateJournalSlots(input.journalSlots, paths.journalSlots, context);
-    let admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[] = [];
-    if (operation === "fresh_v2_init") {
-      if (input.planPath !== paths.plan || input.stagingRoot !== paths.stagingRoot) return refuse();
-      admittedPreexistingPaths = boundedPaths(input.admittedPreexistingPaths, context);
-      if (context.externalShape === null) {
-        const hash = sha256(input.admittedExternalShapeHash);
-        if (
-          context.admitFreshRecoveryExternalShape?.(
-            hash,
-            retainedClone(bootstrapIdentity),
-          ) !== hash
-        ) return refuse();
-      } else {
-        const external = validateBootstrapExternalShapeProjection(context.externalShape);
-        const [home, state, lock] = external.entries;
-        if (home.pathHash !== rawHash(context.productHome) || state.pathHash !== rawHash(context.stateRoot) || lock.pathHash !== rawHash(bootstrapIdentity.path) || home.ownerUid !== bootstrapIdentity.ownerUid || state.ownerUid !== bootstrapIdentity.ownerUid || lock.ownerUid !== bootstrapIdentity.ownerUid || lock.dev !== bootstrapIdentity.dev || lock.ino !== bootstrapIdentity.ino || input.admittedExternalShapeHash !== bootstrapExternalShapeHash(external)) return refuse();
-      }
+    if (input.planPath !== paths.plan || input.stagingRoot !== paths.stagingRoot) return refuse();
+    const admittedPreexistingPaths = boundedPaths(input.admittedPreexistingPaths, context);
+    if (context.externalShape === null) {
+      const hash = sha256(input.admittedExternalShapeHash);
+      if (
+        context.admitFreshRecoveryExternalShape?.(
+          hash,
+          retainedClone(bootstrapIdentity),
+        ) !== hash
+      ) return refuse();
     } else {
-      const migrationPaths = record(input.paths);
-      exact(migrationPaths, ["plan", "stagingRoot"]);
-      if (migrationPaths.plan !== paths.plan || migrationPaths.stagingRoot !== paths.stagingRoot || context.externalShape !== null) return refuse();
+      const external = validateBootstrapExternalShapeProjection(context.externalShape);
+      const [home, state, lock] = external.entries;
+      if (home.pathHash !== rawHash(context.productHome) || state.pathHash !== rawHash(context.stateRoot) || lock.pathHash !== rawHash(bootstrapIdentity.path) || home.ownerUid !== bootstrapIdentity.ownerUid || state.ownerUid !== bootstrapIdentity.ownerUid || lock.ownerUid !== bootstrapIdentity.ownerUid || lock.dev !== bootstrapIdentity.dev || lock.ino !== bootstrapIdentity.ino || input.admittedExternalShapeHash !== bootstrapExternalShapeHash(external)) return refuse();
     }
     if (input.maximumPlanBytes !== MAX_PLAN_BYTES || input.maximumJournalBytes !== MAX_JOURNAL_BYTES) return refuse();
-    const v1ManifestHash = operation === "v1_to_v2" ? sha256(input.v1ManifestHash) : undefined;
     const v2ManifestHash = sha256(input.v2ManifestHash);
     if (!Array.isArray(input.payloads) || input.payloads.length < 1 || input.payloads.length > MAX_STAGING_ENTRIES) return refuse();
     const payloads = input.payloads.map((candidate, ordinal): BootstrapPayloadPlanV1 => {
@@ -1808,7 +1674,7 @@ export function validateBootstrapPlan(
       exact(row, ["ref", "source"]);
       const ref = validatePayloadRef(row.ref, operation, id, context.productHome);
       if (ref.ordinal !== ordinal) return refuse();
-      const source = validatePayloadSource(row.source, ref, { operation, id, ...(v1ManifestHash === undefined ? {} : { v1ManifestHash }) }, context);
+      const source = validatePayloadSource(row.source, ref, context);
       return { ref, source };
     });
     if (new Set(payloads.map((row) => row.ref.path)).size !== payloads.length) return refuse();
@@ -1822,7 +1688,7 @@ export function validateBootstrapPlan(
      * ordinal-zero global-lock transition applies only when it was absent.
      */
     const lockPath = `${context.stateRoot}/.lifecycle.lock`;
-    const admitsLock = operation === "fresh_v2_init" && admittedPreexistingPaths.includes(lockPath as CanonicalAbsolutePathV1);
+    const admitsLock = admittedPreexistingPaths.includes(lockPath as CanonicalAbsolutePathV1);
     const lockRows = [...createdPaths, ...launchabilityPaths].filter((row) => row.kind === "global_lock" || row.path === lockPath);
     if (admitsLock ? lockRows.length !== 0 : createdPaths[0]?.kind !== "global_lock" || createdPaths[0].path !== lockPath || lockRows.length !== 1) return refuse();
     if (new Set([...createdPaths, ...launchabilityPaths].map((row) => row.path)).size !== createdPaths.length + launchabilityPaths.length) return refuse();
@@ -1830,7 +1696,7 @@ export function validateBootstrapPlan(
     if (!Array.isArray(input.foundationParticipants)) return refuse();
     const foundationParticipants = input.foundationParticipants.map((candidate) => validateFoundationParticipant(candidate, operation, id, context));
     validateFoundationPairs(foundationParticipants, operation, id);
-    validateRequiredPlanDerivedSources(payloads, foundationParticipants, operation, context.productHome);
+    validateRequiredPlanDerivedSources(payloads, foundationParticipants, context.productHome);
     validateInitialJournals(foundationParticipants, payloads);
     validateFoundationStaging(foundationParticipants, createdPaths, payloads, context.productHome);
     const manifest = validateManifestBinding(input.manifest as ManifestStatePlanV1, operation, id, v2ManifestHash, foundationParticipants, context);
@@ -1838,9 +1704,7 @@ export function validateBootstrapPlan(
     const aggregate = stagingAggregate(payloads.length, createdPaths.length, launchabilityPaths.length, foundationParticipants.length);
     if (aggregate > MAX_STAGING_ENTRIES || input.maximumStagingEntries !== aggregate) return refuse();
     const common = { schemaVersion: 1 as const, id, v2ManifestHash, bootstrapIdentity, maximumPlanBytes: MAX_PLAN_BYTES, maximumJournalBytes: MAX_JOURNAL_BYTES, maximumStagingEntries: aggregate, payloads, createdPaths, foundationParticipants, launchabilityPaths, manifest };
-    const plan: BootstrapExecutionPlanV1 = operation === "fresh_v2_init"
-      ? { ...common, operation, id: id as FreshV2InitIdV1, admittedExternalShapeHash: sha256(input.admittedExternalShapeHash), admittedPreexistingPaths, planPath: paths.plan, journalSlots, stagingRoot: paths.stagingRoot }
-      : { ...common, operation, id: id as ManifestMigrationIdV1, v1ManifestHash: v1ManifestHash as LowerHexSha256, paths: { plan: paths.plan, stagingRoot: paths.stagingRoot }, journalSlots };
+    const plan: BootstrapExecutionPlanV1 = { ...common, operation, id, admittedExternalShapeHash: sha256(input.admittedExternalShapeHash), admittedPreexistingPaths, planPath: paths.plan, journalSlots, stagingRoot: paths.stagingRoot };
     if (encoder.encode(encodeCanonicalJson(plan as unknown as CanonicalJsonValue)).byteLength > MAX_PLAN_BYTES) return refuse();
     return structuredClone(plan);
   } catch (error) {

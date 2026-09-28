@@ -17,11 +17,10 @@ import type {
   BootstrapRetentionTerminalPreimageV1,
   CreatedPathEvidenceV1,
   FreshV2InitPlanV1,
-  ManifestMigrationPlanV1,
   PlannedCreatedPathV1,
 } from "./bootstrap.js";
 import { BootstrapStateError, validateBootstrapPayloadEvidence } from "./bootstrap.js";
-import type { FreshV2InitIdV1, ManifestMigrationIdV1 } from "./manifest-state.js";
+import type { FreshV2InitIdV1 } from "./manifest-state.js";
 
 export const BOOTSTRAP_RETAINED_MAX_IDS = 256;
 export const BOOTSTRAP_RETAINED_MAX_ENTRIES = 1_000_000;
@@ -46,13 +45,7 @@ export interface BootstrapJournalSlotIdentityV1 {
   readonly ino: UInt64DecimalV1;
 }
 
-type FreshV2InitRetainedPlanV1 = FreshV2InitPlanV1;
-
-type ManifestMigrationRetainedPlanV1 = ManifestMigrationPlanV1;
-
-export type BootstrapRetainedExecutionPlanV1 =
-  | FreshV2InitRetainedPlanV1
-  | ManifestMigrationRetainedPlanV1;
+export type BootstrapRetainedExecutionPlanV1 = FreshV2InitPlanV1;
 
 export type BootstrapRetainedJournalPhaseV1 =
   | "planned"
@@ -70,7 +63,7 @@ export type BootstrapRetainedJournalPhaseV1 =
 
 export interface BootstrapJournalRecordV1 {
   readonly schemaVersion: 1;
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly id: FreshV2InitIdV1;
   readonly planHash: LowerHexSha256;
   readonly slot: 0 | 1;
   readonly sequence: UInt64DecimalV1;
@@ -197,7 +190,7 @@ export interface BootstrapRetentionDirectoryTreeEvidenceV1 {
 }
 
 export interface BootstrapRetentionEvidenceProjectionV1 {
-  readonly bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly bootstrapId: FreshV2InitIdV1;
   /** Present only once retention starts; fixes the plan-derived retention prefix. */
   readonly terminalJournal: BootstrapJournalRecordV1 | null;
   /** Admitted persisted payload values and evidence-file identities; this pure projection does not widen bootstrap codecs. */
@@ -239,7 +232,7 @@ export interface BootstrapRetentionLocationV1 {
 
 export interface BootstrapRetentionEntryV1 {
   readonly schemaVersion: 1;
-  readonly bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly bootstrapId: FreshV2InitIdV1;
   readonly ordinal: number;
   readonly role: BootstrapRetentionRoleV1;
   readonly sourcePath: CanonicalAbsolutePathV1;
@@ -254,9 +247,9 @@ export interface BootstrapJournalSelectionV1 {
 }
 
 export interface BootstrapEvidenceSummaryV1 {
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly id: FreshV2InitIdV1;
   readonly status: "verified" | "incomplete" | "altered" | "unverified";
-  readonly operation: "fresh_v2_init" | "v1_to_v2";
+  readonly operation: "fresh_v2_init";
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   readonly vaultPath: CanonicalAbsolutePathV1;
   readonly entryCount: number;
@@ -268,9 +261,9 @@ export interface SameParentRenameNoReplaceV1 {
 }
 
 export interface BootstrapEvidenceClassificationInputV1 {
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly id: FreshV2InitIdV1;
   readonly planPath: CanonicalAbsolutePathV1;
-  readonly operation: "fresh_v2_init" | "v1_to_v2";
+  readonly operation: "fresh_v2_init";
   readonly journal: BootstrapJournalSelectionV1 | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   /**
@@ -1004,12 +997,11 @@ function validatePostimage(
 }
 
 function planRoot(plan: BootstrapRetainedExecutionPlanV1): CanonicalAbsolutePathV1 {
-  const planPath = plan.operation === "fresh_v2_init" ? plan.planPath : plan.paths.plan;
-  return dirname(dirname(planPath)) as CanonicalAbsolutePathV1;
+  return dirname(dirname(plan.planPath)) as CanonicalAbsolutePathV1;
 }
 
 function stagingRoot(plan: BootstrapRetainedExecutionPlanV1): CanonicalAbsolutePathV1 {
-  return plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+  return plan.stagingRoot;
 }
 
 function creationEvidencePath(
@@ -1017,8 +1009,7 @@ function creationEvidencePath(
   scope: "ordinary" | "launchability",
   ordinal: number,
 ): CanonicalAbsolutePathV1 {
-  const prefix = plan.operation === "fresh_v2_init" ? "fresh-v2-init" : "manifest-migration";
-  return `${planRoot(plan)}/state/.${prefix}.${plan.id}.${scope}.${String(ordinal).padStart(10, "0")}.creation.json` as CanonicalAbsolutePathV1;
+  return `${planRoot(plan)}/state/.fresh-v2-init.${plan.id}.${scope}.${String(ordinal).padStart(10, "0")}.creation.json` as CanonicalAbsolutePathV1;
 }
 
 interface Authority {
@@ -1160,7 +1151,7 @@ function manifestPayloadOrdinal(plan: BootstrapRetainedExecutionPlanV1): number 
 }
 
 function forbiddenCompensationTargets(plan: BootstrapRetainedExecutionPlanV1): ReadonlySet<CanonicalAbsolutePathV1> {
-  const planPath = plan.operation === "fresh_v2_init" ? plan.planPath : plan.paths.plan;
+  const planPath = plan.planPath;
   return new Set([
     plan.bootstrapIdentity.path,
     plan.manifest.manifestPath,
@@ -1257,10 +1248,7 @@ function authorities(
   const stagingOrdinal = plan.createdPaths.findIndex((planned) =>
     planned.kind === "directory" && planned.path === retainedStagingRoot,
   );
-  if (
-    plan.operation !== "fresh_v2_init" ||
-    (stagingOrdinal >= 0 && stagingOrdinal < journal.nextCreatedPath)
-  ) {
+  if (stagingOrdinal >= 0 && stagingOrdinal < journal.nextCreatedPath) {
     const planned = stagingOrdinal < 0 ? undefined : plan.createdPaths[stagingOrdinal];
     result.push({
       role: "staging_subtree",

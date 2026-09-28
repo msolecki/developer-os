@@ -359,12 +359,10 @@ export function admitBootstrapEvidencePlan(
     record(candidate.bootstrapIdentity)?.path !== join(input.stateDirectory, ".lifecycle-bootstrap.lock")
   ) throw new Error("persisted bootstrap plan failed bounded structural admission");
   const freshCandidate = candidate as unknown as FreshV2InitPlanV1;
-  const admitted = validateBootstrapPlan(
+  return validateBootstrapPlan(
     freshCandidate,
     planAdmission(freshCandidate, input.productHome, input.stateDirectory),
   );
-  if (admitted.operation !== "fresh_v2_init") throw new Error("persisted bootstrap plan changed operation");
-  return admitted;
 }
 
 function terminalJournal(current: BootstrapJournalRecordV1): BootstrapJournalRecordV1 | null {
@@ -854,7 +852,7 @@ async function readBootstrapEnvelope(
   let plan: FreshV2InitPlanV1;
   try {
     const value = decodeCanonicalJson(await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES), MAX_PLAN_BYTES);
-    plan = request.validatePlan(value) as FreshV2InitPlanV1;
+    plan = request.validatePlan(value);
     if (plan.id !== id || plan.planPath !== planEntry.path) throw new Error("bootstrap plan identity is unbound");
   } catch {
     return { state: "plan_unverified", id };

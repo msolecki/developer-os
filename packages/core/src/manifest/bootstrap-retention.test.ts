@@ -369,7 +369,7 @@ function validatorAdmittedPlanFixture(): {
     admitManifestParticipant: () => structuredClone(manifest),
     admitPlanDerivedValue: (_role, value) => structuredClone(value),
   };
-  const admittedPersistedPlan = validateBootstrapPlan(persistedPlan, admissionContext) as FreshV2InitPlanV1;
+  const admittedPersistedPlan = validateBootstrapPlan(persistedPlan, admissionContext);
   return {
     persistedPlan,
     admittedPersistedPlan,
@@ -863,7 +863,7 @@ describe("retained bootstrap journal chains", () => {
 
   it("refuses a retaining rollback journal with a different reached prefix from its terminal journal", () => {
     const base = admittedEvidence();
-    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const stagingRoot = plan.stagingRoot;
     const ordinaryCreationEvidence = base.rows.find((row) =>
       row.role === "creation_evidence" && row.sourcePath.includes(".ordinary."),
     );
@@ -1133,12 +1133,11 @@ function admittedEvidence(
     terminalOutcome: "finalized",
   }),
 ): BootstrapRetentionEvidenceProjectionV1 {
-  const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+  const stagingRoot = plan.stagingRoot;
   const stagingOrdinal = plan.createdPaths.findIndex((planned) =>
     planned.kind === "directory" && planned.path === stagingRoot,
   );
-  const stagingReached = plan.operation !== "fresh_v2_init" ||
-    (stagingOrdinal >= 0 && stagingOrdinal < terminalJournal.nextCreatedPath);
+  const stagingReached = stagingOrdinal >= 0 && stagingOrdinal < terminalJournal.nextCreatedPath;
   const directoryTrees: BootstrapRetentionEvidenceProjectionV1["directoryTrees"][number][] = [];
   const rows: BootstrapRetentionEvidenceProjectionV1["rows"][number][] = [];
   const payloadEvidence: Array<{
@@ -1611,7 +1610,7 @@ describe("retained bootstrap table derivation", () => {
 
   it("admits an exact empty staging subtree while retaining its root row at a zero descendant cap", () => {
     const evidence = admittedEvidence();
-    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const stagingRoot = plan.stagingRoot;
     const entries = [] as const;
     const admittedStaging = evidence.rows.find((row) => row.sourcePath === stagingRoot)?.postimage;
     if (admittedStaging?.kind !== "directory_tree") throw new Error("fixture requires admitted staging root");
@@ -1764,7 +1763,7 @@ describe("retained bootstrap table derivation", () => {
 
   it("requires an exact directory descendant bijection and the plan-bound staging cap", () => {
     const evidence = admittedEvidence();
-    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const stagingRoot = plan.stagingRoot;
     const admittedTree = evidence.directoryTrees.find((candidate) => candidate.rootPath === stagingRoot);
     if (admittedTree === undefined) throw new Error("fixture requires staging-tree evidence");
     const rows = evidence.rows.map((row) => row.sourcePath === stagingRoot
@@ -2081,7 +2080,7 @@ describe("retained bootstrap table derivation", () => {
 
   it("refuses an unadmitted descendant instead of silently collapsing it", () => {
     const evidence = admittedEvidence();
-    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const stagingRoot = plan.stagingRoot;
     const rows = [...evidence.rows, {
       role: "staging_subtree" as const, sourcePath: path(`${stagingRoot}/attempt/nested`),
       parent: parent(`${stagingRoot}/attempt`, "34"), postimage: tree("35"),
@@ -2093,7 +2092,7 @@ describe("retained bootstrap table derivation", () => {
     "derives a staging directory's %s from its complete descendant projection",
     (field) => {
       const evidence = admittedEvidence();
-      const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+      const stagingRoot = plan.stagingRoot;
       const entries = [
         {
           relativePath: "attempt",
@@ -2166,7 +2165,7 @@ describe("retained bootstrap table derivation", () => {
      * is refused there regardless of whether it has a row.
      */
     const evidence = admittedEvidence();
-    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const stagingRoot = plan.stagingRoot;
     const entries = [{
       relativePath: "seed.txt",
       kind: "regular_file" as const,
@@ -2203,7 +2202,7 @@ describe("retained bootstrap table derivation", () => {
 
   it("admits a digestless entry only at a redaction-key path, and a digest there never (NEW-93)", () => {
     const evidence = admittedEvidence();
-    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const stagingRoot = plan.stagingRoot;
     const file = (relativePath: string, ino: string, sha256: LowerHexSha256 | null): BootstrapRetentionDirectoryEntryV1 => ({
       relativePath,
       kind: "regular_file",
@@ -2345,7 +2344,7 @@ describe("retained bootstrap table derivation", () => {
 
   it("refuses a created-path parent whose observed inode is not its earlier creation evidence", () => {
     const evidence = admittedEvidence();
-    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const stagingRoot = plan.stagingRoot;
     const targetPath = path(`${stagingRoot}/attempt/active-release.json`);
     const launchabilityPath = plan.launchabilityPaths[0];
     if (launchabilityPath === undefined) throw new Error("fixture requires a launchability path");
@@ -2382,7 +2381,7 @@ describe("retained bootstrap table derivation", () => {
 
   it("refuses compensation targets whose postimage identity differs from their admitted creation evidence", () => {
     const evidence = admittedEvidence();
-    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const stagingRoot = plan.stagingRoot;
     const rollbackJournal = journal({
       phase: "rolled_back",
       direction: "compensating",
@@ -2591,7 +2590,7 @@ describe("retained bootstrap evidence classification", () => {
   const rows = deriveBootstrapRetentionTable(plan, admittedEvidence());
   const base = {
     id: ID,
-    planPath: plan.operation === "fresh_v2_init" ? plan.planPath : plan.paths.plan,
+    planPath: plan.planPath,
     operation: "fresh_v2_init" as const,
     terminalOutcome: "finalized" as const,
     journal: selection(phaseRecord("retained")), expectedRows: rows,

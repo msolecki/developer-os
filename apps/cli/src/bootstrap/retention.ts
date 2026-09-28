@@ -567,10 +567,9 @@ export async function retainBootstrapEnvelope(
    * publication, so "held once the cursor passed ordinal zero" is an invariant
    * only of a plan that creates it.
    */
-  const admitsGlobalLock = store.plan.operation === "fresh_v2_init" &&
-    store.plan.admittedPreexistingPaths.includes(
-      join(dirname(store.plan.bootstrapIdentity.path), ".lifecycle.lock") as CanonicalAbsolutePathV1,
-    );
+  const admitsGlobalLock = store.plan.admittedPreexistingPaths.includes(
+    join(dirname(store.plan.bootstrapIdentity.path), ".lifecycle.lock") as CanonicalAbsolutePathV1,
+  );
   const globalReached = admitsGlobalLock || current.nextCreatedPath > 0;
   if ((globalReached && locks.global === null) || (!globalReached && locks.global !== null)) {
     return refuse();

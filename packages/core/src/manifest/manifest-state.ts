@@ -40,16 +40,13 @@ export type ManifestParticipantIdV1 = string & {
 export type FreshV2InitIdV1 = string & {
   readonly __freshV2InitIdV1: unique symbol;
 };
-export type ManifestMigrationIdV1 = string & {
-  readonly __manifestMigrationIdV1: unique symbol;
-};
 export type LifecycleCoordinatorIdV1 = string & {
   readonly __lifecycleCoordinatorIdV1: unique symbol;
 };
 
 export interface BootstrapExpectedPayloadRefV1 {
   readonly kind: "bootstrap_expected";
-  readonly bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly bootstrapId: FreshV2InitIdV1;
   readonly ordinal: number;
   readonly path: BootstrapPayloadPathV1;
   readonly hash: LowerHexSha256;
@@ -93,7 +90,6 @@ export interface ManifestExternalEffectRefV1 {
 
 export type ManifestEnvelopeV1 =
   | { readonly kind: "fresh_v2_init"; readonly id: FreshV2InitIdV1 }
-  | { readonly kind: "v1_migration"; readonly id: ManifestMigrationIdV1 }
   | { readonly kind: "lifecycle"; readonly id: LifecycleCoordinatorIdV1 };
 
 export interface ManifestStatePlanV1 {
@@ -270,9 +266,6 @@ function participantEnvelope(value: unknown): ManifestEnvelopeV1 {
   if (input.kind === "fresh_v2_init") {
     return { kind: input.kind, id: input.id as FreshV2InitIdV1 };
   }
-  if (input.kind === "v1_migration") {
-    return { kind: input.kind, id: input.id as ManifestMigrationIdV1 };
-  }
   if (input.kind === "lifecycle") {
     return { kind: input.kind, id: input.id as LifecycleCoordinatorIdV1 };
   }
@@ -333,17 +326,16 @@ function validatePayloadRef(
     }
     const ref: BootstrapExpectedPayloadRefV1 = {
       kind: "bootstrap_expected",
-      bootstrapId: input.bootstrapId as FreshV2InitIdV1 | ManifestMigrationIdV1,
+      bootstrapId: input.bootstrapId as FreshV2InitIdV1,
       ordinal: integer(input.ordinal, 0, MAX_BOOTSTRAP_ORDINAL),
       path: admitCanonicalAbsolutePath(input.path, context.evidence) as BootstrapPayloadPathV1,
       hash: lowerHexSha256(input.hash),
       bytes: integer(input.bytes, 0, MAX_MANIFEST_BYTES),
       mode: 0o600,
     };
-    const operation = envelope.kind === "fresh_v2_init" ? "fresh_v2_init" : "v1_to_v2";
     const expectedPath = deriveBootstrapPayloadPath(
       context.productHome,
-      operation,
+      "fresh_v2_init",
       ref.bootstrapId as never,
       ref.ordinal,
     );

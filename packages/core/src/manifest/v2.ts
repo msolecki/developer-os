@@ -5,11 +5,10 @@ import { parseLowerHexSha256, parseStableSemver, parseUtcTimestamp } from "../up
 import { ManifestStateError, validateManifest } from "./store.js";
 import { parseInstructionId } from "../instructions/bounds.js";
 import type { InstructionCategoryV1, InstructionIdV1 } from "../instructions/bounds.js";
-import type { ArtifactOwner, InstallationManifest, InstallationManifestV1, InstallationManifestV2, InstructionBlockMemberV1, InstructionIdentityV1, ManifestAdmissionContextV1, ManagedArtifactSchemaIdV1, ManagedArtifactV2, MergeStrategy, MigratableInstallationManifestV1, OwnerPathArmV1 } from "./types.js";
+import type { ArtifactOwner, InstallationManifest, InstallationManifestV1, InstallationManifestV2, InstructionBlockMemberV1, InstructionIdentityV1, ManifestAdmissionContextV1, ManagedArtifactSchemaIdV1, ManagedArtifactV2, MergeStrategy, OwnerPathArmV1 } from "./types.js";
 
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_ARTIFACTS = 1_000_000;
-const EMPTY_HASH = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const owners = new Set<ArtifactOwner>(["core", "claude", "codex", "macos"]);
 const mergeStrategies = new Set<MergeStrategy>(["dedicated", "semantic-json", "semantic-toml", "marked-block"]);
 const schemas = new Set<ManagedArtifactSchemaIdV1>(["developer-os-config-v1", "lifecycle-id-allocator-v1", "active-release-record-v1", "release-trust-state-v1", "codex-registration-v1"]);
@@ -118,24 +117,6 @@ function legacyBytes(bytes: Uint8Array): unknown {
   if (bytes.byteLength < 1 || bytes.byteLength > MAX_BYTES) invalid(); let text: string; try { text = decoder.decode(bytes); } catch { return invalid(); }
   if (!text.endsWith("\n") || text.endsWith("\n\n")) invalid(); let value: unknown; try { value = JSON.parse(text.slice(0, -1)); } catch { return invalid(); }
   const validated = validateManifestV1(value); const roundTrip = `${JSON.stringify(validated)}\n`; const canonical = encoder.encode(roundTrip); if (canonical.byteLength !== bytes.byteLength || canonical.some((byte, index) => byte !== bytes[index])) invalid(); return value;
-}
-
-export function validateMigratableManifestV1(bytes: Uint8Array, context: ManifestAdmissionContextV1): MigratableInstallationManifestV1 {
-  try {
-    if (bytes.byteLength < 1 || bytes.byteLength > MAX_BYTES) invalid(); countArtifactsBeforeDecode(bytes);
-    const raw = legacyBytes(bytes); const manifest = validateManifestV1(raw); if (manifest.artifacts.length < 1 || manifest.artifacts.length > MAX_ARTIFACTS) invalid(); call(() => parseStableSemver(manifest.productVersion)); call(() => parseUtcTimestamp(manifest.installedAt));
-    const paths = new Set<string>();
-    for (const item of manifest.artifacts) {
-      const owner = item.owner; const kind = item.kind;
-      if (kind !== "file" && kind !== "directory") invalid();
-      const path = ownerPath(item.path, owner, { kind }, context);
-      call(() => parseStableSemver(item.productVersion)); call(() => parseUtcTimestamp(item.verifiedAt)); call(() => parseLowerHexSha256(item.installedHash)); call(() => admitVaultFreeRelativePath(item.source, context.sourceRoot, context.evidence));
-      const folded = path.normalize("NFC").toLowerCase(); if (paths.has(folded)) invalid(); paths.add(folded);
-      if (item.existedBefore) { if (item.kind !== "file") invalid(); call(() => parseLowerHexSha256(item.beforeHash)); call(() => admitVaultFreeRelativePath(item.backupRelativePath, context.backupRoot, context.evidence)); }
-      else if (item.beforeHash !== null || item.backupRelativePath !== null || (item.kind === "directory" && item.installedHash !== EMPTY_HASH)) invalid();
-    }
-    return structuredClone(manifest) as MigratableInstallationManifestV1;
-  } catch (error) { if (codeDefect(error)) throw error; throw new ManifestV1NotMigratableError(); }
 }
 
 export function validateManifestBytes(bytes: Uint8Array, context?: ManifestAdmissionContextV1): InstallationManifest {

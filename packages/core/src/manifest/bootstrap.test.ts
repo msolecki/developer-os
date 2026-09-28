@@ -28,12 +28,10 @@ import {
   type PlannedCreatedPathV1,
   type FreshV2InitJournalV1,
   type FreshV2InitPlanV1,
-  type ManifestMigrationPlanV1,
 } from "./bootstrap.js";
 import type {
   BootstrapExpectedPayloadRefV1,
   FreshV2InitIdV1,
-  ManifestMigrationIdV1,
 } from "./manifest-state.js";
 
 const freshId = "fi_123e4567-e89b-42d3-a456-426614174000" as FreshV2InitIdV1;
@@ -879,7 +877,7 @@ function fullPlanFixture() {
   return { plan, context, compensationSource, forwardSource, packageSource, configSource, digestSource, manifestSource };
 }
 
-const migrationId = "mm_123e4567-e89b-42d3-a456-426614174000" as ManifestMigrationIdV1;
+const migrationId = "mm_123e4567-e89b-42d3-a456-426614174000";
 
 describe("retained bootstrap persisted envelope", () => {
   function retainedPlanFixture(): {
@@ -893,7 +891,7 @@ describe("retained bootstrap persisted envelope", () => {
       { slot: 1, path: `/product/state/fresh-v2-init.${freshId}.journal.1.json`, ownerUid: 501, mode: 0o600, nlink: 1, dev: "1", ino: "41" },
     ];
     return {
-      plan: validateBootstrapPlan(candidate, fixture.context) as FreshV2InitPlanV1,
+      plan: validateBootstrapPlan(candidate, fixture.context),
       context: fixture.context,
     };
   }
@@ -1083,127 +1081,6 @@ function canonicalDomainHash(domain: string, value: unknown): string {
     .update(domain)
     .update(encoded.slice(0, -1))
     .digest("hex");
-}
-
-function migrationPlanFixture(): {
-  readonly plan: ManifestMigrationPlanV1;
-  readonly context: ReturnType<typeof fullPlanFixture>["context"];
-} {
-  const fresh = fullPlanFixture();
-  const candidate = JSON.parse(
-    JSON.stringify(fresh.plan)
-      .replaceAll(freshId, migrationId)
-      .replaceAll("fresh-v2-init", "manifest-migration")
-      .replaceAll("fresh_init_artifacts", "v1_migration_artifacts"),
-  ) as Record<string, unknown>;
-  candidate.operation = "v1_to_v2";
-  candidate.v1ManifestHash = hashA;
-  candidate.paths = {
-    plan: `/product/state/manifest-migration.${migrationId}.plan.json`,
-    stagingRoot: `/product/staging/manifest-migration/${migrationId}`,
-  };
-  delete candidate.admittedExternalShapeHash;
-  delete candidate.admittedPreexistingPaths;
-  delete candidate.planPath;
-  delete candidate.stagingRoot;
-
-  const payloads = candidate.payloads as Array<{
-    ref: Record<string, unknown>;
-    source: Record<string, unknown>;
-  }>;
-  required(payloads[3]).source = {
-    kind: "guarded_migration_preimage",
-    authority: {
-      kind: "v1_manifest",
-      migrationId,
-      v1ManifestHash: hashA,
-    },
-    path: "/product/state/installation-manifest.json",
-    ownerUid: 501,
-    mode: 0o600,
-    nlink: 1,
-    bytes: configPayloadBytes.byteLength,
-    sha256: configPayloadHash,
-    dev: "1",
-    ino: "30",
-  };
-  const participants = candidate.foundationParticipants as Array<{
-    id: string;
-    role: { kind: string; compensationId?: string; forwardId?: string };
-    slot: string;
-    mutations: unknown[];
-    maximumJournalBytes: number;
-    planHash: string;
-    initialJournal: {
-      finalPath: string;
-      plannedBytesHash: string;
-      staged: Record<string, unknown>;
-    };
-  }>;
-  for (const participant of participants) {
-    const ordinal = Number(participant.initialJournal.staged.ordinal);
-    const row = required(payloads[ordinal]);
-    const bytes = new TextEncoder().encode(`${JSON.stringify(row.source.value)}\n`);
-    const journalHash = createHash("sha256").update(bytes).digest("hex");
-    row.ref.hash = journalHash;
-    row.ref.bytes = bytes.byteLength;
-    row.source.valueBytes = bytes.byteLength - 1;
-    row.source.projectionHash = canonicalDomainHash(
-      "developer-os/bootstrap-plan-derived/foundation_initial_journal/v1\0",
-      { role: "foundation_initial_journal", value: row.source.value },
-    );
-    participant.initialJournal.plannedBytesHash = journalHash;
-    participant.initialJournal.staged.hash = journalHash;
-    participant.initialJournal.staged.bytes = bytes.byteLength;
-    const staged = participant.initialJournal.staged;
-    participant.planHash = canonicalDomainHash(
-      "developer-os/foundation-participant-plan/v2\0",
-      {
-        schemaVersion: 2,
-        id: participant.id,
-        slot: participant.slot,
-        role: participant.role,
-        mutations: participant.mutations,
-        maximumJournalBytes: participant.maximumJournalBytes,
-        initialJournal: {
-          finalPath: participant.initialJournal.finalPath,
-          staged: {
-            kind: staged.kind,
-            bootstrapId: staged.bootstrapId,
-            ordinal: staged.ordinal,
-            path: staged.path,
-            bytes: staged.bytes,
-            mode: staged.mode,
-          },
-        },
-      },
-    );
-  }
-  const manifest = candidate.manifest as never as {
-    envelope: { kind: string; id: string };
-    bindings: { foundationTransactions: { count: number; orderedIdsHash: string } };
-  };
-  manifest.envelope = { kind: "v1_migration", id: migrationId };
-  const forwardIds = participants
-    .filter((participant) => participant.role.kind === "forward")
-    .map((participant) => participant.id);
-  manifest.bindings.foundationTransactions = {
-    count: forwardIds.length,
-    orderedIdsHash: createHash("sha256")
-      .update("developer-os/manifest-foundation-bindings/v1\0")
-      .update(JSON.stringify(forwardIds))
-      .digest("hex"),
-  };
-
-  const plan = candidate as unknown as ManifestMigrationPlanV1;
-  const context = {
-    ...fresh.context,
-    operation: "v1_to_v2" as const,
-    id: migrationId,
-    externalShape: null,
-    admitManifestParticipant: () => structuredClone(plan.manifest),
-  } as unknown as ReturnType<typeof fullPlanFixture>["context"];
-  return { plan, context };
 }
 
 describe("immutable bootstrap plan exact grammar", () => {
@@ -1682,88 +1559,85 @@ describe("admittedPreexistingPaths", () => {
 
     expect(validateBootstrapPlan(freshPlan(), context).createdPaths[0])
       .toMatchObject({ kind: "global_lock", path: lock });
-    expect((validateBootstrapPlan(freshPlanAdmittingLock(), context) as FreshV2InitPlanV1).admittedPreexistingPaths)
+    expect(validateBootstrapPlan(freshPlanAdmittingLock(), context).admittedPreexistingPaths)
       .toContain(lock);
     expect(() => validateBootstrapPlan(freshPlanAdmittingLockAndCreatingIt(), context)).toThrow(BootstrapStateError);
     expect(() => validateBootstrapPlan(freshPlanWithoutLockRow(), context)).toThrow(BootstrapStateError);
   });
 });
 
-describe("migration-only bootstrap grammar", () => {
-  it("admits the complete v1_to_v2 arm with literal derived envelope paths and guarded V1 preimage authority", () => {
-    const fixture = migrationPlanFixture();
-    expect(validateBootstrapPlan(fixture.plan, fixture.context as never)).toEqual(fixture.plan);
-    expect(fixture.plan.paths).toStrictEqual({
-      plan: "/product/state/manifest-migration.mm_123e4567-e89b-42d3-a456-426614174000.plan.json",
-      stagingRoot: "/product/staging/manifest-migration/mm_123e4567-e89b-42d3-a456-426614174000",
-    });
-    expect(fixture.plan.payloads[3]?.source).toMatchObject({
-      kind: "guarded_migration_preimage",
-      authority: {
-        kind: "v1_manifest",
-        migrationId,
-        v1ManifestHash: hashA,
-      },
-      path: "/product/state/installation-manifest.json",
-      bytes: configPayloadBytes.byteLength,
-      sha256: configPayloadHash,
-    });
-    expect(
-      bootstrapPayloadSourceIdentityHash(required(fixture.plan.payloads[3]).source),
-    ).toBe("b93e11c2b9f8656016683709bac36eee8799a03b7dce0e1c93d967dde533cc56");
-    expect(
-      createHash("sha256")
-        .update(encodeCanonicalJson(fixture.plan as never))
-        .digest("hex"),
-    ).toBe("8aefe00a8d47c0c732c2d86b57c3990b1d8a51a6767df52c2234ef7bfa7a91ec");
-  });
-
+describe("withdrawn v1_to_v2 bootstrap arm (D18, NEW-78)", () => {
   it.each([
     {
-      name: "a fresh envelope smuggles the migration-preimage source arm",
-      arrange() {
-        const fixture = fullPlanFixture();
-        const candidate = structuredClone(fixture.plan) as never as { payloads: Array<{ source: unknown }> };
-        required(candidate.payloads[3]).source = required(migrationPlanFixture().plan.payloads[3]).source;
-        return { plan: candidate, context: fixture.context };
+      name: "the plan names the withdrawn v1_to_v2 operation",
+      arrange: (candidate: Record<string, unknown>) => {
+        candidate.operation = "v1_to_v2";
       },
     },
     {
-      name: "the migration authority names a different immutable V1 manifest hash",
-      arrange() {
-        const fixture = migrationPlanFixture();
-        const candidate = structuredClone(fixture.plan) as never as {
-          payloads: Array<{ source: { authority?: { v1ManifestHash: string } } }>;
+      name: "the plan carries a withdrawn mm_ migration id",
+      arrange: (candidate: Record<string, unknown>) => {
+        candidate.id = migrationId;
+      },
+    },
+    {
+      name: "a payload uses the withdrawn guarded_migration_preimage source",
+      arrange: (candidate: Record<string, unknown>) => {
+        required((candidate.payloads as Array<{ source: unknown }>)[3]).source = {
+          kind: "guarded_migration_preimage",
+          authority: { kind: "v1_manifest", migrationId, v1ManifestHash: hashA },
+          path: "/product/state/installation-manifest.json",
+          ownerUid: 501,
+          mode: 0o600,
+          nlink: 1,
+          bytes: configPayloadBytes.byteLength,
+          sha256: configPayloadHash,
+          dev: "1",
+          ino: "30",
         };
-        const source = required(candidate.payloads[3]).source;
-        const authority = required(source.authority);
-        authority.v1ManifestHash = hashB;
-        return { plan: candidate, context: fixture.context };
       },
     },
     {
-      name: "a migration plan retains the fresh-only Foundation config role",
-      arrange() {
-        const fixture = migrationPlanFixture();
-        const candidate = structuredClone(fixture.plan) as never as {
-          payloads: Array<{ source: unknown }>;
+      name: "a Foundation participant claims the withdrawn v1_migration_artifacts slot",
+      arrange: (candidate: Record<string, unknown>) => {
+        required((candidate.foundationParticipants as Array<{ slot: string }>)[0]).slot = "v1_migration_artifacts";
+      },
+    },
+    {
+      name: "the plan carries the withdrawn migration-only paths and v1ManifestHash keys",
+      arrange: (candidate: Record<string, unknown>) => {
+        candidate.v1ManifestHash = hashA;
+        candidate.paths = {
+          plan: `/product/state/manifest-migration.${migrationId}.plan.json`,
+          stagingRoot: `/product/staging/manifest-migration/${migrationId}`,
         };
-        required(candidate.payloads[3]).source = fullPlanFixture().configSource;
-        return { plan: candidate, context: fixture.context };
       },
     },
-    {
-      name: "a caller-selected migration final path bypasses envelope derivation",
-      arrange() {
-        const fixture = migrationPlanFixture();
-        const candidate = structuredClone(fixture.plan) as never as { paths: { plan: string } };
-        candidate.paths.plan = "/product/state/attacker.plan.json";
-        return { plan: candidate, context: fixture.context };
-      },
-    },
-  ])("refuses when $name", (testCase) => {
-    const { plan, context } = testCase.arrange();
-    expect(() => validateBootstrapPlan(plan, context as never)).toThrow(BootstrapStateError);
+  ])("refuses a fresh plan when $name", ({ arrange }) => {
+    const fixture = fullPlanFixture();
+    const candidate = structuredClone(fixture.plan) as unknown as Record<string, unknown>;
+    arrange(candidate);
+    expect(() => validateBootstrapPlan(candidate, fixture.context)).toThrow(BootstrapStateError);
+  });
+
+  it("refuses a v1_to_v2 plan even under a v1_to_v2 admission context", () => {
+    const fixture = fullPlanFixture();
+    const candidate = { ...structuredClone(fixture.plan), operation: "v1_to_v2", id: migrationId };
+    const context = { ...fixture.context, operation: "v1_to_v2", id: migrationId, externalShape: null };
+    expect(() => validateBootstrapPlan(candidate, context as never)).toThrow(BootstrapStateError);
+  });
+
+  it("derives no envelope or creation-evidence path for the withdrawn arm", () => {
+    expect(() => deriveBootstrapEnvelopePaths(productHome, "v1_to_v2" as never, migrationId as never)).toThrow(BootstrapStateError);
+    expect(() => deriveBootstrapEnvelopePaths(productHome, "fresh_v2_init", migrationId as never)).toThrow(BootstrapStateError);
+    expect(() => deriveBootstrapCreationEvidencePaths(
+      productHome,
+      "v1_to_v2" as never,
+      migrationId as never,
+      "ordinary",
+      0,
+      "123e4567-e89b-42d3-a456-426614174001",
+    )).toThrow(BootstrapStateError);
   });
 });
 

@@ -22,7 +22,7 @@ export {
   stripInstructionBlock,
 } from "./instruction-block.js";
 export type { InstructionBlockExtractionV1, InstructionBlockMergeV1 } from "./instruction-block.js";
-export { ManifestV1NotMigratableError, validateManifestBytes, validateManifestV1, validateManifestV2, validateMigratableManifestV1 } from "./v2.js";
+export { ManifestV1NotMigratableError, validateManifestBytes, validateManifestV1, validateManifestV2 } from "./v2.js";
 export { ManifestStateParticipant, ManifestStateParticipantError, validateManifestStatePlan } from "./manifest-state.js";
 export {
   BootstrapStateError,
@@ -78,7 +78,6 @@ export type {
   ManagedArtifactSchemaRegistry,
   ManagedArtifactEphemeralRegistryV1,
   ManifestAdmissionContextV1,
-  MigratableInstallationManifestV1,
   OwnerPathArmV1,
 } from "./types.js";
 export type {
@@ -87,7 +86,6 @@ export type {
   LifecycleCoordinatorIdV1,
   ManifestBytesStateV1,
   ManifestExternalEffectRefV1,
-  ManifestMigrationIdV1,
   ManifestParticipantIdV1,
   ManifestParticipantObservationV1,
   ManifestPayloadIdentityV1,
@@ -102,7 +100,6 @@ export type {
   BootstrapExternalShapeEntryV1,
   BootstrapExternalShapeProjectionV1,
   BootstrapJournalPhaseV1,
-  BootstrapMigrationPreimageAuthorityV1,
   BootstrapPayloadEvidenceV1,
   BootstrapPayloadPlanV1,
   BootstrapPayloadSourceV1,
@@ -119,9 +116,6 @@ export type {
   LifecycleBootstrapLockV1,
   LifecycleIdAllocatorV1,
   LifecycleInstallNonceV1,
-  ManifestMigrationJournalV1,
-  ManifestMigrationPathsV1,
-  ManifestMigrationPlanV1,
   PersistedBootstrapLockIdentityV1,
   PlannedCreatedPathV1,
 } from "./bootstrap.js";

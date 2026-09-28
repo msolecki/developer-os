@@ -391,7 +391,12 @@ directories that spec 2 must reserve/create at migration.
 
 **V1 refusal, bootstrap recovery routing, and the V2 handoff admission — 2026-09-17 (decision D18).**
 The migration half of the amendment above is withdrawn: no V1 manifest is ever migrated, and only
-Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
+Spec 2's fresh V2 `init` creates V2 state. The `v1_to_v2` arm Core had already shipped was deleted
+on 2026-09-28 (NEW-78): the bootstrap plan, journal, payload-path, Foundation-participant and
+manifest-envelope grammars admit only `fresh_v2_init`, so a persisted `v1_to_v2` plan, an `mm_` or
+`tx_mm_` identifier, a `manifest-migration` path, a `guarded_migration_preimage` source or a
+`v1_migration` envelope is malformed bootstrap state and is refused. Core's unused
+`validateMigratableManifestV1` went with it. Three contracts take the migration's place.
 
 - **`init` refuses a V1 manifest once the packaged bootstrap capability is available.** It exits 4
   (`capabilityUnavailable`) with reason `manifest_v1_not_migratable`, names the manifest path, and

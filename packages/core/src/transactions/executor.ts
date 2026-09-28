@@ -943,7 +943,7 @@ async function observedPublicationParent(
 }
 
 const BOOTSTRAP_FOUNDATION_ID_RE = new RegExp(
-  "^tx_(fi|mm)_([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})_([0-9]{10})_([fc])$",
+  "^tx_fi_([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})_[0-9]{10}_([fc])$",
   "u",
 );
 
@@ -1338,11 +1338,9 @@ function validateBootstrapFoundationBridgeInput(
 ): TransactionJournalV1 {
   const matched = BOOTSTRAP_FOUNDATION_ID_RE.exec(participant.id);
   if (matched === null) throw new TransactionStateError();
-  const envelopePrefix = matched[1];
-  const uuid = matched[2];
-  const roleSuffix = matched[4];
+  const uuid = matched[1];
+  const roleSuffix = matched[2];
   if (
-    envelopePrefix === undefined ||
     uuid === undefined ||
     roleSuffix === undefined ||
     (roleSuffix === "f" && participant.role.kind !== "forward") ||
@@ -1350,13 +1348,11 @@ function validateBootstrapFoundationBridgeInput(
   ) {
     throw new TransactionStateError();
   }
-  const expectedBootstrapId = `${envelopePrefix}_${uuid}`;
-  const expectedEnvelopeName =
-    envelopePrefix === "fi" ? "fresh-v2-init" : "manifest-migration";
+  const expectedBootstrapId = `fi_${uuid}`;
   const staged = participant.initialJournal.staged;
   const expectedStagedPath = join(
     dependencies.stateDir,
-    `.${expectedEnvelopeName}.${expectedBootstrapId}.${String(staged.ordinal).padStart(10, "0")}.payload`,
+    `.fresh-v2-init.${expectedBootstrapId}.${String(staged.ordinal).padStart(10, "0")}.payload`,
   );
   const expectedFinalPath = join(
     dependencies.stateDir,

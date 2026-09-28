@@ -245,7 +245,6 @@ function validatePlan(value: unknown): BootstrapRetainedExecutionPlanV1 {
   }
   const plan = value as BootstrapRetainedExecutionPlanV1;
   if (
-    plan.operation !== "fresh_v2_init" ||
     plan.id !== ID ||
     plan.journalSlots[0].slot !== 0 ||
     plan.journalSlots[1].slot !== 1
@@ -296,7 +295,6 @@ async function createFixture(): Promise<Fixture> {
   };
   const openRequest: BootstrapJournalStoreOpenRequestV1 = {
     ...common,
-    expectedOperation: "fresh_v2_init",
     expectedId: ID,
     admitInitialWrite: () => {
       admissionCalls.count += 1;
@@ -591,7 +589,6 @@ describe("BootstrapJournalStore creation and recovery", () => {
   });
 
   it.each([
-    ["operation", { expectedOperation: "v1_to_v2" as const }],
     ["id", { expectedId: "fi_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as FreshV2InitIdV1 }],
   ] as const)("refuses an unexpected plan %s without mutation", async (_name, override) => {
     const fixture = await createFixture();

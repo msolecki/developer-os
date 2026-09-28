@@ -40,7 +40,6 @@ const LIFECYCLE_PARTICIPANT_ID = `mf_${"c".repeat(61)}`;
 const FRESH_ID = "fi_11111111-1111-4111-8111-111111111111";
 const MIGRATION_ID = "mm_22222222-2222-4222-8222-222222222222";
 const FRESH_PARTICIPANT_ID = `mf_${FRESH_ID}`;
-const MIGRATION_PARTICIPANT_ID = `mf_${MIGRATION_ID}`;
 const HEX_A = "a".repeat(64) as LowerHexSha256;
 const HEX_B = "b".repeat(64) as LowerHexSha256;
 
@@ -336,7 +335,7 @@ function matchesIdentity(entry: MemoryEntry, expected: ManifestFileIdentityV1): 
   );
 }
 
-type EnvelopeKind = "fresh_v2_init" | "v1_migration" | "lifecycle";
+type EnvelopeKind = "fresh_v2_init" | "lifecycle";
 type Presence = "absent" | "present";
 
 interface RawPayloadRef {
@@ -409,12 +408,8 @@ function createFixture(options: FixtureOptions = {}): Fixture {
   const ordinal = options.ordinal ?? 0;
   const foundationIds = options.foundationIds ?? [];
   const effects = options.effects ?? [];
-  const outerId = envelopeKind === "fresh_v2_init" ? FRESH_ID : envelopeKind === "v1_migration" ? MIGRATION_ID : LIFECYCLE_ID;
-  const participantId = envelopeKind === "fresh_v2_init"
-    ? FRESH_PARTICIPANT_ID
-    : envelopeKind === "v1_migration"
-      ? MIGRATION_PARTICIPANT_ID
-      : LIFECYCLE_PARTICIPANT_ID;
+  const outerId = envelopeKind === "fresh_v2_init" ? FRESH_ID : LIFECYCLE_ID;
+  const participantId = envelopeKind === "fresh_v2_init" ? FRESH_PARTICIPANT_ID : LIFECYCLE_PARTICIPANT_ID;
   const evidence = {
     reopenCanonicalAbsolutePath: (path: string) => path,
     containsCanonicalPath: (root: string, candidate: string) => candidate === root || candidate.startsWith(`${root}/`),
@@ -424,7 +419,7 @@ function createFixture(options: FixtureOptions = {}): Fixture {
   const manifestPath = admitCanonicalAbsolutePath(MANIFEST_PATH, evidence);
   const payloadPath = envelopeKind === "lifecycle"
     ? deriveManifestPayloadPath(productHome, outerId as never, participantId as never)
-    : deriveBootstrapPayloadPath(productHome, envelopeKind === "fresh_v2_init" ? "fresh_v2_init" : "v1_to_v2", outerId as never, ordinal);
+    : deriveBootstrapPayloadPath(productHome, "fresh_v2_init", outerId as never, ordinal);
   const tombstonePath = join(MANIFEST_PARENT, `.installation-manifest.${participantId}.json.tombstone`);
   const fs = new MemoryFileSystem();
   if (dirname(payloadPath) !== MANIFEST_PARENT) fs.addDirectory(dirname(payloadPath));
@@ -621,9 +616,14 @@ describe("ManifestStatePlanV1 boundary tables", () => {
 });
 
 describe("participant envelope admission table", () => {
-  it.each(["fresh_v2_init", "v1_migration", "lifecycle"] as const)("retains the exact legal %s envelope", (envelope) => {
+  it.each(["fresh_v2_init", "lifecycle"] as const)("retains the exact legal %s envelope", (envelope) => {
     const fixture = createFixture({ envelope });
     expect(fixture.admit().envelope).toEqual(fixture.plan.envelope);
+  });
+
+  it.each([FRESH_ID, MIGRATION_ID])("refuses the withdrawn v1_migration envelope arm with outer ID %s (D18, NEW-78)", (id) => {
+    const fixture = createFixture({ envelope: "fresh_v2_init" });
+    admissionRefuses({ ...fixture.plan, envelope: { kind: "v1_migration", id } }, fixture.context);
   });
 
   it.each([
@@ -762,9 +762,6 @@ describe("payload ordinal and binding tables", () => {
     { envelope: "fresh_v2_init", ordinal: 0, accepted: true },
     { envelope: "fresh_v2_init", ordinal: 999_999, accepted: true },
     { envelope: "fresh_v2_init", ordinal: 1_000_000, accepted: false },
-    { envelope: "v1_migration", ordinal: 0, accepted: true },
-    { envelope: "v1_migration", ordinal: 999_999, accepted: true },
-    { envelope: "v1_migration", ordinal: 1_000_000, accepted: false },
   ] as const)("checks $envelope ordinal $ordinal", ({ envelope, ordinal, accepted }) => {
     if (!accepted) {
       const fixture = createFixture({ envelope });
@@ -796,8 +793,8 @@ describe("payload ordinal and binding tables", () => {
     await refusesAndPreserves(fixture, () => fixture.participant.apply(fixture.admit()));
   });
 
-  it.each(["fresh_v2_init", "v1_migration"] as const)("rejects a %s absent-after plan", (envelope) => {
-    const fixture = createFixture({ envelope, after: "absent" });
+  it("rejects a fresh_v2_init absent-after plan", () => {
+    const fixture = createFixture({ envelope: "fresh_v2_init", after: "absent" });
     admissionRefuses(fixture.plan, fixture.context);
   });
 });
@@ -809,8 +806,6 @@ const executionRows = [
   { name: "update present-before/present-after", envelope: "lifecycle", before: "present", after: "present" },
   { name: "fresh bootstrap absent-before/present-after", envelope: "fresh_v2_init", before: "absent", after: "present" },
   { name: "fresh bootstrap present-before/present-after", envelope: "fresh_v2_init", before: "present", after: "present" },
-  { name: "migration bootstrap absent-before/present-after", envelope: "v1_migration", before: "absent", after: "present" },
-  { name: "migration bootstrap present-before/present-after", envelope: "v1_migration", before: "present", after: "present" },
 ] as const;
 
 type ExecutionRow = (typeof executionRows)[number];

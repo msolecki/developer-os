@@ -116,10 +116,6 @@ export interface ManifestAdmissionContextV1 {
     arm: OwnerPathArmV1,
   ) => CanonicalAbsolutePathV1;
 }
-declare const migratableInstallationManifestV1: unique symbol;
-export type MigratableInstallationManifestV1 = InstallationManifestV1 & {
-  readonly [migratableInstallationManifestV1]: true;
-};
 
 export type DriftKind =
   | "missing"

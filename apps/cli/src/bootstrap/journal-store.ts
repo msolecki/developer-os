@@ -16,7 +16,6 @@ import {
   type ExactProductStatePathV1,
   type FreshV2InitIdV1,
   type LowerHexSha256,
-  type ManifestMigrationIdV1,
   type UtcTimestampV1,
 } from "@developer-os/core";
 
@@ -323,7 +322,7 @@ function validatePlanContract(
 }
 
 function planPathOf(plan: BootstrapRetainedExecutionPlanV1): ExactProductStatePathV1 {
-  return plan.operation === "fresh_v2_init" ? plan.planPath : plan.paths.plan;
+  return plan.planPath;
 }
 
 function slotIdentityFromStats(
@@ -523,8 +522,7 @@ function exactSlotTuple(
 
 export interface BootstrapJournalStoreOpenRequestV1 {
   readonly planPath: ExactProductStatePathV1;
-  readonly expectedOperation: "fresh_v2_init" | "v1_to_v2";
-  readonly expectedId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly expectedId: FreshV2InitIdV1;
   readonly validatePlan: (value: unknown) => BootstrapRetainedExecutionPlanV1;
   readonly validateSlots: (
     plan: BootstrapRetainedExecutionPlanV1,
@@ -757,7 +755,7 @@ export class BootstrapJournalStore {
       const plan = request.validatePlan(decodeExactCanonical(planBytes, MAX_PLAN_BYTES));
       if (!exactBytes(encoded(plan), planBytes)) return fail();
       validatePlanContract(plan, request.planPath);
-      if (plan.operation !== request.expectedOperation || plan.id !== request.expectedId) return fail();
+      if (plan.id !== request.expectedId) return fail();
       if (planBytes.byteLength > plan.maximumPlanBytes) return fail();
 
       slot0 = await openBoundRegularFile(

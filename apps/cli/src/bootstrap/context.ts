@@ -251,10 +251,7 @@ export function createBootstrapEvidenceInspectionRequest(input: {
       });
     },
     validateSlots: (plan, slots) => {
-      const selected = selectBootstrapEvidenceJournal(
-        plan as Parameters<typeof selectBootstrapEvidenceJournal>[0],
-        slots,
-      );
+      const selected = selectBootstrapEvidenceJournal(plan, slots);
       if (selected === null) throw new Error("bootstrap journal slots are unbound");
       return selected;
     },

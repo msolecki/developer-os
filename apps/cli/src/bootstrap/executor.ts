@@ -788,7 +788,7 @@ export class BootstrapExecutor {
       retentionNext: null,
       createdAt: timestamp,
       updatedAt: timestamp,
-    }) as FreshV2InitJournalV1;
+    });
   }
 
   private emptyRetentionEvidence(
@@ -858,7 +858,7 @@ export class BootstrapExecutor {
         candidates.push(validateBootstrapJournal(
           plan,
           decodeCanonicalJson(bytes, plan.maximumJournalBytes),
-        ) as FreshV2InitJournalV1);
+        ));
       } catch {
         // The store alone classifies a partial initial write after its exact
         // plan/state/slot authority is reopened and rechecked.
@@ -885,7 +885,6 @@ export class BootstrapExecutor {
     }
     const store = await BootstrapJournalStore.open({
       planPath: plan.planPath,
-      expectedOperation: "fresh_v2_init",
       expectedId: plan.id,
       validatePlan: (value) => this.admitPersistedPlanStructure(value, plan.id),
       validateSlots: (candidate, slots) => selectBootstrapJournal(
@@ -894,9 +893,9 @@ export class BootstrapExecutor {
         slots,
       ),
       buildInitialJournal: (candidate, timestamp) =>
-        this.initialJournalForTimestamp(candidate as FreshV2InitPlanV1, timestamp),
+        this.initialJournalForTimestamp(candidate, timestamp),
       admitInitialWrite: (candidate) =>
-        this.admitPostPlanInitialWrite(candidate as FreshV2InitPlanV1),
+        this.admitPostPlanInitialWrite(candidate),
       now: this.#dependencies.now,
       interrupt: (point) => {
         this.checkpoint(point);
@@ -1565,7 +1564,7 @@ export class BootstrapExecutor {
           return authorityPlan;
         },
         buildInitialJournal: (candidate, timestamp) =>
-          this.initialJournalForTimestamp(candidate as FreshV2InitPlanV1, timestamp),
+          this.initialJournalForTimestamp(candidate, timestamp),
         validatePlan: (value) => {
           if (authorityPlan === null) {
             throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap plan authority was not constructed");
@@ -1588,7 +1587,7 @@ export class BootstrapExecutor {
           if (point === "after_initial_state_sync") this.checkpoint("after_journal");
         },
       });
-      const admitted = store.plan as FreshV2InitPlanV1;
+      const admitted = store.plan;
       this.#journalStores.set(id, store);
       this.#preflightEvidence.delete(id);
       this.#preflightReusableDirectories.delete(id);
@@ -1605,7 +1604,7 @@ export class BootstrapExecutor {
 
   async executeFreshInit(plan: FreshV2InitPlanV1): Promise<FreshInitOutcomeV1> {
     const store = await this.storeFor(plan);
-    let journal = store.current() as FreshV2InitJournalV1;
+    let journal = store.current();
     try {
       if (journal.phase === "retained") {
         if (journal.terminalOutcome !== "finalized") {
@@ -1638,13 +1637,13 @@ export class BootstrapExecutor {
         return await this.completedOutcome(plan);
       } catch (error) {
         if (error instanceof FreshBootstrapInterruption) throw error;
-        const latest = store.current() as FreshV2InitJournalV1;
+        const latest = store.current();
         if (latest.manifestCursor < 2 && latest.terminalOutcome === null) {
           await this.compensate(plan, latest);
           await this.retainTerminal(
             plan,
             store,
-            store.current() as FreshV2InitJournalV1,
+            store.current(),
           );
         }
         throw error;
@@ -2386,9 +2385,7 @@ export class BootstrapExecutor {
         ? source.relativePath
         : source.kind === "constant_empty"
           ? `generated/reservations/${createHash("sha256").update(path).digest("hex")}`
-          : source.kind === "plan_derived"
-            ? `generated/${source.role}`
-            : "generated/migration-preimage";
+          : `generated/${source.role}`;
       if (source.kind === "constant_empty") {
         return {
           ...base,
@@ -2606,7 +2603,7 @@ export class BootstrapExecutor {
   }
 
   private async readOrCreateJournal(plan: FreshV2InitPlanV1): Promise<FreshV2InitJournalV1> {
-    return (await this.storeFor(plan)).current() as FreshV2InitJournalV1;
+    return (await this.storeFor(plan)).current();
   }
 
   private async writeJournal(
@@ -2615,7 +2612,7 @@ export class BootstrapExecutor {
     patch: Partial<FreshV2InitJournalV1>,
   ): Promise<FreshV2InitJournalV1> {
     const store = await this.storeFor(plan);
-    const current = store.current() as FreshV2InitJournalV1;
+    const current = store.current();
     if (!sameValue(current, journal)) {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap journal cursor changed before advance");
     }
@@ -2629,9 +2626,9 @@ export class BootstrapExecutor {
         encoder.encode(encodeCanonicalJson(current as unknown as CanonicalJsonValue)),
       ),
       updatedAt: this.#dependencies.now().toISOString(),
-    }) as FreshV2InitJournalV1;
+    });
     await store.advance(next);
-    return store.current() as FreshV2InitJournalV1;
+    return store.current();
   }
   private assertPublicPayload(bytes: Uint8Array): void {
     const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
@@ -2655,8 +2652,7 @@ export class BootstrapExecutor {
       return packaged.readFile(row.source.relativePath);
     }
     if (row.source.kind === "plan_derived") return derivedPayloadBytes(row.source);
-    if (row.source.kind === "constant_empty") return new Uint8Array();
-    throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "fresh init cannot consume migration preimages");
+    return new Uint8Array();
   }
 
   private async guardReadOwnedFile(
