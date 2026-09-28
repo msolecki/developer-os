@@ -212,9 +212,9 @@ function findNumberValuedStats(
 /**
  * Spec 2 §2's capability-absence gate. No shipped planner bundle exists yet, so the entry
  * list is the compiled protocol module every target planner imports plus the owner and
- * migration planners a bundle composes; the bundle's own planner entrypoint joins it when the
- * release packer produces one. `lint` builds before this runs, so a missing entrypoint is a
- * failure, never a skip.
+ * migration planners a bundle composes; the bundle's own planner and target verifier entrypoints
+ * join it when Task 11b's release packer produces them. `lint` builds before this runs, so a
+ * missing entrypoint is a failure, never a skip.
  */
 const PLANNER_ENTRYPOINTS: readonly string[] = [
   "packages/core/dist/update/planner.js",
@@ -248,7 +248,8 @@ export const RELEASE_TRANSPORT_COMPOSITION: readonly string[] = ["apps/cli/src/u
 
 const REMOTE_NETWORK_MODULE =
   /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
-const GLOBAL_FETCH = /(?<![.\w$])fetch\s*\(|(?<![.\w$])(?:globalThis|self|window)\.fetch\s*\(/u;
+/** Bracket access (`globalThis["fetch"]`) is a declared residual: `codeWithoutLiterals` erases the key. */
+const GLOBAL_FETCH = /(?<![.\w$])(?:(?:globalThis|self|window)\s*\??\.\s*)?fetch\s*(?:(?:\?\.\s*)?\(|\.\s*(?:call|apply)\s*\()/u;
 const TRANSPORT_COMPOSER = /\b(?:nodeReleaseExchange|FixedReleaseTransport)\b/u;
 const LAUNCHER_EXEC = /\bexecAdmittedRelease\b/u;
 const PRODUCT_SOURCE = /^(?:packages|apps)\/[^/]+\/src\/.*\.ts$/u;

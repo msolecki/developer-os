@@ -545,6 +545,11 @@ describe("the repository check gate", () => {
     { name: "globalThis.fetch", path: "packages/core/src/stray-global-this.ts", source: "export const load = (url: string): unknown => globalThis.fetch(url);\n" },
     { name: "self.fetch", path: "packages/core/src/stray-self.ts", source: "export const load = (url: string): unknown => self.fetch(url);\n" },
     { name: "window.fetch", path: "packages/core/src/stray-window.ts", source: "export const load = (url: string): unknown => window.fetch (url);\n" },
+    { name: "fetch.call", path: "packages/core/src/stray-call.ts", source: "export const load = (url: string): unknown => fetch.call(globalThis, url);\n" },
+    { name: "fetch.apply", path: "packages/core/src/stray-apply.ts", source: "export const load = (url: string): unknown => fetch . apply(globalThis, [url]);\n" },
+    { name: "globalThis?.fetch", path: "packages/core/src/stray-optional.ts", source: "export const load = (url: string): unknown => globalThis?.fetch(url);\n" },
+    { name: "self?.fetch", path: "packages/core/src/stray-optional-self.ts", source: "export const load = (url: string): unknown => self?.fetch(url);\n" },
+    { name: "window?.fetch", path: "packages/core/src/stray-optional-window.ts", source: "export const load = (url: string): unknown => window?.fetch?.(url);\n" },
     { name: "an https import", path: "apps/cli/src/commands/stray-https.ts", source: 'import { get } from "node:https";\nexport const probe = get;\n' },
     { name: "a dynamic tls import", path: "apps/cli/src/stray-tls.ts", source: 'export const later = (): unknown => import("node:tls");\n' },
   ])("fails, and names the module, on $name outside the release transport", async ({ path, source }) => {

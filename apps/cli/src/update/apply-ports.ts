@@ -247,7 +247,7 @@ export function updateCodexPort(context: CliContext): () => Promise<UpdateCodexV
     try {
       return await codexPlanningState(context, runtime);
     } finally {
-      await runtime.dispose();
+      await runCleanups([runtime.dispose]);
     }
   };
 }
@@ -668,6 +668,14 @@ async function removeUnconsumedPayloads(journals: UpdateParticipantJournalStore,
   for (const path of paths) await journals.remove(path);
 }
 
+/** Temporary-directory cleanups, each isolated: none may replace the operation's result or skip the rest. */
+export async function runCleanups(cleanups: readonly (() => Promise<void>)[]): Promise<void> {
+  for (const cleanup of cleanups) {
+    // Swallowed on purpose: a leaked temporary directory is inert, while failing a finalized update over it is not.
+    await cleanup().catch(() => undefined);
+  }
+}
+
 export function matchesManifestFileIdentity(entry: LifecycleGuardedEntryV1 | null, expected: ManifestFileIdentityV1): entry is LifecycleGuardedEntryV1 {
   return entry?.kind === "regular_file" && entry.dev === expected.dev && entry.ino === expected.ino && entry.size === expected.size && entry.ownerUid === expected.ownerUid && entry.mode === expected.mode && entry.nlink === expected.nlink;
 }
@@ -768,7 +776,7 @@ async function verifierPort(context: CliContext, lifecycle: CliLifecycleContext)
           remainingMilliseconds: plan.wallMilliseconds,
         });
       } finally {
-        await rm(cwd, { recursive: true, force: true });
+        await runCleanups([() => rm(cwd, { recursive: true, force: true })]);
       }
     },
   };
@@ -1074,7 +1082,7 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
         held = null;
         authority = null;
         try {
-          for (const cleanup of deferred.splice(0)) await cleanup();
+          await runCleanups(deferred.splice(0));
         } finally {
           await acquired.release();
         }

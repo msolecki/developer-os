@@ -144,7 +144,7 @@ function dieAfterUnlinking(context: DyingCliContext, fragment: string): { readon
 }
 
 describe("a death between a publication journal's removal and its plan leaf's (NEW-110 review C2)", () => {
-  it.each(["bundle_publication", "rollback_payload_state"])("recovers when the %s compaction died right after unlinking its final journal", async (kind) => {
+  it.each(["bundle_publication", "rollback_payload_state"])("recovers when the compaction died right after its first unlink under update/journals/%s/", async (kind) => {
     const home = await installUpdatableHome(`recovery-compaction-${kind.replaceAll("_", "-")}`, "arm64");
     const dying = dieAfterUnlinking(home.fixture.context, `/update/journals/${kind}/`);
 

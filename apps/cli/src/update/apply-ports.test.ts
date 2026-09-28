@@ -2,7 +2,7 @@ import { LifecycleRecoveryRequiredError, parseCanonicalAbsolutePathText, parseLo
 import type { LifecycleGuardedEntryV1, ManifestBytesStateV1, ManifestStatePlanV1, UpdateExpectedPayloadRefV1 } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
-import { manifestPayloadIdentities, matchesManifestFileIdentity } from "./apply-ports.js";
+import { manifestPayloadIdentities, matchesManifestFileIdentity, runCleanups } from "./apply-ports.js";
 import { SYNTHETIC_COORDINATOR_ID } from "./testing.js";
 
 function payload(ordinal: number): UpdateExpectedPayloadRefV1 {
@@ -55,6 +55,25 @@ describe("manifestPayloadIdentities (construction_evidence, D72 P2)", () => {
     const identity = await manifestPayloadIdentities([transitional, terminal], () => Promise.resolve({ dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("2") }));
 
     expect(() => identity(payload(9))).toThrow(LifecycleRecoveryRequiredError);
+  });
+});
+
+describe("runCleanups (NEW-110 re-review)", () => {
+  it("runs every cleanup in order and resolves even when one of them rejects", async () => {
+    const ran: string[] = [];
+
+    await expect(runCleanups([
+      () => {
+        ran.push("first");
+        return Promise.reject(Object.assign(new Error("synthetic rm failure"), { code: "EBUSY" }));
+      },
+      () => {
+        ran.push("second");
+        return Promise.resolve();
+      },
+    ])).resolves.toBeUndefined();
+
+    expect(ran).toStrictEqual(["first", "second"]);
   });
 });
 
