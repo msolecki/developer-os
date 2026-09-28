@@ -549,12 +549,13 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
     if ((await observe()).state === "verified") await finalize();
     await compact();
   };
+  // The plan leaf goes first: a retry that still opens it would compact against a journal already gone.
   const removeLeaf = async (ref: ImmutableUpdatePlanRefV1, plan: unknown, journal: UpdateInitialJournalRefV1 | null): Promise<void> => {
+    if (plan !== null) await journals.remove(ref.path, participantPlanFileHash(ref, plan));
     if (journal !== null) {
       await journals.remove(journal.stagedPath);
       await journals.remove(journal.finalPath);
     }
-    if (plan !== null) await journals.remove(ref.path, participantPlanFileHash(ref, plan));
   };
   const compaction: UpdateCompactionHandlersV1 = {
     owner_update: async (entry) => {

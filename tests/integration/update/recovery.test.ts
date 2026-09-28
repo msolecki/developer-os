@@ -25,7 +25,7 @@ import type { CliUpdateContext } from "@developer-os/cli/dist/update/context.js"
 import { planRollback } from "@developer-os/cli/dist/update/planning.js";
 import type { UpdateHomeV1 } from "@developer-os/cli/dist/update/planning.js";
 import { applyRollback } from "@developer-os/cli/dist/update/rollback-apply.js";
-import { dieAfterMutations, installUpdatableHome, updateTo } from "@developer-os/cli/dist/update/testing.js";
+import { dieAfterMutations, installUpdatableHome, SyntheticDeathError, updateTo } from "@developer-os/cli/dist/update/testing.js";
 import type { UpdatableHomeV1 } from "@developer-os/cli/dist/update/testing.js";
 
 /**
@@ -121,6 +121,43 @@ describe("update --apply at every death point (Spec 2 §9.3, §9.4)", () => {
     expect(point).toBeGreaterThan(directions.backward + directions.forward);
     for (const directory of home.world.scratchDirectories) expect(await exists(directory)).toBe(false);
   }, SWEEP_TIMEOUT_MS);
+});
+
+type DyingCliContext = Parameters<typeof dieAfterMutations>[0];
+
+/** The same context whose process dies right after it unlinks a path containing `fragment`. */
+function dieAfterUnlinking(context: DyingCliContext, fragment: string): { readonly context: DyingCliContext; readonly died: () => boolean } {
+  const lifecycle = context.lifecycle;
+  if (lifecycle === undefined) throw new Error("the fixture has no lifecycle ports");
+  let died = false;
+  const fs: Record<string, unknown> = { ...lifecycle.fs };
+  for (const name of ["writeExclusive", "mkdirExclusive", "renameOver", "renameNoReplace", "unlinkExact", "rmdirExactEmpty", "syncDirectory"] as const) {
+    const real = lifecycle.fs[name].bind(lifecycle.fs) as (...args: readonly unknown[]) => Promise<unknown>;
+    fs[name] = async (...args: readonly unknown[]): Promise<unknown> => {
+      if (died) throw new SyntheticDeathError();
+      const result = await real(...args);
+      if (name === "unlinkExact" && (args[0] as { readonly path: string }).path.includes(fragment)) {
+        died = true;
+        throw new SyntheticDeathError();
+      }
+      return result;
+    };
+  }
+  return { context: { ...context, lifecycle: { ...lifecycle, fs: fs as unknown as typeof lifecycle.fs } }, died: () => died };
+}
+
+describe("a death between a publication journal's removal and its plan leaf's (NEW-110 review C2)", () => {
+  it.each(["bundle_publication", "rollback_payload_state"])("recovers when the %s compaction died right after unlinking its final journal", async (kind) => {
+    const home = await installUpdatableHome(`recovery-compaction-${kind.replaceAll("_", "-")}`, "arm64");
+    const dying = dieAfterUnlinking(home.fixture.context, `/update/journals/${kind}/`);
+
+    expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    await recoverUpdate(home.update());
+
+    const settledHome = await settled(home);
+    expect(settledHome.active.version).toBe("1.1.0");
+    expect(settledHome.rollback?.previous.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
 });
 
 describe("update rollback --apply at every death point (Spec 2 §10.2)", () => {
