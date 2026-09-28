@@ -12,7 +12,7 @@ import {
   RELEASE_NETWORK_ENTRYPOINTS,
   RELEASE_TRANSPORT_COMPOSITION,
 } from "./check.js";
-import { ALLOWED_SPAWN_SITES, inspectOptInAuthoritySurfaces } from "./opt-in-authority.js";
+import { ALLOWED_SPAWN_SITES, ALLOWED_SUPERVISED_SITES, inspectOptInAuthoritySurfaces } from "./opt-in-authority.js";
 
 const run = promisify(execFile);
 
@@ -323,6 +323,25 @@ describe("the repository check gate", () => {
    * direct `node:fs` stat inside an exempted module renders exactly like the
    * approved encoder, so only the stat call can fail it.
    */
+  /**
+   * The update ports module also holds `context.fs`, the CLI's own filesystem, whose receiver is
+   * spelled `fs` too; there only the lifecycle port's `lifecycle.fs` is exempt.
+   */
+  it("exempts only the lifecycle port's receiver in the update ports module", async () => {
+    const root = await sandbox({
+      "apps/cli/src/update/apply-ports.ts":
+        `const entry = await lifecycle.fs.lstat(path);\n` +
+        `const stats = await context.fs.lstat(path);\n` +
+        `export const ino = [entry.ino, stats.ino];\n`,
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("apps/cli/src/update/apply-ports.ts:2");
+    expect(outcome.stderr).not.toContain("apps/cli/src/update/apply-ports.ts:1");
+  });
+
   it("fails on a direct number-valued stat inside a guarded port caller", async () => {
     const root = await sandbox({
       "packages/core/src/lifecycle/allocator.ts":
@@ -462,6 +481,36 @@ describe("the repository check gate", () => {
     expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
   });
 
+  it("keeps a raw spawn unexpected at a site allowlisted only for the supervised primitive", async () => {
+    const root = await sandbox({
+      "apps/cli/src/update/apply-ports.ts": 'import { spawn } from "node:child_process";\nexport function codexRuntime(): void {\n  spawn("/usr/bin/true");\n}\n',
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("unexpected spawn site: apps/cli/src/update/apply-ports.ts::codexRuntime");
+  });
+
+  it("accepts the supervised primitive at its allowlisted site", async () => {
+    const root = await sandbox({
+      "apps/cli/src/update/apply-ports.ts": "export function codexRuntime(): unknown {\n  return new SupervisedProcessRunner(nodeSupervisedProcessDependencies);\n}\n",
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  it("keeps the supervised primitive unexpected at a site allowlisted only for a raw spawn", async () => {
+    const root = await sandbox({
+      "packages/security/src/process.ts": "export class NodeProcessRunner {\n  run(): unknown {\n    return new SupervisedProcessRunner(nodeSupervisedProcessDependencies);\n  }\n}\n",
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("unexpected spawn site: packages/security/src/process.ts::NodeProcessRunner (nodeSupervisedProcessDependencies)");
+  });
+
   it.each([
     { removed: "apps/cli/src/git-entry.ts", problem: "no file constructs a GitProcessSupervisor" },
     { removed: "apps/cli/src/launchd-entry.ts", problem: "no file names /bin/launchctl" },
@@ -546,8 +595,9 @@ describe("the opt-in authority surfaces of this repository", () => {
 
   it("observes every allowlisted spawn site, so the allowlist cannot outlive the code it names", async () => {
     expect(ALLOWED_SPAWN_SITES.length).toBeGreaterThan(0);
+    expect(ALLOWED_SUPERVISED_SITES.length).toBeGreaterThan(0);
     const report = await inspectOptInAuthoritySurfaces(repositoryRoot);
-    expect(report.allowedSpawnSites).toStrictEqual([...ALLOWED_SPAWN_SITES].sort());
+    expect(report.allowedSpawnSites).toStrictEqual([...ALLOWED_SPAWN_SITES, ...ALLOWED_SUPERVISED_SITES].sort());
   });
 
   it("finds the Git supervisor composition, the launchd adapters and the scheduled runner", async () => {

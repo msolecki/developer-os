@@ -146,10 +146,14 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
   "apps/cli/src/update/rollback-publication.ts",
   "apps/cli/src/update/recovery.ts",
   "apps/cli/src/update/foundation-port.ts",
-  "apps/cli/src/update/apply-ports.ts",
 ];
 
 const GUARDED_PORT_RECEIVER = /(?:^|[^A-Za-z0-9_$])fs$/u;
+
+/** Modules that also hold `context.fs`, the CLI's own filesystem, exempt only the receiver `lifecycle.fs`. */
+const LIFECYCLE_PORT_RECEIVER_ONLY: ReadonlyMap<string, RegExp> = new Map([
+  ["apps/cli/src/update/apply-ports.ts", /(?:^|[^A-Za-z0-9_$.])lifecycle\.fs$/u],
+]);
 
 /**
  * A single call may opt out where the option would change what it reads: on
@@ -178,7 +182,7 @@ function findNumberValuedStats(
   content: string,
 ): readonly Violation[] {
   if (!path.endsWith(".ts") || path.endsWith(".test.ts")) return [];
-  const viaGuardedPort = STAT_OPTION_EXEMPT.includes(path);
+  const portReceiver = LIFECYCLE_PORT_RECEIVER_ONLY.get(path) ?? (STAT_OPTION_EXEMPT.includes(path) ? GUARDED_PORT_RECEIVER : null);
 
   const code = codeWithoutLiterals(content);
   if (!IDENTITY_FIELD.test(code)) return [];
@@ -189,7 +193,7 @@ function findNumberValuedStats(
   for (const match of code.matchAll(STAT_CALL)) {
     const args = callArguments(code, match.index + match[0].length - 1);
     if (args === null) continue;
-    if (viaGuardedPort && GUARDED_PORT_RECEIVER.test(code.slice(Math.max(0, match.index - 3), match.index))) continue;
+    if (portReceiver?.test(code.slice(Math.max(0, match.index - 16), match.index)) === true) continue;
     if (args.includes("bigint") || FORWARDED_OPTIONS.test(args)) continue;
     const line = code.slice(0, match.index).split("\n").length;
     const marked = lines
@@ -416,7 +420,8 @@ async function main(): Promise<number> {
     for (const problem of authority) process.stderr.write(`  ${problem}\n`);
     process.stderr.write(
       "\nA new process spawn is new authority: route it through an existing entrypoint, or add it to\n" +
-        "ALLOWED_SPAWN_SITES in tests/repository/opt-in-authority.ts in a reviewed change.\n",
+        "ALLOWED_SPAWN_SITES (a raw spawn) or ALLOWED_SUPERVISED_SITES (the supervised primitive) in\n" +
+        "tests/repository/opt-in-authority.ts in a reviewed change.\n",
     );
   }
 

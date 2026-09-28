@@ -63,8 +63,6 @@ export interface OptInAuthorityReportV1 {
  * receive-pack trampoline bridge.
  */
 export const ALLOWED_SPAWN_SITES: readonly string[] = [
-  // Spec 2 P6 (D72): the one closed `codex plugin add <id> --json` refresh and its `plugin list` observation.
-  "apps/cli/src/update/apply-ports.ts::codexRuntime",
   "apps/launcher/src/handoff.ts::execAdmittedRelease",
   "packages/platform-macos/src/retained-rename.ts::SpawnRenameAtxRunner",
   "packages/platform-macos/src/transaction-lock.ts::SpawnLockfRunner",
@@ -72,6 +70,12 @@ export const ALLOWED_SPAWN_SITES: readonly string[] = [
   "packages/security/src/supervised-process.ts::nodeSupervisedProcessDependencies",
   "packages/security/src/update/planner-process.ts::sampleNodePlannerProcess",
   "packages/security/src/update/planner-process.ts::spawnNodePlannerChild",
+];
+
+/** Sites outside a Git or launchd entrypoint that may hold the supervised primitive's real dependencies, and nothing rawer. */
+export const ALLOWED_SUPERVISED_SITES: readonly string[] = [
+  // Spec 2 P6 (D72): the one closed `codex plugin add <id> --json` refresh and its `plugin list` observation.
+  "apps/cli/src/update/apply-ports.ts::codexRuntime",
 ];
 
 const CHILD_PROCESS_MODULES = new Set(["node:child_process", "child_process"]);
@@ -220,7 +224,7 @@ export async function inspectOptInAuthoritySurfaces(repositoryRoot: string): Pro
     const entrypoint = facts.constructsGitSupervisor || facts.namesLaunchctl;
     for (const site of facts.supervisedSites) {
       if (entrypoint) continue;
-      if (ALLOWED_SPAWN_SITES.includes(site)) allowed.add(site);
+      if (ALLOWED_SUPERVISED_SITES.includes(site)) allowed.add(site);
       else unexpected.add(`${site} (${SUPERVISED_SPAWN_AUTHORITY})`);
     }
   }
