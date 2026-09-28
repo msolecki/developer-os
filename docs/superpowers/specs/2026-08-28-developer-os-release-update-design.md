@@ -16,7 +16,11 @@ preimage/postimage types, automatic-rollback exit classes (§9.4, §11) and the 
 types as an accepted residual (§13.3) — is marked "Amended 2026-09-23 (D60)" in place; the A12
 design's §11 amendments (D47: the `unsigned-local` trust state in §3.3, `codex-registration-v1` in §5,
 and the instruction overrides and installed-home reconcile in §6.1) are marked "Amended 2026-09-26
-(A12 §11, D47)" in place.** This
+(A12 §11, D47)" in place; the 2026-09-28 founder decision D72 — the NEW-110 revision pass (P1–P8:
+source parents, manifest identity and steps, plan-derived signed metadata, ephemeral reservations, the
+Codex refresh policy and re-registration, the compensation cause, the capability gate, the fallback
+handoff, the proof scope, and admitted bookkeeping identities) — is the single block "Amended
+2026-09-28 (D72)" above §1.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -54,16 +58,16 @@ residue (`staging`, `state/transactions`, `backups`) that §6.1 refuses as unbou
 refusal directs the user to `developer-os uninstall`, then to archive the product home manually, then
 to `developer-os init`. §6.1's external shape is unchanged.
 
-**Proposed 2026-09-28 (DRAFT, awaiting founder approval) — the Spec 2 revision pass that makes
-`update --apply` and `update rollback --apply` composable (BACKLOG NEW-110, with NEW-61 and NEW-86;
-D60, D61, D68).** Closure Task 9 found six contradictions between this specification and the
-validators shipped by Tasks 12–25 and closure Tasks 1–8 (`git show
+**Amended 2026-09-28 (D72) — the Spec 2 revision pass that makes `update --apply` and
+`update rollback --apply` composable (BACKLOG NEW-110, with NEW-61 and NEW-86; D60, D61, D68).**
+Closure Task 9 found six contradictions between this specification and the validators shipped by
+Tasks 12–25 and closure Tasks 1–8 (`git show
 a03499c:docs/superpowers/plans/2026-09-23-developer-os-spec2-closure.md`, "Blocked 2026-09-23"). This
-block resolves all six, and the minor items found with them, against the shipped code. Nothing in the
-body of this document is edited until the founder approves; on approval each item below is applied at
-the section it names, marked "Amended <date> (D<n>)" there, and this block is replaced by a pointer.
-Items marked **(Q<n>)** carry the recommended answer to the founder question of the same number in
-`docs/superpowers/plans/2026-09-28-new-110-spec2-apply.md`; a different answer changes only that item.
+block resolves all six, and the minor items found with them, against the shipped code. The founder
+approved it as D72, with the recommended answer to every question of
+`docs/superpowers/plans/2026-09-28-new-110-spec2-apply.md` (Q1-A to Q6-A); the items marked
+**(D72 Q<n>-A)** carry those answers. The block is normative. Where it disagrees with the section an
+item names, the item governs, and that section's text is not rewritten.
 
 - **P1 — the source parents are construction directories (contradiction 1).**
   `BundleSourceStagingPlanV1` (§9.2) and `RollbackPayloadSourceStagingPlanV1` (§9.2) pin
@@ -126,7 +130,7 @@ Items marked **(Q<n>)** carry the recommended answer to the founder question of 
   point of no return restores the transitional plan's tombstone; after it, both manifest steps
   force-forward.
 
-- **P4 — the retained signed metadata is plan-derived (contradiction 4) (Q1).** §9.2's
+- **P4 — the retained signed metadata is plan-derived (contradiction 4) (D72 Q1-A).** §9.2's
   `guarded_signed_metadata` source needs a retained verified file with a known path and inode, but
   planning keeps only `{ value, hash }` of the delegation and index and drops the bundle-manifest body
   (`apps/cli/src/update/planning.ts:229-231,625-628`), and the planning scratch retains none of the
@@ -152,7 +156,7 @@ Items marked **(Q<n>)** carry the recommended answer to the founder question of 
   identity (D60), so the arm never appears on the `after` side.
 
 - **P6 — the production Codex refresh policy (contradiction 6) and re-registration on update
-  (NEW-61) (Q2).** Only tests build `OwnerExternalEffectProcessPolicyV1`
+  (NEW-61) (D72 Q2-A).** Only tests build `OwnerExternalEffectProcessPolicyV1`
   (`apps/cli/src/update/external-effect.test.ts:55`), and the shipped policy cannot drive the real
   command: its environment is exactly `HOME=managed_vendor_home` and `TMPDIR`
   (`packages/core/src/update/participants.ts:502-505`), while the install path that is observed to work
@@ -183,19 +187,24 @@ Items marked **(Q<n>)** carry the recommended answer to the founder question of 
   `developer-os/update-leaf/<kind>/v1\0` domain governs every leaf ref; the owner, state, migration and
   external-effect refs that the shipped code hashes as plain SHA-256
   (`updateParticipantDocumentHash`, `packages/core/src/update/participants.ts:220-221`) conform to the
-  spec, no text change. (b) **Compensation cause (Q3):** `UpdateLifecycleCoordinatorJournalV2` gains
+  spec, no text change. (b) **Compensation cause (D72 Q3-A):** `UpdateLifecycleCoordinatorJournalV2` gains
   `compensationCause: SafeReasonCodeV1 | null`, non-null exactly when `direction` is `compensating` or
   `terminalOutcome` is `rolled_back`, written with the transition that starts compensation, so a
   resumed run reports §9.4's exit class of the original cause instead of
-  `update_coordinator_compensated`. (c) **Planner and verifier capability gate (Q4):** the gate is the
+  `update_coordinator_compensated`. (c) **Planner and verifier capability gate (D72 Q4-A):** the gate is the
   repository-level transitive graph check of §2 alone; no capability scan runs at spawn time, because
   every real planner and verifier entry reads its counted request from stdin
-  (`packages/security/src/update/verifier-process.ts:106-107`). (d) **Fallback handoff (Q5):** the
+  (`packages/security/src/update/verifier-process.ts:106-107`). (d) **Fallback handoff (D72 Q5-A):** the
   production source of `UpdateFallbackHandoffV1` is the launcher's FD 3 document, extended by Task 11b;
   until then the production composer refuses before allocation with `update_fallback_unavailable`,
   exit 4, and only the synthetic fixture supplies one. This item does not make Task 11b unnecessary.
   (e) **Allocation:** the coordinator's allocator block covers every prefix the composition uses in one
-  reservation; the count is derived from the materialized update before allocation.
+  reservation; the count is derived from the materialized update before allocation. (f) **Scope of
+  the §12 proof (D72 Q6-A):** DOS-P7's gate is proven on the synthetic release fixture for both
+  `arm64` and `x64`: install, preview and apply, rollback, reapply, uninstall. The Git and automation
+  leg joins once NEW-113's Spec 1 amendment (D71) ships. The real-release half of the gate waits for
+  Task 11b and A16. This specification and Spec 1 stay in place while Task 11b, NEW-112 and NEW-113
+  depend on them; only their surviving contracts move to the architecture notes.
 
 - **P8 — admitted bookkeeping paths carry their identity (NEW-86, D30).** §6.1's
   `admittedPreexistingPaths` becomes `readonly { path: CanonicalAbsolutePathV1; dev: UInt64DecimalV1;
@@ -206,7 +215,8 @@ Items marked **(Q<n>)** carry the recommended answer to the founder question of 
   chained into both journal slots, so a recovering process replays what planning observed. A
   completed fresh `init` compacts its plan, so no persisted plan of the old grammar exists to migrate;
   an interrupted old-grammar plan refuses as exit 6. Spec 1 §2.1's sentence that
-  `admittedPreexistingPaths`' grammar covers the bookkeeping set is amended to match on approval.
+  `admittedPreexistingPaths`' grammar covers the bookkeeping set now refers to this item's grammar.
+  Spec 1 gets a pointer to it at the plan's close (Task 14).
 
 ---
 
