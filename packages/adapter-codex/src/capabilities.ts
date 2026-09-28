@@ -33,7 +33,14 @@ export const CODEX_NOT_USED_KEYS: readonly CodexCapabilityKey[] = [
 ];
 
 /**
- * The join: table permission and probe observation into one three-value
+ * The two keys observed only through firing records (A13 §8.1). A record can
+ * witness that a hook fired; no record is not evidence that it cannot, so an
+ * `absent` for either stays `unknown`, never `no` (hooks spec §8.1).
+ */
+const FIRING_KEYS: ReadonlySet<CodexCapabilityKey> = new Set(["plugin_hooks", "session_start_injection"]);
+
+/**
+ * The join: table permission and probe observation into one four-value
  * state per capability. `doctor` prints this and DOS-P6 consumes it.
  *
  * `yes` is earned twice or not at all — the version table must permit *and*
@@ -50,7 +57,10 @@ export const CODEX_NOT_USED_KEYS: readonly CodexCapabilityKey[] = [
  * to build that wrapper. A key the probe could not check (`unavailable`) is
  * `unknown` for the older reason: "we could not ask" is not "it is not there",
  * and collapsing the two would let a probe failure masquerade as settled
- * information in either direction.
+ * information in either direction. A key the probe asked about and reports
+ * `absent` is `no`, whatever the version: the table gates `yes` and says
+ * nothing about a feature that is not there (NEW-62). The `FIRING_KEYS` above
+ * are the exception.
  *
  * `CODEX_NOT_USED_KEYS` resolve unconditionally, before the table or the
  * observation is even consulted — nothing ships behind any of them, so a table
@@ -78,8 +88,8 @@ export function resolveCapabilities(
 ): CodexCapabilities {
   const stateOf = (key: CodexCapabilityKey): CapabilityState => {
     if (CODEX_NOT_USED_KEYS.includes(key)) return "not-used";
-    const observation = observations.get(key) ?? "absent";
-    if (observation === "unavailable") return "unknown";
+    const observation = observations.get(key);
+    if (observation === "absent") return FIRING_KEYS.has(key) ? "unknown" : "no";
     return tablePermits(key, version) && observation === "observed" ? "yes" : "unknown";
   };
 

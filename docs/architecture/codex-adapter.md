@@ -89,10 +89,13 @@ one capability vocabulary — this note says so rather than restating it as a co
 8. **It spawns no process itself.** Execution goes through `packages/security`'s runner, and the
    two `codex plugin` steps are *proposed*, not run, by this package.
 
-## 3. The capability model — two gates, three values, and one observable key
+## 3. The capability model — two gates, four values, and one observable key
 
 `yes` requires a documented version floor to permit the capability **and** a probe to observe it.
-A probe that could not run yields `unknown`. DOS-P6 removed `wrapper-required`:
+A probe that could not run yields `unknown`. A probe that asked and reports `absent` yields `no`,
+whatever the version — the table gates `yes`, not `no` — and a key no probe mentioned stays
+`unknown` (NEW-62). `doctor --probe` therefore prints `skills=no` when the listing answered without
+our enabled tree and `skills=unknown` when it could not be read. DOS-P6 removed `wrapper-required`:
 `session_end_capture`, `pre_compact_backup`, `subagents` and `durable_project_guidance` are unused
 by this product and resolve to `not-used` before either gate (`CODEX_NOT_USED_KEYS`). Both adapters
 share this vocabulary and their key lists are asserted equal.
@@ -578,9 +581,10 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
   Owner: NEW-45 still, for whether a real turn ever emits more than one `agent_message`.
 - **`renderMarketplace` emits no `policy`/`category`**, so the plugin inherits the vendor's default
   `authPolicy: ON_INSTALL`.
-- **Capability resolution has no `no` state**: `absent` and `unavailable` probe observations both
-  resolve to `unknown` (`packages/core/src/capabilities/index.ts`), contrary to the docblocks in both
-  adapters' `capabilities.ts`. Owner: NEW-62.
+- **Capability resolution had no `no` state**: `absent` and `unavailable` probe observations both
+  resolved to `unknown` (`packages/core/src/capabilities/index.ts`), contrary to the docblocks in both
+  adapters' `capabilities.ts`. Closed by NEW-62: `absent` now resolves to `no` (§3), except for the
+  two firing-record keys, which stay `unknown` without a record.
 
 ## 15. Observed for A12 against Codex CLI 0.155.1 on 2026-09-22
 

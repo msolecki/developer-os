@@ -19,12 +19,29 @@ describe("resolveCapabilities", () => {
     expect(resolved.skills).toBe("yes");
   });
 
-  it("reports unknown when the probe did not observe", () => {
+  /**
+   * NEW-62: `absent` is "we asked and it is not there", a definite negative,
+   * and must not fold into `unknown` beside a probe that could not run.
+   */
+  it("reports no when the probe asked and did not observe", () => {
     const resolved = resolveCapabilities(
       "2.1.216",
       observed([["skills", "absent"]]),
     );
-    expect(resolved.skills).toBe("unknown");
+    expect(resolved.skills).toBe("no");
+  });
+
+  it("reports no below the minimum version, because the table gates yes and not no", () => {
+    const resolved = resolveCapabilities(
+      "1.0.0",
+      observed([["skills", "absent"]]),
+    );
+    expect(resolved.skills).toBe("no");
+  });
+
+  it("never reports no for a key the probe never mentioned", () => {
+    const resolved = resolveCapabilities("2.1.216", observed([]));
+    expect(Object.values(resolved)).not.toContain("no");
   });
 
   /**

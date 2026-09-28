@@ -28,6 +28,28 @@ describe("resolveCapabilities", () => {
     expect(resolveCapabilities("0.147.0", observed).session_start_injection).toBe("unknown");
   });
 
+  /**
+   * NEW-62: `absent` is "we asked and it is not there", a definite negative,
+   * and must not fold into `unknown` beside a probe that could not run. The
+   * table gates `yes`, not `no`, so a below-floor version reports it too.
+   */
+  it("reports no when the probe asked and did not observe, at any version", () => {
+    const absent = new Map<string, ProbeObservation>([["skills", "absent"]]);
+    expect(resolveCapabilities("0.147.0", absent).skills).toBe("no");
+    expect(resolveCapabilities("0.1.0", absent).skills).toBe("no");
+  });
+
+  it("never reports no for a key the probe never mentioned", () => {
+    expect(Object.values(resolveCapabilities("0.147.0", new Map()))).not.toContain("no");
+  });
+
+  it("never reports either hook key as no, because a firing record cannot witness absence", () => {
+    for (const key of ["plugin_hooks", "session_start_injection"] as const) {
+      const absent = new Map<string, ProbeObservation>([[key, "absent"]]);
+      expect(resolveCapabilities("0.155.1", absent)[key]).toBe("unknown");
+    }
+  });
+
   it("reports unknown, never no, for a probe that could not run", () => {
     const resolved = resolveCapabilities(
       "0.147.0",

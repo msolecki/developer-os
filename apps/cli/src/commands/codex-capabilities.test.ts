@@ -159,7 +159,10 @@ describe("reportCodexCapabilities", () => {
       pluginRoot: "/synthetic/plugin",
       probe: true,
     });
-    expect(report.capabilities.skills).toBe("unknown");
+    // NEW-62: the listing answered and our tree is not in it — a definite
+    // negative, printed differently from a listing that could not be read.
+    expect(report.capabilities.skills).toBe("no");
+    expect(report.summary).toContain("skills=no");
   });
 
   /**
@@ -298,7 +301,7 @@ describe("the hook keys come from firing records", () => {
         ["session_end_capture", "observed"],
       ]),
     });
-    expect(report.capabilities.skills).toBe("unknown");
+    expect(report.capabilities.skills).toBe("no");
     expect(report.capabilities.session_end_capture).toBe("not-used");
   });
 

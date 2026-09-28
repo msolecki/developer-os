@@ -70,10 +70,13 @@ implementation plan was deleted when its last step closed; git history is the ar
    fields as warnings and such a plugin still loads. The drift check is the authority on what our
    manifest contains; the probe catches syntax and schema errors early, which is a different job.
 
-## 3. The capability model — two gates, three values
+## 3. The capability model — two gates, four values
 
 `yes` requires a documented version floor to permit the capability **and** a probe to observe it.
-A probe that could not run yields `unknown`. DOS-P6 removed `wrapper-required`:
+A probe that could not run yields `unknown`. A probe that asked and reports `absent` yields `no`,
+whatever the version — the table gates `yes`, not `no` — and a key no probe mentioned stays
+`unknown` (NEW-62). `doctor --probe` therefore prints `skills=no` for a plugin tree that is
+verifiably missing its skills and `skills=unknown` when the probe could not run. DOS-P6 removed `wrapper-required`:
 `session_end_capture`, `pre_compact_backup`, `subagents` and `durable_project_guidance` are unused
 by this product and resolve to `not-used` before either gate (`CLAUDE_NOT_USED_KEYS`).
 
