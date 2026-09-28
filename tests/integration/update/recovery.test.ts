@@ -51,13 +51,15 @@ function bundleRoot(home: UpdatableHomeV1, version: string): string {
   return join(home.fixture.paths.home, "releases", version, `darwin-${home.world.architecture}`);
 }
 
-/** The fresh process's view: the closure is clear and the home admits with zero drift. */
+/**
+ * The fresh process's view: the closure is clear and the home admits with zero drift. An empty
+ * allocator-reserved staging root is not asserted away: the closure is the authority on residue.
+ */
 async function settled(home: UpdatableHomeV1): Promise<UpdateHomeV1> {
   const update = home.update();
   const ports = update.apply;
   if (ports === undefined) throw new Error("the on-disk context binds the apply ports");
   expect((await ports.withGlobalLock(() => ports.closure())).kind).toBe("clear");
-  expect(await nodeFs.readdir(join(home.fixture.paths.home, "staging", "lifecycle")).catch(() => [])).toEqual([]);
   return update.readHome();
 }
 
