@@ -2974,7 +2974,8 @@ describe("runIngest, note captures applied verbatim (spec §3.4)", () => {
 /**
  * D52 (BACKLOG NEW-102): Codex resolves `CODEX_HOME` from the user's real home under `env: {}` and
  * loads its `AGENTS.md` and `agents/*.toml` into the ingest request despite `--ignore-user-config
- * --ignore-rules`. Ingest now hands it a product-owned home that holds only a credential link.
+ * --ignore-rules`. Ingest now hands each run its own product-owned home (NEW-105) that holds only a
+ * credential link.
  */
 describe("ingest's isolated Codex home (D52)", () => {
   async function userCodexHome(fixture: CommandFixture, withAuth: boolean): Promise<string> {

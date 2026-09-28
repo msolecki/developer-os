@@ -1001,7 +1001,12 @@ export async function prepareCodexIngestHome(context: CliContext): Promise<strin
   );
   let runHome: string;
   try {
-    if (linkStats !== null) await context.fs.unlink(link);
+    /** A concurrent run may unlink the legacy link first. */
+    if (linkStats !== null) {
+      await context.fs.unlink(link).catch((error: unknown) => {
+        if (errnoCode(error) !== "ENOENT") throw error;
+      });
+    }
     runHome = await mkdtemp(join(home, CODEX_INGEST_RUN_PREFIX));
   } catch (error) {
     throw codexIngestHomeRefusal(home, `could not be prepared (${errnoCode(error)})`);
