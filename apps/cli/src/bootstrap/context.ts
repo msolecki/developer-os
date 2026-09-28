@@ -2,6 +2,7 @@ import { constants, type BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
+import { sortUtf8 } from "@developer-os/core";
 import type { BootstrapRetentionPostimageV1, CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
 
 import type { BootstrapExecutor } from "./executor.js";
@@ -65,17 +66,13 @@ function entry(path: string, stats: BigIntStats): BootstrapEvidenceGuardedEntryV
   };
 }
 
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left), Buffer.from(right));
-}
-
 /** Descriptor- and identity-bound reader used only by the evidence inspector. */
 export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuardedReaderV1 {
   async inventoryExactNamespaces(
     roots: readonly CanonicalAbsolutePathV1[],
   ): Promise<readonly BootstrapEvidenceGuardedEntryV1[]> {
     const found = new Map<string, BootstrapEvidenceGuardedEntryV1>();
-    for (const root of [...new Set(roots)].sort(compareUtf8)) {
+    for (const root of sortUtf8([...new Set(roots)], (path) => path)) {
       let stats: BigIntStats;
       try {
         stats = await nodeFs.lstat(root, { bigint: true });
@@ -96,7 +93,7 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
         await this.inventoryDirectNamespaces(root, stats, found);
       }
     }
-    return [...found.values()].sort((left, right) => compareUtf8(left.path, right.path));
+    return sortUtf8([...found.values()], (guarded) => guarded.path);
   }
 
   async readRegularFile(
@@ -155,9 +152,9 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
     try {
       const opened = await handle.stat({ bigint: true });
       const isFreshStagingRoot = basename(root) === "fresh-v2-init" && basename(dirname(root)) === "staging";
-      const names = (await nodeFs.readdir(root)).filter((name) =>
+      const names = sortUtf8((await nodeFs.readdir(root)).filter((name) =>
         isFreshStagingRoot ? FRESH_STAGING_ID.test(name) : INITIAL_NAMESPACE.test(name)
-      ).sort(compareUtf8);
+      ), (name) => name);
       if (!sameIdentity(opened, expected)) throw new Error("bootstrap evidence root changed identity");
       for (const name of names) {
         const path = join(root, name);
@@ -170,9 +167,9 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
       }
       const linkedAfter = await nodeFs.lstat(root, { bigint: true });
       const descriptorAfter = await handle.stat({ bigint: true });
-      const namesAfter = (await nodeFs.readdir(root)).filter((name) =>
+      const namesAfter = sortUtf8((await nodeFs.readdir(root)).filter((name) =>
         isFreshStagingRoot ? FRESH_STAGING_ID.test(name) : INITIAL_NAMESPACE.test(name)
-      ).sort(compareUtf8);
+      ), (name) => name);
       if (
         !sameIdentity(linkedAfter, expected) || !sameIdentity(descriptorAfter, expected) ||
         names.length !== namesAfter.length || names.some((name, index) => name !== namesAfter[index])
@@ -194,7 +191,7 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
     );
     try {
       const opened = await handle.stat({ bigint: true });
-      const names = (await nodeFs.readdir(root)).sort(compareUtf8);
+      const names = sortUtf8(await nodeFs.readdir(root), (name) => name);
       if (!sameIdentity(opened, expected)) throw new Error("bootstrap evidence tree changed identity");
       for (const name of names) {
         const path = join(root, name);
@@ -207,7 +204,7 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
       }
       const linkedAfter = await nodeFs.lstat(root, { bigint: true });
       const descriptorAfter = await handle.stat({ bigint: true });
-      const namesAfter = (await nodeFs.readdir(root)).sort(compareUtf8);
+      const namesAfter = sortUtf8(await nodeFs.readdir(root), (name) => name);
       if (
         !sameIdentity(linkedAfter, expected) || !sameIdentity(descriptorAfter, expected) ||
         names.length !== namesAfter.length || names.some((name, index) => name !== namesAfter[index])

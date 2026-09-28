@@ -14,6 +14,7 @@ import {
   isRedactionKeyPath,
   parseLowerHexSha256,
   parseUInt64Decimal,
+  sortUtf8,
   type BootstrapJournalRecordV1,
   type BootstrapRetentionDirectoryEntryV1,
   type BootstrapRetentionEntryV1,
@@ -27,7 +28,6 @@ import type { RenameSameParentNoReplace } from "@developer-os/platform-macos";
 
 import type { BootstrapJournalStore } from "./journal-store.js";
 
-const encoder = new TextEncoder();
 const UINT64_MAX = 18_446_744_073_709_551_615n;
 
 export type BootstrapRetentionObservationV1 =
@@ -70,17 +70,6 @@ function sameValue(left: unknown, right: unknown): boolean {
   } catch {
     return false;
   }
-}
-
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = encoder.encode(left);
-  const rightBytes = encoder.encode(right);
-  const common = Math.min(leftBytes.length, rightBytes.length);
-  for (let index = 0; index < common; index += 1) {
-    const difference = (leftBytes[index] as number) - (rightBytes[index] as number);
-    if (difference !== 0) return difference;
-  }
-  return leftBytes.length - rightBytes.length;
 }
 
 function uint64(value: bigint): ReturnType<typeof parseUInt64Decimal> {
@@ -244,8 +233,7 @@ async function walkDirectory(
       !exactDirectorySnapshot(opened, expectedDirectory) ||
       !exactDirectorySnapshot(linkedBefore, expectedDirectory)
     ) return refuse();
-    const namesBefore = await nodeFs.readdir(absoluteDirectory);
-    namesBefore.sort(compareUtf8);
+    const namesBefore = sortUtf8(await nodeFs.readdir(absoluteDirectory), (name) => name);
     for (const name of namesBefore) {
       if (name.length === 0 || name === "." || name === ".." || name.includes("/") || name.includes("\\")) return refuse();
       const relativePath = relativeDirectory.length === 0 ? name : `${relativeDirectory}/${name}`;
@@ -282,8 +270,7 @@ async function walkDirectory(
     }
     const linkedAfter = await nodeFs.lstat(absoluteDirectory, { bigint: true });
     const descriptorAfter = await handle.stat({ bigint: true });
-    const namesAfter = await nodeFs.readdir(absoluteDirectory);
-    namesAfter.sort(compareUtf8);
+    const namesAfter = sortUtf8(await nodeFs.readdir(absoluteDirectory), (name) => name);
     if (
       !exactDirectorySnapshot(linkedAfter, expectedDirectory) ||
       !exactDirectorySnapshot(descriptorAfter, expectedDirectory) ||
@@ -309,11 +296,11 @@ export async function projectRetainedDirectoryTreeOnce(
 ): Promise<Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>> {
   const rootBefore = await nodeFs.lstat(root, { bigint: true }).catch(() => refuse());
   if (!exactDirectory(rootBefore)) return refuse();
-  const entries: BootstrapRetentionDirectoryEntryV1[] = [];
+  const walked: BootstrapRetentionDirectoryEntryV1[] = [];
   const identities = new Set<string>([`${rootBefore.dev.toString()}:${rootBefore.ino.toString()}`]);
   const skipped = new Set<string>();
-  await walkDirectory(productHome, root, "", entries, identities, rootBefore, skipped);
-  entries.sort((left, right) => compareUtf8(left.relativePath, right.relativePath));
+  await walkDirectory(productHome, root, "", walked, identities, rootBefore, skipped);
+  const entries = sortUtf8(walked, (entry) => entry.relativePath);
   let regularFileBytes = 0n;
   for (const entry of entries) {
     if (entry.kind === "regular_file") {
@@ -325,8 +312,10 @@ export async function projectRetainedDirectoryTreeOnce(
   if (
     !exactDirectorySnapshot(rootAfter, rootBefore)
   ) return refuse();
-  const rootNamesAfter = (await nodeFs.readdir(root).catch(() => refuse())).filter((name) => !skipped.has(name));
-  rootNamesAfter.sort(compareUtf8);
+  const rootNamesAfter = sortUtf8(
+    (await nodeFs.readdir(root).catch(() => refuse())).filter((name) => !skipped.has(name)),
+    (name) => name,
+  );
   const projectedRootNames = entries
     .filter((entry) => !entry.relativePath.includes("/"))
     .map((entry) => entry.relativePath);

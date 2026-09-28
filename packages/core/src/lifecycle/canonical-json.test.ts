@@ -6,6 +6,7 @@ import {
   decodeCanonicalJson,
   encodeCanonicalJson,
   hashCanonicalJson,
+  sortUtf8,
 } from "./canonical-json.js";
 
 const escapedCodeUnits: readonly number[] = [
@@ -252,6 +253,14 @@ describe("CanonicalJsonV1", () => {
  * routes through it, so a second implementation would be the defect: the digest of a
  * plan, a record or a fingerprint is compared across subsystems and versions.
  */
+describe("sortUtf8", () => {
+  it("catches a sort that places a surrogate-pair key before a higher BMP key by UTF-16 code unit", () => {
+    const rows = [{ path: "a/\u{1F600}" }, { path: "a/�" }];
+
+    expect(sortUtf8(rows, (row) => row.path).map((row) => row.path)).toEqual(["a/�", "a/\u{1F600}"]);
+  });
+});
+
 describe("hashCanonicalJson", () => {
   it("hashes the ASCII domain, its trailing NUL, then the canonical bytes including the LF", () => {
     const expected = createHash("sha256")

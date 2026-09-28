@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
+import { encodeCanonicalJson, EXIT_CODES, sortUtf8 } from "@developer-os/core";
 import type { CanonicalJsonValue } from "@developer-os/core";
 
 import { BRAIN_TEMPLATE } from "../commands/brain-template.js";
@@ -77,10 +77,6 @@ function assertRelative(path: string): void {
   }
 }
 
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left), Buffer.from(right));
-}
-
 function document(value: CanonicalJsonValue): Uint8Array {
   return encoder.encode(encodeCanonicalJson(value));
 }
@@ -94,9 +90,7 @@ export async function writeUnsignedLocalRelease(input: {
   readonly version: string;
   readonly bundleFiles: readonly ReleaseFileV1[];
 }): Promise<string> {
-  const bundleFiles = [...input.bundleFiles].sort((left, right) =>
-    compareUtf8(left.relativePath, right.relativePath),
-  );
+  const bundleFiles = sortUtf8(input.bundleFiles, (file) => file.relativePath);
   for (const [position, file] of bundleFiles.entries()) {
     assertRelative(file.relativePath);
     if (bundleFiles[position - 1]?.relativePath === file.relativePath) {

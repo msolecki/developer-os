@@ -16,6 +16,7 @@ import {
   InstructionSourceInvalidError,
   parseInstructionId,
   parseScopedRulePaths,
+  sortUtf8,
   validateInstructionCatalog,
 } from "@developer-os/core";
 import type { InstructionCatalogV1, InstructionCategoryV1, InstructionIdV1 } from "@developer-os/core";
@@ -76,10 +77,6 @@ export function artifactKey(category: SourceCategory, id: string): string {
   return `${category}/${id}`;
 }
 
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left), Buffer.from(right));
-}
-
 function compareArtifacts(left: InstructionSourceV1, right: InstructionSourceV1): number {
   if (left.category !== right.category) return left.category < right.category ? -1 : 1;
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
@@ -87,9 +84,8 @@ function compareArtifacts(left: InstructionSourceV1, right: InstructionSourceV1)
 
 function orderFiles(category: SourceCategory, files: InstructionSourceFileV1[]): InstructionSourceFileV1[] {
   if (category !== "skill") return files;
-  return [...files].sort((left, right) =>
-    left.relativePath === "SKILL.md" ? -1 : right.relativePath === "SKILL.md" ? 1 : compareUtf8(left.relativePath, right.relativePath),
-  );
+  const ordered = sortUtf8(files, (file) => file.relativePath);
+  return [...ordered.filter((file) => file.relativePath === "SKILL.md"), ...ordered.filter((file) => file.relativePath !== "SKILL.md")];
 }
 
 /** Rule text enters a marked block, where a marker would make the render throw instead of refusing. */
@@ -117,9 +113,10 @@ function assertArtifact(where: string, category: SourceCategory, files: readonly
 /** `bundle/workflows/<name>/workflow.yaml`, read through the admitted release only. */
 export async function loadReleaseWorkflows(release: AdmittedPackagedReleaseV1): Promise<readonly WorkflowContractV1[]> {
   const prefix = `${release.bundleRoot}/`;
-  const files = release.files
-    .filter((file) => file.relativePath.startsWith(prefix) && WORKFLOW_FILE.test(file.relativePath.slice(prefix.length)))
-    .sort((left, right) => compareUtf8(left.relativePath, right.relativePath));
+  const files = sortUtf8(
+    release.files.filter((file) => file.relativePath.startsWith(prefix) && WORKFLOW_FILE.test(file.relativePath.slice(prefix.length))),
+    (file) => file.relativePath,
+  );
   const contracts: WorkflowContractV1[] = [];
   for (const file of files) {
     let text: string;
@@ -171,7 +168,7 @@ export async function loadInstructionDefaults(
           : [];
     if (claimed.length === 0) throw new InstructionCatalogInvalidError();
     const artifactFiles: InstructionSourceFileV1[] = [];
-    for (const path of claimed.sort(compareUtf8)) {
+    for (const path of sortUtf8(claimed, (claimedPath) => claimedPath)) {
       unclaimed.delete(path);
       artifactFiles.push({
         relativePath: row.category === "skill" ? path.slice(where.length + 1) : `${row.id}.md`,
@@ -210,10 +207,10 @@ async function listDirectory(path: string, effectiveUid: number): Promise<readon
   const after = await lstatOrNull(path);
   if (after === null || !sameIdentity(before, after)) refuse(path);
   // Finder writes .DS_Store into any folder it opens; a regular one is never an artifact, so skip it.
-  return entries
-    .filter((entry) => !(entry.name === ".DS_Store" && entry.isFile()))
-    .map((entry) => entry.name)
-    .sort(compareUtf8);
+  return sortUtf8(
+    entries.filter((entry) => !(entry.name === ".DS_Store" && entry.isFile())).map((entry) => entry.name),
+    (name) => name,
+  );
 }
 
 /** No-follow open; the identity is checked before and after the read, and the size before it. */
