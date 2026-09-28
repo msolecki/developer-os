@@ -298,6 +298,16 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   (7) Codex hook approval and A13 Task 18 Steps 2–3 run after 2026-10-22, when Codex quota returns.
   (8) After A15, NEW-113 is designed before NEW-110.
   (9) L1: MIT is the license proposed for qualified legal review.
+- **D70 (2026-09-28), a build-only lane for everything startable, amends D69 (8) and SESSION.md §4.**
+  The founder asked to finish every implementable plan item before retiring the legacy shared
+  directory and vault, without running tests and without reinstalling the product. (1) The session
+  orchestrates separate headless implementer sessions, one worktree each under
+  `../developer-os.worktrees/`, several `ORDER.md` rows at once (overrides "one entry per session").
+  (2) Each task writes its tests but does not run them; a commit runs `npm run lint` only; the full
+  suite and fresh-context review run at plan close, as under D56. (3) NEW-113 and NEW-110 are drafted
+  in parallel now, before A15 completes; each spec amendment still needs founder approval before code.
+  (4) Commits stay local; `development` needs a PR (GH013), opened at the close. Accepted risk: D56's.
+  Expires when the rows it started close.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the

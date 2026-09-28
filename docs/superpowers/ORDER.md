@@ -8,6 +8,10 @@ notes are the archive.
 
 ## NOW
 
+**D70 (2026-09-28) build-only lane in flight:** headless sessions in `../developer-os.worktrees/` on
+NEW-82, 88, 89, 90, 91, 92, 93, 96, 97, 99 (code, tests written not run, lint only) and drafts of the
+NEW-113 and NEW-110 spec amendments (founder approval before code). Commits held locally for one PR.
+
 **Next session (D69):** confirm step 7b's `npm run check` on `dbca633` is green (tree of `8fe4b03`;
 log in the founder's work directory), then run A15 steps 8–10 in one sitting under one approval, then
 steps 11–15. Steps 16–18 follow after a week of use; Codex steps after 2026-10-22.
