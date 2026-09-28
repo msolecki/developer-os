@@ -2540,7 +2540,7 @@ measured bytes become **per-plan evidence**:
    have none, and the Git version floor below replaces the Xcode identity.
 2. **Admission by ownership and mode, not bytes.** Each of the three invoked paths, each link-chain
    entry (at most 8), each resolved target, each of the six exec-path links, and every directory from
-   `<dev>` down to each of them (for `/usr/bin/ssh`: `/usr` and `/usr/bin`) is owned by uid `0` and has
+   `<dev>` down to each of them (for `/usr/bin/ssh`: `/`, `/usr` and `/usr/bin`) is owned by uid `0` and has
    `(mode & 0o022) == 0`. Each resolved target is a regular file with the owner-execute bit set and
    neither setuid nor setgid. Directories above `<dev>` are not admitted by mode (Q3-A):
    `/Applications` is `root:admin` mode `0775` on a stock Mac and would refuse every Xcode (residual

@@ -28,7 +28,7 @@ supersedes D59 Q1/Q2 (`:223-230`) and plan 1b Task 19.
 
 **Execution rule (D70, as given in the task brief; the roadmap does not yet record D70):** tasks write
 tests but do not run them; each task commit runs `npm run lint` only; the full suite, `npm run
-test:pinned-host` and a fresh-context review run at plan close (Task 6). Every "run the test" step
+test:pinned-host` and a fresh-context review run at plan close (Task 3). Every "run the test" step
 below therefore reads "deferred to plan close (D70)".
 
 ---
@@ -125,60 +125,69 @@ behaviour — and stays open as its own row. No task here.
 ## Review Focus
 
 1. **A macOS/Xcode update between a persisted Git push plan and its `push_pending` retry** must
-   re-admit, not refuse forever. Pinned by Task 3 Step 1 test "retry re-admits after a binary change".
+   re-admit, not refuse forever. Pinned by Task 1 Part 1b test "retry re-admits after a binary change".
 2. **A hostile `PATH`/`DEVELOPER_DIR` in the caller's environment** must change nothing about which Git
-   runs. Pinned by Task 3 Step 1 test "ignores PATH and DEVELOPER_DIR".
+   runs. Pinned by Task 1 Part 1b test "the production runtime inspects only policy paths under a
+   hostile PATH and DEVELOPER_DIR".
 3. **`/Applications` group-writable on a stock Mac** must still admit Xcode's Git. Pinned by Task 1
-   Step 1 test "admits a stock Xcode layout under a group-writable /Applications".
+   Part 1a test "admits a stock Xcode layout under a group-writable /Applications".
 4. **Two different admitted launchctl identities** must give byte-identical template and observation
-   hashes, while one identity change inside an apply refuses. Pinned by Task 2 Step 1 tests.
+   hashes, while one identity change inside an apply refuses. Pinned by Task 2 Part 2a tests.
 5. **An uncertified row no longer blocks `automation disable`/`uninstall`** on an admitted host, while a
-   below-floor host still refuses with the manual `bootout` list. Pinned by Task 4 Step 1 tests.
+   below-floor host still refuses with the manual `bootout` list. Pinned by Task 2 Part 2b tests.
 
 ## File map
 
-| File | Change | Task |
+| File | Change | Part |
 |---|---|---|
-| `packages/security/src/git/types.ts:309-380` | policy, observation and admitted types; old row types removed | 1 |
-| `packages/security/src/git/distribution.ts` | rewritten: policy constant, `selectDeveloperDirectory`, `admitGitFiles`, `admitGitCapability`, `recheckGitDistribution` | 1 |
-| `packages/security/src/git/process-table.ts:53-54, 440-449, 502, 963` | version-neutral IDs | 1 |
-| `packages/security/src/git/push-plan.ts:68, 142, 162` | `distributionId` literal follows the policy ID | 1 |
-| `packages/security/src/git/supervisor.ts:161-174` | `admittingGitIdentityProbe` rechecks per-invocation evidence | 1 |
-| `packages/security/src/git/index.ts`, `packages/security/src/index.ts`, `index.test.ts:56-61` | export list | 1 |
-| `packages/security/src/git/*.test.ts`, `distribution.test-fixtures.ts` | tests and fixtures | 1 |
-| `packages/platform-macos/src/launchd/distribution.ts` | rewritten: policy, `admitLaunchdHost`, `recheckLaunchdHost`; `certification` removed | 2 |
-| `packages/platform-macos/src/launchd/process-table.ts:120-383` | `launchctl_identity` slot; `requireLaunchdMutationCertified` → `requireLaunchdMutationTable` | 2 |
-| `packages/platform-macos/src/launchd/{effects,observe,snapshot}.ts` | admission call sites; `loadLaunchdProcessTable` fills the identity | 2 |
-| `packages/platform-macos/src/launchd/*.test.ts` | tests | 2 |
-| `apps/cli/src/commands/git/runtime.ts:145, 181-231, 771-836, 943-956` | node observer, `<dev>` resolution, probe parse, evidence | 3 |
-| `apps/cli/src/commands/git/service.ts:1673`, `testing.ts:134-140` | policy ID; fake runtime | 3 |
-| `apps/cli/src/lifecycle/adapters.ts:75-76, 392-431` | launchctl observer returns `dev`/`ino` and `/`, `/bin` | 4 |
-| `apps/cli/src/commands/automation/service.ts:331, 988-995, 1127-1129` | `certification` gates removed | 4 |
-| `apps/cli/src/lifecycle/uninstall.ts:1340-1349`, `testing.ts` | `certification` gate removed | 4 |
-| `tests/integration/git/*.pinned-host.test.ts`, `tests/integration/launchd/fd3-bootstrap.pinned-host.test.ts` | host tests against the policy | 5 |
-| spec, `BACKLOG.md`, roadmap, `docs/architecture/{foundation.md,foundation-constraints.md,threat-model.md}` | plan close | 6 |
+| `packages/security/src/git/types.ts:309-380` | policy, observation and admitted types; old row types removed | 1a |
+| `packages/security/src/git/distribution.ts` | rewritten: policy constant, `selectDeveloperDirectory`, `admitGitFiles`, `admitGitCapability`, `recheckGitDistribution` | 1a |
+| `packages/security/src/git/process-table.ts:53-54, 440-449, 502, 963` | version-neutral IDs | 1a |
+| `packages/security/src/git/push-plan.ts:68, 142, 162` | `distributionId` literal follows the policy ID | 1a |
+| `packages/security/src/git/supervisor.ts:161-174` | `admittingGitIdentityProbe` rechecks per-invocation evidence | 1a |
+| `packages/security/src/git/index.ts`, `packages/security/src/index.ts`, `index.test.ts:56-61` | export list | 1a |
+| `packages/security/src/git/*.test.ts`, `distribution.test-fixtures.ts` | tests and fixtures | 1a |
+| `apps/cli/src/commands/git/runtime.ts:145, 181-231, 771-836, 943-956` | node observer, `<dev>` resolution, probe parse, evidence | 1b |
+| `apps/cli/src/commands/git/service.ts:1673`, `testing.ts:134-140` | policy ID; fake runtime | 1b |
+| `tests/integration/git/*.pinned-host.test.ts` | host tests against the policy | 1c |
+| `packages/platform-macos/src/launchd/distribution.ts` | rewritten: policy, `admitLaunchdHost`, `recheckLaunchdHost`; `certification` removed | 2a |
+| `packages/platform-macos/src/launchd/process-table.ts:120-383` | `launchctl_identity` slot; `requireLaunchdMutationCertified` → `requireLaunchdMutationTable` | 2a |
+| `packages/platform-macos/src/launchd/{effects,observe,snapshot}.ts` | admission call sites; `loadLaunchdProcessTable` fills the identity | 2a |
+| `packages/platform-macos/src/launchd/*.test.ts` | tests | 2a |
+| `apps/cli/src/lifecycle/adapters.ts:75-76, 392-431` | launchctl observer returns `dev`/`ino` and `/`, `/bin` | 2b |
+| `apps/cli/src/commands/automation/service.ts:331, 988-995, 1127-1129` | `certification` gates removed | 2b |
+| `apps/cli/src/lifecycle/uninstall.ts:1340-1349`, `testing.ts` | `certification` gate removed | 2b |
+| `tests/integration/launchd/fd3-bootstrap.pinned-host.test.ts` | host test against the policy | 2c |
+| spec, `BACKLOG.md`, roadmap, `docs/architecture/{foundation.md,foundation-constraints.md,threat-model.md}` | plan close | 3 |
 
 ## Waves
 
+`npm run lint` is whole-repository — `tsc -b` over every package, `apps/cli` and `tests`
+(`tsconfig.json` references `./tests`, whose `include` has `integration/**/*.ts`), then ESLint
+(`package.json:13`). A commit that removes an export another package still imports cannot lint green,
+so each task is one vertical slice with one commit at its end: Task 1 owns every Git file, Task 2
+every launchd file. Parts are steps inside one task and one worktree, not separate commits. The two
+file sets are disjoint, so Tasks 1 and 2 run in parallel; `apps/cli/src/lifecycle/testing.ts` is
+edited by Task 2 alone.
+
 | Wave | Task | Size | Worktree | Consumes |
 |---|---|---|---|---|
-| 1 | Task 1 — Git policy and admission (`packages/security`) | M | `../developer-os.worktrees/new-113-t1` | — |
-| 1 | Task 2 — launchd policy and admission (`packages/platform-macos`) | M | `../developer-os.worktrees/new-113-t2` | — |
-| 2 | Task 3 — Git node observer and runtime (`apps/cli`) | M | `../developer-os.worktrees/new-113-t3` | Task 1 |
-| 2 | Task 4 — launchctl observer and `certification` removal (`apps/cli`) | S | `../developer-os.worktrees/new-113-t4` | Task 2 |
-| 3 | Task 5 — host tests against the policy | S | `../developer-os.worktrees/new-113-t5` | Tasks 1–4 |
-| 4 | Task 6 — plan close (founder runs the full suite) | M | orchestrator checkout | Tasks 1–5 |
-| 5 | Task 7 — Phase 9 gate on a disposable macOS account (founder step) | L | disposable account | Task 6 |
+| 1 | Task 1 — Git: policy (1a), CLI runtime (1b), host tests (1c) | L | `../developer-os.worktrees/new-113-git` | — |
+| 1 | Task 2 — launchd: policy (2a), CLI observer and `certification` removal (2b), host test (2c) | L | `../developer-os.worktrees/new-113-launchd` | — |
+| 2 | Task 3 — plan close (founder runs the full suite) | M | orchestrator checkout | Tasks 1, 2 |
+| 3 | Task 4 — Phase 9 gate on a disposable macOS account (founder step) | L | disposable account | Task 3 |
 
-Tasks 1 and 2 touch disjoint packages; Tasks 3 and 4 touch disjoint `apps/cli` files except
-`lifecycle/testing.ts`, which only Task 4 edits.
+Physical order below is by layer — 1a, 2a (packages), 1b, 2b (`apps/cli`), 1c/2c (host tests), then
+Tasks 3 and 4. An implementer of Task 1 reads Parts 1a, 1b and 1c; of Task 2, Parts 2a, 2b and 2c.
 
 ---
 
-### Task 1: Git distribution policy and admission
+### Task 1, Part 1a: Git distribution policy and admission (`packages/security`)
 
-**What:** the compiled Git row becomes `GIT_DISTRIBUTION_POLICY`; pure admission returns
-`AdmittedGitDistributionV1`; the supervisor rechecks it.
+**Task 1 as a whole (L, one worktree, one commit at the end of Part 1c):** Git is found at fixed paths
+and admitted by ownership, mode, floor and capability, end to end. **Part 1a:** the compiled Git row
+becomes `GIT_DISTRIBUTION_POLICY`; pure admission returns `AdmittedGitDistributionV1`; the supervisor
+rechecks it.
 
 **Files:**
 - Modify: `packages/security/src/git/types.ts:309-380`
@@ -393,26 +402,17 @@ export function selectDeveloperDirectory(inspect: GitPathInspectorV1, policy = G
   `invokedPath`. Rename the IDs in `process-table.ts:53-54` and follow them through `types.ts:311-312`,
   `push-plan.ts:68, 142, 162`; `process-table.ts:502` keeps `envLiteral(GIT_DISTRIBUTION_POLICY_ID)`.
 
-- [ ] **Step 4: Lint.** `npm run lint` — expect exit 0.
-
-- [ ] **Step 5: Commit** (exact paths):
-
-```bash
-git add packages/security/src/git/types.ts packages/security/src/git/distribution.ts \
-  packages/security/src/git/process-table.ts packages/security/src/git/push-plan.ts \
-  packages/security/src/git/supervisor.ts packages/security/src/git/index.ts packages/security/src/index.ts \
-  packages/security/src/index.test.ts packages/security/src/git/distribution.test.ts \
-  packages/security/src/git/distribution.test-fixtures.ts packages/security/src/git/supervisor.test.ts \
-  packages/security/src/git/gateways.test.ts packages/security/src/git/process-table.test.ts
-git commit -m "feat(security): admit Git by fixed path, ownership, version floor and capability (NEW-113)"
-```
+- [ ] **Step 4: Continue with Part 1b** in the same worktree. No lint and no commit yet: `apps/cli` and
+  `tests` still import the removed exports until Parts 1b and 1c land.
 
 ---
 
-### Task 2: launchd policy and admission
+### Task 2, Part 2a: launchd policy and admission (`packages/platform-macos`)
 
-**What:** `/bin/launchctl` admitted by ownership, mode and the macOS floor; identity re-derived into the
-expanded table; `certification` removed from `packages/platform-macos`.
+**Task 2 as a whole (L, one worktree, one commit at the end of Part 2c):** `/bin/launchctl` is admitted
+by ownership, mode, the macOS floor and the `print` probe, and `certification` is gone, end to end.
+**Part 2a:** the policy, the identity re-derived into the expanded table, and `certification` removed
+from `packages/platform-macos`.
 
 **Files:**
 - Rewrite: `packages/platform-macos/src/launchd/distribution.ts`
@@ -452,7 +452,7 @@ export function loadLaunchdProcessTable(productHome, coordinatorId, options: { f
 ```
 
 The dependency interfaces' `inspectExecutable(path: "/bin/launchctl")` now returns
-`ObservedLaunchdDistributionV1["executable"] & { ancestors }` — Task 4 implements it in
+`ObservedLaunchdDistributionV1["executable"] & { ancestors }` — Part 2b implements it in
 `apps/cli/src/lifecycle/adapters.ts`. Removed: `SUPPORTED_LAUNCHD_DISTRIBUTION`,
 `LaunchdCertificationV1`, `admitLaunchdDistribution`, `requireLaunchdMutationCertified`, the
 `certification` field of the table and template.
@@ -468,10 +468,10 @@ const admitted = (): ObservedLaunchdDistributionV1 => ({
 });
 
 describe("launchctl admission", () => {
-  it.each(["26.6.2", "26.7", "26.10.1", "27.0", "27"])("admits macOS %s", (productVersion) => {
+  it.each(["26.6.2", "26.7", "26.10.1", "27.0"])("admits macOS %s", (productVersion) => {
     expect(() => admitLaunchdHost({ ...admitted(), operatingSystem: { ...admitted().operatingSystem, productVersion } })).not.toThrow();
   });
-  it.each(["26.6.1", "26.6", "25.9.9", "26.6.2.1", "026.6.2", "", "26.x"])("refuses macOS %s", (productVersion) => {
+  it.each(["26.6.1", "26.6", "25.9.9", "27", "26.6.2.1", "026.6.2", "", "26.x"])("refuses macOS %s", (productVersion) => {
     expect(() => admitLaunchdHost({ ...admitted(), operatingSystem: { ...admitted().operatingSystem, productVersion } })).toThrow("unsupported_launchd_distribution");
   });
   it("never compares the build", () => {
@@ -551,29 +551,15 @@ const atLeast = (a: readonly number[], b: readonly number[]): boolean => {
   exists (bootout, snapshot), and `admitLaunchdHost` where only the preview observation table exists
   (`observe.ts`). Update docblocks that say "certified" or "pinned row".
 
-- [ ] **Step 4: Lint.** `npm run lint` — expect exit 0 for `packages/platform-macos`; `apps/cli` type
-  errors from the removed exports are expected until Task 4 and are fixed there. If the repository's
-  `tsc -b` makes the whole lint red, Tasks 2 and 4 integrate together (the orchestrator cherry-picks
-  Task 2 only with Task 4 on top) — record which happened.
-
-- [ ] **Step 5: Commit:**
-
-```bash
-git add packages/platform-macos/src/launchd/distribution.ts packages/platform-macos/src/launchd/distribution.test-fixtures.ts \
-  packages/platform-macos/src/launchd/process-table.ts packages/platform-macos/src/launchd/effects.ts \
-  packages/platform-macos/src/launchd/observe.ts packages/platform-macos/src/launchd/snapshot.ts \
-  packages/platform-macos/src/launchd/index.ts packages/platform-macos/src/index.ts \
-  packages/platform-macos/src/launchd/process-table.test.ts packages/platform-macos/src/launchd/effects.test.ts \
-  packages/platform-macos/src/launchd/snapshot.test.ts packages/platform-macos/src/launchd/observe.test.ts
-git commit -m "feat(platform-macos): admit launchctl by fixed path, ownership and macOS floor; drop certification (NEW-113)"
-```
+- [ ] **Step 4: Continue with Part 2b** in the same worktree. No lint and no commit yet: `apps/cli` and
+  `tests` still import the removed exports until Parts 2b and 2c land.
 
 ---
 
-### Task 3: Git node observer and runtime
+### Task 1, Part 1b: Git node observer and runtime (`apps/cli`)
 
 **What:** the CLI's Git runtime observes the file system without following `PATH`/`DEVELOPER_DIR`,
-admits per invocation, and binds evidence through the supervisor.
+admits per invocation, and binds evidence through the supervisor. Same worktree as Part 1a.
 
 **Files:**
 - Modify: `apps/cli/src/commands/git/runtime.ts:145` (delete `XCODE_VERSION_PLIST`), `:181-231`
@@ -584,7 +570,7 @@ admits per invocation, and binds evidence through the supervisor.
 - Test: `apps/cli/src/commands/git/runtime.test.ts`
 
 **Interfaces:**
-- Consumes (Task 1): `GIT_DISTRIBUTION_POLICY`, `GIT_DISTRIBUTION_POLICY_ID`, `GitPathInspectorV1`,
+- Consumes (Part 1a, same worktree): `GIT_DISTRIBUTION_POLICY`, `GIT_DISTRIBUTION_POLICY_ID`, `GitPathInspectorV1`,
   `admitGitFiles`, `admitGitCapability`, `recheckGitDistribution`, `admittingGitIdentityProbe`,
   `AdmittedGitFilesV1`.
 - Produces: `export function inspectGitPath(path: CanonicalAbsolutePathV1): GitPathObservationV1`
@@ -596,13 +582,22 @@ admits per invocation, and binds evidence through the supervisor.
 
 ```ts
 describe("Git distribution observation", () => {
-  it("ignores PATH and DEVELOPER_DIR", async () => {
+  it("the production runtime inspects only policy paths under a hostile PATH and DEVELOPER_DIR", async () => {
     const seen: string[] = [];
     const inspect = (path: CanonicalAbsolutePathV1) => { seen.push(path); return stockXcode({ link: XCODE })(path); };
-    vi.stubEnv("PATH", "/tmp/evil"); vi.stubEnv("DEVELOPER_DIR", "/tmp/evil");
-    admitGitFiles(inspect, "arm64");
-    expect(seen.some((path) => path.startsWith("/tmp"))).toBe(false);
+    vi.stubEnv("PATH", "/tmp/evil/bin"); vi.stubEnv("DEVELOPER_DIR", "/tmp/evil/Developer");
+    await createProductionGitRuntime({ inspect, architecture: "arm64" }).admitDistribution("local");
     expect(seen).toContain("/var/db/xcode_select_link");
+    expect(seen.every((path) => path === "/" || path.startsWith("/var/db/") || path.startsWith("/usr") ||
+      path.startsWith("/Applications/") || path.startsWith("/Library/Developer/"))).toBe(true);
+    vi.unstubAllEnvs();
+  });
+
+  it("no Git module reads PATH or DEVELOPER_DIR", async () => {
+    for (const file of ["runtime.ts", "../../../../../packages/security/src/git/distribution.ts"]) {
+      const source = await readFile(new URL(file, import.meta.url), "utf8");
+      expect(source).not.toMatch(/process\.env(\.|\[")(PATH|DEVELOPER_DIR)/u);
+    }
   });
 
   it("inspectGitPath reports a link without following it and hashes a file by descriptor", async () => {
@@ -660,22 +655,15 @@ admitted = admitGitCapability(files, probeStdout);
   `service.ts:1673` writes `distributionId: GIT_DISTRIBUTION_POLICY_ID`; `testing.ts:134` hashes
   `GIT_DISTRIBUTION_POLICY.processTable`.
 
-- [ ] **Step 4: Lint.** `npm run lint` — expect exit 0.
-
-- [ ] **Step 5: Commit:**
-
-```bash
-git add apps/cli/src/commands/git/runtime.ts apps/cli/src/commands/git/service.ts \
-  apps/cli/src/commands/git/testing.ts apps/cli/src/commands/git/runtime.test.ts
-git commit -m "feat(cli): resolve Git from the active developer directory and admit it per invocation (NEW-113)"
-```
+- [ ] **Step 4: Continue with Part 1c** in the same worktree.
 
 ---
 
-### Task 4: launchctl observer and `certification` removal in the CLI
+### Task 2, Part 2b: launchctl observer and `certification` removal (`apps/cli`)
 
 **What:** the real observer returns `dev`/`ino` and the two ancestors; every `certification` gate in
-`apps/cli` goes, so `automation` and `uninstall` gate on admission alone (Q2-A).
+`apps/cli` goes, so `automation` and `uninstall` gate on admission alone (Q2-A). Same worktree as
+Part 2a.
 
 **Files:**
 - Modify: `apps/cli/src/lifecycle/adapters.ts:75-76, 392-431`
@@ -687,7 +675,7 @@ git commit -m "feat(cli): resolve Git from the active developer directory and ad
 - Test: `apps/cli/src/commands/automation/service.test.ts`, `apps/cli/src/lifecycle/uninstall.test.ts:153, 247`
 
 **Interfaces:**
-- Consumes (Task 2): `ObservedLaunchdDistributionV1`, `admitLaunchdHost`,
+- Consumes (Part 2a, same worktree): `ObservedLaunchdDistributionV1`, `admitLaunchdHost`,
   `LaunchdDistributionUnsupportedError`, `loadLaunchdProcessTable(…, { observe })`.
 - Produces: `inspectExecutable("/bin/launchctl")` returning the Task 2 shape.
 
@@ -726,63 +714,94 @@ it("names the manual bootout for every label on a host below the floor", async (
   `LaunchdDistributionUnsupportedError` catch still names the manual `bootout` list, now reached by
   admission refusals only.
 
-- [ ] **Step 4: Lint.** `npm run lint` — expect exit 0 (this closes the Task 2 cross-package type
-  errors).
-
-- [ ] **Step 5: Commit:**
-
-```bash
-git add apps/cli/src/lifecycle/adapters.ts apps/cli/src/commands/automation/service.ts \
-  apps/cli/src/lifecycle/uninstall.ts apps/cli/src/lifecycle/testing.ts \
-  apps/cli/src/commands/automation/service.test.ts apps/cli/src/lifecycle/uninstall.test.ts
-git commit -m "feat(cli): gate automation and uninstall on launchctl admission, not certification (NEW-113)"
-```
-
-  Add any further `loadLaunchdProcessTable` caller the grep found to the `git add` by exact path.
+- [ ] **Step 4: Continue with Part 2c** in the same worktree.
 
 ---
 
-### Task 5: Host tests against the policy
+### Task 1, Part 1c: Git host tests, lint and the Task 1 commit
 
-**What:** the three `*.pinned-host.test.ts` files run on any admitted host and refuse, never skip,
-elsewhere.
+**What:** the two Git `*.pinned-host.test.ts` files run on any admitted host and refuse, never skip,
+elsewhere; then Task 1's single lint and commit.
 
 **Files:**
 - Modify: `tests/integration/git/local-push.pinned-host.test.ts:8-18`,
-  `tests/integration/git/local-receive.pinned-host.test.ts:15-95, 213`,
-  `tests/integration/launchd/fd3-bootstrap.pinned-host.test.ts:21-100, 199`
+  `tests/integration/git/local-receive.pinned-host.test.ts:15-95, 213`
 
 **Interfaces:**
-- Consumes: Tasks 1–4 (`GIT_DISTRIBUTION_POLICY`, `admitGitFiles`, `inspectGitPath`,
-  `admitLaunchdHost`, `expandLaunchdProcessTable(staging, identity)`).
-- Produces: nothing.
+- Consumes (Parts 1a, 1b): `GIT_DISTRIBUTION_POLICY`, `admitGitFiles`, `admitGitCapability`,
+  `inspectGitPath`.
+- Produces (Task 1 as a whole): the Part 1a and 1b exports, integrated on `development` in one commit.
 
-- [ ] **Step 1: Rewrite the tests.**
-  - `local-push`/`local-receive`: take `GIT` from
-    `admitGitFiles(inspectGitPath, process.arch).executables.find((e) => e.id === "git_main")!.invokedPath`
-    in a `beforeAll`; an admission refusal fails the file (never `skip`). Delete
-    `observeInstalledGitDistribution` (`local-receive:61-95`); the probe comparison at `:213` becomes
-    `admitGitCapability(files, execFileSync(GIT, ["--version", "--build-options"], { encoding: "utf8", env: {} }))`.
-  - `fd3-bootstrap`: keep the `DEVELOPER_OS_LAUNCHD_CERTIFICATION_HOST` guard at `:78` (renamed
-    `DEVELOPER_OS_LAUNCHD_GATE_HOST`; it prevents a live `bootstrap` on a developer's own account);
-    admit with `admitLaunchdHost`; delete the certification object at `:100`; keep the transcript
-    hash print at `:199` as gate evidence for Task 7.
+- [ ] **Step 1: Rewrite the tests.** Take `GIT` from
+  `admitGitFiles(inspectGitPath, process.arch).executables.find((e) => e.id === "git_main")!.invokedPath`
+  in a `beforeAll`; an admission refusal fails the file (never `skip`). Delete
+  `observeInstalledGitDistribution` (`local-receive:61-95`); the probe comparison at `:213` becomes
+  `admitGitCapability(files, execFileSync(GIT, ["--version", "--build-options"], { encoding: "utf8", env: {} }))`.
 
-- [ ] **Step 2: Run the tests.** Deferred to plan close (D70); they run in Task 6 and Task 7.
+- [ ] **Step 2: Run the tests.** Deferred to plan close (D70); they run in Tasks 3 and 4.
 
-- [ ] **Step 3: Lint.** `npm run lint` — expect exit 0.
+- [ ] **Step 3: Lint.** `npm run lint` — expect exit 0. `grep -rn "SUPPORTED_GIT_DISTRIBUTION\b\|admitGitDistribution\|ObservedGitDistributionV1" packages apps tests`
+  — expect no match.
 
-- [ ] **Step 4: Commit:**
+- [ ] **Step 4: Commit** Task 1 (exact paths):
 
 ```bash
-git add tests/integration/git/local-push.pinned-host.test.ts tests/integration/git/local-receive.pinned-host.test.ts \
-  tests/integration/launchd/fd3-bootstrap.pinned-host.test.ts
-git commit -m "test: run the host tests against the fixed-path admission policy (NEW-113)"
+git add packages/security/src/git/types.ts packages/security/src/git/distribution.ts \
+  packages/security/src/git/process-table.ts packages/security/src/git/push-plan.ts \
+  packages/security/src/git/supervisor.ts packages/security/src/git/index.ts packages/security/src/index.ts \
+  packages/security/src/index.test.ts packages/security/src/git/distribution.test.ts \
+  packages/security/src/git/distribution.test-fixtures.ts packages/security/src/git/supervisor.test.ts \
+  packages/security/src/git/gateways.test.ts packages/security/src/git/process-table.test.ts \
+  apps/cli/src/commands/git/runtime.ts apps/cli/src/commands/git/service.ts \
+  apps/cli/src/commands/git/testing.ts apps/cli/src/commands/git/runtime.test.ts \
+  tests/integration/git/local-push.pinned-host.test.ts tests/integration/git/local-receive.pinned-host.test.ts
+git commit -m "feat(git): admit Git from the active developer directory by ownership, floor and capability (NEW-113)"
 ```
 
 ---
 
-### Task 6: Plan close
+### Task 2, Part 2c: launchd host test, lint and the Task 2 commit
+
+**What:** the FD-3 host test runs on any admitted host; then Task 2's single lint and commit.
+
+**Files:**
+- Modify: `tests/integration/launchd/fd3-bootstrap.pinned-host.test.ts:21-100, 199`
+
+**Interfaces:**
+- Consumes (Parts 2a, 2b): `admitLaunchdHost`, `expandLaunchdProcessTable(staging, identity)`.
+- Produces (Task 2 as a whole): the Part 2a exports and the Part 2b observer, integrated on
+  `development` in one commit.
+
+- [ ] **Step 1: Rewrite the test.** Keep the `DEVELOPER_OS_LAUNCHD_CERTIFICATION_HOST` guard at `:78`,
+  renamed `DEVELOPER_OS_LAUNCHD_GATE_HOST` (it prevents a live `bootstrap` on a developer's own
+  account); admit with `admitLaunchdHost`; delete the certification object at `:100`; keep the
+  transcript hash print at `:199` as gate evidence for Task 4.
+
+- [ ] **Step 2: Run the test.** Deferred to plan close (D70); it runs in Tasks 3 and 4.
+
+- [ ] **Step 3: Lint.** `npm run lint` — expect exit 0. `grep -rn "certification\|SUPPORTED_LAUNCHD_DISTRIBUTION\|admitLaunchdDistribution" packages apps tests`
+  — expect no match outside comments naming the removal.
+
+- [ ] **Step 4: Commit** Task 2 (exact paths; add any further `loadLaunchdProcessTable` caller Part 2b's
+  grep found):
+
+```bash
+git add packages/platform-macos/src/launchd/distribution.ts packages/platform-macos/src/launchd/distribution.test-fixtures.ts \
+  packages/platform-macos/src/launchd/process-table.ts packages/platform-macos/src/launchd/effects.ts \
+  packages/platform-macos/src/launchd/observe.ts packages/platform-macos/src/launchd/snapshot.ts \
+  packages/platform-macos/src/launchd/index.ts packages/platform-macos/src/index.ts \
+  packages/platform-macos/src/launchd/process-table.test.ts packages/platform-macos/src/launchd/effects.test.ts \
+  packages/platform-macos/src/launchd/snapshot.test.ts packages/platform-macos/src/launchd/observe.test.ts \
+  apps/cli/src/lifecycle/adapters.ts apps/cli/src/commands/automation/service.ts \
+  apps/cli/src/lifecycle/uninstall.ts apps/cli/src/lifecycle/testing.ts \
+  apps/cli/src/commands/automation/service.test.ts apps/cli/src/lifecycle/uninstall.test.ts \
+  tests/integration/launchd/fd3-bootstrap.pinned-host.test.ts
+git commit -m "feat(launchd): admit launchctl by fixed path, ownership and macOS floor; remove certification (NEW-113)"
+```
+
+---
+
+### Task 3: Plan close
 
 **What:** the spec text becomes approved text, the canonical docs carry the surviving constraints, and
 the full validation runs.
@@ -804,15 +823,15 @@ the full validation runs.
 - [ ] **Step 3: Full validation (founder, by hand).** `npm run check` and `npm run test:pinned-host`
   on the development Mac; every red test is fixed in its task's files with a regression test first.
   Show failures only.
-- [ ] **Step 4: Fresh-context review** by an agent that wrote none of Tasks 1–5, given the spec blocks,
+- [ ] **Step 4: Fresh-context review** by an agent that wrote none of Tasks 1–2, given the spec blocks,
   this plan and `git diff development...HEAD`; accepted findings get a failing test first.
-- [ ] **Step 5: Bookkeeping.** `BACKLOG.md` NEW-113 row: code landed, Task 7 open; roadmap Phase 9:
-  the NEW-113 line points at Task 7. Stage with `git add -f` on exact paths; commit
+- [ ] **Step 5: Bookkeeping.** `BACKLOG.md` NEW-113 row: code landed, Task 4 open; roadmap Phase 9:
+  the NEW-113 line points at Task 4. Stage with `git add -f` on exact paths; commit
   `docs: close the NEW-113 code tasks and approve the fixed-path admission amendment`.
 
 ---
 
-### Task 7: Phase 9 gate on a disposable macOS account (founder step)
+### Task 4: Phase 9 gate on a disposable macOS account (founder step)
 
 **What:** prove roadmap Phase 9's gate (`:417`) — `git enable|sync|disable` and
 `automation enable|disable|status`, with scheduled runs observed — on an admitted host, and record the
@@ -831,7 +850,7 @@ roadmap Phase 9 block.
   real Mac. If `/var/db/xcode_select_link` does not exist or is not root-owned, stop: Q1 needs
   revisiting before anything else runs.
 - [ ] **Step 2: Host tests.** `DEVELOPER_OS_LAUNCHD_GATE_HOST=1 npm run test:pinned-host` from a clone
-  at the Task 6 commit. Expected: all green; keep the printed FD-3 transcript SHA-256.
+  at the Task 3 commit. Expected: all green; keep the printed FD-3 transcript SHA-256.
 - [ ] **Step 3: Git gate.** Install the product build into the account; create a synthetic Brain and a
   local bare remote under the account's home; `developer-os git enable --apply`, then
   `developer-os git sync` twice (one change, one no-change), then `git disable --apply`. Expected: one
@@ -847,5 +866,5 @@ roadmap Phase 9 block.
   — the D65 goal. If no update is available, record "not exercised".
 - [ ] **Step 6: Record** the rows (host facts, transcript hash, outcomes) in
   `docs/releases/compatibility-matrix.md`, tick roadmap Phase 9's gate, remove NEW-113 from
-  `BACKLOG.md`, and delete this plan once its surviving constraints are in the canonical docs (Task 6
+  `BACKLOG.md`, and delete this plan once its surviving constraints are in the canonical docs (Task 3
   Step 2). Delete the disposable account.
