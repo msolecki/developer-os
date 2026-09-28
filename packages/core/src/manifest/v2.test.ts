@@ -288,6 +288,33 @@ describe("InstallationManifestV2", () => {
     expectMigratableRefusal(new TextEncoder().encode(JSON.stringify(legacy, null, 2) + "\n"), context);
     expect(admissions).toBe(0);
   });
+
+  describe("lets a defect in an admission callback escape instead of reading it as a malformed manifest (NEW-92)", () => {
+    const defective = admission({ admitOwnerPath: () => { throw new TypeError("synthetic"); } });
+    const canonical = new TextEncoder().encode(encodeCanonicalJson(manifestWith(artifact()) as never));
+
+    it("validateManifestV2 rethrows an admitOwnerPath defect", () => {
+      expect(() => validateManifestV2(manifestWith(artifact()), defective)).toThrow(TypeError);
+    });
+
+    it("validateManifestV2 rethrows a plain Error from admitOwnerPath, whose contract is return-not-throw", () => {
+      const throwing = admission({ admitOwnerPath: () => { throw new Error("synthetic"); } });
+      expect(() => validateManifestV2(manifestWith(artifact()), throwing)).toThrow("synthetic");
+    });
+
+    it("validateManifestV2 rethrows a path-evidence defect", () => {
+      const context = admission({ evidence: { ...evidence, hasFoldedAlias: () => { throw new TypeError("synthetic"); } } });
+      expect(() => validateManifestV2(manifestWith(artifact()), context)).toThrow(TypeError);
+    });
+
+    it("validateManifestBytes rethrows an admitOwnerPath defect for canonical V2 bytes", () => {
+      expect(() => validateManifestBytes(canonical, defective)).toThrow(TypeError);
+    });
+
+    it("validateMigratableManifestV1 rethrows an admitOwnerPath defect", () => {
+      expect(() => validateMigratableManifestV1(legacyBytes([legacyRow()]), defective)).toThrow(TypeError);
+    });
+  });
 });
 
 describe("InstallationManifestV2 instruction arms", () => {

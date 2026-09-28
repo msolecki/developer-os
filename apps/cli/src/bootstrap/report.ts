@@ -17,6 +17,7 @@ import {
   encodeCanonicalJson,
   hashBytes,
   lifecycleBookkeepingPaths,
+  ManifestStateError,
   selectBootstrapJournal,
   validateBootstrapJournal,
   validateBootstrapPayloadEvidence,
@@ -51,7 +52,7 @@ import type {
   UInt64DecimalV1,
 } from "@developer-os/core";
 
-import { decodeManifestAnchor, isOwnedManifestAnchorShape, manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
+import { decodeManifestAnchor, isCodeDefect, isOwnedManifestAnchorShape, manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
 import { projectBootstrapRetentionPostimage } from "./retention.js";
 
@@ -708,7 +709,8 @@ async function exactV2Handoff(
         reason: "retained manifest bytes are hash-pinned to plan.manifest.after.hash before this call; no live owner authority exists for a historical plan",
       }),
     });
-  } catch {
+  } catch (error) {
+    if (isCodeDefect(error)) throw error;
     return null;
   }
 }
@@ -739,7 +741,8 @@ async function supersededV2Handoff(
     const bytes = await request.reader.readRegularFile(manifest.entry, plan.manifest.maximumPlanBytes);
     return hashBytes(bytes) === anchored.manifestHash &&
       isStructurallyValidV2Manifest(bytes, request.productHome);
-  } catch {
+  } catch (error) {
+    if (isCodeDefect(error)) throw error;
     return false;
   }
 }
@@ -1496,8 +1499,10 @@ export function isStructurallyValidV2Manifest(bytes: Uint8Array, productHome: st
         reason: "routing only decides whether a structurally valid V2 manifest exists; configuration and Brain location belong to each command's own confined read",
       }),
     }).schemaVersion === 2;
-  } catch {
-    return false;
+  } catch (error) {
+    // NEW-92: only the validator's own refusal means malformed; a defect must not send a healthy home to recovery.
+    if (error instanceof ManifestStateError) return false;
+    throw error;
   }
 }
 

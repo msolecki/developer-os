@@ -1,5 +1,6 @@
 import { decodeCanonicalJson, encodeCanonicalJson } from "../lifecycle/canonical-json.js";
 import { admitCanonicalAbsolutePath, admitVaultFreeRelativePath } from "../update/paths.js";
+import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
 import { parseLowerHexSha256, parseStableSemver, parseUtcTimestamp } from "../update/scalars.js";
 import { ManifestStateError, validateManifest } from "./store.js";
 import { parseInstructionId } from "../instructions/bounds.js";
@@ -24,7 +25,15 @@ export class ManifestV1NotMigratableError extends ManifestStateError {
 }
 function object(value: unknown): Record<string, unknown> { if (typeof value !== "object" || value === null || Array.isArray(value)) invalid(); return value as Record<string, unknown>; }
 function exact(value: Record<string, unknown>, keys: readonly string[]): void { const actual = Object.keys(value).sort(); const wanted = [...keys].sort(); if (actual.length !== wanted.length || actual.some((key, i) => key !== wanted[i])) invalid(); }
-function call<T>(fn: () => T): T { try { return fn(); } catch { return invalid(); } }
+/** NEW-92: a parser's refusal is an invalid manifest; a defect in the parser or an injected callback is not. */
+function codeDefect(error: unknown): boolean { return error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError; }
+function call<T>(fn: () => T): T { try { return fn(); } catch (error) { if (codeDefect(error)) throw error; return invalid(); } }
+/** `admitOwnerPath` refuses by returning another path, never by throwing, so it stays outside `call`. */
+function ownerPath(value: unknown, owner: ArtifactOwner, arm: OwnerPathArmV1, context: ManifestAdmissionContextV1): CanonicalAbsolutePathV1 {
+  const canonical = call(() => admitCanonicalAbsolutePath(value, context.evidence));
+  if (context.admitOwnerPath(owner, canonical, arm) !== canonical) invalid();
+  return canonical;
+}
 function bytes(value: string): number { return encoder.encode(value).byteLength; }
 type CommonV2 = Omit<ManagedArtifactV2, "kind" | "verification" | "instruction">;
 const COMMON_KEYS = ["backupRelativePath", "beforeHash", "existedBefore", "kind", "mergeStrategy", "owner", "path", "productVersion", "source", "verifiedAt", "verification"];
@@ -39,11 +48,7 @@ function common(value: Record<string, unknown>, context: ManifestAdmissionContex
   exact(value, arm.kind === "instruction" ? [...COMMON_KEYS, "instruction"] : COMMON_KEYS);
   if (!owners.has(value.owner as ArtifactOwner) || !mergeStrategies.has(value.mergeStrategy as MergeStrategy) || typeof value.existedBefore !== "boolean") invalid();
   const owner = value.owner as ArtifactOwner;
-  const path = call(() => {
-    const canonical = admitCanonicalAbsolutePath(value.path, context.evidence);
-    if (context.admitOwnerPath(owner, canonical, arm) !== canonical) invalid();
-    return canonical;
-  });
+  const path = ownerPath(value.path, owner, arm, context);
   const productVersion = call(() => parseStableSemver(value.productVersion));
   const verifiedAt = call(() => parseUtcTimestamp(value.verifiedAt));
   const source = call(() => admitVaultFreeRelativePath(value.source, context.sourceRoot, context.evidence));
@@ -123,14 +128,14 @@ export function validateMigratableManifestV1(bytes: Uint8Array, context: Manifes
     for (const item of manifest.artifacts) {
       const owner = item.owner; const kind = item.kind;
       if (kind !== "file" && kind !== "directory") invalid();
-      const path = call(() => { const canonical = admitCanonicalAbsolutePath(item.path, context.evidence); if (context.admitOwnerPath(owner, canonical, { kind }) !== canonical) invalid(); return canonical; });
+      const path = ownerPath(item.path, owner, { kind }, context);
       call(() => parseStableSemver(item.productVersion)); call(() => parseUtcTimestamp(item.verifiedAt)); call(() => parseLowerHexSha256(item.installedHash)); call(() => admitVaultFreeRelativePath(item.source, context.sourceRoot, context.evidence));
       const folded = path.normalize("NFC").toLowerCase(); if (paths.has(folded)) invalid(); paths.add(folded);
       if (item.existedBefore) { if (item.kind !== "file") invalid(); call(() => parseLowerHexSha256(item.beforeHash)); call(() => admitVaultFreeRelativePath(item.backupRelativePath, context.backupRoot, context.evidence)); }
       else if (item.beforeHash !== null || item.backupRelativePath !== null || (item.kind === "directory" && item.installedHash !== EMPTY_HASH)) invalid();
     }
     return structuredClone(manifest) as MigratableInstallationManifestV1;
-  } catch { throw new ManifestV1NotMigratableError(); }
+  } catch (error) { if (codeDefect(error)) throw error; throw new ManifestV1NotMigratableError(); }
 }
 
 export function validateManifestBytes(bytes: Uint8Array, context?: ManifestAdmissionContextV1): InstallationManifest {
@@ -140,5 +145,6 @@ export function validateManifestBytes(bytes: Uint8Array, context?: ManifestAdmis
   let candidate: unknown; try { candidate = JSON.parse(text); } catch { return invalid(); }
   if (object(candidate).schemaVersion === 1) { legacyBytes(bytes); return validateManifestV1(candidate); }
   if (object(candidate).schemaVersion !== 2 || context === undefined) invalid();
-  try { return validateManifestV2(decodeCanonicalJson(bytes, MAX_BYTES), context); } catch { return invalid(); }
+  let canonical: unknown; try { canonical = decodeCanonicalJson(bytes, MAX_BYTES); } catch { return invalid(); }
+  return validateManifestV2(canonical, context);
 }
