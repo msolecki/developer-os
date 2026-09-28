@@ -3,6 +3,7 @@ import type { ReleaseIdentityV1, SafeReasonCodeV1, UpdateLifecycleOutcomeV1, Upd
 
 import { construct, refuse, requireCapacity, sameJson, updateApplyPorts } from "./apply.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
+import { updateRollbackPrefixes } from "./compose.js";
 import type { CliUpdateContext } from "./context.js";
 import { planRollback } from "./planning.js";
 import type { UpdateCommandResultV1, UpdateHomeV1 } from "./planning.js";
@@ -59,7 +60,7 @@ export async function applyRollback(update: CliUpdateContext, preview: UpdateRol
   const ports = updateRollbackPorts(update);
   return ports.withGlobalLock(async () => {
     const home = await revalidate(update, ports, preview);
-    const coordinatorId = await ports.allocate();
+    const coordinatorId = await ports.allocate(updateRollbackPrefixes(preview));
     const composition = await ports.composeRollback({ coordinatorId, home, preview });
     const plan = composition.construction;
     if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_rollback" || plan.rollbackSource !== null || plan.outputFrames.length !== 0) {
