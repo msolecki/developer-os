@@ -334,6 +334,12 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   Task 2: the Git supervisor stays synchronous with a synchronous inspector/recheck pair, and
   `real_receive_pack` execs the standard `/usr/bin/git-receive-pack` shim, so the same-PID argv
   invariant is untouched.
+- **D74 (2026-09-28), A15 steps 8–10 without step 7b's full gate.** The founder waived the rest of
+  step 7b's `npm run check` for this install: lint, `test:bootstrap` (94) and `test:suite` (306 files)
+  had passed on `dbca633`, the commit installed; the full `check` runs at the end of the day's work.
+  The runbook's step 10 precondition is corrected by observation: `path`, `format` and `edit` fire
+  only on Edit/Write, so a read-only session proves `inject`, `prompt`, `command`, `commit` and
+  `stop`, and `path` is proven by the refused `.env` probe.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the

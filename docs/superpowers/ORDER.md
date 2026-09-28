@@ -8,13 +8,21 @@ notes are the archive.
 
 ## NOW
 
-**D70 (2026-09-28) build-only lane in flight:** headless sessions in `../developer-os.worktrees/` on
-NEW-82, 88, 89, 90, 91, 92, 93, 96, 97, 99 (code, tests written not run, lint only) and drafts of the
-NEW-113 and NEW-110 spec amendments (founder approval before code). Commits held locally for one PR.
+**A15 steps 8–10 ran on 2026-09-28 (D74).** Step 8 at 15:22; step 9's first `init` was killed
+mid-bootstrap by a host-session restart, and `uninstall` then refused the partial home
+(`lifecycle_ledger_finding` on the Foundation `_f` staging directory, `backups/transactions` absent;
+NEW-114). The founder moved it aside intact under the step-2 backup directory; the retried `init`
+exited 0, `doctor` 0 `[fail]`, `noteCount` equal to step 6. Step 10: all eight Claude hook verbs
+observed firing (the first observation of a skills-directory plugin's `hooks/hooks.json`, A13 Task 18
+Step 1 for Claude), nine legacy entries removed, `guard command` and `guard path` refuse the runbook's
+two probes with exit 2 and injection returns the vault map. Step 7b's `check` was waived by the
+founder for this install (lint, `test:bootstrap` and `test:suite` had passed on `dbca633`); the full
+`check` runs at the end. **Next:** steps 11–15; steps 16–18 after a week of use; Codex hook approval
+after 2026-10-22.
 
-**Next session (D69):** confirm step 7b's `npm run check` on `dbca633` is green (tree of `8fe4b03`;
-log in the founder's work directory), then run A15 steps 8–10 in one sitting under one approval, then
-steps 11–15. Steps 16–18 follow after a week of use; Codex steps after 2026-10-22.
+**D70 build-only lane in flight:** headless sessions in `../developer-os.worktrees/`; NEW-113's code is integrated (Tasks 1–3), NEW-110
+Tasks 1–10 and 13 are integrated, Task 11 is running with P9. Tests are written, not run; the full
+suite and fresh-context review run at the close. Commits held locally for one PR.
 
 **A15, the founder cutover, on the live machine** — step by step through
 `docs/migration/founder-cutover.md` (`npm run pack:local-release -- <dir>`, then
