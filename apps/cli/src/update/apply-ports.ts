@@ -486,18 +486,14 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
         return COMPENSATED;
       },
     },
-    /**
-     * §10.2 orders `owner_external_effect/inverse` before `owner_files/inverse`, but the Codex refresh
-     * must run against the restored (previous) tree: the inverse effect step is a routing no-op, and
-     * the inverse files step restores the files and then runs the refresh, as the owner journal requires.
-     */
+    // Either inverse step restores the files, then refreshes Codex over the previous tree; the journal makes the second a no-op.
     owner_files: {
       apply: (step) => (step.direction === "inverse" ? owners.apply(ownerStep(step.owner)) : owners.applyFiles(ownerStep(step.owner))),
       observe: (step) => owners.observe(ownerStep(step.owner)),
       compensate: (step) => owners.compensate(ownerStep(step.owner)),
     },
     owner_external_effect: {
-      apply: (step) => (step.direction === "inverse" ? Promise.resolve(APPLIED) : owners.applyEffects(ownerStep(step.owner))),
+      apply: (step) => (step.direction === "inverse" ? owners.apply(ownerStep(step.owner)) : owners.applyEffects(ownerStep(step.owner))),
       observe: (step) => owners.observe(ownerStep(step.owner)),
       compensate: (step) => owners.compensate(ownerStep(step.owner)),
     },
@@ -596,10 +592,8 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
       }
       case "rollback_payload": {
         const phase = payloadPlan === null || (await journals.unreached(payloadJournal)) ? null : (await journals.readAt(payloadJournal.finalPath) as { readonly phase?: unknown }).phase;
-        // A verify-only plan finalizes through `retire`; terminal retirement already removed its leaves, so it only confirms the absence.
-        if (payloadPlan !== null && payloadPlan.publish === null && (phase === "verified" || phase === "finalized")) await payload.retire(payloadPlan);
-        // A compensated publication has nothing left to compact.
-        if (payloadPlan !== null && phase !== null && phase !== "rolled_back") await payload.compact(payloadPlan);
+        // A verify-only plan published nothing and `terminal_retire` alone owns the consumed payload; a compensated publication left nothing.
+        if (payloadPlan !== null && payloadPlan.publish !== null && phase !== null && phase !== "rolled_back") await payload.compact(payloadPlan);
         await removeLeaf(entry.plan, payloadPlan, payloadJournal);
         return;
       }
