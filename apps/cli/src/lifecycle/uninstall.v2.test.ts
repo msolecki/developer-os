@@ -422,6 +422,7 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     expect(retained.length).toBeGreaterThan(0);
     const expectedResidue = await bookkeepingSetAndRetainedEvidence(fixture);
     keyReads.path = join(fixture.paths.stateDir, "redaction.key");
+    expect((await nodeFs.lstat(keyReads.path)).isFile()).toBe(true);
     keyReads.count = 0;
     await evidenceOf(fixture);
     expect(keyReads.count).toBe(0);
