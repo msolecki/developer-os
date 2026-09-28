@@ -566,6 +566,83 @@ describe("the Foundation journal root", () => {
     expect(snapshot.journals.size).toBe(1);
   });
 
+  it("admits a complete rewrite temp that is a legal transition of its final journal", async () => {
+    const home = await freshLedgerHome("ledger-rewrite-temp-complete");
+    const journal: TransactionJournalV1 = { ...journalOf(ALLOCATED), phase: "applied" };
+    await plantFile(home, `state/transactions/${ALLOCATED}.json`, encodeFoundationJournalJsonV1(journal));
+    await plantFile(
+      home,
+      `state/transactions/.${ALLOCATED}.${randomUUID()}.json.tmp`,
+      encodeFoundationJournalJsonV1({
+        ...journal,
+        phase: "verified",
+        updatedAt: "2026-09-19T00:00:02.000Z",
+      }),
+    );
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([]);
+    expect(orphanKinds(snapshot)).toStrictEqual(["rewrite_temp"]);
+  });
+
+  it("preserves a rewrite temp larger than its final journal's recomputed maximum (NEW-91)", async () => {
+    const home = await freshLedgerHome("ledger-rewrite-temp-oversize");
+    const journal: TransactionJournalV1 = { ...journalOf(ALLOCATED), phase: "applied" };
+    await plantFile(home, `state/transactions/${ALLOCATED}.json`, encodeFoundationJournalJsonV1(journal));
+    const temp = `state/transactions/.${ALLOCATED}.${randomUUID()}.json.tmp`;
+    await plantFile(
+      home,
+      temp,
+      encodeFoundationJournalJsonV1({
+        ...journalOf(ALLOCATED, ["create", "create", "create", "create", "create", "create"]),
+        phase: "rolled_back",
+      }),
+    );
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([
+      { reason: "lifecycle_guarded_size", path: join(home.home, temp) },
+    ]);
+    expect(snapshot.orphans).toStrictEqual([]);
+    expect(snapshot.journals.size).toBe(1);
+  });
+
+  it("preserves a complete rewrite temp whose mutations differ from its final journal's (NEW-91)", async () => {
+    const home = await freshLedgerHome("ledger-rewrite-temp-mutations");
+    const journal: TransactionJournalV1 = { ...journalOf(ALLOCATED, ["replace"]), phase: "applied" };
+    await plantFile(home, `state/transactions/${ALLOCATED}.json`, encodeFoundationJournalJsonV1(journal));
+    const temp = `state/transactions/.${ALLOCATED}.${randomUUID()}.json.tmp`;
+    await plantFile(
+      home,
+      temp,
+      encodeFoundationJournalJsonV1({ ...journalOf(ALLOCATED, ["create"]), phase: "rolled_back" }),
+    );
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([
+      { reason: "lifecycle_foundation_temp_bytes", path: join(home.home, temp) },
+    ]);
+    expect(snapshot.orphans).toStrictEqual([]);
+  });
+
+  it("preserves a complete rewrite temp at phase planned, which no transition writes (NEW-91)", async () => {
+    const home = await freshLedgerHome("ledger-rewrite-temp-planned");
+    const journal: TransactionJournalV1 = { ...journalOf(ALLOCATED), phase: "applied" };
+    await plantFile(home, `state/transactions/${ALLOCATED}.json`, encodeFoundationJournalJsonV1(journal));
+    const temp = `state/transactions/.${ALLOCATED}.${randomUUID()}.json.tmp`;
+    await plantFile(home, temp, encodeFoundationJournalJsonV1({ ...journal, phase: "planned" }));
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([
+      { reason: "lifecycle_foundation_temp_bytes", path: join(home.home, temp) },
+    ]);
+    expect(snapshot.orphans).toStrictEqual([]);
+  });
+
   it("refuses two rewrite temps for one ID", async () => {
     const home = await freshLedgerHome("ledger-two-temps");
     await plantFile(
@@ -661,15 +738,20 @@ describe("the Foundation journal root", () => {
     expect(snapshot.counts.journalRoot).toBe(0);
   });
 
-  it("treats an absent root as empty", async () => {
-    const home = await freshLedgerHome("ledger-root-absent");
-    await nodeFs.rmdir(join(home.home, "backups/transactions"));
+  it.each(["state/transactions", "staging/transactions", "backups/transactions"])(
+    "refuses an absent %s root instead of reading it as empty (NEW-88)",
+    async (relative) => {
+      const home = await freshLedgerHome("ledger-root-absent");
+      await nodeFs.rmdir(join(home.home, relative));
 
-    const snapshot = await inspect(home);
+      const snapshot = await inspect(home);
 
-    expect(snapshot.findings).toStrictEqual([]);
-    expect(snapshot.counts).toStrictEqual({ journalRoot: 0, staging: 0, backups: 0 });
-  });
+      expect(snapshot.findings).toStrictEqual([
+        { reason: "lifecycle_ledger_root_shape", path: join(home.home, relative) },
+      ]);
+      expect(snapshot.counts).toStrictEqual({ journalRoot: 0, staging: 0, backups: 0 });
+    },
+  );
 });
 
 describe("A13 retained bootstrap residue", () => {

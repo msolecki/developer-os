@@ -31,6 +31,7 @@ import {
   parseLegacyFoundationMutationIndex,
   type FoundationTransactionIdV1,
 } from "./ids.js";
+import { maximumFoundationJournalBytes } from "./store.js";
 
 export interface LifecycleLedgerRootsV1 {
   readonly productHome: CanonicalAbsolutePathV1;
@@ -263,8 +264,8 @@ async function openRoot(
   path: CanonicalAbsolutePathV1,
 ): Promise<LifecycleGuardedEntryV1 | null> {
   const entry = await scan.dependencies.fs.lstat(path);
-  if (entry === null) return null;
   if (
+    entry === null ||
     entry.kind !== "directory" ||
     entry.ownerUid !== scan.dependencies.effectiveUid ||
     entry.mode !== 0o700
@@ -642,15 +643,24 @@ async function scanCompanionRoot(scan: LedgerScanV1, root: CompanionRootV1): Pro
  * fixed head of the encoding is decidable for an incomplete write — the `kind`
  * text that follows it is free — so the rule checks that head, forbids an
  * interior LF, and validates the whole record whenever the terminating LF
- * arrived.
+ * arrived. A rewrite temp beside its final journal is read only up to that
+ * journal's recomputed standalone maximum, and a complete one must be a
+ * `transition` of it: same kind, creation time and mutations, never `planned`.
  */
 async function admitTemporaryJournal(
   scan: LedgerScanV1,
   temp: LifecycleGuardedEntryV1,
   id: FoundationTransactionIdV1,
-  planned: { readonly completeIndices: ReadonlySet<number> } | null,
+  expected:
+    | { readonly completeIndices: ReadonlySet<number> }
+    | { readonly final: TransactionJournalV1 }
+    | null,
 ): Promise<boolean> {
-  const text = await readText(scan, temp, MAX_JOURNAL_BYTES, "lifecycle_foundation_temp_bytes");
+  const maximumBytes =
+    expected !== null && "final" in expected
+      ? Math.min(maximumFoundationJournalBytes(expected.final), MAX_JOURNAL_BYTES)
+      : MAX_JOURNAL_BYTES;
+  const text = await readText(scan, temp, maximumBytes, "lifecycle_foundation_temp_bytes");
   if (text === null) return false;
   if (text.length === 0) return true;
   const head = `{"schemaVersion":1,"id":${JSON.stringify(id)},"kind":"`;
@@ -670,14 +680,25 @@ async function admitTemporaryJournal(
     refuse(scan, "lifecycle_foundation_temp_bytes", temp.path);
     return false;
   }
-  if (planned === null) return true;
+  if (expected === null) return true;
+  if ("final" in expected) {
+    const rebased = { ...journal, phase: expected.final.phase, updatedAt: expected.final.updatedAt };
+    if (
+      journal.phase === "planned" ||
+      encodeFoundationJournalJsonV1(rebased) !== encodeFoundationJournalJsonV1(expected.final)
+    ) {
+      refuse(scan, "lifecycle_foundation_temp_bytes", temp.path);
+      return false;
+    }
+    return true;
+  }
   const staged = journal.mutations
     .map((mutation, index) => (mutation.operation === "remove" ? null : index))
     .filter((index): index is number => index !== null);
   if (
     journal.phase !== "planned" ||
-    staged.length !== planned.completeIndices.size ||
-    staged.some((index) => !planned.completeIndices.has(index))
+    staged.length !== expected.completeIndices.size ||
+    staged.some((index) => !expected.completeIndices.has(index))
   ) {
     refuse(scan, "lifecycle_foundation_temp_bytes", temp.path);
     return false;
@@ -857,7 +878,7 @@ async function resolveId(
     admitDerivedCompanions(scan, id, facts.journal.journal, facts);
     const temp = admitTemporaryCount(scan, facts);
     if (temp === null) return null;
-    return (await admitTemporaryJournal(scan, temp, id, null))
+    return (await admitTemporaryJournal(scan, temp, id, { final: facts.journal.journal }))
       ? { kind: "rewrite_temp", id, temp }
       : null;
   }
