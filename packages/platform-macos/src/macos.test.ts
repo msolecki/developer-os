@@ -295,23 +295,21 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
     entries: Readonly<Record<string, { uid: number; mode: number }>>,
     resolved?: string,
     declared?: string,
+    links: Readonly<Record<string, string>> = {},
   ): MacOsPlatformAdapter {
     return createAdapter({
       currentUid: () => 501,
       /**
-       * **A function of its argument, not a constant.** Returning `resolved` for every
-       * input made `#canonicalize(declaredDirectory)` yield the resolved *file*, so the
-       * third chain collapsed onto the first and was untestable here — and the fixture
-       * described a filesystem where canonicalizing a directory returns a file. Only the
-       * declared path resolves; everything else, directories included, is its own
-       * canonical form, which is true of every fixture in this suite.
+       * **Every symbolic link in the fixture, and nothing else.** The walk asks `readlink`
+       * about each component it passes, so an unlisted path answers "not a link", which is
+       * true of every directory these fixtures describe. `declared → resolved` is the
+       * shorthand most cases need; `links` spells out the hops the NEW-32 cases turn on.
        */
-      ...(resolved === undefined
-        ? {}
-        : {
-            canonicalize: (candidate: string) =>
-              Promise.resolve(candidate === declared ? resolved : candidate),
-          }),
+      readlink: (path: string) =>
+        Promise.resolve(
+          links[path] ??
+            (path === declared && resolved !== declared ? (resolved ?? null) : null),
+        ),
       /**
        * **Unlisted paths reject rather than defaulting to trusted.** A fake that answers
        * `{uid: 501, mode: 0o755}` for anything not in the map is fail-*open* inside the
@@ -503,6 +501,9 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
         "/private/tmp": STICKY_WORLD_WRITABLE,
         "/private/tmp/planted": USER,
         "/private/tmp/planted/claude": FILE,
+        "/opt": ROOT,
+        "/opt/homebrew": USER,
+        "/opt/homebrew/bin": USER,
       },
       "/private/tmp/planted/claude",
       "/opt/homebrew/bin/claude",
@@ -510,7 +511,86 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
 
     await expect(
       adapter.assertTrustedExecutable("/opt/homebrew/bin/claude"),
-    ).rejects.toThrow(MacOsPlatformTrustError);
+    ).rejects.toThrow(/\/private\/tmp is writable by any user/u);
+  });
+
+  /**
+   * **NEW-32, a directory-component hop owned by somebody else.** `/opt/trusted/bin` links
+   * to `/Users/mallory/dir`, itself a link to `/usr/bin`. The declared chain walked
+   * `/opt/trusted` upward, the canonical chains walked `/usr/bin` upward, and nothing
+   * visited `/Users/mallory`, where the retargetable link lives.
+   */
+  it("refuses a symlinked intermediate directory owned by another uid", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/opt": ROOT,
+        "/opt/trusted": ROOT,
+        "/Users": ROOT,
+        "/Users/mallory": { uid: 502, mode: 0o755 },
+        "/usr": ROOT,
+        "/usr/bin": ROOT,
+        "/usr/bin/true": { uid: 0, mode: 0o100755 },
+      },
+      undefined,
+      undefined,
+      {
+        "/opt/trusted/bin": "/Users/mallory/dir",
+        "/Users/mallory/dir": "/usr/bin",
+      },
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/opt/trusted/bin/true"),
+    ).rejects.toThrow(/\/Users\/mallory is owned by neither this user nor root/u);
+  });
+
+  /** The same shape through a root-owned hop directory only the group clause refuses. */
+  it("refuses a group-writable intermediate hop directory", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/opt": ROOT,
+        "/opt/trusted": ROOT,
+        "/srv": { uid: 0, mode: 0o775 },
+        "/usr": ROOT,
+        "/usr/bin": ROOT,
+        "/usr/bin/true": { uid: 0, mode: 0o100755 },
+      },
+      undefined,
+      undefined,
+      {
+        "/opt/trusted/bin": "/srv/dir",
+        "/srv/dir": "/usr/bin",
+      },
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/opt/trusted/bin/true"),
+    ).rejects.toThrow(/\/srv is group-writable and owned by another user/u);
+  });
+
+  /** A relative link target resolves against the real directory holding the link. */
+  it("resolves a relative hop against the directory that holds it", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/Users": ROOT,
+        "/Users/u": USER,
+        "/Users/u/.local": USER,
+        "/Users/u/.local/bin": USER,
+        "/Users/u/.local/share": USER,
+        "/Users/u/.local/share/claude": USER,
+        "/Users/u/.local/share/claude/claude": FILE,
+      },
+      undefined,
+      undefined,
+      { "/Users/u/.local/bin/claude": "../share/claude/claude" },
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/Users/u/.local/bin/claude"),
+    ).resolves.toBeUndefined();
   });
 
   it("refuses a relative path rather than resolving it against cwd", async () => {
@@ -553,6 +633,7 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
   it("refuses when an ancestor cannot be inspected", async () => {
     const adapter = createAdapter({
       currentUid: () => 501,
+      readlink: () => Promise.resolve(null),
       stat: () => Promise.reject(Object.assign(new Error("EACCES"), { code: "EACCES" })),
     });
 
@@ -563,13 +644,10 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
 });
 
 /**
- * **One suite against the real filesystem, because the map-based fixture above cannot
- * express the bug that mattered.** That fake maps a *lexical* path to a mode, and a
- * symlinked directory is precisely the case where the lexical path and the thing `stat`
- * answers about diverge — there is no row you can add to a flat map that says
- * "`stat(bin)` describes `ww/sub` while `dirname(bin/claude)` is still `bin`". Both holes
- * this guard shipped with were invisible to it by construction, and both are forty lines
- * of real `symlink` away (BACKLOG NEW-15).
+ * **One suite against the real filesystem, because a fixture only describes the links its
+ * author thought of.** Both holes this guard first shipped with were invisible to the
+ * map-based fake by construction, and both are forty lines of real `symlink` away
+ * (BACKLOG NEW-15); the NEW-32 middle hop is pinned here too, against the real resolver.
  *
  * The base prefers the user's private per-user temporary directory after checking that the
  * current user owns it, neither group nor other may write it, and this process can write it.
@@ -704,8 +782,7 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable, against a real filesyste
    * **The accept case that guards against over-refusing**, and the direction that got the
    * previous guard withdrawn. This is the founder's actual install shape — a link in a
    * `bin` directory resolving into a versioned directory two levels away — and nothing
-   * else in this suite pins that three chains do not refuse it. A future attempt at
-   * NEW-32's stepwise resolution is most likely to break exactly here.
+   * else in this suite pins that the stepwise walk (NEW-32) does not refuse it.
    */
   it("accepts the vendor shape: a link resolving through two directories", async () => {
     const root = await sandbox();
@@ -738,8 +815,8 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable, against a real filesyste
   });
 
   /**
-   * `realpath` raises `ELOOP` here, whose `code` is a string — it escaped `exitCodeOf`'s
-   * numeric check and surfaced as an operational failure until the resolver was wrapped.
+   * A loop once surfaced as `realpath`'s `ELOOP`, whose string `code` escaped `exitCodeOf`'s
+   * numeric check as an operational failure; the walk's hop limit must refuse it instead.
    * An attacker who can write a PATH directory plants this and chooses the exit code.
    */
   it("refuses a symlink loop as a trust refusal, not an operational failure", async () => {
@@ -791,6 +868,39 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable, against a real filesyste
     await expect(
       realAdapter().assertTrustedExecutable(join(open, "claude")),
     ).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal });
+  });
+
+  /**
+   * **NEW-32 as the threat model states it**: `bin/claude → open/hop → /bin/ls`. The
+   * declared chain walked `bin` upward, the resolved chain walked `/bin` upward, and
+   * `open`, the world-writable directory holding the middle link, was visited by nobody.
+   */
+  it("refuses a middle symlink hop that lives in a world-writable directory", async () => {
+    const root = await sandbox();
+    const open = join(root, "open");
+    await mkdir(open);
+    await chmod(open, 0o777);
+    await mkdir(join(root, "bin"));
+    await symlink("/bin/ls", join(open, "hop"));
+    await symlink(join(open, "hop"), join(root, "bin", "claude"));
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(root, "bin", "claude")),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  /** The directory-component variant: `bin → open/d → /usr/bin`, declared `bin/true`. */
+  it("refuses a directory hop through a world-writable directory into a trusted one", async () => {
+    const root = await sandbox();
+    const open = join(root, "open");
+    await mkdir(open);
+    await chmod(open, 0o777);
+    await symlink("/usr/bin", join(open, "d"));
+    await symlink(join(open, "d"), join(root, "bin"));
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(root, "bin", "true")),
+    ).rejects.toThrow(MacOsPlatformTrustError);
   });
 
   it("refuses a path that does not exist, failing closed", async () => {
