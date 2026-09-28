@@ -308,6 +308,16 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   in parallel now, before A15 completes; each spec amendment still needs founder approval before code.
   (4) Commits stay local; `development` needs a PR (GH013), opened at the close. Accepted risk: D56's.
   Expires when the rows it started close.
+- **D71 (2026-09-28), NEW-113's design and NEW-25's overlap rule.** (1) Git, `launchctl` and `ssh`
+  are admitted at the operating system's standard fixed path (macOS `/usr/bin/git`, `/bin/launchctl`,
+  `/usr/bin/ssh`; the spawn scrubs `xcrun`-steering variables) by root ownership, no group/other
+  write on the executable and `/`, `/usr`, `/usr/bin`, `/bin`, a version floor and a capability
+  probe. (2) The launchd certification field is dropped; a post-bootstrap observation compensates and
+  refuses on failure. (3) The admission is a per-platform table behind the platform interface: v1
+  implements macOS only (Spec v1 §4 stands), but no contract may pin macOS, so Linux and Windows rows
+  can follow without a contract change. (4) The Phase 9 gate covers local/file transport only; HTTPS
+  and SSH stay refused (D59 Q4-A). (5) NEW-25: `high-entropy` stays first-wins on overlap; every
+  other redaction class merges partially overlapping ranges, so persisted fingerprints do not change.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
