@@ -148,7 +148,7 @@ export class BundlePublicationParticipant {
   async #publish(plan: BundlePublicationPlanV1, file: Journal): Promise<void> {
     const source = await this.#stagedSource(plan);
     if ((file.value as BundlePublicationJournalV1).nextRootTransition === 0) {
-      const parent = await this.#io.ownedDirectory(parentPath(plan.target.bundleRoot));
+      const parent = await this.#versionDirectory(plan);
       await this.#advance(plan, file, { kind: "root_intent" });
       const created = await this.#io.fs.mkdirExclusive(plan.target.bundleRoot);
       this.#interrupt("root_made");
@@ -185,6 +185,23 @@ export class BundlePublicationParticipant {
       if (bundleMetadataCreates(plan, ordinal)) await this.#publishMetadata(plan, file, plan.metadata[ordinal] as BundleMetadataStatePlanV1);
       else await this.#verifyMetadata(plan, file, plan.metadata[ordinal] as BundleMetadataStatePlanV1);
     }
+  }
+
+  /**
+   * D72 addendum: a new release's `releases/<version>` is created no-replace under the retained
+   * `releases` root, or reused when a compensated attempt already made it. It is outside the
+   * coordinator staging root, so it cannot be a construction directory; it is never removed here,
+   * because only the empty directory can remain and the next attempt reuses it.
+   * ponytail: identity is not journaled; a bundle journal structure transition would record it.
+   */
+  async #versionDirectory(plan: BundlePublicationPlanV1): Promise<LifecycleGuardedEntryV1> {
+    const path = parentPath(plan.target.bundleRoot);
+    if ((await this.#io.fs.lstat(path)) === null) {
+      const releases = await this.#io.ownedDirectory(parentPath(path));
+      await this.#io.fs.mkdirExclusive(path);
+      await this.#io.fs.syncDirectory(releases);
+    }
+    return this.#io.ownedDirectory(path);
   }
 
   /**

@@ -293,6 +293,18 @@ describe("BundlePublicationParticipant", () => {
     expect(await nodeFs.readdir(bundlePublicationEvidenceDirectory(value.root, publicationId))).toHaveLength(entries.length);
   });
 
+  it("creates an absent releases/<version> directory for a new release and leaves it empty after compensation", async () => {
+    const value = await fixture();
+    const versionRoot = `${value.home}/releases/1.2.0`;
+    await nodeFs.rmdir(versionRoot);
+    const plan = await publishPlan(value);
+    await participant(value).apply(plan);
+    expect((await nodeFs.stat(versionRoot)).mode & 0o777).toBe(0o700);
+    await participant(value).compensate(plan);
+    await assertRolledBack(value, plan);
+    expect(await nodeFs.readdir(versionRoot)).toEqual([]);
+  });
+
   it.each(FORWARD_DEATHS)("recovers %s in the compensating direction", async (point) => {
     const value = await fixture();
     const plan = await publishPlan(value);
