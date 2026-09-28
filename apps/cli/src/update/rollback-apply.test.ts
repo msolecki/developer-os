@@ -87,13 +87,14 @@ function boundaryName(boundary: UpdateCoordinatorBoundaryV1): string | null {
   return boundary.kind;
 }
 
+/** The composer's exact components; availability is zero, so only the caller's under-lock observation can admit it. */
 function capacity(overflow: boolean): UpdateCapacityInputV1 {
   return {
     operation: "rollback",
-    components: [{ kind: "journals", bytes: parseUInt64Decimal("1048576"), entries: parseUInt64Decimal("1") }],
-    reservationGranularityBytes: parseUInt64Decimal("4096"),
-    availableBytes: parseUInt64Decimal(overflow ? "1" : "1099511627776"),
-    availableEntries: parseUInt64Decimal("10000000"),
+    components: [{ kind: "journals", bytes: parseUInt64Decimal(overflow ? "2199023255552" : "1048576"), entries: parseUInt64Decimal("1") }],
+    reservationGranularityBytes: parseUInt64Decimal("1"),
+    availableBytes: parseUInt64Decimal("0"),
+    availableEntries: parseUInt64Decimal("0"),
   };
 }
 

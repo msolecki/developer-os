@@ -6,11 +6,22 @@ import { join } from "node:path";
 import { MARKETPLACE_NAME, PLUGIN_NAME } from "@developer-os/adapter-codex";
 import {
   assertUpdateCoordinatorDerivation,
+  bindRetainedInversePlan,
+  checkRetainedRollbackBlobSource,
   constructionPlanHash,
   decodeCanonicalJson,
+  decodeRetainedInverseLeaf,
   EXIT_CODES,
   formatAllocatedLifecycleId,
+  isRetainedRecordVerification,
   LifecycleRecoveryRequiredError,
+  MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
+  retainedInversePlanHash,
+  retainedRollbackBlobPath,
+  rollbackPayloadMetadataPath,
+  rollbackPayloadRoot,
+  validateBoundedUpdateInversePlan,
+  validateRollbackPayloadInventory,
   ManifestStateParticipant,
   MAXIMUM_CONSTRUCTION_EVIDENCE_BYTES,
   MAXIMUM_CONSTRUCTION_PLAN_BYTES,
@@ -50,6 +61,11 @@ import {
   type OwnerExternalEffectPlanV1,
   type OwnerExternalEffectProcessPolicyV1,
   type OwnerUpdatePlanV1,
+  type ReleaseBundleManifestV1,
+  type ReleaseIdentityV1,
+  type RetainedOwnerInverseProjectionV1,
+  type RetainedSchemaMigrationInverseProjectionV1,
+  type RollbackRecordV1,
   type RollbackPayloadSourceStagingPlanV1,
   type RollbackPayloadStatePlanV1,
   type SchemaMigrationPlanV1,
@@ -58,6 +74,7 @@ import {
   type UpdateConstructionFilePlanV1,
   type UpdateConstructionJournalV1,
   type UpdateConstructionPlanV1,
+  type UpdateConstructionRetainedRollbackBlobSourceV1,
   type UpdateExecutionPlanV1,
   type UpdateFallbackHandoffV1,
   type UpdateInitialJournalRefV1,
@@ -99,8 +116,8 @@ import { BundleSourceExecutor } from "./bundle-source.js";
 import { codexExecutableResolver, codexRefreshPolicy, resolveCodexExecutable } from "./codex-refresh.js";
 import type { CodexExecutableFileSystemV1, CodexExecutableIdentityV1 } from "./codex-refresh.js";
 import { codexRegistrationObserver, supervisedOwnerEffectRun } from "./codex-effect-ports.js";
-import { composeUpdate, updateManifestAdmission, updateManifestFoundationIds } from "./compose.js";
-import type { ObservedPathV1, UpdateComposedSourcesV1 } from "./compose.js";
+import { composeRollback, composeUpdate, updateManifestAdmission, updateManifestFoundationIds } from "./compose.js";
+import type { ComposeDepsV1, ObservedPathV1, RetainedRollbackSetV1, UpdateComposedSourcesV1 } from "./compose.js";
 import { UpdateConstructionStore } from "./construction.js";
 import type { UpdateConstructionSourcePortV1 } from "./construction.js";
 import type { UpdateCodexV1 } from "./context.js";
@@ -114,6 +131,7 @@ import { SchemaMigrationParticipant } from "./migration-participant.js";
 import { OwnerUpdateParticipant } from "./owner-participant.js";
 import type { OwnerUpdateStepV1 } from "./owner-participant.js";
 import { UpdatePlanningRefusal } from "./planning.js";
+import type { UpdateHomeV1 } from "./planning.js";
 import { removeOrphanTerminalExecutorRecord, UpdateRecoveryExecutorFiles } from "./recovery.js";
 import { RollbackPayloadParticipant } from "./rollback-publication.js";
 import { RollbackPayloadSourceExecutor } from "./rollback-source.js";
@@ -453,10 +471,12 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
 
   const steps: UpdateStepHandlersV1 = {
     bundle: {
+      // `verify_previous` walks the retained bundle through the same participant and mutates nothing.
       apply: async (step: StepOf<"bundle">) => {
-        if (step.action !== "publish_target") return unsupported("update_rollback_apply_unavailable");
+        const plan = bundlePlan ?? thirdState("update_bundle_plan_absent", root);
+        if (plan.action !== step.action) thirdState("update_bundle_action", root);
         await journals.open(bundleJournal);
-        await bundle.apply(bundlePlan ?? thirdState("update_bundle_plan_absent", root));
+        await bundle.apply(plan);
         return APPLIED;
       },
       observe: async () => ((await journals.unreached(bundleJournal)) ? BEFORE : APPLIED),
@@ -466,13 +486,18 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
         return COMPENSATED;
       },
     },
+    /**
+     * §10.2 orders `owner_external_effect/inverse` before `owner_files/inverse`, but the Codex refresh
+     * must run against the restored (previous) tree: the inverse effect step is a routing no-op, and
+     * the inverse files step restores the files and then runs the refresh, as the owner journal requires.
+     */
     owner_files: {
-      apply: (step) => owners.applyFiles(ownerStep(step.owner)),
+      apply: (step) => (step.direction === "inverse" ? owners.apply(ownerStep(step.owner)) : owners.applyFiles(ownerStep(step.owner))),
       observe: (step) => owners.observe(ownerStep(step.owner)),
       compensate: (step) => owners.compensate(ownerStep(step.owner)),
     },
     owner_external_effect: {
-      apply: (step) => owners.applyEffects(ownerStep(step.owner)),
+      apply: (step) => (step.direction === "inverse" ? Promise.resolve(APPLIED) : owners.applyEffects(ownerStep(step.owner))),
       observe: (step) => owners.observe(ownerStep(step.owner)),
       compensate: (step) => owners.compensate(ownerStep(step.owner)),
     },
@@ -485,9 +510,11 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
     trust: stateHandler(trustStep, false),
     rollback_payload: {
       apply: async (step: StepOf<"rollback_payload">) => {
-        if (step.transition !== "publish_proposed") return unsupported("update_rollback_apply_unavailable");
+        const plan = payloadPlan ?? thirdState("update_rollback_payload_plan_absent", root);
+        if ((plan.publish === null) !== (step.transition === "verify_retained")) thirdState("update_rollback_payload_transition", root);
         await journals.open(payloadJournal);
-        await payload.publish(payloadPlan ?? thirdState("update_rollback_payload_plan_absent", root));
+        if (plan.publish === null) await payload.verifyRetained(plan);
+        else await payload.publish(plan);
         return APPLIED;
       },
       observe: async () => ((await journals.unreached(payloadJournal)) ? BEFORE : APPLIED),
@@ -500,21 +527,21 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
     rollback_record: {
       ...stateHandler(recordStep, true),
       apply: async (step: StepOf<"rollback_record">) => {
-        if (step.transition !== "publish_proposed") return unsupported("update_rollback_apply_unavailable");
+        const found = recordStep ?? thirdState("update_state_plan_absent", root);
+        if (isRetainedRecordVerification(found.plan) !== (step.transition === "verify_retained")) thirdState("update_rollback_record_transition", root);
+        if (step.transition === "verify_retained") return state.verifyRetained(found);
         return stateHandler(recordStep, true).apply(step);
       },
     },
-    active: {
-      ...stateHandler(activeStep, false),
-      apply: async (step: StepOf<"active">) => {
-        if (step.transition !== "publish_target") return unsupported("update_rollback_apply_unavailable");
-        return stateHandler(activeStep, false).apply(step);
-      },
-    },
+    // `publish_previous` is the same state transition over the previous release's record.
+    active: stateHandler(activeStep, false),
+    // The execution's target is the update target, or the previous release a rollback returns to.
     target_verifier: {
       apply: async (step: StepOf<"target_verifier">) => {
-        if (step.release !== "target") return unsupported("update_rollback_apply_unavailable");
-        return runTargetVerifier(verification ?? thirdState("update_verification_plan_absent", root), await verifierPort(context, lifecycle));
+        const plan = verification ?? thirdState("update_verification_plan_absent", root);
+        const release = execution.operation === "update_apply" ? "target" : "previous";
+        if (step.release !== release || plan.release.releaseIdentityHash !== execution.target.releaseIdentityHash) thirdState("update_verification_release", root);
+        return runTargetVerifier(plan, await verifierPort(context, lifecycle));
       },
       observe: () => Promise.resolve(BEFORE),
       compensate: () => Promise.resolve(BEFORE),
@@ -568,7 +595,11 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
         return;
       }
       case "rollback_payload": {
-        if (payloadPlan !== null && !(await journals.unreached(payloadJournal))) await payload.compact(payloadPlan);
+        const phase = payloadPlan === null || (await journals.unreached(payloadJournal)) ? null : (await journals.readAt(payloadJournal.finalPath) as { readonly phase?: unknown }).phase;
+        // A verify-only plan finalizes through `retire`; terminal retirement already removed its leaves, so it only confirms the absence.
+        if (payloadPlan !== null && payloadPlan.publish === null && (phase === "verified" || phase === "finalized")) await payload.retire(payloadPlan);
+        // A compensated publication has nothing left to compact.
+        if (payloadPlan !== null && phase !== null && phase !== "rolled_back") await payload.compact(payloadPlan);
         await removeLeaf(entry.plan, payloadPlan, payloadJournal);
         return;
       }
@@ -797,8 +828,33 @@ async function removeParticipantDirectories(lifecycle: CliLifecycleContext, cons
   for (const path of found) await removeEmptyDirectory(lifecycle, path);
 }
 
+interface LiveSourcesV1 {
+  readonly sources: UpdateComposedSourcesV1;
+  /** The verified scratch extraction; null for a rollback, which reads no scratch. */
+  readonly scratch: Parameters<BundleSourceExecutor["stage"]>[1] | null;
+}
+
+/**
+ * P9 (D72): a retained blob, reopened no-follow under `rollback/<payload-id>/blobs/` on construction
+ * and on every recovery, and bound to the reopened retained inventory; any mismatch is exit 6.
+ */
+async function readRetainedBlob(lifecycle: CliLifecycleContext, productHome: CanonicalAbsolutePathV1, source: UpdateConstructionRetainedRollbackBlobSourceV1): Promise<Uint8Array> {
+  const inventoryPath = rollbackPayloadMetadataPath(rollbackPayloadRoot(productHome, source.payloadId), 1);
+  const inventoryBytes = await readBound(lifecycle, inventoryPath, MAXIMUM_ROLLBACK_DOCUMENT_BYTES) ?? thirdState("update_retained_inventory_absent", inventoryPath);
+  try {
+    checkRetainedRollbackBlobSource(source, validateRollbackPayloadInventory(decodeCanonicalJson(inventoryBytes, MAXIMUM_ROLLBACK_DOCUMENT_BYTES)));
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof RangeError || error instanceof LifecycleRecoveryRequiredError) throw error;
+    thirdState("update_retained_blob_inventory", inventoryPath);
+  }
+  const blobPath = retainedRollbackBlobPath(productHome, source);
+  const bytes = await readBound(lifecycle, blobPath, source.bytes) ?? thirdState("update_retained_blob_absent", blobPath);
+  if (bytes.byteLength !== source.bytes || sha256(bytes) !== source.sha256) thirdState("update_retained_blob_changed", blobPath);
+  return bytes;
+}
+
 /** Recovery's source port: it never reads a row, and it compensates both nested sources from their plans. */
-function recoverySources(lifecycle: CliLifecycleContext, root: CanonicalAbsolutePathV1, live?: { readonly sources: UpdateComposedSourcesV1; readonly scratch: Parameters<BundleSourceExecutor["stage"]>[1] }): UpdateConstructionSourcePortV1 {
+function recoverySources(lifecycle: CliLifecycleContext, root: CanonicalAbsolutePathV1, live?: LiveSourcesV1): UpdateConstructionSourcePortV1 {
   const deps = { fs: lifecycle.fs, effectiveUid: lifecycle.effectiveUid, now: () => new Date() };
   const liveOnly = (): never => thirdState("update_construction_source_not_live", root);
   return {
@@ -808,6 +864,7 @@ function recoverySources(lifecycle: CliLifecycleContext, root: CanonicalAbsolute
       if (row.role.kind !== "payload") return liveOnly();
       const source = row.role.source;
       if (source.kind === "guarded_preimage") return readGuarded(lifecycle, source.path, source.dev, source.ino, source.bytes);
+      if (source.kind === "retained_rollback_blob") return readRetainedBlob(lifecycle, lifecycle.roots.productHome, source);
       if (source.kind === "signed_bundle_entry") {
         const rootEntry = await lifecycle.fs.lstat(source.root);
         if (rootEntry?.kind !== "directory" || rootEntry.dev !== source.rootDev || rootEntry.ino !== source.rootIno) return thirdState("update_bundle_source_changed", source.root);
@@ -815,18 +872,19 @@ function recoverySources(lifecycle: CliLifecycleContext, root: CanonicalAbsolute
       }
       return thirdState("update_construction_row_source", plan.stagingRoot.path, row.path);
     },
+    // A rollback construction stages no source envelope; its sources are null.
     prepareSources: async (plan, journal) => {
-      const current = live ?? liveOnly();
-      await new BundleSourceExecutor(deps, root).stage(current.sources.bundleSource, current.scratch, plan, journal);
-      await new RollbackPayloadSourceExecutor(deps, root).prepare(current.sources.rollbackSource, plan, journal, current.sources.documents);
+      const { sources, scratch } = live ?? liveOnly();
+      if (sources.bundleSource !== null) await new BundleSourceExecutor(deps, root).stage(sources.bundleSource, scratch ?? liveOnly(), plan, journal);
+      if (sources.rollbackSource !== null) await new RollbackPayloadSourceExecutor(deps, root).prepare(sources.rollbackSource, plan, journal, sources.documents ?? liveOnly());
     },
     consumeRollbackEntry: async (plan, ordinal, frame) => {
-      const current = live ?? liveOnly();
-      await new RollbackPayloadSourceExecutor(deps, root).consume(current.sources.rollbackSource, plan, ordinal, frame);
+      const source = (live ?? liveOnly()).sources.rollbackSource ?? liveOnly();
+      await new RollbackPayloadSourceExecutor(deps, root).consume(source, plan, ordinal, frame);
     },
     finishSources: async (plan, journal: UpdateConstructionJournalV1) => {
-      const current = live ?? liveOnly();
-      await new RollbackPayloadSourceExecutor(deps, root).finish(current.sources.rollbackSource, plan, journal);
+      const source = (live ?? liveOnly()).sources.rollbackSource;
+      if (source !== null) await new RollbackPayloadSourceExecutor(deps, root).finish(source, plan, journal);
     },
     compensateSources: async (plan, journal) => {
       const sources = await sourcePlansOf(lifecycle, plan);
@@ -846,6 +904,53 @@ async function readGuarded(lifecycle: CliLifecycleContext, path: CanonicalAbsolu
 }
 
 // ---------------------------------------------------------------------------------------------
+// `update rollback --apply`'s retained evidence, reopened under the lock (Spec 2 §10.1).
+// ---------------------------------------------------------------------------------------------
+
+/** Validator throws over retained bytes are exit 6; a JavaScript defect propagates. */
+function retainedEvidence<T>(root: CanonicalAbsolutePathV1, work: () => T): T {
+  try {
+    return work();
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof RangeError || error instanceof LifecycleRecoveryRequiredError) throw error;
+    return thirdState("update_rollback_evidence_invalid", root);
+  }
+}
+
+/** The inverse plan, inventory, and every retained leaf, each bound to the record by hash. */
+async function retainedRollbackSet(lifecycle: CliLifecycleContext, productHome: CanonicalAbsolutePathV1, record: RollbackRecordV1): Promise<RetainedRollbackSetV1> {
+  const root = rollbackPayloadRoot(productHome, record.payloadId);
+  const document = async (ordinal: 0 | 1, hash: LowerHexSha256): Promise<unknown> => {
+    const at = rollbackPayloadMetadataPath(root, ordinal);
+    const bytes = await readBound(lifecycle, at, MAXIMUM_ROLLBACK_DOCUMENT_BYTES) ?? thirdState("update_rollback_evidence_absent", at);
+    if (sha256(bytes) !== hash) thirdState("update_rollback_evidence_changed", at);
+    return retainedEvidence(at, () => decodeCanonicalJson(bytes, MAXIMUM_ROLLBACK_DOCUMENT_BYTES));
+  };
+  const plan =await document(0, record.inversePlanHash).then((value) => retainedEvidence(root, () => validateBoundedUpdateInversePlan(value)));
+  const inventory = await document(1, record.payloadInventoryHash).then((value) => retainedEvidence(root, () => validateRollbackPayloadInventory(value)));
+  if (plan.payloadId !== record.payloadId || plan.rollbackBindingHash !== record.rollbackBindingHash || inventory.payloadId !== record.payloadId || inventory.inversePlanHash !== record.inversePlanHash) thirdState("update_rollback_evidence_binding", root);
+  const owners: RetainedOwnerInverseProjectionV1[] = [];
+  const migrations: RetainedSchemaMigrationInverseProjectionV1[] = [];
+  for (const ref of [...plan.ownerPlans, ...plan.migrationPlans]) {
+    const at = parseCanonicalAbsolutePathText(`${root}/${ref.path}`);
+    const bytes = await readBound(lifecycle, at, MAXIMUM_LEAF_PLAN_BYTES) ?? thirdState("update_rollback_evidence_absent", at);
+    const leaf = retainedEvidence(at, () => decodeRetainedInverseLeaf(ref.kind, bytes));
+    if (bytes.byteLength !== ref.bytes || leaf.id !== ref.id || retainedInversePlanHash(bindRetainedInversePlan(leaf, record.rollbackBindingHash, ref.sourcePlanHash)) !== ref.retainedHash) thirdState("update_rollback_evidence_leaf", at);
+    if (leaf.kind === "owner_inverse") owners.push(leaf);
+    else migrations.push(leaf);
+  }
+  return { owners, migrations, entryCount: inventory.entries.length, aggregateBytes: inventory.aggregateBytes };
+}
+
+/** A release's retained signed bundle manifest, by its content hash. */
+async function retainedBundleManifest(lifecycle: CliLifecycleContext, release: ReleaseIdentityV1): Promise<ReleaseBundleManifestV1> {
+  const at = parseCanonicalAbsolutePathText(`${lifecycle.roots.productHome}/state/release-metadata/bundles/${release.bundleManifestHash}.json`);
+  const bytes = await readBound(lifecycle, at, 16_777_216) ?? thirdState("update_rollback_bundle_manifest", at);
+  if (sha256(bytes) !== release.bundleManifestHash) thirdState("update_rollback_bundle_manifest", at);
+  return retainedEvidence(at, () => validateBundleManifest(decodeCanonicalJson(bytes, 16_777_216)));
+}
+
+// ---------------------------------------------------------------------------------------------
 // The production ports.
 // ---------------------------------------------------------------------------------------------
 
@@ -856,7 +961,7 @@ async function readGuarded(lifecycle: CliLifecycleContext, path: CanonicalAbsolu
  */
 export function productionUpdateApplyPorts(context: CliContext, fallback: () => UpdateFallbackHandoffV1 | null): UpdateApplyPortsV1 {
   const productHome = parseCanonicalAbsolutePathText(context.paths.home);
-  const composedSources = new Map<LifecycleCoordinatorIdV1, { readonly sources: UpdateComposedSourcesV1; readonly scratch: Parameters<BundleSourceExecutor["stage"]>[1] }>();
+  const composedSources = new Map<LifecycleCoordinatorIdV1, LiveSourcesV1>();
   let held: HeldLifecycleStableLockV1 | null = null;
   let authority: Promise<Awaited<ReturnType<typeof ledgerAuthority>>> | null = null;
   const lifecycle = (): CliLifecycleContext => lifecycleOf(context);
@@ -864,6 +969,20 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
   const ledger = (): Promise<Awaited<ReturnType<typeof ledgerAuthority>>> => {
     authority ??= ledgerAuthority(context, lifecycle());
     return authority;
+  };
+  const composeDeps = (home: UpdateHomeV1): ComposeDepsV1 => {
+    const handoff = fallback() ?? refuse("update_fallback_unavailable", EXIT_CODES.capabilityUnavailable, context.paths.stateDir);
+    const current = lifecycle();
+    return {
+      productHome,
+      effectiveUid: current.effectiveUid,
+      evidence: createCanonicalPathEvidence(),
+      fallback: handoff,
+      brainRoot: brainRootOf(context),
+      observe: (path) => observePath(current, path),
+      admitManifest: (value) => validateManifestV2(value, gateManifestAdmission(context)),
+      codexHomes: home.manifest.artifacts.some((row) => row.owner === "codex") ? codexHomes(context) : null,
+    };
   };
   const journalStore = (): UpdateCoordinatorJournalStore => new UpdateCoordinatorJournalStore({ fs: lifecycle().fs, productHome, effectiveUid: lifecycle().effectiveUid, uuid: lifecycle().uuid });
 
@@ -951,20 +1070,21 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
       return id;
     },
     compose: async (input) => {
-      const handoff = fallback() ?? refuse("update_fallback_unavailable", EXIT_CODES.capabilityUnavailable, context.paths.stateDir);
-      const current = lifecycle();
-      const hasCodex = input.home.manifest.artifacts.some((row) => row.owner === "codex");
-      const composed = await composeUpdate(input, {
-        productHome,
-        effectiveUid: current.effectiveUid,
-        evidence: createCanonicalPathEvidence(),
-        fallback: handoff,
-        brainRoot: brainRootOf(context),
-        observe: (path) => observePath(current, path),
-        admitManifest: (value) => validateManifestV2(value, gateManifestAdmission(context)),
-        codexHomes: hasCodex ? codexHomes(context) : null,
-      });
+      const composed = await composeUpdate(input, composeDeps(input.home));
       composedSources.set(input.coordinatorId, { sources: composed.sources, scratch: input.inputs.verified });
+      return composed;
+    },
+    // Local evidence only: the retained set and previous bundle manifest are reopened here, under the lock.
+    composeRollback: async (input) => {
+      const deps = composeDeps(input.home);
+      const record = input.home.rollback ?? refuse("update_rollback_unavailable", EXIT_CODES.capabilityUnavailable);
+      const composed = await composeRollback(input, {
+        ...deps,
+        plannedAt: lifecycle().clock(),
+        retained: await retainedRollbackSet(lifecycle(), productHome, record),
+        previousBundle: await retainedBundleManifest(lifecycle(), input.preview.target),
+      });
+      composedSources.set(input.coordinatorId, { sources: composed.sources, scratch: null });
       return composed;
     },
     construction: (id) => {

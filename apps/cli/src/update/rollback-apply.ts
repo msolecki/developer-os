@@ -66,7 +66,8 @@ export async function applyRollback(update: CliUpdateContext, preview: UpdateRol
     if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_rollback" || plan.rollbackSource !== null || plan.outputFrames.length !== 0) {
       refuse("update_composition_identity", EXIT_CODES.recoveryRequired);
     }
-    requireCapacity(composition.capacity);
+    // The composer derives the exact components; availability is this lock's fresh observation.
+    requireCapacity({ ...composition.capacity, ...(await update.capacity()) });
     await construct(ports, composition, [], () => Promise.resolve());
     return resultOf(await new UpdateLifecycleCoordinator(ports.coordinator(coordinatorId)).execute(coordinatorId), preview);
   });

@@ -32,6 +32,7 @@ import {
   initialBundleSourceJournal,
   initialRollbackPayloadPublicationJournal,
   initialRollbackPayloadSourceJournal,
+  materializeRollbackSchemaMigration,
   materializeSchemaMigrations,
   MAXIMUM_LEAF_PLAN_BYTES,
   MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES,
@@ -43,6 +44,7 @@ import {
   parseManifestParticipantId,
   parseSafeReasonCode,
   parseUInt64Decimal,
+  retainedMigrationTarget,
   retainedOwnerInverseOperationHash,
   rollbackEntrySourceProjectionHash,
   rollbackPayloadMetadataPath,
@@ -115,9 +117,14 @@ import {
   type PlannerPathTokenV1,
   type PreparedRollbackPayloadV1,
   type ReleaseBundleEntryV1,
+  type ReleaseBundleManifestV1,
   type ReleaseIdentityV1,
+  type ReleaseMetadataIdentityV1,
   type RetainedExternalEffectInversePlanV1,
+  type RetainedInversePathStateV1,
+  type RetainedOwnerInverseOperationV1,
   type RetainedOwnerInverseProjectionV1,
+  type RetainedSchemaMigrationInverseProjectionV1,
   type RetirementInventoryRefV1,
   type RollbackPayloadIdentityV1,
   type RollbackPayloadIdV1,
@@ -131,6 +138,7 @@ import {
   type UpdateConstructionFileInputV1,
   type UpdateConstructionPayloadKindV1,
   type UpdateConstructionPayloadSourceV1,
+  type UpdateConstructionRetainedRollbackBlobSourceV1,
   type UpdateConstructionRollbackEntrySourceV1,
   type UpdateConstructionRollbackSourceEntryV1,
   type UpdateExecutionPlanV1,
@@ -150,7 +158,7 @@ import {
 
 import { compareManifestRows } from "../instructions/attach.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
-import type { UpdateApplyComposeInputV1, UpdateApplyCompositionV1 } from "./apply.js";
+import type { UpdateApplyComposeInputV1, UpdateApplyCompositionV1, UpdateRollbackComposeInputV1 } from "./apply.js";
 import { codexRegistrationRow } from "./codex-refresh.js";
 import { deriveTerminalManifest } from "./manifest-handler.js";
 import { UpdatePlanningRefusal } from "./planning.js";
@@ -176,11 +184,27 @@ export interface ComposeDepsV1 {
   readonly codexHomes: VendorHomesV1 | null;
 }
 
-/** What `update --apply`'s construction source port needs besides the plan: in memory only. */
+/** The retained rollback set, reopened under the held lock and checked against the record. */
+export interface RetainedRollbackSetV1 {
+  readonly owners: readonly RetainedOwnerInverseProjectionV1[];
+  readonly migrations: readonly RetainedSchemaMigrationInverseProjectionV1[];
+  readonly entryCount: number;
+  readonly aggregateBytes: number;
+}
+
+/** `update rollback --apply`'s reads beyond `ComposeDepsV1`; nothing here comes from a network or planner. */
+export interface RollbackComposeDepsV1 extends ComposeDepsV1 {
+  readonly plannedAt: UtcTimestampV1;
+  readonly retained: RetainedRollbackSetV1;
+  /** The previous release's retained signed bundle manifest (`state/release-metadata/bundles/<hash>.json`). */
+  readonly previousBundle: ReleaseBundleManifestV1;
+}
+
+/** What the construction source port needs besides the plan: in memory only; rollback stages no source. */
 export interface UpdateComposedSourcesV1 {
-  readonly bundleSource: BundleSourceStagingPlanV1;
-  readonly rollbackSource: RollbackPayloadSourceStagingPlanV1;
-  readonly documents: { readonly inversePlan: Uint8Array; readonly inventory: Uint8Array };
+  readonly bundleSource: BundleSourceStagingPlanV1 | null;
+  readonly rollbackSource: RollbackPayloadSourceStagingPlanV1 | null;
+  readonly documents: { readonly inversePlan: Uint8Array; readonly inventory: Uint8Array } | null;
   /** The exact bytes of every immutable plan, initial journal, and recovery-record row, by construction ordinal. */
   readonly rowBytes: ReadonlyMap<number, Uint8Array>;
 }
@@ -258,8 +282,10 @@ export function updateApplyPrefixes(materialized: MaterializedUpdateV1): readonl
 }
 
 /**
- * `update rollback --apply`'s block from its preview: the coordinator, both manifest participants,
- * the Codex refresh, and a paired ref for every 256 restored paths. Task 11 derives the exact set.
+ * `update rollback --apply`'s exact block from its preview, in the order `composeRollback` takes
+ * it: the coordinator, both manifest participants, the Codex refresh when the retained owner has
+ * one, and a paired ref for every 256 restored owner paths or migration mutations. No `rb`: a
+ * rollback publishes no payload.
  */
 export function updateRollbackPrefixes(preview: UpdateRollbackPreviewV1): readonly LifecycleIdPrefixV1[] {
   const tx = preview.owners.reduce((sum, owner) => sum + refCount(owner.paths.create.length + owner.paths.replace.length + owner.paths.remove.length), 0)
@@ -304,7 +330,8 @@ class IdPool {
 type ContentSpecV1 =
   | { readonly kind: "planner_output"; readonly ordinal: number; readonly bytes: number; readonly sha256: LowerHexSha256; readonly mode: 384 | 448 }
   | { readonly kind: "bundle"; readonly entry: Extract<ReleaseBundleEntryV1, { readonly kind: "file" }> }
-  | { readonly kind: "registration"; readonly value: CanonicalJsonV1 };
+  | { readonly kind: "registration"; readonly value: CanonicalJsonV1 }
+  | { readonly kind: "retained"; readonly source: UpdateConstructionRetainedRollbackBlobSourceV1 };
 
 interface PayloadRowV1 {
   readonly ordinal: number;
@@ -406,21 +433,72 @@ function beforeState(row: ManagedArtifactV2, observed: ObservedPathV1 | null): P
   return { state: "file", mode: modeOf(observed), hash: observed.sha256, bytes: Number(entry.size), dev: entry.dev, ino: entry.ino };
 }
 
+type ComposerSourceV1 =
+  | { readonly operation: "update_apply"; readonly input: UpdateApplyComposeInputV1 }
+  | { readonly operation: "update_rollback"; readonly input: UpdateRollbackComposeInputV1; readonly deps: RollbackComposeDepsV1 };
+
+type InitialJournalV1 = { readonly ref: UpdateInitialJournalRefV1; readonly file: UpdateConstructionFileInputV1; readonly bytes: Uint8Array };
+type RecoveryRowsV1 = { readonly descriptor: UpdateExecutionPlanV1["recoveryExecutor"]; readonly files: readonly UpdateConstructionFileInputV1[]; readonly bytes: readonly [Uint8Array, Uint8Array] };
+type StateJournalSpecV1 = { readonly kind: "release_trust_state" | "active_release_state" | "rollback_record_state"; readonly plan: CanonicalStateFilePlanV1; readonly ref: ImmutableUpdatePlanRefV1 };
+type FoundationSlotsV1 = { readonly forward: UpdateFoundationParticipantRefV2["slot"]; readonly compensation: UpdateFoundationParticipantRefV2["slot"] };
+
+/** The operation-independent tail: every leaf and row is built, so the execution leaf, construction, and outer plan follow. */
+interface AssemblyV1 {
+  readonly operation: "update_apply" | "update_rollback";
+  readonly previewHash: LowerHexSha256;
+  readonly executionBindingHash: LowerHexSha256;
+  readonly current: ReleaseIdentityV1;
+  readonly target: ReleaseIdentityV1;
+  readonly metadata: ReleaseMetadataIdentityV1;
+  readonly planner: UpdateExecutionPlanV1["planner"];
+  readonly refs: Pick<UpdateExecutionPlanV1, "bundle" | "trust" | "active" | "rollback" | "rollbackPayload" | "verification" | "retirement"> & { readonly manifest: readonly [ImmutableUpdatePlanRefV1<"manifest_state">, ImmutableUpdatePlanRefV1<"manifest_state">] };
+  readonly owners: readonly OwnerBuildV1[];
+  readonly migrationRefs: readonly ImmutableUpdatePlanRefV1<"schema_migration">[];
+  readonly journals: readonly InitialJournalV1[];
+  readonly recovery: RecoveryRowsV1;
+  readonly plans: number;
+  /** Every leaf plan but the execution leaf, which the assembly derives and appends. */
+  readonly leaves: readonly (readonly [UpdateLeafPlanKindV1, string, unknown])[];
+  readonly sourceJournals: readonly { readonly row: UpdateConstructionFileInputV1; readonly bytes: Uint8Array }[];
+  readonly rows: RowLedger;
+  readonly stagingRoot: Parameters<typeof buildConstructionPlan>[0]["stagingRoot"];
+  readonly rollbackSource: Parameters<typeof buildConstructionPlan>[0]["rollbackSource"];
+  readonly candidate: Parameters<typeof buildConstructionPlan>[0]["candidate"];
+  readonly stepOwners: readonly UpdateStepOwnerV1[];
+  readonly retainPayloadId: RollbackPayloadIdV1 | null;
+  readonly capacityBase: UpdateCapacityInputV1;
+}
+
+const OWNER_APPLY_SLOTS: FoundationSlotsV1 = { forward: "owner_forward_files", compensation: "owner_inverse_files" };
+/** P9 (D72): every rollback ref takes the inverse slot. */
+const OWNER_ROLLBACK_SLOTS: FoundationSlotsV1 = { forward: "owner_inverse_files", compensation: "owner_inverse_files" };
+const SCHEMA_ROLLBACK_SLOTS: FoundationSlotsV1 = { forward: "schema_inverse", compensation: "schema_inverse" };
+const RETAINED_BLOB_PATH = /^blobs\/([0-9]{10})\.bin$/u;
+const MiB = 1_048_576;
+
 class UpdateComposer {
-  readonly #input: UpdateApplyComposeInputV1;
+  readonly #source: ComposerSourceV1;
   readonly #deps: ComposeDepsV1;
   readonly #root: CanonicalAbsolutePathV1;
   readonly #coordinatorId: LifecycleCoordinatorIdV1;
   readonly #ids: IdPool;
   readonly #plannedAt: UtcTimestampV1;
 
-  constructor(input: UpdateApplyComposeInputV1, deps: ComposeDepsV1) {
-    this.#input = input;
+  constructor(source: ComposerSourceV1, deps: ComposeDepsV1) {
+    this.#source = source;
     this.#deps = deps;
-    this.#coordinatorId = input.coordinatorId;
-    this.#root = updateCoordinatorStagingRoot(deps.productHome, input.coordinatorId);
-    this.#ids = new IdPool(input.coordinatorId, updateApplyPrefixes(input.materialized));
-    this.#plannedAt = input.inputs.plannedAt;
+    this.#coordinatorId = source.input.coordinatorId;
+    this.#root = updateCoordinatorStagingRoot(deps.productHome, source.input.coordinatorId);
+    this.#ids = new IdPool(source.input.coordinatorId, source.operation === "update_apply" ? updateApplyPrefixes(source.input.materialized) : updateRollbackPrefixes(source.input.preview));
+    this.#plannedAt = source.operation === "update_apply" ? source.input.inputs.plannedAt : source.deps.plannedAt;
+  }
+
+  get #input(): UpdateApplyComposeInputV1 {
+    return this.#source.operation === "update_apply" ? this.#source.input : refuse("update_composition_operation", EXIT_CODES.recoveryRequired);
+  }
+
+  get #rollback(): Extract<ComposerSourceV1, { readonly operation: "update_rollback" }> {
+    return this.#source.operation === "update_rollback" ? this.#source : refuse("update_composition_operation", EXIT_CODES.recoveryRequired);
   }
 
   #payloadRef(row: PayloadRowV1): UpdatePayloadRefV1 {
@@ -459,7 +537,7 @@ class UpdateComposer {
     this.#preimageRows(owners, rows);
     this.#registrationRows(owners, rows);
 
-    const foundationByOwner = owners.map((owner) => this.#ownerFoundation(owner, rows));
+    const foundationByOwner = owners.map((owner) => this.#ownerFoundation(owner, rows, OWNER_APPLY_SLOTS));
     const migrations = this.#migrationPlans(migrationRows, rows);
 
     // The rollback payload binds every owner/migration plan hash, so owners are complete first.
@@ -523,97 +601,525 @@ class UpdateComposer {
     for (const owner of owners) this.#resolveOwnerSources(owner);
 
     // Target participant journals, then the two recovery records, close the file list.
-    const journals = this.#initialJournals(bundle, refs, owners, migrations, migrationRefs, [trustPlan, activePlan, recordPlan], rollbackState, rows);
-    const recovery = this.#recoveryExecutor(executionBindingHash, rows);
+    const journals = this.#initialJournals(bundle, refs, owners, migrations, migrationRefs, [
+      { kind: "release_trust_state", plan: trustPlan, ref: refs.trust },
+      { kind: "active_release_state", plan: activePlan, ref: refs.active },
+      { kind: "rollback_record_state", plan: recordPlan, ref: refs.rollback },
+    ], rollbackState, rows);
+    const recovery = this.#recoveryExecutor("update_apply", current, executionBindingHash, rows);
     this.#ids.done();
 
-    const execution = composed("update_composition_execution", () => validateUpdateExecutionPlan({
-      schemaVersion: 1,
-      coordinatorId: this.#coordinatorId,
+    const sourceJournalBytes = [bundleSourceJournalBytes(initialBundleSourceJournal(bundleSource, this.#plannedAt)), rollbackPayloadSourceJournalBytes(initialRollbackPayloadSourceJournal(rollbackSource, this.#plannedAt))] as const;
+    const assembled = this.#assemble({
       operation: "update_apply",
       previewHash: materialized.candidate.preview.previewHash,
       executionBindingHash,
-      maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
       current,
       target,
       metadata: inputs.metadata,
       planner: materialized.candidate.transcriptIdentity,
-      bundle: refs.bundle,
-      owners: owners.map((owner) => owner.ref as ImmutableUpdatePlanRefV1<"owner_update">),
-      migrations: migrationRefs,
-      manifest: { transitional: refs.manifest[0], terminal: refs.manifest[1] },
-      trust: refs.trust,
-      active: refs.active,
-      rollback: refs.rollback,
-      rollbackPayload: refs.rollbackPayload,
-      initialParticipantJournals: journals.map((journal) => journal.ref),
-      recoveryExecutor: recovery.descriptor,
-      verification: refs.verification,
-      retirement: refs.retirement,
+      refs,
+      owners,
+      migrationRefs,
+      journals,
+      recovery,
+      plans,
+      leaves: [
+        ["bundle_source_staging", bundleSource.id, bundleSource],
+        ["rollback_payload_source", rollbackSource.id, rollbackSource],
+        ["bundle_publication", bundle.id, bundle],
+        ...owners.map((owner) => ["owner_update", owner.id, owner.plan] as const),
+        ...owners.flatMap((owner) => (owner.effect === null ? [] : [["owner_external_effect", owner.effect.plan.id, owner.effect.plan] as const])),
+        ...migrations.map((plan) => ["schema_migration", plan.id, plan] as const),
+        ...manifests.map((plan) => ["manifest_state", plan.participantId, plan] as const),
+        ["release_trust_state", trustPlan.id, trustPlan],
+        ["active_release_state", activePlan.id, activePlan],
+        ["rollback_record_state", recordPlan.id, recordPlan],
+        ["rollback_payload_state", rollbackState.id, rollbackState],
+        ["target_verification", verification.id, verification],
+        ["terminal_retirement", retirementPlan.id, retirementPlan],
+      ],
+      sourceJournals: [
+        { row: this.#sourceJournalRow("bundle_source_staging", bundleSource.id, sourceJournalBytes[0]), bytes: sourceJournalBytes[0] },
+        { row: this.#sourceJournalRow("rollback_payload_source", rollbackSource.id, sourceJournalBytes[1]), bytes: sourceJournalBytes[1] },
+      ],
+      rows,
+      stagingRoot,
+      rollbackSource: { sourcePlanId: rollbackSource.id, payloadId, rollbackBindingHash: payload.identity.rollbackBindingHash, inventoryHash: payload.identity.inventoryHash, sources: rollbackEntries.map((entry) => entry.source) },
+      candidate: materialized.candidate,
+      stepOwners,
+      retainPayloadId: payloadId,
+      capacityBase: materialized.capacity,
+    });
+    return { ...assembled, sources: { bundleSource, rollbackSource, documents: { inversePlan: payload.inversePlanBytes, inventory: payload.inventoryBytes }, rowBytes: assembled.rowBytes } };
+  }
+
+  #assemble(a: AssemblyV1): UpdateApplyCompositionV1 & { readonly rowBytes: ReadonlyMap<number, Uint8Array> } {
+    const execution = composed("update_composition_execution", () => validateUpdateExecutionPlan({
+      schemaVersion: 1,
+      coordinatorId: this.#coordinatorId,
+      operation: a.operation,
+      previewHash: a.previewHash,
+      executionBindingHash: a.executionBindingHash,
+      maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
+      current: a.current,
+      target: a.target,
+      metadata: a.metadata,
+      planner: a.planner,
+      bundle: a.refs.bundle,
+      owners: a.owners.map((owner) => owner.ref as ImmutableUpdatePlanRefV1<"owner_update">),
+      migrations: a.migrationRefs,
+      manifest: { transitional: a.refs.manifest[0], terminal: a.refs.manifest[1] },
+      trust: a.refs.trust,
+      active: a.refs.active,
+      rollback: a.refs.rollback,
+      rollbackPayload: a.refs.rollbackPayload,
+      initialParticipantJournals: a.journals.map((journal) => journal.ref),
+      recoveryExecutor: a.recovery.descriptor,
+      verification: a.refs.verification,
+      retirement: a.refs.retirement,
     }, { productHome: this.#deps.productHome, evidence: this.#deps.evidence, fallback: this.#deps.fallback }));
     const executionRef = leafRef(this.#root, "update_execution", "execution", execution);
 
-    const planValues: readonly (readonly [UpdateLeafPlanKindV1, string, unknown])[] = [
-      ["bundle_source_staging", bundleSource.id, bundleSource],
-      ["rollback_payload_source", rollbackSource.id, rollbackSource],
-      ["bundle_publication", bundle.id, bundle],
-      ...owners.map((owner) => ["owner_update", owner.id, owner.plan] as const),
-      ...owners.flatMap((owner) => (owner.effect === null ? [] : [["owner_external_effect", owner.effect.plan.id, owner.effect.plan] as const])),
-      ...migrations.map((plan) => ["schema_migration", plan.id, plan] as const),
-      ...manifests.map((plan) => ["manifest_state", plan.participantId, plan] as const),
-      ["release_trust_state", trustPlan.id, trustPlan],
-      ["active_release_state", activePlan.id, activePlan],
-      ["rollback_record_state", recordPlan.id, recordPlan],
-      ["rollback_payload_state", rollbackState.id, rollbackState],
-      ["target_verification", verification.id, verification],
-      ["terminal_retirement", retirementPlan.id, retirementPlan],
-      ["update_execution", "execution", execution],
-    ];
-    if (planValues.length !== plans) refuse("update_composition_plan_count", EXIT_CODES.recoveryRequired);
+    const planValues = [...a.leaves, ["update_execution", "execution", execution] as const];
+    if (planValues.length !== a.plans) refuse("update_composition_plan_count", EXIT_CODES.recoveryRequired);
     const rowBytes = new Map<number, Uint8Array>();
     const planRows = planValues.map(([kind, id, value], ordinal): UpdateConstructionFileInputV1 => {
       const bytes = updateParticipantDocumentBytes(value);
       rowBytes.set(ordinal, bytes);
       return { role: { kind: "immutable_plan", planKind: kind, id: id as SafeReasonCodeV1 }, path: updateLeafPlanPath(this.#root, kind, id), bytes: bytes.byteLength, sha256: sha256(bytes), mode: 384 };
     });
-    const sourceJournalBytes = [bundleSourceJournalBytes(initialBundleSourceJournal(bundleSource, this.#plannedAt)), rollbackPayloadSourceJournalBytes(initialRollbackPayloadSourceJournal(rollbackSource, this.#plannedAt))] as const;
-    sourceJournalBytes.forEach((bytes, index) => rowBytes.set(plans + index, bytes));
-    const sourceJournalRows = [
-      this.#sourceJournalRow("bundle_source_staging", bundleSource.id, sourceJournalBytes[0]),
-      this.#sourceJournalRow("rollback_payload_source", rollbackSource.id, sourceJournalBytes[1]),
-    ];
-    for (const journal of journals) rowBytes.set(journal.ref.stagedExpected.constructionOrdinal, journal.bytes);
-    rowBytes.set(recovery.descriptor.initialStaged.constructionOrdinal, recovery.bytes[0]);
-    rowBytes.set(recovery.descriptor.terminalStaged.constructionOrdinal, recovery.bytes[1]);
+    a.sourceJournals.forEach((journal, index) => rowBytes.set(a.plans + index, journal.bytes));
+    for (const journal of a.journals) rowBytes.set(journal.ref.stagedExpected.constructionOrdinal, journal.bytes);
+    rowBytes.set(a.recovery.descriptor.initialStaged.constructionOrdinal, a.recovery.bytes[0]);
+    rowBytes.set(a.recovery.descriptor.terminalStaged.constructionOrdinal, a.recovery.bytes[1]);
     const files = [
       ...planRows,
-      ...sourceJournalRows,
-      ...[...rows.payloads].sort((left, right) => left.ordinal - right.ordinal).map((row) => this.#payloadFile(row)),
-      ...journals.map((journal) => journal.file),
-      ...recovery.files,
+      ...a.sourceJournals.map((journal) => journal.row),
+      ...[...a.rows.payloads].sort((left, right) => left.ordinal - right.ordinal).map((row) => this.#payloadFile(row)),
+      ...a.journals.map((journal) => journal.file),
+      ...a.recovery.files,
     ];
 
     const outerPaths = updateCoordinatorEnvelopePaths(this.#deps.productHome, this.#coordinatorId);
     const construction = composed("update_composition_construction", () => buildConstructionPlan({
       coordinatorId: this.#coordinatorId,
-      operation: "update_apply",
-      executionBindingHash,
-      stagingRoot,
+      operation: a.operation,
+      executionBindingHash: a.executionBindingHash,
+      stagingRoot: a.stagingRoot,
       files,
-      rollbackSource: { sourcePlanId: rollbackSource.id, payloadId, rollbackBindingHash: payload.identity.rollbackBindingHash, inventoryHash: payload.identity.inventoryHash, sources: rollbackEntries.map((entry) => entry.source) },
-      candidate: materialized.candidate,
+      rollbackSource: a.rollbackSource,
+      candidate: a.candidate,
       constructionJournalCreatedAt: this.#plannedAt,
       outerJournalCreatedAt: this.#plannedAt,
       outerPlanPath: outerPaths.plan,
       outerJournalPath: outerPaths.journal,
     }));
-    const outerPlan = composed("update_composition_outer", () => buildUpdateCoordinatorPlan({ execution, executionRef, construction: constructionPlanRef(construction), owners: stepOwners, retainPayloadId: payloadId }));
+    const outerPlan = composed("update_composition_outer", () => buildUpdateCoordinatorPlan({ execution, executionRef, construction: constructionPlanRef(construction), owners: a.stepOwners, retainPayloadId: a.retainPayloadId }));
     const outer = updateCoordinatorOuterBytes(outerPlan, this.#plannedAt);
     return {
       construction,
       outer,
-      capacity: this.#capacity(constructionPlanBytes(construction).byteLength + updateCoordinatorPlanBytes(outerPlan).byteLength + outerPlan.maximumJournalBytes, journals.length),
-      sources: { bundleSource, rollbackSource, documents: { inversePlan: payload.inversePlanBytes, inventory: payload.inventoryBytes }, rowBytes },
+      capacity: this.#capacity(a.capacityBase, constructionPlanBytes(construction).byteLength + updateCoordinatorPlanBytes(outerPlan).byteLength + outerPlan.maximumJournalBytes, a.journals.length),
+      rowBytes,
+    };
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // `update rollback --apply` (Spec 2 §10.2, P9): every leaf from the retained inverse and local
+  // evidence, over the same row ledger and assembly; no planner, network, or source envelope.
+
+  async composeRollback(): Promise<UpdateComposedV1> {
+    const { input, deps } = this.#rollback;
+    const { home, preview } = input;
+    const record = home.rollback ?? refuse("update_rollback_unavailable", EXIT_CODES.capabilityUnavailable);
+    const { current, target } = preview;
+    if (canonical(record.previous) !== canonical(target) || canonical(record.installed) !== canonical(current)) refuse("update_plan_changed", EXIT_CODES.operationalFailure);
+    const stagingRoot = await this.#stagingRoot();
+
+    const manifestIds = [this.#ids.take("mf"), this.#ids.take("mf")].map((id) => parseManifestParticipantId(id, null)) as [ManifestParticipantIdV1, ManifestParticipantIdV1];
+    const effectId = deps.retained.owners.some((owner) => owner.externalEffects.length > 0) ? this.#ids.take("oe") : null;
+
+    // Plans first, then rows by source rank: retained blobs, guarded current bytes, plan-derived.
+    const owners = await this.#restoreOwners(record.payloadId, target);
+    const retainedMigrations = deps.retained.migrations;
+    const plans = 9 + owners.length + (effectId === null ? 0 : 1) + retainedMigrations.length;
+    const rows = new RowLedger(plans);
+    this.#retainedOwnerRows(owners, rows);
+    const restoreRows = this.#retainedMigrationRows(record.payloadId, rows);
+    this.#preimageRows(owners, rows);
+    const currentRows = await this.#migrationCurrentRows(rows);
+
+    const foundationByOwner = owners.map((owner) => this.#ownerFoundation(owner, rows, OWNER_ROLLBACK_SLOTS));
+    const migrations = retainedMigrations.map((migration) => this.#rollbackMigrationPlan(migration, restoreRows, currentRows, rows));
+    const inverse = new Map(deps.retained.owners.map((projection) => [projection.id as string, projection]));
+    owners.forEach((owner, index) => {
+      owner.foundation = foundationByOwner[index] as readonly UpdateFoundationParticipantRefV2[];
+      this.#ownerPlan(owner, inverse, effectId, "update_rollback");
+    });
+    const stepOwners = owners.map((owner): UpdateStepOwnerV1 => ({ id: owner.id, owner: owner.draft.owner, externalEffects: owner.effect === null ? [] : [{ id: owner.effect.ref.id }] }));
+    const migrationRefs = migrations.map((plan) => leafRef(this.#root, "schema_migration", plan.id, plan));
+    const executionBindingHash = updateExecutionBindingHash({ coordinatorId: this.#coordinatorId, operation: "update_rollback", previewHash: preview.previewHash, current, target });
+
+    // The transitional manifest restores the previous managed state and keeps the consumed set; the terminal one drops it.
+    const activeValue = validateActiveReleaseRecord({ schemaVersion: 1, ...target, activatedAt: this.#plannedAt }, this.#deps.evidence);
+    const transitional = this.#rollbackTransitional(owners, canonical(activeValue), target);
+    const retirement = this.#consumedEntries(transitional, record.payloadId, record.payloadInventoryHash, current, target);
+    const terminal = deriveTerminalManifest(transitional, transitional.artifacts.filter((row) => retirement.some((entry) => under(row.path, entry.root))));
+    const manifestRows = [this.#manifestAfterRow(manifestIds[0], transitional, rows), this.#manifestAfterRow(manifestIds[1], terminal, rows)] as const;
+    const activeRow = this.#stateRow("active_release", parseSafeReasonCode("active"), canonical(activeValue), rows);
+
+    const bundle = await this.#verifyPreviousPlan(target, deps.previousBundle);
+    const payloadState = this.#verifyRetainedPayloadPlan(record.payloadId, record.rollbackBindingHash, record.inversePlanHash, record.payloadInventoryHash);
+    const manifests = this.#manifestPlans(manifestIds, manifestRows, owners, await this.#manifestBefore());
+    const activePlan = await this.#statePlan("active_release", parseSafeReasonCode("active"), "active-release.json", activeRow, "reversible");
+    const recordPlan = await this.#retainedRecordPlan(canonical(record));
+    const verification = this.#verificationPlan(owners, migrations, migrationRefs, transitional, { target, bundleManifest: deps.previousBundle });
+    const retirementPlan = this.#retirementPlan(retirement, transitional, "consumed_rollback_and_rejected_release");
+
+    const refs = {
+      bundle: bundlePublicationPlanRef(bundle, this.#root),
+      manifest: manifests.map((plan) => leafRef(this.#root, "manifest_state", plan.participantId, plan)) as [ImmutableUpdatePlanRefV1<"manifest_state">, ImmutableUpdatePlanRefV1<"manifest_state">],
+      trust: null,
+      active: leafRef(this.#root, "active_release_state", activePlan.id, activePlan),
+      rollback: leafRef(this.#root, "rollback_record_state", recordPlan.id, recordPlan),
+      rollbackPayload: rollbackPayloadStatePlanRef(payloadState, this.#root),
+      verification: leafRef(this.#root, "target_verification", verification.id, verification),
+      retirement: updateTerminalRetirementPlanRef(retirementPlan, this.#root),
+    };
+    manifestRows.forEach((row, index) => {
+      row.source = { kind: "plan_derived", role: "manifest_after", plan: refs.manifest[index] as ImmutableUpdatePlanRefV1<"manifest_state">, value: this.#rowValue(row), valueBytes: row.bytes - 1 };
+    });
+    activeRow.source = { kind: "plan_derived", role: "active_release_after", plan: refs.active, value: this.#rowValue(activeRow), valueBytes: activeRow.bytes - 1 };
+    for (const owner of owners) this.#resolveOwnerSources(owner);
+    this.#resolveMigrationCurrentSources(migrations, migrationRefs, currentRows);
+
+    const journals = this.#initialJournals(bundle, refs, owners, migrations, migrationRefs, [
+      { kind: "active_release_state", plan: activePlan, ref: refs.active },
+      { kind: "rollback_record_state", plan: recordPlan, ref: refs.rollback },
+    ], payloadState, rows);
+    const recovery = this.#recoveryExecutor("update_rollback", current, executionBindingHash, rows);
+    this.#ids.done();
+
+    const { trust } = home;
+    const assembled = this.#assemble({
+      operation: "update_rollback",
+      previewHash: preview.previewHash,
+      executionBindingHash,
+      current,
+      target,
+      // Trust is never a rollback step: the execution names the unchanged accepted metadata.
+      metadata: { delegationSequence: trust.highestDelegationSequence, delegationHash: trust.delegationHash, delegatedReleaseKeyId: trust.delegatedReleaseKeyId, releaseIndexSequence: trust.highestReleaseIndexSequence, releaseIndexHash: trust.releaseIndexHash },
+      planner: null,
+      refs,
+      owners,
+      migrationRefs,
+      journals,
+      recovery,
+      plans,
+      leaves: [
+        ["bundle_publication", bundle.id, bundle],
+        ...owners.map((owner) => ["owner_update", owner.id, owner.plan] as const),
+        ...owners.flatMap((owner) => (owner.effect === null ? [] : [["owner_external_effect", owner.effect.plan.id, owner.effect.plan] as const])),
+        ...migrations.map((plan) => ["schema_migration", plan.id, plan] as const),
+        ...manifests.map((plan) => ["manifest_state", plan.participantId, plan] as const),
+        ["active_release_state", activePlan.id, activePlan],
+        ["rollback_record_state", recordPlan.id, recordPlan],
+        ["rollback_payload_state", payloadState.id, payloadState],
+        ["target_verification", verification.id, verification],
+        ["terminal_retirement", retirementPlan.id, retirementPlan],
+      ],
+      sourceJournals: [],
+      rows,
+      stagingRoot,
+      rollbackSource: null,
+      candidate: null,
+      stepOwners,
+      retainPayloadId: null,
+      capacityBase: this.#rollbackCapacity(),
+    });
+    return { ...assembled, sources: { bundleSource: null, rollbackSource: null, documents: null, rowBytes: assembled.rowBytes } };
+  }
+
+  /** One owner plan per retained inverse leaf: restored rows from the retained operations, every other row kept. */
+  async #restoreOwners(payloadId: RollbackPayloadIdV1, target: ReleaseIdentityV1): Promise<OwnerBuildV1[]> {
+    const { home } = this.#rollback.input;
+    const ordered = [...this.#rollback.deps.retained.owners].sort((left, right) => OWNER_UPDATE_ORDER.indexOf(left.owner) - OWNER_UPDATE_ORDER.indexOf(right.owner));
+    const built: OwnerBuildV1[] = [];
+    for (const projection of ordered) {
+      const retained = new Map(projection.operations.map((operation) => [operation.path as string, operation]));
+      const ops: OwnerOpV1[] = [];
+      for (const row of home.manifest.artifacts.filter((artifact) => artifact.owner === projection.owner)) {
+        const observed = await this.#deps.observe(row.path);
+        const restore = retained.get(row.path);
+        retained.delete(row.path);
+        ops.push(restore === undefined
+          ? { operation: "keep", targetPath: row.path, current: row, after: row, before: beforeState(row, observed), observed, content: null }
+          : this.#restoreOp(projection.owner, row, restore, observed, payloadId, target));
+      }
+      for (const restore of retained.values()) ops.push(this.#restoreOp(projection.owner, null, restore, await this.#deps.observe(restore.path), payloadId, target));
+      const draft: OwnerUpdateDraftV1 = { owner: projection.owner, currentArtifacts: [], proposedOperations: [], externalEffects: [] };
+      built.push({ draft, id: projection.id, ops: ops.sort((left, right) => compareUtf8(left.targetPath, right.targetPath)), contentRows: new Map(), preimageRows: new Map(), foundation: [], plan: null, ref: null, effect: null });
+    }
+    return built;
+  }
+
+  /** A retained operation over its guarded current state: the current bytes must still be the update's postimage. */
+  #restoreOp(owner: ManagedArtifactV2["owner"], row: ManagedArtifactV2 | null, restore: RetainedOwnerInverseOperationV1, observed: ObservedPathV1 | null, payloadId: RollbackPayloadIdV1, target: ReleaseIdentityV1): OwnerOpV1 {
+    const expected = restore.expectedCurrent;
+    const inverse = (): never => refuse("update_composition_inverse", EXIT_CODES.recoveryRequired, restore.path);
+    const changed = (): never => refuse("update_state_changed", EXIT_CODES.operationalFailure, restore.path);
+    let before: PersistedManagedPathStateV1 = { state: "absent" };
+    if (expected.state === "file") {
+      if (observed?.entry.kind !== "regular_file" || observed.sha256 !== expected.sha256) return changed();
+      before = { state: "file", mode: modeOf(observed), hash: observed.sha256, bytes: Number(observed.entry.size), dev: observed.entry.dev, ino: observed.entry.ino };
+    } else if (expected.state !== "absent") {
+      return inverse();
+    } else if (observed !== null) {
+      return changed();
+    }
+    if ((row === null) !== (before.state === "absent")) return inverse();
+    const base = { targetPath: restore.path, current: row, before, observed } as const;
+    if (restore.restore.state === "absent") return before.state === "file" ? { ...base, operation: "remove", after: null, content: null } : inverse();
+    if (restore.restore.state !== "file") return inverse();
+    const content = { kind: "retained", source: this.#retainedBlob(payloadId, restore.restore, restore.path) } as const;
+    return { ...base, operation: before.state === "file" ? "replace" : "create", after: this.#restoredRow(owner, restore.path, row, restore.restore.sha256, target), content };
+  }
+
+  /** P9(c): the restored file's row from the retained inverse; the installed row supplies only its provenance fields. */
+  #restoredRow(owner: ManagedArtifactV2["owner"], target: CanonicalAbsolutePathV1, row: ManagedArtifactV2 | null, hash: LowerHexSha256, release: ReleaseIdentityV1): ManagedArtifactV2 {
+    const provenance = row === null
+      ? { existedBefore: false, beforeHash: null, backupRelativePath: null, source: "generated/rollback_restore" as ManagedArtifactV2["source"], mergeStrategy: "dedicated" as const }
+      : { existedBefore: row.existedBefore, beforeHash: row.beforeHash, backupRelativePath: row.backupRelativePath, source: row.source, mergeStrategy: row.mergeStrategy };
+    return { owner, path: target, productVersion: release.version, ...provenance, verifiedAt: this.#plannedAt, kind: "file", verification: { mode: "content", installedHash: hash } };
+  }
+
+  /** P9(a): one retained preimage blob, by the inventory ordinal its path derives from. */
+  #retainedBlob(payloadId: RollbackPayloadIdV1, restore: Extract<RetainedInversePathStateV1, { readonly state: "file" }>, subject: string): UpdateConstructionRetainedRollbackBlobSourceV1 {
+    const chunk = restore.payload?.chunks.length === 1 ? restore.payload.chunks[0] : undefined;
+    const ordinal = chunk === undefined ? undefined : RETAINED_BLOB_PATH.exec(chunk.path)?.[1];
+    // ponytail: an empty preimage retains no blob, so it has no source arm yet; add a zero-byte arm to P9 if empty managed files appear.
+    if (chunk === undefined || ordinal === undefined || chunk.bytes !== restore.bytes || chunk.sha256 !== restore.sha256) return refuse("update_rollback_restore_unavailable", EXIT_CODES.capabilityUnavailable, subject);
+    return { kind: "retained_rollback_blob", payloadId, ordinal: Number(ordinal), bytes: restore.bytes, sha256: restore.sha256, mode: restore.mode };
+  }
+
+  #retainedOwnerRows(owners: readonly OwnerBuildV1[], rows: RowLedger): void {
+    for (const owner of owners) {
+      for (const op of owner.ops) {
+        if (op.content?.kind !== "retained") continue;
+        const { source } = op.content;
+        const ordinal = rows.ordinal();
+        owner.contentRows.set(op.targetPath, rows.add({ payloadKind: "owner_content", path: this.#payloadPath(ordinal), bytes: source.bytes, sha256: source.sha256, mode: source.mode, source }, ordinal));
+      }
+    }
+  }
+
+  /** Each retained migration mutation's restore blob, keyed by migration and absolute target. */
+  #retainedMigrationRows(payloadId: RollbackPayloadIdV1, rows: RowLedger): Map<string, PayloadRowV1> {
+    const found = new Map<string, PayloadRowV1>();
+    for (const migration of this.#rollback.deps.retained.migrations) {
+      for (const mutation of migration.mutations) {
+        const target = retainedMigrationTarget(migration.domain, mutation.path, this.#deps.brainRoot);
+        const blob = { state: "file", mode: 384, bytes: mutation.restoreBlob.bytes, sha256: mutation.restoreHash, payload: { chunks: [mutation.restoreBlob], aggregateBytes: mutation.restoreBlob.bytes, sha256: mutation.restoreHash } } as const;
+        const source = this.#retainedBlob(payloadId, blob, target);
+        const ordinal = rows.ordinal();
+        found.set(`${migration.id}\0${target}`, rows.add({ payloadKind: "migration_content", path: this.#payloadPath(ordinal), bytes: source.bytes, sha256: source.sha256, mode: source.mode, source }, ordinal));
+      }
+    }
+    return found;
+  }
+
+  /** The guarded current bytes each migration compensation puts back; their source waits for the plan ref. */
+  async #migrationCurrentRows(rows: RowLedger): Promise<Map<string, { readonly row: PayloadRowV1; readonly observed: ObservedPathV1 }>> {
+    const found = new Map<string, { readonly row: PayloadRowV1; readonly observed: ObservedPathV1 }>();
+    for (const migration of this.#rollback.deps.retained.migrations) {
+      for (const mutation of migration.mutations) {
+        const target = retainedMigrationTarget(migration.domain, mutation.path, this.#deps.brainRoot);
+        const observed = await this.#deps.observe(target);
+        if (observed?.entry.kind !== "regular_file" || observed.sha256 !== mutation.expectedCurrentHash) return refuse("update_state_changed", EXIT_CODES.operationalFailure, target);
+        const ordinal = rows.ordinal();
+        found.set(`${migration.id}\0${target}`, { row: rows.add({ payloadKind: "migration_content", path: this.#payloadPath(ordinal), bytes: Number(observed.entry.size), sha256: observed.sha256, mode: modeOf(observed) }, ordinal), observed });
+      }
+    }
+    return found;
+  }
+
+  #rollbackMigrationPlan(migration: RetainedSchemaMigrationInverseProjectionV1, restoreRows: ReadonlyMap<string, PayloadRowV1>, currentRows: ReadonlyMap<string, { readonly row: PayloadRowV1 }>, rows: RowLedger): SchemaMigrationPlanV1 {
+    const key = (target: string): string => `${migration.id}\0${target}`;
+    const rowOf = (map: ReadonlyMap<string, PayloadRowV1 | { readonly row: PayloadRowV1 }>, target: string): PayloadRowV1 => {
+      const found = map.get(key(target)) ?? refuse("update_composition_inverse", EXIT_CODES.recoveryRequired, target);
+      return "row" in found ? found.row : found;
+    };
+    const targets = migration.mutations.map((mutation) => ({ mutation, target: retainedMigrationTarget(migration.domain, mutation.path, this.#deps.brainRoot) }));
+    const forward = targets.map(({ mutation, target }): UpdateFoundationMutationInputV1 => ({ targetPath: target, operation: "replace", expectedBeforeHash: mutation.expectedCurrentHash, ...this.#staged(rowOf(restoreRows, target), rows) }))
+      .sort((left, right) => compareUtf8(left.targetPath, right.targetPath));
+    const foundation = this.#foundationRefs(SCHEMA_ROLLBACK_SLOTS, forward, (mutation) => ({
+      targetPath: mutation.targetPath,
+      operation: "replace",
+      expectedBeforeHash: mutation.content?.sha256 ?? null,
+      ...this.#staged(rowOf(currentRows, mutation.targetPath), rows),
+    }), rows);
+    return composed("update_composition_migration", () => materializeRollbackSchemaMigration(migration, {
+      coordinatorId: this.#coordinatorId,
+      productHome: this.#deps.productHome,
+      brainRoot: this.#deps.brainRoot,
+      restore: new Map(targets.map(({ target }) => [target as string, this.#payloadRef(rowOf(restoreRows, target))])),
+      current: new Map(targets.map(({ target }) => [target as string, this.#payloadRef(rowOf(currentRows, target))])),
+      foundation,
+    }));
+  }
+
+  #resolveMigrationCurrentSources(migrations: readonly SchemaMigrationPlanV1[], refs: readonly ImmutableUpdatePlanRefV1<"schema_migration">[], currentRows: ReadonlyMap<string, { readonly row: PayloadRowV1; readonly observed: ObservedPathV1 }>): void {
+    migrations.forEach((plan, index) => {
+      plan.mutations.forEach((mutation, mutationOrdinal) => {
+        const target = retainedMigrationTarget(plan.domain, mutation.path, this.#deps.brainRoot);
+        const found = currentRows.get(`${plan.id}\0${target}`) ?? refuse("update_composition_inverse", EXIT_CODES.recoveryRequired, target);
+        const { entry } = found.observed;
+        found.row.source = { kind: "guarded_preimage", authority: { kind: "schema_migration_before", migrationPlan: refs[index] as ImmutableUpdatePlanRefV1<"schema_migration">, mutationOrdinal }, path: target, ownerUid: entry.ownerUid as EffectiveUidV1, mode: found.row.mode, nlink: 1, bytes: found.row.bytes, sha256: found.row.sha256, dev: entry.dev, ino: entry.ino };
+      });
+    });
+  }
+
+  /**
+   * §10.2's transitional manifest: the owner rows restored or removed, migrated schema rows back at
+   * their restore hash, the active row naming the previous record; the rejected bundle, its
+   * metadata, and the consumed payload stay until terminal retirement.
+   */
+  #rollbackTransitional(owners: readonly OwnerBuildV1[], active: CanonicalJsonV1, target: ReleaseIdentityV1): InstallationManifestV2 {
+    const { home } = this.#rollback.input;
+    const rows = new Map(home.manifest.artifacts.map((row) => [row.path as string, row]));
+    for (const owner of owners) {
+      for (const op of owner.ops) {
+        if (op.operation === "remove") rows.delete(op.targetPath);
+        else if (op.operation !== "keep" && op.after !== null) rows.set(op.targetPath, op.after);
+      }
+    }
+    const rehash = (at: string, hash: LowerHexSha256): void => {
+      const row = rows.get(at);
+      if (row?.kind !== "file" || installedHash(row) === null) return;
+      rows.set(at, { ...row, productVersion: target.version, verifiedAt: this.#plannedAt, verification: { ...row.verification, installedHash: hash } } as ManagedArtifactV2);
+    };
+    for (const migration of this.#rollback.deps.retained.migrations) {
+      if (migration.domain !== "product_state") continue;
+      for (const mutation of migration.mutations) rehash(mutation.path, mutation.restoreHash);
+    }
+    rehash(`${this.#deps.productHome}/state/active-release.json`, sha256(active));
+    return composed("update_composition_manifest", () => this.#deps.admitManifest({
+      schemaVersion: 2,
+      productVersion: target.version,
+      installedAt: home.manifest.installedAt,
+      artifacts: [...rows.values()].sort(compareManifestRows),
+    }));
+  }
+
+  /**
+   * §10.2's consumed set in kind/root order: the rejected bundle, its metadata no previous-release
+   * document shares, and the retained payload. The record is the ephemeral reservation's content,
+   * removed by its own verify-retained participant at terminal finalization, so its row stays.
+   */
+  #consumedEntries(transitional: InstallationManifestV2, payloadId: RollbackPayloadIdV1, inventoryHash: LowerHexSha256, current: ReleaseIdentityV1, target: ReleaseIdentityV1): readonly RetirementInventoryRefV1[] {
+    if (current.bundleRoot === target.bundleRoot) refuse("update_rollback_target_retained", EXIT_CODES.recoveryRequired, current.bundleRoot);
+    const leafCount = (root: string): number => transitional.artifacts.filter((row) => under(row.path, root)).length;
+    const documents = (release: ReleaseIdentityV1): readonly LowerHexSha256[] => [release.delegationHash, release.releaseIndexHash, release.bundleManifestHash];
+    const payloadRoot = rollbackPayloadRoot(this.#deps.productHome, payloadId);
+    const entries: RetirementInventoryRefV1[] = [
+      { kind: "bundle", root: current.bundleRoot, inventoryHash: current.bundleManifestHash, leafCount: leafCount(current.bundleRoot) },
+      ...documents(current).flatMap((hash, ordinal): RetirementInventoryRefV1[] => (documents(target)[ordinal] === hash ? [] : [{ kind: "metadata", root: bundleMetadataPath(current, ordinal), inventoryHash: hash, leafCount: 1 }])),
+      { kind: "rollback_payload", root: payloadRoot, inventoryHash, leafCount: leafCount(payloadRoot) },
+    ];
+    return entries.sort((left, right) => RETIREMENT_KINDS.indexOf(left.kind) - RETIREMENT_KINDS.indexOf(right.kind) || compareUtf8(left.root, right.root));
+  }
+
+  /** `bundle/verify_previous`: the retained root and its three present-to-present metadata files, observed now. */
+  async #verifyPreviousPlan(target: ReleaseIdentityV1, bundleManifest: ReleaseBundleManifestV1): Promise<BundlePublicationPlanV1> {
+    const root = await this.#deps.observe(target.bundleRoot);
+    if (root?.entry.kind !== "directory") return refuse("update_rollback_evidence_invalid", EXIT_CODES.recoveryRequired, target.bundleRoot);
+    const { entries } = bundleManifest;
+    const inventoryHash = bundleInventoryHash(entries);
+    const signed = [target.delegationHash, target.releaseIndexHash, target.bundleManifestHash];
+    const metadata: BundleMetadataStatePlanV1[] = [];
+    for (const [ordinal, hash] of signed.entries()) {
+      const at = bundleMetadataPath(target, ordinal);
+      const observed = await this.#deps.observe(at);
+      if (observed?.entry.kind !== "regular_file" || observed.sha256 !== hash) return refuse("update_rollback_evidence_invalid", EXIT_CODES.recoveryRequired, at);
+      const id = parseSafeReasonCode(`release_metadata_${String(ordinal)}`);
+      const state = { state: "present", hash, payload: null, ownerUid: observed.entry.ownerUid as EffectiveUidV1, mode: 384, nlink: 1, size: Number(observed.entry.size) } as const;
+      metadata.push({ schemaVersion: 1, id, coordinatorId: this.#coordinatorId, role: "release_metadata", path: at, tombstonePath: path(`${this.#root}/update/evidence/tombstones/${id}.json`), before: { ...state, dev: observed.entry.dev, ino: observed.entry.ino }, after: state, reversal: "reversible", maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES, maximumJournalBytes: MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES });
+    }
+    return composed("update_composition_bundle", () => validateBundlePublicationPlan({
+      schemaVersion: 1,
+      id: parseSafeReasonCode("bundle"),
+      coordinatorId: this.#coordinatorId,
+      action: "verify_previous",
+      target,
+      source: { kind: "retained_bundle", root: target.bundleRoot, rootDev: root.entry.dev, rootIno: root.entry.ino, inventoryHash, entryCount: entries.length, aggregateBytes: bundleAggregateBytes(entries) },
+      targetRootBefore: { state: "present", inventoryHash, dev: root.entry.dev, ino: root.entry.ino },
+      metadata,
+      entries,
+      inventoryHash,
+      maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
+      maximumJournalBytes: MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES,
+    }, this.#root));
+  }
+
+  /** `rollback_payload/verify_retained`: publishes nothing and retires the retained payload at terminal. */
+  #verifyRetainedPayloadPlan(payloadId: RollbackPayloadIdV1, rollbackBindingHash: LowerHexSha256, inversePlanHash: LowerHexSha256, inventoryHash: LowerHexSha256): RollbackPayloadStatePlanV1 {
+    const { entryCount, aggregateBytes } = this.#rollback.deps.retained;
+    const retained: RollbackPayloadIdentityV1 = { payloadId, root: rollbackPayloadRoot(this.#deps.productHome, payloadId), rollbackBindingHash, inversePlanHash, inventoryHash, entryCount, aggregateBytes };
+    return composed("update_composition_rollback_state", () => validateRollbackPayloadStatePlan({
+      schemaVersion: 1,
+      id: parseSafeReasonCode("rollback_payload"),
+      coordinatorId: this.#coordinatorId,
+      retainedBefore: retained,
+      publish: null,
+      source: null,
+      retainAfter: null,
+      retireAtTerminal: [retained],
+      publicationInventoryHash: null,
+      maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
+      maximumJournalBytes: MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES,
+    }, this.#root));
+  }
+
+  /** `rollback_record/verify_retained`: the guarded present record, absent after; it never publishes. */
+  async #retainedRecordPlan(record: CanonicalJsonV1): Promise<CanonicalStateFilePlanV1> {
+    const target = path(`${this.#deps.productHome}/state/update-rollback.json`);
+    const observed = await this.#deps.observe(target);
+    if (observed?.entry.kind !== "regular_file" || observed.sha256 !== sha256(record)) return refuse("update_state_changed", EXIT_CODES.operationalFailure, target);
+    return composed("update_composition_state", () => validateCanonicalStateFilePlan({
+      schemaVersion: 1,
+      id: parseSafeReasonCode("rollback_record"),
+      coordinatorId: this.#coordinatorId,
+      role: "rollback_record",
+      path: target,
+      tombstonePath: path(`${dirname(target)}/.${basename(target)}.${this.#coordinatorId}.tombstone`),
+      before: { state: "present", hash: observed.sha256, payload: null, ownerUid: observed.entry.ownerUid as EffectiveUidV1, mode: 384, nlink: 1, size: Number(observed.entry.size), dev: observed.entry.dev, ino: observed.entry.ino },
+      after: { state: "absent" },
+      reversal: "reversible",
+      maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
+      maximumJournalBytes: MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES,
+    }, this.#deps.productHome));
+  }
+
+  /**
+   * Rollback's aggregate projection, as `planRollback` previews it. Availability is zero here: the
+   * caller overlays its own under-lock observation, so a projection used without one refuses.
+   */
+  #rollbackCapacity(): UpdateCapacityInputV1 {
+    const { retained } = this.#rollback.deps;
+    const leaves = retained.owners.length + retained.migrations.length;
+    const component = (kind: UpdateCapacityInputV1["components"][number]["kind"], bytes: number, entries: number): UpdateCapacityInputV1["components"][number] => ({ kind, bytes: parseUInt64Decimal(String(bytes)), entries: parseUInt64Decimal(String(entries)) });
+    return {
+      operation: "rollback",
+      components: [
+        component("transaction_staging", retained.aggregateBytes, retained.entryCount),
+        component("backups", retained.aggregateBytes, retained.entryCount),
+        component("journals", 64 * MiB + (leaves + 4) * MiB, leaves + 5),
+        component("terminal_compaction_headroom", 64 * MiB, 1),
+      ],
+      reservationGranularityBytes: parseUInt64Decimal("1"),
+      availableBytes: parseUInt64Decimal("0"),
+      availableEntries: parseUInt64Decimal("0"),
     };
   }
 
@@ -760,7 +1266,7 @@ class UpdateComposer {
    * Paired forward/compensation refs over `changed` in path order, at most 256 mutations each.
    * Refs are ordered by ID, so the chunks go to the forward IDs in that order.
    */
-  #foundationRefs(slot: { readonly forward: UpdateFoundationParticipantRefV2["slot"]; readonly compensation: UpdateFoundationParticipantRefV2["slot"] }, forwardMutations: readonly UpdateFoundationMutationInputV1[], compensationOf: (mutation: UpdateFoundationMutationInputV1) => UpdateFoundationMutationInputV1, rows: RowLedger): readonly UpdateFoundationParticipantRefV2[] {
+  #foundationRefs(slot: FoundationSlotsV1, forwardMutations: readonly UpdateFoundationMutationInputV1[], compensationOf: (mutation: UpdateFoundationMutationInputV1) => UpdateFoundationMutationInputV1, rows: RowLedger): readonly UpdateFoundationParticipantRefV2[] {
     const chunks: UpdateFoundationMutationInputV1[][] = [];
     for (let index = 0; index < forwardMutations.length; index += MAX_FOUNDATION_MUTATIONS) chunks.push(forwardMutations.slice(index, index + MAX_FOUNDATION_MUTATIONS));
     const pairs = chunks.map(() => ({ forward: this.#ids.take("tx"), compensation: this.#ids.take("tx") }));
@@ -797,7 +1303,7 @@ class UpdateComposer {
     return { content: this.#payloadRef(content), digest: this.#payloadRef(this.#digestRow(content, rows)) };
   }
 
-  #ownerFoundation(owner: OwnerBuildV1, rows: RowLedger): readonly UpdateFoundationParticipantRefV2[] {
+  #ownerFoundation(owner: OwnerBuildV1, rows: RowLedger, slots: FoundationSlotsV1): readonly UpdateFoundationParticipantRefV2[] {
     const changed = owner.ops.filter((op) => op.operation !== "keep");
     const byTarget = new Map(changed.map((op) => [op.targetPath as string, op]));
     const forward = changed.map((op): UpdateFoundationMutationInputV1 => {
@@ -813,7 +1319,7 @@ class UpdateComposer {
       const preimage = owner.preimageRows.get(mutation.targetPath) ?? refuse("update_composition_preimage", EXIT_CODES.recoveryRequired, mutation.targetPath);
       return { targetPath: mutation.targetPath, operation: op.operation === "remove" ? "create" : "replace", expectedBeforeHash: written, ...this.#staged(preimage, rows) };
     };
-    return this.#foundationRefs({ forward: "owner_forward_files", compensation: "owner_inverse_files" }, forward, compensation, rows);
+    return this.#foundationRefs(slots, forward, compensation, rows);
   }
 
   #inverseProjections(): Map<string, RetainedOwnerInverseProjectionV1> {
@@ -824,10 +1330,11 @@ class UpdateComposer {
     return found;
   }
 
-  #ownerPlan(owner: OwnerBuildV1, inverse: ReadonlyMap<string, RetainedOwnerInverseProjectionV1>, effectId: AllocatedLifecycleIdV1<"oe"> | null): void {
+  #ownerPlan(owner: OwnerBuildV1, inverse: ReadonlyMap<string, RetainedOwnerInverseProjectionV1>, effectId: AllocatedLifecycleIdV1<"oe"> | null, operation: "update_apply" | "update_rollback" = "update_apply"): void {
     const projection = inverse.get(owner.id) ?? refuse("update_composition_inverse", EXIT_CODES.recoveryRequired);
-    const currentPartition = this.#input.home.manifest.artifacts.filter((row) => row.owner === owner.draft.owner);
-    const effect = owner.draft.externalEffects.length > 0 && effectId !== null ? this.#effectPlan(owner, effectId, projection.externalEffects[0]) : null;
+    const currentPartition = this.#source.input.home.manifest.artifacts.filter((row) => row.owner === owner.draft.owner);
+    const drafted = operation === "update_rollback" ? projection.externalEffects.length : owner.draft.externalEffects.length;
+    const effect = drafted > 0 && effectId !== null ? this.#effectPlan(owner, effectId, projection.externalEffects[0], operation) : null;
     owner.effect = effect;
     const plan: OwnerUpdatePlanV1 = {
       schemaVersion: 1,
@@ -848,14 +1355,18 @@ class UpdateComposer {
       inverseOperationHash: retainedOwnerInverseOperationHash(projection),
       maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
     };
-    owner.plan = composed("update_composition_owner", () => validateOwnerUpdatePlan(plan, { productHome: this.#deps.productHome, currentPartition }));
+    owner.plan = composed("update_composition_owner", () => validateOwnerUpdatePlan(plan, { productHome: this.#deps.productHome, currentPartition, operation }));
     owner.ref = leafRef(this.#root, "owner_update", owner.id, owner.plan);
     if (effect !== null) composed("update_composition_effect", () => validateOwnerExternalEffectPlan(effect.plan, owner.plan as OwnerUpdatePlanV1));
   }
 
-  /** The Codex refresh: policy and projection hashes are the retained inverse's, so rollback replays the same child. */
-  #effectPlan(owner: OwnerBuildV1, id: AllocatedLifecycleIdV1<"oe">, retained: RetainedExternalEffectInversePlanV1 | undefined): NonNullable<OwnerBuildV1["effect"]> {
+  /**
+   * The Codex refresh: policy and projection hashes are the retained inverse's, so rollback replays
+   * the same child with the two states swapped, over the restored (previous) tree.
+   */
+  #effectPlan(owner: OwnerBuildV1, id: AllocatedLifecycleIdV1<"oe">, retained: RetainedExternalEffectInversePlanV1 | undefined, operation: "update_apply" | "update_rollback"): NonNullable<OwnerBuildV1["effect"]> {
     if (retained === undefined) return refuse("update_codex_unavailable", EXIT_CODES.capabilityUnavailable);
+    const rollback = operation === "update_rollback";
     const plan: OwnerExternalEffectPlanV1 = {
       schemaVersion: 1,
       id,
@@ -864,8 +1375,8 @@ class UpdateComposer {
       owner: "codex",
       providerProtocol: retained.providerProtocol,
       fileParticipantIds: owner.foundation.filter((ref) => ref.role.kind === "forward").map((ref) => ref.id),
-      expectedStateHash: retained.restoreStateHash,
-      proposedStateHash: retained.expectedCurrentStateHash,
+      expectedStateHash: rollback ? retained.expectedCurrentStateHash : retained.restoreStateHash,
+      proposedStateHash: rollback ? retained.restoreStateHash : retained.expectedCurrentStateHash,
       processPolicy: retained.processPolicy,
       processPolicyHash: ownerExternalEffectProcessPolicyHash(retained.processPolicy),
       forwardPayloads: [],
@@ -1103,12 +1614,12 @@ class UpdateComposer {
     return entries.sort((left, right) => RETIREMENT_KINDS.indexOf(left.kind) - RETIREMENT_KINDS.indexOf(right.kind) || compareUtf8(left.root, right.root));
   }
 
-  #retirementPlan(entries: readonly RetirementInventoryRefV1[], transitional: InstallationManifestV2): UpdateTerminalRetirementPlanV1 {
+  #retirementPlan(entries: readonly RetirementInventoryRefV1[], transitional: InstallationManifestV2, set: UpdateTerminalRetirementPlanV1["set"] = "prior_rollback"): UpdateTerminalRetirementPlanV1 {
     return composed("update_composition_retirement", () => validateUpdateTerminalRetirementPlan({
       schemaVersion: 1,
       id: parseSafeReasonCode("retirement"),
       coordinatorId: this.#coordinatorId,
-      set: "prior_rollback",
+      set,
       transitionalManifestHash: sha256(encoder.encode(canonical(transitional))),
       entries,
       maximumLeaves: entries.reduce((sum, entry) => sum + entry.leafCount, 0),
@@ -1259,8 +1770,8 @@ class UpdateComposer {
     }, this.#deps.productHome));
   }
 
-  #verificationPlan(owners: readonly OwnerBuildV1[], migrations: readonly SchemaMigrationPlanV1[], migrationRefs: readonly ImmutableUpdatePlanRefV1<"schema_migration">[], transitional: InstallationManifestV2): TargetVerificationPlanV1 {
-    const { target, bundleManifest } = this.#input.inputs;
+  #verificationPlan(owners: readonly OwnerBuildV1[], migrations: readonly SchemaMigrationPlanV1[], migrationRefs: readonly ImmutableUpdatePlanRefV1<"schema_migration">[], transitional: InstallationManifestV2, release?: { readonly target: ReleaseIdentityV1; readonly bundleManifest: ReleaseBundleManifestV1 }): TargetVerificationPlanV1 {
+    const { target, bundleManifest } = release ?? this.#input.inputs;
     const context = {
       release: target,
       manifestHash: sha256(encoder.encode(canonical(transitional))),
@@ -1366,25 +1877,22 @@ class UpdateComposer {
 
   #initialJournals(
     bundle: BundlePublicationPlanV1,
-    refs: { readonly bundle: ImmutableUpdatePlanRefV1<"bundle_publication">; readonly trust: ImmutableUpdatePlanRefV1<"release_trust_state">; readonly active: ImmutableUpdatePlanRefV1<"active_release_state">; readonly rollback: ImmutableUpdatePlanRefV1<"rollback_record_state">; readonly rollbackPayload: ImmutableUpdatePlanRefV1<"rollback_payload_state"> },
+    refs: { readonly bundle: ImmutableUpdatePlanRefV1<"bundle_publication">; readonly rollbackPayload: ImmutableUpdatePlanRefV1<"rollback_payload_state"> },
     owners: readonly OwnerBuildV1[],
     migrations: readonly SchemaMigrationPlanV1[],
     migrationRefs: readonly ImmutableUpdatePlanRefV1<"schema_migration">[],
-    states: readonly [CanonicalStateFilePlanV1, CanonicalStateFilePlanV1, CanonicalStateFilePlanV1],
+    states: readonly StateJournalSpecV1[],
     rollbackState: RollbackPayloadStatePlanV1,
     rows: RowLedger,
-  ): readonly { readonly ref: UpdateInitialJournalRefV1; readonly file: UpdateConstructionFileInputV1; readonly bytes: Uint8Array }[] {
+  ): readonly InitialJournalV1[] {
     const at = this.#plannedAt;
     const header = (id: string, planHash: LowerHexSha256) => ({ schemaVersion: 1, id, coordinatorId: this.#coordinatorId, planHash });
-    const stateJournal = (kind: UpdateTargetJournalKindV1, plan: CanonicalStateFilePlanV1, ref: ImmutableUpdatePlanRefV1) => [kind, plan.id, ref.hash, { ...header(plan.id, ref.hash), kind, phase: "planned", nextTransition: 0, compensationNext: null, createdAt: at, updatedAt: at }] as const;
     const values: readonly (readonly [UpdateTargetJournalKindV1, string, LowerHexSha256, unknown])[] = [
       ["bundle_publication", bundle.id, refs.bundle.hash, initialBundlePublicationJournal(bundle, at)],
       ...owners.map((owner) => ["owner_update", owner.id, (owner.ref as ImmutableUpdatePlanRefV1).hash, { ...header(owner.id, (owner.ref as ImmutableUpdatePlanRefV1).hash), phase: "planned", nextForwardFoundation: 0, nextExternalEffect: 0, compensationNext: null, compactionNext: null, createdAt: at, updatedAt: at }] as const),
       ...owners.flatMap((owner) => (owner.effect === null ? [] : [["owner_external_effect", owner.effect.plan.id, owner.effect.ref.hash, { ...header(owner.effect.plan.id, owner.effect.ref.hash), phase: "planned", direction: "forward", nextTransition: 0, evidenceHash: null, createdAt: at, updatedAt: at }] as const])),
       ...migrations.map((plan, index) => ["schema_migration", plan.id, (migrationRefs[index] as ImmutableUpdatePlanRefV1).hash, { ...header(plan.id, (migrationRefs[index] as ImmutableUpdatePlanRefV1).hash), phase: "planned", nextForwardFoundation: 0, compensationNext: null, compactionNext: null, createdAt: at, updatedAt: at }] as const),
-      stateJournal("release_trust_state", states[0], refs.trust),
-      stateJournal("active_release_state", states[1], refs.active),
-      stateJournal("rollback_record_state", states[2], refs.rollback),
+      ...states.map(({ kind, plan, ref }) => [kind, plan.id, ref.hash, { ...header(plan.id, ref.hash), kind, phase: "planned", nextTransition: 0, compensationNext: null, createdAt: at, updatedAt: at }] as const),
       ["rollback_payload_state", rollbackState.id, refs.rollbackPayload.hash, initialRollbackPayloadPublicationJournal(rollbackState, at)],
     ];
     return values.map(([kind, id, planHash, value]) => {
@@ -1401,11 +1909,10 @@ class UpdateComposer {
     });
   }
 
-  #recoveryExecutor(executionBindingHash: LowerHexSha256, rows: RowLedger): { readonly descriptor: UpdateExecutionPlanV1["recoveryExecutor"]; readonly files: readonly UpdateConstructionFileInputV1[]; readonly bytes: readonly [Uint8Array, Uint8Array] } {
-    const { current } = this.#input.inputs;
+  #recoveryExecutor(operation: "update_apply" | "update_rollback", current: ReleaseIdentityV1, executionBindingHash: LowerHexSha256, rows: RowLedger): RecoveryRowsV1 {
     const fallback = this.#deps.fallback;
     if (current.launcherProtocol !== fallback.launcherProtocol || current.updateProtocol !== fallback.updateProtocol) refuse("update_fallback_protocol", EXIT_CODES.capabilityUnavailable);
-    const common = { schemaVersion: 1, coordinatorId: this.#coordinatorId, operation: "update_apply", executionBindingHash, createdAt: this.#plannedAt } as const;
+    const common = { schemaVersion: 1, coordinatorId: this.#coordinatorId, operation, executionBindingHash, createdAt: this.#plannedAt } as const;
     const records: readonly UpdateRecoveryExecutorRecordV1[] = [
       { ...common, state: "executing", executor: { kind: "release_bundle", release: current } },
       { ...common, state: "terminal_cleanup", executor: { kind: "package_fallback", ...fallback } },
@@ -1425,8 +1932,7 @@ class UpdateComposer {
   }
 
   /** The aggregate projection plus the exact construction and outer bytes derived after allocation. */
-  #capacity(derivedBytes: number, journals: number): UpdateCapacityInputV1 {
-    const base = this.#input.materialized.capacity;
+  #capacity(base: UpdateCapacityInputV1, derivedBytes: number, journals: number): UpdateCapacityInputV1 {
     return {
       ...base,
       components: base.components.map((component) => (component.kind === "journals"
@@ -1482,6 +1988,17 @@ export function updateManifestAdmission(input: {
  * through `deps.observe` under the held lock and writes nothing.
  */
 export async function composeUpdate(input: UpdateApplyComposeInputV1, deps: ComposeDepsV1): Promise<UpdateComposedV1> {
-  const composer = new UpdateComposer(input, deps);
+  const composer = new UpdateComposer({ operation: "update_apply", input }, deps);
   return composer.compose();
+}
+
+/**
+ * `update rollback --apply`'s allocation-dependent derivation (Spec 2 §10.2, D72 P9) over the same
+ * composer: the verify-previous bundle, owner and migration inverse leaves whose restore bytes are
+ * retained blobs, the verify-retained payload and record, the previous active record and verifier,
+ * and the consumed-set retirement. It reads only local evidence under the held lock and writes nothing.
+ */
+export async function composeRollback(input: UpdateRollbackComposeInputV1, deps: RollbackComposeDepsV1): Promise<UpdateComposedV1> {
+  const composer = new UpdateComposer({ operation: "update_rollback", input, deps }, deps);
+  return composer.composeRollback();
 }
