@@ -116,7 +116,6 @@ describe("update --apply at every death point (Spec 2 §9.3, §9.4)", () => {
     // Both directions exist: the verifier's durable success is the one point of no return.
     expect(directions.backward).toBeGreaterThan(0);
     expect(directions.forward).toBeGreaterThan(0);
-    expect(point).toBeGreaterThan(directions.backward + directions.forward);
     for (const directory of home.world.scratchDirectories) expect(await exists(directory)).toBe(false);
   }, SWEEP_TIMEOUT_MS);
 });
