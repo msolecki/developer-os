@@ -41,8 +41,13 @@ export type RedactedPayload = { readonly [redacted]: true };
  * the function rather than the module. That is also what makes the producer below a real
  * chokepoint: a caller cannot mint a `RedactedPayload` without handing over something to
  * redact with.
+ *
+ * `scope` mirrors `@developer-os/security`'s `RedactionScope` (NEW-36): the walk passes
+ * `name` for a key and `value` for a string leaf, so a key keeps its schema whatever the
+ * user's `[redaction] patterns` say and a clean leaf keeps its bytes.
  */
-export type Redactor = (text: string) => string;
+export type RedactionScope = "text" | "value" | "path" | "name";
+export type Redactor = (text: string, scope?: RedactionScope) => string;
 
 /**
  * **A budget for the whole walk, because two per-axis bounds do not bound a product of
@@ -286,7 +291,7 @@ function redactDeep(
    * no protection either. A `redactDiagnostic` that throws is a broken redactor, not a
    * hostile value, and the two should fail the same way.
    */
-  if (typeof value === "string") return redact(value);
+  if (typeof value === "string") return redact(value, "value");
   /**
    * **A `bigint` reaches the serializer and kills the process, so it is stopped here.**
    * It is not an object, so it left through the line below untouched, and
@@ -303,16 +308,16 @@ function redactDeep(
    * untouched while the string sibling beside them redacted, against three docblocks here
    * promising "every string leaf".
    *
-   * **A `number` deliberately does not get the same treatment, and the difference is the
-   * published type rather than the risk.** `redact` is `string => string`, so applying it
-   * to a `number` leaf would publish `"1"` where `RunReportV1` declares `schemaVersion: 1`,
-   * and a consumer validating the document would reject every report to redact a field that
-   * is a product-chosen constant. A numeric identifier a user listed in `[redaction]
-   * patterns` therefore escapes through a `number` leaf — a real limitation, registered as
-   * NEW-37 rather than papered over here, because the fix is a redactor that can answer
-   * about a value without changing its type and this module cannot invent one.
+   * **A `number` is published as the number it is, always (NEW-37).** The published JSON
+   * type must not depend on the user's `[redaction] patterns`: a pattern `"1"` turning
+   * `schemaVersion: 1` into a string would make every report invalid against its own schema.
+   * No built-in class can match a finite number's decimal text either — each needs letters,
+   * a key name or forty characters — so a `number` leaf is outside redaction by contract,
+   * not by oversight. The contract that follows: **a caller-derived identifier goes into a
+   * payload as a string**, where every class applies; a `number` is a count, a code or a
+   * version the product chose.
    */
-  if (typeof value === "bigint") return redact(`${value.toString()}n`);
+  if (typeof value === "bigint") return redact(`${value.toString()}n`, "value");
   if (typeof value === "symbol" || typeof value === "function") {
     return "[unserializable]";
   }
@@ -479,7 +484,7 @@ function walk(
       walked[freeName(walked, "[truncated]", written)] = true;
       break;
     }
-    const redacted = redact(key);
+    const redacted = redact(key, "name");
     /**
      * **A suffix that cannot collide with a literal key.** `${redacted}#${written}` used the
      * entry counter, so a payload already containing a key spelled like the synthesized one

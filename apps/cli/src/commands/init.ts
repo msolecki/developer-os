@@ -23,6 +23,7 @@ import {
   canonicalizePlannedPath,
   createRedactor,
 } from "@developer-os/security";
+import type { RedactionScope } from "@developer-os/security";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import {
@@ -1061,14 +1062,14 @@ export async function runInit(
     const durableKey = loadOrCreateRedactionKey(plan.paths.stateDir);
     guards = {
       ...context.guards,
-      redactDiagnostic: (text: string): string =>
+      redactDiagnostic: (text: string, scope?: RedactionScope): string =>
         /**
          * **No user patterns, and there can be none.** `init` is what *creates* the
          * configuration file; a `[redaction]` table cannot exist before this command
          * finishes. The built-in classes are the whole of what applies here, which is
          * correct rather than a gap (BACKLOG NEW-16).
          */
-        createRedactor(durableKey)(text).text,
+        createRedactor(durableKey)(text, scope).text,
     };
 
     const journal = await context.executor.execute({

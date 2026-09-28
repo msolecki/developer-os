@@ -1073,3 +1073,64 @@ describe("createRedactor", () => {
     expect(() => createRedactor(new Uint8Array(31))("anything")).toThrow(RangeError);
   });
 });
+
+describe("redaction scopes (NEW-36, NEW-39)", () => {
+  const redact = createRedactor(deterministicKey, { userPatterns: ["Acme Corp"] });
+  const quarantinePath = "/tmp/developer-os-a1b2c3d4e5f6a7b8/_raw/quarantine/a1b2c3d4e5f60718.md";
+  const decomposed = "DEV/Café.md";
+
+  it("keeps the bytes of an NFD path with nothing to redact", () => {
+    const result = redact(decomposed, "path");
+
+    expect(result.text).toBe(decomposed);
+    expect(result.findings).toStrictEqual([]);
+  });
+
+  it("still returns NFC in the default text scope", () => {
+    expect(redact(decomposed).text).toBe(decomposed.normalize("NFC"));
+  });
+
+  it("keeps the bytes of an NFD string leaf in the value scope", () => {
+    expect(redact(decomposed, "value").text).toBe(decomposed);
+  });
+
+  it("does not apply high-entropy to a path", () => {
+    const path = `DEV/${highEntropySecret}.md`;
+
+    expect(redact(path, "path").text).toBe(path);
+    expect(redact(path).text).toContain("[REDACTED:high-entropy]");
+  });
+
+  it("leaves a quarantine path intact but redacts a configured pattern in a path", () => {
+    expect(redact(quarantinePath, "path").text).toBe(quarantinePath);
+    expect(redact("DEV/Acme Corp notes.md", "path").text).toBe(
+      "DEV/[REDACTED:user-pattern] notes.md",
+    );
+  });
+
+  it("matches a configured pattern in a decomposed path", () => {
+    const withAccent = createRedactor(deterministicKey, { userPatterns: ["Café"] });
+
+    expect(withAccent(decomposed, "path").text).toBe("DEV/[REDACTED:user-pattern].md");
+  });
+
+  it("applies provider classes to a path", () => {
+    expect(redact(`DEV/${providerToken}.md`, "path").text).toBe(
+      "DEV/[REDACTED:provider-token].md",
+    );
+  });
+
+  it("never applies a user pattern to a name, and still applies provider classes", () => {
+    const names = createRedactor(deterministicKey, { userPatterns: ["captureId"] });
+
+    expect(names("captureId", "name")).toStrictEqual({ text: "captureId", findings: [] });
+    expect(names("captureId", "value").text).toBe("[REDACTED:user-pattern]");
+    expect(names(providerToken, "name").text).toBe("[REDACTED:provider-token]");
+  });
+
+  it("redacts a matched value exactly as the text scope does", () => {
+    const line = `API_KEY=${highEntropySecret}`;
+
+    expect(redact(line, "value")).toStrictEqual(redact(line));
+  });
+});

@@ -8,7 +8,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EXIT_CODES, formatJsonResult } from "@developer-os/core";
-import { ProtectedPathPolicy, redactText, SecurityRefusalError } from "@developer-os/security";
+import {
+  createRedactor,
+  ProtectedPathPolicy,
+  redactText,
+  SecurityRefusalError,
+} from "@developer-os/security";
 import type * as SecurityModule from "@developer-os/security";
 
 import {
@@ -834,14 +839,53 @@ describe("failureFrom", () => {
     const published = JSON.stringify(result.error.data);
     expect(published).not.toContain("abc123def456ghi789");
     expect(published).toContain("[REDACTED:bearer-token]");
-    /**
-     * A `number` leaf survives unchanged — not because it cannot carry a secret, but
-     * because the redactor is `string => string` and applying it here would publish
-     * `"5"` where the schema declares a number. NEW-37 carries the limitation; the
-     * assertion pins the published *type*, which is what this test is about.
-     */
+    /** A `number` leaf is published as a number by contract (NEW-37). */
     expect(result.error.data).toMatchObject({
       refused: [{ code: 5, captureId: "cap-a" }],
+    });
+  });
+
+  it("redacts a configured pattern in error.paths and leaves a quarantine path intact (NEW-39)", () => {
+    const redact = createRedactor(REDACTION_KEY, { userPatterns: ["Acme Corp"] });
+    const guards = {
+      redactDiagnostic: (text: string, scope?: "text" | "value" | "path" | "name") =>
+        redact(text, scope).text,
+    };
+    const quarantine = "/tmp/vault/content/_raw/quarantine/a1b2c3d4e5f60718.md";
+    const decomposed = "/tmp/vault/content/DEV/Café.md";
+
+    const result = failureFrom({ guards } as never, new Error("refused"), [
+      quarantine,
+      "/tmp/vault/content/DEV/Acme Corp.md",
+      decomposed,
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.paths).toStrictEqual([
+      quarantine,
+      "/tmp/vault/content/DEV/[REDACTED:user-pattern].md",
+      decomposed,
+    ]);
+  });
+
+  it("keeps a configured pattern in a data key and redacts it in a data value (NEW-36)", () => {
+    const redact = createRedactor(REDACTION_KEY, { userPatterns: ["captureId"] });
+    const guards = {
+      redactDiagnostic: (text: string, scope?: "text" | "value" | "path" | "name") =>
+        redact(text, scope).text,
+    };
+
+    const result = failureFrom({ guards } as never, new Error("refused"), [], undefined, {
+      schemaVersion: 1,
+      refused: [{ captureId: "the captureId field" }],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.data).toStrictEqual({
+      schemaVersion: 1,
+      refused: [{ captureId: "the [REDACTED:user-pattern] field" }],
     });
   });
 

@@ -170,21 +170,11 @@ async function collect(): Promise<Evidence> {
    * "every validator report" artifact with something in it.
    */
   /**
-   * **The sentinel goes in the note's body and deliberately not in its path**, and that is a
-   * measured exclusion rather than an oversight. Planting it in the path turns the `--json`
-   * case red: `failureFrom` redacts `message`, `data` and `recovery`, and passes `paths`
-   * through untouched. The fix is not to redact the field — the redactor's `high-entropy`
-   * class fires on a sixteen-hex capture id, so redacting paths publishes
-   * `[REDACTED:high-entropy].md` for `_raw/quarantine/<id>.md` — but a redactor that applies
-   * the pattern classes alone, which is **NEW-36**'s registered gap.
-   *
-   * **BACKLOG NEW-39** carries the leak with this measurement. The exclusion is named here
-   * because a suite that quietly stops planting where it leaks is the shape this file's own
-   * docblock warns about; when NEW-39 closes, the plant moves into the path and this
-   * paragraph goes.
+   * **In the note's path as well as its body**, because `error.paths` is a published field
+   * and `failureFrom` redacts it in the `path` scope (NEW-39).
    */
   fixture.runner.reply(() =>
-    oneNote(leaky.id, "DEV/leaky.md", "Leaky note", `the token is ${SENTINEL}`),
+    oneNote(leaky.id, `DEV/leaky-${SENTINEL}.md`, "Leaky note", `the token is ${SENTINEL}`),
   );
   const refusal = await runIngest(context, {});
   /**

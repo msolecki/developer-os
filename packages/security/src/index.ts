@@ -21,6 +21,7 @@ export type {
   RedactionFinding,
   RedactionOptions,
   RedactionResult,
+  RedactionScope,
   Redactor,
 } from "./redaction.js";
 export { assertSafeCommand, NodeProcessRunner } from "./process.js";

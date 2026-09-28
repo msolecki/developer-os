@@ -25,6 +25,20 @@ export interface RedactionOptions {
 }
 
 /**
+ * **Which leaf of a published document is being redacted** (NEW-36, NEW-39). `text` is the
+ * historical contract — every class, NFC output — and stays the default because capture
+ * content relies on it. The other three are for structured output and return the caller's
+ * bytes unchanged when nothing matched, so a path handed out as NFD opens again.
+ *
+ * - `value`: every class; a string leaf of a payload.
+ * - `path`: every class except `high-entropy`, which fires on a sixteen-hex capture id and a
+ *   temporary directory's name and would destroy the path rather than a secret in it.
+ * - `name`: every class except `user-pattern` — a product-owned key name keeps its schema
+ *   whatever the user configured, while provider and credential shapes still redact in it.
+ */
+export type RedactionScope = "text" | "value" | "path" | "name";
+
+/**
  * Declaration order is the contract a consumer can rely on to enumerate
  * every class a redaction can emit; a test asserts membership against
  * findings actually produced, not against this list, so a tenth class
@@ -384,7 +398,7 @@ function boundedPemPattern(label: string): RegExp {
 /**
  * A redactor with its key and its user patterns already bound.
  */
-export type Redactor = (text: string) => RedactionResult;
+export type Redactor = (text: string, scope?: RedactionScope) => RedactionResult;
 
 /**
  * **The one production entry to `redactText`, and the reason it exists is the key rather
@@ -405,13 +419,14 @@ export function createRedactor(
   key: Uint8Array,
   options: RedactionOptions = {},
 ): Redactor {
-  return (text: string) => redactText(text, key, options);
+  return (text: string, scope?: RedactionScope) => redactText(text, key, options, scope);
 }
 
 export function redactText(
   text: string,
   key: Uint8Array,
   options: RedactionOptions = {},
+  scope: RedactionScope = "text",
 ): RedactionResult {
   if (key.byteLength < 32) {
     throw new RangeError("Redaction key must contain at least 32 bytes");
@@ -518,7 +533,9 @@ export function redactText(
    * `review` and `ingest` now pass the user's configured patterns, so this ordering is
    * live rather than latent (BACKLOG NEW-16).
    */
-  addUserPatterns(normalizedText, options.userPatterns ?? [], candidates);
+  if (scope !== "name") {
+    addUserPatterns(normalizedText, options.userPatterns ?? [], candidates);
+  }
   /**
    * `.netrc`'s space-separated `password <value>` cannot be named by a
    * fixed key, so it is anchored by context instead: `password` as the
@@ -546,7 +563,13 @@ export function redactText(
     candidates,
   );
 
-  for (const match of normalizedText.matchAll(/[A-Za-z0-9+/=_-]{40,}/gu)) {
+  /**
+   * Skipped at collection rather than filtered afterwards: a dropped candidate may have been
+   * the owner another one merged into, so filtering would change NEW-25's merge outcome.
+   */
+  const heuristicRuns =
+    scope === "path" ? [] : normalizedText.matchAll(/[A-Za-z0-9+/=_-]{40,}/gu);
+  for (const match of heuristicRuns) {
     if (!looksHighEntropy(match[0])) {
       continue;
     }
@@ -556,6 +579,12 @@ export function redactText(
       class: "high-entropy",
     });
   }
+
+  /**
+   * Matching still ran on NFC, so an NFD path carrying a configured pattern is caught; only a
+   * leaf with nothing to redact keeps its bytes. A redacted leaf is destroyed either way.
+   */
+  if (scope !== "text" && candidates.length === 0) return { text, findings: [] };
 
   candidates.sort((left, right) => left.start - right.start);
 

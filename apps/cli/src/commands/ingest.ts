@@ -47,7 +47,7 @@ import type {
 } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
 import { createRedactor } from "@developer-os/security";
-import type { Redactor } from "@developer-os/security";
+import type { RedactionScope, Redactor } from "@developer-os/security";
 import { resolveScopeGlob } from "@developer-os/workflow-schema";
 
 import {
@@ -1891,7 +1891,8 @@ async function ingestOne(
 function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
   return {
     ...guards,
-    redactDiagnostic: (text: string): string => redact(text).text,
+    redactDiagnostic: (text: string, scope?: RedactionScope): string =>
+      redact(text, scope).text,
   };
 }
 

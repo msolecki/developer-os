@@ -12,7 +12,7 @@ import {
 } from "@developer-os/core";
 import type { CliResult, ExitCode } from "@developer-os/core";
 import { createRedactor } from "@developer-os/security";
-import type { Redactor } from "@developer-os/security";
+import type { RedactionScope, Redactor } from "@developer-os/security";
 
 import {
   REDACTION_KEY_BYTES,
@@ -100,7 +100,8 @@ async function lstatOrNull(context: CliContext, path: string) {
 function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
   return {
     ...guards,
-    redactDiagnostic: (text: string): string => redact(text).text,
+    redactDiagnostic: (text: string, scope?: RedactionScope): string =>
+      redact(text, scope).text,
   };
 }
 

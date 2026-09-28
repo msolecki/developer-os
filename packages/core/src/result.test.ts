@@ -1985,3 +1985,33 @@ describe("CLI result contracts", () => {
     );
   });
 });
+
+describe("redactPayload scopes (NEW-36, NEW-37)", () => {
+  it("asks for the name scope on a key and the value scope on a string leaf", () => {
+    const seen: string[] = [];
+    redactPayload(
+      (text, scope) => {
+        seen.push(`${scope ?? "text"}:${text}`);
+        return text;
+      },
+      { captureId: "cap-a", count: 2n },
+    );
+
+    expect(seen).toStrictEqual([
+      "name:captureId",
+      "value:cap-a",
+      "name:count",
+      "value:2n",
+    ]);
+  });
+
+  it("publishes a number as a number even when a pattern would match its digits", () => {
+    const payload = redactPayload((text) => text.replaceAll("1", "[R]"), {
+      schemaVersion: 1,
+      code: 11,
+      id: "11",
+    });
+
+    expect(payload).toStrictEqual({ schemaVersion: 1, code: 11, id: "[R][R]" });
+  });
+});
