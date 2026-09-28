@@ -199,7 +199,7 @@ export function maximumLaunchdEffectJournalBytes(
     coordinatorId: plan.coordinatorId,
     phase: "compensating",
     planHash: PLACEHOLDER_HASH,
-    launchctlIdentityHash: PLACEHOLDER_HASH,
+    launchctlIdentityHash: plan.transitions.length === 0 ? null : PLACEHOLDER_HASH,
     nextTransition: plan.transitions.length,
     compensationNext: -1,
     observations: plan.transitions.map((transition, transitionIndex) => ({ transitionIndex, observedAfter: transition.after })),
