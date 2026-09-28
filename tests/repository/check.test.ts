@@ -301,6 +301,26 @@ describe("the repository check gate", () => {
     expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
   });
 
+  /**
+   * NEW-90: the exemption covers the port's receiver, not the whole file. A
+   * direct `node:fs` stat inside an exempted module renders exactly like the
+   * approved encoder, so only the stat call can fail it.
+   */
+  it("fails on a direct number-valued stat inside a guarded port caller", async () => {
+    const root = await sandbox({
+      "packages/core/src/lifecycle/allocator.ts":
+        `const entry = await fs.lstat(path);\n` +
+        `const stats = await nodeFs.lstat(path);\n` +
+        `export const ino = parseUInt64Decimal(stats.ino.toString(10));\n`,
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("packages/core/src/lifecycle/allocator.ts:2");
+    expect(outcome.stderr).not.toContain("packages/core/src/lifecycle/allocator.ts:1");
+  });
+
   it("fails when the compiled planner entrypoint is missing", async () => {
     const root = await sandbox({ "src/fine.ts": "export const a = 1;\n" }, { planner: false });
 

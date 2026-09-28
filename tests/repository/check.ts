@@ -118,7 +118,11 @@ const FORWARDED_OPTIONS = /\b(?:options|parameters)\b/u;
 /**
  * The lifecycle guarded port's `lstat` takes a path and nothing else, and
  * returns an already-exact decimal identity, so these callers cannot pass
- * the option and have nothing to gain from it.
+ * the option and have nothing to gain from it. The exemption covers only a
+ * call whose receiver is the port, spelled `fs` in every one of them: a direct
+ * `nodeFs.lstat` in the same file still needs the option (NEW-90), because a
+ * file-wide exemption let `stats.ino.toString(10)` on a number-valued stat
+ * through both halves of the guard.
  */
 const STAT_OPTION_EXEMPT: readonly string[] = [
   "packages/core/src/lifecycle/testing.ts",
@@ -141,6 +145,8 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
   "apps/cli/src/update/recovery.ts",
   "apps/cli/src/update/foundation-port.ts",
 ];
+
+const GUARDED_PORT_RECEIVER = /(?:^|[^A-Za-z0-9_$])fs$/u;
 
 /**
  * A single call may opt out where the option would change what it reads: on
@@ -169,7 +175,7 @@ function findNumberValuedStats(
   content: string,
 ): readonly Violation[] {
   if (!path.endsWith(".ts") || path.endsWith(".test.ts")) return [];
-  if (STAT_OPTION_EXEMPT.includes(path)) return [];
+  const viaGuardedPort = STAT_OPTION_EXEMPT.includes(path);
 
   const code = codeWithoutLiterals(content);
   if (!IDENTITY_FIELD.test(code)) return [];
@@ -180,6 +186,7 @@ function findNumberValuedStats(
   for (const match of code.matchAll(STAT_CALL)) {
     const args = callArguments(code, match.index + match[0].length - 1);
     if (args === null) continue;
+    if (viaGuardedPort && GUARDED_PORT_RECEIVER.test(code.slice(Math.max(0, match.index - 3), match.index))) continue;
     if (args.includes("bigint") || FORWARDED_OPTIONS.test(args)) continue;
     const line = code.slice(0, match.index).split("\n").length;
     const marked = lines
