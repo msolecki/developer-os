@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmod, link, lstat, mkdir, mkdtemp, open, readFile, readlink, realpath, rename, stat, unlink, utimes } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, mkdtemp, open, readFile, readlink, realpath, rename, rm, stat, unlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -216,6 +216,8 @@ function codexHomes(context: CliContext): VendorHomesV1 {
 interface CodexRuntimeV1 {
   readonly executable: CodexExecutableIdentityV1;
   readonly effect: Omit<OwnerExternalEffectDependenciesV1, "journals" | "stagingRoot" | "now">;
+  /** Removes the private effect TMPDIR; the runtime's owner calls it once its effect work is done. */
+  readonly dispose: () => Promise<void>;
 }
 
 /** The effect participant's ports for `policy`; the executable must still be the plan's pinned identity. */
@@ -227,11 +229,12 @@ async function codexRuntime(context: CliContext, lifecycle: CliLifecycleContext,
   const pinned = policy ?? codexRefreshPolicy(executable);
   const homes = codexHomes(context);
   const redactor = await redactorOf(context);
-  const tokens = { managedPluginRoot: codexInstructionPaths(homes).pluginRoot, pluginId: PLUGIN_ID, privateEffectTmp: await mkdtemp(join(tmpdir(), "developer-os-effect-")), managedVendorHome: homes.codexHome };
+  const privateEffectTmp = await mkdtemp(join(tmpdir(), "developer-os-effect-"));
+  const tokens = { managedPluginRoot: codexInstructionPaths(homes).pluginRoot, pluginId: PLUGIN_ID, privateEffectTmp, managedVendorHome: homes.codexHome };
   const resolveExecutable = codexExecutableResolver(executable, fsDeps);
   const run = supervisedOwnerEffectRun(new SupervisedProcessRunner(nodeSupervisedProcessDependencies));
   const observe = codexRegistrationObserver({ policy: pinned, tokens, resolveExecutable, run, screen: (text) => redactor(text).findings.length > 0 });
-  return { executable, effect: { tokens, observe, resolveExecutable, run, redact: (text) => redactor(text).text } };
+  return { executable, effect: { tokens, observe, resolveExecutable, run, redact: (text) => redactor(text).text }, dispose: () => rm(privateEffectTmp, { recursive: true, force: true }) };
 }
 
 /** `CliUpdateContext.codex`: the planning-time registration state, policy, and current projection. */
@@ -240,28 +243,36 @@ export function updateCodexPort(context: CliContext): () => Promise<UpdateCodexV
     const lifecycle = lifecycleOf(context);
     const runtime = await codexRuntime(context, lifecycle, null);
     if (runtime === null) return null;
-    const homes = codexHomes(context);
-    const { pluginRoot, registrationFile } = codexInstructionPaths(homes);
-    const policy = codexRefreshPolicy(runtime.executable);
-    const manifestBytes = await readFile(context.paths.manifestFile);
-    const manifest = decodeCanonicalJson(manifestBytes, MAX_MANIFEST_BYTES) as unknown as InstallationManifestV2;
-    const tree = manifest.artifacts.flatMap((artifact) =>
-      artifact.path.startsWith(`${pluginRoot}/`) && artifact.kind !== "directory" && artifact.verification.mode === "content"
-        ? [{ path: artifact.path.slice(pluginRoot.length + 1), sha256: artifact.verification.installedHash }]
-        : []);
-    let record = null;
     try {
-      const bytes = await readFile(registrationFile);
-      record = bytes.byteLength > MAX_REGISTRATION_BYTES ? null : validateCodexRegistrationRecord(bytes);
-    } catch {
-      // An absent or malformed record is the `unregistered` state `inspectCodexRegistration` reports.
-      record = null;
+      return await codexPlanningState(context, runtime);
+    } finally {
+      await runtime.dispose();
     }
-    const registration = tree.length === 0
-      ? "unregistered"
-      : await inspectCodexRegistration({ runner: context.runner, codexExecutable: runtime.executable.canonicalPath, codexHome: homes.codexHome, pluginRoot, record, treeHash: codexPluginTreeHash(tree) });
-    return { homes, registration, policy, projection: await runtime.effect.observe() };
   };
+}
+
+async function codexPlanningState(context: CliContext, runtime: CodexRuntimeV1): Promise<UpdateCodexV1> {
+  const homes = codexHomes(context);
+  const { pluginRoot, registrationFile } = codexInstructionPaths(homes);
+  const policy = codexRefreshPolicy(runtime.executable);
+  const manifestBytes = await readFile(context.paths.manifestFile);
+  const manifest = decodeCanonicalJson(manifestBytes, MAX_MANIFEST_BYTES) as unknown as InstallationManifestV2;
+  const tree = manifest.artifacts.flatMap((artifact) =>
+    artifact.path.startsWith(`${pluginRoot}/`) && artifact.kind !== "directory" && artifact.verification.mode === "content"
+      ? [{ path: artifact.path.slice(pluginRoot.length + 1), sha256: artifact.verification.installedHash }]
+      : []);
+  let record = null;
+  try {
+    const bytes = await readFile(registrationFile);
+    record = bytes.byteLength > MAX_REGISTRATION_BYTES ? null : validateCodexRegistrationRecord(bytes);
+  } catch {
+    // An absent or malformed record is the `unregistered` state `inspectCodexRegistration` reports.
+    record = null;
+  }
+  const registration = tree.length === 0
+    ? "unregistered"
+    : await inspectCodexRegistration({ runner: context.runner, codexExecutable: runtime.executable.canonicalPath, codexHome: homes.codexHome, pluginRoot, record, treeHash: codexPluginTreeHash(tree) });
+  return { homes, registration, policy, projection: await runtime.effect.observe() };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -333,6 +344,8 @@ interface DispatchContextV1 {
   readonly root: CanonicalAbsolutePathV1;
   readonly global: () => HeldLifecycleStableLockV1;
   readonly reopened: ReopenedV1;
+  /** Runs `cleanup` when the global lock this dispatch runs under is released. */
+  readonly defer: (cleanup: () => Promise<void>) => void;
 }
 
 function journalRef(execution: UpdateExecutionPlanV1, kind: UpdateInitialJournalRefV1["kind"], id: string): UpdateInitialJournalRefV1 {
@@ -397,6 +410,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
     ownerSteps.set(plan.owner, { plan, planRef: ref, journal: journalRef(execution, "owner_update", ref.id), effect });
   }
   const runtime = effectPolicy === null ? null : await codexRuntime(context, lifecycle, effectPolicy);
+  if (runtime !== null) dispatch.defer(runtime.dispose);
   const effects = new OwnerExternalEffectParticipant({
     journals,
     stagingRoot: root,
@@ -737,15 +751,20 @@ async function verifierPort(context: CliContext, lifecycle: CliLifecycleContext)
       const bytes = await readBound(lifecycle, manifestPath, 16_777_216) ?? thirdState("update_verifier_bundle_manifest", manifestPath);
       if (sha256(bytes) !== plan.release.bundleManifestHash) thirdState("update_verifier_bundle_manifest", manifestPath);
       const bundleManifest = validateBundleManifest(decodeCanonicalJson(bytes, 16_777_216));
-      // ponytail: the snapshot is the plan's own digests; the bounded read-only home snapshot joins with the real verifier (A16).
-      return supervisor.run({
-        runtime: `${plan.release.bundleRoot}/${bundleManifest.runtimeEntrypoint}`,
-        cwd: await mkdtemp(join(tmpdir(), "developer-os-verifier-")),
-        plan,
-        snapshot: { manifestHash: plan.manifestHash, ownerPostimagesHash: plan.ownerPostimagesHash, migrationPostimagesHash: plan.migrationPostimagesHash },
-        inputBlobs: [],
-        remainingMilliseconds: plan.wallMilliseconds,
-      });
+      const cwd = await mkdtemp(join(tmpdir(), "developer-os-verifier-"));
+      try {
+        // ponytail: the snapshot is the plan's own digests; the bounded read-only home snapshot joins with the real verifier (A16).
+        return await supervisor.run({
+          runtime: `${plan.release.bundleRoot}/${bundleManifest.runtimeEntrypoint}`,
+          cwd,
+          plan,
+          snapshot: { manifestHash: plan.manifestHash, ownerPostimagesHash: plan.ownerPostimagesHash, migrationPostimagesHash: plan.migrationPostimagesHash },
+          inputBlobs: [],
+          remainingMilliseconds: plan.wallMilliseconds,
+        });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
     },
   };
 }
@@ -961,6 +980,7 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
   const productHome = parseCanonicalAbsolutePathText(context.paths.home);
   const composedSources = new Map<LifecycleCoordinatorIdV1, LiveSourcesV1>();
   let held: HeldLifecycleStableLockV1 | null = null;
+  const deferred: (() => Promise<void>)[] = [];
   let authority: Promise<Awaited<ReturnType<typeof ledgerAuthority>>> | null = null;
   const lifecycle = (): CliLifecycleContext => lifecycleOf(context);
   const global = (): HeldLifecycleStableLockV1 => held ?? thirdState("update_global_lock_not_held", context.paths.stateDir);
@@ -992,7 +1012,7 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
       loaded ??= (async () => {
         const outer = plan ?? (await store.read(id)).plan;
         const reopened = await reopen(lifecycle(), productHome, outer);
-        const dispatcher = reopened.execution === null ? null : await dispatcherOf({ context, lifecycle: lifecycle(), productHome, root, global, reopened });
+        const dispatcher = reopened.execution === null ? null : await dispatcherOf({ context, lifecycle: lifecycle(), productHome, root, global, reopened, defer: (cleanup) => deferred.push(cleanup) });
         return { reopened, dispatcher };
       })();
       return loaded;
@@ -1048,7 +1068,11 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
       } finally {
         held = null;
         authority = null;
-        await acquired.release();
+        try {
+          for (const cleanup of deferred.splice(0)) await cleanup();
+        } finally {
+          await acquired.release();
+        }
       }
     },
     closure: async () => {
