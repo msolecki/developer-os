@@ -16,7 +16,7 @@ preimage/postimage types, automatic-rollback exit classes (§9.4, §11) and the 
 types as an accepted residual (§13.3) — is marked "Amended 2026-09-23 (D60)" in place; the A12
 design's §11 amendments (D47: the `unsigned-local` trust state in §3.3, `codex-registration-v1` in §5,
 and the instruction overrides and installed-home reconcile in §6.1) are marked "Amended 2026-09-26
-(A12 §11, D47)" in place; the 2026-09-28 founder decision D72 — the NEW-110 revision pass (P1–P8:
+(A12 §11, D47)" in place; the 2026-09-28 founder decision D72 — the NEW-110 revision pass (P1–P9:
 source parents, manifest identity and steps, plan-derived signed metadata, ephemeral reservations, the
 Codex refresh policy and re-registration, the compensation cause, the capability gate, the fallback
 handoff, the proof scope, and admitted bookkeeping identities) — is the single block "Amended
@@ -217,6 +217,18 @@ item names, the item governs, and that section's text is not rewritten.
   an interrupted old-grammar plan refuses as exit 6. Spec 1 §2.1's sentence that
   `admittedPreexistingPaths`' grammar covers the bookkeeping set now refers to this item's grammar.
   Spec 1 gets a pointer to it at the plan's close (Task 14).
+
+- **P9 — rollback restores from the retained payload (founder, 2026-09-28, D72 addendum).** Closure
+  Task 11 found a seventh contradiction: no `UpdateConstructionPayloadSourceV1` arm may carry bytes
+  from a retained rollback payload, and the Foundation slot is fixed to the forward direction.
+  (a) A new source arm `retained_rollback_blob` names the retained payload identity, the inventory
+  ordinal and the expected `bytes`/`sha256`/`mode`; construction and every recovery reopen the blob
+  under `rollback/<payload-id>/blobs/` without following links and check it against the retained
+  inventory, refusing a mismatch as exit 6. (b) Slot admission follows the operation: an
+  `update_rollback` owner plan takes only `owner_inverse_files` refs and a schema migration only
+  `schema_inverse`; `update` keeps the forward slots. (c) The rollback transitional manifest
+  synthesizes each restored file's `ManagedArtifactV2` row from the retained inverse: the owner
+  recorded there, `productVersion` = the previous release's version, `verification.mode: "content"`.
 
 ---
 
