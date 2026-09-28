@@ -214,8 +214,8 @@ function isAgentName(agent: string): agent is AgentName {
  * (BACKLOG NEW-46).** `CLAUDECODE` is trivially settable, so the trigger was never a
  * privilege an attacker had to earn. The selection is resolved once through
  * `admitOwnedExecutable` (D72 Q2-A's ownership and ancestor rule), pinned by
- * `{dev, ino, mode, size, ctimeNs}` rather than a hash so a >150 MB vendor binary is
- * never read (D73 addendum), and re-resolved inside the runner immediately before the
+ * `{dev, ino, mode, size, ctimeNs}` rather than a hash so a vendor binary over the 64 MiB
+ * `inspectSystemPath` limit is never read (D73 addendum), and re-resolved inside the runner immediately before the
  * spawn: a swap or in-place rewrite in between changes `ctime` and records `unknown`.
  * A binary the same uid planted in a directory only that uid can write still passes;
  * `threat-model.md` §5.11 records that residual.

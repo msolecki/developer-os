@@ -676,8 +676,10 @@ caller of `invokeCodex`, not only `ingest`. `CodexInvocation.codexHome` is requi
 fall back to the user's home and its `AGENTS.md` or agent roles. `invocationFromAgentPrompt`
 returns an invocation without `codexHome`; the one helper that supplies it is
 `invokeIsolatedCodex` in `apps/cli/src/commands/ingest.ts`, which prepares the per-run home
-below, invokes and sweeps. `ingest` wraps it with its scratch working root (NEW-76); a workflow
-`agent.prompt` step passes its compiler-derived working root through it unchanged. The home keeps
+below, invokes and sweeps. `ingest` wraps it with its scratch working root (NEW-76) and is today its only production
+caller. No workflow step invokes Codex yet; `invocationFromAgentPrompt` is exercised only by tests.
+The contract for a future `agent.prompt` caller is to pass its compiler-derived working root
+through `invokeIsolatedCodex` unchanged, never to call `invokeCodex` directly. The home keeps
 its `state/codex-ingest-home` path, which core, admission, retention and uninstall pin.
 
 **Amended 2026-09-28 (NEW-105): one `CODEX_HOME` per run.** Two concurrent ingests shared the
