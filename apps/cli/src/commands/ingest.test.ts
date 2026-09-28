@@ -210,7 +210,8 @@ async function installedFixture(
        * Each vendor's own dialect, because each adapter parses a different one:
        * Codex streams JSONL and `invokeCodex` takes the response out of the last
        * `item.completed` whose `item.type` is `agent_message`, while
-       * `invokeClaude` parses stdout as one JSON document. A fake that spoke one
+       * `invokeClaude` takes it from the `result` string of one `type: "result"`
+       * envelope (Claude Code 2.1.283, 2026-09-28). A fake that spoke one
        * dialect to both would let a bridge that confused them pass.
        *
        * **This spoke a dialect no vendor speaks until 2026-08-20.** It put the
@@ -236,7 +237,7 @@ async function installedFixture(
               }),
               "",
             ].join("\n")
-          : document;
+          : JSON.stringify({ type: "result", subtype: "success", is_error: false, result: document });
       return { stdout, stderr: "", exitCode: 0, signal: null, timedOut: false };
     },
   };
@@ -2104,6 +2105,30 @@ describe("runIngest, the agent call", () => {
 
     expect(result.code).toBe(EXIT_CODES.operationalFailure);
     expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+  });
+
+  it("tells the user to check the claude login when the agent reports an error envelope", async () => {
+    const fixture = await installedFixture("ingest-vendor-error");
+    const seeded = await fixture.seedAccepted("an observation claude cannot answer");
+    fixture.reply(() =>
+      JSON.stringify({
+        type: "result",
+        subtype: "success",
+        is_error: true,
+        result: "Not logged in · Please run /login",
+        terminal_reason: "api_error",
+      }),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.code).toBe(EXIT_CODES.operationalFailure);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    if (result.ok) return;
+    expect(result.error.message).toContain(
+      "the claude agent reported an error (vendor-error); check that `claude` is logged in",
+    );
+    expect(result.error.message).not.toContain("Please run /login");
   });
 
   it("treats a proposal naming a path the parser refuses as malformed output", async () => {

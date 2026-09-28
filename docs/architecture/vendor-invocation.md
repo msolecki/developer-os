@@ -236,6 +236,11 @@ have missed.
 > `process.env`. Nothing else is admitted; D15's refusal of `HOME` stands, and the
 > Codex arm is unchanged. `EXPECTED_VENDOR_ENVIRONMENT` in
 > `tests/security/network.test.ts` carries the two names.
+>
+> The same observation showed that `--output-format json` wraps the answer in a
+> `type: "result"` envelope whose `result` string holds the model's text, and that
+> `is_error: true` arrives at exit `0`. `invokeClaude` now unwraps it and reports
+> `is_error` as `vendor-error` — `docs/architecture/claude-adapter.md` §11.1.
 
 **Decision: no variable is admitted from the parent.** Claude
 is spawned with `env: { USER, LOGNAME }` set to the account name (the amendment above, not

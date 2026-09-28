@@ -372,8 +372,32 @@ starts with hooks, plugins, skills, CLAUDE.md, MCP servers, custom commands and 
 equality in `invoke.test.ts`.
 
 The runner enforces `timeoutMs`; timeout, signal death, non-zero exit, spawn failure, argument
-refusal and malformed structured output remain distinct result variants. Only a zero-exit JSON
-structured payload reaches a consumer, and malformed output is never best-effort parsed.
+refusal, vendor error and malformed structured output remain distinct result variants. Only a
+zero-exit JSON structured payload reaches a consumer, and malformed output is never best-effort parsed.
+
+### 11.1 The `--output-format json` envelope (observed 2026-09-28, Claude Code 2.1.283)
+
+Stdout is not the model's answer but one JSON envelope around it. Observed keys include `type`
+(`"result"`), `subtype`, `is_error` (boolean), `result` (string: the model's final text),
+`session_id`, `terminal_reason`, `stop_reason`, `num_turns`, `usage`, `modelUsage`,
+`total_cost_usd`, `permission_denials` and `duration_ms`. A failure is still exit `0`: not logged in,
+the envelope carried `is_error: true`, `result: "Not logged in · Please run /login"` and
+`terminal_reason: "api_error"`. Until this was observed `invokeClaude` returned the whole envelope as
+the payload, so every ingest proposal failed `unknown-key`.
+
+`invokeClaude` therefore:
+
+1. parses stdout with `parseStructuredPayload` (top-level `__proto__` refused) and requires an
+   object with `type === "result"`, else `malformed-output`;
+2. returns `vendor-error` when `is_error === true` — the vendor's text is never echoed, and `ingest`
+   tells the user to check that `claude` is logged in;
+3. requires `result` to be a string, else `malformed-output`;
+4. parses `result` with `parseStructuredPayload`; if that fails it accepts exactly one surrounding
+   ` ```json ` or ` ``` ` fence with nothing but whitespace outside it, and anything else is
+   `malformed-output`. A bare proposal on stdout (the pre-envelope shape) is `malformed-output`.
+
+Pinned in `packages/adapter-claude/src/invoke.test.ts`, describe block "the --output-format json
+envelope".
 
 ## 12. Former spec section map
 

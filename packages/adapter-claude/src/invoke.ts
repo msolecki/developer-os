@@ -17,6 +17,7 @@ export type ClaudeRunResult =
   | { readonly ok: false; readonly reason: "signal"; readonly signal: string }
   | { readonly ok: false; readonly reason: "exit"; readonly exitCode: number }
   | { readonly ok: false; readonly reason: "malformed-output" }
+  | { readonly ok: false; readonly reason: "vendor-error" }
   | { readonly ok: false; readonly reason: "spawn-failed" }
   | { readonly ok: false; readonly reason: "refused"; readonly detail: string };
 
@@ -163,5 +164,34 @@ export async function invokeClaude(
   if (result.exitCode !== 0) {
     return { ok: false, reason: "exit", exitCode: result.exitCode ?? 1 };
   }
-  return parseStructuredPayload(result.stdout);
+  return parsePrintEnvelope(result.stdout);
+}
+
+// Claude Code 2.1.283 wraps the model's final text in a `type: "result"`
+// envelope and reports errors such as "Not logged in" as `is_error: true` at
+// exit 0 — `docs/architecture/claude-adapter.md` §11.1.
+function parsePrintEnvelope(stdout: string): ClaudeRunResult {
+  const parsed = parseStructuredPayload(stdout);
+  if (!parsed.ok) return parsed;
+  const envelope = parsed.payload;
+  if (
+    typeof envelope !== "object" ||
+    envelope === null ||
+    !("type" in envelope) ||
+    envelope.type !== "result"
+  ) {
+    return { ok: false, reason: "malformed-output" };
+  }
+  if ("is_error" in envelope && envelope.is_error === true) {
+    return { ok: false, reason: "vendor-error" };
+  }
+  if (!("result" in envelope) || typeof envelope.result !== "string") {
+    return { ok: false, reason: "malformed-output" };
+  }
+  const direct = parseStructuredPayload(envelope.result);
+  if (direct.ok) return direct;
+  const fenced = /^```(?:json)?\n([\s\S]*)\n```$/u.exec(envelope.result.trim());
+  return fenced?.[1] === undefined
+    ? { ok: false, reason: "malformed-output" }
+    : parseStructuredPayload(fenced[1]);
 }

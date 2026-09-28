@@ -1219,7 +1219,9 @@ async function invokeVendor(
   const detail = result.reason === "refused" ? `: ${result.detail}` : "";
   throw new IngestRefusal(
     EXIT_CODES.operationalFailure,
-    `the ${vendor.name} agent did not return a usable proposal (${result.reason}${detail})`,
+    result.reason === "vendor-error"
+      ? `the ${vendor.name} agent reported an error (vendor-error); check that \`${vendor.name}\` is logged in`
+      : `the ${vendor.name} agent did not return a usable proposal (${result.reason}${detail})`,
     [],
     RETRY_LATER,
   );
