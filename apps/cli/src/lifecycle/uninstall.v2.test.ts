@@ -421,18 +421,10 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     const retained = await fixture.bootstrapEvidenceIdentities();
     expect(retained.length).toBeGreaterThan(0);
     const expectedResidue = await bookkeepingSetAndRetainedEvidence(fixture);
-    /**
-     * The baseline is one bootstrap evidence inspection, whose `projectRegularEntry` hashes
-     * every regular file under `state` — the orphaned key included. That shipped read predates
-     * this arm (`lifecycle/absent-manifest-uninstall.v2.test.ts`), so what §6 binds here is that
-     * the coordinator adds none of its own: `uninstall` inspects evidence exactly once.
-     */
     keyReads.path = join(fixture.paths.stateDir, "redaction.key");
     keyReads.count = 0;
     await evidenceOf(fixture);
-    const walkReads = keyReads.count;
-    expect(walkReads).toBeGreaterThan(0);
-    keyReads.count = 0;
+    expect(keyReads.count).toBe(0);
 
     const result = await runUninstall(fixture.context, ACCEPTED);
 
@@ -475,7 +467,7 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     expect(targets).not.toContain(join(fixture.paths.stateDir, "lifecycle-id-allocator.json"));
     expect(targets).not.toContain(fixture.paths.manifestFile);
     expect(targets.some((target) => target.startsWith(`${fixture.paths.brain}/`))).toBe(false);
-    expect(keyReads.count).toBe(walkReads);
+    expect(keyReads.count).toBe(0);
     expect(fixture.vendorProcesses).toStrictEqual([]);
     expect(await fixture.bootstrapEvidenceIdentities()).toStrictEqual(retained);
     expect(await productHomeResidue(fixture)).toStrictEqual(expectedResidue);

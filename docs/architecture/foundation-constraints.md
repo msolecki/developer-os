@@ -556,7 +556,10 @@ as the Task 5–8 notes above.
   journaled: `observeSecretOpaqueKey` only `open`s and `fstat`s the descriptor
   (`apps/cli/src/lifecycle/redaction-key.ts`). The tombstone is
   `state/.redaction.key.<coordinator-id>.tombstone`
-  (`apps/cli/src/lifecycle/redaction-key.ts`, `redactionKeyTombstonePath`).
+  (`apps/cli/src/lifecycle/redaction-key.ts`, `redactionKeyTombstonePath`). The bootstrap
+  retention walk records the key and its tombstone from `lstat` alone, with `sha256: null`, and
+  refuses to project either as a row (`isRedactionKeyPath`,
+  `packages/core/src/manifest/bootstrap-retention.ts`; NEW-93).
 - **Locks.** `state/.lifecycle.lock` is created only by fresh `init` and opened
   elsewhere without `O_CREAT`, and never unlinked — the rule and its enforcing classes are stated
   together at the top of `packages/core/src/lifecycle/locks.ts`. Lock order is runner lease → global →

@@ -27,6 +27,7 @@ import {
   classifyBootstrapEvidence,
   deriveBootstrapRetentionLocations,
   deriveBootstrapRetentionTable,
+  isRedactionKeyPath,
   selectBootstrapJournal as selectRetentionJournal,
   validateBootstrapJournalSuccessor as validateRetentionJournalSuccessor,
   type BootstrapJournalRecordV1,
@@ -2198,6 +2199,60 @@ describe("retained bootstrap table derivation", () => {
       ...projection,
       directoryTrees: [{ rootPath: stagingRoot, entries: tamperedEntries }],
     } as unknown as BootstrapRetentionEvidenceProjectionV1)).toThrow();
+  });
+
+  it("admits a digestless entry only at a redaction-key path, and a digest there never (NEW-93)", () => {
+    const evidence = admittedEvidence();
+    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const file = (relativePath: string, ino: string, sha256: LowerHexSha256 | null): BootstrapRetentionDirectoryEntryV1 => ({
+      relativePath,
+      kind: "regular_file",
+      ownerUid: 501,
+      mode: 0o600,
+      nlink: 1,
+      bytes: parseUInt64Decimal("32"),
+      sha256,
+      dev: parseUInt64Decimal("1"),
+      ino: parseUInt64Decimal(ino),
+    });
+    const withEntries = (entries: readonly BootstrapRetentionDirectoryEntryV1[]) => ({
+      ...evidence,
+      directoryTrees: [{ rootPath: stagingRoot, entries }],
+      rows: evidence.rows.map((row) => row.sourcePath === stagingRoot
+        ? {
+            ...row,
+            postimage: {
+              ...row.postimage,
+              treeHash: domainHash("developer-os/bootstrap-retained-tree/v1\0", entries),
+              entryCount: entries.length,
+              regularFileBytes: parseUInt64Decimal(String(32 * entries.filter((entry) => entry.kind === "regular_file").length)),
+              entries,
+            },
+          }
+        : row),
+    } as unknown as BootstrapRetentionEvidenceProjectionV1);
+    const state: BootstrapRetentionDirectoryEntryV1 = {
+      relativePath: "state",
+      kind: "directory",
+      ownerUid: 501,
+      mode: 0o700,
+      nlink: 2,
+      bytes: parseUInt64Decimal("0"),
+      sha256: null,
+      dev: parseUInt64Decimal("1"),
+      ino: parseUInt64Decimal("710"),
+    };
+
+    expect(isRedactionKeyPath(`${stagingRoot}/state/redaction.key`)).toBe(true);
+    expect(isRedactionKeyPath(`${stagingRoot}/state/.redaction.key.lc_${"a".repeat(64)}_7.tombstone`)).toBe(true);
+    expect(isRedactionKeyPath(`${stagingRoot}/redaction.key`)).toBe(false);
+    expect(isRedactionKeyPath(`${stagingRoot}/state/seed.txt`)).toBe(false);
+    expect(() => deriveBootstrapRetentionTable(plan, withEntries([state, file("state/redaction.key", "711", null)])))
+      .not.toThrow();
+    expect(() => deriveBootstrapRetentionTable(plan, withEntries([state, file("state/redaction.key", "711", hash("key"))])))
+      .toThrow();
+    expect(() => deriveBootstrapRetentionTable(plan, withEntries([state, file("state/seed.txt", "711", null)])))
+      .toThrow();
   });
 
   it("requires one and only one complete projection for every maximal directory root", () => {

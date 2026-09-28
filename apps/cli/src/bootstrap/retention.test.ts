@@ -26,6 +26,7 @@ type NodeFsPromisesModule = typeof nodeFs;
 const fsRaceControl = vi.hoisted(() => ({
   afterLstat: undefined as undefined | ((candidate: string) => Promise<void>),
   failClosePath: undefined as string | undefined,
+  opened: [] as string[],
 }));
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -34,6 +35,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     get(target, property) {
       if (property === "open") {
         return async (...args: unknown[]) => {
+          fsRaceControl.opened.push(String(args[0]));
           const handle = await Reflect.apply(target.open, target, args) as nodeFs.FileHandle;
           if (String(args[0]) !== fsRaceControl.failClosePath) return handle;
           return new Proxy(handle, {
@@ -272,6 +274,38 @@ describe("projectBootstrapRetentionPostimage public boundary", () => {
     expect(projected?.kind === "directory_tree" ? projected.entries?.map((entry) => entry.relativePath) : null)
       .toEqual(["codex-ingest-home", "row"]);
   });
+
+  it("records the redaction key and its uninstall tombstone from lstat alone, never opening either (NEW-93)", async () => {
+    const { home, state } = await productHomeWithState("developer-os-retained-redaction-key-");
+    const key = join(state, "redaction.key");
+    const tombstone = join(state, `.redaction.key.lc_${"a".repeat(64)}_7.tombstone`);
+    await nodeFs.writeFile(key, "k".repeat(32), { mode: 0o600 });
+    await nodeFs.writeFile(tombstone, "t".repeat(40), { mode: 0o600 });
+    fsRaceControl.opened = [];
+
+    const projected = await projectBootstrapRetentionPostimage(path(state), path(home));
+
+    expect(fsRaceControl.opened).toContain(join(state, "row"));
+    expect(fsRaceControl.opened).not.toContain(key);
+    expect(fsRaceControl.opened).not.toContain(tombstone);
+    const entries = projected?.kind === "directory_tree" ? projected.entries ?? [] : [];
+    expect(entries.find((entry) => entry.relativePath === "redaction.key"))
+      .toMatchObject({ kind: "regular_file", mode: 0o600, nlink: 1, bytes: "32", sha256: null });
+    expect(entries.find((entry) => entry.relativePath === tombstone.slice(state.length + 1)))
+      .toMatchObject({ kind: "regular_file", bytes: "40", sha256: null });
+    expect(entries.find((entry) => entry.relativePath === "row")?.sha256).toBe(hash("row\n"));
+  });
+
+  it("refuses to project the redaction key as a regular-file row without opening it (NEW-93)", async () => {
+    const { home, state } = await productHomeWithState("developer-os-retained-redaction-key-row-");
+    const key = join(state, "redaction.key");
+    await nodeFs.writeFile(key, "k".repeat(32), { mode: 0o600 });
+    fsRaceControl.opened = [];
+
+    await expect(projectBootstrapRetentionPostimage(path(key), path(home)))
+      .rejects.toBeInstanceOf(BootstrapStateError);
+    expect(fsRaceControl.opened).not.toContain(key);
+  });
 });
 
 function terminalJournal(outcome: "finalized" | "rolled_back" = "finalized"): BootstrapJournalRecordV1 {
@@ -457,6 +491,7 @@ function inventory(fixture: RetentionFixture): readonly [string, BootstrapRetent
 afterEach(async () => {
   fsRaceControl.afterLstat = undefined;
   fsRaceControl.failClosePath = undefined;
+  fsRaceControl.opened = [];
   await Promise.all([...roots].map(async (root) => {
     await nodeFs.rm(root, { recursive: true, force: true });
     roots.delete(root);

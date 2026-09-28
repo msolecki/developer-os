@@ -269,6 +269,7 @@ export {
   containsPath,
   containsPathLoosely,
   foldPath,
+  isRedactionKeyPath,
   detectDrift,
   deriveBootstrapCreationEvidencePaths,
   deriveBootstrapEnvelopePaths,

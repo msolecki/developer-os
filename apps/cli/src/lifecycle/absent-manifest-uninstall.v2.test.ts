@@ -114,15 +114,8 @@ describe("absent-manifest uninstall over a rolled-back V2 init", () => {
     expect(previewed).toMatchObject({ ok: true, data: { removed: [keyPath], transactionId: null } });
     expect(await exists(keyPath)).toBe(true);
 
-    /**
-     * Armed after the evidence inspection, not around the whole command: a rolled-back
-     * envelope retains `state` as a directory tree, and `projectRegularEntry`
-     * (`apps/cli/src/bootstrap/retention.ts`) hashes every regular file it walks — the
-     * orphaned key included. That shipped read predates this arm and is reported as a
-     * finding; what §6 binds here is that the arm itself never opens the key for content.
-     */
-    const evidence = await context.bootstrap.inspectEvidence();
     const countKeyReads = spyOnKeyContentReads(fixture);
+    const evidence = await context.bootstrap.inspectEvidence();
 
     const removed = await runAbsentManifestUninstall({
       context,

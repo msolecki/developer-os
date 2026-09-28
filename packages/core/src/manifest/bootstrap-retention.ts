@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 
 import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { CanonicalAbsolutePathV1, ExactProductStatePathV1 } from "../update/paths.js";
@@ -156,6 +156,16 @@ export interface BootstrapFoundationTerminalJournalEvidenceV1 {
   readonly postimage: Extract<BootstrapRetentionPostimageV1, { kind: "regular_file" }>;
 }
 
+const REDACTION_KEY_LEAF = /^(?:redaction\.key|\.redaction\.key\.lc_[0-9a-f]{64}_[0-9]+\.tombstone)$/u;
+
+/**
+ * NEW-93: the redaction key and its uninstall tombstone are never opened, read or hashed (Global
+ * Constraint), so a retained-tree walk records either one from `lstat` alone, with `sha256: null`.
+ */
+export function isRedactionKeyPath(path: string): boolean {
+  return REDACTION_KEY_LEAF.test(basename(path)) && basename(dirname(path)) === "state";
+}
+
 export type BootstrapRetentionDirectoryEntryV1 =
   | {
       readonly relativePath: string;
@@ -164,7 +174,8 @@ export type BootstrapRetentionDirectoryEntryV1 =
       readonly mode: 0o600 | 0o700;
       readonly nlink: 1;
       readonly bytes: UInt64DecimalV1;
-      readonly sha256: LowerHexSha256;
+      /** `null` exactly when `isRedactionKeyPath` holds for the entry. */
+      readonly sha256: LowerHexSha256 | null;
       readonly dev: UInt64DecimalV1;
       readonly ino: UInt64DecimalV1;
     }
@@ -899,7 +910,9 @@ function validateDirectoryTreeEvidence(value: unknown): BootstrapRetentionDirect
         kind: "regular_file" as const,
         mode: mode === 0o600 ? 0o600 as const : 0o700 as const,
         nlink: 1 as const,
-        sha256: sha256(entry.sha256),
+        sha256: isRedactionKeyPath(`${rootPath}/${relativePath}`)
+          ? (entry.sha256 === null ? null : refuse())
+          : sha256(entry.sha256),
       };
     }
     if (entry.kind === "directory") {

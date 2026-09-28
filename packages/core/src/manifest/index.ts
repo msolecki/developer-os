@@ -47,6 +47,7 @@ export {
   deriveBootstrapRetentionAuthorities,
   deriveBootstrapRetentionLocations,
   deriveBootstrapRetentionTable,
+  isRedactionKeyPath,
   selectBootstrapJournal,
   validateBootstrapJournalSuccessor,
   validateRetentionTerminalBinding,

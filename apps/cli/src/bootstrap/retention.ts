@@ -11,6 +11,7 @@ import {
   CODEX_INGEST_HOME_RELATIVE_PATH,
   MANIFEST_ANCHOR_RELATIVE_PATH,
   encodeCanonicalJson,
+  isRedactionKeyPath,
   parseLowerHexSha256,
   parseUInt64Decimal,
   type BootstrapJournalRecordV1,
@@ -133,7 +134,7 @@ async function projectRegularEntry(
   absolutePath: string,
   relativePath: string,
   before: BigIntStats,
-): Promise<Extract<BootstrapRetentionDirectoryEntryV1, { kind: "regular_file" }>> {
+): Promise<Extract<BootstrapRetentionDirectoryEntryV1, { kind: "regular_file" }> & { readonly sha256: LowerHexSha256 }> {
   if (!exactRegular(before)) return refuse();
   let handle: nodeFs.FileHandle | undefined;
   try {
@@ -183,6 +184,24 @@ async function projectRegularEntry(
   } finally {
     await handle?.close().catch(() => undefined);
   }
+}
+
+function lstatOnlyRegularEntry(
+  relativePath: string,
+  stats: BigIntStats,
+): Extract<BootstrapRetentionDirectoryEntryV1, { kind: "regular_file" }> {
+  if (!exactRegular(stats)) return refuse();
+  return {
+    relativePath,
+    kind: "regular_file",
+    ownerUid: Number(stats.uid),
+    mode: fileMode(stats) === 0o600 ? 0o600 : 0o700,
+    nlink: 1,
+    bytes: uint64(stats.size),
+    sha256: null,
+    dev: uint64(stats.dev),
+    ino: uint64(stats.ino),
+  };
 }
 
 /**
@@ -254,7 +273,9 @@ async function walkDirectory(
         });
         await walkDirectory(productHome, root, relativePath, entries, identities, stats, skipped);
       } else if (stats.isFile() && !stats.isSymbolicLink()) {
-        entries.push(await projectRegularEntry(absolutePath, relativePath, stats));
+        entries.push(isRedactionKeyPath(absolutePath)
+          ? lstatOnlyRegularEntry(relativePath, stats)
+          : await projectRegularEntry(absolutePath, relativePath, stats));
       } else {
         return refuse();
       }
@@ -347,7 +368,7 @@ export async function projectBootstrapRetentionPostimage(
     if (!sameValue(first, second)) return refuse();
     return structuredClone(second);
   }
-  if (!firstStats.isFile() || firstStats.isSymbolicLink()) return refuse();
+  if (!firstStats.isFile() || firstStats.isSymbolicLink() || isRedactionKeyPath(path)) return refuse();
   const firstEntry = await projectRegularEntry(path, "file", firstStats);
   const secondStats = await nodeFs.lstat(path, { bigint: true }).catch(() => refuse());
   const secondEntry = await projectRegularEntry(path, "file", secondStats);
