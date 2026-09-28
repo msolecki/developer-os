@@ -7,8 +7,10 @@
  * rule and why each of its allowlist entries is there.
  */
 
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { inspectPlannerGraph } from "@developer-os/security";
 
@@ -230,6 +232,82 @@ function findPlannerCapabilities(root: string): readonly string[] {
   return problems;
 }
 
+/**
+ * Spec 2 §12's "network remains explicit" row, as a total classifier (D72 P7(f)): the release
+ * transport is the only product module that can reach a network, only the update context composes
+ * it, the launcher execs a release from its own entrypoints, and every planner graph is non-empty.
+ * `node:net` is not listed: the Git gateway's Unix-domain socket is classified by
+ * `tests/security/network.test.ts`, which also proves the socket never leaves the host.
+ */
+export const RELEASE_NETWORK_ENTRYPOINTS: readonly string[] = ["packages/security/src/update/transport.ts"];
+export const RELEASE_TRANSPORT_COMPOSITION: readonly string[] = ["apps/cli/src/update/context.ts"];
+
+const REMOTE_NETWORK_MODULE =
+  /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
+const GLOBAL_FETCH = /(?<![.\w$])fetch\s*\(/u;
+const TRANSPORT_COMPOSER = /\b(?:nodeReleaseExchange|FixedReleaseTransport)\b/u;
+const LAUNCHER_EXEC = /\bexecAdmittedRelease\b/u;
+const PRODUCT_SOURCE = /^(?:packages|apps)\/[^/]+\/src\/.*\.ts$/u;
+/** The transport's own module and the package barrels that re-export it name the composer without composing it. */
+const TRANSPORT_DEFINITION = /^packages\/security\/src\/(?:update\/(?:transport|index)|index)\.ts$/u;
+
+export interface ReleaseAuthorityReportV1 {
+  /** Product modules that import a remote network module or call the global `fetch`. */
+  readonly networkEntrypoints: readonly string[];
+  /** Product modules outside the transport's definition that compose the release transport. */
+  readonly transportCompositions: readonly string[];
+  /** Launcher modules that exec an admitted release. */
+  readonly launcherEntrypoints: readonly string[];
+  /** Each compiled planner entrypoint and the transitive module graph it reaches. */
+  readonly plannerGraphs: readonly { readonly entrypoint: string; readonly modules: readonly string[] }[];
+}
+
+export async function inspectReleaseAuthoritySurfaces(root: string): Promise<ReleaseAuthorityReportV1> {
+  const networkEntrypoints: string[] = [];
+  const transportCompositions: string[] = [];
+  const launcherEntrypoints: string[] = [];
+  const sources = (await candidateFiles(root)).filter(
+    (path) => PRODUCT_SOURCE.test(path) && !path.endsWith(".test.ts") && !path.endsWith(".d.ts"),
+  );
+  for (const path of sources) {
+    let content: string;
+    try {
+      content = await readFile(join(root, path), "utf8");
+    } catch (error) {
+      if (isMissing(error)) continue;
+      throw error;
+    }
+    const code = codeWithoutLiterals(content);
+    if (REMOTE_NETWORK_MODULE.test(content) || GLOBAL_FETCH.test(code)) networkEntrypoints.push(path);
+    if (!TRANSPORT_DEFINITION.test(path) && TRANSPORT_COMPOSER.test(code)) transportCompositions.push(path);
+    if (path.startsWith("apps/launcher/src/") && LAUNCHER_EXEC.test(code)) launcherEntrypoints.push(path);
+  }
+  const relative = (path: string): string => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path);
+  const plannerGraphs = PLANNER_ENTRYPOINTS.map((entrypoint) => ({
+    entrypoint,
+    modules: inspectPlannerGraph(join(root, entrypoint)).modules.map(relative),
+  }));
+  return { networkEntrypoints, transportCompositions, launcherEntrypoints, plannerGraphs };
+}
+
+/** The lint gate's reading: every scope non-empty, and exactly the allowlisted network and transport sites. */
+export function describeReleaseAuthorityProblems(report: ReleaseAuthorityReportV1): readonly string[] {
+  const problems: string[] = [];
+  if (report.networkEntrypoints.length === 0) problems.push("no module reaches the release transport's network");
+  for (const path of report.networkEntrypoints) {
+    if (!RELEASE_NETWORK_ENTRYPOINTS.includes(path)) problems.push(`unexpected network entrypoint: ${path}`);
+  }
+  if (report.transportCompositions.length === 0) problems.push("no module composes the release transport");
+  for (const path of report.transportCompositions) {
+    if (!RELEASE_TRANSPORT_COMPOSITION.includes(path)) problems.push(`unexpected release transport composition: ${path}`);
+  }
+  if (report.launcherEntrypoints.length === 0) problems.push("no launcher module execs an admitted release");
+  for (const graph of report.plannerGraphs) {
+    if (graph.modules.length === 0) problems.push(`the planner graph of ${graph.entrypoint} is empty`);
+  }
+  return problems;
+}
+
 function isMissing(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -354,8 +432,21 @@ async function main(): Promise<number> {
     );
   }
 
+  const release = describeReleaseAuthorityProblems(await inspectReleaseAuthoritySurfaces(root));
+  if (release.length > 0) {
+    process.stderr.write(
+      `release-authority: ${String(release.length)} problem(s) with the network, transport, launcher and planner scopes\n`,
+    );
+    for (const problem of release) process.stderr.write(`  ${problem}\n`);
+    process.stderr.write(
+      "\nOnly `update` plan and apply reach a network, through packages/security/src/update/transport.ts composed in\n" +
+        "apps/cli/src/update/context.ts. A new network path is a threat-model change, not a lint fix.\n",
+    );
+  }
+
   return violations.length > 0 ||
     authority.length > 0 ||
+    release.length > 0 ||
     capabilities.length > 0 ||
     renderings.length > 0 ||
     numberValued.length > 0 ||
@@ -364,4 +455,7 @@ async function main(): Promise<number> {
     : 0;
 }
 
-process.exitCode = await main();
+// Imported by `check.test.ts` for the enumerators; only the lint gate's own invocation runs it.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  process.exitCode = await main();
+}

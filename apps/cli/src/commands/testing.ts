@@ -463,6 +463,8 @@ export interface FixtureOptions {
    * `bundle/workflows/`. Absent, it carries neither.
    */
   readonly instructions?: readonly ReleaseFileV1[];
+  /** With `bootstrapAvailable`, the synthetic release's architecture; absent, `arm64`. */
+  readonly architecture?: "arm64" | "x64";
   /** Uses the real kernel-backed lifecycle lock provider for exclusion tests. */
   readonly bootstrapProductionLocks?: boolean;
   /** Inserts an adversarial namespace race immediately before lifecycle lock acquisition. */
@@ -504,6 +506,7 @@ async function repositoryWorkflowFiles(): Promise<readonly ReleaseFileV1[]> {
 async function createSyntheticPackagedRelease(
   root: string,
   instructions: readonly ReleaseFileV1[] | undefined,
+  architecture: "arm64" | "x64",
 ) {
   const packageRoot = join(root, "packaged-release");
   const retained = {
@@ -554,7 +557,7 @@ async function createSyntheticPackagedRelease(
     releaseIndexHash: digest(indexBytes),
     bundleManifestHash: digest(manifestBytes),
     platform: "darwin",
-    architecture: "arm64",
+    architecture,
     launcherProtocol: 1,
     updateProtocol: 1,
   };
@@ -591,7 +594,7 @@ export async function createCommandFixture(
   const guards = createGuards(policy, REDACTION_KEY);
   const paths = resolveRuntimePaths(pathEnvironmentFor({ userHome, env }));
   const packagedRelease = options.bootstrapAvailable === true
-    ? await createSyntheticPackagedRelease(root, options.instructions)
+    ? await createSyntheticPackagedRelease(root, options.instructions, options.architecture ?? "arm64")
     : null;
   const bootstrapTrace: string[] = [];
   const lifecycleLockEvents: string[] = [];

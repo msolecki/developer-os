@@ -6,6 +6,12 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  describeReleaseAuthorityProblems,
+  inspectReleaseAuthoritySurfaces,
+  RELEASE_NETWORK_ENTRYPOINTS,
+  RELEASE_TRANSPORT_COMPOSITION,
+} from "./check.js";
 import { ALLOWED_SPAWN_SITES, inspectOptInAuthoritySurfaces } from "./opt-in-authority.js";
 
 const run = promisify(execFile);
@@ -75,9 +81,19 @@ const OPT_IN_SEEDS: Readonly<Record<string, string>> = {
   "apps/cli/src/scheduled-entry.ts": "export type Handlers = ScheduledJobHandlersV1;\n",
 };
 
+/**
+ * The release authority gate is total too: the release transport, its one composition and the
+ * launcher's exec stand in for the real modules unless a case says otherwise.
+ */
+const RELEASE_SEEDS: Readonly<Record<string, string>> = {
+  "packages/security/src/update/transport.ts": 'import { request } from "node:https";\nexport const exchange = request;\n',
+  "apps/cli/src/update/context.ts": "export const transport = (): unknown => nodeReleaseExchange;\n",
+  "apps/launcher/src/main.ts": "export const launch = (): unknown => execAdmittedRelease();\n",
+};
+
 async function sandbox(
   files: Readonly<Record<string, string>>,
-  options: { readonly stage?: boolean; readonly name?: string; readonly planner?: boolean; readonly optIn?: boolean } = {},
+  options: { readonly stage?: boolean; readonly name?: string; readonly planner?: boolean; readonly optIn?: boolean; readonly release?: boolean } = {},
 ): Promise<string> {
   const root = await mkdtemp(join("/tmp", options.name ?? "dosSc"));
   sandboxes.push(root);
@@ -87,7 +103,8 @@ async function sandbox(
     ? {}
     : Object.fromEntries([PLANNER_ENTRY, ...PROVIDER_PLANNER_ENTRIES].map((entry) => [entry, "export const planned = 1;\n"]));
   const optIn = options.optIn === false ? {} : OPT_IN_SEEDS;
-  for (const [path, content] of Object.entries({ ...planner, ...optIn, ...files })) {
+  const release = options.release === false ? {} : RELEASE_SEEDS;
+  for (const [path, content] of Object.entries({ ...planner, ...optIn, ...release, ...files })) {
     const full = join(root, path);
     await mkdir(join(full, ".."), { recursive: true });
     await writeFile(full, content);
@@ -459,6 +476,49 @@ describe("the repository check gate", () => {
     expect(outcome.stderr).toContain(problem);
   });
 
+  it.each([
+    { removed: "packages/security/src/update/transport.ts", problem: "no module reaches the release transport's network" },
+    { removed: "apps/cli/src/update/context.ts", problem: "no module composes the release transport" },
+    { removed: "apps/launcher/src/main.ts", problem: "no launcher module execs an admitted release" },
+  ])("fails when a release authority scope is empty: $problem", async ({ removed, problem }) => {
+    const seeds = Object.fromEntries(Object.entries(RELEASE_SEEDS).filter(([path]) => path !== removed));
+    const root = await sandbox(seeds, { release: false });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("release-authority");
+    expect(outcome.stderr).toContain(problem);
+  });
+
+  it.each([
+    { name: "a global fetch", path: "packages/core/src/stray-fetch.ts", source: "export const load = (url: string): unknown => fetch(url);\n" },
+    { name: "an https import", path: "apps/cli/src/commands/stray-https.ts", source: 'import { get } from "node:https";\nexport const probe = get;\n' },
+    { name: "a dynamic tls import", path: "apps/cli/src/stray-tls.ts", source: 'export const later = (): unknown => import("node:tls");\n' },
+  ])("fails, and names the module, on $name outside the release transport", async ({ path, source }) => {
+    const root = await sandbox({ [path]: source });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain(`unexpected network entrypoint: ${path}`);
+  });
+
+  it("fails when a command other than update composes the release transport", async () => {
+    const root = await sandbox({ "apps/cli/src/commands/doctor-network.ts": "export const probe = (): unknown => new FixedReleaseTransport();\n" });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("unexpected release transport composition: apps/cli/src/commands/doctor-network.ts");
+  });
+
+  it("does not read the composer's name in a comment or a string as a composition", async () => {
+    const root = await sandbox({ "apps/cli/src/commands/notes.ts": '// nodeReleaseExchange is update-only\nexport const label = "FixedReleaseTransport";\n' });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
   it("fails outside a git checkout instead of finding nothing", async () => {
     const root = await mkdtemp(join("/tmp", "dosNoGit"));
     sandboxes.push(root);
@@ -492,5 +552,31 @@ describe("the opt-in authority surfaces of this repository", () => {
     expect(report.gitEntrypoints).toContain("apps/cli/src/commands/git/runtime.ts");
     expect(report.launchdEntrypoints).toContain("apps/cli/src/lifecycle/adapters.ts");
     expect(report.scheduledEntrypoints).toContain("apps/cli/src/commands/automation/runner.ts");
+  });
+});
+
+describe("the release authority surfaces of this repository (Spec 2 §12, D72 P7(f))", () => {
+  const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+  it("enumerates every network, launcher and planner-graph scope non-empty", async () => {
+    const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
+    expect(report.networkEntrypoints.length).toBeGreaterThan(0);
+    expect(report.transportCompositions.length).toBeGreaterThan(0);
+    expect(report.launcherEntrypoints.length).toBeGreaterThan(0);
+    expect(report.plannerGraphs.length).toBeGreaterThan(0);
+    expect(report.plannerGraphs.every((graph) => graph.modules.length > 0)).toBe(true);
+    expect(describeReleaseAuthorityProblems(report)).toEqual([]);
+  });
+
+  it("finds the network in exactly the release transport, composed only by the update context", async () => {
+    const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
+    expect(report.networkEntrypoints).toStrictEqual([...RELEASE_NETWORK_ENTRYPOINTS]);
+    expect(report.transportCompositions).toStrictEqual([...RELEASE_TRANSPORT_COMPOSITION]);
+  });
+
+  it("finds the launcher's exec and each planner entrypoint in its own graph", async () => {
+    const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
+    expect(report.launcherEntrypoints).toEqual(expect.arrayContaining(["apps/launcher/src/handoff.ts", "apps/launcher/src/main.ts"]));
+    for (const graph of report.plannerGraphs) expect(graph.modules).toContain(graph.entrypoint);
   });
 });
