@@ -138,6 +138,18 @@ describe("renderCaptureFile", () => {
     expect(frontmatter).not.toMatch(/line|column|offset|location|value/u);
   });
 
+  it("renders a user-pattern finding's non-secret pattern index (NEW-24, D73)", () => {
+    const { frontmatter } = split(
+      renderCaptureFile({
+        ...envelope,
+        redaction: [{ class: "user-pattern", fingerprint: "abcdef0123456789", patternIndex: 2 }],
+      }),
+    );
+
+    expect(frontmatter).toContain("- class: user-pattern");
+    expect(frontmatter).toContain("patternIndex: 2");
+  });
+
   it("keeps a finding narrowed even when the caller's own object already carries a third key", () => {
     /**
      * Regression for M-1 (Task 8 review): `CaptureRedactionFinding` is frozen

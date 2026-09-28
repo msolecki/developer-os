@@ -3,11 +3,21 @@ import { createHmac } from "node:crypto";
 export interface RedactionFinding {
   readonly class: string;
   readonly fingerprint: string;
+  /**
+   * `user-pattern` only: the zero-based position in `userPatterns` of the entry that
+   * produced it, as configured. Non-secret — it names a table row, never its text (D73).
+   */
+  readonly patternIndex?: number;
 }
 
 export interface RedactionResult {
   readonly text: string;
   readonly findings: readonly RedactionFinding[];
+  /**
+   * Indexes of the user patterns whose own matches cover at least `OVER_BROAD_COVERAGE`
+   * of this input (NEW-24). Absent, never empty, when there are none.
+   */
+  readonly overBroadPatterns?: readonly number[];
 }
 
 /**
@@ -64,6 +74,7 @@ interface RedactionCandidate {
   readonly start: number;
   readonly end: number;
   readonly class: string;
+  readonly patternIndex?: number;
 }
 
 function overlaps(
@@ -100,6 +111,7 @@ function addCandidate(
     class: owner.class,
     start: overlapping.reduce((start, e) => Math.min(start, e.start), candidate.start),
     end: overlapping.reduce((end, e) => Math.max(end, e.end), candidate.end),
+    ...(owner.patternIndex === undefined ? {} : { patternIndex: owner.patternIndex }),
   };
   candidates[candidates.indexOf(owner)] = merged;
   for (const absorbed of overlapping.slice(1)) {
@@ -260,12 +272,26 @@ function foldForMatching(value: string): string {
   return folded.replace(/ς/gu, "σ");
 }
 
+/**
+ * **Over-broad is a property of the text, measured as the fraction of it one pattern's own
+ * matches cover** (NEW-24, D73) — not of the pattern's length, which refused `EY` and every
+ * two-character CJK name when it was tried (`redactionSchema` in the config loader). A
+ * client name mentioned a few times covers 1–5% of a note; a common letter or word covers
+ * 8% and up. Below the floor an input is too short to tell the two apart: a capture that is
+ * nothing but the name covers all of it.
+ *
+ * ponytail: fixed threshold and floor; make them configurable if real notes disagree.
+ */
+const OVER_BROAD_COVERAGE = 0.08;
+const OVER_BROAD_MIN_LENGTH = 256;
+
+/** Returns the indexes of the patterns over-broad for `text`, ascending. */
 function addUserPatterns(
   text: string,
   patterns: readonly string[],
   candidates: RedactionCandidate[],
-): void {
-  if (patterns.length === 0) return;
+): number[] {
+  if (patterns.length === 0) return [];
 
   const folded = buildFoldedHaystack(text);
   /**
@@ -276,16 +302,24 @@ function addUserPatterns(
    * raw rather than the folded string did the same for a decomposed (NFD) short form.
    * `addCandidate` now merges overlapping ranges (NEW-25), which closes both that and the
    * partial-overlap case ordering never could (`["Acme Corp", "Corp Holdings"]`); the
-   * sort stays only to keep the scan order independent of how the table was typed.
+   * sort stays to keep the scan order independent of how the table was typed, which also
+   * makes a merged finding keep the longest contributor's `patternIndex`.
    *
-   * Folding before the `Set` makes the de-duplication mean what its name says:
-   * `["Acme", "acme"]` is one needle, scanned once.
+   * Folding before de-duplicating makes it mean what it says: `["Acme", "acme"]` is one
+   * needle, scanned once, and indexed by the first of the two as configured (D73).
    */
-  const ordered = [
-    ...new Set(patterns.map((pattern) => foldForMatching(pattern.normalize("NFC")))),
-  ].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0));
-  for (const needle of ordered) {
+  const firstIndexOf = new Map<string, number>();
+  patterns.forEach((pattern, index) => {
+    const needle = foldForMatching(pattern.normalize("NFC"));
+    if (!firstIndexOf.has(needle)) firstIndexOf.set(needle, index);
+  });
+  const ordered = [...firstIndexOf].sort(
+    ([a], [b]) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0),
+  );
+  const overBroad: number[] = [];
+  for (const [needle, patternIndex] of ordered) {
     if (needle.length === 0) continue;
+    let covered = 0;
     for (
       let at = folded.haystack.indexOf(needle);
       at >= 0;
@@ -293,13 +327,19 @@ function addUserPatterns(
     ) {
       const range = toOriginalRange(folded, at, needle.length);
       if (range === null) continue;
+      covered += range.end - range.start;
       addCandidate(candidates, {
         start: range.start,
         end: range.end,
         class: "user-pattern",
+        patternIndex,
       });
     }
+    if (text.length >= OVER_BROAD_MIN_LENGTH && covered >= OVER_BROAD_COVERAGE * text.length) {
+      overBroad.push(patternIndex);
+    }
   }
+  return overBroad.sort((a, b) => a - b);
 }
 
 function shannonEntropy(value: string): number {
@@ -533,9 +573,8 @@ export function redactText(
    * `review` and `ingest` now pass the user's configured patterns, so this ordering is
    * live rather than latent (BACKLOG NEW-16).
    */
-  if (scope !== "name") {
-    addUserPatterns(normalizedText, options.userPatterns ?? [], candidates);
-  }
+  const overBroadPatterns =
+    scope === "name" ? [] : addUserPatterns(normalizedText, options.userPatterns ?? [], candidates);
   /**
    * `.netrc`'s space-separated `password <value>` cannot be named by a
    * fixed key, so it is anchored by context instead: `password` as the
@@ -600,10 +639,13 @@ export function redactText(
         normalizedText.slice(candidate.start, candidate.end),
         key,
       ),
+      ...(candidate.patternIndex === undefined ? {} : { patternIndex: candidate.patternIndex }),
     });
     cursor = candidate.end;
   }
   redacted += normalizedText.slice(cursor);
 
-  return { text: redacted, findings };
+  return overBroadPatterns.length === 0
+    ? { text: redacted, findings }
+    : { text: redacted, findings, overBroadPatterns };
 }

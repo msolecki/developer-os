@@ -529,6 +529,14 @@ function assertNoteContent(content: string): void {
   }
 }
 
+/** By index, never by value: the pattern is usually a client name (NEW-24, D73). */
+function overBroadWarnings(indexes: readonly number[]): readonly string[] {
+  return indexes.map(
+    (index) =>
+      `[redaction] patterns[${String(index)}] in config.toml matches so much of this capture that it is over-broad; narrow it if that was not intended`,
+  );
+}
+
 /**
  * Diagnostics redacted with the key this command loaded, not with whatever the
  * context closed over. `init` records the rule this follows: redact with the
@@ -670,7 +678,10 @@ export async function runCapture(
           redactionCount,
           note: found.note,
         },
-        found.warning === null ? [] : [found.warning],
+        [
+          ...(found.warning === null ? [] : [found.warning]),
+          ...overBroadWarnings(built.overBroadPatterns),
+        ],
       );
 
     const existing = await readExistingCapture(
@@ -726,15 +737,18 @@ export async function runCapture(
       return duplicate(raced);
     }
 
-    return success({
-      schemaVersion: 1,
-      captureId: built.envelope.captureId,
-      path: target,
-      duplicate: false,
-      status: built.envelope.status,
-      redactionCount,
-      note: built.envelope.note,
-    });
+    return success(
+      {
+        schemaVersion: 1,
+        captureId: built.envelope.captureId,
+        path: target,
+        duplicate: false,
+        status: built.envelope.status,
+        redactionCount,
+        note: built.envelope.note,
+      },
+      overBroadWarnings(built.overBroadPatterns),
+    );
   } catch (error) {
     return failureFrom(
       { guards },

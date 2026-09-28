@@ -300,6 +300,28 @@ describe("runCapture", () => {
     expect(written).toContain("[REDACTED:user-pattern]");
     /** The rest of the observation survives: this redacts a name, not the note. */
     expect(written).toContain("migration needs a rollback plan");
+    /** D73: the persisted finding names the table row, and the name is not over-broad. */
+    expect(written).toContain("patternIndex: 0");
+    expect(result.warnings.join("\n")).not.toContain("over-broad");
+  });
+
+  it("warns, by index and never by value, about a pattern that covers much of the capture (NEW-24)", async () => {
+    const fixture = await installedFixture("capture-over-broad-redaction");
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders", "e"]\n',
+      "utf8",
+    );
+
+    const result = await fixture.run(fixture.context, { text: "see ".repeat(80) });
+
+    expect(result.ok, "the capture must succeed").toBe(true);
+    if (!result.ok) return;
+    const warnings = result.warnings.join("\n");
+    expect(warnings).toContain("patterns[1]");
+    expect(warnings).toContain("over-broad");
+    expect(warnings).not.toContain("patterns[0]");
+    expect(warnings).not.toContain("Northwind");
   });
 
   /**

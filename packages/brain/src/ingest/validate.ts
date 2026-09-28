@@ -509,13 +509,20 @@ function secretScan(
   const findings: IngestValidationFinding[] = [];
   for (const note of notes) {
     const classes = new Set<string>();
+    const entries = new Set<number>();
+    const overBroad = new Set<number>();
     /**
      * The path and the provenance id as well as the body. "The redaction pass
      * finds anything in the proposal" is the rule, and a model that puts a
      * token in a filename has put it somewhere the vault will keep it.
      */
     for (const value of [note.path, note.contents, note.sourceCaptureId]) {
-      for (const found of redact(value).findings) classes.add(found.class);
+      const result = redact(value);
+      for (const found of result.findings) {
+        classes.add(found.class);
+        if (found.patternIndex !== undefined) entries.add(found.patternIndex);
+      }
+      for (const index of result.overBroadPatterns ?? []) overBroad.add(index);
     }
     if (classes.size === 0) continue;
 
@@ -532,23 +539,29 @@ function secretScan(
      * One message for both sent a user looking for a credential that was never there
      * (BACKLOG NEW-24).
      *
-     * **It still names no value and no entry.** Which configured pattern matched is not
-     * knowable here: `RedactionFinding` carries a class and a fingerprint and nothing
-     * that identifies the table row. Threading a pattern index through would widen a type
-     * that reaches a persisted capture envelope, which is a decision rather than a gap to
-     * fill in passing — the residual row states it.
+     * **It names the entry by index and never by value** (NEW-24, founder decision D73):
+     * `patterns[1]` points the user at the row to narrow without writing the client name
+     * into a report that is logged. An entry whose matches cover much of the text is
+     * called over-broad, because that one is refusing every ingest rather than this one.
      */
     const sorted = [...classes].sort(compareCanonical);
     const userConfigured = classes.has("user-pattern");
     const others = sorted.filter((name) => name !== "user-pattern");
+    const rows = (indexes: ReadonlySet<number>): string =>
+      [...indexes].sort((a, b) => a - b).map((index) => `patterns[${String(index)}]`).join(", ");
+    const matched = `${rows(entries)} from the [redaction] table in config.toml`;
+    const broad =
+      overBroad.size === 0
+        ? ""
+        : `; ${rows(overBroad)} matches so much of the text that it is over-broad`;
     findings.push(
       finding(
         "secret-scan",
         note.path,
         userConfigured && others.length === 0
-          ? "this note matches a pattern from the [redaction] table in config.toml; narrow that entry if the match was not intended"
+          ? `this note matches ${matched}; narrow that entry if the match was not intended${broad}`
           : userConfigured
-            ? `the redaction pass found ${others.join(", ")} in this note, and it also matches a pattern from the [redaction] table in config.toml`
+            ? `the redaction pass found ${others.join(", ")} in this note, and it also matches ${matched}${broad}`
             : `the redaction pass found ${sorted.join(", ")} in this note`,
       ),
     );

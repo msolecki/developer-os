@@ -1135,3 +1135,95 @@ describe("redaction scopes (NEW-36, NEW-39)", () => {
     expect(redact(line, "value")).toStrictEqual(redact(line));
   });
 });
+
+/**
+ * NEW-24, founder decision D73: a persisted finding may carry the zero-based index of the
+ * configured pattern that produced it, and an over-broad pattern is detected by the fraction
+ * of the input its own matches cover — never by its length, which refused `EY` and every
+ * two-character CJK name when it was tried.
+ */
+describe("user pattern index and match density (NEW-24, D73)", () => {
+  /** 300 code units, hand-countable: every other one is an `a`, so `a` covers 50%. */
+  const alternating = "ab".repeat(150);
+  /** 300 code units carrying one four-character name: 4 / 300 is about 1.3%. */
+  const oneMention = `Acme ${"x".repeat(295)}`;
+
+  it("indexes a finding by the pattern's position as configured, not by scan order", () => {
+    const { findings } = redactText("x Acme Corp Holdings y Acme z", deterministicKey, {
+      userPatterns: ["Acme", "Acme Corp Holdings"],
+    });
+
+    expect(findings.map((f) => f.patternIndex)).toEqual([1, 0]);
+  });
+
+  it("indexes two spellings of one needle by the first one configured", () => {
+    const { findings } = redactText("x ACME y", deterministicKey, {
+      userPatterns: ["Northwind", "acme", "Acme"],
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.patternIndex).toBe(1);
+  });
+
+  it("keeps the index of the longest contributor when two patterns merge", () => {
+    const { findings } = redactText("x Acme Corp Holdings y", deterministicKey, {
+      userPatterns: ["Acme Corp", "Corp Holdings"],
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.patternIndex).toBe(1);
+  });
+
+  it("carries no index on a finding whose class is not user-pattern, even after a merge", () => {
+    const { findings } = redactText(`key ${providerToken} tail end`, deterministicKey, {
+      userPatterns: ["a1a1 tail"],
+    });
+
+    expect(findings.map((f) => f.class)).toEqual(["provider-token"]);
+    expect(Object.keys(findings[0] ?? {})).toEqual(["class", "fingerprint"]);
+  });
+
+  it("flags a pattern whose matches cover much of the input", () => {
+    const result = redactText(alternating, deterministicKey, {
+      userPatterns: ["Acme", "a"],
+    });
+
+    expect(result.overBroadPatterns).toEqual([1]);
+  });
+
+  it("does not flag a name mentioned once in a longer text", () => {
+    const result = redactText(oneMention, deterministicKey, { userPatterns: ["Acme"] });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.overBroadPatterns).toBeUndefined();
+  });
+
+  it("does not flag a short input that is nothing but the name", () => {
+    const result = redactText("Acme Corp", deterministicKey, { userPatterns: ["Acme Corp"] });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.overBroadPatterns).toBeUndefined();
+  });
+
+  it("measures each pattern's own matches, so a long name lends a short one no coverage", () => {
+    /** `Acme Corp Holdings` covers 54 / 300 = 18%; `Acme` alone covers 12 / 300 = 4%. */
+    const text = `${"Acme Corp Holdings ".repeat(3)}${"y".repeat(243)}`;
+    const result = redactText(text, deterministicKey, {
+      userPatterns: ["Acme", "Acme Corp Holdings"],
+    });
+
+    expect(result.overBroadPatterns).toEqual([1]);
+  });
+
+  it("reports nothing over-broad in the name scope, which applies no user pattern", () => {
+    const result = createRedactor(deterministicKey, { userPatterns: ["a"] })(alternating, "name");
+
+    expect(result).toStrictEqual({ text: alternating, findings: [] });
+  });
+
+  it("leaves the result shape unchanged when no pattern is over-broad", () => {
+    const result = redactText(oneMention, deterministicKey, { userPatterns: ["Acme"] });
+
+    expect(Object.keys(result)).toEqual(["text", "findings"]);
+  });
+});

@@ -603,9 +603,8 @@ describe("secret-scan", () => {
   /**
    * **A `user-pattern` hit means "narrow your config", every other class means "a real
    * secret is in the proposal".** One message for both sent a user hunting a credential
-   * that was never there (BACKLOG NEW-24). The message still names no value
-   * and no table entry — it cannot; `RedactionFinding` carries a class and a fingerprint
-   * and nothing that identifies which row matched.
+   * that was never there (BACKLOG NEW-24). The message still names no value; since D73
+   * it names the table row by index.
    */
   it("says a user-configured pattern matched, rather than reporting a secret", async () => {
     const context: IngestValidationContext = {
@@ -623,6 +622,39 @@ describe("secret-scan", () => {
     expect(message).not.toContain("Northwind");
     /** And it does not claim a secret class was found, because none was. */
     expect(message).not.toContain("provider-token");
+  });
+
+  it("names the matching table row by index and never by value (NEW-24, D73)", async () => {
+    const context: IngestValidationContext = {
+      ...contextFor(await makeVault()),
+      redact: (text: string) =>
+        redactText(text, KEY, { userPatterns: ["Contoso", "Northwind"] }),
+    };
+    const result = await validateProposal(
+      proposal(note("DEV/client.md", {}, "the Northwind migration is planned\n")),
+      context,
+    );
+
+    const message = result.findings.find((f) => f.validator === "secret-scan")?.message;
+    expect(message).toContain("patterns[1] from the [redaction] table in config.toml");
+    expect(message).not.toContain("patterns[0]");
+    expect(message).not.toContain("Northwind");
+    expect(message).not.toContain("over-broad");
+  });
+
+  it("calls an entry over-broad when its matches cover much of the note (NEW-24, D73)", async () => {
+    const context: IngestValidationContext = {
+      ...contextFor(await makeVault()),
+      redact: (text: string) => redactText(text, KEY, { userPatterns: ["Northwind", "e"] }),
+    };
+    const result = await validateProposal(
+      proposal(note("DEV/client.md", {}, `${"see ".repeat(80)}\n`)),
+      context,
+    );
+
+    const message = result.findings.find((f) => f.validator === "secret-scan")?.message;
+    expect(message).toContain("patterns[1] matches so much of the text that it is over-broad");
+    expect(message).not.toContain("patterns[0]");
   });
 
   it("names the real classes as well when both are present", async () => {
