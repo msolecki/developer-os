@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import type { BigIntStats } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { encodeCanonicalJson } from "../lifecycle/canonical-json.js";
 import { EXIT_CODES } from "../result.js";
@@ -133,6 +133,13 @@ export interface ManifestStatePlanAdmissionContextV1 {
   readonly updatePayloadIdentity?: (
     value: UpdateExpectedPayloadRefV1,
   ) => ManifestPayloadIdentityV1;
+  /**
+   * Spec 2 D72 P2. `"inline"`: Spec 1's Git and automation plans pin the postimage inode in the
+   * plan. `"construction_evidence"`: an update plan's staged states carry a null identity, which
+   * `updatePayloadIdentity` resolves from reopened construction evidence. Required whenever a
+   * lifecycle plan names a payload; bootstrap contexts leave it unset.
+   */
+  readonly lifecycleIdentity?: "inline" | "construction_evidence";
 }
 
 export interface ManifestFileIdentityV1 {
@@ -278,8 +285,31 @@ function payloadIdentity(value: unknown): ManifestPayloadIdentityV1 {
   return { dev: uint64(input.dev), ino: uint64(input.ino) };
 }
 
+function lifecycleIdentity(
+  context: ManifestStatePlanAdmissionContextV1,
+): "inline" | "construction_evidence" {
+  const mode = context.lifecycleIdentity;
+  if (mode !== "inline" && mode !== "construction_evidence") refuse();
+  return mode;
+}
+
+/** A terminal `before` names another admitted participant's postimage (D72 P2(b)). */
+function siblingPayloadParticipant(
+  path: CanonicalAbsolutePathV1,
+  envelope: ManifestEnvelopeV1,
+  participantId: ManifestParticipantIdV1,
+  context: ManifestStatePlanAdmissionContextV1,
+): ManifestParticipantIdV1 {
+  const candidate = basename(dirname(path));
+  if (candidate === participantId || context.admitParticipant(envelope, candidate) !== candidate) {
+    refuse();
+  }
+  return candidate as ManifestParticipantIdV1;
+}
+
 function validatePayloadRef(
   value: unknown,
+  role: "before" | "after",
   envelope: ManifestEnvelopeV1,
   participantId: ManifestParticipantIdV1,
   context: ManifestStatePlanAdmissionContextV1,
@@ -305,10 +335,13 @@ function validatePayloadRef(
       bytes: integer(input.bytes, 0, MAX_MANIFEST_BYTES),
       mode: 0o600,
     };
+    const payloadParticipant = role === "after"
+      ? participantId
+      : siblingPayloadParticipant(ref.path, envelope, participantId, context);
     const expectedPath = deriveManifestPayloadPath(
       context.productHome,
       ref.coordinatorId as never,
-      participantId as never,
+      payloadParticipant as never,
     );
     if (ref.path !== expectedPath) refuse();
     return { ref, identity: payloadIdentity(context.updatePayloadIdentity(ref)) };
@@ -317,6 +350,7 @@ function validatePayloadRef(
   if (input.kind === "bootstrap_expected") {
     requireExactKeys(input, ["bootstrapId", "bytes", "hash", "kind", "mode", "ordinal", "path"]);
     if (
+      role !== "after" ||
       envelope.kind === "lifecycle" ||
       input.bootstrapId !== envelope.id ||
       input.mode !== 0o600 ||
@@ -369,17 +403,17 @@ function validateManifestBytesState(
 
   const bothIdentitiesNull = input.dev === null && input.ino === null;
   if ((input.dev === null) !== (input.ino === null)) refuse();
-  if (role === "before" && (input.bytes !== null || bothIdentitiesNull)) refuse();
-  if (
-    role === "after" &&
-    (input.bytes === null || (envelope.kind === "lifecycle" ? bothIdentitiesNull : !bothIdentitiesNull))
-  ) {
-    refuse();
-  }
+  if (role === "after" && input.bytes === null) refuse();
+  // D72 P2: a state naming staged bytes takes its inode from their evidence, except in Spec 1's
+  // inline lifecycle plans; only an update plan's terminal `before` may name bytes at all.
+  const identityFromEvidence = input.bytes !== null &&
+    (envelope.kind !== "lifecycle" || lifecycleIdentity(context) === "construction_evidence");
+  if (role === "before" && input.bytes !== null && !identityFromEvidence) refuse();
+  if (bothIdentitiesNull !== identityFromEvidence) refuse();
 
   const decodedPayload = input.bytes === null
     ? null
-    : validatePayloadRef(input.bytes, envelope, participantId, context);
+    : validatePayloadRef(input.bytes, role, envelope, participantId, context);
   const state: PresentManifestState = {
     state: "present",
     hash: lowerHexSha256(input.hash),
@@ -392,16 +426,15 @@ function validateManifestBytesState(
     ino: bothIdentitiesNull ? null : uint64(input.ino),
   };
 
-  if (role === "after") {
+  if (decodedPayload !== null) {
     if (
-      decodedPayload === null ||
       decodedPayload.ref.hash !== state.hash ||
       BigInt(decodedPayload.ref.bytes) !== BigInt(state.size)
     ) {
       refuse();
     }
     if (
-      decodedPayload.ref.kind === "update_expected" &&
+      !identityFromEvidence &&
       (decodedPayload.identity.dev !== state.dev || decodedPayload.identity.ino !== state.ino)
     ) {
       refuse();
@@ -654,49 +687,80 @@ export class ManifestStateParticipant {
   async apply(plan: ManifestStatePlanV1): Promise<ManifestParticipantObservationV1> {
     try {
       const admitted = validateManifestStatePlan(plan, this.dependencies.admission);
-      const inventory = await this.inventory(admitted);
-      let classification = classifyInventory(admitted, inventory);
+      const preserved = await this.preserve(admitted);
+      if (preserved === "applied") return { state: "applied" };
+      return await this.publish(admitted, preserved);
+    } catch (error) {
+      return normalizeFailure(error);
+    }
+  }
 
+  /** Spec 2 §9.3 `manifest/preserve_before`: moves a present `before` to the tombstone. */
+  async preserveBefore(plan: ManifestStatePlanV1): Promise<ManifestParticipantObservationV1> {
+    try {
+      const admitted = validateManifestStatePlan(plan, this.dependencies.admission);
+      return { state: await this.preserve(admitted) };
+    } catch (error) {
+      return normalizeFailure(error);
+    }
+  }
+
+  /** Spec 2 §9.3 `manifest/publish_*`: publishes `after` once a present `before` is preserved. */
+  async publishAfter(plan: ManifestStatePlanV1): Promise<ManifestParticipantObservationV1> {
+    try {
+      const admitted = validateManifestStatePlan(plan, this.dependencies.admission);
+      const inventory = await this.inventory(admitted);
       if (inventoryEquals(inventory, appliedInventory(admitted))) {
         await this.adoptAppliedTransition(admitted);
         await this.requireAppliedInventory(admitted);
         return { state: "applied" };
       }
 
-      if (classification === "before") {
-        if (admitted.before.state === "present") {
-          await this.moveAndMakeDurable(
-            admitted.manifestPath,
-            admitted.tombstonePath,
-            admitted.before,
-          );
-          await this.requirePreimageInventory(admitted);
-          classification = "preimage_preserved";
-        }
-      } else if (classification === "preimage_preserved") {
-        await this.adoptApplyPreimageTransition(admitted);
-      } else {
-        return refuse();
-      }
-
-      if (admitted.after.state === "present") {
-        if (admitted.after.bytes === null) return refuse();
-        await this.moveAndMakeDurable(
-          admitted.after.bytes.path,
-          admitted.manifestPath,
-          admitted.after,
-        );
-        await this.requireAppliedInventory(admitted);
-      } else if (classification === "preimage_preserved") {
-        await this.requirePreimageInventory(admitted);
-      } else {
-        await this.requireBeforeInventory(admitted);
-      }
-
-      return { state: "applied" };
+      const preserved = admitted.before.state === "present" ? "preimage_preserved" : "before";
+      if (classifyInventory(admitted, inventory) !== preserved) return refuse();
+      if (preserved === "preimage_preserved") await this.adoptApplyPreimageTransition(admitted);
+      return await this.publish(admitted, preserved);
     } catch (error) {
       return normalizeFailure(error);
     }
+  }
+
+  private async preserve(
+    admitted: ManifestStatePlanV1,
+  ): Promise<"before" | "preimage_preserved" | "applied"> {
+    const inventory = await this.inventory(admitted);
+    if (inventoryEquals(inventory, appliedInventory(admitted))) {
+      await this.adoptAppliedTransition(admitted);
+      await this.requireAppliedInventory(admitted);
+      return "applied";
+    }
+
+    const classification = classifyInventory(admitted, inventory);
+    if (classification === "preimage_preserved") {
+      await this.adoptApplyPreimageTransition(admitted);
+      return "preimage_preserved";
+    }
+    if (classification !== "before") return refuse();
+    if (admitted.before.state !== "present") return "before";
+    await this.moveAndMakeDurable(admitted.manifestPath, admitted.tombstonePath, admitted.before);
+    await this.requirePreimageInventory(admitted);
+    return "preimage_preserved";
+  }
+
+  private async publish(
+    admitted: ManifestStatePlanV1,
+    preserved: "before" | "preimage_preserved",
+  ): Promise<ManifestParticipantObservationV1> {
+    if (admitted.after.state === "present") {
+      if (admitted.after.bytes === null) return refuse();
+      await this.moveAndMakeDurable(admitted.after.bytes.path, admitted.manifestPath, admitted.after);
+      await this.requireAppliedInventory(admitted);
+    } else if (preserved === "preimage_preserved") {
+      await this.requirePreimageInventory(admitted);
+    } else {
+      await this.requireBeforeInventory(admitted);
+    }
+    return { state: "applied" };
   }
 
   async compensate(plan: ManifestStatePlanV1): Promise<ManifestParticipantObservationV1> {
@@ -904,13 +968,7 @@ export class ManifestStateParticipant {
     if (state.dev !== null && state.ino !== null) {
       evidence = { dev: state.dev, ino: state.ino };
     } else {
-      if (
-        state.bytes?.kind !== "bootstrap_expected" ||
-        this.dependencies.admission.bootstrapPayloadIdentity === undefined
-      ) {
-        return refuse();
-      }
-      const admitted = this.dependencies.admission.bootstrapPayloadIdentity(state.bytes);
+      const admitted = this.evidenceIdentity(state.bytes);
       if (admitted === null) return refuse();
       evidence = payloadIdentity(admitted);
     }
@@ -923,6 +981,15 @@ export class ManifestStateParticipant {
       dev: evidence.dev,
       ino: evidence.ino,
     };
+  }
+
+  private evidenceIdentity(ref: ManifestPayloadRefV1 | null): ManifestPayloadIdentityV1 | null {
+    const admission = this.dependencies.admission;
+    if (ref?.kind === "bootstrap_expected") return admission.bootstrapPayloadIdentity?.(ref) ?? null;
+    if (ref?.kind === "update_expected" && admission.lifecycleIdentity === "construction_evidence") {
+      return admission.updatePayloadIdentity?.(ref) ?? null;
+    }
+    return null;
   }
 
   private async requireBeforeInventory(plan: ManifestStatePlanV1): Promise<void> {
