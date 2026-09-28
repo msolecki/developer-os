@@ -51,15 +51,13 @@ function bundleRoot(home: UpdatableHomeV1, version: string): string {
   return join(home.fixture.paths.home, "releases", version, `darwin-${home.world.architecture}`);
 }
 
-/**
- * The fresh process's view: the closure is clear and the home admits with zero drift. An empty
- * allocator-reserved staging root is not asserted away: the closure is the authority on residue.
- */
+/** The fresh process's view: the closure is clear and the home admits with zero drift. */
 async function settled(home: UpdatableHomeV1): Promise<UpdateHomeV1> {
   const update = home.update();
   const ports = update.apply;
   if (ports === undefined) throw new Error("the on-disk context binds the apply ports");
   expect((await ports.withGlobalLock(() => ports.closure())).kind).toBe("clear");
+  expect(await nodeFs.readdir(join(home.fixture.paths.home, "staging", "lifecycle")).catch(() => [])).toEqual([]);
   return update.readHome();
 }
 
@@ -157,6 +155,19 @@ describe("a death between a publication journal's removal and its plan leaf's (N
     const settledHome = await settled(home);
     expect(settledHome.active.version).toBe("1.1.0");
     expect(settledHome.rollback?.previous.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
+});
+
+describe("an allocation that died before its construction envelope (NEW-110 review I4)", () => {
+  it("removes the empty allocator-reserved staging root under the global lock", async () => {
+    const home = await installUpdatableHome("recovery-empty-staging-root", "arm64");
+    const root = join(home.fixture.paths.home, "staging", "lifecycle", `lc_${"d".repeat(64)}_7`);
+    await nodeFs.mkdir(root, { recursive: true, mode: 0o700 });
+
+    expect(await recoverUpdate(home.update())).toStrictEqual({ kind: "not_update" });
+
+    expect(await exists(root)).toBe(false);
+    await settled(home);
   }, CASE_TIMEOUT_MS);
 });
 

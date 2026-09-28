@@ -27,6 +27,7 @@ import {
   MAXIMUM_CONSTRUCTION_PLAN_BYTES,
   MAXIMUM_LEAF_PLAN_BYTES,
   parseCanonicalAbsolutePathText,
+  parseLifecycleCoordinatorId,
   parseLowerHexSha256,
   parsePositiveUInt32,
   reserveLifecycleIdBlock,
@@ -1121,7 +1122,39 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
       completeEnvelopeSuffix: (id) => journalStore().completeEnvelopeSuffix(id),
     },
     executorCleanup: (id) => removeOrphanTerminalExecutorRecord(lifecycle().fs, productHome, lifecycle().effectiveUid, createCanonicalPathEvidence(), id),
+    removeEmptyStagingRoots: () => removeEmptyStagingRoots(lifecycle()),
   };
+}
+
+async function namesOf(lifecycle: CliLifecycleContext, directory: LifecycleGuardedEntryV1): Promise<readonly string[]> {
+  const names: string[] = [];
+  for await (const name of lifecycle.fs.names(directory)) names.push(name);
+  return names;
+}
+
+function isCoordinatorId(name: string): boolean {
+  try {
+    parseLifecycleCoordinatorId(name, null);
+    return true;
+  } catch {
+    // Any other name is not an allocator reservation and is never this sweep's to remove.
+    return false;
+  }
+}
+
+/** An owner-owned, empty `staging/lifecycle/<lc>` under the held lock and a clear closure has no other owner. */
+async function removeEmptyStagingRoots(lifecycle: CliLifecycleContext): Promise<void> {
+  const parent = await lifecycle.fs.lstat(lifecycle.roots.lifecycleStaging);
+  if (parent?.kind !== "directory") return;
+  let removed = false;
+  for (const name of await namesOf(lifecycle, parent)) {
+    if (!isCoordinatorId(name)) continue;
+    const entry = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(`${parent.path}/${name}`));
+    if (entry?.kind !== "directory" || entry.ownerUid !== lifecycle.effectiveUid || (await namesOf(lifecycle, entry)).length > 0) continue;
+    await lifecycle.fs.rmdirExactEmpty(entry);
+    removed = true;
+  }
+  if (removed) await lifecycle.fs.syncDirectory(parent);
 }
 
 /** The Security secret screen over staged construction bytes: any finding refuses before a byte lands. */

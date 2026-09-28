@@ -78,6 +78,11 @@ export interface UpdateApplyPortsV1 {
   readonly coordinator: (coordinatorId: LifecycleCoordinatorIdV1) => UpdateLifecycleCoordinatorDependenciesV1;
   readonly envelope: UpdateRecoveryRoutesV1["envelope"];
   readonly executorCleanup: UpdateRecoveryRoutesV1["executorCleanup"];
+  /**
+   * Under the lock with a clear closure: removes each empty `staging/lifecycle/<lc>` an allocation
+   * left before its construction envelope, which the closure does not claim.
+   */
+  readonly removeEmptyStagingRoots?: () => Promise<void>;
 }
 
 /** A verifier or step failure before the point of no return: the old release was restored. */
@@ -142,7 +147,11 @@ async function recoverLocked(ports: UpdateApplyPortsV1, closure: LifecycleJourna
  */
 export function recoverUpdate(update: CliUpdateContext): Promise<UpdateRecoveryRouteOutcomeV1> {
   const ports = updateApplyPorts(update);
-  return ports.withGlobalLock(async () => recoverLocked(ports, await ports.closure()));
+  return ports.withGlobalLock(async () => {
+    const closure = await ports.closure();
+    if (closure.kind === "clear") await ports.removeEmptyStagingRoots?.();
+    return recoverLocked(ports, closure);
+  });
 }
 
 /**
