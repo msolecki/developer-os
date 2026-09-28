@@ -11,7 +11,7 @@ A14 (DOS-P12), roadmap Phase 7
 (`docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`). Its scope is
 `docs/migration/instruction-inventory.md` §5 (14 scripts plus 2 libraries) and the three project
 template rows of §6. Its implementation plan, `plans/2026-09-22-developer-os-tooling-verbs.md`, was
-deleted when Phase 7 closed (`git show d4592a7^:docs/superpowers/plans/2026-09-22-developer-os-tooling-verbs.md`);
+deleted when Phase 7 closed (`git show e262051^:docs/superpowers/plans/2026-09-22-developer-os-tooling-verbs.md`);
 what shipped is recorded in the roadmap's Phase 7.
 
 **Gate (roadmap Phase 7):** every inventoried script is a product verb or a recorded refusal. §2 is

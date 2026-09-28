@@ -5,7 +5,7 @@
 Completed tasks were removed on 2026-09-23 and 2026-09-26; see git history.
 
 **Open work:** Task 18, a **founder stop point**: it needs real sessions and manual Codex trust.
-Task 2 is done (D67, `c1d5790..ec3e123`); its full-suite run is A15 step 7b on `a8d2c78`. Tasks 1 and 3–17 are
+Task 2 is done (D67, `d157227..28cfe19`); its full-suite run is A15 step 7b on `a03499c`. Tasks 1 and 3–17 are
 committed (Task 15, the Codex half, under D57 on a local mock Responses API) and Task 19's phase
 close ran: full suite green on `bc17550`, the whole-phase review and its re-review (D62–D64), PR #15.
 The surviving constraints are in `docs/architecture/hooks.md`.

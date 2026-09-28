@@ -4356,7 +4356,7 @@ file is never also a `*.v2.test.ts` file.
 ### 7.1 Deferred gate: uninstall → `init` round trip and A9 kill matrix (NEW-100)
 
 **Added 2026-09-26 (NEW-100).** Moved verbatim in substance from plan 1a Task 24, whose plan file was
-deleted when plan 1a closed (`git show d5185a4:docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`
+deleted when plan 1a closed (`git show 49d759b:docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`
 holds the original). This is the one place the contract lives until `BACKLOG.md` NEW-100 closes.
 
 **Status (D42, 2026-09-22).** Deferred to post-A16 hardening; it runs once, together with the other
