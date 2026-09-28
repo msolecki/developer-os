@@ -20,9 +20,14 @@ founder for this install (lint, `test:bootstrap` and `test:suite` had passed on 
 `check` runs at the end. **Next:** steps 11–15; steps 16–18 after a week of use; Codex hook approval
 after 2026-10-22.
 
-**D70 build-only lane in flight:** headless sessions in `../developer-os.worktrees/`; NEW-113's code is integrated (Tasks 1–3), NEW-110
-Tasks 1–10 and 13 are integrated, Task 11 is running with P9. Tests are written, not run; the full
-suite and fresh-context review run at the close. Commits held locally for one PR.
+**D70 build-only lane: code complete (2026-09-28).** NEW-113's Tasks 1–3 and NEW-110's Tasks 1–13
+(with P9) are integrated, plus backlog rows NEW-20, 24, 25, 26, 31, 32, 34, 36–39, 46, 50, 56, 62–64,
+66, 71, 76, 78, 88–93, 96, 97, 105–107 and 114; NEW-54, 82 and 99 were already fixed. Three
+fresh-context reviews ran (NEW-110: REQUEST CHANGES, two Critical; NEW-113 and the rows: APPROVE WITH
+FIXES); every accepted finding is fixed and NEW-110's fixes are under re-review. Tests were written,
+not run: the full suite is running on the integrated tree, and both plans (NEW-113 Task 4, NEW-110
+Task 14), the BACKLOG closures and the PR follow it. NEW-113 Task 5 (the Phase 9 gate on a disposable
+macOS account) is a founder step.
 
 **A15, the founder cutover, on the live machine** — step by step through
 `docs/migration/founder-cutover.md` (`npm run pack:local-release -- <dir>`, then
