@@ -492,7 +492,7 @@ as configured — a row number, never the text matched — and `redactAndNormali
 `renderCaptureFile` copy it by name, so it is persisted in the capture envelope. `redactText`
 reports `overBroadPatterns`: the rows whose own matches cover at least 8% of an input of at least
 256 code units (`packages/security/src/redaction.ts` — `OVER_BROAD_COVERAGE`). Length was the wrong
-measure and was withdrawn from the loader. `capture` warns and `ingest`'s secret-scan finding names
+measure and was withdrawn from the loader. `capture` and `import` warn and `ingest`'s secret-scan finding names
 the row, both by index. `doctor` does not check it: it has no text to measure a pattern against.
 Pinned by `redaction.test.ts` → "user pattern index and match density (NEW-24, D73)".
 
