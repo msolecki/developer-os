@@ -149,7 +149,9 @@ export type UpdateConstructionPlanDerivedSourceV1 =
   | { readonly kind: "plan_derived"; readonly role: "active_release_after"; readonly plan: ImmutableUpdatePlanRefV1<"active_release_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
   | { readonly kind: "plan_derived"; readonly role: "rollback_record_after"; readonly plan: ImmutableUpdatePlanRefV1<"rollback_record_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
   /** P4 (D72): the signed delegation (0), release index (1) or bundle manifest (2) of the bundle plan's metadata. */
-  | { readonly kind: "plan_derived"; readonly role: "release_metadata_after"; readonly metadata: 0 | 1 | 2; readonly value: CanonicalJsonV1; readonly valueBytes: number };
+  | { readonly kind: "plan_derived"; readonly role: "release_metadata_after"; readonly metadata: 0 | 1 | 2; readonly value: CanonicalJsonV1; readonly valueBytes: number }
+  /** D72 addendum: the Codex registration record's `replace` content, derived by the CLI owner provider (P6(d)). */
+  | { readonly kind: "plan_derived"; readonly role: "codex_registration_after"; readonly plan: ImmutableUpdatePlanRefV1<"owner_update">; readonly value: CanonicalJsonV1; readonly valueBytes: number };
 
 export type UpdateConstructionPayloadSourceV1 =
   | { readonly kind: "planner_output"; readonly ordinal: number }
@@ -679,6 +681,15 @@ function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: Upda
         return null;
       }
       let authority: string | null = null;
+      if (source.role === "codex_registration_after") {
+        exact(source, ["kind", "role", "plan", "value", "valueBytes"], label);
+        if (payloadKind !== "owner_content") fail(`${label}: Codex registration record for ${payloadKind}`);
+        const plan = checkPlanRef(source.plan, "owner_update", stagingRoot, `${label}.plan`);
+        const derived = checkDerivedValue(source.value, source.valueBytes, MAXIMUM_LEAF_PLAN_BYTES - 1, label);
+        if (derived.bytes !== row.bytes || derived.sha256 !== row.sha256 || row.mode !== 384) fail(`${label}: differs from its row`);
+        // One registration record per Codex owner plan; the plan's `replace` row names this payload.
+        return `codex_registration/${String(plan.id)}`;
+      }
       if (source.role === "release_metadata_after") {
         exact(source, ["kind", "role", "metadata", "value", "valueBytes"], label);
         if (payloadKind !== "state_after") fail(`${label}: release metadata for ${payloadKind}`);
@@ -740,6 +751,7 @@ function derivedPayloadPath(root: string, ordinal: number, payloadKind: UpdateCo
       return `${root}/participants/foundation/${source.participant.id}/initial-journal.json`;
     case "foundation_staged_digest":
     case "release_metadata_after":
+    case "codex_registration_after":
       return null;
     case "manifest_after":
       return `${root}/participants/manifest/${source.plan.id}/after.json`;

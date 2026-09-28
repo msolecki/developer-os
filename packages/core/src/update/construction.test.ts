@@ -567,3 +567,45 @@ describe("signed metadata construction rows (Spec 2 P4, D72)", () => {
     expect(() => validateConstructionBijections(plan)).toThrow(/\.kind/);
   });
 });
+
+describe("Codex registration construction rows (D72 addendum, P6(d))", () => {
+  const record = encodeCanonicalJson({ codexHome: "/synthetic/home/.codex", treeHash: "a".repeat(64) });
+  const ownerPlan = (id: string): ImmutableUpdatePlanRefV1<"owner_update"> => ({
+    kind: "owner_update", id: parseSafeReasonCode(id), path: updateLeafPlanPath(root, "owner_update", id), hash: sha(`owner/${id}`), bytes: 128,
+  });
+
+  interface RegistrationRowSpec {
+    readonly payloadKind?: "owner_content" | "state_after";
+    readonly rowContent?: string;
+  }
+
+  function withRegistrationRows(specs: readonly RegistrationRowSpec[]): UpdateConstructionPlanInputV1 {
+    const base = input();
+    const rows = [...base.files];
+    const at0 = rows.findIndex((file) => file.role.kind === "payload" && file.role.payloadKind === "state_after");
+    rows.splice(at0, 0, ...specs.map((spec, index) => {
+      const source = { kind: "plan_derived", role: "codex_registration_after", plan: ownerPlan("owner_codex"), value: record, valueBytes: encoder.encode(record).byteLength - 1 } as UpdateConstructionPayloadSourceV1;
+      return row({ kind: "payload", payloadKind: spec.payloadKind ?? "owner_content", source }, path(`update/payloads/${(at0 + index).toString(10).padStart(10, "0")}.payload`), spec.rowContent ?? record);
+    }));
+    return { ...base, files: rows };
+  }
+
+  it("admits the record as plan-derived owner content at its ordinal payload path", () => {
+    const plan = buildConstructionPlan(withRegistrationRows([{}]));
+    expect(validateConstructionBijections(plan)).toBe(true);
+    const found = plan.files.find((file) => file.role.kind === "payload" && file.role.source.kind === "plan_derived" && file.role.source.role === "codex_registration_after");
+    expect(found?.sha256).toBe(sha(record));
+  });
+
+  it("refuses the role on a row that is not owner content", () => {
+    expect(() => buildConstructionPlan(withRegistrationRows([{ payloadKind: "state_after" }]))).toThrow(/state_after/);
+  });
+
+  it("refuses a value whose hash does not match its row", () => {
+    expect(() => buildConstructionPlan(withRegistrationRows([{ rowContent: "{}\n" }]))).toThrow(/differs from its row/);
+  });
+
+  it("refuses two registration rows for one owner plan", () => {
+    expect(() => buildConstructionPlan(withRegistrationRows([{}, {}]))).toThrow(/an authority selects two rows/);
+  });
+});
