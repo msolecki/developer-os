@@ -23,7 +23,6 @@ import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.j
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import {
-  manifestAdmissionFor,
   relocatedBrainRefusal,
   runCoordinatorUninstall,
   uninstallRuntimePaths,
@@ -37,6 +36,7 @@ import type { AdmittedV2HomeV1 } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { coordinatorNonceOf, residueFrom } from "./context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import {
   createUninstallAdapters,
   createUninstallParticipants,

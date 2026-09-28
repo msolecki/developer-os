@@ -45,7 +45,8 @@ import { assertOrdinaryCommandAdmitted, inspectBootstrapEvidenceAdmission } from
 import { runInit } from "../commands/init.js";
 import { runRepair } from "../commands/repair.js";
 import { runStatus } from "../commands/status.js";
-import { manifestAdmissionFor, runUninstall } from "../commands/uninstall.js";
+import { runUninstall } from "../commands/uninstall.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import {
   createCommandFixture,
   exists,

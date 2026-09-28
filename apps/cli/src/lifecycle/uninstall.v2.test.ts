@@ -33,7 +33,8 @@ import {
   removeCommandFixtures,
 } from "../commands/testing.js";
 import type { CommandFixture, FixtureOptions } from "../commands/testing.js";
-import { manifestAdmissionFor, runUninstall } from "../commands/uninstall.js";
+import { runUninstall } from "../commands/uninstall.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import type { CliContext } from "../context.js";
 import { admitInstalledV2Home } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";

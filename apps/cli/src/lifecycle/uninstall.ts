@@ -114,7 +114,6 @@ import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import { readConfigFile } from "../commands/doctor.js";
 import {
   downcastArtifactV2,
-  manifestAdmissionFor,
   planUninstall,
   removeDirectories,
   UninstallRefusal,
@@ -140,6 +139,7 @@ import {
 } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { residueFrom } from "./context.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import { isCodeDefect, MANIFEST_ANCHOR_WARNING, removeManifestAnchor } from "./manifest-anchor.js";
 import { withLifecycleMutation } from "./mutation-gate.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";

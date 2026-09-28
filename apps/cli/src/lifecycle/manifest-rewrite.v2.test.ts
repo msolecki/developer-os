@@ -8,7 +8,7 @@ import type { CanonicalJsonValue, InstallationManifestV2 } from "@developer-os/c
 
 import { runInit } from "../commands/init.js";
 import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
-import { manifestAdmissionFor } from "../commands/uninstall.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import { withLifecycleMutation } from "./mutation-gate.js";
 
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;

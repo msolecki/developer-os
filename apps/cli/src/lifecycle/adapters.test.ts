@@ -28,7 +28,7 @@ import {
 } from "@developer-os/platform-macos";
 
 import { createCommandFixture, removeCommandFixtures } from "../commands/testing.js";
-import { manifestAdmissionFor } from "../commands/uninstall.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import { pathEnvironmentFor, publishBootstrapInitialJournalNoReplace } from "../context.js";
 import {
   REJECTING_LAUNCHD_HOST,
@@ -302,5 +302,27 @@ describe("the lifecycle manifest adapter", () => {
       code: EXIT_CODES.recoveryRequired,
       reason: "manifest_bytes_identity",
     });
+  });
+});
+
+describe("the confined manifest admission (NEW-96)", () => {
+  it("gives the mutation gate and uninstall one owner-path policy", async () => {
+    const fixture = await createCommandFixture("adapters-admission");
+    const { paths } = fixture.context;
+    const refused: string[] = [];
+    const uninstall = manifestAdmissionFor(paths, refused);
+    const gate = gateManifestAdmission(fixture.context);
+    const inside = parseCanonicalAbsolutePathText(join(paths.home, "templates", "file"));
+    const inBrain = parseCanonicalAbsolutePathText(join(paths.brain, "note.md"));
+    const outside = parseCanonicalAbsolutePathText("/developer-os-outside-authority/file");
+
+    expect(gate.sourceRoot).toBe(uninstall.sourceRoot);
+    expect(gate.backupRoot).toBe(uninstall.backupRoot);
+    for (const admission of [gate, uninstall]) {
+      expect(admission.admitOwnerPath("core", inside, { kind: "file" })).toBe(inside);
+      expect(admission.admitOwnerPath("core", inBrain, { kind: "file" })).toBe(inBrain);
+      expect(admission.admitOwnerPath("core", outside, { kind: "file" })).not.toBe(outside);
+    }
+    expect(refused).toStrictEqual([outside]);
   });
 });

@@ -32,7 +32,7 @@ import type { CliContext } from "../context.js";
 import { run } from "../main.js";
 import { runConfig } from "./config.js";
 import { runInit } from "./init.js";
-import { manifestAdmissionFor } from "./uninstall.js";
+import { manifestAdmissionFor } from "../lifecycle/manifest-admission.js";
 import {
   createCommandFixture,
   REAL_FILESYSTEM_TIMEOUT_MS,
