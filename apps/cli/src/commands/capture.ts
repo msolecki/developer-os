@@ -616,7 +616,7 @@ export async function runCapture(
      * break (`:186-188`). Which root is legitimate is this command's question,
      * not that validator's.
      */
-    const { quarantine } = await resolveQuarantine(
+    const { quarantine, canonicalQuarantine } = await resolveQuarantine(
       context,
       config,
       paths,
@@ -628,7 +628,13 @@ export async function runCapture(
           "restore the quarantine directory inside the vault's content root; an observation is never written through a quarantine path that leaves it",
         ),
     );
+    /**
+     * `target` is only ever reported; `canonicalTarget` is only ever touched
+     * (NEW-20). The file name is joined onto the canonical root rather than the
+     * whole path canonicalized, so `readText`'s `O_NOFOLLOW` still sees the leaf.
+     */
     const target = join(quarantine, built.fileName);
+    const canonicalTarget = join(canonicalQuarantine, built.fileName);
     const redactionCount = built.envelope.redaction.length;
 
     const duplicate = (found: ExistingCapture): CliResult<CaptureResultV1> =>
@@ -647,7 +653,7 @@ export async function runCapture(
 
     const existing = await readExistingCapture(
       context,
-      target,
+      canonicalTarget,
       built.fileName,
       redact,
     );
@@ -658,7 +664,7 @@ export async function runCapture(
         context,
         paths,
         quarantine,
-        target,
+        canonicalTarget,
         built.contents,
         "capture",
       );
@@ -691,7 +697,7 @@ export async function runCapture(
        * refused guard, a full disk, an unreadable staging directory, an
        * interrupted apply: every one of them still surfaces as itself.
        */
-      const raced = await readCaptureQuietly(context, target, built.fileName, redact);
+      const raced = await readCaptureQuietly(context, canonicalTarget, built.fileName, redact);
       if (raced === null || !raced.parsed || raced.contents === built.contents) {
         throw error;
       }

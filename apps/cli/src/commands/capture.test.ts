@@ -330,9 +330,9 @@ describe("runCapture", () => {
    * A vault reached through a symlink is ordinary — a synced folder, a second
    * volume — and on such an install a canonicalized `path` would print and
    * publish a location the user never wrote in `config.toml`, in `--json` as
-   * well as on the terminal. The quarantine root **is** canonicalized, for the
-   * containment question that has to be asked of the destination; what must not
-   * follow from that is the canonical form leaking into the contract, or into
+   * well as on the terminal. The quarantine root **is** canonicalized, and every
+   * read and write goes through that form (NEW-20); what must not follow from
+   * that is the canonical form leaking into the contract, or into
    * `validateChangePlan`'s `ownedRoots`, where a pre-resolved root makes its
    * grew-authority test compare a string against itself.
    */
@@ -353,6 +353,55 @@ describe("runCapture", () => {
     expect(await nodeFs.readFile(result.data.path, "utf8")).toContain(
       `captureId: ${result.data.captureId}`,
     );
+  });
+
+  /**
+   * NEW-20: the containment proof holds for the canonical quarantine, so a
+   * symlink retargeted after the proof must not carry the write with it. The
+   * content-root link is swapped the moment the proof has resolved it; a write
+   * through the declared path would follow the link into `elsewhere`, which
+   * `validateChangePlan` permits as a sideways relocation.
+   *
+   * Out of reach here: a real directory on the canonical chain replaced by a
+   * symlink after the proof has the same string in both forms, and pinning that
+   * needs descriptor-relative operations rather than paths.
+   */
+  it("refuses at exit 5 and writes nowhere when the content root is retargeted after the proof", async () => {
+    const fixture = await installedFixture("capture-symlink-swap");
+    const content = join(fixture.paths.brain, "content");
+    const real = join(fixture.paths.brain, "real-content");
+    await nodeFs.rename(content, real);
+    await nodeFs.symlink(real, content);
+    const elsewhere = join(fixture.root, "elsewhere");
+    await nodeFs.mkdir(join(elsewhere, "_raw", "quarantine"), {
+      recursive: true,
+      mode: 0o700,
+    });
+    const declaredQuarantine = quarantineDirectory(fixture);
+    const before = await nodeFs.readdir(join(real, "_raw", "quarantine"));
+
+    let swapped = false;
+    const canonicalize = async (path: string): Promise<string> => {
+      const resolved = await fixture.context.guards.canonicalize(path);
+      if (!swapped && path === declaredQuarantine) {
+        swapped = true;
+        await nodeFs.unlink(content);
+        await nodeFs.symlink(elsewhere, content);
+      }
+      return resolved;
+    };
+    const context: CliContext = {
+      ...fixture.context,
+      guards: { ...fixture.context.guards, canonicalize },
+    };
+
+    const result = await fixture.run(context, { text: OBSERVATION });
+
+    expect(swapped, "the swap must happen for the test to mean anything").toBe(true);
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    expect(await nodeFs.readdir(join(elsewhere, "_raw", "quarantine"))).toStrictEqual([]);
+    expect(await nodeFs.readdir(join(real, "_raw", "quarantine"))).toStrictEqual(before);
+    expect(await captureTransactions(fixture)).toHaveLength(0);
   });
 
   it("names the file after the capture id, which is the deduplication key", async () => {

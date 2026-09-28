@@ -51,16 +51,17 @@ and its record.
 
 | Boundary | Status | The record that owns it |
 |---|---|---|
-| A capture stays inside the vault | **holds since 2026-08-15**, with a check-then-use window left open | closed: `BACKLOG.md` §1 NEW-14; the window is **NEW-20** |
+| A capture stays inside the vault | **holds since 2026-08-15**; the check-then-use window closed for `capture` on 2026-09-28 | closed: `BACKLOG.md` §1 NEW-14 and **NEW-20** |
 | A secret removed from a vault file is gone from the machine | **holds since 2026-08-17** — the pre-edit copy is pruned at both terminal phases | closed: `ORDER.md`, Foundation request 2 |
 | An agent invocation is bounded in turns | **partial** — bounded under Claude, no such field under Codex | `codex-adapter.md` §11.3 |
 
 **The first row changed on 2026-08-15 and this table is the corrected one.** The relocated-quarantine
 escape it used to record as absent was closed by the fix round after DOS-P6 Task 19's review: all
 three commands that touch quarantine now anchor on the configured content root through one shared
-`resolveContainedRoot` (§5.2). What remains is narrower and is registered rather than closed —
-`resolveContainedRoot` proves the root once and the declared path is followed again afterwards, so a
-won race can still redirect a capture (**NEW-20**, theoretical, not a regression).
+`resolveContainedRoot` (§5.2). What remained was narrower —
+`resolveContainedRoot` proved the root once and `capture` followed the declared path again afterwards,
+so a won race could redirect a capture (**NEW-20**, closed 2026-09-28: `capture` now reads and writes
+through the canonical root the proof held for; §5.2).
 
 **These are not "known issues" filed at the back.** The second used to defeat a sentence this product
 tells a user to their face — that `review --decision edit` removed the secret they pasted — and that
@@ -266,10 +267,15 @@ measured against a real `init`. The re-armed ancestor check is **depth behind th
 having because the collision guard is incidental: it depends on `init` recording directories, which
 is not a security property, and its message names the manifest rather than the link.
 
-**The check is proven once and the path is followed again afterwards**, which is a check-then-use
-window this arrangement accepts: `resolveContainedRoot` answers at `apps/cli/src/commands/quarantine.ts:100`
-and every later operation re-follows the declared path. `BACKLOG.md` §1 **NEW-20** carries it, with
-why it is registered rather than closed.
+**`capture` uses the form the check held for** (`BACKLOG.md` §1 **NEW-20**, closed 2026-09-28):
+`resolveQuarantine` returns the canonical quarantine beside the declared one, every read, `mkdir` and
+write goes through the canonical form, and the declared form survives only as `CaptureResultV1.path`
+and as `validateChangePlan`'s owned root. An ancestor symlink retargeted after the proof therefore
+re-resolves the owned root and not the target, and the plan is refused at exit 5 as
+`outside_owned_roots` (`apps/cli/src/commands/capture.test.ts` — `refuses at exit 5 and writes
+nowhere when the content root is retargeted after the proof`). **Residuals:** a real directory on the
+canonical chain replaced by a symlink after the proof has one string for both forms, which only
+descriptor-relative operations would pin; and `import` still re-follows its declared quarantine.
 
 All three commands now resolve the quarantine root once, through **one shared implementation**
 (`apps/cli/src/context.ts:263-305`), prove it inside the configured content root, and measure every
