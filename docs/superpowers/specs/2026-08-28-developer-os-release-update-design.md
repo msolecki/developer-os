@@ -54,6 +54,160 @@ residue (`staging`, `state/transactions`, `backups`) that §6.1 refuses as unbou
 refusal directs the user to `developer-os uninstall`, then to archive the product home manually, then
 to `developer-os init`. §6.1's external shape is unchanged.
 
+**Proposed 2026-09-28 (DRAFT, awaiting founder approval) — the Spec 2 revision pass that makes
+`update --apply` and `update rollback --apply` composable (BACKLOG NEW-110, with NEW-61 and NEW-86;
+D60, D61, D68).** Closure Task 9 found six contradictions between this specification and the
+validators shipped by Tasks 12–25 and closure Tasks 1–8 (`git show
+a03499c:docs/superpowers/plans/2026-09-23-developer-os-spec2-closure.md`, "Blocked 2026-09-23"). This
+block resolves all six, and the minor items found with them, against the shipped code. Nothing in the
+body of this document is edited until the founder approves; on approval each item below is applied at
+the section it names, marked "Amended <date> (D<n>)" there, and this block is replaced by a pointer.
+Items marked **(Q<n>)** carry the recommended answer to the founder question of the same number in
+`docs/superpowers/plans/2026-09-28-new-110-spec2-apply.md`; a different answer changes only that item.
+
+- **P1 — the source parents are construction directories (contradiction 1).**
+  `BundleSourceStagingPlanV1` (§9.2) and `RollbackPayloadSourceStagingPlanV1` (§9.2) pin
+  `sourceParentDev`/`sourceParentIno` of `update/source/bundle` and `update/source/rollback`, but both
+  plans are hashed into the construction plan before any directory exists, and §9.2's construction
+  `directories` list ("every expected-absent variable directory needed by the exact
+  `update/plans/<kind>`, construction evidence, payload, initial-journal, recovery-executor, and other
+  construction-file paths") never names them. The shipped validator refuses them as "an unused
+  directory" (`packages/core/src/update/construction.ts:915`), so the shipped tests create them by hand.
+  **Resolution:** (a) the construction `directories` list also contains `update/source` and, for each
+  planned source, its fixed parent `update/source/bundle` or `update/source/rollback`, expected-absent,
+  `0700`, parent-before-child; a source parent is legal exactly when the matching
+  `bundle_source_staging` or `rollback_payload_source` plan row exists, and is exempt from the
+  unused-directory rule on that condition only. (b) `sourceParentDev` and `sourceParentIno` are removed
+  from both source staging plans. (c) A source executor, on first execution and on every recovery,
+  takes the parent's identity only from the construction journal's `directoryIdentities` row of that
+  directory's ordinal, reopens the parent no-follow and requires that identity — the rule
+  `#parentEntry` already applies to construction evidence (`apps/cli/src/update/construction.ts:243-255`).
+  §9.2 already keeps the construction journal alive long enough: the later construction cursor removes
+  a source's plan and journal only after that source's own terminal compaction, and construction
+  directories go last in reverse ordinal order. This is D60 F2-A's rule — identity from reopened construction
+  evidence — applied to directories.
+
+- **P2 — a lifecycle manifest postimage carries no inode (contradiction 2, and a correction of D60).**
+  §5.3's `ManifestBytesStateV1` type puts `dev`/`ino` on every present state, and the shipped
+  `validateManifestBytesState` requires a non-null `after` identity for lifecycle envelopes and a
+  non-null `before` identity for every plan (`packages/core/src/manifest/manifest-state.ts:380-386`).
+  §5.3's prose says the opposite for lifecycle refs ("its device/inode comes only from matching
+  construction evidence"). D60's `CanonicalStatePostimageV1` comment ("as ManifestBytesStateV1 already
+  does") relied on the prose and was wrong about the type and the validator: the manifest does **not**
+  already avoid the cycle. **Resolution:** the prose wins, for both envelopes. (a) A present `after`
+  state carries `dev: null, ino: null` whenever `bytes` is non-null; its identity is resolved at
+  execution from the reopened construction evidence of its `update_expected` ref (a `state_after` row
+  with the `manifest_after` role, which construction already emits,
+  `packages/core/src/update/construction.ts:704,758-759`) or, for bootstrap, from its payload
+  evidence, as now. (b) The terminal manifest plan's `before` names the transitional plan's `after`
+  ref in `bytes` and carries `dev: null, ino: null`; the no-replace rename keeps the inode, so the
+  same resolution yields it. A `before` with `bytes: null` still carries the observed identity. (c)
+  Spec 1's Git and automation manifest plans write the payload before the plan and keep their inline
+  identity. `ManifestStatePlanV1` cannot tell them apart from update plans: both use
+  `envelope.kind: "lifecycle"` and `update_expected` refs
+  (`packages/core/src/manifest/manifest-state.ts:61,97`). The admission context therefore gains a
+  required `lifecycleIdentity: "inline" | "construction_evidence"`. Spec 1's codec passes `"inline"`
+  (`apps/cli/src/lifecycle/codecs.ts:251`), and the update composer and participants pass
+  `"construction_evidence"`. The plan grammar is unchanged.
+
+- **P3 — the four `manifest/*` steps over the two manifest plans (contradiction 3).** §9.3 already
+  defines the content; what is missing is the binding of steps to plans. **Resolution:** §9.2's two
+  manifest leaf plans are `transitional` and `terminal` (as shipped,
+  `packages/core/src/update/coordinator.ts:117-118`). `manifest/preserve_before` moves the transitional
+  plan's `before` to its tombstone; `manifest/publish_transitional` publishes the transitional
+  `after`; `manifest/publish_terminal` preserves the transitional manifest to the terminal plan's
+  tombstone and publishes the terminal `after`; `manifest/finalize_tombstones` compacts both plans'
+  tombstones, terminal then transitional. For `update_apply`, the terminal manifest's artifact set
+  equals the transitional set minus exactly the partition `terminal_retire/prior_rollback` removed;
+  for `update_rollback`, minus exactly the partition
+  `terminal_retire/consumed_rollback_and_rejected_release` removed. No other row may differ; the
+  composer derives the terminal set that way and the manifest handler refuses any other difference
+  as exit 6. The transitional set is §9.3 step 7's and §10.2's, unchanged. Compensation before the
+  point of no return restores the transitional plan's tombstone; after it, both manifest steps
+  force-forward.
+
+- **P4 — the retained signed metadata is plan-derived (contradiction 4) (Q1).** §9.2's
+  `guarded_signed_metadata` source needs a retained verified file with a known path and inode, but
+  planning keeps only `{ value, hash }` of the delegation and index and drops the bundle-manifest body
+  (`apps/cli/src/update/planning.ts:229-231,625-628`), and the planning scratch retains none of the
+  three (`packages/security/src/update/scratch.ts:52-54`). A file in system temp would also fail the
+  source's "reopen on every recovery" rule after a crash. **Resolution:** (a) the three documents are
+  construction `plan_derived` rows with the new role `release_metadata_after`,
+  `{ metadata: 0 | 1 | 2, value: CanonicalJsonV1, valueBytes }`, legal only for `state_after` rows
+  bound to bundle-plan metadata ordinal 0 (delegation), 1 (release index) and 2 (bundle manifest);
+  `sha256(value)` must equal that ordinal's signed hash in the materialized update. The bytes fit
+  easily: 64 KiB + 4 MiB + 16 MiB raw, at most about 41 MiB JSON-escaped, against the 512 MiB
+  construction-plan cap and 64 MiB row cap. (b) The `guarded_signed_metadata` arm is withdrawn: no
+  path produces it, and its validator and exact-set entry are deleted with this change.
+
+- **P5 — ephemeral reservations in owner plans (contradiction 5).** §8.2 admits `absent` and
+  `ephemeral_present` for ephemeral reservations, but §9.2's `PersistedManagedPathStateV1` has no
+  ephemeral arm and `keep` requires a present, hashed `before`
+  (`packages/core/src/update/participants.ts:139-143,319`), so a real home's absent reservation — e.g.
+  `state/update-rollback.json` (§3.2) or `state/git-sync.json` — cannot be planned. **Resolution:**
+  `PersistedManagedPathStateV1` gains the arm `{ state: "ephemeral_present"; mode: 384; dev; ino }`,
+  legal only as an observed `before`. For an artifact whose verification mode is `ephemeral`, `keep`
+  is legal with `before` `absent` or `ephemeral_present` and never reads or hashes its bytes; every
+  other operation on an ephemeral artifact still refuses, as §9.2 already says. Postimages carry no
+  identity (D60), so the arm never appears on the `after` side.
+
+- **P6 — the production Codex refresh policy (contradiction 6) and re-registration on update
+  (NEW-61) (Q2).** Only tests build `OwnerExternalEffectProcessPolicyV1`
+  (`apps/cli/src/update/external-effect.test.ts:55`), and the shipped policy cannot drive the real
+  command: its environment is exactly `HOME=managed_vendor_home` and `TMPDIR`
+  (`packages/core/src/update/participants.ts:502-505`), while the install path that is observed to work
+  passes only `CODEX_HOME=<codex home>` (`apps/cli/src/instructions/codex-registration.ts:90`); setting
+  `HOME` to the Codex home points Codex at `<codex home>/.codex`. **Resolution:** (a) the environment
+  is exactly `CODEX_HOME=managed_vendor_home` and `TMPDIR=private_effect_tmp`, in that order. (b)
+  The installed provider's registry has one entry. At planning it is the `codex` executable that
+  install's discovery selects (`apps/cli/src/instructions/apply.ts:453`). `pinned_codex_cli`
+  resolves to that executable's canonical real path, which must be a regular file owned by the user or root, not group- or
+  other-writable, with every ancestor directory owned by the user or root and not group- or
+  other-writable; the pinned identity is that file's device/inode/mode/SHA-256, rechecked before spawn.
+  The owner-owned single-link rule is withdrawn for this token because a Homebrew or npm `codex` is a
+  link into a package-manager tree. (c) The argv is exactly `plugin add <plugin_id> --json`; the
+  marketplace is never added by update. If the Codex owner's registration state is not `registered`
+  at planning, update refuses before allocation as owner drift, exit 3. (d) The Codex owner files plan
+  carries the registration record (`codex/registration.json`, `codex-registration-v1`) as a `replace`
+  row whose bytes name the target tree hash computed over the owner postimage
+  (`codexPluginTreeHash` takes path and hash rows only, `apps/cli/src/instructions/codex-registration.ts:58`).
+  The CLI owner provider adds this row when it builds the concrete plan, as §8.3 has it construct the
+  concrete effect plan, because the record's `codexHome` is an absolute path the root-free planner
+  never sees. The preview projects the concrete owner plan, so the row appears there as an ordinary
+  Codex `replace`, and the under-lock re-derivation stays byte-equal. §9.3 already orders owner files (step 3) before owner
+  external effects (step 4), so a failed refresh compensates the record with the tree. (e) Every
+  update whose Codex owner plan changes any file emits exactly one `codex_registration_refresh`,
+  as the planner already drafts (`packages/adapter-codex/src/update/plan.ts:55`).
+
+- **P7 — minor items found with the six.** (a) **Leaf-plan hashes:** §9.2's
+  `developer-os/update-leaf/<kind>/v1\0` domain governs every leaf ref; the owner, state, migration and
+  external-effect refs that the shipped code hashes as plain SHA-256
+  (`updateParticipantDocumentHash`, `packages/core/src/update/participants.ts:220-221`) conform to the
+  spec, no text change. (b) **Compensation cause (Q3):** `UpdateLifecycleCoordinatorJournalV2` gains
+  `compensationCause: SafeReasonCodeV1 | null`, non-null exactly when `direction` is `compensating` or
+  `terminalOutcome` is `rolled_back`, written with the transition that starts compensation, so a
+  resumed run reports §9.4's exit class of the original cause instead of
+  `update_coordinator_compensated`. (c) **Planner and verifier capability gate (Q4):** the gate is the
+  repository-level transitive graph check of §2 alone; no capability scan runs at spawn time, because
+  every real planner and verifier entry reads its counted request from stdin
+  (`packages/security/src/update/verifier-process.ts:106-107`). (d) **Fallback handoff (Q5):** the
+  production source of `UpdateFallbackHandoffV1` is the launcher's FD 3 document, extended by Task 11b;
+  until then the production composer refuses before allocation with `update_fallback_unavailable`,
+  exit 4, and only the synthetic fixture supplies one. This item does not make Task 11b unnecessary.
+  (e) **Allocation:** the coordinator's allocator block covers every prefix the composition uses in one
+  reservation; the count is derived from the materialized update before allocation.
+
+- **P8 — admitted bookkeeping paths carry their identity (NEW-86, D30).** §6.1's
+  `admittedPreexistingPaths` becomes `readonly { path: CanonicalAbsolutePathV1; dev: UInt64DecimalV1;
+  ino: UInt64DecimalV1 }[0..4096]`, same order and bounds. The planning process records the identity
+  it observed; `validateBootstrapPlan` checks the grammar; execution and recovery resolve an admitted
+  Foundation publication parent only from that recorded identity, never from a use-time `lstat`, and
+  refuse a changed inode as exit 6. The plan is written and parent-synced before any mutation and
+  chained into both journal slots, so a recovering process replays what planning observed. A
+  completed fresh `init` compacts its plan, so no persisted plan of the old grammar exists to migrate;
+  an interrupted old-grammar plan refuses as exit 6. Spec 1 §2.1's sentence that
+  `admittedPreexistingPaths`' grammar covers the bookkeeping set is amended to match on approval.
+
 ---
 
 ## 1. Scope and invariants
