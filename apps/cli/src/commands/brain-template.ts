@@ -81,6 +81,6 @@ export const BRAIN_TEMPLATE: readonly BrainTemplateFile[] = [
   },
   {
     path: "content/templates/note.md",
-    content: "---\nschemaVersion: 1\ntitle:\ntype:\ncreated:\nupdated:\ntags: []\naliases: []\nsummary:\nstage:\nauthor:\nreviewed: null\noccurrences: 0\n---\n\nWrite the note here. Everything above the fence is the frontmatter Developer OS\nreads; everything below it is yours.\n\n`type` is one of knowledge-note, compiled-note, project-note, reference-note.\n`stage` is one of emerging, established, deprecated. `author` is human or agent.\n`reviewed` is a YYYY-MM-DD date, or null when nobody has read it yet \u2014 an agent\nwrote it and no human has checked it.\n\nThis folder is never indexed, so this file is not a note and will not appear in\nany search result.\n",
+    content: "---\nschemaVersion: 1\ntitle:\ntype:\ncreated:\nupdated:\ntags: []\naliases: []\nsummary:\nstage:\nauthor:\nreviewed: null\noccurrences: 1\n---\n\nWrite the note here. Everything above the fence is the frontmatter Developer OS\nreads; everything below it is yours.\n\n`type` is one of knowledge-note, compiled-note, project-note, reference-note.\n`stage` is one of emerging, established, deprecated. `author` is human or agent.\n`reviewed` is a YYYY-MM-DD date, or null when nobody has read it yet \u2014 an agent\nwrote it and no human has checked it.\n\nThis folder is never indexed, so this file is not a note and will not appear in\nany search result.\n",
   },
 ];

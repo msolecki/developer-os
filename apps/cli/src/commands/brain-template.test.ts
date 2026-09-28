@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseNote } from "@developer-os/brain";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -113,6 +114,31 @@ describe("the embedded Brain template", () => {
       "project-note",
       "reference-note",
     ]);
+  });
+
+  it("ships a note template that parses clean once its blanks are filled", () => {
+    /**
+     * The template leaves the per-note keys blank for the user; every value it
+     * does set must already satisfy the note schema. It shipped `occurrences: 0`
+     * after the schema required an integer of at least 1, so every note copied
+     * from it carried a frontmatter error.
+     */
+    const template = BRAIN_TEMPLATE.find(
+      (file) => file.path === "content/templates/note.md",
+    );
+    const filled = (template?.content ?? "")
+      .replace(/^title:$/mu, "title: A filled-in note")
+      .replace(/^type:$/mu, "type: knowledge-note")
+      .replace(/^created:$/mu, "created: 2026-09-28")
+      .replace(/^updated:$/mu, "updated: 2026-09-28")
+      .replace(/^summary:$/mu, "summary: What the note answers.")
+      .replace(/^stage:$/mu, "stage: emerging")
+      .replace(/^author:$/mu, "author: human");
+
+    const parsed = parseNote(filled);
+
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.ok).toBe(true);
   });
 
   it("links two examples together so a fresh install has a non-empty graph", () => {
