@@ -42,11 +42,14 @@ export const REDACTION_CLASSES = Object.freeze([
   "user-pattern",
 ] as const);
 
+/**
+ * A span of the normalized text; the secret is sliced from it at output, so a
+ * merged range fingerprints exactly the text it redacts.
+ */
 interface RedactionCandidate {
   readonly start: number;
   readonly end: number;
   readonly class: string;
-  readonly secret: string;
 }
 
 function overlaps(
@@ -56,17 +59,38 @@ function overlaps(
   return left.start < right.end && right.start < left.end;
 }
 
+/**
+ * Merges a candidate with every existing one it overlaps (NEW-25). Dropping it
+ * instead left its non-overlapping part in the clear. The merged range keeps the
+ * class of the earliest-scanned contributor, so the class order in `redactText`
+ * still decides classification. Touching ranges are not overlaps and stay apart.
+ *
+ * `high-entropy` is the exception and stays first-wins (founder decision D71): its
+ * run spans a `KEY=` prefix, so merging it would change the persisted fingerprint of
+ * an ordinary env or credential line. The known residual is a token tail left in the
+ * clear when an earlier candidate covers only part of a high-entropy run.
+ */
 function addCandidate(
   candidates: RedactionCandidate[],
   candidate: RedactionCandidate,
 ): void {
-  if (
-    candidate.secret.length === 0 ||
-    candidates.some((existing) => overlaps(existing, candidate))
-  ) {
+  if (candidate.end <= candidate.start) return;
+  const overlapping = candidates.filter((existing) => overlaps(existing, candidate));
+  const [owner] = overlapping;
+  if (owner === undefined) {
+    candidates.push(candidate);
     return;
   }
-  candidates.push(candidate);
+  if (candidate.class === "high-entropy") return;
+  const merged: RedactionCandidate = {
+    class: owner.class,
+    start: overlapping.reduce((start, e) => Math.min(start, e.start), candidate.start),
+    end: overlapping.reduce((end, e) => Math.max(end, e.end), candidate.end),
+  };
+  candidates[candidates.indexOf(owner)] = merged;
+  for (const absorbed of overlapping.slice(1)) {
+    candidates.splice(candidates.indexOf(absorbed), 1);
+  }
 }
 
 function addWholeMatches(
@@ -81,7 +105,6 @@ function addWholeMatches(
       start: match.index,
       end: match.index + secret.length,
       class: findingClass,
-      secret,
     });
   }
 }
@@ -107,7 +130,6 @@ function addCapturedMatches(
       start,
       end: start + secret.length,
       class: findingClass,
-      secret,
     });
   }
 }
@@ -233,32 +255,17 @@ function addUserPatterns(
 
   const folded = buildFoldedHaystack(text);
   /**
-   * **Folded first, then de-duplicated, then sorted longest-first — in that order, and
-   * the order is the whole correctness argument.**
+   * **Folded first, then de-duplicated, then sorted longest-first.**
    *
-   * `addCandidate` is first-wins on overlap, so an unsorted scan makes the result depend
-   * on how the user typed the table: `["Acme", "Acme Corp"]` over `"hello Acme Corp bye"`
-   * redacts the short form and **leaves `Corp` in the clear**, while the reverse order
-   * redacts the whole name. Listing both the short and the long form of a client name is
-   * the obvious thing for a founder to do.
+   * The ordering was the correctness argument while `addCandidate` was first-wins: an
+   * unsorted scan let `["Acme", "Acme Corp"]` leave `Corp` in the clear, and a sort on the
+   * raw rather than the folded string did the same for a decomposed (NFD) short form.
+   * `addCandidate` now merges overlapping ranges (NEW-25), which closes both that and the
+   * partial-overlap case ordering never could (`["Acme Corp", "Corp Holdings"]`); the
+   * sort stays only to keep the scan order independent of how the table was typed.
    *
-   * **Sorting on the raw string instead of the folded one reintroduces exactly that bug,
-   * deterministically.** Matching happens on `normalize("NFC").toLowerCase()`, and the
-   * two lengths disagree whenever a pattern arrives decomposed — which macOS filenames,
-   * Finder copy-paste and several editors all produce. A decomposed `"Nguyễn Văn Ánh"` is
-   * eighteen raw units and fourteen folded ones, so it sorts *ahead* of a composed
-   * `"Nguyễn Văn Ánh Co"` at seventeen, claims fourteen characters, and drops the longer
-   * candidate as an overlap: `" Co"` left in the clear in **both** configured orders.
-   *
-   * Folding before the `Set` also makes the de-duplication mean what its name says:
-   * `["Acme", "acme"]` is one needle, scanned once, where a byte-identical dedupe scanned
-   * it twice.
-   *
-   * **What longest-first does not close: partial overlap.** Two patterns that interleave
-   * rather than contain — `["Acme Corp", "Corp Holdings"]` over `"x Acme Corp Holdings y"`
-   * — still cannot both win, and `"Acme"` stays in the clear. That is `addCandidate`'s
-   * first-wins rule and predates this ordering; it is recorded as `BACKLOG.md` §1 **NEW-25**
-   * rather than silently implied to be handled.
+   * Folding before the `Set` makes the de-duplication mean what its name says:
+   * `["Acme", "acme"]` is one needle, scanned once.
    */
   const ordered = [
     ...new Set(patterns.map((pattern) => foldForMatching(pattern.normalize("NFC")))),
@@ -276,7 +283,6 @@ function addUserPatterns(
         start: range.start,
         end: range.end,
         class: "user-pattern",
-        secret: text.slice(range.start, range.end),
       });
     }
   }
@@ -505,8 +511,8 @@ export function redactText(
    * `"password [REDACTED:credential-store] Corp Holdings"`, "Corp
    * Holdings" left in the clear). Running `user-pattern` first means it
    * claims the full configured span, so the password pattern's later,
-   * narrower attempt at the same region is the one the overlap resolver
-   * drops. `addUserPatterns` still no-ops when no patterns are configured,
+   * narrower attempt at the same region is absorbed into it and the merged
+   * range keeps the `user-pattern` class. `addUserPatterns` still no-ops when no patterns are configured,
    * so this reordering does not change output for any of the calls that
    * pass none. **That was every production call site until 2026-08-17**; `capture`,
    * `review` and `ingest` now pass the user's configured patterns, so this ordering is
@@ -548,7 +554,6 @@ export function redactText(
       start: match.index,
       end: match.index + match[0].length,
       class: "high-entropy",
-      secret: match[0],
     });
   }
 
@@ -562,7 +567,10 @@ export function redactText(
     redacted += `[REDACTED:${candidate.class}]`;
     findings.push({
       class: candidate.class,
-      fingerprint: fingerprint(candidate.secret, key),
+      fingerprint: fingerprint(
+        normalizedText.slice(candidate.start, candidate.end),
+        key,
+      ),
     });
     cursor = candidate.end;
   }

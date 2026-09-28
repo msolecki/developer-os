@@ -476,7 +476,18 @@ commands that redact bind the user's patterns into a closure at their compositio
 `apps/cli/src/commands/ingest.ts:1667`. `createRedactor` is the only production entry to
 `redactText`, enforced by `tests/repository/redactor-entry.test.ts`, which is what keeps a new call
 site from silently opting out of the user's own patterns. **Record: `BACKLOG.md` §1 NEW-16, closed;
-its residuals NEW-24, NEW-25 and NEW-26 are open.**
+its residuals NEW-24 and NEW-26 are open, and NEW-25 is fixed with the residual below.**
+
+**Overlapping candidates merge, except `high-entropy` (NEW-25, founder decision D71).**
+`addCandidate` (`packages/security/src/redaction.ts`) merges a candidate with every one it
+partially overlaps; the merged range keeps the class of the earliest-scanned contributor and
+fingerprints the whole merged span, so `["Acme Corp", "Corp Holdings"]` over `Acme Corp Holdings`
+no longer leaves `Acme` in the clear. `high-entropy` stays first-wins: its run spans a `KEY=` prefix,
+and merging it would change the persisted fingerprint of an ordinary `API_TOKEN=…` line. **Residual:
+when an earlier candidate covers only part of a high-entropy run — a user pattern matching the start
+of a token, say — the run is dropped and the token's tail stays in the clear.** Pinned by
+`redaction.test.ts` → "drops a high-entropy run that partially overlaps an earlier candidate,
+leaving its tail".
 
 ### 5.8 The redaction key — the product's first secret at rest
 

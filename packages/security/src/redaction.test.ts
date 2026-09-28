@@ -435,6 +435,87 @@ describe("redactText", () => {
     });
   });
 
+  /**
+   * NEW-25: first-wins dropped a partially overlapping candidate whole, leaving its
+   * non-overlapping part in the clear. Merged ranges keep the class of the earliest
+   * scanned contributor and fingerprint the whole merged span. `high-entropy` stays
+   * first-wins (D71).
+   */
+  describe("merging partially overlapping ranges across classes", () => {
+    const fingerprintOf = (secret: string): string =>
+      createHmac("sha256", deterministicKey).update(secret).digest("hex").slice(0, 16);
+
+    it("extends a provider token over a user pattern that overlaps its tail", () => {
+      const { text, findings } = redactText(
+        `key ${providerToken} tail end`,
+        deterministicKey,
+        { userPatterns: ["a1a1 tail"] },
+      );
+
+      expect(text).toBe("key [REDACTED:provider-token] end");
+      expect(findings).toEqual([
+        { class: "provider-token", fingerprint: fingerprintOf(`${providerToken} tail`) },
+      ]);
+    });
+
+    it("extends a service credential over a user pattern that overlaps its head", () => {
+      const { text, findings } = redactText(
+        `id ${awsAccessKeyId} here`,
+        deterministicKey,
+        { userPatterns: ["id akia"] },
+      );
+
+      expect(text).toBe("[REDACTED:service-credential] here");
+      expect(findings).toEqual([
+        { class: "service-credential", fingerprint: fingerprintOf(`id ${awsAccessKeyId}`) },
+      ]);
+    });
+
+    it("joins two disjoint findings of different classes that a later pattern bridges", () => {
+      const source = `${providerToken} ${awsAccessKeyId} tail`;
+      const { text, findings } = redactText(source, deterministicKey, {
+        userPatterns: ["a1 akia"],
+      });
+
+      expect(text).toBe("[REDACTED:provider-token] tail");
+      expect(findings).toEqual([
+        {
+          class: "provider-token",
+          fingerprint: fingerprintOf(`${providerToken} ${awsAccessKeyId}`),
+        },
+      ]);
+    });
+
+    /** D71: a whole `KEY=value` line is high-entropy-shaped; merging it would change this fingerprint. */
+    it("does not merge a high-entropy run into an env secret, keeping key name and fingerprint", () => {
+      const { text, findings } = redactText(`API_TOKEN=${environmentSecret}`, deterministicKey);
+
+      expect(text).toBe("API_TOKEN=[REDACTED:env-secret]");
+      expect(findings).toEqual([
+        { class: "env-secret", fingerprint: fingerprintOf(environmentSecret) },
+      ]);
+    });
+
+    /** D71 residual, pinned so it is not mistaken for coverage. */
+    it("drops a high-entropy run that partially overlaps an earlier candidate, leaving its tail", () => {
+      const { text, findings } = redactText(`opaque ${highEntropySecret}`, deterministicKey, {
+        userPatterns: [highEntropySecret.slice(0, 6)],
+      });
+
+      expect(text).toBe(`opaque [REDACTED:user-pattern]${highEntropySecret.slice(6)}`);
+      expect(findings.map((f) => f.class)).toEqual(["user-pattern"]);
+    });
+
+    it("keeps touching but non-overlapping ranges as separate findings", () => {
+      const { text, findings } = redactText("x acmecorp y", deterministicKey, {
+        userPatterns: ["acme", "corp"],
+      });
+
+      expect(text).toBe("x [REDACTED:user-pattern][REDACTED:user-pattern] y");
+      expect(findings).toHaveLength(2);
+    });
+  });
+
   describe("user-pattern", () => {
     it("matches a user pattern case-insensitively and as a literal, never as a regex", () => {
       const { text, findings } = redactText("The ACME Corp report", deterministicKey, {
@@ -833,7 +914,7 @@ describe("createRedactor", () => {
   });
 
   /**
-   * `addCandidate` is first-wins on overlap, so an unordered scan made the result depend
+   * `addCandidate` was first-wins on overlap, so an unordered scan made the result depend
    * on how the user typed the table: with `["Acme", "Acme Corp"]` the short form won and
    * **`Corp` stayed in the clear**. Listing both forms of a client name is the obvious
    * thing to do, so this is the ordinary case rather than an edge one.
@@ -968,7 +1049,7 @@ describe("createRedactor", () => {
   /**
    * De-duplication is on the folded needle, so two spellings of one name are one scan.
    * Asserted on a **case variant** rather than a byte-identical repeat: `addCandidate`
-   * refuses an overlap either way, so a byte-identical pair produces one finding with or
+   * merges an overlap either way, so a byte-identical pair produces one finding with or
    * without the dedupe and pins nothing.
    */
   it("treats two case spellings of one pattern as one needle", () => {
@@ -979,17 +1060,13 @@ describe("createRedactor", () => {
     expect(result.findings.filter((f) => f.class === "user-pattern")).toHaveLength(1);
   });
 
-  /**
-   * **What longest-first does not close**, asserted so nobody reads the ordering as a
-   * guarantee it is not. Two patterns that interleave rather than contain cannot both
-   * win under `addCandidate`'s first-wins rule. Not a regression — the unordered scan
-   * leaked here too — and registered as `BACKLOG.md` §1 **NEW-25**.
-   */
-  it("leaves the tail of a partially overlapping pattern, which ordering cannot fix", () => {
+  /** NEW-25: under first-wins, `"Acme "` stayed in the clear here. */
+  it("merges two partially overlapping patterns into one redaction", () => {
     const result = createRedactor(deterministicKey, {
       userPatterns: ["Acme Corp", "Corp Holdings"],
     })("x Acme Corp Holdings y");
-    expect(result.text).toBe("x Acme [REDACTED:user-pattern] y");
+    expect(result.text).toBe("x [REDACTED:user-pattern] y");
+    expect(result.findings.map((f) => f.class)).toEqual(["user-pattern"]);
   });
 
   it("still refuses a key shorter than the floor redactText enforces", () => {
