@@ -967,7 +967,11 @@ record.
   exact shape: the lock as an owner `0600` zero-byte single-link regular file, every directory owner
   `0700`, and every child either a bookkeeping path, a retained-evidence path, an ancestor of one, or
   a bootstrap-participant lock/staging entry named by `LifecycleBookkeepingResidueV1`. Shape grants no
-  authority by itself — a lock's liveness is decided only by acquiring it.
+  authority by itself — a lock's liveness is decided only by acquiring it. The residue's participant
+  IDs come from every fresh-init plan whose bytes were admitted, verified or `unverified`, and an
+  `unverified` envelope's tombstones under `state/transactions` and its participants' staging and
+  backup directories join the retained paths, so a fresh init that died after its handoff stays
+  uninstallable in place (NEW-114).
 - **The two present-manifest uninstall variants and their derivation (D24).** `deriveVariant`
   (`apps/cli/src/lifecycle/uninstall.ts`) calls Core's `deriveUninstallLaunchdEvidence` on the
   observed manifest's plist rows, the validated configuration's `automation.lifecycle` record, and

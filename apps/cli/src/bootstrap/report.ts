@@ -124,6 +124,12 @@ export interface BootstrapEvidenceAdmissionV1 {
     readonly journal: BootstrapJournalSelectionV1 | null;
   } | null;
   readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
+  /**
+   * Foundation participant IDs (`tx_fi_…_{f|c}`) of every envelope whose plan bytes were admitted,
+   * verified or not: the plan binds the name, so an unverified fresh init's `_f` staging stays
+   * attributable to it (NEW-114).
+   */
+  readonly bootstrapParticipantIds: readonly string[];
   /** `retainedPaths` with the identity this inspection observed, which a fresh plan records (Spec 2 P8). */
   readonly retainedIdentities: readonly {
     readonly path: CanonicalAbsolutePathV1;
@@ -1319,6 +1325,24 @@ async function inspectPlan(
   };
 }
 
+/**
+ * NEW-114: an unverified envelope skips the retention inventory, which is what put the tombstones
+ * retention left in its Foundation roots into `retainedPaths`. Only the retained namespace is read
+ * here, so a live Foundation journal or staged leaf stays visible to the lifecycle ledger.
+ */
+function foundationTombstonesOf(
+  request: BootstrapEvidenceInspectionRequestV1,
+  plan: FreshV2InitPlanV1,
+): Promise<readonly BootstrapEvidenceGuardedEntryV1[]> {
+  return request.reader.inventoryExactNamespaces([
+    join(request.stateDirectory, "transactions"),
+    ...plan.foundationParticipants.flatMap((participant) => [
+      join(request.productHome, "staging", "transactions", participant.id),
+      join(request.productHome, "backups", "transactions", participant.id),
+    ]),
+  ] as CanonicalAbsolutePathV1[]);
+}
+
 export async function inspectBootstrapEvidenceAdmission(
   outerRequest: BootstrapEvidenceInspectionRequestV1,
 ): Promise<BootstrapEvidenceAdmissionV1> {
@@ -1405,6 +1429,10 @@ export async function inspectBootstrapEvidenceAdmission(
       });
     }
   }
+  for (const result of results) {
+    if (result.plan === null || result.summary.status !== "unverified") continue;
+    for (const candidate of await foundationTombstonesOf(request, result.plan)) allEntries.set(candidate.path, candidate);
+  }
   summaries.sort((left, right) => Buffer.compare(Buffer.from(left.id), Buffer.from(right.id)));
   const counted = sumEntries(allEntries.values());
   /**
@@ -1471,6 +1499,9 @@ export async function inspectBootstrapEvidenceAdmission(
     report,
     active: active.length === 1 ? active[0] ?? null : null,
     retainedPaths: [...allEntries.keys()].sort(),
+    bootstrapParticipantIds: [...new Set(results.flatMap((result) =>
+      result.plan === null ? [] : result.plan.foundationParticipants.map((participant) => participant.id),
+    ))].sort(),
     retainedIdentities: [...allEntries.values()]
       .map((entry) => ({ path: entry.path, dev: entry.dev, ino: entry.ino }))
       .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),

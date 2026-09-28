@@ -244,9 +244,7 @@ describe("the lifecycle composition root", () => {
         parseCanonicalAbsolutePathText("/product/backups/transactions/tx_fi_a_f"),
         parseCanonicalAbsolutePathText("/product/backups/transactions/tx_fi_a_f/0.bak"),
       ],
-      retainedEnvelopes: [
-        { plan: { foundationParticipants: [{ id: "tx_fi_a_f" }, { id: "tx_fi_a_c" }] } },
-      ],
+      bootstrapParticipantIds: ["tx_fi_a_f", "tx_fi_a_c"],
     });
 
     expect([...residue.retainedPaths]).toStrictEqual([

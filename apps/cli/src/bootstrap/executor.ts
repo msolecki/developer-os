@@ -1343,9 +1343,7 @@ export class BootstrapExecutor {
     const roots = lifecycleBookkeepingPaths(paths.home);
     const residue: LifecycleBookkeepingResidueV1 = {
       retainedPaths: new Set(admitted.retainedPaths),
-      bootstrapParticipantIds: new Set(admitted.retainedEnvelopes.flatMap((envelope) =>
-        envelope.plan.foundationParticipants.map((participant) => participant.id),
-      )),
+      bootstrapParticipantIds: new Set(admitted.bootstrapParticipantIds),
     };
     const { observations, present } = await observeBookkeepingTree(
       roots,

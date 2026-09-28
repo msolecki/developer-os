@@ -74,9 +74,7 @@ const COORDINATOR_LEAF_GRAMMAR = /^\.?lc_([0-9a-f]{64})_(?:0|[1-9][0-9]*)[.]/u;
 
 export interface LifecycleResidueEvidenceV1 {
   readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
-  readonly retainedEnvelopes: readonly {
-    readonly plan: { readonly foundationParticipants: readonly { readonly id: string }[] };
-  }[];
+  readonly bootstrapParticipantIds: readonly string[];
 }
 
 export interface CliLifecycleContext {
@@ -159,13 +157,10 @@ export async function coordinatorNonceOf(
 }
 
 export function residueFrom(evidence: LifecycleResidueEvidenceV1): LifecycleBookkeepingResidueV1 {
-  const bootstrapParticipantIds = new Set<string>();
-  for (const envelope of evidence.retainedEnvelopes) {
-    for (const participant of envelope.plan.foundationParticipants) {
-      bootstrapParticipantIds.add(participant.id);
-    }
-  }
-  return { retainedPaths: new Set<string>(evidence.retainedPaths), bootstrapParticipantIds };
+  return {
+    retainedPaths: new Set<string>(evidence.retainedPaths),
+    bootstrapParticipantIds: new Set(evidence.bootstrapParticipantIds),
+  };
 }
 
 const NODE_TRANSACTION_FILE_SYSTEM = {

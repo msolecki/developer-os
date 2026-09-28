@@ -1,7 +1,7 @@
 import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { deriveBootstrapRetentionLocations, encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
 import type { CanonicalJsonValue } from "@developer-os/core";
@@ -9,6 +9,7 @@ import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
 import { runInit } from "../commands/init.js";
 import { runUninstall } from "../commands/uninstall.js";
+import { redactionKeyPath } from "../context.js";
 import { admitInstalledV2Home } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../lifecycle/context.js";
 import { gateManifestAdmission } from "../lifecycle/mutation-gate.js";
@@ -933,6 +934,87 @@ describe("admitted bookkeeping paths carry their identity (Spec 2 P8, NEW-86)", 
     expect(reinstalled.code).toBe(EXIT_CODES.recoveryRequired);
     expect((await nodeFs.lstat(transactions, { bigint: true })).ino).toBe(swapped.ino);
     expect(await exists(fixture.paths.manifestFile)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+/** NEW-114: the process died with its host session after the handoff, before the key, entrypoint and instructions. */
+describe("a fresh init killed after the bootstrap publication and before the instruction step", () => {
+  async function killedAfterBootstrapPublication(name: string): Promise<CommandFixture> {
+    const fixture = await createCommandFixture(name, { bootstrapAvailable: true });
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state !== "available") throw new Error("fixture supplied no bootstrap capability");
+    const initializeFresh = bootstrap.executor.initializeFresh.bind(bootstrap.executor);
+    vi.spyOn(bootstrap.executor, "initializeFresh").mockImplementationOnce(async (request, evidence) => {
+      await initializeFresh(request, evidence);
+      throw new Error("killed before the instruction step");
+    });
+
+    const interrupted = await runInit(fixture.context, ACCEPTED);
+
+    expect(interrupted.ok).toBe(false);
+    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+    await closeBootstrapProcess(fixture);
+    return fixture;
+  }
+
+  async function admissionOf(fixture: CommandFixture): Promise<Awaited<ReturnType<typeof inspectBootstrapEvidenceAdmission>>> {
+    const { paths } = fixture.context;
+    return inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+      productHome: paths.home,
+      stateDirectory: paths.stateDir,
+      initialRoots: [paths.home, paths.stateDir, fixture.context.userHome],
+    }));
+  }
+
+  /** A new inode at the slot path unbinds it from the identity the plan persisted, which reads as `unverified`. */
+  async function unbindJournalSlot(plan: JsonRecord): Promise<void> {
+    const slot = (plan.journalSlots as JsonRecord[])[0];
+    if (slot === undefined) throw new Error("persisted plan has no journal slot");
+    const path = String(slot.path);
+    const replacement = `${path}.new114`;
+    await nodeFs.writeFile(replacement, await nodeFs.readFile(path), { mode: 0o600 });
+    await nodeFs.rename(replacement, path);
+  }
+
+  it("resumes through a second init that finishes the redaction key", async () => {
+    const fixture = await killedAfterBootstrapPublication("bootstrap-killed-before-instructions-resume");
+
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    if (!resumed.ok) throw new Error(JSON.stringify(resumed));
+    expect(resumed.data.schemaVersion).toBe(2);
+    expect(await exists(redactionKeyPath(fixture.paths.stateDir))).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("uninstalls in place while its bootstrap evidence is verified", async () => {
+    const fixture = await killedAfterBootstrapPublication("bootstrap-killed-before-instructions-verified");
+    expect((await admissionOf(fixture)).report.ids.map((summary) => summary.status)).toStrictEqual(["verified"]);
+
+    const removed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+
+    if (!removed.ok) throw new Error(JSON.stringify(removed));
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("uninstalls in place while its bootstrap evidence is unverified, admitting the Foundation _f staging", async () => {
+    const fixture = await killedAfterBootstrapPublication("bootstrap-killed-before-instructions-unverified");
+    const plan = (await persistedPlan(fixture)).value;
+    const forwardId = String(participant(plan, "forward").id);
+    const forwardStaging = join(fixture.paths.stagingDir, "transactions", forwardId);
+    const staged = await nodeFs.readdir(forwardStaging);
+    expect(staged.length).toBeGreaterThan(0);
+    expect(staged.every((name) => name.startsWith(".developer-os-retained."))).toBe(true);
+    await unbindJournalSlot(plan);
+    const admission = await admissionOf(fixture);
+    expect(admission.report.ids.map((summary) => summary.status)).toStrictEqual(["unverified"]);
+    expect(admission.bootstrapParticipantIds).toContain(forwardId);
+    expect(admission.retainedPaths).toEqual(expect.arrayContaining(staged.map((name) => join(forwardStaging, name))));
+
+    const removed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+
+    if (!removed.ok) throw new Error(JSON.stringify(removed));
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+    expect((await nodeFs.readdir(forwardStaging)).toSorted()).toStrictEqual(staged.toSorted());
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
