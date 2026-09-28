@@ -41,7 +41,6 @@ import {
   validateConstructionBijections,
   validateConstructionFileEvidence,
   validateManifestV2,
-  parseUInt64Decimal,
   validateReleaseTrustState,
   validateRollbackRecord,
   validateUpdateExecutionPlan,
@@ -57,6 +56,7 @@ import {
   type LifecycleIdPrefixV1,
   type ExitCode,
   type LowerHexSha256,
+  type ManifestPayloadIdentityV1,
   type ManifestStatePlanV1,
   type OwnerExternalEffectPlanV1,
   type OwnerExternalEffectProcessPolicyV1,
@@ -76,6 +76,7 @@ import {
   type UpdateConstructionPlanV1,
   type UpdateConstructionRetainedRollbackBlobSourceV1,
   type UpdateExecutionPlanV1,
+  type UpdateExpectedPayloadRefV1,
   type UpdateFallbackHandoffV1,
   type UpdateInitialJournalRefV1,
   type UpdateLeafPlanKindV1,
@@ -138,7 +139,7 @@ import { RollbackPayloadSourceExecutor } from "./rollback-source.js";
 import { UpdateRetirementParticipant } from "./retirement-participant.js";
 import { retirementResolvePort } from "./retirement-resolve.js";
 import { CanonicalStateParticipant, constructionPayloadIdentity, participantPlanFileHash, runTargetVerifier, UpdateParticipantJournalStore } from "./state-participant.js";
-import type { CanonicalStateStepV1 } from "./state-participant.js";
+import type { CanonicalStateStepV1, UpdatePayloadIdentityResolverV1 } from "./state-participant.js";
 
 type StepOf<TKind extends UpdateLifecycleCoordinatorStepV1["kind"]> = Extract<UpdateLifecycleCoordinatorStepV1, { readonly kind: TKind }>;
 
@@ -446,7 +447,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
   const transitionalManifest = constructionPlan === null || transitional === null ? null : manifestValueOf(constructionPlan, transitional);
   const retired = transitionalManifest === null || retirementPlan === null ? [] : transitionalManifest.artifacts.filter((row) => retirementPlan.entries.some((entry) => row.path === entry.root || row.path.startsWith(`${entry.root}/`)));
   const ownerPlans = [...ownerSteps.values()].map((step) => step.plan);
-  const manifestParticipant = manifestParticipantOf(dispatch, ownerPlans);
+  const manifestParticipant = await manifestParticipantOf(dispatch, ownerPlans, [transitional, terminal].filter((plan) => plan !== null), payloadIdentity);
   const manifestHandlers = transitional === null || terminal === null
     ? { manifest: { apply: () => thirdState("update_manifest_plan_absent"), observe: () => thirdState("update_manifest_plan_absent"), compensate: () => thirdState("update_manifest_plan_absent") } }
     : manifestStepHandlers({ transitional, terminal }, retired, {
@@ -669,9 +670,21 @@ function manifestValueOf(construction: UpdateConstructionPlanV1, plan: ManifestS
   return decodeCanonicalJson(new TextEncoder().encode(row.role.source.value), MAX_MANIFEST_BYTES) as unknown as InstallationManifestV2;
 }
 
-function manifestParticipantOf(dispatch: DispatchContextV1, ownerPlans: readonly OwnerUpdatePlanV1[]): (plan: ManifestStatePlanV1) => ManifestStateParticipant {
+/** The codec asks synchronously, so every manifest plan's `update_expected` payload inode is read from its construction evidence up front. */
+export async function manifestPayloadIdentities(plans: readonly ManifestStatePlanV1[], resolve: UpdatePayloadIdentityResolverV1): Promise<(ref: UpdateExpectedPayloadRefV1) => ManifestPayloadIdentityV1> {
+  const resolved = new Map<number, ManifestPayloadIdentityV1>();
+  for (const plan of plans) {
+    for (const state of [plan.before, plan.after]) {
+      if (state.state !== "present" || state.bytes?.kind !== "update_expected" || resolved.has(state.bytes.ordinal)) continue;
+      resolved.set(state.bytes.ordinal, await resolve(state.bytes));
+    }
+  }
+  return (ref) => resolved.get(ref.ordinal) ?? thirdState("update_manifest_payload_row", ref.path);
+}
+
+async function manifestParticipantOf(dispatch: DispatchContextV1, ownerPlans: readonly OwnerUpdatePlanV1[], plans: readonly ManifestStatePlanV1[], payloadIdentity: UpdatePayloadIdentityResolverV1): Promise<(plan: ManifestStatePlanV1) => ManifestStateParticipant> {
   const { lifecycle, context, productHome } = dispatch;
-  const construction = dispatch.reopened.construction;
+  const updatePayloadIdentity = await manifestPayloadIdentities(plans, payloadIdentity);
   const identityOf = async (path: CanonicalAbsolutePathV1, expected: ManifestFileIdentityV1): Promise<LifecycleGuardedEntryV1> => {
     const entry = await lifecycle.fs.lstat(path);
     if (entry?.kind !== "regular_file" || entry.dev !== expected.dev || entry.ino !== expected.ino || entry.size !== expected.size || entry.ownerUid !== expected.ownerUid) return thirdState("manifest_bytes_identity", path);
@@ -694,17 +707,7 @@ function manifestParticipantOf(dispatch: DispatchContextV1, ownerPlans: readonly
         coordinatorId: plan.envelope.id as LifecycleCoordinatorIdV1,
         foundationTransactionIds: terminalPlan ? [] : updateManifestFoundationIds(ownerPlans),
         externalEffects: plan.bindings.externalEffects,
-        /**
-         * The codec asks synchronously and, for `construction_evidence`, only requires the payload
-         * to be this construction's row; the participant's guarded move re-proves the actual inode.
-         * ponytail: a synchronous evidence reader would let the codec compare the inode itself.
-         */
-        updatePayloadIdentity: (ref) => {
-          if (construction === null) return thirdState("update_construction_plan_absent", ref.path);
-          const row = construction.files[ref.ordinal];
-          if (row === undefined || row.path !== ref.path || row.sha256 !== ref.hash) thirdState("update_manifest_payload_row", ref.path);
-          return { dev: parseUInt64Decimal("0"), ino: parseUInt64Decimal("0") };
-        },
+        updatePayloadIdentity,
       }),
       uid: lifecycle.effectiveUid,
       manifestAdmission: gateManifestAdmission(context),

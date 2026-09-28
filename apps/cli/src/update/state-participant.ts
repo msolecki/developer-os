@@ -76,7 +76,7 @@ export interface UpdatePayloadIdentityV1 {
  * Resolves a planned postimage payload to the device/inode its construction row recorded. A plan
  * never carries a postimage inode (D60): it is written before its payload exists.
  */
-export type UpdatePayloadIdentityResolverV1 = (payload: Pick<StatePayloadRefV1, "coordinatorId" | "ordinal" | "path" | "hash" | "bytes" | "mode">) => Promise<UpdatePayloadIdentityV1>;
+export type UpdatePayloadIdentityResolverV1 = (payload: Pick<StatePayloadRefV1, "coordinatorId" | "ordinal" | "hash" | "bytes" | "mode"> & { readonly path: CanonicalAbsolutePathV1 }) => Promise<UpdatePayloadIdentityV1>;
 
 /**
  * The production resolver: the payload ref must equal its `state_after` construction row, and the
