@@ -4,9 +4,17 @@ import { dirname, isAbsolute, join, normalize } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
 import {
+  admitPosixRootOwned,
   canonicalizePlannedPath,
+  recheckSystemExecutable,
+  type AdmittedSystemExecutableV1,
   type ProcessRunner,
+  type SystemExecutableIdV1,
+  type SystemExecutableRowV1,
+  type SystemPathInspectorV1,
 } from "@developer-os/security";
+
+import { DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath } from "./system-executables.js";
 
 import type {
   AgentDiscovery,
@@ -90,6 +98,8 @@ export interface MacOsPlatformAdapterOptions {
   /** A link's target, `null` when the path is not a link, and a rejection otherwise. */
   readonly readlink?: (path: string) => Promise<string | null>;
   readonly currentUid?: () => number;
+  /** The no-follow observer `posix_root_owned` admission reads; injected for a fake host. */
+  readonly inspectSystemPath?: SystemPathInspectorV1;
 }
 
 interface SupportedPlatform {
@@ -175,6 +185,7 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
   readonly #stat: (path: string) => Promise<{ uid: number; mode: number }>;
   readonly #readlink: (path: string) => Promise<string | null>;
   readonly #currentUid: () => number;
+  readonly #inspectSystemPath: SystemPathInspectorV1;
 
   constructor(options: MacOsPlatformAdapterOptions) {
     this.#environment = options.environment ?? nodeEnvironment();
@@ -191,6 +202,7 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
       });
     this.#readlink = options.readlink ?? readlinkOrNull;
     this.#currentUid = options.currentUid ?? (() => process.getuid?.() ?? -1);
+    this.#inspectSystemPath = options.inspectSystemPath ?? inspectSystemPath;
   }
 
   async inspect(): Promise<PlatformFacts> {
@@ -414,6 +426,24 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
         );
       }
     }
+  }
+
+  systemExecutable(id: SystemExecutableIdV1): SystemExecutableRowV1 {
+    const row = DARWIN_SYSTEM_EXECUTABLES.find((candidate) => candidate.id === id);
+    if (row === undefined) {
+      throw new MacOsPlatformInputError(`No darwin system executable row is named ${id}`);
+    }
+    return row;
+  }
+
+  async admitSystemExecutable(id: SystemExecutableIdV1): Promise<AdmittedSystemExecutableV1> {
+    this.#assertDarwin();
+    return admitPosixRootOwned(this.systemExecutable(id), this.#inspectSystemPath);
+  }
+
+  async recheckSystemExecutable(admitted: AdmittedSystemExecutableV1): Promise<void> {
+    this.#assertDarwin();
+    await recheckSystemExecutable(this.systemExecutable(admitted.id), this.#inspectSystemPath, admitted);
   }
 
   productStateRoot(userHome: string): string {

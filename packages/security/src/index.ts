@@ -36,6 +36,19 @@ export type {
   SupervisedTerminationV1,
 } from "./supervised-process.js";
 export type { NormalizedShellCommand } from "./shell-command.js";
+export {
+  admitPosixRootOwned,
+  recheckSystemExecutable,
+  SystemExecutableRefusalError,
+} from "./system-executables.js";
+export type {
+  AdmittedSystemExecutableV1,
+  SystemExecutableIdV1,
+  SystemExecutableRowV1,
+  SystemPathInspectorV1,
+  SystemPathObservationV1,
+  SystemPlatformV1,
+} from "./system-executables.js";
 export type {
   CommandPolicy,
   ProcessRequest,

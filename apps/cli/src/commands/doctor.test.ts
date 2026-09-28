@@ -1099,6 +1099,9 @@ describe("discovery that throws for one agent", () => {
         name === agent
           ? Promise.reject(REFUSED)
           : real.discoverExecutable(name),
+      systemExecutable: (id) => real.systemExecutable(id),
+      admitSystemExecutable: (id) => real.admitSystemExecutable(id),
+      recheckSystemExecutable: (admitted) => real.recheckSystemExecutable(admitted),
       productStateRoot: (home) => real.productStateRoot(home),
       proposedBrainRoot: (home) => real.proposedBrainRoot(home),
     };
@@ -1631,6 +1634,15 @@ describe("the scheduled-safe doctor profile", () => {
       discoverExecutable: (name) => {
         spawns.push(`platform.discoverExecutable:${name}`);
         return context.platform.discoverExecutable(name);
+      },
+      systemExecutable: (id) => context.platform.systemExecutable(id),
+      admitSystemExecutable: (id) => {
+        spawns.push(`platform.admitSystemExecutable:${id}`);
+        return context.platform.admitSystemExecutable(id);
+      },
+      recheckSystemExecutable: (admitted) => {
+        spawns.push(`platform.recheckSystemExecutable:${admitted.id}`);
+        return context.platform.recheckSystemExecutable(admitted);
       },
       productStateRoot: (home) => context.platform.productStateRoot(home),
       proposedBrainRoot: (home) => context.platform.proposedBrainRoot(home),

@@ -9,6 +9,7 @@ export type {
   MacOsPlatformAdapterOptions,
   MacOsPlatformEnvironment,
 } from "./macos.js";
+export { DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath } from "./system-executables.js";
 export type {
   AgentDiscovery,
   AgentName,

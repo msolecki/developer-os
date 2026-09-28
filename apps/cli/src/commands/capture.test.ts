@@ -180,6 +180,9 @@ function countingPlatform(
       asked.push(name);
       return inner.discoverExecutable(name);
     },
+    systemExecutable: (id) => inner.systemExecutable(id),
+    admitSystemExecutable: (id) => inner.admitSystemExecutable(id),
+    recheckSystemExecutable: (admitted) => inner.recheckSystemExecutable(admitted),
     productStateRoot: (userHome: string) => inner.productStateRoot(userHome),
     proposedBrainRoot: (userHome: string) => inner.proposedBrainRoot(userHome),
   };

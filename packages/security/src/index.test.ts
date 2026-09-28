@@ -84,6 +84,9 @@ describe("the package's public door", () => {
         "SanitizedLocalRemoteHelper",
         "sanitizedGitEnvironment",
         "TargetVerifierSupervisor",
+        "admitPosixRootOwned",
+        "recheckSystemExecutable",
+        "SystemExecutableRefusalError",
       ].sort(),
     );
   });

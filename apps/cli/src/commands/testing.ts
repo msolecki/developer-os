@@ -32,12 +32,19 @@ import type {
   RenameAtxRunner,
 } from "@developer-os/platform-macos";
 import {
+  DARWIN_SYSTEM_EXECUTABLES,
   MacOsRetainedRename,
   MacOsStableLockProvider,
   MacOsTransactionLockProvider,
 } from "@developer-os/platform-macos";
 import { ProtectedPathPolicy } from "@developer-os/security";
-import type { ProcessResult, ProcessRunner } from "@developer-os/security";
+import type {
+  AdmittedSystemExecutableV1,
+  ProcessResult,
+  ProcessRunner,
+  SystemExecutableIdV1,
+  SystemExecutableRowV1,
+} from "@developer-os/security";
 
 import {
   BootstrapExecutor,
@@ -279,6 +286,21 @@ export class FakePlatformAdapter implements PlatformAdapter {
     return Promise.resolve(
       configured ?? { name, installed: false, executablePath: null, version: null },
     );
+  }
+
+  systemExecutable(id: SystemExecutableIdV1): SystemExecutableRowV1 {
+    const row = DARWIN_SYSTEM_EXECUTABLES.find((candidate) => candidate.id === id);
+    if (row === undefined) throw new Error(`no darwin system executable row ${id}`);
+    return row;
+  }
+
+  /** No command test admits a system executable through the platform yet; Git and launchd admit directly. */
+  admitSystemExecutable(): Promise<AdmittedSystemExecutableV1> {
+    return Promise.reject(new Error("FakePlatformAdapter does not admit system executables"));
+  }
+
+  recheckSystemExecutable(): Promise<void> {
+    return Promise.reject(new Error("FakePlatformAdapter does not admit system executables"));
   }
 
   productStateRoot(userHome: string): string {
