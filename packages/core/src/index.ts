@@ -197,6 +197,7 @@ export type { HookFiringRecordsShapeV1, HookFiringRecordV1 } from "./hooks/firin
 export {
   CODEX_INGEST_AUTH_LINK,
   CODEX_INGEST_HOME_RELATIVE_PATH,
+  CODEX_INGEST_HOME_REPAIR,
   inspectCodexIngestHomeShape,
 } from "./lifecycle/codex-ingest-home.js";
 export type { CodexIngestHomeEntryV1, CodexIngestHomeShapeV1 } from "./lifecycle/codex-ingest-home.js";

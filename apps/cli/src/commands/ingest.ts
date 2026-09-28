@@ -7,6 +7,7 @@ import { getuid } from "node:process";
 import {
   CODEX_INGEST_AUTH_LINK,
   CODEX_INGEST_HOME_RELATIVE_PATH,
+  CODEX_INGEST_HOME_REPAIR,
   containsPath,
   EXIT_CODES,
   inspectCodexIngestHomeShape,
@@ -921,7 +922,7 @@ function codexIngestHomeRefusal(path: string, complaint: string): IngestRefusal 
     EXIT_CODES.operationalFailure,
     `the isolated Codex home this run gives the agent ${complaint}`,
     [path],
-    "if the path this run names is a regular auth.json, Codex may have refreshed your credential there: move it over the auth.json in your own Codex home, then remove the run directory that held it; otherwise remove the path this run names, and ingest recreates what it needs",
+    CODEX_INGEST_HOME_REPAIR,
   );
 }
 
@@ -993,7 +994,14 @@ export async function prepareCodexIngestHome(context: CliContext): Promise<strin
         : "holds an entry it never keeps",
     );
   }
-  for (const name of runs) await admitSiblingRun(context, join(home, name), effectiveUid);
+  for (const name of runs) {
+    const sibling = join(home, name);
+    if (await admitSiblingRun(context, sibling, effectiveUid)) {
+      context.io.stderr(
+        `warning: ${renderPath(sibling)} belongs to another ingest; if none is running, an interrupted one left it with that run's Codex state, and uninstall and init refuse until it is removed: remove it`,
+      );
+    }
+  }
 
   const present = await context.fs.stat(credential).then(
     () => true,
@@ -1022,9 +1030,10 @@ export async function prepareCodexIngestHome(context: CliContext): Promise<strin
 
 /**
  * NEW-105: a sibling run directory may belong to an ingest running right now, so only what would
- * make it unsafe is checked. A sibling that vanished between `readdir` and `lstat` finished its run.
+ * make it unsafe is checked. A sibling that vanished between `readdir` and `lstat` finished its run,
+ * and is reported absent.
  */
-async function admitSiblingRun(context: CliContext, path: string, effectiveUid: number): Promise<void> {
+async function admitSiblingRun(context: CliContext, path: string, effectiveUid: number): Promise<boolean> {
   const absent = (error: unknown): null => {
     if (errnoCode(error) === "ENOENT") return null;
     throw error;
@@ -1037,13 +1046,14 @@ async function admitSiblingRun(context: CliContext, path: string, effectiveUid: 
   } catch (error) {
     throw codexIngestHomeRefusal(path, `could not be prepared (${errnoCode(error)})`);
   }
-  if (stats === null) return;
+  if (stats === null) return false;
   if (!stats.isDirectory() || stats.isSymbolicLink() || stats.uid !== effectiveUid) {
     throw codexIngestHomeRefusal(path, "holds an entry it never keeps");
   }
   if (auth !== null && !auth.isSymbolicLink()) {
     throw codexIngestHomeRefusal(join(path, CODEX_INGEST_AUTH_LINK), "holds an entry it never keeps");
   }
+  return true;
 }
 
 /**

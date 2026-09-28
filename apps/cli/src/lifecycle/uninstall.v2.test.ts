@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CODEX_INGEST_HOME_REPAIR,
   EXIT_CODES,
   MANIFEST_ANCHOR_RELATIVE_PATH,
   SCHEDULED_JOB_IDS,
@@ -828,6 +829,22 @@ describe("V2 uninstall and D52's state/codex-ingest-home", () => {
 
     expect(await allocatorCounter(fixture)).toBe(before);
     expect(await nodeFs.readFile(join(home, "auth.json"), "utf8")).toBe("rotated\n");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("names the repair when an interrupted ingest left a run directory", async () => {
+    const fixture = await initializedV2Fixture("uninstall-codex-ingest-home-abandoned-run");
+    const abandoned = join(fixture.paths.stateDir, "codex-ingest-home", "run-a1b2c3");
+    await nodeFs.mkdir(abandoned, { recursive: true, mode: 0o700 });
+    await nodeFs.chmod(join(abandoned, ".."), 0o700);
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("codex_ingest_home_shape");
+    expect(result.error.paths).toStrictEqual([abandoned]);
+    expect(result.error.recovery).toBe(CODEX_INGEST_HOME_REPAIR);
+    expect(await exists(abandoned)).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 

@@ -3133,6 +3133,27 @@ describe("ingest's isolated Codex home (D52)", () => {
     expect((await nodeFs.readdir(sibling)).sort()).toStrictEqual(["auth.json", "state_5.sqlite"]);
   });
 
+  /** An interrupted run leaves its sibling for ever; the user hears of it, and it is still never deleted. */
+  it("warns on stderr about a sibling run's home and leaves it in place", async () => {
+    const fixture = await installedFixture("ingest-codex-home-sibling-warning");
+    const codexHome = await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    const sibling = join(home, "run-crash1");
+    await nodeFs.mkdir(sibling, { recursive: true, mode: 0o700 });
+    await nodeFs.chmod(home, 0o700);
+    await nodeFs.symlink(join(codexHome, "auth.json"), join(sibling, "auth.json"));
+    const seeded = await fixture.seedAccepted("an observation beside an abandoned run");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+    const warning = fixture.io.err.find((line) => line.includes("run-crash1"));
+    expect(warning).toContain("belongs to another ingest");
+    expect(warning).toContain("remove it");
+    expect(await nodeFs.readdir(home)).toStrictEqual(["run-crash1"]);
+  });
+
   /** A pre-NEW-105 install left the link at the top level; it is unlinked, its target untouched. */
   it("removes a legacy top-level credential link without following it", async () => {
     const fixture = await installedFixture("ingest-codex-home-legacy-link");

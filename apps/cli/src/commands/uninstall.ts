@@ -1,6 +1,7 @@
 import { isAbsolute, join } from "node:path";
 
 import {
+  CODEX_INGEST_HOME_REPAIR,
   containsPath,
   containsPathLoosely,
   detectDrift,
@@ -8,6 +9,7 @@ import {
   failure,
   hashBytes,
   LifecycleRecoveryRefusalError,
+  LifecycleRecoveryRequiredError,
   ManifestUnsupportedArtifactError,
   success,
   validateChangePlan,
@@ -950,6 +952,9 @@ export async function runUninstall(
       error instanceof InstructionRefusal
         ? error
         : null;
+    const codexIngestHome =
+      error instanceof LifecycleRecoveryRequiredError && error.reason === "codex_ingest_home_shape" ? error : null;
+    if (codexIngestHome !== null) return failureFrom(context, error, codexIngestHome.paths, CODEX_INGEST_HOME_REPAIR);
     const paths = refusal?.paths ?? (error instanceof CodexRegistrationFailedError ? error.paths : []);
     const evidence = error instanceof InstructionRefusal && error.evidence !== null ? { evidence: error.evidence } : undefined;
     return failureFrom(context, error, paths, refusal?.recovery, evidence);

@@ -10,6 +10,10 @@
 export const CODEX_INGEST_HOME_RELATIVE_PATH = "state/codex-ingest-home";
 export const CODEX_INGEST_AUTH_LINK = "auth.json";
 
+/** The one repair every `codex_ingest_home_shape` refusal names: ingest's, uninstall's and init's. */
+export const CODEX_INGEST_HOME_REPAIR =
+  "if the named path is a regular auth.json, Codex may have refreshed your credential there: move it over the auth.json in your own Codex home, then remove the run directory that held it; otherwise remove the named path (a run-* directory is left by an interrupted ingest), and ingest recreates what it needs";
+
 /** Structural, so a guarded entry and an `lstat` projection both fit. */
 export interface CodexIngestHomeEntryV1 {
   readonly kind: string;

@@ -7,6 +7,7 @@
  * with D20's archive guidance rather than deleting a key beside evidence nobody has read.
  */
 import {
+  CODEX_INGEST_HOME_REPAIR,
   EXIT_CODES,
   LifecycleRecoveryRequiredError,
   inspectAbsentManifestProductHome,
@@ -187,7 +188,7 @@ export async function runAbsentManifestUninstall(
         EXIT_CODES.recoveryRequired,
         error.message,
         error.paths,
-        ABSENT_MANIFEST_ARCHIVE_RECOVERY,
+        error.reason === "codex_ingest_home_shape" ? CODEX_INGEST_HOME_REPAIR : ABSENT_MANIFEST_ARCHIVE_RECOVERY,
       );
     }
     throw error;

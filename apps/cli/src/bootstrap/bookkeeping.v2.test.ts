@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { EXIT_CODES, lifecycleBookkeepingPaths } from "@developer-os/core";
+import { CODEX_INGEST_HOME_REPAIR, EXIT_CODES, lifecycleBookkeepingPaths } from "@developer-os/core";
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
 import { runInit } from "../commands/init.js";
@@ -186,6 +186,21 @@ describe("the lifecycle bookkeeping set on a real V2 home", () => {
     expect(refused.message).toContain("bookkeeping residue of an unadmitted shape");
     expect(refused.message).toContain(join("backups", "unrelated.txt"));
     expect(unrelated.endsWith(join("backups", "unrelated.txt"))).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses a run directory an interrupted ingest left, naming it and the repair", async () => {
+    const fixture = await createCommandFixture("bootstrap-codex-ingest-abandoned-run", { bootstrapAvailable: true });
+    await plantProductHome(fixture);
+    const codexIngestHome = join(fixture.paths.stateDir, "codex-ingest-home");
+    await nodeFs.mkdir(join(codexIngestHome, "run-a1b2c3"), { recursive: true, mode: 0o700 });
+    await nodeFs.chmod(codexIngestHome, 0o700);
+
+    const refused = await refusedInit(fixture);
+
+    expect(refused.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(refused.message).toContain("codex_ingest_home_shape");
+    expect(refused.message).toContain(join("codex-ingest-home", "run-a1b2c3"));
+    expect(refused.message).toContain(CODEX_INGEST_HOME_REPAIR);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses a planted logs directory, which is not bookkeeping and holds no retained evidence", async () => {

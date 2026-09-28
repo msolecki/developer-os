@@ -21,6 +21,7 @@ import {
   CODEX_INGEST_HOME_RELATIVE_PATH,
   HOOK_FIRING_RECORDS_RELATIVE_PATH,
   inspectCodexIngestHomeShape,
+  CODEX_INGEST_HOME_REPAIR,
   inspectHookFiringRecordsShape,
   inspectLifecycleBookkeepingShape,
   lifecycleBookkeepingPaths,
@@ -1322,7 +1323,7 @@ export class BootstrapExecutor {
         throw new FreshBootstrapError(
           EXIT_CODES.recoveryRequired,
           `product home contains a Codex ingest home of an unadmitted shape (codex_ingest_home_shape): ${
-            shape.offendingName === null ? codexIngestHome : join(codexIngestHome, shape.offendingName)}`,
+            shape.offendingName === null ? codexIngestHome : join(codexIngestHome, shape.offendingName)}; ${CODEX_INGEST_HOME_REPAIR}`,
         );
       }
       result.set(codexIngestHome, codexIngestStats);
