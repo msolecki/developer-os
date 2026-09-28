@@ -3,7 +3,21 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { EXIT_CODES, parseStableSemver } from "@developer-os/core";
+import {
+  encodeCanonicalJson,
+  EXIT_CODES,
+  MAXIMUM_LEAF_PLAN_BYTES,
+  MAXIMUM_RETIREMENT_INVENTORY_LEAVES,
+  MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
+  MAXIMUM_ROLLBACK_PAYLOAD_ENTRIES,
+  MAXIMUM_UPDATE_RETIREMENT_LEAVES,
+  parseCanonicalAbsolutePathText,
+  parseStableSemver,
+  rollbackPayloadBlobPath,
+  updateCoordinatorStagingRoot,
+  validateRollbackPayloadInventory,
+  validateUpdateTerminalRetirementPlan,
+} from "@developer-os/core";
 import { runUpdate } from "@developer-os/cli/dist/commands/update/index.js";
 import { exists, removeCommandFixtures } from "@developer-os/cli/dist/commands/testing.js";
 import { recoverUpdate } from "@developer-os/cli/dist/update/apply.js";
@@ -173,6 +187,78 @@ describe("a verifier that rejects the target (Spec 2 §9.4, D72 P7(b), Review Fo
     }
     expect(point).toBeGreaterThan(1);
   }, SWEEP_TIMEOUT_MS);
+});
+
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+const PAYLOAD_ID = `rb_${"e".repeat(64)}_3`;
+
+function payloadInventory(entries: number): unknown {
+  return {
+    schemaVersion: 1,
+    payloadId: PAYLOAD_ID,
+    rollbackBindingHash: "a".repeat(64),
+    inversePlanHash: "b".repeat(64),
+    entries: Array.from({ length: entries }, (_, ordinal) => ({ ordinal, path: rollbackPayloadBlobPath(ordinal), role: "owner_preimage", bytes: 0, sha256: EMPTY_SHA256 })),
+    aggregateBytes: 0,
+  };
+}
+
+/** The canonical inventory length for `entries` smallest rows, computed rather than encoded per candidate. */
+function inventoryBytes(entries: number): number {
+  const encoded = (value: unknown): number => Buffer.byteLength(encodeCanonicalJson(value as never));
+  // A row differs from row 0 only in its ordinal's decimal digits; the blob path is fixed-width.
+  const rowZero = encoded({ ordinal: 0, path: rollbackPayloadBlobPath(0), role: "owner_preimage", bytes: 0, sha256: EMPTY_SHA256 }) - 1;
+  let total = encoded(payloadInventory(0));
+  for (let ordinal = 0; ordinal < entries; ordinal += 1) total += rowZero + String(ordinal).length - 1 + (ordinal === 0 ? 0 : 1);
+  return total;
+}
+
+/**
+ * Spec 2 §12 and amendment A6: "exact maximum" means the maximum admissible under both the
+ * cardinality and the byte bound, and the first row over either. The declared retirement
+ * cardinality counts 1,000,000 payload entries, which no 64-MiB inventory can hold, so the
+ * feasible payload maximum is derived here from the byte bound instead of trusted.
+ */
+describe("the rollback payload's feasible maximum, under both bounds (A6)", () => {
+  it("derives the largest inventory the 64 MiB byte bound admits, admits it, and refuses one entry more", () => {
+    let feasible = 0;
+    let step = 1 << 20;
+    while (step > 0) {
+      if (feasible + step <= MAXIMUM_ROLLBACK_PAYLOAD_ENTRIES && inventoryBytes(feasible + step) <= MAXIMUM_ROLLBACK_DOCUMENT_BYTES) feasible += step;
+      step >>= 1;
+    }
+
+    // The byte bound binds first: the declared cardinality maximum cannot be written.
+    expect(feasible).toBeGreaterThan(0);
+    expect(feasible).toBeLessThan(MAXIMUM_ROLLBACK_PAYLOAD_ENTRIES);
+    expect(validateRollbackPayloadInventory(payloadInventory(feasible)).entries).toHaveLength(feasible);
+    expect(() => validateRollbackPayloadInventory(payloadInventory(feasible + 1))).toThrow(/64 MiB/u);
+
+    // So the largest retirement tree any update can meet is well inside the declared leaf cap.
+    const payloadLeaves = feasible + 7;
+    expect(payloadLeaves).toBeLessThan(MAXIMUM_RETIREMENT_INVENTORY_LEAVES);
+    const coordinatorId = `lc_${"f".repeat(64)}_9`;
+    const home = parseCanonicalAbsolutePathText("/synthetic/user/.developer-os");
+    const entries = [
+      { kind: "bundle", root: `${home}/releases/1.0.0/darwin-arm64`, inventoryHash: "c".repeat(64), leafCount: 200_001 },
+      { kind: "metadata", root: `${home}/state/release-metadata`, inventoryHash: "d".repeat(64), leafCount: 3 },
+      { kind: "rollback_payload", root: `${home}/rollback/${PAYLOAD_ID}`, inventoryHash: "e".repeat(64), leafCount: payloadLeaves },
+      { kind: "rollback_record", root: `${home}/state/update-rollback.json`, inventoryHash: "f".repeat(64), leafCount: 1 },
+    ];
+    const maximumLeaves = entries.reduce((sum, entry) => sum + entry.leafCount, 0);
+    expect(maximumLeaves).toBeLessThan(MAXIMUM_UPDATE_RETIREMENT_LEAVES);
+    const plan = validateUpdateTerminalRetirementPlan({
+      schemaVersion: 1,
+      id: "retirement",
+      coordinatorId,
+      set: "prior_rollback",
+      transitionalManifestHash: "9".repeat(64),
+      entries,
+      maximumLeaves,
+      maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
+    }, updateCoordinatorStagingRoot(home, coordinatorId as never));
+    expect(plan.maximumLeaves).toBe(maximumLeaves);
+  });
 });
 
 describe("the ephemeral reservations (D72 P5, Review Focus 2)", () => {
