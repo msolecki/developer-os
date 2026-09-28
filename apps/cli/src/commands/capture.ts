@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { cwd as processCwd } from "node:process";
 
-import { containsPath, EXIT_CODES, success } from "@developer-os/core";
+import { containsPath, EXIT_CODES, parseCanonicalAbsolutePathText, success } from "@developer-os/core";
 import type {
   CliResult,
   DeveloperOsConfigV1,
@@ -37,6 +37,12 @@ import {
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
+import {
+  PROBE_FILE_SYSTEM,
+  pinProbeExecutable,
+  recheckProbeExecutable,
+} from "../pinned-executable.js";
+import type { ProbeFileSystemV1 } from "../pinned-executable.js";
 import { slugify } from "../project-slug.js";
 import {
   fingerprintDirectory,
@@ -99,6 +105,8 @@ export interface CaptureDependencies {
   readonly detect: (
     env: Readonly<Record<string, string | undefined>>,
   ) => string;
+  /** The host the version probe's executable is admitted and rechecked against; absent means the real one. */
+  readonly executables?: ProbeFileSystemV1;
 }
 
 const DEFAULT_DEPENDENCIES: CaptureDependencies = {
@@ -202,12 +210,15 @@ function isAgentName(agent: string): agent is AgentName {
  * 2026-08-15 and that date only the first was live, because NEW-21 had not
  * observed the second.
  *
- * **What it spawns is a PATH-resolved binary, and this command now pays the check
- * that makes it safe to.** `PlatformAdapter`'s own type says whoever executes a
- * discovered binary owes an owner and mode check first; no caller paid it until
- * 2026-08-17, and this command had joined the offenders on 2026-08-15 when the
- * Claude row made the path live. `CLAUDECODE` is trivially settable, so the
- * trigger was never a privilege an attacker had to earn.
+ * **What it spawns is the PATH-selected binary's real path, pinned and rechecked
+ * (BACKLOG NEW-46).** `CLAUDECODE` is trivially settable, so the trigger was never a
+ * privilege an attacker had to earn. The selection is resolved once through
+ * `admitOwnedExecutable` (D72 Q2-A's ownership and ancestor rule), pinned by
+ * `{dev, ino, mode, size, ctimeNs}` rather than a hash so a >150 MB vendor binary is
+ * never read (D73 addendum), and re-resolved inside the runner immediately before the
+ * spawn: a swap or in-place rewrite in between changes `ctime` and records `unknown`.
+ * A binary the same uid planted in a directory only that uid can write still passes;
+ * `threat-model.md` §5.11 records that residual.
  *
  * **The refusal is swallowed here and fatal in `ingest`, and the asymmetry is the
  * point.** Spec §5.4 records an agent this command cannot identify as `unknown`,
@@ -231,6 +242,7 @@ function isAgentName(agent: string): agent is AgentName {
 export async function discoverSourceAgent(
   context: CliContext,
   agent: string,
+  executables: ProbeFileSystemV1 = PROBE_FILE_SYSTEM,
 ): Promise<SourceAgent> {
   if (!isAgentName(agent)) return UNKNOWN_SOURCE;
 
@@ -248,10 +260,18 @@ export async function discoverSourceAgent(
      * version, and failing the whole capture over a `--version` it declined to run would
      * cost the user their note for nothing.
      */
-    await context.platform.assertTrustedExecutable(discovery.executablePath);
+    const pinned = await pinProbeExecutable(
+      parseCanonicalAbsolutePathText(discovery.executablePath),
+      executables,
+    );
     const installation = await VERSION_PROBES[agent]({
-      runner: context.runner,
-      executable: discovery.executablePath,
+      runner: {
+        run: async (request) => {
+          await recheckProbeExecutable(pinned, executables);
+          return context.runner.run(request);
+        },
+      },
+      executable: pinned.canonicalPath,
     });
     return installation === null
       ? UNKNOWN_SOURCE
@@ -579,6 +599,7 @@ export async function runCapture(
     const source = await discoverSourceAgent(
       context,
       dependencies.detect(context.env),
+      dependencies.executables,
     );
 
     const built = buildCapture({

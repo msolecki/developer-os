@@ -728,21 +728,31 @@ frequently run command, triggered by a `CLAUDECODE=1` any wrapper or CI step can
 **The trigger surface doubled on 2026-08-20 and got cheaper.** NEW-21 added Codex's detection row, so
 `capture` now spawns a version probe inside a Codex session too — and that row matches on
 **presence**, so `CODEX_THREAD_ID=anything` arms it where Claude's row at least wants the literal `1`.
-Neither was ever a privilege an attacker had to earn. `assertTrustedExecutable` runs before the spawn
-on that path (`apps/cli/src/commands/capture.ts:251`), and it is what makes the widening tolerable.
+Neither was ever a privilege an attacker had to earn.
 
-**It is a partial mitigation, and this paragraph is the one a future reader will rely on, so it says
-which part.** The check refuses a chain owned by neither the user nor root, any other-writable
-directory, and a group-writable one the user does not own. It does **not** refuse a binary the *same
-uid* planted in a directory that uid owns and reached through a prepended `PATH` — that chain passes
-every test it makes. And anyone who can export `CODEX_THREAD_ID` into a session can usually export
-`PATH` into the same one. So what the detection row widened is the set of sessions in which a
-same-uid `PATH` attack gets a spawn to ride, and the check narrows *who* can plant the binary rather
-than closing the path. Registered as `BACKLOG.md` §1 NEW-46.
+**`capture`'s probe is pinned and rechecked (`BACKLOG.md` §1 NEW-46, D72 Q2-A with the D73
+addendum).** `discoverSourceAgent` resolves the `PATH`-selected binary once to its real path through
+`admitOwnedExecutable` (`apps/cli/src/pinned-executable.ts`, shared with the Codex refresh): the target
+must be a regular file with owner-execute, owned by the user or root, with no group/other write and no
+setuid, setgid or sticky bit, and every ancestor of the real path up to `/` a directory owned by the
+user or root with no group/other write — stricter than `assertTrustedExecutable`, which accepts a
+group-writable directory the user owns. It pins `{dev, ino, mode, size, ctimeNs}` rather than a
+hash, so a vendor binary larger than `inspectSystemPath`'s 64 MiB bound is never read, and the runner
+re-admits the real path and compares every pinned field immediately before the spawn, which goes to
+the real path rather than the link. Any content or metadata write moves `ctime`, so a swap or in-place
+rewrite between resolve and spawn records `unknown` and spawns nothing. The Codex refresh keeps its
+`sha256` pin (D72).
 
-**`assertTrustedExecutable` is that check**, and all three executors call it before spawning:
-`apps/cli/src/commands/capture.ts:251`, `apps/cli/src/commands/doctor.ts:479`,
-`apps/cli/src/commands/ingest.ts:579` — `doctor` was a third executor paying nothing while the first
+**The residual, stated because a future reader will rely on this paragraph.** A binary the *same uid*
+planted in a directory chain only that uid (or root) can write, reached through a prepended `PATH`,
+still passes: it is user-owned, `0755`, and stable between resolve and spawn. Anyone who can export
+`CODEX_THREAD_ID` into a session can usually export `PATH` into the same one, and such an attacker
+already runs code as the user. What NEW-46 closed is a binary in a group-writable directory and a
+swap between check and spawn; the probe still passes `--version` and nothing else.
+
+**`assertTrustedExecutable` is the check the other two executors pay** before spawning:
+`apps/cli/src/commands/doctor.ts:479` and `apps/cli/src/commands/ingest.ts:579` — `doctor` was a
+third executor paying nothing while the first
 version of this fix claimed a third could not arrive. The rule, decided by the founder rather than
 chosen here (BACKLOG NEW-15): **resolve, then check.** The binary is canonicalized and the resolved
 target must be a regular file. The declared path is resolved **one component at a time** with

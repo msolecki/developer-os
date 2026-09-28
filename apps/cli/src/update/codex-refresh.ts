@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { dirname } from "node:path";
 
 import {
   encodeCanonicalJson,
@@ -22,6 +21,7 @@ import type { SystemPathInspectorV1 } from "@developer-os/security";
 
 import { codexPluginTreeHash, type CodexRegistrationStateV1 } from "../instructions/codex-registration.js";
 import { codexInstructionPaths, type VendorHomesV1 } from "../instructions/vendor-homes.js";
+import { admitOwnedExecutable, UntrustedExecutableError } from "../pinned-executable.js";
 import { UpdatePlanningRefusal } from "./planning.js";
 import { refuseParticipant } from "./state-participant.js";
 
@@ -47,24 +47,19 @@ function untrusted(path: string): never {
 }
 
 /**
- * Resolves the selected `codex` through every link to its real path, which must be a regular
- * executable file owned by the user or root with no group/other write and no setuid, setgid or
- * sticky bit; every ancestor up to `/` must be a directory owned by the user or root with no
- * group/other write. The owner-owned single-link rule is withdrawn for this token: a Homebrew or
- * npm `codex` is a link into a package-manager tree.
+ * `admitOwnedExecutable`'s rule, pinned by content hash. The owner-owned single-link rule is
+ * withdrawn for this token: a Homebrew or npm `codex` is a link into a package-manager tree.
  */
 export async function resolveCodexExecutable(selected: CanonicalAbsolutePathV1, deps: CodexExecutableFileSystemV1): Promise<CodexExecutableIdentityV1> {
-  const canonicalPath = parseCanonicalAbsolutePathText(await deps.realpath(selected));
-  const owned = (uid: number): boolean => uid === deps.effectiveUid || uid === 0;
-  for (let ancestor = dirname(canonicalPath); ; ancestor = dirname(ancestor)) {
-    const entry = await deps.inspect(ancestor as CanonicalAbsolutePathV1);
-    if (entry.kind !== "directory" || !owned(entry.ownerUid) || (entry.mode & 0o022) !== 0) untrusted(ancestor);
-    if (ancestor === "/") break;
+  let admitted;
+  try {
+    admitted = await admitOwnedExecutable(selected, deps);
+  } catch (error) {
+    if (error instanceof UntrustedExecutableError) return untrusted(error.path);
+    throw error;
   }
-  const target = await deps.inspect(canonicalPath);
-  if (target.kind !== "file" || !owned(target.ownerUid) || (target.mode & 0o7022) !== 0 || (target.mode & 0o100) === 0 || target.sha256 === null) {
-    return untrusted(canonicalPath);
-  }
+  const { canonicalPath, target } = admitted;
+  if (target.sha256 === null) return untrusted(canonicalPath);
   return {
     canonicalPath,
     identity: { dev: parseUInt64Decimal(target.dev), ino: parseUInt64Decimal(target.ino), mode: target.mode, sha256: parseLowerHexSha256(target.sha256) },

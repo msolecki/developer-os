@@ -16,11 +16,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { discoverSourceAgent, runCapture } from "./capture.js";
 import type { CaptureOptions } from "./capture.js";
+import type { ProbeFileSystemV1 } from "../pinned-executable.js";
 import { runInit } from "./init.js";
 import {
   createCommandFixture,
   REAL_FILESYSTEM_TIMEOUT_MS,
+  probeObservation,
   removeCommandFixtures,
+  syntheticProbeHost,
 } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 import { loadOrCreateRedactionKey } from "../context.js";
@@ -43,6 +46,7 @@ interface CaptureFixture extends CommandFixture {
     options: CaptureOptions,
     /** Overrides the real detection table, for a vendor that has no row in it. */
     detect?: (env: Readonly<Record<string, string | undefined>>) => string,
+    executables?: ProbeFileSystemV1,
   ): ReturnType<typeof runCapture>;
 }
 
@@ -74,8 +78,8 @@ async function installedFixture(
   return {
     ...fixture,
     project,
-    run: (context, captureOptions, detect = detectSourceAgent) =>
-      runCapture(context, captureOptions, { cwd: () => project, detect }),
+    run: (context, captureOptions, detect = detectSourceAgent, executables = syntheticProbeHost()) =>
+      runCapture(context, captureOptions, { cwd: () => project, detect, executables }),
   };
 }
 
@@ -236,21 +240,31 @@ describe("runCapture", () => {
    * **The check is real here even though the outcome is quiet**: `capture` became the
    * second executor, and the most-run one, when Task 17 made the detection row live.
    */
-  it("records an unknown source agent when the discovered binary is not trusted", async () => {
+  it("records an unknown source agent, spawning nothing, when PATH selects a binary in a group-writable directory (NEW-46)", async () => {
+    const spawned: string[] = [];
     const fixture = await installedFixture("capture-untrusted-binary", {
       fixture: {
-        untrustedExecutable: new Error(
-          "The executable is not trusted: /synthetic/bin is writable by any user",
-        ),
+        agents: CLAUDE_INSTALLED,
+        runner: {
+          run: (request): Promise<ProcessResult> => {
+            spawned.push(request.executable);
+            return Promise.reject(new Error("an untrusted binary must never spawn"));
+          },
+        },
       },
     });
+    const shadowing = syntheticProbeHost();
+    shadowing.table.set("/synthetic/bin", probeObservation("directory", { mode: 0o775 }));
+    spawned.length = 0;
 
     const result = await fixture.run(
       fixture.context,
       { text: "an observation taken beside an untrusted binary" },
       () => "claude",
+      shadowing,
     );
 
+    expect(spawned).toStrictEqual([]);
     expect(result.ok, "the capture must still succeed").toBe(true);
     if (!result.ok) return;
 
@@ -1252,7 +1266,7 @@ describe("discoverSourceAgent", () => {
       },
     });
 
-    expect(await discoverSourceAgent(fixture.context, "claude")).toStrictEqual({
+    expect(await discoverSourceAgent(fixture.context, "claude", syntheticProbeHost())).toStrictEqual({
       sourceAgent: "claude",
       sourceAgentVersion: "2.1.216",
     });
@@ -1316,10 +1330,96 @@ describe("discoverSourceAgent", () => {
       options,
     );
 
-    expect(await discoverSourceAgent(fixture.context, "claude")).toStrictEqual({
+    expect(await discoverSourceAgent(fixture.context, "claude", syntheticProbeHost())).toStrictEqual({
       sourceAgent: "unknown",
       sourceAgentVersion: "unknown",
     });
+  });
+});
+
+describe("discoverSourceAgent: the pinned vendor executable (NEW-46, D72 Q2-A, D73 addendum)", () => {
+  const LINK = "/synthetic/bin/claude";
+  const REAL = "/synthetic/Cellar/claude/bin/claude";
+
+  async function recordingFixture(label: string): Promise<{ fixture: CommandFixture; spawned: string[] }> {
+    const spawned: string[] = [];
+    const fixture = await createCommandFixture(label, {
+      agents: CLAUDE_INSTALLED,
+      runner: {
+        run: (request): Promise<ProcessResult> => {
+          spawned.push(request.executable);
+          return runnerReturning("2.1.216 (Claude Code)\n").run(request);
+        },
+      },
+    });
+    return { fixture, spawned };
+  }
+
+  it("spawns the PATH entry's real path, never the link", async () => {
+    const { fixture, spawned } = await recordingFixture("probe-pinned-link");
+
+    const source = await discoverSourceAgent(fixture.context, "claude", syntheticProbeHost([REAL], { [LINK]: REAL }));
+
+    expect(source).toStrictEqual({ sourceAgent: "claude", sourceAgentVersion: "2.1.216" });
+    expect(spawned).toStrictEqual([REAL]);
+  });
+
+  it.each([
+    ["a different file swapped in", { ino: "43" }],
+    ["the same inode rewritten in place", { ctimeNs: "2000" }],
+    ["the same inode resized", { size: 65 }],
+    ["the mode changed", { mode: 0o700 }],
+  ] as const)("records unknown and spawns nothing when the target shows %s between resolve and spawn", async (_label, changed) => {
+    const { fixture, spawned } = await recordingFixture(`probe-swap-${Object.keys(changed).join("")}`);
+    const host = syntheticProbeHost([REAL], { [LINK]: REAL });
+    let observed = 0;
+    const swapping: ProbeFileSystemV1 = {
+      ...host,
+      inspect: (path) => {
+        if (path !== REAL) return host.inspect(path);
+        observed += 1;
+        return Promise.resolve(probeObservation("file", observed === 1 ? {} : changed));
+      },
+    };
+
+    const source = await discoverSourceAgent(fixture.context, "claude", swapping);
+
+    expect(observed, "the target is observed at resolve and again at the recheck").toBe(2);
+    expect(source).toStrictEqual({ sourceAgent: "unknown", sourceAgentVersion: "unknown" });
+    expect(spawned).toStrictEqual([]);
+  });
+
+  it("records unknown and spawns nothing when an ancestor turns group-writable between resolve and spawn", async () => {
+    const { fixture, spawned } = await recordingFixture("probe-swap-ancestor");
+    const host = syntheticProbeHost([REAL], { [LINK]: REAL });
+    let observed = 0;
+    const loosening: ProbeFileSystemV1 = {
+      ...host,
+      inspect: (path) => {
+        if (path !== "/synthetic/Cellar") return host.inspect(path);
+        observed += 1;
+        return Promise.resolve(probeObservation("directory", observed === 1 ? {} : { mode: 0o775 }));
+      },
+    };
+
+    expect(await discoverSourceAgent(fixture.context, "claude", loosening)).toStrictEqual({ sourceAgent: "unknown", sourceAgentVersion: "unknown" });
+    expect(spawned).toStrictEqual([]);
+  });
+
+  it.each([
+    ["a target owned by another user", { [REAL]: probeObservation("file", { ownerUid: 502 }) }],
+    ["a group-writable target", { [REAL]: probeObservation("file", { mode: 0o775 }) }],
+    ["a setuid target", { [REAL]: probeObservation("file", { mode: 0o4755 }) }],
+    ["a target without the owner-execute bit", { [REAL]: probeObservation("file", { mode: 0o644 }) }],
+    ["an other-writable ancestor", { "/synthetic/Cellar/claude": probeObservation("directory", { mode: 0o757 }) }],
+    ["an ancestor owned by another user", { "/synthetic": probeObservation("directory", { ownerUid: 502 }) }],
+  ] as const)("records unknown and spawns nothing for %s", async (label, overrides) => {
+    const { fixture, spawned } = await recordingFixture(`probe-refuse-${label.replaceAll(" ", "-")}`);
+    const host = syntheticProbeHost([REAL], { [LINK]: REAL });
+    for (const [path, observation] of Object.entries(overrides)) host.table.set(path, observation);
+
+    expect(await discoverSourceAgent(fixture.context, "claude", host)).toStrictEqual({ sourceAgent: "unknown", sourceAgentVersion: "unknown" });
+    expect(spawned).toStrictEqual([]);
   });
 });
 

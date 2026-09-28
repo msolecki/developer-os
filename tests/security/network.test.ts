@@ -21,6 +21,7 @@ import { runUninstall } from "@developer-os/cli/dist/commands/uninstall.js";
 import {
   createCommandFixture,
   removeCommandFixtures,
+  syntheticProbeHost,
 } from "@developer-os/cli/dist/commands/testing.js";
 import type { CommandFixture } from "@developer-os/cli/dist/commands/testing.js";
 import type { CliContext } from "@developer-os/cli/dist/context.js";
@@ -138,7 +139,7 @@ const COMMANDS: readonly CommandCase[] = [
       runCapture(
         fixture.context,
         { text: "an observation with an agent" },
-        { cwd: () => fixture.project, detect: () => "claude" },
+        { cwd: () => fixture.project, detect: () => "claude", executables: syntheticProbeHost() },
       ),
   },
   {
