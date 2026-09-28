@@ -132,7 +132,9 @@ export interface BootstrapEvidenceAdmissionV1 {
   }[];
   /**
    * The maximal roots `retainedPaths` collapses to: each retained subtree's
-   * `sourcePath`/`tombstonePath` rather than every descendant. A prefix-match
+   * `sourcePath`/`tombstonePath` rather than every descendant, with no member
+   * nested under another. Every `retainedPaths` entry lies at or below one of
+   * them; a `sourcePath` may name an absent entry. A prefix-match
    * exclusion check needs only these, and callers that list every retained
    * path (like `uninstall`'s removability guard) pay an O(retained-file-count)
    * cost that this set avoids.
@@ -693,6 +695,26 @@ function hasAncestorIn(path: string, roots: ReadonlySet<string>): boolean {
     if (roots.has(current)) return true;
     if (dirname(current) === current) return false;
   }
+}
+
+/** Every path with no proper ancestor in the set, so a prefix match over the result covers the whole input. */
+function maximalRoots(paths: readonly CanonicalAbsolutePathV1[]): CanonicalAbsolutePathV1[] {
+  const all = new Set<string>(paths);
+  return [...new Set(paths)]
+    .filter((path) => dirname(path) === path || !hasAncestorIn(dirname(path), all))
+    .sort();
+}
+
+/**
+ * What uninstall reports as preserved retention (NEW-56): each present retained
+ * subtree once, at its maximal root. Listing `retainedPaths` printed every file
+ * inside a retained Brain tombstone.
+ */
+export function preservedRetentionRoots(
+  evidence: Pick<BootstrapEvidenceAdmissionV1, "retainedPaths" | "retainedRoots">,
+): readonly CanonicalAbsolutePathV1[] {
+  const present = new Set<string>(evidence.retainedPaths);
+  return evidence.retainedRoots.filter((root) => present.has(root));
 }
 
 function sumEntries(entries: Iterable<BootstrapEvidenceGuardedEntryV1>): { readonly entries: number; readonly bytes: bigint } {
@@ -1452,10 +1474,7 @@ export async function inspectBootstrapEvidenceAdmission(
     retainedIdentities: [...allEntries.values()]
       .map((entry) => ({ path: entry.path, dev: entry.dev, ino: entry.ino }))
       .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
-    retainedRoots: [...new Set([
-      ...initial.map((candidate) => candidate.path),
-      ...results.flatMap((result) => result.roots),
-    ])].sort(),
+    retainedRoots: maximalRoots([...allEntries.keys(), ...results.flatMap((result) => result.roots)]),
     retainedParentAuthorities: orderedParentAuthorities,
     fingerprint,
     blocksNewIntent: active.length > 1 || conflictingParentAuthority || unverifiedBlocked ||

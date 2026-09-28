@@ -200,6 +200,55 @@ describe("inspectBootstrapEvidence", () => {
     expect(altered.retainedParentAuthorities).toStrictEqual([]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  /**
+   * NEW-56: one home never holds two active plans, because `init` resumes the
+   * one it finds. Two homes each interrupted right after their first journal
+   * write do, once a single inspection spans both state directories and admits
+   * each plan against its own home. Removing each home's bootstrap leaf keeps
+   * the attributed-leaf term false, so the single-home baseline pins every
+   * other `blocksNewIntent` term false and only `active.length > 1` remains.
+   */
+  it("blocks new intent when two admitted plans are both active", async () => {
+    const interruptedAfterJournal = async (name: string) => {
+      const fixture = await createCommandFixture(name, {
+        bootstrapAvailable: true,
+        bootstrapInterruptAfter: "after_journal",
+      });
+      expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+      const bootstrap = fixture.context.bootstrap;
+      if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+      await bootstrap.executor.close();
+      await nodeFs.rm(join(fixture.paths.stateDir, ".lifecycle-bootstrap.lock"), { force: true });
+      return fixture;
+    };
+    const first = await interruptedAfterJournal("bootstrap-report-two-active-first");
+    const second = await interruptedAfterJournal("bootstrap-report-two-active-second");
+    const firstRequest = requestFor(first);
+    const secondRequest = requestFor(second);
+
+    const single = await inspectBootstrapEvidenceAdmission(firstRequest);
+
+    expect(single.active).not.toBeNull();
+    expect(single.blocksNewIntent).toBe(false);
+
+    const ownedBySecond = (value: unknown): boolean => {
+      const planPath = (value as { readonly planPath?: unknown }).planPath;
+      return typeof planPath === "string" && planPath.startsWith(`${second.paths.home}/`);
+    };
+    const doubled = await inspectBootstrapEvidenceAdmission({
+      ...firstRequest,
+      initialRoots: [...firstRequest.initialRoots, second.paths.stateDir as CanonicalAbsolutePathV1],
+      validatePlan: (value) =>
+        ownedBySecond(value) ? secondRequest.validatePlan(value) : firstRequest.validatePlan(value),
+    });
+
+    expect(doubled.report.ids.map((summary) => summary.status)).toStrictEqual(["incomplete", "incomplete"]);
+    expect(doubled.bootstrapLeaf).toBeNull();
+    expect(doubled.retainedParentAuthorities).toStrictEqual([]);
+    expect(doubled.active).toBeNull();
+    expect(doubled.blocksNewIntent).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("reports a pre-plan prefix as unverified without adopting or changing it", async () => {
     const fixture = await createCommandFixture("bootstrap-report-unverified", {
       bootstrapAvailable: true,

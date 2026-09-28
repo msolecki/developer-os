@@ -20,7 +20,7 @@ import type {
 } from "@developer-os/core";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
-import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import { inspectBootstrapEvidenceAdmission, preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import {
   relocatedBrainRefusal,
@@ -370,7 +370,7 @@ async function resumeUninstall(
       schemaVersion: 1,
       removed: [],
       restored: [],
-      preserved: evidence.retainedPaths,
+      preserved: preservedRetentionRoots(evidence),
       retainedBootstrapEvidence: evidence.report.ids,
       transactionId: dispatch.id,
     });
@@ -425,7 +425,7 @@ async function resumeUninstall(
     schemaVersion: 1,
     removed,
     restored: [],
-    preserved: [...new Set([...evidence.retainedPaths, ...preserved])],
+    preserved: [...new Set([...preservedRetentionRoots(evidence), ...preserved])],
     retainedBootstrapEvidence: evidence.report.ids,
     transactionId: dispatch.id,
   });

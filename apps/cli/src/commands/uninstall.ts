@@ -35,7 +35,7 @@ import {
 import type { CliContext } from "../context.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
-import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import { inspectBootstrapEvidenceAdmission, preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import {
   ABSENT_MANIFEST_ARCHIVE_RECOVERY,
@@ -902,7 +902,7 @@ export async function runUninstall(
         schemaVersion: 1,
         removed: preview.removable.map((entry) => entry.artifact.path),
         restored: [],
-        preserved: [...new Set([...preview.preserved, ...evidence.retainedPaths])],
+        preserved: [...new Set([...preview.preserved, ...preservedRetentionRoots(evidence)])],
         retainedBootstrapEvidence: evidence.report.ids,
         transactionId: null,
       });
@@ -934,7 +934,7 @@ export async function runUninstall(
     return success({
       schemaVersion: 1,
       ...outcome,
-      preserved: [...new Set([...outcome.preserved, ...evidence.retainedPaths])],
+      preserved: [...new Set([...outcome.preserved, ...preservedRetentionRoots(evidence)])],
       retainedBootstrapEvidence: evidence.report.ids,
     });
   } catch (error) {

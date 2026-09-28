@@ -699,6 +699,59 @@ describe("runUninstall", () => {
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
+   * NEW-56: `preserved` used to carry every recursive descendant of every
+   * directory tombstone, so uninstall printed each note filename inside a
+   * retained Brain tombstone. It now names each retained subtree once, at its
+   * maximal root.
+   */
+  it("reports a retained directory tombstone as preserved without listing its descendants", async () => {
+    const fixture = await createCommandFixture("uninstall-preserved-retention-roots", {
+      bootstrapAvailable: true,
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    if (fixture.context.bootstrap?.state !== "available") {
+      throw new Error("fixture bootstrap is not available");
+    }
+    const retainedDirectory = (await fixture.bootstrapEvidenceIdentities()).find(
+      (candidate) =>
+        candidate.kind === "directory" &&
+        candidate.path.includes(".developer-os-retained."),
+    );
+    if (retainedDirectory === undefined) {
+      throw new Error("no retained directory tombstone in the fixture");
+    }
+    const plantedPaths: string[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      const note = join(retainedDirectory.path, `folder-${String(index % 2)}`, `note-${String(index)}.md`);
+      await nodeFs.mkdir(join(note, ".."), { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(note, `synthetic retained note ${String(index)}\n`, { mode: 0o600 });
+      plantedPaths.push(note);
+    }
+
+    const evidence = await fixture.context.bootstrap.inspectEvidence();
+
+    expect(evidence.retainedPaths).toEqual(expect.arrayContaining(plantedPaths));
+    for (const root of evidence.retainedRoots) {
+      expect(evidence.retainedRoots.some((other) => root.startsWith(`${other}/`)), root).toBe(false);
+    }
+    for (const path of evidence.retainedPaths) {
+      expect(
+        evidence.retainedRoots.some((root) => path === root || path.startsWith(`${root}/`)),
+        path,
+      ).toBe(true);
+    }
+
+    const result = await runUninstall(fixture.context, { dryRun: true, assumeYes: true });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.preserved).toContain(retainedDirectory.path);
+    expect(
+      result.data.preserved.filter((path) => path.startsWith(`${retainedDirectory.path}/`)),
+    ).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
    * The assertion that keeps the roots-only exclusion honest: a manifest
    * artifact planted deep inside a retained tombstoned tree must still be
    * refused, because `containsPathLoosely` has to actually cover the

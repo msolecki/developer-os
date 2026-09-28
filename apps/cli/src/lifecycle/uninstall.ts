@@ -111,6 +111,7 @@ import type {
 } from "@developer-os/platform-macos";
 
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
+import { preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import { readConfigFile } from "../commands/doctor.js";
 import {
@@ -794,7 +795,7 @@ function directoryRowsOf(
   evidence: BootstrapEvidenceAdmissionV1,
 ): readonly string[] {
   const bookkeeping = lifecycleBookkeepingPaths(productHome);
-  const retained = [...evidence.retainedRoots, ...evidence.retainedPaths];
+  const retained = evidence.retainedRoots;
   return manifest.artifacts
     .filter((artifact) => artifact.kind === "directory")
     .map((artifact) => artifact.path as string)
@@ -1562,7 +1563,7 @@ export class LifecycleUninstaller {
         ...(hooks === null ? [] : [hooks.directory.path]),
         ...(codexIngestHome === null ? [] : [codexIngestHome.directory.path]),
       ].sort(),
-      preserved: [...new Set([...partitioned.preserved, ...evidence.retainedPaths])],
+      preserved: [...new Set([...partitioned.preserved, ...preservedRetentionRoots(evidence)])],
       builder: uninstallBuilder(inputs),
     };
   }

@@ -14,6 +14,7 @@ import {
 } from "@developer-os/core";
 import type { AbsentManifestEvidenceV1, CanonicalAbsolutePathV1 } from "@developer-os/core";
 
+import { preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import type { CliContext } from "../context.js";
 import { UninstallRefusal } from "../commands/uninstall.js";
@@ -72,7 +73,7 @@ function resultOf(
     arm,
     removed,
     restored: [],
-    preserved: evidence.retainedPaths,
+    preserved: preservedRetentionRoots(evidence),
     retainedBootstrapEvidence: evidence.report.ids,
     transactionId: null,
   };
