@@ -1,12 +1,18 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { formatJsonResult } from "@developer-os/core";
+import { formatJsonResult, parseStableSemver } from "@developer-os/core";
 import type { CliResult, TransactionJournalV1 } from "@developer-os/core";
 import { runImport } from "@developer-os/cli/dist/commands/import.js";
 import type { ImportResultV1 } from "@developer-os/cli/dist/commands/import.js";
 import { runIngest } from "@developer-os/cli/dist/commands/ingest.js";
+import { removeCommandFixtures } from "@developer-os/cli/dist/commands/testing.js";
+import { runUpdate } from "@developer-os/cli/dist/commands/update/index.js";
+import type { UpdateInvocationV1 } from "@developer-os/cli/dist/commands/update/index.js";
 import { run } from "@developer-os/cli/dist/main.js";
+import type { CliUpdateContext } from "@developer-os/cli/dist/update/context.js";
+import { installUpdatableHome } from "@developer-os/cli/dist/update/testing.js";
+import type { UpdatableHomeV1 } from "@developer-os/cli/dist/update/testing.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -386,5 +392,68 @@ describe("a planted sentinel, through import", () => {
     expect(captureId).not.toBe("");
     expect(await importFixture.captureText(captureId)).toContain(marker);
     expect(staging.join("\n")).toContain(marker);
+  });
+});
+
+/**
+ * **A planted sentinel, through update and rollback (Spec 2 §11).** Private content crosses the
+ * planner boundary only as explicitly admitted blobs; a Brain note is none, so neither the
+ * counted planner request nor its blobs may carry it, and no preview, result, retained rollback
+ * payload, bundle, journal or record the lifecycle leaves in the product home may either.
+ */
+describe("a planted sentinel, through update and rollback", () => {
+  const wire: string[] = [];
+  const outputs: string[] = [];
+  const succeeded: boolean[] = [];
+  let product: readonly string[] = [];
+  let home: UpdatableHomeV1;
+  const note = "sentinel-through-update.md";
+
+  beforeAll(async () => {
+    home = await installUpdatableHome("sentinel-update", "arm64");
+    await writeFile(join(home.fixture.paths.brain, note), `# Planted\n\n${SENTINEL}\n`, { mode: 0o600 });
+    const base = home.update();
+    const update: CliUpdateContext = {
+      ...base,
+      planner: {
+        run: (request) => {
+          wire.push(JSON.stringify(request.request), ...request.inputBlobs.map((blob) => Buffer.from(blob).toString("latin1")));
+          return base.planner.run(request);
+        },
+      },
+    };
+    const context = { ...home.fixture.context, update };
+    const invocations: readonly UpdateInvocationV1[] = [
+      { kind: "update", version: parseStableSemver("1.1.0"), apply: false, json: true },
+      { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true },
+      { kind: "update", version: null, apply: true, json: true },
+      { kind: "rollback", apply: false, json: true },
+      { kind: "rollback", apply: true, json: true },
+    ];
+    for (const invocation of invocations) {
+      const result = await runUpdate(context, invocation);
+      succeeded.push(result.ok);
+      outputs.push(formatJsonResult(result));
+    }
+    product = await readFilesUnder(home.fixture.paths.home);
+  }, 900_000);
+
+  afterAll(removeCommandFixtures);
+
+  it("planted a sentinel the Brain really holds, and ran every step", async () => {
+    expect(await readFile(join(home.fixture.paths.brain, note), "utf8")).toContain(SENTINEL);
+    expect(succeeded).toStrictEqual([true, true, true, true, true]);
+  });
+
+  it.each([
+    ["the planner request and its input blobs", () => wire],
+    ["the --json output of every update and rollback step", () => outputs],
+    ["every file the lifecycle left in the product home", () => product],
+  ] as const)("keeps the sentinel out of %s", (artifact, contentsOf) => {
+    const contents = contentsOf();
+    expect(contents.length, `${artifact} produced nothing to scan`).toBeGreaterThan(0);
+    for (const [index, content] of contents.entries()) {
+      expect(content, `${artifact}, entry ${String(index)}`).not.toContain(SENTINEL);
+    }
   });
 });

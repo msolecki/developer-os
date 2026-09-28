@@ -26,6 +26,9 @@ import {
 import type { CommandFixture } from "@developer-os/cli/dist/commands/testing.js";
 import type { CliContext } from "@developer-os/cli/dist/context.js";
 import { run } from "@developer-os/cli/dist/main.js";
+import { runUpdate } from "@developer-os/cli/dist/commands/update/index.js";
+import type { CliUpdateContext } from "@developer-os/cli/dist/update/context.js";
+import { createUpdateFixture } from "@developer-os/cli/dist/update/testing.js";
 import { MacOsPlatformAdapter } from "@developer-os/platform-macos";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -469,8 +472,42 @@ describe("the bootstrap refusal paths", () => {
 const GIT_GATEWAY_TRAMPOLINE_SOURCE = "packages/security/src/git/gateways.ts";
 
 /**
- * **The update-only row.** No `update` command exists yet, so this row is a
- * static classifier rather than a command run: every non-test TypeScript
+ * **Rollback and recovery are local.** Spec 2 §11/§12 (D72 P7(f)): of the whole `update`
+ * surface only plan and apply reach the release transport. `update rollback` reads retained
+ * evidence alone, so a context whose every release port throws still previews it, and the
+ * recording transport it could have reached sees nothing. The on-disk apply, recovery and
+ * rollback legs assert the same over the real ports in `tests/integration/update/recovery.test.ts`.
+ */
+describe("update rollback reaches no network", () => {
+  afterEach(removeCommandFixtures);
+
+  it("previews a rollback with the FD 3 trust, transport, scratch and planner ports all unreachable", async () => {
+    const fixture = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+    const never = (): never => {
+      throw new Error("a release port was reached");
+    };
+    const update: CliUpdateContext = {
+      ...fixture.update,
+      readOfflineTrust: never,
+      createTransport: never,
+      scratch: { create: never, listRecoverableAttempts: never, recoverCleanup: never },
+      planner: { run: never },
+    };
+
+    const result = await runUpdate({ ...(await createCommandFixture("network-rollback-preview")).context, update }, { kind: "rollback", apply: false, json: true });
+
+    expect(result).toMatchObject({ ok: true, data: { outcome: "rollback_preview" } });
+    expect(fixture.requests).toStrictEqual([]);
+    expect(fixture.events.filter((event) => event.startsWith("transport") || event === "trust" || event === "planner")).toStrictEqual([]);
+    /** The positive control: the same fixture's update preview does reach its transport. */
+    await runUpdate({ ...(await createCommandFixture("network-update-preview")).context, update: fixture.update }, { kind: "update", version: null, apply: false, json: true });
+    expect(fixture.requests.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * **The update-only row, statically.** `tests/repository/check.ts`'s release authority gate
+ * holds the same boundary on every lint run; this row classifies the sources directly: every non-test TypeScript
  * source under `packages/` and `apps/` is read, and the set of files that can
  * open a socket — a network module import or a global `fetch` call — must be
  * exactly the fixed release transport. Total in both directions like the rows

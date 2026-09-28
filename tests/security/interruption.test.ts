@@ -1,9 +1,12 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { EXIT_CODES } from "@developer-os/core";
+import { EXIT_CODES, parseStableSemver } from "@developer-os/core";
 import type { TransactionPhase } from "@developer-os/core";
 import { runCapture } from "@developer-os/cli/dist/commands/capture.js";
+import { removeCommandFixtures } from "@developer-os/cli/dist/commands/testing.js";
+import { runUpdate } from "@developer-os/cli/dist/commands/update/index.js";
+import { dieAfterMutations, installUpdatableHome, updateTo } from "@developer-os/cli/dist/update/testing.js";
 import { runImport } from "@developer-os/cli/dist/commands/import.js";
 import { runRefactor } from "@developer-os/cli/dist/commands/refactor.js";
 import { runRepair } from "@developer-os/cli/dist/commands/repair.js";
@@ -518,4 +521,39 @@ describe("what the brain refactor sweep drove", () => {
       ].sort(),
     );
   });
+});
+
+/**
+ * **An `update --apply` killed mid-run heals through the next `update --apply` (Spec 2 §9.4).**
+ * The death is `dieAfterMutations`': the chosen guarded mutation lands, then that one and every
+ * later one throw, as a kill leaves the disk. The first, middle and last mutation of a measured
+ * run are the three the command-level path must survive — before the outer journal, inside the
+ * coordinator, and after the point of no return. Every point is swept in
+ * `tests/integration/update/recovery.test.ts`; this row is the command's own resume path.
+ */
+describe("an update --apply interrupted, then run again", () => {
+  afterEach(removeCommandFixtures);
+
+  it("resumes or restarts from the persisted direction and ends on the target release", async () => {
+    const measured = await installUpdatableHome("interruption-update-measure", "arm64");
+    const counting = dieAfterMutations(measured.fixture.context, Number.MAX_SAFE_INTEGER);
+    expect(await updateTo(measured.update(counting.context), "1.1.0")).toMatchObject({ outcome: "applied" });
+    const total = counting.landed();
+    expect(total).toBeGreaterThan(2);
+
+    const points = [1, Math.floor(total / 2), total - 1];
+    for (const point of points) {
+      const home = await installUpdatableHome(`interruption-update-${String(point)}`, "arm64");
+      const dying = dieAfterMutations(home.fixture.context, point);
+      await expect(updateTo(home.update(dying.context), "1.1.0"), `point ${String(point)}`).rejects.toThrow();
+      expect(dying.died()).toBe(true);
+
+      const again = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });
+
+      expect(again.ok, `point ${String(point)}: ${JSON.stringify(again)}`).toBe(true);
+      const settled = await home.update().readHome();
+      expect(settled.active.version, `point ${String(point)}`).toBe("1.1.0");
+      expect(settled.rollback?.previous.version, `point ${String(point)}`).toBe("1.0.0");
+    }
+  }, 1_800_000);
 });

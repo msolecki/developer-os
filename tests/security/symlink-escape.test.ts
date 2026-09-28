@@ -1,8 +1,17 @@
+import { execFile } from "node:child_process";
 import { lstat, mkdir, readFile, rename, rm, symlink } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
-import { EXIT_CODES } from "@developer-os/core";
+import ts from "typescript";
+
+import { EXIT_CODES, parseStableSemver } from "@developer-os/core";
 import { runCapture } from "@developer-os/cli/dist/commands/capture.js";
+import { removeCommandFixtures } from "@developer-os/cli/dist/commands/testing.js";
+import { runUpdate } from "@developer-os/cli/dist/commands/update/index.js";
+import { recoverUpdate } from "@developer-os/cli/dist/update/apply.js";
+import { installUpdatableHome } from "@developer-os/cli/dist/update/testing.js";
 
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -423,3 +432,63 @@ describe("a symlink out of the index root", () => {
  * scope, that a full command-level fixture here would trip on for a reason
  * that has nothing to do with the anchor this task fixed.
  */
+
+/**
+ * **Spec 2 §13.3 residual 9, held as an exact set (amendment A8).** The `symlink` artifact arm is
+ * validated but no Spec 2 path may produce one. A production module that builds a
+ * `kind: "symlink"` object literal is a producer candidate; the set is exactly the two admission
+ * codecs that copy an arm they were handed (the V2 manifest validator and the planner draft
+ * admission), so a new producer reddens this row. The dynamic half is
+ * `tests/e2e/release-update.test.ts`, which reads every manifest a whole lifecycle publishes.
+ */
+describe("no Spec 2 path produces a symlink artifact", () => {
+  it("finds a symlink-kind object literal only in the two codecs that re-admit an existing arm", async () => {
+    const run = promisify(execFile);
+    const here = dirname(fileURLToPath(import.meta.url));
+    const root = (await run("git", ["rev-parse", "--show-toplevel"], { cwd: here })).stdout.trim();
+    const listed = (await run("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "packages", "apps"], { cwd: root, maxBuffer: 32 * 1024 * 1024 })).stdout;
+    const sources = [...new Set(listed.split("\0"))].filter(
+      (path) => /^(?:packages|apps)\/[^/]+\/src\/.*\.ts$/u.test(path) && !path.endsWith(".test.ts") && !path.endsWith(".d.ts"),
+    );
+    expect(sources.length).toBeGreaterThan(0);
+
+    const producers = new Set<string>();
+    for (const path of sources) {
+      const source = ts.createSourceFile(path, await readFile(join(root, path), "utf8"), ts.ScriptTarget.Latest, true);
+      const visit = (node: ts.Node): void => {
+        if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name) && node.name.text === "kind" && ts.isStringLiteralLike(node.initializer) && node.initializer.text === "symlink") producers.add(path);
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+    }
+
+    expect([...producers].sort()).toStrictEqual(["packages/core/src/manifest/v2.ts", "packages/core/src/update/planner.ts"]);
+  });
+});
+
+/**
+ * **A release directory that resolves outside the product home.** `update --apply` publishes the
+ * target bundle under `releases/<version>/`; a symlink planted there must be refused, never
+ * followed, and the installed release must stay active.
+ */
+describe("a symlinked release directory met by update --apply", () => {
+  afterEach(removeCommandFixtures);
+
+  it("refuses, writes nothing through the link, and keeps the installed release", async () => {
+    const home = await installUpdatableHome("symlink-release-directory", "arm64");
+    const outside = join(home.fixture.root, "outside-release");
+    await mkdir(outside, { recursive: true, mode: 0o700 });
+    const planted = join(home.fixture.paths.home, "releases", "1.1.0");
+    await symlink(outside, planted);
+
+    const result = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).not.toBe(EXIT_CODES.success);
+    expect(await filesUnder(outside)).toStrictEqual([]);
+    expect((await lstat(planted)).isSymbolicLink()).toBe(true);
+    await rm(planted);
+    await recoverUpdate(home.update());
+    expect((await home.update().readHome()).active.version).toBe("1.0.0");
+  }, 900_000);
+});

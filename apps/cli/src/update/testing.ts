@@ -972,6 +972,8 @@ export interface DyingContextV1 {
   readonly context: CliContext;
   /** True once the chosen mutation landed and the process model died. */
   readonly died: () => boolean;
+  /** Durable mutations landed so far; with an unreachable `count` it measures a whole run. */
+  readonly landed: () => number;
 }
 
 const DURABLE_MUTATIONS = ["writeExclusive", "mkdirExclusive", "renameOver", "renameNoReplace", "unlinkExact", "rmdirExactEmpty", "syncDirectory"] as const;
@@ -999,6 +1001,7 @@ export function dieAfterMutations(context: CliContext, count: number): DyingCont
   return {
     context: { ...context, lifecycle: { ...lifecycle, fs: fs as unknown as typeof lifecycle.fs } },
     died: () => landed >= count,
+    landed: () => landed,
   };
 }
 
