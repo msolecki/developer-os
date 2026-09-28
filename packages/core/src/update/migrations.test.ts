@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
+import { encodeCanonicalJson } from "../lifecycle/canonical-json.js";
 import type { AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import {
@@ -44,6 +45,7 @@ import {
   type SchemaMigrationDraftV1,
   type SecretScreenedBlobV1,
 } from "./planner.js";
+import { updateParticipantDocumentHash } from "./participants.js";
 import { validateReleaseIdentity, type ReleaseIdentityV1 } from "./release.js";
 import { parseLowerHexSha256, parsePositiveUInt32, parseSchemaMigrationId, type LowerHexSha256, type SafeReasonCodeV1, type UtcTimestampV1 } from "./scalars.js";
 
@@ -522,6 +524,11 @@ describe("validateSchemaMigrationExecutionJournal", () => {
     ["compacting", { phase: "compacting", nextForwardFoundation: 1, compactionNext: 2 }],
   ])("admits a %s journal", (_name, overrides) => {
     expect(validateSchemaMigrationExecutionJournal(journal(overrides), plan()).phase).toBe(journal(overrides).phase);
+  });
+
+  it("binds the journal to the execution ref's leaf-domain hash, not the raw file hash (D72 P7(a))", () => {
+    expect(schemaMigrationPlanHash(plan())).toBe(updateParticipantDocumentHash("schema_migration", plan()));
+    expect(() => validateSchemaMigrationExecutionJournal(journal({ planHash: sha(new TextEncoder().encode(encodeCanonicalJson(plan() as never))) }), plan())).toThrow(/planHash/);
   });
 
   it.each([

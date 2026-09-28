@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
+import { updateLeafPlanHash } from "./bundle-participant.js";
 import { maximumFoundationJournalBytes } from "../lifecycle/store.js";
 import type { FoundationMutationRefV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1, UpdateExpectedPayloadRefV1 } from "../manifest/manifest-state.js";
@@ -559,9 +560,12 @@ export function schemaMigrationPlanBytes(plan: SchemaMigrationPlanV1): Uint8Arra
   return new TextEncoder().encode(canonical(plan));
 }
 
-/** The immutable plan ref hash: raw SHA-256 of the exact persisted bytes. */
+/**
+ * The immutable plan ref hash (D72 P7(a)): the `developer-os/update-leaf/schema_migration/v1\0`
+ * domain over the exact persisted bytes, so the journal's `planHash` equals the execution ref's.
+ */
 export function schemaMigrationPlanHash(plan: SchemaMigrationPlanV1): LowerHexSha256 {
-  return sha256Hex(schemaMigrationPlanBytes(plan));
+  return updateLeafPlanHash("schema_migration", schemaMigrationPlanBytes(plan));
 }
 
 export interface RetainedSchemaMigrationInverseContextV1 {
