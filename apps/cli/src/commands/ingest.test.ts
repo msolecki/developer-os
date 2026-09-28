@@ -1237,6 +1237,48 @@ describe("runIngest, a batch that is not uniform", () => {
   });
 
   /**
+   * NEW-38. The warning sentence is a message, not data: it renders the file name through
+   * `renderPath`, so a bidi override cannot reach `--json` through `error.message`, while the
+   * structured `unreadable[].captureId` beside it stays byte-exact and still names the file.
+   */
+  it("screens format characters in the unreadable-capture warning, not in the id", async () => {
+    const fixture = await installedFixture("ingest-warning-format-characters");
+    const refusing = await fixture.seedAccepted("an observation that refuses");
+    const hostile = "cap‮evil  two";
+    await nodeFs.writeFile(join(fixture.quarantine, `${hostile}.md`), "not a capture at all\n", {
+      mode: 0o600,
+    });
+    fixture.reply(() => oneNote(refusing.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).not.toContain("‮");
+    expect(result.error.message).toContain("cap�evil  two.md is not a readable capture");
+    const report = result.error.data as unknown as {
+      readonly unreadable: readonly { readonly captureId: string }[];
+    };
+    expect(report.unreadable[0]?.captureId).toBe(hostile);
+  });
+
+  it("screens format characters in the success arm's warnings too", async () => {
+    const fixture = await installedFixture("ingest-warning-format-characters-success");
+    const readable = await fixture.seedAccepted("an observation that ingests");
+    await nodeFs.writeFile(join(fixture.quarantine, "cap‮evil.md"), "not a capture at all\n", {
+      mode: 0o600,
+    });
+    fixture.reply(() => oneNote(readable.id));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings.join("\n")).not.toContain("‮");
+    expect(result.warnings.join("\n")).toContain("cap�evil.md is not a readable capture");
+  });
+
+  /**
    * **The longest id a filesystem permits passes through whole**, which is what the report
    * carrying values untransformed has to mean at the boundary. A filename is limited to 255
    * **UTF-16 code units** (measured on darwin/APFS — `"漢".repeat(255)` is 765 bytes and

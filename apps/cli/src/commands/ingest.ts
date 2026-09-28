@@ -655,8 +655,9 @@ async function selectCaptures(
     if (!outcome.ok) {
       const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
       unreadable.push({ captureId, status: "failed", notes: [] });
+      /** NEW-38: a message, so the name renders through `renderPath`; `captureId` above stays byte-exact. */
       warnings.push(
-        `${fileName} is not a readable capture (${outcome.reason}), so it is failed rather than waiting to be ingested`,
+        `${renderPath(fileName)} is not a readable capture (${outcome.reason}), so it is failed rather than waiting to be ingested`,
       );
       continue;
     }
@@ -2030,7 +2031,8 @@ export interface RunReportV1 {
  * it renamed ordinary files; and it closed nothing, because the *success* arm published the
  * same filename raw throughout. `threat-model.md`'s rule is byte-exact everywhere, rendered
  * at the terminal, and the residue — `JSON.stringify` escaping `\p{Cc}` and not `\p{Cf}` —
- * is NEW-38.
+ * was NEW-38, closed where the name becomes a sentence: `selectCaptures` renders it through
+ * `renderPath` in the warning, and the id here stays byte-exact.
  *
  * **Note paths are not screened, and screening them was the defect.** A proposed path
  * carrying `\p{Cc}` or `\p{Cf}`, or exceeding the cap, is refused by `proposal.ts` before it
@@ -2046,15 +2048,11 @@ export interface RunReportV1 {
  *
  * `redactDeep` is not a substitute for either: it redacts secrets, not format characters.
  *
- * **What is still unscreened, so a green gate is not over-read.** `selection.warnings` are
- * English sentences that embed the raw quarantine file name, and they ship verbatim in
- * `reportLines`' message *and* on the success arm's `warnings`; `RunReportV1.refused[]`
- * carries `message` and `recovery` as the refusal produced them. None of those is a *new*
- * exposure — every one of them already reached the user through the failure message this
- * field sits beside — but the enumeration is the point: a first version of this paragraph
- * named only the warnings and read as exhaustive. `RunReportV1` publishes `unreadable`
- * structurally rather than repeating the warning sentences, which narrows the exposure
- * without closing it.
+ * **What is still unscreened, so a green gate is not over-read.** `RunReportV1.refused[]`
+ * carries `message` and `recovery` as the refusal produced them; that is not a *new*
+ * exposure — it already reached the user through the failure message this field sits beside.
+ * `selection.warnings`, which embed the quarantine file name, render it through `renderPath`
+ * since NEW-38, in `reportLines`' message and on the success arm's `warnings` alike.
  *
  * **Every field is copied and published as it stands; nothing here transforms a value.**
  * Two helpers used to — `screened` on the capture ids and `carriedNotes` on the note paths —
