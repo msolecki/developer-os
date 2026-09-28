@@ -318,6 +318,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   can follow without a contract change. (4) The Phase 9 gate covers local/file transport only; HTTPS
   and SSH stay refused (D59 Q4-A). (5) NEW-25: `high-entropy` stays first-wins on overlap; every
   other redaction class merges partially overlapping ranges, so persisted fingerprints do not change.
+- **D72 (2026-09-28), NEW-110's Spec 2 revision pass.** The founder approved every recommended
+  answer of `plans/2026-09-28-new-110-spec2-apply.md`: signed metadata inline as `plan_derived` rows
+  (Q1-A); Codex re-registration on `update` pins `codex`'s real path owned by the user or root with no
+  group/other write on it or its ancestors (Q2-A, NEW-61); a `compensationCause` journal field (Q3-A);
+  the spawn-time capability scan is removed, the repository graph gate stays (Q4-A); production ports
+  bind now and the fallback port refuses `update_fallback_unavailable` until Task 11b (Q5-A); Task 26
+  proves the lifecycle on a synthetic arm64+x64 fixture, Git and automation join after NEW-113 (Q6-A).
+  Task 11b stays parked (D46), so `update` reaches a real release only after it.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
