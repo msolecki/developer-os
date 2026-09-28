@@ -358,6 +358,46 @@ describe("import from a path", () => {
     expect(await digests(fixture)).toEqual(before);
     expect(await nodeFs.readdir(outside)).toEqual([]);
   });
+
+  /**
+   * NEW-20, as `capture` pins it: the content-root link is retargeted once
+   * both proofs have resolved it. A read or write through the declared
+   * quarantine would follow the link into `elsewhere`.
+   */
+  it("refuses at exit 5 and writes nowhere when the content root is retargeted after the proof", async () => {
+    const fixture = await installed("import-symlink-swap");
+    await plant(inboxOf(fixture), { "a.md": "an observation" });
+    const content = contentOf(fixture);
+    const real = join(fixture.paths.brain, "real-content");
+    await nodeFs.rename(content, real);
+    await nodeFs.symlink(real, content);
+    const elsewhere = join(fixture.root, "elsewhere");
+    await nodeFs.mkdir(join(elsewhere, "_raw", "quarantine"), { recursive: true, mode: 0o700 });
+    const before = await nodeFs.readdir(join(real, "_raw", "quarantine"));
+
+    let swapped = false;
+    const canonicalize = async (path: string): Promise<string> => {
+      const resolved = await fixture.context.guards.canonicalize(path);
+      if (!swapped && path === inboxOf(fixture)) {
+        swapped = true;
+        await nodeFs.unlink(content);
+        await nodeFs.symlink(elsewhere, content);
+      }
+      return resolved;
+    };
+    const context: CliContext = {
+      ...fixture.context,
+      guards: { ...fixture.context.guards, canonicalize },
+    };
+
+    const result = await importWith(fixture, {}, context);
+
+    expect(swapped, "the swap must happen for the test to mean anything").toBe(true);
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    expect(await nodeFs.readdir(join(elsewhere, "_raw", "quarantine"))).toEqual([]);
+    expect(await nodeFs.readdir(join(real, "_raw", "quarantine"))).toEqual(before);
+    expect(await importJournals(fixture)).toEqual([]);
+  });
 });
 
 describe("per-file and protected refusals", () => {

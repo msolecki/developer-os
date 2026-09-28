@@ -324,7 +324,8 @@ export async function processCandidates(input: {
   readonly captureMethod: "import" | "import-claude-memory";
   readonly projectSlug: "inbox" | "import" | "claude-memory";
   readonly source: ImportResultV1["source"];
-  readonly quarantine: string;
+  readonly quarantine: string; // declared: only `validateChangePlan`'s owned root
+  readonly canonicalQuarantine: string; // what the containment proof held for: every read and write (NEW-20)
   readonly paths: RuntimePaths;
   readonly key: Uint8Array;
   readonly keyDurable: boolean; // false: dry run on an ephemeral key → no duplicate detection
@@ -367,7 +368,7 @@ export async function processCandidates(input: {
     input.keyDurable &&
     (await readExistingCapture(
       context,
-      join(input.quarantine, built.fileName),
+      join(input.canonicalQuarantine, built.fileName),
       built.fileName,
       redact,
     )) !== null;
@@ -427,7 +428,7 @@ export async function processCandidates(input: {
         continue;
       }
 
-      const target = join(input.quarantine, built.fileName);
+      const target = join(input.canonicalQuarantine, built.fileName);
       try {
         await writeQuarantineCapture(
           context,
@@ -542,7 +543,7 @@ export async function runImport(
         refused,
         "restore the directory inside the vault's content root; an import never reads from or writes through a path that leaves it",
       );
-    const { contentRoot, quarantine } = await resolveQuarantine(
+    const { contentRoot, quarantine, canonicalQuarantine } = await resolveQuarantine(
       context,
       config,
       paths,
@@ -566,6 +567,7 @@ export async function runImport(
     };
     const common = {
       quarantine,
+      canonicalQuarantine,
       paths,
       keyDurable: !options.dryRun || existingKey !== null,
       cap: Math.min(options.limit ?? IMPORT_MAX_FILES_PER_RUN, IMPORT_MAX_FILES_PER_RUN),

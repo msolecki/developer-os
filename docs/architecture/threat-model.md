@@ -267,15 +267,15 @@ measured against a real `init`. The re-armed ancestor check is **depth behind th
 having because the collision guard is incidental: it depends on `init` recording directories, which
 is not a security property, and its message names the manifest rather than the link.
 
-**`capture` uses the form the check held for** (`BACKLOG.md` §1 **NEW-20**, closed 2026-09-28):
+**`capture` and `import` use the form the check held for** (`BACKLOG.md` §1 **NEW-20**, closed 2026-09-28):
 `resolveQuarantine` returns the canonical quarantine beside the declared one, every read, `mkdir` and
 write goes through the canonical form, and the declared form survives only as `CaptureResultV1.path`
 and as `validateChangePlan`'s owned root. An ancestor symlink retargeted after the proof therefore
 re-resolves the owned root and not the target, and the plan is refused at exit 5 as
-`outside_owned_roots` (`apps/cli/src/commands/capture.test.ts` — `refuses at exit 5 and writes
-nowhere when the content root is retargeted after the proof`). **Residuals:** a real directory on the
-canonical chain replaced by a symlink after the proof has one string for both forms, which only
-descriptor-relative operations would pin; and `import` still re-follows its declared quarantine.
+`outside_owned_roots` (`apps/cli/src/commands/capture.test.ts` and `import.test.ts` — `refuses at
+exit 5 and writes nowhere when the content root is retargeted after the proof`). **Residual:** a real
+directory on the canonical chain replaced by a symlink after the proof has one string for both forms,
+which only descriptor-relative operations would pin.
 
 All three commands now resolve the quarantine root once, through **one shared implementation**
 (`apps/cli/src/context.ts:348-361`), prove it inside the configured content root, and measure every
