@@ -355,7 +355,7 @@ The vendor CLI is the only outbound process this product makes, and the only pla
 | The child inherits nothing from the parent environment | the runner passes only `{...request.env}` (`packages/security/src/process.ts:95`), and both adapters pass `env: {}` — stricter than the spec asks | `tests/security/network.test.ts` — `does not pass a proxy the parent process was given`, asserted by *inheritance* rather than by an expectation that could be edited to match a leak |
 | Output cannot exhaust memory | 1 MiB per stream, after which the child is `SIGKILL`ed and the call is a security refusal (`packages/security/src/process.ts:7,185-220`) | `packages/security/src/process.test.ts` |
 | A run is bounded in wall clock | `SIGTERM`, then `SIGKILL` 100 ms later, to the process *group* on darwin (`packages/security/src/process.ts:115-132,172-183`); `INGEST_TIMEOUT_MS` is 120 s (`apps/cli/src/commands/ingest.ts:235-241`) | `packages/security/src/process.test.ts` |
-| Vendor output is redacted before it is returned to any caller | the runner redacts stdout and stderr inside `finishFromClose` (`packages/security/src/process.ts:154-159`) | `tests/security/sentinel.test.ts`'s `the logs` and `the --json output` cases **(§8: neither carries a watched failure)**; `packages/security/src/process.test.ts` asserts the redaction at the runner |
+| Vendor output is redacted before it is returned to any caller | the runner redacts stdout and stderr inside `finishFromClose` (`packages/security/src/process.ts:154-159`), with the user's `[redaction]` patterns once configuration is read (NEW-26, §5.7) | `tests/security/sentinel.test.ts`'s `the logs` and `the --json output` cases **(§8: neither carries a watched failure)**; `packages/security/src/process.test.ts` asserts the redaction at the runner; `apps/cli/src/context.test.ts` → "redacts vendor stdout and stderr with the configured patterns once they are bound" |
 | A refusal never echoes the rejected value | `parseAgentPromptArgs` scrubs it, because a `with` block is author-controlled and the message reaches a log (`packages/core/src/agent-prompt/index.ts:83-88`) | `packages/core/src/agent-prompt/agent-prompt.test.ts` |
 | **An invocation is bounded in turns** | **partial** | see below |
 
@@ -483,7 +483,7 @@ reads configuration redact the user's patterns; a test context without the membe
 runner. Pinned by `apps/cli/src/context.test.ts` → "redacts vendor stdout and stderr with the
 configured patterns once they are bound" and `apps/cli/src/commands/ingest.test.ts` → "binds the
 configured patterns to the runner before any vendor process runs". **Record: `BACKLOG.md` §1 NEW-16, closed;
-its residuals NEW-24 and NEW-26 are open, and NEW-25 is fixed with the residual below.**
+its residual NEW-24 is open, NEW-26's fix is described above, and NEW-25 is fixed with the residual below.**
 
 **Overlapping candidates merge, except `high-entropy` (NEW-25, founder decision D71).**
 `addCandidate` (`packages/security/src/redaction.ts`) merges a candidate with every one it

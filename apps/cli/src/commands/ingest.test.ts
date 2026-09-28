@@ -2231,6 +2231,7 @@ describe("runIngest, the agent call", () => {
     );
     fixture.reply(() => oneNote(seeded.id));
     const bound: { patterns: readonly string[]; vendorCalls: number }[] = [];
+    const callsBefore = fixture.calls.length;
 
     const result = await runIngest(
       {
@@ -2243,8 +2244,8 @@ describe("runIngest, the agent call", () => {
     );
 
     expect(result.ok, "the ingest must reach the vendor").toBe(true);
-    expect(fixture.calls.length).toBeGreaterThan(0);
-    expect(bound[0]).toEqual({ patterns: ["Northwind Traders"], vendorCalls: 0 });
+    expect(fixture.calls.length).toBeGreaterThan(callsBefore);
+    expect(bound[0]).toEqual({ patterns: ["Northwind Traders"], vendorCalls: callsBefore });
   });
 
   /**
