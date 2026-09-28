@@ -1,17 +1,22 @@
-import { EXIT_CODES, type LowerHexSha256, type UtcTimestampV1 } from "@developer-os/core";
+import { EXIT_CODES, encodeCanonicalJson, type CanonicalJsonValue } from "@developer-os/core";
+import {
+  SystemExecutableRefusalError,
+  admitPosixRootOwned,
+  type AdmittedSystemExecutableV1,
+  type SystemExecutableRowV1,
+  type SystemPathInspectorV1,
+} from "@developer-os/security";
 
-export type LaunchdOperatingSystemV1 = {
+import { DARWIN_SYSTEM_EXECUTABLES } from "../system-executables.js";
+
+export type LaunchdOperatingSystemPolicyV1 = {
   readonly productName: "macOS";
-  readonly productVersion: string;
-  readonly buildVersion: string;
+  readonly minimumProductVersion: "26.6.2";
 };
 
-export type LaunchdExecutableIdentityV1 = {
+export type LaunchdExecutablePolicyV1 = {
   readonly path: "/bin/launchctl";
   readonly ownerUid: 0;
-  readonly mode: 493;
-  readonly size: number;
-  readonly sha256: LowerHexSha256;
 };
 
 export type LaunchdEmptyDirectoryIdentityV1 = {
@@ -20,42 +25,40 @@ export type LaunchdEmptyDirectoryIdentityV1 = {
   readonly mode: 493;
 };
 
-/** Spec §5.3 (amended 2026-09-23, D59): `null` means uncertified, and every mutation refuses. */
-export type LaunchdCertificationV1 = {
-  readonly certifiedAt: UtcTimestampV1;
-  readonly fixtureTranscriptSha256: LowerHexSha256;
-} | null;
-
-export type LaunchdDistributionRowV1 = {
-  readonly previewTableId: `launchctl-macos-${string}-preview-v1`;
-  readonly mutationTableId: `launchctl-macos-${string}-fd3-v1`;
-  readonly operatingSystem: LaunchdOperatingSystemV1;
-  readonly executable: LaunchdExecutableIdentityV1;
+/**
+ * Spec §5.3 (amended 2026-09-28, D71): `/bin/launchctl` is the `darwin` `scheduler` row, admitted
+ * by `posix_root_owned` and a macOS floor. No field names a build, a binary hash or a certificate.
+ */
+export type LaunchdDistributionPolicyV2 = {
+  readonly previewTableId: "launchctl-macos-preview-v2";
+  readonly mutationTableId: "launchctl-macos-fd3-v2";
+  readonly operatingSystem: LaunchdOperatingSystemPolicyV1;
+  readonly executable: LaunchdExecutablePolicyV1;
   readonly emptyDirectory: LaunchdEmptyDirectoryIdentityV1;
-  readonly certification: LaunchdCertificationV1;
 };
 
-/**
- * The one supported launchctl row (NEW-84 re-pinning rule 1): measured read-only on 2026-09-23.
- * No other file restates these literals; re-pinning replaces this constant in one change, and the
- * change that certifies the row on a disposable host (plan 1b Task 19) fills `certification`.
- */
-export const SUPPORTED_LAUNCHD_DISTRIBUTION: LaunchdDistributionRowV1 = Object.freeze({
-  previewTableId: "launchctl-macos-26.6.2-25G83-preview-v1",
-  mutationTableId: "launchctl-macos-26.6.2-25G83-fd3-v1",
-  operatingSystem: Object.freeze({ productName: "macOS", productVersion: "26.6.2", buildVersion: "25G83" }),
-  executable: Object.freeze({
-    path: "/bin/launchctl",
-    ownerUid: 0,
-    mode: 493,
-    size: 363488,
-    sha256: "b4dbf509754d8e1117f7851baa93ede75bc75218c48d6ddf19fbb1505d261be7" as LowerHexSha256,
-  }),
+/** Per-apply evidence, never a cross-machine pin: `ProductBuildVersion` is recorded and never compared. */
+export type LaunchctlIdentityV1 = {
+  readonly file: AdmittedSystemExecutableV1;
+  readonly productVersion: string;
+  readonly buildVersion: string;
+};
+
+/** `sw_vers` values read through an injected probe, never a shell, and a no-follow path inspector. */
+export interface LaunchdHostObserverV1 {
+  operatingSystem(): Promise<{ productName: string; productVersion: string; buildVersion: string }>;
+  inspect: SystemPathInspectorV1;
+}
+
+export const LAUNCHD_DISTRIBUTION_POLICY: LaunchdDistributionPolicyV2 = Object.freeze({
+  previewTableId: "launchctl-macos-preview-v2",
+  mutationTableId: "launchctl-macos-fd3-v2",
+  operatingSystem: Object.freeze({ productName: "macOS", minimumProductVersion: "26.6.2" }),
+  executable: Object.freeze({ path: "/bin/launchctl", ownerUid: 0 }),
   emptyDirectory: Object.freeze({ path: "/private/var/empty", ownerUid: 0, mode: 493 }),
-  certification: null,
 });
 
-/** A launchctl row this host does not match, or an uncertified row asked to mutate: a capability, not a verdict. */
+/** A host below the floor, a launchctl that fails admission, or one that changed since admission. */
 export class LaunchdDistributionUnsupportedError extends Error {
   readonly code = EXIT_CODES.capabilityUnavailable;
   readonly reason = "unsupported_launchd_distribution";
@@ -66,41 +69,51 @@ export class LaunchdDistributionUnsupportedError extends Error {
   }
 }
 
-/** What a guarded, no-follow inspection of `/bin/launchctl` and an injected `sw_vers` probe report. */
-export interface ObservedLaunchdDistributionV1 {
-  readonly operatingSystem: {
-    readonly productName: string;
-    readonly productVersion: string;
-    readonly buildVersion: string;
-  };
-  readonly executable: {
-    readonly path: string;
-    readonly kind: "file" | "directory" | "symlink" | "other";
-    readonly ownerUid: number;
-    readonly mode: number;
-    readonly size: number;
-    readonly sha256: string;
-  };
-}
-
 function unsupported(detail: string): never {
   throw new LaunchdDistributionUnsupportedError(detail);
 }
 
-/** Every field is compared; version text is never trusted on its own (spec §5.3). */
-export function admitLaunchdDistribution(
-  observed: ObservedLaunchdDistributionV1,
-  row: LaunchdDistributionRowV1 = SUPPORTED_LAUNCHD_DISTRIBUTION,
-): void {
-  const os = observed.operatingSystem;
-  if (os.productName !== row.operatingSystem.productName) unsupported("operating system product name");
-  if (os.productVersion !== row.operatingSystem.productVersion) unsupported("operating system version");
-  if (os.buildVersion !== row.operatingSystem.buildVersion) unsupported("operating system build");
-  const executable = observed.executable;
-  if (executable.path !== row.executable.path) unsupported("launchctl path");
-  if (executable.kind !== "file") unsupported("launchctl is not a regular file");
-  if (executable.ownerUid !== row.executable.ownerUid) unsupported("launchctl owner");
-  if (executable.mode !== row.executable.mode) unsupported("launchctl mode");
-  if (executable.size !== row.executable.size) unsupported("launchctl size");
-  if (executable.sha256 !== row.executable.sha256) unsupported("launchctl hash");
+/** Two or three canonical decimal integers; a missing patch reads as `0`. */
+function macOsVersion(text: string): readonly [number, number, number] | null {
+  const match = /^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})(?:\.(0|[1-9]\d{0,3}))?$/u.exec(text);
+  return match === null ? null : [Number(match[1]), Number(match[2]), Number(match[3] ?? "0")];
+}
+
+const atLeast = (a: readonly number[], b: readonly number[]): boolean => {
+  for (let index = 0; index < b.length; index += 1) if ((a[index] ?? 0) !== (b[index] ?? 0)) return (a[index] ?? 0) > (b[index] ?? 0);
+  return true;
+};
+
+function schedulerRow(policy: LaunchdDistributionPolicyV2): SystemExecutableRowV1 {
+  const row = DARWIN_SYSTEM_EXECUTABLES.find((candidate) => candidate.id === "scheduler");
+  if (row?.path !== policy.executable.path) unsupported("no darwin scheduler row for the policy's launchctl path");
+  return row;
+}
+
+/** Rules 1–2 of spec §5.3 (D71): the macOS floor, then `posix_root_owned` on `/bin/launchctl`. */
+export async function admitLaunchdHost(
+  host: LaunchdHostObserverV1,
+  policy: LaunchdDistributionPolicyV2 = LAUNCHD_DISTRIBUTION_POLICY,
+): Promise<LaunchctlIdentityV1> {
+  const os = await host.operatingSystem();
+  if (os.productName !== policy.operatingSystem.productName) unsupported("operating system product name");
+  const version = macOsVersion(os.productVersion);
+  const floor = macOsVersion(policy.operatingSystem.minimumProductVersion);
+  if (version === null || floor === null || !atLeast(version, floor)) unsupported("operating system version is below the floor or malformed");
+  let file: AdmittedSystemExecutableV1;
+  try {
+    file = await admitPosixRootOwned(schedulerRow(policy), host.inspect);
+  } catch (error) {
+    if (error instanceof SystemExecutableRefusalError) throw new LaunchdDistributionUnsupportedError(error.detail, { cause: error });
+    throw error;
+  }
+  return Object.freeze({ file, productVersion: os.productVersion, buildVersion: os.buildVersion });
+}
+
+/** Re-admits and refuses any difference from the identity the table bound. */
+export async function recheckLaunchdHost(host: LaunchdHostObserverV1, identity: LaunchctlIdentityV1): Promise<void> {
+  const fresh = await admitLaunchdHost(host);
+  if (encodeCanonicalJson(fresh as unknown as CanonicalJsonValue) !== encodeCanonicalJson(identity as unknown as CanonicalJsonValue)) {
+    unsupported("launchctl or the operating system changed since admission");
+  }
 }

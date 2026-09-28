@@ -45,7 +45,7 @@ import type { LifecycleExecutionPlanV1 } from "../../lifecycle/codecs.js";
 import type { CliLifecycleContext } from "../../lifecycle/context.js";
 import { withLifecycleMutation } from "../../lifecycle/mutation-gate.js";
 import { automationLogSlotPath, automationRunnerLeasePath, automationStatusPath } from "../../lifecycle/runtime-records.js";
-import { scriptedLaunchd } from "../../lifecycle/testing.js";
+import { hostWith, scriptedLaunchd } from "../../lifecycle/testing.js";
 import { entrypointPath } from "../../update/local-release.js";
 import { runConfig } from "../config.js";
 import { runGit } from "../git/index.js";
@@ -65,8 +65,15 @@ const BASE_SCHEDULES = ["brain-reindex=daily@02:00", "brain-lint=daily@02:30", "
 const ENTRYPOINT = "// synthetic Developer OS entrypoint\n";
 const encoder = new TextEncoder();
 
-const launchd = scriptedLaunchd({ clock: () => CLOCK, certified: true });
-const host = { drifted: false, thirdState: false };
+const host = { drifted: false, thirdState: false, belowFloor: false };
+const [admittedHost, belowFloorHost] = [hostWith(), hostWith({ productVersion: "26.5" })];
+const launchd = scriptedLaunchd({
+  clock: () => CLOCK,
+  host: {
+    operatingSystem: () => (host.belowFloor ? belowFloorHost : admittedHost).operatingSystem(),
+    inspect: (path) => (host.belowFloor ? belowFloorHost : admittedHost).inspect(path),
+  },
+});
 const runtime = scriptedGitRuntime();
 
 /**
@@ -94,7 +101,7 @@ function effectPorts(context: CliLifecycleContext): LifecycleEffectPortsV1 {
       observer: {
         observe: (request) =>
           host.drifted
-            ? Promise.reject(new LaunchdDistributionUnsupportedError("operating system build 25G84 is not the pinned row"))
+            ? Promise.reject(new LaunchdDistributionUnsupportedError("operating system version is below the floor or malformed"))
             : launchd.ports.observer.observe(request).then((observed) =>
                 host.thirdState && observed.kind === "observed"
                   ? { ...observed, jobs: observed.jobs.map((entry) => ({ ...entry, state: { kind: "third_state" as const, reason: "dual_generation" as const } })) }
@@ -331,6 +338,7 @@ describe("automation on a real V2 home", () => {
 
       const plan = lastPlan(home);
       expect(validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan))).toBe("automation_enable");
+      expect(JSON.stringify(plan)).not.toMatch(/certif/u);
       expect(stepNames(plan)).toStrictEqual([
         "manifest:preserve_before",
         "foundation:plist_files",
@@ -381,6 +389,23 @@ describe("automation on a real V2 home", () => {
         ["doctor", true, "current", "loaded", null],
         ["git-sync", false, "absent", null, null],
       ]);
+      expect(launchd.events).toStrictEqual(eventsBefore);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "reports unsupported_launchd_distribution in status on a host below the macOS floor, without refusing",
+    async () => {
+      const home = await sharedHome();
+      const eventsBefore = [...launchd.events];
+      host.belowFloor = true;
+      try {
+        const status = dataOf(await runAutomation(home.context, { subcommand: "status" }));
+        expect(status).toMatchObject({ kind: "status", activation: "active", distribution: "unsupported_launchd_distribution" });
+      } finally {
+        host.belowFloor = false;
+      }
       expect(launchd.events).toStrictEqual(eventsBefore);
     },
     REAL_FILESYSTEM_TIMEOUT_MS,

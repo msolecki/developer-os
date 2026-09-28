@@ -19,11 +19,11 @@ import {
 } from "@developer-os/core";
 import type { SupervisedPhaseV1, SupervisedProcessRunner, SupervisedTerminationV1 } from "@developer-os/security";
 
-import { admitLaunchdDistribution, type ObservedLaunchdDistributionV1 } from "./distribution.js";
+import { recheckLaunchdHost, type LaunchdHostObserverV1 } from "./distribution.js";
 import { encodeLaunchdPlist } from "./plist.js";
 import {
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
-  requireLaunchdMutationCertified,
+  requireLaunchdMutationTable,
   type LaunchdProcessDirectoryIdentityV1,
   type SupportedLaunchdProcessTableTemplateV1,
   type SupportedLaunchdProcessTableV1,
@@ -137,12 +137,10 @@ export interface LaunchdSnapshotFileSystemV1 {
 export interface LaunchdSnapshotDependenciesV1 {
   readonly runner: Pick<SupervisedProcessRunner, "run">;
   readonly fs?: LaunchdSnapshotFileSystemV1;
-  /** The pinned mutation template; injected only by certification fixtures. */
+  /** The compiled mutation template; injected only by fixtures. */
   readonly template?: SupportedLaunchdProcessTableTemplateV1;
   effectiveUid(): number;
-  /** `sw_vers` values read through an injected probe, never a shell. */
-  operatingSystem(): Promise<ObservedLaunchdDistributionV1["operatingSystem"]>;
-  inspectExecutable(path: "/bin/launchctl"): Promise<ObservedLaunchdDistributionV1["executable"]>;
+  readonly host: LaunchdHostObserverV1;
 }
 
 const NODE_FILE_SYSTEM: LaunchdSnapshotFileSystemV1 = {
@@ -341,8 +339,8 @@ export class LaunchdSnapshotBootstrapper {
     const [mutationProfile] = table.profiles;
     let outcome: LaunchdMutationEvidenceV1["process"];
     try {
-      this.#certify(table);
-      await this.#admitHost();
+      this.#requireTable(table);
+      await recheckLaunchdHost(this.#dependencies.host, table.launchctlIdentity);
       await this.#admitStaging(table, false);
       const stats = await handle.stat({ bigint: true });
       if (!matchesLeaf(stats, attempt.snapshot.ownerUid, 0n) || !sameIdentity(stats, attempt.snapshot) || stats.size !== BigInt(attempt.snapshot.size)) {
@@ -384,12 +382,12 @@ export class LaunchdSnapshotBootstrapper {
     await source.close();
   }
 
-  #certify(table: SupportedLaunchdProcessTableV1): void {
-    requireLaunchdMutationCertified(table, this.#template);
+  #requireTable(table: SupportedLaunchdProcessTableV1): void {
+    requireLaunchdMutationTable(table, this.#template);
   }
 
   #admitRequest(request: LaunchdSnapshotRequestV1): Uint8Array {
-    this.#certify(request.table);
+    this.#requireTable(request.table);
     const uid = this.#dependencies.effectiveUid();
     if (request.domain !== launchdGuiDomain(uid as EffectiveUidV1)) refuse("launchd bootstrap domain is not the effective user's gui domain");
     parseLaunchdEffectId(request.effectId);
@@ -422,13 +420,6 @@ export class LaunchdSnapshotBootstrapper {
     ) {
       recovery("launchd_snapshot_outside_frontier", path);
     }
-  }
-
-  async #admitHost(): Promise<void> {
-    admitLaunchdDistribution({
-      operatingSystem: await this.#dependencies.operatingSystem(),
-      executable: await this.#dependencies.inspectExecutable("/bin/launchctl"),
-    });
   }
 
   async #admitDirectory(identity: LaunchdProcessDirectoryIdentityV1): Promise<readonly string[]> {

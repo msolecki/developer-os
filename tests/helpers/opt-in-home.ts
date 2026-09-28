@@ -226,7 +226,7 @@ async function installSyntheticEntrypoint(fixture: CommandFixture, lifecycle: Cl
 
 export async function createOptInHome(name: string): Promise<OptInHomeV1> {
   const runtime = scriptedGitRuntime();
-  const launchd = scriptedLaunchd({ clock: () => CLOCK, certified: true });
+  const launchd = scriptedLaunchd({ clock: () => CLOCK });
   const faults: OptInFaultsV1 = {
     rejectDestination: { on: false },
     launchdDrift: false,

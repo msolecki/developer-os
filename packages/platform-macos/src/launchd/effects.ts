@@ -21,7 +21,7 @@ import {
 } from "@developer-os/core";
 import type { SupervisedPhaseV1, SupervisedProcessRunner, SupervisedTerminationV1 } from "@developer-os/security";
 
-import { admitLaunchdDistribution, type ObservedLaunchdDistributionV1 } from "./distribution.js";
+import { LaunchdDistributionUnsupportedError, admitLaunchdHost, recheckLaunchdHost, type LaunchdHostObserverV1 } from "./distribution.js";
 import {
   launchdEffectPlanHash,
   sameLaunchdLiveState,
@@ -37,7 +37,7 @@ import {
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   expandLaunchdProcessTable,
   launchdProcessTableHash,
-  requireLaunchdMutationCertified,
+  requireLaunchdMutationTable,
   type LaunchdProcessDirectoryIdentityV1,
   type SupportedLaunchdProcessTableTemplateV1,
   type SupportedLaunchdProcessTableV1,
@@ -176,21 +176,28 @@ async function directoryIdentity(fs: LaunchdSnapshotFileSystemV1, path: string):
 
 /**
  * Re-derives the allocated mutation table from the three guarded staging directories of one
- * coordinator; the effect plan's `processTableHash` then decides whether it is the bound table.
+ * coordinator and a fresh host admission; the effect plan's `processTableHash` then decides
+ * whether it is the bound table, so a launchctl or macOS change since planning never matches.
  */
 export async function loadLaunchdProcessTable(
   productHome: CanonicalAbsolutePathV1,
   coordinatorId: LifecycleCoordinatorIdV1,
-  options: { readonly fs?: LaunchdSnapshotFileSystemV1; readonly template?: SupportedLaunchdProcessTableTemplateV1 } = {},
+  options: {
+    readonly fs?: LaunchdSnapshotFileSystemV1;
+    readonly template?: SupportedLaunchdProcessTableTemplateV1;
+    readonly host: LaunchdHostObserverV1;
+  },
 ): Promise<SupportedLaunchdProcessTableV1> {
   const fs = options.fs ?? NODE_FILE_SYSTEM;
   const root = `${productHome}/staging/lifecycle/${coordinatorId}/launchd-process`;
+  const launchctl = await admitLaunchdHost(options.host);
   return expandLaunchdProcessTable(
     {
       root: await directoryIdentity(fs, root),
       home: await directoryIdentity(fs, `${root}/home`),
       tmp: await directoryIdentity(fs, `${root}/tmp`),
     },
+    launchctl,
     options.template ?? SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   );
 }
@@ -221,13 +228,13 @@ export interface LaunchdBootoutDependenciesV1 {
   readonly fs?: LaunchdSnapshotFileSystemV1;
   readonly template?: SupportedLaunchdProcessTableTemplateV1;
   effectiveUid(): number;
-  operatingSystem(): Promise<ObservedLaunchdDistributionV1["operatingSystem"]>;
-  inspectExecutable(path: "/bin/launchctl"): Promise<ObservedLaunchdDistributionV1["executable"]>;
+  readonly host: LaunchdHostObserverV1;
 }
 
 /**
- * The literal `launchctl bootout gui/<uid>/<generated-label>` of the certified mutation row, with
- * the host, `/bin/launchctl` and the private `HOME`/`TMPDIR` staging re-verified around it.
+ * The literal `launchctl bootout gui/<uid>/<generated-label>` of the mutation table, with the
+ * table's bound launchctl identity rechecked and the private `HOME`/`TMPDIR` staging re-verified
+ * around it.
  */
 export class LaunchdBootoutRunner implements LaunchdBootoutPortV1 {
   readonly #dependencies: LaunchdBootoutDependenciesV1;
@@ -239,14 +246,11 @@ export class LaunchdBootoutRunner implements LaunchdBootoutPortV1 {
   }
 
   async bootout(table: SupportedLaunchdProcessTableV1, target: LaunchdGeneratedServiceTargetV1, phase: SupervisedPhaseV1): Promise<LaunchdBootoutEvidenceV1> {
-    requireLaunchdMutationCertified(table, this.#dependencies.template ?? SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE);
+    requireLaunchdMutationTable(table, this.#dependencies.template ?? SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE);
     const prefix = `gui/${String(this.#dependencies.effectiveUid())}/`;
     if (!target.startsWith(prefix)) refuse("launchd bootout target is not the effective user's gui domain");
     parseGeneratedLabel(target.slice(prefix.length));
-    admitLaunchdDistribution({
-      operatingSystem: await this.#dependencies.operatingSystem(),
-      executable: await this.#dependencies.inspectExecutable("/bin/launchctl"),
-    });
+    await recheckLaunchdHost(this.#dependencies.host, table.launchctlIdentity);
     await admitProcessStaging(this.#fs, table);
     const [mutationProfile] = table.profiles;
     const evidence = await this.#dependencies.runner.run({
@@ -386,11 +390,11 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
     return next;
   }
 
-  /** Hash-bound and certified before any query or mutation; an uncertified row refuses here (Q2). */
+  /** Hash-bound to the effect plan and de-slotted to the compiled template before any query or mutation. */
   async #table(effect: LaunchdEffectPlanV1): Promise<SupportedLaunchdProcessTableV1> {
     const table = await this.#dependencies.processTable();
     if (launchdProcessTableHash(table) !== effect.processTableHash) recovery("launchd_process_table_changed", table.staging.root.path);
-    requireLaunchdMutationCertified(table, this.#template);
+    requireLaunchdMutationTable(table, this.#template);
     return table;
   }
 
@@ -505,7 +509,14 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
     if (live !== undefined && sameLaunchdLiveState(live, to)) return;
     if (live === undefined || !sameLaunchdLiveState(live, from)) recovery("launchd_live_state_third_state", transition.plistPath);
     const bootstrap = await this.#command(effect, direction, index, transition, to, table, phase);
-    await this.#awaitState(effect, transition, from, to, phase);
+    try {
+      await this.#awaitState(effect, transition, from, to, phase);
+    } catch (error) {
+      // Spec §5.3 rule 5 (D71): with no certification, a forward FD-3 bootstrap that does not
+      // produce the planned label is the runtime proof failing; the coordinator compensates.
+      if (bootstrap === null || direction !== "forward" || !(error instanceof LifecycleRecoveryRequiredError)) throw error;
+      throw new LaunchdDistributionUnsupportedError("bootstrap post-observation is not the planned generated label", { cause: error });
+    }
     if (bootstrap !== null) await this.#dependencies.bootstrapper.recheckSource(bootstrap);
   }
 

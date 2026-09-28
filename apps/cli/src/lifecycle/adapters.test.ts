@@ -105,8 +105,7 @@ function recordingHost(calls: string[]): LaunchdHostV1 {
       run: reject("run"),
     },
     consoleUserUid: reject("consoleUserUid"),
-    operatingSystem: reject("operatingSystem"),
-    inspectExecutable: reject("inspectExecutable"),
+    host: { operatingSystem: reject("operatingSystem"), inspect: reject("inspect") },
     inspectEmptyDirectory: reject("inspectEmptyDirectory"),
   };
 }
@@ -235,7 +234,8 @@ describe("the composed lifecycle effect adapters", () => {
     expect(home.lifecycle.effectPorts()).toBe(home.lifecycle.effectPorts());
     expect(built).toBe(1);
     await expect(REJECTING_LAUNCHD_HOST.runner.run({} as never)).rejects.toThrow(/without injecting a runner/u);
-    await expect(REJECTING_LAUNCHD_HOST.operatingSystem()).rejects.toThrow();
+    await expect(REJECTING_LAUNCHD_HOST.host.operatingSystem()).rejects.toThrow();
+    await expect(REJECTING_LAUNCHD_HOST.host.inspect("/bin/launchctl" as CanonicalAbsolutePathV1)).rejects.toThrow();
   });
 
   it("refuses a no-replace rename whose source left its identity, and the network push (D59)", async () => {

@@ -1,12 +1,8 @@
-import type { CanonicalAbsolutePathV1, EffectiveUidV1, LowerHexSha256, UInt64DecimalV1, UtcTimestampV1 } from "@developer-os/core";
+import type { CanonicalAbsolutePathV1, EffectiveUidV1, UInt64DecimalV1 } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
-import {
-  LaunchdDistributionUnsupportedError,
-  SUPPORTED_LAUNCHD_DISTRIBUTION,
-  admitLaunchdDistribution,
-  type ObservedLaunchdDistributionV1,
-} from "./distribution.js";
+import { LaunchdDistributionUnsupportedError, admitLaunchdHost, recheckLaunchdHost } from "./distribution.js";
+import { LAUNCHCTL_IDENTITY, hostWith } from "./distribution.test-fixtures.js";
 import {
   LAUNCHD_PREVIEW_OBSERVATION_TABLE,
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
@@ -15,9 +11,8 @@ import {
   launchdObservationProcessTableHash,
   launchdProcessTableHash,
   launchdProcessTableTemplateHash,
-  requireLaunchdMutationCertified,
+  requireLaunchdMutationTable,
   type LaunchdProcessDirectoryIdentityV1,
-  type SupportedLaunchdProcessTableTemplateV1,
 } from "./process-table.js";
 import { LaunchdInputError } from "./types.js";
 
@@ -28,72 +23,78 @@ function directory(path: string, ino: string): LaunchdProcessDirectoryIdentityV1
   return { path: path as CanonicalAbsolutePathV1, ownerUid: uid, mode: 448, dev: "16777232" as UInt64DecimalV1, ino: ino as UInt64DecimalV1 };
 }
 
-const staging = {
+const STAGING = {
   root: directory(root, "100"),
   home: directory(`${root}/home`, "101"),
   tmp: directory(`${root}/tmp`, "102"),
 };
 
-const uncertifiedTable = expandLaunchdProcessTable(staging);
+const table = expandLaunchdProcessTable(STAGING, LAUNCHCTL_IDENTITY);
 
-const certifiedTemplate: SupportedLaunchdProcessTableTemplateV1 = {
-  ...SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
-  certification: {
-    certifiedAt: "2026-09-24T10:00:00.000Z" as UtcTimestampV1,
-    fixtureTranscriptSha256: "a".repeat(64) as LowerHexSha256,
-  },
-};
-
-function observedRow(): ObservedLaunchdDistributionV1 {
-  return {
-    operatingSystem: { ...SUPPORTED_LAUNCHD_DISTRIBUTION.operatingSystem },
-    executable: { ...SUPPORTED_LAUNCHD_DISTRIBUTION.executable, kind: "file" },
-  };
-}
-
-type Drift = { readonly name: string; readonly mutate: (row: ObservedLaunchdDistributionV1) => ObservedLaunchdDistributionV1 };
-
-const drifts: readonly Drift[] = [
-  { name: "product name", mutate: (row) => ({ ...row, operatingSystem: { ...row.operatingSystem, productName: "Mac OS X" } }) },
-  { name: "product version", mutate: (row) => ({ ...row, operatingSystem: { ...row.operatingSystem, productVersion: "26.6.3" } }) },
-  { name: "build", mutate: (row) => ({ ...row, operatingSystem: { ...row.operatingSystem, buildVersion: "25G84" } }) },
-  { name: "path", mutate: (row) => ({ ...row, executable: { ...row.executable, path: "/usr/bin/launchctl" } }) },
-  { name: "symlink", mutate: (row) => ({ ...row, executable: { ...row.executable, kind: "symlink" } }) },
-  { name: "owner", mutate: (row) => ({ ...row, executable: { ...row.executable, ownerUid: 501 } }) },
-  { name: "mode", mutate: (row) => ({ ...row, executable: { ...row.executable, mode: 0o775 } }) },
-  { name: "size", mutate: (row) => ({ ...row, executable: { ...row.executable, size: row.executable.size + 1 } }) },
-  { name: "same version, different binary", mutate: (row) => ({ ...row, executable: { ...row.executable, sha256: "0".repeat(64) } }) },
-];
-
-describe("launchctl distribution row", () => {
-  it("pins the measured launchctl row", () => {
-    expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.id).toBe("launchctl-macos-26.6.2-25G83-preview-v1");
-    expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.executable).toEqual({
-      path: "/bin/launchctl", ownerUid: 0, mode: 493, size: 363488,
-      sha256: "b4dbf509754d8e1117f7851baa93ede75bc75218c48d6ddf19fbb1505d261be7",
-    });
-    expect(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE.id).toBe("launchctl-macos-26.6.2-25G83-fd3-v1");
-    expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.operatingSystem).toEqual({ productName: "macOS", productVersion: "26.6.2", buildVersion: "25G83" });
+describe("launchctl distribution policy", () => {
+  it("names the fixed path, the macOS floor and version-neutral table IDs, and no build or binary", () => {
+    expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.id).toBe("launchctl-macos-preview-v2");
+    expect(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE.id).toBe("launchctl-macos-fd3-v2");
+    expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.executable).toEqual({ path: "/bin/launchctl", ownerUid: 0 });
+    expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.operatingSystem).toEqual({ productName: "macOS", minimumProductVersion: "26.6.2" });
     expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.emptyDirectory).toEqual({ path: "/private/var/empty", ownerUid: 0, mode: 493 });
+    expect(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE.launchctlIdentity).toEqual({ slot: "launchctl_identity" });
   });
 
-  it("is uncertified until the disposable-host certification fills the row", () => {
-    expect(SUPPORTED_LAUNCHD_DISTRIBUTION.certification).toBeNull();
-    expect(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE.certification).toBeNull();
-    expect("certification" in LAUNCHD_PREVIEW_OBSERVATION_TABLE).toBe(false);
+  it("admits the fixture host as exactly LAUNCHCTL_IDENTITY", async () => {
+    await expect(admitLaunchdHost(hostWith())).resolves.toEqual(LAUNCHCTL_IDENTITY);
   });
+});
 
-  it("admits the exact measured host", () => {
-    expect(() => { admitLaunchdDistribution(observedRow()); }).not.toThrow();
+describe("launchctl admission", () => {
+  it.each(["26.6.2", "26.7", "26.10.1", "27.0"])("admits macOS %s", async (productVersion) => {
+    await expect(admitLaunchdHost(hostWith({ productVersion }))).resolves.toBeDefined();
   });
-
-  it("has drift cases", () => {
-    expect(drifts.length).toBeGreaterThan(0);
+  it.each(["26.6.1", "26.6", "25.9.9", "27", "26.6.2.1", "026.6.2", "", "26.x"])("refuses macOS %s", async (productVersion) => {
+    await expect(admitLaunchdHost(hostWith({ productVersion }))).rejects.toThrow("unsupported_launchd_distribution");
   });
+  it("refuses another product name", async () => {
+    await expect(admitLaunchdHost(hostWith({ productName: "Mac OS X" }))).rejects.toThrow(LaunchdDistributionUnsupportedError);
+  });
+  it("never compares the build", async () => {
+    await expect(admitLaunchdHost(hostWith({ buildVersion: "26A1" }))).resolves.toBeDefined();
+  });
+  it.each([
+    ["owner", { "/bin/launchctl": { ownerUid: 501 } }], ["group write", { "/bin/launchctl": { mode: 0o775 } }],
+    ["setuid", { "/bin/launchctl": { mode: 0o4755 } }], ["symlink", { "/bin/launchctl": { kind: "symlink" as const } }],
+    ["writable /bin", { "/bin": { mode: 0o775 } }], ["writable /", { "/": { mode: 0o757 } }],
+  ])("refuses %s", async (_name, paths) => {
+    await expect(admitLaunchdHost(hostWith({ paths }))).rejects.toThrow("unsupported_launchd_distribution");
+  });
+  it("keeps the table refusal as the cause", async () => {
+    const refusal = admitLaunchdHost(hostWith({ paths: { "/bin/launchctl": { ownerUid: 501 } } }));
+    await expect(refusal).rejects.toBeInstanceOf(LaunchdDistributionUnsupportedError);
+    await expect(refusal).rejects.toHaveProperty("cause.name", "SystemExecutableRefusalError");
+  });
+  it.each(["dev", "ino", "size", "sha256"] as const)("recheck refuses a changed %s", async (field) => {
+    const identity = await admitLaunchdHost(hostWith());
+    const change = { [field]: field === "size" ? 1 : field === "sha256" ? "c".repeat(64) : "7" };
+    await expect(recheckLaunchdHost(hostWith({ paths: { "/bin/launchctl": change } }), identity)).rejects.toThrow("unsupported_launchd_distribution");
+  });
+  it("recheck refuses a macOS update and passes an unchanged host", async () => {
+    const identity = await admitLaunchdHost(hostWith());
+    await expect(recheckLaunchdHost(hostWith({ productVersion: "26.7" }), identity)).rejects.toThrow(LaunchdDistributionUnsupportedError);
+    await expect(recheckLaunchdHost(hostWith(), identity)).resolves.toBeUndefined();
+  });
+});
 
-  it.each(drifts)("refuses $name drift as unsupported_launchd_distribution", ({ mutate }) => {
-    expect(() => { admitLaunchdDistribution(mutate(observedRow())); }).toThrow(LaunchdDistributionUnsupportedError);
-    expect(() => { admitLaunchdDistribution(mutate(observedRow())); }).toThrow("unsupported_launchd_distribution");
+describe("launchd tables carry no host literal", () => {
+  it("keeps template and observation hashes equal for two admitted identities", async () => {
+    const one = expandLaunchdProcessTable(STAGING, await admitLaunchdHost(hostWith()));
+    const two = expandLaunchdProcessTable(STAGING, await admitLaunchdHost(hostWith({ paths: { "/bin/launchctl": { sha256: "c".repeat(64), size: 400000 } } })));
+    expect(launchdProcessTableTemplateHash(deslotLaunchdProcessTable(one))).toBe(launchdProcessTableTemplateHash(deslotLaunchdProcessTable(two)));
+    expect(launchdProcessTableHash(one)).not.toBe(launchdProcessTableHash(two));
+    expect(JSON.stringify(LAUNCHD_PREVIEW_OBSERVATION_TABLE)).not.toMatch(/25G83|363488|sha256|certif/u);
+    expect("certification" in SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE).toBe(false);
+  });
+  it("admits a mutation table without certification", async () => {
+    const admitted = expandLaunchdProcessTable(STAGING, await admitLaunchdHost(hostWith()));
+    expect(() => { requireLaunchdMutationTable(admitted); }).not.toThrow();
   });
 });
 
@@ -141,28 +142,29 @@ describe("launchctl process tables", () => {
     expect(template.terminationGraceMs).toBe(100);
   });
 
-  it("expands the staging slots into HOME and TMPDIR and de-slots back to the exact template", () => {
-    expect(uncertifiedTable.staging).toEqual(staging);
-    expect(uncertifiedTable.environment).toEqual({
+  it("expands the staging and launchctl slots and de-slots back to the exact template", () => {
+    expect(table.staging).toEqual(STAGING);
+    expect(table.launchctlIdentity).toEqual(LAUNCHCTL_IDENTITY);
+    expect(table.environment).toEqual({
       HOME: `${root}/home`,
       LANG: "C",
       LC_ALL: "C",
       PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
       TMPDIR: `${root}/tmp`,
     });
-    expect(deslotLaunchdProcessTable(uncertifiedTable)).toEqual(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE);
-    expect(launchdProcessTableTemplateHash(deslotLaunchdProcessTable(uncertifiedTable))).toBe(launchdProcessTableTemplateHash());
+    expect(deslotLaunchdProcessTable(table)).toEqual(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE);
+    expect(launchdProcessTableTemplateHash(deslotLaunchdProcessTable(table))).toBe(launchdProcessTableTemplateHash());
   });
 
   it("separates the three table hash domains", () => {
-    const hashes = new Set([launchdObservationProcessTableHash(), launchdProcessTableTemplateHash(), launchdProcessTableHash(uncertifiedTable)]);
+    const hashes = new Set([launchdObservationProcessTableHash(), launchdProcessTableTemplateHash(), launchdProcessTableHash(table)]);
     expect(hashes.size).toBe(3);
     for (const hash of hashes) expect(hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("binds the expanded table hash to the staging identities", () => {
-    const moved = expandLaunchdProcessTable({ ...staging, tmp: directory(`${root}/tmp`, "103") });
-    expect(launchdProcessTableHash(moved)).not.toBe(launchdProcessTableHash(uncertifiedTable));
+    const moved = expandLaunchdProcessTable({ ...STAGING, tmp: directory(`${root}/tmp`, "103") }, LAUNCHCTL_IDENTITY);
+    expect(launchdProcessTableHash(moved)).not.toBe(launchdProcessTableHash(table));
   });
 
   it.each([
@@ -173,41 +175,19 @@ describe("launchctl process tables", () => {
     { name: "another owner", change: { tmp: { ...directory(`${root}/tmp`, "102"), ownerUid: 502 as EffectiveUidV1 } } },
     { name: "home and tmp one directory", change: { tmp: directory(`${root}/tmp`, "101") } },
   ])("refuses a staging identity with $name", ({ change }) => {
-    expect(() => expandLaunchdProcessTable({ ...staging, ...change })).toThrow(LaunchdInputError);
+    expect(() => expandLaunchdProcessTable({ ...STAGING, ...change }, LAUNCHCTL_IDENTITY)).toThrow(LaunchdInputError);
   });
 });
 
-describe("launchd mutation certification", () => {
-  it("refuses mutation while the row is uncertified", () => {
-    expect(() => { requireLaunchdMutationCertified(uncertifiedTable); }).toThrow("unsupported_launchd_distribution");
-    expect(() => { requireLaunchdMutationCertified(uncertifiedTable); }).toThrow(LaunchdDistributionUnsupportedError);
-  });
-
-  it("admits a certified table that de-slots to its certified template", () => {
-    const certified = expandLaunchdProcessTable(staging, certifiedTemplate);
-    expect(() => { requireLaunchdMutationCertified(certified, certifiedTemplate); }).not.toThrow();
-  });
-
-  it("refuses a certified table against the uncertified production template", () => {
-    const certified = expandLaunchdProcessTable(staging, certifiedTemplate);
-    expect(() => { requireLaunchdMutationCertified(certified); }).toThrow("process table is not the pinned row");
-  });
-
-  it("refuses malformed certification evidence", () => {
-    const malformed: SupportedLaunchdProcessTableTemplateV1 = {
-      ...certifiedTemplate,
-      certification: { certifiedAt: "2026-09-24" as UtcTimestampV1, fixtureTranscriptSha256: "a".repeat(64) as LowerHexSha256 },
-    };
-    expect(() => { requireLaunchdMutationCertified(expandLaunchdProcessTable(staging, malformed), malformed); }).toThrow(LaunchdDistributionUnsupportedError);
-  });
-
-  it("refuses a table for another row", () => {
-    const other = { ...expandLaunchdProcessTable(staging, certifiedTemplate), id: "launchctl-macos-26.7-25H1-fd3-v1" as const };
-    expect(() => { requireLaunchdMutationCertified(other, certifiedTemplate); }).toThrow("process table is not the pinned row");
+describe("launchd mutation table", () => {
+  it("refuses a table carrying a retired pinned table ID", () => {
+    const retired = { ...table, id: "launchctl-macos-26.6.2-25G83-fd3-v1" as unknown as typeof table.id };
+    expect(() => { requireLaunchdMutationTable(retired); }).toThrow("process table is not the compiled template");
+    expect(() => { requireLaunchdMutationTable(retired); }).toThrow(LaunchdDistributionUnsupportedError);
   });
 
   it("refuses a table whose environment does not name its staging", () => {
-    const drifted = { ...expandLaunchdProcessTable(staging, certifiedTemplate), environment: { ...uncertifiedTable.environment, HOME: root } };
-    expect(() => { requireLaunchdMutationCertified(drifted, certifiedTemplate); }).toThrow(LaunchdInputError);
+    const drifted = { ...table, environment: { ...table.environment, HOME: root } };
+    expect(() => { requireLaunchdMutationTable(drifted); }).toThrow(LaunchdInputError);
   });
 });

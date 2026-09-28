@@ -100,7 +100,6 @@ async function launchdHome(
   if (base === undefined) throw new Error("the fixture composed no lifecycle context");
   const launchd = scriptedLaunchd({
     clock: base.clock,
-    certified: true,
     ...(beforeBootout === undefined ? {} : { beforeBootout }),
   });
   launchd.loaded.set(DOCTOR, plist.label);

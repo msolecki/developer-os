@@ -82,6 +82,7 @@ import {
   LaunchdEffectJournalStore,
   MAX_LAUNCHD_PLIST_BYTES,
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+  admitLaunchdHost,
   assertLaunchdPlanBindings,
   buildLaunchdPlanPreview,
   launchdEffectPlan,
@@ -1306,8 +1307,8 @@ async function observeLabels(
 
 /**
  * The `P` variant's launchd inputs, observed before any ID is reserved: every manifest-owned
- * plist admitted and read, every label's live state, and — when a label is loaded — a certified
- * mutation row, so an unsupported host refuses here instead of rolling back after the marker.
+ * plist admitted and read, every label's live state, and — when a label is loaded — an admitted
+ * launchctl host, so an unsupported host refuses here instead of rolling back after the marker.
  */
 async function planUninstallLaunchd(
   request: LifecycleUninstallRequestV1,
@@ -1331,9 +1332,7 @@ async function planUninstallLaunchd(
   let live: ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1>;
   try {
     live = await observeLabels(ports.observer, lifecycle.effectiveUid, rows, productHome);
-    if (template.certification === null && [...live.values()].some((state) => state.state === "loaded")) {
-      throw new LaunchdDistributionUnsupportedError("launchctl row is not certified");
-    }
+    if ([...live.values()].some((state) => state.state === "loaded")) await admitLaunchdHost(ports.host);
   } catch (error) {
     if (error instanceof LaunchdDistributionUnsupportedError) {
       refuseUnsupportedLaunchd(lifecycle.effectiveUid, rows.map((row) => row.label), error);
@@ -1393,7 +1392,9 @@ export async function stageLaunchdProcessTable(
   }
   await lifecycle.fs.syncDirectory(root);
   await syncDirectoryAt(lifecycle.fs, coordinatorStaging);
-  return launchdProcessTableHash(await loadLaunchdProcessTable(productHome, coordinatorId, { template }));
+  return launchdProcessTableHash(
+    await loadLaunchdProcessTable(productHome, coordinatorId, { template, host: lifecycle.effectPorts().launchd.host }),
+  );
 }
 
 /**
