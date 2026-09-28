@@ -242,16 +242,16 @@ is spawned with `env: { USER, LOGNAME }` set to the account name (the amendment 
 inherited from the parent) (`packages/adapter-claude/src/invoke.ts`); Codex
 always gets `env: { CODEX_HOME: <isolated per-run home> }`: `codexHome` is required and
 `invokeCodex` refuses a call without it (D73, NEW-106), and every product call supplies it
-through `invokeIsolatedCodex` (`apps/cli/src/commands/ingest.ts`). Beyond that one product-chosen
-variable, neither vendor inherits anything from the parent — not `HOME`, not a
+through `invokeIsolatedCodex` (`apps/cli/src/commands/ingest.ts`). Beyond these product-chosen
+variables, neither vendor inherits anything from the parent — not `HOME`, not a
 proxy variable. Task 1 Step 6 recorded both binaries exiting `0` under
 `env -i … --help` (Claude row 13, Codex row 7 above); until 2026-09-28 no
 observation in this document recorded either vendor failing for want of a
 variable, and the one that now does (the amendment above) admits two names only.
-`EXPECTED_VENDOR_ENVIRONMENT` in `tests/security/network.test.ts:103` remains
+`EXPECTED_VENDOR_ENVIRONMENT` in `tests/security/network.test.ts:109` remains
 the single place a future admission would be made, and it may be made only
 against a recorded observation of a vendor failing without the variable —
-never for a proxy variable, which `tests/security/network.test.ts:285`
+never for a proxy variable, which `tests/security/network.test.ts:293`
 (`"does not pass a proxy the parent process was given"`) already proves does
 not reach the child.
 
