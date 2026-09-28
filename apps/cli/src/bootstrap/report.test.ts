@@ -171,6 +171,35 @@ describe("inspectBootstrapEvidence", () => {
     expect(await nodeFs.readFile(unrelated, "utf8")).toBe("unrelated sibling\n");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("withholds retained parent authorities from an altered envelope whose journal selection stays exact", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-altered-authorities", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const verified = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+    expect(verified.report.ids[0]?.status).toBe("verified");
+    expect(verified.retainedParentAuthorities.length).toBeGreaterThan(0);
+    const target = await firstExternalRegularFile(
+      await retainedTombstones(fixture.root),
+      [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
+    );
+    if (target === null) throw new Error("fixture retained no external-parent regular-file tombstone");
+    const id = /^\.developer-os-retained\.(fi_[0-9a-f-]+)\./u.exec(basename(target))?.[1];
+    if (id === undefined) throw new Error("fixture tombstone has no bootstrap ID");
+    await nodeFs.writeFile(
+      join(dirname(target), `.developer-os-retained.${id}.9999999999.tombstone`),
+      RETAINED_SECRET,
+      { mode: 0o600 },
+    );
+
+    const altered = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+
+    expect(altered.report.ids[0]?.status).toBe("altered");
+    expect(altered.active).not.toBeNull();
+    expect(altered.retainedParentAuthorities).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("reports a pre-plan prefix as unverified without adopting or changing it", async () => {
     const fixture = await createCommandFixture("bootstrap-report-unverified", {
       bootstrapAvailable: true,

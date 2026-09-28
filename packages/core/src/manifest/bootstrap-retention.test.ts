@@ -1279,7 +1279,7 @@ function admittedEvidence(
       if (mutation.stagedPath === null || mutation.content == null || mutation.digest == null) return;
       consumedFoundationPayloadOrdinals.add(mutation.content.ordinal);
       consumedFoundationPayloadOrdinals.add(mutation.digest.ordinal);
-      consumedFoundationPaths.add(mutation.targetPath);
+      if (participant.role.kind === "forward") consumedFoundationPaths.add(mutation.targetPath);
       consumedFoundationPaths.add(mutation.stagedPath);
       consumedFoundationPaths.add(path(`${mutation.stagedPath}.sha256`));
     });
@@ -2001,6 +2001,7 @@ describe("retained bootstrap table derivation", () => {
       const forwardTargets = new Set(plan.foundationParticipants
         .filter((participant) => participant.role.kind === "forward")
         .flatMap((participant) => participant.mutations.map((mutation) => mutation.targetPath)));
+      expect(forwardTargets.size).toBeGreaterThan(0);
       const installed = new Set(plan.manifest.after.state === "present"
         ? [plan.manifest.manifestPath] : []);
 

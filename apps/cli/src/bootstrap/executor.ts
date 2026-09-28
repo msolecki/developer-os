@@ -1021,6 +1021,13 @@ export class BootstrapExecutor {
     const lifecycleLock = join(paths.stateDir, ".lifecycle.lock");
     const lifecycleLockStats = await lstatOptional(lifecycleLock);
     const lifecycleLockName = lifecycleLockStats === null ? [] : [basename(lifecycleLock)];
+    /** NEW-71: a present lock is only the reusable one the plan admitted, bound by identity as the pre-intent inventory binds its held lock. */
+    const admittedLifecycleLock = plan.admittedPreexistingPaths.find((entry) => entry.path === lifecycleLock);
+    const lifecycleLockIsAdmitted = lifecycleLockStats === null || (
+      admittedLifecycleLock !== undefined &&
+      lifecycleLockStats.dev.toString(10) === admittedLifecycleLock.dev &&
+      lifecycleLockStats.ino.toString(10) === admittedLifecycleLock.ino
+    );
     if (
       lifecycleLockStats !== null &&
       (!lifecycleLockStats.isFile() || lifecycleLockStats.isSymbolicLink() ||
@@ -1050,6 +1057,7 @@ export class BootstrapExecutor {
       lockStats.dev.toString(10) !== plan.bootstrapIdentity.dev ||
       lockStats.ino.toString(10) !== plan.bootstrapIdentity.ino ||
       held.dev !== plan.bootstrapIdentity.dev || held.ino !== plan.bootstrapIdentity.ino ||
+      !lifecycleLockIsAdmitted ||
       !sameValue(homeNames, expectedHomeNames) ||
       !sameValue(stateNames, expectedStateNames)
     ) {

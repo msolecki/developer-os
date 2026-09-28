@@ -1286,7 +1286,7 @@ async function inspectPlan(
       ...initialForId.map((entry) => entry.path),
       ...roots,
     ])],
-    parentAuthorities: exactSelection && terminalRetained && table !== null
+    parentAuthorities: exactSelection && summary.status === "verified" && table !== null
       ? [...new Map(table.map((row) => [row.parent.path, row.parent] as const)).values()]
       : [],
     /** Spec 2 P8: a swapped retained parent would otherwise leave only the swapped identity to admit. */

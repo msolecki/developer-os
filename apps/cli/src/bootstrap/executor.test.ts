@@ -327,6 +327,44 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect(await nodeFs.readFile(marker, "utf8")).toBe("unadmitted\n");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("refuses a post-plan global lock whose identity is not the one the plan admitted", async () => {
+    const fixture = await createCommandFixture("bootstrap-post-plan-global-lock-swap", {
+      bootstrapAvailable: true,
+      bootstrapFailureAfter: "after_global_lock",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    await closeBootstrapProcess(fixture);
+    const planNames = async (): Promise<string[]> =>
+      (await nodeFs.readdir(fixture.paths.stateDir)).filter((name) => name.endsWith(".plan.json"));
+    const rolledBackPlans = await planNames();
+    fixture.disableBootstrapFailure();
+    fixture.setBootstrapInterrupt("after_plan");
+    const planning = fixture.rebuildContext();
+    expect((await runInit(planning, ACCEPTED)).ok).toBe(false);
+    await closeBootstrapContext(planning);
+    const published = (await planNames()).filter((name) => !rolledBackPlans.includes(name));
+    expect(published).toHaveLength(1);
+    const plan = JSON.parse(
+      await nodeFs.readFile(join(fixture.paths.stateDir, published[0] as string), "utf8"),
+    ) as JsonRecord;
+    const slotPaths = (plan.journalSlots as JsonRecord[]).map((slot) => String(slot.path));
+    const lock = join(fixture.paths.stateDir, ".lifecycle.lock");
+    const admitted = (plan.admittedPreexistingPaths as JsonRecord[]).find((entry) => entry.path === lock);
+    if (admitted === undefined) throw new Error("second plan did not admit the rolled-back global lock");
+    const replacement = `${lock}.replacement`;
+    await nodeFs.writeFile(replacement, new Uint8Array(), { mode: 0o600 });
+    await nodeFs.rename(replacement, lock);
+    expect((await nodeFs.lstat(lock, { bigint: true })).ino.toString(10)).not.toBe(decimalText(admitted.ino));
+
+    fixture.disableBootstrapInterrupt();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect(!refused.ok && refused.error.message).toContain("post-plan inventory");
+    expect(await Promise.all(slotPaths.map((path) => nodeFs.readFile(path))))
+      .toEqual([Buffer.alloc(0), Buffer.alloc(0)]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("refuses an equal-empty replacement slot after plan publication without writing it", async () => {
     const fixture = await createCommandFixture("bootstrap-post-plan-slot-replacement", {
       bootstrapAvailable: true,
