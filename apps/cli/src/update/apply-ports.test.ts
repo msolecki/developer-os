@@ -1,8 +1,8 @@
 import { LifecycleRecoveryRequiredError, parseCanonicalAbsolutePathText, parseLowerHexSha256, parseUInt64Decimal } from "@developer-os/core";
-import type { ManifestBytesStateV1, ManifestStatePlanV1, UpdateExpectedPayloadRefV1 } from "@developer-os/core";
+import type { LifecycleGuardedEntryV1, ManifestBytesStateV1, ManifestStatePlanV1, UpdateExpectedPayloadRefV1 } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
-import { manifestPayloadIdentities } from "./apply-ports.js";
+import { manifestPayloadIdentities, matchesManifestFileIdentity } from "./apply-ports.js";
 import { SYNTHETIC_COORDINATOR_ID } from "./testing.js";
 
 function payload(ordinal: number): UpdateExpectedPayloadRefV1 {
@@ -55,5 +55,47 @@ describe("manifestPayloadIdentities (construction_evidence, D72 P2)", () => {
     const identity = await manifestPayloadIdentities([transitional, terminal], () => Promise.resolve({ dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("2") }));
 
     expect(() => identity(payload(9))).toThrow(LifecycleRecoveryRequiredError);
+  });
+});
+
+describe("matchesManifestFileIdentity", () => {
+  const expected: Parameters<typeof matchesManifestFileIdentity>[1] = {
+    hash: parseLowerHexSha256("a".repeat(64)),
+    ownerUid: 501,
+    mode: 0o600,
+    nlink: 1,
+    size: parseUInt64Decimal("10"),
+    dev: parseUInt64Decimal("3"),
+    ino: parseUInt64Decimal("4"),
+  };
+  const entry: LifecycleGuardedEntryV1 = {
+    path: parseCanonicalAbsolutePathText("/synthetic/user/.developer-os/installation-manifest.json"),
+    kind: "regular_file",
+    ownerUid: 501,
+    mode: 0o600,
+    nlink: 1,
+    size: parseUInt64Decimal("10"),
+    dev: parseUInt64Decimal("3"),
+    ino: parseUInt64Decimal("4"),
+  };
+
+  it("admits the exact ManifestFileIdentityV1 tuple", () => {
+    expect(matchesManifestFileIdentity(entry, expected)).toBe(true);
+  });
+
+  it.each([
+    ["another owner", { ownerUid: 502 }],
+    ["a widened mode", { mode: 0o644 }],
+    ["a second link", { nlink: 2 }],
+    ["another size", { size: parseUInt64Decimal("11") }],
+    ["another device", { dev: parseUInt64Decimal("5") }],
+    ["another inode", { ino: parseUInt64Decimal("6") }],
+    ["a directory", { kind: "directory" as const }],
+  ])("refuses %s", (_label, change) => {
+    expect(matchesManifestFileIdentity({ ...entry, ...change }, expected)).toBe(false);
+  });
+
+  it("refuses an absent entry", () => {
+    expect(matchesManifestFileIdentity(null, expected)).toBe(false);
   });
 });

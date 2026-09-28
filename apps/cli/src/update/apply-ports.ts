@@ -369,7 +369,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
   const constructionPlan = reopened.construction;
   const payloadIdentity = constructionPlan === null ? () => thirdState("update_construction_plan_absent", root) : constructionPayloadIdentity(fs, effectiveUid, constructionPlan);
   const hashTarget = async (path: CanonicalAbsolutePathV1): Promise<LowerHexSha256 | null> => {
-    const entry = await fs.lstat(path);
+    const entry = await lifecycle.fs.lstat(path);
     return entry?.kind === "regular_file" ? fs.hashRegular(entry, BigInt(entry.size)) : null;
   };
   const foundation = new UpdateFoundationPort({
@@ -668,10 +668,14 @@ async function removeUnconsumedPayloads(journals: UpdateParticipantJournalStore,
   for (const path of paths) await journals.remove(path);
 }
 
+export function matchesManifestFileIdentity(entry: LifecycleGuardedEntryV1 | null, expected: ManifestFileIdentityV1): entry is LifecycleGuardedEntryV1 {
+  return entry?.kind === "regular_file" && entry.dev === expected.dev && entry.ino === expected.ino && entry.size === expected.size && entry.ownerUid === expected.ownerUid && entry.mode === expected.mode && entry.nlink === expected.nlink;
+}
+
 async function guardedUnlink(lifecycle: CliLifecycleContext, path: CanonicalAbsolutePathV1, expected: ManifestFileIdentityV1): Promise<void> {
   const entry = await lifecycle.fs.lstat(path);
   if (entry === null) return;
-  if (entry.kind !== "regular_file" || entry.dev !== expected.dev || entry.ino !== expected.ino || entry.size !== expected.size) thirdState("manifest_bytes_identity", path);
+  if (!matchesManifestFileIdentity(entry, expected)) thirdState("manifest_bytes_identity", path);
   if ((await lifecycle.fs.hashRegular(entry, BigInt(expected.size))) !== expected.hash) thirdState("manifest_bytes_hash", path);
   await lifecycle.fs.unlinkExact(entry);
   const parent = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/"))));
@@ -703,7 +707,7 @@ async function manifestParticipantOf(dispatch: DispatchContextV1, ownerPlans: re
   const updatePayloadIdentity = await manifestPayloadIdentities(plans, payloadIdentity);
   const identityOf = async (path: CanonicalAbsolutePathV1, expected: ManifestFileIdentityV1): Promise<LifecycleGuardedEntryV1> => {
     const entry = await lifecycle.fs.lstat(path);
-    if (entry?.kind !== "regular_file" || entry.dev !== expected.dev || entry.ino !== expected.ino || entry.size !== expected.size || entry.ownerUid !== expected.ownerUid) return thirdState("manifest_bytes_identity", path);
+    if (!matchesManifestFileIdentity(entry, expected)) return thirdState("manifest_bytes_identity", path);
     if ((await lifecycle.fs.hashRegular(entry, BigInt(expected.size))) !== expected.hash) thirdState("manifest_bytes_hash", path);
     return entry;
   };
