@@ -1095,7 +1095,7 @@ describe("redaction scopes (NEW-36, NEW-39)", () => {
   });
 
   it("does not apply high-entropy to a path", () => {
-    const path = `DEV/${highEntropySecret}.md`;
+    const path = `DEV/notes ${highEntropySecret}.md`;
 
     expect(redact(path, "path").text).toBe(path);
     expect(redact(path).text).toContain("[REDACTED:high-entropy]");
@@ -1129,8 +1129,9 @@ describe("redaction scopes (NEW-36, NEW-39)", () => {
   });
 
   it("redacts a matched value exactly as the text scope does", () => {
-    const line = `API_KEY=${highEntropySecret}`;
+    const line = `MY_API_KEY=${environmentSecret}`;
 
+    expect(redact(line).findings.length).toBeGreaterThan(0);
     expect(redact(line, "value")).toStrictEqual(redact(line));
   });
 });
