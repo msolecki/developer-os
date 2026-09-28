@@ -7,6 +7,7 @@
  */
 import { SecurityRefusalError } from "../paths.js";
 import {
+  SystemExecutableRefusalError,
   admitPosixRootOwned,
   type AdmittedSystemExecutableV1,
   type SystemExecutableRowV1,
@@ -79,8 +80,9 @@ export async function admitGitExecutables(
     const git = await admitPosixRootOwned(rowFor(rows, policy, "git"), inspect);
     const receivePack = await admitPosixRootOwned(rowFor(rows, policy, "git-receive-pack"), inspect);
     return { git, receivePack, ssh: null };
-  } catch {
-    return unsupported();
+  } catch (error) {
+    const detail = error instanceof SystemExecutableRefusalError ? error.detail : undefined;
+    throw new SecurityRefusalError("unsupported_git_distribution", { detail, cause: error });
   }
 }
 

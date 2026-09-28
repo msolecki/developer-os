@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { SystemExecutableRefusalError } from "../system-executables.js";
+
 import { admitGitCapability, admitGitExecutables, GIT_DISTRIBUTION_POLICY, parseGitVersionLine } from "./distribution.js";
 import { DARWIN, PROBE_OK, stockHost } from "./distribution.test-fixtures.js";
 import { expandGitArgv, GIT_DISTRIBUTION_POLICY_ID, hashGitProcessTable } from "./process-table.js";
@@ -41,6 +43,13 @@ describe("Git executables", () => {
     await expect(admitGitExecutables(DARWIN, stockHost({ "/usr/bin/git-receive-pack": { mode: 0o775 } }), "arm64", "local")).rejects.toThrow(
       "unsupported_git_distribution",
     );
+  });
+  it("keeps the table refusal's detail and cause", async () => {
+    const refused: unknown = await admitGitExecutables(DARWIN, stockHost({ "/usr/bin/git": { ownerUid: 501 } }), "arm64", "local").catch(
+      (error: unknown) => error,
+    );
+    expect(refused).toMatchObject({ message: "unsupported_git_distribution", detail: "/usr/bin/git is not a root-owned executable regular file" });
+    expect((refused as Error).cause).toBeInstanceOf(SystemExecutableRefusalError);
   });
   it("refuses when the table has no git-receive-pack row", async () => {
     await expect(admitGitExecutables([DARWIN[0], DARWIN[2]], stockHost(), "arm64", "local")).rejects.toThrow("unsupported_git_distribution");

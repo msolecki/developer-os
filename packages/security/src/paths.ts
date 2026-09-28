@@ -13,10 +13,12 @@ import { EXIT_CODES } from "@developer-os/core";
 
 export class SecurityRefusalError extends Error {
   readonly code = EXIT_CODES.securityRefusal;
+  readonly detail: string | undefined;
 
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions & { readonly detail?: string | undefined }) {
+    super(message, options);
     this.name = "SecurityRefusalError";
+    this.detail = options?.detail;
   }
 }
 
