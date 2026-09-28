@@ -106,7 +106,8 @@ function admitRetainedAncestor(
   residue: LifecycleBookkeepingResidueV1,
 ): LifecycleBookkeepingShapeResultV1 {
   const observation = observe(path);
-  if (!ownedDirectory(observation, effectiveUid)) return refuse(path);
+  // An empty ancestor holds nothing, so stale evidence naming a removed child cannot admit it (NEW-89).
+  if (!ownedDirectory(observation, effectiveUid) || observation.childNames.length === 0) return refuse(path);
   for (const name of observation.childNames) {
     const child = `${path}/${name}`;
     if (residue.retainedPaths.has(child)) continue;
