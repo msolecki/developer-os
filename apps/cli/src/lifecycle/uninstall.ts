@@ -803,13 +803,6 @@ function directoryRowsOf(
     .sort((left, right) => right.length - left.length);
 }
 
-async function uninstallCommitted(
-  fs: LifecycleGuardedFileSystemV1,
-  plan: LifecycleExecutionPlanV1,
-): Promise<boolean> {
-  return (await guardedEntry(fs, plan.authority.manifestPath)) === null;
-}
-
 function observationOf(
   entry: LifecycleGuardedEntryV1 | null | undefined,
   childNames: readonly string[],
@@ -1091,19 +1084,18 @@ export function createUninstallAdapters(input: {
      * inverse still describes the world it is proved against while the earlier entries run.
      *
      * `removeEnvelopeLeaves` reaches these hooks for *every* terminal uninstall, rolled back
-     * included, and it carries no terminal outcome to tell them apart. Taking the nonce and the
-     * allocator from a home whose uninstall compensated would leave an installation that
-     * §2.1 can no longer admit, so the restored manifest is the discriminator: it is present
-     * exactly when this coordinator rolled back, and then nothing here is collected.
+     * included. Taking the nonce and the allocator from a home whose uninstall compensated would
+     * leave an installation that §2.1 can no longer admit, so a `rolled_back` outcome collects
+     * nothing here (NEW-97).
      */
     controlFiles: {
-      removeAllocator: async (plan) => {
-        if (!(await uninstallCommitted(fs, plan))) return;
+      removeAllocator: async (_plan, outcome) => {
+        if (outcome === "rolled_back") return;
         await removeStateLeaf(fs, productHome, MARKER_LEAF);
         await removeStateLeaf(fs, productHome, ALLOCATOR_LEAF);
       },
-      removeNonce: async (plan) => {
-        if (!(await uninstallCommitted(fs, plan))) return;
+      removeNonce: async (_plan, outcome) => {
+        if (outcome === "rolled_back") return;
         /** Before the nonce: the nonce is what makes a death here resume through this hook again. */
         await removeHookFiringRecords(fs, productHome, request.lifecycle.effectiveUid);
         await removeCodexIngestHome(fs, productHome, request.lifecycle.effectiveUid);

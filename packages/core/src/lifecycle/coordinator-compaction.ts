@@ -218,6 +218,7 @@ async function removeCoordinatorStaging<TPlan extends CoordinatorPlan>(
 async function removeEnvelopeLeaves<TPlan extends CoordinatorPlan>(
   dependencies: LifecycleCoordinatorCompactionDependenciesV1<TPlan>,
   plan: TPlan,
+  outcome: LifecycleTerminalOutcomeV1,
   global: HeldLifecycleStableLockV1,
 ): Promise<void> {
   const { fs, roots, adapters } = dependencies;
@@ -229,12 +230,12 @@ async function removeEnvelopeLeaves<TPlan extends CoordinatorPlan>(
       refuseLifecycleRecovery("lifecycle_control_file_state", allocator.path);
     }
     if (allocator !== null) {
-      await adapters.controlFiles.removeAllocator(plan);
+      await adapters.controlFiles.removeAllocator(plan, outcome);
       await syncDirectoryAt(fs, roots.stateDirectory);
       await dependencies.afterBoundary?.({ kind: "control_file_removed", file: "allocator" });
     }
     if (nonce !== null) {
-      await adapters.controlFiles.removeNonce(plan);
+      await adapters.controlFiles.removeNonce(plan, outcome);
       await syncDirectoryAt(fs, roots.stateDirectory);
       await dependencies.afterBoundary?.({ kind: "control_file_removed", file: "nonce" });
     }
@@ -337,7 +338,7 @@ async function removeEntry<TPlan extends CoordinatorPlan>(
       await removeCoordinatorStaging(dependencies, plan);
       return;
     case "coordinator_envelope":
-      await removeEnvelopeLeaves(dependencies, plan, global);
+      await removeEnvelopeLeaves(dependencies, plan, outcome, global);
       return;
   }
 }
