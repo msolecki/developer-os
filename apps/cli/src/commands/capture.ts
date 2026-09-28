@@ -530,7 +530,7 @@ function assertNoteContent(content: string): void {
 }
 
 /** By index, never by value: the pattern is usually a client name (NEW-24, D73). */
-function overBroadWarnings(indexes: readonly number[]): readonly string[] {
+export function overBroadWarnings(indexes: readonly number[]): readonly string[] {
   return indexes.map(
     (index) =>
       `[redaction] patterns[${String(index)}] in config.toml matches so much of this capture that it is over-broad; narrow it if that was not intended`,

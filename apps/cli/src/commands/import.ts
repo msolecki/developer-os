@@ -20,7 +20,7 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext } from "../context.js";
-import { MAX_CAPTURE_INPUT_BYTES } from "./capture.js";
+import { MAX_CAPTURE_INPUT_BYTES, overBroadWarnings } from "./capture.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
 import {
   fingerprintDirectory,
@@ -338,6 +338,8 @@ export async function processCandidates(input: {
   let duplicateCount = 0;
   let remaining = 0;
   let newCount = 0;
+  /** Pattern indexes the redactor called over-broad on any file, warned once each (NEW-24). */
+  const overBroad = new Set<number>();
 
   const prepare = async (candidate: ImportCandidate): Promise<Prepared> => {
     let text: string;
@@ -361,6 +363,7 @@ export async function processCandidates(input: {
       createdAt: context.now().toISOString(),
       redact,
     });
+    for (const patternIndex of built.overBroadPatterns) overBroad.add(patternIndex);
     return built.envelope.content.length === 0 ? { refused: "import_source_empty" } : { built };
   };
 
@@ -456,7 +459,9 @@ export async function processCandidates(input: {
   }
 
   const refused = rows.filter((file) => file.outcome === "refused");
-  if (refused.length === 0) return success(result());
+  if (refused.length === 0) {
+    return success(result(), overBroadWarnings([...overBroad].sort((a, b) => a - b)));
+  }
 
   // Exit codes 1..6 rank by severity in numeric order (spec §4.1).
   const code = Math.max(

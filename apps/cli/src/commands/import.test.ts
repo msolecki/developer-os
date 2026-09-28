@@ -484,6 +484,26 @@ describe("redaction precedes everything", () => {
     expect(JSON.stringify(result)).not.toContain(SENTINEL);
   });
 
+  it("warns, by index and never by value, about a pattern that covers much of a file (NEW-24)", async () => {
+    const fixture = await installed("import-over-broad-redaction");
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders", "e"]\n',
+      "utf8",
+    );
+    await plant(inboxOf(fixture), { "broad.md": "see ".repeat(80) });
+
+    const result = await importWith(fixture);
+
+    expect(dataOf(result).files.map((file) => file.outcome)).toEqual(["imported"]);
+    if (!result.ok) return;
+    const warnings = result.warnings.join("\n");
+    expect(warnings).toContain("patterns[1]");
+    expect(warnings).toContain("over-broad");
+    expect(warnings).not.toContain("patterns[0]");
+    expect(warnings).not.toContain("Northwind");
+  });
+
   it.each([["--json"], ["human"]] as const)(
     "redacts a secret in a refused file's name (%s output)",
     async (mode) => {
