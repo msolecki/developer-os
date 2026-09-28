@@ -269,7 +269,7 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   §3.8, not fixed by further tokenizer rounds.
 - **D68 (2026-09-26), plan bookkeeping.** (1) The parked release plan and Spec 2 closure plan are closed:
   nothing in them can run before NEW-110's revision pass and A15, so their open bodies move behind
-  `git show a8d2c78:` pointers in `BACKLOG.md` NEW-110 and NEW-111, and the revision pass writes a
+  `git show a03499c:` pointers in `BACKLOG.md` NEW-110 and NEW-111, and the revision pass writes a
   fresh plan. (2) A13 Task 18 Step 1 (Claude real-agent matrix) is evidenced by the A15 cutover's
   step 10 verification on the live machine instead of a separate disposable install; Step 2 (Codex)
   and Step 3 still run after Codex quota returns.
@@ -314,9 +314,9 @@ Scope: inventory §7. Rule: the agent never writes to the vault directly; every 
 
 - Workflows and verbs landed as Tasks 1–15 of the A12b plan (closed and deleted 2026-09-26), and the
   phase close ran.
-- [x] Real-vendor gate: five `pass` rows on Claude 2.1.283 at `c319af9` in
+- [x] Real-vendor gate: five `pass` rows on Claude 2.1.283 at `d7043d5` in
   `docs/releases/compatibility-matrix.md` (2026-09-26, D66). The run found and fixed an opaque
-  `capture --note` refusal (`c319af9`). The plan's decisions and the spec's residuals
+  `capture --note` refusal (`d7043d5`). The plan's decisions and the spec's residuals
   moved to `docs/architecture/brain.md` §6.13 on 2026-09-26.
 
 Gate: each workflow proven end to end on the synthetic vault with a fake vendor and once with a real vendor in the compatibility matrix.
@@ -355,7 +355,7 @@ The phase closes ran (above). What is left of them is founder work, executed fro
 
 - [x] A12: billed row passed (NEW-101), `UNPROVEN_CLAUDE_CATEGORIES` emptied, private-pattern scan
   0 findings (2026-09-28).
-- [x] A12b: real-vendor run done 2026-09-26 (five `pass` rows, `c319af9`); `test:vendor-ingest` green
+- [x] A12b: real-vendor run done 2026-09-26 (five `pass` rows, `d7043d5`); `test:vendor-ingest` green
   the same day.
 - [ ] A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 18 real-agent matrix on both vendors;
   Task 2 legacy parity check.
@@ -381,7 +381,7 @@ Runs after Phase 8 (D16), and takes over the automation job registry bullet from
 
 Preconditions (NEW-84): a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
 
-- Plan 1b (D59; closed and deleted 2026-09-26, `git show fb8277f:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`) Tasks 1–18 and 20 landed
+- Plan 1b (D59; closed and deleted 2026-09-26, `git show 84a50f1:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`) Tasks 1–18 and 20 landed
   under D56; the rows were measured and re-pinned in the spec (NEW-84, D59). The phase close
   (Task 21) ran except `npm run test:pinned-host`, which moves to NEW-113.
 - [ ] NEW-113 (D65, supersedes Task 19): replace the exact-build pin through a Spec 1 amendment, then
