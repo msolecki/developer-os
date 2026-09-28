@@ -241,8 +241,9 @@ const GATE_COVERAGE: readonly GateCoverageV1[] = [
   {
     gate: "Git distribution identity is exact",
     tests: [
-      ["packages/security/src/git/distribution.test.ts", "refuses a one-field change to %s as unsupported_git_distribution"],
-      ["packages/security/src/git/distribution.test.ts", "refuses a same-version different binary"],
+      ["packages/security/src/git/distribution.test.ts", "refuses another architecture and maps a table refusal"],
+      ["packages/security/src/git/distribution.test.ts", "%s admits: %s"],
+      ["packages/security/src/git/supervisor.test.ts", "a recheck that sees a changed sha256 refuses before the permit runs"],
       ["apps/cli/src/commands/git/git.v2.test.ts", "reports an unsupported distribution in status without spawning, and sync refuses before any repository work"],
     ],
   },
@@ -258,8 +259,8 @@ const GATE_COVERAGE: readonly GateCoverageV1[] = [
     gate: "process table is canonical",
     tests: [
       ["packages/security/src/git/process-table.test.ts", "pins the twelve environment maps, seven I/O profiles, four budgets, 21 nodes and 21 edges in id order"],
-      ["packages/security/src/git/distribution.test.ts", "pins thirteen build-option lines without the version line"],
-      ["packages/security/src/git/distribution.test.ts", "pins the three executables in id order, with empty versionLines only for the HTTPS helper"],
+      ["packages/security/src/git/distribution.test.ts", "maps each distribution image to its system row, and the HTTPS helper to none"],
+      ["packages/security/src/git/distribution.test.ts", "execs receive-pack as the git-receive-pack fixed path with the gateway's unchanged argv"],
     ],
   },
   {

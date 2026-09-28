@@ -2,10 +2,11 @@ import { hashCanonicalJson, type CanonicalJsonValue } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
 import { SecurityRefusalError } from "../paths.js";
-import { SUPPORTED_GIT_DISTRIBUTION } from "./distribution.js";
+import { GIT_DISTRIBUTION_POLICY } from "./distribution.js";
 import { mutatedProcessRows } from "./distribution.test-fixtures.js";
 import {
   expandGitArgv,
+  GIT_DISTRIBUTION_POLICY_ID,
   GIT_PACK_OBJECT_COUNT_MAX,
   hashGitProcessTable,
   parseGitAlternateObjectDirectory,
@@ -24,7 +25,7 @@ import {
   type GitProcessEdgeV1,
 } from "./types.js";
 
-const table = SUPPORTED_GIT_DISTRIBUTION.processTable;
+const table = GIT_DISTRIBUTION_POLICY.processTable;
 
 function edge(id: string): GitProcessEdgeV1 {
   const found = table.edges.find((candidate) => candidate.id === id);
@@ -130,7 +131,7 @@ describe("the closed Git process table", () => {
       destination_receive: "destination_receive",
     };
     for (const [profileId, phase] of Object.entries(phases)) {
-      expect(literal(profileId, "DEVELOPER_OS_GIT_DISTRIBUTION")).toBe(SUPPORTED_GIT_DISTRIBUTION.id);
+      expect(literal(profileId, "DEVELOPER_OS_GIT_DISTRIBUTION")).toBe(GIT_DISTRIBUTION_POLICY_ID);
       expect(literal(profileId, "DEVELOPER_OS_GIT_PHASE")).toBe(phase);
     }
     expect(literal("push_ssh", "GIT_SSH_VARIANT")).toBe("ssh");

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { hashCanonicalJson, type CanonicalJsonValue } from "@developer-os/core";
 
-import { hashGitProcessTable, SUPPORTED_GIT_DISTRIBUTION_ID, SUPPORTED_GIT_PROCESS_TABLE } from "./process-table.js";
+import { hashGitProcessTable, GIT_DISTRIBUTION_POLICY_ID, SUPPORTED_GIT_PROCESS_TABLE } from "./process-table.js";
 import { PERSISTED_GIT_PUSH_PLAN_CODEC } from "./push-plan.js";
 
 const COMMIT = "c".repeat(40);
@@ -35,7 +35,7 @@ const httpsPlan = {
   destination: { transport: "https", effectivePushUrl: "https://example.invalid/synthetic/brain.git" },
   sourceBefore,
   sourceAfter,
-  distributionId: SUPPORTED_GIT_DISTRIBUTION_ID,
+  distributionId: GIT_DISTRIBUTION_POLICY_ID,
   processTableHash: hashGitProcessTable(SUPPORTED_GIT_PROCESS_TABLE),
 };
 
@@ -79,7 +79,7 @@ describe("PersistedGitPushPlanV1", () => {
     { name: "an http:// destination", value: { ...httpsPlan, destination: { transport: "https", effectivePushUrl: "http://example.invalid/a.git" } } },
     { name: "a remote-helper transport", value: { ...httpsPlan, destination: { transport: "ext", effectivePushUrl: "ext::sh" } } },
     { name: "another remote name", value: { ...httpsPlan, remoteName: "origin" } },
-    { name: "another distribution", value: { ...httpsPlan, distributionId: "apple-git-155-arm64-xcode-26.6-17F113" } },
+    { name: "another distribution", value: { ...httpsPlan, distributionId: "apple-git-arm64-v1" } },
     { name: "a non-hex process-table hash", value: { ...httpsPlan, processTableHash: "Z".repeat(64) } },
     { name: "a sourceAfter branch not at commitOid", value: { ...httpsPlan, sourceAfter: { ...sourceAfter, branchRef: sourceBefore.branchRef } } },
     {

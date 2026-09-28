@@ -39,12 +39,14 @@ export type { NormalizedShellCommand } from "./shell-command.js";
 export {
   admitPosixRootOwned,
   recheckSystemExecutable,
+  recheckSystemExecutableSync,
   SystemExecutableRefusalError,
 } from "./system-executables.js";
 export type {
   AdmittedSystemExecutableV1,
   SystemExecutableIdV1,
   SystemExecutableRowV1,
+  SystemPathInspectorSyncV1,
   SystemPathInspectorV1,
   SystemPathObservationV1,
   SystemPlatformV1,
@@ -114,16 +116,20 @@ export type {
 } from "./update/index.js";
 
 export {
-  admitGitDistribution,
+  admitGitCapability,
+  admitGitExecutables,
   expandGitArgv,
+  GIT_DISTRIBUTION_POLICY,
+  GIT_DISTRIBUTION_POLICY_ID,
   hashGitProcessTable,
   parseGitAlternateObjectDirectory,
   parseGitConfigQuotedPath,
-  SUPPORTED_GIT_DISTRIBUTION,
-  validateSupportedGitDistribution,
+  parseGitVersionLine,
   validateSupportedGitProcessTable,
 } from "./git/index.js";
 export type {
+  AdmittedGitDistributionV1,
+  AdmittedGitExecutablesV1,
   GitAlternateObjectDirectoryV1,
   GitArgSlotV1,
   GitArgSlotValuesV1,
@@ -134,10 +140,8 @@ export type {
   GitProcessEdgeV1,
   GitProcessIoProfileV1,
   GitProcessNodeV1,
+  GitDistributionPolicyV2,
   GitProcessPhaseBudgetV1,
-  ObservedGitDistributionV1,
-  SupportedGitDistributionV1,
-  SupportedGitExecutableV1,
   SupportedGitProcessTableV1,
 } from "./git/index.js";
 export { PERSISTED_GIT_PUSH_PLAN_CODEC, validateGitSyncPlan } from "./git/index.js";

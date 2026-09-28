@@ -4,7 +4,7 @@
  * standard fixed paths: nothing here consults `PATH`, `DEVELOPER_DIR` or `xcrun`.
  */
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "@developer-os/core";
@@ -21,6 +21,7 @@ const BIN = parseCanonicalAbsolutePathText("/bin");
 
 export const DARWIN_SYSTEM_EXECUTABLES: readonly SystemExecutableRowV1[] = [
   { platform: "darwin", id: "git", path: "/usr/bin/git", ancestors: [ROOT, USR, USR_BIN], admission: "posix_root_owned", status: "implemented" },
+  { platform: "darwin", id: "git-receive-pack", path: "/usr/bin/git-receive-pack", ancestors: [ROOT, USR, USR_BIN], admission: "posix_root_owned", status: "implemented" },
   { platform: "darwin", id: "scheduler", path: "/bin/launchctl", ancestors: [ROOT, BIN], admission: "posix_root_owned", status: "implemented" },
   { platform: "darwin", id: "ssh", path: "/usr/bin/ssh", ancestors: [ROOT, USR, USR_BIN], admission: "posix_root_owned", status: "implemented" },
 ];
@@ -63,5 +64,53 @@ export async function inspectSystemPath(path: CanonicalAbsolutePathV1): Promise<
     return { ...common, sha256: createHash("sha256").update(bytes).digest("hex") };
   } finally {
     await handle.close();
+  }
+}
+
+/**
+ * Digests keyed by the exact file identity including `mtimeNs`/`ctimeNs`: a Git permit is
+ * rechecked before each of up to 200,001 source-build execs, and any write to the file
+ * changes `ctime`, so a cached digest never outlives the bytes it describes.
+ */
+const syncDigests = new Map<string, string>();
+
+/** `inspectSystemPath` with the synchronous fs API, for a recheck inside a synchronous permit consumption. */
+export function inspectSystemPathSync(path: CanonicalAbsolutePathV1): SystemPathObservationV1 {
+  let observed;
+  try {
+    observed = lstatSync(path, { bigint: true });
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" };
+    throw error;
+  }
+  const common = {
+    kind: kindOf(observed),
+    ownerUid: Number(observed.uid),
+    mode: Number(observed.mode & 0o7777n),
+    dev: observed.dev.toString(10),
+    ino: observed.ino.toString(10),
+    size: Number(observed.size),
+  };
+  if (!observed.isFile() || observed.size > BigInt(MAX_HASHED_BYTES)) return { ...common, sha256: null };
+  const key = [path, observed.dev, observed.ino, observed.size, observed.mtimeNs, observed.ctimeNs].join("\0");
+  const cached = syncDigests.get(key);
+  if (cached !== undefined) return { ...common, sha256: cached };
+  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (
+      opened.dev !== observed.dev ||
+      opened.ino !== observed.ino ||
+      opened.size !== observed.size ||
+      opened.mtimeNs !== observed.mtimeNs ||
+      opened.ctimeNs !== observed.ctimeNs
+    ) {
+      return { ...common, sha256: null };
+    }
+    const sha256 = createHash("sha256").update(readFileSync(descriptor)).digest("hex");
+    syncDigests.set(key, sha256);
+    return { ...common, sha256 };
+  } finally {
+    closeSync(descriptor);
   }
 }

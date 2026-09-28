@@ -3,7 +3,9 @@
  * below is exact: a value outside it refuses in `process-table.ts` or
  * `distribution.ts`, and no record carries a free-string authority.
  */
-import type { CanonicalAbsolutePathV1, LowerHexSha256 } from "@developer-os/core";
+import type { CanonicalAbsolutePathV1 } from "@developer-os/core";
+
+import type { SystemExecutableIdV1 } from "../system-executables.js";
 
 declare const gitConfigQuotedPathV1: unique symbol;
 declare const gitAlternateObjectDirectoryV1: unique symbol;
@@ -13,18 +15,8 @@ export type GitAlternateObjectDirectoryV1 = CanonicalAbsolutePathV1 & {
   readonly [gitAlternateObjectDirectoryV1]: true;
 };
 
-export const GIT_EXECUTABLE_IDS = ["git_main", "git_remote_https", "system_ssh"] as const;
+export const GIT_EXECUTABLE_IDS = ["git_main", "git_receive_pack", "git_remote_https", "system_ssh"] as const;
 export type GitExecutableIdV1 = (typeof GIT_EXECUTABLE_IDS)[number];
-
-export const GIT_EXEC_PATH_LINK_NAMES = [
-  "git",
-  "git-index-pack",
-  "git-pack-objects",
-  "git-receive-pack",
-  "git-remote-https",
-  "git-unpack-objects",
-] as const;
-export type GitExecPathLinkNameV1 = (typeof GIT_EXEC_PATH_LINK_NAMES)[number];
 
 export const GIT_ARG_SLOTS = [
   "validated_https_url",
@@ -221,27 +213,6 @@ export type GitProcessEdgePredicateV1 = (typeof GIT_PROCESS_EDGE_PREDICATES)[num
 export const GIT_PROCESS_CWDS = ["source_shadow", "destination_shadow", "quarantine"] as const;
 export type GitProcessCwdV1 = (typeof GIT_PROCESS_CWDS)[number];
 
-export interface ExecutableFileIdentityV1 {
-  readonly canonicalPath: CanonicalAbsolutePathV1;
-  readonly ownerUid: 0;
-  readonly mode: number;
-  readonly size: number;
-  readonly sha256: LowerHexSha256;
-}
-
-export interface GitLinkChainEntryV1 {
-  readonly path: CanonicalAbsolutePathV1;
-  readonly target: string;
-}
-
-export interface SupportedGitExecutableV1 {
-  readonly id: GitExecutableIdV1;
-  readonly invokedPath: CanonicalAbsolutePathV1;
-  readonly linkChain: readonly GitLinkChainEntryV1[];
-  readonly target: ExecutableFileIdentityV1;
-  readonly versionLines: readonly string[];
-}
-
 export type GitArgTokenV1 =
   | { readonly kind: "literal"; readonly value: string }
   | { readonly kind: "slot"; readonly slot: GitArgSlotV1 }
@@ -308,8 +279,8 @@ export interface GitProcessPhaseBudgetV1 {
 
 export interface SupportedGitProcessTableV1 {
   readonly schemaVersion: 1;
-  readonly id: "apple-git-157-process-v1";
-  readonly distributionId: "apple-git-157-arm64-xcode-27.0-27A266a";
+  readonly id: "apple-git-process-v2";
+  readonly distributionId: "apple-git-arm64-v2";
   readonly environmentProfiles: readonly GitEnvironmentProfileV1[];
   readonly ioProfiles: readonly GitProcessIoProfileV1[];
   readonly phaseBudgets: readonly GitProcessPhaseBudgetV1[];
@@ -317,54 +288,32 @@ export interface SupportedGitProcessTableV1 {
   readonly edges: readonly GitProcessEdgeV1[];
 }
 
-export interface GitExecPathLinkV1 {
-  readonly name: GitExecPathLinkNameV1;
-  readonly path: CanonicalAbsolutePathV1;
-  readonly ownerUid: 0;
-  readonly mode: 493;
-  readonly size: 13 | 15;
-  readonly target: string;
+export interface GitVersionFloorV1 {
+  readonly major: number;
+  readonly minor: number;
+  readonly patch: number;
+  /** The row's `(<prefix><n>)` build suffix and its minimum `n`; `null` compares only `<major>.<minor>.<patch>`. */
+  readonly vendorBuild: { readonly prefix: string; readonly minimum: number } | null;
 }
 
-export interface SupportedGitDistributionV1 {
-  readonly schemaVersion: 1;
-  readonly id: "apple-git-157-arm64-xcode-27.0-27A266a";
-  readonly xcode: { readonly version: "27.0"; readonly build: "27A266a" };
-  readonly architecture: "arm64";
-  readonly buildOptionLines: readonly string[];
-  readonly executables: readonly SupportedGitExecutableV1[];
-  readonly execPathLinks: readonly GitExecPathLinkV1[];
-  readonly processTable: SupportedGitProcessTableV1;
+/** Which system table row runs each distribution image; `null` has no standard fixed path and refuses. */
+export interface GitDistributionExecutableV2 {
+  readonly id: GitExecutableIdV1;
+  readonly system: Exclude<SystemExecutableIdV1, "scheduler"> | null;
 }
 
 /**
- * What planning measured on this host, in the row's own shape. It carries no
- * `dev`/`ino`: spec §4.2 makes those invocation-time plan evidence, not
- * compiled machine identity.
+ * Spec 1 §4.2 as amended 2026-09-28 (D71): a policy, not a pinned build. The
+ * binaries' bytes are per-invocation evidence and never part of this record.
  */
-export interface ObservedGitDistributionV1 {
-  readonly xcode: { readonly version: string; readonly build: string };
-  readonly architecture: string;
-  readonly buildOptionLines: readonly string[];
-  readonly executables: readonly {
-    readonly id: string;
-    readonly invokedPath: string;
-    readonly linkChain: readonly { readonly path: string; readonly target: string }[];
-    readonly target: {
-      readonly canonicalPath: string;
-      readonly ownerUid: number;
-      readonly mode: number;
-      readonly size: number;
-      readonly sha256: string;
-    };
-    readonly versionLines: readonly string[];
-  }[];
-  readonly execPathLinks: readonly {
-    readonly name: string;
-    readonly path: string;
-    readonly ownerUid: number;
-    readonly mode: number;
-    readonly size: number;
-    readonly target: string;
-  }[];
+export interface GitDistributionPolicyV2 {
+  readonly schemaVersion: 2;
+  readonly id: "apple-git-arm64-v2";
+  readonly platform: "darwin";
+  readonly architecture: "arm64";
+  readonly gitVersionFloor: GitVersionFloorV1;
+  readonly sshVersionFloor: { readonly major: number; readonly minor: number; readonly portable: number };
+  readonly requiredBuildOptionLines: readonly string[];
+  readonly executables: readonly GitDistributionExecutableV2[];
+  readonly processTable: SupportedGitProcessTableV1;
 }

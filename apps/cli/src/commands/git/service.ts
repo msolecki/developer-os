@@ -102,7 +102,7 @@ import type {
 } from "@developer-os/core";
 import { PRIVATE_FOLDERS, discoverNotes, lintVault, resolveBrainConfig } from "@developer-os/brain";
 import type { DirectoryEntry } from "@developer-os/brain";
-import { PERSISTED_GIT_PUSH_PLAN_CODEC, SUPPORTED_GIT_DISTRIBUTION, createRedactor } from "@developer-os/security";
+import { GIT_DISTRIBUTION_POLICY_ID, PERSISTED_GIT_PUSH_PLAN_CODEC, createRedactor } from "@developer-os/security";
 import type { PersistedGitPushPlanV1 } from "@developer-os/security";
 
 import { createBootstrapEvidenceInspectionRequest } from "../../bootstrap/context.js";
@@ -1670,7 +1670,7 @@ function pushPlanOf(inputs: SyncInputsV1, destinationRef: { readonly id: string;
     },
     sourceBefore: draft.sync.sourcePreconditions,
     sourceAfter: draft.sourceAfter,
-    distributionId: SUPPORTED_GIT_DISTRIBUTION.id,
+    distributionId: GIT_DISTRIBUTION_POLICY_ID,
     processTableHash: inputs.processTableHash,
   };
   return inputs.staged === null ? (plan as unknown as PersistedGitPushPlanV1) : PERSISTED_GIT_PUSH_PLAN_CODEC.validate(plan);

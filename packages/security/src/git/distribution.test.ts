@@ -1,121 +1,117 @@
 import { describe, expect, it } from "vitest";
 
-import { admitGitDistribution, SUPPORTED_GIT_DISTRIBUTION, validateSupportedGitDistribution } from "./distribution.js";
-import { mutate, observedFromRow, sameVersionOtherHash } from "./distribution.test-fixtures.js";
-import { hashGitProcessTable } from "./process-table.js";
-import { GIT_EXEC_PATH_LINK_NAMES, GIT_EXECUTABLE_IDS } from "./types.js";
+import { admitGitCapability, admitGitExecutables, GIT_DISTRIBUTION_POLICY, parseGitVersionLine } from "./distribution.js";
+import { DARWIN, PROBE_OK, stockHost } from "./distribution.test-fixtures.js";
+import { expandGitArgv, GIT_DISTRIBUTION_POLICY_ID, hashGitProcessTable } from "./process-table.js";
 
-const observedFields = Object.keys(observedFromRow(SUPPORTED_GIT_DISTRIBUTION));
-
-describe("the supported Git distribution row", () => {
-  it("round-trips the sole supported row byte-identically", () => {
-    expect(validateSupportedGitDistribution(SUPPORTED_GIT_DISTRIBUTION)).toEqual(SUPPORTED_GIT_DISTRIBUTION);
-    expect(hashGitProcessTable(SUPPORTED_GIT_DISTRIBUTION.processTable)).toMatch(/^[0-9a-f]{64}$/u);
+describe("the Git distribution policy", () => {
+  it("names no build, Xcode version or binary hash, and binds the process table to its ID", () => {
+    expect(GIT_DISTRIBUTION_POLICY.id).toBe(GIT_DISTRIBUTION_POLICY_ID);
+    expect(GIT_DISTRIBUTION_POLICY.processTable.distributionId).toBe(GIT_DISTRIBUTION_POLICY_ID);
+    expect(GIT_DISTRIBUTION_POLICY.processTable.id).toBe("apple-git-process-v2");
+    expect(hashGitProcessTable(GIT_DISTRIBUTION_POLICY.processTable)).toMatch(/^[0-9a-f]{64}$/u);
+    expect(JSON.stringify({ ...GIT_DISTRIBUTION_POLICY, processTable: null })).not.toMatch(/Xcode|27A266a|[0-9a-f]{64}|certif/iu);
+    expect(Object.isFrozen(GIT_DISTRIBUTION_POLICY)).toBe(true);
   });
 
-  it("admits the exact measured identity", () => {
-    expect(() => { admitGitDistribution(observedFromRow(SUPPORTED_GIT_DISTRIBUTION), SUPPORTED_GIT_DISTRIBUTION); }).not.toThrow();
+  it("maps each distribution image to its system row, and the HTTPS helper to none", () => {
+    expect(GIT_DISTRIBUTION_POLICY.executables).toEqual([
+      { id: "git_main", system: "git" },
+      { id: "git_receive_pack", system: "git-receive-pack" },
+      { id: "git_remote_https", system: null },
+      { id: "system_ssh", system: "ssh" },
+    ]);
   });
+});
 
-  it("measures every identity field", () => {
-    expect(observedFields.length).toBeGreaterThan(0);
-    expect([...observedFields].sort()).toEqual(["architecture", "buildOptionLines", "execPathLinks", "executables", "xcode"]);
+describe("Git executables", () => {
+  it("admits /usr/bin/git and /usr/bin/git-receive-pack for local", async () => {
+    await expect(admitGitExecutables(DARWIN, stockHost(), "arm64", "local")).resolves.toMatchObject({
+      git: { canonicalPath: "/usr/bin/git" },
+      receivePack: { canonicalPath: "/usr/bin/git-receive-pack" },
+      ssh: null,
+    });
   });
-
-  it.each(observedFields)("refuses a one-field change to %s as unsupported_git_distribution", (field) => {
-    expect(() =>
-      { admitGitDistribution(mutate(observedFromRow(SUPPORTED_GIT_DISTRIBUTION), field), SUPPORTED_GIT_DISTRIBUTION); },
-    ).toThrow("unsupported_git_distribution");
+  it.each(["https", "ssh"] as const)("refuses %s (D59 Q4-A)", async (transport) => {
+    await expect(admitGitExecutables(DARWIN, stockHost(), "arm64", transport)).rejects.toThrow("unsupported_git_distribution");
   });
-
-  it("refuses a same-version different binary", () => {
-    expect(() => { admitGitDistribution(sameVersionOtherHash(), SUPPORTED_GIT_DISTRIBUTION); }).toThrow("unsupported_git_distribution");
-  });
-
-  it("refuses an observation with an extra or missing field", () => {
-    const observed = observedFromRow(SUPPORTED_GIT_DISTRIBUTION);
-    expect(() => { admitGitDistribution({ ...observed, extra: 1 } as typeof observed, SUPPORTED_GIT_DISTRIBUTION); }).toThrow(
+  it("refuses another architecture and maps a table refusal", async () => {
+    await expect(admitGitExecutables(DARWIN, stockHost(), "x64", "local")).rejects.toThrow("unsupported_git_distribution");
+    await expect(admitGitExecutables(DARWIN, stockHost({ "/usr/bin/git": { ownerUid: 501 } }), "arm64", "local")).rejects.toThrow("unsupported_git_distribution");
+    await expect(admitGitExecutables(DARWIN, stockHost({ "/usr/bin/git-receive-pack": { mode: 0o775 } }), "arm64", "local")).rejects.toThrow(
       "unsupported_git_distribution",
     );
-    const missing: Record<string, unknown> = { ...observed };
-    delete missing.architecture;
-    expect(() => { admitGitDistribution(missing as unknown as typeof observed, SUPPORTED_GIT_DISTRIBUTION); }).toThrow(
-      "unsupported_git_distribution",
-    );
   });
-
-  it("refuses to admit against a row that is not the compiled row", () => {
-    const row = structuredClone(SUPPORTED_GIT_DISTRIBUTION) as unknown as { buildOptionLines: string[] };
-    row.buildOptionLines[0] = `${row.buildOptionLines[0] ?? ""}x`;
-    expect(() => validateSupportedGitDistribution(row)).toThrow();
-    expect(() =>
-      { admitGitDistribution(observedFromRow(SUPPORTED_GIT_DISTRIBUTION), row as unknown as typeof SUPPORTED_GIT_DISTRIBUTION); },
-    ).toThrow("unsupported_git_distribution");
+  it("refuses when the table has no git-receive-pack row", async () => {
+    await expect(admitGitExecutables([DARWIN[0], DARWIN[2]], stockHost(), "arm64", "local")).rejects.toThrow("unsupported_git_distribution");
   });
+});
 
-  it("pins thirteen build-option lines without the version line", () => {
-    const main = SUPPORTED_GIT_DISTRIBUTION.executables.find((executable) => executable.id === "git_main");
-    expect(SUPPORTED_GIT_DISTRIBUTION.buildOptionLines).toHaveLength(13);
-    expect(main?.versionLines).toHaveLength(1);
-    expect(SUPPORTED_GIT_DISTRIBUTION.buildOptionLines).not.toContain(main?.versionLines[0]);
-  });
-
-  it("pins the three executables in id order, with empty versionLines only for the HTTPS helper", () => {
-    const ids = SUPPORTED_GIT_DISTRIBUTION.executables.map((executable) => executable.id);
-    expect(ids.length).toBeGreaterThan(0);
-    expect(ids).toEqual([...GIT_EXECUTABLE_IDS]);
-    for (const executable of SUPPORTED_GIT_DISTRIBUTION.executables) {
-      expect(executable.target.ownerUid).toBe(0);
-      expect(executable.target.mode).toBe(0o755);
-      expect(executable.versionLines.length === 0).toBe(executable.id === "git_remote_https");
-    }
-    const helper = SUPPORTED_GIT_DISTRIBUTION.executables.find((executable) => executable.id === "git_remote_https");
-    expect(helper?.linkChain).toEqual([{ path: helper?.invokedPath, target: "git-remote-http" }]);
-  });
-
-  it("pins six exec-path links sorted by name", () => {
-    const links = SUPPORTED_GIT_DISTRIBUTION.execPathLinks;
-    expect(links.length).toBeGreaterThan(0);
-    expect(links.map((link) => link.name)).toEqual([...GIT_EXEC_PATH_LINK_NAMES]);
-    for (const link of links) {
-      expect(link.path.endsWith(`/usr/libexec/git-core/${link.name}`)).toBe(true);
-      expect([link.ownerUid, link.mode]).toEqual([0, 493]);
-      expect([link.size, link.target]).toEqual(
-        link.name === "git-remote-https" ? [15, "git-remote-http"] : [13, "../../bin/git"],
-      );
-    }
-  });
-
-  it("binds the process table to this row", () => {
-    expect(SUPPORTED_GIT_DISTRIBUTION.processTable.distributionId).toBe(SUPPORTED_GIT_DISTRIBUTION.id);
-  });
-
+describe("version floor and capability", () => {
   it.each([
-    ["schemaVersion", 2],
-    ["id", "apple-git-000-arm64-xcode-0.0-000000a"],
-    ["architecture", "x86_64"],
-    ["extra", true],
-  ])("refuses a row with %s changed", (field, value) => {
-    expect(() => validateSupportedGitDistribution({ ...SUPPORTED_GIT_DISTRIBUTION, [field]: value })).toThrow();
+    ["git version 2.54.0 (Apple Git-157)", true],
+    ["git version 2.55.1 (Apple Git-160)", true],
+    ["git version 3.0.0 (Apple Git-157)", true],
+    ["git version 2.53.9 (Apple Git-157)", false],
+    ["git version 2.54.0 (Apple Git-156)", false],
+    ["git version 2.54.0", false],
+    ["git version 2.54.0 (Homebrew)", false],
+    ["git version 02.54.0 (Apple Git-157)", false],
+  ])("%s admits: %s", async (line, admits) => {
+    const admitted = await admitGitExecutables(DARWIN, stockHost(), "arm64", "local");
+    const run = () => admitGitCapability(admitted, `${line}\n${PROBE_OK}`, 0);
+    if (admits) expect(run().gitVersionLine).toBe(line);
+    else expect(run).toThrow("unsupported_git_distribution");
   });
-
-  it("refuses a row with twelve or fourteen build-option lines", () => {
-    const lines = SUPPORTED_GIT_DISTRIBUTION.buildOptionLines;
-    expect(() => validateSupportedGitDistribution({ ...SUPPORTED_GIT_DISTRIBUTION, buildOptionLines: lines.slice(1) })).toThrow();
-    expect(() =>
-      validateSupportedGitDistribution({ ...SUPPORTED_GIT_DISTRIBUTION, buildOptionLines: [...lines, "extra: line"] }),
-    ).toThrow();
+  it.each(["cpu: arm64", "shell-path: /bin/sh", "default-hash: sha1", "default-ref-format: files"])("refuses without %s", async (required) => {
+    const admitted = await admitGitExecutables(DARWIN, stockHost(), "arm64", "local");
+    const probe = PROBE_OK.split("\n").filter((line) => line !== required).join("\n");
+    expect(() => admitGitCapability(admitted, `git version 2.54.0 (Apple Git-157)\n${probe}`, 0)).toThrow("unsupported_git_distribution");
   });
-
-  it("refuses a link whose size and target disagree", () => {
-    const execPathLinks = SUPPORTED_GIT_DISTRIBUTION.execPathLinks.map((link) =>
-      link.name === "git" ? { ...link, target: "git-remote-http" } : link,
-    );
-    expect(() => validateSupportedGitDistribution({ ...SUPPORTED_GIT_DISTRIBUTION, execPathLinks })).toThrow();
+  it("ignores changed library lines, refuses duplicates, over-long output and a non-zero exit", async () => {
+    const admitted = await admitGitExecutables(DARWIN, stockHost(), "arm64", "local");
+    const head = "git version 2.54.0 (Apple Git-157)";
+    expect(() => admitGitCapability(admitted, `${head}\n${PROBE_OK}\nlibcurl: 9.9.9\nfeature: new`, 0)).not.toThrow();
+    expect(() => admitGitCapability(admitted, `${head}\n${PROBE_OK}\ndefault-hash: sha1`, 0)).toThrow("unsupported_git_distribution");
+    expect(() => admitGitCapability(admitted, `${head}\n${PROBE_OK}\n${"x: y\n".repeat(40)}`, 0)).toThrow("unsupported_git_distribution");
+    expect(() => admitGitCapability(admitted, "xcrun: error: invalid active developer path", 1)).toThrow("unsupported_git_distribution");
+    expect(() => admitGitCapability(admitted, `${head}\n${PROBE_OK}\r\n`, 0)).toThrow("unsupported_git_distribution");
+    expect(() => admitGitCapability(admitted, "", 0)).toThrow("unsupported_git_distribution");
   });
+  it("carries the admitted files into the distribution record", async () => {
+    const admitted = await admitGitExecutables(DARWIN, stockHost(), "arm64", "local");
+    expect(admitGitCapability(admitted, `git version 2.54.0 (Apple Git-157)\n${PROBE_OK}\n`, 0)).toEqual({
+      ...admitted,
+      gitVersionLine: "git version 2.54.0 (Apple Git-157)",
+    });
+  });
+  it("parses the vendor build only where the row names one", () => {
+    expect(parseGitVersionLine("git version 2.54.0 (Apple Git-157)", "Apple Git-")).toEqual({ major: 2, minor: 54, patch: 0, vendorBuild: 157 });
+    expect(parseGitVersionLine("git version 2.54.0", null)).toEqual({ major: 2, minor: 54, patch: 0, vendorBuild: null });
+    expect(parseGitVersionLine("git version 2.54.0 (Apple Git-157) extra", "Apple Git-")).toBeNull();
+    expect(parseGitVersionLine("git version 2.54.0 (Apple Git-157)", null)).toBeNull();
+  });
+});
 
-  it("keeps the compiled row immutable", () => {
-    expect(Object.isFrozen(SUPPORTED_GIT_DISTRIBUTION)).toBe(true);
-    expect(Object.isFrozen(SUPPORTED_GIT_DISTRIBUTION.executables[0]?.target)).toBe(true);
+describe("process table under the shim", () => {
+  it("every environment profile is free of xcrun inputs", () => {
+    for (const profile of GIT_DISTRIBUTION_POLICY.processTable.environmentProfiles) {
+      for (const { name } of profile.entries) expect(name).not.toMatch(/^(DEVELOPER_DIR|SDKROOT|TOOLCHAINS|xcrun_.*)$/u);
+    }
+  });
+  it("execs receive-pack as the git-receive-pack fixed path with the gateway's unchanged argv", () => {
+    const node = GIT_DISTRIBUTION_POLICY.processTable.nodes.find((candidate) => candidate.id === "real_receive_pack");
+    expect(node?.image).toEqual({ kind: "distribution", executableId: "git_receive_pack", argv0: "git-receive-pack" });
+    const edges = GIT_DISTRIBUTION_POLICY.processTable.edges;
+    const exec = edges.find((candidate) => candidate.id === "exec_receive_pack");
+    const spawn = edges.find((candidate) => candidate.id === "spawn_receive_pack_gateway");
+    expect(exec?.argvAlternatives).toEqual(spawn?.argvAlternatives);
+    const [grammar] = exec?.argvAlternatives ?? [];
+    if (grammar === undefined) throw new Error("exec_receive_pack has no argv");
+    expect(expandGitArgv(grammar, { private_destination_shadow: "/x/shadow.git" })).toEqual([
+      "git-receive-pack",
+      "--skip-connectivity-check",
+      "/x/shadow.git",
+    ]);
   });
 });

@@ -1,63 +1,73 @@
 /**
- * Test-only derivations of the one supported row. Nothing here restates a
- * measured literal: every fixture is the compiled constant with one field
- * changed, so a re-pin updates the fixtures by construction.
+ * Test-only hosts and probe output for the fixed-path Git admission (Spec 1 §4.2 as
+ * amended 2026-09-28, D71), and one-change corruptions of the compiled process table.
  */
-import { gitDistributionIdentity, SUPPORTED_GIT_DISTRIBUTION } from "./distribution.js";
-import type { ObservedGitDistributionV1, SupportedGitDistributionV1 } from "./types.js";
+import {
+  admitPosixRootOwnedSync,
+  type SystemExecutableRowV1,
+  type SystemPathInspectorSyncV1,
+  type SystemPathInspectorV1,
+  type SystemPathObservationV1,
+} from "../system-executables.js";
+import { GIT_DISTRIBUTION_POLICY, type AdmittedGitExecutablesV1 } from "./distribution.js";
 
-type Mutable = Record<string, unknown> | unknown[];
+/** The darwin Git rows as the platform table states them (`packages/platform-macos`). */
+export const DARWIN = [
+  { platform: "darwin", id: "git", path: "/usr/bin/git", ancestors: ["/", "/usr", "/usr/bin"], admission: "posix_root_owned", status: "implemented" },
+  { platform: "darwin", id: "git-receive-pack", path: "/usr/bin/git-receive-pack", ancestors: ["/", "/usr", "/usr/bin"], admission: "posix_root_owned", status: "implemented" },
+  { platform: "darwin", id: "ssh", path: "/usr/bin/ssh", ancestors: ["/", "/usr", "/usr/bin"], admission: "posix_root_owned", status: "implemented" },
+] as unknown as readonly [SystemExecutableRowV1, SystemExecutableRowV1, SystemExecutableRowV1];
 
-export function observedFromRow(row: SupportedGitDistributionV1): ObservedGitDistributionV1 {
-  return structuredClone(gitDistributionIdentity(row));
-}
+type PresentObservation = Exclude<SystemPathObservationV1, { kind: "absent" }>;
 
-function alterFirstLeaf(container: Mutable, key: string | number): void {
-  const value = (container as Record<string | number, unknown>)[key];
-  if (typeof value === "string") {
-    (container as Record<string | number, unknown>)[key] = `${value}x`;
-    return;
-  }
-  if (typeof value === "number") {
-    (container as Record<string | number, unknown>)[key] = value + 1;
-    return;
-  }
-  if (Array.isArray(value)) {
-    if (value.length === 0) throw new Error(`fixture: ${String(key)} has no leaf to alter`);
-    alterFirstLeaf(value, 0);
-    return;
-  }
-  if (typeof value === "object" && value !== null) {
-    const first = Object.keys(value)[0];
-    if (first === undefined) throw new Error(`fixture: ${String(key)} has no leaf to alter`);
-    alterFirstLeaf(value as Mutable, first);
-    return;
-  }
-  throw new Error(`fixture: ${String(key)} is not alterable`);
-}
+const directory = (ino: string): PresentObservation => ({ kind: "directory", ownerUid: 0, mode: 0o755, dev: "1", ino, size: 64, sha256: null });
+const file = (ino: string, sha256: string): PresentObservation => ({ kind: "file", ownerUid: 0, mode: 0o755, dev: "1", ino, size: 119_000, sha256 });
 
-/** The observation with exactly one primitive under `field` changed. */
-export function mutate(observed: ObservedGitDistributionV1, field: string): ObservedGitDistributionV1 {
-  const copy = structuredClone(observed) as unknown as Record<string, unknown>;
-  if (!Object.hasOwn(copy, field)) throw new Error(`fixture: unknown field ${field}`);
-  alterFirstLeaf(copy, field);
-  return copy as unknown as ObservedGitDistributionV1;
-}
-
-function flipLastHex(hash: string): string {
-  return `${hash.slice(0, -1)}${hash.endsWith("0") ? "1" : "0"}`;
-}
-
-/** Identical version and build lines, different `git_main` bytes: a future binary that merely reports the same version. */
-export function sameVersionOtherHash(): ObservedGitDistributionV1 {
-  const observed = structuredClone(gitDistributionIdentity(SUPPORTED_GIT_DISTRIBUTION)) as unknown as {
-    executables: { id: string; target: { sha256: string } }[];
+/** A stock macOS host: every path root-owned `0755`; `overrides` change single fields of one path. */
+export function stockHostSync(overrides: Readonly<Record<string, Partial<PresentObservation>>> = {}): SystemPathInspectorSyncV1 {
+  const paths: Record<string, PresentObservation> = {
+    "/": directory("2"),
+    "/usr": directory("3"),
+    "/usr/bin": directory("4"),
+    "/usr/bin/git": file("10", "a".repeat(64)),
+    "/usr/bin/git-receive-pack": file("11", "b".repeat(64)),
+    "/usr/bin/ssh": file("12", "c".repeat(64)),
   };
-  const main = observed.executables.find((executable) => executable.id === "git_main");
-  if (main === undefined) throw new Error("fixture: git_main missing");
-  main.target.sha256 = flipLastHex(main.target.sha256);
-  return observed as unknown as ObservedGitDistributionV1;
+  for (const [path, change] of Object.entries(overrides)) {
+    const base = paths[path];
+    if (base === undefined) throw new Error(`fixture: no stock path ${path}`);
+    paths[path] = { ...base, ...change };
+  }
+  return (path) => paths[path] ?? { kind: "absent" };
 }
+
+export function stockHost(overrides: Readonly<Record<string, Partial<PresentObservation>>> = {}): SystemPathInspectorV1 {
+  const inspect = stockHostSync(overrides);
+  return (path) => Promise.resolve(inspect(path));
+}
+
+/** What `admitGitExecutables` returns for a local push on the stock host, built synchronously. */
+export function stockAdmitted(): AdmittedGitExecutablesV1 {
+  const inspect = stockHostSync();
+  return { git: admitPosixRootOwnedSync(DARWIN[0], inspect), receivePack: admitPosixRootOwnedSync(DARWIN[1], inspect), ssh: null };
+}
+
+/** The thirteen D59 build-option lines, in the measured order, without the version line. */
+export const PROBE_OK = [
+  "cpu: arm64",
+  "no commit associated with this build",
+  "sizeof-long: 8",
+  "sizeof-size_t: 8",
+  "shell-path: /bin/sh",
+  "rust: disabled",
+  "feature: fsmonitor--daemon",
+  "libcurl: 8.7.1",
+  "zlib: 1.2.12",
+  "SHA-1: SHA1_DC",
+  "SHA-256: SHA256_BLK",
+  "default-ref-format: files",
+  "default-hash: sha1",
+].join("\n");
 
 interface MutableTable {
   [key: string]: unknown;
@@ -77,7 +87,7 @@ interface MutableTable {
 }
 
 function table(change: (value: MutableTable) => void): unknown {
-  const copy = structuredClone(SUPPORTED_GIT_DISTRIBUTION.processTable) as unknown as MutableTable;
+  const copy = structuredClone(GIT_DISTRIBUTION_POLICY.processTable) as unknown as MutableTable;
   change(copy);
   return copy;
 }

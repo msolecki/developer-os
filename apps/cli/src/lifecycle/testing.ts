@@ -57,7 +57,7 @@ import type {
   LaunchdPriorJobStateV1,
   LaunchdSnapshotRequestV1,
 } from "@developer-os/platform-macos";
-import { PERSISTED_GIT_PUSH_PLAN_CODEC, SUPPORTED_GIT_DISTRIBUTION } from "@developer-os/security";
+import { GIT_DISTRIBUTION_POLICY_ID, PERSISTED_GIT_PUSH_PLAN_CODEC } from "@developer-os/security";
 import type { PersistedGitPushPlanV1, SystemPathObservationV1 } from "@developer-os/security";
 
 import type { LifecycleEffectPortsV1 } from "./adapters.js";
@@ -538,7 +538,7 @@ export function syntheticPushPlan(
           },
     sourceBefore,
     sourceAfter,
-    distributionId: SUPPORTED_GIT_DISTRIBUTION.id,
+    distributionId: GIT_DISTRIBUTION_POLICY_ID,
     processTableHash: hex("0"),
   });
 }

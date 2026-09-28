@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   admitPosixRootOwned,
+  admitPosixRootOwnedSync,
   recheckSystemExecutable,
+  recheckSystemExecutableSync,
   SystemExecutableRefusalError,
   type SystemExecutableRowV1,
   type SystemPathObservationV1,
@@ -13,9 +15,13 @@ const dir = (mode = 0o755): SystemPathObservationV1 => ({ kind: "directory", own
 type PresentObservation = Exclude<SystemPathObservationV1, { kind: "absent" }>;
 const file = (change: Partial<PresentObservation> = {}): PresentObservation =>
   ({ kind: "file", ownerUid: 0, mode: 0o755, dev: "1", ino: "3", size: 101_000, sha256: "a".repeat(64), ...change });
-const host = (overrides: Record<string, SystemPathObservationV1> = {}) => {
+const hostSync = (overrides: Record<string, SystemPathObservationV1> = {}) => {
   const paths: Record<string, SystemPathObservationV1> = { "/": dir(), "/usr": dir(), "/usr/bin": dir(), "/usr/bin/git": file(), ...overrides };
-  return (path: string) => Promise.resolve(paths[path] ?? { kind: "absent" as const });
+  return (path: string): SystemPathObservationV1 => paths[path] ?? { kind: "absent" as const };
+};
+const host = (overrides: Record<string, SystemPathObservationV1> = {}) => {
+  const inspect = hostSync(overrides);
+  return (path: string) => Promise.resolve(inspect(path));
 };
 
 describe("posix_root_owned", () => {
@@ -44,5 +50,13 @@ describe("posix_root_owned", () => {
     const admitted = await admitPosixRootOwned(GIT, host());
     const drift = file({ [field]: field === "size" ? 1 : field === "sha256" ? "b".repeat(64) : "9" });
     await expect(recheckSystemExecutable(GIT, host({ "/usr/bin/git": drift }), admitted)).rejects.toThrow(SystemExecutableRefusalError);
+  });
+  it("the synchronous pair applies the same predicate and recheck", async () => {
+    expect(admitPosixRootOwnedSync(GIT, hostSync())).toEqual(await admitPosixRootOwned(GIT, host()));
+    expect(() => admitPosixRootOwnedSync(GIT, hostSync({ "/usr/bin": dir(0o775) }))).toThrow(SystemExecutableRefusalError);
+    const admitted = admitPosixRootOwnedSync(GIT, hostSync());
+    expect(() => { recheckSystemExecutableSync(GIT, hostSync(), admitted); }).not.toThrow();
+    const drift = hostSync({ "/usr/bin/git": file({ sha256: "b".repeat(64) }) });
+    expect(() => { recheckSystemExecutableSync(GIT, drift, admitted); }).toThrow(SystemExecutableRefusalError);
   });
 });

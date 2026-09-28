@@ -1,6 +1,5 @@
-import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, open, readFile, readdir, readlink, realpath, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, open, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import {
@@ -11,99 +10,42 @@ import {
   type LowerHexSha1,
   type LowerHexSha256,
 } from "@developer-os/core";
+import { DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath } from "@developer-os/platform-macos";
 import {
-  SUPPORTED_GIT_DISTRIBUTION,
-  admitGitDistribution,
+  admitGitCapability,
+  admitGitExecutables,
   materializeSanitizedBareDestinationShadow,
   prepareLocalReceive,
   validateShadowConfigTemplate,
+  type AdmittedGitExecutablesV1,
   type GitLocalReceiveRunV1,
-  type ObservedGitDistributionV1,
   type SanitizedBareDestinationShadowV1,
 } from "@developer-os/security";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 /**
- * Plan 1b Task 13 on the pinned host (founder Q5): real `git-receive-pack`
- * and its `index-pack --keep` child write into a materialized private
- * destination shadow, then `prepareLocalReceive` validates what they
- * produced. Every repository is a synthetic one under a fresh `mktemp`
- * directory. On any other Git distribution the observation refuses
- * `unsupported_git_distribution`: a skip would read as a pass.
+ * Plan 1b Task 13 on an admitted host (founder Q5, D71): the real
+ * `/usr/bin/git-receive-pack` shim and its `index-pack --keep` child write into
+ * a materialized private destination shadow, then `prepareLocalReceive`
+ * validates what they produced. Every repository is a synthetic one under a
+ * fresh `mktemp` directory. A host whose fixed-path Git does not admit refuses
+ * `unsupported_git_distribution` and fails the file: a skip would read as a pass.
  */
 
-const git = (id: "git_main" | "system_ssh" | "git_remote_https"): string => {
-  const executable = SUPPORTED_GIT_DISTRIBUTION.executables.find((candidate) => candidate.id === id);
-  if (executable === undefined) throw new Error(`the supported row has no ${id}`);
-  return executable.invokedPath;
-};
-
-const GIT = git("git_main");
+let admitted: AdmittedGitExecutablesV1;
+let GIT = "";
+let RECEIVE_PACK = "";
 const UID = process.getuid?.() ?? 0;
 const BRANCH = parseFullBranchRef("refs/heads/main");
 
-async function linkChain(path: string): Promise<{ path: string; target: string }[]> {
-  const chain: { path: string; target: string }[] = [];
-  let current = path;
-  while ((await lstat(current)).isSymbolicLink()) {
-    const target = await readlink(current);
-    chain.push({ path: current, target });
-    current = target.startsWith("/") ? target : `${current.slice(0, current.lastIndexOf("/"))}/${target}`;
-  }
-  return chain;
-}
+beforeAll(async () => {
+  admitted = await admitGitExecutables(DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath, process.arch, "local");
+  GIT = admitted.git.canonicalPath;
+  RECEIVE_PACK = admitted.receivePack.canonicalPath;
+});
 
 function lines(text: string): string[] {
   return text.split("\n").filter((line) => line !== "");
-}
-
-/** The measured identity of the installed distribution, read-only, exactly as the row records it. */
-async function observeInstalledGitDistribution(): Promise<ObservedGitDistributionV1> {
-  const xcode = lines(execFileSync("/usr/bin/xcodebuild", ["-version"], { encoding: "utf8", env: {} }));
-  const build = lines(execFileSync(GIT, ["version", "--build-options"], { encoding: "utf8", env: {} }));
-  const executables = [];
-  for (const row of SUPPORTED_GIT_DISTRIBUTION.executables) {
-    const canonicalPath = await realpath(row.invokedPath);
-    const stats = await lstat(canonicalPath);
-    const versionLines =
-      row.id === "git_main"
-        ? build.slice(0, 1)
-        : row.id === "system_ssh"
-          ? lines(spawnSync(row.invokedPath, ["-V"], { encoding: "utf8", env: {} }).stderr)
-          : [];
-    executables.push({
-      id: row.id,
-      invokedPath: row.invokedPath,
-      linkChain: await linkChain(row.invokedPath),
-      target: {
-        canonicalPath,
-        ownerUid: stats.uid,
-        mode: stats.mode & 0o7777,
-        size: stats.size,
-        sha256: createHash("sha256").update(await readFile(canonicalPath)).digest("hex"),
-      },
-      versionLines,
-    });
-  }
-  const execPathLinks = [];
-  for (const row of SUPPORTED_GIT_DISTRIBUTION.execPathLinks) {
-    const stats = await lstat(row.path);
-    execPathLinks.push({
-      name: row.name,
-      path: row.path,
-      ownerUid: stats.uid,
-      mode: stats.mode & 0o7777,
-      size: stats.size,
-      target: await readlink(row.path),
-    });
-  }
-  return {
-    xcode: { version: (xcode[0] ?? "").replace(/^Xcode /u, ""), build: (xcode[1] ?? "").replace(/^Build version /u, "") },
-    architecture: execFileSync("/usr/bin/uname", ["-m"], { encoding: "utf8", env: {} }).trim(),
-    buildOptionLines: build.slice(1),
-    executables,
-    execPathLinks,
-  };
 }
 
 const destinationTemplate = validateShadowConfigTemplate({
@@ -181,7 +123,7 @@ async function scenario(input: ScenarioV1): Promise<Awaited<ReturnType<typeof pr
     input.target === null ? { state: "absent" } : { state: "present", oid: input.target, bytesHash: "0".repeat(64) as LowerHexSha256 };
   const receive = async (): Promise<GitLocalReceiveRunV1> => {
     run(
-      ["send-pack", `--receive-pack=${GIT} receive-pack --skip-connectivity-check`, shadow.gitDir, `${input.commitOid}:${BRANCH}`],
+      ["send-pack", `--receive-pack=${RECEIVE_PACK} --skip-connectivity-check`, shadow.gitDir, `${input.commitOid}:${BRANCH}`],
       source,
       { GIT_ALTERNATE_OBJECT_DIRECTORIES: `${source}/.git/objects` },
     );
@@ -208,9 +150,9 @@ async function scenario(input: ScenarioV1): Promise<Awaited<ReturnType<typeof pr
   return result;
 }
 
-describe("local receive on the pinned Git distribution", () => {
+describe("local receive on the admitted fixed-path Git", () => {
   beforeEach(async () => {
-    admitGitDistribution(await observeInstalledGitDistribution(), SUPPORTED_GIT_DISTRIBUTION);
+    admitGitCapability(admitted, execFileSync(GIT, ["--version", "--build-options"], { encoding: "utf8", env: {} }), 0);
     root = await realpath(await mkdtemp(`${tmpdir()}/developer-os-local-receive-pinned-`));
     const home = `${root}/home`;
     await mkdir(home, { mode: 0o700 });

@@ -18,7 +18,7 @@ import {
 } from "@developer-os/core";
 
 export type SystemPlatformV1 = "darwin" | "linux" | "win32";
-export type SystemExecutableIdV1 = "git" | "ssh" | "scheduler";
+export type SystemExecutableIdV1 = "git" | "git-receive-pack" | "ssh" | "scheduler";
 
 export interface SystemExecutableRowV1 {
   readonly platform: SystemPlatformV1;
@@ -43,6 +43,8 @@ export type SystemPathObservationV1 =
 
 /** Observes a path without following a link at it; `sha256` is non-null only for a regular file. */
 export type SystemPathInspectorV1 = (path: CanonicalAbsolutePathV1) => Promise<SystemPathObservationV1>;
+/** The same observation, synchronously, for a recheck inside a synchronous permit consumption. */
+export type SystemPathInspectorSyncV1 = (path: CanonicalAbsolutePathV1) => SystemPathObservationV1;
 
 export interface AdmittedSystemExecutableV1 {
   readonly platform: SystemPlatformV1;
@@ -70,24 +72,18 @@ function refuse(detail: string): never {
 
 const writableByOthers = (mode: number): boolean => (mode & 0o022) !== 0;
 
-/**
- * `posix_root_owned`: every listed ancestor is a root-owned directory without group/other
- * write, and the standard path itself is a root-owned regular file (a link refuses) with
- * the owner-execute bit, no group/other write and neither setuid nor setgid.
- */
-export async function admitPosixRootOwned(
-  row: SystemExecutableRowV1,
-  inspect: SystemPathInspectorV1,
-): Promise<AdmittedSystemExecutableV1> {
+function implementedPath(row: SystemExecutableRowV1): CanonicalAbsolutePathV1 {
   if (row.status !== "implemented") refuse(`${row.platform}/${row.id} is not implemented`);
-  const path = parseCanonicalAbsolutePathText(row.path);
-  for (const ancestor of row.ancestors) {
-    const entry = await inspect(ancestor);
-    if (entry.kind !== "directory" || entry.ownerUid !== 0 || writableByOthers(entry.mode)) {
-      refuse(`${ancestor} is not a root-owned directory without group/other write`);
-    }
+  return parseCanonicalAbsolutePathText(row.path);
+}
+
+function requireRootOwnedAncestor(ancestor: CanonicalAbsolutePathV1, entry: SystemPathObservationV1): void {
+  if (entry.kind !== "directory" || entry.ownerUid !== 0 || writableByOthers(entry.mode)) {
+    refuse(`${ancestor} is not a root-owned directory without group/other write`);
   }
-  const target = await inspect(path);
+}
+
+function admittedTarget(row: SystemExecutableRowV1, path: CanonicalAbsolutePathV1, target: SystemPathObservationV1): AdmittedSystemExecutableV1 {
   if (
     target.kind !== "file" ||
     target.ownerUid !== 0 ||
@@ -111,8 +107,33 @@ export async function admitPosixRootOwned(
   };
 }
 
+/**
+ * `posix_root_owned`: every listed ancestor is a root-owned directory without group/other
+ * write, and the standard path itself is a root-owned regular file (a link refuses) with
+ * the owner-execute bit, no group/other write and neither setuid nor setgid.
+ */
+export async function admitPosixRootOwned(
+  row: SystemExecutableRowV1,
+  inspect: SystemPathInspectorV1,
+): Promise<AdmittedSystemExecutableV1> {
+  const path = implementedPath(row);
+  for (const ancestor of row.ancestors) requireRootOwnedAncestor(ancestor, await inspect(ancestor));
+  return admittedTarget(row, path, await inspect(path));
+}
+
+/** `admitPosixRootOwned` over a synchronous inspector: the same predicate, step for step. */
+export function admitPosixRootOwnedSync(row: SystemExecutableRowV1, inspect: SystemPathInspectorSyncV1): AdmittedSystemExecutableV1 {
+  const path = implementedPath(row);
+  for (const ancestor of row.ancestors) requireRootOwnedAncestor(ancestor, inspect(ancestor));
+  return admittedTarget(row, path, inspect(path));
+}
+
 const identityBytes = (admitted: AdmittedSystemExecutableV1): string =>
   encodeCanonicalJson(admitted as unknown as CanonicalJsonValue);
+
+function requireUnchanged(fresh: AdmittedSystemExecutableV1, admitted: AdmittedSystemExecutableV1): void {
+  if (identityBytes(fresh) !== identityBytes(admitted)) refuse(`${fresh.canonicalPath} changed since admission`);
+}
 
 /** Re-admits and refuses any difference from the invocation's admitted evidence. */
 export async function recheckSystemExecutable(
@@ -120,6 +141,13 @@ export async function recheckSystemExecutable(
   inspect: SystemPathInspectorV1,
   admitted: AdmittedSystemExecutableV1,
 ): Promise<void> {
-  const fresh = await admitPosixRootOwned(row, inspect);
-  if (identityBytes(fresh) !== identityBytes(admitted)) refuse(`${fresh.canonicalPath} changed since admission`);
+  requireUnchanged(await admitPosixRootOwned(row, inspect), admitted);
+}
+
+export function recheckSystemExecutableSync(
+  row: SystemExecutableRowV1,
+  inspect: SystemPathInspectorSyncV1,
+  admitted: AdmittedSystemExecutableV1,
+): void {
+  requireUnchanged(admitPosixRootOwnedSync(row, inspect), admitted);
 }

@@ -1,171 +1,22 @@
 /**
- * The one supported Git distribution row (NEW-84 re-pinning rule 1). Spec 1
- * §4.2 as amended 2026-09-23 (D59): measured read-only on 2026-09-23. No other
- * file restates a hash, size, build or version literal; re-pinning replaces
- * this row, its process table and every exact-set test in one change.
+ * Spec 1 §4.2 as amended 2026-09-28 (D71; NEW-113): Git runs from the platform's
+ * standard fixed paths, admitted by ownership and mode (`posix_root_owned`), a version
+ * floor and a capability probe. The measured bytes are per-invocation evidence held in
+ * memory for one top-level invocation; nothing here names a macOS build, an Xcode
+ * version or a binary hash, and nothing consults `PATH` or `xcrun`.
  */
-import {
-  encodeCanonicalJson,
-  parseCanonicalAbsolutePathText,
-  parseLowerHexSha256,
-  type CanonicalAbsolutePathV1,
-  type CanonicalJsonValue,
-} from "@developer-os/core";
-
 import { SecurityRefusalError } from "../paths.js";
 import {
-  parseBoundedLinkTarget,
-  parseBoundedTextLine,
-  SUPPORTED_GIT_DISTRIBUTION_ID,
-  SUPPORTED_GIT_PROCESS_TABLE,
-  validateSupportedGitProcessTable,
-} from "./process-table.js";
-import {
-  GIT_EXEC_PATH_LINK_NAMES,
-  GIT_EXECUTABLE_IDS,
-  type ExecutableFileIdentityV1,
-  type GitExecPathLinkV1,
-  type ObservedGitDistributionV1,
-  type SupportedGitDistributionV1,
-  type SupportedGitExecutableV1,
-} from "./types.js";
+  admitPosixRootOwned,
+  type AdmittedSystemExecutableV1,
+  type SystemExecutableRowV1,
+  type SystemPathInspectorV1,
+} from "../system-executables.js";
+import { GIT_DISTRIBUTION_POLICY_ID, parseBoundedTextLine, SUPPORTED_GIT_PROCESS_TABLE } from "./process-table.js";
+import type { GitDistributionPolicyV2, GitVersionFloorV1 } from "./types.js";
 
-const DEVELOPER = "/Applications/Xcode.app/Contents/Developer";
-const EXEC_PATH = `${DEVELOPER}/usr/libexec/git-core`;
-const path = (text: string): CanonicalAbsolutePathV1 => parseCanonicalAbsolutePathText(text);
-const sha256 = parseLowerHexSha256;
-
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
-function record(value: unknown, label: string): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
-  return value as Readonly<Record<string, unknown>>;
-}
-
-function exact(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
-  const input = record(value, label);
-  if (Object.keys(input).length !== keys.length || keys.some((key) => !Object.hasOwn(input, key))) {
-    fail(`${label}: keys`);
-  }
-  return input;
-}
-
-function array(value: unknown, minimum: number, maximum: number, label: string): readonly unknown[] {
-  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) fail(`${label}: length`);
-  return value as readonly unknown[];
-}
-
-function integer(value: unknown, minimum: number, maximum: number, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) fail(label);
-  return value;
-}
-
-function assertSortedUnique(values: readonly string[], label: string): void {
-  for (let index = 1; index < values.length; index += 1) {
-    if (!((values[index - 1] as string) < (values[index] as string))) fail(`${label}: not sorted and unique`);
-  }
-}
-
-function parseExecutableIdentity(value: unknown, label: string): ExecutableFileIdentityV1 {
-  const input = exact(value, ["canonicalPath", "ownerUid", "mode", "size", "sha256"], label);
-  if (input.ownerUid !== 0) fail(`${label}.ownerUid`);
-  return {
-    canonicalPath: parseCanonicalAbsolutePathText(input.canonicalPath),
-    ownerUid: 0,
-    mode: integer(input.mode, 0, 0o7777, `${label}.mode`),
-    size: integer(input.size, 1, Number.MAX_SAFE_INTEGER, `${label}.size`),
-    sha256: sha256(input.sha256),
-  };
-}
-
-function parseExecutable(value: unknown, label: string): SupportedGitExecutableV1 {
-  const input = exact(value, ["id", "invokedPath", "linkChain", "target", "versionLines"], label);
-  const id = input.id;
-  if (typeof id !== "string" || !(GIT_EXECUTABLE_IDS as readonly string[]).includes(id)) fail(`${label}.id`);
-  const linkChain = array(input.linkChain, 0, 8, `${label}.linkChain`).map((link, index) => {
-    const fields = exact(link, ["path", "target"], `${label}.linkChain[${String(index)}]`);
-    return { path: parseCanonicalAbsolutePathText(fields.path), target: parseBoundedLinkTarget(fields.target) };
-  });
-  if (new Set(linkChain.map((link) => link.path)).size !== linkChain.length) fail(`${label}.linkChain: repeated path`);
-  const versionLines = array(input.versionLines, 0, 32, `${label}.versionLines`).map(parseBoundedTextLine);
-  if ((id === "git_remote_https") !== (versionLines.length === 0)) fail(`${label}.versionLines`);
-  return {
-    id: id as SupportedGitExecutableV1["id"],
-    invokedPath: parseCanonicalAbsolutePathText(input.invokedPath),
-    linkChain,
-    target: parseExecutableIdentity(input.target, `${label}.target`),
-    versionLines,
-  };
-}
-
-/** A size-13 link is always `../../bin/git` and the one size-15 link is `git-remote-http`; nothing else is measured. */
-const LINK_TARGET_BY_SIZE: Readonly<Record<13 | 15, string>> = { 13: "../../bin/git", 15: "git-remote-http" };
-
-function parseExecPathLink(value: unknown, label: string): GitExecPathLinkV1 {
-  const input = exact(value, ["name", "path", "ownerUid", "mode", "size", "target"], label);
-  const name = input.name;
-  if (typeof name !== "string" || !(GIT_EXEC_PATH_LINK_NAMES as readonly string[]).includes(name)) fail(`${label}.name`);
-  if (input.ownerUid !== 0) fail(`${label}.ownerUid`);
-  if (input.mode !== 493) fail(`${label}.mode`);
-  if (input.size !== 13 && input.size !== 15) fail(`${label}.size`);
-  const target = parseBoundedLinkTarget(input.target);
-  if (target !== LINK_TARGET_BY_SIZE[input.size] || (input.size === 15) !== (name === "git-remote-https")) {
-    fail(`${label}.target`);
-  }
-  return {
-    name: name as GitExecPathLinkV1["name"],
-    path: parseCanonicalAbsolutePathText(input.path),
-    ownerUid: 0,
-    mode: 493,
-    size: input.size,
-    target,
-  };
-}
-
-function parseDistributionShape(value: unknown): SupportedGitDistributionV1 {
-  const label = "SupportedGitDistributionV1";
-  const input = exact(
-    value,
-    ["schemaVersion", "id", "xcode", "architecture", "buildOptionLines", "executables", "execPathLinks", "processTable"],
-    label,
-  );
-  if (input.schemaVersion !== 1) fail(`${label}.schemaVersion`);
-  if (input.id !== SUPPORTED_GIT_DISTRIBUTION_ID) fail(`${label}.id`);
-  const xcode = exact(input.xcode, ["version", "build"], `${label}.xcode`);
-  if (xcode.version !== "27.0" || xcode.build !== "27A266a") fail(`${label}.xcode`);
-  if (input.architecture !== "arm64") fail(`${label}.architecture`);
-  const executables = array(input.executables, 3, 3, `${label}.executables`).map((item, index) =>
-    parseExecutable(item, `${label}.executables[${String(index)}]`),
-  );
-  assertSortedUnique(
-    executables.map((executable) => executable.id),
-    `${label}.executables`,
-  );
-  const execPathLinks = array(input.execPathLinks, 6, 6, `${label}.execPathLinks`).map((item, index) =>
-    parseExecPathLink(item, `${label}.execPathLinks[${String(index)}]`),
-  );
-  assertSortedUnique(
-    execPathLinks.map((link) => link.name),
-    `${label}.execPathLinks`,
-  );
-  return {
-    schemaVersion: 1,
-    id: SUPPORTED_GIT_DISTRIBUTION_ID,
-    xcode: { version: "27.0", build: "27A266a" },
-    architecture: "arm64",
-    buildOptionLines: array(input.buildOptionLines, 13, 13, `${label}.buildOptionLines`).map(parseBoundedTextLine),
-    executables,
-    execPathLinks,
-    processTable: validateSupportedGitProcessTable(input.processTable),
-  };
-}
-
-const execPathLink = (name: GitExecPathLinkV1["name"]): GitExecPathLinkV1 => {
-  const size = name === "git-remote-https" ? 15 : 13;
-  return { name, path: path(`${EXEC_PATH}/${name}`), ownerUid: 0, mode: 493, size, target: LINK_TARGET_BY_SIZE[size] };
-};
+const ARCHITECTURE = "arm64";
+const MAX_PROBE_LINES = 32;
 
 function deepFreeze<T>(value: T): T {
   if (typeof value === "object" && value !== null) {
@@ -175,109 +26,115 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-export const SUPPORTED_GIT_DISTRIBUTION: SupportedGitDistributionV1 = deepFreeze(
-  parseDistributionShape({
-    schemaVersion: 1,
-    id: SUPPORTED_GIT_DISTRIBUTION_ID,
-    xcode: { version: "27.0", build: "27A266a" },
-    architecture: "arm64",
-    buildOptionLines: [
-      "cpu: arm64",
-      "no commit associated with this build",
-      "sizeof-long: 8",
-      "sizeof-size_t: 8",
-      "shell-path: /bin/sh",
-      "rust: disabled",
-      "feature: fsmonitor--daemon",
-      "libcurl: 8.7.1",
-      "zlib: 1.2.12",
-      "SHA-1: SHA1_DC",
-      "SHA-256: SHA256_BLK",
-      "default-ref-format: files",
-      "default-hash: sha1",
-    ],
-    executables: [
-      {
-        id: "git_main",
-        invokedPath: path(`${DEVELOPER}/usr/bin/git`),
-        linkChain: [],
-        target: {
-          canonicalPath: path(`${DEVELOPER}/usr/bin/git`),
-          ownerUid: 0,
-          mode: 493,
-          size: 3837392,
-          sha256: sha256("9a1c8fc68dc75e1b3c0cd8e5ad9d13ac9bc92cb53c9578b3cff4beaf2e9b1e70"),
-        },
-        versionLines: ["git version 2.54.0 (Apple Git-157)"],
-      },
-      {
-        id: "git_remote_https",
-        invokedPath: path(`${EXEC_PATH}/git-remote-https`),
-        linkChain: [{ path: path(`${EXEC_PATH}/git-remote-https`), target: "git-remote-http" }],
-        target: {
-          canonicalPath: path(`${EXEC_PATH}/git-remote-http`),
-          ownerUid: 0,
-          mode: 493,
-          size: 2346832,
-          sha256: sha256("1a68d873ea23502f44e63d8013ad2d1374a8f0161fe4a07ba8f708f686794124"),
-        },
-        versionLines: [],
-      },
-      {
-        id: "system_ssh",
-        invokedPath: path("/usr/bin/ssh"),
-        linkChain: [],
-        target: {
-          canonicalPath: path("/usr/bin/ssh"),
-          ownerUid: 0,
-          mode: 493,
-          size: 1584576,
-          sha256: sha256("17542914a3fb55e7efeb35a90d594a21c84bf6a4cfe1fc8ddff5606dc2658fc3"),
-        },
-        versionLines: ["OpenSSH_10.3p1, LibreSSL 3.3.6"],
-      },
-    ],
-    execPathLinks: GIT_EXEC_PATH_LINK_NAMES.map(execPathLink),
-    processTable: SUPPORTED_GIT_PROCESS_TABLE,
-  }),
-);
+export const GIT_DISTRIBUTION_POLICY: GitDistributionPolicyV2 = deepFreeze({
+  schemaVersion: 2,
+  id: GIT_DISTRIBUTION_POLICY_ID,
+  platform: "darwin",
+  architecture: ARCHITECTURE,
+  gitVersionFloor: { major: 2, minor: 54, patch: 0, vendorBuild: { prefix: "Apple Git-", minimum: 157 } },
+  sshVersionFloor: { major: 10, minor: 3, portable: 1 },
+  requiredBuildOptionLines: [`cpu: ${ARCHITECTURE}`, "default-hash: sha1", "default-ref-format: files", "shell-path: /bin/sh"],
+  executables: [
+    { id: "git_main", system: "git" },
+    { id: "git_receive_pack", system: "git-receive-pack" },
+    { id: "git_remote_https", system: null },
+    { id: "system_ssh", system: "ssh" },
+  ],
+  processTable: SUPPORTED_GIT_PROCESS_TABLE,
+});
 
-const SUPPORTED_GIT_DISTRIBUTION_BYTES = encodeCanonicalJson(SUPPORTED_GIT_DISTRIBUTION as unknown as CanonicalJsonValue);
-
-/** Exact-set identity, as for the process table: a well-formed row that is not the compiled row is unsupported. */
-export function validateSupportedGitDistribution(value: unknown): SupportedGitDistributionV1 {
-  const row = parseDistributionShape(value);
-  if (encodeCanonicalJson(row as unknown as CanonicalJsonValue) !== SUPPORTED_GIT_DISTRIBUTION_BYTES) {
-    fail("SupportedGitDistributionV1: not the compiled row");
-  }
-  return SUPPORTED_GIT_DISTRIBUTION;
+/** One invocation's admitted files; `ssh` is non-null only when SSH is the selected transport. */
+export interface AdmittedGitExecutablesV1 {
+  readonly git: AdmittedSystemExecutableV1;
+  readonly receivePack: AdmittedSystemExecutableV1;
+  readonly ssh: AdmittedSystemExecutableV1 | null;
 }
 
-/** The measurable half of a row: what planning compares an observation against. */
-export function gitDistributionIdentity(row: SupportedGitDistributionV1): ObservedGitDistributionV1 {
-  return {
-    xcode: row.xcode,
-    architecture: row.architecture,
-    buildOptionLines: row.buildOptionLines,
-    executables: row.executables,
-    execPathLinks: row.execPathLinks,
-  };
+export interface AdmittedGitDistributionV1 extends AdmittedGitExecutablesV1 {
+  readonly gitVersionLine: string;
+}
+
+function unsupported(): never {
+  throw new SecurityRefusalError("unsupported_git_distribution");
+}
+
+function rowFor(rows: readonly SystemExecutableRowV1[], policy: GitDistributionPolicyV2, id: SystemExecutableRowV1["id"]): SystemExecutableRowV1 {
+  return rows.find((row) => row.platform === policy.platform && row.id === id) ?? unsupported();
 }
 
 /**
- * Version text is never identity on its own: every measured field must equal
- * the row byte for byte. Any drift, malformed observation or unsupported row
- * refuses before a repository or network process exists.
+ * Admits the fixed paths the local transport runs. HTTPS has no `git_remote_https` row
+ * and SSH stays refused (D59 Q4-A) until their traces are recorded. Any table refusal,
+ * and any failure to observe a path, is `unsupported_git_distribution`.
  */
-export function admitGitDistribution(observed: ObservedGitDistributionV1, row: SupportedGitDistributionV1): void {
-  let admitted = false;
+export async function admitGitExecutables(
+  rows: readonly SystemExecutableRowV1[],
+  inspect: SystemPathInspectorV1,
+  architecture: string,
+  transport: "local" | "https" | "ssh",
+  policy: GitDistributionPolicyV2 = GIT_DISTRIBUTION_POLICY,
+): Promise<AdmittedGitExecutablesV1> {
+  if (transport !== "local" || architecture !== policy.architecture) unsupported();
   try {
-    const supported = validateSupportedGitDistribution(row);
-    admitted =
-      encodeCanonicalJson(observed as unknown as CanonicalJsonValue) ===
-      encodeCanonicalJson(gitDistributionIdentity(supported) as unknown as CanonicalJsonValue);
+    const git = await admitPosixRootOwned(rowFor(rows, policy, "git"), inspect);
+    const receivePack = await admitPosixRootOwned(rowFor(rows, policy, "git-receive-pack"), inspect);
+    return { git, receivePack, ssh: null };
   } catch {
-    admitted = false;
+    return unsupported();
   }
-  if (!admitted) throw new SecurityRefusalError("unsupported_git_distribution");
+}
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+const DECIMAL = "(0|[1-9][0-9]*)";
+
+/** Canonical decimals only; the vendor group is required exactly when the row names a prefix. */
+export function parseGitVersionLine(
+  line: string,
+  vendorBuildPrefix: string | null,
+): { major: number; minor: number; patch: number; vendorBuild: number | null } | null {
+  const suffix = vendorBuildPrefix === null ? "" : ` \\(${escapeRegExp(vendorBuildPrefix)}${DECIMAL}\\)`;
+  const match = new RegExp(`^git version ${DECIMAL}\\.${DECIMAL}\\.${DECIMAL}${suffix}$`, "u").exec(line);
+  if (match === null) return null;
+  const numbers = match.slice(1).map(Number);
+  if (!numbers.every(Number.isSafeInteger)) return null;
+  const [major, minor, patch, vendorBuild] = numbers as [number, number, number, number | undefined];
+  return { major, minor, patch, vendorBuild: vendorBuild ?? null };
+}
+
+function meetsFloor(line: string, floor: GitVersionFloorV1): boolean {
+  const version = parseGitVersionLine(line, floor.vendorBuild?.prefix ?? null);
+  if (version === null) return false;
+  const observed = [version.major, version.minor, version.patch];
+  const minimum = [floor.major, floor.minor, floor.patch];
+  const index = observed.findIndex((part, position) => part !== minimum[position]);
+  if (index >= 0 && (observed[index] as number) < (minimum[index] as number)) return false;
+  return floor.vendorBuild === null || (version.vendorBuild !== null && version.vendorBuild >= floor.vendorBuild.minimum);
+}
+
+/**
+ * Judges the `direct_distribution_probe` output (`git --version --build-options`, run
+ * through the shim): line 0 meets the floor, and each required build-option line is
+ * present exactly once. Every other line is ignored, so a library bump still admits.
+ */
+export function admitGitCapability(
+  admitted: AdmittedGitExecutablesV1,
+  probeStdout: string,
+  probeExitCode: number,
+  policy: GitDistributionPolicyV2 = GIT_DISTRIBUTION_POLICY,
+): AdmittedGitDistributionV1 {
+  if (probeExitCode !== 0) unsupported();
+  const lines = probeStdout.split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  if (lines.length === 0 || lines.length > MAX_PROBE_LINES) unsupported();
+  try {
+    for (const line of lines) parseBoundedTextLine(line);
+  } catch {
+    return unsupported();
+  }
+  const [versionLine, ...options] = lines as [string, ...string[]];
+  if (!meetsFloor(versionLine, policy.gitVersionFloor)) unsupported();
+  for (const required of policy.requiredBuildOptionLines) {
+    if (options.filter((line) => line === required).length !== 1) unsupported();
+  }
+  return { ...admitted, gitVersionLine: versionLine };
 }

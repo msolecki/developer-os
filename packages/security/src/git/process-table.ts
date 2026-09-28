@@ -50,8 +50,8 @@ import {
   type SupportedGitProcessTableV1,
 } from "./types.js";
 
-export const SUPPORTED_GIT_DISTRIBUTION_ID = "apple-git-157-arm64-xcode-27.0-27A266a";
-export const SUPPORTED_GIT_PROCESS_TABLE_ID = "apple-git-157-process-v1";
+export const GIT_DISTRIBUTION_POLICY_ID = "apple-git-arm64-v2";
+export const SUPPORTED_GIT_PROCESS_TABLE_ID = "apple-git-process-v2";
 export const GIT_PACK_OBJECT_COUNT_MAX = 200001;
 
 const GIT_PROCESS_TABLE_DOMAIN = "developer-os:git-process-table:v1";
@@ -148,10 +148,6 @@ function parseBoundedEnvironmentValue(value: unknown): string {
 
 export function parseBoundedTextLine(value: unknown): string {
   return boundedText(value, 1, 1024, false, "BoundedTextLineV1");
-}
-
-export function parseBoundedLinkTarget(value: unknown): string {
-  return boundedText(value, 1, 4096, false, "BoundedLinkTargetV1");
 }
 
 /**
@@ -442,11 +438,11 @@ function parseProcessTableShape(value: unknown): SupportedGitProcessTableV1 {
   );
   if (input.schemaVersion !== 1) fail(`${label}.schemaVersion`);
   if (input.id !== SUPPORTED_GIT_PROCESS_TABLE_ID) fail(`${label}.id`);
-  if (input.distributionId !== SUPPORTED_GIT_DISTRIBUTION_ID) fail(`${label}.distributionId`);
+  if (input.distributionId !== GIT_DISTRIBUTION_POLICY_ID) fail(`${label}.distributionId`);
   const table: SupportedGitProcessTableV1 = {
     schemaVersion: 1,
     id: SUPPORTED_GIT_PROCESS_TABLE_ID,
-    distributionId: SUPPORTED_GIT_DISTRIBUTION_ID,
+    distributionId: GIT_DISTRIBUTION_POLICY_ID,
     environmentProfiles: fixedList(input.environmentProfiles, 12, parseEnvironmentProfile, `${label}.environmentProfiles`),
     ioProfiles: fixedList(input.ioProfiles, 7, parseIoProfile, `${label}.ioProfiles`),
     phaseBudgets: fixedList(input.phaseBudgets, 4, parsePhaseBudget, `${label}.phaseBudgets`),
@@ -499,7 +495,7 @@ const LOCALE: EnvironmentMap = { LC_ALL: envLiteral("C"), LANG: envLiteral("C") 
 const SUPERVISED: EnvironmentMap = {
   DEVELOPER_OS_GIT_SUPERVISOR_SOCKET: envSlot("supervisor_socket"),
   DEVELOPER_OS_GIT_INVOCATION_CAPABILITY: envSlot("invocation_capability"),
-  DEVELOPER_OS_GIT_DISTRIBUTION: envLiteral(SUPPORTED_GIT_DISTRIBUTION_ID),
+  DEVELOPER_OS_GIT_DISTRIBUTION: envLiteral(GIT_DISTRIBUTION_POLICY_ID),
 };
 const SANITIZED_GIT: EnvironmentMap = plus(LOCALE, {
   HOME: envSlot("temporary_home"),
@@ -627,7 +623,7 @@ const NODES: readonly GitProcessNodeV1[] = [
   { id: "real_pack_git", image: gitMain("git"), environmentProfiles: PUSH_PROFILES, cwd: "source_shadow" },
   {
     id: "real_receive_pack",
-    image: gitMain("git-receive-pack"),
+    image: { kind: "distribution", executableId: "git_receive_pack", argv0: "git-receive-pack" },
     environmentProfiles: ["destination_receive"],
     cwd: "destination_shadow",
   },
@@ -960,7 +956,7 @@ export const SUPPORTED_GIT_PROCESS_TABLE: SupportedGitProcessTableV1 = deepFreez
   parseProcessTableShape({
     schemaVersion: 1,
     id: SUPPORTED_GIT_PROCESS_TABLE_ID,
-    distributionId: SUPPORTED_GIT_DISTRIBUTION_ID,
+    distributionId: GIT_DISTRIBUTION_POLICY_ID,
     environmentProfiles: byId(ENVIRONMENT_PROFILES),
     ioProfiles: byId(IO_PROFILES),
     phaseBudgets: byId(PHASE_BUDGETS),
