@@ -45,7 +45,7 @@ import { deriveUpdateExecutorRecordPath, parseCanonicalAbsolutePathText, type Ca
 import { PLANNER_PROTOCOL_V1, PLANNER_WIRE_BOUNDS_V1 } from "../update/planner.js";
 import { parseRollbackPayloadId, type PlannerTranscriptIdentityV1 } from "../update/preview.js";
 import { validateReleaseIdentity, type ReleaseIdentityV1 } from "../update/release.js";
-import { parseLowerHexSha256, parsePositiveUInt32, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256 } from "../update/scalars.js";
+import { parseLowerHexSha256, parsePositiveUInt32, parseSafeReasonCode, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256 } from "../update/scalars.js";
 import { encodeCanonicalJson } from "./canonical-json.js";
 import { createLifecycleCodecs } from "./codecs.js";
 import { deriveLifecycleLedgerRoots } from "./foundation-ledger.js";
@@ -196,7 +196,7 @@ function activeIndex(plan: UpdateLifecycleCoordinatorPlanV2): number {
 }
 
 function compensating(plan: UpdateLifecycleCoordinatorPlanV2): UpdateLifecycleCoordinatorJournalV2 {
-  return advanceUpdateCoordinatorJournal(plan, walk(plan, upTo(activeIndex(plan))), { kind: "compensation_started" }, later);
+  return advanceUpdateCoordinatorJournal(plan, walk(plan, upTo(activeIndex(plan))), { kind: "compensation_started", cause: parseSafeReasonCode("update_step_failed") }, later);
 }
 
 function rolledBack(plan: UpdateLifecycleCoordinatorPlanV2): UpdateLifecycleCoordinatorJournalV2 {

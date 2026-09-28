@@ -72,11 +72,29 @@ function compensatedExitCode(cause: string): typeof EXIT_CODES.securityRefusal |
 }
 
 /**
+ * Heals update residue; a resumed coordinator that compensated is this invocation's failure,
+ * reported with the cause its journal persisted (P7(b)) rather than a fresh preview.
+ */
+async function resumedRollback(update: CliUpdateContext, kind: string, preview: string): Promise<CliResult<never> | null> {
+  const recovered = await recoverUpdate(update);
+  if (recovered.kind !== "coordinator" || recovered.outcome.kind !== "rolled_back") return null;
+  const { cause } = recovered.outcome;
+  const { active } = await update.readHome();
+  return failure(compensatedExitCode(cause), {
+    kind,
+    message: cause,
+    paths: [],
+    recovery: `Developer OS ${active.version} is still active; run \`${preview}\` to preview again`,
+  });
+}
+
+/**
  * `update --apply` heals any update residue first, previews with its scratch kept open, then
  * applies that same in-memory candidate. An automatic rollback is a failure: nothing changed.
  */
 async function runApply(update: CliUpdateContext, version: StableSemverV1 | null): Promise<CliResult<UpdateCommandResultV1>> {
-  await recoverUpdate(update);
+  const resumed = await resumedRollback(update, "update_rolled_back_automatically", "developer-os update");
+  if (resumed !== null) return resumed;
   const prepared = await prepareUpdate(update, { version });
   if (prepared.apply === null) return success(prepared.result);
   const applied = await applyUpdate(update, prepared.apply);
@@ -94,7 +112,8 @@ async function runApply(update: CliUpdateContext, version: StableSemverV1 | null
  * applies that preview. A compensated rollback is a failure: the rejected release stays active.
  */
 async function runRollbackApply(update: CliUpdateContext): Promise<CliResult<UpdateCommandResultV1>> {
-  await recoverUpdate(update);
+  const resumed = await resumedRollback(update, "update_rollback_compensated", "developer-os update rollback");
+  if (resumed !== null) return resumed;
   const rolledBack = await applyRollback(update, await planRollback(update));
   if (rolledBack.outcome === "rolled_back") return success(rolledBack);
   return failure(compensatedExitCode(rolledBack.cause), {

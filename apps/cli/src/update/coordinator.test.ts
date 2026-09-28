@@ -9,10 +9,12 @@ import {
   initialUpdateCoordinatorJournal,
   LifecycleRecoveryRequiredError,
   parseCanonicalAbsolutePathText,
+  parseSafeReasonCode,
   parseUtcTimestamp,
   updateCoordinatorEnvelopePaths,
   updateCoordinatorOuterBytes,
   type CanonicalAbsolutePathV1,
+  type CanonicalJsonValue,
   type LifecycleGuardedFileSystemV1,
   type UpdateCompactionEntryV1,
   type UpdateLifecycleCoordinatorPlanV2,
@@ -95,6 +97,21 @@ describe("UpdateCoordinatorJournalStore", () => {
     await store().rewrite(plan, journal, started);
     expect((await store().read(SYNTHETIC_COORDINATOR_ID)).journal).toEqual(started);
     await expect(store().rewrite(plan, journal, started)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+  });
+
+  it("persists the compensation cause across a fresh read and refuses a journal without the key (P7(b))", async () => {
+    const { plan, paths, store } = await envelope();
+    const { journal } = await store().read(SYNTHETIC_COORDINATOR_ID);
+    const started = advanceUpdateCoordinatorJournal(plan, journal, { kind: "start" }, clock);
+    await store().rewrite(plan, journal, started);
+    const compensating = advanceUpdateCoordinatorJournal(plan, started, { kind: "compensation_started", cause: parseSafeReasonCode("update_verifier_rejected") }, clock);
+    await store().rewrite(plan, started, compensating);
+    expect((await store().read(SYNTHETIC_COORDINATOR_ID)).journal).toMatchObject({ direction: "compensating", compensationCause: "update_verifier_rejected" });
+
+    const legacy: Record<string, unknown> = { ...compensating };
+    delete legacy.compensationCause;
+    await nodeFs.writeFile(paths.journal, `${encodeCanonicalJson(legacy as CanonicalJsonValue).trimEnd()}\n`);
+    await expect(store().read(SYNTHETIC_COORDINATOR_ID)).rejects.toMatchObject({ code: 6 });
   });
 
   it("keeps the old journal intact when killed after the rewrite temp", async () => {

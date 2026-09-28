@@ -205,6 +205,8 @@ export interface UpdateLifecycleCoordinatorJournalV2 {
   readonly compensationNext: number | null;
   readonly pointOfNoReturnReached: boolean;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
+  /** §9.4's original cause, written with `compensation_started`; non-null exactly while compensating. */
+  readonly compensationCause: SafeReasonCodeV1 | null;
   readonly retirementNext: number | null;
   readonly compactionNext: number | null;
   readonly createdAt: UtcTimestampV1;
@@ -242,7 +244,7 @@ const RECORD_KEYS = ["schemaVersion", "state", "coordinatorId", "operation", "ex
 const STAGED_KEYS = ["constructionOrdinal", "path", "bytes", "hash", "mode"];
 const EXECUTION_KEYS = ["schemaVersion", "coordinatorId", "operation", "previewHash", "executionBindingHash", "maximumPlanBytes", "current", "target", "metadata", "planner", "bundle", "owners", "migrations", "manifest", "trust", "active", "rollback", "rollbackPayload", "initialParticipantJournals", "recoveryExecutor", "verification", "retirement"];
 const PLAN_KEYS = ["schemaVersion", "id", "operation", "previewHash", "executionBindingHash", "maximumPlanBytes", "maximumJournalBytes", "recoveryExecutorInitialHash", "recoveryExecutorTerminalHash", "construction", "update", "steps", "compaction"];
-const JOURNAL_KEYS = ["schemaVersion", "id", "operation", "phase", "direction", "planHash", "nextStep", "compensationNext", "pointOfNoReturnReached", "terminalOutcome", "retirementNext", "compactionNext", "createdAt", "updatedAt"];
+const JOURNAL_KEYS = ["schemaVersion", "id", "operation", "phase", "direction", "planHash", "nextStep", "compensationNext", "pointOfNoReturnReached", "terminalOutcome", "compensationCause", "retirementNext", "compactionNext", "createdAt", "updatedAt"];
 const encoder = new TextEncoder();
 
 function fail(label: string): never {
@@ -924,6 +926,7 @@ export function initialUpdateCoordinatorJournal(plan: UpdateLifecycleCoordinator
     compensationNext: null,
     pointOfNoReturnReached: false,
     terminalOutcome: null,
+    compensationCause: null,
     retirementNext: null,
     compactionNext: null,
     createdAt,
@@ -964,6 +967,7 @@ export function validateUpdateCoordinatorJournal(value: unknown, plan: UpdateLif
     compensationNext: nullableInteger(input.compensationNext, -1, steps - 1, `${label}.compensationNext`),
     pointOfNoReturnReached: input.pointOfNoReturnReached,
     terminalOutcome: input.terminalOutcome === null ? null : oneOf(input.terminalOutcome, ["finalized", "rolled_back"] as const, `${label}.terminalOutcome`),
+    compensationCause: input.compensationCause === null ? null : parseSafeReasonCode(input.compensationCause),
     retirementNext: nullableInteger(input.retirementNext, 0, MAXIMUM_UPDATE_RETIREMENT_LEAVES, `${label}.retirementNext`),
     compactionNext: nullableInteger(input.compactionNext, 0, plan.compaction.entries.length, `${label}.compactionNext`),
     createdAt: parseUtcTimestamp(input.createdAt),
@@ -979,6 +983,7 @@ export function validateUpdateCoordinatorJournal(value: unknown, plan: UpdateLif
     if (journal.retirementNext !== null && (journal.phase !== "terminal_finalizing" || current?.kind !== "terminal_retire")) return false;
     const terminalPhase = journal.phase === "finalized" || journal.phase === "rolled_back" || journal.phase === "compacting";
     if ((journal.terminalOutcome !== null) !== terminalPhase) return false;
+    if ((journal.compensationCause !== null) !== (journal.direction === "compensating")) return false;
     if (journal.direction === "forward") {
       if (journal.compensationNext !== null) return false;
       switch (journal.phase) {
@@ -1018,7 +1023,7 @@ export type UpdateCoordinatorJournalEventV1 =
   | { readonly kind: "point_of_no_return" }
   | { readonly kind: "retirement_started" }
   | { readonly kind: "retirement_leaf"; readonly maximumLeaves: number }
-  | { readonly kind: "compensation_started" }
+  | { readonly kind: "compensation_started"; readonly cause: SafeReasonCodeV1 }
   | { readonly kind: "compensation_step_completed" }
   | { readonly kind: "rolled_back" }
   | { readonly kind: "compaction_started" }
@@ -1064,7 +1069,7 @@ export function advanceUpdateCoordinatorJournal(plan: UpdateLifecycleCoordinator
     }
     case "compensation_started":
       if (journal.direction !== "forward" || journal.pointOfNoReturnReached || journal.nextStep >= plan.steps.length) fail("coordinator event compensation_started");
-      next = { ...journal, direction: "compensating", phase: "compensating", compensationNext: updateCompensationCursor(plan.steps, journal.nextStep), retirementNext: null };
+      next = { ...journal, direction: "compensating", phase: "compensating", compensationNext: updateCompensationCursor(plan.steps, journal.nextStep), compensationCause: event.cause, retirementNext: null };
       break;
     case "compensation_step_completed":
       if (journal.phase !== "compensating" || journal.compensationNext === null || journal.compensationNext < 0) fail("coordinator event compensation_step_completed");
@@ -1137,17 +1142,16 @@ export type UpdateLifecycleOutcomeV1 =
 interface UpdateSessionV1 {
   readonly plan: UpdateLifecycleCoordinatorPlanV2;
   journal: UpdateLifecycleCoordinatorJournalV2;
-  cause: SafeReasonCodeV1;
 }
 
-const RESUMED_CAUSE = parseSafeReasonCode("update_coordinator_compensated");
+const UNNAMED_CAUSE = parseSafeReasonCode("update_coordinator_compensated");
 
 function causeOf(error: unknown): SafeReasonCodeV1 {
   if (error !== null && typeof error === "object" && "reason" in error) {
     try {
       return parseSafeReasonCode((error as { readonly reason: unknown }).reason);
     } catch {
-      return RESUMED_CAUSE;
+      return UNNAMED_CAUSE;
     }
   }
   return parseSafeReasonCode("update_step_failed");
@@ -1185,7 +1189,7 @@ export class UpdateLifecycleCoordinator {
     const { plan, journal } = await this.#dependencies.store.read(id);
     if (plan.id !== id || journal.id !== id) refuseLifecycleRecovery("update_coordinator_identity", id);
     await this.#dependencies.verifyPlan(plan);
-    return { plan, journal, cause: RESUMED_CAUSE };
+    return { plan, journal };
   }
 
   async #boundary(boundary: UpdateCoordinatorBoundaryV1): Promise<void> {
@@ -1224,9 +1228,8 @@ export class UpdateLifecycleCoordinator {
         case "compacting": {
           const done = await this.#compactOnce(session);
           if (done) {
-            return journal.terminalOutcome === "rolled_back"
-              ? { kind: "rolled_back", id: session.plan.id, cause: session.cause }
-              : { kind: "finalized", id: session.plan.id };
+            if (journal.compensationCause === null) return { kind: "finalized", id: session.plan.id };
+            return { kind: "rolled_back", id: session.plan.id, cause: journal.compensationCause };
           }
           break;
         }
@@ -1244,8 +1247,7 @@ export class UpdateLifecycleCoordinator {
       await this.#applyStep(session, step);
     } catch (error) {
       if (session.journal.pointOfNoReturnReached || error instanceof LifecycleRecoveryRequiredError) throw error;
-      session.cause = causeOf(error);
-      await this.#advance(session, { kind: "compensation_started" });
+      await this.#advance(session, { kind: "compensation_started", cause: causeOf(error) });
       return;
     }
     await this.#boundary({ kind: "step_returned", step: index, direction: "forward" });
