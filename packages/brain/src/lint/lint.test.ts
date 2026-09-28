@@ -492,6 +492,52 @@ describe("invisible frontmatter values", () => {
     expect(result.findings.some((f) => f.key === "aliases")).toBe(true);
   });
 
+  /**
+   * NEW-31, decided by the founder as D73 on 2026-09-28. `perceptualKey` keeps U+200D so a
+   * joined emoji is not read as three people, which means a stray joiner between two
+   * letters hides a duplicate title. A joiner only means something inside an emoji ZWJ
+   * sequence or a shaping script, so everywhere else it is a warning.
+   */
+  it.each([
+    ["an emoji family", "Team \u{1F468}‍\u{1F469}‍\u{1F467}"],
+    ["a skin-tone modifier before the joiner", "Crew \u{1F469}\u{1F3FD}‍\u{1F680}"],
+    ["a gender sign after the joiner", "Run \u{1F3C3}‍♀️"],
+    ["a variation selector before the joiner", "Fire ❤️‍\u{1F525}"],
+    ["a Devanagari half-form", "क्‍ष notes"],
+    ["an Arabic letter forced into its joining form", "ه‍ notes"],
+    ["a Persian word-medial joiner", "م‍ی notes"],
+    ["a Malayalam chillu ending a word", "ന്‍ notes"],
+  ])("leaves a title with %s alone", async (_label, title) => {
+    const result = await findingsFor({ title: JSON.stringify(title) });
+    expect(result.findings.filter((f) => f.key === "title")).toStrictEqual([]);
+  });
+
+  it.each([
+    ["two Latin letters", "Deploy‍keys"],
+    ["a letter and a digit", "Plan‍2"],
+  ])("warns about a stray joiner between %s", async (_label, title) => {
+    const result = await findingsFor({ title: JSON.stringify(title) });
+    const titles = result.findings.filter((f) => f.key === "title");
+    expect(titles).toHaveLength(1);
+    expect(titles[0]?.class).toBe("frontmatter");
+    expect(titles[0]?.severity).toBe("warn");
+  });
+
+  it("warns once per title, however many stray joiners it carries", async () => {
+    const result = await findingsFor({ title: '"De‍ploy‍keys"' });
+    expect(result.findings.filter((f) => f.key === "title")).toHaveLength(1);
+  });
+
+  it("still indexes a note whose title carries a stray joiner", async () => {
+    const files = { "content/DEV/note.md": note({ title: '"Deploy‍keys"' }) };
+    const build = await buildIndex(memoryBuild(files));
+    expect(build.index.notes).toHaveLength(1);
+
+    const result = await lintMemory(files);
+    expect(result.findings.some((f) => f.severity === "error")).toBe(false);
+    expect(result.findings.some((f) => f.key === "title")).toBe(true);
+  });
+
   it("warns about a summary with no visible character", async () => {
     const result = await findingsFor({ summary: '"\u3164"' });
     expect(result.findings.find((f) => f.key === "summary")?.severity).toBe("warn");

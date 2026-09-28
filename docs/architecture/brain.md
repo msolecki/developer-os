@@ -94,7 +94,7 @@ symlink carry `key: null`.
 
 | Class | Findings |
 |---|---|
-| `frontmatter` | missing required key, wrong type, value outside an enum, malformed date, `summary` over 400 characters (`error`); unknown key (`info`); a key whose value swallowed the prose that followed it, a `tag`, `summary` or `alias` with no visible character, and a symlinked folder that is not followed (`warn`) |
+| `frontmatter` | missing required key, wrong type, value outside an enum, malformed date, `summary` over 400 characters (`error`); unknown key (`info`); a key whose value swallowed the prose that followed it, a `tag`, `summary` or `alias` with no visible character, a `title` carrying U+200D between characters that do not join (outside an emoji ZWJ sequence and with no Arabic-family or Indic neighbour), and a symlinked folder that is not followed (`warn`) |
 | `provenance` | `author: agent` with `reviewed: null` (`warn`); a `sources` entry that resolves to no file and is not an allowed absolute URI (`http:`, `https:`, `mailto:`, `doi:`, `urn:` or `isbn:`) (`error`) |
 | `links` | wikilink resolving to nothing, into an excluded folder, or outside the vault (`error`); link text matching more than one note (`warn`) |
 | `duplicates` | identical screened, normalized title within one topic folder (`warn`); identical content hash anywhere (`warn`); case-insensitive path collision (`error`) |
@@ -104,7 +104,7 @@ symlink carry `key: null`.
 | `gap` | an index tag carried by at least three canonical notes, none of them of type `compiled-note`; `path` is the lowest such note, `key` `tags` (`info`) |
 
 `unclassified-folder` is reported by discovery through the `frontmatter` class's result envelope at
-`warn`, so it surfaces in `brain lint` without a ninth class. The five `frontmatter` warnings are
+`warn`, so it surfaces in `brain lint` without a ninth class. The six `frontmatter` warnings are
 enumerated because the completed spec had drifted from the implementation and `BACKLOG.md` NEW-48
 found the omission; moving the current inventory here closes that documentation-only row.
 
