@@ -829,8 +829,6 @@ export interface RollbackPayloadSourceStagingPlanV1 {
   readonly sourceRoot: CanonicalAbsolutePathV1;
   readonly evidenceRoot: CanonicalAbsolutePathV1;
   readonly sourceRootBefore: { readonly state: "absent" };
-  readonly sourceParentDev: UInt64DecimalV1;
-  readonly sourceParentIno: UInt64DecimalV1;
   readonly inversePlanHash: LowerHexSha256;
   readonly inventoryHash: LowerHexSha256;
   readonly entriesProjectionHash: LowerHexSha256;
@@ -911,7 +909,7 @@ export type RollbackPayloadSourceCompactionTargetV1 =
   | { readonly kind: "entry" | "evidence" | "metadata" | "structure"; readonly ordinal: number };
 
 export interface RollbackPayloadSourcePathsV1 {
-  /** `update/source/rollback`: the pre-existing parent `sourceParentDev/Ino` binds. */
+  /** `update/source/rollback`: a construction directory; its identity comes only from the construction journal. */
   readonly parent: CanonicalAbsolutePathV1;
   readonly envelope: CanonicalAbsolutePathV1;
   readonly sourceRoot: CanonicalAbsolutePathV1;
@@ -923,7 +921,7 @@ const SOURCE_STRUCTURE_COUNT = 7;
 const SOURCE_METADATA_ROLES = ["inverse_plan", "inventory"] as const;
 const SOURCE_PHASES: readonly RollbackPayloadSourcePhaseV1[] = ["planned", "structure_staging", "metadata_publishing", "payload_staging", "source_ready", "compensating", "rolled_back", "compacting"];
 const SOURCE_FORWARD: readonly RollbackPayloadSourcePhaseV1[] = ["planned", "structure_staging", "metadata_publishing", "payload_staging"];
-const SOURCE_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "payloadId", "rollbackBindingHash", "sourceRoot", "evidenceRoot", "sourceRootBefore", "sourceParentDev", "sourceParentIno", "inversePlanHash", "inventoryHash", "entriesProjectionHash", "metadata", "entryCount", "aggregateBytes", "maximumPlanBytes", "maximumJournalBytes"];
+const SOURCE_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "payloadId", "rollbackBindingHash", "sourceRoot", "evidenceRoot", "sourceRootBefore", "inversePlanHash", "inventoryHash", "entriesProjectionHash", "metadata", "entryCount", "aggregateBytes", "maximumPlanBytes", "maximumJournalBytes"];
 const SOURCE_JOURNAL_KEYS = ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "nextStructure", "structureIdentities", "structureWriteState", "nextMetadata", "metadataIdentities", "metadataWriteState", "nextEntry", "entryWriteState", "readyWriteState", "readyIdentity", "compensationMetadataNext", "compensationNext", "compensationPart", "compensationStructureNext", "compactionNext", "createdAt", "updatedAt"];
 const SOURCE_READY_KEYS = ["schemaVersion", "coordinatorId", "stagingPlanHash", "payloadId", "rollbackBindingHash", "sourceRoot", "sourceRootDev", "sourceRootIno", "structureIdentitiesHash", "inversePlanHash", "inventoryHash", "evidenceSetHash", "metadata", "entryCount", "aggregateBytes"];
 const METADATA_IDENTITY_KEYS = ["role", "path", "bytes", "sha256", "dev", "ino"];
@@ -976,8 +974,6 @@ export function validateRollbackPayloadSourceStagingPlan(value: unknown, staging
   const paths = rollbackPayloadSourcePaths(stagingRoot, parseRollbackPayloadId(input.payloadId));
   if (input.sourceRoot !== paths.sourceRoot || input.evidenceRoot !== paths.evidenceRoot) fail(`${label}: not the derived source paths`);
   if (exact(input.sourceRootBefore, ["state"], `${label}.sourceRootBefore`).state !== "absent") fail(`${label}.sourceRootBefore`);
-  parseUInt64Decimal(input.sourceParentDev);
-  parseUInt64Decimal(input.sourceParentIno);
   for (const key of ["rollbackBindingHash", "inversePlanHash", "inventoryHash", "entriesProjectionHash"]) parseLowerHexSha256(input[key]);
   const metadata = list(input.metadata, 2, 2, `${label}.metadata`).map((row, ordinal) => validateSourceMetadataPlan(row, ordinal, paths.sourceRoot, `${label}.metadata[${ordinal.toString(10)}]`));
   if (metadata[0]?.sha256 !== input.inversePlanHash || metadata[1]?.sha256 !== input.inventoryHash) fail(`${label}.metadata: not the bound inverse plan and inventory`);
@@ -992,8 +988,6 @@ export function buildRollbackPayloadSourceStagingPlan(input: {
   readonly id: SafeReasonCodeV1;
   readonly coordinatorId: LifecycleCoordinatorIdV1;
   readonly stagingRoot: CanonicalAbsolutePathV1;
-  readonly sourceParentDev: UInt64DecimalV1;
-  readonly sourceParentIno: UInt64DecimalV1;
   readonly payload: PreparedRollbackPayloadV1;
   readonly entriesProjectionHash: LowerHexSha256;
 }): RollbackPayloadSourceStagingPlanV1 {
@@ -1008,8 +1002,6 @@ export function buildRollbackPayloadSourceStagingPlan(input: {
     sourceRoot: paths.sourceRoot,
     evidenceRoot: paths.evidenceRoot,
     sourceRootBefore: { state: "absent" },
-    sourceParentDev: input.sourceParentDev,
-    sourceParentIno: input.sourceParentIno,
     inversePlanHash: payloadIdentity.inversePlanHash,
     inventoryHash: payloadIdentity.inventoryHash,
     entriesProjectionHash: input.entriesProjectionHash,

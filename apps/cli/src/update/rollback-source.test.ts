@@ -14,12 +14,15 @@ import {
 } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { resolveSourceParent } from "./construction.js";
 import { ROLLBACK_SOURCE_DEATH_POINTS, RollbackPayloadSourceExecutor, type RollbackSourceDeathPointV1 } from "./rollback-source.js";
 import {
   BRAIN_BEFORE,
   createRollbackSourceFixture,
   exists,
+  identityOf,
   OLD_OWNER,
+  readConstructionJournal,
   ROLLBACK_PAYLOAD_ID,
   ROLLBACK_SOURCE_ID,
   rollbackDependencies,
@@ -73,23 +76,65 @@ describe("RollbackPayloadSourceExecutor", () => {
     expect(await nodeFs.readFile(fixture.preimagePath, "utf8")).toBe(OLD_OWNER);
   });
 
+  it("stages under the construction-created update/source/rollback with no hand mkdir (P1)", async () => {
+    const fixture = await createRollbackSourceFixture(homes);
+    const parent = resolveSourceParent(fixture.constructionJournal, fixture.construction, "rollback");
+    expect(fixture.construction.directories[parent.ordinal]?.path).toBe(rollbackPayloadSourcePaths(fixture.root, ROLLBACK_PAYLOAD_ID).parent);
+    expect(await identityOf(rollbackPayloadSourcePaths(fixture.root, ROLLBACK_PAYLOAD_ID).parent)).toStrictEqual({ dev: parent.dev, ino: parent.ino });
+    await stageRollbackSource(fixture);
+    expect((await journalOf(fixture)).phase).toBe("source_ready");
+  });
+
+  it("recovers in a fresh process from the persisted construction journal's directoryIdentities (P1)", async () => {
+    const fixture = await createRollbackSourceFixture(homes);
+    const dying = executor(fixture, (reached) => {
+      if (reached === "structure_made") throw new Killed(reached);
+    });
+    await expect(stageRollbackSource(fixture, dying)).rejects.toBeInstanceOf(Killed);
+    await executor(fixture).compensate(fixture.plan, fixture.construction, await readConstructionJournal(fixture.root, fixture.construction));
+    expect((await journalOf(fixture)).phase).toBe("rolled_back");
+    expect(await nodeFs.readdir(rollbackPayloadSourcePaths(fixture.root, ROLLBACK_PAYLOAD_ID).parent)).toStrictEqual([]);
+  });
+
+  it("refuses a swapped source parent inode before staging and on recovery, exit 6 (P1)", async () => {
+    const fixture = await createRollbackSourceFixture(homes);
+    const parent = rollbackPayloadSourcePaths(fixture.root, ROLLBACK_PAYLOAD_ID).parent;
+    const dying = executor(fixture, (reached) => {
+      if (reached === "journal_rewritten") throw new Killed(reached);
+    });
+    await expect(stageRollbackSource(fixture, dying)).rejects.toBeInstanceOf(Killed);
+    await nodeFs.rmdir(parent);
+    await nodeFs.mkdir(parent, { mode: 0o700 });
+    const journal = await readConstructionJournal(fixture.root, fixture.construction);
+    await expect(executor(fixture).compensate(fixture.plan, fixture.construction, journal)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(fixture)).phase).toBe("structure_staging");
+
+    const fresh = await createRollbackSourceFixture(homes);
+    const freshParent = rollbackPayloadSourcePaths(fresh.root, ROLLBACK_PAYLOAD_ID).parent;
+    await nodeFs.rmdir(freshParent);
+    await nodeFs.mkdir(freshParent, { mode: 0o700 });
+    await expect(stageRollbackSource(fresh)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await nodeFs.readdir(freshParent)).toStrictEqual([]);
+    expect((await journalOf(fresh)).phase).toBe("planned");
+  });
+
   it("refuses a construction authority whose entries no longer project to the source plan", async () => {
     const fixture = await createRollbackSourceFixture(homes);
     const changed = withEntry(fixture, 3, (entry) => ({ ...entry, bytes: entry.bytes + 1 }));
-    await expect(executor(fixture).prepare(fixture.plan, changed, { inversePlan: fixture.payload.inversePlanBytes, inventory: fixture.payload.inventoryBytes })).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(executor(fixture).prepare(fixture.plan, changed, fixture.constructionJournal, { inversePlan: fixture.payload.inversePlanBytes, inventory: fixture.payload.inventoryBytes })).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     expect(await exists(rollbackPayloadSourcePaths(fixture.root, ROLLBACK_PAYLOAD_ID).envelope)).toBe(false);
   });
 
   it("refuses documents that are not the plan's bound inverse plan and inventory", async () => {
     const fixture = await createRollbackSourceFixture(homes);
     const tampered = new TextEncoder().encode(`${new TextDecoder().decode(fixture.payload.inventoryBytes)} `);
-    await expect(executor(fixture).prepare(fixture.plan, fixture.construction, { inversePlan: fixture.payload.inversePlanBytes, inventory: tampered })).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(executor(fixture).prepare(fixture.plan, fixture.construction, fixture.constructionJournal, { inversePlan: fixture.payload.inversePlanBytes, inventory: tampered })).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
   });
 
   it("refuses a guarded preimage that changed after planning, before writing its entry", async () => {
     const fixture = await createRollbackSourceFixture(homes);
     const staging = executor(fixture);
-    await staging.prepare(fixture.plan, fixture.construction, { inversePlan: fixture.payload.inversePlanBytes, inventory: fixture.payload.inventoryBytes });
+    await staging.prepare(fixture.plan, fixture.construction, fixture.constructionJournal, { inversePlan: fixture.payload.inversePlanBytes, inventory: fixture.payload.inventoryBytes });
     await nodeFs.writeFile(fixture.preimagePath, "edited after planning\n");
     await expect(staging.consume(fixture.plan, fixture.construction, 1, fixture.frame)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     const journal = await journalOf(fixture);
@@ -100,9 +145,9 @@ describe("RollbackPayloadSourceExecutor", () => {
   it("refuses a frame consumer that is not the next planner-output ordinal", async () => {
     const fixture = await createRollbackSourceFixture(homes);
     const staging = executor(fixture);
-    await staging.prepare(fixture.plan, fixture.construction, { inversePlan: fixture.payload.inversePlanBytes, inventory: fixture.payload.inventoryBytes });
+    await staging.prepare(fixture.plan, fixture.construction, fixture.constructionJournal, { inversePlan: fixture.payload.inversePlanBytes, inventory: fixture.payload.inventoryBytes });
     await expect(staging.consume(fixture.plan, fixture.construction, 0, fixture.frame)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
-    await expect(staging.finish(fixture.plan, fixture.construction)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(staging.finish(fixture.plan, fixture.construction, fixture.constructionJournal)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
   });
 
   it("refuses a second staging walk once the journal left its initial state", async () => {
@@ -118,7 +163,7 @@ describe("RollbackPayloadSourceExecutor", () => {
     });
     await expect(stageRollbackSource(fixture, dying)).rejects.toBeInstanceOf(Killed);
 
-    await executor(fixture).compensate(fixture.plan, fixture.construction);
+    await executor(fixture).compensate(fixture.plan, fixture.construction, fixture.constructionJournal);
     const journal = await journalOf(fixture);
     expect(journal.phase).toBe("rolled_back");
     const paths = rollbackPayloadSourcePaths(fixture.root, ROLLBACK_PAYLOAD_ID);
@@ -137,8 +182,8 @@ describe("RollbackPayloadSourceExecutor", () => {
         throw new Killed(reached);
       }
     });
-    for (let attempt = 0; attempt < 3; attempt += 1) await expect(dying.compensate(fixture.plan, fixture.construction)).rejects.toBeInstanceOf(Killed);
-    await executor(fixture).compensate(fixture.plan, null);
+    for (let attempt = 0; attempt < 3; attempt += 1) await expect(dying.compensate(fixture.plan, fixture.construction, fixture.constructionJournal)).rejects.toBeInstanceOf(Killed);
+    await executor(fixture).compensate(fixture.plan, fixture.construction, await readConstructionJournal(fixture.root, fixture.construction));
     expect((await journalOf(fixture)).phase).toBe("rolled_back");
     expect(await exists(rollbackPayloadSourcePaths(fixture.root, ROLLBACK_PAYLOAD_ID).envelope)).toBe(false);
   });
@@ -175,7 +220,7 @@ describe("RollbackPayloadSourceExecutor", () => {
     // An identity swap: the recorded inode is gone and another file sits at the path.
     await nodeFs.rm(target);
     await nodeFs.writeFile(target, "swapped\n", { mode: 0o600 });
-    await expect(executor(fixture).compensate(fixture.plan, fixture.construction)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(executor(fixture).compensate(fixture.plan, fixture.construction, fixture.constructionJournal)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     expect(await exists(target)).toBe(true);
   });
 });

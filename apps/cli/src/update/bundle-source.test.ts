@@ -8,6 +8,7 @@ import {
   bundleInventoryHash,
   bundleSourceJournalBytes,
   bundleSourcePaths,
+  bundleSourceStagingPlanBytes,
   createNodeLifecycleGuardedFileSystem,
   decodeCanonicalJson,
   initialBundleSourceJournal,
@@ -26,11 +27,15 @@ import {
   type LifecycleCoordinatorIdV1,
   type LowerHexSha256,
   type ReleaseBundleEntryV1,
+  type UpdateConstructionJournalV1,
+  type UpdateConstructionPlanV1,
 } from "@developer-os/core";
 import type { VerifiedScratchBundleV1 } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BUNDLE_SOURCE_DEATH_POINTS, BundleSourceExecutor, type BundleSourceDeathPointV1 } from "./bundle-source.js";
+import { resolveSourceParent } from "./construction.js";
+import { readConstructionJournal, stageSourceConstruction } from "./rollback-testing.js";
 
 const encoder = new TextEncoder();
 const sha = (value: Uint8Array | string): LowerHexSha256 => parseLowerHexSha256(createHash("sha256").update(value).digest("hex"));
@@ -68,17 +73,16 @@ interface SourceFixture {
   readonly plan: BundleSourceStagingPlanV1;
   readonly scratch: VerifiedScratchBundleV1;
   readonly journalPath: CanonicalAbsolutePathV1;
+  readonly construction: UpdateConstructionPlanV1;
+  readonly constructionJournal: UpdateConstructionJournalV1;
 }
 
-/** The state construction leaves behind: the source parent, the source plan's initial journal, and a verified scratch tree. */
+/** The state a real construction run leaves behind: its directories, the source plan's initial journal, and a verified scratch tree. */
 async function fixture(): Promise<SourceFixture> {
   const home = parseCanonicalAbsolutePathText(await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "dos-bundle-source-"))));
   homes.push(home);
   const root = parseCanonicalAbsolutePathText(`${home}/staging/lifecycle/${coordinatorId}`);
   const paths = bundleSourcePaths(root, sourceId);
-  await nodeFs.mkdir(paths.parent, { recursive: true, mode: 0o700 });
-  await nodeFs.mkdir(`${root}/update/journals/bundle_source_staging`, { recursive: true, mode: 0o700 });
-  const parent = await nodeFs.lstat(paths.parent, { bigint: true });
   const plan: BundleSourceStagingPlanV1 = {
     schemaVersion: 1,
     id: sourceId,
@@ -86,16 +90,22 @@ async function fixture(): Promise<SourceFixture> {
     sourceRoot: paths.sourceRoot,
     evidenceRoot: paths.evidenceRoot,
     sourceRootBefore: { state: "absent" },
-    sourceParentDev: parseUInt64Decimal(parent.dev.toString(10)),
-    sourceParentIno: parseUInt64Decimal(parent.ino.toString(10)),
     entries,
     inventoryHash: bundleInventoryHash(entries),
     aggregateBytes: bundleAggregateBytes(entries),
     maximumPlanBytes: 16_777_216,
     maximumJournalBytes: 1_048_576,
   };
+  const journalBytes = bundleSourceJournalBytes(initialBundleSourceJournal(plan, at));
+  const { plan: construction, journal: constructionJournal } = await stageSourceConstruction({
+    root,
+    coordinatorId,
+    sources: [{ kind: "bundle_source_staging", id: sourceId, plan: bundleSourceStagingPlanBytes(plan), journal: journalBytes }],
+    rollbackSource: null,
+    candidate: null,
+  });
   const journalPath = updateParticipantJournalPath(root, "bundle_source_staging", sourceId);
-  await nodeFs.writeFile(journalPath, bundleSourceJournalBytes(initialBundleSourceJournal(plan, at)), { mode: 0o600, flag: "wx" });
+  await nodeFs.writeFile(journalPath, journalBytes, { mode: 0o600, flag: "wx" });
   const extracted = `${home}/scratch/extracted`;
   for (const directory of ["bin", "lib"]) await nodeFs.mkdir(`${extracted}/${directory}`, { recursive: true, mode: 0o700 });
   for (const file of files) {
@@ -103,7 +113,21 @@ async function fixture(): Promise<SourceFixture> {
     await nodeFs.chmod(`${extracted}/${file.path}`, file.mode);
   }
   const scratch: VerifiedScratchBundleV1 = { id: "rp_synthetic", planHash: sha("scratch plan"), manifestHash: sha("manifest"), root: parseCanonicalAbsolutePathText(extracted), entries: entries.length };
-  return { home, root, plan, scratch, journalPath };
+  return { home, root, plan, scratch, journalPath, construction, constructionJournal };
+}
+
+function stageOf(value: SourceFixture, interrupt?: (point: BundleSourceDeathPointV1) => void): ReturnType<BundleSourceExecutor["stage"]> {
+  return executor(value, interrupt).stage(value.plan, value.scratch, value.construction, value.constructionJournal);
+}
+
+function compensateOf(value: SourceFixture, interrupt?: (point: BundleSourceDeathPointV1) => void): Promise<void> {
+  return executor(value, interrupt).compensate(value.plan, value.construction, value.constructionJournal);
+}
+
+async function swapSourceParent(value: SourceFixture): Promise<void> {
+  const parent = bundleSourcePaths(value.root, sourceId).parent;
+  await nodeFs.rmdir(parent);
+  await nodeFs.mkdir(parent, { mode: 0o700 });
 }
 
 function executor(value: SourceFixture, interrupt?: (point: BundleSourceDeathPointV1) => void): BundleSourceExecutor {
@@ -138,7 +162,7 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function stageSource(value: SourceFixture): Promise<Awaited<ReturnType<BundleSourceExecutor["stage"]>>> {
-  return executor(value).stage(value.plan, value.scratch);
+  return stageOf(value);
 }
 
 const FORWARD_DEATHS = BUNDLE_SOURCE_DEATH_POINTS.filter((point) => !["compensation_step", "compaction_step", "ready_removed"].includes(point));
@@ -169,8 +193,8 @@ describe("BundleSourceExecutor", () => {
 
   it.each(FORWARD_DEATHS)("compensates planlessly after death at %s", async (point) => {
     const value = await fixture();
-    await expect(executor(value, dieAt(point)).stage(value.plan, value.scratch)).rejects.toBeInstanceOf(Killed);
-    await executor(value).compensate(value.plan);
+    await expect(stageOf(value, dieAt(point))).rejects.toBeInstanceOf(Killed);
+    await compensateOf(value);
     expect((await journalOf(value)).phase).toBe("rolled_back");
     expect(await nodeFs.readdir(bundleSourcePaths(value.root, sourceId).parent)).toEqual([]);
     expect(await listTree(value.scratch.root)).toHaveLength(entries.length);
@@ -179,7 +203,7 @@ describe("BundleSourceExecutor", () => {
   it("compensates a source_ready envelope with no outer plan, ready evidence first", async () => {
     const value = await fixture();
     await stageSource(value);
-    await executor(value).compensate(value.plan);
+    await compensateOf(value);
     expect((await journalOf(value)).phase).toBe("rolled_back");
     expect(await nodeFs.readdir(bundleSourcePaths(value.root, sourceId).parent)).toEqual([]);
   });
@@ -187,8 +211,8 @@ describe("BundleSourceExecutor", () => {
   it.each(["compensation_step", "ready_removed", "journal_rewritten"] as const)("resumes compensation after death at %s", async (point) => {
     const value = await fixture();
     await stageSource(value);
-    await expect(executor(value, dieAt(point)).compensate(value.plan)).rejects.toBeInstanceOf(Killed);
-    await executor(value).compensate(value.plan);
+    await expect(compensateOf(value, dieAt(point))).rejects.toBeInstanceOf(Killed);
+    await compensateOf(value);
     expect((await journalOf(value)).phase).toBe("rolled_back");
     expect(await nodeFs.readdir(bundleSourcePaths(value.root, sourceId).parent)).toEqual([]);
   });
@@ -209,33 +233,73 @@ describe("BundleSourceExecutor", () => {
     const value = await fixture();
     await nodeFs.writeFile(`${value.scratch.root}/readme.txt`, "tampered bundle!\n");
     await expect(stageSource(value)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
-    await executor(value).compensate(value.plan);
+    await compensateOf(value);
     expect(await nodeFs.readdir(bundleSourcePaths(value.root, sourceId).parent)).toEqual([]);
   });
 
-  it("refuses a second stage, a moved source parent, and a nonempty unbound structure", async () => {
+  it("refuses a second stage and a nonempty unbound structure", async () => {
     const value = await fixture();
     await stageSource(value);
     await expect(stageSource(value)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
 
-    const moved = await fixture();
-    const wrongParent = { ...moved.plan, sourceParentIno: parseUInt64Decimal("1") };
-    await expect(executor(moved).stage(wrongParent, moved.scratch)).rejects.toThrow();
-
     const squatted = await fixture();
-    await expect(executor(squatted, dieAt("structure_made")).stage(squatted.plan, squatted.scratch)).rejects.toBeInstanceOf(Killed);
+    await expect(stageOf(squatted, dieAt("structure_made"))).rejects.toBeInstanceOf(Killed);
     await nodeFs.writeFile(`${bundleSourcePaths(squatted.root, sourceId).envelope}/foreign`, "x");
-    await expect(executor(squatted).compensate(squatted.plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(compensateOf(squatted)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     expect(await exists(`${bundleSourcePaths(squatted.root, sourceId).envelope}/foreign`)).toBe(true);
   });
 
   it("refuses a partial file whose recorded identity was swapped", async () => {
     const value = await fixture();
-    await expect(executor(value, dieAt("entry_written")).stage(value.plan, value.scratch)).rejects.toBeInstanceOf(Killed);
+    await expect(stageOf(value, dieAt("entry_written"))).rejects.toBeInstanceOf(Killed);
     const swapped = `${value.plan.sourceRoot}/bin/developer-os`;
     await nodeFs.rm(swapped);
     await nodeFs.writeFile(swapped, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
-    await expect(executor(value).compensate(value.plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(compensateOf(value)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     expect(await exists(swapped)).toBe(true);
+  });
+});
+
+describe("BundleSourceExecutor source parent (P1)", () => {
+  it("stages under the construction-created update/source/bundle with no hand mkdir", async () => {
+    const value = await fixture();
+    const parent = resolveSourceParent(value.constructionJournal, value.construction, "bundle");
+    const paths = bundleSourcePaths(value.root, sourceId);
+    expect(value.construction.directories[parent.ordinal]?.path).toBe(paths.parent);
+    const observed = await nodeFs.lstat(paths.parent, { bigint: true });
+    expect({ dev: observed.dev.toString(10), ino: observed.ino.toString(10) }).toStrictEqual({ dev: parent.dev, ino: parent.ino });
+    expect((await stageSource(value)).entryCount).toBe(entries.length);
+  });
+
+  it("recovers in a fresh process from the persisted construction journal's directoryIdentities", async () => {
+    const value = await fixture();
+    await expect(stageOf(value, dieAt("structure_made"))).rejects.toBeInstanceOf(Killed);
+    const fresh = await readConstructionJournal(value.root, value.construction);
+    expect(fresh.directoryIdentities).toStrictEqual(value.constructionJournal.directoryIdentities);
+    await executor(value).compensate(value.plan, value.construction, fresh);
+    expect((await journalOf(value)).phase).toBe("rolled_back");
+    expect(await nodeFs.readdir(bundleSourcePaths(value.root, sourceId).parent)).toEqual([]);
+  });
+
+  it("refuses a swapped parent inode before the first structure, exit 6", async () => {
+    const value = await fixture();
+    await swapSourceParent(value);
+    await expect(stageSource(value)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(value)).phase).toBe("planned");
+    expect(await nodeFs.readdir(bundleSourcePaths(value.root, sourceId).parent)).toEqual([]);
+  });
+
+  it("refuses a swapped parent inode on recovery, before binding or removing anything, exit 6", async () => {
+    const value = await fixture();
+    await expect(stageOf(value, dieAt("journal_rewritten"))).rejects.toBeInstanceOf(Killed);
+    await swapSourceParent(value);
+    await expect(executor(value).compensate(value.plan, value.construction, await readConstructionJournal(value.root, value.construction))).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(value)).phase).toBe("structure_staging");
+  });
+
+  it("refuses a construction journal of another plan", async () => {
+    const value = await fixture();
+    const other = await fixture();
+    await expect(executor(value).stage(value.plan, value.scratch, value.construction, other.constructionJournal)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
   });
 });

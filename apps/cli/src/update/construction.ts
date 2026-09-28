@@ -91,12 +91,15 @@ export const UPDATE_CONSTRUCTION_STORE_DEATH_POINTS: readonly UpdateConstruction
 export interface UpdateConstructionSourcePortV1 {
   /** Reopens the row's selected authority and returns its unique bytes; the store rechecks them. */
   readonly readRow: (plan: UpdateConstructionPlanV1, row: UpdateConstructionFilePlanV1) => Promise<Uint8Array>;
-  /** Called once the source plan/journal rows are complete and before the first output frame. */
-  readonly prepareSources: (plan: UpdateConstructionPlanV1) => Promise<void>;
+  /**
+   * Called once the source plan/journal rows are complete and before the first output frame. The
+   * journal carries the source parents' identities (`resolveSourceParent`).
+   */
+  readonly prepareSources: (plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1) => Promise<void>;
   readonly consumeRollbackEntry: (plan: UpdateConstructionPlanV1, ordinal: number, frame: SecretScreenedBlobV1) => Promise<void>;
-  readonly finishSources: (plan: UpdateConstructionPlanV1) => Promise<void>;
+  readonly finishSources: (plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1) => Promise<void>;
   /** Pre-handoff compensation of the reached nested prefix; runs before construction rows are removed. */
-  readonly compensateSources: (plan: UpdateConstructionPlanV1) => Promise<void>;
+  readonly compensateSources: (plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1) => Promise<void>;
   /** Terminal nested evidence that makes a delegated row's guarded absence legal during compaction. */
   readonly nestedTerminal: (plan: UpdateConstructionPlanV1, row: UpdateConstructionFilePlanV1) => Promise<boolean>;
 }
@@ -204,6 +207,20 @@ async function writeAll(handle: FileHandle, bytes: Uint8Array): Promise<void> {
     offset += bytesWritten;
   }
   await handle.sync();
+}
+
+/**
+ * P1 (D72): a source parent (`update/source/bundle` or `update/source/rollback`) is a construction
+ * directory, and its identity is only the construction journal's `directoryIdentities` row of that
+ * directory's ordinal. The caller reopens the parent no-follow and requires this identity.
+ */
+export function resolveSourceParent(journal: UpdateConstructionJournalV1, plan: UpdateConstructionPlanV1, kind: "bundle" | "rollback"): { readonly ordinal: number; readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 } {
+  const path = `${plan.stagingRoot.path}/update/source/${kind}`;
+  if (journal.constructionPlanHash !== constructionPlanHash(plan)) return refuse("update_construction_source_parent", path);
+  const ordinal = plan.directories.findIndex((directory) => directory.path === path);
+  const identity = journal.directoryIdentities[ordinal];
+  if (ordinal === -1 || identity?.ordinal !== ordinal) return refuse("update_construction_source_parent", path);
+  return { ordinal, dev: identity.dev, ino: identity.ino };
 }
 
 /**
@@ -418,7 +435,7 @@ export class UpdateConstructionStore {
       const journal = this.#plan(plan).journal;
       const row = plan.files[journal.nextFile];
       if (!framesRead && (row === undefined || !precedesFrames(row))) {
-        await sources.prepareSources(plan);
+        await sources.prepareSources(plan, journal);
         await this.#streamFrames(plan, frames);
         framesRead = true;
         continue;
@@ -428,7 +445,7 @@ export class UpdateConstructionStore {
       await this.#stageRow(plan, row, await this.#rowBytes(plan, row));
     }
     await this.#advance(plan, { kind: "sources_staging" });
-    await sources.finishSources(plan);
+    await sources.finishSources(plan, this.#plan(plan).journal);
     await this.#advance(plan, { kind: "files_ready" });
   }
 
@@ -626,7 +643,7 @@ export class UpdateConstructionStore {
       await this.#advance(plan, { kind: "compensate" });
     }
     if (this.#plan(plan).journal.phase === "compensating") {
-      await this.#dependencies.sources.compensateSources(plan);
+      await this.#dependencies.sources.compensateSources(plan, this.#plan(plan).journal);
       await this.#removeOuter(this.#plan(plan).journal);
     }
     for (let journal = this.#plan(plan).journal; journal.phase === "compensating"; journal = this.#plan(plan).journal) {

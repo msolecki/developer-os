@@ -45,6 +45,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { BUNDLE_PUBLICATION_DEATH_POINTS, BundlePublicationParticipant, type BundlePublicationDeathPointV1 } from "./bundle-publication.js";
 import { BundleSourceExecutor } from "./bundle-source.js";
+import { stageSourceConstruction, type SourceConstructionV1 } from "./rollback-testing.js";
 
 const encoder = new TextEncoder();
 const sha = (value: Uint8Array | string): LowerHexSha256 => parseLowerHexSha256(createHash("sha256").update(value).digest("hex"));
@@ -81,6 +82,7 @@ interface Fixture {
   readonly target: ReleaseIdentityV1;
   readonly source: BundleSourceStagingPlanV1;
   readonly scratch: VerifiedScratchBundleV1;
+  readonly construction: SourceConstructionV1;
   readonly journalPath: CanonicalAbsolutePathV1;
 }
 
@@ -124,10 +126,6 @@ async function fixture(): Promise<Fixture> {
   homes.push(home);
   const root = parseCanonicalAbsolutePathText(`${home}/staging/lifecycle/${coordinatorId}`);
   const paths = bundleSourcePaths(root, sourceId);
-  for (const directory of [paths.parent, `${root}/update/journals/bundle_source_staging`, `${root}/update/journals/bundle_publication`, `${root}/update/plans/bundle_source_staging`, `${root}/update/payloads/state/release_metadata`, `${home}/releases/1.2.0`, ...["delegations", "indexes", "bundles"].map((store) => `${home}/state/release-metadata/${store}`)]) {
-    await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
-  }
-  const parent = await identityOf(paths.parent);
   const source: BundleSourceStagingPlanV1 = {
     schemaVersion: 1,
     id: sourceId,
@@ -135,16 +133,26 @@ async function fixture(): Promise<Fixture> {
     sourceRoot: paths.sourceRoot,
     evidenceRoot: paths.evidenceRoot,
     sourceRootBefore: { state: "absent" },
-    sourceParentDev: parent.dev,
-    sourceParentIno: parent.ino,
     entries,
     inventoryHash: bundleInventoryHash(entries),
     aggregateBytes: bundleAggregateBytes(entries),
     maximumPlanBytes: 16_777_216,
     maximumJournalBytes: 1_048_576,
   };
-  await nodeFs.writeFile(bundleSourceStagingPlanRef(source, root).path, bundleSourceStagingPlanBytes(source), { mode: 0o600, flag: "wx" });
-  await nodeFs.writeFile(updateParticipantJournalPath(root, "bundle_source_staging", sourceId), bundleSourceJournalBytes(initialBundleSourceJournal(source, at)), { mode: 0o600, flag: "wx" });
+  const sourcePlanBytes = bundleSourceStagingPlanBytes(source);
+  const sourceJournalBytes = bundleSourceJournalBytes(initialBundleSourceJournal(source, at));
+  const construction = await stageSourceConstruction({
+    root,
+    coordinatorId,
+    sources: [{ kind: "bundle_source_staging", id: sourceId, plan: sourcePlanBytes, journal: sourceJournalBytes }],
+    rollbackSource: null,
+    candidate: null,
+  });
+  for (const directory of [`${root}/update/journals/bundle_publication`, `${root}/update/payloads/state/release_metadata`, `${home}/releases/1.2.0`, ...["delegations", "indexes", "bundles"].map((store) => `${home}/state/release-metadata/${store}`)]) {
+    await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
+  }
+  await nodeFs.writeFile(bundleSourceStagingPlanRef(source, root).path, sourcePlanBytes, { mode: 0o600, flag: "wx" });
+  await nodeFs.writeFile(updateParticipantJournalPath(root, "bundle_source_staging", sourceId), sourceJournalBytes, { mode: 0o600, flag: "wx" });
   const extracted = `${home}/scratch/extracted`;
   await nodeFs.mkdir(`${extracted}/bin`, { recursive: true, mode: 0o700 });
   for (const file of files) {
@@ -152,7 +160,7 @@ async function fixture(): Promise<Fixture> {
     await nodeFs.chmod(`${extracted}/${file.path}`, file.mode);
   }
   const scratch: VerifiedScratchBundleV1 = { id: "rp_synthetic", planHash: sha("scratch plan"), manifestHash: sha("manifest"), root: parseCanonicalAbsolutePathText(extracted), entries: entries.length };
-  await new BundleSourceExecutor(dependencies(), root).stage(source, scratch);
+  await new BundleSourceExecutor(dependencies(), root).stage(source, scratch, construction.plan, construction.journal);
   const target: ReleaseIdentityV1 = {
     version: "1.2.0" as ReleaseIdentityV1["version"],
     releaseSequence: u64("12"),
@@ -168,7 +176,7 @@ async function fixture(): Promise<Fixture> {
     launcherProtocol: 1 as ReleaseIdentityV1["launcherProtocol"],
     updateProtocol: 1 as ReleaseIdentityV1["updateProtocol"],
   };
-  return { home, root, target, source, scratch, journalPath: updateParticipantJournalPath(root, "bundle_publication", publicationId) };
+  return { home, root, target, source, scratch, construction, journalPath: updateParticipantJournalPath(root, "bundle_publication", publicationId) };
 }
 
 /** Ordinal 1 (the index) is already retained; ordinals 0 and 2 arrive as construction payloads. */
@@ -347,7 +355,7 @@ describe("BundlePublicationParticipant", () => {
 
     const notReady = await fixture();
     const notReadyPlan = await publishPlan(notReady);
-    await new BundleSourceExecutor(dependencies(), notReady.root).compensate(notReady.source);
+    await new BundleSourceExecutor(dependencies(), notReady.root).compensate(notReady.source, notReady.construction.plan, notReady.construction.journal);
     await expect(participant(notReady).apply(notReadyPlan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     expect(await exists(notReady.target.bundleRoot)).toBe(false);
 

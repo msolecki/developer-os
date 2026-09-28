@@ -272,6 +272,42 @@ describe("update construction plan", () => {
     expect(() => buildConstructionPlan({ ...base, files: rows })).toThrow(/authority selects two rows/u);
   });
 
+  it("lists update/source and each planned source's parent as construction directories (P1)", () => {
+    const base = input("update_rollback");
+    const bundleJournal = path("update/journals/bundle_source_staging/bundle_source.json");
+    const rows = [...base.files];
+    rows.splice(4, 0, leaf("bundle_source_staging", "bundle_source", `{"bundle_source":1}\n`), row({ kind: "initial_journal", journalKind: "bundle_source_staging", id: parseSafeReasonCode("bundle_source"), finalPath: bundleJournal }, bundleJournal, `{"bundle_journal":0}\n`));
+    const plan = buildConstructionPlan({ ...base, files: rows });
+    expect(validateConstructionBijections(plan)).toBe(true);
+    const ordinal = (relative: string): number => plan.directories.findIndex((directory) => directory.path === path(relative));
+    expect(ordinal("update/source")).toBeGreaterThan(0);
+    expect(ordinal("update/source/bundle")).toBeGreaterThan(ordinal("update/source"));
+    expect(plan.directories[ordinal("update/source/bundle")]?.parent).toEqual({ kind: "created_directory", ordinal: ordinal("update/source") });
+    expect(ordinal("update/source/rollback")).toBe(-1);
+
+    const apply = buildConstructionPlan(input());
+    expect(apply.directories.map((directory) => directory.path)).toContain(path("update/source/rollback"));
+    expect(apply.directories.map((directory) => directory.path)).not.toContain(path("update/source/bundle"));
+  });
+
+  it("refuses update/source/bundle as an unused directory without its source plan row (P1)", () => {
+    const plan = mutable(buildConstructionPlan(input("update_rollback")));
+    const directories = plan.directories as unknown as Record<string, unknown>[];
+    const at = directories.length;
+    directories.push({ ordinal: at, path: path("update/source"), expectedBefore: "absent", ownerUid: uid, mode: 448, parent: { kind: "created_directory", ordinal: 0 } });
+    directories.push({ ordinal: at + 1, path: path("update/source/bundle"), expectedBefore: "absent", ownerUid: uid, mode: 448, parent: { kind: "created_directory", ordinal: at } });
+    expect(() => validateConstructionBijections(plan)).toThrow(/update\/source\/bundle without exactly its source plan row/u);
+  });
+
+  it("refuses an apply plan whose rollback source parent is missing (P1)", () => {
+    const plan = mutable(buildConstructionPlan(input()));
+    const directories = plan.directories as unknown as { path: string }[];
+    const parent = directories.find((directory) => directory.path === path("update/source/rollback"));
+    if (parent === undefined) throw new Error("apply plan lists update/source/rollback");
+    parent.path = path("update/source/other");
+    expect(() => validateConstructionBijections(plan)).toThrow(/update\/source\/rollback without exactly its source plan row/u);
+  });
+
   it("refuses an output blob that no row or entry consumes", () => {
     const extra = { ...candidate, materialization: { ...candidate.materialization, outputBlobs: [...candidate.materialization.outputBlobs, { ordinal: 2, bytes: 1, sha256: sha("x") }] } } as PreparedUpdateCandidateV1;
     expect(() => buildConstructionPlan({ ...input(), candidate: extra })).toThrow(/no consumer/u);

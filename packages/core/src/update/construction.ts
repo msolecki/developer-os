@@ -400,6 +400,8 @@ const MAX_ROLLBACK_ENTRIES = 1_000_000;
 const MAX_LEAF_ID_BYTES = 106;
 const PAYLOAD_SOURCE_ORDER: readonly UpdateConstructionPayloadSourceV1["kind"][] = ["planner_output", "signed_bundle_entry", "guarded_preimage", "guarded_signed_metadata", "plan_derived"];
 const SOURCE_JOURNAL_KINDS: readonly UpdateConstructionJournalKindV1[] = ["bundle_source_staging", "rollback_payload_source"];
+/** P1 (D72): each planned source's fixed parent is a construction directory under `update/source`. */
+const SOURCE_PARENTS = [["bundle_source_staging", "update/source/bundle"], ["rollback_payload_source", "update/source/rollback"]] as const;
 const TARGET_JOURNAL_KINDS: readonly UpdateTargetJournalKindV1[] = ["bundle_publication", "owner_update", "owner_external_effect", "schema_migration", "manifest_state", "release_trust_state", "active_release_state", "rollback_record_state", "rollback_payload_state"];
 const LEAF_KINDS: readonly UpdateLeafPlanKindV1[] = ["update_execution", "bundle_source_staging", "bundle_publication", "owner_update", "owner_external_effect", "schema_migration", "manifest_state", "release_trust_state", "active_release_state", "rollback_record_state", "rollback_payload_source", "rollback_payload_state", "target_verification", "terminal_retirement"];
 const PHASES: readonly UpdateConstructionPhaseV1[] = ["planned", "directories_staging", "files_staging", "sources_staging", "files_ready", "outer_plan_publishing", "outer_journal_publishing", "handed_off", "compensating", "rolled_back", "compacting"];
@@ -912,7 +914,14 @@ export function validateConstructionBijections(plan: UpdateConstructionPlanV1): 
   });
   if (executionPlans !== 1) fail(`${label}.files: not exactly one update_execution plan`);
   if (recoveryStates.join(",") !== "executing,terminal_cleanup" || files.length < 2) fail(`${label}.files: the two recovery records`);
-  if (directories.some((directory) => directory.path !== evidenceDirectory && !directoryParents.has(directory.path))) fail(`${label}.directories: an unused directory`);
+  const sourceParents = new Set<string>();
+  for (const [kind, relative] of SOURCE_PARENTS) {
+    const parent = `${rootPath}/${relative}`;
+    const planned = [...leafPlans].some((key) => key.startsWith(`${kind}/`));
+    if (planned !== directories.some((directory) => directory.path === parent)) fail(`${label}.directories: ${relative} without exactly its source plan row`);
+    if (planned) sourceParents.add(parent);
+  }
+  if (directories.some((directory) => directory.path !== evidenceDirectory && !sourceParents.has(directory.path) && !directoryParents.has(directory.path))) fail(`${label}.directories: an unused directory`);
 
   // Rollback source: present exactly for apply, its entries contiguous and hashed both ways.
   const rollback = input.rollbackSource as UpdateConstructionRollbackSourceV1 | null;
@@ -991,7 +1000,8 @@ export function buildConstructionPlan(input: UpdateConstructionPlanInputV1): Upd
   const ordered = input.files;
 
   const needed = new Set<string>([`${root}/update`, `${root}/update/construction/evidence`]);
-  for (const path of [...ordered.map((file) => file.path), `${root}/update/construction/evidence/x`]) {
+  const sourceParents = SOURCE_PARENTS.filter(([kind]) => ordered.some((file) => file.role.kind === "immutable_plan" && file.role.planKind === kind)).map(([, relative]) => `${root}/${relative}/x`);
+  for (const path of [...ordered.map((file) => file.path), `${root}/update/construction/evidence/x`, ...sourceParents]) {
     for (let parent = parentOf(path); below(parent, root); parent = parentOf(parent)) needed.add(parent);
   }
   const update = `${root}/update`;

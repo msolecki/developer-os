@@ -37,6 +37,7 @@ import {
   type RollbackPayloadSourceStagingPlanV1,
   type RollbackPayloadSourceStepV1,
   type SecretScreenedBlobV1,
+  type UpdateConstructionJournalV1,
   type UpdateConstructionPlanV1,
   type UpdateConstructionRollbackEntrySourceV1,
   type UpdateConstructionRollbackSourceEntryV1,
@@ -57,6 +58,7 @@ import {
   type BundleEntryDeathPointV1,
   type BundleParticipantDependenciesV1,
 } from "./bundle-source.js";
+import { resolveSourceParent } from "./construction.js";
 
 export type RollbackSourceDeathPointV1 = BundleEntryDeathPointV1 | "structure_made" | "metadata_created" | "metadata_written" | "ready_created" | "ready_written" | "ready_removed";
 
@@ -174,9 +176,14 @@ export class RollbackPayloadSourceExecutor {
     return this.#io.ownedDirectory(identity.path, identity);
   }
 
-  /** `update/source/rollback` for the envelope; then envelope, payload root, and `payload/plans`. */
-  async #structureParent(plan: RollbackPayloadSourceStagingPlanV1, journal: RollbackPayloadSourceStagingJournalV1, ordinal: number): Promise<LifecycleGuardedEntryV1> {
-    if (ordinal === 0) return this.#io.ownedDirectory(rollbackPayloadSourcePaths(this.#root, plan.payloadId).parent, { dev: plan.sourceParentDev, ino: plan.sourceParentIno });
+  /** `update/source/rollback`, reopened no-follow under the construction journal's recorded identity (P1). */
+  async #sourceParent(plan: RollbackPayloadSourceStagingPlanV1, construction: UpdateConstructionPlanV1, constructionJournal: UpdateConstructionJournalV1): Promise<LifecycleGuardedEntryV1> {
+    return this.#io.ownedDirectory(rollbackPayloadSourcePaths(this.#root, plan.payloadId).parent, resolveSourceParent(constructionJournal, construction, "rollback"));
+  }
+
+  /** The source parent for the envelope; then envelope, payload root, and `payload/plans`. */
+  async #structureParent(sourceParent: LifecycleGuardedEntryV1, journal: RollbackPayloadSourceStagingJournalV1, ordinal: number): Promise<LifecycleGuardedEntryV1> {
+    if (ordinal === 0) return sourceParent;
     return this.#structure(journal, [0, 0, 0, 1, 3, 3, 1][ordinal] as number);
   }
 
@@ -184,7 +191,7 @@ export class RollbackPayloadSourceExecutor {
    * Structures, then the two bound documents. Legal only from the construction-published initial
    * journal in the originating process, after the construction authority is resolved.
    */
-  async prepare(value: RollbackPayloadSourceStagingPlanV1, construction: UpdateConstructionPlanV1, documents: RollbackSourceDocumentsV1): Promise<void> {
+  async prepare(value: RollbackPayloadSourceStagingPlanV1, construction: UpdateConstructionPlanV1, constructionJournal: UpdateConstructionJournalV1, documents: RollbackSourceDocumentsV1): Promise<void> {
     const { plan, file } = await this.#open(value);
     if ((file.value as RollbackPayloadSourceStagingJournalV1).phase !== "planned") refuseBundle("rollback_source_not_fresh", file.path);
     const entries = rollbackSourceEntries(plan, construction);
@@ -198,9 +205,10 @@ export class RollbackPayloadSourceExecutor {
       || encodeCanonicalJson(inventory.entries as unknown as CanonicalJsonValue) !== encodeCanonicalJson(entries.map((row) => row.entry) as unknown as CanonicalJsonValue)) {
       refuseBundle("rollback_source_inventory", plan.sourceRoot);
     }
+    const sourceParent = await this.#sourceParent(plan, construction, constructionJournal);
     const structures = rollbackPayloadSourceStructures(plan);
     for (let journal = file.value as RollbackPayloadSourceStagingJournalV1; journal.nextStructure < structures.length; journal = file.value as RollbackPayloadSourceStagingJournalV1) {
-      const parent = await this.#structureParent(plan, journal, journal.nextStructure);
+      const parent = await this.#structureParent(sourceParent, journal, journal.nextStructure);
       await this.#advance(plan, file, { kind: "structure_intent" });
       const created = await this.#io.fs.mkdirExclusive((structures[journal.nextStructure] as (typeof structures)[number]).path);
       this.#interrupt("structure_made");
@@ -244,12 +252,12 @@ export class RollbackPayloadSourceExecutor {
   }
 
   /** The remaining non-planner entries, then ready evidence over the exact complete evidence set. */
-  async finish(value: RollbackPayloadSourceStagingPlanV1, construction: UpdateConstructionPlanV1): Promise<RollbackPayloadSourceReadyEvidenceV1> {
+  async finish(value: RollbackPayloadSourceStagingPlanV1, construction: UpdateConstructionPlanV1, constructionJournal: UpdateConstructionJournalV1): Promise<RollbackPayloadSourceReadyEvidenceV1> {
     const { plan, file } = await this.#open(value);
     const entries = rollbackSourceEntries(plan, construction);
     this.#requireStaging(file);
     await this.#stageThrough(plan, file, entries, entries.length);
-    return this.#publishReady(plan, file, entries.map((row) => row.entry));
+    return this.#publishReady(plan, file, entries.map((row) => row.entry), await this.#sourceParent(plan, construction, constructionJournal));
   }
 
   #requireStaging(file: Journal): void {
@@ -311,11 +319,10 @@ export class RollbackPayloadSourceExecutor {
     }, created);
   }
 
-  async #publishReady(plan: RollbackPayloadSourceStagingPlanV1, file: Journal, entries: readonly RollbackPayloadEntryV1[]): Promise<RollbackPayloadSourceReadyEvidenceV1> {
+  async #publishReady(plan: RollbackPayloadSourceStagingPlanV1, file: Journal, entries: readonly RollbackPayloadEntryV1[], parent: LifecycleGuardedEntryV1): Promise<RollbackPayloadSourceReadyEvidenceV1> {
     const evidence = rollbackPayloadSourceReadyEvidence(plan, file.value as RollbackPayloadSourceStagingJournalV1, await rollbackSourceEvidenceSetHash(this.#io, plan, entries));
     const bytes = rollbackPayloadSourceReadyEvidenceBytes(evidence);
     const paths = rollbackPayloadSourcePaths(this.#root, plan.payloadId);
-    const parent = await this.#io.ownedDirectory(paths.parent, { dev: plan.sourceParentDev, ino: plan.sourceParentIno });
     await this.#advance(plan, file, { kind: "ready_intent" });
     const ready = await this.#io.createEmpty(paths.ready, 0o600);
     try {
@@ -372,17 +379,16 @@ export class RollbackPayloadSourceExecutor {
   /**
    * Compensation-only recovery for any reached prefix: ready evidence, then entries (entry, then
    * evidence) in reverse, then metadata and structures in reverse. It never resumes a write or adopts
-   * an unrecorded path. Entry rows come from `construction`, or else from the source's own bound inventory.
+   * an unrecorded path. Entry rows come from `construction`, and the parent must still be the
+   * construction journal's recorded inode before anything is bound or removed.
    */
-  async compensate(value: RollbackPayloadSourceStagingPlanV1, construction: UpdateConstructionPlanV1 | null): Promise<void> {
+  async compensate(value: RollbackPayloadSourceStagingPlanV1, construction: UpdateConstructionPlanV1, constructionJournal: UpdateConstructionJournalV1): Promise<void> {
     const { plan, file } = await this.#open(value);
     const phase = (file.value as RollbackPayloadSourceStagingJournalV1).phase;
     if (phase === "rolled_back") return;
     if (phase === "compacting") refuseBundle("rollback_source_compacting", file.path);
-    const reached = file.value as RollbackPayloadSourceStagingJournalV1;
-    const entries = construction !== null
-      ? rollbackSourceEntries(plan, construction).map((row) => row.entry)
-      : reached.nextMetadata === 2 ? await this.#sourceInventory(plan, reached) : null;
+    await this.#sourceParent(plan, construction, constructionJournal);
+    const entries = rollbackSourceEntries(plan, construction).map((row) => row.entry);
     if (phase !== "compensating") {
       await this.#bindIntents(plan, file, entries);
       await this.#advance(plan, file, { kind: "compensate" });
@@ -397,7 +403,7 @@ export class RollbackPayloadSourceExecutor {
     for (let journal = file.value as RollbackPayloadSourceStagingJournalV1; journal.phase === "compensating"; journal = file.value as RollbackPayloadSourceStagingJournalV1) {
       const at = journal.compensationNext as number;
       if (at >= 0) {
-        const entry = entries?.[at];
+        const entry = entries[at];
         if (entry === undefined) return refuseBundle("rollback_source_entries", plan.sourceRoot);
         await this.#removeEntryPart(plan, entry, journal.compensationPart as "entry" | "evidence", journal.entryWriteState?.ordinal === at ? journal.entryWriteState : null);
       } else if (journal.compensationMetadataNext !== null && journal.compensationMetadataNext >= 0) {
