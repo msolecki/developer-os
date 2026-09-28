@@ -326,6 +326,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   bind now and the fallback port refuses `update_fallback_unavailable` until Task 11b (Q5-A); Task 26
   proves the lifecycle on a synthetic arm64+x64 fixture, Git and automation join after NEW-113 (Q6-A).
   Task 11b stays parked (D46), so `update` reaches a real release only after it.
+- **D73 (2026-09-28), three backlog decisions.** NEW-106: every product invocation of Codex runs
+  under the isolated `CODEX_HOME` that `ingest` uses (D8 covers them). NEW-24: a persisted redaction
+  finding may carry the non-secret index of the user pattern that produced it; over-broad patterns
+  are detected by match density. NEW-31: stray U+200D between non-joining characters is a Brain lint
+  warning; emoji ZWJ sequences and Indic/Persian shaping stay legal. Addenda to D71 from NEW-113
+  Task 2: the Git supervisor stays synchronous with a synchronous inspector/recheck pair, and
+  `real_receive_pack` execs the standard `/usr/bin/git-receive-pack` shim, so the same-PID argv
+  invariant is untouched.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
