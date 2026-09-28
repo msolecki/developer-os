@@ -1509,21 +1509,29 @@ describe("immutable bootstrap plan exact grammar", () => {
 
 describe("admittedPreexistingPaths", () => {
   const admitted = () => fullPlanFixture();
+  /** Spec 2 P8 (NEW-86): each admitted path carries the identity planning observed. */
+  const entry = (path: string, ino = "10"): { path: string; dev: string; ino: string } => ({ path, dev: "1", ino });
   it.each([
-    ["a path outside the product home", ["/elsewhere/.developer-os-retained.x.0000000000.tombstone"]],
-    ["descending order", ["/product/state/b", "/product/state/a"]],
-    ["a duplicate", ["/product/state/a", "/product/state/a"]],
-    ["more than 4096 entries", Array.from({ length: 4097 }, (_, index) => `/product/state/${String(index).padStart(5, "0")}`)],
+    ["a path outside the product home", [entry("/elsewhere/.developer-os-retained.x.0000000000.tombstone")]],
+    ["descending order", [entry("/product/state/b"), entry("/product/state/a")]],
+    ["an out-of-order entry", [entry("/product/state/a"), entry("/product/state/c"), entry("/product/state/b")]],
+    ["a duplicate", [entry("/product/state/a"), entry("/product/state/a", "11")]],
+    ["more than 4096 entries", Array.from({ length: 4097 }, (_, index) => entry(`/product/state/${String(index).padStart(5, "0")}`))],
+    ["a bare path in the pre-P8 grammar", ["/product/state/a"]],
+    ["an old-grammar list of bare paths", ["/product/state/a", "/product/state/b"]],
+    ["an entry without an identity", [{ path: "/product/state/a" }]],
+    ["an entry with an extra key", [{ ...entry("/product/state/a"), mode: 0o700 }]],
+    ["a non-decimal inode", [{ path: "/product/state/a", dev: "1", ino: "0x10" }]],
+    ["a numeric device", [{ path: "/product/state/a", dev: 1, ino: "10" }]],
   ])("refuses %s", (_, paths) => {
     const { plan, context } = admitted();
-    expect(() => validateBootstrapPlan({ ...plan, admittedPreexistingPaths: paths }, context)).toThrow();
+    expect(() => validateBootstrapPlan({ ...plan, admittedPreexistingPaths: paths }, context)).toThrow(BootstrapStateError);
   });
-  it("admits an ascending confined list", () => {
+  it("admits an ascending confined list and returns each recorded identity", () => {
     const { plan, context } = admitted();
-    expect(() => validateBootstrapPlan(
-      { ...plan, admittedPreexistingPaths: ["/product/state/a", "/product/state/b"] },
-      context,
-    )).not.toThrow();
+    const paths = [entry("/product/state/a", "10"), entry("/product/state/b", "11")];
+    expect(validateBootstrapPlan({ ...plan, admittedPreexistingPaths: paths }, context).admittedPreexistingPaths)
+      .toStrictEqual(paths);
   });
 
   it("requires createdPaths[0] to be the global lock exactly when the plan admits no pre-existing lock", () => {
@@ -1550,17 +1558,18 @@ describe("admittedPreexistingPaths", () => {
       };
     };
     const freshPlan = (): unknown => structuredClone(plan);
-    const freshPlanAdmittingLock = (): unknown => ({ ...withoutLockRow(), admittedPreexistingPaths: [lock] });
+    const admittedLock = { path: lock, dev: "1", ino: "9" };
+    const freshPlanAdmittingLock = (): unknown => ({ ...withoutLockRow(), admittedPreexistingPaths: [admittedLock] });
     const freshPlanAdmittingLockAndCreatingIt = (): unknown => ({
       ...structuredClone(plan),
-      admittedPreexistingPaths: [lock],
+      admittedPreexistingPaths: [admittedLock],
     });
     const freshPlanWithoutLockRow = (): unknown => withoutLockRow();
 
     expect(validateBootstrapPlan(freshPlan(), context).createdPaths[0])
       .toMatchObject({ kind: "global_lock", path: lock });
     expect(validateBootstrapPlan(freshPlanAdmittingLock(), context).admittedPreexistingPaths)
-      .toContain(lock);
+      .toContainEqual(admittedLock);
     expect(() => validateBootstrapPlan(freshPlanAdmittingLockAndCreatingIt(), context)).toThrow(BootstrapStateError);
     expect(() => validateBootstrapPlan(freshPlanWithoutLockRow(), context)).toThrow(BootstrapStateError);
   });

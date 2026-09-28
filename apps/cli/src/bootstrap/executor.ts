@@ -224,6 +224,32 @@ interface PlanIdentityStats {
   readonly ino: string | number | bigint;
 }
 
+type AdmittedPreexistingPath = FreshV2InitPlanV1["admittedPreexistingPaths"][number];
+
+/**
+ * Spec 2 P8 (NEW-86): one entry per admitted path, carrying the identity the
+ * planning process observed. A path two observations disagree on has no
+ * single identity to record, so it refuses rather than picking one.
+ */
+function admittedIdentities(
+  observations: readonly (readonly [string, PlanIdentityStats])[],
+): AdmittedPreexistingPath[] {
+  const admitted = new Map<string, AdmittedPreexistingPath>();
+  for (const [path, stats] of observations) {
+    const entry = {
+      path: path as CanonicalAbsolutePathV1,
+      dev: (typeof stats.dev === "string" ? stats.dev : stats.dev.toString(10)) as UInt64DecimalV1,
+      ino: (typeof stats.ino === "string" ? stats.ino : stats.ino.toString(10)) as UInt64DecimalV1,
+    };
+    const existing = admitted.get(path);
+    if (existing !== undefined && (existing.dev !== entry.dev || existing.ino !== entry.ino)) {
+      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "an admitted pre-existing path has conflicting identities");
+    }
+    admitted.set(path, entry);
+  }
+  return [...admitted.values()];
+}
+
 function lowerHash(bytes: Uint8Array | string): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
@@ -682,7 +708,7 @@ export class BootstrapExecutor {
   /** A12: a plan that admitted a pre-existing lock has no ordinal-zero row and no creation evidence for one. */
   private async reacquireAdmittedGlobalLock(plan: FreshV2InitPlanV1): Promise<void> {
     const path = join(this.#dependencies.paths.stateDir, ".lifecycle.lock");
-    if (!plan.admittedPreexistingPaths.includes(path as CanonicalAbsolutePathV1)) {
+    if (!plan.admittedPreexistingPaths.some((entry) => entry.path === path)) {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "global lock is not ordinal zero");
     }
     const stats = await lstatOptional(path);
@@ -980,8 +1006,9 @@ export class BootstrapExecutor {
      * a process that resumes after a crash replays the same admitted set the
      * planning process observed under the lock.
      */
-    const retainedHomeNames = retainedChildNames(paths.home, plan.admittedPreexistingPaths);
-    const retainedStateNames = retainedChildNames(paths.stateDir, plan.admittedPreexistingPaths);
+    const admittedPaths = plan.admittedPreexistingPaths.map((entry) => entry.path);
+    const retainedHomeNames = retainedChildNames(paths.home, admittedPaths);
+    const retainedStateNames = retainedChildNames(paths.stateDir, admittedPaths);
     const [homeStats, stateStats, lockStats, homeNames, stateNames] = await Promise.all([
       nodeFs.lstat(paths.home, { bigint: true }),
       nodeFs.lstat(paths.stateDir, { bigint: true }),
@@ -1100,7 +1127,7 @@ export class BootstrapExecutor {
       admittedBookkeeping: new Map(
         [...admittedBookkeeping.keys()].map((path) => [path, projectedIdentity]),
       ),
-      retainedPaths,
+      retainedPaths: new Map(retainedPaths.map((path) => [path, projectedIdentity])),
       nonce: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" as LowerHexSha256,
     });
     const plan = {
@@ -1552,7 +1579,7 @@ export class BootstrapExecutor {
         brainStats,
         preexistingDirectories: reusableAfter,
         admittedBookkeeping: bookkeepingAfter,
-        retainedPaths: evidenceAfterLock.retainedPaths,
+        retainedPaths: new Map(evidenceAfterLock.retainedIdentities.map((entry) => [entry.path, entry])),
         nonce: Buffer.from((this.#dependencies.nonce ?? (() => randomBytes(32)))()).toString("hex") as LowerHexSha256,
       });
       const store = await BootstrapJournalStore.create({
@@ -1789,7 +1816,7 @@ export class BootstrapExecutor {
     readonly brainStats: PlanIdentityStats | null;
     readonly preexistingDirectories: ReadonlyMap<string, PlanIdentityStats>;
     readonly admittedBookkeeping: ReadonlyMap<string, PlanIdentityStats>;
-    readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
+    readonly retainedPaths: ReadonlyMap<string, PlanIdentityStats>;
     readonly nonce: LowerHexSha256;
   }): Promise<{ readonly plan: FreshV2InitPlanV1 }> {
     const paths = this.#dependencies.paths;
@@ -2134,14 +2161,13 @@ export class BootstrapExecutor {
       operation: "fresh_v2_init",
       id: input.id,
       admittedExternalShapeHash: bootstrapExternalShapeHash(input.externalShape),
-      admittedPreexistingPaths: [...new Set<string>([
+      admittedPreexistingPaths: admittedIdentities([
         ...input.retainedPaths,
-        ...input.preexistingDirectories.keys(),
-        ...input.admittedBookkeeping.keys(),
-      ])]
-        .filter((path) => path === paths.home || path.startsWith(`${paths.home}/`))
-        .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
-        .map((path) => path as CanonicalAbsolutePathV1),
+        ...input.preexistingDirectories,
+        ...input.admittedBookkeeping,
+      ])
+        .filter(({ path }) => path === paths.home || path.startsWith(`${paths.home}/`))
+        .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
       v2ManifestHash: manifestRef.hash,
       bootstrapIdentity: {
         path: join(paths.stateDir, ".lifecycle-bootstrap.lock") as CanonicalAbsolutePathV1,
@@ -3342,31 +3368,32 @@ export class BootstrapExecutor {
     const retained = evidenceAdmission.retainedParentAuthorities.find((candidate) => candidate.path === path);
     const stats = await lstatOptional(path);
     /**
-     * A12: a bookkeeping directory this plan admitted by shape carries neither
-     * creation evidence nor a plan-recorded identity, because it pre-dates the
-     * plan, so its shape is the whole authority the specification grants — and
-     * only where retention recorded no authority for it, so that a retained row
-     * keeps deciding wherever one exists. Neither identity is durable: the
-     * retained row's parent is itself projected at inspection time, in
-     * `report.ts`'s `retentionRow`.
+     * Spec 2 P8 (NEW-86): a bookkeeping directory this plan admitted by shape
+     * resolves only from the identity the planning process recorded in the
+     * immutable plan, which a recovering process replays. The `lstat` below
+     * checks that identity and never supplies it. Where retention also recorded
+     * an authority for the directory, the two durable identities must agree.
      */
-    if (
-      retained === undefined &&
-      lifecycleBookkeepingPaths(this.#dependencies.paths.home).has(path) &&
-      plan.admittedPreexistingPaths.includes(path)
-    ) {
+    const admitted = plan.admittedPreexistingPaths.find((candidate) => candidate.path === path);
+    if (admitted !== undefined && lifecycleBookkeepingPaths(this.#dependencies.paths.home).has(path)) {
       if (
         stats === null || !stats.isDirectory() || stats.isSymbolicLink() ||
         Number(stats.uid) !== uid() || mode(stats) !== 0o700
       ) {
         throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent escaped its admitted bookkeeping shape");
       }
+      if (
+        stats.dev.toString(10) !== admitted.dev || stats.ino.toString(10) !== admitted.ino ||
+        (retained !== undefined && (retained.dev !== admitted.dev || retained.ino !== admitted.ino))
+      ) {
+        throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent changed its admitted identity");
+      }
       return {
         path,
         ownerUid: uid(),
         mode: 0o700 as const,
-        dev: stats.dev.toString(10) as UInt64DecimalV1,
-        ino: stats.ino.toString(10) as UInt64DecimalV1,
+        dev: admitted.dev,
+        ino: admitted.ino,
       };
     }
     if (

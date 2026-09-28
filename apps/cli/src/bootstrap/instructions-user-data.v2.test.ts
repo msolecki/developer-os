@@ -16,7 +16,7 @@ afterEach(removeCommandFixtures);
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 
 interface PersistedFreshPlan {
-  readonly admittedPreexistingPaths: readonly string[];
+  readonly admittedPreexistingPaths: readonly { readonly path: string; readonly dev: string; readonly ino: string }[];
   readonly createdPaths: readonly { readonly path: string }[];
 }
 
@@ -52,12 +52,16 @@ describe("the product home's instructions directory is user data (A12 spec §3.2
     for (const relative of Object.keys(OVERRIDES)) {
       before.set(relative, (await nodeFs.lstat(join(root, relative), { bigint: true })).ino);
     }
+    const rootStats = await nodeFs.lstat(root, { bigint: true });
 
     const result = await runInit(fixture.context, ACCEPTED);
 
     if (!result.ok) throw new Error(result.error.message);
     const plan = await onlyPlan(fixture);
-    expect(plan.admittedPreexistingPaths).toStrictEqual([root]);
+    /** Spec 2 P8 (NEW-86): the plan records the identity planning observed. */
+    expect(plan.admittedPreexistingPaths).toStrictEqual([
+      { path: root, dev: rootStats.dev.toString(10), ino: rootStats.ino.toString(10) },
+    ]);
     expect(plan.createdPaths.filter((row) => row.path === root || row.path.startsWith(`${root}/`)))
       .toStrictEqual([]);
     expect(Object.keys(OVERRIDES).length).toBeGreaterThan(0);

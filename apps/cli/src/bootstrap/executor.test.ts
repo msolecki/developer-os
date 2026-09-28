@@ -3,10 +3,12 @@ import { basename, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { deriveBootstrapRetentionLocations, EXIT_CODES } from "@developer-os/core";
+import { deriveBootstrapRetentionLocations, encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
+import type { CanonicalJsonValue } from "@developer-os/core";
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
 import { runInit } from "../commands/init.js";
+import { runUninstall } from "../commands/uninstall.js";
 import { admitInstalledV2Home } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../lifecycle/context.js";
 import { gateManifestAdmission } from "../lifecycle/mutation-gate.js";
@@ -790,6 +792,110 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect(resumed.code).toBe(EXIT_CODES.recoveryRequired);
     expect(resumed.error.message).toBe("existing global lock escaped admitted rolled-back evidence");
   }, 600_000);
+});
+
+describe("admitted bookkeeping paths carry their identity (Spec 2 P8, NEW-86)", () => {
+  /** Same path, same children, fresh inode; the displaced directory stays alive so its inode is not reused. */
+  async function swapDirectoryInode(fixture: CommandFixture, path: string): Promise<void> {
+    const fresh = join(fixture.root, `fresh-${basename(path)}`);
+    await nodeFs.mkdir(fresh, { mode: 0o700 });
+    await nodeFs.chmod(fresh, 0o700);
+    for (const name of await nodeFs.readdir(path)) await nodeFs.rename(join(path, name), join(fresh, name));
+    await nodeFs.rename(path, join(fixture.root, `displaced-${basename(path)}`));
+    await nodeFs.rename(fresh, path);
+  }
+
+  async function plantTransactions(fixture: CommandFixture): Promise<string> {
+    const transactions = join(fixture.paths.stateDir, "transactions");
+    await nodeFs.mkdir(transactions, { recursive: true, mode: 0o700 });
+    for (const path of [fixture.paths.home, fixture.paths.stateDir, transactions]) await nodeFs.chmod(path, 0o700);
+    return transactions;
+  }
+
+  it("records the observed identity and refuses a swapped admitted parent in a fresh process", async () => {
+    const fixture = await createCommandFixture("bootstrap-p8-swapped-admitted-parent", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_plan",
+    });
+    const transactions = await plantTransactions(fixture);
+    const observed = await nodeFs.lstat(transactions, { bigint: true });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const plan = (await persistedPlan(fixture)).value;
+    expect(plan.admittedPreexistingPaths).toContainEqual({
+      path: transactions,
+      dev: observed.dev.toString(10),
+      ino: observed.ino.toString(10),
+    });
+    await closeBootstrapProcess(fixture);
+    fixture.disableBootstrapInterrupt();
+    await swapDirectoryInode(fixture, transactions);
+
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(resumed.ok).toBe(false);
+    if (resumed.ok) return;
+    expect(resumed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses an interrupted plan persisted in the pre-P8 bare-path grammar", async () => {
+    const fixture = await createCommandFixture("bootstrap-p8-old-grammar-plan", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_plan",
+    });
+    await plantTransactions(fixture);
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const persisted = await persistedPlan(fixture);
+    const admitted = persisted.value.admittedPreexistingPaths as readonly JsonRecord[];
+    expect(admitted.length).toBeGreaterThan(0);
+    const oldGrammar = encodeCanonicalJson({
+      ...persisted.value,
+      admittedPreexistingPaths: admitted.map((entry) => entry.path),
+    } as unknown as CanonicalJsonValue);
+    await nodeFs.writeFile(persisted.path, oldGrammar, { mode: 0o600 });
+    await closeBootstrapProcess(fixture);
+    fixture.disableBootstrapInterrupt();
+
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(resumed.ok).toBe(false);
+    if (resumed.ok) return;
+    expect(resumed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(await nodeFs.readFile(persisted.path, "utf8")).toBe(oldGrammar);
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** Restores the refusal test plan 1a Task 2 deleted as unwritable (D30). */
+  it("refuses a reinstall after the uninstall once state/transactions was swapped for a fresh inode", async () => {
+    const fixture = await createCommandFixture("bootstrap-p8-reinstall-swapped-transactions", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    const initialized = await runInit(fixture.context, ACCEPTED);
+    if (!initialized.ok) throw new Error(JSON.stringify({ initialized, trace: fixture.bootstrapTrace.slice(-30) }));
+    const removed = await runUninstall(fixture.context, ACCEPTED);
+    if (!removed.ok) throw new Error(removed.error.message);
+    for (const relative of [join("state", "transactions"), join("staging", "transactions"), join("backups", "transactions")]) {
+      const root = join(fixture.paths.home, relative);
+      const names = await nodeFs.readdir(root).catch(() => [] as string[]);
+      for (const name of names.filter((candidate) => /^\.?tx_fixture_[0-9]+(\.json|\.lock)?$/u.test(candidate))) {
+        await nodeFs.rm(join(root, name), { recursive: true, force: true });
+      }
+    }
+    const transactions = join(fixture.paths.stateDir, "transactions");
+    const before = await nodeFs.lstat(transactions, { bigint: true });
+    await swapDirectoryInode(fixture, transactions);
+    const swapped = await nodeFs.lstat(transactions, { bigint: true });
+    expect(swapped.ino).not.toBe(before.ino);
+
+    const reinstalled = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(reinstalled.ok).toBe(false);
+    if (reinstalled.ok) return;
+    expect(reinstalled.code).toBe(EXIT_CODES.recoveryRequired);
+    expect((await nodeFs.lstat(transactions, { bigint: true })).ino).toBe(swapped.ino);
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
 describe("D49 preexisting planned parent shape", () => {

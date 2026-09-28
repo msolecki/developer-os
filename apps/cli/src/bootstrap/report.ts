@@ -124,6 +124,12 @@ export interface BootstrapEvidenceAdmissionV1 {
     readonly journal: BootstrapJournalSelectionV1 | null;
   } | null;
   readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
+  /** `retainedPaths` with the identity this inspection observed, which a fresh plan records (Spec 2 P8). */
+  readonly retainedIdentities: readonly {
+    readonly path: CanonicalAbsolutePathV1;
+    readonly dev: UInt64DecimalV1;
+    readonly ino: UInt64DecimalV1;
+  }[];
   /**
    * The maximal roots `retainedPaths` collapses to: each retained subtree's
    * `sourcePath`/`tombstonePath` rather than every descendant. A prefix-match
@@ -434,6 +440,13 @@ async function guardedValue<T>(
   };
 }
 
+/** Spec 2 P8: a retained row's parent no longer carries the identity its envelope recorded. */
+class RetentionParentIdentityChangedError extends Error {
+  constructor() {
+    super("retention parent changed its recorded identity");
+  }
+}
+
 /** Complete retained-table projection shared by reporting and executor recovery. */
 export async function buildBootstrapRetentionEvidence(
   request: BootstrapEvidenceInspectionRequestV1,
@@ -462,9 +475,16 @@ export async function buildBootstrapRetentionEvidence(
     if ((source === null) === (retained === null)) throw new Error("retention path is in a third state");
     return source === null ? retainedPath : logicalPath;
   };
+  /**
+   * Spec 2 P8 (NEW-86): a row's parent identity comes from recorded evidence
+   * whenever the plan holds any, and the projection must agree with it.
+   * `recorded` is null only for a parent the plan neither created nor
+   * observed, whose projection is then the only identity there is.
+   */
   const retentionRow = async (
     role: BootstrapRetentionEvidenceProjectionV1["rows"][number]["role"],
     sourcePath: CanonicalAbsolutePathV1,
+    recorded: { readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 } | null,
   ): Promise<BootstrapRetentionEvidenceProjectionV1["rows"][number]> => {
     const physical = await physicalPath(sourcePath);
     const physicalParent = await physicalPath(dirname(sourcePath) as CanonicalAbsolutePathV1);
@@ -473,6 +493,9 @@ export async function buildBootstrapRetentionEvidence(
       request.projectPostimage(physicalParent),
     ]);
     if (postimage === null || parent?.kind !== "directory_tree") throw new Error("retention authority changed before projection");
+    if (recorded !== null && (parent.dev !== recorded.dev || parent.ino !== recorded.ino)) {
+      throw new RetentionParentIdentityChangedError();
+    }
     return {
       role,
       sourcePath,
@@ -492,7 +515,7 @@ export async function buildBootstrapRetentionEvidence(
       (value) => validateBootstrapPayloadEvidence(value, row.ref, row.source),
     ));
   }
-  const createdPathEvidence = [];
+  const createdPathEvidence: BootstrapRetentionEvidenceProjectionV1["createdPathEvidence"][number][] = [];
   for (const scope of ["ordinary", "launchability"] as const) {
     const count = scope === "ordinary" ? terminal.nextCreatedPath : terminal.nextLaunchabilityPath;
     const plannedPaths = scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths;
@@ -550,10 +573,23 @@ export async function buildBootstrapRetentionEvidence(
    * `locations` for tombstone redirection; only row construction needs the
    * uncollapsed set.
    */
+  const recordedParent = (path: string): { readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 } | null => {
+    const created = createdPathEvidence.find(({ value }) =>
+      value.kind === "directory" &&
+      (value.scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths)[value.ordinal]?.path === path,
+    )?.value;
+    const preexisting = [...plan.createdPaths, ...plan.launchabilityPaths]
+      .map((planned) => planned.parent)
+      .find((parent) => parent.kind === "preexisting" && parent.path === path);
+    return created ??
+      (preexisting?.kind === "preexisting" ? preexisting : null) ??
+      plan.admittedPreexistingPaths.find((admitted) => admitted.path === path) ??
+      null;
+  };
   const authorities = deriveBootstrapRetentionAuthorities(plan, terminal);
   const rows: BootstrapRetentionEvidenceProjectionV1["rows"][number][] = [];
   for (const authority of authorities) {
-    rows.push(await retentionRow(authority.role, authority.sourcePath));
+    rows.push(await retentionRow(authority.role, authority.sourcePath, recordedParent(dirname(authority.sourcePath))));
   }
   const directoryRows = rows.filter((row) => row.postimage.kind === "directory_tree")
     .sort((left, right) => left.sourcePath.length - right.sourcePath.length);
@@ -827,7 +863,7 @@ async function restoredTargets(
 }
 
 type BootstrapEnvelopeReadV1 =
-  | { readonly state: "plan_unverified"; readonly id: FreshV2InitIdV1 }
+  | { readonly state: "plan_unverified"; readonly id: FreshV2InitIdV1; readonly preP8Grammar: boolean }
   | {
       readonly state: "slots_unbound";
       readonly id: FreshV2InitIdV1;
@@ -850,12 +886,20 @@ async function readBootstrapEnvelope(
   const id = FRESH_PLAN.exec(basename(planEntry.path))?.[1] as FreshV2InitIdV1 | undefined;
   if (id === undefined) throw new Error("bootstrap evidence plan filename is malformed");
   let plan: FreshV2InitPlanV1;
+  let value: unknown = null;
   try {
-    const value = decodeCanonicalJson(await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES), MAX_PLAN_BYTES);
+    value = decodeCanonicalJson(await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES), MAX_PLAN_BYTES);
     plan = request.validatePlan(value);
     if (plan.id !== id || plan.planPath !== planEntry.path) throw new Error("bootstrap plan identity is unbound");
   } catch {
-    return { state: "plan_unverified", id };
+    /**
+     * Spec 2 P8: a complete plan whose admitted paths carry no identity was
+     * interrupted under the old grammar. Unlike a torn plan write it may have
+     * mutated the home, so it refuses instead of letting a new ID start beside it.
+     */
+    const admitted = record(value)?.admittedPreexistingPaths;
+    const preP8Grammar = Array.isArray(admitted) && admitted.some((entry) => typeof entry === "string");
+    return { state: "plan_unverified", id, preP8Grammar };
   }
   const slots = await request.reader.inventoryExactNamespaces(plan.journalSlots.map((slot) => slot.path));
   const slotEntries = plan.journalSlots.map((slot) => slots.find((candidate) => candidate.path === slot.path) ?? null);
@@ -926,7 +970,7 @@ async function inspectPlan(
       roots: [planEntry.path],
       parentAuthorities: [],
       verifiedEnvelope: null,
-      blocksNewIntent: false,
+      blocksNewIntent: envelope.preP8Grammar,
     };
   }
   const { plan, slots: initial } = envelope;
@@ -986,6 +1030,7 @@ async function inspectPlan(
   let table: ReturnType<typeof deriveBootstrapRetentionTable> | null = null;
   let exactEvidence: BootstrapRetentionEvidenceProjectionV1 | null = null;
   let exactSelection = false;
+  let parentIdentityChanged = false;
   try {
     const evidence: BootstrapRetentionEvidenceProjectionV1 = terminal === null
       ? {
@@ -1007,7 +1052,8 @@ async function inspectPlan(
       if (!loneSlotRemainsCurrent(plan, evidence, selection, slotValues, table)) throw error;
     }
     exactSelection = true;
-  } catch {
+  } catch (error) {
+    parentIdentityChanged = error instanceof RetentionParentIdentityChangedError;
     if (selection.current.phase !== "retained" && selection.current.phase !== "retaining") {
       const counted = sumEntries([planEntry, ...initial]);
       return {
@@ -1243,7 +1289,8 @@ async function inspectPlan(
     parentAuthorities: exactSelection && terminalRetained && table !== null
       ? [...new Map(table.map((row) => [row.parent.path, row.parent] as const)).values()]
       : [],
-    blocksNewIntent: terminalRetained ? !inert : !exactSelection,
+    /** Spec 2 P8: a swapped retained parent would otherwise leave only the swapped identity to admit. */
+    blocksNewIntent: parentIdentityChanged || (terminalRetained ? !inert : !exactSelection),
     verifiedEnvelope: summary.status === "verified" && exactSelection && terminal !== null && exactEvidence !== null
       ? { plan, terminalJournal: terminal, evidence: exactEvidence }
       : null,
@@ -1402,6 +1449,9 @@ export async function inspectBootstrapEvidenceAdmission(
     report,
     active: active.length === 1 ? active[0] ?? null : null,
     retainedPaths: [...allEntries.keys()].sort(),
+    retainedIdentities: [...allEntries.values()]
+      .map((entry) => ({ path: entry.path, dev: entry.dev, ino: entry.ino }))
+      .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
     retainedRoots: [...new Set([
       ...initial.map((candidate) => candidate.path),
       ...results.flatMap((result) => result.roots),

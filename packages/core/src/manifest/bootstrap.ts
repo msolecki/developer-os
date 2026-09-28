@@ -174,6 +174,12 @@ export type BootstrapPlannedParentV1 =
       readonly ordinal: number;
     };
 
+export interface BootstrapAdmittedPreexistingPathV1 {
+  readonly path: CanonicalAbsolutePathV1;
+  readonly dev: UInt64DecimalV1;
+  readonly ino: UInt64DecimalV1;
+}
+
 export type PlannedCreatedPathV1 =
   | {
       readonly kind: "directory";
@@ -287,8 +293,11 @@ export interface FreshV2InitPlanV1 extends BootstrapPlanCommonV1 {
    * before this plan was published. Persisted because a later process that
    * resumes the plan has no memory of the preflight, and the post-plan shape
    * check needs the exact set of names that may legally exist beside it.
+   * Each entry carries the `lstat` identity planning observed (Spec 2 P8,
+   * NEW-86), so execution and recovery resolve an admitted parent from the
+   * plan rather than from a use-time observation.
    */
-  readonly admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[];
+  readonly admittedPreexistingPaths: readonly BootstrapAdmittedPreexistingPathV1[];
   readonly planPath: ExactProductStatePathV1;
   readonly journalSlots: readonly [
     PersistedBootstrapJournalSlotIdentityV1,
@@ -1607,20 +1616,24 @@ function stagingAggregate(
 }
 
 /**
- * Ordered, deduplicated and confined to the product home. The set is replayed
- * by a later process to decide which names may legally exist beside the plan,
- * so an unbounded or unconfined list would widen that whitelist.
+ * Ordered by path, deduplicated and confined to the product home. The set is
+ * replayed by a later process to decide which names may legally exist beside
+ * the plan, so an unbounded or unconfined list would widen that whitelist.
+ * Spec 2 P8: every entry carries the identity planning observed, and a bare
+ * path (the pre-P8 grammar) refuses.
  */
-function boundedPaths(value: unknown, context: BootstrapPlanAdmissionContextV1): readonly CanonicalAbsolutePathV1[] {
+function boundedPaths(value: unknown, context: BootstrapPlanAdmissionContextV1): readonly BootstrapAdmittedPreexistingPathV1[] {
   if (!Array.isArray(value) || value.length > 4096) return refuse();
-  const admitted = value.map((candidate) => {
-    const path = admitCanonicalAbsolutePath(candidate, context.evidence);
+  const admitted = value.map((candidate): BootstrapAdmittedPreexistingPathV1 => {
+    const entry = record(candidate);
+    exact(entry, ["dev", "ino", "path"]);
+    const path = admitCanonicalAbsolutePath(entry.path, context.evidence);
     if (path !== context.productHome && !path.startsWith(`${context.productHome}/`)) return refuse();
-    return path;
+    return { path, dev: uint64(entry.dev), ino: uint64(entry.ino) };
   });
   for (let index = 1; index < admitted.length; index += 1) {
-    const previous = admitted[index - 1] as string;
-    const current = admitted[index] as string;
+    const previous = (admitted[index - 1] as BootstrapAdmittedPreexistingPathV1).path as string;
+    const current = (admitted[index] as BootstrapAdmittedPreexistingPathV1).path as string;
     if (Buffer.compare(Buffer.from(previous), Buffer.from(current)) >= 0) return refuse();
   }
   return admitted;
@@ -1679,7 +1692,7 @@ export function validateBootstrapPlan(
      * ordinal-zero global-lock transition applies only when it was absent.
      */
     const lockPath = `${context.stateRoot}/.lifecycle.lock`;
-    const admitsLock = admittedPreexistingPaths.includes(lockPath as CanonicalAbsolutePathV1);
+    const admitsLock = admittedPreexistingPaths.some((entry) => entry.path === lockPath);
     const lockRows = [...createdPaths, ...launchabilityPaths].filter((row) => row.kind === "global_lock" || row.path === lockPath);
     if (admitsLock ? lockRows.length !== 0 : createdPaths[0]?.kind !== "global_lock" || createdPaths[0].path !== lockPath || lockRows.length !== 1) return refuse();
     if (new Set([...createdPaths, ...launchabilityPaths].map((row) => row.path)).size !== createdPaths.length + launchabilityPaths.length) return refuse();

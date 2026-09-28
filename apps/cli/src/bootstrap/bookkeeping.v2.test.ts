@@ -23,8 +23,12 @@ const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 
 interface PersistedFreshPlan {
   readonly id: string;
-  readonly admittedPreexistingPaths: readonly string[];
+  readonly admittedPreexistingPaths: readonly { readonly path: string; readonly dev: string; readonly ino: string }[];
   readonly createdPaths: readonly { readonly kind: string; readonly path: string }[];
+}
+
+function admittedPaths(plan: PersistedFreshPlan): readonly string[] {
+  return plan.admittedPreexistingPaths.map((entry) => entry.path);
 }
 
 async function planNames(fixture: CommandFixture): Promise<readonly string[]> {
@@ -101,7 +105,7 @@ describe("the lifecycle bookkeeping set on a real V2 home", () => {
     });
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
     const lock = join(fixture.paths.stateDir, ".lifecycle.lock");
-    const lockBefore = await nodeFs.lstat(lock);
+    const lockBefore = await nodeFs.lstat(lock, { bigint: true });
     const rolledBack = await readPlan(fixture, (await planNames(fixture))[0] as string);
     for (const path of [
       fixture.paths.backupsDir,
@@ -135,12 +139,16 @@ describe("the lifecycle bookkeeping set on a real V2 home", () => {
 
     if (!reinstalled.ok) throw new Error(reinstalled.error.message);
     const second = await newestPlanOf(fixture, await planNames(fixture), rolledBack.id);
-    expect(second.admittedPreexistingPaths).toContain(lock);
+    expect(second.admittedPreexistingPaths).toContainEqual({
+      path: lock,
+      dev: lockBefore.dev.toString(10),
+      ino: lockBefore.ino.toString(10),
+    });
     expect(second.createdPaths.some((row) => row.kind === "global_lock")).toBe(false);
-    expect((await nodeFs.lstat(lock)).ino).toBe(lockBefore.ino);
+    expect((await nodeFs.lstat(lock, { bigint: true })).ino).toBe(lockBefore.ino);
     expect(survivors.length).toBeGreaterThan(0);
     for (const path of survivors) {
-      expect(second.admittedPreexistingPaths, path).toContain(path);
+      expect(admittedPaths(second), path).toContain(path);
       expect(second.createdPaths.map((row) => row.path), path).not.toContain(path);
     }
   }, REAL_FILESYSTEM_TIMEOUT_MS);
@@ -154,7 +162,7 @@ describe("the lifecycle bookkeeping set on a real V2 home", () => {
 
     if (!result.ok) throw new Error(result.error.message);
     const plan = await readPlan(fixture, (await planNames(fixture))[0] as string);
-    expect(plan.admittedPreexistingPaths).toContain(fixture.paths.backupsDir);
+    expect(admittedPaths(plan)).toContain(fixture.paths.backupsDir);
     expect(plan.createdPaths.map((row) => row.path)).not.toContain(fixture.paths.backupsDir);
     const manifest = JSON.parse(await nodeFs.readFile(fixture.paths.manifestFile, "utf8")) as { artifacts: { path: string }[] };
     expect(manifest.artifacts.map((artifact) => artifact.path)).not.toContain(fixture.paths.backupsDir);
