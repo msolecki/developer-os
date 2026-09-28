@@ -1018,6 +1018,26 @@ describe("a fresh init killed after the bootstrap publication and before the ins
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
+/** NEW-88 residual: the lock and nonce exist before any Foundation transaction creates backups/transactions lazily. */
+describe("a fresh init killed after its created paths and before the Foundation transaction", () => {
+  it("uninstalls, because the fresh layout already created backups/transactions", async () => {
+    const fixture = await createCommandFixture("bootstrap-killed-after-created-paths-uninstall", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_created_paths",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    expect(await exists(join(fixture.paths.stateDir, ".lifecycle.lock"))).toBe(true);
+    expect(await exists(join(fixture.paths.stateDir, "lifecycle-install-nonce"))).toBe(true);
+    expect(await exists(join(fixture.paths.backupsDir, "transactions"))).toBe(true);
+    fixture.disableBootstrapInterrupt();
+    await closeBootstrapProcess(fixture);
+
+    const removed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+
+    if (!removed.ok) throw new Error(JSON.stringify(removed));
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
 describe("D49 preexisting planned parent shape", () => {
   const owner = 501;
   const shape = (mode: number, overrides: { directory?: boolean; symlink?: boolean; uid?: number } = {}) => ({

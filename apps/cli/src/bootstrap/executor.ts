@@ -2026,6 +2026,7 @@ export class BootstrapExecutor {
 
     const ordinaryDirectories = [
       paths.backupsDir,
+      join(paths.backupsDir, "transactions"),
       paths.logsDir,
       join(paths.home, "schemas"),
       paths.stagingDir,
