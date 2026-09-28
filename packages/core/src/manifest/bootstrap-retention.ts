@@ -3,6 +3,7 @@ import { basename, dirname } from "node:path";
 
 import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { CanonicalAbsolutePathV1, ExactProductStatePathV1 } from "../update/paths.js";
+import { compareUtf8 } from "../update/release.js";
 import {
   parseLowerHexSha256,
   parseUInt64Decimal,
@@ -835,17 +836,6 @@ const ROLE_ORDER: Readonly<Record<BootstrapRetentionRoleV1, number>> = {
   bootstrap_lock: 7,
 };
 
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = encoder.encode(left);
-  const rightBytes = encoder.encode(right);
-  const common = Math.min(leftBytes.length, rightBytes.length);
-  for (let index = 0; index < common; index += 1) {
-    const difference = (leftBytes[index] as number) - (rightBytes[index] as number);
-    if (difference !== 0) return difference;
-  }
-  return leftBytes.length - rightBytes.length;
-}
-
 /**
  * Evidence rows, retention locations, and the verified retention table must
  * all land in this exact order, because callers compare one against another
@@ -857,6 +847,37 @@ function compareRetentionRowOrder(
   right: { readonly role: BootstrapRetentionRoleV1; readonly sourcePath: CanonicalAbsolutePathV1 },
 ): number {
   return ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || compareUtf8(left.sourcePath, right.sourcePath);
+}
+
+/**
+ * NEW-63: the one collapse -> role order pipeline behind both retention
+ * locations and the retention table. The two once carried separate copies, and
+ * any drift between them assigns a tombstone ordinal the reader never checks.
+ */
+function collapseAndOrder<Row extends { readonly role: BootstrapRetentionRoleV1; readonly sourcePath: CanonicalAbsolutePathV1 }>(
+  rows: readonly Row[],
+  isDirectory: (row: Row) => boolean,
+): { readonly maximalRoots: readonly Row[]; readonly ordered: readonly Row[] } {
+  const directoryRoots = rows
+    .filter(isDirectory)
+    .sort((left, right) => left.sourcePath.length - right.sourcePath.length || compareUtf8(left.sourcePath, right.sourcePath));
+  const maximalRoots = directoryRoots.filter((row, index) =>
+    !directoryRoots.slice(0, index).some((ancestor) => row.sourcePath.startsWith(`${ancestor.sourcePath}/`)),
+  );
+  const ordered = rows
+    .filter((row) =>
+      !maximalRoots.some((root) => row.sourcePath !== root.sourcePath && row.sourcePath.startsWith(`${root.sourcePath}/`)),
+    )
+    .sort(compareRetentionRowOrder);
+  return { maximalRoots, ordered };
+}
+
+function retentionTombstonePath(
+  plan: BootstrapRetainedExecutionPlanV1,
+  sourcePath: CanonicalAbsolutePathV1,
+  ordinal: number,
+): CanonicalAbsolutePathV1 {
+  return `${dirname(sourcePath)}/.developer-os-retained.${plan.id}.${String(ordinal).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1;
 }
 
 function canonicalRelativePath(value: unknown, rootPath: CanonicalAbsolutePathV1): string {
@@ -1301,30 +1322,15 @@ export function deriveBootstrapRetentionLocations(
   terminalValue: unknown,
 ): readonly BootstrapRetentionLocationV1[] {
   const journal = terminalRetentionJournal(plan, terminalValue);
-  const listed = listedRetentionAuthorities(plan, journal);
-  const directoryRoots = listed
-    .filter((authority) =>
-      authority.role === "staging_subtree" || authority.planned?.kind === "directory",
-    )
-    .sort((left, right) =>
-      left.sourcePath.length - right.sourcePath.length || compareUtf8(left.sourcePath, right.sourcePath),
-    );
-  const maximalRoots = directoryRoots.filter((row, index) =>
-    !directoryRoots.slice(0, index).some((ancestor) =>
-      row.sourcePath.startsWith(`${ancestor.sourcePath}/`),
-    ),
+  const { maximalRoots, ordered } = collapseAndOrder(
+    listedRetentionAuthorities(plan, journal),
+    (authority) => authority.role === "staging_subtree" || authority.planned?.kind === "directory",
   );
-  const collapsed = listed.filter((row) =>
-    !maximalRoots.some((root) =>
-      row.sourcePath !== root.sourcePath && row.sourcePath.startsWith(`${root.sourcePath}/`),
-    ),
-  );
-  collapsed.sort(compareRetentionRowOrder);
-  return collapsed.map((row, ordinal) => ({
+  return ordered.map((row, ordinal) => ({
     ordinal,
     role: row.role,
     sourcePath: row.sourcePath,
-    tombstonePath: `${dirname(row.sourcePath)}/.developer-os-retained.${plan.id}.${String(ordinal).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1,
+    tombstonePath: retentionTombstonePath(plan, row.sourcePath, ordinal),
     collapsesDescendants: maximalRoots.some((root) => root.sourcePath === row.sourcePath),
   }));
 }
@@ -1983,16 +1989,8 @@ function deriveBootstrapRetentionTableUncached(
     verifyAuthority(plan, authority, row, payloadEvidence, createdPathEvidence, foundationEvidence);
   }
 
-  const directoryRoots = rows
-    .filter((row) => row.postimage.kind === "directory_tree")
-    .sort((left, right) => left.sourcePath.length - right.sourcePath.length || compareUtf8(left.sourcePath, right.sourcePath));
-  const maximalRoots = directoryRoots.filter((row, index) =>
-    !directoryRoots.slice(0, index).some((ancestor) => row.sourcePath.startsWith(`${ancestor.sourcePath}/`)),
-  );
+  const { maximalRoots, ordered: collapsed } = collapseAndOrder(rows, (row) => row.postimage.kind === "directory_tree");
   const directoryTrees = verifyDirectoryTrees(rows, maximalRoots, evidence.directoryTrees);
-  const collapsed = rows.filter((row) =>
-    !maximalRoots.some((root) => row.sourcePath !== root.sourcePath && row.sourcePath.startsWith(`${root.sourcePath}/`)),
-  );
 
   const identities = new Set<string>();
   for (const tree of directoryTrees) {
@@ -2008,7 +2006,6 @@ function deriveBootstrapRetentionTableUncached(
     identities.add(identity);
   }
 
-  collapsed.sort(compareRetentionRowOrder);
   const table = collapsed.map((row, ordinal): BootstrapRetentionEntryV1 => {
     let postimage = row.postimage;
     if (postimage.kind === "directory_tree") {
@@ -2022,7 +2019,7 @@ function deriveBootstrapRetentionTableUncached(
       ordinal,
       role: row.role,
       sourcePath: row.sourcePath,
-      tombstonePath: `${dirname(row.sourcePath)}/.developer-os-retained.${plan.id}.${String(ordinal).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1,
+      tombstonePath: retentionTombstonePath(plan, row.sourcePath, ordinal),
       parent: row.parent,
       postimage,
     };

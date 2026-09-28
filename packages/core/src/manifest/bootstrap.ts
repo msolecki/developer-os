@@ -17,6 +17,7 @@ import {
   type ExactProductStatePathV1,
   type VaultFreeRelativePathV1,
 } from "../update/paths.js";
+import { compareUtf8 } from "../update/release.js";
 import {
   parseLowerHexSha256,
   parseUInt64Decimal,
@@ -945,16 +946,6 @@ export function validateBootstrapJournal(
   } catch (error) {
     return normalizeFailure(error);
   }
-}
-
-function compareUtf8(left: string, right: string): number {
-  const a = encoder.encode(left);
-  const b = encoder.encode(right);
-  const shared = Math.min(a.length, b.length);
-  for (let index = 0; index < shared; index += 1) {
-    if (a[index] !== b[index]) return (a[index] as number) - (b[index] as number);
-  }
-  return a.length - b.length;
 }
 
 function validateBootstrapIdentity(

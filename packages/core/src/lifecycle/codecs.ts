@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import type { FoundationMutationRefV1, LifecycleInstallNonceV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
+import { compareUtf8 } from "../update/release.js";
 import {
   parseLowerHexSha256,
   parseUInt64Decimal,
@@ -141,17 +142,6 @@ function nullableHash(value: unknown): LowerHexSha256 | null {
 
 function nullablePath(value: unknown): CanonicalAbsolutePathV1 | null {
   return value === null ? null : parseCanonicalAbsolutePathText(value);
-}
-
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = encoder.encode(left);
-  const rightBytes = encoder.encode(right);
-  const common = Math.min(leftBytes.length, rightBytes.length);
-  for (let index = 0; index < common; index += 1) {
-    const difference = (leftBytes[index] as number) - (rightBytes[index] as number);
-    if (difference !== 0) return difference;
-  }
-  return leftBytes.length - rightBytes.length;
 }
 
 function requireSortedUnique(values: readonly string[], label: string): void {

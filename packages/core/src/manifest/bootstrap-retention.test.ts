@@ -1579,6 +1579,58 @@ describe("retained bootstrap table derivation", () => {
     );
   });
 
+  it("derives the same ordinals and tombstones for locations and the table across terminal outcomes (NEW-63)", () => {
+    const rolledBack = admittedEvidence(historicalJournal({
+      phase: "rolled_back",
+      direction: "compensating",
+      nextPayload: plan.payloads.length,
+      nextCreatedPath: plan.createdPaths.length,
+      nextFoundationParticipant: 1,
+      nextLaunchabilityPath: 2,
+      compensationNext: -1,
+      terminalOutcome: "rolled_back",
+    }));
+    const interrupted = plan.payloads[1];
+    if (interrupted === undefined) throw new Error("fixture requires an interrupted payload");
+    const partial = regular("partial", "199", {
+      dev: parseUInt64Decimal("1"),
+      ino: parseUInt64Decimal("199"),
+      mode: interrupted.ref.mode,
+    });
+    const writeState = { state: "writing" as const, ordinal: 1, dev: partial.dev, ino: partial.ino };
+    const writing = admittedEvidence(historicalJournal({
+      phase: "rolled_back",
+      direction: "compensating",
+      nextPayload: 1,
+      payloadWriteState: writeState,
+      compensationNext: -1,
+      terminalOutcome: "rolled_back",
+    }));
+    const interruptedWriting = {
+      ...writing,
+      interruptedPayload: { writeState, postimage: partial },
+      rows: [...writing.rows, {
+        role: "payload" as const,
+        sourcePath: interrupted.ref.path,
+        parent: parent(dirname(interrupted.ref.path), "2"),
+        postimage: partial,
+      }],
+    };
+
+    for (const evidence of [admittedEvidence(), rolledBack, interruptedWriting]) {
+      const table = deriveBootstrapRetentionTable(plan, evidence);
+      expect(deriveBootstrapRetentionLocations(plan, evidence.terminalJournal).map((location) => ({
+        ordinal: location.ordinal,
+        sourcePath: location.sourcePath,
+        tombstonePath: location.tombstonePath,
+      }))).toEqual(table.map((entry) => ({
+        ordinal: entry.ordinal,
+        sourcePath: entry.sourcePath,
+        tombstonePath: entry.tombstonePath,
+      })));
+    }
+  });
+
   it("refuses an invalid Foundation terminal value and a jointly forged successor inode", () => {
     const evidence = admittedEvidence();
     const admitted = evidence.foundationEvidence[0];
