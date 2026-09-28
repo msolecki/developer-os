@@ -173,9 +173,11 @@ describe("init --adapters: fresh install and reconcile (one chained home)", () =
       expect(existsSync(join(installed.codexPlugin, "skills", `developer-os-${id}`, "SKILL.md")), id).toBe(true);
     }
 
-    const claude = CATALOG.artifacts
-      .filter((row) => !UNPROVEN_CLAUDE_CATEGORIES.has(row.category))
-      .map((row) => `${row.category}/${row.id}/default`);
+    // Every catalog row, plus the `CLAUDE.md` block that carries the rules (NEW-101).
+    const claude = [
+      ...CATALOG.artifacts.map((row) => `${row.category}/${row.id}/default`),
+      "vendor-file/claude-md/default",
+    ];
     expect(claude.length).toBeGreaterThan(0);
     expect(await instructionKeys(fixture, "claude")).toStrictEqual(claude.sort());
     // Output styles are unsupported on Codex; the rest installs, the rules as block members.
@@ -186,9 +188,9 @@ describe("init --adapters: fresh install and reconcile (one chained home)", () =
     const agentsMd = await nodeFs.readFile(join(installed.codexHome, "AGENTS.md"), "utf8");
     expect(agentsMd).toContain(INSTRUCTION_BLOCK_BEGIN);
     expect(agentsMd).toContain("Be careful.");
-    // Every Claude block member is a rule, and `rule` is held back until the billed row passes.
-    expect(UNPROVEN_CLAUDE_CATEGORIES.has("rule")).toBe(true);
-    expect(existsSync(join(installed.claudeHome, "CLAUDE.md"))).toBe(false);
+    // The billed row (NEW-101) proved `rule` loading, so the Claude block now installs too.
+    expect(UNPROVEN_CLAUDE_CATEGORIES.size).toBe(0);
+    expect(await nodeFs.readFile(join(installed.claudeHome, "CLAUDE.md"), "utf8")).toContain(INSTRUCTION_BLOCK_BEGIN);
 
     const config = loadConfig(await nodeFs.readFile(fixture.paths.configFile, "utf8"));
     expect(config.adapters).toStrictEqual({ claude: true, codex: true });
@@ -323,6 +325,23 @@ function hookCommands(text: string): readonly string[] {
 }
 
 /** `~/.claude` apart from the plugin tree the attach owns (and the `skills` parent it creates for it). */
+/** What init manages outside the plugin since NEW-101; `settings.json` stays the user's own. */
+const CLAUDE_MANAGED_OUTSIDE_PLUGIN = [
+  "CLAUDE.md",
+  "output-styles",
+  "output-styles/developer-os-terse.md",
+  "rules",
+  "rules/developer-os-typescript.md",
+];
+
+/** The paths added outside the plugin, after checking every pre-existing row is byte-identical. */
+async function claudeManagedOutsidePlugin(claudeHome: string, before: readonly string[]): Promise<readonly string[]> {
+  const after = await claudeOutsidePlugin(claudeHome);
+  expect(before.length).toBeGreaterThan(0);
+  for (const row of before) expect(after, row).toContain(row);
+  return after.filter((row) => !before.includes(row)).map((row) => row.split("\0")[0] ?? "");
+}
+
 async function claudeOutsidePlugin(claudeHome: string): Promise<readonly string[]> {
   return (await inventoryDigest(claudeHome)).filter((row) => {
     const path = row.split("\0")[0] ?? "";
@@ -354,11 +373,8 @@ describe("init --adapters claude installs Claude hooks naming the local-build en
     for (const command of commands) expect(command.startsWith(prefix), command).toBe(true);
     const row = (await manifestOf(fixture)).artifacts.find((artifact) => artifact.path === hooksFile);
     expect(row).toMatchObject({ owner: "claude", kind: "file", verification: { mode: "content" } });
-    expect(await claudeOutsidePlugin(installed.claudeHome)).toStrictEqual(outsideBefore);
-    // Review I1: the user is told what was held back.
-    expect(result.ok && result.warnings).toContain(
-      "held back until their Claude loading is proven: claude output-style/terse, claude rule/careful, claude scoped-rule/typescript",
-    );
+    expect(await claudeManagedOutsidePlugin(installed.claudeHome, outsideBefore)).toStrictEqual(CLAUDE_MANAGED_OUTSIDE_PLUGIN);
+    expect(result.ok && result.warnings.some((warning) => warning.includes("held back"))).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("renders a byte-identical hooks.json on a second install of the same build", async () => {
@@ -366,20 +382,17 @@ describe("init --adapters claude installs Claude hooks naming the local-build en
 
     expect(result.ok).toBe(true);
     expect(await nodeFs.readFile(hooksFile, "utf8")).toBe(firstRender);
-    expect(await claudeOutsidePlugin(installed.claudeHome)).toStrictEqual(outsideBefore);
+    expect(await claudeManagedOutsidePlugin(installed.claudeHome, outsideBefore)).toStrictEqual(CLAUDE_MANAGED_OUTSIDE_PLUGIN);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("reports the held-back Claude categories as held back, not missing, on an unedited install", async () => {
+  it("reports every Claude artifact installed, the CLAUDE.md block included, on an unedited install", async () => {
     const report = await runDoctorReport(installed.fixture.context);
 
-    expect(report.checks.find((check) => check.id === "instructions")?.status).toBe("warn");
+    expect(report.checks.find((check) => check.id === "instructions")?.status).toBe("pass");
     const claude = report.instructions.filter((status) => status.owner === "claude");
-    expect(claude.filter((status) => status.state !== "installed").map((status) => `${status.category}/${status.id}: ${status.state}`)).toStrictEqual([
-      "output-style/terse: held-back",
-      "rule/careful: held-back",
-      "scoped-rule/typescript: held-back",
-    ]);
-    expect(claude.some((status) => status.category === "vendor-file")).toBe(false);
+    expect(claude.length).toBeGreaterThan(0);
+    expect(claude.filter((status) => status.state !== "installed").map((status) => `${status.category}/${status.id}: ${status.state}`)).toStrictEqual([]);
+    expect(claude.some((status) => status.category === "vendor-file")).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("reports an edit to hooks.json as drift in doctor", async () => {

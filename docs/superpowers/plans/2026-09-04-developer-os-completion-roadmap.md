@@ -296,12 +296,15 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
-- Spec, plan and Tasks 1–28 of `plans/2026-09-22-developer-os-instruction-artifacts.md` landed and
+- Spec, plan and Tasks 1–28 of the A12 plan (closed and deleted 2026-09-28) landed and
   the phase close ran: install/uninstall wiring (NEW-60) `be9b6de`, `022dc98`; loading assertions
   (NEW-65) `084f1ba`; Codex registration at install `485ca5a`.
 - [ ] Codex cache: an in-place re-render is not loaded until `codex plugin add` runs again; the update lifecycle must re-register (NEW-61). Registration at install landed; re-registration on `update` belongs with Phase 8.
-- [ ] Founder stops — the plan's remainder; see "Founder stops still open (Phases 5–7)" below. The
-  §11 spec amendments and the inventory status flip ran on 2026-09-26.
+- [x] Founder stops: the billed row (NEW-101, `claude-adapter.md` §14.1) emptied
+  `UNPROVEN_CLAUDE_CATEGORIES`, the real-vendor loading and isolation files ran green, and the
+  private-pattern scan (18 patterns, outside the repository) found 0 over `instructions/` and
+  `templates/project/`, closing A14 Task 15 Step 4 too. The §11 spec amendments and the inventory
+  status flip ran on 2026-09-26.
 
 Gate: all inventoried artifacts install, drift-check and uninstall on both vendors; `doctor` names each as `default` or `user`.
 
@@ -350,9 +353,8 @@ Gate: every inventoried script is a verb or a recorded refusal.
 
 The phase closes ran (above). What is left of them is founder work, executed from the plan named:
 
-- [ ] A12 (`plans/2026-09-22-developer-os-instruction-artifacts.md`): NEW-101 billed real-agent row,
-  then emptying `UNPROVEN_CLAUDE_CATEGORIES` (Task 29 Step 3b); the founder-local private-pattern scan (`scan-instruction-defaults.js --patterns`) over `instructions/`
-  and `templates/project/`, which also closes A14 Task 15 Step 4.
+- [x] A12: billed row passed (NEW-101), `UNPROVEN_CLAUDE_CATEGORIES` emptied, private-pattern scan
+  0 findings (2026-09-28).
 - [x] A12b: real-vendor run done 2026-09-26 (five `pass` rows, `c319af9`); `test:vendor-ingest` green
   the same day.
 - [ ] A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 18 real-agent matrix on both vendors;

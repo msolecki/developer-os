@@ -19,25 +19,24 @@ absence is a decision). Statuses were updated on 2026-09-26 to what A12, A13 and
 
 | Artifact | Legacy mechanism | Product target | Status |
 |---|---|---|---|
-| `rules/communication.md` | `@import` from the user's global `CLAUDE.md` | managed `instruction` artifact; one product-owned import block in the user's global `CLAUDE.md`; concatenated into `~/.codex/AGENTS.md` for Codex | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `rules/workflow.md` | same | same; client references redacted before publication | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `rules/security.md` | same | same | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `knowledge/stack-preferences.md` | same | same | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `rules-lazy/typescript.md` | path-scoped rule (`paths:` frontmatter) symlinked into `~/.claude/rules/` | copied managed file in `~/.claude/rules/`; Codex has no path-scoped rules → emulated inside `AGENTS.md` with an "applies to paths" header, reported as `unsupported-vendor: emulated` | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `rules-lazy/nextjs.md` | same | same | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `rules-lazy/error-handling.md` | same (not linked on the legacy machine) | same | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `rules-lazy/monitoring.md` | same (not linked on the legacy machine) | same | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `rules-lazy/comments.md` | same (added after the freeze; D51) | same | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `rules-lazy/testing.md` | same (added after the freeze; D51) | same | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
-| `rules-lazy/lessons-code.md` | same (added after the freeze; D51; generic defect classes only) | same | shipped A12: Codex in the block; Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed row (NEW-101) |
+| `rules/communication.md` | `@import` from the user's global `CLAUDE.md` | managed `instruction` artifact; one product-owned import block in the user's global `CLAUDE.md`; concatenated into `~/.codex/AGENTS.md` for Codex | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `rules/workflow.md` | same | same; client references redacted before publication | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `rules/security.md` | same | same | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `knowledge/stack-preferences.md` | same | same | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `rules-lazy/typescript.md` | path-scoped rule (`paths:` frontmatter) symlinked into `~/.claude/rules/` | copied managed file in `~/.claude/rules/`; Codex has no path-scoped rules → emulated inside `AGENTS.md` with an "applies to paths" header, reported as `unsupported-vendor: emulated` | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `rules-lazy/nextjs.md` | same | same | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `rules-lazy/error-handling.md` | same (not linked on the legacy machine) | same | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `rules-lazy/monitoring.md` | same (not linked on the legacy machine) | same | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `rules-lazy/comments.md` | same (added after the freeze; D51) | same | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `rules-lazy/testing.md` | same (added after the freeze; D51) | same | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
+| `rules-lazy/lessons-code.md` | same (added after the freeze; D51; generic defect classes only) | same | shipped A12: Codex in the block; Claude installs since the billed row (NEW-101, 2026-09-26) |
 
 ## 2. Output styles — 4 files (A12)
 
 `architect`, `debug`, `direct-objective`, `tdd-enforcer`. Claude Code: managed files in
 `~/.claude/output-styles/`. Codex has no output styles → `unsupported-vendor`.
 
-Status: shipped A12 as defaults; on Claude held back by `UNPROVEN_CLAUDE_CATEGORIES` until the billed
-row (NEW-101).
+Status: shipped A12 as defaults; installed on Claude since the billed row (NEW-101, 2026-09-26).
 
 ## 3. Plugin `solkova-core` — 32 artifacts (A12)
 

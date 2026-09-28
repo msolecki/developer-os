@@ -35,9 +35,6 @@ closes they governed. The next code-producing work runs `SESSION.md` §5 as writ
 
 **Founder stop points left by the closed phases** (each executable from the plan named):
 
-- A12 (`plans/2026-09-22-developer-os-instruction-artifacts.md`): NEW-101 billed real-agent row, then
-  emptying `UNPROVEN_CLAUDE_CATEGORIES`; the founder-local `--patterns` scan over `instructions/` and
-  `templates/project/` (A12, and A14 Task 15).
 - `npm run build && npm run test:vendor-ingest` (unbilled: loopback and dead-endpoint capture, both vendor CLIs installed, disposable home;
   `tests/integration/ingest/no-user-hooks.test.ts` and `instruction-isolation.test.ts`, the second
   shared with A12's Task 21 Step 4). `npm run check` includes it, so a `check` without vendor
@@ -70,7 +67,6 @@ Strict sequence; do not start a blocked row early.
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
 | A15 | DOS-P8 Founder migration (shadow mode dropped, D58) — `docs/migration/founder-cutover.md`, then execution | A14 (closed) | rollback to the legacy runtime is exercised and one stable cycle completes | runbook written; execution now |
-| A12 | DOS-P10 Managed instruction artifacts | — | every artifact in `docs/migration/instruction-inventory.md` §1–§3, §6 installs, drift-checks, and uninstalls on both vendors | phase closed; founder stops (NEW-101..103) and the §11 spec amendments owed |
 | A13 | DOS-P11 Hooks | — | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | phase closed; founder Tasks 2 and 18 owed |
 | A11b | DOS-P7 remainder (D16): Spec 2 closure Tasks 9–10, Task 26, Task 11b; NEW-113 (D65) | A15 (D56 ran Tasks 12–25 and plan 1b early) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Phase 8 and 9 closes ran; closure Tasks 9–10 blocked on design (NEW-110); Task 26 and 11b parked (D46: the launcher refuses every `unsigned-local` home, `apps/launcher/src/selection.ts:331`); Task 19 founder |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
@@ -136,13 +132,12 @@ They are not ordered ahead of A15 unless the touched subsystem makes one relevan
 
 ## Count
 
-- Product sequence: 5 open entries — A15 (now), A12, A13 (founder stops only), A11b, A16. A12b closed 2026-09-26 (five `pass` rows on `c319af9`).
+- Product sequence: 4 open entries — A15 (now), A13 (founder stops only), A11b, A16. A12b and A12 closed 2026-09-26/28.
 - Implementation still to build: NEW-61's Codex re-registration on `update` (with Phase 8's apply
   path); A16's plan and work.
 - Parked or blocked: Spec 2 closure Tasks 9–10 (NEW-110), Spec 2 Task 26, Spec 2 Task 11b (D46),
   NEW-100's round trip (opt-in-surfaces spec §7.1, post-A16, D42).
-- Founder stop points (9): A12 NEW-101 billed row, then `UNPROVEN_CLAUDE_CATEGORIES`; A12's
-  founder-local `--patterns` scan (A12, A14); A13 Task 18; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
+- Founder stop points: A13 Task 18; the A15 cutover execution. Long-lead gates L1 and L2 block A16.
 - Repository chores: none. The A12 §11 amendments with NEW-108, the inventory status flip, A12b's
   decisions and residuals and plan 1b's architecture carry-over ran on 2026-09-26.
 - Repository backlog: 59 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
