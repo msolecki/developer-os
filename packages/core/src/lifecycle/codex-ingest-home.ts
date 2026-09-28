@@ -1,9 +1,11 @@
 /**
  * D52 (2026-09-22, BACKLOG NEW-102): `ingest` runs Codex with `CODEX_HOME` set to this
  * product-owned directory, so the product's `AGENTS.md` block and `agents/*.toml` roles in the
- * user's own Codex home never reach an ingest request (D8). At rest it holds at most one entry: a
- * symlink `auth.json` to the user's resolved Codex credential, whose bytes the product never reads.
- * Codex's own run residue is removed by `ingest` after every run, so any other child is refused.
+ * user's own Codex home never reach an ingest request (D8). NEW-105: each run gets its own
+ * `run-XXXXXX` directory here, holding a symlink `auth.json` to the user's resolved Codex
+ * credential (whose bytes the product never reads), removed by `ingest` after the child exits.
+ * At rest the directory is empty; a pre-NEW-105 top-level `auth.json` link is still admitted.
+ * A leftover run directory is refused here: it belongs to a live or crashed run.
  */
 export const CODEX_INGEST_HOME_RELATIVE_PATH = "state/codex-ingest-home";
 export const CODEX_INGEST_AUTH_LINK = "auth.json";

@@ -650,6 +650,20 @@ Uninstall unlinks the link and removes the directory. The link is the only thing
 user's credential is never touched. Workflow `agent.prompt` callers of `invokeCodex` pass no
 `codexHome` and still spawn with `env: {}`.
 
+**Amended 2026-09-28 (NEW-105): one `CODEX_HOME` per run.** Two concurrent ingests shared the
+directory above with no ordering. Each Codex call now gets its own `mkdtemp` directory
+`state/codex-ingest-home/run-XXXXXX` (`0700`), with a fresh `auth.json` symlink to the resolved
+credential made in it (never read or copied), and `invokeCodex` spawns with
+`env: { CODEX_HOME: <run dir> }`. After the child exits the run directory is removed whole, links
+unlinked and never followed, so the isolated home rests **empty**. Before creating its own, a run
+admits the parent (owned `0700` directory), leaves sibling `run-*` directories alone — one may be
+a live ingest — and unlinks a pre-NEW-105 top-level `auth.json` link; any other entry is refused.
+If Codex replaced a run's link with a regular file, that file may be a refreshed credential: the
+sweep keeps it with its run directory, and the next run refuses naming it. The shared shape check
+(`inspectCodexIngestHomeShape`) is unchanged, so init, both uninstall arms and the absent-manifest
+walk still admit an empty home or the legacy link, and refuse a leftover run directory (a live or
+crashed run) instead of deleting it.
+
 **Observed 2026-09-22, Codex CLI 0.155.1, with the §15 *request* method** (disposable `T`; the
 user home `$T/home/.codex` held the §15 `AGENTS.md` block, `agents/developer-os-probe.toml` and a
 dummy `auth.json`; the isolated home held only the `auth.json` symlink; ingest flags

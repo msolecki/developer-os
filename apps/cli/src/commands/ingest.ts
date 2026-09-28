@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { rm, symlink } from "node:fs/promises";
+import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { getuid } from "node:process";
@@ -921,27 +921,37 @@ function codexIngestHomeRefusal(path: string, complaint: string): IngestRefusal 
     EXIT_CODES.operationalFailure,
     `the isolated Codex home this run gives the agent ${complaint}`,
     [path],
-    "if the path this run names is a regular auth.json, Codex may have refreshed your credential there: move it over the auth.json in your own Codex home; otherwise remove the path this run names, and ingest recreates what it needs",
+    "if the path this run names is a regular auth.json, Codex may have refreshed your credential there: move it over the auth.json in your own Codex home, then remove the run directory that held it; otherwise remove the path this run names, and ingest recreates what it needs",
   );
 }
 
+/** NEW-105: the prefix of each run's own `CODEX_HOME` under `state/codex-ingest-home`. */
+const CODEX_INGEST_RUN_PREFIX = "run-";
+
 /**
- * D52 (BACKLOG NEW-102): the `CODEX_HOME` an ingest run hands Codex, reconciled on every run.
- * Given the user's own Codex home, Codex loads its `AGENTS.md` (the product's instruction block
- * among it) and `agents/*.toml` roles into the request even under `--ignore-user-config
- * --ignore-rules` (codex-adapter.md §15), which breaks D8. This directory holds, at rest, only a
- * symlink `auth.json` to the user's resolved credential. The credential is never read or copied:
- * its presence is a `stat`, and the link is the only thing written.
+ * D52 (BACKLOG NEW-102): the `CODEX_HOME` an ingest run hands Codex. Given the user's own Codex
+ * home, Codex loads its `AGENTS.md` (the product's instruction block among it) and `agents/*.toml`
+ * roles into the request even under `--ignore-user-config --ignore-rules` (codex-adapter.md §15),
+ * which breaks D8.
  *
- * - Anything besides that one symlink is refused, never repaired: `sweepCodexIngestHome` removes
- *   Codex's own run residue after each run, so a leftover means a crashed run or a third party.
- * - A link whose target changed (a new `CODEX_HOME`) is re-pointed. With no credential the link is
- *   dropped and the run goes ahead, so Codex refuses on missing auth exactly as it did before.
- * - `symlink` and `rm` come from `node:fs/promises` because `CliFileSystem` carries neither.
+ * NEW-105: every run gets its own `mkdtemp` directory `run-XXXXXX` under the isolated home, holding
+ * only a fresh symlink `auth.json` to the user's resolved credential, so concurrent ingests never
+ * share Codex state. The credential is never read or copied: its presence is a `stat`, and the
+ * link is the only thing written. At rest the isolated home is empty.
+ *
+ * - The isolated home itself must be a private directory this user owns. Its children may be
+ *   sibling runs (owned directories, left alone: one may be live) and a pre-NEW-105 `auth.json`
+ *   link, which is unlinked; anything else is refused, never repaired.
+ * - A sibling whose `auth.json` is no longer a link may hold a credential Codex refreshed, so it is
+ *   refused by name rather than ignored or deleted.
+ * - With no credential no link is made and the run goes ahead, so Codex refuses on missing auth
+ *   exactly as it did before.
+ * - `mkdtemp`, `symlink` and `rm` come from `node:fs/promises` because `CliFileSystem` carries none.
  */
 export async function prepareCodexIngestHome(context: CliContext): Promise<string> {
   const home = join(context.paths.home, CODEX_INGEST_HOME_RELATIVE_PATH);
   const link = join(home, CODEX_INGEST_AUTH_LINK);
+  const effectiveUid = getuid?.() ?? -1;
   const credential = join(
     resolveVendorHomes(context.env, context.userHome, context.paths.home).codexHome,
     CODEX_INGEST_AUTH_LINK,
@@ -968,7 +978,13 @@ export async function prepareCodexIngestHome(context: CliContext): Promise<strin
           ownerUid: stats.uid,
           mode: stats.mode & 0o777,
         };
-  const shape = inspectCodexIngestHomeShape(entry(directoryStats), names, () => entry(linkStats), getuid?.() ?? -1);
+  const runs = names.filter((name) => name.startsWith(CODEX_INGEST_RUN_PREFIX));
+  const shape = inspectCodexIngestHomeShape(
+    entry(directoryStats),
+    names.filter((name) => !runs.includes(name)),
+    () => entry(linkStats),
+    effectiveUid,
+  );
   if (!shape.admitted) {
     throw codexIngestHomeRefusal(
       shape.offendingName === null ? home : join(home, shape.offendingName),
@@ -977,39 +993,76 @@ export async function prepareCodexIngestHome(context: CliContext): Promise<strin
         : "holds an entry it never keeps",
     );
   }
+  for (const name of runs) await admitSiblingRun(context, join(home, name), effectiveUid);
 
   const present = await context.fs.stat(credential).then(
     () => true,
     () => false,
   );
+  let runHome: string;
   try {
-    const current = linkStats === null ? null : await context.fs.readlink(link);
-    const wanted = present ? credential : null;
-    if (current !== wanted) {
-      if (current !== null) await context.fs.unlink(link);
-      if (wanted !== null) await symlink(wanted, link);
-    }
+    if (linkStats !== null) await context.fs.unlink(link);
+    runHome = await mkdtemp(join(home, CODEX_INGEST_RUN_PREFIX));
   } catch (error) {
-    throw codexIngestHomeRefusal(link, `could not link the Codex credential (${errnoCode(error)})`);
+    throw codexIngestHomeRefusal(home, `could not be prepared (${errnoCode(error)})`);
   }
-  return home;
+  try {
+    if (present) await symlink(credential, join(runHome, CODEX_INGEST_AUTH_LINK));
+  } catch (error) {
+    await rm(runHome, { recursive: true, force: true }).catch(() => undefined);
+    throw codexIngestHomeRefusal(runHome, `could not link the Codex credential (${errnoCode(error)})`);
+  }
+  return runHome;
 }
 
 /**
- * Removes what Codex wrote into the isolated home during the run (codex-adapter.md §15 D52 lists
- * it: sqlite state, `installation_id`, `shell_snapshots/`, `skills/.system/`, `tmp/`, `.tmp/`), so
- * the resting shape is again the one `prepareCodexIngestHome` and uninstall admit. `rm` unlinks a
- * symlink rather than following it, and `auth.json` is never touched here — if Codex replaced the
- * link with a file, that file may be a refreshed credential, and the next run refuses naming it
- * rather than deleting it. A failed sweep is not fatal: the next run refuses on the residue.
+ * NEW-105: a sibling run directory may belong to an ingest running right now, so only what would
+ * make it unsafe is checked. A sibling that vanished between `readdir` and `lstat` finished its run.
  */
-export async function sweepCodexIngestHome(context: CliContext, home: string): Promise<void> {
+async function admitSiblingRun(context: CliContext, path: string, effectiveUid: number): Promise<void> {
+  const absent = (error: unknown): null => {
+    if (errnoCode(error) === "ENOENT") return null;
+    throw error;
+  };
+  let stats;
+  let auth;
   try {
-    for (const name of await context.fs.readdir(home)) {
-      if (name !== CODEX_INGEST_AUTH_LINK) await rm(join(home, name), { recursive: true, force: true });
+    stats = await context.fs.lstat(path).catch(absent);
+    auth = stats?.isDirectory() === true ? await context.fs.lstat(join(path, CODEX_INGEST_AUTH_LINK)).catch(absent) : null;
+  } catch (error) {
+    throw codexIngestHomeRefusal(path, `could not be prepared (${errnoCode(error)})`);
+  }
+  if (stats === null) return;
+  if (!stats.isDirectory() || stats.isSymbolicLink() || stats.uid !== effectiveUid) {
+    throw codexIngestHomeRefusal(path, "holds an entry it never keeps");
+  }
+  if (auth !== null && !auth.isSymbolicLink()) {
+    throw codexIngestHomeRefusal(join(path, CODEX_INGEST_AUTH_LINK), "holds an entry it never keeps");
+  }
+}
+
+/**
+ * Removes this run's `CODEX_HOME` and everything Codex wrote into it (codex-adapter.md §15 D52
+ * lists it: sqlite state, `installation_id`, `shell_snapshots/`, `skills/.system/`, `tmp/`,
+ * `.tmp/`). `rm` unlinks a symlink rather than following it. If Codex replaced the `auth.json`
+ * link with a file, that file may be a refreshed credential: it is kept, with its run directory,
+ * and the next run refuses naming it rather than deleting it. A failed sweep is not fatal.
+ */
+export async function sweepCodexIngestHome(context: CliContext, runHome: string): Promise<void> {
+  try {
+    const auth = await context.fs.lstat(join(runHome, CODEX_INGEST_AUTH_LINK)).catch((error: unknown) => {
+      if (errnoCode(error) === "ENOENT") return null;
+      throw error;
+    });
+    if (auth === null || auth.isSymbolicLink()) {
+      await rm(runHome, { recursive: true, force: true });
+      return;
+    }
+    for (const name of await context.fs.readdir(runHome)) {
+      if (name !== CODEX_INGEST_AUTH_LINK) await rm(join(runHome, name), { recursive: true, force: true });
     }
   } catch {
-    // ponytail: best effort; the next prepareCodexIngestHome names what is left.
+    // ponytail: best effort; uninstall names a leftover run directory.
   }
 }
 
