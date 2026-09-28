@@ -504,6 +504,27 @@ describe("redaction precedes everything", () => {
     expect(warnings).not.toContain("Northwind");
   });
 
+  it("still warns about an over-broad pattern when another file in the batch is refused (NEW-24)", async () => {
+    const fixture = await installed("import-over-broad-mixed-batch");
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders", "e"]\n',
+      "utf8",
+    );
+    await plant(inboxOf(fixture), { "broad.md": "see ".repeat(80), "empty.md": "   \n" });
+
+    const result = await importWith(fixture);
+
+    const data = failureDataOf(result) as ImportResultV1 & { readonly overBroadPatterns?: readonly number[] };
+    expect(data.files.find((file) => file.path === "broad.md")?.outcome).toBe("imported");
+    expect(data.files.find((file) => file.path === "empty.md")?.outcome).toBe("refused");
+    expect(data.overBroadPatterns).toEqual([1]);
+    if (result.ok) return;
+    expect(result.error.message).toContain("patterns[1]");
+    expect(result.error.message).toContain("over-broad");
+    expect(JSON.stringify(result)).not.toContain("Northwind");
+  });
+
   it.each([["--json"], ["human"]] as const)(
     "redacts a secret in a refused file's name (%s output)",
     async (mode) => {

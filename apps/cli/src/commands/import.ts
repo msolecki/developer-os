@@ -458,9 +458,10 @@ export async function processCandidates(input: {
     return failureFrom({ guards: context.guards }, error, [], recoveryOf(error), result());
   }
 
+  const overBroadPatterns = [...overBroad].sort((a, b) => a - b);
   const refused = rows.filter((file) => file.outcome === "refused");
   if (refused.length === 0) {
-    return success(result(), overBroadWarnings([...overBroad].sort((a, b) => a - b)));
+    return success(result(), overBroadWarnings(overBroadPatterns));
   }
 
   // Exit codes 1..6 rank by severity in numeric order (spec §4.1).
@@ -473,11 +474,14 @@ export async function processCandidates(input: {
     { guards: context.guards },
     new ImportRefusal(
       code,
-      `import refused ${String(refused.length)} file(s); every other file was processed`,
+      [
+        `import refused ${String(refused.length)} file(s); every other file was processed`,
+        ...overBroadWarnings(overBroadPatterns),
+      ].join("\n"),
     ),
     [],
     undefined,
-    result(),
+    { ...result(), overBroadPatterns },
   );
 }
 

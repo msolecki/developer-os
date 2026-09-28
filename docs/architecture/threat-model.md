@@ -493,7 +493,8 @@ as configured — a row number, never the text matched — and `redactAndNormali
 reports `overBroadPatterns`: the rows whose own matches cover at least 8% of an input of at least
 256 code units (`packages/security/src/redaction.ts` — `OVER_BROAD_COVERAGE`). Length was the wrong
 measure and was withdrawn from the loader. `capture` and `import` warn and `ingest`'s secret-scan finding names
-the row, both by index. `doctor` does not check it: it has no text to measure a pattern against.
+the row, both by index. An `import` batch that refuses another file still carries the warning, in the
+failure message and as `error.data.overBroadPatterns`, because the files it did write are already redacted. `doctor` does not check it: it has no text to measure a pattern against.
 Pinned by `redaction.test.ts` → "user pattern index and match density (NEW-24, D73)".
 
 **Overlapping candidates merge, except `high-entropy` (NEW-25, founder decision D71).**
