@@ -23,6 +23,7 @@ import type {
   ActiveReleaseRecordV1,
   ArtifactOwner,
   CanonicalAbsolutePathV1,
+  CanonicalJsonV1,
   CanonicalJsonValue,
   ExitCode,
   InstallationManifestV2,
@@ -127,6 +128,7 @@ export interface UpdateTargetInputsV1 {
   readonly current: ReleaseIdentityV1;
   readonly target: ReleaseIdentityV1;
   readonly metadata: ReleaseMetadataIdentityV1;
+  readonly signedMetadata: SignedReleaseMetadataV1;
   readonly bundle: ReleaseBundleReferenceV1;
   readonly bundleManifest: ReleaseBundleManifestV1;
   readonly verified: VerifiedScratchBundleV1;
@@ -136,8 +138,13 @@ export interface UpdateTargetInputsV1 {
   readonly observation: UpdateCapacityObservationV1 | null;
 }
 
+/** P4 (D72): the fetched delegation, release index and bundle manifest, bundle-plan metadata ordinals 0–2. */
+export type SignedReleaseMetadataV1 = readonly [CanonicalJsonV1, CanonicalJsonV1, CanonicalJsonV1];
+
 export interface MaterializedUpdateV1 {
   readonly snapshot: UpdatePlannerSnapshotV1;
+  /** The bytes behind `metadata`'s and the target's signed hashes, for the `release_metadata_after` rows. */
+  readonly signedMetadata: SignedReleaseMetadataV1;
   readonly run: TargetPlannerRunResultV1;
   readonly manifest: InstallationManifestV2;
   readonly observation: UpdateCapacityObservationV1;
@@ -226,9 +233,14 @@ async function fetchDocument(
   transport: UpdateTransportV1,
   kind: "release_key_delegation" | "release_index",
   maximumBytes: number,
-): Promise<{ readonly value: unknown; readonly hash: LowerHexSha256 }> {
+): Promise<{ readonly value: unknown; readonly hash: LowerHexSha256; readonly text: CanonicalJsonV1 }> {
   const bytes = await collect(maximumBytes, (sink) => transport.get({ kind, sink }));
-  return { value: await classified("update_metadata_invalid", EXIT_CODES.securityRefusal, () => decodeCanonicalJson(bytes.body, maximumBytes)), hash: bytes.hash };
+  return { value: await classified("update_metadata_invalid", EXIT_CODES.securityRefusal, () => decodeCanonicalJson(bytes.body, maximumBytes)), hash: bytes.hash, text: canonicalText(bytes.body) };
+}
+
+/** A body `decodeCanonicalJson` admitted is byte-for-byte canonical, so its UTF-8 text is the `CanonicalJsonV1`. */
+function canonicalText(body: Uint8Array): CanonicalJsonV1 {
+  return new TextDecoder().decode(body) as CanonicalJsonV1;
 }
 
 /** Collects one bounded body; the transport already enforces the length, this only refuses a lie. */
@@ -659,7 +671,8 @@ async function planUpdateAttempt(
     await attempt.download((sink) => transport.get({ kind: "archive", delegation: delegationV1, bundle: selected.bundle, sink }));
     const verified = await attempt.extract(selected.bundle);
     const plannedAt = update.clock();
-    const inputs: UpdateTargetInputsV1 = { current, target, metadata, bundle: selected.bundle, bundleManifest, verified, transport, plannedAt, retained, observation: null };
+    const signedMetadata: SignedReleaseMetadataV1 = [delegation.text, index.text, canonicalText(manifestBody.body)];
+    const inputs: UpdateTargetInputsV1 = { current, target, metadata, signedMetadata, bundle: selected.bundle, bundleManifest, verified, transport, plannedAt, retained, observation: null };
     const materialized = await materializeUpdate(update, home, inputs);
     const result = { schemaVersion: 1, outcome: "preview", plan: materialized.candidate.preview } as const;
     if (!options.retainScratch) return { result, candidate: materialized.candidate, apply: null };
@@ -719,7 +732,7 @@ export async function materializeUpdate(update: CliUpdateContext, home: UpdateHo
       return capacityRefusal(error);
     }
   });
-  return { snapshot, run, manifest, observation, capacity, candidate };
+  return { snapshot, signedMetadata: inputs.signedMetadata, run, manifest, observation, capacity, candidate };
 }
 
 /** Rollback's own direction: an update-created path is removed, an update-removed one created. */

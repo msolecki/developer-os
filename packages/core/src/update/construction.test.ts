@@ -32,7 +32,7 @@ import {
   type UpdateConstructionStepV1,
 } from "./construction.js";
 import { buildUpdateFoundationParticipantRef, updateFoundationStagedDigestBytes, type UpdatePayloadRefV1 } from "./migrations.js";
-import { deriveUpdatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
+import { deriveCanonicalStatePayloadPath, deriveUpdatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
 import type { PreparedUpdateCandidateV1, RollbackPayloadEntryV1, RollbackPayloadIdV1 } from "./preview.js";
 import { parseLowerHexSha256, parseSafeReasonCode, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256, type SafeReasonCodeV1 } from "./scalars.js";
 
@@ -488,5 +488,82 @@ describe("Foundation construction rows (Spec 2 §5.3, D60)", () => {
   it("refuses a Foundation journal re-encoded as canonical JSON", () => {
     const canonicalText = (text: string): string => encodeCanonicalJson(JSON.parse(text) as never);
     expect(() => buildConstructionPlan(withFoundationRows(`${sha(content)}\n`, canonicalText))).toThrow();
+  });
+});
+
+describe("signed metadata construction rows (Spec 2 P4, D72)", () => {
+  const delegation = encodeCanonicalJson({ document: "delegation", sequence: "2" });
+  const releaseIndex = encodeCanonicalJson({ document: "release_index", sequence: "2" });
+  const bundleManifest = encodeCanonicalJson({ document: "bundle_manifest", entries: [] });
+  const documents = [delegation, releaseIndex, bundleManifest];
+
+  interface MetadataRowSpec {
+    readonly metadata: number;
+    readonly value: string;
+    readonly payloadKind?: "state_after" | "owner_content";
+    readonly rowContent?: string;
+    readonly kind?: string;
+  }
+
+  function metadataRow(spec: MetadataRowSpec, index: number): UpdateConstructionFileInputV1 {
+    const source = { kind: spec.kind ?? "plan_derived", role: "release_metadata_after", metadata: spec.metadata, value: spec.value, valueBytes: encoder.encode(spec.value).byteLength - 1 } as unknown as UpdateConstructionPayloadSourceV1;
+    const rowPath = deriveCanonicalStatePayloadPath(home, coordinatorId as string as SafeReasonCodeV1, "release_metadata", parseSafeReasonCode(`release_metadata_${index.toString(10)}`));
+    return row({ kind: "payload", payloadKind: spec.payloadKind ?? "state_after", source }, rowPath, spec.rowContent ?? spec.value);
+  }
+
+  /** Inserts the metadata rows before the manifest postimage, the other plan-derived `state_after` row. */
+  function withMetadataRows(specs: readonly MetadataRowSpec[]): UpdateConstructionPlanInputV1 {
+    const base = input();
+    const rows = [...base.files];
+    const at0 = rows.findIndex((file) => file.role.kind === "payload" && file.role.payloadKind === "state_after");
+    rows.splice(at0, 0, ...specs.map(metadataRow));
+    return { ...base, files: rows };
+  }
+
+  const all = documents.map((value, metadata) => ({ metadata, value }));
+
+  it("admits the delegation, release index and bundle manifest as plan-derived state rows", () => {
+    const plan = buildConstructionPlan(withMetadataRows(all));
+    expect(validateConstructionBijections(plan)).toBe(true);
+    const rows = plan.files.filter((file) => file.role.kind === "payload" && file.role.source.kind === "plan_derived" && file.role.source.role === "release_metadata_after");
+    expect(rows.map((file) => file.sha256)).toEqual(documents.map((value) => sha(value)));
+  });
+
+  it("refuses a value whose hash does not match its row", () => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata: 0, value: delegation, rowContent: releaseIndex }, { metadata: 1, value: releaseIndex }, { metadata: 2, value: bundleManifest }]))).toThrow(/differs from its row/);
+  });
+
+  it("refuses the role on a row that is not state_after", () => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata: 0, value: delegation, payloadKind: "owner_content" }]))).toThrow(/owner_content/);
+  });
+
+  it.each([[3], [-1]])("refuses metadata ordinal %s", (metadata) => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata, value: delegation }]))).toThrow(/metadata/);
+  });
+
+  it("refuses two rows bound to one metadata ordinal", () => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata: 0, value: delegation }, { metadata: 0, value: releaseIndex }]))).toThrow(/an authority selects two rows/);
+  });
+
+  it("refuses a value that is not canonical JSON", () => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata: 0, value: `{ "document": "delegation" }\n` }]))).toThrow(/canonical/);
+  });
+
+  it("fits a 16 MiB bundle manifest at the exact maximum", () => {
+    const value = encodeCanonicalJson("m".repeat(16_777_216 - 3));
+    expect(encoder.encode(value).byteLength).toBe(16_777_216);
+    const plan = buildConstructionPlan(withMetadataRows([{ metadata: 0, value: delegation }, { metadata: 1, value: releaseIndex }, { metadata: 2, value }]));
+    expect(validateConstructionBijections(plan)).toBe(true);
+    expect(constructionPlanBytes(plan).byteLength).toBeLessThanOrEqual(plan.maximumPlanBytes);
+  }, 60_000);
+
+  it("refuses the withdrawn guarded_signed_metadata arm as unknown", () => {
+    const plan = mutable(buildConstructionPlan(withMetadataRows(all)));
+    const target = plan.files.find((file) => file.role.kind === "payload" && file.role.source.kind === "plan_derived" && file.role.source.role === "release_metadata_after");
+    if (target?.role.kind !== "payload") throw new Error("fixture has a metadata row");
+    const withdrawn = { kind: "guarded_signed_metadata", metadata: {}, role: "delegation", path: target.path, ownerUid: uid, mode: 384, nlink: 1, bytes: target.bytes, sha256: target.sha256, dev: identity.dev, ino: identity.ino } as unknown as UpdateConstructionPayloadSourceV1;
+    (target.role as { source: UpdateConstructionPayloadSourceV1; sourceProjectionHash: LowerHexSha256 }).source = withdrawn;
+    (target.role as { sourceProjectionHash: LowerHexSha256 }).sourceProjectionHash = payloadSourceProjectionHash(withdrawn);
+    expect(() => validateConstructionBijections(plan)).toThrow(/\.kind/);
   });
 });

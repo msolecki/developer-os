@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { decodeCanonicalJson, EXIT_CODES, validateRetainedOwnerInverseProjection, validateRetainedSchemaMigrationInverseProjection } from "@developer-os/core";
 import { SecurityRefusalError } from "@developer-os/security";
 import { describe, expect, it } from "vitest";
@@ -5,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   planRollback,
   planUpdate,
+  prepareUpdate,
   UpdatePlanningRefusal,
   validateRollbackRecord,
 } from "./planning.js";
@@ -206,6 +209,18 @@ describe("planUpdate", () => {
     ]);
     expect(parsed.operations.map((operation) => operation.path)).not.toContain(DIRECTORY_PATH);
     expect(parsed.externalEffects).toStrictEqual([]);
+  });
+
+  it("keeps the delegation, release index and bundle manifest byte-equal to what was fetched", async () => {
+    const fixture = createUpdateFixture();
+    const planned = await prepareUpdate(fixture.update, { version: null });
+    if (planned.apply === null) throw new Error("expected a prepared apply");
+    const { target } = planned.apply.inputs;
+    const [delegation, index, manifest] = planned.apply.materialized.signedMetadata;
+    const hash = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
+
+    expect([hash(delegation), hash(index), hash(manifest)]).toStrictEqual([target.delegationHash, target.releaseIndexHash, target.bundleManifestHash]);
+    expect(manifest).toBe(new TextDecoder().decode(fixture.releases.get("1.1.0")?.manifestBytes));
   });
 });
 

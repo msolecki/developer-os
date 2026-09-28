@@ -9,7 +9,7 @@ import type { UpdateFoundationParticipantRefV2 } from "./migrations.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
 import type { PreparedUpdateCandidateV1, RollbackPayloadEntryV1, RollbackPayloadIdV1 } from "./preview.js";
 import { parseRollbackPayloadId } from "./preview.js";
-import { compareUtf8, parseBundleRelativePath, validateReleaseMetadataIdentity, type BundleRelativePathV1, type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
+import { compareUtf8, parseBundleRelativePath, type BundleRelativePathV1, type ReleaseIdentityV1 } from "./release.js";
 import {
   encodeTenDigitOrdinal,
   parseLowerHexSha256,
@@ -147,7 +147,9 @@ export type UpdateConstructionPlanDerivedSourceV1 =
   | { readonly kind: "plan_derived"; readonly role: "manifest_after"; readonly plan: ImmutableUpdatePlanRefV1<"manifest_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
   | { readonly kind: "plan_derived"; readonly role: "release_trust_after"; readonly plan: ImmutableUpdatePlanRefV1<"release_trust_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
   | { readonly kind: "plan_derived"; readonly role: "active_release_after"; readonly plan: ImmutableUpdatePlanRefV1<"active_release_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
-  | { readonly kind: "plan_derived"; readonly role: "rollback_record_after"; readonly plan: ImmutableUpdatePlanRefV1<"rollback_record_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number };
+  | { readonly kind: "plan_derived"; readonly role: "rollback_record_after"; readonly plan: ImmutableUpdatePlanRefV1<"rollback_record_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
+  /** P4 (D72): the signed delegation (0), release index (1) or bundle manifest (2) of the bundle plan's metadata. */
+  | { readonly kind: "plan_derived"; readonly role: "release_metadata_after"; readonly metadata: 0 | 1 | 2; readonly value: CanonicalJsonV1; readonly valueBytes: number };
 
 export type UpdateConstructionPayloadSourceV1 =
   | { readonly kind: "planner_output"; readonly ordinal: number }
@@ -164,19 +166,6 @@ export type UpdateConstructionPayloadSourceV1 =
       readonly sourceMode: 384 | 448;
       readonly sourceDev: UInt64DecimalV1;
       readonly sourceIno: UInt64DecimalV1;
-    }
-  | {
-      readonly kind: "guarded_signed_metadata";
-      readonly metadata: ReleaseMetadataIdentityV1;
-      readonly role: "delegation" | "release_index" | "bundle_manifest";
-      readonly path: CanonicalAbsolutePathV1;
-      readonly ownerUid: EffectiveUidV1;
-      readonly mode: 384;
-      readonly nlink: 1;
-      readonly bytes: number;
-      readonly sha256: LowerHexSha256;
-      readonly dev: UInt64DecimalV1;
-      readonly ino: UInt64DecimalV1;
     }
   | GuardedPreimageSourceV1
   | UpdateConstructionPlanDerivedSourceV1;
@@ -398,7 +387,7 @@ const MAX_FRAMES = 1_000_000;
 const MAX_FRAME_BYTES = 16_777_216;
 const MAX_ROLLBACK_ENTRIES = 1_000_000;
 const MAX_LEAF_ID_BYTES = 106;
-const PAYLOAD_SOURCE_ORDER: readonly UpdateConstructionPayloadSourceV1["kind"][] = ["planner_output", "signed_bundle_entry", "guarded_preimage", "guarded_signed_metadata", "plan_derived"];
+const PAYLOAD_SOURCE_ORDER: readonly UpdateConstructionPayloadSourceV1["kind"][] = ["planner_output", "signed_bundle_entry", "guarded_preimage", "plan_derived"];
 const SOURCE_JOURNAL_KINDS: readonly UpdateConstructionJournalKindV1[] = ["bundle_source_staging", "rollback_payload_source"];
 /** P1 (D72): each planned source's fixed parent is a construction directory under `update/source`. */
 const SOURCE_PARENTS = [["bundle_source_staging", "update/source/bundle"], ["rollback_payload_source", "update/source/rollback"]] as const;
@@ -659,19 +648,6 @@ function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: Upda
       integer(source.sourceBytes, 0, MAXIMUM_CONSTRUCTION_PLAN_BYTES, `${label}.sourceBytes`);
       if (!matches(source.sourceBytes, source.sourceHash, source.sourceMode)) fail(`${label}: differs from its row`);
       return null;
-    case "guarded_signed_metadata":
-      exact(source, ["kind", "metadata", "role", "path", "ownerUid", "mode", "nlink", "bytes", "sha256", "dev", "ino"], label);
-      if (payloadKind !== "state_after") fail(`${label}: signed metadata for ${payloadKind}`);
-      validateReleaseMetadataIdentity(source.metadata);
-      oneOf(source.role, ["delegation", "release_index", "bundle_manifest"], `${label}.role`);
-      parseCanonicalAbsolutePathText(source.path);
-      integer(source.ownerUid, 0, 4_294_967_295, `${label}.ownerUid`);
-      if (source.nlink !== 1) fail(`${label}.nlink`);
-      integer(source.bytes, 1, MAXIMUM_CONSTRUCTION_JOURNAL_BYTES, `${label}.bytes`);
-      parseUInt64Decimal(source.dev);
-      parseUInt64Decimal(source.ino);
-      if (!matches(source.bytes, source.sha256, source.mode) || source.mode !== 384) fail(`${label}: differs from its row`);
-      return null;
     case "guarded_preimage": {
       oneOf(payloadKind, ["foundation_content", "owner_content", "migration_content"], `${label}: preimage for ${payloadKind}`);
       const key = checkGuardedPreimage(source, stagingRoot, label);
@@ -701,6 +677,13 @@ function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: Upda
         if (derived.sha256 !== source.plannedBytesHash) fail(`${label}.plannedBytesHash`);
         if (derived.bytes !== row.bytes || derived.sha256 !== row.sha256 || row.mode !== 384) fail(`${label}: differs from its row`);
         return null;
+      }
+      let authority: string | null = null;
+      if (source.role === "release_metadata_after") {
+        exact(source, ["kind", "role", "metadata", "value", "valueBytes"], label);
+        if (payloadKind !== "state_after") fail(`${label}: release metadata for ${payloadKind}`);
+        // One row per signed document. The plan holds no release identity, so the ordinal's signed hash binds where the row is composed.
+        authority = `release_metadata/${oneOf(source.metadata, [0, 1, 2], `${label}.metadata`).toString(10)}`;
       } else {
         exact(source, ["kind", "role", "plan", "value", "valueBytes"], label);
         const kinds = { manifest_after: "manifest_state", release_trust_after: "release_trust_state", active_release_after: "active_release_state", rollback_record_after: "rollback_record_state" } as const;
@@ -710,7 +693,7 @@ function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: Upda
       }
       const derived = checkDerivedValue(source.value, source.valueBytes, MAXIMUM_CONSTRUCTION_JOURNAL_BYTES - 1, label);
       if (derived.bytes !== row.bytes || derived.sha256 !== row.sha256 || row.mode !== 384) fail(`${label}: differs from its row`);
-      return null;
+      return authority;
     }
     default:
       return fail(`${label}.kind`);
@@ -747,7 +730,7 @@ function checkRollbackEntrySource(entry: UpdateConstructionRollbackSourceEntryV1
   }
 }
 
-/** §5.3/§9.2 payload paths; guarded signed metadata has no derivation of its own here. */
+/** §5.3/§9.2 payload paths; a release-metadata row's path derives from its bundle plan, which this plan does not hold. */
 function derivedPayloadPath(root: string, ordinal: number, payloadKind: UpdateConstructionPayloadKindV1, role: Extract<UpdateConstructionFileRoleV1, { readonly kind: "payload" }>): string | null {
   const source = role.source;
   if (payloadKind === "foundation_content" || payloadKind === "foundation_digest" || payloadKind === "owner_content" || payloadKind === "migration_content") return `${root}/update/payloads/${encodeTenDigitOrdinal(ordinal)}.payload`;
@@ -756,6 +739,7 @@ function derivedPayloadPath(root: string, ordinal: number, payloadKind: UpdateCo
     case "foundation_initial_journal":
       return `${root}/participants/foundation/${source.participant.id}/initial-journal.json`;
     case "foundation_staged_digest":
+    case "release_metadata_after":
       return null;
     case "manifest_after":
       return `${root}/participants/manifest/${source.plan.id}/after.json`;
