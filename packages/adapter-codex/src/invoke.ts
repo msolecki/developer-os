@@ -43,11 +43,12 @@ export interface CodexInvocation {
   readonly outputSchemaPath: string;
   readonly timeoutMs: number;
   /**
-   * D52 (BACKLOG NEW-102): the child's `CODEX_HOME`, and the only variable it is given. Absent,
-   * the child gets `env: {}` and Codex resolves the user's own home, loading its `AGENTS.md` and
-   * `agents/*.toml` even under `--ignore-user-config --ignore-rules`. `ingest` always supplies it.
+   * D52 (BACKLOG NEW-102): the child's `CODEX_HOME`, and the only variable it is given. Without it
+   * Codex resolves the user's own home and loads its `AGENTS.md` and `agents/*.toml` even under
+   * `--ignore-user-config --ignore-rules`, so D73 (NEW-106) makes it required and `invokeCodex`
+   * refuses a call that lacks it. The CLI's `invokeIsolatedCodex` is what supplies it.
    */
-  readonly codexHome?: string;
+  readonly codexHome: string;
 }
 
 export type CodexRunResult =
@@ -92,11 +93,14 @@ export const DEFAULT_TIMEOUT_MS = 30_000;
  * the positional rule — the complete one — is applied to all of them. What
  * provenance decides is only whether the *nominal* rule is applied on top, and
  * for these three it is not (BACKLOG NEW-12).
+ *
+ * The result carries no `codexHome`, so it cannot reach `invokeCodex` until the CLI's
+ * `invokeIsolatedCodex` gives it a per-run isolated home (D73, NEW-106).
  */
 export function invocationFromAgentPrompt(
   args: unknown,
   context: InvocationContext,
-): { ok: true; invocation: CodexInvocation } | { ok: false; detail: string } {
+): { ok: true; invocation: Omit<CodexInvocation, "codexHome"> } | { ok: false; detail: string } {
   const parsed = parseAgentPromptArgs(args);
   if (!parsed.ok) {
     // The rejected value is never echoed: a `with` block is author-controlled
@@ -291,7 +295,7 @@ export async function invokeCodex(
   if (outputSchemaPathRefusal !== null) {
     return { ok: false, reason: "refused", detail: outputSchemaPathRefusal };
   }
-  if (invocation.codexHome !== undefined && !isAbsolute(invocation.codexHome)) {
+  if (typeof invocation.codexHome !== "string" || !isAbsolute(invocation.codexHome)) {
     return { ok: false, reason: "refused", detail: "the Codex home must be an absolute path" };
   }
 
@@ -329,7 +333,7 @@ export async function invokeCodex(
       // vendor; Codex architecture former §14.1 carries the observation of 2026-08-15.
       stdin: "",
       timeoutMs: invocation.timeoutMs,
-      env: invocation.codexHome === undefined ? {} : { CODEX_HOME: invocation.codexHome },
+      env: { CODEX_HOME: invocation.codexHome },
     });
   } catch {
     return { ok: false, reason: "spawn-failed" };

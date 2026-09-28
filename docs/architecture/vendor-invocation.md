@@ -225,9 +225,9 @@ have missed.
 
 **Decision: the empty environment is retained. No variable is admitted from the parent.** Claude
 is spawned with `env: {}` (`packages/adapter-claude/src/invoke.ts:140`); Codex
-gets `env: { CODEX_HOME: <isolated home> }` whenever a `codexHome` is supplied,
-which ingest always does (`packages/adapter-codex/src/invoke.ts:332`,
-`apps/cli/src/commands/ingest.ts:1058-1060`). Beyond that one product-chosen
+always gets `env: { CODEX_HOME: <isolated per-run home> }`: `codexHome` is required and
+`invokeCodex` refuses a call without it (D73, NEW-106), and every product call supplies it
+through `invokeIsolatedCodex` (`apps/cli/src/commands/ingest.ts`). Beyond that one product-chosen
 variable, neither vendor inherits anything from the parent — not `HOME`, not a
 proxy variable. Task 1 Step 6 recorded both binaries exiting `0` under
 `env -i … --help` (Claude row 13, Codex row 7 above), and no observation

@@ -18,6 +18,7 @@ import {
   parseCaptureFile,
 } from "@developer-os/brain";
 import type { CaptureStatus, ProposedNote } from "@developer-os/brain";
+import { invocationFromAgentPrompt } from "@developer-os/adapter-codex";
 import type { CliContext } from "../context.js";
 import { redactText } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
@@ -32,6 +33,7 @@ import {
   INGEST_DECLARED_WRITE_SCOPES,
   renderIngest,
   CAPTURE_LEFT_AT,
+  invokeIsolatedCodex,
   prepareAgentWorkspace,
   renderValidationFinding,
   runIngest,
@@ -3057,6 +3059,39 @@ describe("ingest's isolated Codex home (D52)", () => {
     expect((await nodeFs.stat(home)).mode & 0o777).toBe(0o700);
     expect(await nodeFs.readFile(join(codexHome, "AGENTS.md"), "utf8")).toContain("developer-os:begin");
     expect(await nodeFs.readFile(join(codexHome, "auth.json"), "utf8")).toBe('{"synthetic":true}\n');
+  });
+
+  /** NEW-106 (D73): D8 covers every product Codex call, not only ingest's. */
+  it("runs a workflow agent.prompt Codex call in its own isolated home, never the user's AGENTS.md", async () => {
+    const fixture = await installedFixture("agent-prompt-codex-home-isolated");
+    const codexHome = await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    const built = invocationFromAgentPrompt(
+      { prompt: "summarise the vault" },
+      { workingRoot: fixture.root, writeScopes: [], outputSchemaPath: join(fixture.root, "schema.json") },
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    fixture.reply(() => nothingProposed());
+    let runDuring: string[] = [];
+    fixture.duringCall(async () => {
+      runDuring = await nodeFs.readdir(codexHomeOf(fixture));
+    });
+
+    const result = await invokeIsolatedCodex(
+      fixture.context,
+      { executable: CODEX, version: "0.155.1" },
+      built.invocation,
+      { runner: fixture.context.runner },
+    );
+
+    expect(result.ok).toBe(true);
+    const runHome = codexHomeOf(fixture);
+    expect(fixture.calls.map((call) => call.env)).toStrictEqual([{ CODEX_HOME: runHome }]);
+    expect(runHome).not.toBe(codexHome);
+    expect(join(home, basename(runHome))).toBe(runHome);
+    expect(runDuring).toStrictEqual(["auth.json"]);
+    expect(await nodeFs.readdir(home)).toStrictEqual([]);
   });
 
   it("gives every Codex call its own home rather than one shared directory", async () => {

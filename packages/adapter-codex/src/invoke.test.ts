@@ -11,6 +11,7 @@ import { DEFAULT_TIMEOUT_MS, invocationFromAgentPrompt, invokeCodex } from "./in
 import type { CodexInvocation } from "./invoke.js";
 
 const installation = { executable: "/opt/synthetic/bin/codex", version: "0.147.0" } as const;
+const ISOLATED_HOME = "/synthetic/home/.developer-os/state/codex-ingest-home/run-abc123";
 
 function invocation(overrides: Partial<CodexInvocation> = {}): CodexInvocation {
   return {
@@ -19,6 +20,7 @@ function invocation(overrides: Partial<CodexInvocation> = {}): CodexInvocation {
     writeScopes: [],
     outputSchemaPath: "/synthetic/work/schema.json",
     timeoutMs: DEFAULT_TIMEOUT_MS,
+    codexHome: ISOLATED_HOME,
     ...overrides,
   };
 }
@@ -123,6 +125,16 @@ describe("invocationFromAgentPrompt", () => {
     );
     expect(built.ok).toBe(true);
     if (built.ok) expect(built.invocation.timeoutMs).toBe(DEFAULT_TIMEOUT_MS);
+  });
+
+  /** D73 (NEW-106): the home is the CLI's `invokeIsolatedCodex` to give, never a with-block field. */
+  it("builds no Codex home, so the step cannot reach invokeCodex unisolated", () => {
+    const built = invocationFromAgentPrompt(
+      { prompt: "summarise" },
+      { workingRoot: "/synthetic/work", writeScopes: [], outputSchemaPath: "/synthetic/s.json" },
+    );
+    expect(built.ok).toBe(true);
+    if (built.ok) expect("codexHome" in built.invocation).toBe(false);
   });
 
   it("never echoes the rejected value, which reaches a log", () => {
@@ -321,7 +333,7 @@ describe("invokeCodex argv", () => {
     expect(seen()?.args).not.toContain("workspace-write");
   });
 
-  it("hands the runner the host cwd, no stdin, no environment, and the invocation's own timeout", async () => {
+  it("hands the runner the host cwd, no stdin, only CODEX_HOME, and the invocation's own timeout", async () => {
     const { runner: capturingRunner, seen } = capturing();
     await invokeCodex(installation, invocation({ timeoutMs: 12_345 }), {
       runner: capturingRunner,
@@ -329,7 +341,7 @@ describe("invokeCodex argv", () => {
     const request = seen();
     expect(request?.cwd).toBe(process.cwd());
     expect(request?.stdin).toBe("");
-    expect(request?.env).toEqual({});
+    expect(request?.env).toEqual({ CODEX_HOME: ISOLATED_HOME });
     expect(request?.timeoutMs).toBe(12_345);
   });
 
@@ -339,6 +351,17 @@ describe("invokeCodex argv", () => {
       runner: capturingRunner,
     });
     expect(seen()?.env).toEqual({ CODEX_HOME: "/synthetic/home/.developer-os/state/codex-ingest-home" });
+  });
+
+  /** D73 (NEW-106): without a home Codex would load the user's AGENTS.md and agent roles. */
+  it("refuses a call with no Codex home without spawning, never falling back to the user's", async () => {
+    const { runner: capturingRunner, seen } = capturing();
+    const unisolated = { ...invocation(), codexHome: undefined } as unknown as CodexInvocation;
+    const result = await invokeCodex(installation, unisolated, {
+      runner: capturingRunner,
+    });
+    expect(result).toMatchObject({ ok: false, reason: "refused" });
+    expect(seen()).toBeNull();
   });
 
   it("refuses a relative Codex home without spawning", async () => {

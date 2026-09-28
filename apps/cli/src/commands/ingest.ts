@@ -1100,11 +1100,8 @@ export async function sweepCodexIngestHome(context: CliContext, runHome: string)
  * here because a reader will otherwise assume both calls are constrained the
  * same way.
  */
-/**
- * D52: Codex runs with the isolated home as its `CODEX_HOME`, swept whatever the outcome.
- * NEW-76: its scratch working root is this run's own leaf, removed whatever the outcome.
- */
-async function invokeIsolatedCodex(
+/** NEW-76: ingest's scratch working root is this run's own leaf, removed whatever the outcome. */
+async function invokeCodexInWorkspace(
   context: CliContext,
   invocation: Omit<Parameters<typeof invokeCodex>[1], "codexHome" | "workingRoot">,
   installation: Parameters<typeof invokeCodex>[0],
@@ -1112,14 +1109,28 @@ async function invokeIsolatedCodex(
 ): ReturnType<typeof invokeCodex> {
   const workingRoot = await prepareAgentWorkspace(context);
   try {
-    const codexHome = await prepareCodexIngestHome(context);
-    try {
-      return await invokeCodex(installation, { ...invocation, workingRoot, codexHome }, dependencies);
-    } finally {
-      await sweepCodexIngestHome(context, codexHome);
-    }
+    return await invokeIsolatedCodex(context, installation, { ...invocation, workingRoot }, dependencies);
   } finally {
     await removeAgentWorkspace(workingRoot);
+  }
+}
+
+/**
+ * D52, D73 (NEW-106): the one door every product Codex call goes through, ingest's and a workflow
+ * `agent.prompt` step's alike. Codex runs with its own per-run home under `state/codex-ingest-home`
+ * as `CODEX_HOME`, swept whatever the outcome; `invokeCodex` refuses a call without one.
+ */
+export async function invokeIsolatedCodex(
+  context: CliContext,
+  installation: Parameters<typeof invokeCodex>[0],
+  invocation: Omit<Parameters<typeof invokeCodex>[1], "codexHome">,
+  dependencies: Parameters<typeof invokeCodex>[2],
+): ReturnType<typeof invokeCodex> {
+  const codexHome = await prepareCodexIngestHome(context);
+  try {
+    return await invokeCodex(installation, { ...invocation, codexHome }, dependencies);
+  } finally {
+    await sweepCodexIngestHome(context, codexHome);
   }
 }
 
@@ -1151,7 +1162,7 @@ async function invokeVendor(
           },
           dependencies,
         )
-      : await invokeIsolatedCodex(context, {
+      : await invokeCodexInWorkspace(context, {
           prompt,
           writeScopes: [],
           outputSchemaPath: schemaPath,

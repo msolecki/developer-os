@@ -647,8 +647,18 @@ refused and never deleted. After the run, in a `finally`, every child except `au
 without following links, so the resting shape is the one fresh `init`, both uninstall arms and the
 absent-manifest walk admit (`inspectCodexIngestHomeShape`, reason `codex_ingest_home_shape`).
 Uninstall unlinks the link and removes the directory. The link is the only thing it removes; the
-user's credential is never touched. Workflow `agent.prompt` callers of `invokeCodex` pass no
-`codexHome` and still spawn with `env: {}`.
+user's credential is never touched. ~~Workflow `agent.prompt` callers of `invokeCodex` pass no
+`codexHome` and still spawn with `env: {}`.~~ Superseded by D73 below.
+
+**Amended 2026-09-28 (NEW-106, D73): every product Codex call is isolated.** D8 covers every
+caller of `invokeCodex`, not only `ingest`. `CodexInvocation.codexHome` is required and
+`invokeCodex` refuses (`refused`, nothing spawned) a call without an absolute one, so no call can
+fall back to the user's home and its `AGENTS.md` or agent roles. `invocationFromAgentPrompt`
+returns an invocation without `codexHome`; the one helper that supplies it is
+`invokeIsolatedCodex` in `apps/cli/src/commands/ingest.ts`, which prepares the per-run home
+below, invokes and sweeps. `ingest` wraps it with its scratch working root (NEW-76); a workflow
+`agent.prompt` step passes its compiler-derived working root through it unchanged. The home keeps
+its `state/codex-ingest-home` path, which core, admission, retention and uninstall pin.
 
 **Amended 2026-09-28 (NEW-105): one `CODEX_HOME` per run.** Two concurrent ingests shared the
 directory above with no ordering. Each Codex call now gets its own `mkdtemp` directory
