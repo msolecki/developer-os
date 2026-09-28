@@ -105,7 +105,7 @@ symlink carry `key: null`.
 
 `unclassified-folder` is reported by discovery through the `frontmatter` class's result envelope at
 `warn`, so it surfaces in `brain lint` without a ninth class. The six `frontmatter` warnings are
-enumerated because the completed spec had drifted from the implementation and `BACKLOG.md` NEW-48
+enumerated because the completed spec had drifted from the implementation and the since-closed `BACKLOG.md` NEW-48
 found the omission; moving the current inventory here closes that documentation-only row.
 
 ## 4. Known residuals

@@ -575,9 +575,9 @@ as the Task 5–8 notes above.
   `LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS` (`packages/core/src/lifecycle/bookkeeping.ts`); see
   `foundation.md` §10 for its shape-admission rule.
 - **Uninstall artifact capacity (D26; not itself a Global Constraints line, but the plan 1a bound
-  the section above cross-references).** `MAX_ARTIFACT_MUTATIONS = 256`
-  (`apps/cli/src/lifecycle/uninstall.ts`); a release bundle above roughly 197 files cannot be
-  uninstalled until Phase 4b (`BACKLOG.md` NEW-85).
+  the section above cross-references).** `MAX_UNINSTALL_ARTIFACTS`, 31 steps of 256 mutations
+  (7,936) since D45 (`apps/cli/src/lifecycle/uninstall.ts` — `MAX_UNINSTALL_ARTIFACTS`); the
+  single-step 256 bound this line used to state closed with NEW-85 on 2026-09-26.
 
 Every bound above is a ceiling the code refuses past, not a target it approaches — none of these
 constants moved during plan 1a's implementation; they were fixed at the plan's writing and this

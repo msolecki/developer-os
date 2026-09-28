@@ -11,7 +11,7 @@ proposes canonical notes from it, nine deterministic validators judge the propos
 workflow verb.** Everything before it emitted, validated or rendered.
 
 **Every claim here points at code or at a named test case**, `path:line`, which is the standard
-`threat-model.md` holds itself to. Where a claim rests on something weaker, it says so in the
+`threat-model.md` holds itself to. A new citation should prefer the anchor form — a backticked path, an em dash, a backticked identifier the file contains — which the citation gate checks by content; a line number is only bounds-checked, so it can silently drift onto unrelated code. Where a claim rests on something weaker, it says so in the
 sentence rather than in a footnote. The threat model is the companion document: it owns the trust
 boundaries and their mechanisms, and this note owns the shape of the pipeline and the decisions that
 produced it.
@@ -29,7 +29,7 @@ produced it.
 | structured-result schemas | `packages/workflow-schema/src/vocabulary.ts`: every verb declaring `structured_result` gets one product-shipped JSON Schema; today that set is `ingest.stage` |
 | the contracts the vendor trees render | `workflows/{capture,review,ingest,brain-search,shared}/workflow.yaml`, all five at `2.0.0`. That glob matches **six** files: `workflows/doctor/workflow.yaml` is unchanged at `1.0.0` |
 | the closed verb-mapping defect | Before DOS-P6, three shipped skills in each vendor tree named commands with no handler. The effect vocabulary now binds each implemented verb to its command in `packages/workflow-schema/src/vocabulary.ts`; `workflow-schema.md` §§5, 7 records the compiler side |
-| the security suites | `tests/security/`, nine suites, 90 cases |
+| the security suites | `tests/security/`, eleven suites (the count is checked by `tests/repository/citations.test.ts`); 90 cases when last collected, on 2026-08-17 |
 | the end-to-end run against the compiled binary | `tests/e2e/knowledge-lifecycle/lifecycle.test.ts` |
 | trust boundaries and the mechanism enforcing each | `docs/architecture/threat-model.md` |
 
@@ -581,8 +581,8 @@ completed design left open.
 
 ## 11. What the evidence is worth
 
-`tests/security/` holds **nine suites and 90 cases**, and **38 carried no watched-failure
-demonstration.** The split, its derivation, and the fact that the per-suite breakdown cannot be
+`tests/security/` holds **eleven suites**; at the 2026-08-17 collection it held nine suites and 90
+cases, and **38 carried no watched-failure demonstration.** The split, its derivation, and the fact that the per-suite breakdown cannot be
 re-derived from this repository are `docs/architecture/threat-model.md` §8 and `BACKLOG.md` §5. Do not
 cite the directory as a whole as though every case in it were evidence; the threat model marks the
 cases it relies on that are not.
@@ -663,7 +663,7 @@ matching a former section below resolve through this note.
 | §7.5 | this note §10; `BACKLOG.md` §1 |
 | §8 | see the subject-routing rule above; lifecycle security/redaction is owned by former §§8.1–8.5 and `docs/architecture/threat-model.md` §§5.3, 5.7–5.8 |
 | §8.1 | `threat-model.md` §5.7 |
-| §8.2 | `threat-model.md` §5.7; `BACKLOG.md` §1 NEW-16 |
+| §8.2 | `threat-model.md` §5.7 (NEW-16, closed 2026-08-17) |
 | §8.3 | `threat-model.md` §5.3 |
 | §8.4 | this note §8.1; `threat-model.md` §5.8 |
 | §8.5 | `threat-model.md` §§1–9 |

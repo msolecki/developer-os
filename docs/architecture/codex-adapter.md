@@ -635,7 +635,7 @@ line and a §5.1 block with a `## probe-rule` section; `$C/agents/developer-os-p
   `POST to http://127.0.0.1:9/v1/responses: `, never on `prompt-input` alone, which shows neither
   agent roles nor the effect of `codex exec` flags.
 
-### D52 — ingest runs Codex with an isolated `CODEX_HOME` (2026-09-22, BACKLOG NEW-102)
+### D52 — ingest runs Codex with an isolated `CODEX_HOME` (2026-09-22, BACKLOG NEW-102, closed 2026-09-26)
 
 `ingest` no longer lets Codex resolve the user's Codex home. Before each Codex run it reconciles
 `<product-home>/state/codex-ingest-home/` (`0700`, product-owned) to hold nothing but a symlink

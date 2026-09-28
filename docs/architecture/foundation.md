@@ -106,7 +106,7 @@ inbound-reference index; the amendment record is §8 of `git show d72287a^:docs/
 
 **A second amendment landed on 2026-08-17, on exactly the same terms.** Track R entry R2 gave
 `DeveloperOsConfigV1` an optional `redaction?: { patterns }` member — a bounded list of literal
-substrings, never expressions — because `threat-model.md` §5.7 and `BACKLOG.md` §1 NEW-16 record the
+substrings, never expressions — because `threat-model.md` §5.7 and the since-closed `BACKLOG.md` §1 NEW-16 recorded the
 user-extensible redaction class that was **unreachable**: `redactText` accepted the option and no
 production caller passed it, and this schema had no key a user could set.
 Additive in the same three senses as `brain`: `.strict()` and `schemaVersion = 1` are unchanged, the
@@ -755,7 +755,7 @@ not exist here" look identical from outside and are not the same thing.
   all proxy variables pointed at a closed port.
 
   The workspace list is **discovered, not written down**, and that is the whole of the fix
-  for `BACKLOG.md` NEW-1: it used to be a hard-coded array of four directories, so
+  for the closed `BACKLOG.md` NEW-1: it used to be a hard-coded array of four directories, so
   `packages/brain` was added on 2026-08-07 and scanned by nothing while this paragraph
   claimed otherwise. The non-empty assertion is made per workspace rather than over the
   total, because a floor over the sum is satisfied by one populated directory while every
@@ -982,11 +982,11 @@ record.
   is called with `"mf"` only once the four Foundation IDs are already bound
   (`apps/cli/src/lifecycle/uninstall.ts`). The reserved-prefix order for the present-manifest,
   no-launchd coordinator is exactly `lc, tx, tx, tx, tx, mf`.
-- **The capacity refusal (D26).** `MAX_ARTIFACT_MUTATIONS` is 256 (`apps/cli/src/lifecycle/uninstall.ts`);
+- **The capacity refusal (D26, D45).** `MAX_UNINSTALL_ARTIFACTS` is 31 `F(uninstall_artifacts)`
+  steps of 256 mutations, 7,936 (`apps/cli/src/lifecycle/uninstall.ts` — `MAX_UNINSTALL_ARTIFACTS`);
   `LifecycleUninstaller.preview` throws `UninstallCapacityError` (`reason:
   "uninstall_artifact_capacity_exceeded"`, exit 4) before any ID is reserved when the partitioned
-  artifact mutations exceed it. A release bundle over roughly 197 files cannot be uninstalled until
-  Phase 4b decides the durable cap (`BACKLOG.md` NEW-85).
+  artifact mutations exceed it. D45 replaced the single 256-mutation step; NEW-85 closed 2026-09-26.
 - **The non-creating global lock and lock order.** `packages/core/src/lifecycle/locks.ts` states the
   rule its types enforce: the global lock at `state/.lifecycle.lock` is created only by Spec 2's
   fresh `init`, so every other acquirer opens an existing path without `O_CREAT` and refuses

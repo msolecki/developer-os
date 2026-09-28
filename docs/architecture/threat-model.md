@@ -13,7 +13,7 @@ where every boundary sits beside the mechanism that enforces it and the artifact
 
 **Every row cites the code or the test, and the exceptions are declared rather than hidden.** A
 threat model whose claims cannot be checked against the tree rots at the first refactor, so a
-mechanism is a `path:line` and evidence is a named test case wherever one exists. **Three kinds of
+mechanism is a `path:line` or an anchor — a backticked path, an em dash, a backticked identifier the file contains, which the citation gate checks by content where a line is only bounds-checked — and evidence is a named test case wherever one exists. **Three kinds of
 row fall short of that, and each says so where it appears:**
 
 1. **Six mechanisms in §5 name another note's section *beside* their `path:line`, never instead of
@@ -511,7 +511,7 @@ leaving its tail".
 | Boundary | Mechanism | Evidence |
 |---|---|---|
 | Every managed mutation is journalled, backed up and recoverable | seven phases driven by one loop, each journalled *after* it completes and before the next is attempted, so the journal always describes work already done (`packages/core/src/transactions/executor.ts:2172-2203`, `:2969-2981`) — the full phase table is `foundation.md` §3 | `tests/security/interruption.test.ts` — an interruption at each of the seven forward phases, for the capture write and each of the four forward ingest kinds. **It is an in-process `afterPhase` throw, not a signal**, and the suite says so in its own header: a thrown error unwinds where a `SIGKILL` does not, so it proves the journal is recoverable and never that no `finally` ran |
-| An interrupted run leaves the capture retryable and `doctor` says how to recover | `checkTransactions` fails on any incomplete journal and names both ways out in its recovery string (`apps/cli/src/commands/doctor.ts:1031,1042`), which sets exit 6; it fails a second way, on a backup payload that outlived a terminal transaction, naming the one `repair` that clears it (`:1059-1065`) | `tests/security/interruption.test.ts`, and its derived coverage case at `:410` which reddens if the driven set shrinks; `tests/e2e/foundation.test.ts:1030` — `is reported, blocks init, and names both ways out` |
+| An interrupted run leaves the capture retryable and `doctor` says how to recover | `checkTransactions` fails on any incomplete journal and names both ways out in its recovery string (`apps/cli/src/commands/doctor.ts:1031,1042`), which sets exit 6; it fails a second way, on a backup payload that outlived a terminal transaction, naming the one `repair` that clears it (`:1059-1065`) | `tests/security/interruption.test.ts`, and its derived coverage case at `tests/security/interruption.test.ts:410` which reddens if the driven set shrinks; `tests/e2e/foundation.test.ts:1030` — `is reported, blocks init, and names both ways out` |
 | A file that changed under a running command is not overwritten | two checks, and the earlier one is new as of 2026-08-20. A caller that read the file supplies the digest of what it read on `PlannedFileMutation.expectedBeforeHash`, and the **plan phase** refuses on a mismatch with `TransactionPreconditionError` (`packages/core/src/transactions/executor.ts:1608-1614`) — before anything is staged, so that refusal can promise the file is untouched. A write landing later is caught at backup time by the executor's own snapshot (`:2549-2551`), which cannot. `review` and `ingest` both supply a precondition on the write that follows their own read; the window that remains is registered as NEW-40 | `apps/cli/src/commands/review.test.ts` — `refuses, keeping the hand edit, when it lands between the read and the write`; `apps/cli/src/commands/ingest.test.ts` — `refuses when a hand edit lands between the read and the staging write`; `tests/security/concurrent-edit.test.ts` for the later window |
 | A second operation on a held journal is refused | every store operation on a journal runs inside `withTransactionLock` (`packages/core/src/transactions/store.ts:202,254,268,290`), which takes an advisory per-transaction lock through `/usr/bin/lockf` (`packages/platform-macos/src/transaction-lock.ts:17,84`) | `tests/security/concurrent-edit.test.ts` — `refuses a second transaction while one holds the lock` |
 | **A secret removed from a vault file is gone from the machine** | `TransactionExecutor.pruneBackups` unlinks every `<index>.bin` and `<index>.bin.tmp` at both terminal transitions and both terminal early-returns (`packages/core/src/transactions/executor.ts`) | `tests/security/backup-prune.test.ts` — `holds nowhere under the product home once the edit finalizes`, which sweeps the whole product home **after** the command returns and reddens when the prune is disabled; `packages/core/src/transactions/transactions.test.ts` pins the mechanism per phase |
@@ -710,7 +710,7 @@ the "every managed mutation is transactional" sentence has a stated exception.
 
 | Boundary | Mechanism | Evidence |
 |---|---|---|
-| Discovery runs one absolute helper and gives it nothing but a search path | `/usr/bin/which`, spawned with `env: { PATH: <search path> }` and nothing else (`packages/platform-macos/src/macos.ts:18,229`) | `tests/security/network.test.ts` — every classified spawn asserted absolute, and the classification asserted total in both directions (`:237-251`) |
+| Discovery runs one absolute helper and gives it nothing but a search path | `/usr/bin/which`, spawned with `env: { PATH: <search path> }` and nothing else (`packages/platform-macos/src/macos.ts:18,229`) | `tests/security/network.test.ts` — every classified spawn asserted absolute, and the classification asserted total in both directions (`tests/security/network.test.ts:237-251`) |
 | A discovered path that is not usable is refused rather than reported | must be absolute, free of every control character, and must not carry a redaction marker — because the runner redacts its own output and a high-entropy path segment comes back rewritten but still absolute (`packages/platform-macos/src/macos.ts:135-145`) | `packages/platform-macos/src/macos.test.ts` |
 | An empty `PATH` does not become an unbounded search | a fixed fallback of the four system directories (`packages/platform-macos/src/macos.ts:21,185-186`) | `packages/platform-macos/src/macos.test.ts` |
 | The *platform boundary* never executes what it found | `AgentDiscovery.version` is permanently `null` there, because determining it requires running the binary (`packages/platform-macos/src/types.ts:19-24`, `foundation.md` §7). **A layer above does execute it**: `discoverCli` runs `<exe> --version` (`packages/security/src/cli.ts:54-80`) and `doctor` calls it on every invocation, which retired the Foundation-era invariant — `claude-adapter.md` §9 residual 10 records exactly that | `packages/platform-macos/src/macos.test.ts`; `tests/security/network.test.ts` classifies the version probe rather than forbidding it |
@@ -772,10 +772,10 @@ is a false refusal — a usability cost and the founder's call — not a weakeni
 What this does **not** mean: it is not a privilege escalation. The binary runs as the user, from the
 user's own `PATH`, and anyone who can plant it there can already run code as that user. What it costs
 is that Developer OS hands such a binary a prompt built from the user's captures and read access to
-the user's vault, and reports the result as its own. **Record: `BACKLOG.md` §1 NEW-15**, registered when this document landed. The nearest record before
+the user's vault, and reports the result as its own. **Record: `BACKLOG.md` §1 NEW-15**, registered when this document landed and closed 2026-08-17. The nearest record before
 it was `claude-adapter.md` §9 residual 10, which notes that `doctor` executes the discovered binary
 and retires the Foundation-era invariant — it records the execution and **not** the missing check,
-which is why NEW-15 exists rather than a pointer to it. Stated here because the brief names `PATH` as
+which is why NEW-15 existed rather than a pointer to it. Stated here because the brief names `PATH` as
 a boundary this document must carry, and carrying it accurately means saying which half is enforced.
 
 ### 5.12 Configuration
@@ -946,7 +946,7 @@ a capability: no verb ever wrote a vendor file.
 
 ## 8. What the evidence is worth
 
-`tests/security/` holds **nine suites and 90 cases**, counted by collection — `npx vitest list --root tests security` — rather than by adding deltas to a remembered total. Two of the nine are not in design spec §9's
+`tests/security/` holds **eleven suites**, a count `tests/repository/citations.test.ts` derives from the tree and checks against this line. Cases are counted by collection — `npx vitest list --root tests security` — rather than by adding deltas to a remembered total; the last collection, on 2026-08-17, found nine suites and 90 cases. Two of those nine are not in design spec §9's
 list — **network** and **concurrent edit** — and are there because `BACKLOG.md` §7's standing gate
 requires them and the spec dropped them.
 

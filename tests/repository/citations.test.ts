@@ -17,6 +17,11 @@ const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
  * run here says the citations resolve, never that the evidence is sound; that stays a
  * review question (BACKLOG NEW-23, closed by this file).
  *
+ * **The checkable alternative is the anchor** (NEW-34): `` `path` — `identifier` ``, whose
+ * identifier must occur in the file as a whole word. A line number is bounds-checked only
+ * and drifts silently with code growth; an anchor goes red when its symbol is renamed or
+ * removed. Prefer it for new citations.
+ *
  * **Why it exists.** The architecture notes declare their own standard —
  * `knowledge-pipeline.md`'s preamble says "every claim here points at code or at a named
  * test case, `path:line`". 411 citations were maintained by hand and `npm run
@@ -134,6 +139,18 @@ const CONTINUATION = /`:(\d+)(?:-(\d+))?((?:,\d+(?:-\d+)?)*)`/gu;
  * Clearing means such a range is skipped, and the document is expected to write the path.
  */
 const BARE_MENTION = /`([\w.-]+\.[A-Za-z]+)`/gu;
+/**
+ * A repository-rooted path carrying **no** line number. Like `BARE_MENTION` it clears the
+ * carrier (NEW-34): it used to neither set nor clear it, so a `` `:335-337` `` written after
+ * it was bounds-checked against an earlier, different file. It names its file unambiguously,
+ * so the architecture sweep also requires it to be tracked. The lookbehind skips a path
+ * inside another one (`.agents/plugins/…`) and a historical `git show <rev>:docs/…`; the
+ * lookahead skips a citation (`:12`) and a prefix of a longer name (`x.test` of `x.test.ts`).
+ */
+const PATH_MENTION =
+  /(?<![\w./:-])((?:apps|packages|tests|workflows|docs)\/[\w./-]*[\w-]\.[A-Za-z]+)(?![\w/-]|\.\w|:\d)/gu;
+/** `` `path` — `identifier` ``: a citation checked by content rather than by line. */
+const ANCHOR = /`((?:[\w.-]+\/)*[\w.-]+\.[A-Za-z]+)` — `([A-Za-z_]\w*)`/gu;
 /** A fence opener or closer. Citations inside a fence are specimens, not evidence. */
 const FENCE = /^\s*(?:```|~~~)/u;
 /** A heading ends a continuation's reach: a new section is a new context. */
@@ -268,11 +285,14 @@ export function extractCitations(
         ranges: [],
       });
     }
+    for (const match of line.matchAll(PATH_MENTION)) {
+      hits.push({ at: match.index, named: null, hasDirectory: true, raw: match[0], ranges: [] });
+    }
 
     hits.sort((a, b) => a.at - b.at);
 
     for (const hit of hits) {
-      /** A file named without a line clears the carrier; see `BARE_MENTION`. */
+      /** A file named without a line clears the carrier; see `BARE_MENTION` and `PATH_MENTION`. */
       if (hit.named === null && hit.ranges.length === 0) {
         previous = null;
         continue;
@@ -313,7 +333,7 @@ export type Resolution =
  * to the wrong vendor's code. Refusing makes the author write the directory.
  */
 export function resolveSource(
-  citation: Citation,
+  citation: Pick<Citation, "named" | "hasDirectory">,
   files: readonly string[],
 ): Resolution {
   if (citation.hasDirectory) {
@@ -346,6 +366,120 @@ export function outOfRange(
 export function lineCount(contents: string): number {
   if (contents.length === 0) return 0;
   return contents.split("\n").length - (contents.endsWith("\n") ? 1 : 0);
+}
+
+/** Lines outside fences, 1-based. A specimen in a code block is not a claim. */
+function proseLines(text: string): readonly (readonly [number, string])[] {
+  const out: (readonly [number, string])[] = [];
+  let fenced = false;
+  for (const [index, line] of text.split("\n").entries()) {
+    if (FENCE.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (!fenced) out.push([index + 1, line]);
+  }
+  return out;
+}
+
+export interface Anchor {
+  readonly named: string;
+  readonly hasDirectory: boolean;
+  readonly symbol: string;
+  readonly line: number;
+  readonly raw: string;
+}
+
+export function extractAnchors(text: string): readonly Anchor[] {
+  return proseLines(text).flatMap(([line, content]) =>
+    [...content.matchAll(ANCHOR)].map((match) => {
+      const named = match[1] ?? "";
+      return {
+        named,
+        hasDirectory: named.includes("/"),
+        symbol: match[2] ?? "",
+        line,
+        raw: match[0],
+      };
+    }),
+  );
+}
+
+/** Whole-word, so `prune` does not pass on a file that only has `pruneBackups`. */
+export function containsIdentifier(contents: string, symbol: string): boolean {
+  return new RegExp(`(?<![\\w$])${symbol}(?![\\w$])`, "u").test(contents);
+}
+
+/**
+ * Directory-rooted paths named without a line (NEW-34). `threat-model.md` §5.9 once cited an
+ * untracked test file by path and nothing checked it. A build output under `dist/` is not
+ * tracked by design and is exempt.
+ */
+export function extractPathMentions(
+  text: string,
+): readonly { readonly path: string; readonly line: number }[] {
+  return proseLines(text).flatMap(([line, content]) =>
+    [...content.matchAll(PATH_MENTION)]
+      .map((match) => match[1] ?? "")
+      .filter((path) => !path.includes("/dist/"))
+      .map((path) => ({ path, line })),
+  );
+}
+
+/** The `NEW-n` ids that still have a row in `BACKLOG.md` §1's tables. */
+export function openBacklogIds(backlog: string): ReadonlySet<string> {
+  return new Set([...backlog.matchAll(/^\| (NEW-\d+) \|/gmu)].map((match) => match[1] ?? ""));
+}
+
+/** A line that sends the reader to a backlog row, or asserts one is open. */
+const BACKLOG_POINTER = /\bBACKLOG\b|\b(?:is|stays|remains|still) open\b/u;
+/** A line that says the row it names is finished. */
+const CLOSURE = /\b(?:closed|closes|removed|superseded|withdrawn|settled|answered|decided|resolved)\b/iu;
+
+/**
+ * **A removed row cited in the present tense** (NEW-34). Rows leave `BACKLOG.md` when they
+ * close, so a line pointing at one — "(`BACKLOG.md` NEW-85)", "NEW-15 is open" — without
+ * saying it closed tells the reader a live defect exists where none is tracked, or hides that
+ * the prose describes code that has since changed. Historical mentions carry a closure word
+ * on the same line and pass.
+ */
+export function staleBacklogReferences(
+  text: string,
+  open: ReadonlySet<string>,
+): readonly { readonly id: string; readonly line: number }[] {
+  return proseLines(text).flatMap(([line, content]) =>
+    BACKLOG_POINTER.test(content) && !CLOSURE.test(content)
+      ? [...content.matchAll(/\bNEW-\d+\b/gu)]
+          .map((match) => match[0])
+          .filter((id) => !open.has(id))
+          .map((id) => ({ id, line }))
+      : [],
+  );
+}
+
+const NUMBER_WORDS = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
+  "nineteen", "twenty",
+];
+
+/**
+ * **A count a document restates is checked against the tree, not trusted** (NEW-34). The
+ * notes said "nine suites" of `tests/security/` for weeks after it held eleven. Only the
+ * first count after the path in the same sentence or table cell is read, so a dated
+ * historical count later in the sentence stays prose.
+ */
+export function statedSuiteCounts(
+  text: string,
+  directory: string,
+): readonly { readonly count: number; readonly line: number }[] {
+  const claim = new RegExp(`\`${directory}\`[^.|]*?\\b(\\w+) suites\\b`, "u");
+  return proseLines(text).flatMap(([line, content]) => {
+    const word = claim.exec(content)?.[1];
+    if (word === undefined) return [];
+    const count = /^\d+$/u.test(word) ? Number(word) : NUMBER_WORDS.indexOf(word.toLowerCase());
+    return [{ count, line }];
+  });
 }
 
 async function repository(): Promise<{
@@ -389,15 +523,35 @@ describe("every documented citation resolves", () => {
     const { root, files, docs } = await repository();
     const lengths = new Map<string, number>();
     const perDocument = new Map<string, number>();
+    const withLines = new Map<string, number>();
     const broken: string[] = [];
+    const contents = new Map<string, string>();
+    const read = async (path: string): Promise<string> => {
+      let text = contents.get(path);
+      if (text === undefined) {
+        text = await readFile(join(root, path), "utf8");
+        contents.set(path, text);
+      }
+      return text;
+    };
 
     const knownBasenames = new Set(files.map((file) => basename(file)));
     for (const doc of docs) {
-      const citations = extractCitations(
-        await readFile(join(root, doc), "utf8"),
-        knownBasenames,
-      );
-      perDocument.set(doc, citations.length);
+      const text = await read(doc);
+      const citations = extractCitations(text, knownBasenames);
+      const anchors = extractAnchors(text);
+      /** An anchor counts toward the floor, so converting a line citation to one never trips it. */
+      perDocument.set(doc, citations.length + anchors.length);
+      withLines.set(doc, citations.length);
+      for (const anchor of anchors) {
+        const where = `${doc}:${String(anchor.line)} ${anchor.raw}`;
+        const resolution = resolveSource(anchor, files);
+        if (resolution.kind !== "resolved") {
+          broken.push(`${where} does not resolve to exactly one tracked file (${resolution.kind})`);
+        } else if (!containsIdentifier(await read(resolution.path), anchor.symbol)) {
+          broken.push(`${where}: ${resolution.path} does not contain \`${anchor.symbol}\``);
+        }
+      }
       for (const citation of citations) {
         const where = `${doc}:${String(citation.line)} ${citation.raw}`;
         const resolution = resolveSource(citation, files);
@@ -415,7 +569,7 @@ describe("every documented citation resolves", () => {
 
         let length = lengths.get(resolution.path);
         if (length === undefined) {
-          length = lineCount(await readFile(join(root, resolution.path), "utf8"));
+          length = lineCount(await read(resolution.path));
           lengths.set(resolution.path, length);
         }
         if (outOfRange(citation, length)) {
@@ -453,14 +607,79 @@ describe("every documented citation resolves", () => {
        * file goes unfloored. `BASELINES` does not have this hole; this closes the
        * asymmetry.
        */
-      expect(perDocument.has(doc), `${doc} is no longer in docs/`).toBe(true);
+      expect(withLines.has(doc), `${doc} is no longer in docs/`).toBe(true);
       expect(
-        perDocument.get(doc) ?? 0,
+        withLines.get(doc) ?? 0,
         `${doc} now carries citations and needs a baseline`,
       ).toBe(0);
     }
 
     expect(broken).toStrictEqual([]);
+  });
+});
+
+/**
+ * **Scoped to `docs/architecture/`, the notes whose claims are evidence.** Plans, specs and
+ * the backlog under `docs/superpowers/` cite paths a task is about to create and rows by
+ * history, and migration notes name artifacts written at cutover; holding those to "tracked
+ * now" and "open now" would be wrong rather than strict.
+ */
+describe("architecture notes state only what the tree still holds", () => {
+  const architecture = async (): Promise<{
+    readonly root: string;
+    readonly files: readonly string[];
+    readonly notes: readonly (readonly [string, string])[];
+  }> => {
+    const { root, files, docs } = await repository();
+    const paths = docs.filter((doc) => doc.startsWith("docs/architecture/"));
+    expect(paths.length, "no architecture note was enumerated").toBeGreaterThan(0);
+    const notes = await Promise.all(
+      paths.map(async (doc) => [doc, await readFile(join(root, doc), "utf8")] as const),
+    );
+    return { root, files, notes };
+  };
+
+  it("names only tracked files when it names a path without a line", async () => {
+    const { files, notes } = await architecture();
+    const tracked = new Set(files);
+    const mentions = notes.flatMap(([doc, text]) =>
+      extractPathMentions(text).map((mention) => ({ doc, ...mention })),
+    );
+    expect(mentions.length, "no path mention extracted").toBeGreaterThan(0);
+    expect(
+      mentions
+        .filter((mention) => !tracked.has(mention.path))
+        .map((mention) => `${mention.doc}:${String(mention.line)} ${mention.path} is not tracked`),
+    ).toStrictEqual([]);
+  });
+
+  it("never points at a removed backlog row as though it were open", async () => {
+    const { root, notes } = await architecture();
+    const open = openBacklogIds(await readFile(join(root, "docs/superpowers/BACKLOG.md"), "utf8"));
+    expect(open.size, "no open row parsed from BACKLOG.md").toBeGreaterThan(0);
+    expect(
+      notes.flatMap(([doc, text]) =>
+        staleBacklogReferences(text, open).map(
+          (stale) => `${doc}:${String(stale.line)} points at ${stale.id}, which has no row`,
+        ),
+      ),
+    ).toStrictEqual([]);
+  });
+
+  it("states the security suite count the tree holds", async () => {
+    const { files, notes } = await architecture();
+    const suites = files.filter(
+      (file) => file.startsWith("tests/security/") && file.endsWith(".test.ts"),
+    ).length;
+    const claims = notes.flatMap(([doc, text]) =>
+      statedSuiteCounts(text, "tests/security/").map((claim) => ({ doc, ...claim })),
+    );
+    expect(claims.length, "no note states the suite count").toBeGreaterThan(0);
+    expect(
+      claims
+        .filter((claim) => claim.count !== suites)
+        .map((claim) => `${claim.doc}:${String(claim.line)} states ${String(claim.count)}, the tree holds ${String(suites)}`),
+    ).toStrictEqual([]);
   });
 });
 
@@ -624,6 +843,124 @@ describe("the extractor and the predicate this gate is built on", () => {
     );
     expect(found).toHaveLength(2);
     expect(found[1]).toMatchObject({ named: "apps/cli/src/commands/ingest.ts", start: 459 });
+  });
+
+  /**
+   * NEW-34: a slashed path with no line neither set nor cleared the carrier, so the range
+   * after it was bounds-checked against the earlier file — in bounds, green, wrong file.
+   */
+  it("clears the carrier on a directory-rooted path named without a line", () => {
+    expect(
+      extractCitations(
+        "`apps/cli/src/commands/ingest.ts:245`; see `tests/security/network.test.ts` at `:459`",
+        NO_KNOWN_FILES,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("keeps carrying past a git show path and a path nested in another", () => {
+    const found = extractCitations(
+      [
+        "`apps/cli/src/commands/ingest.ts:245`,",
+        "`git show abc123:docs/superpowers/plans/gone.md`, `.agents/plugins/marketplace.json`,",
+        "then `:459`",
+      ].join("\n"),
+      NO_KNOWN_FILES,
+    );
+    expect(found.map((c) => [c.named, c.start])).toStrictEqual([
+      ["apps/cli/src/commands/ingest.ts", 245],
+      ["apps/cli/src/commands/ingest.ts", 459],
+    ]);
+  });
+
+  it("extracts a lineless path, but not a build output, a prefix or a fenced specimen", () => {
+    expect(
+      extractPathMentions(
+        [
+          "see `tests/security/backup-prune.test.ts` and `apps/cli/dist/bin.js`",
+          "`packages/core/src/x.ts:12` is a citation, `git show abc:docs/a.md` history",
+          "```",
+          "`tests/security/specimen.test.ts`",
+          "```",
+        ].join("\n"),
+      ),
+    ).toStrictEqual([{ path: "tests/security/backup-prune.test.ts", line: 1 }]);
+  });
+
+  it("extracts an anchor, and not from a fenced block", () => {
+    expect(
+      extractAnchors(
+        ["the prune is `apps/cli/src/commands/ingest.ts` — `pruneBackups` here", "```", "`a/b.ts` — `c`", "```"].join("\n"),
+      ),
+    ).toStrictEqual([
+      {
+        named: "apps/cli/src/commands/ingest.ts",
+        hasDirectory: true,
+        symbol: "pruneBackups",
+        line: 1,
+        raw: "`apps/cli/src/commands/ingest.ts` — `pruneBackups`",
+      },
+    ]);
+  });
+
+  it("resolves an anchor's basename like a citation's, refusing an ambiguous one", () => {
+    const [anchor] = extractAnchors("`types.ts` — `DeveloperOsConfigV1`");
+    expect(anchor).toBeDefined();
+    expect(resolveSource(anchor as Anchor, files)).toMatchObject({ kind: "ambiguous" });
+  });
+
+  it("checks an anchor's identifier as a whole word", () => {
+    const contents = "export function pruneBackups(): void {}\nconst $x = pruneBackupsLater;";
+    expect(containsIdentifier(contents, "pruneBackups")).toBe(true);
+    expect(containsIdentifier(contents, "prune")).toBe(false);
+    expect(containsIdentifier(contents, "Backups")).toBe(false);
+    expect(containsIdentifier(contents, "x")).toBe(false);
+  });
+
+  it("parses the open backlog ids from the table rows only", () => {
+    expect([
+      ...openBacklogIds(["| NEW-7 | a | b |", "| NEW-34 | c | d |", "NEW-99 in prose", "|NEW-5| no space |"].join("\n")),
+    ]).toStrictEqual(["NEW-7", "NEW-34"]);
+  });
+
+  it("rejects a pointer to a removed backlog row that does not say it closed", () => {
+    const open = new Set(["NEW-7"]);
+    expect(
+      staleBacklogReferences(
+        [
+          "cannot be uninstalled until Phase 4b (`BACKLOG.md` NEW-85).",
+          "NEW-15 is open and tracked.",
+          "`BACKLOG.md` §1 NEW-16, closed 2026-08-17.",
+          "the closed `BACKLOG.md` NEW-1 fixed this",
+          "one open decision remains in `BACKLOG.md` §1: NEW-7",
+          "NEW-21 settled it; the answer was no",
+          "the parked NEW-14 case became a refusal",
+        ].join("\n"),
+        open,
+      ),
+    ).toStrictEqual([
+      { id: "NEW-85", line: 1 },
+      { id: "NEW-15", line: 2 },
+    ]);
+  });
+
+  it("reads the first suite count stated after the directory, in words or digits", () => {
+    expect(
+      statedSuiteCounts(
+        [
+          "`tests/security/` holds **eleven suites**; on 2026-08-17 it held nine suites",
+          "| suites | `tests/security/`, 12 suites |",
+          "`tests/security/` holds many suites",
+          "nine suites, with no directory named",
+          "`tests/security/`. Elsewhere, nine suites",
+        ].join("\n"),
+        "tests/security/",
+      ),
+    ).toStrictEqual([
+      { count: 11, line: 1 },
+      { count: 12, line: 2 },
+      { count: -1, line: 3 },
+    ]);
   });
 
   it("treats an empty file as having no lines a citation can name", () => {
