@@ -14,7 +14,7 @@ import {
 } from "@developer-os/core";
 
 import { applyForwardRef, committedForwardTargets, compensateForwardRef, type UpdateFoundationPortV1, type UpdateTargetHashPortV1 } from "./owner-participant.js";
-import { participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { participantPlanFileHash, participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
 
 export interface SchemaMigrationParticipantDependenciesV1 {
   readonly journals: UpdateParticipantJournalStore;
@@ -110,12 +110,12 @@ export class SchemaMigrationParticipant {
       }
       await journals.remove(step.journal.finalPath);
     }
-    await journals.remove(step.planRef.path, step.planRef.hash);
+    await journals.remove(step.planRef.path, participantPlanFileHash(step.planRef, step.plan));
   }
 
   private async openJournal(step: SchemaMigrationStepV1): Promise<SchemaMigrationExecutionJournalV1> {
     const { plan, planRef, journal } = step;
-    if (planRef.hash !== updateParticipantDocumentHash(plan) || planRef.id !== plan.id || journal.kind !== "schema_migration" || journal.id !== plan.id || journal.planHash !== planRef.hash) refuseParticipant("update_migration_binding", journal.finalPath);
+    if (planRef.hash !== updateParticipantDocumentHash("schema_migration", plan) || planRef.id !== plan.id || journal.kind !== "schema_migration" || journal.id !== plan.id || journal.planHash !== planRef.hash) refuseParticipant("update_migration_binding", journal.finalPath);
     return validateSchemaMigrationExecutionJournal(await this.#dependencies.journals.open(journal), plan);
   }
 

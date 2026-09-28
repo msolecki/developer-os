@@ -9,7 +9,8 @@ import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canon
 import type { AllocatedLifecycleIdV1, EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ArtifactOwner, ManagedArtifactV2 } from "../manifest/types.js";
-import { parseLeafPlanId, type ImmutableUpdatePlanRefV1, type OwnerExternalEffectIdV1, type UpdateLeafPlanIdV1 } from "./construction.js";
+import { updateLeafPlanHash } from "./bundle-participant.js";
+import { parseLeafPlanId, type ImmutableUpdatePlanRefV1, type OwnerExternalEffectIdV1, type UpdateLeafPlanIdV1, type UpdateLeafPlanKindV1 } from "./construction.js";
 import { checkUpdateFoundationMutations, type SchemaMigrationPlanV1, type UpdateFoundationParticipantRefV2, type UpdatePayloadRefV1 } from "./migrations.js";
 import { OWNER_UPDATE_ORDER, MAX_OWNER_CHANGED_FILE_BYTES } from "./owner.js";
 import {
@@ -138,6 +139,7 @@ export async function compensateParticipants(reached: ReachedUpdateStepsV1, adap
 
 export type PersistedManagedPathStateV1 =
   | { readonly state: "absent" }
+  | { readonly state: "ephemeral_present"; readonly mode: 384; readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 }
   | { readonly state: "file"; readonly mode: 384 | 448; readonly hash: LowerHexSha256; readonly bytes: number; readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 }
   | { readonly state: "directory"; readonly mode: 448; readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 }
   | { readonly state: "symlink"; readonly targetBytes: number; readonly targetHash: LowerHexSha256; readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 };
@@ -216,9 +218,9 @@ export function updateParticipantDocumentBytes(value: unknown): Uint8Array {
   return new TextEncoder().encode(canonical(value));
 }
 
-/** The immutable plan ref hash: raw SHA-256 of the exact persisted bytes. */
-export function updateParticipantDocumentHash(value: unknown): LowerHexSha256 {
-  return createHash("sha256").update(updateParticipantDocumentBytes(value)).digest("hex") as LowerHexSha256;
+/** The immutable plan ref hash (D72 P7(a)): §9.2's `developer-os/update-leaf/<kind>/v1\0` domain over the exact persisted bytes. */
+export function updateParticipantDocumentHash(kind: UpdateLeafPlanKindV1, value: unknown): LowerHexSha256 {
+  return updateLeafPlanHash(kind, updateParticipantDocumentBytes(value));
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -268,6 +270,11 @@ function pathState(value: unknown, label: string): PersistedManagedPathStateV1 {
     exactKeys(value, ["state"], label);
     return { state: "absent" };
   }
+  if (state === "ephemeral_present") {
+    const input = exactKeys(value, ["state", "mode", "dev", "ino"], label);
+    if (input.mode !== 384) fail(`${label}.mode`);
+    return { state: "ephemeral_present", mode: 384, dev: parseUInt64Decimal(input.dev), ino: parseUInt64Decimal(input.ino) };
+  }
   if (state === "file") {
     const input = exactKeys(value, ["state", "mode", "hash", "bytes", "dev", "ino"], label);
     if (input.mode !== 384 && input.mode !== 448) fail(`${label}.mode`);
@@ -300,6 +307,21 @@ function installedHash(artifact: ManagedArtifactV2): LowerHexSha256 | null {
   return verification.installedHash ?? null;
 }
 
+function isEphemeral(artifact: ManagedArtifactV2 | null): boolean {
+  return artifact?.kind === "file" && artifact.verification.mode === "ephemeral";
+}
+
+/**
+ * D72 P5: an ephemeral reservation only keeps, over an observed `absent` or `ephemeral_present`
+ * before, and its bytes are never read; `ephemeral_present` is legal nowhere else.
+ */
+function checkEphemeralOperation(operation: PersistedOwnerChangeOperationV1, before: PersistedManagedPathStateV1, label: string): boolean {
+  if (!isEphemeral(operation.afterArtifact) && before.state !== "ephemeral_present") return false;
+  if (operation.operation !== "keep" || !isEphemeral(operation.afterArtifact) || operation.content !== null) fail(`${label}: an ephemeral reservation only keeps`);
+  if (before.state !== "absent" && before.state !== "ephemeral_present") fail(`${label}: an ephemeral keep over a hashed before`);
+  return true;
+}
+
 /**
  * Spec 2 §9.2's `PersistedOwnerChangeOperationV1` table: create needs absent-before plus an after
  * artifact and payload; replace/remove need a present regular-file before; keep is byte-identical;
@@ -314,6 +336,7 @@ function checkOperation(operation: PersistedOwnerChangeOperationV1, plan: OwnerU
   const after = operation.afterArtifact;
   if (after !== null && (after.owner !== plan.owner || after.path !== operation.targetPath)) fail(`${label}.afterArtifact: another owner or path`);
   const content = operation.content === null ? null : payloadRef(operation.content, plan, context, `${label}.content`);
+  if (checkEphemeralOperation(operation, before, label)) return;
   switch (operation.operation) {
     case "keep":
       if (before.state === "absent" || after === null || content !== null) fail(`${label}: keep is not byte-identical`);
@@ -452,7 +475,7 @@ function journalHeader(input: Record<string, unknown>, plan: { readonly id: stri
 export function validateOwnerUpdateJournal(value: unknown, plan: OwnerUpdatePlanV1): OwnerUpdateJournalV1 {
   const label = "OwnerUpdateJournalV1";
   const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "nextForwardFoundation", "nextExternalEffect", "compensationNext", "compactionNext", "createdAt", "updatedAt"], label);
-  const { createdAt, updatedAt } = journalHeader(input, plan, updateParticipantDocumentHash(plan), label);
+  const { createdAt, updatedAt } = journalHeader(input, plan, updateParticipantDocumentHash("owner_update", plan), label);
   if (!OWNER_JOURNAL_PHASES.includes(input.phase as OwnerUpdateJournalV1["phase"])) fail(`${label}.phase`);
   const phase = input.phase as OwnerUpdateJournalV1["phase"];
   const forwardCount = plan.foundation.length / 2;
@@ -648,7 +671,7 @@ export function validateOwnerExternalEffectPlan(value: unknown, owner: OwnerUpda
   integer(plan.maximumJournalBytes, 1, MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES, `${label}.maximumJournalBytes`);
   integer(plan.maximumEvidenceBytes, 1, MAXIMUM_OWNER_EXTERNAL_EFFECT_EVIDENCE_BYTES, `${label}.maximumEvidenceBytes`);
   if (updateParticipantDocumentBytes(plan).byteLength > maximum) fail(`${label}: exceeds its plan bytes`);
-  if (ref.hash !== updateParticipantDocumentHash(plan)) fail(`${label}: differs from the owner plan's ref`);
+  if (ref.hash !== updateParticipantDocumentHash("owner_external_effect", plan)) fail(`${label}: differs from the owner plan's ref`);
   return plan;
 }
 
@@ -659,7 +682,7 @@ export function validateOwnerExternalEffectPlan(value: unknown, owner: OwnerUpda
 export function validateOwnerExternalEffectJournal(value: unknown, plan: OwnerExternalEffectPlanV1): OwnerExternalEffectJournalV1 {
   const label = "OwnerExternalEffectJournalV1";
   const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "direction", "nextTransition", "evidenceHash", "createdAt", "updatedAt"], label);
-  const { createdAt, updatedAt } = journalHeader(input, plan, updateParticipantDocumentHash(plan), label);
+  const { createdAt, updatedAt } = journalHeader(input, plan, updateParticipantDocumentHash("owner_external_effect", plan), label);
   if (!EFFECT_JOURNAL_PHASES.includes(input.phase as OwnerExternalEffectJournalV1["phase"])) fail(`${label}.phase`);
   const phase = input.phase as OwnerExternalEffectJournalV1["phase"];
   const direction = input.direction;
@@ -685,7 +708,7 @@ export function ownerExternalEffectEvidenceHash(evidence: OwnerExternalEffectEvi
 export function validateOwnerExternalEffectEvidence(value: unknown, plan: OwnerExternalEffectPlanV1, direction: "forward" | "compensating", observedStateHash: LowerHexSha256): OwnerExternalEffectEvidenceV1 {
   const label = "OwnerExternalEffectEvidenceV1";
   const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "planHash", "direction", "observedStateHash", "processPolicyHash", "exitCode", "redactedStdoutHash", "redactedStderrHash", "completedAt"], label);
-  if (input.schemaVersion !== 1 || input.id !== plan.id || input.coordinatorId !== plan.coordinatorId || input.planHash !== updateParticipantDocumentHash(plan)) fail(`${label}: not this plan's evidence`);
+  if (input.schemaVersion !== 1 || input.id !== plan.id || input.coordinatorId !== plan.coordinatorId || input.planHash !== updateParticipantDocumentHash("owner_external_effect", plan)) fail(`${label}: not this plan's evidence`);
   if (input.direction !== direction || input.observedStateHash !== observedStateHash || input.processPolicyHash !== plan.processPolicyHash || input.exitCode !== 0) fail(`${label}: not the expected observation`);
   parseLowerHexSha256(input.redactedStdoutHash);
   parseLowerHexSha256(input.redactedStderrHash);
@@ -925,13 +948,13 @@ export function ownerPostimagesHash(rows: readonly OwnerPostimageRowInputV1[]): 
   return domainHash(
     "developer-os/update-owner-postimages/v1\0",
     rows.map((row) => {
-      if (row.ref.hash !== updateParticipantDocumentHash(row.plan) || row.ref.id !== row.plan.id) fail("ownerPostimagesHash: a ref that is not its plan");
+      if (row.ref.hash !== updateParticipantDocumentHash("owner_update", row.plan) || row.ref.id !== row.plan.id) fail("ownerPostimagesHash: a ref that is not its plan");
       if (!same(row.effects.map((effect) => effect.ref), row.plan.externalEffects)) fail("ownerPostimagesHash: effects are not the owner plan's refs");
       return {
         ref: row.ref,
         operations: row.plan.operations.map((operation) => ({ targetPath: operation.targetPath, after: operation.afterArtifact ?? { state: "absent" } })),
         effects: row.effects.map((effect) => {
-          if (effect.ref.hash !== updateParticipantDocumentHash(effect.plan)) fail("ownerPostimagesHash: an effect ref that is not its plan");
+          if (effect.ref.hash !== updateParticipantDocumentHash("owner_external_effect", effect.plan)) fail("ownerPostimagesHash: an effect ref that is not its plan");
           return { ref: effect.ref, proposedStateHash: effect.plan.proposedStateHash };
         }),
       };
@@ -947,7 +970,7 @@ export function migrationPostimagesHash(rows: readonly { readonly ref: Immutable
   return domainHash(
     "developer-os/update-migration-postimages/v1\0",
     rows.map(({ ref, plan }) => {
-      if (ref.id !== plan.id || ref.hash !== updateParticipantDocumentHash(plan)) fail("migrationPostimagesHash: a ref that is not its plan");
+      if (ref.id !== plan.id || ref.hash !== updateParticipantDocumentHash("schema_migration", plan)) fail("migrationPostimagesHash: a ref that is not its plan");
       return { ref, id: plan.id, domain: plan.domain, fromVersion: plan.fromVersion, toVersion: plan.toVersion, mutations: plan.mutations.map((mutation) => ({ path: mutation.path, afterHash: mutation.afterHash })) };
     }),
   );

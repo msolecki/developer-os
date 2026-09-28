@@ -126,7 +126,7 @@ async function stateFixture(role: "release_trust" | "active_release" | "rollback
   const kind = role === "release_trust" ? "release_trust_state" : role === "active_release" ? "active_release_state" : "rollback_record_state";
   const planPath = updateLeafPlanPath(root, kind, id);
   await writeOwned(planPath, updateParticipantDocumentBytes(plan));
-  const planHash = updateParticipantDocumentHash(plan);
+  const planHash = updateParticipantDocumentHash(kind, plan);
   const initial = encoder.encode(encodeCanonicalJson({ schemaVersion: 1, kind, id, coordinatorId, planHash, phase: "planned", nextTransition: 0, compensationNext: null, createdAt: at, updatedAt: at }));
   const stagedPath = parseCanonicalAbsolutePathText(`${root}/update/initial-journals/${kind}/${id}.json`);
   await writeOwned(stagedPath, initial);
@@ -234,7 +234,7 @@ describe("canonical state participant", () => {
     expect(Object.keys(step.plan.after)).not.toContain("dev");
     expect(Object.keys(step.plan.after)).not.toContain("ino");
     expect(Object.keys(step.plan.before)).toEqual(expect.arrayContaining(["dev", "ino"]));
-    expect(updateParticipantDocumentHash(step.plan)).toBe(step.planRef.hash);
+    expect(updateParticipantDocumentHash(step.planRef.kind, step.plan)).toBe(step.planRef.hash);
     await expect(participant.apply(step)).resolves.toEqual({ state: "verified" });
   });
 

@@ -96,7 +96,7 @@ async function readJson(path: string): Promise<Record<string, unknown> | null> {
 async function stage(root: CanonicalAbsolutePathV1, kind: UpdateLeafPlanKindV1 & UpdateInitialJournalRefV1["kind"], id: string, plan: unknown, initial: Record<string, unknown>) {
   const planPath = updateLeafPlanPath(root, kind, id);
   await writeOwned(planPath, updateParticipantDocumentBytes(plan));
-  const planHash = updateParticipantDocumentHash(plan);
+  const planHash = updateParticipantDocumentHash(kind, plan);
   const bytes = encoder.encode(encodeCanonicalJson({ ...initial, planHash, createdAt: at, updatedAt: at }));
   const stagedPath = parseCanonicalAbsolutePathText(`${root}/update/initial-journals/${kind}/${id}.json`);
   await writeOwned(stagedPath, bytes);
@@ -323,5 +323,15 @@ describe("owner update participant", () => {
     expect(events).toEqual([`compact:${tx(1)}`, `compact:${tx(2)}`]);
     expect(await readJson(step.journal.finalPath)).toBeNull();
     expect(await readJson(step.planRef.path)).toBeNull();
+  });
+
+  it("refuses a plan ref and journal bound by a plain SHA-256 instead of the leaf domain (D72 P7(a))", async () => {
+    const { step, events, participant } = await fixture({ effect: false });
+    const plain = sha(updateParticipantDocumentBytes(step.plan));
+    const legacy = { ...step, planRef: { ...step.planRef, hash: plain }, journal: { ...step.journal, planHash: plain } };
+    await expect(participant.applyFiles(legacy)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(participant.compact(legacy)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(events).toEqual([]);
+    expect(await readJson(step.planRef.path)).not.toBeNull();
   });
 });

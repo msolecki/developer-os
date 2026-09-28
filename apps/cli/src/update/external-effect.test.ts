@@ -113,7 +113,7 @@ async function fixture(): Promise<EffectFixture> {
   };
   const planPath = updateLeafPlanPath(root, "owner_external_effect", effectId);
   await writeOwned(planPath, updateParticipantDocumentBytes(plan));
-  const planHash = updateParticipantDocumentHash(plan);
+  const planHash = updateParticipantDocumentHash("owner_external_effect", plan);
   const initial = encoder.encode(encodeCanonicalJson({ schemaVersion: 1, id: effectId, coordinatorId, planHash, phase: "planned", direction: "forward", nextTransition: 0, evidenceHash: null, createdAt: at, updatedAt: at }));
   const stagedPath = parseCanonicalAbsolutePathText(`${root}/update/initial-journals/owner_external_effect/${effectId}.json`);
   await writeOwned(stagedPath, initial);
