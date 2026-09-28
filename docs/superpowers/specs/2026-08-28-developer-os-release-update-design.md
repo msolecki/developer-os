@@ -194,7 +194,12 @@ item names, the item governs, and that section's text is not rewritten.
   `update_coordinator_compensated`. (c) **Planner and verifier capability gate (D72 Q4-A):** the gate is the
   repository-level transitive graph check of §2 alone; no capability scan runs at spawn time, because
   every real planner and verifier entry reads its counted request from stdin
-  (`packages/security/src/update/verifier-process.ts:106-107`). (d) **Fallback handoff (D72 Q5-A):** the
+  (`packages/security/src/update/verifier-process.ts:106-107`). Until Task 11b's packer ships a compiled
+  verifier entrypoint, the graph check covers the planner entrypoints only; the verifier joins
+  `PLANNER_ENTRYPOINTS` with that packer, and no verifier capability gate exists before it (review,
+  2026-09-28). The persisted-format changes of this pass (`compensationCause` at `schemaVersion: 2`, the
+  leaf-domain migration hash, P8's bookkeeping grammar) carry no migration because no production
+  journal or plan predates them; each needs one no later than Task 11b. (d) **Fallback handoff (D72 Q5-A):** the
   production source of `UpdateFallbackHandoffV1` is the launcher's FD 3 document, extended by Task 11b;
   until then the production composer refuses before allocation with `update_fallback_unavailable`,
   exit 4, and only the synthetic fixture supplies one. This item does not make Task 11b unnecessary.
