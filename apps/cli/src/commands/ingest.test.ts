@@ -1604,12 +1604,12 @@ describe("runIngest, resolved against this vault rather than a default", () => {
 });
 
 /**
- * `prepareAgentWorkspace` decides on `lstat`, not on `mkdir` — `mkdir` with
- * `recursive` succeeds on an existing directory, follows a symlink at the leaf,
- * and does not re-apply `mode` to something already there. These drive it
- * through an injected filesystem because the real path is a fixed name under
- * `tmpdir()`, which every parallel test file would share.
+ * `prepareAgentWorkspace` decides on `lstat`, not on `mkdir` alone. NEW-76: the leaf is unique
+ * per run and created without `recursive`, so an existing path fails rather than being adopted.
+ * These drive it through an injected filesystem so no unit case touches the real `tmpdir()`.
  */
+const WORKSPACE_LEAF = /^developer-os-agent-workspace-[0-9a-f-]{36}$/;
+
 describe("prepareAgentWorkspace", () => {
   function contextWith(fs: {
     mkdir?: () => Promise<void>;
@@ -1637,7 +1637,20 @@ describe("prepareAgentWorkspace", () => {
   it("returns a private directory this user owns", async () => {
     const workspace = await prepareAgentWorkspace(contextWith({}));
     expect(isAbsolute(workspace)).toBe(true);
-    expect(basename(workspace)).toBe("developer-os-agent-workspace");
+    expect(basename(workspace)).toMatch(WORKSPACE_LEAF);
+  });
+
+  /** NEW-76: a fixed leaf was one shared directory every run and every test file reused. */
+  it("gives each run its own leaf", async () => {
+    const context = contextWith({});
+    expect(await prepareAgentWorkspace(context)).not.toBe(await prepareAgentWorkspace(context));
+  });
+
+  /** Without `recursive`, `mkdir` fails `EEXIST` on a pre-created path instead of adopting it. */
+  it("creates the leaf exclusively, never adopting an existing path", async () => {
+    const mkdir = vi.fn((): Promise<void> => Promise.resolve());
+    const workspace = await prepareAgentWorkspace(contextWith({ mkdir }));
+    expect(mkdir).toHaveBeenCalledWith(workspace, { mode: 0o700 });
   });
 
   it("refuses a symlink at the leaf, which mkdir reports as success", async () => {
@@ -1749,7 +1762,7 @@ describe("prepareAgentWorkspace", () => {
         }),
       ),
     ).rejects.toMatchObject({
-      paths: [join(tmpdir(), "developer-os-agent-workspace")],
+      paths: [expect.stringMatching(/\/developer-os-agent-workspace-[0-9a-f-]{36}$/) as unknown as string],
       recovery: expect.stringContaining("TMPDIR") as unknown as string,
     });
   });
@@ -1860,6 +1873,31 @@ describe("runIngest, the agent call", () => {
     /** The property the architecture note argues for: outside the closed set. */
     expect(workingRoot?.startsWith(fixture.paths.home)).toBe(false);
     expect(workingRoot?.startsWith(fixture.paths.brain)).toBe(false);
+  });
+
+  /** NEW-76: the scratch leaf is the run's own and is removed once the child exits. */
+  it("leaves no scratch directory behind after a codex run", async () => {
+    const fixture = await installedFixture("ingest-codex-scratch-removed", {
+      claude: false,
+    });
+    const seeded = await fixture.seedAccepted("an observation for codex");
+    fixture.reply(() => oneNote(seeded.id));
+    const scratch = join(fixture.root, "scratch-tmp");
+    await nodeFs.mkdir(scratch, { mode: 0o700 });
+    vi.stubEnv("TMPDIR", scratch);
+    expect(tmpdir()).toBe(scratch);
+    let during: string[] = [];
+    fixture.duringCall(async () => {
+      during = await nodeFs.readdir(scratch);
+    });
+
+    await fixture.run();
+
+    const call = fixture.calls[0];
+    const workingRoot = call?.args[call.args.indexOf("-C") + 1] ?? "";
+    expect(basename(workingRoot)).toMatch(WORKSPACE_LEAF);
+    expect(during).toStrictEqual([basename(workingRoot)]);
+    expect(await nodeFs.readdir(scratch)).toStrictEqual([]);
   });
 
   it("falls to codex when claude is not installed", async () => {

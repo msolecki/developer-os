@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
@@ -830,7 +830,7 @@ function errnoCode(error: unknown): string {
  * `--ignore-user-config` leaves auth on `$CODEX_HOME`, which derives from
  * `$HOME`. NEW-75 is the row for that; see `docs/architecture/vendor-invocation.md`.
  */
-const AGENT_WORKSPACE_LEAF = "developer-os-agent-workspace";
+const AGENT_WORKSPACE_PREFIX = "developer-os-agent-workspace-";
 
 /**
  * **The directory travels as a `path`, never inside the message.** `failureFrom`
@@ -868,34 +868,22 @@ function workspaceRefusal(workspace: string, complaint: string): IngestRefusal {
  * before the vendor branch instead, it refused the default vendor over a path that
  * run does not use.
  *
- * `mkdir` with `recursive` reports success on an existing directory *and*
- * follows a symlink at the leaf, and it does not re-apply `mode` to something
- * already there — so it settles almost nothing on its own. The `lstat` after it
- * is what decides, and it decides on the link rather than its target.
+ * **One leaf per run, removed after it (NEW-76).** The name carries a random
+ * UUID and `mkdir` runs without `recursive`, so a path that already exists —
+ * a symlink, or a directory another local user pre-created on a shared `/tmp`
+ * (what `tmpdir()` falls back to under launchd, cron or a container) — fails
+ * `EEXIST` instead of being adopted. That is `mkdtemp`'s property, bought through
+ * the `CliFileSystem.mkdir` the injected filesystems already carry. The caller
+ * removes the leaf with `removeAgentWorkspace` once the child exits.
  *
- * **Ownership and mode are checked because the path is predictable.**
- * `tmpdir()` reads `$TMPDIR` and falls back to `/tmp` when it is unset, which is
- * what a launchd daemon, a cron entry or a container gives this process. On a
- * shared `/tmp` another local user can pre-create this exact name; without these
- * two checks `recursive: true` would swallow the `EEXIST` and hand the agent a
- * directory somebody else controls.
- *
- * **Why a fixed name and not `mkdtemp`, now that nothing reuses this directory.**
- * `mkdtemp` would be stronger on every axis this function defends: it creates
- * `0o700` atomically, fails rather than adopting an existing path, and produces
- * an unguessable name no other user can pre-create, which would retire the two
- * checks above rather than merely satisfy them. It is not used because it is not
- * on `CliFileSystem`, and widening that interface obliges every injected
- * filesystem in the suite to grow a method — a Foundation-shaped change to buy a
- * property two `lstat` fields already establish. Recorded so the next reader
- * knows the trade was made and not missed.
- *
- * The `mkdir`→`lstat` window stays open, and it is the smaller of two: the one
- * that matters is `lstat` → the vendor's own `open`, which no flag available to
- * this process can close.
+ * The `lstat` after it still decides, on the link rather than its target:
+ * a real directory, owned by this user, reachable by nobody else. The
+ * `mkdir`→`lstat` window stays open, and it is the smaller of two: the one that
+ * matters is `lstat` → the vendor's own `open`, which no flag available to this
+ * process can close.
  */
 export async function prepareAgentWorkspace(context: CliContext): Promise<string> {
-  const workspace = join(tmpdir(), AGENT_WORKSPACE_LEAF);
+  const workspace = join(tmpdir(), `${AGENT_WORKSPACE_PREFIX}${randomUUID()}`);
 
   /**
    * `tmpdir()` returns `$TMPDIR` verbatim, so a relative one makes this path
@@ -910,7 +898,7 @@ export async function prepareAgentWorkspace(context: CliContext): Promise<string
 
   let stats;
   try {
-    await context.fs.mkdir(workspace, { recursive: true, mode: 0o700 });
+    await context.fs.mkdir(workspace, { mode: 0o700 });
     stats = await context.fs.lstat(workspace);
   } catch (error) {
     throw workspaceRefusal(workspace, `could not be prepared (${errnoCode(error)})`);
@@ -921,6 +909,11 @@ export async function prepareAgentWorkspace(context: CliContext): Promise<string
   }
 
   return workspace;
+}
+
+/** NEW-76: best effort, because a leftover leaf is unique to its run and never reused. */
+async function removeAgentWorkspace(workspace: string): Promise<void> {
+  await rm(workspace, { recursive: true, force: true }).catch(() => undefined);
 }
 
 function codexIngestHomeRefusal(path: string, complaint: string): IngestRefusal {
@@ -1049,18 +1042,26 @@ export async function sweepCodexIngestHome(context: CliContext, home: string): P
  * here because a reader will otherwise assume both calls are constrained the
  * same way.
  */
-/** D52: Codex runs with the isolated home as its `CODEX_HOME`, swept whatever the outcome. */
+/**
+ * D52: Codex runs with the isolated home as its `CODEX_HOME`, swept whatever the outcome.
+ * NEW-76: its scratch working root is this run's own leaf, removed whatever the outcome.
+ */
 async function invokeIsolatedCodex(
   context: CliContext,
-  invocation: Omit<Parameters<typeof invokeCodex>[1], "codexHome">,
+  invocation: Omit<Parameters<typeof invokeCodex>[1], "codexHome" | "workingRoot">,
   installation: Parameters<typeof invokeCodex>[0],
   dependencies: Parameters<typeof invokeCodex>[2],
 ): ReturnType<typeof invokeCodex> {
-  const codexHome = await prepareCodexIngestHome(context);
+  const workingRoot = await prepareAgentWorkspace(context);
   try {
-    return await invokeCodex(installation, { ...invocation, codexHome }, dependencies);
+    const codexHome = await prepareCodexIngestHome(context);
+    try {
+      return await invokeCodex(installation, { ...invocation, workingRoot, codexHome }, dependencies);
+    } finally {
+      await sweepCodexIngestHome(context, codexHome);
+    }
   } finally {
-    await sweepCodexIngestHome(context, codexHome);
+    await removeAgentWorkspace(workingRoot);
   }
 }
 
@@ -1094,7 +1095,6 @@ async function invokeVendor(
         )
       : await invokeIsolatedCodex(context, {
           prompt,
-          workingRoot: await prepareAgentWorkspace(context),
           writeScopes: [],
           outputSchemaPath: schemaPath,
           timeoutMs: INGEST_TIMEOUT_MS,
@@ -2284,9 +2284,9 @@ export async function runIngest(
     const vendor = anyPlain ? await selectVendor(context, requested) : null;
 
     /**
-     * Validated once per run, for its refusal rather than its value — the value
-     * `invokeVendor` uses comes from its own call, which is two idempotent
-     * syscalls by then.
+     * Validated once per run, for its refusal rather than its value — the leaf is
+     * removed at once, and each `invokeVendor` call prepares and removes its own
+     * (NEW-76).
      *
      * **The reason is classification, not cost.** An unusable scratch directory
      * is a run-wide, deterministic environment failure: it persists, so every
@@ -2297,9 +2297,8 @@ export async function runIngest(
      * it and `reportLines` prints it — so what the loop adds is not a wrong
      * recovery but N copies of the same one, under `refusedRecovery`'s
      * run-level "rerun, and reject captures to stop retrying", which is the
-     * useless half: neither fixes a directory owned by somebody else. One
-     * `sudo developer-os ingest` leaving a root-owned leaf is enough to reach
-     * that state. Raised here it is one refusal, correctly classified, with
+     * useless half: neither fixes a relative or unwritable `TMPDIR`. Raised
+     * here it is one refusal, correctly classified, with
      * nothing telling the user to try again.
      *
      * Ordered after `selectCaptures`, and gated on the vendor, for the same
@@ -2308,7 +2307,7 @@ export async function runIngest(
      * use this directory, and neither may be failed by it.
      */
     if (vendor?.name === "codex" && anyPlain) {
-      await prepareAgentWorkspace(context);
+      await removeAgentWorkspace(await prepareAgentWorkspace(context));
     }
 
     const environment: IngestEnvironment = {

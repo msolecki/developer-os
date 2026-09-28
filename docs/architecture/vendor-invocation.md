@@ -314,7 +314,8 @@ on and supplying a fake key, so no model turn can complete.
 **Decision: Codex is no longer told to treat the vault as its working root.**
 `apps/cli/src/commands/ingest.ts` passed the vault's own `contentRoot` as
 `-C <DIR>`; it now passes an empty scratch directory, `prepareAgentWorkspace`'s
-`join(tmpdir(), "developer-os-agent-workspace")`. The asymmetry this closes was
+`join(tmpdir(), "developer-os-agent-workspace-<uuid>")`, one leaf per Codex call, removed after
+the child exits (NEW-76, 2026-09-28). The asymmetry this closes was
 created by roadmap Phase 1, which left Claude with no read grant at all
 (`--tools ""`, an empty tool set) while Codex kept a directory argument pointing
 at the user's notes — one verb, two read scopes, depending on which binary
@@ -352,10 +353,12 @@ reach".
 **Why the directory is checked and not merely created.** `tmpdir()` reads
 `$TMPDIR` and falls back to the shared `/tmp` when it, `TMP` and `TEMP` are all
 unset — the environment a launchd daemon, a cron entry or a container hands this
-process. On a shared `/tmp` a fixed name is pre-creatable by another local user,
-and `mkdir` with `recursive` swallows the `EEXIST` while silently *not* applying
-its `mode` to what is already there. `prepareAgentWorkspace` therefore decides on
-the `lstat` that follows: it refuses a leaf that is not a real directory, one
+process. On a shared `/tmp` a fixed name was pre-creatable by another local user,
+and `mkdir` with `recursive` swallowed the `EEXIST` while silently *not* applying
+its `mode` to what was already there. Since NEW-76 the leaf carries a random UUID
+and `mkdir` runs without `recursive`, so an existing path fails `EEXIST` rather
+than being adopted; `prepareAgentWorkspace` still decides on the `lstat` that
+follows: it refuses a leaf that is not a real directory, one
 this user does not own, and one any other user can reach. The mode test proves
 what the leaf grants and nothing about its ancestors — on `/tmp` what stops a
 non-owner replacing the directory outright is that directory's own sticky bit.
