@@ -8,6 +8,10 @@ notes are the archive.
 
 ## NOW
 
+**Next session (D69):** confirm step 7b's `npm run check` on `dbca633` is green (tree of `8fe4b03`;
+log in the founder's work directory), then run A15 steps 8–10 in one sitting under one approval, then
+steps 11–15. Steps 16–18 follow after a week of use; Codex steps after 2026-10-22.
+
 **A15, the founder cutover, on the live machine** — step by step through
 `docs/migration/founder-cutover.md` (`npm run pack:local-release -- <dir>`, then
 `init --local-release <dir> --adapters claude,codex`), each step with founder approval (D56, D58).

@@ -273,6 +273,31 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   fresh plan. (2) A13 Task 18 Step 1 (Claude real-agent matrix) is evidenced by the A15 cutover's
   step 10 verification on the live machine instead of a separate disposable install; Step 2 (Codex)
   and Step 3 still run after Codex quota returns.
+- **D69 (2026-09-28), how the A15 cutover runs from step 8.**
+  (1) Steps 8–10 run in one sitting. The agent executes them under a single founder approval given at
+  the start, each with its backup and rollback. The founder verifies steps 9 and 10 in a fresh Claude
+  session, which also evidences A13 Task 18 Step 1 (D68). The install build is `8fe4b03`, whose tree
+  equals `dbca633`, the step 7b commit.
+  (2) Step 7c, rehearsed 2026-09-28, found the step 8 inputs:
+  - the legacy plugin is `solkova-core` (Claude marketplace `solkova`, Codex marketplace `personal`);
+  - five orphaned legacy Codex agents (`code-reviewer`, `qa-expert`, `performance-engineer`,
+    `research-analyst`, `security-auditor`) are removed, and every other Codex agent is the
+    founder's own and stays;
+  - two dead legacy symlinks under the Codex home are removed by name;
+  - the product installs under `developer-os-*` names, so legacy rule files do not collide, but they
+    are still removed so no rule loads twice.
+  (3) Step 11 overrides go to both vendors: `claudeception` and `react-best-practices` from the
+  legacy shared plugin's skills, and `excalidraw-diagram` plus the five `research*` skills from the
+  vault's own skills directory.
+  (4) Step 12 accepts every capture except obvious junk (duplicates, empty or secret-bearing
+  captures); the agent reviews.
+  (5) Steps 16–18, including the full rollback exercise, run in a separate session after one week of
+  use.
+  (6) Step 19 deletes the legacy shared directory after archiving it: the tarball stays in the backup
+  and the remote repository is marked archived.
+  (7) Codex hook approval and A13 Task 18 Steps 2–3 run after 2026-10-22, when Codex quota returns.
+  (8) After A15, NEW-113 is designed before NEW-110.
+  (9) L1: MIT is the license proposed for qualified legal review.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
