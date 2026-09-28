@@ -96,24 +96,41 @@ export function updateTerminalRetirementPlanRef(plan: UpdateTerminalRetirementPl
 }
 
 /**
+ * The inventory's shape by kind: a bundle or payload tree ends at its root directory, a rollback
+ * record is exactly its one file, and a metadata inventory holds files only (the shared retained
+ * metadata directories are not leaves).
+ */
+function checkInventoryShape(entry: RetirementInventoryRefV1, inventory: readonly RetirementLeafV1[], label: string): void {
+  const last = inventory.at(-1);
+  if (entry.kind === "rollback_record" && (inventory.length !== 1 || last?.path !== entry.root || last.kind !== "file")) fail(`${label}: not exactly the record file`);
+  if (entry.kind === "metadata" && inventory.some((leaf) => leaf.kind !== "file")) fail(`${label}: a metadata directory`);
+  if ((entry.kind === "bundle" || entry.kind === "rollback_payload") && last !== undefined && (last.path !== entry.root || last.kind !== "directory")) fail(`${label}: not ending at its root directory`);
+}
+
+/**
  * The step's leaves in cursor order: the plan's entries in their kind/root order, each inventory's
- * leaves in the removal order its resolver derived (children before their directory, the
- * inventory document last among files). `inventories[i]` are the leaves of `plan.entries[i]`.
- * Every leaf lies at or under its entry's root and is counted once across the whole set.
+ * leaves in the removal order its resolver derived, children before their directory.
+ * `inventories[i]` are the leaves of `plan.entries[i]`. Every leaf lies at or under its entry's
+ * root and is counted once across the whole set.
  */
 export function flattenUpdateRetirementLeaves(plan: UpdateTerminalRetirementPlanV1, inventories: readonly (readonly RetirementLeafV1[])[]): readonly RetirementLeafV1[] {
   const label = "UpdateTerminalRetirementPlanV1";
   if (inventories.length !== plan.entries.length) fail(`${label}: not one inventory per entry`);
   const leaves: RetirementLeafV1[] = [];
   const seen = new Set<string>();
+  const removedDirectories = new Set<string>();
   plan.entries.forEach((entry, index) => {
     const inventory = inventories[index] as readonly RetirementLeafV1[];
-    if (inventory.length !== entry.leafCount) fail(`${label}.entries[${String(index)}]: leaf count`);
+    const entryLabel = `${label}.entries[${String(index)}]`;
+    if (inventory.length !== entry.leafCount) fail(`${entryLabel}: leaf count`);
+    checkInventoryShape(entry, inventory, entryLabel);
     for (const leaf of inventory) {
-      if (leaf.path !== entry.root && !leaf.path.startsWith(`${entry.root}/`)) fail(`${label}.entries[${String(index)}]: a leaf outside its root`);
-      if (leaf.kind === "directory" && (leaf.bytes !== null || leaf.sha256 !== null)) fail(`${label}.entries[${String(index)}]: a directory with content`);
+      if (leaf.path !== entry.root && !leaf.path.startsWith(`${entry.root}/`)) fail(`${entryLabel}: a leaf outside its root`);
+      if (leaf.kind === "directory" && (leaf.bytes !== null || leaf.sha256 !== null)) fail(`${entryLabel}: a directory with content`);
+      if (removedDirectories.has(leaf.path.slice(0, leaf.path.lastIndexOf("/")))) fail(`${entryLabel}: a leaf after its directory`);
       if (seen.has(leaf.path)) fail(`${label}: a leaf counted twice`);
       seen.add(leaf.path);
+      if (leaf.kind === "directory") removedDirectories.add(leaf.path);
       leaves.push(leaf);
     }
   });

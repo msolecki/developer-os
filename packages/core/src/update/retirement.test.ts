@@ -161,4 +161,55 @@ describe("flattenUpdateRetirementLeaves", () => {
     expect(() => flattenUpdateRetirementLeaves(parsed, [[payloadLeaves[0] as RetirementLeafV1, payloadLeaves[0] as RetirementLeafV1, directory(payloadRoot)]])).toThrow();
     expect(() => flattenUpdateRetirementLeaves(parsed, [[...payloadLeaves.slice(0, 2), { ...directory(payloadRoot), sha256: sha("x") }]])).toThrow();
   });
+
+  const recordRoot = path(`${home}/state/update-rollback.json`);
+  const metadataRoot = path(`${home}/state/release-metadata/bundles/${sha("bundle manifest")}.json`);
+  const record: RetirementLeafV1 = { path: recordRoot, kind: "file", bytes: null, sha256: sha("record") };
+  const metadata: RetirementLeafV1 = { path: metadataRoot, kind: "file", bytes: null, sha256: sha("bundle manifest") };
+
+  it("flattens all four inventory kinds in kind/root order", () => {
+    const parsed = validate(plan({ set: "consumed_rollback_and_rejected_release", entries: [ref("bundle", bundleRoot, 2), ref("metadata", metadataRoot, 1), ref("rollback_payload", payloadRoot, 3), ref("rollback_record", recordRoot, 1)] }));
+    expect(flattenUpdateRetirementLeaves(parsed, [bundleLeaves, [metadata], payloadLeaves, [record]])).toStrictEqual([...bundleLeaves, metadata, ...payloadLeaves, record]);
+  });
+
+  it("refuses a directory removed before a leaf inside it", () => {
+    const nested = [file(bundleRoot, "bin/tool"), directory(`${bundleRoot}/bin`), file(bundleRoot, "bin/other"), directory(bundleRoot)];
+    expect(() => flattenUpdateRetirementLeaves(validate(plan({ entries: [ref("bundle", bundleRoot, 4)] })), [nested])).toThrow();
+    const childFirst = [file(bundleRoot, "bin/tool"), file(bundleRoot, "bin/other"), directory(`${bundleRoot}/bin`), directory(bundleRoot)];
+    expect(flattenUpdateRetirementLeaves(validate(plan({ entries: [ref("bundle", bundleRoot, 4)] })), [childFirst])).toStrictEqual(childFirst);
+  });
+
+  it.each<RetirementInventoryRefV1["kind"]>(["bundle", "rollback_payload"])("requires a %s inventory to end at its root directory", (kind) => {
+    const root = kind === "bundle" ? bundleRoot : payloadRoot;
+    const parsed = validate(plan({ entries: [ref(kind, root, 2)] }));
+    expect(() => flattenUpdateRetirementLeaves(parsed, [[directory(root), file(root, "late")]])).toThrow();
+    expect(() => flattenUpdateRetirementLeaves(parsed, [[file(root, "a"), file(root, "b")]])).toThrow();
+  });
+
+  it("requires a rollback record inventory to be exactly its one file", () => {
+    expect(flattenUpdateRetirementLeaves(validate(plan({ entries: [ref("rollback_record", recordRoot, 1)] })), [[record]])).toStrictEqual([record]);
+    expect(() => flattenUpdateRetirementLeaves(validate(plan({ entries: [ref("rollback_record", recordRoot, 0)] })), [[]])).toThrow();
+    expect(() => flattenUpdateRetirementLeaves(validate(plan({ entries: [ref("rollback_record", recordRoot, 1)] })), [[directory(recordRoot)]])).toThrow();
+    const other = path(`${home}/state/update-rollback.json.d`);
+    expect(() => flattenUpdateRetirementLeaves(validate(plan({ entries: [ref("rollback_record", other, 2)] })), [[file(other, "a"), directory(other)]])).toThrow();
+  });
+
+  it("refuses a directory in a metadata inventory: shared metadata directories are not leaves", () => {
+    const store = path(`${home}/state/release-metadata/bundles`);
+    expect(() => flattenUpdateRetirementLeaves(validate(plan({ entries: [ref("metadata", store, 2)] })), [[file(store, "a.json"), directory(store)]])).toThrow();
+  });
+
+  it("flattens the feasible exact aggregate maximum and refuses the first leaf over either bound (A6)", () => {
+    // The plan carries refs only, so its byte bound never binds before the 1,200,012-leaf cardinality bound.
+    const stores = ["bundles", "delegations", "indexes"].map((store) => path(`${home}/state/release-metadata/${store}/${sha(store)}.json`));
+    const entries = [ref("bundle", bundleRoot, 200_001), ...stores.map((root) => ref("metadata", root, 1)), ref("rollback_payload", payloadRoot, MAXIMUM_RETIREMENT_INVENTORY_LEAVES), ref("rollback_record", recordRoot, 1)];
+    const parsed = validate(plan({ set: "consumed_rollback_and_rejected_release", entries }));
+    expect(parsed.maximumLeaves).toBe(MAXIMUM_UPDATE_RETIREMENT_LEAVES);
+    const flat = (root: CanonicalAbsolutePathV1, files: number): RetirementLeafV1[] => [...Array.from({ length: files }, (_, index) => file(root, `f${String(index)}`)), directory(root)];
+    const bundle = flat(bundleRoot, 200_000);
+    const inventories = [bundle, ...stores.map((root): RetirementLeafV1[] => [{ path: root, kind: "file", bytes: null, sha256: sha(root) }]), flat(payloadRoot, MAXIMUM_RETIREMENT_INVENTORY_LEAVES - 1), [record]];
+    expect(flattenUpdateRetirementLeaves(parsed, inventories)).toHaveLength(MAXIMUM_UPDATE_RETIREMENT_LEAVES);
+    expect(() => flattenUpdateRetirementLeaves(parsed, [[file(bundleRoot, "extra"), ...bundle], ...inventories.slice(1)])).toThrow();
+    expect(() => validate(plan({ entries: [...entries.slice(0, 5), ref("rollback_record", recordRoot, 2)] }))).toThrow();
+  }, 120_000);
 });
