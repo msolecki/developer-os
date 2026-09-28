@@ -572,3 +572,23 @@ installs it beside the defaults, `doctor` reports it as `user`, and re-running `
 change to it. It is trusted as your own text: the product reads it with no-follow guards and bounds
 and never reviews its content.
 
+
+## 17. The Claude owner across update and rollback (Spec 2 §8.3)
+
+**Added 2026-09-28** by NEW-110 Task 12 (D72); `foundation.md` §11 has the update contract.
+
+- **The provider is a pure file-tree diff.** `claudeOwnerUpdateProvider`
+  (`packages/adapter-claude/src/update/plan.ts`) plans the `claude` partition with
+  `planOwnedFileTree`: an installed content file whose source the target ships is kept on an equal
+  hash and replaced otherwise, one the target stops shipping is removed, and a new entry is created.
+  Directories, symlinks, ephemeral and block rows are keep-only. It declares every replaceable
+  Claude file a content dependency, so each replace or remove carries the bytes its inverse needs.
+- **No external effect.** Claude discovers the installed tree in place (§4), so an update requests
+  no registration refresh for this owner; a second effect or any non-Codex effect refuses the whole
+  plan.
+- **Rollback** restores each replaced or removed Claude file from its retained blob and removes each
+  file the update created, before the manifest and active record move back.
+- **Proof scope.** The planner-level rules are held by the core owner tests; the synthetic on-disk
+  lifecycle (`tests/e2e/release-update.test.ts`) installs no Claude owner. The draft grammar
+  (`PlannerManagedArtifactDraftV2` in `packages/core/src/update/planner.ts`) has no `instruction`
+  arm, so a home holding instruction rows is not covered by that proof.

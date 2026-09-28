@@ -376,3 +376,19 @@ code, and the residuals the spec accepted.
 | R6 | `--merge` does not union the source's `tags`/`aliases` into the target's frontmatter | follows from "no frontmatter patcher"; links by the source's title are still rewritten |
 | R7 | Obsidian renders a note capture's inner frontmatter as body text inside quarantine | cosmetic |
 | R8 | A replacing note capture normalizes and redacts the **whole** note: line endings, normalization form, stripped control and format characters, trimmed trailing whitespace, and any high-entropy run of 40+ characters redacted | accepted as the price of "the reviewed bytes are the written bytes"; `review` shows the redaction count. Narrowing it needs a redactor that takes the class set to apply, the same change NEW-36 asks for |
+
+### 6.14 The Brain across update and rollback (Spec 2)
+
+Added 2026-09-28 by NEW-110 Task 12 (D72); `foundation.md` §11 has the update contract.
+
+- **An update never reads the Brain root by name.** The target planner sees a bounded Brain snapshot
+  of Brain-relative paths, sizes and hashes under the token `brain_root`; a note's bytes cross only
+  when a declared Brain schema migration admits that note as an input blob. Neither the absolute root
+  nor a literal redaction pattern crosses (`tests/security/sentinel.test.ts`, `a planted sentinel,
+  through update and rollback`).
+- **Brain schema migrations** are token-only planners (`packages/brain/src/migrations/update/plan.ts`)
+  inside the same compiled planner graph the lint gate checks. Their mutations pass folder-policy
+  admission, form contiguous version chains, and retain a byte-exact inverse in the rollback payload,
+  so `update rollback` restores a migrated note from its retained blob.
+- **Preview and rollback write nothing to the Brain**, and uninstall after any update, rollback or
+  reapply leaves every Brain note byte-identical (`tests/e2e/release-update.test.ts`).

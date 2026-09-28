@@ -622,3 +622,42 @@ literal; this is the index from bound to symbol. Cite symbols, not lines.
 - **Distribution rows.** `SUPPORTED_GIT_DISTRIBUTION` and `SUPPORTED_LAUNCHD_DISTRIBUTION` are the
   only places a pinned hash, size, build or version literal appears; `foundation.md` §10 records the
   re-pinning rule.
+
+## Spec 2: release, update and rollback bounds
+
+Added 2026-09-28 (NEW-110 Task 12, D72). The bounds Spec 2 fixes, as the shipped code names them;
+`foundation.md` §11 has the contract. Cite symbols, not lines.
+
+- **Transport.** 64 KiB response headers, a 30-second idle deadline re-armed on progress, one
+  15-minute wall per attempt shared with the planner and verifier; bodies of at most 64 KiB
+  (delegation), 4 MiB (index), 16 MiB (bundle manifest) and 2 GiB (archive), each asset also held
+  to its exact signed size (`MAXIMUM_BODY_BYTES` and the constants beside it in
+  `packages/security/src/update/transport.ts`).
+- **Archive.** One Zstandard frame with a window of at most 128 MiB (`MAXIMUM_ZSTD_WINDOW_LOG`) over
+  exactly `expectedUstarBytes(manifest)` of ustar (`packages/security/src/update/archive.ts`).
+- **Planner wire.** `PLANNER_WIRE_BOUNDS_V1` (`packages/core/src/update/planner.ts`): 256 MiB of
+  request or result JSON, 1,000,000 blobs and 1 GiB of blob bytes each way, 1 MiB of stderr,
+  512 MiB resident, a 30-second idle and 600-second wall deadline, one process. The target verifier
+  narrows it to its plan's own caps and zero output blobs (`targetVerifierWireBounds`,
+  `packages/security/src/update/verifier-process.ts`).
+- **Plans.** Every leaf plan ≤ 16 MiB (`MAXIMUM_LEAF_PLAN_BYTES`), the construction plan ≤ 512 MiB
+  (`MAXIMUM_CONSTRUCTION_PLAN_BYTES`, `packages/core/src/update/construction.ts`); the V2 coordinator
+  journal ≤ 1 MiB, at most 10,031 steps and 20,100 compaction entries
+  (`MAXIMUM_UPDATE_COORDINATOR_JOURNAL_BYTES`, `MAXIMUM_UPDATE_COORDINATOR_STEPS`,
+  `MAXIMUM_UPDATE_COMPACTION_ENTRIES`, `packages/core/src/update/coordinator.ts`).
+- **Rollback payload.** The record, inverse plan and inventory are each canonical and ≤ 64 MiB
+  (`MAXIMUM_ROLLBACK_DOCUMENT_BYTES`); at most 1,000,000 entries, each ≤ 16 MiB, 2 GiB in aggregate
+  (`MAXIMUM_ROLLBACK_PAYLOAD_ENTRIES`, `MAXIMUM_ROLLBACK_BLOB_BYTES`,
+  `MAXIMUM_ROLLBACK_PAYLOAD_AGGREGATE_BYTES`, `packages/core/src/update/rollback.ts`).
+- **Retirement.** At most 16 inventories per set, 1,000,007 leaves per inventory and 1,200,012 in
+  all (`MAXIMUM_RETIREMENT_INVENTORIES`, `MAXIMUM_RETIREMENT_INVENTORY_LEAVES`,
+  `MAXIMUM_UPDATE_RETIREMENT_LEAVES`). **Both bounds bind (amendment A6):** the 64 MiB inventory holds
+  far fewer than 1,000,000 entries, so the largest payload any update can retire is derived from the
+  byte bound, not from the declared count — `tests/integration/update/recovery.test.ts` derives it,
+  admits it and refuses one entry more.
+- **Capacity.** Active, old rollback, target, scratch, staging, backups, inverse, journals and
+  compaction headroom are checked together for bytes and entries before any reservation, and again
+  against the exact composition after allocation (`projectUpdateCapacity`); a first-over refusal
+  consumes only the allocator gap.
+- **Codex refresh.** 64 KiB stdout and stderr, a 30-second idle and 60-second wall, one process
+  (`codexRefreshPolicy`, `apps/cli/src/update/codex-refresh.ts`).

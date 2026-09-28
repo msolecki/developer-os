@@ -561,6 +561,26 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
   holds for listing and fails for loading; §11.14 is confirmed rather than suspected. The
   `PLUGIN_VERSION` literal `0.0.0` names the cache directory. Owner: `BACKLOG.md` NEW-61 (roadmap
   Phase 5 and the update lifecycle).
+- **Amended 2026-09-28 (Spec 2 D72 P6, NEW-61): an update re-registers the plugin.** Every update
+  whose Codex owner plan changes a file carries exactly one `codex_registration_refresh` effect:
+  `codex plugin add developer-os@developer-os --json` from the managed plugin root, with exactly
+  `CODEX_HOME=<recorded Codex home>` and `TMPDIR=<private effect directory>`, closed stdin, one
+  process, 64 KiB output bounds and a 60-second wall (`codexRefreshPolicy` in
+  `apps/cli/src/update/codex-refresh.ts`). `plugin list --json` observes the projection before and
+  after under the same policy. The marketplace is never added by an update.
+  - **The executable** is the `codex` discovery selected, pinned at its canonical real path: a
+    regular file owned by the user or root with no group or other write on it or on any ancestor.
+    Its device, inode, mode and SHA-256 are rechecked before every spawn, so a Homebrew or npm link
+    is admitted and a replaced binary refuses.
+  - **The record.** The owner files step rewrites `codex/registration.json` to the postimage tree
+    hash before the effect runs, so a failed refresh compensates the record with the tree and
+    `doctor` reads `registered` after a successful one.
+  - **Planning refuses** an update while the registration is `unregistered` or `stale`
+    (`update_codex_registration_<state>`, exit 3) before allocation.
+  - **Evidence:** `apps/cli/src/update/codex-refresh.test.ts` and the Codex rows of
+    `tests/integration/update/archive-planner.test.ts` (one refresh leaf, the rewritten record).
+    The refresh has run only against scripted Codex output; the synthetic on-disk lifecycle
+    installs no Codex owner.
 - **Hook events available:** `pre_tool_use`, `post_tool_use`, `pre_compact`, `session_start`,
   `user_prompt_submit`, `stop`, `subagent_start`. There is no session-end event, so
   `sessionEndCapture` parity is impossible on this vendor. A plugin manifest may carry `"hooks"`.

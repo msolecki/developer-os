@@ -89,8 +89,9 @@ boundary was missing that was not.
 
 ## 2. What is being defended, and against whom
 
-Developer OS is a **local-first CLI on one developer's machine**. There is no server, no account, no
-telemetry and no network (§7). The assets are therefore local and few:
+Developer OS is a **local-first CLI on one developer's machine**. There is no server, no account and
+no telemetry, and no network except the explicit `update` plan and apply, which fetch signed release
+metadata and bundles (§5.16, §7). The assets are therefore local and few:
 
 | Asset | Why it matters |
 |---|---|
@@ -893,6 +894,30 @@ piece defends. Spec 1 §4 and §5 remain normative for every literal.
   because the permit carries no PIDs; a real push through Apple Git-157 after the I1 fix and the
   hostile config and redirect cases wait for NEW-113's disposable account (`BACKLOG.md` §6, Phase 9).
 
+### 5.16 Release trust, update and rollback (Spec 2)
+
+**Added 2026-09-28** by NEW-110 Task 12 (D72). `update` is the product's first network client and
+its first code that replaces its own executable, so it is the one place the local-first boundary
+is crossed on purpose. `foundation.md` §11 has the shipped contract; this records what each piece
+defends. Spec 2 stays normative for every literal.
+
+| Boundary | Mechanism | Evidence |
+|---|---|---|
+| Only `update` plan and apply reach a network | the release transport (`packages/security/src/update/transport.ts`) is the only network module, and only `apps/cli/src/update/context.ts` composes it; rollback, recovery, `init` and uninstall make zero release requests | `tests/repository/check.ts` (`inspectReleaseAuthoritySurfaces`, run by every `npm run lint`) and its cases in `tests/repository/check.test.ts`; `tests/security/network.test.ts` (`previews a rollback with the FD 3 trust, transport, scratch and planner ports all unreachable`); `tests/e2e/release-update.test.ts` counts transport requests across rollback and uninstall |
+| The transport reaches only fixed origins | two fixed metadata locators from the launcher's FD 3 handoff; assets only under a delegated origin, at most one redirect re-validated as plain HTTPS without query, userinfo or port; an exact signed length and SHA-256 per asset; no proxy, credential or caller header; one 15-minute attempt deadline | `packages/security/src/update/transport.test.ts`; `tests/integration/update/signature-transport.test.ts` drives the same bytes through the production transport for both architectures |
+| A release is admitted only through the signed chain, and trust never reverses | root-signed delegation of one release key, release-key-signed index, per-architecture bundle manifest and archive hashes; delegation, index and release sequences are high watermarks that compensation and rollback leave advanced | `tests/integration/update/signature-transport.test.ts` (forged index, replay, substituted manifest, the other architecture's archive); `tests/integration/update/recovery.test.ts` (a rejected verifier leaves trust advanced; rollback leaves it byte-identical) |
+| An archive is admitted entry by entry before any byte is used | one checksummed Zstandard frame of an exact ustar stream in manifest order, root-owned headers, no links or specials, exact sizes, modes and hashes | `packages/security/src/update/archive.test.ts`; `tests/integration/update/archive-planner.test.ts` for both architectures' bundles |
+| The target planner cannot read, write or reach anything | a compiled graph with no filesystem, network, process, environment, clock, randomness, native or dynamic import; the request carries tokens, never roots; its result is bound to the request by transcript hashes before allocation | the planner-graph gate in `tests/repository/check.ts`; `tests/integration/update/archive-planner.test.ts` (request and result binding); `tests/security/sentinel.test.ts` (a planted Brain sentinel never reaches the planner wire, a result, or the product home) |
+| A killed update or rollback resumes in its persisted direction | the construction envelope and the V2 coordinator journal are the only authority; the target verifier's durable success is the one point of no return; recovery reads no network and runs no planner | `tests/integration/update/recovery.test.ts` sweeps every durable mutation of apply, rollback and a verifier-rejected update; `tests/security/interruption.test.ts` (`an update --apply interrupted, then run again`) |
+| Nothing is published through a link | every publication creates or reopens its target no-follow and checks identity from construction evidence (D72 P1, P2, P9) | `tests/security/symlink-escape.test.ts` (`a symlinked release directory met by update --apply`; the A8 exact set of symlink-kind producers) |
+| The Codex refresh cannot be redirected | the pinned `codex` real path with its identity rechecked before spawn, exactly `CODEX_HOME` and `TMPDIR`, closed argv, no marketplace change; an unregistered or stale plugin refuses before allocation | `apps/cli/src/update/codex-refresh.test.ts`; `tests/integration/update/archive-planner.test.ts` (the Codex rows) |
+
+- **What stays open.** The production fallback handoff and the real release roots arrive with
+  Task 11b, and real signed artifacts with A16; until then `update --apply` refuses exit 4 outside
+  the synthetic fixture. The target verifier runs the signed bundle's own code and is not
+  OS-sandboxed (Spec 2 §13.3 residual 6). A home with adapter instruction artifacts has no update
+  proof yet: the synthetic lifecycle installs the core owner only.
+
 ---
 
 ## 6. Statuses, and the invariant under every failure
@@ -939,7 +964,7 @@ look identical from outside and are not the same thing.
 
 | Absent | Mechanism | Evidence |
 |---|---|---|
-| **Network** | no HTTP client, no socket, no DNS anywhere in the product | `tests/e2e/foundation.test.ts:1241` — `ships no network capability`. It scans every compiled non-test module in **every workspace discovered under `apps/` and `packages/`** (`:1252-1264`) — discovered, not written down, which is the whole of the fix for the closed NEW-1 — and asserts non-empty **per workspace** rather than over the total (`:1314-1316`), because a floor over the sum is satisfied by one populated directory |
+| **Network outside `update`** | no HTTP client, no socket, no DNS anywhere in the product but the release transport, which only `update` plan and apply compose (§5.16, amended 2026-09-28) | `tests/e2e/foundation.test.ts:1241` — `ships no network capability`. It scans every compiled non-test module in **every workspace discovered under `apps/` and `packages/`** (`:1252-1264`) — discovered, not written down, which is the whole of the fix for the closed NEW-1 — and asserts non-empty **per workspace** rather than over the total (`:1314-1316`), because a floor over the sum is satisfied by one populated directory |
 | **Any outbound call but one** | the vendor agent CLI during ingest and, once Git is enabled, the pinned Git for `git sync` (§5.15); nothing else | `tests/security/network.test.ts` — the spawn list is **classified, not forbidden**: the unclassified set is asserted empty and the classified set asserted non-empty, because a filter with nothing behind it passes by filtering everything. Git spawns go through `GitProcessSupervisor`, not that runner: the same file proves zero spawns while Git is disabled, and an enabled Git admits only the permits of the pinned process table (Amended 2026-09-26) |
 | **Credentials** | no Keychain, no token store; the protected-path policy refuses `.ssh`, `.aws`, `.gnupg`, `.env` and `.env.*`, and three exact files, on both the declared and the canonical path (`packages/security/src/protected-paths.ts:37-57,148-160`); the `read-env-variants` rule exempts `.env.example`, `.env.sample`, `.env.template` and `.env.dist` (D67, `:39-47`) | **The declared half:** `packages/security/src/protected-paths.test.ts:53` — `rejects reading the protected path %s` — and `:64` — `rejects writing the protected path %s` — two `it.each` blocks that run every one of the eight fixture paths (`:23-32`) through `assertReadable` and `assertWritable`, covering `.env`, `.env.local`, `.ssh`, `.aws`, `.gnupg` and all three exact files by name. **The canonical half:** `:158` — `rejects an innocent alias that resolves into synthetic SSH data` — a path innocent as written that resolves into a protected directory. **The negative control**, which is what keeps the rule a name match rather than a substring match: `:83` — `does not treat a protected-name prefix as the protected directory`. Note the policy covers `.env` and `.env.*` but **not** `.envrc` or `.environment` (`foundation.md` §7) |
 | **Reading a session transcript** | no code path opens the field the vendors ship in every hook payload | `tests/repository/transcript-path.test.ts` — a gate rather than a reviewer's grep, with the needle assembled at runtime so the file does not match its own source |
@@ -954,6 +979,12 @@ absent: both are opt-in authority behind an activation record (§5.15). The outb
 its one vendor exception for network: `git sync`'s push runs through the pinned Git, not through a
 product HTTP client, only the local/file transport is admitted until NEW-113 (D65), and the Git
 runtime's one socket is a Unix-domain socket on the host.
+
+**Spec 2 narrowed the network absence to an explicit boundary (Amended 2026-09-28, D72).** The
+release transport is an HTTP client, so "no network" now reads "no network outside `update` plan
+and apply". The boundary is enumerated, not assumed: `inspectReleaseAuthoritySurfaces` in
+`tests/repository/check.ts` fails lint on a second network module, a second composition of the
+transport, or an empty launcher or planner-graph scope.
 
 **A14 left this table unchanged in substance.** `import`, `project init`, `project check` and
 `vendor-config` add no network capability and no spawn, so the classified set in

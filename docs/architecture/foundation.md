@@ -761,6 +761,13 @@ not exist here" look identical from outside and are not the same thing.
   total, because a floor over the sum is satisfied by one populated directory while every
   other goes unread — which is how the gap stayed invisible. No module count is stated here
   any more: a number in prose that no test pins is the same defect in a different shape.
+
+  **Amended 2026-09-28 (Spec 2, D72 P7(f)): one explicit exception.** The release transport
+  (`packages/security/src/update/transport.ts`) is the product's only network module, and only
+  `update` plan and apply compose it (§11). The same scan classifies it by name, and the lint
+  gate's `inspectReleaseAuthoritySurfaces` (`tests/repository/check.ts`) holds both halves on
+  every run: exactly that module reaches a network, and exactly `apps/cli/src/update/context.ts`
+  composes it.
 - **No agent integration.** Agents are *discovered* — `/usr/bin/which`, with a `PATH` and
   nothing else — and never executed. `AgentDiscovery.version` is permanently `null` in
   Foundation because determining it requires running the binary. Discovery that refuses, or
@@ -1118,3 +1125,101 @@ record.
      certified host for it still exists.
   5. **Stop when unsupported.** Until certification evidence exists for the pinned launchd row, every
      launchd mutation refuses.
+
+## 11. Release, update and rollback (Spec 2)
+
+**Added 2026-09-28** by NEW-110 Task 12, carrying the contracts of Spec 2
+(`docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`, amended by D72 P1–P9)
+that the shipped code now implements. The spec stays normative for every literal while Task 11b,
+NEW-112 and NEW-113 depend on it; this section is what a reader of the code needs.
+
+### 11.1 The installed release
+
+- **Layout.** A release lives at `releases/<version>/darwin-<arch>/` with its three signed metadata
+  documents retained under `state/release-metadata/`. `state/active-release.json` names the one
+  active release, `state/release-trust.json` holds the trust high watermarks, and
+  `state/update-rollback.json` plus `rollback/<payload-id>/` hold the one retained rollback set.
+  `state/update-executor.json` names the recovery executor while an update runs. Each is written
+  only by a coordinator step; nothing else mutates them.
+- **Trust.** A release is admitted only through the signed chain: an offline root (the launcher's
+  FD 3 handoff) delegates one release key, which signs the release index, which names each
+  bundle's archive and manifest by size and SHA-256 for both `arm64` and `x64`. Delegation, index
+  and accepted-release sequences are high watermarks: a lower one refuses as replay (exit 5), and
+  trust never moves backwards — not on compensation, not on rollback.
+- **Architecture.** The installed release's architecture selects the bundle (`arm64` is ordinal 0,
+  `x64` ordinal 1 in every index entry); the bundle manifest, the release identity and the bundle
+  root carry it, and a bundle, archive or manifest of the other architecture refuses.
+
+### 11.2 `update` and `update rollback`
+
+- **Plan-only by default.** `update` reads the home, the FD 3 trust, the signed metadata and the
+  bundle, runs the target planner over one attempt-owned scratch and prints a preview; it writes
+  nothing durable. `update rollback` reads only retained local evidence: no FD 3, transport,
+  scratch or planner.
+- **Apply.** `--apply` heals any update residue first, then revalidates under the global lock: a
+  clear V2 closure, the same home, the same retained evidence, and a planner rerun whose
+  transcript and candidate equal the preview's. It reserves one allocator block for every prefix
+  (D72 P7(e)), composes every leaf plan and the construction plan (`apps/cli/src/update/compose.ts`),
+  rechecks exact capacity, stages the construction envelope and hands off to the V2 coordinator.
+- **Forward order** (§9.3): bundle, owner files, rollback payload, the transitional manifest
+  (preserve, publish), trust, rollback record, active, target verifier, recovery executor switch to
+  the fallback, terminal retirement of the prior rollback set, the terminal manifest (publish,
+  finalize tombstones). **Rollback order** (§10.2): verify the previous bundle, the retained payload
+  and the record in place, owner files inverse, the transitional manifest, the previous active
+  record, the previous verifier, the executor switch, retirement of the consumed set and the
+  rejected release, the terminal manifest.
+- **The point of no return** is the target verifier's durable success. A failure before it
+  compensates to the old release (trust stays advanced); after it every step force-forwards. A
+  resumed run reports the exit class of the persisted `compensationCause` (D72 P7(b)): a verifier
+  rejection is exit 5, anything else exit 1.
+- **Fallback handoff.** Production binds `--apply` with no fallback until Task 11b extends the
+  launcher's FD 3 document, so it refuses `update_fallback_unavailable`, exit 4, before any write
+  (D72 P7(d)). Only the synthetic fixture supplies one.
+- **Codex.** A Codex tree change re-registers the plugin exactly once (`codex-adapter.md` §14).
+
+### 11.3 The D72 rules the code relies on
+
+- **P1** — source parents are construction directories; a source executor takes a parent's identity
+  only from the construction journal, never from a use-time `lstat`.
+- **P2** — a lifecycle manifest postimage carries no inode; its identity comes from reopened
+  construction evidence (`lifecycleIdentity: "construction_evidence"`), while Spec 1's Git and
+  automation plans keep `"inline"`.
+- **P3** — the four `manifest/*` steps run over two plans, transitional and terminal; the terminal
+  set is the transitional set minus exactly the retired partition, or the handler refuses exit 6.
+- **P4** — the three signed metadata documents are construction `plan_derived` rows with the role
+  `release_metadata_after`, bound to their signed hashes.
+- **P5** — an ephemeral reservation may be absent or empty; `keep` never reads or hashes it, so a
+  home without `state/update-rollback.json` or `state/git-sync.json` updates.
+- **P8** — admitted bookkeeping paths carry their planned identity (NEW-86).
+- **P9** — rollback restores each owner file from its retained blob, reopened no-follow under
+  `rollback/<payload-id>/blobs/` and bound to the retained inventory; owner and migration slots
+  follow the operation.
+
+### 11.4 Exit codes on the update surface
+
+Spec 2 §11's mapping on top of §6: 1 for a bounded transport interruption or a failure after a prior
+capacity check; 2 for a malformed request, a nonexistent release or a downgrade; 3 for managed
+drift, a post-update edit blocking rollback, or a Codex registration that is not `registered`; 4
+for an unsupported architecture, a launcher or protocol too old, or no fallback handoff; 5 for any
+signature, checksum, origin, archive, process or verifier refusal; 6 for an incomplete or
+contradictory journal, a third state, missing rollback evidence, or malformed trust, active or
+manifest state. Messages carry fixed reason codes only.
+
+### 11.5 Accepted residuals (Spec 2 §13.3, unchanged)
+
+No first-observation freeze resistance; one root and one active release key; one previous version
+only; rollback never merges; one fixed online source; the signed target planner is not OS-sandboxed;
+protocol growth refuses until the launcher upgrades; publication is A16's; the `symlink` artifact
+arm is validated but unreachable (held as an exact set by `tests/security/symlink-escape.test.ts`);
+two V2 Foundation ref types.
+
+### 11.6 Proof scope (D72 P7(f))
+
+The §12 gate is proven on the synthetic release for both architectures: install, preview and apply,
+a second apply, rollback, reapply and uninstall (`tests/e2e/release-update.test.ts`); every durable
+death point of apply, rollback and a verifier-rejected update recovers
+(`tests/integration/update/recovery.test.ts`); the signature chain runs through the production
+transport (`tests/integration/update/signature-transport.test.ts`); archives and the planner's
+request/result binding for both architectures (`tests/integration/update/archive-planner.test.ts`).
+The synthetic home carries the core owner only. The Git and automation leg joins with NEW-113, and
+the real-release half waits for Task 11b and A16.
