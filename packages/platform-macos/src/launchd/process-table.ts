@@ -282,6 +282,11 @@ export function launchdProcessTableHash(table: SupportedLaunchdProcessTableV1): 
   return hashCanonicalJson("developer-os:launchd-process-table:v1", table as unknown as CanonicalJsonValue);
 }
 
+/** SHA-256 over `developer-os:launchctl-identity:v1\0` plus the identity's canonical JSON. */
+export function launchctlIdentityHash(identity: LaunchctlIdentityV1): LowerHexSha256 {
+  return hashCanonicalJson("developer-os:launchctl-identity:v1", identity as unknown as CanonicalJsonValue);
+}
+
 function refuse(message: string): never {
   throw new LaunchdInputError(message);
 }

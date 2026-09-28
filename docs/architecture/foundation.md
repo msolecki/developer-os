@@ -1072,7 +1072,16 @@ record.
   `packages/core/src/git/effect-journal.ts`, at most `MAX_GIT_EFFECT_JOURNAL_BYTES`, 16 MiB) and
   `state/launchd-effect-journals` (`LaunchdEffectJournalV1`,
   `packages/platform-macos/src/launchd/effect-journal.ts`, at most `MAX_LAUNCHD_EFFECT_JOURNAL_BYTES`,
-  1 MiB), both inspected by the ledger. `LifecycleUnsupportedLeafError` is still defined in
+  1 MiB), both inspected by the ledger. **Amended 2026-09-28 (NEW-113 review finding 1):**
+  `LaunchdEffectJournalV1.launchctlIdentityHash` records the `launchctl` identity the journal was
+  opened with (`null` exactly for a zero-transition effect). A resumed `apply` or `compensate` whose
+  freshly admitted `launchctl` differs — a macOS update between a killed run and its resume — refuses
+  `unsupported_launchd_distribution` with the manual `launchctl bootout gui/<uid>/<label>` for every
+  label the plan may have loaded (`refuseUnsupportedLaunchd`, mapped in `createLifecycleEffectAdapters`),
+  instead of recovery-required `launchd_process_table_changed`, which still covers a changed staging
+  identity. The field changes `maximumLaunchdEffectJournalBytes` and therefore every launchd effect
+  plan hash; no migration exists because no production launchd effect journal was ever written
+  (automation had never been enabled on any install). `LifecycleUnsupportedLeafError` is still defined in
   `codecs.ts` but nothing throws it, so `unsupported_until_plan_1b` is no longer a reachable reason.
   - **Commands.** `git enable|disable|status|sync` (`createGitService`,
     `apps/cli/src/commands/git/service.ts`) and `automation enable|disable|status`

@@ -84,6 +84,12 @@ export type LaunchdEffectJournalV1 = {
   readonly coordinatorId: LifecycleCoordinatorIdV1;
   readonly phase: LaunchdEffectJournalPhaseV1;
   readonly planHash: LowerHexSha256;
+  /**
+   * Spec §5.3 rule 4: the launchctl the journal was opened with, so a resume after a macOS update
+   * refuses `unsupported_launchd_distribution` rather than a bare table-hash mismatch. `null`
+   * exactly when the effect has no transition and so never loads a process table.
+   */
+  readonly launchctlIdentityHash: LowerHexSha256 | null;
   readonly nextTransition: number;
   readonly compensationNext: number | null;
   readonly observations: readonly LaunchdEffectObservationV1[];
@@ -193,6 +199,7 @@ export function maximumLaunchdEffectJournalBytes(
     coordinatorId: plan.coordinatorId,
     phase: "compensating",
     planHash: PLACEHOLDER_HASH,
+    launchctlIdentityHash: PLACEHOLDER_HASH,
     nextTransition: plan.transitions.length,
     compensationNext: -1,
     observations: plan.transitions.map((transition, transitionIndex) => ({ transitionIndex, observedAfter: transition.after })),
@@ -244,7 +251,19 @@ export function validateLaunchdEffectJournal(value: unknown): LaunchdEffectJourn
   const label = "LaunchdEffectJournalV1";
   const raw = exactKeys(
     value,
-    ["schemaVersion", "id", "coordinatorId", "phase", "planHash", "nextTransition", "compensationNext", "observations", "createdAt", "updatedAt"],
+    [
+      "schemaVersion",
+      "id",
+      "coordinatorId",
+      "phase",
+      "planHash",
+      "launchctlIdentityHash",
+      "nextTransition",
+      "compensationNext",
+      "observations",
+      "createdAt",
+      "updatedAt",
+    ],
     label,
   );
   if (raw.schemaVersion !== 1) refuse(`${label}: schemaVersion`);
@@ -261,6 +280,7 @@ export function validateLaunchdEffectJournal(value: unknown): LaunchdEffectJourn
     coordinatorId: parseLifecycleCoordinatorId(raw.coordinatorId, null),
     phase: raw.phase as LaunchdEffectJournalPhaseV1,
     planHash: parseLowerHexSha256(raw.planHash),
+    launchctlIdentityHash: raw.launchctlIdentityHash === null ? null : parseLowerHexSha256(raw.launchctlIdentityHash),
     nextTransition: integer(raw.nextTransition, 0, MAX_TRANSITIONS, `${label}: nextTransition`),
     compensationNext: raw.compensationNext === null ? null : integer(raw.compensationNext, -1, MAX_TRANSITIONS - 1, `${label}: compensationNext`),
     observations: Object.freeze(observations),
@@ -283,6 +303,7 @@ export function validateLaunchdEffectJournalForPlan(plan: LaunchdEffectPlanV1, j
     malformed("identity");
   }
   const n = plan.transitions.length;
+  if ((journal.launchctlIdentityHash === null) !== (n === 0)) malformed("launchctl identity");
   const c = journal.nextTransition;
   const compensation = journal.compensationNext;
   if (journal.observations.length !== c) malformed("observation count");

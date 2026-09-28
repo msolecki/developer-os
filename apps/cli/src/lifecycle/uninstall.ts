@@ -131,7 +131,7 @@ import { unregisterCodexPlugin } from "../instructions/codex-registration.js";
 import { planInstructionDetach } from "../instructions/detach.js";
 import type { InstructionDetachInputV1, InstructionDetachPlanV1, InstructionFileSystemV1 } from "../instructions/detach.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
-import { createLifecycleEffectAdapters } from "./adapters.js";
+import { createLifecycleEffectAdapters, refuseUnsupportedLaunchd } from "./adapters.js";
 import { observeLifecycleActivationRecord, observeManifestSchema, V2HomeAdmissionError } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
 import {
@@ -238,24 +238,7 @@ export class UninstallCapacityError extends Error {
   }
 }
 
-/**
- * Residual 10 (D59): a launchctl row this host no longer matches cannot `bootout`, so uninstall
- * preserves every file and names the manual unload for each installed generated label.
- * `failureFrom` publishes `kindOf(name)`, so the name is spelled to make it the `reason`.
- */
-export function refuseUnsupportedLaunchd(
-  uid: number,
-  labels: readonly GeneratedLaunchdLabelV1[],
-  cause: LaunchdDistributionUnsupportedError,
-): never {
-  const detail = cause.message.replace(/^unsupported_launchd_distribution: /u, "");
-  const manual = labels.length === 0
-    ? "no generated label is installed"
-    : `unload by hand: ${labels.map((label) => `launchctl bootout gui/${String(uid)}/${label}`).join("; ")}`;
-  const error = new LaunchdDistributionUnsupportedError(`${detail}; every file is preserved; ${manual}`, { cause });
-  error.name = "Unsupported_launchd_distributionError";
-  throw error;
-}
+export { refuseUnsupportedLaunchd };
 
 /** identity-free stat: the guarded port takes a path and nothing else, and returns an already-exact decimal identity. */
 function guardedEntry(

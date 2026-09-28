@@ -36,6 +36,7 @@ import { assertLaunchdPlan, launchdEffectPlan, parseCanonicalLaunchdPlist, type 
 import {
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   expandLaunchdProcessTable,
+  launchctlIdentityHash,
   launchdProcessTableHash,
   requireLaunchdMutationTable,
   type LaunchdProcessDirectoryIdentityV1,
@@ -390,9 +391,16 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
     return next;
   }
 
-  /** Hash-bound to the effect plan and de-slotted to the compiled template before any query or mutation. */
-  async #table(effect: LaunchdEffectPlanV1): Promise<SupportedLaunchdProcessTableV1> {
+  /**
+   * Hash-bound to the effect plan and de-slotted to the compiled template before any query or
+   * mutation. A launchctl other than the one the journal was opened with is a host change, not a
+   * damaged table: it refuses before the hash comparison that it would otherwise fail.
+   */
+  async #table(effect: LaunchdEffectPlanV1, journal: LaunchdEffectJournalV1 | null): Promise<SupportedLaunchdProcessTableV1> {
     const table = await this.#dependencies.processTable();
+    if (journal !== null && journal.launchctlIdentityHash !== launchctlIdentityHash(table.launchctlIdentity)) {
+      throw new LaunchdDistributionUnsupportedError("launchctl changed since this launchd effect journal was opened");
+    }
     if (launchdProcessTableHash(table) !== effect.processTableHash) recovery("launchd_process_table_changed", table.staging.root.path);
     requireLaunchdMutationTable(table, this.#template);
     return table;
@@ -400,8 +408,8 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
 
   async #apply(effect: LaunchdEffectPlanV1): Promise<void> {
     const n = effect.transitions.length;
-    const table = n === 0 ? null : await this.#table(effect);
     let journal = await this.#dependencies.journals.readJournal(effect);
+    const table = n === 0 ? null : await this.#table(effect, journal);
     if (journal === null) {
       const createdAt = this.#dependencies.clock();
       journal = {
@@ -410,6 +418,7 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
         coordinatorId: effect.coordinatorId,
         phase: "planned",
         planHash: launchdEffectPlanHash(effect),
+        launchctlIdentityHash: table === null ? null : launchctlIdentityHash(table.launchctlIdentity),
         nextTransition: 0,
         compensationNext: null,
         observations: [],
@@ -452,7 +461,7 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
       await this.#write(effect, journal, { phase: "rolled_back", compensationNext: -1 });
       return;
     }
-    const table = effect.transitions.length === 0 ? null : await this.#table(effect);
+    const table = effect.transitions.length === 0 ? null : await this.#table(effect, journal);
     if (journal.phase === "applied") {
       const index = journal.nextTransition;
       const transition = effect.transitions[index] ?? recovery("lifecycle_effect_journal_state", effect.id);

@@ -74,6 +74,7 @@ function journal(plan: LaunchdEffectPlanV1, patch: Partial<LaunchdEffectJournalV
     coordinatorId: plan.coordinatorId,
     phase: "planned",
     planHash: launchdEffectPlanHash(plan),
+    launchctlIdentityHash: plan.transitions.length === 0 ? null : ("4".repeat(64) as LowerHexSha256),
     nextTransition: 0,
     compensationNext: null,
     observations: [],
@@ -185,6 +186,7 @@ describe("the §2.4 phase relation", () => {
     const wrong = journal(plan, { phase: "applied", nextTransition: 1, observations: [{ transitionIndex: 0, observedAfter: first.before }] });
     expect(() => { validateLaunchdEffectJournalForPlan(plan, wrong); }).toThrow(LifecycleRecoveryRequiredError);
     expect(() => { validateLaunchdEffectJournalForPlan(plan, journal(plan, { planHash: "f".repeat(64) as LowerHexSha256 })); }).toThrow(LifecycleRecoveryRequiredError);
+    expect(() => { validateLaunchdEffectJournalForPlan(plan, journal(plan, { launchctlIdentityHash: null })); }).toThrow(LifecycleRecoveryRequiredError);
   });
 
   it("reports only finalized and rolled_back as terminal", () => {

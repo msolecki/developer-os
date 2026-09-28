@@ -669,6 +669,47 @@ describe("LaunchdEffectExecutor", () => {
     expect(await phaseOf(fx, "after_files")).toBeNull();
   });
 
+  /** Five journal writes (planned … applied), then the doctor bootstrap: the kill lands with the job loaded. */
+  const KILLED_AFTER_BOOTSTRAP = 6;
+
+  /** Spec §5.3 rule 4: a macOS update between a killed apply and its resume moves launchctl. */
+  it("refuses unsupported_launchd_distribution, not recovery, when launchctl changed after the journal was opened", async () => {
+    const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    publishPlists(fx);
+    fx.world.crashAt = fx.world.boundaries + KILLED_AFTER_BOOTSTRAP;
+    await expect(fx.executor().apply(fx.ref("after_files"))).rejects.toThrow(Crash);
+    fx.world.crashAt = null;
+    expect(await phaseOf(fx, "after_files")).toBe("applied");
+    const loadedBefore = liveSet(fx);
+    const updated = expandLaunchdProcessTable(fx.table.staging, { ...LAUNCHCTL_IDENTITY, productVersion: "26.7" });
+
+    for (const run of [
+      () => fx.executor({ processTable: () => Promise.resolve(updated) }).apply(fx.ref("after_files")),
+      () => fx.executor({ processTable: () => Promise.resolve(updated) }).compensate(fx.ref("after_files")),
+    ]) {
+      const refused: unknown = await run().then(() => null, (error: unknown) => error);
+      expect(refused).toBeInstanceOf(LaunchdDistributionUnsupportedError);
+      expect(refused).not.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    }
+    expect([await phaseOf(fx, "after_files"), liveSet(fx)]).toStrictEqual(["applied", loadedBefore]);
+  });
+
+  it("still refuses recovery-required when only the staging identities changed after the journal was opened", async () => {
+    const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    publishPlists(fx);
+    fx.world.crashAt = fx.world.boundaries + KILLED_AFTER_BOOTSTRAP;
+    await expect(fx.executor().apply(fx.ref("after_files"))).rejects.toThrow(Crash);
+    fx.world.crashAt = null;
+    const restaged = expandLaunchdProcessTable(
+      { root: fx.table.staging.root, home: fx.table.staging.home, tmp: stagingIdentity(fx.table.staging.tmp.path, "99") },
+      LAUNCHCTL_IDENTITY,
+    );
+
+    await expect(fx.executor({ processTable: () => Promise.resolve(restaged) }).apply(fx.ref("after_files"))).rejects.toMatchObject({
+      reason: "launchd_process_table_changed",
+    });
+  });
+
   it("refuses a table carrying a retired pinned table ID, before writing a journal", async () => {
     const retired = { ...processTable(), id: "launchctl-macos-26.6.2-25G83-fd3-v1" as unknown as SupportedLaunchdProcessTableV1["id"] };
     const fx = fixture(plan("automation_enable", ["doctor"], {}, retired), retired);

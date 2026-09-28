@@ -27,6 +27,7 @@ import type {
 } from "@developer-os/core";
 import {
   LaunchdBootoutRunner,
+  LaunchdDistributionUnsupportedError,
   LaunchdEffectExecutor,
   LaunchdEffectJournalStore,
   LaunchdObserver,
@@ -38,6 +39,8 @@ import {
   loadLaunchdProcessTable,
 } from "@developer-os/platform-macos";
 import type {
+  GeneratedLaunchdLabelV1,
+  LaunchdPlanV1,
   LaunchdEffectDependenciesV1,
   LaunchdEmptyDirectoryObservationV1,
   LaunchdHostObserverV1,
@@ -87,6 +90,34 @@ function recovery(reason: string, path: string): never {
   throw new LifecycleRecoveryRequiredError(reason, [path]);
 }
 
+/**
+ * Residual 10 (D59): a launchctl row this host no longer matches cannot `bootout`, so uninstall
+ * preserves every file and names the manual unload for each installed generated label.
+ * `failureFrom` publishes `kindOf(name)`, so the name is spelled to make it the `reason`.
+ */
+export function refuseUnsupportedLaunchd(
+  uid: number,
+  labels: readonly GeneratedLaunchdLabelV1[],
+  cause: LaunchdDistributionUnsupportedError,
+): never {
+  const detail = cause.message.replace(/^unsupported_launchd_distribution: /u, "");
+  const manual = labels.length === 0
+    ? "no generated label is installed"
+    : `unload by hand: ${labels.map((label) => `launchctl bootout gui/${String(uid)}/${label}`).join("; ")}`;
+  const error = new LaunchdDistributionUnsupportedError(`${detail}; every file is preserved; ${manual}`, { cause });
+  error.name = "Unsupported_launchd_distributionError";
+  throw error;
+}
+
+/** Every generated label a coordinator's launchd plan may have loaded: each job's prior and its postimage. */
+function plannedLabels(plan: LaunchdPlanV1): readonly GeneratedLaunchdLabelV1[] {
+  const labels = plan.entries.flatMap((entry) => [
+    ...(entry.beforeLiveState.state === "loaded" ? [entry.beforeLiveState.label] : []),
+    ...(entry.generatedLabel === null ? [] : [entry.generatedLabel]),
+  ]);
+  return [...new Set(labels)];
+}
+
 export function createLifecycleEffectAdapters(
   context: CliLifecycleContext,
   ports: LifecycleEffectPortsV1,
@@ -107,12 +138,14 @@ export function createLifecycleEffectAdapters(
    * executor is bound to one coordinator's plan — so the plan is resolved from the published
    * effect plan's own coordinator ID, and the executor re-derives and hash-binds the rest.
    */
-  const launchdFor = async (ref: LifecycleEffectRefV1<string>): Promise<LaunchdEffectExecutor> => {
+  const launchdFor = async (
+    ref: LifecycleEffectRefV1<string>,
+  ): Promise<{ readonly executor: LaunchdEffectExecutor; readonly labels: readonly GeneratedLaunchdLabelV1[] }> => {
     const effect = await journals.readPlan(ref);
     const key = lifecycleHomeKeyFromCoordinatorId(context.roots.productHome, effect.coordinatorId);
     const { plan } = await context.store(key).read(effect.coordinatorId);
     if (plan.participants.launchd === null) recovery("launchd_effect_unbound", ref.id);
-    return new LaunchdEffectExecutor({
+    const executor = new LaunchdEffectExecutor({
       ...ports.launchd,
       plan: plan.participants.launchd,
       journals,
@@ -123,13 +156,24 @@ export function createLifecycleEffectAdapters(
           host: ports.launchd.host,
         }),
     });
+    return { executor, labels: plannedLabels(plan.participants.launchd) };
+  };
+  /** A resumed journal whose launchctl moved (a macOS update) names the manual unload, residual 10. */
+  const unloadByHandOnHostChange = async (ref: LifecycleEffectRefV1<string>, method: "apply" | "compensate"): Promise<void> => {
+    const { executor, labels } = await launchdFor(ref);
+    try {
+      await executor[method](ref);
+    } catch (error) {
+      if (error instanceof LaunchdDistributionUnsupportedError) refuseUnsupportedLaunchd(context.effectiveUid, labels, error);
+      throw error;
+    }
   };
   const launchd: LifecycleEffectAdapterV1 = {
-    apply: async (ref) => (await launchdFor(ref)).apply(ref),
-    finalize: async (ref) => (await launchdFor(ref)).finalize(ref),
-    compensate: async (ref) => (await launchdFor(ref)).compensate(ref),
-    observe: async (ref) => (await launchdFor(ref)).observe(ref),
-    compact: async (ref, outcome) => (await launchdFor(ref)).compact(ref, outcome),
+    apply: (ref) => unloadByHandOnHostChange(ref, "apply"),
+    finalize: async (ref) => (await launchdFor(ref)).executor.finalize(ref),
+    compensate: (ref) => unloadByHandOnHostChange(ref, "compensate"),
+    observe: async (ref) => (await launchdFor(ref)).executor.observe(ref),
+    compact: async (ref, outcome) => (await launchdFor(ref)).executor.compact(ref, outcome),
   };
 
   return {
