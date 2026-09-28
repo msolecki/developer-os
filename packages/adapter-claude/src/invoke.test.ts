@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { userInfo } from "node:os";
+import { describe, expect, it, vi } from "vitest";
 import type {
   ProcessRequest,
   ProcessResult,
@@ -72,11 +73,28 @@ describe("invokeClaude", () => {
     ]);
   });
 
-  it("passes an empty environment, so nothing inherits by accident", async () => {
+  it("passes only USER and LOGNAME, set to the account name, so the Keychain login resolves and nothing else inherits", async () => {
     const { runner, seen } = capturing({ stdout: "{}" });
     await invokeClaude(installation, invocation, { runner });
-    expect(seen()?.env).toEqual({});
+    const account = userInfo().username;
+    expect(seen()?.env).toStrictEqual({ USER: account, LOGNAME: account });
+    expect(seen()?.env).not.toHaveProperty("HOME");
     expect(seen()?.stdin).toBe("");
+  });
+
+  it("takes the account name from the password database, never from the parent's USER or LOGNAME", async () => {
+    vi.stubEnv("USER", "impostor");
+    vi.stubEnv("LOGNAME", "impostor");
+    vi.stubEnv("HOME", "/tmp/impostor-home");
+    try {
+      const { runner, seen } = capturing({ stdout: "{}" });
+      await invokeClaude(installation, invocation, { runner });
+      const account = userInfo().username;
+      expect(account).not.toBe("impostor");
+      expect(seen()?.env).toStrictEqual({ USER: account, LOGNAME: account });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   /**

@@ -223,17 +223,31 @@ have missed.
 > product has. NEW-75 stays open and now names that as its closure condition.
 > The decision below is therefore unchanged.
 
-**Decision: the empty environment is retained. No variable is admitted from the parent.** Claude
-is spawned with `env: {}` (`packages/adapter-claude/src/invoke.ts:140`); Codex
+> **Amended 2026-09-28 (NEW-75, Claude half): Claude gets `USER` and `LOGNAME`.**
+> Observed on the founder machine with Claude Code 2.1.283. The production ingest
+> invocation (the shipped argv, `env: {}`) returned `is_error` with result
+> `Not logged in · Please run /login`, so every `ingest --agent claude` refused with
+> "the claude agent did not return a usable proposal". The identical argv with
+> `env { USER, LOGNAME }` only — no `HOME` — succeeded. The subscription credential
+> is a macOS Keychain item looked up by account name, and the empty environment
+> left the vendor without one. `invokeClaude` therefore passes exactly
+> `{ USER: <account>, LOGNAME: <account> }`, the account taken from
+> `os.userInfo().username` (the password database), never from the parent's
+> `process.env`. Nothing else is admitted; D15's refusal of `HOME` stands, and the
+> Codex arm is unchanged. `EXPECTED_VENDOR_ENVIRONMENT` in
+> `tests/security/network.test.ts` carries the two names.
+
+**Decision: no variable is admitted from the parent.** Claude
+is spawned with `env: { USER, LOGNAME }` set to the account name (the amendment above, not
+inherited from the parent) (`packages/adapter-claude/src/invoke.ts`); Codex
 always gets `env: { CODEX_HOME: <isolated per-run home> }`: `codexHome` is required and
 `invokeCodex` refuses a call without it (D73, NEW-106), and every product call supplies it
 through `invokeIsolatedCodex` (`apps/cli/src/commands/ingest.ts`). Beyond that one product-chosen
 variable, neither vendor inherits anything from the parent — not `HOME`, not a
 proxy variable. Task 1 Step 6 recorded both binaries exiting `0` under
-`env -i … --help` (Claude row 13, Codex row 7 above), and no observation
-anywhere in this document — across Tasks 1, 4 or 6 — records either vendor
-failing for want of a variable. Per the Task 6 brief's own Step 1, this is the
-expected outcome, and it is what the plan's roadmap correction sanctions.
+`env -i … --help` (Claude row 13, Codex row 7 above); until 2026-09-28 no
+observation in this document recorded either vendor failing for want of a
+variable, and the one that now does (the amendment above) admits two names only.
 `EXPECTED_VENDOR_ENVIRONMENT` in `tests/security/network.test.ts:103` remains
 the single place a future admission would be made, and it may be made only
 against a recorded observation of a vendor failing without the variable —
@@ -300,7 +314,8 @@ on and supplying a fake key, so no model turn can complete.
   a per-process `.json` and `.key`. The flag's own help text says sessions "will not be saved to
   disk and cannot be resumed"; what was observed is narrower than that sentence. The harness pins
   this set, so a change in it fails a test rather than passing unnoticed.
-- **This compounds with the empty environment.** The child is handed `env: {}`, so it has no
+- **This compounds with the empty environment.** The child is handed no `HOME` (only `USER` and
+  `LOGNAME` since NEW-75), so it has no
   `HOME` of its own and resolves one through `getpwuid_r` (see the Task 6 section above) — which
   means the files above land in the *developer's real* `~/.claude` during a production ingest run,
   not in a sandbox. The test avoids this only because it sets `HOME` explicitly, which production

@@ -1,3 +1,4 @@
+import { userInfo } from "node:os";
 import { isAbsolute } from "node:path";
 import { cwd } from "node:process";
 import { parseStructuredPayload, screenProseArgument } from "@developer-os/security";
@@ -47,6 +48,15 @@ const MAX_TURNS_CEILING = 50;
  * Claude table rows 14-17.
  */
 export const DEFAULT_MAX_TURNS = 5;
+
+// NEW-75, Claude Code 2.1.283: under `env: {}` the Keychain login is not found
+// ("Not logged in"); `USER`/`LOGNAME` alone fix it. Read from the password
+// database, never `process.env`; `HOME` stays refused (D15) —
+// `docs/architecture/vendor-invocation.md`, Task 6.
+function keychainAccountEnvironment(): Readonly<Record<string, string>> {
+  const account = userInfo().username;
+  return { USER: account, LOGNAME: account };
+}
 
 export async function invokeClaude(
   installation: ClaudeInstallation,
@@ -137,7 +147,7 @@ export async function invokeClaude(
       cwd: cwd(),
       stdin: "",
       timeoutMs: invocation.timeoutMs,
-      env: {},
+      env: keychainAccountEnvironment(),
     });
   } catch {
     return { ok: false, reason: "spawn-failed" };

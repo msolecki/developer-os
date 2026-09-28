@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -82,19 +83,20 @@ import type { InstalledFixture, VendorCall } from "./helpers.js";
  */
 
 /**
- * What the vendor's child process is handed. Both adapters pass `env: {}`
- * (`packages/adapter-claude/src/invoke.ts:139`,
- * `packages/adapter-codex/src/invoke.ts:324`), so this is empty today.
+ * What the Claude child process is handed during ingest: `USER` and `LOGNAME`
+ * set to `os.userInfo().username`, and nothing else — admitted by NEW-75
+ * (2026-09-28, Claude Code 2.1.283) against a recorded observation of
+ * `env: {}` failing with "Not logged in", because the subscription credential
+ * is a Keychain item looked up by account name
+ * (`docs/architecture/vendor-invocation.md`, Task 6 section). Still no `HOME`.
  *
- * Declared as an expectation rather than written as `toEqual({})` inline: an
- * empty environment is stricter than spec §2.7 asks and this constant is where a
- * vendor CLI that genuinely needs `HOME` would be admitted, deliberately, in one
- * place a reviewer can see, against a recorded observation of it failing without
- * the variable — never for a proxy (the case below named "does not pass a
- * proxy..." already proves one does not reach the child). Kept empty per F2,
- * `docs/architecture/vendor-invocation.md`'s Task 6 section, 2026-09-05.
+ * Declared as an expectation rather than written inline: this constant is where
+ * a vendor variable is admitted, deliberately, in one place a reviewer can see,
+ * against a recorded observation of the vendor failing without it — never for a
+ * proxy (the case below named "does not pass a proxy..." already proves one
+ * does not reach the child).
  *
- * **What this constant being `{}` does not prove.** An empty environment is not
+ * **What this constant omitting `HOME` does not prove.** It is not
  * evidence the child cannot find the invoking user's home directory: both
  * installed binaries statically import `getpwuid_r` (`nm -u`), the libc call a
  * process with no `HOME` falls back to via the system password database — see
@@ -102,9 +104,12 @@ import type { InstalledFixture, VendorCall } from "./helpers.js";
  * no permitted probe could observe it at runtime. What actually keeps the
  * vendor away from the user's own settings and hooks is `--restricted` /
  * `--safe-mode` (Claude) and `--ignore-user-config` (Codex), not this
- * constant staying empty.
+ * constant staying small.
  */
-const EXPECTED_VENDOR_ENVIRONMENT: Readonly<Record<string, string>> = {};
+const EXPECTED_VENDOR_ENVIRONMENT: Readonly<Record<string, string>> = {
+  USER: userInfo().username,
+  LOGNAME: userInfo().username,
+};
 
 const PROXY = "http://proxy.invalid:8080";
 
@@ -279,9 +284,8 @@ describe("the one outbound call this product makes", () => {
    *
    * **The non-empty assertion is on the parent, not the child**, and that is the
    * one place this case departs from the shape the brief sketched. The child's
-   * environment is empty *by design* (`env: {}` at both adapters), so asserting
-   * `Object.keys(child.env).length > 0` would pin a property this product does
-   * not have and could only be made green by weakening the product. The rule
+   * environment is fixed *by design* (`USER`/`LOGNAME` only), so a non-empty
+   * child proves nothing about inheritance. The rule
    * that a sweep must be non-empty per scope is honoured on the scope that must
    * be non-empty: the environment the run was made under really did carry both
    * proxies.

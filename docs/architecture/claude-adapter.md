@@ -347,7 +347,12 @@ claude -p <prompt> --output-format json --max-turns <N> --tools "" --strict-mcp-
   --restricted --safe-mode --no-session-persistence --permission-prompts none
 ```
 
-Stdin and environment are empty. The prompt is screened as prose before spawn. `maxTurns` must be
+Stdin is empty. The environment is exactly `{ USER, LOGNAME }`, both set to
+`os.userInfo().username` and never read from the parent's `process.env`; there is no `HOME`
+(D15). Observed 2026-09-28 on Claude Code 2.1.283 (NEW-75): with `env: {}` the shipped argv
+returned `is_error` with `Not logged in · Please run /login`, because the subscription credential
+is a macOS Keychain item looked up by account name; the identical argv with `USER` and `LOGNAME`
+only succeeded (`docs/architecture/vendor-invocation.md`, Task 6 amendment). The prompt is screened as prose before spawn. `maxTurns` must be
 an integer from 1 through 50; the exported default is 5 for the future cross-vendor call site. The
 shared `agent.prompt` argument parser in `packages/core` is strict, accepts only bounded non-empty
 `prompt`, refuses hostile prototype keys, and currently refuses a workflow-supplied `maxTurns` until

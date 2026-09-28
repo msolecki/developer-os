@@ -49,7 +49,7 @@ import {
  * Every negative has a positive control in the same file: the same install, observed through the
  * same capture, with the isolation removed, must carry the managed text.
  *
- * **Founder caveats, not claims.** (1) Both product vendors spawn without `HOME` (Claude `env: {}`,
+ * **Founder caveats, not claims.** (1) Both product vendors spawn without `HOME` (Claude `USER`/`LOGNAME` only,
  * Codex `CODEX_HOME` alone), so they resolve the real home; this file pins a disposable `HOME`,
  * which is not the product's exact environment (the D52 note's caveat, and NEW-103 for Claude).
  * (2) `codex exec` contacts github.com and chatgpt.com at startup for plugin sync (§15); nothing is
