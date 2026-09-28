@@ -170,6 +170,8 @@ export interface OwnerUpdatePlanContextV1 {
   readonly productHome: CanonicalAbsolutePathV1;
   /** The owner's complete current manifest partition, in manifest order, from the guarded preimage. */
   readonly currentPartition: readonly ManagedArtifactV2[];
+  /** P9 (D72): selects the slot admission; absent means `update_apply`. */
+  readonly operation?: "update_apply" | "update_rollback";
 }
 
 export interface OwnerUpdateJournalV1 {
@@ -193,7 +195,11 @@ export const MAXIMUM_OWNER_EXTERNAL_EFFECT_EVIDENCE_BYTES = 1_048_576;
 const MAX_OWNER_OPERATIONS = 1_000_000;
 const MAX_OWNER_FOUNDATION_REFS = 7_814;
 const MAX_OWNER_FORWARD_REFS = 3_907;
-const OWNER_SLOTS = { forward: "owner_forward_files", compensation: "owner_inverse_files" } as const;
+/** Spec 2 §5.3 as amended by P9 (D72): a rollback owner plan takes only `owner_inverse_files` refs. */
+const OWNER_SLOTS = {
+  update_apply: { forward: "owner_forward_files", compensation: "owner_inverse_files" },
+  update_rollback: { forward: "owner_inverse_files", compensation: "owner_inverse_files" },
+} as const;
 const OWNER_JOURNAL_PHASES: readonly OwnerUpdateJournalV1["phase"][] = ["planned", "files_applying", "effects_applying", "verified", "compensating", "finalized", "rolled_back", "compacting"];
 
 function fail(label: string): never {
@@ -385,8 +391,9 @@ function checkOwnerFoundation(plan: OwnerUpdatePlanV1, context: OwnerUpdatePlanC
   const byId = new Map(refs.map((ref) => [ref.id as string, ref]));
   const forward = refs.filter((ref) => ref.role.kind === "forward");
   if (forward.length * 2 !== refs.length || forward.length > MAX_OWNER_FORWARD_REFS) fail(`${label}.foundation: unpaired refs`);
+  const slots = OWNER_SLOTS[context.operation ?? "update_apply"];
   for (const ref of refs) {
-    if (ref.slot !== (ref.role.kind === "forward" ? OWNER_SLOTS.forward : OWNER_SLOTS.compensation)) fail(`${label}.foundation: not an owner slot`);
+    if (ref.slot !== (ref.role.kind === "forward" ? slots.forward : slots.compensation)) fail(`${label}.foundation: not an owner slot`);
     if (ref.role.kind !== "forward") continue;
     const compensation = ref.role.compensationId === null ? undefined : byId.get(ref.role.compensationId);
     if (compensation?.role.kind !== "compensation" || compensation.role.forwardId !== ref.id) fail(`${label}.foundation: an unpaired forward ref`);

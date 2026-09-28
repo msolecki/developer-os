@@ -5,6 +5,7 @@ import { encodeCanonicalJson } from "../lifecycle/canonical-json.js";
 import type { AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import {
+  materializeRollbackSchemaMigration,
   materializeSchemaMigration,
   materializeSchemaMigrations,
   orderMigrationChain,
@@ -20,6 +21,7 @@ import {
   validateSchemaMigrationExecutionJournal,
   validateSchemaMigrationRegistry,
   type MigrationMaterializationContextV1,
+  type RollbackMigrationMaterializationContextV1,
   type SchemaMigrationPlanV1,
   type SchemaMigrationProviderV1,
   type SchemaMigrationRegistryV1,
@@ -585,5 +587,49 @@ describe("buildUpdateFoundationParticipantRef", () => {
       mutations: [{ targetPath: configPath, operation: "replace", expectedBeforeHash: sha(configV1), content: payload(0, configV2), digest: payload(50, configV2) }],
       journalOrdinal: 110, createdAt: at,
     })).toThrow(/digest/);
+  });
+});
+
+describe("materializeRollbackSchemaMigration (D72 P9)", () => {
+  const withSlot = (refs: readonly UpdateFoundationParticipantRefV2[], slot: UpdateFoundationParticipantRefV2["slot"]): UpdateFoundationParticipantRefV2[] => refs.map((ref) => {
+    const unsigned: Omit<UpdateFoundationParticipantRefV2, "planHash"> = { id: ref.id, slot, role: ref.role, mutations: ref.mutations, maximumJournalBytes: ref.maximumJournalBytes, initialJournal: ref.initialJournal };
+    return { ...unsigned, planHash: updateFoundationParticipantPlanHash(unsigned) };
+  });
+  const retained = {
+    id: id("config-v2"),
+    domain: "product_state" as const,
+    fromVersion: v(1),
+    toVersion: v(2),
+    mutations: [{ path: configPath, expectedCurrentHash: sha(configV2), restoreHash: sha(configV1), restoreBlob: { path: "blobs/0000000000.bin" as never, bytes: configV1.byteLength, sha256: sha(configV1) } }],
+  };
+  const rollbackContext = (slot: UpdateFoundationParticipantRefV2["slot"] = "schema_inverse"): RollbackMigrationMaterializationContextV1 => ({
+    coordinatorId,
+    productHome,
+    brainRoot,
+    restore: new Map([[configPath, payload(1, configV1)]]),
+    current: new Map([[configPath, payload(0, configV2)]]),
+    foundation: withSlot(foundationPair(10, configPath, configV2, configV1, 1, 0), slot),
+  });
+
+  it("restores the retained before bytes over the update's after bytes through schema_inverse refs", () => {
+    const plan = materializeRollbackSchemaMigration(retained, rollbackContext());
+    expect(plan.mutations).toEqual([{ path: configPath, beforeHash: sha(configV2), afterHash: sha(configV1), afterBlob: payload(1, configV1), inverseBlob: payload(0, configV2) }]);
+    expect(plan.foundation.every((ref) => ref.slot === "schema_inverse")).toBe(true);
+  });
+
+  it("refuses forward-slot refs on a rollback migration", () => {
+    expect(() => materializeRollbackSchemaMigration(retained, rollbackContext("schema_forward"))).toThrow(/direction-matching/);
+  });
+
+  it("refuses inverse-slot refs on an update migration", () => {
+    expect(() => materializeMigration(configDraft, { foundation: withSlot(foundationPair(10, configPath, configV1, configV2, 0, 1), "schema_inverse") })).toThrow(/direction-matching/);
+  });
+
+  it("refuses restore bytes that differ from the retained blob", () => {
+    expect(() => materializeRollbackSchemaMigration(retained, { ...rollbackContext(), restore: new Map([[configPath as string, payload(1, configV3)]]) })).toThrow(/retained blob/);
+  });
+
+  it("refuses current bytes that differ from the expected current hash", () => {
+    expect(() => materializeRollbackSchemaMigration(retained, { ...rollbackContext(), current: new Map([[configPath as string, payload(0, configV3)]]) })).toThrow(/expected current hash/);
   });
 });

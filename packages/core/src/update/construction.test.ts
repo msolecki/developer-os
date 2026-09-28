@@ -7,6 +7,7 @@ import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import {
   advanceConstructionJournal,
   buildConstructionPlan,
+  checkRetainedRollbackBlobSource,
   constructionCompactionTarget,
   constructionDeletionAuthority,
   constructionEvidenceBytes,
@@ -15,6 +16,7 @@ import {
   constructionPlanHash,
   initialConstructionJournal,
   payloadSourceProjectionHash,
+  retainedRollbackBlobPath,
   rollbackEntrySourceProjectionHash,
   rollbackSourceEntriesProjectionHash,
   updateConstructionEvidencePath,
@@ -29,6 +31,7 @@ import {
   type UpdateConstructionPayloadSourceV1,
   type UpdateConstructionPlanInputV1,
   type UpdateConstructionPlanV1,
+  type UpdateConstructionRetainedRollbackBlobSourceV1,
   type UpdateConstructionStepV1,
 } from "./construction.js";
 import { buildUpdateFoundationParticipantRef, updateFoundationStagedDigestBytes, type UpdatePayloadRefV1 } from "./migrations.js";
@@ -607,5 +610,65 @@ describe("Codex registration construction rows (D72 addendum, P6(d))", () => {
 
   it("refuses two registration rows for one owner plan", () => {
     expect(() => buildConstructionPlan(withRegistrationRows([{}, {}]))).toThrow(/an authority selects two rows/);
+  });
+});
+
+describe("retained rollback blob construction rows (D72 P9)", () => {
+  const restored = encoder.encode("owner preimage v1\n");
+  const payloadId = `rb_${nonce}_3` as RollbackPayloadIdV1;
+  const preimage: RollbackPayloadEntryV1 = { ordinal: 0, path: "blobs/0000000000.bin" as RollbackPayloadEntryV1["path"], role: "owner_preimage", bytes: restored.byteLength, sha256: sha(restored) };
+  const retainedInventory = { payloadId, entries: [preimage] };
+  const blobSource = (overrides: Partial<UpdateConstructionRetainedRollbackBlobSourceV1> = {}): UpdateConstructionRetainedRollbackBlobSourceV1 => ({ kind: "retained_rollback_blob", payloadId, ordinal: 0, bytes: restored.byteLength, sha256: sha(restored), mode: 384, ...overrides });
+
+  function withBlobRows(operation: "update_apply" | "update_rollback", sources: readonly UpdateConstructionRetainedRollbackBlobSourceV1[], payloadKind: "owner_content" | "state_after" = "owner_content"): UpdateConstructionPlanInputV1 {
+    const base = input(operation);
+    const rows = [...base.files];
+    const at0 = rows.findIndex((file) => file.role.kind === "payload");
+    rows.splice(at0, 0, ...sources.map((source, index): UpdateConstructionFileInputV1 => ({ role: { kind: "payload", payloadKind, source }, path: path(`update/payloads/${(at0 + index).toString(10).padStart(10, "0")}.payload`), bytes: restored.byteLength, sha256: sha(restored), mode: 384 })));
+    return { ...base, files: rows };
+  }
+
+  it("admits a retained blob as owner content of an update_rollback plan", () => {
+    const plan = buildConstructionPlan(withBlobRows("update_rollback", [blobSource()]));
+    expect(validateConstructionBijections(plan)).toBe(true);
+    expect(plan.files.some((file) => file.role.kind === "payload" && file.role.source.kind === "retained_rollback_blob")).toBe(true);
+  });
+
+  it("refuses a retained blob in an update_apply plan", () => {
+    expect(() => buildConstructionPlan(withBlobRows("update_apply", [blobSource()]))).toThrow(/outside update_rollback/);
+  });
+
+  it("refuses a retained blob as state_after", () => {
+    expect(() => buildConstructionPlan(withBlobRows("update_rollback", [blobSource()], "state_after"))).toThrow(/state_after/);
+  });
+
+  it("refuses a source whose hash differs from its row", () => {
+    expect(() => buildConstructionPlan(withBlobRows("update_rollback", [blobSource({ sha256: sha("other") })]))).toThrow(/differs from its row/);
+  });
+
+  it("refuses two rows bound to one retained blob", () => {
+    expect(() => buildConstructionPlan(withBlobRows("update_rollback", [blobSource(), blobSource()]))).toThrow(/an authority selects two rows/);
+  });
+
+  it("derives the blob path under the retained payload root", () => {
+    expect(retainedRollbackBlobPath(home, blobSource())).toBe(`${home}/rollback/${payloadId}/blobs/0000000000.bin`);
+  });
+
+  it("admits the source against its retained inventory row", () => {
+    expect(checkRetainedRollbackBlobSource(blobSource(), retainedInventory)).toEqual(preimage);
+  });
+
+  it.each([
+    ["another payload", blobSource({ payloadId: `rb_${nonce}_4` as RollbackPayloadIdV1 }), /not the retained payload/],
+    ["an ordinal past the inventory", blobSource({ ordinal: 1 }), /not a retained preimage row/],
+    ["different bytes", blobSource({ bytes: 1 }), /differs from its inventory row/],
+    ["a different hash", blobSource({ sha256: sha("other") }), /differs from its inventory row/],
+  ] as const)("refuses %s against the retained inventory", (_name, source, message) => {
+    expect(() => checkRetainedRollbackBlobSource(source, retainedInventory)).toThrow(message);
+  });
+
+  it("refuses an inverse-plan leaf row as a restore blob", () => {
+    const leafRow: RollbackPayloadEntryV1 = { ...preimage, path: "plans/owner_inverse/owner_codex.plan.json" as RollbackPayloadEntryV1["path"], role: "inverse_plan_leaf" };
+    expect(() => checkRetainedRollbackBlobSource(blobSource(), { payloadId, entries: [leafRow] })).toThrow(/not a retained preimage row/);
   });
 });

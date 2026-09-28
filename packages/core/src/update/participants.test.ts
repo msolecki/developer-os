@@ -215,6 +215,22 @@ describe("owner update plans", () => {
     expect(() => validateOwnerUpdatePlan(mutate(clone(buildOwner())), context)).toThrow();
   });
 
+  describe("slot admission follows the operation (D72 P9)", () => {
+    const inverseSlots = (plan: OwnerUpdatePlanV1): OwnerUpdatePlanV1 => ({ ...plan, foundation: plan.foundation.map((ref) => ({ ...ref, slot: "owner_inverse_files" as const })) });
+
+    it("admits a rollback owner plan whose refs all take owner_inverse_files", () => {
+      expect(validateOwnerUpdatePlan(inverseSlots(buildOwner()), { ...context, operation: "update_rollback" }).foundation.every((ref) => ref.slot === "owner_inverse_files")).toBe(true);
+    });
+
+    it("refuses a rollback owner plan with an owner_forward_files ref", () => {
+      expect(() => validateOwnerUpdatePlan(buildOwner(), { ...context, operation: "update_rollback" })).toThrow(/not an owner slot/u);
+    });
+
+    it("refuses an update owner plan whose forward ref takes owner_inverse_files", () => {
+      expect(() => validateOwnerUpdatePlan(inverseSlots(buildOwner()), { ...context, operation: "update_apply" })).toThrow(/not an owner slot/u);
+    });
+  });
+
   describe("an ephemeral reservation (D72 P5)", () => {
     const reservation = path(`${root}/state.json`);
     const ephemeral = { ...artifact(reservation, "file", null), verification: { mode: "ephemeral" } } as ManagedArtifactV2;

@@ -442,7 +442,7 @@ export function updateFoundationParticipantPlanHash(ref: Omit<UpdateFoundationPa
   return createHash("sha256").update("developer-os/foundation-participant-plan/v2\0", "ascii").update(canonical(projection).slice(0, -1), "utf8").digest("hex") as LowerHexSha256;
 }
 
-function checkFoundationRef(ref: UpdateFoundationParticipantRefV2, slot: UpdateFoundationParticipantRefV2["slot"], context: MigrationMaterializationContextV1): void {
+function checkFoundationRef(ref: UpdateFoundationParticipantRefV2, slot: UpdateFoundationParticipantRefV2["slot"], context: Pick<MigrationMaterializationContextV1, "coordinatorId" | "productHome">): void {
   const label = "UpdateFoundationParticipantRefV2";
   if (ref.slot !== slot) fail(`${label}.slot: not the direction-matching schema slot`);
   if (ref.mutations.length < 1 || ref.mutations.length > MAX_FOUNDATION_MUTATIONS) fail(`${label}.mutations: count`);
@@ -463,13 +463,13 @@ function checkFoundationRef(ref: UpdateFoundationParticipantRefV2, slot: UpdateF
  * compensation whose mutations reverse it, and the concatenated forward mutations equal to the
  * plan's replace set in canonical target-path order.
  */
-function checkFoundationBinding(refs: readonly UpdateFoundationParticipantRefV2[], forward: readonly ForwardMutationCoreV1[], inverses: ReadonlyMap<string, UpdatePayloadRefV1>, context: MigrationMaterializationContextV1): void {
+function checkFoundationBinding(refs: readonly UpdateFoundationParticipantRefV2[], forward: readonly ForwardMutationCoreV1[], inverses: ReadonlyMap<string, UpdatePayloadRefV1>, context: Pick<MigrationMaterializationContextV1, "coordinatorId" | "productHome">, slot: "schema_forward" | "schema_inverse"): void {
   const label = "SchemaMigrationPlanV1.foundation";
   if (refs.length < 2 || refs.length > MAX_FOUNDATION_REFS || refs.length % 2 !== 0) fail(`${label}: count`);
   for (let index = 1; index < refs.length; index += 1) {
     if (compareUtf8((refs[index - 1] as UpdateFoundationParticipantRefV2).id, (refs[index] as UpdateFoundationParticipantRefV2).id) >= 0) fail(`${label}: not unique and ordered by ID`);
   }
-  for (const ref of refs) checkFoundationRef(ref, "schema_forward", context);
+  for (const ref of refs) checkFoundationRef(ref, slot, context);
   const byId = new Map(refs.map((ref) => [ref.id as string, ref]));
   const forwardRefs = refs.filter((ref) => ref.role.kind === "forward");
   if (forwardRefs.length * 2 !== refs.length || forwardRefs.length > MAX_FOUNDATION_FORWARD_REFS) fail(`${label}: forward and compensation refs are not paired`);
@@ -519,7 +519,7 @@ export function materializeSchemaMigration(draft: SchemaMigrationDraftV1, contex
     return { path, beforeHash, afterHash: after.sha256, afterBlob, inverseBlob };
   });
   forward.sort((left, right) => compareUtf8(left.targetPath, right.targetPath));
-  checkFoundationBinding(context.foundation, forward, inverses, context);
+  checkFoundationBinding(context.foundation, forward, inverses, context, "schema_forward");
   const plan: SchemaMigrationPlanV1 = {
     schemaVersion: 1,
     id: draft.id,
@@ -553,6 +553,63 @@ export function materializeSchemaMigrations(drafts: readonly SchemaMigrationDraf
     state = materialized.state;
     return materialized;
   });
+}
+
+export interface RollbackMigrationMaterializationContextV1 {
+  readonly coordinatorId: LifecycleCoordinatorIdV1;
+  readonly productHome: CanonicalAbsolutePathV1;
+  readonly brainRoot: CanonicalAbsolutePathV1;
+  /** By absolute path: the staged retained restore bytes (P9) and the staged current bytes compensation puts back. */
+  readonly restore: ReadonlyMap<string, UpdatePayloadRefV1>;
+  readonly current: ReadonlyMap<string, UpdatePayloadRefV1>;
+  readonly foundation: readonly UpdateFoundationParticipantRefV2[];
+}
+
+/** The absolute path a retained mutation names: Brain paths are vault-relative, product-state paths absolute. */
+export function retainedMigrationTarget(domain: SchemaMigrationDomainV1, path: VaultRelativePathV1 | CanonicalProductStatePathV1, brainRoot: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
+  return domain === "brain" ? parseCanonicalAbsolutePathText(`${brainRoot}/${path}`) : parseCanonicalAbsolutePathText(path);
+}
+
+/**
+ * Spec 2 §10.2 with P9 (D72): one `schema_migration/inverse` leaf from its retained inverse. Each
+ * mutation expects the update's after hash and restores the exact before bytes from the retained
+ * blob; compensation re-stages the current bytes. Refs take only the `schema_inverse` slot. Pure.
+ */
+export function materializeRollbackSchemaMigration(inverse: Pick<RetainedSchemaMigrationInversePlanV1, "id" | "domain" | "fromVersion" | "toVersion" | "mutations">, context: RollbackMigrationMaterializationContextV1): SchemaMigrationPlanV1 {
+  const label = "RetainedSchemaMigrationInversePlanV1";
+  if (inverse.mutations.length < 1 || inverse.mutations.length > MAX_MUTATIONS) fail(`${label}.mutations: count`);
+  const inverses = new Map<string, UpdatePayloadRefV1>();
+  const forward: ForwardMutationCoreV1[] = [];
+  const mutations = inverse.mutations.map((mutation): SchemaMigrationMutationV1 => {
+    const absolute = retainedMigrationTarget(inverse.domain, mutation.path, context.brainRoot);
+    if (inverses.has(absolute)) fail(`${label}: repeated path`);
+    const restore = context.restore.get(absolute);
+    const current = context.current.get(absolute);
+    if (restore === undefined || current === undefined) fail(`${label}: a mutation without staged bytes`);
+    checkMutationPayload(restore, context.coordinatorId, context.productHome, `${label}.restore`);
+    checkMutationPayload(current, context.coordinatorId, context.productHome, `${label}.current`);
+    if (restore.sha256 !== mutation.restoreHash || restore.bytes !== mutation.restoreBlob.bytes || mutation.restoreBlob.sha256 !== mutation.restoreHash) fail(`${label}: restore bytes differ from the retained blob`);
+    if (current.sha256 !== mutation.expectedCurrentHash) fail(`${label}: current bytes differ from the expected current hash`);
+    if (mutation.restoreHash === mutation.expectedCurrentHash) fail(`${label}: a mutation that changes nothing`);
+    inverses.set(absolute, current);
+    forward.push({ targetPath: absolute, operation: "replace", expectedBeforeHash: mutation.expectedCurrentHash, contentHash: restore.sha256, contentSize: restore.bytes, content: restore });
+    return { path: mutation.path, beforeHash: mutation.expectedCurrentHash, afterHash: mutation.restoreHash, afterBlob: restore, inverseBlob: current };
+  });
+  forward.sort((left, right) => compareUtf8(left.targetPath, right.targetPath));
+  checkFoundationBinding(context.foundation, forward, inverses, context, "schema_inverse");
+  const plan: SchemaMigrationPlanV1 = {
+    schemaVersion: 1,
+    id: inverse.id,
+    coordinatorId: context.coordinatorId,
+    domain: inverse.domain,
+    fromVersion: inverse.fromVersion,
+    toVersion: inverse.toVersion,
+    mutations,
+    foundation: context.foundation,
+    maximumPlanBytes: MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
+  };
+  if (schemaMigrationPlanBytes(plan).byteLength > plan.maximumPlanBytes) fail("SchemaMigrationPlanV1: exceeds its plan bytes");
+  return plan;
 }
 
 /** The persisted bytes: canonical JSON plus one LF. */
