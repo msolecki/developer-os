@@ -507,16 +507,17 @@ manifest-envelope grammars admit only `fresh_v2_init`, so a persisted `v1_to_v2`
   the per-member refusal table, `refuses a directory at %s as %s instead of treating it as absent
   (NEW-82)`, and `lets a programming error escape instead of relabelling it (NEW-82)`.
 
-  **NEW-82 is closed here and still open one layer out.** `admission.ts` reaches the filesystem
-  through the guarded port, whose `lstat` refuses a directory or a symlink with the member's own
-  reason. `assertOrdinaryCommandAdmitted` does not: `inventoryExactNamespaces` routes a directory at
-  `installation-manifest.json` to its direct-namespace branch, which records children only, so no
-  entry matches the root and the leaf reports absent. The command then falls through to the
-  absent-manifest arm and, on an installed home, refuses exit 6 telling the user to archive bootstrap
-  evidence when the fault is a directory at their manifest path. A plan path is unaffected, because
-  its basename matches `INITIAL_NAMESPACE` and routes to `inventoryTree`, which records the root. The
-  open half is that one path; `apps/cli/src/bootstrap/report.test.ts` carries it as a failing
-  expectation, and `BACKLOG.md` NEW-126 tracks it since the NEW-82 row closed on 2026-09-29.
+  **NEW-82 and NEW-126 close it one layer out too.** `admission.ts` reaches the filesystem through
+  the guarded port, whose `lstat` refuses a directory or a symlink with the member's own reason.
+  `report.ts`'s `guardedFile`, which `assertOrdinaryCommandAdmitted` reads the manifest and each plan
+  through (and the superseded-handoff check its anchor), calls `inventoryExactNamespaces` with
+  `leaves: true`, which reports a directory root as that one entry, so
+  a directory at `installation-manifest.json` refuses as `NON_REGULAR_BOOTSTRAP_LEAF` naming it
+  instead of reading as an absent manifest. Every other caller keeps the default, where a
+  direct-namespace root records its children only: the product home, `state` and the retention row
+  parents are containers, and recording them would put them into `retainedPaths`. Evidence:
+  `apps/cli/src/bootstrap/report.test.ts` — `distinguishes a directory at the manifest path from an
+  absent one (NEW-126)` and `keeps namespace-container roots out of the inventory (NEW-126)`.
 
 None of these refusal paths spawns a process, which is the only way this product reaches a network:
 `tests/security/network.test.ts` — `the bootstrap refusal paths`.
@@ -982,10 +983,11 @@ record.
   `0700`, and every child either a bookkeeping path, a retained-evidence path, an ancestor of one, or
   a bootstrap-participant lock/staging entry named by `LifecycleBookkeepingResidueV1`. Shape grants no
   authority by itself — a lock's liveness is decided only by acquiring it. The residue's participant
-  IDs come from every fresh-init plan whose bytes were admitted, verified or `unverified`, and an
-  `unverified` envelope's tombstones under `state/transactions` and its participants' staging and
-  backup directories join the retained paths, so a fresh init that died after its handoff stays
-  uninstallable in place (NEW-114).
+  IDs come from every reported fresh-init envelope, verified or `unverified`: from its plan when the
+  plan bytes were admitted, otherwise derived from the init ID as the ordinal-0 pair
+  `BootstrapExecutor` allocates (NEW-123). An `unverified` envelope's tombstones under
+  `state/transactions` and its participants' staging and backup directories join the retained
+  paths, so a fresh init that died after its handoff stays uninstallable in place (NEW-114).
 - **The two present-manifest uninstall variants and their derivation (D24).** `deriveVariant`
   (`apps/cli/src/lifecycle/uninstall.ts`) calls Core's `deriveUninstallLaunchdEvidence` on the
   observed manifest's plist rows, the validated configuration's `automation.lifecycle` record, and

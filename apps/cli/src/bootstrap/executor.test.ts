@@ -1018,6 +1018,36 @@ describe("a fresh init killed after the bootstrap publication and before the ins
     expect(await exists(fixture.paths.manifestFile)).toBe(false);
     expect((await nodeFs.readdir(forwardStaging)).toSorted()).toStrictEqual(staged.toSorted());
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** NEW-123: with no admitted plan bytes the participant IDs derive from the envelope's ID. */
+  it.each([
+    {
+      envelope: "plan_unverified",
+      damage: async (planPath: string) => {
+        await nodeFs.writeFile(`${planPath}.new123`, "{}\n", { mode: 0o600 });
+        await nodeFs.rename(`${planPath}.new123`, planPath);
+      },
+    },
+    { envelope: "id-only", damage: (planPath: string) => nodeFs.rm(planPath) },
+  ])("uninstalls in place while its envelope is $envelope, admitting the Foundation _f staging", async ({ envelope, damage }) => {
+    const fixture = await killedAfterBootstrapPublication(`bootstrap-killed-before-instructions-${envelope}`);
+    const plan = await persistedPlan(fixture);
+    const forwardId = String(participant(plan.value, "forward").id);
+    const forwardStaging = join(fixture.paths.stagingDir, "transactions", forwardId);
+    const staged = await nodeFs.readdir(forwardStaging);
+    expect(staged.length).toBeGreaterThan(0);
+    await damage(plan.path);
+    const admission = await admissionOf(fixture);
+    expect(admission.report.ids.map((summary) => [summary.id, summary.status])).toStrictEqual([[plan.value.id, "unverified"]]);
+    expect(admission.bootstrapParticipantIds).toContain(forwardId);
+    expect(admission.retainedPaths).toEqual(expect.arrayContaining(staged.map((name) => join(forwardStaging, name))));
+
+    const removed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+
+    if (!removed.ok) throw new Error(JSON.stringify(removed));
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+    expect((await nodeFs.readdir(forwardStaging)).toSorted()).toStrictEqual(staged.toSorted());
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
 /** NEW-88 residual: the lock and nonce exist before any Foundation transaction creates backups/transactions lazily. */

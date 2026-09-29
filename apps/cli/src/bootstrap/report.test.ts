@@ -28,6 +28,7 @@ import {
   inspectBootstrapEvidenceAdmission,
   NON_REGULAR_BOOTSTRAP_LEAF,
 } from "./report.js";
+import { manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
 import { projectBootstrapRetentionPostimage, projectRetainedDirectoryTreeOnce } from "./retention.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
@@ -347,6 +348,43 @@ describe("inspectBootstrapEvidence", () => {
     expect(report.ids[0]?.status).toBe("verified");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("lets a reader defect in the exact V2 handoff escape instead of reading the handoff as gone (NEW-124)", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-exact-handoff-defect", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const real = new NodeBootstrapEvidenceGuardedReader();
+    const reader: BootstrapEvidenceGuardedReaderV1 = {
+      inventoryExactNamespaces: (roots, options) => real.inventoryExactNamespaces(roots, options),
+      readRegularFile: (entry, maximumBytes) => basename(entry.path) === "installation-manifest.json"
+        ? Promise.reject(new TypeError("synthetic"))
+        : real.readRegularFile(entry, maximumBytes),
+    };
+
+    await expect(inspectBootstrapEvidenceAdmission({ ...requestFor(fixture), reader })).rejects.toBeInstanceOf(TypeError);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("lets a reader defect in the superseded V2 handoff escape instead of reading it as unsettled (NEW-124)", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-superseded-handoff-defect", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    /** A changed manifest fails the exact handoff, which is what sends inspection to the superseded check. */
+    await nodeFs.appendFile(fixture.paths.manifestFile, "\n");
+    const anchor = manifestAnchorPath(fixture.paths.home);
+    const real = new NodeBootstrapEvidenceGuardedReader();
+    const reader: BootstrapEvidenceGuardedReaderV1 = {
+      inventoryExactNamespaces: (roots, options) => roots.includes(anchor as CanonicalAbsolutePathV1)
+        ? Promise.reject(new TypeError("synthetic"))
+        : real.inventoryExactNamespaces(roots, options),
+      readRegularFile: (entry, maximumBytes) => real.readRegularFile(entry, maximumBytes),
+    };
+
+    await expect(inspectBootstrapEvidenceAdmission({ ...requestFor(fixture), reader })).rejects.toBeInstanceOf(TypeError);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("projects a retained directory tree exactly twice per inspection", async () => {
     const fixture = await createCommandFixture("bootstrap-report-projection-count", {
       bootstrapAvailable: true,
@@ -543,29 +581,29 @@ describe("assertOrdinaryCommandAdmitted over the production reader", () => {
     });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  /**
-   * NEW-82, open half, so this states the contract and `it.fails` records that
-   * the product does not meet it yet: it goes red the moment it does.
-   * `inventoryExactNamespaces` inventories a directory root by its children,
-   * and a directory here has no child matching the bootstrap-evidence
-   * namespace, so the inventory comes back empty and the gate cannot tell it
-   * from an absent manifest. On a bare home that merely admits; on an installed
-   * home the absent-manifest arm finds the installed files as live residue and
-   * refuses exit 6 with `BOOTSTRAP_MANUAL_ARCHIVE`, telling the user to archive
-   * bootstrap evidence when the fault is a directory at their manifest path.
-   * Closing it means recording the root entry itself in the reader's
-   * direct-namespace branch, the way its tree branch already does, which
-   * changes what every other exact-namespace caller inventories.
-   */
-  it.fails("distinguishes a directory at the manifest path from an absent one (NEW-82, open)", async () => {
+  /** NEW-126: an empty directory used to inventory as nothing and pass as an absent manifest. */
+  it("distinguishes a directory at the manifest path from an absent one (NEW-126)", async () => {
     await bareHome(async (home) => {
       const manifest = join(home, "installation-manifest.json");
       await nodeFs.mkdir(manifest, { mode: 0o700 });
 
       await expect(assertOrdinaryCommandAdmitted(requestForHome(home))).rejects.toMatchObject({
         code: EXIT_CODES.recoveryRequired,
+        name: "BootstrapRecoveryRequiredError",
+        message: NON_REGULAR_BOOTSTRAP_LEAF,
         paths: [manifest],
       });
+    });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("keeps namespace-container roots out of the inventory (NEW-126)", async () => {
+    await bareHome(async (home) => {
+      const reader = new NodeBootstrapEvidenceGuardedReader();
+      const roots = [home, join(home, "state")] as CanonicalAbsolutePathV1[];
+
+      expect(await reader.inventoryExactNamespaces(roots)).toStrictEqual([]);
+      expect((await reader.inventoryExactNamespaces(roots, { leaves: true })).map((found) => found.path))
+        .toStrictEqual(roots);
     });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

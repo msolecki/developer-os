@@ -90,8 +90,14 @@ export interface BootstrapEvidenceGuardedEntryV1 {
 }
 
 export interface BootstrapEvidenceGuardedReaderV1 {
+  /**
+   * `leaves: true` reports a directory root as that one entry instead of walking it. Namespace
+   * containers (the product home, `state`, retention row parents) must stay unrecorded, or they
+   * would join `retainedPaths` (NEW-126).
+   */
   inventoryExactNamespaces(
     roots: readonly CanonicalAbsolutePathV1[],
+    options?: { readonly leaves?: boolean },
   ): Promise<readonly BootstrapEvidenceGuardedEntryV1[]>;
   readRegularFile(
     entry: BootstrapEvidenceGuardedEntryV1,
@@ -125,9 +131,9 @@ export interface BootstrapEvidenceAdmissionV1 {
   } | null;
   readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
   /**
-   * Foundation participant IDs (`tx_fi_…_{f|c}`) of every envelope whose plan bytes were admitted,
-   * verified or not: the plan binds the name, so an unverified fresh init's `_f` staging stays
-   * attributable to it (NEW-114).
+   * Foundation participant IDs (`tx_fi_…_{f|c}`) of every reported envelope, verified or not: the
+   * plan binds the names, so an unverified fresh init's `_f` staging stays attributable to it
+   * (NEW-114); without admitted plan bytes they derive from the ID (NEW-123).
    */
   readonly bootstrapParticipantIds: readonly string[];
   /**
@@ -1341,15 +1347,24 @@ async function inspectPlan(
  */
 function foundationTombstonesOf(
   request: BootstrapEvidenceInspectionRequestV1,
-  plan: FreshV2InitPlanV1,
+  participantIds: readonly string[],
 ): Promise<readonly BootstrapEvidenceGuardedEntryV1[]> {
   return request.reader.inventoryExactNamespaces([
     join(request.stateDirectory, "transactions"),
-    ...plan.foundationParticipants.flatMap((participant) => [
-      join(request.productHome, "staging", "transactions", participant.id),
-      join(request.productHome, "backups", "transactions", participant.id),
+    ...participantIds.flatMap((participantId) => [
+      join(request.productHome, "staging", "transactions", participantId),
+      join(request.productHome, "backups", "transactions", participantId),
     ]),
   ] as CanonicalAbsolutePathV1[]);
+}
+
+/**
+ * NEW-123: an envelope with no admitted plan still names its participants, because
+ * `BootstrapExecutor` allocates exactly the ordinal-0 pair from the init ID.
+ */
+function executorFoundationParticipantIds(id: string): readonly string[] {
+  const uuid = id.slice("fi_".length);
+  return [`tx_fi_${uuid}_0000000000_c`, `tx_fi_${uuid}_0000000000_f`];
 }
 
 export async function inspectBootstrapEvidenceAdmission(
@@ -1438,20 +1453,23 @@ export async function inspectBootstrapEvidenceAdmission(
       });
     }
   }
+  const planParticipantIds = new Map(results.flatMap((result) => result.plan === null
+    ? []
+    : [[result.plan.id as string, result.plan.foundationParticipants.map((participant) => participant.id as string)] as const]));
+  const participantIdsOf = (id: string): readonly string[] =>
+    planParticipantIds.get(id) ?? executorFoundationParticipantIds(id);
   const unverifiedPaths: CanonicalAbsolutePathV1[] = [];
-  for (const result of results) {
-    if (result.plan === null || result.summary.status !== "unverified") continue;
-    for (const candidate of await foundationTombstonesOf(request, result.plan)) {
+  for (const summary of summaries) {
+    if (summary.status !== "unverified") continue;
+    for (const candidate of await foundationTombstonesOf(request, participantIdsOf(summary.id))) {
       if (!allEntries.has(candidate.path)) unverifiedPaths.push(candidate.path);
       allEntries.set(candidate.path, candidate);
     }
   }
-  const verifiedParticipantIds = new Set(results.flatMap((result) =>
+  const verifiedParticipantIds = new Set<string>(results.flatMap((result) =>
     result.verifiedEnvelope === null ? [] : result.verifiedEnvelope.plan.foundationParticipants.map((participant) => participant.id),
   ));
-  const bootstrapParticipantIds = [...new Set(results.flatMap((result) =>
-    result.plan === null ? [] : result.plan.foundationParticipants.map((participant) => participant.id),
-  ))].sort();
+  const bootstrapParticipantIds = [...new Set(summaries.flatMap((summary) => participantIdsOf(summary.id)))].sort();
   summaries.sort((left, right) => Buffer.compare(Buffer.from(left.id), Buffer.from(right.id)));
   const counted = sumEntries(allEntries.values());
   /**
@@ -1722,7 +1740,7 @@ async function guardedFile(
 ): Promise<GuardedFileObservationV1> {
   let inventoried: readonly BootstrapEvidenceGuardedEntryV1[];
   try {
-    inventoried = await request.reader.inventoryExactNamespaces([path as CanonicalAbsolutePathV1]);
+    inventoried = await request.reader.inventoryExactNamespaces([path as CanonicalAbsolutePathV1], { leaves: true });
   } catch (error) {
     // NEW-82: a defect in the reader is not a fact about the leaf.
     if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) throw error;

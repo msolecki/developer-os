@@ -70,6 +70,7 @@ function entry(path: string, stats: BigIntStats): BootstrapEvidenceGuardedEntryV
 export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuardedReaderV1 {
   async inventoryExactNamespaces(
     roots: readonly CanonicalAbsolutePathV1[],
+    options?: { readonly leaves?: boolean },
   ): Promise<readonly BootstrapEvidenceGuardedEntryV1[]> {
     const found = new Map<string, BootstrapEvidenceGuardedEntryV1>();
     for (const root of sortUtf8([...new Set(roots)], (path) => path)) {
@@ -87,7 +88,9 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
       if (!stats.isDirectory() || stats.isSymbolicLink()) {
         throw new BootstrapRootInvalidError([root]);
       }
-      if (INITIAL_NAMESPACE.test(basename(root))) {
+      if (options?.leaves === true) {
+        found.set(root, entry(root, stats));
+      } else if (INITIAL_NAMESPACE.test(basename(root))) {
         await this.inventoryTree(root, stats, found);
       } else {
         await this.inventoryDirectNamespaces(root, stats, found);
