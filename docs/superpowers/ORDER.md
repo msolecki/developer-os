@@ -20,6 +20,19 @@ founder for this install (lint, `test:bootstrap` and `test:suite` had passed on 
 `check` runs at the end. **Next:** steps 11–15; steps 16–18 after a week of use; Codex hook approval
 after 2026-10-22.
 
+**A15 steps 11–15 ran on 2026-09-28/29.** Step 11: eight third-party-derived skills are user overrides
+on both vendors (85 instruction artifacts); build junk and `react-best-practices`' `rules/` (70 files
+over the 64-file bound; the compiled `AGENTS.md` carries them) were dropped from the copies. Step 13:
+no live reference to the legacy shared directory remains beyond three inert `~/.codex/config.toml`
+entries (removed with step 19). Step 15: reinstalled three times (releases from `de0d4f8e`,
+`cb19f7c6`, `26807aed`), each proving the Brain, the overrides and the Brain config identical. Step
+12: 106 inbox files imported and accepted; the first real Claude ingest needed three product fixes
+(Keychain account env, NEW-75; the note frontmatter contract in the prompt; unwrapping the
+`--output-format json` envelope), then ingested 71 (NEW-116 owns the other 35). Found on the way:
+NEW-114, NEW-115, and six notes written under `content/content/` (moved; validator fix in flight).
+**Next:** the full `check` at the very end (founder, 2026-09-28), then both plan closes and the PR;
+steps 16–18 after a week of use; Codex hook approval after 2026-10-22; step 19 after one stable cycle.
+
 **D70 build-only lane: code complete (2026-09-28).** NEW-113's Tasks 1–3 and NEW-110's Tasks 1–13
 (with P9) are integrated, plus backlog rows NEW-20, 24, 25, 26, 31, 32, 34, 36–39, 46, 50, 56, 62–64,
 66, 71, 76, 78, 88–93, 96, 97, 105–107 and 114; NEW-54, 82 and 99 were already fixed. Three
