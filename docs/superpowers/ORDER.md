@@ -37,7 +37,7 @@ Claude hook verbs firing (A13 Task 18 Step 1 for Claude, D68). Steps 11–15 ran
 third-party-derived skills are user overrides on both vendors; no live reference to the legacy shared
 directory remains beyond three inert `~/.codex/config.toml` entries (removed with step 19); three
 reinstalls preserved the Brain, the overrides and the Brain config; 106 inbox files were imported and
-accepted, and the first real Claude ingest ingested 71 after four product fixes (`3ebc505d`,
+accepted, and the first real Claude ingest ingested 71 after four product fixes, then 75 after NEW-116's fix; the founder rejected the last 31 (`3ebc505d`,
 `588c866d`, `cb19f7c6`, `26807aed`; NEW-116 owns the other 35). Six notes written under
 `content/content/` were moved by hand; the validator landed in `72f0f5bf`. **Next:** steps 16–18 after one week
 of use, Codex hook approval after 2026-10-22, step 19 after one stable cycle. Git and launchd stay
