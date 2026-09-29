@@ -70,7 +70,7 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 const encoder = new TextEncoder();
 
 /**
- * Spec §2.3: Claude's `@` import takes the path up to the first whitespace, so
+ * `foundation.md` §12.1: Claude's `@` import takes the path up to the first whitespace, so
  * a product home that needs quoting cannot be imported at all.
  */
 function assertImportable(productHome: string): void {

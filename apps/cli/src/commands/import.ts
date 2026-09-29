@@ -42,7 +42,7 @@ export interface ImportFileResultV1 {
   readonly path: string; // source-relative, redacted
   readonly outcome: "imported" | "skipped" | "refused" | "would_import";
   readonly captureId: string | null;
-  readonly reason: string | null; // spec §5.6 reason, or "unsupported_type"
+  readonly reason: string | null; // `knowledge-pipeline.md` §3.1 reason, or "unsupported_type"
   readonly redactionCount: number;
 }
 
@@ -83,7 +83,7 @@ type FailureExitCode = Exclude<ExitCode, typeof EXIT_CODES.success>;
 
 const ACCEPTED_EXTENSIONS = new Set([".md", ".markdown", ".txt"]);
 
-/** Spec §5.6, per-file rows. The run's code is the most severe of these. */
+/** `knowledge-pipeline.md` §3.1, per-file rows. The run's code is the most severe of these. */
 const FILE_REFUSAL_CODES: Readonly<Record<string, FailureExitCode>> = {
   import_source_protected: EXIT_CODES.securityRefusal,
   import_source_symlink: EXIT_CODES.securityRefusal,
@@ -95,7 +95,7 @@ const FILE_REFUSAL_CODES: Readonly<Record<string, FailureExitCode>> = {
 
 const NOT_INITIALIZED = "developer-os init";
 
-/** A run-level refusal (spec §5.6). The name is the published `kind`. */
+/** A run-level refusal (`knowledge-pipeline.md` §3.1). The name is the published `kind`. */
 export class ImportRunRefusal extends Error {
   constructor(
     readonly reason: string,
@@ -243,7 +243,7 @@ const enumerationLimit = (root: string): ImportRunRefusal =>
   );
 
 /**
- * Spec §5.5: list `<vendor-home>/projects` and each project's memory
+ * `claude-adapter.md` §15: list `<vendor-home>/projects` and each project's memory
  * directory, nothing else. A project directory holds session transcripts,
  * so it is never listed itself.
  */
@@ -464,7 +464,7 @@ export async function processCandidates(input: {
     return success(result(), overBroadWarnings(overBroadPatterns));
   }
 
-  // Exit codes 1..6 rank by severity in numeric order (spec §4.1).
+  // Exit codes 1..6 rank by severity in numeric order (`foundation.md` §6).
   const code = Math.max(
     ...refused.map(
       (file) => FILE_REFUSAL_CODES[file.reason ?? ""] ?? EXIT_CODES.operationalFailure,
@@ -486,7 +486,7 @@ export async function processCandidates(input: {
 }
 
 /**
- * `developer-os import [<path>]`, spec §5 under Q5 A: sources are read and
+ * `developer-os import [<path>]`, `knowledge-pipeline.md` §3.1 (A14 Q5 A): sources are read and
  * never moved, and every new capture is one Foundation transaction.
  */
 export async function runImport(
@@ -506,7 +506,7 @@ export async function runImport(
         "the Claude Code memory layout has not been observed for this product; nothing was read",
       );
     }
-    // Spec §5.5: the variable is not followed, so the memory under it would be missed silently.
+    // `claude-adapter.md` §15: the variable is not followed, so the memory under it would be missed silently.
     if (options.claudeMemory && context.env.CLAUDE_CONFIG_DIR !== undefined && context.env.CLAUDE_CONFIG_DIR !== "") {
       throw new ImportRunRefusal(
         "claude_config_dir_not_followed",

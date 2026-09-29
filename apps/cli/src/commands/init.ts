@@ -301,7 +301,7 @@ async function assertV2Undrifted(
     if (typeof artifact.path !== "string") continue;
     unchanged.push(artifact.path);
     if (artifact.verification?.mode === "ephemeral") continue;
-    // Vendor rows are resolved by the instruction planners (spec §6.2), not refused here.
+    // Vendor rows are resolved by the instruction planners (`foundation.md` §12.3), not refused here.
     if (artifact.owner === "claude" || artifact.owner === "codex") continue;
     try {
       const stats = await context.fs.lstat(artifact.path);
@@ -977,7 +977,7 @@ export async function runInit(
       // D53: before the instructions, whose Claude hooks name it.
       await installEntrypoint(context);
       /**
-       * After the handoff, never inside it (spec §6.1): an instruction failure leaves a complete
+       * After the handoff, never inside it (`foundation.md` §12.3): an instruction failure leaves a complete
        * V2 home, and `init` exits with the instruction step's code.
        */
       const selection = options.adapters ?? null;

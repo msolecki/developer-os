@@ -44,7 +44,7 @@ async function onlyPlan(fixture: CommandFixture): Promise<PersistedFreshPlan> {
   ) as PersistedFreshPlan;
 }
 
-describe("the product home's instructions directory is user data (A12 spec §3.2)", () => {
+describe("the product home's instructions directory is user data (foundation.md §12.1)", () => {
   it("installs over a home holding only instructions/** and leaves those bytes untouched", async () => {
     const fixture = await createCommandFixture("bootstrap-instructions-user-data", { bootstrapAvailable: true });
     const root = await plantOverrides(fixture);

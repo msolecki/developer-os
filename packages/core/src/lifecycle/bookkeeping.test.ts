@@ -369,7 +369,7 @@ describe("the closed lifecycle bookkeeping set", () => {
     }
   });
 
-  describe("an instruction backup left by uninstall (A12 spec §6.3)", () => {
+  describe("an instruction backup left by uninstall (foundation.md §12.3)", () => {
     const backups = join(HOME, "backups");
     const transactions = join(backups, "transactions");
     const HEX = "0123456789abcdef".repeat(4);

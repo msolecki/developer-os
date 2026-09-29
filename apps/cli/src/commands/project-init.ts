@@ -163,7 +163,7 @@ async function resolveOverrides(
   };
 }
 
-/** Spec §6. Every refusal below happens before any write. */
+/** `foundation.md` §13.1. Every refusal below happens before any write. */
 export async function runProjectInit(
   context: CliContext,
   options: ProjectInitOptions,

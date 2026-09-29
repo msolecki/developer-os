@@ -35,7 +35,7 @@ import {
 } from "../../contracts/adapters/claude/render-all.js";
 
 /**
- * NEW-65 / D8 (spec §10.2 "ingest stays isolated"): with every default instruction installed in a
+ * NEW-65 / D8 (A12's "ingest stays isolated" gate, codex-adapter.md §15): with every default instruction installed in a
  * disposable home, each vendor's **ingest argv** yields a model request carrying neither block
  * marker nor any managed file's text. A failure here stops the phase: D8 outranks A12.
  *
@@ -148,7 +148,7 @@ interface ClaudeInstall {
   readonly importLine: string;
 }
 
-/** Spec §2.2 layout: the plugin, `rules/`, `output-styles/`, the imports, and the `CLAUDE.md` block. */
+/** `foundation.md` §12.5 layout: the plugin, `rules/`, `output-styles/`, the imports, and the `CLAUDE.md` block. */
 async function installClaude(home: TempHome): Promise<ClaudeInstall> {
   const workflows = await loadRepositoryWorkflows();
   const { defaults, none } = await loadDefaultInstructionSources("claude", workflows);
@@ -323,7 +323,7 @@ function codexEnv(home: TempHome, codexHome: string): Record<string, string> {
 }
 
 /**
- * Spec §2.2 layout in the user's `C = H/.codex`: the marketplace tree under the product home,
+ * `foundation.md` §12.5 layout in the user's `C = H/.codex`: the marketplace tree under the product home,
  * registered through the vendor CLI, `C/agents/*.toml`, and the `C/AGENTS.md` block.
  */
 async function installCodex(home: TempHome): Promise<CodexInstall> {

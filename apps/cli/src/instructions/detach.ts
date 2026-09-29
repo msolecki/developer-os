@@ -99,7 +99,7 @@ function vendorRoot(homes: VendorHomesV1, vendor: Vendor): string {
   return vendor === "claude" ? join(homes.userHome, ".claude") : homes.codexHome;
 }
 
-/** Spec §2.2: a symlink at any component from the vendor root down refuses, exit 5. */
+/** `foundation.md` §12.5: a symlink at any component from the vendor root down refuses, exit 5. */
 async function refuseSymlinkedComponents(fs: InstructionFileSystemV1, root: string, path: string): Promise<void> {
   const rel = relative(root, path);
   const components = rel.startsWith("..") || isAbsolute(rel)

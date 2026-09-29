@@ -123,7 +123,7 @@ export function proposeClaudeUninstall(
   managed: ManagedByPath,
 ): ClaudeInstallProposal {
   const root = pluginRoot(context);
-  // The owner check its Codex twin already performed (spec §2.2, adapter fix).
+  // The owner check its Codex twin already performed (`foundation.md` §12.5, adapter fix).
   // Rows without a content hash (directories) are the detach planner's, not a file removal.
   const owned = [...managed.values()]
     .filter((artifact) => artifact.owner === "claude" && artifact.path.startsWith(`${root}/`))

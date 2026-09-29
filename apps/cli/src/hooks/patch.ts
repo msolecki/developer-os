@@ -12,7 +12,7 @@ function isRelativePath(path: string): boolean {
 }
 
 /**
- * The paths a Codex `apply_patch` body names, from its file headers only (spec §3, Codex file-edit
+ * The paths a Codex `apply_patch` body names, from its file headers only (`hooks.md` §3.3, Codex file-edit
  * rule). The grammar is the one `docs/architecture/hooks.md` §1 question 4 observed on 0.155.1;
  * body lines are admitted by their prefix and never read. Any other line, a line that trims to a
  * `***` marker, a path with edge whitespace, an absolute or `..` path, or more than

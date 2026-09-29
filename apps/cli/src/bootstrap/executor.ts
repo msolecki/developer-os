@@ -1268,7 +1268,7 @@ export class BootstrapExecutor {
       }
       result.set(path, stats);
     }
-    /** A12 spec §3.2: the user's override tree is opaque user data a fresh `init` admits, never claims. */
+    /** `foundation.md` §12.1: the user's override tree is opaque user data a fresh `init` admits, never claims. */
     for (const name of USER_DATA_HOME_ENTRIES) {
       const path = join(this.#dependencies.paths.home, name);
       const stats = await lstatOptional(path);
@@ -2468,7 +2468,7 @@ export class BootstrapExecutor {
    * confinement, not a placeholder — unlike `report.ts`'s `exactV2Handoff`,
    * which inspects a retained plan with no live request in scope. `vendors`
    * is null: a fresh-init manifest never carries a vendor row, since attach
-   * runs later in its own gated transaction (spec §6.1).
+   * runs later in its own gated transaction (`foundation.md` §12.3).
    */
   private manifestAdmission(
     request: FreshInitRequestV1,

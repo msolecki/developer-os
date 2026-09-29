@@ -22,7 +22,7 @@ describe("resolveCapabilities", () => {
     expect(resolveCapabilities("0.147.0", observed).non_interactive_run).toBe("unknown");
   });
 
-  /** A13 §8.1: without a Codex firing record the hook keys are `unknown`, never `no`. */
+  /** `hooks.md` §3.6: without a Codex firing record the hook keys are `unknown`, never `no`. */
   it("reports the hook keys as unknown without a firing observation", () => {
     expect(resolveCapabilities("0.147.0", observed).plugin_hooks).toBe("unknown");
     expect(resolveCapabilities("0.147.0", observed).session_start_injection).toBe("unknown");

@@ -221,17 +221,18 @@ in `d157227..28cfe19`, and m4 plus the mock-only `apply_patch` grammar, moved in
 
 - Review M4 remainder, founder: the exit code no longer waits for the firing record (`6b7ac75`), but
   the process lives until the write settles, so a slow gate can still overrun the vendor's
-  2-second window. Options: write without the gate on `block` (a §7.3 amendment), or `process.exit`
-  after a bounded wait, which can cut stderr.
+  2-second window. Options: write without the gate on `block` (an amendment of
+  `docs/architecture/hooks.md` §3.6), or `process.exit` after a bounded wait, which can cut stderr.
 - m1: legacy per-event firing records are never cleaned before uninstall and count against the
-  32-child cap; stays open by D62 (spec §7.3).
+  32-child cap; stays open by D62 (`docs/architecture/hooks.md` §3.6).
 
 ### Phase 7 · A14 (no phase; startable)
 
 - Review M3: `project init` departs from the codebase's pattern with no observable failure,
   because its path-overlap check already refuses the dangerous case, so no red test exists.
 - Review M4b: a race that fails closed (exit 5); a test needs filesystem fault injection.
-- Review M5: a spec wording change; its text did not reach this handoff.
+- Review M5: a wording change to the A14 contract, now `docs/architecture/foundation.md` §13 (the
+  tooling-verbs spec retired 2026-09-29); its text did not reach this handoff.
 
 ### Phase 8 · Spec 2 apply (NEW-110 closed 2026-09-29; what remains travels with Task 11b, NEW-111)
 

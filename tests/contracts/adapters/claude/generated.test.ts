@@ -55,7 +55,7 @@ describe("plugins/claude is a clean regeneration", () => {
   });
 
   /**
-   * Spec §3.1: the checked-in tree is the default render. Only skills, their thin
+   * `foundation.md` §12.1: the checked-in tree is the default render. Only skills, their thin
    * commands and agents live in the plugin root; rules, scoped rules, output styles
    * and the `CLAUDE.md` block are written under the user home instead.
    */

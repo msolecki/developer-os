@@ -614,7 +614,7 @@ export async function downcastArtifactV2(
   context: CliContext,
   artifact: ManagedArtifactV2,
 ): Promise<ManagedArtifactV1> {
-  // Block rows leave the manifest through the detach step before the drained uninstall (spec §6.3).
+  // Block rows leave the manifest through the detach step before the drained uninstall (`foundation.md` §12.4).
   if (artifact.verification.mode === "block") throw new ManifestUnsupportedArtifactError();
   const installedHash = artifact.kind === "directory"
     ? hashBytes(new Uint8Array())
@@ -748,7 +748,7 @@ export async function uninstallRuntimePaths(context: CliContext): Promise<Runtim
  * is admitted by `dispatchUninstall`, which owns the relocated-Brain diagnosis; the
  * coordinator's own manifest arm is deliberately unconfined (I2).
  *
- * A12 spec §6.3: vendor rows leave first, through the instruction detach, and the drained
+ * `foundation.md` §12.4: vendor rows leave first, through the instruction detach, and the drained
  * uninstall then runs unchanged over a home re-admitted after it. The dry run and the prompt
  * preview the coordinator over the manifest the detach would leave, so neither detaches.
  */

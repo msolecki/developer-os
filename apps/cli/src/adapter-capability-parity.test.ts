@@ -34,7 +34,7 @@ describe("the two adapters' capability key lists", () => {
     expect([...CODEX_NOT_USED_KEYS]).toEqual([...CLAUDE_NOT_USED_KEYS]);
   });
 
-  /** A13 §8.1: both hook keys left both lists in one commit. */
+  /** `hooks.md` §3.6: both hook keys left both lists in one commit. */
   it("both resolve the hook keys from firing records rather than declining them", () => {
     for (const key of ["plugin_hooks", "session_start_injection"] as const) {
       expect(CLAUDE_NOT_USED_KEYS).not.toContain(key);

@@ -43,11 +43,12 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-28 | founder, NEW-113 questions (D71, under D65) | the exact macOS build + SHA-256 pin is replaced by fixed-path admission from a per-platform `SystemExecutableTableV1` (darwin implemented; linux and win32 recorded as intended): `/usr/bin/git` (the Apple shim, with `xcrun` inputs absent from every child environment), `/usr/bin/ssh` and `/bin/launchctl`, admitted by root ownership, no group/other write, version floors and a capability probe, with per-invocation evidence; `certification` removed; HTTPS and SSH still refuse; residuals 6 and 10 rewritten, 13 and 14 added | §4.2, §5.3, §7, §8.3 |
 | 2026-09-28 | founder, NEW-113 Task 2 addenda to D71 (roadmap D73), folded in at the plan close 2026-09-29 | a fourth `darwin` row `/usr/bin/git-receive-pack`, which `real_receive_pack` executes with argv0 `git-receive-pack`; the Git supervisor stays synchronous with a synchronous inspector/recheck pair | §4.2, §7 |
 | 2026-09-29 | NEW-110 plan close (Spec 2 D72 P8, NEW-86) | pointer: admitted bookkeeping paths carry their planned `dev`/`ino` | §2.1 |
+| 2026-09-29 | founder, closed-phase spec retirement | pointers: the retired A13 hooks spec §7.3 is `docs/architecture/hooks.md` §3.6; the retired A12 instruction-artifacts spec §6.3 is `docs/architecture/foundation.md` §12.4 | §2.1, §6 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
 change is marked "Amended 2026-09-22 (A13 Q3-A)"; the later ones are marked with their decision
 number, "Amended 2026-09-23 (D59)", "Amended 2026-09-24 (D61)", "Added 2026-09-25 (D62)" and
-"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)"; the NEW-100 row is marked "Added 2026-09-26 (NEW-100)"; the NEW-113 row is marked "Amended 2026-09-28 (D71)"; its Task 2 addenda are marked "Amended 2026-09-28 (D71 addendum)"; the P8 pointer is marked "Amended 2026-09-29 (pointer to Spec 2 D72 P8, NEW-86)".
+"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)"; the NEW-100 row is marked "Added 2026-09-26 (NEW-100)"; the NEW-113 row is marked "Amended 2026-09-28 (D71)"; its Task 2 addenda are marked "Amended 2026-09-28 (D71 addendum)"; the P8 pointer is marked "Amended 2026-09-29 (pointer to Spec 2 D72 P8, NEW-86)"; the spec-retirement pointers are marked "Amended 2026-09-29: … retired".
 
 ---
 
@@ -161,8 +162,11 @@ restate Spec 2's rows. The rows both specifications use have these owners:
 | `state/hooks` (amended 2026-09-22, A13 Q3-A) | fresh `init` | hook firing-record writes only | Spec 1 uninstall, after both plugin trees |
 
 **Amended 2026-09-22 (A13 Q3-A, D47).** `state/hooks` is a **reserved runtime path** for the hook
-firing records of `specs/2026-09-22-developer-os-hooks-design.md` §7.3. It is not in the bookkeeping
+firing records of `docs/architecture/hooks.md` §3.6. It is not in the bookkeeping
 set, because the bookkeeping set is never removed and this path is.
+
+**Amended 2026-09-29: the A13 hooks spec retired; its firing-record contract (§7.3) is
+`docs/architecture/hooks.md` §3.6.**
 
 - **Owner:** fresh `init` creates `state/hooks` as a directory with mode 0700, owned by the effective
   uid. It is never a manifest row.
@@ -4452,7 +4456,10 @@ overrides, is user data, never residue. The absent-manifest walks still visit it
 bounds and entry rules, but it is projected away like the bootstrap leaf and left in place (a non-directory there refuses
 `absent_manifest_user_data`), and it is never a ledger or manifest row (`USER_DATA_HOME_ENTRIES`, `packages/core/src/lifecycle/absent-manifest.ts`).
 The removable partition and §2.4's grammar are unchanged, because the instruction detach step runs
-before the drained uninstall (instruction-artifacts spec §6.3).
+before the drained uninstall (`docs/architecture/foundation.md` §12.4).
+
+**Amended 2026-09-29: the A12 instruction-artifacts spec retired; its detach-before-uninstall
+contract (§6.3) is `docs/architecture/foundation.md` §12.4.**
 
 **Amended 2026-09-22 (A13 Q3-A, D47).** The absent-manifest walks also admit §2.1's reserved runtime
 path `state/hooks` by its shape: an owner-only `0700` directory owned by the effective user

@@ -107,7 +107,7 @@ describe("guard commit", () => {
   });
 });
 
-// Spec §5.2 step 3 (amended, D62): a line break collapses to one LF, and an unquoted LF ends a segment.
+// `hooks.md` §3.4 (D62): a line break collapses to one LF, and an unquoted LF ends a segment.
 describe("a command on its own line", () => {
   it.each([
     ["force-push", "cd repo\ngit push --force"],
@@ -151,7 +151,7 @@ it("blocks force-push after an arithmetic shift", async () => {
   expect(await run("(( x = 1 << 3 ))\ngit push --force\n3")).toMatchObject({ kind: "block", ruleId: "force-push" });
 });
 
-// Spec §5.2 step 2 joins every backslash–newline pair, where bash does not (residual in hooks.md §3.8).
+// `normalizeShellCommand` (`hooks.md` §3.4) joins every backslash–newline pair, where bash does not (residual in hooks.md §3.8).
 // D63 closes it: each physical line of the raw command is its own candidate.
 describe("a backslash before a line break bash does not join", () => {
   it.each(["echo \\\\\ngit push --force", "# note \\\ngit push --force"])("blocks force-push: %j", async (command) => {

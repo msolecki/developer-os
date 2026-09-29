@@ -14,7 +14,7 @@ describe("hook contract", () => {
     entrypoint: "/Users/synthetic/.developer-os/bin/developer-os",
   };
 
-  it("renders the exact two-token §4.1 command bytes (G1 as resolved)", () => {
+  it("renders the exact two-token hooks.md §3.2 command bytes (G1 as resolved)", () => {
     expect(renderHookCommand(EXE, "command", "claude"))
       .toBe(`${EXE.node} ${EXE.entrypoint} guard command --vendor claude`);
     expect(renderHookCommand(EXE, "inject", "codex"))

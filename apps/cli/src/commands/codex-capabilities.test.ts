@@ -166,7 +166,7 @@ describe("reportCodexCapabilities", () => {
   });
 
   /**
-   * A13 §8.1 and NEW-65: a plugin listing proves the tree is loaded, not that
+   * `hooks.md` §3.6 and NEW-65: a plugin listing proves the tree is loaded, not that
    * a hook fired, so without a firing record `plugin_hooks` stays `unknown`.
    */
   it("reports plugin_hooks as unknown when the probe observes our tree but nothing fired", async () => {

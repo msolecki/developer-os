@@ -15,7 +15,7 @@ export type CodexCapabilities = Readonly<Record<CodexCapabilityKey, CapabilitySt
  *
  * `plugin_hooks` and `session_start_injection` left this list with A13, in
  * the same change as the Claude twin: the observation for both keys is a Codex
- * firing record under `state/hooks/`, never a plugin listing (A13 §8.1), so
+ * firing record under `state/hooks/`, never a plugin listing (`hooks.md` §3.6), so
  * until a trusted hook has fired both stay `unknown`. The two capture keys stay
  * because knowledge-pipeline architecture note §2 declines both automatic
  * capture paths — no capture hook fires, and no `developer-os run codex`
@@ -33,9 +33,9 @@ export const CODEX_NOT_USED_KEYS: readonly CodexCapabilityKey[] = [
 ];
 
 /**
- * The two keys observed only through firing records (A13 §8.1). A record can
+ * The two keys observed only through firing records (`hooks.md` §3.6). A record can
  * witness that a hook fired; no record is not evidence that it cannot, so an
- * `absent` for either stays `unknown`, never `no` (hooks spec §8.1).
+ * `absent` for either stays `unknown`, never `no`.
  */
 const FIRING_KEYS: ReadonlySet<CodexCapabilityKey> = new Set(["plugin_hooks", "session_start_injection"]);
 

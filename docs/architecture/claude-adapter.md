@@ -45,7 +45,7 @@ implementation plan was deleted when its last step closed; git history is the ar
    test asserts no byte lands outside a temporary `HOME`.
    **Amended 2026-09-22 (A12):** instruction artifacts add writes outside
    `H/.claude/skills/developer-os/`, and only to the rows of the closed, owner-bound authorization in
-   spec `2026-09-22-developer-os-instruction-artifacts-design.md` §2.2:
+   `foundation.md` §12.5:
    `H/.claude/rules/developer-os-<id>.md` (scoped rules), `H/.claude/output-styles/developer-os-<id>.md`
    (output styles), one marked block in exactly `H/.claude/CLAUDE.md`, and the product-created parent
    directories `H/.claude`, `H/.claude/skills`, `H/.claude/rules` and `H/.claude/output-styles`. The
@@ -58,7 +58,7 @@ implementation plan was deleted when its last step closed; git history is the ar
    **Amended 2026-09-22 (A12):** still true for `settings.json`: A12 writes no settings key and
    selects no output style (an installed style is only available; the user picks it). The one file
    A12 does share with the user, `H/.claude/CLAUDE.md`, is merged by the marked block's three-way
-   table (spec §5.2), and its conflict is reported through `buildConflictEvidence`'s block arm — §9
+   table (`foundation.md` §12.2), and its conflict is reported through `buildConflictEvidence`'s block arm — §9
    residual 8.
 4. **It never opens `transcript_path`**, on any code path. The hook verbs read their payload
    through `decodeHookPayload`, an allow-list of named fields that never iterates the payload, and
@@ -299,7 +299,7 @@ capture cannot faithfully obtain agent-authored observation text without reading
 8. **CLOSED 2026-09-22 by A12: `buildConflictEvidence` has its consumer.** The marked instruction
    block in `H/.claude/CLAUDE.md` and `C/AGENTS.md` is the first real three-way merge; a block
    conflict calls the new block arm of `ConflictEvidenceRequest`, which reports three hashes and a
-   redacted two-way diff (spec §5.3). **Amended 2026-09-22 (A12).**
+   redacted two-way diff (`foundation.md` §12.2). **Amended 2026-09-22 (A12).**
 9. **The integration test proves the tree does not anger `claude plugin validate`, not that the
    six skills load.** Its only substantive assertion is a clean exit and a clean stderr; a renderer
    gutted to emit only the manifest would still pass it. Proving discovery needs a real session —
@@ -604,7 +604,7 @@ originals instead:
 - `excalidraw-diagram` — <https://github.com/coleam00/excalidraw-diagram-skill>
 
 A skill you own, including a modified copy of one of these, lives under
-`<product-home>/instructions/<vendor>/skills/<id>/` as a **user override** (spec §3.2). `init`
+`<product-home>/instructions/<vendor>/skills/<id>/` as a **user override** (`foundation.md` §12.1). `init`
 installs it beside the defaults, `doctor` reports it as `user`, and re-running `init` reconciles a
 change to it. It is trusted as your own text: the product reads it with no-follow guards and bounds
 and never reviews its content.

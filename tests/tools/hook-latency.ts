@@ -1,5 +1,5 @@
 /**
- * Hook latency baseline (A13 spec §5.4, plan Task 16). Not a vitest file: it is
+ * Hook latency baseline (`hooks.md` §2, A13 plan Task 16). Not a vitest file: it is
  * a measurement run by hand with `npm run build && node tests/dist/tools/hook-latency.js`.
  *
  * It spawns the built entrypoint the way a vendor does, through the real

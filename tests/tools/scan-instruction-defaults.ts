@@ -1,5 +1,5 @@
 /**
- * Redaction gate for the default instruction tree (spec §3.3). Findings carry a path, a
+ * Redaction gate for the default instruction tree (`foundation.md` §12.1). Findings carry a path, a
  * line and a rule name only, never the matched text, so the report is safe to paste.
  *
  * `node tests/dist/tools/scan-instruction-defaults.js [--patterns <file>]` scans the

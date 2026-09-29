@@ -28,7 +28,7 @@ export interface ClaudeDenyRulesV1 extends ClaudeObservationV1 {
 
 /**
  * Vendor behaviour, taken from an observation on a disposable home (D57) and
- * never from memory or documentation (spec §5.5). The verb that needs it
+ * never from memory or documentation (`claude-adapter.md` §15). The verb that needs it
  * refuses exit 4 or warns while it is `null`.
  */
 export const CLAUDE_MEMORY_LAYOUT: ClaudeMemoryLayoutV1 | null = {
@@ -44,7 +44,7 @@ export const CLAUDE_MEMORY_LAYOUT: ClaudeMemoryLayoutV1 | null = {
 
 /**
  * Vendor behaviour, taken from an observation on a disposable home (D57) and
- * never from memory or documentation (spec §5.5). The verb that needs it
+ * never from memory or documentation (`claude-adapter.md` §15). The verb that needs it
  * refuses exit 4 or warns while it is `null`.
  */
 export const CLAUDE_DENY_RULES: ClaudeDenyRulesV1 | null = {

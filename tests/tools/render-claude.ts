@@ -1,6 +1,6 @@
 /**
  * Regenerate `plugins/claude/` from `workflows/` and the default `instructions/`
- * (never user overrides; spec §3.1).
+ * (never user overrides; `foundation.md` §12.1).
  *
  * **Not a CLI command, and that is a correction to the plan.** DOS-P4's Task 10
  * said to add `developer-os workflow render --vendor claude`, and Task 10 shipped

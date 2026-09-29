@@ -194,7 +194,7 @@ describe("registerCodexPlugin", () => {
   });
 });
 
-describe("the spec §6.4 partial states, by fault injection", () => {
+describe("the codex-adapter.md §16 partial states, by fault injection", () => {
   it.each([MARKETPLACE_LIST, MARKETPLACE_ADD, PLUGIN_ADD, PLUGIN_LIST])(
     "tree installed, not registered: a fresh registration failing at `%s` is unregistered",
     async (failOn) => {

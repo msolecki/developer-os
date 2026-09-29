@@ -495,7 +495,7 @@ describe("every other known or unknown entry", () => {
   });
 });
 
-describe("the product home's instructions directory (A12 spec §3.2)", () => {
+describe("the product home's instructions directory (foundation.md §12.1)", () => {
   const INSTRUCTIONS = `${HOME}/instructions`;
   const overrides = (): Map<string, PlantV1> =>
     new Map<string, PlantV1>([

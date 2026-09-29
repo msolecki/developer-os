@@ -54,9 +54,9 @@ one capability vocabulary — this note says so rather than restating it as a co
    omitted. `durable_project_guidance` is therefore reported and used by nothing (§11.5).
    **Amended 2026-09-22 (A12):** the first half no longer holds as written. The product now writes
    exactly one marked block (`<!-- developer-os:begin v1 -->` … `<!-- developer-os:end v1 -->`) in exactly `C/AGENTS.md`,
-   merged three-way with the user's text around it (spec
-   `2026-09-22-developer-os-instruction-artifacts-design.md` §5), plus `C/agents/developer-os-<id>.toml`
-   agents; both are rows of the closed §2.2 authorization. It still never writes
+   merged three-way with the user's text around it (`foundation.md` §12.2), plus
+   `C/agents/developer-os-<id>.toml` agents; both are rows of the closed `foundation.md` §12.5
+   authorization. It still never writes
    `AGENTS.override.md` at any scope (`packages/adapter-codex/src/instructions.ts`).
    `durable_project_guidance` stays `not-used`: the block is user-scope guidance in the Codex home,
    not project guidance.
@@ -481,7 +481,7 @@ rather than performed; and the provisional JSONL reduction was replaced after a 
 9. **CLOSED 2026-09-22 by A12: `buildConflictEvidence` has its consumer.** The marked instruction
    block in `C/AGENTS.md` (and `H/.claude/CLAUDE.md`) is the first real three-way merge; a block
    conflict uses the new block arm of `ConflictEvidenceRequest`: three hashes plus a redacted
-   two-way diff (spec §5.3). **Amended 2026-09-22 (A12).**
+   two-way diff (`foundation.md` §12.2). **Amended 2026-09-22 (A12).**
 10. **Line-wrap drift across several files.** No formatter and no `max-len` rule is configured, so
     nothing enforces either convention and a hand pass would drift again by the next commit. This
     wants a repository lint decision, not a hand pass. **Owner: whoever configures repository
@@ -503,7 +503,7 @@ rather than performed; and the provisional JSONL reduction was replaced after a 
     post-install edit under the product home is invisible to the model until Codex resyncs its
     cache on some schedule this adapter has never observed. **Owner: DOS-P7**, whose update
     lifecycle is what re-renders the tree in place.
-    **CLOSED 2026-09-22 by A12 (amended in place):** spec §6.4's registration step runs
+    **CLOSED 2026-09-22 by A12 (amended in place):** §16's registration step runs
     `codex plugin add developer-os@developer-os --json` on every install and on every reconcile whose
     plugin-tree hash differs from the one recorded in `P/codex/registration.json`
     (`codex-registration-v1`), which re-stages the cache copy, then checks `codex plugin list --json`.

@@ -95,7 +95,7 @@ function assertNoBlockMarker(path: string, bytes: Uint8Array): void {
   if (index !== -1) throw new InstructionSourceInvalidError(path, index + 1);
 }
 
-/** The §2.3 checks shared by defaults and overrides; `where` names the artifact in a refusal. */
+/** The `foundation.md` §12.1 bounds checks shared by defaults and overrides; `where` names the artifact in a refusal. */
 function assertArtifact(where: string, category: SourceCategory, files: readonly InstructionSourceFileV1[]): void {
   for (const file of files) {
     const path = `${where}/${file.relativePath}`;
@@ -135,7 +135,7 @@ export async function loadReleaseWorkflows(release: AdmittedPackagedReleaseV1): 
   return contracts;
 }
 
-/** `bundle/instructions/`: the catalog and exactly the files its rows claim (§3.1). */
+/** `bundle/instructions/`: the catalog and exactly the files its rows claim (`foundation.md` §12.1). */
 export async function loadInstructionDefaults(
   release: AdmittedPackagedReleaseV1,
   workflowIds: ReadonlySet<string>,
@@ -279,7 +279,7 @@ function overrideId(path: string, name: string, workflowIds: ReadonlySet<string>
   }
 }
 
-/** `<P>/instructions/<vendor>/`: the category is the directory, the id the file or directory name (§3.2). */
+/** `<P>/instructions/<vendor>/`: the category is the directory, the id the file or directory name (`foundation.md` §12.1). */
 export async function loadInstructionOverrides(input: {
   readonly productHome: string;
   readonly vendor: Vendor;

@@ -70,7 +70,7 @@ async function userPatterns(context: CliContext): Promise<readonly string[]> {
 }
 
 /**
- * Spec §7: a finding is reported at the first unclaimed line whose own redaction yields the
+ * `foundation.md` §13.2: a finding is reported at the first unclaimed line whose own redaction yields the
  * same class, and at `null` when no single line does (a multi-line key block).
  */
 function secretFindings(name: string, text: string, redact: Redactor): readonly string[] {
@@ -144,7 +144,7 @@ export async function runProjectCheck(
         text = await readUntrustedText(context, path, PROJECT_CHECK_MAX_READ_BYTES);
       } catch (error) {
         if (!(error instanceof UntrustedFileRefusal)) throw error;
-        // Spec §7: only a redactor finding (5) or the read bound (1) fails; an unread link or special file warns.
+        // `foundation.md` §13.2: only a redactor finding (5) or the read bound (1) fails; an unread link or special file warns.
         (error.reason === "too_large" ? problems : unread).push({
           line: `${name}: ${error.message}`,
           path,

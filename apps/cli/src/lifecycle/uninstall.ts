@@ -1903,7 +1903,7 @@ export interface UninstallDetachOutcomeV1 {
 }
 
 /**
- * Spec §6.3's detach, planned from one read of the manifest and one of the configuration: the
+ * `foundation.md` §12.4's detach, planned from one read of the manifest and one of the configuration: the
  * transaction's `expectedBeforeHash` guards are the hashes of the very bytes planned from.
  * `null` when no row is vendor-owned, so a home that never attached a vendor does not enter the
  * mutation gate at all.
@@ -1942,7 +1942,7 @@ async function codexExecutable(context: CliContext): Promise<string | null> {
 }
 
 /**
- * Spec §6.3 steps 1–3 under the mutation gate, re-planned under its lock: a refusal fires before
+ * `foundation.md` §12.4's detach under the mutation gate, re-planned under its lock: a refusal fires before
  * Codex is unregistered, and unregistration runs before any file changes. The executor writes
  * files only, so the directories the plan empties are removed after the commit, through the same
  * re-resolving `rmdir` the V1 revert uses.

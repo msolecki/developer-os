@@ -272,9 +272,11 @@ or both paths resolve to the same directory.
 > 4. **`import`, `project init` and `project check` are added** (A14, approved 2026-09-22 as
 >    D47). `import [<path>] | --claude-memory` writes quarantined captures only; `project init
 >    [<dir>]` writes the project instruction templates create-only; `project check [<dir>]` is a
->    read-only hygiene report. `docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`
->    §3 is the contract; `repo audit|bootstrap|secrets-scan` and `project worktree` are recorded
->    refusals and have no dispatch entry.
+>    read-only hygiene report. `docs/architecture/foundation.md` §13 is the contract (its command
+>    surface; `import` in `docs/architecture/knowledge-pipeline.md` §3.1);
+>    `repo audit|bootstrap|secrets-scan` and `project worktree` are recorded refusals and have no
+>    dispatch entry. **Amended 2026-09-29: the A14 tooling-verbs spec retired; its contract (§3) is
+>    `docs/architecture/foundation.md` §13.**
 
 ```text
 developer-os init
@@ -356,7 +358,11 @@ Re-running `init` with the same inputs is idempotent.
 > selects `none` and names the flag as the next step; a re-run keeps the stored selection. The
 > instruction install is not an init-owned artifact: it runs after the V2 bootstrap handoff as one
 > ordinary gated Foundation transaction, its check is not in `INIT_OWNED_CHECKS`, and its failure
-> never reverts the installed home (instruction-artifacts spec §6.1, `apps/cli/src/commands/init.ts`).
+> never reverts the installed home (`docs/architecture/foundation.md` §12.3,
+> `apps/cli/src/commands/init.ts`).
+>
+> **Amended 2026-09-29: the A12 instruction-artifacts spec retired; its `init` contract (§6.1) is
+> `docs/architecture/foundation.md` §12.3.**
 
 ### 9.2 Managed artifacts
 
@@ -397,8 +403,11 @@ conflict manually. Developer OS does not silently choose.
 > arm (`packages/core/src/manifest/drift.ts`) is called by the instruction attach and detach
 > (`apps/cli/src/instructions/attach.ts`, `detach.ts`). The evidence is three hashes (baseline,
 > current, proposed) plus a redacted two-way diff of current against proposed; the base block's
-> bytes are not retained, so no three-way rendering exists (instruction-artifacts spec §5.3,
-> residual 5).
+> bytes are not retained, so no three-way rendering exists (`docs/architecture/foundation.md`
+> §12.2 and §12.7).
+>
+> **Amended 2026-09-29: the A12 instruction-artifacts spec retired; its conflict-evidence contract
+> (§5.3, residual 5) is `docs/architecture/foundation.md` §12.2 and §12.7.**
 
 ### 9.4 Uninstall
 
@@ -411,7 +420,11 @@ separate explicit operation outside version 1's automatic lifecycle.
 instruction file (the user's global `CLAUDE.md`, the Codex `AGENTS.md`) is stripped on uninstall,
 never restored from its backup, because a restore would erase every edit the user made outside the
 block since install. A block that no longer equals its installed base refuses exit 3 with conflict
-evidence; the whole-file backup stays in `backups/` as evidence (instruction-artifacts spec §6.3).
+evidence; the whole-file backup stays in `backups/` as evidence (`docs/architecture/foundation.md`
+§12.4).
+
+**Amended 2026-09-29: the A12 instruction-artifacts spec retired; its uninstall contract (§6.3) is
+`docs/architecture/foundation.md` §12.4.**
 
 ## 10. Workflow contract and generation
 

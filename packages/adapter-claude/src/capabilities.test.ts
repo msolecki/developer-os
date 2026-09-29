@@ -112,7 +112,7 @@ describe("resolveCapabilities", () => {
 });
 
 /**
- * A13 §8.1: the two hook keys left the not-used list and follow the two-gate
+ * `hooks.md` §3.6: the two hook keys left the not-used list and follow the two-gate
  * rule, with a firing record as the observation. Without one they are
  * `unknown`, never `no`.
  */

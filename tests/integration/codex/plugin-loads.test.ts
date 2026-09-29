@@ -343,7 +343,7 @@ describe("the generated install tree against a real Codex installation", () => {
   );
 
   /**
-   * NEW-65 (spec §10.2 "loading is asserted"): every instruction skill reaches the model-visible
+   * NEW-65 (A12's "loading is asserted" gate): every instruction skill reaches the model-visible
    * skill list, and the whole `C/AGENTS.md` (the user's bytes and the product's block) is carried
    * verbatim (codex-adapter.md §15). Agent roles are not in `prompt-input`; the isolation test
    * observes them through the request instead.
@@ -363,7 +363,7 @@ describe("the generated install tree against a real Codex installation", () => {
   );
 
   /**
-   * Spec §6.4: Codex reads its cache copy, so an in-place change to the installed tree stays
+   * codex-adapter.md §16: Codex reads its cache copy, so an in-place change to the installed tree stays
    * invisible until `plugin add` runs again, which `registerCodexPlugin` always does
    * (codex-adapter.md §15 "`plugin add` over a registered plugin"). The description is what
    * changes because `prompt-input` carries a skill's name and description, not its body.

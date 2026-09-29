@@ -4,7 +4,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { parseCanonicalAbsolutePathText } from "@developer-os/core";
 import type { CanonicalAbsolutePathV1 } from "@developer-os/core";
 
-/** Spec §2.2: `H`, `P` and `C`, resolved once per command. */
+/** `foundation.md` §12.5: `H`, `P` and `C`, resolved once per command. */
 export interface VendorHomesV1 {
   readonly userHome: CanonicalAbsolutePathV1;
   readonly productHome: CanonicalAbsolutePathV1;

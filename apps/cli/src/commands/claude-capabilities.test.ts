@@ -276,7 +276,7 @@ describe("reportClaudeCapabilities", () => {
 });
 
 /**
- * A13 §8.1 and NEW-65: the observation for the two hook keys is a firing
+ * `hooks.md` §3.6 and NEW-65: the observation for the two hook keys is a firing
  * record, never what the probe saw. A validated or listed tree is loaded, not
  * firing.
  */

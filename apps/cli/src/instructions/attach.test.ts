@@ -502,7 +502,7 @@ describe("planInstructionAttach: target refusals", () => {
   });
 });
 
-describe("planInstructionAttach: the §5.2 merge", () => {
+describe("planInstructionAttach: the foundation.md §12.2 merge", () => {
   it("returns noop for an unchanged re-plan", async () => {
     const state = await installed();
     expect(await planInstructionAttach(input(state))).toStrictEqual({ kind: "noop" });

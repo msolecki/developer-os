@@ -77,7 +77,7 @@ function record(event: string, firstSeen: Date, lastSeen: Date, vendor: HookVend
 }
 
 describe("HOOK_EVENT_OF", () => {
-  it("maps every verb to its §3 event, with the same PascalCase names on Codex", () => {
+  it("maps every verb to its hooks.md §3.4 event, with the same PascalCase names on Codex", () => {
     expect(HOOK_EVENT_OF.claude).toStrictEqual({
       inject: "SessionStart",
       command: "PreToolUse",

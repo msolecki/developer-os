@@ -19,13 +19,13 @@ export interface CodexHookRow {
 }
 
 /**
- * Spec §7.2's fixed manual step. Trust is granted in Codex and stored under `hooks.state` in its
+ * `hooks.md` §3.7's fixed manual step. Trust is granted in Codex and stored under `hooks.state` in its
  * `config.toml` (`hooks.md` §1, observed on 0.155.1); the product never writes that file (D7).
  */
 export const CODEX_HOOK_TRUST_STEP =
   "approve each developer-os hook in Codex; Codex keeps the approval under hooks.state in its config.toml, which Developer OS never writes";
 
-/** Spec §7.2's fixed uninstall line: approvals outlive the hooks they name. */
+/** `hooks.md` §3.7's fixed uninstall line: approvals outlive the hooks they name. */
 export const CODEX_HOOK_TRUST_RESIDUE =
   "Codex hook approvals for developer-os remain under hooks.state in your Codex config.toml; remove them yourself if you want them gone";
 

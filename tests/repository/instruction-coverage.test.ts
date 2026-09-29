@@ -75,7 +75,7 @@ function expectedLegacyNames(): ReadonlySet<string> {
   return new Set([...rules, ...styles, ...plugin, ...research]);
 }
 
-describe("the catalog covers the inventory (spec §9, §10.2)", () => {
+describe("the catalog covers the inventory (instruction-inventory.md §1–§3)", () => {
   it("parses the inventory into the expected names", () => {
     const expected = expectedLegacyNames();
     for (const name of [

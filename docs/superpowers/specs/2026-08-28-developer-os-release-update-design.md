@@ -20,7 +20,9 @@ and the instruction overrides and installed-home reconcile in §6.1) are marked 
 source parents, manifest identity and steps, plan-derived signed metadata, ephemeral reservations, the
 Codex refresh policy and re-registration, the compensation cause, the capability gate, the fallback
 handoff, the proof scope, and admitted bookkeeping identities) — is the single block "Amended
-2026-09-28 (D72)" above §1.** This
+2026-09-28 (D72)" above §1; the 2026-09-29 retirement of the A12 instruction-artifacts spec
+repoints §5 to `docs/architecture/codex-adapter.md` §16 and §6.1 to `docs/architecture/foundation.md`
+§12.3, marked "Amended 2026-09-29: … retired" in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -923,7 +925,11 @@ type ManagedArtifactSchemaIdV1 =
 ```
 
 **Amended 2026-09-26 (A12 §11, D47).** `codex-registration-v1` verifies the Codex registration record
-the instruction install writes (instruction-artifacts spec §6.4; `apps/cli/src/instructions/apply.ts`).
+the instruction install writes (`docs/architecture/codex-adapter.md` §16, which fixes the record as
+exactly `{ codexHome, treeHash }`; `apps/cli/src/instructions/apply.ts`).
+
+**Amended 2026-09-29: the A12 instruction-artifacts spec retired; its registration-record contract
+(§6.4) is `docs/architecture/codex-adapter.md` §16.**
 
 Adding a schema ID requires its strict validator, byte/semantic bounds, migration behavior, and a
 non-vacuous exact-set test in the same change. Schema drift compares type plus strict semantic
@@ -1389,8 +1395,11 @@ non-symlink directory; fresh `init` treats it as opaque user data and never clai
 (`USER_DATA_HOME_ENTRIES`, `apps/cli/src/bootstrap/executor.ts`). Anything else at that name refuses
 exit 6. `init` on an already installed V2 home (`settleExistingV2`, `apps/cli/src/commands/init.ts`)
 no longer only asserts that nothing drifted: after the same checks it reconciles the instruction
-artifacts against the current overrides and adapter selection (instruction-artifacts spec §6.2, Q2
-option A). Drift in any non-instruction row still refuses.
+artifacts against the current overrides and adapter selection (`docs/architecture/foundation.md`
+§12.3, A12 Q2 option A). Drift in any non-instruction row still refuses.
+
+**Amended 2026-09-29: the A12 instruction-artifacts spec retired; its reconcile contract (§6.2) is
+`docs/architecture/foundation.md` §12.3.**
 
 ### 6.2 V1 admission and mapping
 

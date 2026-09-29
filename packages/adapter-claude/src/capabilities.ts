@@ -17,7 +17,7 @@ export type ClaudeCapabilities = Readonly<
  *
  * `plugin_hooks` and `session_start_injection` left this list with A13: the
  * observation for both keys is a firing record under `state/hooks/`, never a
- * listing or a validate run (A13 §8.1). `plugin_hooks` is observed by any
+ * listing or a validate run (`hooks.md` §3.6). `plugin_hooks` is observed by any
  * Claude firing record, `session_start_injection` by the `SessionStart` one.
  * The two capture keys stay because knowledge-pipeline architecture note §2
  * declines both automatic capture paths: no capture hook fires, and no
@@ -37,9 +37,9 @@ export const CLAUDE_NOT_USED_KEYS: readonly ClaudeCapabilityKey[] = [
 ];
 
 /**
- * The two keys observed only through firing records (A13 §8.1). A record can
+ * The two keys observed only through firing records (`hooks.md` §3.6). A record can
  * witness that a hook fired; no record is not evidence that it cannot, so an
- * `absent` for either stays `unknown`, never `no` (hooks spec §8.1).
+ * `absent` for either stays `unknown`, never `no`.
  */
 const FIRING_KEYS: ReadonlySet<ClaudeCapabilityKey> = new Set([
   "plugin_hooks",
