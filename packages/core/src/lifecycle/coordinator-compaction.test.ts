@@ -313,10 +313,12 @@ async function uninstallWorld(
     controlFiles: {
       removeAllocator: async (_plan, outcome) => {
         removedControlFiles.push(`allocator:${outcome}`);
+        if (outcome === "rolled_back") return;
         await nodeFs.rm(join(created, "state", "lifecycle-id-allocator.json"), { force: true });
       },
       removeNonce: async (_plan, outcome) => {
         removedControlFiles.push(`nonce:${outcome}`);
+        if (outcome === "rolled_back") return;
         await nodeFs.rm(join(created, "state", "lifecycle-install-nonce"), { force: true });
       },
     },
@@ -466,6 +468,26 @@ describe("terminal coordinator compaction", () => {
     await compactTerminalCoordinator(world.dependencies(), await terminalRecord(world), world.global);
 
     expect(world.removedControlFiles).toStrictEqual(["allocator:rolled_back", "nonce:rolled_back"]);
+  }, 120_000);
+
+  it("emits no control_file_removed boundary for a rolled-back uninstall that keeps its control files (NEW-122)", async () => {
+    const world = await uninstallWorld("compaction-rolled-back-boundaries", { failCommitAbsence: true });
+    await world.execute();
+    expect((await world.journal())?.phase).toBe("rolled_back");
+
+    const order: string[] = [];
+    await compactTerminalCoordinator(
+      world.dependencies((boundary) => {
+        if (boundary.kind === "control_file_removed") order.push(boundary.file);
+        if (boundary.kind === "envelope_leaf_removed") order.push(boundary.leaf);
+      }),
+      await terminalRecord(world),
+      world.global,
+    );
+
+    expect(order).toStrictEqual(["journal", "lock", "plan"]);
+    expect(await world.exists("state/lifecycle-id-allocator.json")).toBe(true);
+    expect(await world.exists("state/lifecycle-install-nonce")).toBe(true);
   }, 120_000);
 
   it("accepts each entry's exact absence when it dies after the deletion and before the rewrite", async () => {

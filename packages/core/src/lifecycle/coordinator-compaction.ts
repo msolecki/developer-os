@@ -229,15 +229,21 @@ async function removeEnvelopeLeaves<TPlan extends CoordinatorPlan>(
     if (allocator !== null && nonce === null) {
       refuseLifecycleRecovery("lifecycle_control_file_state", allocator.path);
     }
+    // NEW-122: a compensated uninstall keeps both files (the adapter returns early), so no removal boundary.
+    const removes = outcome !== "rolled_back";
     if (allocator !== null) {
       await adapters.controlFiles.removeAllocator(plan, outcome);
       await syncDirectoryAt(fs, roots.stateDirectory);
-      await dependencies.afterBoundary?.({ kind: "control_file_removed", file: "allocator" });
+      if (removes) {
+        await dependencies.afterBoundary?.({ kind: "control_file_removed", file: "allocator" });
+      }
     }
     if (nonce !== null) {
       await adapters.controlFiles.removeNonce(plan, outcome);
       await syncDirectoryAt(fs, roots.stateDirectory);
-      await dependencies.afterBoundary?.({ kind: "control_file_removed", file: "nonce" });
+      if (removes) {
+        await dependencies.afterBoundary?.({ kind: "control_file_removed", file: "nonce" });
+      }
     }
   }
 
