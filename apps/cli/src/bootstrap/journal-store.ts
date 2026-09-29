@@ -83,9 +83,7 @@ function sameIdentity(stats: Pick<BigIntStats, "dev" | "ino">, expected: FileIde
 
 /**
  * `Buffer.compare` is one `memcmp` where `every` invoked a closure per byte.
- * `decodeExactCanonical` re-encodes and re-compares every record on every read
- * — deliberately, it is the proof the stored bytes were canonical — so this
- * runs over whole plans, and a 512 KiB comparison cost 2.1 ms as a closure.
+ * This runs over whole plans, and a 512 KiB comparison cost 2.1 ms as a closure.
  */
 function exactBytes(left: Uint8Array, right: Uint8Array): boolean {
   return Buffer.compare(left, right) === 0;
@@ -281,10 +279,9 @@ async function readBounded(
   return bytes;
 }
 
+/** `decodeCanonicalJson` already re-encodes and refuses any byte that is not canonical (NEW-53). */
 function decodeExactCanonical(bytes: Uint8Array, maximumBytes: number): unknown {
-  const value = decodeCanonicalJson(bytes, maximumBytes);
-  if (!exactBytes(bytes, encoded(value))) return fail();
-  return value;
+  return decodeCanonicalJson(bytes, maximumBytes);
 }
 
 function decodeObserved(bytes: Uint8Array, maximumBytes: number): unknown {
@@ -913,9 +910,9 @@ export class BootstrapJournalStore {
       this.#ownerUid,
       this.plan.maximumPlanBytes,
     );
+    // `#planBytes` is `encoded(this.plan)`, proved in `create`/`open`, and `this.plan` is deep-frozen,
+    // so decoding and re-encoding here could only repeat this comparison (NEW-53).
     if (!exactBytes(planBytes, this.#planBytes)) return fail();
-    const persistedPlan = decodeExactCanonical(planBytes, this.plan.maximumPlanBytes);
-    if (!exactBytes(encoded(persistedPlan), encoded(this.plan))) return fail();
     const raw = await Promise.all(([0, 1] as const).map((slot) => readBounded(
       this.plan.journalSlots[slot].path,
       this.#handles.slots[slot],

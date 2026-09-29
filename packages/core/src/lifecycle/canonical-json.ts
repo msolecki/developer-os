@@ -300,8 +300,6 @@ export function decodeCanonicalJson(bytes: Uint8Array, maximumBytes: number): Ca
   const value = new JsonParser(decoded.slice(0, -1)).parse();
   const canonical = encodeCanonicalJson(value);
   const canonicalBytes = encoder.encode(canonical);
-  if (canonicalBytes.byteLength !== bytes.byteLength || canonicalBytes.some((byte, index) => byte !== bytes[index])) {
-    fail("input is not byte-for-byte canonical");
-  }
+  if (Buffer.compare(canonicalBytes, bytes) !== 0) fail("input is not byte-for-byte canonical");
   return value;
 }
