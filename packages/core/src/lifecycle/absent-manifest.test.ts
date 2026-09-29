@@ -186,6 +186,36 @@ function evidenceOf(overrides: Partial<AbsentManifestEvidenceV1> = {}): AbsentMa
   };
 }
 
+/** Counts a `has` as one touch and every iteration as `size` touches. */
+class TouchCountingSet extends Set<string> {
+  touches = 0;
+
+  override has(value: string): boolean {
+    this.touches += 1;
+    return super.has(value);
+  }
+
+  override values(): ReturnType<Set<string>["values"]> {
+    this.touches += this.size;
+    return super.values();
+  }
+
+  override keys(): ReturnType<Set<string>["keys"]> {
+    this.touches += this.size;
+    return super.keys();
+  }
+
+  override [Symbol.iterator](): ReturnType<Set<string>[typeof Symbol.iterator]> {
+    this.touches += this.size;
+    return super[Symbol.iterator]();
+  }
+
+  override forEach(callback: (value: string, key: string, set: Set<string>) => void, thisArg?: unknown): void {
+    this.touches += this.size;
+    super.forEach(callback, thisArg);
+  }
+}
+
 const RETAINED_PATHS = [
   retained(HOME, "0000000000"),
   retained(`${HOME}/logs`, "0000000001"),
@@ -1076,13 +1106,15 @@ describe("the counting seam (A8)", () => {
    * `excludedRoots` once carried every retained path, which made each
    * removability check pay for the size of the retained tree
    * (`apps/cli/src/commands/uninstall.test.ts`). The same shape refused here in
-   * minutes rather than seconds before the projection was indexed.
+   * minutes rather than seconds before the projection was indexed. NEW-29:
+   * counted as retained-path touches, not elapsed time — the per-directory scan
+   * costs directories × stale, the index costs a constant per entry.
    */
-  it("refuses a large unprojected home in bounded time", async () => {
+  it("refuses a large unprojected home touching each retained path a bounded number of times", async () => {
     const directories = 50_000;
     const stale = 5_000;
     const extra = new Map<string, PlantV1>();
-    const retainedPaths = new Set<string>();
+    const retainedPaths = new TouchCountingSet();
     for (let ordinal = 0; ordinal < directories; ordinal += 1) {
       extra.set(`${HOME}/d-${String(ordinal)}`, directory());
     }
@@ -1091,12 +1123,13 @@ describe("the counting seam (A8)", () => {
     }
     const home = memoryHome("state_empty", { extra, evidence: { retainedPaths } });
 
-    const started = Date.now();
+    retainedPaths.touches = 0;
     const error = await refusal(home);
 
     expect(retainedPaths.size).toBe(stale);
     expect(error.paths.length).toBe(directories + 1);
-    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(retainedPaths.touches).toBeGreaterThan(0);
+    expect(retainedPaths.touches).toBeLessThanOrEqual(20 * (directories + stale));
   }, 120_000);
 
   it("publishes the walk bounds the spec fixes", () => {

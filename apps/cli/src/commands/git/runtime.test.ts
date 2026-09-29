@@ -144,7 +144,6 @@ describe("the receive-pack bridge", () => {
     const grandchildPid = join(root, "grandchild.pid");
     await nodeFs.writeFile(trampoline, '#!/bin/sh\n/bin/sleep 60 &\necho $! > "$1"\nwait\n', { mode: 0o700 });
 
-    const started = performance.now();
     const bridged = bridgeReceivePack({
       executable: trampoline,
       argv: [grandchildPid],
@@ -155,8 +154,8 @@ describe("the receive-pack bridge", () => {
       phase: phase(500),
     });
 
+    // The trampoline sleeps 60 s, so the 15 s test budget is what proves the deadline, not the exit, ended it.
     await expect(bridged).rejects.toThrow("git_process_failed");
-    expect(performance.now() - started).toBeLessThan(5_000);
     expect(isAlive(Number((await nodeFs.readFile(grandchildPid, "utf8")).trim()))).toBe(false);
   }, 15_000);
 });

@@ -52,6 +52,22 @@ function expectRedacted(result: RedactionResult, secret: string): void {
   ).toBe(true);
 }
 
+function toLowerCaseCalls(run: () => void): number {
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
+  const original = String.prototype.toLowerCase;
+  let calls = 0;
+  try {
+    String.prototype.toLowerCase = function toLowerCase(this: string) {
+      calls += 1;
+      return original.call(this);
+    };
+    run();
+  } finally {
+    String.prototype.toLowerCase = original;
+  }
+  return calls;
+}
+
 describe("redactText", () => {
   it("redacts an environment secret assignment", () => {
     const result = redactText(
@@ -537,148 +553,45 @@ describe("redactText", () => {
     });
 
     /**
-     * Finding 10 (fix pass 1 review): this proves the pattern is never
-     * *compiled* as a regular expression — an unescaped `(a+)+$` catastrophically
-     * backtracks in well under 50,000 characters if it reaches `RegExp`, so
-     * a sub-second result here is evidence the literal path was taken. It
-     * does **not** prove the literal-matching implementation itself is
-     * linear in text size or pattern count — see the `indexOf`-performance
-     * tests below for that.
+     * Finding 10 (fix pass 1 review): the pattern is never compiled as a
+     * regular expression. A compiled `(a+)+$` matches an all-`a` text and
+     * would redact it; a literal one does not occur in it.
      */
-    it("does not backtrack on a pathological pattern", () => {
-      const started = performance.now();
-      redactText("a".repeat(50_000), deterministicKey, {
+    it("treats a pathological pattern as literal text over a long input", () => {
+      const source = "a".repeat(50_000);
+      const result = redactText(source, deterministicKey, {
         userPatterns: ["(a+)+$"],
       });
-      expect(performance.now() - started).toBeLessThan(1_000);
+
+      expect(result.text).toBe(source);
+      expect(result.findings).toHaveLength(0);
     });
 
     /**
-     * Important 5 (fix pass 1 review, ceiling corrected in fix pass 2,
-     * ceiling replaced with a same-run ratio in fix pass 3, baseline
-     * corrected to share the ratio's allocation profile in fix pass 4,
-     * input size and repetition count cut in fix pass 5): the first
-     * shipped implementation re-sliced and re-lowered a window at every
-     * text position for every pattern — O(n·m) per pattern.
-     *
-     * An absolute wall-clock ceiling is a race against whatever else the
-     * machine is doing (fix pass 1: 697 ms measured against a 600 ms
-     * ceiling on otherwise-passing hardware). A ratio against a
-     * zero-pattern baseline is not load-invariant either, because
-     * `addUserPatterns` returns before `buildFoldedHaystack` ever runs at
-     * zero patterns, so the baseline never pays the allocation the
-     * measurement does (fix pass 4). Giving the baseline one pattern
-     * instead of zero fixed that — but at 2 MB and five repetitions each,
-     * the fixed version of this test cost ~4.2 s in isolation, and went
-     * over vitest's 5 s default under `npm run check`'s parallel workers
-     * (fix pass 4 verified only `pnpm vitest run` in isolation, which does
-     * not reproduce parallel-worker contention — exactly how this reached
-     * the coordinator).
-     *
-     * Cut to **512 KB, three repetitions each** (six `redactText` calls
-     * total, plus two untimed warm-ups) rather than widening the timeout
-     * around the larger size: the separation between the fixed and buggy
-     * implementations is a property of the *algorithm's shape*
-     * (allocate-once-then-`indexOf`-per-pattern vs. reslice-and-refold
-     * per position per pattern), not of input size, so there was no reason
-     * to keep paying for 2 MB once that was confirmed. Recalibrated,
-     * min-of-3, 512 KB, by temporarily reintroducing the exact pre-fix
-     * shape:
-     * - Fixed, no load, 20 samples across independent process launches:
-     *   ratio 0.63-1.25.
-     * - Fixed, under 16-way background CPU load
-     *   (`node -e 'while(true){Math.sqrt(Math.random())}'` ×16, `pkill`
-     *   after), 5 samples: ratio 0.66-1.46 — still no meaningful drift
-     *   from the no-load range at this smaller size.
-     * - Buggy (reintroduced), no load, 20 samples: ratio 6.32-7.99.
-     * - Buggy, no separate under-load measurement taken at this size: the
-     *   no-load floor (6.32) already sits far above every fixed ceiling
-     *   observed (1.46), and fix pass 4 already established the buggy
-     *   shape's ratio *rises* under load rather than falling, so a
-     *   dedicated under-load buggy measurement would only widen the gap
-     *   further, not narrow it.
-     * Every fixed measurement observed, loaded or not, stayed under 1.5;
-     * every buggy measurement observed stayed over 6.3. 3 keeps wide
-     * margin on both sides — roughly 2× the highest fixed measurement and
-     * half the lowest buggy one — same as fix pass 4's ceiling, unchanged
-     * because the *ratio* a correct implementation produces does not
-     * depend on input size, only the absolute time to compute it does.
-     *
-     * This proves the *shape* changed back to a per-position rescan if it
-     * regresses; it does not certify a specific throughput bound for
-     * arbitrary text or pattern sizes.
+     * Important 5 (fix pass 1 review), NEW-29: the first shipped implementation
+     * re-sliced and re-lowered a window at every text position for every
+     * pattern — O(n·m) per pattern. Counted through `toLowerCase`, which
+     * `foldForMatching` calls once per code point: folding the haystack once
+     * makes each extra pattern cost its own length, a per-position rescan makes
+     * it cost the text's.
      */
-    it(
-      "adds bounded per-pattern overhead over a single-pattern baseline, not a per-position rescan",
-      () => {
-        const text = "x".repeat(512 * 1024);
-        const baselinePattern = ["pattern-0-not-present-in-text-xyz"];
-        const patterns = Array.from(
-          { length: 10 },
-          (_, index) => `pattern-${String(index)}-not-present-in-text-xyz`,
-        );
+    it("folds the text once, whatever the pattern count, not once per pattern per position", () => {
+      const text = "x".repeat(4096);
+      const patterns = Array.from(
+        { length: 10 },
+        (_, index) => `pattern-${String(index)}-not-present-in-text-xyz`,
+      );
 
-        function minElapsed(run: () => void, repetitions: number): number {
-          let best = Infinity;
-          for (let index = 0; index < repetitions; index += 1) {
-            const started = performance.now();
-            run();
-            const elapsed = performance.now() - started;
-            if (elapsed < best) best = elapsed;
-          }
-          return best;
-        }
+      const baseline = toLowerCaseCalls(() =>
+        redactText(text, deterministicKey, { userPatterns: patterns.slice(0, 1) }),
+      );
+      const withPatterns = toLowerCaseCalls(() =>
+        redactText(text, deterministicKey, { userPatterns: patterns }),
+      );
 
-        // One untimed warm-up call each, so the first *timed* repetition is
-        // not the one absorbing JIT compilation for a code path the rest of
-        // this suite may not have exercised yet.
-        redactText(text, deterministicKey, { userPatterns: baselinePattern });
-        redactText(text, deterministicKey, { userPatterns: patterns });
-
-        const baseline = minElapsed(
-          () => redactText(text, deterministicKey, { userPatterns: baselinePattern }),
-          3,
-        );
-        const withPatterns = minElapsed(
-          () => redactText(text, deterministicKey, { userPatterns: patterns }),
-          3,
-        );
-
-        // `+ 20` absorbs timer-resolution noise when `baseline` itself is
-        // small; the multiplier is what actually separates the two
-        // implementations, per the calibration above.
-        expect(withPatterns).toBeLessThan(baseline * 3 + 20);
-      },
-      // **2,000 ms was arithmetically wrong and is corrected to 15,000 ms on
-      // 2026-09-07.** The assertion above is unchanged; only the budget moves.
-      //
-      // The old note derived 2,000 from "the heaviest combined `baseline` +
-      // `withPatterns` min-time observed ... was ~550 ms". That 550 ms is the
-      // sum of two *minimums*, i.e. two passes. The body runs **eight**: two
-      // untimed warm-ups plus three timed repetitions each. At ~275 ms a pass
-      // under load that is ~2,200 ms of work inside a 2,000 ms budget, so this
-      // was already short on this laptop and only ever passed because the
-      // machine was usually quieter than the calibration run. GitHub's
-      // `macos-15` runner, measured at ~1.9x this machine on 2026-09-07, made
-      // it fail outright: `Test timed out in 2000ms` in run 34133320221.
-      //
-      // 15,000 ms is ~3.5x the projected 4,180 ms on that runner. It is
-      // deliberately loose because this budget guards against a hang, while the
-      // *ratio* assertion above is what guards the algorithm — a wide timeout
-      // costs nothing when the test passes and prevents a false red when the
-      // machine is busy.
-      //
-      // **Why this is still an elapsed-time test, against NEW-29's preference
-      // for deterministic counts.** The property is that `addUserPatterns`
-      // folds the haystack once and then scans it per needle, rather than
-      // re-folding per pattern. Counting that directly means observing
-      // `buildFoldedHaystack` invocations, and it is module-private with no
-      // injection seam; exporting it purely for a test would widen this
-      // package's public surface to measure an internal. So NEW-29's documented
-      // fallback applies here, and the row records what production seam would
-      // retire this test's timing dependence.
-      15_000,
-    );
+      expect(baseline).toBeGreaterThanOrEqual(text.length);
+      expect(withPatterns - baseline).toBeLessThan(text.length);
+    });
 
     it("keeps overlap resolution: the first candidate wins and the second is dropped", () => {
       const { findings } = redactText(awsAccessKeyId, deterministicKey, {
@@ -822,20 +735,21 @@ describe("redactText", () => {
      * used here because 8,000 stays under the 1 s ceiling even unfixed and
      * would not have caught this — bounding the body length caps each
      * failed attempt's rescan instead of letting it run to end-of-string.
+     * NEW-29: the bound is asserted as behavior, not as elapsed time — a body
+     * far past it is not matched, which an unbounded rescan would match.
      */
-    it("does not go quadratic on many unterminated certificate markers", () => {
-      const source = "-----BEGIN CERTIFICATE-----\n".repeat(16_000);
-      const started = performance.now();
-      redactText(source, deterministicKey);
-      expect(performance.now() - started).toBeLessThan(1_000);
-    });
+    it.each(["CERTIFICATE", "PRIVATE KEY"])(
+      "bounds the %s body rescanned per BEGIN marker",
+      (label) => {
+        const block = (body: string): string =>
+          `-----BEGIN ${label}-----\n${body}\n-----END ${label}-----`;
+        const realistic = block("A".repeat(4_000));
+        const oversized = block("A".repeat(100_000));
 
-    it("does not go quadratic on many unterminated private-key markers", () => {
-      const source = "-----BEGIN PRIVATE KEY-----\n".repeat(16_000);
-      const started = performance.now();
-      redactText(source, deterministicKey);
-      expect(performance.now() - started).toBeLessThan(1_000);
-    });
+        expect(redactText(realistic, deterministicKey).findings).toHaveLength(1);
+        expect(redactText(oversized, deterministicKey).text).toContain(`-----BEGIN ${label}-----`);
+      },
+    );
   });
 
   describe("REDACTION_CLASSES", () => {

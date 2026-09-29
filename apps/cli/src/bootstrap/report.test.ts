@@ -769,7 +769,7 @@ describe("assertOrdinaryCommandAdmitted", () => {
  * regardless of status: a bounded read plus one admission attempt.
  */
 describe("gate cost with many retained envelope ids (NEW-81 §2)", () => {
-  it("measures assertOrdinaryCommandAdmitted's cost against the cap on retained envelope ids", async () => {
+  it("reads each retained envelope id a bounded number of times at the cap", async () => {
     const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-gate-cost-"));
     const home = join(root, "product-home");
     const state = join(home, "state");
@@ -784,29 +784,36 @@ describe("gate cost with many retained envelope ids (NEW-81 §2)", () => {
           { mode: 0o600 },
         );
       }
+      const real = new NodeBootstrapEvidenceGuardedReader();
+      let inventories = 0;
+      let reads = 0;
+      const countingReader: BootstrapEvidenceGuardedReaderV1 = {
+        inventoryExactNamespaces: (roots) => {
+          inventories += 1;
+          return real.inventoryExactNamespaces(roots);
+        },
+        readRegularFile: (entry, maximumBytes) => {
+          reads += 1;
+          return real.readRegularFile(entry, maximumBytes);
+        },
+      };
       const request = createBootstrapEvidenceInspectionRequest({
         productHome: home,
         stateDirectory: state,
         initialRoots: [home, state, root],
+        reader: countingReader,
       });
 
-      const started = performance.now();
       await assertOrdinaryCommandAdmitted(request).catch(() => undefined);
-      const elapsedMs = performance.now() - started;
 
       /**
-       * No bound or short-circuit is added for this row: measured below
-       * `MEASURED_TOLERANCE_MS`, an ordinary command's gate check at the
-       * product's own hard cap on retained envelopes is not something a CLI
-       * user would notice, let alone find unusable — evidence against
-       * building unneeded complexity for a problem this measurement does not
-       * show.
+       * NEW-29: a count, not an elapsed time. No bound or short-circuit is
+       * added for NEW-81 §2 as long as the gate's I/O stays linear in the
+       * envelope count — one bounded read per id, never a rescan per id.
        */
-      const MEASURED_TOLERANCE_MS = 3000;
-      console.log(
-        `NEW-81 §2 measured: ${elapsedMs.toFixed(1)}ms for ${String(BOOTSTRAP_RETAINED_MAX_IDS)} retained envelope ids (tolerance ${String(MEASURED_TOLERANCE_MS)}ms)`,
-      );
-      expect(elapsedMs).toBeLessThan(MEASURED_TOLERANCE_MS);
+      expect(reads).toBeGreaterThanOrEqual(BOOTSTRAP_RETAINED_MAX_IDS);
+      expect(reads).toBeLessThanOrEqual(4 * BOOTSTRAP_RETAINED_MAX_IDS);
+      expect(inventories).toBeLessThanOrEqual(4 * BOOTSTRAP_RETAINED_MAX_IDS);
     } finally {
       await nodeFs.rm(root, { recursive: true, force: true });
     }
