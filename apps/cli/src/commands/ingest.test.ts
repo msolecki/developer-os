@@ -1090,7 +1090,7 @@ describe("runIngest, a batch that is not uniform", () => {
 
     fixture.reply((call) => {
       const target = seeded.find((capture) =>
-        call.args.join("\n").includes(capture.id),
+        call.args.join("\n").includes(`Capture ${capture.id}`),
       );
       if (target === undefined) return nothingProposed();
       return target.id === refusing.id
@@ -1468,7 +1468,7 @@ describe("runIngest, a batch that is not uniform", () => {
       oneNote(id, `DEV/note-${id}.md`, `Note ${id}`, `The note for ${id}.`);
     fixture.reply((call) => {
       const target = seeded.find((capture) =>
-        call.args.join("\n").includes(capture.id),
+        call.args.join("\n").includes(`Capture ${capture.id}`),
       );
       if (target === undefined) return nothingProposed();
       return target.id === middle.id
