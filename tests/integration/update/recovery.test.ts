@@ -170,6 +170,20 @@ describe("an allocation that died before its construction envelope (NEW-110 revi
   }, CASE_TIMEOUT_MS);
 });
 
+describe("an allocation that died after its allocator temp landed", () => {
+  it("cleans the pre-rename allocator temp under the global lock, so the closure clears", async () => {
+    const home = await installUpdatableHome("recovery-allocator-temp", "arm64");
+    const dying = dieAfterMutations(home.fixture.context, 1);
+    expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    expect((await nodeFs.readdir(home.fixture.paths.stateDir)).filter((name) => name.startsWith(".lifecycle-id-allocator."))).toHaveLength(1);
+
+    expect(await recoverUpdate(home.update())).toStrictEqual({ kind: "not_update" });
+
+    expect((await nodeFs.readdir(home.fixture.paths.stateDir)).filter((name) => name.startsWith(".lifecycle-id-allocator."))).toEqual([]);
+    expect((await settled(home)).active.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
+});
+
 describe("update rollback --apply at every death point (Spec 2 §10.2)", () => {
   it("recovers 1.2.0 -> 1.1.0 either to 1.1.0 with the set consumed or to 1.2.0 with it intact, with no network", async () => {
     const home = await baseAt120("recovery-rollback-sweep");

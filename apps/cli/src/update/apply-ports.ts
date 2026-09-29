@@ -112,7 +112,7 @@ import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import { admitInstalledV2Home } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../lifecycle/context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "../lifecycle/context.js";
-import { gateManifestAdmission } from "../lifecycle/mutation-gate.js";
+import { cleanAllocatorTemp, gateManifestAdmission } from "../lifecycle/mutation-gate.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
 import { BundlePublicationParticipant } from "./bundle-publication.js";
 import { BundleSourceExecutor } from "./bundle-source.js";
@@ -1136,6 +1136,10 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
     },
     executorCleanup: (id) => removeOrphanTerminalExecutorRecord(lifecycle().fs, productHome, lifecycle().effectiveUid, createCanonicalPathEvidence(), id),
     removeEmptyStagingRoots: () => removeEmptyStagingRoots(lifecycle()),
+    cleanAllocatorTemp: async () => {
+      const { key, residue } = await ledger();
+      await cleanAllocatorTemp(context, lifecycle(), key, residue, global());
+    },
   };
 }
 

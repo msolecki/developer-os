@@ -83,6 +83,8 @@ export interface UpdateApplyPortsV1 {
    * left before its construction envelope, which the closure does not claim.
    */
   readonly removeEmptyStagingRoots?: () => Promise<void>;
+  /** Under the lock, before the closure is read: removes the one pre-rename allocator temp a death after its write left. */
+  readonly cleanAllocatorTemp?: () => Promise<void>;
 }
 
 /** A verifier or step failure before the point of no return: the old release was restored. */
@@ -148,6 +150,7 @@ async function recoverLocked(ports: UpdateApplyPortsV1, closure: LifecycleJourna
 export function recoverUpdate(update: CliUpdateContext): Promise<UpdateRecoveryRouteOutcomeV1> {
   const ports = updateApplyPorts(update);
   return ports.withGlobalLock(async () => {
+    await ports.cleanAllocatorTemp?.();
     const closure = await ports.closure();
     if (closure.kind === "clear") await ports.removeEmptyStagingRoots?.();
     return recoverLocked(ports, closure);

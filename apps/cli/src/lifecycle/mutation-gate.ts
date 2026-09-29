@@ -307,8 +307,9 @@ export async function requireLifecycleStagingRoot(
  * which `assertRecoverable` would refuse — so a mutator cleans it before the recovery pass.
  * The cheap inspection runs first because the temp is absent on every healthy home, and the
  * full ledger read is only needed for the surviving allocated IDs the cleanup re-verifies.
+ * `update --apply` allocates through the same allocator, so its recovery calls this too.
  */
-async function cleanAllocatorTemp(
+export async function cleanAllocatorTemp(
   context: CliContext,
   lifecycle: CliLifecycleContext,
   key: LifecycleHomeKeyV1,
