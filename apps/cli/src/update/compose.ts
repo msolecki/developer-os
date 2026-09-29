@@ -92,6 +92,7 @@ import {
   type CanonicalPathEvidenceV1,
   type CanonicalProductStatePathV1,
   type CanonicalStateFilePlanV1,
+  type CanonicalStatePayloadPathV1,
   type EffectiveUidV1,
   type ExitCode,
   type ImmutableUpdatePlanRefV1,
@@ -509,7 +510,7 @@ class UpdateComposer {
     return deriveUpdatePayloadPath(this.#deps.productHome, this.#coordinatorId as string as SafeReasonCodeV1, ordinal);
   }
 
-  #statePayloadPath(role: "release_metadata" | "release_trust" | "active_release" | "rollback_record", id: SafeReasonCodeV1): CanonicalAbsolutePathV1 {
+  #statePayloadPath(role: "release_metadata" | "release_trust" | "active_release" | "rollback_record", id: SafeReasonCodeV1): CanonicalStatePayloadPathV1 {
     return deriveCanonicalStatePayloadPath(this.#deps.productHome, this.#coordinatorId as string as SafeReasonCodeV1, role, id);
   }
 
@@ -1723,7 +1724,7 @@ class UpdateComposer {
         return { ...common, before: { ...state, payload: null, dev: observed.entry.dev, ino: observed.entry.ino }, after: { ...state, payload: null } };
       }
       const row = rows[ordinal] as PayloadRowV1;
-      const payload = { kind: "update_expected", coordinatorId: this.#coordinatorId, ordinal: row.ordinal, path: row.path as never, hash: row.sha256, bytes: row.bytes, mode: 384 } as const;
+      const payload = { kind: "update_expected", coordinatorId: this.#coordinatorId, ordinal: row.ordinal, path: this.#statePayloadPath("release_metadata", id), hash: row.sha256, bytes: row.bytes, mode: 384 } as const;
       return { ...common, before: { state: "absent" }, after: { state: "present", hash: row.sha256, payload, ownerUid: this.#deps.effectiveUid as EffectiveUidV1, mode: 384, nlink: 1, size: row.bytes } };
     });
     return composed("update_composition_bundle", () => validateBundlePublicationPlan({
@@ -1754,7 +1755,7 @@ class UpdateComposer {
       if (observed.entry.kind !== "regular_file" || observed.sha256 === null) return refuse("update_state_changed", EXIT_CODES.operationalFailure, target);
       before = { state: "present", hash: observed.sha256, payload: null, ownerUid: observed.entry.ownerUid as EffectiveUidV1, mode: 384, nlink: 1, size: Number(observed.entry.size), dev: observed.entry.dev, ino: observed.entry.ino };
     }
-    const payload = { kind: "update_expected", coordinatorId: this.#coordinatorId, ordinal: row.ordinal, path: row.path as never, hash: row.sha256, bytes: row.bytes, mode: 384 } as const;
+    const payload = { kind: "update_expected", coordinatorId: this.#coordinatorId, ordinal: row.ordinal, path: this.#statePayloadPath(role, id), hash: row.sha256, bytes: row.bytes, mode: 384 } as const;
     return composed("update_composition_state", () => validateCanonicalStateFilePlan({
       schemaVersion: 1,
       id,
@@ -1830,7 +1831,7 @@ class UpdateComposer {
   #bundleSource(entry: Extract<ReleaseBundleEntryV1, { readonly kind: "file" }>): UpdateConstructionPayloadSourceV1 {
     const scratch = this.#scratchIdentity;
     const file = scratch.files.get(entry.path);
-    if (file === undefined) return refuse("update_bundle_source_changed", EXIT_CODES.securityRefusal, entry.path);
+    if (file === undefined || scratch.root === null) return refuse("update_bundle_source_changed", EXIT_CODES.securityRefusal, entry.path);
     return {
       kind: "signed_bundle_entry",
       release: this.#input.inputs.target,
@@ -1847,7 +1848,7 @@ class UpdateComposer {
     };
   }
 
-  #scratchIdentity: { readonly root: LifecycleGuardedEntryV1; readonly files: ReadonlyMap<string, LifecycleGuardedEntryV1> } = { root: null as never, files: new Map() };
+  #scratchIdentity: { readonly root: LifecycleGuardedEntryV1 | null; readonly files: ReadonlyMap<string, LifecycleGuardedEntryV1> } = { root: null, files: new Map() };
 
   /** Observes the verified scratch root and each bundle file an owner row sources, before any row is built. */
   async #observeScratch(owners: readonly OwnerBuildV1[]): Promise<void> {
