@@ -9,7 +9,7 @@
 
 import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { inspectPlannerGraph } from "@developer-os/security";
@@ -243,12 +243,11 @@ const PLANNER_ENTRYPOINTS: readonly string[] = [
 
 function findPlannerCapabilities(root: string): readonly string[] {
   const problems: string[] = [];
-  const relative = (path: string): string => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path);
   for (const entrypoint of PLANNER_ENTRYPOINTS) {
     const graph = inspectPlannerGraph(join(root, entrypoint));
     if (graph.modules.length === 0) problems.push(`${entrypoint}: the compiled graph is empty or missing`);
     for (const finding of graph.forbidden) {
-      problems.push(`${entrypoint}: ${relative(finding.module)}: ${finding.capability} (${finding.evidence})`);
+      problems.push(`${entrypoint}: ${relative(root, finding.module)}: ${finding.capability} (${finding.evidence})`);
     }
   }
   return problems;
@@ -305,10 +304,9 @@ export async function inspectReleaseAuthoritySurfaces(root: string): Promise<Rel
     if (!TRANSPORT_DEFINITION.test(path) && TRANSPORT_COMPOSER.test(code)) transportCompositions.push(path);
     if (path.startsWith("apps/launcher/src/") && LAUNCHER_EXEC.test(code)) launcherEntrypoints.push(path);
   }
-  const relative = (path: string): string => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path);
   const plannerGraphs = PLANNER_ENTRYPOINTS.map((entrypoint) => ({
     entrypoint,
-    modules: inspectPlannerGraph(join(root, entrypoint)).modules.map(relative),
+    modules: inspectPlannerGraph(join(root, entrypoint)).modules.map((module) => relative(root, module)),
   }));
   return { networkEntrypoints, transportCompositions, launcherEntrypoints, plannerGraphs };
 }
