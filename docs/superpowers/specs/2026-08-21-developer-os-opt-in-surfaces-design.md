@@ -41,11 +41,12 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-26 | A12 design §11, approved 2026-09-22 (D47) | `<product-home>/instructions/` is user data in the absent-manifest walk | §6 |
 | 2026-09-26 | founder, D42 (2026-09-22) | plan 1a Task 24's deferred round-trip and kill-matrix contract moved here unchanged when the plan file was deleted (NEW-100) | §7.1 |
 | 2026-09-28 | founder, NEW-113 questions (D71, under D65) | the exact macOS build + SHA-256 pin is replaced by fixed-path admission from a per-platform `SystemExecutableTableV1` (darwin implemented; linux and win32 recorded as intended): `/usr/bin/git` (the Apple shim, with `xcrun` inputs absent from every child environment), `/usr/bin/ssh` and `/bin/launchctl`, admitted by root ownership, no group/other write, version floors and a capability probe, with per-invocation evidence; `certification` removed; HTTPS and SSH still refuse; residuals 6 and 10 rewritten, 13 and 14 added | §4.2, §5.3, §7, §8.3 |
+| 2026-09-28 | founder, NEW-113 Task 2 addenda to D71 (roadmap D73), folded in at the plan close 2026-09-29 | a fourth `darwin` row `/usr/bin/git-receive-pack`, which `real_receive_pack` executes with argv0 `git-receive-pack`; the Git supervisor stays synchronous with a synchronous inspector/recheck pair | §4.2, §7 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
 change is marked "Amended 2026-09-22 (A13 Q3-A)"; the later ones are marked with their decision
 number, "Amended 2026-09-23 (D59)", "Amended 2026-09-24 (D61)", "Added 2026-09-25 (D62)" and
-"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)"; the NEW-100 row is marked "Added 2026-09-26 (NEW-100)"; the NEW-113 row is marked "Amended 2026-09-28 (D71)".
+"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)"; the NEW-100 row is marked "Added 2026-09-26 (NEW-100)"; the NEW-113 row is marked "Amended 2026-09-28 (D71)"; its Task 2 addenda are marked "Amended 2026-09-28 (D71 addendum)".
 
 ---
 
@@ -2648,6 +2649,30 @@ Every record is exact-key `CanonicalJsonV1`, with arrays sorted by `id`. `Execut
 leave the compiled schema. Statements elsewhere in §4.2 that say "pinned Git", "pinned target" or
 "the row" read as "the admitted distribution of `AdmittedGitDistributionV1`".
 
+**Amended 2026-09-28 (D71 addendum).** Two founder addenda from NEW-113 Task 2 (roadmap D73) change
+this block where they conflict; everything else in it stands.
+
+1. **A fourth `darwin` row, `git-receive-pack`.** Rule 2's `real_receive_pack` sentence is replaced:
+   the node executes the standard Apple shim `/usr/bin/git-receive-pack` with argv0
+   `git-receive-pack`, exactly the argv the D59 table already records, so the same-PID argv invariant
+   of the gateway → real receive-pack exec is untouched. `SystemExecutableIdV1` gains
+   `"git-receive-pack"`, and the `darwin` table gains the row
+   `{ id: "git-receive-pack", path: "/usr/bin/git-receive-pack", ancestors: ["/", "/usr", "/usr/bin"],
+   admission: "posix_root_owned", status: "implemented" }`, admitted by rule 3 exactly as `git`.
+   `GitDistributionPolicyV2.executables` becomes four entries, adding
+   `{ id: "git_receive_pack", system: "git-receive-pack" }`; each local-transport invocation admits
+   `/usr/bin/git` and `/usr/bin/git-receive-pack`, and `AdmittedGitDistributionV1` carries both files
+   (plus `/usr/bin/ssh` when SSH is selected), so its executables list is `[2..3]`. The version floor
+   and capability probe run through `/usr/bin/git` only. The `linux` and `win32` rows gain the
+   matching entry when their platform package is designed.
+2. **The supervisor stays synchronous.** Rule 6's recheck before each real exec runs inside the Git
+   supervisor's synchronous permit consumption, so the platform supplies a synchronous inspector and
+   recheck pair beside the asynchronous admission (`inspectSystemPathSync`,
+   `recheckSystemExecutableSync`). The synchronous inspector observes with `lstat` and hashes through
+   an `O_NOFOLLOW` descriptor whose `dev`, `ino`, `size`, `mtimeNs` and `ctimeNs` must equal that
+   `lstat`; it may cache a digest keyed by that whole identity, because any write to the file changes
+   `ctime`. A mismatch leaves the hash null and refuses `unsupported_git_distribution`.
+
 `GitExecGatewayV1` makes the child policy enforceable. For each invocation, the coordinator creates an
 owner-only directory containing exact generated 0700 Node-24 trampoline scripts named only `git`,
 `git-remote-https`, `git-remote-developer-os-local`, `git-receive-pack`, and
@@ -4547,6 +4572,14 @@ follows; every other row is unchanged.
 A `*.pinned-host.test.ts` file now runs on any host that the policy admits, and refuses — never
 skips — on a host below a floor or failing a capability. It stays excluded from `test:suite`, and
 `npm run test:pinned-host` runs it locally at phase close and on the Phase 9 gate account.
+
+**Amended 2026-09-28 (D71 addendum).** With §4.2's D71 addendum: the "system executable table is
+closed" row's exact set has four `darwin` rows, adding `git-receive-pack`
+`/usr/bin/git-receive-pack`; the "Git distribution admission is closed" fixtures cover
+`/usr/bin/git-receive-pack` like `/usr/bin/git`, and a change to either between admission and a real
+exec refuses, observed through the synchronous inspector; and in the "process table is canonical"
+row, `real_receive_pack` executes `/usr/bin/git-receive-pack` with argv0 `git-receive-pack`, not
+`/usr/bin/git` with argv0 `git` and a leading `receive-pack`.
 
 ### 7.1 Deferred gate: uninstall → `init` round trip and A9 kill matrix (NEW-100)
 

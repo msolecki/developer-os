@@ -44,7 +44,7 @@ execution envelopes, closes `config get/set` key/value/result/redaction-output g
 enable the sole publisher of a new `.git`; every sync uses bounded object/index/reflog/ref effects.
 Required source/destination reflogs are exact staged CAS postimages, generated Git-config paths reject
 controls/line breaks, and the in-process pack reader has explicit compressed/object/inflation/delta/
-RAM/temp/deadline budgets. On a certified pinned row, Launchd bootstrap inherits as FD 3 only the
+RAM/temp/deadline budgets. On an admitted `/bin/launchctl` (D71), Launchd bootstrap inherits as FD 3 only the
 descriptor of the already-unlinked, immutable private snapshot; the real source plist descriptor is
 never inherited and there is no pathname fallback. Runner admission first authenticates installed manifest/plist/
 generation evidence, then decides active handler versus inert `automation_disabled` status under its
@@ -619,9 +619,18 @@ literal; this is the index from bound to symbol. Cite symbols, not lines.
 - **Identity encoding (D31).** Every recorded `dev`/`ino` in the Git and launchd code comes from
   `{ bigint: true }` stats; `findIdentityRenderings` and `findNumberValuedStats` in
   `tests/repository/check.ts` enforce it at lint.
-- **Distribution rows.** `SUPPORTED_GIT_DISTRIBUTION` and `SUPPORTED_LAUNCHD_DISTRIBUTION` are the
-  only places a pinned hash, size, build or version literal appears; `foundation.md` §10 records the
-  re-pinning rule.
+- **System executables (amended 2026-09-28, D71; NEW-113's code).** The `darwin` rows are the one
+  constant `DARWIN_SYSTEM_EXECUTABLES` (`packages/platform-macos/src/system-executables.ts`): `git`
+  `/usr/bin/git`, `git-receive-pack` `/usr/bin/git-receive-pack`, `ssh` `/usr/bin/ssh`, `scheduler`
+  `/bin/launchctl`, each `posix_root_owned` over the ancestors `/`, `/usr`, `/usr/bin` (or `/`,
+  `/bin` for `launchctl`): regular file, uid `0`, `(mode & 0o022) == 0`, owner-execute, no
+  setuid/setgid. A file above 64 MiB (`MAX_HASHED_BYTES`) is observed but not hashed, so admission
+  refuses it. Floors live only in `GIT_DISTRIBUTION_POLICY` (Git `2.54.0`, `Apple Git-157`; ssh
+  `OpenSSH_10.3p1`; four required build-option lines; at most 32 probe lines) and
+  `LAUNCHD_DISTRIBUTION_POLICY` (macOS `26.6.2`); no ceiling, and no build, Xcode version or binary
+  hash literal exists anywhere. `LaunchdEffectJournalV1.launchctlIdentityHash` is `null` exactly for
+  a zero-transition effect and counts toward `MAX_LAUNCHD_EFFECT_JOURNAL_BYTES`. `foundation.md` §10
+  has the admission contract.
 
 ## Spec 2: release, update and rollback bounds
 

@@ -333,7 +333,7 @@ the validated Git policy or an existing log requires them; compensation restores
 `GitConfigQuotedPathV1` excludes controls/line breaks from generated config paths, and the in-process
 pack/ref reader streams under exact compressed/object/inflation/delta/RAM/temp limits plus the one
 inherited 600-second phase. Launchd bootstrap no longer passes the verified plist's mutable pathname:
-on a separately certified pinned row it inherits only the descriptor of the already-unlinked,
+on an admitted `/bin/launchctl` (§10, D71) it inherits only the descriptor of the already-unlinked,
 immutable private snapshot as FD 3 and passes only `/dev/fd/3`; the real source plist descriptor is
 never inherited and there is no fallback. A scheduled runner first authenticates manifest/plist/generation
 installation evidence independently of current active provenance, then under its lease/global lock
@@ -1105,39 +1105,53 @@ record.
     writes the per-job status (≤ `MAX_AUTOMATION_STATUS_BYTES`, 64 KiB) and ten rotated log slots
     (`AUTOMATION_LOG_SLOTS`, ≤ `MAX_AUTOMATION_LOG_BYTES`, 1 MiB each), redacted before they are
     bounded; each job runs under its `AutomationRunnerLeaseV1`, the lease uninstall drains.
-- **What still refuses: the distribution rows and the re-pinning rule (NEW-84, D59).** Every Git
-  operation admits the executable against `SUPPORTED_GIT_DISTRIBUTION`
-  (`packages/security/src/git/distribution.ts`) and every launchd operation admits `launchctl` against
-  `SUPPORTED_LAUNCHD_DISTRIBUTION` (`packages/platform-macos/src/launchd/distribution.ts`); a mismatch
-  in any pinned field refuses `unsupported_git_distribution` or `unsupported_launchd_distribution`
-  before any live authority. Both rows were measured read-only on 2026-09-23 (macOS 26.6.2 `25G83`,
-  Xcode 27.0 `27A266a`, Apple Git-157) and are the spec's values (Spec 1 §4.2, §5.3, "Amended
-  2026-09-23 (D59)"). Two refusals stand until NEW-113 (D65, 2026-09-26) replaces the exact-build pin with fixed
-  system paths, ownership and a version floor: the launchd row's `certification` is `null`, so every launchd mutation refuses (read-only
-  observation, preview and `automation status` still report state, and an unsupported or uncertified
-  row names the manual `launchctl bootout gui/<uid>/<label>` per installed label, residual 10); and
-  only the local/file Git transport is traced, so an HTTPS or SSH remote refuses
-  `unsupported_git_distribution`. Tests that exec the pinned Git or `launchctl` are
-  `*.pinned-host.test.ts` files, run by `npm run test:pinned-host` and never by hosted CI. The re-pinning rule below is superseded by D65 and stays only
-  while the pin does:
-  1. **One row per package, as data.** The Git row is the one constant `SUPPORTED_GIT_DISTRIBUTION`;
-     the launchd rows are the one constants file `packages/platform-macos/src/launchd/distribution.ts`.
-     No other file restates a hash, size, build or version literal; tests import the constant and
-     mutate one field at a time.
-  2. **Measure read-only.** The command list never runs `launchctl bootstrap`, `bootout`, `load`,
-     `unload`, `enable`, `disable` or `kickstart`, and never writes under `~/Library/LaunchAgents`
-     (it is in
-     `git show d2f18b4:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`, "NEW-84").
-  3. **Refuse on any drift.** OS product version or build, executable path, owner, mode, size or hash,
-     Xcode selection, build-option line, link target and SSH bytes are all compared; version text is
-     never trusted on its own.
-  4. **Re-pin in one change.** Measure the new row, amend the spec rows with a dated founder-approved
-     amendment, replace the constant, update every exact-set test that imports it, record the Git
-     process trace and run the FD 3 bootstrap certification on a disposable host at that exact
-     build, and review — one commit. A row is replaced, not added; a row is kept only while a
-     certified host for it still exists.
-  5. **Stop when unsupported.** Until certification evidence exists for the pinned launchd row, every
-     launchd mutation refuses.
+- **Which Git, `ssh` and `launchctl` run: fixed-path admission (D65, D71; NEW-113's code, 2026-09-28).**
+  The exact macOS build plus binary SHA-256 pin of D59 is gone; Spec 1 §4.2 and §5.3 "Amended
+  2026-09-28 (D71)" and their D71 addendum are normative. What the code relies on:
+  1. **One per-platform table.** `SystemExecutableRowV1` and the `posix_root_owned` predicate live in
+     `packages/security/src/system-executables.ts`; the `darwin` rows are `DARWIN_SYSTEM_EXECUTABLES`
+     in `packages/platform-macos/src/system-executables.ts`, exposed through `PlatformAdapter`. Four
+     rows are implemented: `git` `/usr/bin/git`, `git-receive-pack` `/usr/bin/git-receive-pack` (both
+     Apple shims following the `xcode-select` choice), `ssh` `/usr/bin/ssh` and `scheduler`
+     `/bin/launchctl`. Linux (`/usr/bin/git`, `/usr/bin/ssh`, systemd user units) and Windows
+     (`%ProgramFiles%\Git\cmd\git.exe`) are recorded in the spec as intended, not implemented; no
+     contract field names a macOS build, an Xcode version or a certificate. `PATH`, `DEVELOPER_DIR`
+     and `xcrun` are never consulted, and every Git child environment is an exact profile, so no
+     `xcrun`-steering variable reaches the shim.
+  2. **`posix_root_owned`.** The path is a regular file (a symbolic link refuses), uid `0`,
+     `(mode & 0o022) == 0`, owner-execute set, neither setuid nor setgid; each ancestor (`/`, `/usr`,
+     `/usr/bin` for Git and ssh; `/`, `/bin` for `launchctl`) is a uid-`0` directory with
+     `(mode & 0o022) == 0`.
+  3. **Floors and a probe, no ceiling.** Git `2.54.0` with `(Apple Git-<n>)`, `n >= 157`, read from
+     `git --version --build-options` through the shim, which must also print `cpu: arm64`,
+     `shell-path: /bin/sh`, `default-hash: sha1` and `default-ref-format: files` exactly once (other
+     lines ignored, more than 32 or a non-zero exit refuses); ssh `OpenSSH_10.3p1`; macOS
+     `ProductVersion >= 26.6.2`, with `ProductBuildVersion` recorded and never compared. Policies:
+     `GIT_DISTRIBUTION_POLICY` (`apple-git-arm64-v2`, process table `apple-git-process-v2`) and
+     `LAUNCHD_DISTRIBUTION_POLICY` (`launchctl-macos-preview-v2`, `launchctl-macos-fd3-v2`); an old
+     ID in a persisted plan or journal refuses.
+  4. **Evidence per invocation, rechecked before every exec.** Admission returns
+     `AdmittedSystemExecutableV1` (`dev`, `ino`, `size`, `sha256`). Git holds it in memory for one
+     top-level invocation and never persists it, so a `push_pending` retry after a macOS or Xcode
+     update re-admits. `GitProcessSupervisor` stays synchronous: it rechecks each admitted file
+     before every real exec through the synchronous pair `inspectSystemPathSync` /
+     `recheckSystemExecutableSync`, whose digest cache is keyed by the file's full identity including
+     `mtimeNs`/`ctimeNs`. Launchd binds `LaunchctlIdentityV1` into the execution table through
+     `processTableHash` (the template and preview carry only the `launchctl_identity` slot, so two
+     admitted Macs hash equal) and `recheckLaunchdHost` compares it before every process;
+     `LaunchdEffectJournalV1.launchctlIdentityHash` (above) makes a resume on a changed `launchctl`
+     refuse with the manual `bootout` list. The production launchd runner spawns `/bin/launchctl`
+     and nothing else (`launchctlRunner`, `apps/cli/src/lifecycle/adapters.ts`).
+  5. **What still refuses.** `certification` is removed; the FD-3 contract is enforced on every run by
+     the post-bootstrap observation, whose failure compensates and refuses
+     `unsupported_launchd_distribution`. A host below a floor names the manual
+     `launchctl bootout gui/<uid>/<label>` per installed label (Spec 1 residual 10). Only the
+     local/file Git transport is traced: `git_remote_https` has no row and an HTTPS or SSH remote
+     refuses `unsupported_git_distribution` (D59 Q4-A, D71 Q4). Accepted: the Git tree behind the
+     shim is not admitted by mode (residual 13), and the shim still decides its developer directory
+     (residual 14). Tests that exec the real binaries are `*.pinned-host.test.ts`, run by
+     `npm run test:pinned-host` on any admitted host (refusing, never skipping, below a floor) and
+     never by hosted CI; the Phase 9 gate on a disposable account is `BACKLOG.md` NEW-113's Task 5.
 
 ## 11. Release, update and rollback (Spec 2)
 
