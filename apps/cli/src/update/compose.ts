@@ -429,7 +429,8 @@ function beforeState(row: ManagedArtifactV2, observed: ObservedPathV1 | null): P
     return { state: "symlink", targetBytes: Number(entry.size), targetHash: observed.sha256, dev: entry.dev, ino: entry.ino };
   }
   if (entry.kind !== "regular_file" || observed.sha256 === null) return changed();
-  const expected = installedHash(row);
+  // A schema row is verified by its schema, never its hash: every gated transaction rewrites the allocator.
+  const expected = row.verification.mode === "schema" ? null : installedHash(row);
   if (expected !== null && expected !== observed.sha256) return changed();
   return { state: "file", mode: modeOf(observed), hash: observed.sha256, bytes: Number(entry.size), dev: entry.dev, ino: entry.ino };
 }

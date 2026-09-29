@@ -273,6 +273,20 @@ describe("owner update plans", () => {
       expect(withReservation({ expectedBefore: present, afterArtifact: present as never })).toThrow();
     });
 
+    describe("a keep over bytes the product rewrote since install", () => {
+      const moved = { state: "file" as const, mode: 384 as const, hash: sha("advanced"), bytes: 8, dev, ino: ino(3) };
+
+      it("admits a schema row, which is verified by its schema, never its hash", () => {
+        const schema = { ...artifact(reservation, "file", null), verification: { mode: "schema", schemaId: "lifecycle-id-allocator-v1", installedHash: sha("installed") } } as ManagedArtifactV2;
+        expect(withReservation({ expectedBefore: moved, afterArtifact: schema }, schema)().operations).toHaveLength(4);
+      });
+
+      it("refuses a content row", () => {
+        const file = artifact(reservation, "file", sha("installed"));
+        expect(withReservation({ expectedBefore: moved, afterArtifact: file }, file)).toThrow(/keep changes the recorded hash/u);
+      });
+    });
+
     it("refuses an ephemeral_present state that carries a hash", () => {
       expect(withReservation({ expectedBefore: { ...present, hash: sha("s") } as never })).toThrow(/expectedBefore: keys/u);
     });

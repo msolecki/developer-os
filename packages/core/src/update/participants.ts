@@ -346,7 +346,8 @@ function checkOperation(operation: PersistedOwnerChangeOperationV1, plan: OwnerU
   switch (operation.operation) {
     case "keep":
       if (before.state === "absent" || after === null || content !== null) fail(`${label}: keep is not byte-identical`);
-      if (before.state === "file" && installedHash(after) !== null && installedHash(after) !== before.hash) fail(`${label}: keep changes the recorded hash`);
+      // A schema row is verified by its schema, never its hash: every gated transaction rewrites the allocator.
+      if (before.state === "file" && !(after.kind === "file" && after.verification.mode === "schema") && installedHash(after) !== null && installedHash(after) !== before.hash) fail(`${label}: keep changes the recorded hash`);
       return;
     case "create":
       if (before.state !== "absent" || after?.kind !== "file" || content === null) fail(`${label}: create needs absent before, a file after, and content`);
