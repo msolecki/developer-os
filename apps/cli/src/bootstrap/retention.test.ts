@@ -404,6 +404,9 @@ function retentionFixture(options: {
   const locks = freshLocks();
   const store = {
     plan: {
+      operation: "fresh_v2_init",
+      bootstrapIdentity: { path: path("/synthetic/state/bootstrap.json") },
+      admittedPreexistingPaths: [],
       createdPaths: [{ kind: "global_lock" }],
     },
     current: () => structuredClone(current),
