@@ -596,7 +596,7 @@ describe("materializeRollbackSchemaMigration (D72 P9)", () => {
     return { ...unsigned, planHash: updateFoundationParticipantPlanHash(unsigned) };
   });
   const retained = {
-    id: id("config-v2"),
+    id: id("migration_config-v2"),
     domain: "product_state" as const,
     fromVersion: v(1),
     toVersion: v(2),
