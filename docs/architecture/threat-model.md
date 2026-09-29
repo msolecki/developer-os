@@ -900,8 +900,8 @@ piece defends. Spec 1 §4 and §5 remain normative for every literal.
 
 - **What stays open.** The trampoline's reported `ppid` is not bound to the parent PID in the permit,
   because the permit carries no PIDs; a real push through `/usr/bin/git` after the I1 fix, `git
-  receive-pack` through the shim, and the hostile config and redirect cases wait for NEW-113's Task 5
-  on a disposable account (`BACKLOG.md` NEW-113 and §6, Phase 9).
+  receive-pack` through the shim, and the hostile config and redirect cases are unexercised: NEW-113
+  closed under D76 (2026-09-29) with its disposable-account gate (Task 5, §6 Phase 9) skipped.
 
 ### 5.16 Release trust, update and rollback (Spec 2)
 

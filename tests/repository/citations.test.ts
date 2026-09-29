@@ -76,15 +76,8 @@ const BASELINES: ReadonlyMap<string, number> = new Map([
   ["docs/architecture/knowledge-pipeline.md", 70],
   ["docs/architecture/foundation-constraints.md", 3],
   ["docs/architecture/workflow-schema.md", 3],
-  ["docs/superpowers/BACKLOG.md", 8],
-  /**
-   * **Lowered from 2 to 1 on 2026-08-20, when R2 closed.** A floor exists to catch citations
-   * being lost silently, and this one caught exactly that — the second citation lived in the
-   * "Four Foundation requests" section, which Task 10 removed because all three of R2's are
-   * closed. A section that is deleted takes its citations with it, so the floor moves down
-   * with it rather than the deletion being worked around.
-   */
-  ["docs/superpowers/ORDER.md", 1],
+  /** Lowered from 8 to 6 on 2026-09-29: the closed NEW-113 (D76) and NEW-117 rows took one each. */
+  ["docs/superpowers/BACKLOG.md", 6],
   ["docs/superpowers/plans/2026-07-21-developer-os-program.md", 8],
 ]);
 
@@ -97,12 +90,18 @@ const BASELINES: ReadonlyMap<string, number> = new Map([
  * `docs/architecture/knowledge-pipeline.md`, whose floor appears above.
  */
 
-/** Notes that cite files without line numbers. Asserted, so the claim cannot rot. */
+/** Documents that cite files without line numbers. Asserted, so the claim cannot rot. */
 const EXPECTED_WITHOUT_LINES = [
   "docs/architecture/brain.md",
   "docs/architecture/claude-adapter.md",
   "docs/architecture/codex-adapter.md",
   "docs/architecture/foundation.md",
+  /**
+   * **Floored at 2, then 1 (2026-08-20, R2's closure), moved here on 2026-09-29** when D76
+   * rewrote the A11b row and dropped its last `path:line` citation. A deleted section takes its
+   * citations with it, so the floor follows the deletion rather than working around it.
+   */
+  "docs/superpowers/ORDER.md",
 ] as const;
 
 interface Citation {
@@ -595,7 +594,7 @@ describe("every documented citation resolves", () => {
     }
 
     /**
-     * The other half of the same claim: these four are listed as citing files without
+     * The other half of the same claim: these five are listed as citing files without
      * lines, and that statement is asserted rather than trusted. If one gains a
      * `path:line` citation it belongs in `BASELINES` and this goes red to say so.
      */

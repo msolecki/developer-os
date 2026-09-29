@@ -1168,14 +1168,15 @@ record.
      shim is not admitted by mode (residual 13), and the shim still decides its developer directory
      (residual 14). Tests that exec the real binaries are `*.pinned-host.test.ts`, run by
      `npm run test:pinned-host` on any admitted host (refusing, never skipping, below a floor) and
-     never by hosted CI; the Phase 9 gate on a disposable account is `BACKLOG.md` NEW-113's Task 5.
+     never by hosted CI; the Phase 9 gate on a disposable account (NEW-113's Task 5) was skipped
+     when NEW-113 closed under D76 (2026-09-29), so the first enable on any Mac is the first real run.
 
 ## 11. Release, update and rollback (Spec 2)
 
 **Added 2026-09-28** by NEW-110 Task 12, carrying the contracts of Spec 2
 (`docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`, amended by D72 P1–P9)
-that the shipped code now implements. The spec stays normative for every literal while Task 11b,
-NEW-112 and NEW-113 depend on it; this section is what a reader of the code needs.
+that the shipped code now implements. The spec stays normative for every literal while Task 11b
+and NEW-112 depend on it; this section is what a reader of the code needs.
 
 ### 11.1 The installed release
 
