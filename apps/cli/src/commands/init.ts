@@ -47,6 +47,7 @@ import {
   BRAIN_TEMPLATE_DIRECTORIES,
 } from "./brain-template.js";
 import type { CliContext } from "../context.js";
+import { FreshBootstrapError } from "../bootstrap/executor.js";
 import type {
   FreshInitOutcomeV1,
   FreshInitPreviewV1,
@@ -1126,7 +1127,7 @@ export async function runInit(
     return failureFrom(
       { guards },
       error,
-      error instanceof InitRefusal ? error.paths : [],
+      error instanceof InitRefusal || error instanceof FreshBootstrapError ? error.paths : [],
       error instanceof InitRefusal ? error.recovery : undefined,
     );
   }

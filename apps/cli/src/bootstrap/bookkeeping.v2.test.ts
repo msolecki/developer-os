@@ -192,15 +192,17 @@ describe("the lifecycle bookkeeping set on a real V2 home", () => {
     const fixture = await createCommandFixture("bootstrap-codex-ingest-abandoned-run", { bootstrapAvailable: true });
     await plantProductHome(fixture);
     const codexIngestHome = join(fixture.paths.stateDir, "codex-ingest-home");
-    await nodeFs.mkdir(join(codexIngestHome, "run-a1b2c3"), { recursive: true, mode: 0o700 });
+    const abandoned = join(codexIngestHome, "run-a1b2c3");
+    await nodeFs.mkdir(abandoned, { recursive: true, mode: 0o700 });
     await nodeFs.chmod(codexIngestHome, 0o700);
 
-    const refused = await refusedInit(fixture);
+    const result = await runInit(fixture.context, ACCEPTED);
 
-    expect(refused.code).toBe(EXIT_CODES.recoveryRequired);
-    expect(refused.message).toContain("codex_ingest_home_shape");
-    expect(refused.message).toContain(join("codex-ingest-home", "run-a1b2c3"));
-    expect(refused.message).toContain(CODEX_INGEST_HOME_REPAIR);
+    if (result.ok) throw new Error("init admitted a home it must refuse");
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.message).toContain("codex_ingest_home_shape");
+    expect(result.error.paths).toStrictEqual([abandoned]);
+    expect(result.error.message).toContain(CODEX_INGEST_HOME_REPAIR);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses a planted logs directory, which is not bookkeeping and holds no retained evidence", async () => {

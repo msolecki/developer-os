@@ -198,10 +198,12 @@ export interface BootstrapExecutorDependencies {
   readonly inspectEvidence?: (() => Promise<BootstrapEvidenceAdmissionV1>) | undefined;
 }
 
-class FreshBootstrapError extends Error {
+/** `paths` reach `failureFrom`'s `path` scope; a path quoted in `message` may redact as high-entropy (NEW-39). */
+export class FreshBootstrapError extends Error {
   constructor(
     readonly code: typeof EXIT_CODES.recoveryRequired | typeof EXIT_CODES.securityRefusal | typeof EXIT_CODES.invalidInput,
     message: string,
+    readonly paths: readonly string[] = [],
   ) {
     super(message);
     this.name = "FreshBootstrapError";
@@ -1320,10 +1322,11 @@ export class BootstrapExecutor {
         : null;
       const shape = inspectCodexIngestHomeShape(entryOf(codexIngestStats), names, () => entryOf(link), uid());
       if (!shape.admitted) {
+        const offending = shape.offendingName === null ? codexIngestHome : join(codexIngestHome, shape.offendingName);
         throw new FreshBootstrapError(
           EXIT_CODES.recoveryRequired,
-          `product home contains a Codex ingest home of an unadmitted shape (codex_ingest_home_shape): ${
-            shape.offendingName === null ? codexIngestHome : join(codexIngestHome, shape.offendingName)}; ${CODEX_INGEST_HOME_REPAIR}`,
+          `product home contains a Codex ingest home of an unadmitted shape (codex_ingest_home_shape): ${offending}; ${CODEX_INGEST_HOME_REPAIR}`,
+          [offending],
         );
       }
       result.set(codexIngestHome, codexIngestStats);
