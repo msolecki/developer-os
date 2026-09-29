@@ -340,6 +340,12 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   The runbook's step 10 precondition is corrected by observation: `path`, `format` and `edit` fire
   only on Edit/Write, so a read-only session proves `inject`, `prompt`, `command`, `commit` and
   `stop`, and `path` is proven by the refused `.env` probe.
+- **D75 (2026-09-29), closing the D70 lane's plans before the full suite.** The founder closes the
+  NEW-113 and NEW-110 plans without waiting for the full `npm run check` (the D70 lane's tests were
+  written, not run); the founder runs the full check later, and a red run reopens the rows its
+  failures belong to. Fresh-context review ran for both plans (NEW-110: REQUEST CHANGES with two
+  Critical, fixed and re-reviewed APPROVE WITH FIXES, minors fixed; NEW-113: APPROVE WITH FIXES,
+  fixed; the other rows: APPROVE WITH FIXES, fixed).
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
@@ -366,7 +372,7 @@ Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 - Spec, plan and Tasks 1–28 of the A12 plan (closed and deleted 2026-09-28) landed and
   the phase close ran: install/uninstall wiring (NEW-60) `be9b6de`, `022dc98`; loading assertions
   (NEW-65) `084f1ba`; Codex registration at install `485ca5a`.
-- [ ] Codex cache: an in-place re-render is not loaded until `codex plugin add` runs again; the update lifecycle must re-register (NEW-61). Registration at install landed; re-registration on `update` belongs with Phase 8.
+- [x] Codex cache: an in-place re-render is not loaded until `codex plugin add` runs again; the update lifecycle must re-register (NEW-61, closed 2026-09-29). Registration at install landed; re-registration on `update` landed with Phase 8's apply path (`dab8064a`, `b2c258e8`, `b7a593be`; D75: tests written, full check owed).
 - [x] Founder stops: the billed row (NEW-101, `claude-adapter.md` §14.1) emptied
   `UNPROVEN_CLAUDE_CATEGORIES`, the real-vendor loading and isolation files ran green, and the
   private-pattern scan (18 patterns, outside the repository) found 0 over `instructions/` and
@@ -434,27 +440,35 @@ Runs after Phase 10 (D16). Tasks 10–11 moved to Phase 4b.
 NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the §5.3/§6.3 limit conflict is resolved, the exact-maximum gates are read against both bounds, and the `symlink` arm is accepted residual 9. Tasks 20 and 26 carry what that leaves them. Execute the baseline plan.
 
 - Tasks 12–25 of the release plan and Tasks 1–8 of the Spec 2 closure plan landed under D56, and the
-  Phase 8 close ran. Both plans were closed on 2026-09-26 (D68); their open bodies are behind the
-  `git show` pointers in `BACKLOG.md` NEW-110 and NEW-111.
-- [ ] Closure Tasks 9–10 (`update --apply` / `update rollback --apply` composition): blocked on design,
-  NEW-110; parked by D61.
-- [ ] Task 26 (the lifecycle proof) and Task 11b: parked (D56, D46).
+  Phase 8 close ran. Both plans were closed on 2026-09-26 (D68); their open bodies are behind
+  `git show a03499c:` pointers (NEW-110, closed 2026-09-29, consumed the closure plan's; Task 11b's
+  is in `BACKLOG.md` NEW-111).
+- [x] Closure Tasks 9–10 (`update --apply` / `update rollback --apply` composition): NEW-110's Spec 2
+  revision pass (D72, `plans/2026-09-28-new-110-spec2-apply.md`, closed and deleted 2026-09-29 under
+  D75) landed them as its Tasks 10 (`b2c258e8`, `e91f4e2d`, `ba842b7b`, `e1e1755e`, `b7a593be`) and 11
+  (`c5b65eac`, `1c52d4ce`, `6824e034`), on Tasks 1–9 and 13; review fixes `c8960d46`..`a3cebf2d`.
+- [x] Task 26 (the lifecycle proof) on the synthetic arm64 and x64 fixture: NEW-110 Task 12
+  (`b9faa189`, `e672ae1f`, `00afee8b`, `26baedd4`, `8b29e3c9`); the surviving contracts are in
+  `docs/architecture/foundation.md` §11. D75: tests written, the full check is owed.
+- [ ] Task 11b: parked (D46), with NEW-111 and NEW-112. The real-release half of the gate waits for it
+  and A16, and so do the persisted-format migrations Spec 2's D72 block owes "no later than Task 11b".
 
-Gate: `update` dry-run and apply and rollback proven on a disposable install, then once on the founder machine.
+Gate: `update` dry-run and apply and rollback proven on a disposable install, then once on the founder machine. The synthetic half (disposable install, both architectures) landed with NEW-110 Task 12; the real-release half and the founder machine wait on Task 11b.
 
 ### Phase 9 — Spec 1b: git and launchd · L
 
 Runs after Phase 8 (D16), and takes over the automation job registry bullet from Phase 7. The registry is Spec 1 §5.1's four jobs (`brain-reindex`, `brain-lint`, `doctor`, `git-sync`); `import` and `ingest` stay manual (D47, Spec 1 §1).
 
-Preconditions (NEW-84): a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
-
 - Plan 1b (D59; closed and deleted 2026-09-26, `git show 84a50f1:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`) Tasks 1–18 and 20 landed
-  under D56; the rows were measured and re-pinned in the spec (NEW-84, D59). The phase close
-  (Task 21) ran except `npm run test:pinned-host`, which moves to NEW-113.
-- [ ] NEW-113 (D65, supersedes Task 19): replace the exact-build pin through a Spec 1 amendment, then
-  prove the gate below on a disposable macOS account.
-- The architecture carry-over of plan 1b's decisions ran on 2026-09-26 (`foundation.md` §10,
-  `foundation-constraints.md`, `threat-model.md` §5.15).
+  under D56. The phase close (Task 21) ran except `npm run test:pinned-host`, which moved to NEW-113.
+- [x] NEW-113's code (D65, D71, D73 addenda; supersedes plan 1b Task 19 and NEW-84's pin): fixed-path
+  admission from a per-platform table replaced the exact-build pin. Plan
+  `plans/2026-09-28-new-113-fixed-path-admission.md` Tasks 1–3 landed (`a9d50032`, `cfed0476`,
+  `b1a7c6a5`; review fixes `83647122`, `d92759a0`, `0c799c68`) and the plan closed on 2026-09-29 under
+  D75; its surviving constraints are in `foundation.md` §10, `foundation-constraints.md` and
+  `threat-model.md` §5.15. D75: tests written, the full check and `npm run test:pinned-host` are owed.
+- [ ] The gate below, on a disposable macOS account: NEW-113's Task 5, a founder step whose body is in
+  `BACKLOG.md` NEW-113.
 
 Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; scheduled runs observed.
 
@@ -466,7 +480,12 @@ Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; s
   guards (closes D3's accepted risk), legacy surfaces removed, reinstall preserving the Brain and
   overrides, retired jobs run by hand until Phase 9, Git and launchd left disabled, rollback
   exercised once.
-- [ ] Execute it. Do not delete the legacy repositories; archive them after one stable cycle.
+- [x] Steps 1–15 executed on the live machine (steps 8–10 on 2026-09-28 under D69 and D74, steps
+  11–15 on 2026-09-28/29; `ORDER.md` has the evidence). The runs found NEW-114 (closed), NEW-115,
+  NEW-116 and the ingest fixes `588c866d`, `cb19f7c6`, `26807aed` and `3ebc505d`.
+- [ ] Steps 16–18 (per-adapter gate cycle, exercised rollback) after one week of use; step 19 after one
+  stable cycle; Codex hook approval after 2026-10-22. Do not delete the legacy repositories; archive
+  them after one stable cycle.
 
 Gate: one complete capture → review → ingest → search → reinstall → uninstall cycle on the live machine; rollback to the legacy runtime exercised.
 
@@ -496,8 +515,8 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |
 | 6 | `specs/<date>-developer-os-hooks-design.md` and its plan |
 | 7 | `specs/2026-09-22-developer-os-tooling-verbs-design.md` (its plan closed and was deleted 2026-09-26) |
-| 8 | a fresh plan from NEW-110's Spec 2 revision pass (both earlier plans closed 2026-09-26) |
-| 9 | plan 1b (closed 2026-09-26) and the Spec 1 amendment NEW-113 names |
+| 8 | `plans/2026-09-28-new-110-spec2-apply.md` from NEW-110's Spec 2 revision pass (closed 2026-09-29, D75; both earlier plans closed 2026-09-26); Task 11b has no plan yet, its body is behind `BACKLOG.md` NEW-111's pointer |
+| 9 | plan 1b (closed 2026-09-26), Spec 1's D71 amendment and `plans/2026-09-28-new-113-fixed-path-admission.md` (closed 2026-09-29, D75; Task 5 is in `BACKLOG.md` NEW-113) |
 | 10 | `docs/migration/founder-cutover.md` |
 | 11 | program plan Task 9 |
 
