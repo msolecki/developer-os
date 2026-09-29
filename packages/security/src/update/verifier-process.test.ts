@@ -207,6 +207,23 @@ describe("target verifier supervision", () => {
       expect(spawned).toHaveLength(1);
     });
 
+    it("admits a strictly valid three-digest result frame", async () => {
+      const { supervisor } = withRedactor(answer(echo));
+      expect(await supervisor.run(request(`${tmpHome}/releases/2.0.0/darwin-arm64`))).toEqual({ exitCode: 0, ...echo });
+    });
+
+    it.each([
+      ["an extra string key", { ...echo, note: `sk-${"A1b2C3d4".repeat(4)}` }],
+      ["non-hex text in a digest field", { ...echo, ownerPostimagesHash: `sk-${"A1b2C3d4".repeat(4)}` }],
+    ])("rejects a result frame with %s as the contract refusal, without screening it", async (_name, frame) => {
+      const screened: string[] = [];
+      const real = createRedactor(new Uint8Array(32).fill(7));
+      const base = harness(answer(frame));
+      const supervisor = new TargetVerifierSupervisor({ ...base.supervisor.dependencies, redactor: (text, scope) => { screened.push(text); return real(text, scope); } });
+      await expect(supervisor.run(request(BUNDLE_ROOT))).rejects.toSatisfy(rejection);
+      expect(screened.some((text) => text.includes("sk-"))).toBe(false);
+    });
+
     it("still refuses a provider token planted in the request, before any spawn", async () => {
       const { supervisor, spawned } = withRedactor(answer(echo));
       await expect(supervisor.run(request(`/product/sk-${"A1b2C3d4".repeat(4)}/darwin-arm64`))).rejects.toBeInstanceOf(SecurityRefusalError);
@@ -226,6 +243,7 @@ describe("target verifier supervision", () => {
     { name: "a clean exit with an extra key", behavior: answer({ ...echo, note: "extra" }) },
     { name: "a clean exit with a missing digest", behavior: answer({ manifestHash: echo.manifestHash, ownerPostimagesHash: echo.ownerPostimagesHash }) },
     { name: "a clean exit with a malformed digest", behavior: answer({ ...echo, migrationPostimagesHash: "ABC" }) },
+    { name: "a secret in a digest field of the result frame", behavior: answer({ ...echo, manifestHash: SECRET_MARKER }) },
     { name: "a clean exit without its end frame", behavior: (child) => { child.stdout.push(output(echo).subarray(0, -9)); child.exit(0); } },
   ])("rejects $name so the coordinator compensates", async ({ behavior }) => {
     const { supervisor, child } = harness(behavior);
@@ -239,7 +257,6 @@ describe("target verifier supervision", () => {
     { name: "stderr beyond the plan's byte bound", behavior: (child) => { child.stderr.push(new Uint8Array(65)); } },
     { name: "an output blob frame", behavior: (child) => { const bad = output(echo); child.stdout.push(Uint8Array.from([...bad.subarray(0, -9), 0x12, 0, 0, 0, 0, 0, 0, 0, 1, 7])); } },
     { name: "a wrong magic", behavior: (child) => { const bad = output(echo); bad[0] = 0x58; child.stdout.push(bad); } },
-    { name: "a secret in the result frame", behavior: answer({ ...echo, manifestHash: SECRET_MARKER }) },
     { name: "a termination by signal", behavior: (child) => { child.exit(null, "SIGSEGV"); } },
   ])("refuses $name and reaps the child", async ({ behavior }) => {
     const { supervisor, child } = harness(behavior);

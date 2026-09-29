@@ -65,6 +65,17 @@ export function targetVerifierWireBounds(plan: TargetVerificationPlanV1): Planne
   };
 }
 
+/** A result frame that is not exactly the bounded three-digest echo is the verifier disagreeing, before any byte of it is used. */
+function strictDigests(payload: Uint8Array, maximumBytes: number): Digests | null {
+  let value: unknown;
+  try {
+    value = decodePlannerJson(payload, maximumBytes);
+  } catch {
+    return null;
+  }
+  return digestsOf(value);
+}
+
 function digestsOf(value: unknown): Digests | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const keys = Object.keys(value).sort();
@@ -184,12 +195,9 @@ export class TargetVerifierSupervisor {
         progress();
         for (const frame of decoder.push(chunk)) {
           if (frame.kind !== "json") continue;
-          screenPlannerFrame(redactor, frame.payload);
-          try {
-            digests = digestsOf(decodePlannerJson(frame.payload, bounds.resultJsonBytes));
-          } catch {
-            digests = null;
-          }
+          digests = strictDigests(frame.payload, bounds.resultJsonBytes);
+          // Exact keys, every value ^[0-9a-f]{64}$: no free text survives to be screened, so high-entropy stays off.
+          if (digests !== null) screenPlannerFrame(redactor, frame.payload, "path");
         }
       }
       // A truncated stream is judged by the exit: a clean exit without its end frame is no echo.
