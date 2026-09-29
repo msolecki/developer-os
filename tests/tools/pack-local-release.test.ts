@@ -190,4 +190,23 @@ describe("pack (D55: one bundled CLI module)", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("product home");
   });
+
+  // NEW-115: a successful `init --yes` from a local release printed its result and then never exited.
+  it("exits after a successful init --yes from the packed release", async () => {
+    const root = await temporary();
+    const out = await pack(join(root, "pkg"), OPTIONS);
+    const home = join(root, "home");
+    await mkdir(home, { mode: 0o700 });
+
+    const result = spawnSync(process.execPath, [join(out, "bundle", LOCAL_BUNDLE_CLI_ENTRY), "init", "--yes", "--local-release", out, "--adapters", "none"], {
+      cwd: "/",
+      env: { HOME: home, PATH: "/usr/bin:/bin" },
+      encoding: "utf8",
+      timeout: 60_000,
+      killSignal: "SIGKILL",
+    });
+
+    expect(result.error, "init did not exit within 60 s").toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+  });
 });

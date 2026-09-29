@@ -178,3 +178,17 @@ if ((home === undefined || home.length === 0) && !scheduledMode) {
     process.exitCode = hookMode ? hookLastResortExit(argv) : 1;
   }
 }
+
+/**
+ * NEW-115: a successful `init --yes` stayed alive for over an hour at 0% CPU with no child and no
+ * descriptor beyond its terminal; the handle was never identified. The exit code above is the whole
+ * outcome, so exit once both streams drain: a pipe write on macOS is asynchronous.
+ */
+const drained = (stream: NodeJS.WriteStream): Promise<void> =>
+  new Promise((resolve) => {
+    stream.write("", () => {
+      resolve();
+    });
+  });
+await Promise.all([drained(process.stdout), drained(process.stderr)]);
+process.exit();
