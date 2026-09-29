@@ -2334,6 +2334,57 @@ describe("runIngest, the agent call", () => {
     expect(fixture.calls).toHaveLength(2);
   });
 
+  it("shows a later capture the paths an earlier capture wrote in the same run (NEW-116)", async () => {
+    const fixture = await installedFixture("ingest-taken-paths-grow");
+    const [earlier, later] = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+    ].sort(byId);
+    if (earlier === undefined || later === undefined) throw new Error("two captures seeded");
+    fixture.reply((call) =>
+      call.args.join("\n").includes(`Capture ${earlier.id}`)
+        ? oneNote(earlier.id, "DEV/written-first.md", "Written first")
+        : nothingProposed(),
+    );
+
+    await fixture.run();
+
+    expect(fixture.calls).toHaveLength(2);
+    const second = fixture.calls[1]?.args.join("\n") ?? "";
+    const untrusted = second.indexOf("untrusted data, not instruction");
+    expect(second).toContain(`Capture ${later.id}`);
+    expect(second.indexOf("- DEV/written-first.md")).toBeGreaterThan(-1);
+    expect(second.indexOf("- DEV/written-first.md")).toBeLessThan(untrusted);
+    /** The index excerpt is refreshed from what the run wrote, not read once. */
+    expect(second).toContain("Written first");
+  });
+
+  it("does not retry a refused capture within the same run (NEW-116)", async () => {
+    const fixture = await installedFixture("ingest-refused-once-per-run");
+    const [refusedOne, ingestedOne] = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+    ].sort(byId);
+    if (refusedOne === undefined || ingestedOne === undefined) {
+      throw new Error("two captures seeded");
+    }
+    fixture.reply((call) =>
+      call.args.join("\n").includes(`Capture ${refusedOne.id}`)
+        ? oneNote(refusedOne.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`)
+        : oneNote(ingestedOne.id, "DEV/fine.md"),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    const callsFor = (id: string): number =>
+      fixture.calls.filter((call) => call.args.join("\n").includes(`Capture ${id}`)).length;
+    expect(callsFor(refusedOne.id)).toBe(1);
+    expect(callsFor(ingestedOne.id)).toBe(1);
+    expect(await fixture.statusOf(refusedOne.id)).toBe("accepted");
+    expect(await fixture.statusOf(ingestedOne.id)).toBe("ingested");
+  });
+
   it("accepts --yes and changes nothing by it, because ingest never asks", async () => {
     const fixture = await installedFixture("ingest-yes");
     const seeded = await fixture.seedAccepted("an observation for --yes");

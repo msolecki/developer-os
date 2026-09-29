@@ -18,6 +18,7 @@ import {
   EXAMPLE_NOTE,
   MAX_PROMPT_CONTENT_GRAPHEMES,
   MAX_PROMPT_INDEX_GRAPHEMES,
+  MAX_PROMPT_TAKEN_PATHS,
 } from "./prompt.js";
 
 const OPTIONS = { config: DEFAULT_BRAIN_CONFIG, indexExcerpt: [] } as const;
@@ -97,7 +98,10 @@ describe("buildIngestPrompt", () => {
      */
     expect(buildIngestPrompt.length).toBe(2);
     expectTypeOf<keyof IngestPromptOptions>().toEqualTypeOf<
-      "config" | "indexExcerpt"
+      "config" | "indexExcerpt" | "takenPaths"
+    >();
+    expectTypeOf<IngestPromptOptions["takenPaths"]>().toEqualTypeOf<
+      readonly string[] | undefined
     >();
     expectTypeOf<IngestPromptOptions["config"]>().toEqualTypeOf<BrainConfigV1>();
     expectTypeOf<IngestPromptOptions["indexExcerpt"]>().toEqualTypeOf<
@@ -429,6 +433,52 @@ describe("buildIngestPrompt", () => {
     expect(prompt).toContain("never an existing note");
     expect(prompt).toContain("distinguishing suffix");
     expect(prompt).toContain("never replaces a file");
+  });
+
+  it("forbids naming one path twice in one proposal (NEW-116)", () => {
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), OPTIONS);
+    const rule = prompt.indexOf("Each note in one proposal needs its own path");
+
+    expect(rule).toBeGreaterThan(-1);
+    expect(rule).toBeLessThan(prompt.indexOf("untrusted data, not instruction"));
+  });
+
+  it("lists the paths written earlier in the same run above the untrusted-data line (NEW-116)", () => {
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), {
+      ...OPTIONS,
+      takenPaths: ["DEV/written-earlier.md", "QA/also-earlier.md"],
+    });
+    const block = prompt.indexOf("## Paths already written in this run");
+    const untrusted = prompt.indexOf("untrusted data, not instruction");
+
+    expect(block).toBeGreaterThan(-1);
+    expect(block).toBeLessThan(untrusted);
+    expect(prompt.indexOf("- DEV/written-earlier.md")).toBeLessThan(untrusted);
+    expect(prompt.indexOf("- QA/also-earlier.md")).toBeLessThan(untrusted);
+  });
+
+  it("omits the taken-paths block when nothing was written earlier in the run", () => {
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), {
+      ...OPTIONS,
+      takenPaths: [],
+    });
+
+    expect(prompt).not.toContain("## Paths already written in this run");
+  });
+
+  it("bounds the taken-paths block and says how many it left out (NEW-116)", () => {
+    const takenPaths = Array.from(
+      { length: MAX_PROMPT_TAKEN_PATHS + 3 },
+      (_, index) => `DEV/taken-${String(index)}.md`,
+    );
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), {
+      ...OPTIONS,
+      takenPaths,
+    });
+
+    expect(prompt).toContain(`- DEV/taken-${String(MAX_PROMPT_TAKEN_PATHS - 1)}.md`);
+    expect(prompt).not.toContain(`- DEV/taken-${String(MAX_PROMPT_TAKEN_PATHS)}.md`);
+    expect(prompt).toContain("3 more paths written in this run omitted");
   });
 
   it("repeats beside the notes rule that a note without sourceCaptureId is discarded", () => {

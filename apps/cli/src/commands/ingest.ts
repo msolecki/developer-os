@@ -1612,10 +1612,12 @@ interface IngestEnvironment {
   readonly vendor: Vendor | null;
   readonly ingestContract: readonly string[];
   /**
-   * Read once here, from the vault's own index, rather than once per capture
-   * — see `readIndexExcerpt`, which reads it and is called once in `runIngest`.
+   * Read at run setup and re-read after each capture that wrote notes, so a later
+   * capture sees what an earlier one created (BACKLOG NEW-116) — see `readIndexExcerpt`.
    */
   readonly indexExcerpt: readonly IndexExcerptEntryV1[];
+  /** Note paths written earlier in this run, in write order (BACKLOG NEW-116). */
+  readonly takenPaths: readonly string[];
 }
 
 /**
@@ -1662,7 +1664,8 @@ async function ingestOne(
   environment: IngestEnvironment,
   fileName: string,
 ): Promise<CaptureOutcome> {
-  const { brainConfig, indexExcerpt, paths, quarantine, redact, vendor } = environment;
+  const { brainConfig, indexExcerpt, paths, quarantine, redact, takenPaths, vendor } =
+    environment;
   const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
 
   /**
@@ -1745,7 +1748,7 @@ async function ingestOne(
         await invokeVendor(
           context,
           vendor,
-          buildIngestPrompt(envelope, { config: brainConfig, indexExcerpt }),
+          buildIngestPrompt(envelope, { config: brainConfig, indexExcerpt, takenPaths }),
           outputSchemaPath(paths.home, INGEST_VERB),
         )
       ).payload;
@@ -1944,9 +1947,11 @@ function isIndexDocumentShape(
 
 /**
  * The vault's own index, as the bounded excerpt `buildIngestPrompt` carries in
- * place of a read scope over the vault. Read once here, at run setup, and
- * handed down on `IngestEnvironment` — never re-read per capture, which would
- * make one run's cost scale with its capture count instead of its vault size.
+ * place of a read scope over the vault. Read at run setup and handed down on
+ * `IngestEnvironment`, then re-read only after a capture that wrote notes — the
+ * reindex that capture triggered has already paid the vault-sized cost, and a
+ * read-once excerpt hid every note the run created from every later capture
+ * (BACKLOG NEW-116: 35 of 106 refused, mostly on a path that already holds a file).
  *
  * **A fresh vault has no index until the first `brain reindex`, and that is
  * not this run's problem to solve.** Absent, unreadable or unparsable, the
@@ -2350,10 +2355,8 @@ export async function runIngest(
     });
     guards = guardsWith(context.guards, redact);
 
-    /**
-     * Once per run, not once per capture — see `readIndexExcerpt`.
-     */
-    const indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
+    /** Refreshed in the capture loop below — see `readIndexExcerpt`. */
+    let indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
 
     const selection = await selectCaptures(context, quarantine, redact, limit);
 
@@ -2401,6 +2404,7 @@ export async function runIngest(
       redact,
       vendor,
       indexExcerpt,
+      takenPaths: [],
       /**
        * Resolved once per invocation, here, because resolution is per-install:
        * the declared globs are constants and the strings they become depend on
@@ -2431,12 +2435,28 @@ export async function runIngest(
     const ingested: IngestedCaptureV1[] = [];
     const refused: RefusedCaptureV1[] = [];
     const order: string[] = [];
+    const takenPaths: string[] = [];
 
+    /**
+     * Each selected capture is attempted exactly once per run, so a refused one is never
+     * retried inside it (BACKLOG NEW-116). Across runs the order is still `captureId`, so a
+     * capture that keeps refusing stays at the head of every `--limit N` window; no
+     * per-capture field records a refused attempt, and ordering on one needs a state file.
+     */
     for (const { fileName } of selection.accepted) {
       order.push(fileName.slice(0, -CAPTURE_FILE_SUFFIX.length));
-      const outcome = await ingestOne(context, environment, fileName);
+      const outcome = await ingestOne(
+        context,
+        { ...environment, indexExcerpt, takenPaths },
+        fileName,
+      );
       if (outcome.ok) ingested.push(outcome.capture);
       else refused.push(outcome.refusal);
+      const written = outcome.ok ? outcome.capture.notes : outcome.refusal.appliedNotes;
+      if (written.length > 0) {
+        takenPaths.push(...written.map((note) => redact(note).text));
+        indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
+      }
     }
 
     const captures = [...ingested, ...selection.unreadable].sort(compareIds);
