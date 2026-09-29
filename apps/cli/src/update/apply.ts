@@ -79,8 +79,8 @@ export interface UpdateApplyPortsV1 {
   readonly envelope: UpdateRecoveryRoutesV1["envelope"];
   readonly executorCleanup: UpdateRecoveryRoutesV1["executorCleanup"];
   /**
-   * Under the lock with a clear closure: removes each empty `staging/lifecycle/<lc>` an allocation
-   * left before its construction envelope, which the closure does not claim.
+   * Under the lock: removes each empty `staging/lifecycle/<lc>` no coordinator plan or journal
+   * claims — what an allocation left before its construction envelope, or a cleaned envelope left.
    */
   readonly removeEmptyStagingRoots?: () => Promise<void>;
   /** Under the lock, before the closure is read: removes the one pre-rename allocator temp a death after its write left. */
@@ -151,9 +151,10 @@ export function recoverUpdate(update: CliUpdateContext): Promise<UpdateRecoveryR
   const ports = updateApplyPorts(update);
   return ports.withGlobalLock(async () => {
     await ports.cleanAllocatorTemp?.();
-    const closure = await ports.closure();
-    if (closure.kind === "clear") await ports.removeEmptyStagingRoots?.();
-    return recoverLocked(ports, closure);
+    await ports.removeEmptyStagingRoots?.();
+    const recovered = await recoverLocked(ports, await ports.closure());
+    await ports.removeEmptyStagingRoots?.();
+    return recovered;
   });
 }
 

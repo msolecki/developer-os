@@ -1159,13 +1159,19 @@ function isCoordinatorId(name: string): boolean {
   }
 }
 
-/** An owner-owned, empty `staging/lifecycle/<lc>` under the held lock and a clear closure has no other owner. */
+/**
+ * An owner-owned, empty `staging/lifecycle/<lc>` under the held lock that no coordinator plan or
+ * journal claims has no other owner. The ledger reports exactly that root as `planless_staging`,
+ * so the closure is never clear while it exists and the sweep cannot wait for one.
+ */
 async function removeEmptyStagingRoots(lifecycle: CliLifecycleContext): Promise<void> {
   const parent = await lifecycle.fs.lstat(lifecycle.roots.lifecycleStaging);
   if (parent?.kind !== "directory") return;
+  const journals = await lifecycle.fs.lstat(lifecycle.roots.coordinatorJournals);
+  const claimed = journals?.kind === "directory" ? await namesOf(lifecycle, journals) : [];
   let removed = false;
   for (const name of await namesOf(lifecycle, parent)) {
-    if (!isCoordinatorId(name)) continue;
+    if (!isCoordinatorId(name) || claimed.some((journal) => journal.startsWith(`${name}.`))) continue;
     const entry = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(`${parent.path}/${name}`));
     if (entry?.kind !== "directory" || entry.ownerUid !== lifecycle.effectiveUid || (await namesOf(lifecycle, entry)).length > 0) continue;
     await lifecycle.fs.rmdirExactEmpty(entry);
