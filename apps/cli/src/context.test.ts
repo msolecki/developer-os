@@ -70,13 +70,16 @@ vi.mock("@developer-os/security", async (importOriginal) => {
   };
 });
 
-function fingerprintOf(context: CliContext, secret: string): string | undefined {
+/** `createGuards` builds its redactor once, so the context must be created after `redactionKeyUses` is cleared. */
+function contextWithRedactionKeys(build: () => CliContext): { readonly context: CliContext; readonly fingerprintOf: (secret: string) => string | undefined } {
   redactionKeyUses.length = 0;
-  context.guards.redactDiagnostic(secret);
-  const used = redactionKeyUses[0];
-  return used === undefined
-    ? undefined
-    : redactText(secret, used).findings[0]?.fingerprint;
+  const context = build();
+  const keys = [...redactionKeyUses];
+  const fingerprintOf = (secret: string): string | undefined => {
+    const fingerprints = new Set(keys.map((key) => redactText(secret, key).findings[0]?.fingerprint));
+    return fingerprints.size === 1 ? [...fingerprints][0] : undefined;
+  };
+  return { context, fingerprintOf };
 }
 
 const REDACTION_KEY = new Uint8Array(32).fill(7);
@@ -483,18 +486,20 @@ describe("createProductionContext", () => {
     await nodeFs.mkdir(stateDir, { recursive: true, mode: 0o700 });
     const durable = loadOrCreateRedactionKey(stateDir);
 
-    const context = createProductionContext({
-      io: NULL_IO,
-      env: {},
-      userHome: fixture.homeDir,
-    });
+    const { context, fingerprintOf } = contextWithRedactionKeys(() =>
+      createProductionContext({
+        io: NULL_IO,
+        env: {},
+        userHome: fixture.homeDir,
+      }),
+    );
     const secret = `ghp_${"a".repeat(36)}`;
 
     expect(context.guards.redactDiagnostic(secret)).toBe(
       redactText(secret, durable).text,
     );
-    expect(fingerprintOf(context, secret)).toMatch(/^[a-f0-9]{16}$/u);
-    expect(fingerprintOf(context, secret)).toBe(
+    expect(fingerprintOf(secret)).toMatch(/^[a-f0-9]{16}$/u);
+    expect(fingerprintOf(secret)).toBe(
       redactText(secret, durable).findings[0]?.fingerprint,
     );
   });
