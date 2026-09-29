@@ -32,7 +32,7 @@ function childSegments(root: string, parent: string): readonly string[] | null {
  */
 function checkRef(productHome: CanonicalAbsolutePathV1, artifacts: ReadonlyMap<string, ManagedArtifactV2>, entry: RetirementInventoryRefV1): void {
   const { root, inventoryHash } = entry;
-  const bound = ((): boolean => {
+  const bound = artifacts.has(root) && ((): boolean => {
     switch (entry.kind) {
       case "bundle":
         return childSegments(root, `${productHome}/releases`)?.length === 2 && contentHashOf(artifacts.get(`${productHome}/state/release-metadata/bundles/${inventoryHash}.json`)) === inventoryHash;
