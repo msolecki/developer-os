@@ -39,9 +39,9 @@ directory remains beyond three inert `~/.codex/config.toml` entries (removed wit
 reinstalls preserved the Brain, the overrides and the Brain config; 106 inbox files were imported and
 accepted, and the first real Claude ingest ingested 71 after four product fixes (`3ebc505d`,
 `588c866d`, `cb19f7c6`, `26807aed`; NEW-116 owns the other 35). Six notes written under
-`content/content/` were moved by hand; the validator is NEW-125. **Next:** steps 16–18 after one week
+`content/content/` were moved by hand; the validator landed in `72f0f5bf`. **Next:** steps 16–18 after one week
 of use, Codex hook approval after 2026-10-22, step 19 after one stable cycle. Git and launchd stay
-disabled on the live machine until NEW-113's Task 5 passes.
+disabled on the live machine until the founder enables them (D76: NEW-113's Task 5 is skipped).
 
 **Evidence the closed phases stand on (2026-09-26, run 4).** On `bc17550`, every part green: lint,
 `test:lifecycle` (21/21 files), `test:e2e`, `test:suite` (306/306 files, 9913 tests, 8 todo =
@@ -57,11 +57,8 @@ requires a PR (see "Delivery evidence still owed").
 Each is executable from the document named; none is agent work.
 
 1. D75's full suite: `npm run check` and `npm run test:pinned-host` on the integrated tree, then the
-   D70 PR and its merge (NOW).
-2. NEW-113 Task 5, the Phase 9 gate on a new disposable macOS account (`git enable|sync|disable`,
-   `automation enable|disable|status`, scheduled runs observed, local/file transport only): the steps
-   are in `BACKLOG.md` NEW-113.
-3. A15 steps 16–18 (per-adapter gate cycle, exercised rollback) after one week of use, step 19 after
+   push of `development` (D76: one branch, no PR branch; GH013 needs the founder's bypass).
+2. A15 steps 16–18 (per-adapter gate cycle, exercised rollback) after one week of use, step 19 after
    one stable cycle (`docs/migration/founder-cutover.md`), and the Codex hook approval after
    2026-10-22.
 4. A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 2 legacy parity check; Task 18 Steps 2–3, the
@@ -94,7 +91,7 @@ Strict sequence; do not start a blocked row early.
 |---|---|---|---|---|
 | A15 | DOS-P8 Founder migration (shadow mode dropped, D58) — `docs/migration/founder-cutover.md` | A14 (closed) | rollback to the legacy runtime is exercised and one stable cycle completes | steps 1–15 done 2026-09-28/29; steps 16–18 after a week of use, step 19 after one stable cycle |
 | A13 | DOS-P11 Hooks | — | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | phase closed; Claude observed firing in A15 step 10; founder Task 2 and Task 18 Steps 2–3 (Codex) owed |
-| A11b | DOS-P7 remainder (D16): Spec 2 closure Tasks 9–10, Task 26, Task 11b; NEW-113 (D65) | A15 (D56, D70 ran the rest early) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | closure Tasks 9–10 and Task 26 closed with NEW-110 (synthetic arm64 and x64 proof) and NEW-113's code closed, both under D75 with the full suite owed; NEW-113 Task 5 founder; Task 11b parked (D46: the launcher refuses every `unsigned-local` home, `apps/launcher/src/selection.ts:331`; NEW-111, NEW-112, NEW-118) |
+| A11b | DOS-P7 remainder (D16): Spec 2 closure Tasks 9–10, Task 26, Task 11b; NEW-113 (D65) | A15 (D56, D70 ran the rest early) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | closure Tasks 9–10 and Task 26 closed with NEW-110 (synthetic arm64 and x64 proof) and NEW-113 closed without its disposable-account gate (D76), both under D75 with the full suite owed; Task 11b parked (D46: `update` reaches a real release only after it) |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
 
 A11 (Phase 4b) and A14 (Phase 7) have nothing left of their own: A11's Task 11b is tracked under
@@ -106,8 +103,6 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate (one worktree each):
 
-- NEW-125 — review and integrate the `content/` note-path validator (`be6543ed`, branch
-  `task/ingest-path`, not on `development`).
 - NEW-115 (`init` does not exit after success) and NEW-116 (ingest yield and head-of-line blocking).
 - Residuals of the D70 lane: NEW-117, NEW-119, NEW-122, NEW-123, NEW-124, NEW-126.
 - NEW-53 (the `init` encoder cost) and NEW-29 (the elapsed-time assertion class).
@@ -122,7 +117,7 @@ Needs a human, a policy decision, or an external application:
 - NEW-33 — whether root-owned, group-writable executable directories are acceptable.
 - NEW-35 — enforceable exec-by-identity, or the check-then-spawn race retained as a platform limit.
 - Foundation watchdog — whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
-- The founder stop points above (NEW-75, NEW-45, NEW-42, NEW-7, NEW-104, NEW-113).
+- The founder stop points above (NEW-75, NEW-45, NEW-42, NEW-7, NEW-104).
 
 Conditional: NEW-27 when a real write scope is wired, NEW-28 when a production argument reaches the
 retained screening refusal, NEW-100's round trip after A16 (D42).
@@ -147,12 +142,12 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 ## Count
 
-- Product sequence: 4 open entries — A15 (steps 16–19), A13 (founder stops only), A11b (NEW-113 Task
-  5 and the parked Task 11b), A16.
-- Owed now: D75's full `check` and `test:pinned-host`, then the D70 PR.
+- Product sequence: 4 open entries — A15 (steps 16–19), A13 (founder stops only), A11b (the parked Task
+  11b), A16.
+- Owed now: D75's full `check` and `test:pinned-host`, then the push of `development` (D76).
 - Implementation still to build: Task 11b (parked, D46) and A16's plan and work; the startable rows
   above.
-- Founder stop points: six, listed above. Long-lead gates L1 and L2 block A16.
-- Repository backlog: 28 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
+- Founder stop points: listed above. Long-lead gates L1 and L2 block A16.
+- Repository backlog: 26 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
   and the §6 phase-close deferrals. Closed on 2026-09-29 under D75: 36 rows including NEW-110 (the list is in
   `BACKLOG.md` §1), and NEW-54, NEW-82, NEW-87 and NEW-99 removed as already fixed or moot.

@@ -346,6 +346,12 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   failures belong to. Fresh-context review ran for both plans (NEW-110: REQUEST CHANGES with two
   Critical, fixed and re-reviewed APPROVE WITH FIXES, minors fixed; NEW-113: APPROVE WITH FIXES,
   fixed; the other rows: APPROVE WITH FIXES, fixed).
+- **D76 (2026-09-29), two founder answers after D75.** (1) NEW-113 Task 5, the Phase 9 gate on a
+  disposable macOS account, is skipped: the founder closes NEW-113 without it. Git sync and
+  automation ship proven only by their written tests and the D75 full suite; they stay disabled on the
+  live machine until the founder enables them, and the first enable on any Mac is their first real run.
+  (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
+  push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
