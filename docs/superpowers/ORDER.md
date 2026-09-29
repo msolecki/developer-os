@@ -35,11 +35,14 @@ restart and left a home `uninstall` refused (NEW-114, now closed); the home was 
 retried `init` exited 0, `doctor` 0 `[fail]`, `noteCount` equal to step 6. Step 10 observed all eight
 Claude hook verbs firing (A13 Task 18 Step 1 for Claude, D68). Steps 11–15 ran on 2026-09-28/29: eight
 third-party-derived skills are user overrides on both vendors; no live reference to the legacy shared
-directory remains beyond three inert `~/.codex/config.toml` entries (removed with step 19); three
+directory remains (2026-09-29: two dead `~/.codex` symlinks step 13's grep could not see and three
+inert `~/.codex/config.toml` entries were removed, the grep gap closed in step 13's Verify); three
 reinstalls preserved the Brain, the overrides and the Brain config; 106 inbox files were imported and
 accepted, and the first real Claude ingest ingested 71 after four product fixes, then 75 after NEW-116's fix; the founder rejected the last 31 (`3ebc505d`,
 `588c866d`, `cb19f7c6`, `26807aed`; NEW-116 owns the other 35). Six notes written under
-`content/content/` were moved by hand; the validator landed in `72f0f5bf`. **Next:** steps 16–18 after one week
+`content/content/` were moved by hand; the validator landed in `72f0f5bf`. **Next:** step 13b (added
+2026-09-29: disable the vault's scheduled legacy CI workflow; its vault-scoped legacy skills and
+tooling are removed with step 19), steps 16–18 after one week
 of use, Codex hook approval after 2026-10-22, step 19 after one stable cycle. Git and launchd stay
 disabled on the live machine until the founder enables them (D76: NEW-113's Task 5 is skipped).
 

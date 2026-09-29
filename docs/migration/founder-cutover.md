@@ -598,9 +598,31 @@ Codex hooks of step 10 still call.
 
 **Verify** `grep -rn --exclude-dir=projects '<legacy-shared-repo>' ~/.zshrc ~/.zprofile ~/.claude ~/.codex`
 shows only the Codex hook entries. `projects/` holds session transcripts; excluding it keeps their
-private text off the terminal.
+private text off the terminal. `grep -r` does not follow symlinks, so also run
+`find ~/.claude ~/.codex -type l -lname '<legacy-shared-repo>/*'` and `find -L ~/.claude ~/.codex -type l`:
+both print nothing. A live link into `<legacy-shared-repo>` (for example a Codex `rules/*.rules`
+file) breaks silently when step 19 archives it.
 
 **Rollback** restore the removed lines from `<backup-dir>/shell-profile.tgz`.
+
+## Step 13b — Stop the vault's own legacy tooling from writing to the Brain
+
+The vault carries legacy tooling of its own, tracked in its repository: vault-scoped Claude skills
+and commands (`.claude/skills/`, `.claude/commands/`, `.claude/hooks/`), a scheduled remote CI
+workflow under `.github/workflows/` that rebuilds `_indexes/` and opens a pull request, the legacy
+Python pipeline (`dev/`, `tests/`, a virtualenv) and `.githooks/`. None of it goes through
+quarantine, review and ingest, and the remote workflow's index format is not the product's
+`brain reindex` output. Step 18 still needs it, so it is only stopped here and removed in step 19.
+
+**Command**
+
+- Disable the scheduled workflow on the vault's remote: `gh workflow disable <workflow> -R <vault-remote>`.
+- Until step 19, run Brain work only through `dos` and the product skills; do not invoke the
+  vault-scoped slash commands in a session opened inside `<vault>`.
+
+**Verify** `gh workflow list -R <vault-remote> --all` shows the workflow as `disabled_manually`.
+
+**Rollback** `gh workflow enable <workflow> -R <vault-remote>`.
 
 ## Step 14 — Run each retired job by hand until Phase 9
 
@@ -772,7 +794,10 @@ Then:
   legacy Codex hook entries are gone, move the checkout to a local archive location and mark the
   remote repository archived with the host's archive setting. Until NEW-104, it stays in place because
   the Codex hooks run from it.
-- `<vault>` is the Brain; it is not archived.
+- `<vault>` is the Brain; it is not archived. Its legacy tooling (step 13b) is removed in one vault
+  commit: `git -C <vault> rm -r` the vault-scoped `.claude/` skills, commands and hooks, the legacy
+  workflow, `dev/`, `tests/` and `.githooks/`, and delete the untracked virtualenv. Then
+  `dos brain lint` reports 0 errors and `dos doctor` has no `[fail]` line.
 - `<backup-dir>` may be deleted after the stable cycle, once the founder has decided to keep no
   offline copy.
 - The three result files of program plan Task 8 carry only redacted, value-free outcomes (per-step
