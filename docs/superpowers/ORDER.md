@@ -9,7 +9,7 @@ notes are the archive.
 ## NOW
 
 **The D70 lane closed on 2026-09-29 under D75, and its full suite is owed.** NEW-113's code (Tasks
-1–3), NEW-110 (Tasks 0–13, with P9) and 36 backlog rows are integrated and reviewed; both plans are
+1–3), NEW-110 (Tasks 0–13, with P9) and 35 other backlog rows are integrated and reviewed; both plans are
 closed and deleted, their surviving contracts in `docs/architecture/foundation.md` §10–§11,
 `foundation-constraints.md`, `threat-model.md` §5.15–§5.16, `codex-adapter.md` §14, `brain.md` §6.14
 and `claude-adapter.md` §17. Tests were written, not run. **Next, founder:** run `npm run check` and
@@ -154,5 +154,5 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
   above.
 - Founder stop points: six, listed above. Long-lead gates L1 and L2 block A16.
 - Repository backlog: 28 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
-  and the §6 phase-close deferrals. Closed on 2026-09-29 under D75: 36 rows (the list is in
+  and the §6 phase-close deferrals. Closed on 2026-09-29 under D75: 36 rows including NEW-110 (the list is in
   `BACKLOG.md` §1), and NEW-54, NEW-82, NEW-87 and NEW-99 removed as already fixed or moot.
