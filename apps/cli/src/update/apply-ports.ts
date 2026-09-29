@@ -96,6 +96,7 @@ import {
   spawnNodePlannerChild,
   SupervisedProcessRunner,
   TargetVerifierSupervisor,
+  type RedactionScope,
 } from "@developer-os/security";
 
 import { createCanonicalPathEvidence } from "../bootstrap/admission.js";
@@ -1170,13 +1171,13 @@ async function removeEmptyStagingRoots(lifecycle: CliLifecycleContext): Promise<
 }
 
 /** The Security secret screen over staged construction bytes: any finding refuses before a byte lands. */
-function screenOf(context: CliContext): (bytes: Uint8Array) => void {
+function screenOf(context: CliContext): (bytes: Uint8Array, scope: RedactionScope) => void {
   let redactor: ReturnType<typeof createRedactor> | null = null;
   const key = readRedactionKey(context.paths.stateDir);
   if (key !== null) redactor = createRedactor(key, { userPatterns: [] });
-  return (bytes) => {
+  return (bytes, scope) => {
     if (redactor === null) return;
-    if (redactor(decoder.decode(bytes)).findings.length > 0) refuse("update_construction_secret", EXIT_CODES.securityRefusal);
+    if (redactor(decoder.decode(bytes), scope).findings.length > 0) refuse("update_construction_secret", EXIT_CODES.securityRefusal);
   };
 }
 

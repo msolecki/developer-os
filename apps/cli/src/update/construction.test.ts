@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import {
   buildConstructionPlan,
+  constructionPlanBytes,
   constructionPlanHash,
   createNodeLifecycleGuardedFileSystem,
   encodeCanonicalJson,
@@ -34,6 +35,7 @@ import {
   type UpdateConstructionJournalV1,
   type UpdateConstructionPlanV1,
 } from "@developer-os/core";
+import type { RedactionScope } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -139,7 +141,7 @@ function sources(fixtureValue: Fixture, overrides: Partial<UpdateConstructionSou
   };
 }
 
-function store(fixtureValue: Fixture, options: { readonly interrupt?: (point: UpdateConstructionStoreDeathPointV1) => void; readonly sources?: Partial<UpdateConstructionSourcePortV1>; readonly screen?: (bytes: Uint8Array) => void } = {}): UpdateConstructionStore {
+function store(fixtureValue: Fixture, options: { readonly interrupt?: (point: UpdateConstructionStoreDeathPointV1) => void; readonly sources?: Partial<UpdateConstructionSourcePortV1>; readonly screen?: (bytes: Uint8Array, scope: RedactionScope) => void } = {}): UpdateConstructionStore {
   const fs = createNodeLifecycleGuardedFileSystem({
     effectiveUid: uid,
     renameNoReplace: async ({ sourcePath, destinationPath }) => {
@@ -366,6 +368,20 @@ describe("UpdateConstructionStore", () => {
     };
     await expect(construct(refusing, store(refusing, { screen: secret }))).rejects.toThrow("secret screen finding");
     expect(await exists((refusing.plan.files[6] as UpdateConstructionFilePlanV1).path)).toBe(false);
+  });
+
+  it("screens product-derived documents in the path scope and foreign bytes in the text scope", async () => {
+    const value = await fixture();
+    const scopes = new Map<string, RedactionScope>();
+    await construct(value, store(value, { screen: (bytes, scope) => { scopes.set(Buffer.from(bytes).toString("hex"), scope); } }));
+    const scopeOf = (bytes: Uint8Array): RedactionScope | undefined => scopes.get(Buffer.from(bytes).toString("hex"));
+    expect(scopeOf(constructionPlanBytes(value.plan))).toBe("path");
+    for (const frame of value.frames) expect(scopeOf(frame.content)).toBe("text");
+    for (const row of value.plan.files.filter((file) => file.role.kind !== "payload" || file.role.source.kind === "plan_derived")) {
+      expect(scopeOf(value.rowBytes.get(row.ordinal) ?? new Uint8Array()), `row ${String(row.ordinal)}`).toBe("path");
+    }
+    expect(scopeOf(outerBytes.plan)).toBe("path");
+    expect(scopeOf(outerBytes.journal)).toBe("path");
   });
 
   it("refuses a frame that differs from its planned identity", async () => {

@@ -45,6 +45,7 @@ import {
   type UpdateConstructionStepV1,
   type UtcTimestampV1,
 } from "@developer-os/core";
+import type { RedactionScope } from "@developer-os/security";
 
 /** Where a test may kill the constructing process; each point follows a durable effect. */
 export type UpdateConstructionStoreDeathPointV1 =
@@ -108,8 +109,11 @@ export interface UpdateConstructionStoreDependenciesV1 {
   readonly fs: LifecycleGuardedFileSystemV1;
   readonly effectiveUid: number;
   readonly now: () => Date;
-  /** The Security secret screen; throws on any finding. Runs before bytes are hashed or persisted. */
-  readonly screen: (bytes: Uint8Array) => void;
+  /**
+   * The Security secret screen; throws on any finding. Runs before bytes are hashed or persisted.
+   * A document the product derived is all paths and hashes, so it takes the `path` scope; foreign bytes take `text`.
+   */
+  readonly screen: (bytes: Uint8Array, scope: RedactionScope) => void;
   readonly sources: UpdateConstructionSourcePortV1;
   readonly interrupt?: (point: UpdateConstructionStoreDeathPointV1) => void;
 }
@@ -192,6 +196,11 @@ function sourceJournal(row: UpdateConstructionFilePlanV1): boolean {
 /** Rows before the first output frame: every immutable plan and each source's initial journal. */
 function precedesFrames(row: UpdateConstructionFilePlanV1): boolean {
   return row.role.kind === "immutable_plan" || sourceJournal(row);
+}
+
+/** Only a payload that is not plan-derived carries foreign bytes: a planner frame, a bundle file, a preimage. */
+function productDerived(row: UpdateConstructionFilePlanV1): boolean {
+  return row.role.kind !== "payload" || row.role.source.kind === "plan_derived";
 }
 
 /** A source journal may have rewritten its inode before handoff; every other row keeps its planned size. */
@@ -339,7 +348,7 @@ export class UpdateConstructionStore {
     const root = await this.#rootEntry(plan);
     if ((await this.#children(root)).length !== 0) refuse("update_construction_root_not_empty", this.#root);
     const planBytes = constructionPlanBytes(plan);
-    this.#dependencies.screen(planBytes);
+    this.#dependencies.screen(planBytes, "path");
     const planPending = await fs.writeExclusive(this.#paths.planPending, planBytes);
     this.#interrupt("plan_pending_written");
     await fs.syncDirectory(root);
@@ -382,7 +391,7 @@ export class UpdateConstructionStore {
   /** One row: intent → exclusive create → recorded inode → bytes → reopen → evidence → advance. */
   async #stageRow(plan: UpdateConstructionPlanV1, row: UpdateConstructionFilePlanV1, bytes: Uint8Array): Promise<void> {
     if (bytes.byteLength !== row.bytes || sha256Hex(bytes) !== row.sha256) refuse("update_construction_source_changed", row.path);
-    this.#dependencies.screen(bytes);
+    this.#dependencies.screen(bytes, productDerived(row) ? "path" : "text");
     const current = this.#plan(plan).journal;
     if (current.nextFile !== row.ordinal || current.fileWriteState !== null) refuse("update_construction_cursor", row.path);
     const parent = await this.#parentEntry(plan, current, row.parent);
@@ -461,7 +470,7 @@ export class UpdateConstructionStore {
       if (expected?.ordinal !== frame.ordinal || frame.bytes !== expected.bytes || frame.content.byteLength !== expected.bytes || sha256Hex(frame.content) !== expected.sha256) {
         refuse("update_construction_output_frame", this.#root);
       }
-      this.#dependencies.screen(frame.content);
+      this.#dependencies.screen(frame.content, "text");
       while (this.#plan(plan).journal.nextOutputFrame === expected.ordinal) {
         const journal = this.#plan(plan).journal;
         const consumer = expected.consumers[journal.nextOutputConsumer];
@@ -482,7 +491,7 @@ export class UpdateConstructionStore {
   async publishOuter(plan: UpdateConstructionPlanV1, outer: UpdateConstructionOuterBytesV1): Promise<void> {
     for (const [path, bytes] of [[plan.outerPlanPath, outer.plan], [plan.outerJournalPath, outer.journal]] as const) {
       if (bytes.byteLength < 1 || bytes.byteLength > MAXIMUM_LEAF_PLAN_BYTES) refuse("update_construction_outer_bound", path);
-      this.#dependencies.screen(bytes);
+      this.#dependencies.screen(bytes, "path");
       const file: UpdateConstructionOuterFileV1 = { path, bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384 };
       const parent = await this.#ownedDirectory(lifecycleParentPath(path));
       await this.#advance(plan, { kind: "outer_intent", file });
