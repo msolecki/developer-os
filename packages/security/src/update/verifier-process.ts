@@ -103,7 +103,8 @@ export class TargetVerifierSupervisor {
     const bounds = targetVerifierWireBounds(plan);
     const { redactor } = this.dependencies;
     const requestJson = plannerJsonBytes({ schemaVersion: 1, plan, snapshot: run.snapshot });
-    screenPlannerFrame(redactor, requestJson);
+    // Built only from the validated plan and its own digests: hashes and product paths, never free text.
+    screenPlannerFrame(redactor, requestJson, "path");
     for (const blob of run.inputBlobs) screenPlannerFrame(redactor, blob);
     // Frames the whole input before spawning, so an over-bound request never starts a process.
     const wire = new PlannerWireEncoder("input", bounds);

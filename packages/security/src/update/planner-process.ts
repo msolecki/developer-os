@@ -27,7 +27,7 @@ import type {
 
 import { SecurityRefusalError } from "../paths.js";
 import { assertSafeCommand } from "../process.js";
-import type { Redactor } from "../redaction.js";
+import type { RedactionScope, Redactor } from "../redaction.js";
 
 export type { PlannerTranscriptIdentityV1, PlannerWireBoundsV1 } from "@developer-os/core";
 
@@ -102,10 +102,11 @@ function sha256(bytes: Uint8Array): LowerHexSha256 {
 
 /**
  * Spec 2 §8.2: every request/result frame and blob is screened before it is hashed, sent, or
- * accepted. The diagnostic is fixed; neither the bytes nor the finding reach it.
+ * accepted. The diagnostic is fixed; neither the bytes nor the finding reach it. A frame the
+ * product derived from a validated plan takes the `path` scope; anything else takes `text`.
  */
-export function screenPlannerFrame(redactor: Redactor, bytes: Uint8Array): void {
-  if (redactor(textDecoder.decode(bytes)).findings.length > 0) refuse("Planner frame failed the secret screen");
+export function screenPlannerFrame(redactor: Redactor, bytes: Uint8Array, scope: RedactionScope = "text"): void {
+  if (redactor(textDecoder.decode(bytes), scope).findings.length > 0) refuse("Planner frame failed the secret screen");
 }
 
 interface Supervision {

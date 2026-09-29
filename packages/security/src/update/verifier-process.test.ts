@@ -8,7 +8,7 @@ import type { TargetVerificationPlanV1 } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
 import { SecurityRefusalError } from "../paths.js";
-import type { RedactionResult } from "../redaction.js";
+import { createRedactor, type RedactionResult } from "../redaction.js";
 import type { PlannerChildProcessV1, PlannerProcessSampleV1, PlannerSpawnRequestV1 } from "./planner-process.js";
 import { TargetVerifierSupervisor, targetVerifierWireBounds, type TargetVerifierRunRequestV1 } from "./verifier-process.js";
 
@@ -191,6 +191,27 @@ describe("target verifier supervision", () => {
     expect(decodePlannerJson((json as { payload: Uint8Array }).payload, 4_096)).toEqual({ schemaVersion: 1, plan: plan(), snapshot: { manifest: "synthetic" } });
     expect(frames.slice(1)).toEqual([{ kind: "blob", ordinal: 0, payload: bytes("synthetic blob") }, { kind: "end" }]);
     expect(child().reaped).toBe(true);
+  });
+
+  describe("the real redactor over the product-generated request", () => {
+    const tmpHome = "/private/var/folders/j3/z6tddtv93jx1396f2d7vnqnc0000gn/T/developer-os-e2e-FP6Kwf/home/.developer-os";
+    const withRedactor = (behavior: Behavior): { readonly supervisor: TargetVerifierSupervisor; readonly spawned: PlannerSpawnRequestV1[] } => {
+      const base = harness(behavior);
+      return { supervisor: new TargetVerifierSupervisor({ ...base.supervisor.dependencies, redactor: createRedactor(new Uint8Array(32).fill(7)) }), spawned: base.spawned };
+    };
+    const request = (bundleRoot: string): TargetVerifierRunRequestV1 => run({ plan: plan({ release: { version: "2.0.0", bundleRoot } }), snapshot: echo, inputBlobs: [] });
+
+    it("admits sha256 fields and a random TMPDIR bundle root, and spawns the verifier", async () => {
+      const { supervisor, spawned } = withRedactor(answer({ outcome: "disagree" }, 1));
+      await expect(supervisor.run(request(`${tmpHome}/releases/2.0.0/darwin-arm64`))).rejects.toSatisfy(rejection);
+      expect(spawned).toHaveLength(1);
+    });
+
+    it("still refuses a provider token planted in the request, before any spawn", async () => {
+      const { supervisor, spawned } = withRedactor(answer(echo));
+      await expect(supervisor.run(request(`/product/sk-${"A1b2C3d4".repeat(4)}/darwin-arm64`))).rejects.toBeInstanceOf(SecurityRefusalError);
+      expect(spawned).toEqual([]);
+    });
   });
 
   it("returns mismatched digests for `runTargetVerifier` to reject", async () => {
