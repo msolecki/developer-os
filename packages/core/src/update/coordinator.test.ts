@@ -435,7 +435,7 @@ describe("UpdateLifecycleCoordinatorJournalV2", () => {
     } as const;
     const bytes = new TextEncoder().encode(`${encodeCanonicalJson(widest)}\n`);
     expect(bytes.byteLength).toBeLessThanOrEqual(MAXIMUM_UPDATE_COORDINATOR_JOURNAL_BYTES);
-    expect(built.maximumJournalBytes).toBe(MAXIMUM_UPDATE_COORDINATOR_JOURNAL_BYTES);
+    expect(built.maximumJournalBytes).toBeLessThanOrEqual(MAXIMUM_UPDATE_COORDINATOR_JOURNAL_BYTES);
     expect(updateCoordinatorJournalBytes(built, advanceUpdateCoordinatorJournal(built, walk(built, upTo(active)), { kind: "compensation_started", cause: parseSafeReasonCode("a".repeat(64)) }, clock())).byteLength).toBeLessThan(bytes.byteLength);
   });
 

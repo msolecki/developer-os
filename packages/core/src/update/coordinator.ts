@@ -785,6 +785,7 @@ export function maximumUpdateCoordinatorJournalBytes(plan: Pick<UpdateLifecycleC
     compensationNext: Math.max(plan.steps.length - 1, 1),
     pointOfNoReturnReached: false,
     terminalOutcome: "rolled_back",
+    compensationCause: "a".repeat(64),
     retirementNext: MAXIMUM_UPDATE_RETIREMENT_LEAVES,
     compactionNext: plan.compaction.entries.length,
     createdAt: "0000-00-00T00:00:00.000Z",
