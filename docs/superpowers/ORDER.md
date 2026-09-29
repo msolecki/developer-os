@@ -96,7 +96,7 @@ Strict sequence; do not start a blocked row early.
 
 A11 (Phase 4b), A13 (Phase 6) and A14 (Phase 7) have nothing left of their own: A11's Task 11b is
 tracked under A11b, A13's real-agent rows (NEW-104, NEW-127) are founder stop points, and A14's
-template scan runs with A12's.
+template scan ran with A12's (0 findings, 2026-09-28).
 
 ## Repository work not owned by the product sequence
 

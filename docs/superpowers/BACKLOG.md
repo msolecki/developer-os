@@ -25,7 +25,7 @@ run, so the founder's full `npm run check` and `npm run test:pinned-host` are ow
 | A16 · DOS-P9 | plan decision, beta, packaging, documentation, v1 publication | A11b, L1, L2 |
 
 A11 (Phase 4b) and A14 (Phase 7) have nothing left of their own: Task 11b is tracked under A11b, and
-A14's template scan runs with A12's.
+A14's template scan ran with A12's (0 findings, 2026-09-28).
 
 The phase order, the founder decisions of 2026-09-04 and 2026-09-16 that fixed it, and the documents each phase
 expects are in `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`.
@@ -212,8 +212,9 @@ in `d157227..28cfe19`, and m4 plus the mock-only `apply_patch` grammar, moved in
 - Workflow versions (review M7, founder): nothing is released (D47), so no overlay pins the bytes of
   `brain-search@2.0.0` before `714918a`, and the five `1.0.0` workflows whose prose changed were not
   bumped. If the founder prefers bumps, bump all six at once.
-- Spec gap: after `brain refactor --merge`, `[[s]]` links in the target's own body become links to
-  itself. R6 forbids only frontmatter edits; body cleanup is unspecified.
+- Contract gap (`docs/architecture/brain.md` §6.13, merge mode and R6): after `brain refactor
+  --merge`, `[[s]]` links in the target's own body become links to itself. Only frontmatter edits
+  are forbidden; body cleanup is unspecified.
 - `knowledge-pipeline.md` §§1, 3, 5, 7 (the Task 16 amendments) were not reviewed.
 
 ### Phase 6 · A13 (plan closed 2026-09-29; the real-agent rows are NEW-104 and NEW-127)

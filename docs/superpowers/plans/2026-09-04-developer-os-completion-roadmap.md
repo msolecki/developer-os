@@ -158,7 +158,9 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
 ### Phase 5 — A12: instruction artifacts · L
 
 - **D47 (2026-09-22).** Specs A12, A12b, A13 and A14 (`specs/2026-09-22-developer-os-{instruction-artifacts,brain-workflows,hooks,tooling-verbs}-design.md`)
-  approved with every recommended answer, except A12 Q1: no production for now — local unsigned build
+  approved with every recommended answer (A12b's was deleted on 2026-09-29 after its contracts moved
+  to `docs/architecture/brain.md` §6.13: `git show
+  343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`), except A12 Q1: no production for now — local unsigned build
   only, no release path. Also decided: Spec 1 §1 holds — `import` and `ingest` stay manual and leave
   Phase 9's job registry. The D44 lane (lint per commit, tests and review at phase close, no push)
   applies to Phases 5–7 as well, on the founder's instruction to skip tests for now.
@@ -427,8 +429,8 @@ Scope: inventory §5, §6.
   15 of `plans/2026-09-22-developer-os-tooling-verbs.md`; Task 14's Claude observations (NEW-109) were
   recorded under D57 (`4041286`). The phase close ran and the plan was deleted on 2026-09-26; its
   scope decisions are amended into the tooling-verbs spec §6 and §8 ("Amended 2026-09-26 (NEW-108)").
-- [ ] The `project init` templates' founder-local scan, run with A12's (see below). The inventory
-  status flip ran on 2026-09-26.
+- [x] The `project init` templates' founder-local scan, run with A12's: 0 findings over
+  `templates/project/` (Phase 5 above, 2026-09-28). The inventory status flip ran on 2026-09-26.
 - The automation job registry is Spec 1b's and belongs to Phase 9 (D16). It is Spec 1 §5.1's four jobs: `brain-reindex`, `brain-lint`, `doctor` and `git-sync`. `import` and `ingest` stay manual and are not registry entries (D47, Spec 1 §1).
 
 Gate: every inventoried script is a verb or a recorded refusal.
@@ -522,10 +524,10 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | Phase | Document |
 |---|---|
 | 4b | baseline plan Tasks 10–11 plus the production wiring step Phase 4b adds |
-| 5 | `specs/<date>-developer-os-instruction-artifacts-design.md` and its plan |
-| 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |
-| 6 | `specs/2026-09-22-developer-os-hooks-design.md` (its plan closed and was deleted 2026-09-29) |
-| 7 | `specs/2026-09-22-developer-os-tooling-verbs-design.md` (its plan closed and was deleted 2026-09-26) |
+| 5 | `specs/2026-09-22-developer-os-instruction-artifacts-design.md`, kept while Spec 1 and Spec 2 cite it (its plan closed and was deleted 2026-09-28); contracts in `docs/architecture/foundation.md` §4 and §12 |
+| 5b | `docs/architecture/brain.md` §6.13 (the spec was deleted 2026-09-29: `git show 343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`; its plan closed 2026-09-26) |
+| 6 | `specs/2026-09-22-developer-os-hooks-design.md`, kept while Spec 1 §2.1 and `BACKLOG.md` §6 Phase 6 cite its §7.3 (its plan closed and was deleted 2026-09-29); contracts in `docs/architecture/hooks.md` |
+| 7 | `specs/2026-09-22-developer-os-tooling-verbs-design.md`, kept while the umbrella design §8 item 4 and `BACKLOG.md` §6 Phase 7 M5 cite it (its plan closed and was deleted 2026-09-26); contracts in `docs/architecture/foundation.md` §13, `knowledge-pipeline.md` §3.1 and `claude-adapter.md` §15 |
 | 8 | `plans/2026-09-28-new-110-spec2-apply.md` from NEW-110's Spec 2 revision pass (closed 2026-09-29, D75; both earlier plans closed 2026-09-26); Task 11b has no plan yet, its body is behind `BACKLOG.md` NEW-111's pointer |
 | 9 | plan 1b (closed 2026-09-26), Spec 1's D71 amendment and `plans/2026-09-28-new-113-fixed-path-admission.md` (closed 2026-09-29, D75; Task 5 is in `BACKLOG.md` NEW-113) |
 | 10 | `docs/migration/founder-cutover.md` |
