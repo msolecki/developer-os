@@ -371,6 +371,8 @@ export async function createSecurityFixture(
           stat: () =>
             /** `S_IFREG` included: the guard checks the file type, not only the bits. */
             Promise.resolve({ uid: process.getuid?.() ?? 0, mode: 0o100755 }),
+          /** No link on the synthetic chain; NEW-32's stepwise resolver would otherwise readlink a path that does not exist. */
+          readlink: () => Promise.resolve(null),
         })
       : new FakePlatformAdapter({ userHome, agents });
 
