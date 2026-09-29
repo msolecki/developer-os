@@ -680,6 +680,16 @@ async function sandboxBase(
   return fallback;
 }
 
+describe("MacOsPlatformAdapter system executables (NEW-117)", () => {
+  it("offers no system-executable admission; DARWIN_SYSTEM_EXECUTABLES is the one seam", () => {
+    const adapter = createAdapter() as unknown as Record<string, unknown>;
+
+    for (const method of ["systemExecutable", "admitSystemExecutable", "recheckSystemExecutable"]) {
+      expect(adapter[method]).toBeUndefined();
+    }
+  });
+});
+
 describe("MacOsPlatformAdapter.assertTrustedExecutable, against a real filesystem", () => {
   const roots: string[] = [];
 

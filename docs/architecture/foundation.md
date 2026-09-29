@@ -1124,7 +1124,10 @@ record.
   2026-09-28 (D71)" and their D71 addendum are normative. What the code relies on:
   1. **One per-platform table.** `SystemExecutableRowV1` and the `posix_root_owned` predicate live in
      `packages/security/src/system-executables.ts`; the `darwin` rows are `DARWIN_SYSTEM_EXECUTABLES`
-     in `packages/platform-macos/src/system-executables.ts`, exposed through `PlatformAdapter`. Four
+     in `packages/platform-macos/src/system-executables.ts`. That table is the platform seam:
+     `admitGitExecutables` (`apps/cli/src/commands/git/runtime.ts`) and the launchd `schedulerRow`
+     (`packages/platform-macos/src/launchd/distribution.ts`) read it directly, and `PlatformAdapter`
+     carries no system-executable method (NEW-117 removed three that had no production caller). Four
      rows are implemented: `git` `/usr/bin/git`, `git-receive-pack` `/usr/bin/git-receive-pack` (both
      Apple shims following the `xcode-select` choice), `ssh` `/usr/bin/ssh` and `scheduler`
      `/bin/launchctl`. Linux (`/usr/bin/git`, `/usr/bin/ssh`, systemd user units) and Windows

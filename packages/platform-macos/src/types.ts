@@ -1,9 +1,3 @@
-import type {
-  AdmittedSystemExecutableV1,
-  SystemExecutableIdV1,
-  SystemExecutableRowV1,
-} from "@developer-os/security";
-
 export type AgentName = "claude" | "codex";
 
 export interface PlatformFacts {
@@ -50,15 +44,6 @@ export interface PlatformAdapter {
    * by review. There are three today: `ingest`, `capture` and `discoverEachAgent`.
    */
   assertTrustedExecutable(path: string): Promise<void>;
-  /**
-   * The platform's standard fixed-path row for a system executable (Spec 1 §4.2 as
-   * amended 2026-09-28, D71). Never resolved through `PATH`; an unknown ID throws.
-   */
-  systemExecutable(id: SystemExecutableIdV1): SystemExecutableRowV1;
-  /** Admits the row by its predicate and returns the invocation's evidence, or throws `SystemExecutableRefusalError`. */
-  admitSystemExecutable(id: SystemExecutableIdV1): Promise<AdmittedSystemExecutableV1>;
-  /** Re-admits before a real exec and throws `SystemExecutableRefusalError` on any difference. */
-  recheckSystemExecutable(admitted: AdmittedSystemExecutableV1): Promise<void>;
   productStateRoot(userHome: string): string;
   proposedBrainRoot(userHome: string): string;
 }
