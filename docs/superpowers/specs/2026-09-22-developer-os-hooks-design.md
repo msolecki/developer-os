@@ -19,8 +19,9 @@ Governing founder decisions: **D3** (the legacy guards return through product ho
 returns), **D7** (Codex hooks are trusted manually; the product never writes the Codex config file),
 **D8** (isolated vendor invocations load no user hooks), **D16** (this phase precedes the cutover).
 
-**Amended 2026-09-22 (D47, A13 plan Task 3).** The implementation plan
-`docs/superpowers/plans/2026-09-22-developer-os-hooks.md` closes the gaps below. Each item is
+**Amended 2026-09-22 (D47, A13 plan Task 3).** The implementation plan (closed and deleted
+2026-09-29: `git show 343f8453:docs/superpowers/plans/2026-09-22-developer-os-hooks.md`) closes the
+gaps below. Each item is
 normative and takes precedence over the section it names. D47 applies throughout: there is no
 launcher and no packaged release, and "launcher" reads as "the entrypoint A12's local-build install
 places on disk".
