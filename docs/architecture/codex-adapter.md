@@ -559,8 +559,8 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
   prompt-input` roots the skills at `<CODEX_HOME>/plugins/cache/developer-os/developer-os/0.0.0/skills`,
   and an edit to the product tree is invisible until `codex plugin add` runs again. §4's premise
   holds for listing and fails for loading; §11.14 is confirmed rather than suspected. The
-  `PLUGIN_VERSION` literal `0.0.0` names the cache directory. Owner: `BACKLOG.md` NEW-61 (roadmap
-  Phase 5 and the update lifecycle).
+  `PLUGIN_VERSION` literal `0.0.0` names the cache directory. `BACKLOG.md` NEW-61 closed 2026-09-29:
+  install re-registers on a changed tree, and so does `update` (next item).
 - **Amended 2026-09-28 (Spec 2 D72 P6, NEW-61): an update re-registers the plugin.** Every update
   whose Codex owner plan changes a file carries exactly one `codex_registration_refresh` effect:
   `codex plugin add developer-os@developer-os --json` from the managed plugin root, with exactly

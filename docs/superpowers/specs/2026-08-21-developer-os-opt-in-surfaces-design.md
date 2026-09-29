@@ -42,11 +42,12 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-26 | founder, D42 (2026-09-22) | plan 1a Task 24's deferred round-trip and kill-matrix contract moved here unchanged when the plan file was deleted (NEW-100) | §7.1 |
 | 2026-09-28 | founder, NEW-113 questions (D71, under D65) | the exact macOS build + SHA-256 pin is replaced by fixed-path admission from a per-platform `SystemExecutableTableV1` (darwin implemented; linux and win32 recorded as intended): `/usr/bin/git` (the Apple shim, with `xcrun` inputs absent from every child environment), `/usr/bin/ssh` and `/bin/launchctl`, admitted by root ownership, no group/other write, version floors and a capability probe, with per-invocation evidence; `certification` removed; HTTPS and SSH still refuse; residuals 6 and 10 rewritten, 13 and 14 added | §4.2, §5.3, §7, §8.3 |
 | 2026-09-28 | founder, NEW-113 Task 2 addenda to D71 (roadmap D73), folded in at the plan close 2026-09-29 | a fourth `darwin` row `/usr/bin/git-receive-pack`, which `real_receive_pack` executes with argv0 `git-receive-pack`; the Git supervisor stays synchronous with a synchronous inspector/recheck pair | §4.2, §7 |
+| 2026-09-29 | NEW-110 plan close (Spec 2 D72 P8, NEW-86) | pointer: admitted bookkeeping paths carry their planned `dev`/`ino` | §2.1 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
 change is marked "Amended 2026-09-22 (A13 Q3-A)"; the later ones are marked with their decision
 number, "Amended 2026-09-23 (D59)", "Amended 2026-09-24 (D61)", "Added 2026-09-25 (D62)" and
-"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)"; the NEW-100 row is marked "Added 2026-09-26 (NEW-100)"; the NEW-113 row is marked "Amended 2026-09-28 (D71)"; its Task 2 addenda are marked "Amended 2026-09-28 (D71 addendum)".
+"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)"; the NEW-100 row is marked "Added 2026-09-26 (NEW-100)"; the NEW-113 row is marked "Amended 2026-09-28 (D71)"; its Task 2 addenda are marked "Amended 2026-09-28 (D71 addendum)"; the P8 pointer is marked "Amended 2026-09-29 (pointer to Spec 2 D72 P8, NEW-86)".
 
 ---
 
@@ -194,6 +195,16 @@ entries are other bookkeeping paths, that projected bootstrap residue, or ancest
 Shape grants no authority: the directories hold nothing live. Fresh `init` decides whether the lock is
 live by acquiring it; absent-manifest uninstall never acquires it and only leaves it in place. No directory is adopted beyond
 what Spec 2 §6.1 admits.
+
+**Amended 2026-09-29 (pointer to Spec 2 D72 P8, NEW-86).** What fresh `init` admits by shape is now
+recorded with its identity: Spec 2's block "Amended 2026-09-28 (D72)", item P8, changes §6.1's
+`admittedPreexistingPaths` to `{ path, dev, ino }` entries written into the immutable plan, and
+execution and recovery resolve an admitted Foundation publication parent only from that recorded
+identity, refusing a changed inode as exit 6. P8 names "Spec 1 §2.1's sentence that
+`admittedPreexistingPaths`' grammar covers the bookkeeping set"; no sentence of this section uses that
+name, and the one it means is the paragraph above: each bookkeeping path fresh `init` admits by shape
+is an entry of that grammar. Shape still grants no authority; P8 only binds the admitted path to what
+planning observed.
 
 Every reservation has `existedBefore: false` and null restore evidence. New `init` refuses before
 mutation if any reserved path already exists, except what Spec 2 §6.1 admits. The product never claims or backs
