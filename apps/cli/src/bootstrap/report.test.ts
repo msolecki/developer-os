@@ -404,15 +404,15 @@ describe("inspectBootstrapEvidence", () => {
      * through the total above: one call carries every retention root and row
      * parent, and no second call carries a subset of them.
      */
-    expect(arities.filter((arity) => arity > 2)).toStrictEqual([4, 326]);
+    expect(arities.filter((arity) => arity > 2)).toStrictEqual([4, 328]);
 
     /**
-     * Measured against this fixture's 161-location plan: the outer
+     * Measured against this fixture's 162-location plan: the outer
      * `initialRoots` walk (1), the plan's journal-slot walk (1), one walk per
-     * payload/created-path/foundation-participant evidence read (156),
+     * payload/created-path/foundation-participant evidence read (157),
      * the manifest-handoff check (1) — and, until the roots/row-parents walks are
-     * grouped into one call, two more instead of one. 160 is that total with
-     * the group, whose one call carries 326 roots (161 sources, 161 tombstones,
+     * grouped into one call, two more instead of one. 161 is that total with
+     * the group, whose one call carries 328 roots (162 sources, 162 tombstones,
      * 4 row parents); it moves in lockstep with the fixture's shape, not a fixed
      * constant, so a future change to the fixture is expected to move it too.
      * It was 155 against a 156-location plan until plan 1a Task 1 (2026-09-17)
@@ -421,9 +421,10 @@ describe("inspectBootstrapEvidence", () => {
      * creation-evidence reads and three more locations. It was 158 against 159
      * until the 2026-09-22/23 init work added one more location; first
      * measured in the 2026-09-24 full-suite run. It was 159 against 160 until
-     * NEW-94 made `staging/lifecycle` one more created path.
+     * NEW-94 made `staging/lifecycle` one more created path, and 160 against
+     * 161 until NEW-88's residual made `backups/transactions` one more.
      */
-    expect(walks).toBe(160);
+    expect(walks).toBe(161);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("looks up retained rows by key instead of scanning them per location", async () => {
