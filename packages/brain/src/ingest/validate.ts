@@ -8,7 +8,7 @@ import {
 } from "@developer-os/security";
 import type { RedactionResult } from "@developer-os/security";
 
-import { compareCanonical, PRIVATE_FOLDERS } from "../discovery/index.js";
+import { compareCanonical, PRIVATE_FOLDERS, resolveTopic } from "../discovery/index.js";
 import type { DirectoryEntry, DirectoryReader } from "../discovery/index.js";
 import type { IndexBuildRequest } from "../indexes/index.js";
 import { canonicalizeArtifact, lintBuild } from "../lint/index.js";
@@ -762,6 +762,24 @@ function writeScope(
           "write-scope",
           note.path,
           "this path resolves into a private folder, the indexes directory, or a dot-segment, none of which a proposal may write",
+        ),
+      );
+      continue;
+    }
+
+    /**
+     * Last, so the destination checks above keep their own findings. A model
+     * prefixing the content root (`content/DEV/x.md`) wrote six notes into an
+     * unindexed `content/content/` on 2026-09-29; discovery indexes only a
+     * topic folder or an alias resolving to one, so nothing else may be proposed.
+     */
+    const [topic = ""] = entry.segments;
+    if (entry.segments.length < 2 || resolveTopic(topic, config) === null) {
+      findings.push(
+        finding(
+          "write-scope",
+          note.path,
+          "this path does not start with a configured topic folder or topic alias, so the note would never be indexed",
         ),
       );
     }

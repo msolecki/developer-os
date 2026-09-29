@@ -291,7 +291,7 @@ still pass the exhaustiveness test because the typo went into the expectation to
 | `secret-scan` | `:505` | a secret the model handed back |
 | `deterministic-reindex` | `:1024` | a proposal whose projection does not rebuild deterministically |
 | `generated-output-consistency` | `:760` | a write into the generated indexes directory |
-| `write-scope` | `:619` | a path outside the declared, resolved write scopes |
+| `write-scope` | `:619` | a path outside the declared, resolved write scopes, or whose first segment is not a configured topic folder or an alias resolving to one (`content/DEV/x.md` is refused) |
 
 `validateProposal` (`:892`) runs them, is total and side-effect-free, and a finding names the class and
 the file **never the value** (`:67-72`) — the report is written and logged, and the proposal is model

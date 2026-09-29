@@ -975,6 +975,45 @@ describe("write-scope", () => {
     expect(validators(result)).toContain("write-scope");
   });
 
+  it("refuses a path prefixed with the content root name, which lands in content/content (2026-09-29)", async () => {
+    const result = await validateProposal(
+      proposal(note("content/DEV/x.md")),
+      contextFor(await makeVault()),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("write-scope");
+  });
+
+  it("accepts a path whose first segment is a configured topic folder", async () => {
+    expectClean(await validateProposal(proposal(note("DEV/x.md")), contextFor(await makeVault())));
+  });
+
+  it("refuses a path whose first segment is no configured topic folder", async () => {
+    for (const path of ["NOTES/x.md", "x.md", "dev/x.md"]) {
+      const result = await validateProposal(proposal(note(path)), contextFor(await makeVault()));
+      expect(validators(result), path).toContain("write-scope");
+    }
+  });
+
+  it("accepts an alias folder whose target is a topic folder, and refuses one whose target is not", async () => {
+    const vault = await makeVault();
+    const base = contextFor(vault);
+    const withAliases = (topicAliases: Readonly<Record<string, string>>): IngestValidationContext => ({
+      ...base,
+      brain: { ...base.brain, config: { ...DEFAULT_BRAIN_CONFIG, topicAliases } },
+    });
+
+    expectClean(
+      await validateProposal(proposal(note("PROJEKTY/x.md")), withAliases({ PROJEKTY: "PROJECTS" })),
+    );
+    const dangling = await validateProposal(
+      proposal(note("PROJEKTY/x.md")),
+      withAliases({ PROJEKTY: "NOWHERE" }),
+    );
+    expect(validators(dangling)).toContain("write-scope");
+  });
+
   it("names the offending path byte for byte, so the caller can act on it", async () => {
     const result = await validateProposal(
       proposal(note("_raw/quarantine/evil.md")),

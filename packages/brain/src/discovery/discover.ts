@@ -110,7 +110,7 @@ function isExcludedSegment(
   return name === config.indexesDir || PRIVATE_FOLDERS.includes(name);
 }
 
-function resolveTopic(name: string, config: BrainConfigV1): string | null {
+export function resolveTopic(name: string, config: BrainConfigV1): string | null {
   /**
    * `Object.hasOwn` rather than a plain lookup. `topicAliases` is user data, so
    * a folder whose name is also an inherited property would otherwise resolve

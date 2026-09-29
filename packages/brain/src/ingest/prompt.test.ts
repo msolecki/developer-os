@@ -205,6 +205,16 @@ describe("buildIngestPrompt", () => {
     expect(prompt).not.toContain("PROJECTS");
   });
 
+  it("requires the first path segment to be a topic folder, never the content root (2026-09-29)", () => {
+    const prompt = buildIngestPrompt(envelopeWhoseContentIs("plain"), {
+      config: { ...DEFAULT_BRAIN_CONFIG, contentRoot: "notes", topicFolders: ["LEDGER"] },
+      indexExcerpt: [],
+    });
+
+    expect(prompt).toContain("first segment must be one of those topic folders");
+    expect(prompt).toContain("`LEDGER/x.md`, not `notes/LEDGER/x.md`");
+  });
+
   it("tells the model it may write nothing, and that it cannot write at all", () => {
     /**
      * The agent is invoked with zero declared write scopes (spec §3.3), so the

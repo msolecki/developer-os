@@ -243,6 +243,8 @@ export function buildIngestPrompt(
 ): string {
   const { config, indexExcerpt } = options;
   const folders = config.topicFolders.map(scalar).join(", ");
+  const example = scalar(config.topicFolders[0] ?? "DEV");
+  const contentRoot = scalar(config.contentRoot);
   const captureId = scalar(envelope.captureId);
 
   return [
@@ -260,8 +262,10 @@ export function buildIngestPrompt(
     "  answer** whenever the material below is not worth a note; inventing one to fill",
     "  the array is worse than proposing nothing.",
     `  Every note object carries \`"sourceCaptureId": "${captureId}"\`; a note without it is discarded.`,
-    `- \`path\`: relative to the vault's content root (\`${scalar(config.contentRoot)}\`), forward`,
+    `- \`path\`: relative to the vault's content root (\`${contentRoot}\`), forward`,
     `  slashes, ending in \`.md\`. The topic folders in this vault are: ${folders}.`,
+    `  The first segment must be one of those topic folders, never the content root itself:`,
+    `  \`${example}/x.md\`, not \`${contentRoot}/${example}/x.md\`.`,
     "  Never absolute, never traversing, never naming a generated index.",
     "  The path must be **new**: never a path listed in the index excerpt below, and",
     "  never an existing note. If the natural name is taken, add a distinguishing suffix",
