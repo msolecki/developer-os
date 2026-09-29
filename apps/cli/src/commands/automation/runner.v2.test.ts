@@ -222,7 +222,8 @@ describe("runtime records through the real gate", () => {
     const { held, borrowed } = await heldGlobal(home);
     try {
       const records = production.records(borrowed);
-      for (let run = 0; run < 2_000; run += 1) {
+      // ponytail: 200, not 2000 — the gate costs ~640 ms per write (NEW-53), and the journal count is flat from write 20 on.
+      for (let run = 0; run < 200; run += 1) {
         await records.writeStatus(
           {
             schemaVersion: 1,
