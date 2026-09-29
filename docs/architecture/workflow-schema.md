@@ -282,6 +282,13 @@ footprints and requires exact equality with declared read/write scopes, rejectin
 over-declaration. Only `agent.prompt` remains unimplemented; configured vault roots resolve at the
 handler boundary rather than by templating canonical workflow YAML.
 
+Only `ingest` declares a write scope outside `content/_raw/quarantine/**`, and it expresses that in
+effect verbs only; a workflow whose only write is quarantine may carry prose, because prose writes
+nothing (`tests/contracts/workflows/canonical.test.ts`). Steps carry no condition, so an optional
+write is preceded by a prose gate step. Capture text reaches `developer-os capture [--note <path>]`
+on stdin through a quoted heredoc whose command starts with `developer-os`, never through a pipe, so
+a `Bash(developer-os:*)` permission admits it and shell metacharacters in the text stay inert.
+
 ### 10.4 Refusals and exit codes
 
 `when` is closed to `capability-missing`, `index-missing`, `vault-missing`, `input-invalid` and

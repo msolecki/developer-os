@@ -726,3 +726,49 @@ dummy `auth.json`; the isolated home held only the `auth.json` symlink; ingest f
   the link with the rotated credential. The product would then refuse the next run and name the
   file instead of deleting it.
 
+## 16. Instruction projection and registration (A12)
+
+`foundation.md` §12 has the lifecycle.
+
+**Projection** (`packages/adapter-codex/src/instructions.ts` — `renderInstructionTree`, pure and
+byte-deterministic):
+
+- The `C/AGENTS.md` block holds `## <id>` sections for rules, then
+  `## <id> — applies only to paths matching: <globs>` sections for scoped rules (emulated: the
+  path restriction is prose only), each sorted by id.
+- `output-style` is unsupported and nothing is written.
+- `agent` becomes `C/agents/developer-os-<id>.toml` with exactly the keys `name` (as
+  `developer-os-<id>`), `description` and `developer_instructions` (§15).
+- `skill` becomes `<product-home>/codex/plugins/developer-os/skills/<id>/`; a command collapses to
+  its skill.
+- An instruction skill that claims a workflow path refuses.
+
+**Registration**
+(`apps/cli/src/instructions/codex-registration.ts` — `registerCodexPlugin`) runs after the attach
+commits, only when `codex plugin list --json` does not show the plugin enabled at its root, or
+when the record is missing or its `treeHash` or `codexHome` differ.
+
+- It runs `plugin marketplace add <product-home>/codex` only when `plugin marketplace list` lacks
+  it, then always `plugin add developer-os@developer-os --json`, then requires `plugin list --json`
+  to show the plugin enabled at the plugin root.
+- Every call is an argv array with `env` exactly `{ CODEX_HOME: C }`.
+- Success rewrites `<product-home>/codex/registration.json`, `{ codexHome, treeHash }` under
+  schema `codex-registration-v1`, in a second gated transaction. `treeHash` is
+  `codexPluginTreeHash`: domain `developer-os:codex-plugin-tree:v1` over the sorted
+  `(path, sha256)` of the plugin tree's content rows.
+- A failing step is `codex_registration_failed`, exit 1, after the commit.
+
+**Unregistration**
+(`apps/cli/src/instructions/codex-registration.ts` — `unregisterCodexPlugin`) runs before any file
+changes: `plugin remove` when listed, then `plugin marketplace remove developer-os` when listed.
+An absent CLI is the warning `codex registration not removed: codex CLI absent`; a present CLI
+that fails aborts with exit 1 before any mutation.
+
+**Partial states,** each reported by `doctor`'s `codex-registration` and recovered by re-running
+`init`:
+
+- The tree is installed but not registered, or the detach failed after unregistering:
+  `unregistered`.
+- The tree changed since the last registration: `stale`.
+- Codex's cache copy differs from the tree: `cache-stale`, under `--probe` only.
+

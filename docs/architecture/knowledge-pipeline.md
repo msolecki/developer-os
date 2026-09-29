@@ -160,6 +160,40 @@ transaction per new capture with the same shape and roots as `capture`, and reco
 the capture id, a content hash, is the cursor: a rerun over an unchanged source is a duplicate at
 exit 0.
 
+### 3.1 `import`: sources, batches and refusals (A14)
+
+All in `apps/cli/src/commands/import.ts` — `runImport` unless named.
+
+- **Sources.** Bare `import` drains `<content>/_raw/inbox`. `import <path>` takes a file or a
+  directory inside the inbox, or outside both the vault and the product home: overlap with the
+  product home refuses `import_source_in_product_home` (5), a vault path outside the inbox
+  `import_source_in_vault` (2), a protected root `import_source_protected` (5), a missing one
+  `import_source_not_found` (2). `--claude-memory` reads `claude-adapter.md` §15's layout; with a
+  `<path>` it is a usage error, exit 2. Inbox and quarantine are each proven inside the content root
+  (`import_root_not_contained`, 5). No configuration or no vault refuses `not_initialized` (1); a
+  vault path that is not a directory, `vault_not_directory` (2).
+- **Walk.** Depth-first with `lstat`, never following a link, and finished before any file is read,
+  so a bound refusal writes nothing. Names beginning `.` are skipped silently. `.md`, `.markdown`
+  and `.txt` are accepted; any other entry is `skipped` `unsupported_type` and leaves the exit code
+  alone; a link is the per-file `import_source_symlink`. Order is the NFC source-relative path
+  compared as UTF-8 bytes. More than `IMPORT_MAX_ENTRIES_WALKED` (10,000) entries, `IMPORT_MAX_DEPTH`
+  (16) levels or `IMPORT_MAX_MEMORY_PROJECTS` (1,000) memory project directories refuses
+  `import_enumeration_limit` (2).
+- **Batches.** `IMPORT_MAX_FILES_PER_RUN` (1,000), narrowed by `--limit`, counts only new captures.
+  Duplicates are counted in `duplicateCount` and not listed; accepted non-duplicate files beyond the
+  cap are `remaining`, exit 0. A rerun over the inbox therefore advances.
+- **Per file** (`processCandidates`). Read through `readUntrustedText` at `MAX_CAPTURE_INPUT_BYTES`
+  (64 KiB). A refusal (`import_source_protected` and `_symlink` 5, `_not_found` 2, `_too_large`,
+  `_not_text` and `_empty` 1; a non-regular file reads as `_not_text`) leaves the file untouched and
+  the run continues. Rows name the redacted source-relative path, never content. The run exits with
+  the most severe per-file code (`foundation.md` §6), the whole `ImportResultV1` riding on
+  `CliError.data` (§10.2 item 4).
+- **Run stop.** Any other failure mid-run, a mutation-gate refusal included, ends the run with its
+  own code; finalized files stay, and the unprocessed ones are counted in `remaining`.
+- **Dry run.** Writes nothing: no key, no directory, no transaction. Without an existing key it
+  detects no duplicates and reports every accepted file `would_import` with `captureId: null`.
+- **An edited source is new content**, so it becomes a new capture; review is the filter.
+
 ---
 
 ## 4. Review, and where a hand edit is brought back under the guarantees
@@ -244,6 +278,9 @@ model ran**.
 `invokeClaude` has no such flag, so on that vendor the schema is described in the prompt and enforced
 by `parseIngestProposal` afterwards (`ingest.ts:1084-1093`, `:1683`).
 
+**A note capture skips the model.** It is applied verbatim, with no vendor call, as one `create` or
+one `replace` bound to its capture-time hash; `brain.md` §6.13 has the contract.
+
 ---
 
 ## 6. The status ladder, and why a refusal never produces `failed`
@@ -308,6 +345,9 @@ says "required frontmatter for the note's declared stage is absent" without sayi
 The registered narrowing, ratified as shipped, and its cost of reversal are §8 of
 `git show d72287a^:docs/superpowers/BACKLOG.md`.
 
+For a replacing note capture, `duplicate-detection` ignores the destination itself and
+`source-and-provenance` also requires the replaced note's `created` (`brain.md` §6.13).
+
 ---
 
 ## 8. Two configuration decisions a later reader will trip over
@@ -326,7 +366,10 @@ differently on every invocation: the field would populate, look correct, and mea
   building the context already threw. The root warns and falls back to an ephemeral key
   (`:743-745`), so diagnostics are still redacted on a machine that has never been initialized.
 - `loadOrCreateRedactionKey` (`:659`) is the **point-of-use** door, called by `init` (`init.ts:350`,
-  `:975`, `:1026`, `:1061`) and by `capture`, `review` and `ingest` at their own points of use. It creates when absent,
+  `:975`, `:1026`, `:1061`) and by `capture`, `review` and `ingest` at their own points of use, and
+  by `import` except under `--dry-run`. `import --dry-run`, `project init` and `project check` never
+  create it: they read it with `readRedactionKey` and fall back to an ephemeral key. It creates
+  when absent,
   refuses a symlink or a non-regular file, and tightens an over-permissive mode. Both doors open with
   `O_NOFOLLOW | O_NONBLOCK`: without the second, a FIFO planted at that path blocks the CLI forever,
   because the file-type guard is downstream of the open.

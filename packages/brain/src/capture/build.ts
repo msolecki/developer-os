@@ -34,7 +34,7 @@ export interface CaptureBuildRequest {
   readonly workingDirectoryFingerprint: string;
   readonly createdAt: string;
   readonly redact: (text: string) => RedactionResult;
-  /** Absent for a plain capture. Not part of the deduplication hash (spec R3). */
+  /** Absent for a plain capture. Not part of the deduplication hash (`brain.md` §6.13 R3). */
   readonly note?: CaptureNoteTargetV1;
 }
 

@@ -19,8 +19,8 @@ import {
 import type { TempHome } from "../helpers/temp-home.js";
 
 /**
- * Spec §7.4, the refactor half: `brain retire` and `brain refactor` refuse a
- * symlinked topic folder, an agent session and an occupied destination, and write
+ * `brain.md` §6.13 (agent sessions, refactor algorithm): `brain retire` and
+ * `brain refactor` refuse a symlinked topic folder, an agent session and an occupied destination, and write
  * nothing when they do. Every case runs the compiled binary under a temporary HOME
  * and asserts the exact exit code and kind: on the base commit both verbs are
  * unknown commands (usage, exit 2), and a `not.toBe(success)` would pass there.

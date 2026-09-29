@@ -1035,7 +1035,7 @@ describe("runCapture", () => {
   });
 });
 
-/** A complete, parseable note: `capture --note` refuses anything less (spec §3.1 step 2). */
+/** A complete, parseable note: `capture --note` refuses anything less (`brain.md` §6.13). */
 function noteText(title: string, body = "A synthetic note body."): string {
   return [
     "---",
@@ -1238,7 +1238,10 @@ describe("runCapture --note", () => {
   });
 
   it("reports a note capture of an existing plain capture's text as that duplicate, keeping its envelope", async () => {
-    /** Spec R3: the deduplication hash is content-only. Task 16 reports this as a gap. */
+    /**
+     * `brain.md` §6.13 R3: the deduplication hash is content-only. Task 16 reports this as
+     * a gap.
+     */
     const fixture = await installedFixture("note-duplicate");
     const plain = await fixture.run(fixture.context, { text: NEW_NOTE });
     expect(plain.ok).toBe(true);

@@ -796,7 +796,7 @@ function isolatedFindings(build: IndexBuildResult): readonly LintFinding[] {
     );
 }
 
-/** A constant, not configuration (spec §5.3). */
+/** A constant, not configuration (`brain.md` §3, `gap`). */
 const GAP_MIN_NOTES = 3;
 
 function gapFindings(build: IndexBuildResult): readonly LintFinding[] {

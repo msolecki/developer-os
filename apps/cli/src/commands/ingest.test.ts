@@ -2870,7 +2870,7 @@ function refusedOf(result: IngestOutcome): NoteRefusalReport["refused"] {
 
 const NO_VENDOR = { claude: false, codex: false } as const;
 
-describe("runIngest, note captures applied verbatim (spec §3.4)", () => {
+describe("runIngest, note captures applied verbatim (brain.md §6.13)", () => {
   it("applies a create note capture verbatim without resolving or invoking a vendor", async () => {
     const fixture = await installedFixture("verbatim-create", NO_VENDOR);
     const id = await seedNote(fixture, "DEV/new-note.md", NEW_NOTE);

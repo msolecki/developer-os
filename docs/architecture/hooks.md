@@ -136,6 +136,10 @@ dummy key (the A12 *request* method), killed by an alarm.
    - `Stop` carries `session_id`, the transcript-path key, `cwd`, `prompt_id`, `permission_mode`,
      `hook_event_name`, `stop_hook_active` (a boolean, `false` on the first stop),
      `last_assistant_message`, `background_tasks` and `session_crons`.
+
+   Fixtures under `tests/fixtures/hooks/` are scrubbed before check-in: the transcript-path key is
+   removed, paths are rewritten to a synthetic home, and `tests/repository/transcript-path.test.ts`
+   stays green over them.
 4. **Codex: event names, matcher, tool name, file edits (§3).** The plugin `hooks.json` uses the
    Claude-shaped document `{"hooks": {"<Event>": [{"matcher": …, "hooks": [{"type": "command",
    "command": …, "timeout": …}]}]}}` with **PascalCase** event keys: `PreToolUse`, `PostToolUse`,
@@ -300,13 +304,21 @@ records what the code does at this commit. Where the phase is not finished, it s
 Every hook entry's command is `<executable> guard <kind> --vendor <vendor>` or
 `<executable> brain status --inject --vendor <vendor>`. `hookCommandTail` in
 `packages/core/src/hooks/contract.ts` owns the tail, so both adapters render the same bytes.
-`assertHookExecutablePath` refuses an executable path that is not absolute and shell-safe, that has
-an empty, `.` or `..` segment, or that has a segment shaped like a version or a hash. The product
-refuses an unsafe path rather than quoting it, because vendors run the command through a shell.
+The executable is two tokens, `<node> <entrypoint>`: the Node path `stableNodePath` resolves (the
+version-free `<prefix>/opt/<formula>` link when it resolves to the running Node), then
+`<product-home>/bin/developer-os.mjs`. Naming Node means the entrypoint's `env node` shebang never
+runs. Both tokens must match `^/[A-Za-z0-9._+@/-]+$` and have no empty, `.` or `..` segment
+(`assertHookNodePath`); the entrypoint must also have no segment shaped like a version or a hash
+(`assertHookExecutablePath`). A refusal stops `init` with exit 2 before any transaction. The product
+refuses an unsafe path rather than quoting it, because vendors run the command through a shell. The
+command carries no working directory: a verb uses the payload's `cwd`, or the process working
+directory when the payload has none.
 
 `run()` sends hook-mode argv (`argv[0] === "guard"`, or any `--inject`) to `parseHookArgv` before
 strict dispatch (spec G9). That parser accepts exactly the two rendered token sequences. No hook-mode
 failure reaches `usageFailure()` or `emit()`, because the product's exit 2 is the vendor's *block*.
+`bin.ts` routes its own failures in hook mode, an unset `HOME` and the catch-all, through
+`hookLastResortExit`: exit 2 for a closed verb, 0 otherwise.
 
 ### 3.3 Stdin and output
 
@@ -314,6 +326,11 @@ failure reaches `usageFailure()` or `emit()`, because the product's exit 2 is th
   `decodeHookPayload` reads an allow-list of fields by explicit path. It never iterates, spreads or
   stringifies the payload object, and it never reads the transcript-path field.
 - stdout carries only a `context` outcome. Every diagnostic goes to stderr.
+- A payload whose tool name is not the verb's matcher (`HOOK_TOOL_MATCHERS`) is `allow`.
+- `block` and `advise` write `developer-os <rule-id>: <detail>` to stderr. `allow` writes nothing,
+  or one note line. A fail-open verb's failure is `allow`, never `advise`.
+- `context` text passes through the redactor and `screenAndCap` line by line, so line breaks
+  survive (`writeHookOutcome`).
 - A `reason` is at most 2,048 UTF-8 bytes (`MAX_HOOK_REASON_BYTES`) after the redactor and
   `screenAndCap`, and quotes at most 200 bytes of matched input. Injected context is at most
   16,384 bytes (`MAX_INJECTED_CONTEXT_BYTES`).
@@ -351,6 +368,14 @@ stderr line.
 | `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | `advise` when an edited path resolves through a symlink out of the project root |
 | `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit`; `block` with the first 40 diagnostic lines |
 
+`normalizeShellCommand` refuses a NUL byte (`nul-byte`, block), deletes each backslash–newline
+pair, and collapses each run of LF, CR or CRLF to one LF; no rule reads the raw string. Base rules:
+`pipe-to-shell` blocks `curl` or `wget` piped to `sh`, `bash` or `zsh` (a path before the shell name
+is admitted); `recursive-delete-root` blocks `rm` with a recursive flag on `/`, `~`, `$HOME` or
+`${HOME}` (D67 adds the `/*` forms); `hook-bypass` blocks `git commit` with `--no-verify` or `-n`
+and `git push` with `--no-verify`; `force-push` blocks `git push` with `--force`, `-f` or a `+`
+refspec. Rule IDs are public and stable: rules are added, never silently removed.
+
 Spec §3's snake_case Codex event names are superseded by §1 question 4: Codex 0.155.1 reads
 PascalCase keys and silently ignores snake_case ones. Claude 2.1.280 has no `MultiEdit` tool, so
 that matcher alternative never matches.
@@ -371,6 +396,34 @@ characters, and the line with every `\`, every `$` before `'` and every quote re
 first line needs neither: bash starts it unquoted, as the whole-command analysis does. Only the
 whole command is refused as `unterminated-quote`. `pipe-to-shell`'s regex half is unanchored, so
 for it the extra lines change nothing; its D67 token half reads each candidate like the other rules.
+
+### 3.4.1 Verb details
+
+- **Project root.** The nearest ancestor of the canonical `cwd` that holds `.git`, else the
+  canonical `cwd` (`resolveProjectRoot`).
+- **Project-local tools.** `tsc`, `biome` and `prettier` are the JS entry that
+  `<root>/node_modules/<package>/package.json` names as `bin`; the package, its manifest and the
+  entry must stay inside the root (`localBin`). `node_modules/.bin` is never used, because under
+  pnpm it is a shell wrapper Node cannot run. There is no global tool and no install.
+- **`inject`.** The slug is `slugify(basename(<project root>))`. `BrainService.sessionContext`
+  returns `vault-map.md` and the one `project-note` whose title or alias equals the slug. The output
+  is the vault map, then the note, capped at 16,384 bytes; the vault map is truncated first, at a
+  line boundary, with `VAULT_MAP_TRUNCATED_MARKER`. A gate refusal, a missing configuration or any
+  error is `allow` with one note. The verb writes nothing but its firing record.
+- **`stop`.** Runs only when the root has `tsconfig.json` and a project-local `tsc`. It checks
+  `tsconfig.check.json` when present, else `tsconfig.json`. A non-zero exit is `block`
+  (`typecheck`) with the first 40 non-empty lines; a timeout or spawn failure is `allow`.
+- **`format`.** Uses `biome format --write` when `biome.json` or `biome.jsonc` exists, else
+  `prettier --write` when a file in `PRETTIER_CONFIG_FILES` exists (a `package.json` key does not
+  count). One run covers every edited file that exists inside the root and passes
+  `ProtectedPathPolicy.assertWritable`. A formatter error is `advise` (`format-failed`).
+- **`prompt`.** Reads `<root>/.developer-os/skill-rules.json` with no-follow, at most 64 KiB,
+  exactly `{ schemaVersion: 1, rules: [{ skill, keywords }] }`: at most 200 rules and 20 keywords
+  per rule, each 1–64 characters, `skill` matching `^[a-z0-9][a-z0-9-]{0,63}$`. Matching is an
+  NFC-lowercased substring test, and the `context` line names at most 3 skills. An absent file is
+  `allow`; an invalid one is `allow` with a note naming the file.
+- **`edit`.** Resolves each edited path and never opens the file. It is `advise` (`shared-file`)
+  only when the lexical path is inside the root and its real path is not.
 
 ### 3.5 Recursion
 
@@ -403,6 +456,13 @@ absent-manifest walks. `recordHookFiring` runs after the outcome is written. It 
 directory exists, belongs to the user and has mode 0700, when the record is absent or older than
 24 h, and when `assertOrdinaryCommandAdmitted` admits. It never creates a directory, never changes the
 exit code and swallows every error.
+
+A record is canonical JSON with exactly `schemaVersion` (1), `vendor`, `event`, `productVersion`,
+`firstSeen` and `lastSeen` (`HookFiringRecordV1`). The reader ignores a record whose vendor or event
+is not its verb's. Spec 1 §2.1 fixes the admitted shape: record names, leftover `.tmp-<16 hex>`
+temps, and at most 32 children together (`MAX_HOOK_FIRING_RECORD_CHILDREN`). A per-event record
+left by an earlier build counts against that cap until uninstall; cleaning it up is open (D62,
+`BACKLOG.md` §6 Phase 6).
 
 This is a product-home write outside any transaction. It is the recorded exception spec §7.3 grants,
 bounded like Spec 1's other runtime records. Uninstall removes both plugin trees first and

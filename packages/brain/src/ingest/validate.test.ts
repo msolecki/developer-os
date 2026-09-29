@@ -1025,7 +1025,7 @@ describe("write-scope", () => {
   });
 });
 
-describe("a replacing note capture (spec §§3.4, 5.1)", () => {
+describe("a replacing note capture (brain.md §6.13, verbatim ingest)", () => {
   it("passes a replacing note capture that keeps created and collides only with its own old bytes", async () => {
     const vault = await vaultWith({
       "DEV/a.md": noteText({ title: "A", created: "2026-01-01" }, "See [[existing]].\n"),
@@ -1077,7 +1077,7 @@ describe("a replacing note capture (spec §§3.4, 5.1)", () => {
     expect(validators(result)).toContain("duplicate-detection");
   });
 
-  it("passes all nine when the projection carries only isolated and gap findings (spec §5.1)", async () => {
+  it("passes all nine when the projection carries only isolated and gap findings (brain.md §6.13)", async () => {
     // Three notes sharing tag "t", none compiled, none linked: isolated x3 and gap x1 in projection lint.
     const vault = await vaultWith({
       "DEV/a.md": noteText({ title: "A", tags: "[t]" }),

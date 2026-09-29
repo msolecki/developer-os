@@ -29,7 +29,10 @@ const envelope: CaptureEnvelopeV1 = {
   note: null,
 };
 
-/** The exact bytes this envelope rendered to before `note` existed (spec §3.2). */
+/**
+ * The exact bytes this envelope rendered to before `note` existed (`brain.md` §6.13,
+ * `CaptureEnvelopeV1.note`).
+ */
 const PRE_NOTE_FIXTURE_TEXT = [
   "---",
   "schemaVersion: 1",

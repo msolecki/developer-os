@@ -452,8 +452,8 @@ Measured in a disposable `HOME` during the 2026-09-04 audit; each row names the 
   `docs/migration/instruction-inventory.md` §4 maps onto one of these. §5's decline of
   transcript-based capture stands; the founder's 2026-09-04 decision reopens
   `session_start_injection` for A13.
-- **`proposeClaudeUninstall` filters by path prefix only**, without the `owner` check its Codex
-  twin performs. Owner: roadmap Phase 5.
+- **Closed by A12:** `proposeClaudeUninstall` now performs the owner check its Codex twin performs
+  (`packages/adapter-claude/src/install.ts` — `proposeClaudeUninstall`).
 
 ## 14. Observed for A12 against Claude Code 2.1.280 on 2026-09-22
 
@@ -552,6 +552,14 @@ allow and ask lists are personal choices and `env` routinely holds credentials. 
 on an exact string match. The check reports missing **rule IDs**, never a user string, and never
 returns `fail`. Codex is not examined, and the message says so.
 
+A rule ID counts as present only when every string of its `CLAUDE_DENY_RULES` entry is present. An
+absent file, one over `VENDOR_SETTINGS_MAX_BYTES` (1 MiB), invalid JSON (a fixed message, because
+`JSON.parse` quotes its input) and a `permissions.deny` of the wrong shape each `warn`. Exact
+matching warns about an equivalent rule spelled differently; that false warning is the safe
+direction, and the match widens only with observed vendor semantics. `doctor` adds the check
+outside `guarded` (`apps/cli/src/commands/doctor.ts` — `checkVendorConfig`), because `guarded`
+turns a throw into `fail`.
+
 ### 15.1 Observed against Claude Code 2.1.280 on 2026-09-23
 
 Recorded under founder decision D57 by a headless agent session.
@@ -617,6 +625,21 @@ and never reviews its content.
   plan.
 - **Rollback** restores each replaced or removed Claude file from its retained blob and removes each
   file the update created, before the manifest and active record move back.
+
+## 18. Instruction projection (A12)
+
+`packages/adapter-claude/src/instructions.ts` — `renderInstructionTree` is pure and
+byte-deterministic; `foundation.md` §12 has the lifecycle.
+
+- `rule`: `<product-home>/claude/instructions/<id>.md`, imported by one
+  `@<product-home>/claude/instructions/<id>.md` line per rule, sorted by id, inside the
+  `H/.claude/CLAUDE.md` block.
+- `scoped-rule`: `H/.claude/rules/developer-os-<id>.md`, `paths:` frontmatter kept.
+- `output-style`: `H/.claude/output-styles/developer-os-<id>.md`, never selected.
+- `agent`, `skill`: the plugin's `agents/<id>.md` and `skills/<id>/`.
+- A `thinCommand` skill also gets a generated `commands/<id>.md` whose body only invokes
+  `developer-os:<id>`.
+- Instruction ids carry no prefix; an instruction and a workflow claiming one plugin path refuse.
 - **Proof scope.** The planner-level rules are held by the core owner tests; the synthetic on-disk
   lifecycle (`tests/e2e/release-update.test.ts`) installs no Claude owner. The draft grammar
   (`PlannerManagedArtifactDraftV2` in `packages/core/src/update/planner.ts`) has no `instruction`

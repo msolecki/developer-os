@@ -107,8 +107,8 @@ function pathRefused(path: string, why: string): BrainRefactorRefusal {
 }
 
 /**
- * Spec §6.2's containment, stated directly: no component below the content
- * root is a symlink, the path canonicalizes inside a configured topic folder
+ * The refactor containment of `brain.md` §6.13, stated directly: no component
+ * below the content root is a symlink, the path canonicalizes inside a configured topic folder
  * (or `_graveyard/` for retire and merge), and a `create` target is absent.
  * Returns the canonical absolute target.
  */

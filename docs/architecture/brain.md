@@ -301,6 +301,12 @@ The surface is `developer-os brain reindex [--dry-run] [--json]`, `brain lint [-
 the search alias. Reindex is the only mutating command and stages exactly the four §6.3 artifacts
 through a Foundation transaction; dry-run writes nothing. Lint, search and status are read-only.
 
+It also carries `brain retire <note> [--dry-run] [--json]` and `brain refactor --rename <note>
+<new-name> | --move <note> <topic-folder> | --merge <source> <target> | --split <note> <heading>`,
+each with `[--dry-run] [--json]` and no `--yes`; `<heading>` is one ATX heading of level 2–6, at
+most 512 characters. Both mutate through the §6.13 contracts and dispatch after
+`assertOrdinaryCommandAdmitted`.
+
 Brain adds no exit class: `1` is validation or lint error, `2` malformed config or invalid query,
 `5` a path-security refusal, and `6` incomplete transaction/recovery required. `brain retire` and
 `brain refactor` also use Foundation's `3` for their conflicts: an occupied destination
@@ -322,10 +328,86 @@ write-free dry run.
 ### 6.13 Brain workflows, note captures and the refactor verbs (A12b)
 
 Recorded 2026-09-26 from the A12b plan (`plans/2026-09-22-developer-os-brain-workflows.md`, closed and
-deleted 2026-09-26; `git show d7043d5:` holds it) and its spec
-(`docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`, approved by D47). The spec
-stays normative; these are the choices the plan made where the spec was silent or conflicted with the
-code, and the residuals the spec accepted.
+deleted 2026-09-26; `git show d7043d5:` holds it) and its spec, approved by D47 and deleted on
+2026-09-29 (`git show 343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`).
+The contracts below are what survived the spec; the numbered decisions are where the plan chose
+where the spec was silent or conflicted with the code; the residuals are the ones the spec accepted.
+
+**Contracts.**
+
+- **Three mutation paths, and nothing else writes the vault.** P1: a plain capture, written by the
+  ingest model, `create` only. P2: a note capture, applied verbatim with no vendor call, as `create`
+  or as a `replace` bound to its capture-time hash. P3: `brain retire` and `brain refactor`, run by
+  the person and planned deterministically. `brain-answer` and `brain-report` use P1 only when
+  `file-back` is true; `brain-compile` and `brain-enhance` use P2; `brain-garden` uses P2 and prints
+  P3 commands with `--dry-run` only. The one verb A12b added is `capture.writeNote`
+  (`workflow-schema.md` §5).
+- **`capture --note <path>`** (`apps/cli/src/commands/capture.ts`). `<path>` is content-root-relative
+  and obeys `ProposedNote.path`'s rules (`isUnsafeProposedNotePath`). Before anything is written the
+  destination is proven inside a configured topic folder, outside every `PRIVATE_FOLDERS` segment and
+  the indexes directory, and not reached through a symlink; the redacted, normalized text plus one
+  `\n` parses with no `error` issue and is at most `MAX_PROPOSED_NOTE_CHARS`; an existing destination
+  must be a canonical note, and the SHA-256 hex of its bytes is recorded as `beforeSha256`, else
+  `null`.
+- **`CaptureEnvelopeV1.note`** is `{ path, beforeSha256 } | null`, additive under
+  `schemaVersion: 1`. `renderCaptureFile` emits it only when non-null, so a plain capture renders
+  byte-identically; `parseCaptureFile` reads absent as `null` and refuses as `unparseable` anything
+  but exactly those two keys, a valid path, and 64 lowercase hex or `null`. It is preserved, never
+  recomputed, including by `review --decision edit`, and it is outside the deduplication hash (R3).
+  A binary without the field plans a `create` and meets the occupied-path refusal, so it fails
+  closed. `review` rows carry `note: { path, replaces } | null`, and the human line reads
+  `creates <path>` or `replaces <path>`.
+- **Verbatim ingest** (`apps/cli/src/commands/ingest.ts`). A note capture's proposal is its content
+  plus `\n`, built without a vendor; vendor resolution and the exit-4 refusal apply only to a batch
+  holding a plain capture. The redaction key is still loaded, or created, before selection
+  (`loadOrCreateRedactionKey`), so a note-only batch can create `state/redaction.key` (D62). Before
+  validation the destination must still hash to `beforeSha256`, or still be absent when that is
+  `null`. Otherwise, and on a `TransactionPreconditionError` at apply, the capture is refused with
+  exit 3 and reason `note_changed_since_capture` and stays `accepted`. The recovery is
+  `review --decision reject` and then rerunning the workflow, never rerunning `ingest`. The nine
+  validators judge a projection in which the destination is replaced, not added: for a replacing
+  capture `duplicate-detection` ignores the destination itself and `source-and-provenance` requires
+  the same `created`. The apply is the usual ladder with one `replace` carrying
+  `expectedBeforeHash = beforeSha256`, or one `create`.
+- **Ingest ignores `isolated` and `gap` by construction**: the validators that read lint filter on
+  `provenance`, `links` and `duplicates` by name (`packages/brain/src/ingest/validate.test.ts`).
+- **Refactor algorithm** (`packages/brain/src/refactor/`, `apps/cli/src/commands/refactor.ts`).
+  Build the vault in memory; plan as a pure, reversed-reader-deterministic function; check the
+  post-conditions below on the projection; refuse above `MAX_REFACTOR_MUTATIONS` (256, the
+  executor's participant bound) before any ID is allocated; stop under `--dry-run`. Otherwise run
+  one transaction (`brain-retire` or `brain-refactor`), each `replace` and `remove` carrying the hash
+  of the bytes read, then `brain-refactor-reindex`. A crash between the two leaves `index-drift`,
+  which `brain reindex` clears. A destination canonicalizes inside a configured topic folder (or
+  `_graveyard/` for retire and merge), passes no symlink, and a `create` target must be absent. A
+  note that is not valid UTF-8 refuses as `brain_refactor_input_invalid`.
+- **Modes.** `retire`: remove, then create `_graveyard/<note>` with the bytes unchanged; refused
+  while anything links to or cites the note. `--rename`/`--move`: remove, then create at the new path
+  with the bytes unchanged. `--merge`: the target's header stays byte-exact, and its body gains
+  `\n\n## <source title>\n\n<source body, trimmed>\n`; the source goes to `_graveyard/`. `--split`:
+  the section, from its heading to the next heading of equal or higher level, becomes `<slug>.md`,
+  and the parent keeps `See [[<slug>]].` in its place. **No existing frontmatter is ever edited.**
+  The split child is rendered fresh: the heading as `title`, the parent's `type`, `tags` and
+  `author`, `created` today, `stage: emerging`, `reviewed: null`, `summary` "Split from <parent
+  title>.". `<slug>` is the heading NFC-lowercased with each non-alphanumeric run turned into `-`;
+  empty or occupied refuses.
+- **Link rewriting.** Only occurrences `extractLinks` counts. A link whose old resolution was the
+  moved note is rewritten only if its text no longer resolves to the new target, so title- and
+  alias-tier links stay untouched. The new text is the target's basename without `.md` when that
+  resolves uniquely, else its content-root path without `.md`. `#anchor` and `|display` are kept,
+  except the split anchor, which is dropped. Headers are never edited.
+- **Post-conditions**, all refusing `refactor_postcondition_failed`: every created or replaced note
+  parses; no `error` lint finding is new, compared on (class, mapped path, key) with `index-drift`
+  excluded; the graph's edge multiset, self-edges dropped, equals the mapped pre-state's, plus the
+  parent→child edge of a split.
+- **Agent sessions.** An applied `retire` or `refactor` refuses with exit 5
+  `brain_refactor_in_agent_session` when any `AGENT_DETECTION_ROWS` marker is set
+  (`anyAgentMarker`), before config is read; `--dry-run` is always allowed. In-process tests inject
+  that environment and never read `process.env`.
+- **Result and refusals.** `--json` returns `BrainRefactorResultV1` (`transactionId` `null` under
+  `--dry-run`). Exit 2: usage (zero or two mode flags) and `brain_refactor_input_invalid`. Exit 3:
+  the three conflicts in §6.11. Exit 1: `refactor_postcondition_failed`, `refactor_too_wide`, and
+  `refactor_reindex_failed` (applied, index not rebuilt; recovery `brain reindex`). Exit 5:
+  `brain_refactor_path_refused`, `brain_refactor_in_agent_session`. Exit 6: incomplete transaction.
 
 **Implementation decisions.**
 
@@ -364,15 +446,15 @@ code, and the residuals the spec accepted.
     error, and the refactor's post-condition refuses it with `refactor_postcondition_failed`. It is
     fail-closed and goes beyond residual R6 below.
 
-**Accepted residuals** (spec §8).
+**Accepted residuals.**
 
 | # | Residual | Disposition |
 |---|---|---|
 | R1 | In an interactive session the vendor's own tools can still write the vault; the declared scope and the skill text are instructions, not enforcement | A13's `guard path` is the only mechanism that could deny it; recommended to A13, not decided by A12b |
 | R2 | `brain-enhance` binds the note's hash at **capture** time, not at the agent's read: an edit made between the agent's read and its `capture` is overwritten by a revision that never saw it | accepted; the person reviewing the capture sees the full note. Closing it needs `--note-sha256` from the agent |
 | R3 | The deduplication hash is content-only, so two note captures with identical text and different destinations are one capture. Likewise a `--note` capture whose normalized text equals an existing plain capture returns `duplicate: true` with that capture's id and keeps that capture's envelope | accepted; the second is reported as a duplicate at exit 0 |
-| R4 | The agent-session detection that keeps `brain retire` and `brain refactor` person-run (spec §6.7) is environment-based and advisory against an adversary who strips it | accepted; it targets planted instructions in ordinary sessions |
-| R5 | `brain-garden`'s `limit`, one-capture-per-note and "never apply" are prose | backstopped by review of every capture and by the §6.7 detection; a second capture against one note fails its precondition at ingest with the reject-and-rerun recovery |
+| R4 | The agent-session detection that keeps `brain retire` and `brain refactor` person-run (the agent-session contract above) is environment-based and advisory against an adversary who strips it | accepted; it targets planted instructions in ordinary sessions |
+| R5 | `brain-garden`'s `limit`, one-capture-per-note and "never apply" are prose | backstopped by review of every capture and by the agent-session refusal; a second capture against one note fails its precondition at ingest with the reject-and-rerun recovery |
 | R6 | `--merge` does not union the source's `tags`/`aliases` into the target's frontmatter | follows from "no frontmatter patcher"; links by the source's title are still rewritten |
 | R7 | Obsidian renders a note capture's inner frontmatter as body text inside quarantine | cosmetic |
 | R8 | A replacing note capture normalizes and redacts the **whole** note: line endings, normalization form, stripped control and format characters, trimmed trailing whitespace, and any high-entropy run of 40+ characters redacted | accepted as the price of "the reviewed bytes are the written bytes"; `review` shows the redaction count. Narrowing it needs a redactor that takes the class set to apply, the same change NEW-36 asks for |

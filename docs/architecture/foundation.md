@@ -37,7 +37,7 @@ Within those packages, one responsibility per path:
 | `apps/cli/src/main.ts` | pure command dispatch returning `CliResult` |
 | `apps/cli/src/io.ts` | injectable user interaction |
 | `apps/cli/src/context.ts` | the composition root and the guards it supplies |
-| `apps/cli/src/commands/` | one module or directory per top-level command (`automation/`, `git/` and `update/` are directories; `brain.ts` dispatches `reindex.ts` and `refactor.ts`), plus shared support modules that are not commands: `brain-dependencies.ts`, `brain-template.ts`, `claude-capabilities.ts`, `codex-capabilities.ts`, `output-schemas.ts`, `project-template.ts`, `quarantine.ts`, `testing.ts`, `untrusted-file.ts` and `vendor-config.ts` |
+| `apps/cli/src/commands/` | one module or directory per top-level command (`automation/`, `git/` and `update/` are directories; `brain.ts` dispatches `reindex.ts` and `refactor.ts`; `project` has no module of its own, and `main.ts` routes `project init` to `project-init.ts` and `project check` to `project-check.ts`), plus shared support modules that are not commands: `brain-dependencies.ts`, `brain-template.ts`, `claude-capabilities.ts`, `codex-capabilities.ts`, `output-schemas.ts`, `project-template.ts`, `quarantine.ts`, `testing.ts`, `untrusted-file.ts` and `vendor-config.ts` |
 | `packages/core/src/result.ts` | stable exit and error contracts |
 | `packages/core/src/config/` | runtime paths and TOML configuration |
 | `packages/core/src/plans/` | exact change-plan model |
@@ -388,6 +388,20 @@ artifact path or any existing filesystem leaf collides with the newly reserved e
 activation path; no V1 claim is adopted or retyped there. The active opt-in-surfaces design §2.1
 freezes every retained sync/marker/status/lock/log path and record schema plus the three owned journal
 directories that spec 2 must reserve/create at migration.
+
+**The `instruction` kind (A12, 2026-09-26).** `ManagedArtifactV2` has two `instruction` arms
+(`packages/core/src/manifest/v2.ts` — `instructionArtifact`). A `content` row is a whole file the
+product created: `mergeStrategy: "dedicated"`, `existedBefore: false`, null restore fields, and an
+identity `{ category, id, source }`. A `block` row is the one marked block in a shared vendor
+instruction file: `mergeStrategy: "marked-block"`, owner `claude` or `codex`, category
+`vendor-file`, source `default`, 1 to 64 `members` in strict `(category, id)` order, and at most
+one per owner. Its `existedBefore` follows the file, and the whole-file backup is evidence only,
+never restored. `marked-block` is refused on every other arm. Drift hashes a `content` row like a
+regular file and a `block` row by its extracted block alone: absent markers are `missing`,
+malformed ones `block_malformed`, an edit `content_changed`, and bytes outside the block are never
+drift. Uninstall never downcasts a `block` row
+(`apps/cli/src/commands/uninstall.ts` — `downcastArtifactV2`); the instruction detach (§12.4)
+removes it first.
 
 **V1 refusal, bootstrap recovery routing, and the V2 handoff admission — 2026-09-17 (decision D18).**
 The migration half of the amendment above is withdrawn: no V1 manifest is ever migrated, and only
@@ -1242,7 +1256,7 @@ two V2 Foundation ref types.
 
 ### 11.6 Proof scope (D72 P7(f))
 
-The §12 gate is proven on the synthetic release for both architectures: install, preview and apply,
+Spec 2's §12 gate is proven on the synthetic release for both architectures: install, preview and apply,
 a second apply, rollback, reapply and uninstall (`tests/e2e/release-update.test.ts`); every durable
 death point of apply, rollback and a verifier-rejected update recovers
 (`tests/integration/update/recovery.test.ts`); the signature chain runs through the production
@@ -1250,3 +1264,214 @@ transport (`tests/integration/update/signature-transport.test.ts`); archives and
 request/result binding for both architectures (`tests/integration/update/archive-planner.test.ts`).
 The synthetic home carries the core owner only. The Git and automation leg joins with NEW-113, and
 the real-release half waits for Task 11b and A16.
+
+## 12. Instruction artifacts (A12)
+
+**Added 2026-09-29**, carrying the contracts of the A12 design (approved D47, amended D51 and D62)
+that the shipped code implements; the spec
+(`docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`) stays until
+Spec 1 and Spec 2 stop citing it. The block grammar lives in Core beside drift; each adapter
+renders its own vendor tree (`claude-adapter.md` §18, `codex-adapter.md` §16) and imports neither
+the other adapter nor the CLI.
+
+### 12.1 Sources and bounds
+
+- **Defaults** are the release's `instructions/` tree, read only through the admitted release
+  (`apps/cli/src/instructions/sources.ts` — `loadInstructionDefaults`); the working tree is never
+  read. The catalog is strict
+  (`packages/core/src/instructions/catalog.ts` — `validateInstructionCatalog`): `schemaVersion: 1`,
+  rows `{ category, id, legacyName, vendors, thinCommand }` sorted and unique, `thinCommand` only
+  on a `skill`. A file no row claims, or a row with no file, refuses `instruction_catalog_invalid`,
+  exit 2. `plugins/claude/` and `plugins/codex/` are rendered from the defaults alone.
+- **Overrides** live under `<product-home>/instructions/<vendor>/`, in the category directories
+  `rules`, `scoped-rules`, `output-styles`, `agents` and `skills`; the id is `<id>.md` or the skill
+  directory name (`apps/cli/src/instructions/sources.ts` — `loadInstructionOverrides`). An override
+  with a default's `(category, id)` replaces it on that vendor, a skill as a whole directory
+  keeping the default's `thinCommand`; a new pair adds an artifact; both record `source: "user"`.
+  An unknown category directory refuses; a category the vendor lacks (Codex `output-styles`) is
+  reported `unsupported-vendor`. The product never creates, edits or deletes anything under the
+  tree, it is never a manifest row, fresh `init` admits it as opaque user data, and the
+  absent-manifest walk classifies it as user data
+  (`packages/core/src/lifecycle/absent-manifest.ts` — `USER_DATA_HOME_ENTRIES`).
+- **Bounds** (`packages/core/src/instructions/bounds.ts` — `INSTRUCTION_BOUNDS_V1`): an id matches
+  `^[a-z0-9][a-z0-9-]{0,63}$`, is not prefixed `developer-os-` and names no workflow; a relative
+  segment matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` at depth ≤ 4; a file is ≤ 256 KiB of UTF-8
+  with no BOM, NUL or CR; a skill is ≤ 64 files and ≤ 1 MiB; a vendor after the merge is ≤ 128
+  artifacts and ≤ 8 MiB; a scoped rule's `paths:` holds 1 to 32 globs of ≤ 256 bytes; rule and
+  scoped-rule text may not contain a block marker. A violation refuses
+  `instruction_source_invalid`, exit 2, naming path and line only. The rendered Codex block body
+  is ≤ 64 KiB (`instruction_block_too_large`, exit 2). A product home whose segments are not all
+  `[A-Za-z0-9._-]` cannot appear in a Claude `@` line and refuses
+  `instruction_path_not_importable`, exit 2.
+- **Redaction.** `tests/repository/instruction-defaults.test.ts` scans `instructions/` and
+  `templates/project/` on every run. A commit that adds or changes a default also runs the same
+  scanner with a private pattern file kept outside the repository, `--patterns <file>`
+  (`tests/tools/scan-instruction-defaults.ts` — `scanInstructionDefaults`), and records the command
+  and its zero finding count. The author of a default never opens a legacy path; the founder
+  supplies legacy text through a copy outside the repository.
+
+### 12.2 The marked block
+
+- **Grammar** (`packages/core/src/manifest/instruction-block.ts` — `extractInstructionBlock`):
+  `<!-- developer-os:begin v1 -->`, a managed-by header line naming
+  `<product-home>/instructions/<vendor>/`, the body, `<!-- developer-os:end v1 -->`. It is
+  well-formed when each marker occurs exactly once on its own LF-terminated line, begin before
+  end; the block's bytes run from the begin line through the end line's LF. Any other count or
+  order is malformed.
+- **First insertion**
+  (`packages/core/src/manifest/instruction-block.ts` — `insertInstructionBlock`) appends after the
+  file's final LF, adding one LF first if a non-empty file lacks it; that LF is the only byte an
+  install and uninstall cycle may leave. A missing file is created holding only the block.
+- **Merge** (`packages/core/src/manifest/instruction-block.ts` — `decideInstructionBlockMerge`),
+  base = the row's `blockHash`: malformed markers refuse `instruction_block_malformed`, exit 3;
+  absent markers re-insert the proposal (reported `restored` when a base exists); a current block
+  equal to the proposal writes nothing; equal to the base, it writes the proposal; anything else
+  refuses `instruction_block_conflict`, exit 3, with conflict evidence: three hashes and a redacted
+  two-way diff bounded at 1 MiB and 1,000 lines. The write is one `replace` of the whole file
+  guarded by the whole-file hash read at plan time, so a concurrent edit anywhere refuses. Every
+  exit-3 refusal carries one recovery text
+  (`apps/cli/src/instructions/attach.ts` — `instructionConflictRecovery`): move the edits into
+  `<product-home>/instructions/<vendor>/`, delete the whole block, re-run.
+
+### 12.3 `init` installs and reconciles
+
+- `init --adapters <claude,codex|claude|codex|none>`
+  (`apps/cli/src/instructions/apply.ts` — `parseAdaptersFlag`; any other value
+  `adapters_flag_invalid`, exit 2). A fresh `init` without the flag selects `none`, writes nothing
+  into a vendor home and names the flag; a re-run without it keeps the stored `adapters.*`. A
+  selected vendor whose CLI is absent, unreadable or below its floor refuses
+  `adapter_unavailable`, exit 4, before any mutation; no admitted release refuses
+  `packaged_release_unavailable`, exit 4; a release whose version or `releaseIdentityHash` differs
+  from the installed one refuses `release_mismatch`, exit 4
+  (`apps/cli/src/instructions/apply.ts` — `assertInstalledRelease`).
+- The step runs after the bootstrap handoff, is not in `INIT_OWNED_CHECKS`, and its failure never
+  reverts the installed home; `init` exits with its code. On an installed V2 home
+  (`apps/cli/src/commands/init.ts` — `settleExistingV2`) drift in a `claude` or `codex` row is
+  left to the planners below; drift in any other row still refuses.
+- `apps/cli/src/instructions/apply.ts` — `applyInstructions` runs, each under its own gate entry:
+  detach every deselected vendor (§12.4); attach the selection as one Foundation transaction
+  (`apps/cli/src/instructions/attach.ts` — `planInstructionAttach`: every file, both blocks, any
+  whole-file backup, the `adapters.*` values and the manifest rewrite); then register Codex
+  (`codex-adapter.md` §16). An unchanged re-run writes and registers nothing.
+- **Content targets.** An unmanaged entry refuses `instruction_target_occupied`, exit 3, and is
+  never adopted; a managed file the user edited refuses `instruction_target_drifted`, exit 3; a
+  deleted managed file is re-created (`restored`); a row the render no longer produces is removed
+  unless edited.
+- **Parents.** A missing parent of an authorized target becomes a `directory` row; the caller
+  creates it `0700` before `execute()` (the executor creates no directory) and removes the ones it
+  created, deepest first, if the transaction refuses. A parent that already exists is never a row.
+- **Backups.** A pre-existing vendor file's whole-file backup is the content-addressed
+  `backups/instruction-<owner>-<sha256>`, reused when identical, admitted by the bookkeeping shape
+  (`packages/core/src/lifecycle/bookkeeping.ts` — `INSTRUCTION_BACKUP_NAME`), never restored.
+
+### 12.4 Detach and `uninstall`
+
+- `apps/cli/src/instructions/detach.ts` — `planInstructionDetach` removes the detached vendor's
+  rows outside the product home, plus the Codex home record when Codex detaches. A drifted content
+  file refuses `managed_drift`, exit 3; a vanished one drops its row. A block equal to its base is
+  stripped (`replace` with the file minus the block, or `remove` when the product created the file
+  and nothing remains); absent markers drop the row; malformed markers or an edited block refuse
+  exit 3, an edit with conflict evidence. The same transaction sets the vendor's `adapters.*` to
+  `false`. After the commit, product-created directories the plan emptied are removed deepest
+  first; any others are kept and reported. Codex is unregistered before any file changes.
+- `uninstall` detaches both vendors before the drained uninstall
+  (`apps/cli/src/lifecycle/uninstall.ts` — `detachVendorInstructions`), which then sees only
+  product-home rows; its dry run and prompt preview do not detach. A vendor's product-home rows
+  (`<product-home>/claude/instructions/`, the Codex marketplace tree, `codex/registration.json`)
+  stay after a deselection and leave with the drained uninstall.
+
+### 12.5 Vendor homes and the closed authorization
+
+- `H`, `P` and `C` are resolved once per command
+  (`apps/cli/src/instructions/vendor-homes.ts` — `resolveVendorHomes`). `C` is the Codex home the
+  Codex attach recorded in `<product-home>/codex/codex-home`
+  (`apps/cli/src/instructions/vendor-homes.ts` — `codexHomeRecordPath`), read no-follow and
+  owner-checked; before any attach it is `CODEX_HOME` when absolute, else `H/.codex`. A set
+  absolute `CODEX_HOME` that differs refuses `codex_home_mismatch`, exit 3; deselecting Codex
+  removes the record. `CLAUDE_CONFIG_DIR` is never followed, and `doctor`'s `instructions` check
+  warns while it is set.
+- `apps/cli/src/bootstrap/admission.ts` — `isVendorAuthorized` is the whole external
+  authorization, exact per owner and arm, refusing `.` and `..` segments. `claude`: the subtree
+  `H/.claude/skills/developer-os/` (`file`, `directory`, and `instruction` content of category
+  `agent`, `skill` or `command`); `H/.claude/rules/developer-os-<id>.md` (`scoped-rule`);
+  `H/.claude/output-styles/developer-os-<id>.md` (`output-style`); exactly `H/.claude/CLAUDE.md`
+  (block only); the directories `H/.claude`, `H/.claude/skills`, the plugin root,
+  `H/.claude/rules` and `H/.claude/output-styles`. `codex`: `C/agents/developer-os-<id>.toml`
+  (`agent`), exactly `C/AGENTS.md` (block only), and the directories `C` and `C/agents`. A symlink
+  at any component of a target refuses `instruction_target_symlinked`, exit 5.
+
+### 12.6 `doctor`
+
+- `instructions` (`apps/cli/src/commands/doctor.ts` — `inspectInstructions`) lists, per selected
+  vendor, every installed catalog row, every override and the vendor's `vendor-file` block, sorted
+  by `(owner, category, id)`, each `installed`, `drifted`, `missing`, `emulated` (a Codex scoped
+  rule), `unsupported-vendor` (a Codex output style) or `held-back`. Any drifted row makes its
+  artifact `drifted`. It fails, exit 3, on `drifted`, `missing` or `block_malformed`, and warns on
+  `unsupported-vendor`, `held-back` and a set `CLAUDE_CONFIG_DIR`. Human output is one
+  `<owner> <category>/<id>: <source>, <state>` line per artifact.
+- `held-back` is a Claude category in
+  `apps/cli/src/instructions/attach.ts` — `UNPROVEN_CLAUDE_CATEGORIES`: not installed until a real
+  session proves it loads. The set has been empty since the billed row passed
+  (`claude-adapter.md` §14.1).
+- `codex-registration` (`apps/cli/src/commands/doctor.ts` — `checkCodexRegistration`):
+  `unregistered` or `stale` fail exit 1, `cache-stale` only under `--probe`, an absent CLI warns;
+  the recovery is re-running `init`. Neither check is init-owned.
+
+### 12.7 Accepted residuals
+
+- A default cannot be disabled, only replaced by an override.
+- Codex registration is an unjournaled external effect: a crash between the attach commit and
+  registration leaves an unregistered tree until the next `init`.
+- The conflict diff is two-way; the base block's bytes are not retained.
+
+## 13. Project templates: `project init` and `project check` (A14)
+
+**Added 2026-09-29**, carrying the contracts of the A14 tooling-verbs design (D47, amended by
+NEW-108) that the shipped code implements; the spec
+(`docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`) stays while the umbrella
+design cites it.
+
+### 13.1 `project init [<dir>] [--dry-run] [--json]`
+
+- **Template set.** `PROJECT_TEMPLATE` (`apps/cli/src/commands/project-template.ts` —
+  `PROJECT_TEMPLATE`) embeds the flat files of `templates/project/`: `AGENTS.md`, `CLAUDE.md` and
+  `_Context.md`. They are static bytes with no substitution, and every file lands at the project root.
+  `project-template.test.ts` pins the exact names, at most `PROJECT_TEMPLATE_MAX_FILES` (8), each at
+  most `PROJECT_TEMPLATE_MAX_BYTES` (64 KiB), byte-equal to the checked-in copy and finding-free. An
+  empty set refuses `project_templates_unavailable`, exit 4, before any read or write.
+- **Before any write.** An uninitialized product refuses `project_not_initialized`, exit 1: the
+  journals live in the product home. `<dir>` defaults to the working directory, is canonicalized and
+  must be an existing directory (`project_root_not_directory`, exit 2). A root inside, containing or
+  equal to the product home or the Brain refuses `project_root_overlaps_product`, exit 5.
+- **Overrides (D5).** `<product-home>/templates/project/<name>` replaces the default of the same name
+  as a whole file; any other name is ignored with a warning. An override is read through
+  `readUntrustedText` at the 64 KiB bound. An unreadable one refuses `project_template_unreadable`
+  with the reader's exit code; any redactor finding refuses `project_template_secret`, exit 5,
+  because the output is a repository file that may be pushed.
+- **Create-only.** If any target exists, `project_file_exists`, exit 3, lists every existing path and
+  nothing is written; there is no merge and no `--force`. Otherwise one Foundation transaction, kind
+  `project-init`, all `create`, with `<dir>` the owned root and the product home and the Brain
+  excluded. `--dry-run` writes nothing and returns `transactionId: null`.
+- **The user's files.** They get no manifest row and no drift check, and `uninstall` never removes
+  them. No vendor settings file is ever written (`threat-model.md` §7).
+- **Key.** Never created: `readRedactionKey`, else an ephemeral key, which only decides whether a
+  finding exists.
+
+### 13.2 `project check [<dir>] [--json]`
+
+Read-only; it spawns nothing and needs no installed product: an unreadable configuration means no
+user patterns, and an absent key means an ephemeral one. `ProjectCheckReportV1` carries
+`DoctorCheck` rows from a closed set:
+
+| Check | Status | When |
+|---|---|---|
+| `instruction-file` | `warn` | neither `AGENTS.md` nor `CLAUDE.md` exists |
+| `instruction-size` | `warn` | an instruction file exceeds `PROJECT_INSTRUCTION_WARN_BYTES` (40,000, product-chosen) |
+| `instruction-secrets` | `fail` | a redactor finding in an instruction or template file (exit 5), or a file over `PROJECT_CHECK_MAX_READ_BYTES` (1 MiB), not read past the bound (exit 1) |
+| `instruction-secrets` | `warn` | a present file was not scanned: a link or a special file |
+| `template-set` | `warn` | a template name is absent from `<dir>` |
+
+A secret is reported as file, class and 1-based line: a whole-file pass, then one pass per line,
+with line `null` when no single line carries the finding (a multi-line key block). The value and the
+fingerprint are never printed. `doctorExitCode` picks the exit code (§6's order); warnings alone
+exit 0.

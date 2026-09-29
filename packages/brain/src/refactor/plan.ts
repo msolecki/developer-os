@@ -58,7 +58,7 @@ export class RefactorRefusal extends Error {
   }
 }
 
-/** The executor's participant bound (spec §6.6). */
+/** The executor's participant bound (`brain.md` §6.13, refactor algorithm). */
 export const MAX_REFACTOR_MUTATIONS = 256;
 
 export interface RefactorInputV1 {
@@ -159,8 +159,8 @@ export function requireNote(state: PreStateV1, path: string): IndexedNote {
 
 /**
  * Rewrites every link in another note whose old resolution is `moved` and whose
- * text no longer reaches `target` once `moved` is gone (spec §6.4). Title- and
- * alias-tier links keep resolving and are left alone.
+ * text no longer reaches `target` once `moved` is gone (`brain.md` §6.13, link
+ * rewriting). Title- and alias-tier links keep resolving and are left alone.
  */
 export function rewriteReferrers(
   state: PreStateV1,
@@ -427,7 +427,7 @@ async function checkPostconditions(
 
 /**
  * Pure: reads through `input.build` and returns a plan, writing nothing
- * (spec I4). Every refusal is a `RefactorRefusal`.
+ * (`brain.md` §2). Every refusal is a `RefactorRefusal`.
  */
 export async function planRefactor(
   request: RefactorRequestV1,

@@ -307,7 +307,7 @@ const UNTOUCHED_RECOVERY =
 /**
  * A note capture refused as `note_changed_since_capture` is also left untouched, but
  * `UNTOUCHED_RECOVERY`'s "the next run tries it again" is false for it: the bound hash never
- * changes, so every rerun refuses the same way (spec §3.4).
+ * changes, so every rerun refuses the same way (`brain.md` §6.13, verbatim ingest).
  */
 const NOTE_CHANGED_RECOVERY =
   "a capture refused as note_changed_since_capture was written against a note that has changed since, and running ingest again refuses it the same way: developer-os review --id <id> --decision reject, then run the workflow again against the current note";
@@ -1347,8 +1347,8 @@ async function exists(context: CliContext, path: string): Promise<boolean> {
  * existing notes. The refusal is raised before the transaction so the user meets
  * a sentence about their own vault rather than a `TransactionPlanError`.
  *
- * **The one exception is a note capture (spec §3.4)**, where a person reviewed the exact
- * bytes: its bound destination is a `replace` carrying the capture-time hash as
+ * **The one exception is a note capture (`brain.md` §6.13, verbatim ingest)**, where a
+ * person reviewed the exact bytes: its bound destination is a `replace` carrying the capture-time hash as
  * `expectedBeforeHash`, or a `create` that refuses as `note_changed_since_capture`.
  *
  * **No `validateChangePlan`**, for the reason a capture skips it: a note is the
@@ -1568,9 +1568,10 @@ async function leftAtOf(
 /* ------------------------------------------------------------ one capture */
 
 /**
- * Spec §3.4's precondition, checked before the capture is staged: the destination still
- * holds the bytes `capture --note` hashed, or is still absent for a create. Any mismatch,
- * including a replaced note that is now gone, is `note_changed_since_capture`.
+ * The verbatim-ingest precondition (`brain.md` §6.13), checked before the capture is
+ * staged: the destination still holds the bytes `capture --note` hashed, or is still
+ * absent for a create. Any mismatch, including a replaced note that is now gone, is
+ * `note_changed_since_capture`.
  */
 async function assertNoteUnchanged(
   context: CliContext,
@@ -2361,7 +2362,7 @@ export async function runIngest(
     const selection = await selectCaptures(context, quarantine, redact, limit);
 
     /**
-     * After selection, because only a plain capture needs a vendor (spec §3.4): a batch of
+     * After selection, because only a plain capture needs a vendor (`brain.md` §6.13): a batch of
      * note captures is applied verbatim, so neither resolution nor its exit-4 refusal
      * applies to it. The key is loaded before this now; selection needs it to parse.
      */

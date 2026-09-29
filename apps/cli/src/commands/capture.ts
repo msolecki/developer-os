@@ -415,7 +415,7 @@ export function isTopicNotePath(notePath: string, brainConfig: BrainConfigV1): b
 }
 
 /**
- * `--note <path>`, spec §3.1 steps 1 and 3: the destination proven inside a
+ * `--note <path>`, `brain.md` §6.13 (`capture --note`): the destination proven inside a
  * topic folder, and bound to the SHA-256 of its bytes when it exists. Runs
  * before the redaction key is loaded, so a refused path writes nothing at all.
  *
@@ -506,7 +506,10 @@ async function resolveNoteTarget(
   return { path: notePath, beforeSha256 };
 }
 
-/** Spec §3.1 step 2 and its bound: the normalized capture must be a whole, parseable note. */
+/**
+ * `brain.md` §6.13 (`capture --note`) and its bound: the normalized capture must be a
+ * whole, parseable note.
+ */
 function assertNoteContent(content: string): void {
   const note = `${content}\n`;
   if (note.length > MAX_PROPOSED_NOTE_CHARS) {
