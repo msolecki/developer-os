@@ -1268,9 +1268,9 @@ the real-release half waits for Task 11b and A16.
 ## 12. Instruction artifacts (A12)
 
 **Added 2026-09-29**, carrying the contracts of the A12 design (approved D47, amended D51 and D62)
-that the shipped code implements; the spec
-(`docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`) stays until
-Spec 1 and Spec 2 stop citing it. The block grammar lives in Core beside drift; each adapter
+that the shipped code implements; the spec retired on 2026-09-29
+(`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`)
+and this section is the contract. The block grammar lives in Core beside drift; each adapter
 renders its own vendor tree (`claude-adapter.md` §18, `codex-adapter.md` §16) and imports neither
 the other adapter nor the CLI.
 
@@ -1427,9 +1427,9 @@ the other adapter nor the CLI.
 ## 13. Project templates: `project init` and `project check` (A14)
 
 **Added 2026-09-29**, carrying the contracts of the A14 tooling-verbs design (D47, amended by
-NEW-108) that the shipped code implements; the spec
-(`docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`) stays while the umbrella
-design cites it.
+NEW-108) that the shipped code implements; the spec retired on 2026-09-29
+(`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`) and
+this section is the contract.
 
 **Command surface.** A14 adds three verbs and changes no other command; none of them opens the
 network or spawns a process.

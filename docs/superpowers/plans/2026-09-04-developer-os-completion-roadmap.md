@@ -160,7 +160,8 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
 - **D47 (2026-09-22).** Specs A12, A12b, A13 and A14 (`specs/2026-09-22-developer-os-{instruction-artifacts,brain-workflows,hooks,tooling-verbs}-design.md`)
   approved with every recommended answer (A12b's was deleted on 2026-09-29 after its contracts moved
   to `docs/architecture/brain.md` §6.13: `git show
-  343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`), except A12 Q1: no production for now — local unsigned build
+  343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`; A12's, A13's and
+  A14's retired the same day, readable at `git show 59a6be11:docs/superpowers/specs/<name>`), except A12 Q1: no production for now — local unsigned build
   only, no release path. Also decided: Spec 1 §1 holds — `import` and `ingest` stay manual and leave
   Phase 9's job registry. The D44 lane (lint per commit, tests and review at phase close, no push)
   applies to Phases 5–7 as well, on the founder's instruction to skip tests for now.
@@ -238,7 +239,7 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   error envelope, exit 5 for `update_verifier_rejected`, 1 otherwise; trust stays advanced), F4-A (the
   two V2 ref types are an accepted residual in §13.3).
 - **D61 (2026-09-24).** Two spec amendments follow shipped security fixes: the hooks spec
-  (`specs/2026-09-22-developer-os-hooks-design.md`) names firing records per verb
+  (retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md`) names firing records per verb
   (`<vendor>.<verb>.json`) and scopes G7's "never the user home" base to Claude, with Codex patch paths
   resolved against the canonical `cwd`; Spec 1 §4.2 (`specs/2026-08-21-developer-os-opt-in-surfaces-design.md`)
   refuses a backslash in `GitConfigQuotedPathV1`, matching Core's `CanonicalAbsolutePathV1`. Also
@@ -524,10 +525,10 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | Phase | Document |
 |---|---|
 | 4b | baseline plan Tasks 10–11 plus the production wiring step Phase 4b adds |
-| 5 | `specs/2026-09-22-developer-os-instruction-artifacts-design.md`, kept while Spec 1 and Spec 2 cite it (its plan closed and was deleted 2026-09-28); contracts in `docs/architecture/foundation.md` §4 and §12 |
+| 5 | `docs/architecture/foundation.md` §4 and §12, `claude-adapter.md` §18 and `codex-adapter.md` §16 (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`; its plan closed and was deleted 2026-09-28) |
 | 5b | `docs/architecture/brain.md` §6.13 (the spec was deleted 2026-09-29: `git show 343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`; its plan closed 2026-09-26) |
-| 6 | `specs/2026-09-22-developer-os-hooks-design.md`, kept while Spec 1 §2.1 and `BACKLOG.md` §6 Phase 6 cite its §7.3 (its plan closed and was deleted 2026-09-29); contracts in `docs/architecture/hooks.md` |
-| 7 | `specs/2026-09-22-developer-os-tooling-verbs-design.md`, kept while the umbrella design §8 item 4 and `BACKLOG.md` §6 Phase 7 M5 cite it (its plan closed and was deleted 2026-09-26); contracts in `docs/architecture/foundation.md` §13, `knowledge-pipeline.md` §3.1 and `claude-adapter.md` §15 |
+| 6 | `docs/architecture/hooks.md` (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md`; its plan closed and was deleted 2026-09-29) |
+| 7 | `docs/architecture/foundation.md` §13, `knowledge-pipeline.md` §3.1 and `claude-adapter.md` §15 (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`; its plan closed and was deleted 2026-09-26) |
 | 8 | `plans/2026-09-28-new-110-spec2-apply.md` from NEW-110's Spec 2 revision pass (closed 2026-09-29, D75; both earlier plans closed 2026-09-26); Task 11b has no plan yet, its body is behind `BACKLOG.md` NEW-111's pointer |
 | 9 | plan 1b (closed 2026-09-26), Spec 1's D71 amendment and `plans/2026-09-28-new-113-fixed-path-admission.md` (closed 2026-09-29, D75; Task 5 is in `BACKLOG.md` NEW-113) |
 | 10 | `docs/migration/founder-cutover.md` |

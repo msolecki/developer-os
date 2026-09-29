@@ -609,8 +609,8 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
 ## 15. Observed for A12 against Codex CLI 0.155.1 on 2026-09-22
 
 Recorded by A12 plan Task 2 (spec §10.1), re-pinned to the installed version by founder decision
-D48. Each row names the §4 row or §10.1 bullet of
-`docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md` it answers.
+D48. Each row names the §4 row or §10.1 bullet it answers of the A12 spec, retired 2026-09-29:
+`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`.
 
 **Isolation, for every row.** `T=$(realpath "$(mktemp -d "$TMPDIR/x.XXXX")")`, `C=$T/.codex`; every
 command ran as `env -i PATH="$PATH" TMPDIR="$TMPDIR" HOME="$T" CODEX_HOME="$C"

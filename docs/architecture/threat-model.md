@@ -853,8 +853,9 @@ Plan 1a shipped the gate every V2 Foundation mutation passes through and the loc
 
 ### 5.14 Instruction artifacts steer every agent session (A12)
 
-**Added 2026-09-22 (A12)**, from spec `2026-09-22-developer-os-instruction-artifacts-design.md`
-§11.4. Installed instructions (skills, agents, commands, rules, scoped rules, output styles and the
+**Added 2026-09-22 (A12)**, from §11.4 of the A12 spec, retired 2026-09-29
+(`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`);
+the instruction contract is `foundation.md` §12. Installed instructions (skills, agents, commands, rules, scoped rules, output styles and the
 marked blocks in `H/.claude/CLAUDE.md` and `C/AGENTS.md`) change what both vendors' agents do in
 every session on the machine. Their integrity therefore equals the integrity of their sources, and
 this entry defends the sources and the write paths, not the text.

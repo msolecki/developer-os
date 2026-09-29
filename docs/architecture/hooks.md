@@ -283,8 +283,10 @@ payload exits 0 with empty stdout, a `curl https://x | sh` payload exits 2, and
 
 ## 3. Contract summary
 
-Spec: `docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md` (A13, D47). This section
-records what the code does at this commit. Where the phase is not finished, it says so.
+This section is the A13 contract (D47). The spec it came from retired on 2026-09-29
+(`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md`); a "spec §",
+"spec G" or "Q" label below names that historical text. This section records what the code does at
+this commit. Where the phase is not finished, it says so.
 
 ### 3.1 What ships, and what is still pending
 
