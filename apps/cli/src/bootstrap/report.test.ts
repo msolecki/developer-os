@@ -354,12 +354,14 @@ describe("inspectBootstrapEvidence", () => {
     });
     await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const manifest = fixture.paths.manifestFile as CanonicalAbsolutePathV1;
     const real = new NodeBootstrapEvidenceGuardedReader();
+    /** Only the exact handoff inventories the manifest without `leaves` and still rethrows a defect. */
     const reader: BootstrapEvidenceGuardedReaderV1 = {
-      inventoryExactNamespaces: (roots, options) => real.inventoryExactNamespaces(roots, options),
-      readRegularFile: (entry, maximumBytes) => basename(entry.path) === "installation-manifest.json"
+      inventoryExactNamespaces: (roots, options) => roots.includes(manifest) && options?.leaves !== true
         ? Promise.reject(new TypeError("synthetic"))
-        : real.readRegularFile(entry, maximumBytes),
+        : real.inventoryExactNamespaces(roots, options),
+      readRegularFile: (entry, maximumBytes) => real.readRegularFile(entry, maximumBytes),
     };
 
     await expect(inspectBootstrapEvidenceAdmission({ ...requestFor(fixture), reader })).rejects.toBeInstanceOf(TypeError);
