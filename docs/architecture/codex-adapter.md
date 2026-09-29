@@ -746,14 +746,19 @@ byte-deterministic):
 **Registration**
 (`apps/cli/src/instructions/codex-registration.ts` — `registerCodexPlugin`) runs after the attach
 commits, only when `codex plugin list --json` does not show the plugin enabled at its root, or
-when the record is missing or its `treeHash` or `codexHome` differ.
+when the record is missing or its `treeHash` or `codexHome` differ. It is the vendor CLI's own
+write to its own configuration: an unjournaled external effect, run outside the Foundation
+transaction through the security runner.
 
 - It runs `plugin marketplace add <product-home>/codex` only when `plugin marketplace list` lacks
-  it, then always `plugin add developer-os@developer-os --json`, then requires `plugin list --json`
-  to show the plugin enabled at the plugin root.
-- Every call is an argv array with `env` exactly `{ CODEX_HOME: C }`.
-- Success rewrites `<product-home>/codex/registration.json`, `{ codexHome, treeHash }` under
-  schema `codex-registration-v1`, in a second gated transaction. `treeHash` is
+  it, then always `plugin add developer-os@developer-os --json` (the call that refreshes Codex's
+  cache copy, §14), then requires `plugin list --json` to show an `installed[]` entry whose
+  `source.path` equals the plugin root with `enabled: true`.
+- Every call is an argv array with `env` exactly `{ CODEX_HOME: C }`, so the CLI registers against
+  the home whose `AGENTS.md` and `agents/` the product writes.
+- Success rewrites `<product-home>/codex/registration.json` in a second gated transaction. It is a
+  manifest-owned `schema` row, schema id `codex-registration-v1`, holding exactly
+  `{ codexHome, treeHash }` (`validateCodexRegistrationRecord`). `treeHash` is
   `codexPluginTreeHash`: domain `developer-os:codex-plugin-tree:v1` over the sorted
   `(path, sha256)` of the plugin tree's content rows.
 - A failing step is `codex_registration_failed`, exit 1, after the commit.

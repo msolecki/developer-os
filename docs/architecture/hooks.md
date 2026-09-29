@@ -462,16 +462,24 @@ A record is canonical JSON with exactly `schemaVersion` (1), `vendor`, `event`, 
 is not its verb's. Spec 1 §2.1 fixes the admitted shape: record names, leftover `.tmp-<16 hex>`
 temps, and at most 32 children together (`MAX_HOOK_FIRING_RECORD_CHILDREN`). A per-event record
 left by an earlier build counts against that cap until uninstall; cleaning it up is open (D62,
-`BACKLOG.md` §6 Phase 6).
+`BACKLOG.md` §6 Phase 6). A write happens only after the gate admits, and the gate refuses a
+directory over the cap, so cleanup after the gate cannot repair it and cleanup before the gate would
+break the write rule above. The margin is accepted while no build with per-event records has been
+released.
 
-This is a product-home write outside any transaction. It is the recorded exception spec §7.3 grants,
-bounded like Spec 1's other runtime records. Uninstall removes both plugin trees first and
-`state/hooks/` last, so a hook that fires mid-uninstall cannot leave residue that refuses at exit 6.
+This is a product-home write outside any transaction: `state/hooks` is a reserved runtime path in
+Spec 1's owner table (§2.1), bounded like Spec 1's other runtime records. The gate runs after the
+outcome is written, so a guard never depends on it. **Uninstall order is normative:** uninstall
+removes both plugin trees first, so the hooks stop firing, and `state/hooks/` last, so a hook that
+fires mid-uninstall cannot leave residue that refuses at exit 6.
 
-`plugin_hooks` resolves from any firing record for the vendor, and `session_start_injection` from
-that vendor's session-start record, in both the probed and the unprobed `doctor` run. Without a
-record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_backup` stay
-`not-used`: capture remains declined (`knowledge-pipeline.md` §2).
+`plugin_hooks` and `session_start_injection` left both `NOT_USED` lists in one commit, with
+`adapter-capability-parity.test.ts` green, and follow the two-gate rule (`claude-adapter.md` §3):
+`yes` needs the version floor (`DOCUMENTED_FLOORS`) and an observation. `plugin_hooks` resolves from
+any firing record for the vendor, and `session_start_injection` from that vendor's `inject` record,
+in both the probed and the unprobed `doctor` run. Without a record, both stay `unknown`, never `no`.
+`session_end_capture` and `pre_compact_backup` stay `not-used`: capture remains declined
+(`knowledge-pipeline.md` §2).
 
 ### 3.7 `doctor`
 
@@ -486,7 +494,10 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 - **`external-hooks`** (Q2-A) reads `~/.claude/settings.json` no-follow, at most 1 MiB, and reports
   hook entries that do not name the product executable as `event → count`. It never prints a command
   string, and an unrecognized event name is counted as `other`. Any read failure is `unknown`. Codex
-  is always `codex=unknown`, because `config.toml` is not read (`codex-adapter.md` §2.3).
+  is always `codex=unknown`, because `config.toml` is not read (`codex-adapter.md` §2.3). A15 uses
+  it as one piece of evidence that legacy and product guards are never both enabled; it sees only
+  user-scope `settings.json` hooks, so the cutover checks plugin-delivered and project-scope legacy
+  hooks separately.
 - Neither check writes a vendor configuration file. The product never writes `settings.json` or any
   Codex config file, and Codex trust stays manual (D7). `init` with Codex selected prints
   `CODEX_HOOK_TRUST_STEP` as a warning, and `doctor` names it as the `hooks` recovery while a Codex

@@ -1431,6 +1431,24 @@ NEW-108) that the shipped code implements; the spec
 (`docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`) stays while the umbrella
 design cites it.
 
+**Command surface.** A14 adds three verbs and changes no other command; none of them opens the
+network or spawns a process.
+
+| Command | Options | Positionals | Mutates | Contract |
+|---|---|---|---|---|
+| `import [<path>]` | `--claude-memory`, `--limit <n>`, `--dry-run`, `--json` | 0..1 | the vault quarantine only | `knowledge-pipeline.md` §3.1 |
+| `project init [<dir>]` | `--dry-run`, `--json` | 0..1 after the subcommand | files in `<dir>`, create-only | §13.1 |
+| `project check [<dir>]` | `--json` | 0..1 after the subcommand | nothing | §13.2 |
+
+Dispatch lives in `apps/cli/src/main.ts`: `import` is in `COMMAND_OPTIONS` and
+`COMMAND_POSITIONALS`, and `--claude-memory` with a `<path>` exits 2 at parse time; `project` is a
+group whose `PROJECT_SUBCOMMANDS` admits `init` and `check`, and an unknown subcommand exits 2. The
+ordinary-command bootstrap gate (`assertOrdinaryCommandAdmitted`) applies to all three, as to every
+command but `init`. Output follows `emit`/`publish`: human lines through `renderPath`, one `--json`
+line, every string leaf redacted. The `doctor` check `vendor-config` is `claude-adapter.md` §15.
+`repo audit|bootstrap|secrets-scan` and `project worktree` are recorded refusals with no dispatch
+entry (`docs/migration/instruction-inventory.md` §5).
+
 ### 13.1 `project init [<dir>] [--dry-run] [--json]`
 
 - **Template set.** `PROJECT_TEMPLATE` (`apps/cli/src/commands/project-template.ts` —
