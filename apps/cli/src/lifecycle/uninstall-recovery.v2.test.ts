@@ -652,8 +652,11 @@ describe("the uninstall control-file adapter (NEW-97)", () => {
   it("keeps the marker, the nonce and the allocator on a rolled-back outcome with the manifest gone", async () => {
     const fixture = await initializedV2Fixture("uninstall-control-files-rolled-back");
     await died(fixture, dieAtStepReturn(manifestStep("preserve_before"), () => currentPlan(fixture)));
-    /** The retired guard read an absent manifest as a committed uninstall; the outcome alone decides now. */
-    await nodeFs.unlink(fixture.paths.manifestFile);
+    /**
+     * `preserve_before` has already moved the manifest to its tombstone, which the retired guard
+     * read as a committed uninstall; the outcome alone decides now.
+     */
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
 
     const context = fixture.rebuildContext();
     const lifecycle = lifecycleOf(context);
