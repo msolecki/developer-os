@@ -398,6 +398,13 @@ describe("UpdateLifecycleCoordinatorJournalV2", () => {
     expect(crossed.compensationCause).toBeNull();
   });
 
+  it("reserves room in the plan's own journal bound for every journal, including the widest cause", () => {
+    const widestCause = { kind: "compensation_started", cause: parseSafeReasonCode("a".repeat(64)) } as const;
+    for (const journal of [walk(built, upTo(1)), advanceUpdateCoordinatorJournal(built, walk(built, upTo(active)), widestCause, clock())]) {
+      expect(() => updateCoordinatorJournalBytes(built, journal)).not.toThrow();
+    }
+  });
+
   it("refuses a compensating journal without a cause and a forward journal with one", () => {
     const forward = walk(built, upTo(active));
     const compensating = advanceUpdateCoordinatorJournal(built, forward, compensationStarted, clock());
