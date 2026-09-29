@@ -509,8 +509,9 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
 - **`.env` templates are exempt in the product only (D67).** `ProtectedPathPolicy` lets
   `.env.example`, `.env.sample`, `.env.template` and `.env.dist` through. Claude's
   `Read(//**/.env.*)` deny string still refuses them, so the vendor stays the stricter side.
-- **NEW-46's class is avoided, not closed.** Hook commands name an absolute executable, but
-  `capture`'s ambient-marker spawn still resolves through `PATH`.
+- **NEW-46's class is avoided here.** Hook commands name an absolute executable. `capture`'s
+  ambient-marker spawn still selects its vendor through `PATH`, pinned and rechecked since NEW-46
+  closed (`threat-model.md` §5.11; residual NEW-121).
 - **A changed Codex hook stops silently.** A trusted hook whose command, matcher or timeout changes
   lists as `modified` and does not fire, and Codex prints nothing (§1 question 8). A Node upgrade
   that moves the Node executable (G1), or a change to `CODEX_HOOK_ROWS`, therefore stops every

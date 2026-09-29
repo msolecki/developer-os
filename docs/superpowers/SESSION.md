@@ -111,7 +111,9 @@ All of these are required:
    closes no plan (D17, narrowed by D32). The founder runs it by hand at plan close, together with
    the slow suites step 1 defers and the single push of step 7; the plan does not close until it is
    green. Under D36 this is the **only** point at which they run. A plan step that names `npm run check` for an ordinary task commit is
-   satisfied by step 1 plus step 7.
+   satisfied by step 1 plus step 7. **Exception, D75 (2026-09-29):** the founder closed the NEW-113
+   and NEW-110 plans before their full `check`; it is owed, and a red run reopens the rows its
+   failures belong to. The exception covers those two plans only.
 3. **Suspended by D36 for the rest of plan 1a** — one whole-plan review at close replaces it, and
    the deferred fix list under Task 25 collects what is owed. Outside D36: obtain fresh-context
    review from an agent that did not author the code-producing task. For every accepted finding, add
@@ -127,7 +129,10 @@ All of these are required:
    progress there, because `check.yml` cancels a superseded run and a full run takes ~4 h. If one is
    running, hold the commit and push it with the next once that run completes. Do not wait for
    green to start the next task, but check the latest completed run before every new commit: a red
-   run stops new commits until it is fixed. Do not merge; the founder owns merging.
+   run stops new commits until it is fixed. Do not merge; the founder owns merging. **Found
+   2026-09-22, still true 2026-09-29:** the `baseline` ruleset makes a PR mandatory on `development`,
+   so a direct push is rejected with `GH013`; until the founder decides this rule, deliver through a
+   PR as D70 (4) did (`ORDER.md`, "Delivery evidence still owed").
 
 ## 6. Report and stop
 

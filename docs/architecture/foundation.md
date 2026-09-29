@@ -502,7 +502,7 @@ manifest-envelope grammars admit only `fresh_v2_init`, so a persisted `v1_to_v2`
   evidence when the fault is a directory at their manifest path. A plan path is unaffected, because
   its basename matches `INITIAL_NAMESPACE` and routes to `inventoryTree`, which records the root. The
   open half is that one path; `apps/cli/src/bootstrap/report.test.ts` carries it as a failing
-  expectation.
+  expectation, and `BACKLOG.md` NEW-126 tracks it since the NEW-82 row closed on 2026-09-29.
 
 None of these refusal paths spawns a process, which is the only way this product reaches a network:
 `tests/security/network.test.ts` — `the bootstrap refusal paths`.

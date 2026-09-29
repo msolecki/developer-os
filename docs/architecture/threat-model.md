@@ -742,7 +742,7 @@ frequently run command, triggered by a `CLAUDECODE=1` any wrapper or CI step can
 **presence**, so `CODEX_THREAD_ID=anything` arms it where Claude's row at least wants the literal `1`.
 Neither was ever a privilege an attacker had to earn.
 
-**`capture`'s probe is pinned and rechecked (`BACKLOG.md` §1 NEW-46, D72 Q2-A with the D73
+**`capture`'s probe is pinned and rechecked (`BACKLOG.md` §1 NEW-46, closed 2026-09-28; D72 Q2-A with the D73
 addendum).** `discoverSourceAgent` resolves the `PATH`-selected binary once to its real path through
 `admitOwnedExecutable` (`apps/cli/src/pinned-executable.ts`, shared with the Codex refresh): the target
 must be a regular file with owner-execute, owned by the user or root, with no group/other write and no
@@ -760,7 +760,8 @@ planted in a directory chain only that uid (or root) can write, reached through 
 still passes: it is user-owned, `0755`, and stable between resolve and spawn. Anyone who can export
 `CODEX_THREAD_ID` into a session can usually export `PATH` into the same one, and such an attacker
 already runs code as the user. What NEW-46 closed is a binary in a group-writable directory and a
-swap between check and spawn; the probe still passes `--version` and nothing else.
+swap between check and spawn; the probe still passes `--version` and nothing else. The residual is
+`BACKLOG.md` NEW-121.
 
 **`assertTrustedExecutable` is the check the other two executors pay** before spawning:
 `apps/cli/src/commands/doctor.ts:479` and `apps/cli/src/commands/ingest.ts:579` — `doctor` was a

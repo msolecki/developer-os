@@ -583,7 +583,7 @@ Every bound above is a ceiling the code refuses past, not a target it approaches
 constants moved during plan 1a's implementation; they were fixed at the plan's writing and this
 record exists so a later change that raises one does so having read what depends on it. The
 section names files and symbols, not lines: plan 1b edited several of these files, and a line
-citation would have silently moved (`BACKLOG.md` NEW-87).
+citation would have silently moved (`BACKLOG.md` NEW-87, closed 2026-09-29).
 
 ## Plan 1b: Git and launchd bounds
 
