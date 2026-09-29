@@ -510,6 +510,7 @@ export async function withLifecycleMutation<T>(
   work: (authority: LifecycleMutationAuthorityV1) => Promise<T>,
   resolution?: { readonly standaloneFoundationId: string },
   borrowed?: { readonly global: HeldLifecycleStableLockV1 },
+  residueOf: typeof residueFrom = residueFrom,
 ): Promise<T> {
   const home = await classifyMutationHome(context, lifecycle);
   if (home.kind !== "v2") refuseNonV2(home, context.paths);
@@ -536,7 +537,7 @@ export async function withLifecycleMutation<T>(
 
     await requireLifecycleStagingRoot(lifecycle, context.paths);
     const key = lifecycleHomeKeyFromAdmission(admitted, context.paths);
-    const residue = residueFrom(
+    const residue = residueOf(
       await inspectBootstrapEvidenceAdmission(
         createBootstrapEvidenceInspectionRequest({
           productHome: context.paths.home,

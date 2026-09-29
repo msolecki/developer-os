@@ -130,6 +130,15 @@ export interface BootstrapEvidenceAdmissionV1 {
    * attributable to it (NEW-114).
    */
   readonly bootstrapParticipantIds: readonly string[];
+  /**
+   * The part of `retainedPaths` and `bootstrapParticipantIds` only an `unverified` envelope
+   * contributes. Uninstall admits it; every other mutation must not, or altered retained evidence
+   * would read as a clear ledger (NEW-99).
+   */
+  readonly unverifiedResidue: {
+    readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
+    readonly bootstrapParticipantIds: readonly string[];
+  };
   /** `retainedPaths` with the identity this inspection observed, which a fresh plan records (Spec 2 P8). */
   readonly retainedIdentities: readonly {
     readonly path: CanonicalAbsolutePathV1;
@@ -1429,10 +1438,20 @@ export async function inspectBootstrapEvidenceAdmission(
       });
     }
   }
+  const unverifiedPaths: CanonicalAbsolutePathV1[] = [];
   for (const result of results) {
     if (result.plan === null || result.summary.status !== "unverified") continue;
-    for (const candidate of await foundationTombstonesOf(request, result.plan)) allEntries.set(candidate.path, candidate);
+    for (const candidate of await foundationTombstonesOf(request, result.plan)) {
+      if (!allEntries.has(candidate.path)) unverifiedPaths.push(candidate.path);
+      allEntries.set(candidate.path, candidate);
+    }
   }
+  const verifiedParticipantIds = new Set(results.flatMap((result) =>
+    result.verifiedEnvelope === null ? [] : result.verifiedEnvelope.plan.foundationParticipants.map((participant) => participant.id),
+  ));
+  const bootstrapParticipantIds = [...new Set(results.flatMap((result) =>
+    result.plan === null ? [] : result.plan.foundationParticipants.map((participant) => participant.id),
+  ))].sort();
   summaries.sort((left, right) => Buffer.compare(Buffer.from(left.id), Buffer.from(right.id)));
   const counted = sumEntries(allEntries.values());
   /**
@@ -1499,9 +1518,11 @@ export async function inspectBootstrapEvidenceAdmission(
     report,
     active: active.length === 1 ? active[0] ?? null : null,
     retainedPaths: [...allEntries.keys()].sort(),
-    bootstrapParticipantIds: [...new Set(results.flatMap((result) =>
-      result.plan === null ? [] : result.plan.foundationParticipants.map((participant) => participant.id),
-    ))].sort(),
+    bootstrapParticipantIds,
+    unverifiedResidue: {
+      retainedPaths: [...new Set(unverifiedPaths)].sort(),
+      bootstrapParticipantIds: bootstrapParticipantIds.filter((id) => !verifiedParticipantIds.has(id)),
+    },
     retainedIdentities: [...allEntries.values()]
       .map((entry) => ({ path: entry.path, dev: entry.dev, ino: entry.ino }))
       .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),

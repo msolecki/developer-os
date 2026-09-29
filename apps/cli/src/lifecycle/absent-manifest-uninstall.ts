@@ -20,7 +20,7 @@ import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import type { CliContext } from "../context.js";
 import { UninstallRefusal } from "../commands/uninstall.js";
 import type { UninstallOptions, UninstallResultV1 } from "../commands/uninstall.js";
-import { residueFrom } from "./context.js";
+import { uninstallResidueFrom } from "./context.js";
 import type { CliLifecycleContext } from "./context.js";
 import {
   codexIngestHomePath,
@@ -56,7 +56,7 @@ function absentManifestEvidenceOf(
   evidence: BootstrapEvidenceAdmissionV1,
 ): AbsentManifestEvidenceV1 {
   return {
-    ...residueFrom(evidence),
+    ...uninstallResidueFrom(evidence),
     bootstrapIdentities: evidence.retainedEnvelopes.map(
       (envelope) => envelope.plan.bootstrapIdentity,
     ),

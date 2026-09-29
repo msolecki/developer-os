@@ -140,7 +140,7 @@ import {
   uninstallLeasePaths,
 } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
-import { residueFrom } from "./context.js";
+import { uninstallResidueFrom } from "./context.js";
 import { manifestAdmissionFor } from "./manifest-admission.js";
 import { isCodeDefect, MANIFEST_ANCHOR_WARNING, removeManifestAnchor } from "./manifest-anchor.js";
 import { withLifecycleMutation } from "./mutation-gate.js";
@@ -1575,7 +1575,7 @@ export class LifecycleUninstaller {
         holds,
         preserved: preservedDirectories,
       });
-      const residue = residueFrom(evidence);
+      const residue = uninstallResidueFrom(evidence);
       const recovered = await lifecycle
         .recovery(request.key, adapters, residue)
         .recover(current(), { resumeUninstall: true });
@@ -1842,7 +1842,7 @@ async function cleanAllocatorTemp(
   );
   if (observed.temp === null) return;
   const allocatedIds = allocatedIdsFrom(
-    await lifecycle.inspectLedger(request.key, residueFrom(request.evidence)),
+    await lifecycle.inspectLedger(request.key, uninstallResidueFrom(request.evidence)),
   );
   const rechecked = await inspectLifecycleAllocator(
     lifecycle.fs,
@@ -1982,5 +1982,5 @@ export async function detachVendorInstructions(context: CliContext, lifecycle: C
       preserved: [...plan.preserved, ...outcome.preserved],
       warnings,
     };
-  });
+  }, undefined, undefined, uninstallResidueFrom);
 }

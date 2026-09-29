@@ -1009,6 +1009,8 @@ describe("a fresh init killed after the bootstrap publication and before the ins
     expect(admission.report.ids.map((summary) => summary.status)).toStrictEqual(["unverified"]);
     expect(admission.bootstrapParticipantIds).toContain(forwardId);
     expect(admission.retainedPaths).toEqual(expect.arrayContaining(staged.map((name) => join(forwardStaging, name))));
+    expect(admission.unverifiedResidue.bootstrapParticipantIds).toContain(forwardId);
+    expect(admission.unverifiedResidue.retainedPaths).toEqual(expect.arrayContaining(staged.map((name) => join(forwardStaging, name))));
 
     const removed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
 

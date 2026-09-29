@@ -49,6 +49,7 @@ import {
   createLifecycleContext,
   lifecycleHomeKeyFromCoordinatorId,
   residueFrom,
+  uninstallResidueFrom,
 } from "./context.js";
 import type { CliLifecycleContext } from "./context.js";
 import { syntheticUninstall } from "./testing.js";
@@ -245,6 +246,7 @@ describe("the lifecycle composition root", () => {
         parseCanonicalAbsolutePathText("/product/backups/transactions/tx_fi_a_f/0.bak"),
       ],
       bootstrapParticipantIds: ["tx_fi_a_f", "tx_fi_a_c"],
+      unverifiedResidue: { retainedPaths: [], bootstrapParticipantIds: [] },
     });
 
     expect([...residue.retainedPaths]).toStrictEqual([
@@ -252,6 +254,23 @@ describe("the lifecycle composition root", () => {
       "/product/backups/transactions/tx_fi_a_f/0.bak",
     ]);
     expect([...residue.bootstrapParticipantIds]).toStrictEqual(["tx_fi_a_f", "tx_fi_a_c"]);
+  });
+
+  it("leaves an unverified envelope's residue unattributed for a mutation and attributes it for uninstall", () => {
+    const unverifiedStaging = parseCanonicalAbsolutePathText("/product/staging/transactions/tx_fi_b_f/.developer-os-retained.x");
+    const evidence = {
+      retainedPaths: [parseCanonicalAbsolutePathText("/product/backups/transactions/tx_fi_a_f"), unverifiedStaging],
+      bootstrapParticipantIds: ["tx_fi_a_f", "tx_fi_b_f"],
+      unverifiedResidue: { retainedPaths: [unverifiedStaging], bootstrapParticipantIds: ["tx_fi_b_f"] },
+    };
+
+    const mutation = residueFrom(evidence);
+    const uninstall = uninstallResidueFrom(evidence);
+
+    expect([...mutation.retainedPaths]).toStrictEqual(["/product/backups/transactions/tx_fi_a_f"]);
+    expect([...mutation.bootstrapParticipantIds]).toStrictEqual(["tx_fi_a_f"]);
+    expect([...uninstall.retainedPaths]).toStrictEqual(evidence.retainedPaths);
+    expect([...uninstall.bootstrapParticipantIds]).toStrictEqual(["tx_fi_a_f", "tx_fi_b_f"]);
   });
 
   it("accepts the shipped bootstrap evidence admission as its residue evidence", async () => {
