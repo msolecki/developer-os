@@ -987,7 +987,13 @@ record.
   plan bytes were admitted, otherwise derived from the init ID as the ordinal-0 pair
   `BootstrapExecutor` allocates (NEW-123). An `unverified` envelope's tombstones under
   `state/transactions` and its participants' staging and backup directories join the retained
-  paths, so a fresh init that died after its handoff stays uninstallable in place (NEW-114).
+  paths, so a fresh init that died after its handoff stays uninstallable in place (NEW-114). Once no
+  live target is attributable to an `unverified` envelope, it no longer blocks a new intent: its
+  retained tombstones (whatever their mode) and its bootstrap leaf count as inert residue, and a later
+  `init` installs a new ID beside it, with both envelopes retained (founder decision B, NEW-123). Other
+  residue named with its ID (a live staging subtree, a `.fresh-v2-init.<id>.*` leaf) still blocks, and
+  `altered` envelopes are unaffected. Evidence: `apps/cli/src/bootstrap/executor.test.ts` —
+  `installs a new ID beside the unverified envelope after its uninstall, retaining both (NEW-123)`.
 - **The two present-manifest uninstall variants and their derivation (D24).** `deriveVariant`
   (`apps/cli/src/lifecycle/uninstall.ts`) calls Core's `deriveUninstallLaunchdEvidence` on the
   observed manifest's plist rows, the validated configuration's `automation.lifecycle` record, and

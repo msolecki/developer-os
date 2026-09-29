@@ -1027,7 +1027,8 @@ async function inspectPlan(
       roots: [planEntry.path, ...initial.map((entry) => entry.path)],
       parentAuthorities: [],
       verifiedEnvelope: null,
-      blocksNewIntent: false,
+      /** NEW-123 (founder decision B): §6.4 lets a new init start beside it only once no live target is attributable. */
+      blocksNewIntent: !await restoredTargets(request, plan, null),
     };
   }
   const slotValues = envelope.values;
@@ -1428,12 +1429,8 @@ export async function inspectBootstrapEvidenceAdmission(
           (!isSlot || BigInt(candidate.bytes) <= BigInt(MAX_JOURNAL_BYTES)) &&
           (!isPlan || BigInt(candidate.bytes) <= BigInt(MAX_PLAN_BYTES));
       }
-      if (isTombstone || insideTombstone) {
-        return candidate.kind === "directory"
-          ? candidate.mode === 0o700
-          : (candidate.mode === 0o600 || candidate.mode === 0o700) && candidate.nlink === 1;
-      }
-      return false;
+      /** NEW-123 (founder decision B): retained tombstones are inert, so a new init may start beside them. */
+      return isTombstone || insideTombstone;
     });
     if (!confined) unverifiedBlocked = true;
     if (reportedIds.has(rawId as FreshV2InitIdV1)) continue;
@@ -1505,10 +1502,12 @@ export async function inspectBootstrapEvidenceAdmission(
    * identity, which for a retained one is the third state §6.4 refuses; an
    * unattributed exact leaf is coordination residue a later init may start
    * beside. Anything else at that path stayed in the inventory above and is
-   * unknown residue, so the name alone decides nothing either way (A3).
+   * unknown residue, so the name alone decides nothing either way (A3). An `unverified` envelope
+   * attributes nothing: its leaf is coordination residue like an unattributed one (NEW-123, B).
    */
   const attributedIds = results.flatMap((result) =>
-    exactLeaf !== null && result.plan !== null && identityMatches(exactLeaf, result.plan.bootstrapIdentity)
+    exactLeaf !== null && result.plan !== null && result.summary.status !== "unverified" &&
+    identityMatches(exactLeaf, result.plan.bootstrapIdentity)
       ? [result.plan.id]
       : []);
   const bootstrapLeaf = exactLeaf === null ? null : {

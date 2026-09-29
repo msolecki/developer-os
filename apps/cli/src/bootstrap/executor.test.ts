@@ -1019,6 +1019,26 @@ describe("a fresh init killed after the bootstrap publication and before the ins
     expect((await nodeFs.readdir(forwardStaging)).toSorted()).toStrictEqual(staged.toSorted());
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("installs a new ID beside the unverified envelope after its uninstall, retaining both (NEW-123)", async () => {
+    const fixture = await killedAfterBootstrapPublication("bootstrap-killed-before-instructions-reinstall");
+    const plan = await persistedPlan(fixture);
+    await unbindJournalSlot(plan.value);
+    const removed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+    if (!removed.ok) throw new Error(JSON.stringify(removed));
+    expect((await admissionOf(fixture)).blocksNewIntent).toBe(false);
+
+    const reinstalled = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    if (!reinstalled.ok) throw new Error(JSON.stringify(reinstalled));
+    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+    expect(await exists(plan.path)).toBe(true);
+    const ids = (await admissionOf(fixture)).report.ids;
+    expect(ids).toHaveLength(2);
+    expect(ids).toContainEqual(expect.objectContaining({ id: plan.value.id, status: "unverified" }));
+    expect(ids).toContainEqual(expect.objectContaining({ status: "verified" }));
+    expect(ids.find((summary) => summary.status === "verified")?.id).not.toBe(plan.value.id);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   /** NEW-123: with no admitted plan bytes the participant IDs derive from the envelope's ID. */
   it.each([
     {
