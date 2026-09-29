@@ -149,6 +149,6 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 - Implementation still to build: Task 11b (parked, D46) and A16's plan and work; the startable rows
   above.
 - Founder stop points: listed above. Long-lead gates L1 and L2 block A16.
-- Repository backlog: 27 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
+- Repository backlog: 26 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
   and the §6 phase-close deferrals. Closed on 2026-09-29 under D75: 36 rows including NEW-110 (the list is in
   `BACKLOG.md` §1), and NEW-54, NEW-82, NEW-87 and NEW-99 removed as already fixed or moot.
