@@ -150,6 +150,24 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
 
 const GUARDED_PORT_RECEIVER = /(?:^|[^A-Za-z0-9_$])fs$/u;
 
+/**
+ * The exemption above trusts the receiver's name, so an exempted module may not
+ * bind `node:fs` to that name (NEW-119): `import * as fs from "node:fs"` would
+ * make every direct stat look like a port call.
+ */
+const NODE_FS_IMPORT = /\bimport\s+([^;]*?)\s*from\s*["'](?:node:)?fs(?:\/promises)?["']/gu;
+const LOCAL_FS_BINDING = /(?:^(?:type\s+)?|[,{]|\bas)\s*fs\s*(?:$|[,}])/u;
+
+function findNodeFsBoundToPortName(path: string, content: string): readonly Violation[] {
+  return [...content.matchAll(NODE_FS_IMPORT)]
+    .filter((match) => LOCAL_FS_BINDING.test(match[1] ?? ""))
+    .map((match) => ({
+      path,
+      line: content.slice(0, match.index).split("\n").length,
+      match: `${match[0].replace(/\s+/gu, " ")} (fs is reserved for the guarded port)`,
+    }));
+}
+
 /** Modules that also hold `context.fs`, the CLI's own filesystem, exempt only the receiver `lifecycle.fs`. */
 const LIFECYCLE_PORT_RECEIVER_ONLY: ReadonlyMap<string, RegExp> = new Map([
   ["apps/cli/src/update/apply-ports.ts", /(?:^|[^A-Za-z0-9_$.])lifecycle\.fs$/u],
@@ -183,12 +201,12 @@ function findNumberValuedStats(
 ): readonly Violation[] {
   if (!path.endsWith(".ts") || path.endsWith(".test.ts")) return [];
   const portReceiver = LIFECYCLE_PORT_RECEIVER_ONLY.get(path) ?? (STAT_OPTION_EXEMPT.includes(path) ? GUARDED_PORT_RECEIVER : null);
+  const violations: Violation[] = portReceiver === GUARDED_PORT_RECEIVER ? [...findNodeFsBoundToPortName(path, content)] : [];
 
   const code = codeWithoutLiterals(content);
-  if (!IDENTITY_FIELD.test(code)) return [];
+  if (!IDENTITY_FIELD.test(code)) return violations;
 
   const lines = content.split("\n");
-  const violations: Violation[] = [];
   STAT_CALL.lastIndex = 0;
   for (const match of code.matchAll(STAT_CALL)) {
     const args = callArguments(code, match.index + match[0].length - 1);

@@ -357,6 +357,39 @@ describe("the repository check gate", () => {
     expect(outcome.stderr).not.toContain("packages/core/src/lifecycle/allocator.ts:1");
   });
 
+  /** NEW-119: the exemption keys on the receiver's name, so `fs` may only ever be the guarded port. */
+  it.each([
+    { name: "a namespace import", source: 'import * as fs from "node:fs";' },
+    { name: "a default import", source: 'import fs from "node:fs";' },
+    { name: "a named import from node:fs/promises", source: 'import {\n  lstat,\n  promises as fs,\n} from "node:fs/promises";' },
+    { name: "a bare fs specifier", source: "import fs, { constants } from 'fs';" },
+  ])("fails when a guarded port caller binds node:fs to fs through $name", async ({ source }) => {
+    const root = await sandbox({
+      "packages/core/src/lifecycle/allocator.ts":
+        `${source}\nconst entry = await fs.lstat(path);\nexport const ino = entry.ino;\n`,
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("packages/core/src/lifecycle/allocator.ts:1");
+  });
+
+  it("accepts a guarded port caller whose fs is the port and whose node:fs has another name", async () => {
+    const root = await sandbox({
+      "packages/core/src/lifecycle/allocator.ts":
+        'import * as nodeFs from "node:fs/promises";\n' +
+        'import { constants, lstat as fsLstat } from "node:fs";\n' +
+        "export async function allocate(fs: LifecycleGuardedFs): Promise<string> {\n" +
+        "  const entry = await fs.lstat(path);\n" +
+        "  const stats = await nodeFs.lstat(path, { bigint: true });\n" +
+        "  return `${entry.ino}:${stats.ino}:${String(constants.O_RDONLY)}:${typeof fsLstat}`;\n" +
+        "}\n",
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
   it("fails when the compiled planner entrypoint is missing", async () => {
     const root = await sandbox({ "src/fine.ts": "export const a = 1;\n" }, { planner: false });
 
