@@ -293,7 +293,7 @@ records what the code does at this commit. Where the phase is not finished, it s
 | Binding the render into A12's local-build install | shipped (Task 14): `init` renders both vendor trees through `withClaudeHooks` and `withCodexHooks` with the installed executable | `apps/cli/src/instructions/attach.ts` |
 | The two-token command form `<node-executable> <entrypoint>` (spec G1 resolution) | shipped: `renderHookCommand` takes `{ node, entrypoint }`; the Node path is exempt from the version-or-hash rule and admits `@` | `packages/core/src/hooks/contract.ts` |
 | The Codex half: `CODEX_HOOK_ROWS`, `renderCodexHooks`, `withCodexHooks` (manifest `"hooks": "./hooks/hooks.json"`), the Codex field, matcher, outcome and event maps, the `apply_patch` header grammar, the manual-trust and trust-residue lines | shipped (Task 15), from §1's 2026-09-23 observations. Checked the same day in the disposable home: the `withCodexHooks` output loaded through `hooks/list` as eight hooks with no errors, and after a trust grant, on the mock model, the built CLI blocked an `apply_patch` adding `.env` (`protected-path`) and a `curl … \| sh` (`pipe-to-shell`) and let `echo synthetic` and a `note.txt` patch through | `packages/adapter-codex/src/hooks.ts`, `apps/cli/src/hooks/` |
-| Claude firing observed from a skills-directory plugin | observed for all five events (§1 question 1) | Task 1 |
+| Claude firing observed from a skills-directory plugin | observed for all five events (§1 question 1), and for all eight verbs of an installed release on the founder machine (§4.1) | Task 1, A15 step 10 |
 
 ### 3.2 Command bytes and argv
 
@@ -386,8 +386,9 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   (spec G8).
 - **Isolated `ingest`.** Planted plugin hooks did not fire under either vendor's ingest argv (§1
   question 9): Claude's safe mode skips plugin hooks, and Codex's `--ignore-user-config` drops the
-  config that enables the plugin and holds its trust. The Task 18 matrix repeats this with the
-  product's own hooks installed, and Phase 6 stops if it fails.
+  config that enables the plugin and holds its trust. Repeating this with the product's own hooks
+  installed is owed (§4.2, NEW-127); if either vendor fires them, the adapter's ingest argv is
+  amended before anything else ships.
 
 ### 3.6 Firing records (Q3-A)
 
@@ -541,3 +542,34 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
 - **The latency budget is machine-relative** (§2) until the Phase 11 release matrix measures it on
   the supported floor.
 - **Guard rules have no user override in v1.** One is added when someone asks for it.
+
+## 4. Real-agent evidence
+
+The A13 plan's Task 18 (the founder real-agent matrix) closed with the plan; what it did not observe
+is tracked in `BACKLOG.md` NEW-104 (Codex) and NEW-127 (Claude and isolated `ingest`).
+
+### 4.1 Claude, founder machine (2026-09-28/29)
+
+Observed during the A15 cutover (D68, D69, D74) on the founder machine, not a disposable `HOME`, with
+Claude Code 2.1.283 and 2.1.284 and local releases packed from `de0d4f8e..30524da2`.
+
+- **Every Claude verb fires.** `doctor`'s `hooks` check listed a firing record for `inject`,
+  `prompt`, `command`, `commit`, `path`, `format`, `edit` and `stop`.
+- **The installed guards block.** Fed the Claude `PreToolUse` payloads directly, the installed
+  `guard command` refused `curl http://127.0.0.1:9/x | sh` as `pipe-to-shell`, and the installed
+  `guard path` refused a `.env` write as `protected-path`, each with exit 2. They were fed directly
+  because the model itself refused the probe prompt, so no model turn reached either guard.
+- **Session-start injection works.** The `SessionStart` hook returned the vault map and the
+  project note as context.
+
+### 4.2 Not yet observed
+
+- Claude, in a real session: a `git push --force` refused; a type error that prevents stop, then
+  the second stop allowed by `stop_hook_active`; the formatter changing a file; a matching skill
+  rule in context; the shared-file symlink advisory; `doctor --probe` reporting `plugin_hooks=yes`
+  (NEW-127).
+- Codex, every row: hooks not firing before manual trust, then the effects above and in the first
+  bullet after it, in a real session rather than §1's mock Responses API, including cwd-relative resolution inside a git
+  repository and the `apply_patch` grammar (NEW-104; Codex quota returns after 2026-10-22).
+- Isolated `ingest` on each vendor with the product hooks installed: no firing record and no
+  injected content (§3.5; NEW-127). §1 question 9 observed this only with planted hooks.

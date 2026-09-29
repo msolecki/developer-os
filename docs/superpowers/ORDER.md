@@ -61,11 +61,12 @@ Each is executable from the document named; none is agent work.
 2. A15 steps 16–18 (per-adapter gate cycle, exercised rollback) after one week of use, step 19 after
    one stable cycle (`docs/migration/founder-cutover.md`), and the Codex hook approval after
    2026-10-22.
-4. A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 2 legacy parity check; Task 18 Steps 2–3, the
-   Codex real-agent matrix (NEW-104), after 2026-10-22.
-5. NEW-75's Codex half: its credential path supplied separately and one real authenticated
+3. A13's real-agent rows (the plan closed 2026-09-29; evidence in `docs/architecture/hooks.md` §4):
+   NEW-127, Claude's unobserved rows and the isolated-`ingest` check, and NEW-104, the Codex
+   real-agent matrix, after 2026-10-22.
+4. NEW-75's Codex half: its credential path supplied separately and one real authenticated
    `ingest --agent codex` (credits, after 2026-10-22).
-6. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
+5. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
    (percent-encoded links in Obsidian).
 
 Open sequence (D16, daily use before completeness):
@@ -90,12 +91,12 @@ Strict sequence; do not start a blocked row early.
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
 | A15 | DOS-P8 Founder migration (shadow mode dropped, D58) — `docs/migration/founder-cutover.md` | A14 (closed) | rollback to the legacy runtime is exercised and one stable cycle completes | steps 1–15 done 2026-09-28/29; steps 16–18 after a week of use, step 19 after one stable cycle |
-| A13 | DOS-P11 Hooks | — | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | phase closed; Claude observed firing in A15 step 10; founder Task 2 and Task 18 Steps 2–3 (Codex) owed |
 | A11b | DOS-P7 remainder (D16): Spec 2 closure Tasks 9–10, Task 26, Task 11b; NEW-113 (D65) | A15 (D56, D70 ran the rest early) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | closure Tasks 9–10 and Task 26 closed with NEW-110 (synthetic arm64 and x64 proof) and NEW-113 closed without its disposable-account gate (D76), both under D75 with the full suite owed; Task 11b parked (D46: `update` reaches a real release only after it) |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
 
-A11 (Phase 4b) and A14 (Phase 7) have nothing left of their own: A11's Task 11b is tracked under
-A11b, and A14's template scan runs with A12's.
+A11 (Phase 4b), A13 (Phase 6) and A14 (Phase 7) have nothing left of their own: A11's Task 11b is
+tracked under A11b, A13's real-agent rows (NEW-104, NEW-127) are founder stop points, and A14's
+template scan runs with A12's.
 
 ## Repository work not owned by the product sequence
 
@@ -117,7 +118,7 @@ Needs a human, a policy decision, or an external application:
 - NEW-33 — whether root-owned, group-writable executable directories are acceptable.
 - NEW-35 — enforceable exec-by-identity, or the check-then-spawn race retained as a platform limit.
 - Foundation watchdog — whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
-- The founder stop points above (NEW-75, NEW-45, NEW-42, NEW-7, NEW-104).
+- The founder stop points above (NEW-75, NEW-45, NEW-42, NEW-7, NEW-104, NEW-127).
 
 Conditional: NEW-27 when a real write scope is wired, NEW-28 when a production argument reaches the
 retained screening refusal, NEW-100's round trip after A16 (D42).
@@ -142,12 +143,12 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 ## Count
 
-- Product sequence: 4 open entries — A15 (steps 16–19), A13 (founder stops only), A11b (the parked Task
-  11b), A16.
+- Product sequence: 3 open entries — A15 (steps 16–19), A11b (the parked Task 11b), A16. A13 left it
+  on 2026-09-29; its founder rows are stop point 3.
 - Owed now: D75's full `check` and `test:pinned-host`, then the push of `development` (D76).
 - Implementation still to build: Task 11b (parked, D46) and A16's plan and work; the startable rows
   above.
 - Founder stop points: listed above. Long-lead gates L1 and L2 block A16.
-- Repository backlog: 26 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
+- Repository backlog: 27 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
   and the §6 phase-close deferrals. Closed on 2026-09-29 under D75: 36 rows including NEW-110 (the list is in
   `BACKLOG.md` §1), and NEW-54, NEW-82, NEW-87 and NEW-99 removed as already fixed or moot.

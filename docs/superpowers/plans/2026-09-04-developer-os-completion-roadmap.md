@@ -404,13 +404,18 @@ Gate: each workflow proven end to end on the synthetic vault with a fake vendor 
 
 Scope: inventory §4.
 
-- Spec and the Claude half landed as Tasks 3–14, 16, 17 of `plans/2026-09-22-developer-os-hooks.md`
-  (Claude hooks installed by `init`, `a156b0c`).
+- Spec and the Claude half landed as Tasks 3–14, 16, 17 of the A13 plan (closed and deleted
+  2026-09-29, `git show 343f8453:docs/superpowers/plans/2026-09-22-developer-os-hooks.md`; Claude
+  hooks installed by `init`, `a156b0c`). Its surviving constraints are in `docs/architecture/hooks.md`.
 - Task 15, the Codex half (Codex hooks bundled in the plugin manifest and trusted manually, D7), and
   Task 1's remaining observations landed under D57 (`4041286`, `4e308d2`, `2e75574`, `2bec6a7`).
 - The phase close (Task 19) ran.
-- [ ] Task 2: legacy parity check (founder stop point), never run.
-- [ ] Task 18: "observed firing" proven in the real-agent matrix on both vendors (founder stop point).
+- [x] Task 2: legacy parity check, done under D67 (`d157227..28cfe19`).
+- [x] Task 18 for Claude: every verb observed firing, the `command` and `path` guards refusing and
+  session-start injection working on the founder machine in A15 step 10 (D68; `hooks.md` §4.1). The
+  plan closed on 2026-09-29 with the rest moved to `BACKLOG.md`: **except** NEW-127 (Claude's
+  unobserved rows and the isolated-`ingest` check) and NEW-104 (the Codex matrix, after 2026-10-22),
+  both founder stop points.
 
 Gate: every supported hook observed firing on Claude; on Codex after manual trust; capability keys `session_start_injection` and `plugin_hooks` resolve to `yes` where observed.
 
@@ -436,8 +441,8 @@ The phase closes ran (above). What is left of them is founder work, executed fro
   0 findings (2026-09-28).
 - [x] A12b: real-vendor run done 2026-09-26 (five `pass` rows, `d7043d5`); `test:vendor-ingest` green
   the same day.
-- [ ] A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 18 real-agent matrix on both vendors;
-  Task 2 legacy parity check.
+- [x] A13: Task 2 done (D67); the plan closed 2026-09-29 after Task 18's Claude evidence
+  (`hooks.md` §4.1). Still owed as founder stop points: NEW-127 and NEW-104 (Phase 6 above).
 
 ### Phase 8 — Spec 2 Tasks 12–26: release transport, update, rollback · L
 
@@ -519,7 +524,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 4b | baseline plan Tasks 10–11 plus the production wiring step Phase 4b adds |
 | 5 | `specs/<date>-developer-os-instruction-artifacts-design.md` and its plan |
 | 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |
-| 6 | `specs/<date>-developer-os-hooks-design.md` and its plan |
+| 6 | `specs/2026-09-22-developer-os-hooks-design.md` (its plan closed and was deleted 2026-09-29) |
 | 7 | `specs/2026-09-22-developer-os-tooling-verbs-design.md` (its plan closed and was deleted 2026-09-26) |
 | 8 | `plans/2026-09-28-new-110-spec2-apply.md` from NEW-110's Spec 2 revision pass (closed 2026-09-29, D75; both earlier plans closed 2026-09-26); Task 11b has no plan yet, its body is behind `BACKLOG.md` NEW-111's pointer |
 | 9 | plan 1b (closed 2026-09-26), Spec 1's D71 amendment and `plans/2026-09-28-new-113-fixed-path-admission.md` (closed 2026-09-29, D75; Task 5 is in `BACKLOG.md` NEW-113) |
