@@ -388,10 +388,12 @@ export class BundlePublicationParticipant {
   /**
    * After the outer point of no return: `verified` → `finalized`, then publication evidence in
    * reverse ordinal order. It never removes a retained target entry; the outer compaction entry
-   * removes the journal and immutable plan afterwards.
+   * removes the journal and immutable plan afterwards. A `rolled_back` publication is terminal:
+   * its compensation already removed every entry, evidence file, metadata file and the root.
    */
   async compact(value: BundlePublicationPlanV1): Promise<void> {
     const { plan, file } = await this.#open(value);
+    if ((file.value as BundlePublicationJournalV1).phase === "rolled_back") return;
     if ((file.value as BundlePublicationJournalV1).phase === "verified") await this.#advance(plan, file, { kind: "finalize" });
     if ((file.value as BundlePublicationJournalV1).phase === "finalized") await this.#advance(plan, file, { kind: "compaction_step" });
     if ((file.value as BundlePublicationJournalV1).phase !== "compacting") refuseBundle("bundle_publication_not_terminal", file.path);

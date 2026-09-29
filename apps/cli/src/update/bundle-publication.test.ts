@@ -358,6 +358,16 @@ describe("BundlePublicationParticipant", () => {
     for (const file of files) expect(await nodeFs.readFile(`${value.target.bundleRoot}/${file.path}`, "utf8")).toBe(file.content);
   });
 
+  it("compacts a compensated publication as terminal, leaving its rolled-back journal in place", async () => {
+    const value = await fixture();
+    const plan = await publishPlan(value);
+    await participant(value).apply(plan);
+    await participant(value).compensate(plan);
+    await participant(value).compact(plan);
+    expect((await journalOf(value, plan)).phase).toBe("rolled_back");
+    await assertRolledBack(value, plan);
+  });
+
   it("refuses a present target root, a source that is not ready, and a tampered source plan", async () => {
     const squatted = await fixture();
     const squattedPlan = await publishPlan(squatted);
