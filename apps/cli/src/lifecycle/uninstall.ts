@@ -1626,7 +1626,8 @@ export class LifecycleUninstaller {
         coordinatorId,
         ids.slice(1, inputs.launchd === null ? -1 : -2),
       );
-      if (inputs.launchd !== null) {
+      /** No loaded label means no transition, so the executor never loads the table and the host is never admitted. */
+      if (inputs.launchd?.preview.entries.some((entry) => entry.beforeLiveState.state === "loaded") === true) {
         inputs.launchd.processTableHash = await stageLaunchdProcessTable(
           lifecycle,
           productHome,
