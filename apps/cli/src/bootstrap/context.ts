@@ -156,7 +156,7 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
       const opened = await handle.stat({ bigint: true });
       const isFreshStagingRoot = basename(root) === "fresh-v2-init" && basename(dirname(root)) === "staging";
       const names = sortUtf8((await nodeFs.readdir(root)).filter((name) =>
-        isFreshStagingRoot ? FRESH_STAGING_ID.test(name) : INITIAL_NAMESPACE.test(name)
+        INITIAL_NAMESPACE.test(name) || (isFreshStagingRoot && FRESH_STAGING_ID.test(name))
       ), (name) => name);
       if (!sameIdentity(opened, expected)) throw new Error("bootstrap evidence root changed identity");
       for (const name of names) {
@@ -171,7 +171,7 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
       const linkedAfter = await nodeFs.lstat(root, { bigint: true });
       const descriptorAfter = await handle.stat({ bigint: true });
       const namesAfter = sortUtf8((await nodeFs.readdir(root)).filter((name) =>
-        isFreshStagingRoot ? FRESH_STAGING_ID.test(name) : INITIAL_NAMESPACE.test(name)
+        INITIAL_NAMESPACE.test(name) || (isFreshStagingRoot && FRESH_STAGING_ID.test(name))
       ), (name) => name);
       if (
         !sameIdentity(linkedAfter, expected) || !sameIdentity(descriptorAfter, expected) ||
