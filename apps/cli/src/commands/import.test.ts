@@ -506,9 +506,10 @@ describe("redaction precedes everything", () => {
 
   it("still warns about an over-broad pattern when another file in the batch is refused (NEW-24)", async () => {
     const fixture = await installed("import-over-broad-mixed-batch");
+    /** Not `"e"`: failure data and message pass through the user's patterns, which would redact `imported` and `over-broad` themselves. */
     await nodeFs.appendFile(
       fixture.paths.configFile,
-      '\n[redaction]\npatterns = ["Northwind Traders", "e"]\n',
+      '\n[redaction]\npatterns = ["Northwind Traders", "see"]\n',
       "utf8",
     );
     await plant(inboxOf(fixture), { "broad.md": "see ".repeat(80), "empty.md": "   \n" });
