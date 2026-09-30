@@ -158,8 +158,14 @@ function singleLine(blocks: readonly HeaderBlock[], keys: Iterable<string>): boo
  * reference definition, an `href`/`src` attribute or any HTML tag (comments
  * included) is a link it cannot see; so is `[[` inside frontmatter, which lint
  * and the index do not treat as a body link.
+ *
+ * Ruling 24 adds what surfaces vault files without any link: a fenced block
+ * whose info string starts `query`, `dataview`, `dataviewjs` or `tasks` (any
+ * fence length, backtick or tilde, in any container), and the `obsidian:` and
+ * `file:` URI schemes, matched anywhere (`_file:///x_` is emphasis around one).
  */
-const OTHER_LINK = /\]\(|href=|src=|^ {0,3}\[[^\]]+\]:|<[a-z/!]/imu;
+const OTHER_LINK =
+  /\]\(|href=|src=|^ {0,3}\[[^\]]+\]:|<[a-z/!]|(?:`{3,}|~{3,})[ \t]*(?:query|dataview|tasks)|(?:obsidian|file):(?=\S)/imu;
 
 function linksOtherwise(header: string, body: string): boolean {
   return header.includes("[[") || OTHER_LINK.test(header) || OTHER_LINK.test(body);
@@ -313,7 +319,11 @@ const CONTROL_CODE: Readonly<Record<GardenProposalV1["kind"], Code>> = {
  * the two views disagree as multisets the body is hidden-linked; the union is
  * returned so every link either view sees is resolved and privacy-checked.
  */
-function linksOf(body: string): { readonly links: readonly string[]; readonly hidden: boolean } {
+function linksOf(body: string): {
+  readonly links: readonly string[];
+  readonly hidden: boolean;
+  readonly referenceColon: boolean;
+} {
   const occurrences = findWikilinks(body);
   const starts = new Set(occurrences.map((occurrence) => occurrence.index));
   let hidden = false;
@@ -324,7 +334,17 @@ function linksOf(body: string): { readonly links: readonly string[]; readonly hi
   const deleted = extractLinks(body);
   const sorted = (links: readonly string[]): string => JSON.stringify([...links].sort());
   if (sorted(blanked) !== sorted(deleted)) hidden = true;
-  return { links: [...new Set([...blanked, ...deleted])], hidden };
+  /**
+   * Ruling 24: with every counted `[[…]]` span blanked, a `]:` left anywhere
+   * may end a reference definition label in a quote, list or other container
+   * no line-start pattern sees. The raw body is used, not the code-masked one,
+   * so a place the mask and a renderer read differently fails closed.
+   */
+  let rest = body;
+  for (const { index, length } of occurrences) {
+    rest = rest.slice(0, index) + " ".repeat(length) + rest.slice(index + length);
+  }
+  return { links: [...new Set([...blanked, ...deleted])], hidden, referenceColon: rest.includes("]:") };
 }
 
 interface Checked {
@@ -350,7 +370,8 @@ interface Checked {
  * already claimed → `hub_too_thin` → `sources_outside_bundle`; related:
  * `target_not_selected` → `related_changes_body`; fix: `target_occupied` →
  * `fix_out_of_scope`) → `link_unresolved` (a hidden `[[`, or a link that does
- * not resolve, or a hub linking other than by body wikilink) → `redaction_would_alter`.
+ * not resolve, or a hub linking other than by body wikilink, a `]:` outside a
+ * wikilink, a vault query block or an `obsidian:`/`file:` URI) → `redaction_would_alter`.
  * Related and fix apply Ruling 21 to their own new text as their last kind rule.
  */
 export function validateGardenResponse(
@@ -432,14 +453,15 @@ export function validateGardenResponse(
     if (LINE_BREAKING.test(proposal.note)) return reject(CONTROL_CODE[proposal.kind]);
     const parsed = validNote(proposal.note);
     if (parsed === null) return reject("frontmatter_invalid");
-    const { links, hidden } = linksOf(parsed.body);
+    const { links, hidden, referenceColon } = linksOf(parsed.body);
     /** Ruling 21: a hub is agent-authored throughout, frontmatter included, as written and as decoded. */
     const parts = split(proposal.note);
     const mapping = parts === null ? null : frontmatterMapping(parts.frontmatter);
     const values = mapping === null ? null : decoded(mapping);
     if (proposal.kind === "hub" && (values === null || LINE_BREAKING.test(values))) return reject(CONTROL_CODE.hub);
     const otherwise =
-      proposal.kind === "hub" && (parts === null || linksOtherwise(`${parts.header}${values ?? ""}`, parts.body));
+      proposal.kind === "hub" &&
+      (parts === null || referenceColon || linksOtherwise(`${parts.header}${values ?? ""}`, parts.body));
     return { proposal, early: kindCheck(proposal, parsed), parsed, links, hiddenLink: hidden || otherwise };
   });
 

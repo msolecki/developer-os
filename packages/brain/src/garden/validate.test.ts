@@ -632,4 +632,69 @@ describe("validateGardenResponse", () => {
       }
     });
   });
+
+  describe("fix round 5", () => {
+    const SECRET = "_raw/quarantine/secret";
+    const hub = (note: string): unknown => ({ proposals: [{ kind: "hub", target: "DEV/testing-hub.md", note }] });
+    const run = (response: unknown): string => {
+      const result = validateGardenResponse({
+        response,
+        targets: TARGETS,
+        notes: NOTES,
+        config: DEFAULT_BRAIN_CONFIG,
+        readNote: (path) => TEXTS.get(path) ?? null,
+        pendingNotePaths: new Set(),
+        findings: [SUMMARY_FINDING],
+        redactionFindings: () => 0,
+      });
+      if ("invalid" in result) return "invalid";
+      return result.rejected.map((r) => r.code).join(",") || "accepted";
+    };
+    const related = (label: string): unknown => ({
+      proposals: [{ kind: "related", target: "DEV/alpha.md", note: text("DEV/alpha.md") + `\n## Related\n\n- [[Beta|${label}]]\n- [[Gamma]]\n` }],
+    });
+    const fix = (summary: string): unknown => ({
+      proposals: [{ kind: "fix", target: "DEV/gamma.md", note: text("DEV/gamma.md").replace('summary: "About Gamma."', `summary: ${summary}`) }],
+    });
+
+    it("rejects a reference definition in any container of a hub body (Ruling 24a)", () => {
+      for (const body of [
+        `[a\\]b]\n\n[a\\]b]: ${SECRET}.md\n`,
+        `[r]\n\n> [r]: ${SECRET}.md\n`,
+        `[r]\n\n> > [r]: ${SECRET}.md\n`,
+        `[r]\n\n- [r]: ${SECRET}.md\n`,
+        `[r]\n\n1. [r]: ${SECRET}.md\n`,
+        "[[Beta]]]: x\n",
+      ]) {
+        expect(run(hub(HUB + body))).toBe("link_unresolved");
+      }
+      expect(run(hub(HUB + "- [[Beta]]: explains rebasing\n- [[Gamma|the step]]: and more\n"))).toBe("accepted");
+    });
+
+    it("rejects a vault query block in agent-authored text (Ruling 24b)", () => {
+      for (const body of [
+        '```dataview\nLIST FROM "_raw"\n```\n',
+        "```query\npath:_raw\n```\n",
+        "~~~~ DataviewJS\ndv.pages()\n~~~~\n",
+        "> ```tasks\n> path includes _raw\n> ```\n",
+      ]) {
+        expect(run(hub(HUB + body))).toBe("link_unresolved");
+      }
+      expect(run(related("```QUERY"))).toBe("related_changes_body");
+      expect(run(fix('"```dataview"'))).toBe("fix_out_of_scope");
+      expect(run(hub(HUB + "```ts\nconst x = 1;\n```\n"))).toBe("accepted");
+    });
+
+    it("rejects obsidian: and file: URIs in agent-authored text, decoded frontmatter included (Ruling 24c)", () => {
+      for (const body of ["obsidian://open?file=_raw%2Fx\n", `file:///x/${SECRET}.md\n`, "OBSIDIAN://open\n", "_File:///x_\n"]) {
+        expect(run(hub(HUB + body))).toBe("link_unresolved");
+      }
+      const withSummary = (value: string): string => HUB.replace('summary: "About Testing hub."', `summary: ${value}`);
+      expect(run(hub(withSummary('"obsidian://open?file=_raw%2Fx"')))).toBe("link_unresolved");
+      expect(run(hub(withSummary('"\\x66ile:///x/_raw/y"')))).toBe("link_unresolved");
+      expect(run(related("obsidian://open?file=_raw%2Fx"))).toBe("related_changes_body");
+      expect(run(fix('"file:///x/_raw/y"'))).toBe("fix_out_of_scope");
+      expect(run(hub(HUB + "The config file: settings.json.\n"))).toBe("accepted");
+    });
+  });
 });

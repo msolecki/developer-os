@@ -43,4 +43,11 @@ describe("buildGardenPrompt", () => {
     expect(prompt).toContain("Link only with `[[wikilinks]]` in the body");
     expect(prompt).toContain("no HTML tags");
   });
+
+  it("tells the agent the Ruling 24 bans: stray `]:`, vault query blocks, obsidian/file URIs", () => {
+    const { prompt } = buildGardenPrompt({ targets: { gaps: [], isolated: [] }, notes: [], readNote: () => "" });
+    expect(prompt).toContain("no `]:` outside a wikilink");
+    expect(prompt).toContain("no `query`, `dataview`, `dataviewjs` or `tasks` code blocks");
+    expect(prompt).toContain("no `obsidian:` or `file:` URIs");
+  });
 });
