@@ -327,7 +327,17 @@ async function listByStatus(
   redact: Redactor,
   status: CaptureStatus,
 ): Promise<Listing> {
-  const captures: ReviewedCaptureV1[] = [];
+  const { envelopes, warnings } = await envelopesByStatus(context, quarantine, redact, status);
+  return { captures: envelopes.map(reviewedRow), warnings };
+}
+
+async function envelopesByStatus(
+  context: CliContext,
+  quarantine: string,
+  redact: Redactor,
+  status: CaptureStatus,
+): Promise<{ readonly envelopes: readonly CaptureEnvelopeV1[]; readonly warnings: readonly string[] }> {
+  const envelopes: CaptureEnvelopeV1[] = [];
   const warnings: string[] = [];
 
   for (const fileName of await captureFileNames(context, quarantine)) {
@@ -340,10 +350,10 @@ async function listByStatus(
       continue;
     }
     if (outcome.envelope.status !== status) continue;
-    captures.push(reviewedRow(outcome.envelope));
+    envelopes.push(outcome.envelope);
   }
 
-  return { captures, warnings };
+  return { envelopes, warnings };
 }
 
 /**
@@ -674,6 +684,60 @@ function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
   };
 }
 
+/** Configuration, vault check, contained quarantine root and the redactor, in the order `runReview` needs them. */
+async function openQuarantine(
+  context: CliContext,
+): Promise<{ readonly quarantine: string; readonly redact: Redactor }> {
+  const config = await readConfiguration(context);
+  const paths = runtimePathsFor(context, config);
+  await assertVaultPresent(context, paths);
+  const contentRoot = join(paths.brain, resolveBrainConfig(config).contentRoot);
+  const quarantine = await resolveContainedRoot(
+    context,
+    contentRoot,
+    join(contentRoot, ...QUARANTINE_SEGMENTS),
+    "the quarantine directory resolves outside the content root",
+    (message, paths_) =>
+      new ReviewRefusal(EXIT_CODES.securityRefusal, message, paths_),
+  );
+
+  const key = loadOrCreateRedactionKey(paths.stateDir);
+  /**
+   * Built once, where the key and the configuration are both in scope. Spec §8.2's
+   * user-extensible patterns reach the re-redaction an `edit` performs through here —
+   * which matters most in this command, since `review --decision edit` exists to remove
+   * a secret a user pasted in by hand (BACKLOG NEW-16).
+   */
+  const redact = createRedactor(key, {
+    userPatterns: config.redaction?.patterns ?? [],
+  });
+  return { quarantine, redact };
+}
+
+export interface QuarantinedCaptureSummaryV1 {
+  readonly captureId: string;
+  /** `envelope.createdAt`, ISO-8601. */
+  readonly createdAt: string;
+  /** `envelope.note?.path`; `null` for a plain capture. */
+  readonly notePath: string | null;
+  readonly status: CaptureStatus;
+}
+
+/** Captures at one status with their creation time, for callers that need more than `runReview` publishes. Refusals propagate. */
+export async function listCaptureSummaries(
+  context: CliContext,
+  status: CaptureStatus,
+): Promise<readonly QuarantinedCaptureSummaryV1[]> {
+  const { quarantine, redact } = await openQuarantine(context);
+  const { envelopes } = await envelopesByStatus(context, quarantine, redact, status);
+  return envelopes.map((envelope) => ({
+    captureId: envelope.captureId,
+    createdAt: envelope.createdAt,
+    notePath: envelope.note?.path ?? null,
+    status: envelope.status,
+  }));
+}
+
 /**
  * `developer-os review`, spec §5.6.
  *
@@ -720,29 +784,7 @@ export async function runReview(
      */
     const status = listedStatus(options);
 
-    const config = await readConfiguration(context);
-    const paths = runtimePathsFor(context, config);
-    await assertVaultPresent(context, paths);
-    const contentRoot = join(paths.brain, resolveBrainConfig(config).contentRoot);
-    const quarantine = await resolveContainedRoot(
-      context,
-      contentRoot,
-      join(contentRoot, ...QUARANTINE_SEGMENTS),
-      "the quarantine directory resolves outside the content root",
-      (message, paths_) =>
-        new ReviewRefusal(EXIT_CODES.securityRefusal, message, paths_),
-    );
-
-    const key = loadOrCreateRedactionKey(paths.stateDir);
-    /**
-     * Built once, where the key and the configuration are both in scope. Spec §8.2's
-     * user-extensible patterns reach the re-redaction an `edit` performs through here —
-     * which matters most in this command, since `review --decision edit` exists to remove
-     * a secret a user pasted in by hand (BACKLOG NEW-16).
-     */
-    const redact = createRedactor(key, {
-      userPatterns: config.redaction?.patterns ?? [],
-    });
+    const { quarantine, redact } = await openQuarantine(context);
     guards = guardsWith(context.guards, redact);
 
     if (target === null) {

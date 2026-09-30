@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { runCapture } from "./capture.js";
 import { runInit } from "./init.js";
-import { runReview } from "./review.js";
+import { listCaptureSummaries, runReview } from "./review.js";
 import type { ReviewOptions } from "./review.js";
 import { createCommandFixture, removeCommandFixtures } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
@@ -1057,5 +1057,16 @@ describe("runReview", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.recovery).toContain("developer-os init");
+  });
+});
+
+describe("listCaptureSummaries", () => {
+  it("lists quarantined captures with their creation time and note path", async () => {
+    const fixture = await installedFixture("review-summaries");
+    await seedNote(fixture, "Alpha", "DEV/alpha.md");
+    const summaries = await listCaptureSummaries(fixture.context, "quarantined");
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({ status: "quarantined", notePath: "DEV/alpha.md" });
+    expect(Date.parse(summaries[0]?.createdAt ?? "")).not.toBeNaN();
   });
 });
