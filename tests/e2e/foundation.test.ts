@@ -157,6 +157,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
        * `output-schemas.test.ts` is what pins the derivation.
        */
       const ingestSchemaFile = join(schemasDir, "ingest.stage.schema.json");
+      const gardenSchemaFile = join(schemasDir, "garden.proposals.schema.json");
       const brainKeep = join(home.brain, ".gitkeep");
       const redactionKeyFile = join(stateDir, "redaction.key");
 
@@ -209,7 +210,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
        * are pinned by `brain-template.test.ts` and restating them here would
        * make every template edit a two-file change with one of them silent.
        */
-      expect(planned.created.slice(0, 10)).toStrictEqual([
+      expect(planned.created.slice(0, 11)).toStrictEqual([
         home.productHome,
         stateDir,
         stagingDir,
@@ -218,10 +219,11 @@ describe("Foundation temporary-HOME lifecycle", () => {
         schemasDir,
         configFile,
         ingestSchemaFile,
+        gardenSchemaFile,
         home.brain,
         brainKeep,
       ]);
-      const template = planned.created.slice(10);
+      const template = planned.created.slice(11);
       expect(template.length).toBeGreaterThan(0);
       /** The content root itself is the first entry, then everything under it. */
       expect(template[0]).toBe(`${home.brain}/content`);
@@ -278,10 +280,10 @@ describe("Foundation temporary-HOME lifecycle", () => {
          * count now covers the vault's directories and files as well as the
          * product's. Left as an exact number rather than a floor: this suite
          * exists to notice that an install created something nobody declared.
-         * Two more as of DOS-P6 Task 11 — `schemas/` and the one output
-         * schema in it.
+         * Three more: `schemas/` and its two output
+         * schemas (ingest.stage, garden.proposals).
          */
-        managedArtifacts: 36,
+        managedArtifacts: 37,
         driftCount: 0,
         incompleteTransactions: [],
       });
@@ -381,6 +383,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
         schemasDir,
         configFile,
         ingestSchemaFile,
+        gardenSchemaFile,
         home.brain,
       ]);
       expect(await inventory(home.root)).toStrictEqual(beforeStatus);
@@ -403,6 +406,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
       expect(removal.removed).toStrictEqual([
         configFile,
         ingestSchemaFile,
+        gardenSchemaFile,
         schemasDir,
         logsDir,
       ]);
