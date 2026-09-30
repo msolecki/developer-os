@@ -30,6 +30,8 @@ import {
   type LaunchdPlanV1,
   type LaunchdTransitionRequestV1,
   type LifecycleFileBindingV1,
+  validateLaunchdPlan,
+  validateLaunchdPlanPreview,
 } from "./plan.js";
 import { buildLaunchdPlanPreview, encodeLaunchdPlist, launchdPlistDictionary } from "./plist.js";
 import {
@@ -203,6 +205,24 @@ const rows = [
   { name: "remove from loaded old generation", retained: retainedOld("doctor", "loaded"), target: null, operation: "remove", unload: true, load: false },
   { name: "remove from unloaded", retained: retainedOld("doctor", "unloaded"), target: null, operation: "remove", unload: false, load: false },
 ] as const;
+
+describe("plan entry bounds", () => {
+  const entries = (count: number) => Array.from({ length: count }, () => ({}));
+  it("bounds a preview at the registry size", () => {
+    const preview = (count: number) => ({ schemaVersion: 1, observationProcessTableHash: "0", mutationProcessTableTemplateHash: "0", entries: entries(count) });
+    expect(() => validateLaunchdPlanPreview(preview(SCHEDULED_JOB_IDS.length + 1))).toThrow("LaunchdPlanPreviewV1: entries");
+    expect(() => validateLaunchdPlanPreview(preview(SCHEDULED_JOB_IDS.length))).not.toThrow("LaunchdPlanPreviewV1: entries");
+  });
+  it("bounds a plan's entries and plist files at the registry size", () => {
+    const plan = (entriesCount: number, files: number) => ({
+      schemaVersion: 1, planHash: "0", previewHash: null, coordinatorId: "0", coordinatorOperation: "automation_enable", processTableHash: "0",
+      config: null, activation: null, plistFiles: entries(files), manifest: {}, beforeFilesEffect: null, afterFilesEffect: null, entries: entries(entriesCount),
+    });
+    expect(() => validateLaunchdPlan(plan(7, 0))).toThrow("LaunchdPlanV1: entries");
+    expect(() => validateLaunchdPlan(plan(0, 7))).toThrow("LaunchdPlanV1: plistFiles");
+    expect(() => validateLaunchdPlan(plan(6, 6))).not.toThrow(/: (entries|plistFiles)$/);
+  });
+});
 
 describe("the exhaustive §5.3 file/live table", () => {
   it.each(rows)("$name", ({ retained, target, operation, unload, load }) => {

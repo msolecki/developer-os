@@ -145,6 +145,17 @@ describe("reconcileAutomationSchedules", () => {
     expect(without.schedules.map((s) => s.job)).not.toContain("brain-garden");
   });
 
+  it("parses an off value and lets it drop an optional job the prior config held", () => {
+    expect(parseScheduleFlag("brain-pulse=off")).toEqual({ job: "brain-pulse", schedule: null });
+    const prior = reconcileAutomationSchedules({ prior: null, flags: [...firstEnableFlags, "brain-garden=weekly@sun,17:00", "brain-pulse=hourly@05"], gitEligible: false });
+    const result = reconcileAutomationSchedules({ prior, flags: ["brain-garden=off"], gitEligible: false });
+    expect(result.schedules.map((s) => s.job)).toEqual(["brain-reindex", "brain-lint", "doctor", "brain-pulse"]);
+  });
+
+  it.each(["doctor=off", "git-sync=off"])("refuses %s as mandatory", (flag) => {
+    expect(() => reconcileAutomationSchedules({ prior: threeJobs, flags: [flag], gitEligible: true })).toThrow(/mandatory and cannot be turned off/);
+  });
+
   it("places git-sync fourth, before the optional jobs, when Git is eligible", () => {
     const result = reconcileAutomationSchedules({
       prior: null,

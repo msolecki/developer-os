@@ -239,6 +239,10 @@ export function gitSyncEligible(
   return activation.git.configHash === lifecycleConfigHash("git", git.lifecycle);
 }
 
+/**
+ * "Eligible" means not Git-gated. Optional jobs are included whether or not they are scheduled,
+ * so callers must intersect the result with the configured schedules.
+ */
 export function eligibleLaunchdJobs(gitEligible: boolean): readonly LaunchdJobDefinitionV1[] {
   return LAUNCHD_JOBS.filter((definition) => !definition.requiresGitActivation || gitEligible);
 }
