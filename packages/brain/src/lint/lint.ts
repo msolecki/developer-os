@@ -156,7 +156,7 @@ const SHAPING_SCRIPT =
 function hasStrayJoiner(value: string): boolean {
   const chars = Array.from(value);
   return chars.some((char, i) => {
-    if (char !== "‍") return false;
+    if (char !== "\u200D") return false;
     const before = chars[i - 1] ?? "";
     const after = chars[i + 1] ?? "";
     const emoji = EMOJI_BEFORE_JOINER.test(before) && EMOJI_AFTER_JOINER.test(after);

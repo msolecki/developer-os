@@ -499,22 +499,22 @@ describe("invisible frontmatter values", () => {
    * sequence or a shaping script, so everywhere else it is a warning.
    */
   it.each([
-    ["an emoji family", "Team \u{1F468}‍\u{1F469}‍\u{1F467}"],
-    ["a skin-tone modifier before the joiner", "Crew \u{1F469}\u{1F3FD}‍\u{1F680}"],
-    ["a gender sign after the joiner", "Run \u{1F3C3}‍♀️"],
-    ["a variation selector before the joiner", "Fire ❤️‍\u{1F525}"],
-    ["a Devanagari half-form", "क्‍ष notes"],
-    ["an Arabic letter forced into its joining form", "ه‍ notes"],
-    ["a Persian word-medial joiner", "م‍ی notes"],
-    ["a Malayalam chillu ending a word", "ന്‍ notes"],
+    ["an emoji family", "Team \u{1F468}\u200D\u{1F469}\u200D\u{1F467}"],
+    ["a skin-tone modifier before the joiner", "Crew \u{1F469}\u{1F3FD}\u200D\u{1F680}"],
+    ["a gender sign after the joiner", "Run \u{1F3C3}\u200D♀️"],
+    ["a variation selector before the joiner", "Fire ❤️\u200D\u{1F525}"],
+    ["a Devanagari half-form", "क्\u200Dष notes"],
+    ["an Arabic letter forced into its joining form", "ه\u200D notes"],
+    ["a Persian word-medial joiner", "م\u200Dی notes"],
+    ["a Malayalam chillu ending a word", "ന്\u200D notes"],
   ])("leaves a title with %s alone", async (_label, title) => {
     const result = await findingsFor({ title: JSON.stringify(title) });
     expect(result.findings.filter((f) => f.key === "title")).toStrictEqual([]);
   });
 
   it.each([
-    ["two Latin letters", "Deploy‍keys"],
-    ["a letter and a digit", "Plan‍2"],
+    ["two Latin letters", "Deploy\u200Dkeys"],
+    ["a letter and a digit", "Plan\u200D2"],
   ])("warns about a stray joiner between %s", async (_label, title) => {
     const result = await findingsFor({ title: JSON.stringify(title) });
     const titles = result.findings.filter((f) => f.key === "title");
@@ -524,12 +524,12 @@ describe("invisible frontmatter values", () => {
   });
 
   it("warns once per title, however many stray joiners it carries", async () => {
-    const result = await findingsFor({ title: '"De‍ploy‍keys"' });
+    const result = await findingsFor({ title: '"De\u200Dploy\u200Dkeys"' });
     expect(result.findings.filter((f) => f.key === "title")).toHaveLength(1);
   });
 
   it("still indexes a note whose title carries a stray joiner", async () => {
-    const files = { "content/DEV/note.md": note({ title: '"Deploy‍keys"' }) };
+    const files = { "content/DEV/note.md": note({ title: '"Deploy\u200Dkeys"' }) };
     const build = await buildIndex(memoryBuild(files));
     expect(build.index.notes).toHaveLength(1);
 

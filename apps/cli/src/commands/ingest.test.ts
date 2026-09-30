@@ -1247,7 +1247,7 @@ describe("runIngest, a batch that is not uniform", () => {
   it("screens format characters in the unreadable-capture warning, not in the id", async () => {
     const fixture = await installedFixture("ingest-warning-format-characters");
     const refusing = await fixture.seedAccepted("an observation that refuses");
-    const hostile = "cap‮evil  two";
+    const hostile = "cap\u202Eevil  two";
     await nodeFs.writeFile(join(fixture.quarantine, `${hostile}.md`), "not a capture at all\n", {
       mode: 0o600,
     });
@@ -1257,7 +1257,7 @@ describe("runIngest, a batch that is not uniform", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.message).not.toContain("‮");
+    expect(result.error.message).not.toContain("\u202E");
     expect(result.error.message).toContain("cap�evil  two.md is not a readable capture");
     const report = result.error.data as unknown as {
       readonly unreadable: readonly { readonly captureId: string }[];
@@ -1268,7 +1268,7 @@ describe("runIngest, a batch that is not uniform", () => {
   it("screens format characters in the success arm's warnings too", async () => {
     const fixture = await installedFixture("ingest-warning-format-characters-success");
     const readable = await fixture.seedAccepted("an observation that ingests");
-    await nodeFs.writeFile(join(fixture.quarantine, "cap‮evil.md"), "not a capture at all\n", {
+    await nodeFs.writeFile(join(fixture.quarantine, "cap\u202Eevil.md"), "not a capture at all\n", {
       mode: 0o600,
     });
     fixture.reply(() => oneNote(readable.id));
@@ -1277,7 +1277,7 @@ describe("runIngest, a batch that is not uniform", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.warnings.join("\n")).not.toContain("‮");
+    expect(result.warnings.join("\n")).not.toContain("\u202E");
     expect(result.warnings.join("\n")).toContain("cap�evil.md is not a readable capture");
   });
 
