@@ -611,8 +611,8 @@ export function validateLaunchdPlan(value: unknown): LaunchdPlanV1 {
   if (raw.schemaVersion !== 1) refuse("LaunchdPlanV1: schemaVersion");
   const operations: readonly unknown[] = ["automation_enable", "automation_reconcile", "automation_disable", "uninstall"];
   if (!operations.includes(raw.coordinatorOperation)) refuse("LaunchdPlanV1: coordinatorOperation");
-  if (!Array.isArray(raw.plistFiles) || raw.plistFiles.length > 4) refuse("LaunchdPlanV1: plistFiles");
-  if (!Array.isArray(raw.entries) || raw.entries.length > 4) refuse("LaunchdPlanV1: entries");
+  if (!Array.isArray(raw.plistFiles) || raw.plistFiles.length > SCHEDULED_JOB_IDS.length) refuse("LaunchdPlanV1: plistFiles");
+  if (!Array.isArray(raw.entries) || raw.entries.length > SCHEDULED_JOB_IDS.length) refuse("LaunchdPlanV1: entries");
   const manifest = exactKeys(raw.manifest, ["path", "statePlanHash", "before", "after"], "LaunchdPlanV1.manifest");
   const plan: LaunchdPlanV1 = Object.freeze({
     schemaVersion: 1,
@@ -649,7 +649,7 @@ export function validateLaunchdPlanPreview(value: unknown): LaunchdPlanPreviewV1
     "LaunchdPlanPreviewV1",
   );
   if (raw.schemaVersion !== 1) refuse("LaunchdPlanPreviewV1: schemaVersion");
-  if (!Array.isArray(raw.entries) || raw.entries.length > 4) refuse("LaunchdPlanPreviewV1: entries");
+  if (!Array.isArray(raw.entries) || raw.entries.length > SCHEDULED_JOB_IDS.length) refuse("LaunchdPlanPreviewV1: entries");
   let order = -1;
   const entries = (raw.entries as readonly unknown[]).map((entry, index) => {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry) || Object.hasOwn(entry, "bootstrapPlists")) {

@@ -55,10 +55,14 @@ afterEach(() => {
 });
 
 describe("closed job registry", () => {
-  it("enumerates exactly the four jobs in canonical order, none may spawn a vendor", () => {
-    expect(LAUNCHD_JOBS.length).toBeGreaterThan(0);
-    expect(LAUNCHD_JOBS.map((job) => job.id)).toEqual(["brain-reindex", "brain-lint", "doctor", "git-sync"]);
-    expect(LAUNCHD_JOBS.map((job) => job.maySpawnVendor)).toEqual([false, false, false, false]);
+  it("enumerates exactly the six jobs in canonical order", () => {
+    expect(LAUNCHD_JOBS.map((job) => job.id)).toEqual(["brain-reindex", "brain-lint", "doctor", "git-sync", "brain-garden", "brain-pulse"]);
+  });
+
+  it("defines brain-garden as the only vendor-spawning job", () => {
+    const spawning = SCHEDULED_JOB_IDS.filter((id) => launchdJob(id).maySpawnVendor);
+    expect(spawning).toEqual(["brain-garden"]);
+    expect(launchdJob("brain-pulse")).toMatchObject({ baseLabel: "com.developer-os.brain-pulse", requiresGitActivation: false, maySpawnVendor: false });
   });
 
   it("follows the core registry order and gates only git-sync on Git activation", () => {
@@ -76,6 +80,8 @@ describe("closed job registry", () => {
       ["brain-lint", "com.developer-os.brain-lint", "/Users/fixture/Library/LaunchAgents/com.developer-os.brain-lint.plist"],
       ["doctor", "com.developer-os.doctor", "/Users/fixture/Library/LaunchAgents/com.developer-os.doctor.plist"],
       ["git-sync", "com.developer-os.git-sync", "/Users/fixture/Library/LaunchAgents/com.developer-os.git-sync.plist"],
+      ["brain-garden", "com.developer-os.brain-garden", "/Users/fixture/Library/LaunchAgents/com.developer-os.brain-garden.plist"],
+      ["brain-pulse", "com.developer-os.brain-pulse", "/Users/fixture/Library/LaunchAgents/com.developer-os.brain-pulse.plist"],
     ]);
   });
 
@@ -242,8 +248,8 @@ describe("git-sync eligibility", () => {
     ).toBe(false);
   });
 
-  it("offers three jobs without Git and four with it", () => {
-    expect(eligibleLaunchdJobs(false).map((job) => job.id)).toEqual(["brain-reindex", "brain-lint", "doctor"]);
-    expect(eligibleLaunchdJobs(true).map((job) => job.id)).toEqual(["brain-reindex", "brain-lint", "doctor", "git-sync"]);
+  it("omits only git-sync without Git", () => {
+    expect(eligibleLaunchdJobs(false).map((job) => job.id)).toEqual(["brain-reindex", "brain-lint", "doctor", "brain-garden", "brain-pulse"]);
+    expect(eligibleLaunchdJobs(true).map((job) => job.id)).toEqual([...SCHEDULED_JOB_IDS]);
   });
 });

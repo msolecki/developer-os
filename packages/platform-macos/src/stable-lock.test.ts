@@ -568,7 +568,7 @@ describe.runIf(process.platform === "darwin")("MacOsStableLockProvider", () => {
     expect(clock.sleeps).toStrictEqual([]);
   });
 
-  it("acquires the four registry leases in the given order and never re-sorts them", async () => {
+  it("acquires the six registry leases in the given order and never re-sorts them", async () => {
     const fixture = await homeWithLeases("order");
     const clock = fakeClock();
     const recording = recordingFileSystem();
@@ -578,8 +578,10 @@ describe.runIf(process.platform === "darwin")("MacOsStableLockProvider", () => {
       "brain-lint",
       "doctor",
       "git-sync",
+      "brain-garden",
+      "brain-pulse",
     ]);
-    expect(fixture.paths).toHaveLength(4);
+    expect(fixture.paths).toHaveLength(6);
     expect([...fixture.paths]).not.toStrictEqual([...fixture.paths].sort());
 
     const held = await new MacOsStableLockProvider({

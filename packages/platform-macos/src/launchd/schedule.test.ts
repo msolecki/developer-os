@@ -135,6 +135,25 @@ describe("reconcileAutomationSchedules", () => {
     expect(reconcileAutomationSchedules({ prior: result, flags: [], gitEligible: true })).toEqual(result);
   });
 
+  it("enables brain-garden only when flagged and keeps it from the prior config", () => {
+    const raw = ["brain-reindex=daily@03:00", "brain-lint=daily@03:10", "doctor=daily@03:20"];
+    const first = reconcileAutomationSchedules({ prior: null, flags: [...raw, "brain-garden=weekly@sun,17:00"], gitEligible: false });
+    expect(first.schedules.map((s) => s.job)).toEqual(["brain-reindex", "brain-lint", "doctor", "brain-garden"]);
+    const again = reconcileAutomationSchedules({ prior: first, flags: [], gitEligible: false });
+    expect(again.schedules.map((s) => s.job)).toContain("brain-garden");
+    const without = reconcileAutomationSchedules({ prior: null, flags: raw, gitEligible: false });
+    expect(without.schedules.map((s) => s.job)).not.toContain("brain-garden");
+  });
+
+  it("places git-sync fourth, before the optional jobs, when Git is eligible", () => {
+    const result = reconcileAutomationSchedules({
+      prior: null,
+      flags: [...firstEnableFlags, "brain-garden=weekly@sun,17:00", "git-sync=hourly@15"],
+      gitEligible: true,
+    });
+    expect(result.schedules.map((s) => s.job)).toEqual(["brain-reindex", "brain-lint", "doctor", "git-sync", "brain-garden"]);
+  });
+
   it("drops a git-sync schedule that is no longer eligible", () => {
     const four = reconcileAutomationSchedules({ prior: threeJobs, flags: ["git-sync=hourly@15"], gitEligible: true });
     expect(reconcileAutomationSchedules({ prior: four, flags: [], gitEligible: false })).toEqual(threeJobs);

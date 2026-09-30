@@ -163,12 +163,12 @@ describe("LaunchdObserver", () => {
     ]);
   });
 
-  it("issues at most 13 probes for a complete four-job observation", async () => {
+  it("issues at most 19 probes for a complete six-job observation", async () => {
     const jobs = SCHEDULED_JOB_IDS.map((job: ScheduledJobIdV1) => ({ job, retained: generatedLabel(job, OLD), planned: generatedLabel(job, NEW) }));
-    expect(jobs).toHaveLength(4);
+    expect(jobs).toHaveLength(6);
     const runner = new ScriptedRunner();
     const result = await new LaunchdObserver(host(runner)).observe({ domain, jobs });
-    expect(runner.requests).toHaveLength(13);
+    expect(runner.requests).toHaveLength(19);
     expect(result).toEqual({ kind: "observed", jobs: SCHEDULED_JOB_IDS.map((job) => ({ job, state: { kind: "unloaded" } })) });
   });
 
@@ -323,7 +323,7 @@ describe("LaunchdObserver", () => {
   });
 
   it.each([
-    { name: "more than four jobs", jobs: [...SCHEDULED_JOB_IDS, "doctor" as const].map((job) => ({ job, retained: null, planned: null })) },
+    { name: "more than six jobs", jobs: [...SCHEDULED_JOB_IDS, "doctor" as const].map((job) => ({ job, retained: null, planned: null })) },
     { name: "a duplicate job", jobs: [replaceDoctor, replaceDoctor] },
     { name: "a retained label of another job", jobs: [{ job: "doctor" as const, retained: generatedLabel("brain-lint", OLD), planned: null }] },
     { name: "a planned label of another job", jobs: [{ job: "doctor" as const, retained: null, planned: generatedLabel("git-sync", NEW) }] },

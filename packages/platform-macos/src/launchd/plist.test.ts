@@ -41,7 +41,7 @@ const hostileHome = "/Users/a b/&<\"é>/.developer-os";
 const observationHash = "1".repeat(64) as LowerHexSha256;
 const templateHash = "2".repeat(64) as LowerHexSha256;
 
-function projectionFor(home: string, job: Exclude<ScheduledJobIdV1, "brain-garden" | "brain-pulse"> = "brain-reindex"): LaunchdGenerationProjectionV1 {
+function projectionFor(home: string, job: ScheduledJobIdV1 = "brain-reindex"): LaunchdGenerationProjectionV1 {
   const productHome = parseScheduledProductHome(home);
   return {
     job,

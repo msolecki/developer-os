@@ -1,5 +1,6 @@
 import {
   SCHEDULED_JOB_IDS,
+  isOptionalScheduledJob,
   type AutomationConfigV1,
   type NormalizedScheduleV1,
   type ScheduledJobIdV1,
@@ -99,6 +100,9 @@ export function reconcileAutomationSchedules(request: {
   readonly gitEligible: boolean;
 }): AutomationConfigV1 {
   const eligible = SCHEDULED_JOB_IDS.filter((job) => job !== "git-sync" || request.gitEligible);
+  const named = new Set([...request.flags.map((flag) => parseScheduleFlag(flag).job), ...(request.prior?.schedules ?? []).map((entry) => entry.job)]);
+  // Optional jobs are kept only when a flag or the prior configuration names them.
+  const kept = eligible.filter((job) => !isOptionalScheduledJob(job) || named.has(job));
   const supplied = new Map<ScheduledJobIdV1, NormalizedScheduleV1>();
   for (const flag of request.flags) {
     const parsed = parseScheduleFlag(flag);
@@ -112,7 +116,7 @@ export function reconcileAutomationSchedules(request: {
   }
   return {
     schemaVersion: 1,
-    schedules: eligible.map((job) => {
+    schedules: kept.map((job) => {
       const schedule = supplied.get(job) ?? prior.get(job) ?? refuse(`schedule required for ${job}`);
       return { job, schedule };
     }),

@@ -25,7 +25,9 @@ export type ClosedLaunchdBaseLabelV1 =
   | "com.developer-os.brain-reindex"
   | "com.developer-os.brain-lint"
   | "com.developer-os.doctor"
-  | "com.developer-os.git-sync";
+  | "com.developer-os.git-sync"
+  | "com.developer-os.brain-garden"
+  | "com.developer-os.brain-pulse";
 
 /** `gui/<effective uid>`: the one launchd domain Developer OS may name. */
 export type LaunchdGuiDomainV1 = `gui/${number}` & { readonly [launchdGuiDomainV1]: true };
@@ -102,7 +104,7 @@ export interface LaunchdJobDefinitionV1 {
   readonly baseLabel: ClosedLaunchdBaseLabelV1;
   readonly plistFileName: `${ClosedLaunchdBaseLabelV1}.plist`;
   readonly requiresGitActivation: boolean;
-  readonly maySpawnVendor: false;
+  readonly maySpawnVendor: boolean;
 }
 
 export type LaunchdPlanOperationV1 = "install" | "replace" | "keep" | "remove";

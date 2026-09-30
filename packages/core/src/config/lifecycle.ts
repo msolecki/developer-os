@@ -80,8 +80,8 @@ export interface LifecycleActivationRecordV1 {
 
 /**
  * Reconciliation order, not an alphabetical set: Spec 1 §2.2 fixes the first three
- * entries as mandatory and `git-sync` as exactly the fourth when it was eligible at
- * apply, and Task 9's lease acquisition walks the same order.
+ * entries as mandatory, `git-sync` as exactly the fourth when it was eligible at
+ * apply, and the optional `brain-garden` and `brain-pulse` after it; and Task 9's lease acquisition walks the same order.
  */
 export const SCHEDULED_JOB_IDS = [
   "brain-reindex",

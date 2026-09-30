@@ -1,7 +1,6 @@
 import {
   SCHEDULED_JOB_IDS,
   hashCanonicalJson,
-  isOptionalScheduledJob,
   lifecycleConfigHash,
   parseCanonicalAbsolutePathText,
   parseLowerHexSha256,
@@ -68,9 +67,21 @@ function job(id: ScheduledJobIdV1): LaunchdJobDefinitionV1 {
         maySpawnVendor: false,
       };
     case "brain-garden":
+      return {
+        id,
+        baseLabel: "com.developer-os.brain-garden",
+        plistFileName: "com.developer-os.brain-garden.plist",
+        requiresGitActivation: false,
+        maySpawnVendor: true,
+      };
     case "brain-pulse":
-      // Temporary (NEW-134 Task 1): Task 2 defines these registry entries.
-      throw new Error(`${id} is wired in NEW-134 Task 2`);
+      return {
+        id,
+        baseLabel: "com.developer-os.brain-pulse",
+        plistFileName: "com.developer-os.brain-pulse.plist",
+        requiresGitActivation: false,
+        maySpawnVendor: false,
+      };
     default: {
       const unknown: never = id;
       return refuse(`unknown scheduled job ${String(unknown)}`);
@@ -80,8 +91,7 @@ function job(id: ScheduledJobIdV1): LaunchdJobDefinitionV1 {
 
 /** Spec 1 §5.1's closed registry, in `SCHEDULED_JOB_IDS` order. `import` and `ingest` are not jobs (D47). */
 export const LAUNCHD_JOBS: readonly LaunchdJobDefinitionV1[] = Object.freeze(
-  // Temporary (NEW-134 Task 1): optional jobs join the registry in Task 2, so its module load keeps working.
-  SCHEDULED_JOB_IDS.filter((id) => !isOptionalScheduledJob(id)).map((id) => Object.freeze(job(id))),
+  SCHEDULED_JOB_IDS.map((id) => Object.freeze(job(id))),
 );
 
 export function launchdJob(id: unknown): LaunchdJobDefinitionV1 {

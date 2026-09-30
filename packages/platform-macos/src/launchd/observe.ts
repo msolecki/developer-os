@@ -1,4 +1,4 @@
-import type { ScheduledJobIdV1 } from "@developer-os/core";
+import { SCHEDULED_JOB_IDS, type ScheduledJobIdV1 } from "@developer-os/core";
 import type { SupervisedPhaseV1, SupervisedProcessRunner } from "@developer-os/security";
 
 import {
@@ -97,7 +97,7 @@ function candidateLabel(job: ScheduledJobIdV1, label: GeneratedLaunchdLabelV1 | 
 }
 
 function validateJobs(jobs: readonly LaunchdObservationJobV1[]): readonly LaunchdObservationJobV1[] {
-  if (jobs.length > 4) refuse("launchd observation names more than four jobs");
+  if (jobs.length > SCHEDULED_JOB_IDS.length) refuse("launchd observation names more than six jobs");
   const seen = new Set<ScheduledJobIdV1>();
   return jobs.map((entry) => {
     const job = launchdJob(entry.job).id;
