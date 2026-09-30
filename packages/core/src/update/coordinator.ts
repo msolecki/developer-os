@@ -1129,7 +1129,7 @@ export interface UpdateLifecycleCoordinatorDependenciesV1 {
   readonly participants: UpdateCoordinatorParticipantsV1;
   readonly executor: UpdateRecoveryExecutorPortV1;
   /** Reopens the execution leaf and owner plans and runs `assertUpdateCoordinatorDerivation`. */
-  readonly verifyPlan: (plan: UpdateLifecycleCoordinatorPlanV2) => Promise<void>;
+  readonly verifyPlan: (plan: UpdateLifecycleCoordinatorPlanV2, journal: UpdateLifecycleCoordinatorJournalV2) => Promise<void>;
   /** Proves the held global lock before every mutation; refuses otherwise. */
   readonly requireLock: () => Promise<void>;
   readonly clock: () => UtcTimestampV1;
@@ -1189,7 +1189,7 @@ export class UpdateLifecycleCoordinator {
     await this.#dependencies.requireLock();
     const { plan, journal } = await this.#dependencies.store.read(id);
     if (plan.id !== id || journal.id !== id) refuseLifecycleRecovery("update_coordinator_identity", id);
-    await this.#dependencies.verifyPlan(plan);
+    await this.#dependencies.verifyPlan(plan, journal);
     return { plan, journal };
   }
 

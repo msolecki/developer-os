@@ -794,7 +794,7 @@ async function compactStaging(dispatch: DispatchContextV1): Promise<void> {
   if (construction === null) return removeEmptyDirectory(lifecycle, root);
   const deps = { fs: lifecycle.fs, effectiveUid: lifecycle.effectiveUid, now: () => context.now() };
   const journals = new UpdateParticipantJournalStore({ fs: lifecycle.fs, effectiveUid: lifecycle.effectiveUid });
-  const sources = await sourcePlansOf(lifecycle, construction);
+  const sources = await sourcePlansOf(lifecycle, construction, construction.files.length);
   if (sources.rollback !== null) {
     await new RollbackPayloadSourceExecutor(deps, root).compact(sources.rollback.plan);
     await journals.remove(updateParticipantJournalPath(root, "rollback_payload_source", sources.rollback.plan.id));
@@ -817,12 +817,15 @@ interface SourcePlansV1 {
   readonly rollback: { readonly plan: RollbackPayloadSourceStagingPlanV1; readonly row: UpdateConstructionFilePlanV1 } | null;
 }
 
-/** Both source plans, reopened from their construction rows by exact hash; an unwritten row is absent. */
-async function sourcePlansOf(lifecycle: CliLifecycleContext, construction: UpdateConstructionPlanV1): Promise<SourcePlansV1> {
+/**
+ * Both source plans, reopened from their construction rows by exact hash. A row at or past
+ * `nextFile` is unwritten or in flight (possibly an empty exclusive create): its source never ran.
+ */
+async function sourcePlansOf(lifecycle: CliLifecycleContext, construction: UpdateConstructionPlanV1, nextFile: number): Promise<SourcePlansV1> {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- each source kind decodes to its own plan type
   const open = async <T>(kind: UpdateLeafPlanKindV1): Promise<{ readonly plan: T; readonly row: UpdateConstructionFilePlanV1 } | null> => {
     const row = construction.files.find((file) => file.role.kind === "immutable_plan" && file.role.planKind === kind);
-    if (row === undefined) return null;
+    if (row === undefined || row.ordinal >= nextFile) return null;
     const bytes = await readBound(lifecycle, row.path, MAXIMUM_LEAF_PLAN_BYTES);
     if (bytes === null) return null;
     if (sha256(bytes) !== row.sha256) thirdState("update_source_plan_hash", row.path);
@@ -918,7 +921,7 @@ function recoverySources(lifecycle: CliLifecycleContext, root: CanonicalAbsolute
       if (source !== null) await new RollbackPayloadSourceExecutor(deps, root).finish(source, plan, journal);
     },
     compensateSources: async (plan, journal) => {
-      const sources = await sourcePlansOf(lifecycle, plan);
+      const sources = await sourcePlansOf(lifecycle, plan, journal.nextFile);
       const reached = async (kind: "rollback_payload_source" | "bundle_source_staging", id: string): Promise<boolean> => (await lifecycle.fs.lstat(updateParticipantJournalPath(root, kind, id))) !== null;
       if (sources.rollback !== null && (await reached("rollback_payload_source", sources.rollback.plan.id))) await new RollbackPayloadSourceExecutor(deps, root).compensate(sources.rollback.plan, plan, journal);
       if (sources.bundle !== null && (await reached("bundle_source_staging", sources.bundle.plan.id))) await new BundleSourceExecutor(deps, root).compensate(sources.bundle.plan, plan, journal);
@@ -1059,10 +1062,10 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
           return (await executor()).removeRecord(plan);
         },
       },
-      verifyPlan: async (plan) => {
+      verifyPlan: async (plan, journal) => {
         const { reopened } = await load(plan);
-        // After `coordinator_staging` the leaves are gone; the hash-bound outer plan alone remains.
-        if (reopened.execution === null) return;
+        // Compaction removes the owner leaves first, so from then on the hash-bound outer plan alone remains.
+        if (reopened.execution === null || journal.phase === "compacting") return;
         assertUpdateCoordinatorDerivation(plan, reopened.execution, reopened.owners);
       },
       requireLock: () => {

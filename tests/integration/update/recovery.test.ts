@@ -122,8 +122,8 @@ describe("update --apply at every death point (Spec 2 §9.3, §9.4)", () => {
 
 type DyingCliContext = Parameters<typeof dieAfterMutations>[0];
 
-/** The same context whose process dies right after it unlinks a path containing `fragment`. */
-function dieAfterUnlinking(context: DyingCliContext, fragment: string): { readonly context: DyingCliContext; readonly died: () => boolean } {
+/** The same context whose process dies right after the first durable mutation `fatal` selects. */
+function dieWhen(context: DyingCliContext, fatal: (name: string, args: readonly unknown[]) => boolean | Promise<boolean>): { readonly context: DyingCliContext; readonly died: () => boolean } {
   const lifecycle = context.lifecycle;
   if (lifecycle === undefined) throw new Error("the fixture has no lifecycle ports");
   let died = false;
@@ -133,7 +133,7 @@ function dieAfterUnlinking(context: DyingCliContext, fragment: string): { readon
     fs[name] = async (...args: readonly unknown[]): Promise<unknown> => {
       if (died) throw new SyntheticDeathError();
       const result = await real(...args);
-      if (name === "unlinkExact" && (args[0] as { readonly path: string }).path.includes(fragment)) {
+      if (await fatal(name, args)) {
         died = true;
         throw new SyntheticDeathError();
       }
@@ -141,6 +141,22 @@ function dieAfterUnlinking(context: DyingCliContext, fragment: string): { readon
     };
   }
   return { context: { ...context, lifecycle: { ...lifecycle, fs: fs as unknown as typeof lifecycle.fs } }, died: () => died };
+}
+
+function dieAfterUnlinking(context: DyingCliContext, fragment: string): ReturnType<typeof dieWhen> {
+  return dieWhen(context, (name, args) => name === "unlinkExact" && (args[0] as { readonly path: string }).path.includes(fragment));
+}
+
+/** True once some staging root holds an exclusively created, still empty `kind` source plan row. */
+async function emptySourcePlanExists(home: UpdatableHomeV1, kind: string): Promise<boolean> {
+  const lifecycleRoot = join(home.fixture.paths.home, "staging", "lifecycle");
+  for (const root of await nodeFs.readdir(lifecycleRoot).catch(() => [])) {
+    const plans = join(lifecycleRoot, root, "update", "plans", kind);
+    for (const leaf of await nodeFs.readdir(plans).catch(() => [])) {
+      if ((await nodeFs.stat(join(plans, leaf))).size === 0) return true;
+    }
+  }
+  return false;
 }
 
 describe("a death between a publication journal's removal and its plan leaf's (NEW-110 review C2)", () => {
@@ -154,6 +170,19 @@ describe("a death between a publication journal's removal and its plan leaf's (N
     const settledHome = await settled(home);
     expect(settledHome.active.version).toBe("1.1.0");
     expect(settledHome.rollback?.previous.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
+});
+
+describe("a construction that died between a source plan row's exclusive create and its bytes", () => {
+  it.each(["bundle_source_staging", "rollback_payload_source"])("compensates the empty %s row without reading it as a plan", async (kind) => {
+    const home = await installUpdatableHome(`recovery-empty-${kind.replaceAll("_", "-")}`, "arm64");
+    const dying = dieWhen(home.fixture.context, () => emptySourcePlanExists(home, kind));
+
+    expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    expect(await emptySourcePlanExists(home, kind)).toBe(true);
+    await recoverUpdate(home.update());
+
+    expect((await settled(home)).active.version).toBe("1.0.0");
   }, CASE_TIMEOUT_MS);
 });
 
