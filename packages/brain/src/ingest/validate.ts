@@ -508,6 +508,22 @@ function secretScan(
 ): readonly IngestValidationFinding[] {
   const findings: IngestValidationFinding[] = [];
   for (const note of notes) {
+    /**
+     * NEW-129: the model sees capture and index text with secrets already replaced by
+     * markers and is told to carry them through, so it can copy one into a file name. The
+     * marker holds no secret, so the scan below finds nothing and the vault gained
+     * `DEV/refetch-ma[REDACTED:provider-token].md`. A name built from a redacted value is
+     * refused, not written.
+     */
+    if (note.path.includes("[REDACTED:")) {
+      findings.push(
+        finding(
+          "secret-scan",
+          note.path,
+          "this path carries a [REDACTED:...] marker, so the file name was built from redacted text; name the note from its subject instead",
+        ),
+      );
+    }
     const classes = new Set<string>();
     const entries = new Set<number>();
     const overBroad = new Set<number>();

@@ -674,6 +674,20 @@ describe("secret-scan", () => {
     expect(message).toContain("[redaction] table in config.toml");
   });
 
+  /** NEW-129: a model copied a redaction marker into a file name; the marker holds no secret. */
+  for (const path of ["DEV/refetch-ma[REDACTED:provider-token].md", "[REDACTED:high-entropy].md"]) {
+    it(`refuses a destination path carrying a redaction marker: ${path}`, async () => {
+      const result = await validateProposal(
+        proposal({ path, contents: noteText(), sourceCaptureId: CAPTURE_ID }),
+        contextFor(await makeVault()),
+      );
+
+      expect(result.ok).toBe(false);
+      const message = result.findings.find((f) => f.validator === "secret-scan")?.message;
+      expect(message).toContain("path carries a [REDACTED:...] marker");
+    });
+  }
+
   it("accepts a proposal the redactor finds nothing in", async () => {
     const result = await validateProposal(proposal(validNote()), contextFor(await makeVault()));
     expect(validators(result)).not.toContain("secret-scan");
