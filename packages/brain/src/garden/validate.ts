@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+
 import type { BrainConfigV1 } from "@developer-os/core";
 import { parseAllDocuments } from "yaml";
 
@@ -412,6 +414,8 @@ export function validateGardenResponse(
   const selected = new Set(input.targets.isolated);
   const pending = new Set([...input.pendingNotePaths].map(fold));
   const indexed = new Set(notes.map((note) => fold(contentRelative(note.path))));
+  /** Ruling 31: file names (folded) a new hub may not reuse — the index's, then each earlier hub's. */
+  const fileNames = new Set(notes.map((note) => fold(posix.basename(note.path, ".md"))));
   const resolveIndexed = createLinkResolver(notes, config.contentRoot);
 
   function kindCheck(proposal: GardenProposalV1, parsed: ParsedNote): Code | null {
@@ -423,6 +427,9 @@ export function validateGardenResponse(
       if (indexed.has(fold(target)) || pending.has(fold(target)) || input.readNote(target) !== null) {
         return "target_occupied";
       }
+      const name = fold(posix.basename(target, ".md"));
+      if (fileNames.has(name)) return "target_occupied";
+      fileNames.add(name);
       if (!isUnreviewedAgentNote(parsed) || parsed.frontmatter.type !== "compiled-note") {
         return "frontmatter_invalid";
       }
@@ -501,9 +508,23 @@ export function validateGardenResponse(
   );
 
   /**
+   * Ruling 31: the file-name view is built once, over every hub the agent
+   * proposed that parsed — accepted or not — so a rejected hub still makes its
+   * file name ambiguous. Dropping it would turn an ambiguous link into a unique
+   * one the agent never meant.
+   */
+  const byFileName = createLinkResolver(
+    [...notes, ...checked.filter((entry) => entry.proposal.kind === "hub" && entry.parsed !== null).map((hub) => asIndexed(hub, config))],
+    config.contentRoot,
+    { fileNamesOnly: true },
+  );
+
+  /**
    * A link may resolve to a hub proposed in the same run only if that hub is
-   * itself accepted. Rejecting a hub can only add link failures, so iterate
-   * until the accepted hub set stops shrinking (at most eight proposals).
+   * itself accepted. Rejecting a hub removes it from the full resolver, which
+   * can only turn a link to it into a failure: the file-name view above never
+   * shrinks, so no link becomes unique by a rejection. Iterate until the
+   * accepted hub set stops shrinking (at most eight proposals).
    */
   let hubs = checked.filter((entry) => entry.proposal.kind === "hub" && entry.early === null);
   let codes: (Code | null)[] = [];
@@ -511,11 +532,6 @@ export function validateGardenResponse(
     const resolve = createLinkResolver(
       [...notes, ...hubs.map((hub) => asIndexed(hub, config))],
       config.contentRoot,
-    );
-    const byFileName = createLinkResolver(
-      [...notes, ...hubs.map((hub) => asIndexed(hub, config))],
-      config.contentRoot,
-      { fileNamesOnly: true },
     );
     codes = checked.map((entry, index) => {
       if (entry.early !== null) return entry.early;

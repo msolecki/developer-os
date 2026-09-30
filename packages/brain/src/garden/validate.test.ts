@@ -824,4 +824,48 @@ describe("validateGardenResponse", () => {
       }
     });
   });
+
+  describe("Task 6b review 3: a proposed hub's file name must be unique in the vault (Ruling 31)", () => {
+    const NESTED = [...NOTES, note("content/DEV/sub/rebase.md", { title: "Rebasing" })];
+    const run = (proposals: readonly unknown[]): GardenValidationV1 => {
+      const result = validateGardenResponse({
+        response: { proposals },
+        targets: TARGETS,
+        notes: NESTED,
+        config: DEFAULT_BRAIN_CONFIG,
+        readNote: (path) => TEXTS.get(path) ?? null,
+        pendingNotePaths: new Set(),
+        findings: [],
+        redactionFindings: () => 0,
+      });
+      if ("invalid" in result) throw new Error("unexpected agent_output_invalid");
+      return result;
+    };
+    const hub = (target: string, extra = ""): unknown => ({ kind: "hub", target, note: HUB + extra });
+    const related = (link: string): unknown => ({
+      kind: "related",
+      target: "DEV/alpha.md",
+      note: text("DEV/alpha.md") + `\n## Related\n\n- [[${link}]]\n- [[beta]]\n`,
+    });
+    const codes = (result: GardenValidationV1): readonly string[] => result.rejected.map((r) => `${r.target}:${r.code}`);
+
+    it("rejects a hub whose file name an indexed note or an earlier hub already has", () => {
+      expect(codes(run([hub("DEV/hubs/rebase.md")]))).toEqual(["DEV/hubs/rebase.md:target_occupied"]);
+      expect(codes(run([hub("DEV/hubs/Rebase.md")]))).toEqual(["DEV/hubs/Rebase.md:target_occupied"]);
+      const two = run([hub("DEV/x/topic.md"), hub("QA/topic.md")]);
+      // Without Ruling 31 the second hub is `duplicate_target` (same gap tag); the name check runs first.
+      expect(codes(two)).toEqual(["QA/topic.md:target_occupied"]);
+    });
+
+    it("still counts a rejected colliding hub as an ambiguity for a same-run link", () => {
+      expect(codes(run([hub("DEV/hubs/rebase.md", "[[rebase]]\n"), related("rebase")]))).toEqual([
+        "DEV/hubs/rebase.md:target_occupied",
+        "DEV/alpha.md:related_changes_body",
+      ]);
+    });
+
+    it("accepts a uniquely named same-run hub linked by its file name", () => {
+      expect(codes(run([hub("DEV/hubs/newhub.md"), related("newhub")]))).toEqual([]);
+    });
+  });
 });
