@@ -216,18 +216,23 @@ export function validateGardenResponse(
       });
       return outside ? "sources_outside_bundle" : null;
     }
-    const current = selected.has(target) || proposal.kind === "fix" ? input.readNote(target) : null;
     if (proposal.kind === "related") {
-      if (current === null) return "target_not_selected";
-      return checkRelated(current, proposal.note);
+      const current = selected.has(target) ? input.readNote(target) : null;
+      return current === null ? "target_not_selected" : checkRelated(current, proposal.note);
     }
     if (pending.has(fold(target))) return "target_occupied";
-    if (current === null) return "fix_out_of_scope";
+    /**
+     * The findings gate the read: only a target some finding names (an indexed
+     * note) ever reaches `readNote`, so an agent-written path such as
+     * `DEV/../x.md` is never handed to the reader.
+     */
     const allowed = new Set(
       input.findings
         .filter((finding) => finding.path === prefix + target && finding.key !== null)
         .map((finding) => finding.key as string),
     );
+    const current = allowed.size === 0 ? null : input.readNote(target);
+    if (current === null) return "fix_out_of_scope";
     return checkFix(current, proposal.note, allowed);
   }
 

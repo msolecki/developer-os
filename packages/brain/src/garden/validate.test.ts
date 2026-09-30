@@ -252,6 +252,23 @@ describe("validateGardenResponse", () => {
     }
   });
 
+  it("never hands an agent-written fix target to the reader when no finding names it", () => {
+    const fix = text("DEV/gamma.md").replace("About Gamma.", "Better.");
+    const result = validateGardenResponse({
+      response: { proposals: [{ kind: "fix", target: "DEV/../gamma.md", note: fix }] },
+      targets: TARGETS,
+      notes: NOTES,
+      config: DEFAULT_BRAIN_CONFIG,
+      readNote: () => {
+        throw new Error("readNote called");
+      },
+      pendingNotePaths: new Set(),
+      findings: [SUMMARY_FINDING],
+      redactionFindings: () => 0,
+    });
+    expect(result).toMatchObject({ accepted: [], rejected: [{ index: 0, code: "fix_out_of_scope" }] });
+  });
+
   it("rejects a note over 64 KiB as too_large", () => {
     const hub = HUB + "x".repeat(70_000);
     expect(validate({ proposals: [{ kind: "hub", target: "DEV/testing-hub.md", note: hub }] }))
