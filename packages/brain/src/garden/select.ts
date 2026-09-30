@@ -41,6 +41,13 @@ export function selectGardenTargets(input: {
   readonly notes: readonly IndexedNote[];
   readonly findings: readonly LintFinding[];
   readonly pendingNotePaths: ReadonlySet<string>;
+  /**
+   * Ruling 32: tags a pending hub already covers, so its gap is not re-offered
+   * while the hub waits in review. Task 8's handler supplies it from the tags of
+   * quarantined captures whose note is new and whose frontmatter `type` is
+   * `compiled-note`. Defaults to none.
+   */
+  readonly pendingHubTags?: ReadonlySet<string>;
 }): GardenTargetsV1 {
   const flagged = new Set<string>();
   for (const finding of input.findings) {
@@ -50,7 +57,7 @@ export function selectGardenTargets(input: {
   }
 
   const byTag = new Map<string, string[]>();
-  const covered = new Set<string>();
+  const covered = new Set<string>(input.pendingHubTags);
   for (const note of input.notes) {
     for (const tag of note.tags) {
       if (note.type === "compiled-note") covered.add(tag);

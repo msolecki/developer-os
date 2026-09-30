@@ -414,8 +414,13 @@ export function validateGardenResponse(
   const selected = new Set(input.targets.isolated);
   const pending = new Set([...input.pendingNotePaths].map(fold));
   const indexed = new Set(notes.map((note) => fold(contentRelative(note.path))));
-  /** Ruling 31: file names (folded) a new hub may not reuse — the index's, then each earlier hub's. */
-  const fileNames = new Set(notes.map((note) => fold(posix.basename(note.path, ".md"))));
+  /**
+   * Ruling 31: file names (folded) a new hub may not reuse — the index's, then each earlier hub's.
+   * Ruling 32: a pending capture's note path reserves its file name too; ingest does not re-check twins.
+   */
+  const fileNames = new Set(
+    [...notes.map((note) => note.path), ...input.pendingNotePaths].map((path) => fold(posix.basename(path, ".md"))),
+  );
   const resolveIndexed = createLinkResolver(notes, config.contentRoot);
 
   function kindCheck(proposal: GardenProposalV1, parsed: ParsedNote): Code | null {

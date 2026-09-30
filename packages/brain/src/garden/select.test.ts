@@ -47,4 +47,11 @@ describe("selectGardenTargets", () => {
     const targets = selectGardenTargets({ notes, findings: notes.map((n) => isolated(n.path)), pendingNotePaths: new Set(["dev/N0.md"]) });
     expect(targets.isolated).toEqual(["DEV/n1.md"]);
   });
+
+  it("counts a gap as covered while a pending hub for its tag waits in review (Ruling 32)", () => {
+    const notes = ["a", "b", "c", "d"].map((n) => note(`content/DEV/${n}.md`, { tags: ["git"] }));
+    const input = { notes, findings: [gap("git")], pendingNotePaths: new Set<string>() };
+    expect(selectGardenTargets(input).gaps.map((g) => g.tag)).toEqual(["git"]);
+    expect(selectGardenTargets({ ...input, pendingHubTags: new Set(["git"]) }).gaps).toEqual([]);
+  });
 });

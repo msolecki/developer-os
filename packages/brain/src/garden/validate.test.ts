@@ -827,14 +827,14 @@ describe("validateGardenResponse", () => {
 
   describe("Task 6b review 3: a proposed hub's file name must be unique in the vault (Ruling 31)", () => {
     const NESTED = [...NOTES, note("content/DEV/sub/rebase.md", { title: "Rebasing" })];
-    const run = (proposals: readonly unknown[]): GardenValidationV1 => {
+    const run = (proposals: readonly unknown[], pendingNotePaths: ReadonlySet<string> = new Set()): GardenValidationV1 => {
       const result = validateGardenResponse({
         response: { proposals },
         targets: TARGETS,
         notes: NESTED,
         config: DEFAULT_BRAIN_CONFIG,
         readNote: (path) => TEXTS.get(path) ?? null,
-        pendingNotePaths: new Set(),
+        pendingNotePaths,
         findings: [],
         redactionFindings: () => 0,
       });
@@ -866,6 +866,12 @@ describe("validateGardenResponse", () => {
 
     it("accepts a uniquely named same-run hub linked by its file name", () => {
       expect(codes(run([hub("DEV/hubs/newhub.md"), related("newhub")]))).toEqual([]);
+    });
+
+    it("reserves a pending capture's file name (Ruling 32)", () => {
+      const result = run([hub("QA/topic.md"), related("topic")], new Set(["DEV/x/Topic.md"]));
+      // The rejected hub was the link's only candidate, so it resolves nowhere: link_unresolved, not related_changes_body.
+      expect(codes(result)).toEqual(["QA/topic.md:target_occupied", "DEV/alpha.md:link_unresolved"]);
     });
   });
 });
