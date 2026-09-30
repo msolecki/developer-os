@@ -111,6 +111,49 @@ describe("redactText", () => {
     expectRedacted(result, highEntropySecret);
   });
 
+  /** NEW-129: Brain note paths, slugs and wikilinks are not secrets. */
+  describe("note paths and slugs", () => {
+    const slug = "developer-os-release-handoff-review-fixes-quickly-jumping-zebras";
+    const benign = [
+      slug,
+      `[[DEV/${slug}]]`,
+      `content/DEV/${slug}.md`,
+      "content/DEV/check-trust-at-every-symlink-hop.md",
+      "[[DEV/what-must-live-in-the-durable-journal]]",
+      "_raw/processed/2026-07-16-143736-48639-przedsiebiorcze-trojmiasto.md",
+      "docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md",
+      "packages/core/src/lifecycle/foundation-ledger.ts:911",
+    ];
+    for (const value of benign) {
+      it(`leaves ${value} in the clear`, () => {
+        const result = redactText(`see ${value} for details`, deterministicKey);
+
+        expect(result.text).toBe(`see ${value} for details`);
+        expect(result.findings).toEqual([]);
+      });
+    }
+
+    const pathEmbeddedToken = "Qm4Zx9Tp2Lk7Wr5Vn8Bc3Hy6Jd1Fs0Ga4Ue7Io9Pz2K"; // gitleaks:allow -- synthetic test fixture
+    const slashedBase64 = "aZ3+kQ9/Xw7mP2+vL8/tR4nB6+yH1/cJ5sD0fG7=="; // gitleaks:allow -- synthetic test fixture
+    const hyphenatedRandom = "k3m9x2p7q4-z8w1v6b3n5-r2t7y4u9i0-h5g8f1d3s6-a9l2"; // gitleaks:allow -- synthetic test fixture
+    const secrets = {
+      "a mixed-case base64 token": highEntropySecret,
+      "a hex digest": lowercaseHexSecret,
+      "a lowercase alphanumeric token": lowercaseAlphanumericSecret,
+      "a base64 token containing / and +": slashedBase64,
+      "a token embedded as one path segment": `config/${pathEmbeddedToken}/x`,
+      "a hyphen-joined random token": hyphenatedRandom,
+    };
+    for (const [name, secret] of Object.entries(secrets)) {
+      it(`still redacts ${name}`, () => {
+        const result = redactText(`value ${secret} end`, deterministicKey);
+
+        expect(result.text).not.toContain(secret);
+        expect(result.findings.map((f) => f.class)).toContain("high-entropy");
+      });
+    }
+  });
+
   it("redacts a 64-character lowercase hexadecimal secret", () => {
     const result = redactText(
       `hex material ${lowercaseHexSecret}`,

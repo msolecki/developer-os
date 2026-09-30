@@ -406,6 +406,33 @@ function looksHighEntropy(value: string): boolean {
   return entropy >= 4 && normalizedEntropy >= 0.7;
 }
 
+/**
+ * A word: one case throughout, a vowel unless it is at most three letters (`src`, `cli`),
+ * and no longer than a real word gets. Short digit runs are dates and ids.
+ */
+function isWordLikePart(part: string): boolean {
+  if (/^[0-9]{1,8}$/u.test(part)) return true;
+  if (!/^(?:[a-z]{1,24}|[A-Z]{1,24})$/u.test(part)) return false;
+  return part.length <= 3 || /[aeiouy]/iu.test(part);
+}
+
+/**
+ * NEW-129: a note path, wikilink target or kebab slug — every `/` segment made only of
+ * word-like `-`/`_` parts. Anything else (mixed case, letters beside digits, `+`, `=`)
+ * falls back to the whole-run entropy check, so a token sitting in one segment still
+ * redacts the run. Known cost: a long all-word passphrase joined by `-` is exempt too.
+ */
+function isWordLikePath(run: string): boolean {
+  const segments = run.split("/").filter((segment) => segment.length > 0);
+  return (
+    segments.length > 0 &&
+    segments.every((segment) => {
+      const parts = segment.split(/[-_]/u).filter((part) => part.length > 0);
+      return parts.length > 0 && parts.every(isWordLikePart);
+    })
+  );
+}
+
 function fingerprint(secret: string, key: Uint8Array): string {
   return createHmac("sha256", key)
     .update(secret)
@@ -609,7 +636,7 @@ export function redactText(
   const heuristicRuns =
     scope === "path" ? [] : normalizedText.matchAll(/[A-Za-z0-9+/=_-]{40,}/gu);
   for (const match of heuristicRuns) {
-    if (!looksHighEntropy(match[0])) {
+    if (isWordLikePath(match[0]) || !looksHighEntropy(match[0])) {
       continue;
     }
     addCandidate(candidates, {
