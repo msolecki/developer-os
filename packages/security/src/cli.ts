@@ -173,7 +173,8 @@ export function screenProseArgument(value: string, field: string): string | null
 /**
  * **The third screen, and the only one whose name states a provenance rather
  * than a shape.** A derived path is one *this product assembled* — the working
- * root, since 2026-09-07 (NEW-74) from `tmpdir()` plus a fixed leaf rather than
+ * root, since 2026-09-07 (NEW-74) from `tmpdir()` plus a product-named leaf (a
+ * random per-run one since NEW-76) rather than
  * from the user's validated `brainPath`; the output schema path, from the
  * product state root plus a fixed `schemas/<verb>.schema.json` tail.
  *

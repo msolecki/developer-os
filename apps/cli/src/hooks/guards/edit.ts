@@ -8,7 +8,7 @@ import { editedPaths, HOOK_TOOL_MATCHERS } from "../payload.js";
 import { relativePathBase, resolveProjectRoot } from "../project-root.js";
 import type { HookVerbHandler } from "../registry.js";
 
-/** Resolves the path only; the file is never opened (§5.3). */
+/** Resolves the path only; the file is never opened (`hooks.md` §3.4.1). */
 export const guardEdit: HookVerbHandler = async (payload, runtime) => {
   if (payload.toolName === null || !HOOK_TOOL_MATCHERS[runtime.vendor].file.includes(payload.toolName)) {
     return { kind: "allow" };

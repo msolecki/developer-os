@@ -52,17 +52,18 @@ export type {
   LaunchdScheduledProductHomeV1,
 } from "./types.js";
 export {
+  LAUNCHD_DISTRIBUTION_POLICY,
   LaunchdDistributionUnsupportedError,
-  SUPPORTED_LAUNCHD_DISTRIBUTION,
-  admitLaunchdDistribution,
+  admitLaunchdHost,
+  recheckLaunchdHost,
 } from "./distribution.js";
 export type {
-  LaunchdCertificationV1,
-  LaunchdDistributionRowV1,
+  LaunchctlIdentityV1,
+  LaunchdDistributionPolicyV2,
   LaunchdEmptyDirectoryIdentityV1,
-  LaunchdExecutableIdentityV1,
-  LaunchdOperatingSystemV1,
-  ObservedLaunchdDistributionV1,
+  LaunchdExecutablePolicyV1,
+  LaunchdHostObserverV1,
+  LaunchdOperatingSystemPolicyV1,
 } from "./distribution.js";
 export {
   LAUNCHD_PREVIEW_OBSERVATION_TABLE,
@@ -73,7 +74,7 @@ export {
   launchdObservationProcessTableHash,
   launchdProcessTableHash,
   launchdProcessTableTemplateHash,
-  requireLaunchdMutationCertified,
+  requireLaunchdMutationTable,
 } from "./process-table.js";
 export type {
   LaunchdArgvSlotV1,

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { readdirSync } from "node:fs";
-import { chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, open, readdir, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,35 +11,34 @@ import type {
   LaunchdEffectIdV1,
   LowerHexSha256,
   UInt64DecimalV1,
-  UtcTimestampV1,
 } from "@developer-os/core";
 import {
   LaunchdDistributionUnsupportedError,
   LaunchdObserver,
   LaunchdSnapshotBootstrapper,
-  SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
-  admitLaunchdDistribution,
+  admitLaunchdHost,
   encodeLaunchdPlist,
   expandLaunchdProcessTable,
   generatedLabel,
+  inspectSystemPath,
   launchdGuiDomain,
   parseScheduledProductHome,
   scheduledProgramArguments,
+  type LaunchdHostObserverV1,
   type LaunchdPlistDictionaryV1,
   type LaunchdProcessDirectoryIdentityV1,
-  type ObservedLaunchdDistributionV1,
-  type SupportedLaunchdProcessTableTemplateV1,
 } from "@developer-os/platform-macos";
 import { SupervisedProcessRunner, nodeSupervisedProcessDependencies } from "@developer-os/security";
 import { describe, expect, it } from "vitest";
 
 /**
- * Spec §5.3's certification fixture (plan 1b Task 19). It loads and unloads one synthetic
- * generated label in the real `gui/<uid>` domain, so it runs only on a disposable host at the
- * pinned build, with `DEVELOPER_OS_LAUNCHD_CERTIFICATION_HOST=disposable`. Everywhere else it
- * throws `unsupported_launchd_distribution`: a skip would read as a pass.
+ * Spec §5.3 rule 5's FD-3 contract, proven once on the Phase 9 disposable-account gate (D71). It
+ * loads and unloads one synthetic generated label in the real `gui/<uid>` domain, so it runs only
+ * on an admitted host with `DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable`. Everywhere else it throws
+ * `unsupported_launchd_distribution`: a skip would read as a pass. The transcript hash it prints is
+ * gate evidence, never a runtime key.
  */
-const DISPOSABLE_HOST = process.env.DEVELOPER_OS_LAUNCHD_CERTIFICATION_HOST === "disposable";
+const DISPOSABLE_HOST = process.env.DEVELOPER_OS_LAUNCHD_GATE_HOST === "disposable";
 
 function effectiveUid(): number {
   if (process.getuid === undefined) throw new LaunchdDistributionUnsupportedError("effective uid is unavailable");
@@ -50,16 +49,11 @@ function swVers(flag: "-productName" | "-productVersion" | "-buildVersion"): str
   return execFileSync("/usr/bin/sw_vers", [flag], { encoding: "utf8", env: {} }).trim();
 }
 
-async function operatingSystem(): Promise<ObservedLaunchdDistributionV1["operatingSystem"]> {
-  return Promise.resolve({ productName: swVers("-productName"), productVersion: swVers("-productVersion"), buildVersion: swVers("-buildVersion") });
-}
-
-async function inspectExecutable(path: "/bin/launchctl"): Promise<ObservedLaunchdDistributionV1["executable"]> {
-  const stats = await lstat(path, { bigint: true });
-  const kind = stats.isSymbolicLink() ? "symlink" : stats.isFile() ? "file" : stats.isDirectory() ? "directory" : "other";
-  const sha256 = kind === "file" ? createHash("sha256").update(await readFile(path)).digest("hex") : "";
-  return { path, kind, ownerUid: Number(stats.uid), mode: Number(stats.mode & 0o7777n), size: Number(stats.size), sha256 };
-}
+const host: LaunchdHostObserverV1 = {
+  operatingSystem: () =>
+    Promise.resolve({ productName: swVers("-productName"), productVersion: swVers("-productVersion"), buildVersion: swVers("-buildVersion") }),
+  inspect: inspectSystemPath,
+};
 
 async function directoryIdentity(path: string, ownerUid: EffectiveUidV1): Promise<LaunchdProcessDirectoryIdentityV1> {
   const stats = await lstat(path, { bigint: true });
@@ -72,18 +66,16 @@ async function directoryIdentity(path: string, ownerUid: EffectiveUidV1): Promis
   };
 }
 
-describe("launchctl FD-3 bootstrap certification", () => {
+describe("launchctl FD-3 bootstrap gate", () => {
   it("loads the generated label from an already-unlinked inherited snapshot and leaves nothing behind", async () => {
     if (!DISPOSABLE_HOST) {
-      throw new LaunchdDistributionUnsupportedError("certification runs only on a disposable host (DEVELOPER_OS_LAUNCHD_CERTIFICATION_HOST=disposable)");
+      throw new LaunchdDistributionUnsupportedError("the FD-3 gate runs only on a disposable account (DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable)");
     }
-    const observedOs = await operatingSystem();
-    const observedExecutable = await inspectExecutable("/bin/launchctl");
-    admitLaunchdDistribution({ operatingSystem: observedOs, executable: observedExecutable });
+    const launchctl = await admitLaunchdHost(host);
 
     const uid = effectiveUid() as EffectiveUidV1;
     const domain = launchdGuiDomain(uid);
-    const base = await realpath(await mkdtemp(join(tmpdir(), "dos-launchd-certification-")));
+    const base = await realpath(await mkdtemp(join(tmpdir(), "dos-launchd-gate-")));
     const runner = new SupervisedProcessRunner(nodeSupervisedProcessDependencies);
     const generation = createHash("sha256").update(randomBytes(32)).digest("hex") as LowerHexSha256;
     const label = generatedLabel("doctor", generation);
@@ -94,18 +86,13 @@ describe("launchctl FD-3 bootstrap certification", () => {
       await mkdir(join(root, "home"), { recursive: true });
       await mkdir(join(root, "tmp"));
       for (const path of [root, join(root, "home"), join(root, "tmp")]) await chmod(path, 0o700);
-      // The row under certification: the transcript hash this run prints is what Task 19 records.
-      const candidate: SupportedLaunchdProcessTableTemplateV1 = {
-        ...SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
-        certification: { certifiedAt: new Date().toISOString() as UtcTimestampV1, fixtureTranscriptSha256: "0".repeat(64) as LowerHexSha256 },
-      };
       const table = expandLaunchdProcessTable(
         {
           root: await directoryIdentity(root, uid),
           home: await directoryIdentity(join(root, "home"), uid),
           tmp: await directoryIdentity(join(root, "tmp"), uid),
         },
-        candidate,
+        launchctl,
       );
 
       const plist: LaunchdPlistDictionaryV1 = {
@@ -123,10 +110,8 @@ describe("launchctl FD-3 bootstrap certification", () => {
 
       const bootstrapper = new LaunchdSnapshotBootstrapper({
         runner,
-        template: candidate,
         effectiveUid,
-        operatingSystem,
-        inspectExecutable,
+        host,
         fs: {
           lstat: (path, options) => lstat(path, options),
           open: (path, flags, mode) => open(path, flags, mode),
@@ -138,8 +123,7 @@ describe("launchctl FD-3 bootstrap certification", () => {
         runner,
         effectiveUid,
         consoleUserUid: async () => Number((await lstat("/dev/console", { bigint: true })).uid),
-        operatingSystem,
-        inspectExecutable,
+        host,
         inspectEmptyDirectory: async (path) => {
           const stats = await lstat(path, { bigint: true });
           return {
@@ -154,7 +138,7 @@ describe("launchctl FD-3 bootstrap certification", () => {
       });
 
       const baseline = readdirSync("/dev/fd").length;
-      const phase = runner.beginPhase("launchd-certification", table.transitionDeadlineMs);
+      const phase = runner.beginPhase("launchd-gate", table.transitionDeadlineMs);
       const attempt = await bootstrapper.prepare({
         table,
         domain,
@@ -190,13 +174,12 @@ describe("launchctl FD-3 bootstrap certification", () => {
       expect(readdirSync("/dev/fd").length).toBe(baseline);
 
       const transcript = JSON.stringify({
-        operatingSystem: observedOs,
-        launchctl: { size: observedExecutable.size, sha256: observedExecutable.sha256 },
+        launchctl,
         attempt,
         process: evidence.process,
         observedAfter: afterBootstrap,
       });
-      process.stdout.write(`launchctl FD-3 certification transcript sha256: ${createHash("sha256").update(transcript).digest("hex")}\n`);
+      process.stdout.write(`launchctl FD-3 gate transcript sha256: ${createHash("sha256").update(transcript).digest("hex")}\n`);
     } finally {
       if (loaded) {
         await runner.run({
@@ -211,7 +194,7 @@ describe("launchctl FD-3 bootstrap certification", () => {
           idleMs: 30000,
           wallMs: 30000,
           terminationGraceMs: 100,
-          phase: runner.beginPhase("launchd-certification-bootout", 30000),
+          phase: runner.beginPhase("launchd-gate-bootout", 30000),
         });
       }
       await rm(base, { recursive: true, force: true });

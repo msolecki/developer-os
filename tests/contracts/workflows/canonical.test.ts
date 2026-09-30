@@ -77,8 +77,8 @@ describe("canonical workflows", () => {
 
   it("writes outside quarantine only through ingest, and expresses that in effect verbs only", async () => {
     /**
-     * Brain spec §4.4 replaced "keeps every vault write inside capture, review
-     * and ingest": a workflow whose writes are quarantine-only may carry prose,
+     * The A12b brain-workflows design (now `workflow-schema.md` §10.3) replaced
+     * "keeps every vault write inside capture, review and ingest": a workflow whose writes are quarantine-only may carry prose,
      * because prose writes nothing and its only write is a capture verb.
      */
     const names = await directories();

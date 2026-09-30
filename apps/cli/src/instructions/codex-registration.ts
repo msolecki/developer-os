@@ -148,7 +148,7 @@ export async function inspectCodexRegistration(input: {
   readonly treeHash: LowerHexSha256;
 }): Promise<CodexRegistrationStateV1> {
   if (!registeredAt(await listInstalled(input), input.pluginRoot)) return "unregistered";
-  /** No row means no registration ever completed, even if `plugin add` landed (spec §6.4, first partial state). */
+  /** No row means no registration ever completed, even if `plugin add` landed (`codex-adapter.md` §16, first partial state). */
   if (input.record === null) return "unregistered";
   if (input.record.treeHash !== input.treeHash || input.record.codexHome !== input.codexHome) {
     return "stale";
@@ -156,7 +156,7 @@ export async function inspectCodexRegistration(input: {
   return "registered";
 }
 
-/** Spec §6.4: `plugin add` always runs, because it is what refreshes Codex's cache copy. */
+/** `codex-adapter.md` §16: `plugin add` always runs, because it is what refreshes Codex's cache copy. */
 export async function registerCodexPlugin(input: {
   readonly runner: ProcessRunner;
   readonly codexExecutable: string;

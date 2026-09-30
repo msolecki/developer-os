@@ -27,7 +27,6 @@ import {
   type AllocatedLifecycleIdV1,
   type CanonicalAbsolutePathV1,
   type CodexRegistrationProjectionV1,
-  type EffectiveUidV1,
   type LifecycleCoordinatorIdV1,
   type LowerHexSha256,
   type ManagedArtifactV2,
@@ -96,7 +95,7 @@ async function readJson(path: string): Promise<Record<string, unknown> | null> {
 async function stage(root: CanonicalAbsolutePathV1, kind: UpdateLeafPlanKindV1 & UpdateInitialJournalRefV1["kind"], id: string, plan: unknown, initial: Record<string, unknown>) {
   const planPath = updateLeafPlanPath(root, kind, id);
   await writeOwned(planPath, updateParticipantDocumentBytes(plan));
-  const planHash = updateParticipantDocumentHash(plan);
+  const planHash = updateParticipantDocumentHash(kind, plan);
   const bytes = encoder.encode(encodeCanonicalJson({ ...initial, planHash, createdAt: at, updatedAt: at }));
   const stagedPath = parseCanonicalAbsolutePathText(`${root}/update/initial-journals/${kind}/${id}.json`);
   await writeOwned(stagedPath, bytes);
@@ -147,10 +146,10 @@ async function fixture(options: { readonly effect?: boolean; readonly drift?: "r
     kind: "codex_registration_refresh" as const,
     providerProtocol: parsePositiveUInt32(1),
     executable: "pinned_codex_cli" as const,
-    executableIdentity: { ownerUid: uid as EffectiveUidV1, mode: 493 as const, nlink: 1 as const, bytes: 10, sha256: sha("codex"), dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("2") },
+    executableIdentity: { dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("2"), mode: 493, sha256: sha("codex") },
     argv: [{ kind: "literal" as const, value: "plugin" as OwnerExternalEffectLiteralV1 }, { kind: "token" as const, value: "plugin_id" as const }],
     cwd: "managed_plugin_root" as const,
-    environment: [{ name: "HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }] as const,
+    environment: [{ name: "CODEX_HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }] as const,
     stdin: "closed" as const,
     network: false as const,
     model: false as const,
@@ -323,5 +322,26 @@ describe("owner update participant", () => {
     expect(events).toEqual([`compact:${tx(1)}`, `compact:${tx(2)}`]);
     expect(await readJson(step.journal.finalPath)).toBeNull();
     expect(await readJson(step.planRef.path)).toBeNull();
+  });
+
+  it("finishes a compaction that died after its journal's removal by removing only the plan", async () => {
+    const { step, events, participant } = await fixture();
+    await participant.apply(step);
+    await participant.finalize(step);
+    await nodeFs.rm(step.journal.finalPath);
+    events.length = 0;
+    await participant.compact(step);
+    expect(events).toEqual([]);
+    expect(await readJson(step.planRef.path)).toBeNull();
+  });
+
+  it("refuses a plan ref and journal bound by a plain SHA-256 instead of the leaf domain (D72 P7(a))", async () => {
+    const { step, events, participant } = await fixture({ effect: false });
+    const plain = sha(updateParticipantDocumentBytes(step.plan));
+    const legacy = { ...step, planRef: { ...step.planRef, hash: plain }, journal: { ...step.journal, planHash: plain } };
+    await expect(participant.applyFiles(legacy)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(participant.compact(legacy)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(events).toEqual([]);
+    expect(await readJson(step.planRef.path)).not.toBeNull();
   });
 });

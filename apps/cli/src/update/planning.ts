@@ -5,12 +5,14 @@ import {
   admitReleaseIdentity,
   advanceReleaseTrust,
   buildRollbackPreview,
+  codexRegistrationProjectionHash,
   decodeCanonicalJson,
   encodeCanonicalJson,
   encodeTenDigitOrdinal,
   EXIT_CODES,
   materializePlannerDraft,
   MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
+  ownerExternalEffectProcessPolicyHash,
   MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
   parseCanonicalAbsolutePathText,
   parseUInt64Decimal,
@@ -23,6 +25,7 @@ import type {
   ActiveReleaseRecordV1,
   ArtifactOwner,
   CanonicalAbsolutePathV1,
+  CanonicalJsonV1,
   CanonicalJsonValue,
   ExitCode,
   InstallationManifestV2,
@@ -40,6 +43,7 @@ import type {
   ReleaseKeyDelegationV1,
   ReleaseMetadataIdentityV1,
   ReleaseTrustStateV1,
+  RetainedExternalEffectInversePlanV1,
   RetainedInversePathStateV1,
   RetainedOwnerInverseOperationV1,
   RetainedOwnerInverseProjectionV1,
@@ -67,6 +71,7 @@ import { verifyReleaseMetadataChain } from "@developer-os/security";
 import type { ReleaseIndexDocumentV1, ReleaseKeyDelegationDocumentV1, TargetPlannerRunResultV1, VerifiedScratchBundleV1 } from "@developer-os/security";
 
 import { compareManifestRows } from "../instructions/attach.js";
+import { requireCodexRegistered } from "./codex-refresh.js";
 import type { CliUpdateContext, UpdateScratchAttemptV1, UpdateTransportV1 } from "./context.js";
 
 /**
@@ -127,6 +132,7 @@ export interface UpdateTargetInputsV1 {
   readonly current: ReleaseIdentityV1;
   readonly target: ReleaseIdentityV1;
   readonly metadata: ReleaseMetadataIdentityV1;
+  readonly signedMetadata: SignedReleaseMetadataV1;
   readonly bundle: ReleaseBundleReferenceV1;
   readonly bundleManifest: ReleaseBundleManifestV1;
   readonly verified: VerifiedScratchBundleV1;
@@ -136,8 +142,13 @@ export interface UpdateTargetInputsV1 {
   readonly observation: UpdateCapacityObservationV1 | null;
 }
 
+/** P4 (D72): the fetched delegation, release index and bundle manifest, bundle-plan metadata ordinals 0–2. */
+export type SignedReleaseMetadataV1 = readonly [CanonicalJsonV1, CanonicalJsonV1, CanonicalJsonV1];
+
 export interface MaterializedUpdateV1 {
   readonly snapshot: UpdatePlannerSnapshotV1;
+  /** The bytes behind `metadata`'s and the target's signed hashes, for the `release_metadata_after` rows. */
+  readonly signedMetadata: SignedReleaseMetadataV1;
   readonly run: TargetPlannerRunResultV1;
   readonly manifest: InstallationManifestV2;
   readonly observation: UpdateCapacityObservationV1;
@@ -226,9 +237,14 @@ async function fetchDocument(
   transport: UpdateTransportV1,
   kind: "release_key_delegation" | "release_index",
   maximumBytes: number,
-): Promise<{ readonly value: unknown; readonly hash: LowerHexSha256 }> {
+): Promise<{ readonly value: unknown; readonly hash: LowerHexSha256; readonly text: CanonicalJsonV1 }> {
   const bytes = await collect(maximumBytes, (sink) => transport.get({ kind, sink }));
-  return { value: await classified("update_metadata_invalid", EXIT_CODES.securityRefusal, () => decodeCanonicalJson(bytes.body, maximumBytes)), hash: bytes.hash };
+  return { value: await classified("update_metadata_invalid", EXIT_CODES.securityRefusal, () => decodeCanonicalJson(bytes.body, maximumBytes)), hash: bytes.hash, text: canonicalText(bytes.body) };
+}
+
+/** A body `decodeCanonicalJson` admitted is byte-for-byte canonical, so its UTF-8 text is the `CanonicalJsonV1`. */
+function canonicalText(body: Uint8Array): CanonicalJsonV1 {
+  return new TextDecoder().decode(body) as CanonicalJsonV1;
 }
 
 /** Collects one bounded body; the transport already enforces the length, this only refuses a lie. */
@@ -382,6 +398,7 @@ function prepareInverse(
   draft: TargetUpdateDraftV1,
   outputs: readonly SecretScreenedBlobV1[],
   bundleModes: ReadonlyMap<string, 384 | 448>,
+  codexEffect: RetainedExternalEffectInversePlanV1 | null,
 ): PreparedInverseV1 {
   const entries: RollbackPayloadEntryV1[] = [];
   let stagedBytes = 0;
@@ -442,9 +459,8 @@ function prepareInverse(
       id: `owner_${plan.owner}` as SafeReasonCodeV1,
       owner: plan.owner,
       operations: operations.sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
-      // The Codex refresh inverse needs the process policy and registration state hashes that only the
-      // apply-time owner provider observes; the plan-only projection carries none (Task 24 adds them).
-      externalEffects: [],
+      // P6: the drafted Codex refresh, replayed over the restored tree by a later rollback.
+      externalEffects: plan.owner === "codex" && plan.externalEffects.length > 0 && codexEffect !== null ? [codexEffect] : [],
       maximumPlanBytes: MAXIMUM_LEAF_BYTES,
     };
   });
@@ -659,7 +675,8 @@ async function planUpdateAttempt(
     await attempt.download((sink) => transport.get({ kind: "archive", delegation: delegationV1, bundle: selected.bundle, sink }));
     const verified = await attempt.extract(selected.bundle);
     const plannedAt = update.clock();
-    const inputs: UpdateTargetInputsV1 = { current, target, metadata, bundle: selected.bundle, bundleManifest, verified, transport, plannedAt, retained, observation: null };
+    const signedMetadata: SignedReleaseMetadataV1 = [delegation.text, index.text, canonicalText(manifestBody.body)];
+    const inputs: UpdateTargetInputsV1 = { current, target, metadata, signedMetadata, bundle: selected.bundle, bundleManifest, verified, transport, plannedAt, retained, observation: null };
     const materialized = await materializeUpdate(update, home, inputs);
     const result = { schemaVersion: 1, outcome: "preview", plan: materialized.candidate.preview } as const;
     if (!options.retainScratch) return { result, candidate: materialized.candidate, apply: null };
@@ -690,7 +707,7 @@ export async function materializeUpdate(update: CliUpdateContext, home: UpdateHo
 
   const manifest = concreteManifest(update, home, snapshot, run.draft, run.outputBlobs, target);
   const bundleModes = new Map(bundleManifest.entries.flatMap((entry) => (entry.kind === "file" ? [[entry.path as string, entry.mode] as const] : [])));
-  const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs, bundleModes);
+  const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs, bundleModes, await codexEffectOf(update, run.draft));
   const inventoryBytes = prepared.entries.reduce((sum, entry) => sum + entry.bytes, 0);
   const participants = run.draft.ownerPlans.length + run.draft.migrations.length + 4;
   const observation = inputs.observation ?? await update.capacity();
@@ -719,7 +736,33 @@ export async function materializeUpdate(update: CliUpdateContext, home: UpdateHo
       return capacityRefusal(error);
     }
   });
-  return { snapshot, run, manifest, observation, capacity, candidate };
+  return { snapshot, signedMetadata: inputs.signedMetadata, run, manifest, observation, capacity, candidate };
+}
+
+/**
+ * P6(c)/(e): a Codex tree change requires the owner `registered` before allocation (exit 3), and
+ * its drafted refresh carries the pinned policy and the current projection, which the refresh
+ * restores unchanged, so expected and restore states hash alike.
+ * ponytail: the proposed projection keeps the current plugin version; a version bump reports as a
+ * postimage mismatch and compensates until the target's plugin version is part of the projection.
+ */
+async function codexEffectOf(update: CliUpdateContext, draft: TargetUpdateDraftV1): Promise<RetainedExternalEffectInversePlanV1 | null> {
+  const plan = draft.ownerPlans.find((candidate) => candidate.owner === "codex");
+  const changed = plan?.proposedOperations.some((operation) => operation.operation !== "keep") ?? false;
+  if (plan === undefined || (!changed && plan.externalEffects.length === 0)) return null;
+  const codex = (await update.codex?.()) ?? refuse("update_codex_unavailable", EXIT_CODES.capabilityUnavailable, [], "install the codex CLI, then run developer-os update again");
+  requireCodexRegistered(codex.registration);
+  if (plan.externalEffects.length === 0) return null;
+  const hash = codexRegistrationProjectionHash(codex.projection);
+  return {
+    kind: "codex_registration_refresh",
+    providerProtocol: codex.policy.providerProtocol,
+    expectedCurrentStateHash: hash,
+    restoreStateHash: hash,
+    restorePayloads: [],
+    processPolicy: codex.policy,
+    processPolicyHash: ownerExternalEffectProcessPolicyHash(codex.policy),
+  };
 }
 
 /** Rollback's own direction: an update-created path is removed, an update-removed one created. */

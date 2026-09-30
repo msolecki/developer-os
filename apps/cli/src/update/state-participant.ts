@@ -15,6 +15,7 @@ import {
   rejectUpdateStep,
   stateLeafKindForRole,
   updateConstructionEvidencePath,
+  updateParticipantDocumentBytes,
   updateParticipantDocumentHash,
   validateConstructionFileEvidence,
   validateStateParticipantJournal,
@@ -52,6 +53,15 @@ function sha256Hex(bytes: Uint8Array): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
 
+/**
+ * The raw file hash guarded removal compares, for a plan its ref binds. The ref hash itself is
+ * leaf-domain separated (D72 P7(a)), so it never equals the file's plain SHA-256.
+ */
+export function participantPlanFileHash(ref: ImmutableUpdatePlanRefV1, plan: unknown): LowerHexSha256 {
+  if (ref.hash !== updateParticipantDocumentHash(ref.kind, plan)) refuseParticipant("update_participant_plan_ref", ref.path);
+  return sha256Hex(updateParticipantDocumentBytes(plan));
+}
+
 export function participantTimestamp(now: () => Date, floor: UtcTimestampV1): UtcTimestampV1 {
   const stamp = parseUtcTimestamp(now().toISOString());
   return stamp > floor ? stamp : floor;
@@ -66,7 +76,7 @@ export interface UpdatePayloadIdentityV1 {
  * Resolves a planned postimage payload to the device/inode its construction row recorded. A plan
  * never carries a postimage inode (D60): it is written before its payload exists.
  */
-export type UpdatePayloadIdentityResolverV1 = (payload: Pick<StatePayloadRefV1, "coordinatorId" | "ordinal" | "path" | "hash" | "bytes" | "mode">) => Promise<UpdatePayloadIdentityV1>;
+export type UpdatePayloadIdentityResolverV1 = (payload: Pick<StatePayloadRefV1, "coordinatorId" | "ordinal" | "hash" | "bytes" | "mode"> & { readonly path: CanonicalAbsolutePathV1 }) => Promise<UpdatePayloadIdentityV1>;
 
 /**
  * The production resolver: the payload ref must equal its `state_after` construction row, and the
@@ -354,14 +364,14 @@ export class CanonicalStateParticipant {
       if (step.plan.after.state === "present") await journals.remove(step.plan.after.payload.path, step.plan.after.hash);
       await journals.remove(step.journal.finalPath);
     }
-    await journals.remove(step.planRef.path, step.planRef.hash);
+    await journals.remove(step.planRef.path, participantPlanFileHash(step.planRef, step.plan));
   }
 
   private async openJournal(step: CanonicalStateStepV1): Promise<StateJournal> {
     const role = step.plan.role;
     if (role === "release_metadata") return refuseParticipant("update_state_role", step.plan.path);
     const kind = stateLeafKindForRole(role);
-    if (step.journal.kind !== kind || step.planRef.kind !== kind || step.planRef.hash !== updateParticipantDocumentHash(step.plan) || step.journal.planHash !== step.planRef.hash) refuseParticipant("update_state_binding", step.journal.finalPath);
+    if (step.journal.kind !== kind || step.planRef.kind !== kind || step.planRef.hash !== updateParticipantDocumentHash(kind, step.plan) || step.journal.planHash !== step.planRef.hash) refuseParticipant("update_state_binding", step.journal.finalPath);
     const value = await this.#dependencies.journals.open(step.journal);
     return validateStateParticipantJournal(value, kind, { id: step.plan.id, coordinatorId: step.plan.coordinatorId, retainedVerification: isRetainedRecordVerification(step.plan) }, step.planRef.hash);
   }

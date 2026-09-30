@@ -45,6 +45,7 @@ import {
   type UpdateConstructionStepV1,
   type UtcTimestampV1,
 } from "@developer-os/core";
+import type { RedactionScope } from "@developer-os/security";
 
 /** Where a test may kill the constructing process; each point follows a durable effect. */
 export type UpdateConstructionStoreDeathPointV1 =
@@ -91,12 +92,15 @@ export const UPDATE_CONSTRUCTION_STORE_DEATH_POINTS: readonly UpdateConstruction
 export interface UpdateConstructionSourcePortV1 {
   /** Reopens the row's selected authority and returns its unique bytes; the store rechecks them. */
   readonly readRow: (plan: UpdateConstructionPlanV1, row: UpdateConstructionFilePlanV1) => Promise<Uint8Array>;
-  /** Called once the source plan/journal rows are complete and before the first output frame. */
-  readonly prepareSources: (plan: UpdateConstructionPlanV1) => Promise<void>;
+  /**
+   * Called once the source plan/journal rows are complete and before the first output frame. The
+   * journal carries the source parents' identities (`resolveSourceParent`).
+   */
+  readonly prepareSources: (plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1) => Promise<void>;
   readonly consumeRollbackEntry: (plan: UpdateConstructionPlanV1, ordinal: number, frame: SecretScreenedBlobV1) => Promise<void>;
-  readonly finishSources: (plan: UpdateConstructionPlanV1) => Promise<void>;
+  readonly finishSources: (plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1) => Promise<void>;
   /** Pre-handoff compensation of the reached nested prefix; runs before construction rows are removed. */
-  readonly compensateSources: (plan: UpdateConstructionPlanV1) => Promise<void>;
+  readonly compensateSources: (plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1) => Promise<void>;
   /** Terminal nested evidence that makes a delegated row's guarded absence legal during compaction. */
   readonly nestedTerminal: (plan: UpdateConstructionPlanV1, row: UpdateConstructionFilePlanV1) => Promise<boolean>;
 }
@@ -105,8 +109,11 @@ export interface UpdateConstructionStoreDependenciesV1 {
   readonly fs: LifecycleGuardedFileSystemV1;
   readonly effectiveUid: number;
   readonly now: () => Date;
-  /** The Security secret screen; throws on any finding. Runs before bytes are hashed or persisted. */
-  readonly screen: (bytes: Uint8Array) => void;
+  /**
+   * The Security secret screen; throws on any finding. Runs before bytes are hashed or persisted.
+   * A document the product derived is all paths and hashes, so it takes the `path` scope; foreign bytes take `text`.
+   */
+  readonly screen: (bytes: Uint8Array, scope: RedactionScope) => void;
   readonly sources: UpdateConstructionSourcePortV1;
   readonly interrupt?: (point: UpdateConstructionStoreDeathPointV1) => void;
 }
@@ -191,6 +198,11 @@ function precedesFrames(row: UpdateConstructionFilePlanV1): boolean {
   return row.role.kind === "immutable_plan" || sourceJournal(row);
 }
 
+/** Only a payload that is not plan-derived carries foreign bytes: a planner frame, a bundle file, a preimage. */
+function productDerived(row: UpdateConstructionFilePlanV1): boolean {
+  return row.role.kind !== "payload" || row.role.source.kind === "plan_derived";
+}
+
 /** A source journal may have rewritten its inode before handoff; every other row keeps its planned size. */
 function compensationCap(row: UpdateConstructionFilePlanV1): number {
   return row.role.kind === "initial_journal" ? MAXIMUM_PARTICIPANT_JOURNAL_BYTES : row.bytes;
@@ -204,6 +216,20 @@ async function writeAll(handle: FileHandle, bytes: Uint8Array): Promise<void> {
     offset += bytesWritten;
   }
   await handle.sync();
+}
+
+/**
+ * P1 (D72): a source parent (`update/source/bundle` or `update/source/rollback`) is a construction
+ * directory, and its identity is only the construction journal's `directoryIdentities` row of that
+ * directory's ordinal. The caller reopens the parent no-follow and requires this identity.
+ */
+export function resolveSourceParent(journal: UpdateConstructionJournalV1, plan: UpdateConstructionPlanV1, kind: "bundle" | "rollback"): { readonly ordinal: number; readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 } {
+  const path = `${plan.stagingRoot.path}/update/source/${kind}`;
+  if (journal.constructionPlanHash !== constructionPlanHash(plan)) return refuse("update_construction_source_parent", path);
+  const ordinal = plan.directories.findIndex((directory) => directory.path === path);
+  const identity = journal.directoryIdentities[ordinal];
+  if (ordinal === -1 || identity?.ordinal !== ordinal) return refuse("update_construction_source_parent", path);
+  return { ordinal, dev: identity.dev, ino: identity.ino };
 }
 
 /**
@@ -322,7 +348,7 @@ export class UpdateConstructionStore {
     const root = await this.#rootEntry(plan);
     if ((await this.#children(root)).length !== 0) refuse("update_construction_root_not_empty", this.#root);
     const planBytes = constructionPlanBytes(plan);
-    this.#dependencies.screen(planBytes);
+    this.#dependencies.screen(planBytes, "path");
     const planPending = await fs.writeExclusive(this.#paths.planPending, planBytes);
     this.#interrupt("plan_pending_written");
     await fs.syncDirectory(root);
@@ -365,7 +391,7 @@ export class UpdateConstructionStore {
   /** One row: intent → exclusive create → recorded inode → bytes → reopen → evidence → advance. */
   async #stageRow(plan: UpdateConstructionPlanV1, row: UpdateConstructionFilePlanV1, bytes: Uint8Array): Promise<void> {
     if (bytes.byteLength !== row.bytes || sha256Hex(bytes) !== row.sha256) refuse("update_construction_source_changed", row.path);
-    this.#dependencies.screen(bytes);
+    this.#dependencies.screen(bytes, productDerived(row) ? "path" : "text");
     const current = this.#plan(plan).journal;
     if (current.nextFile !== row.ordinal || current.fileWriteState !== null) refuse("update_construction_cursor", row.path);
     const parent = await this.#parentEntry(plan, current, row.parent);
@@ -418,7 +444,7 @@ export class UpdateConstructionStore {
       const journal = this.#plan(plan).journal;
       const row = plan.files[journal.nextFile];
       if (!framesRead && (row === undefined || !precedesFrames(row))) {
-        await sources.prepareSources(plan);
+        await sources.prepareSources(plan, journal);
         await this.#streamFrames(plan, frames);
         framesRead = true;
         continue;
@@ -428,7 +454,7 @@ export class UpdateConstructionStore {
       await this.#stageRow(plan, row, await this.#rowBytes(plan, row));
     }
     await this.#advance(plan, { kind: "sources_staging" });
-    await sources.finishSources(plan);
+    await sources.finishSources(plan, this.#plan(plan).journal);
     await this.#advance(plan, { kind: "files_ready" });
   }
 
@@ -444,7 +470,7 @@ export class UpdateConstructionStore {
       if (expected?.ordinal !== frame.ordinal || frame.bytes !== expected.bytes || frame.content.byteLength !== expected.bytes || sha256Hex(frame.content) !== expected.sha256) {
         refuse("update_construction_output_frame", this.#root);
       }
-      this.#dependencies.screen(frame.content);
+      this.#dependencies.screen(frame.content, "text");
       while (this.#plan(plan).journal.nextOutputFrame === expected.ordinal) {
         const journal = this.#plan(plan).journal;
         const consumer = expected.consumers[journal.nextOutputConsumer];
@@ -465,7 +491,7 @@ export class UpdateConstructionStore {
   async publishOuter(plan: UpdateConstructionPlanV1, outer: UpdateConstructionOuterBytesV1): Promise<void> {
     for (const [path, bytes] of [[plan.outerPlanPath, outer.plan], [plan.outerJournalPath, outer.journal]] as const) {
       if (bytes.byteLength < 1 || bytes.byteLength > MAXIMUM_LEAF_PLAN_BYTES) refuse("update_construction_outer_bound", path);
-      this.#dependencies.screen(bytes);
+      this.#dependencies.screen(bytes, "path");
       const file: UpdateConstructionOuterFileV1 = { path, bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384 };
       const parent = await this.#ownedDirectory(lifecycleParentPath(path));
       await this.#advance(plan, { kind: "outer_intent", file });
@@ -626,7 +652,7 @@ export class UpdateConstructionStore {
       await this.#advance(plan, { kind: "compensate" });
     }
     if (this.#plan(plan).journal.phase === "compensating") {
-      await this.#dependencies.sources.compensateSources(plan);
+      await this.#dependencies.sources.compensateSources(plan, this.#plan(plan).journal);
       await this.#removeOuter(this.#plan(plan).journal);
     }
     for (let journal = this.#plan(plan).journal; journal.phase === "compensating"; journal = this.#plan(plan).journal) {
@@ -710,7 +736,13 @@ export class UpdateConstructionStore {
    * read-only leaves itself. The caller then runs `removeEnvelope`.
    */
   async compact(plan: UpdateConstructionPlanV1): Promise<void> {
-    const current = this.#current?.plan === plan ? this.#current : await this.#loadJournal(plan);
+    if (this.#current?.plan !== plan) {
+      // A resumed compaction: `removeEnvelope` may already have taken the compacted journal.
+      if ((await this.#dependencies.fs.lstat(this.#paths.journal)) === null) return;
+      await this.#removeRewriteTemp(plan);
+      await this.#loadJournal(plan);
+    }
+    const current = this.#plan(plan);
     if (current.journal.phase === "handed_off") await this.#advance(plan, { kind: "compaction_step" });
     else if (current.journal.phase !== "compacting") refuse("update_construction_not_terminal", this.#root);
     const F = plan.files.length;

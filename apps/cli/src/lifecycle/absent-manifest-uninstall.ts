@@ -7,6 +7,7 @@
  * with D20's archive guidance rather than deleting a key beside evidence nobody has read.
  */
 import {
+  CODEX_INGEST_HOME_REPAIR,
   EXIT_CODES,
   LifecycleRecoveryRequiredError,
   inspectAbsentManifestProductHome,
@@ -14,11 +15,12 @@ import {
 } from "@developer-os/core";
 import type { AbsentManifestEvidenceV1, CanonicalAbsolutePathV1 } from "@developer-os/core";
 
+import { preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import type { CliContext } from "../context.js";
 import { UninstallRefusal } from "../commands/uninstall.js";
 import type { UninstallOptions, UninstallResultV1 } from "../commands/uninstall.js";
-import { residueFrom } from "./context.js";
+import { uninstallResidueFrom } from "./context.js";
 import type { CliLifecycleContext } from "./context.js";
 import {
   codexIngestHomePath,
@@ -54,7 +56,7 @@ function absentManifestEvidenceOf(
   evidence: BootstrapEvidenceAdmissionV1,
 ): AbsentManifestEvidenceV1 {
   return {
-    ...residueFrom(evidence),
+    ...uninstallResidueFrom(evidence),
     bootstrapIdentities: evidence.retainedEnvelopes.map(
       (envelope) => envelope.plan.bootstrapIdentity,
     ),
@@ -72,7 +74,7 @@ function resultOf(
     arm,
     removed,
     restored: [],
-    preserved: evidence.retainedPaths,
+    preserved: preservedRetentionRoots(evidence),
     retainedBootstrapEvidence: evidence.report.ids,
     transactionId: null,
   };
@@ -186,7 +188,7 @@ export async function runAbsentManifestUninstall(
         EXIT_CODES.recoveryRequired,
         error.message,
         error.paths,
-        ABSENT_MANIFEST_ARCHIVE_RECOVERY,
+        error.reason === "codex_ingest_home_shape" ? CODEX_INGEST_HOME_REPAIR : ABSENT_MANIFEST_ARCHIVE_RECOVERY,
       );
     }
     throw error;

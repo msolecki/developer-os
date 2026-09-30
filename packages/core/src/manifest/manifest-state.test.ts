@@ -40,7 +40,6 @@ const LIFECYCLE_PARTICIPANT_ID = `mf_${"c".repeat(61)}`;
 const FRESH_ID = "fi_11111111-1111-4111-8111-111111111111";
 const MIGRATION_ID = "mm_22222222-2222-4222-8222-222222222222";
 const FRESH_PARTICIPANT_ID = `mf_${FRESH_ID}`;
-const MIGRATION_PARTICIPANT_ID = `mf_${MIGRATION_ID}`;
 const HEX_A = "a".repeat(64) as LowerHexSha256;
 const HEX_B = "b".repeat(64) as LowerHexSha256;
 
@@ -336,7 +335,7 @@ function matchesIdentity(entry: MemoryEntry, expected: ManifestFileIdentityV1): 
   );
 }
 
-type EnvelopeKind = "fresh_v2_init" | "v1_migration" | "lifecycle";
+type EnvelopeKind = "fresh_v2_init" | "lifecycle";
 type Presence = "absent" | "present";
 
 interface RawPayloadRef {
@@ -387,6 +386,7 @@ interface FixtureOptions {
   readonly ordinal?: number;
   readonly foundationIds?: readonly string[];
   readonly effects?: readonly ManifestExternalEffectRefV1[];
+  readonly lifecycleIdentity?: "inline" | "construction_evidence" | "unset";
 }
 
 interface Fixture {
@@ -409,12 +409,9 @@ function createFixture(options: FixtureOptions = {}): Fixture {
   const ordinal = options.ordinal ?? 0;
   const foundationIds = options.foundationIds ?? [];
   const effects = options.effects ?? [];
-  const outerId = envelopeKind === "fresh_v2_init" ? FRESH_ID : envelopeKind === "v1_migration" ? MIGRATION_ID : LIFECYCLE_ID;
-  const participantId = envelopeKind === "fresh_v2_init"
-    ? FRESH_PARTICIPANT_ID
-    : envelopeKind === "v1_migration"
-      ? MIGRATION_PARTICIPANT_ID
-      : LIFECYCLE_PARTICIPANT_ID;
+  const identityMode = options.lifecycleIdentity ?? "inline";
+  const outerId = envelopeKind === "fresh_v2_init" ? FRESH_ID : LIFECYCLE_ID;
+  const participantId = envelopeKind === "fresh_v2_init" ? FRESH_PARTICIPANT_ID : LIFECYCLE_PARTICIPANT_ID;
   const evidence = {
     reopenCanonicalAbsolutePath: (path: string) => path,
     containsCanonicalPath: (root: string, candidate: string) => candidate === root || candidate.startsWith(`${root}/`),
@@ -424,7 +421,7 @@ function createFixture(options: FixtureOptions = {}): Fixture {
   const manifestPath = admitCanonicalAbsolutePath(MANIFEST_PATH, evidence);
   const payloadPath = envelopeKind === "lifecycle"
     ? deriveManifestPayloadPath(productHome, outerId as never, participantId as never)
-    : deriveBootstrapPayloadPath(productHome, envelopeKind === "fresh_v2_init" ? "fresh_v2_init" : "v1_to_v2", outerId as never, ordinal);
+    : deriveBootstrapPayloadPath(productHome, "fresh_v2_init", outerId as never, ordinal);
   const tombstonePath = join(MANIFEST_PARENT, `.installation-manifest.${participantId}.json.tombstone`);
   const fs = new MemoryFileSystem();
   if (dirname(payloadPath) !== MANIFEST_PARENT) fs.addDirectory(dirname(payloadPath));
@@ -455,7 +452,11 @@ function createFixture(options: FixtureOptions = {}): Fixture {
         mode: 0o600 as const,
       };
   const after = afterPresence === "present"
-    ? presentState(AFTER_BYTES, envelopeKind === "lifecycle" ? 202n : null, payloadRef)
+    ? presentState(
+        AFTER_BYTES,
+        envelopeKind === "lifecycle" && identityMode !== "construction_evidence" ? 202n : null,
+        payloadRef,
+      )
     : { state: "absent" as const };
   const plan: RawPlan = {
     schemaVersion: 1,
@@ -504,6 +505,7 @@ function createFixture(options: FixtureOptions = {}): Fixture {
       if (value.path !== payloadPath || value.coordinatorId !== outerId) throw new Error("update payload was not admitted");
       return { dev: DEVICE.toString(10) as never, ino: "202" as never };
     },
+    ...(envelopeKind === "lifecycle" && identityMode !== "unset" ? { lifecycleIdentity: identityMode } : {}),
   };
   const manifestAdmission: ManifestAdmissionContextV1 = {
     evidence,
@@ -621,9 +623,14 @@ describe("ManifestStatePlanV1 boundary tables", () => {
 });
 
 describe("participant envelope admission table", () => {
-  it.each(["fresh_v2_init", "v1_migration", "lifecycle"] as const)("retains the exact legal %s envelope", (envelope) => {
+  it.each(["fresh_v2_init", "lifecycle"] as const)("retains the exact legal %s envelope", (envelope) => {
     const fixture = createFixture({ envelope });
     expect(fixture.admit().envelope).toEqual(fixture.plan.envelope);
+  });
+
+  it.each([FRESH_ID, MIGRATION_ID])("refuses the withdrawn v1_migration envelope arm with outer ID %s (D18, NEW-78)", (id) => {
+    const fixture = createFixture({ envelope: "fresh_v2_init" });
+    admissionRefuses({ ...fixture.plan, envelope: { kind: "v1_migration", id } }, fixture.context);
   });
 
   it.each([
@@ -762,9 +769,6 @@ describe("payload ordinal and binding tables", () => {
     { envelope: "fresh_v2_init", ordinal: 0, accepted: true },
     { envelope: "fresh_v2_init", ordinal: 999_999, accepted: true },
     { envelope: "fresh_v2_init", ordinal: 1_000_000, accepted: false },
-    { envelope: "v1_migration", ordinal: 0, accepted: true },
-    { envelope: "v1_migration", ordinal: 999_999, accepted: true },
-    { envelope: "v1_migration", ordinal: 1_000_000, accepted: false },
   ] as const)("checks $envelope ordinal $ordinal", ({ envelope, ordinal, accepted }) => {
     if (!accepted) {
       const fixture = createFixture({ envelope });
@@ -796,8 +800,8 @@ describe("payload ordinal and binding tables", () => {
     await refusesAndPreserves(fixture, () => fixture.participant.apply(fixture.admit()));
   });
 
-  it.each(["fresh_v2_init", "v1_migration"] as const)("rejects a %s absent-after plan", (envelope) => {
-    const fixture = createFixture({ envelope, after: "absent" });
+  it("rejects a fresh_v2_init absent-after plan", () => {
+    const fixture = createFixture({ envelope: "fresh_v2_init", after: "absent" });
     admissionRefuses(fixture.plan, fixture.context);
   });
 });
@@ -809,8 +813,6 @@ const executionRows = [
   { name: "update present-before/present-after", envelope: "lifecycle", before: "present", after: "present" },
   { name: "fresh bootstrap absent-before/present-after", envelope: "fresh_v2_init", before: "absent", after: "present" },
   { name: "fresh bootstrap present-before/present-after", envelope: "fresh_v2_init", before: "present", after: "present" },
-  { name: "migration bootstrap absent-before/present-after", envelope: "v1_migration", before: "absent", after: "present" },
-  { name: "migration bootstrap present-before/present-after", envelope: "v1_migration", before: "present", after: "present" },
 ] as const;
 
 type ExecutionRow = (typeof executionRows)[number];
@@ -1409,5 +1411,192 @@ describe("outer-cursor direction and point-of-no-return table", () => {
     await fixture.participant.apply(plan);
     await expect(fixture.recreate().compensate(plan)).resolves.toEqual({ state: "compensated" });
     expectBeforeInventory(fixture, "present", "present");
+  });
+});
+
+const TRANSITIONAL_PARTICIPANT_ID = `mf_${"d".repeat(61)}`;
+
+function withAfterIdentity(fixture: Fixture, ino: string | null): RawPlan {
+  return {
+    ...fixture.plan,
+    after: { ...rawPresentAfter(fixture), dev: ino === null ? null : DEVICE.toString(10), ino },
+  };
+}
+
+/**
+ * The terminal manifest plan of D72 P2(b): the manifest on disk (inode 101) is the transitional
+ * plan's published postimage, and the terminal `before` names that postimage's payload ref.
+ */
+function terminalFixture(mode: "inline" | "construction_evidence" = "construction_evidence"): {
+  readonly fixture: Fixture;
+  readonly plan: RawPlan;
+  readonly context: ManifestStatePlanAdmissionContextV1;
+} {
+  const fixture = createFixture({ lifecycleIdentity: mode });
+  const transitionalPath = deriveManifestPayloadPath(
+    fixture.context.productHome,
+    LIFECYCLE_ID as never,
+    TRANSITIONAL_PARTICIPANT_ID as never,
+  );
+  const transitionalRef = {
+    kind: "update_expected" as const,
+    coordinatorId: LIFECYCLE_ID,
+    ordinal: 1,
+    path: transitionalPath,
+    hash: hash(BEFORE_BYTES),
+    bytes: BEFORE_BYTES.byteLength,
+    mode: 0o600 as const,
+  };
+  const context: ManifestStatePlanAdmissionContextV1 = {
+    ...fixture.context,
+    admitParticipant: (envelope, candidate) => {
+      if (
+        envelope.kind !== "lifecycle" ||
+        envelope.id !== LIFECYCLE_ID ||
+        (candidate !== LIFECYCLE_PARTICIPANT_ID && candidate !== TRANSITIONAL_PARTICIPANT_ID)
+      ) {
+        throw new Error("participant pair was not admitted");
+      }
+      return candidate as ManifestParticipantIdV1;
+    },
+    updatePayloadIdentity: (value) => {
+      if (value.coordinatorId !== LIFECYCLE_ID) throw new Error("update payload was not admitted");
+      if (value.path === transitionalPath) return { dev: DEVICE.toString(10) as never, ino: "101" as never };
+      if (value.path === fixture.payloadPath) return { dev: DEVICE.toString(10) as never, ino: "202" as never };
+      throw new Error("update payload was not admitted");
+    },
+  };
+  const plan: RawPlan = { ...fixture.plan, before: presentState(BEFORE_BYTES, null, transitionalRef) };
+  return { fixture, plan, context };
+}
+
+describe("lifecycle postimage identity mode (D72 P2)", () => {
+  it("refuses a construction-evidence after that still pins dev/ino", () => {
+    const fixture = createFixture({ lifecycleIdentity: "construction_evidence" });
+    admissionRefuses(withAfterIdentity(fixture, "202"), fixture.context);
+  });
+
+  it("admits a construction-evidence after with a null identity", () => {
+    const fixture = createFixture({ lifecycleIdentity: "construction_evidence" });
+    expect(fixture.admit().after).toMatchObject({ state: "present", dev: null, ino: null });
+  });
+
+  it("refuses an inline after with a null identity", () => {
+    const fixture = createFixture({ lifecycleIdentity: "inline" });
+    admissionRefuses(withAfterIdentity(fixture, null), fixture.context);
+  });
+
+  it("refuses a lifecycle context without lifecycleIdentity", () => {
+    const fixture = createFixture({ lifecycleIdentity: "unset" });
+    admissionRefuses(fixture.plan, fixture.context);
+    admissionRefuses(withAfterIdentity(fixture, null), fixture.context);
+  });
+
+  it("admits a payload-free lifecycle plan without lifecycleIdentity", () => {
+    const fixture = createFixture({ before: "present", after: "absent", lifecycleIdentity: "unset" });
+    expect(fixture.admit().after).toEqual({ state: "absent" });
+  });
+
+  it("admits a bootstrap plan unchanged, with no lifecycleIdentity", () => {
+    const fixture = createFixture({ envelope: "fresh_v2_init" });
+    expect(fixture.context.lifecycleIdentity).toBeUndefined();
+    expect(fixture.admit().after).toMatchObject({ state: "present", dev: null, ino: null });
+  });
+
+  it("admits a terminal before that names the transitional after ref with a null identity", () => {
+    const { plan, context } = terminalFixture();
+    expect(validateManifestStatePlan(plan, context).before).toMatchObject({
+      state: "present",
+      dev: null,
+      ino: null,
+      bytes: { kind: "update_expected", ordinal: 1 },
+    });
+  });
+
+  it.each([
+    { name: "a pinned identity", patch: { dev: DEVICE.toString(10), ino: "101" } },
+    { name: "its own payload path", patch: { bytesPath: "self" } },
+    { name: "a hash that is not the named ref's", patch: { hash: HEX_B } },
+  ])("refuses a terminal before with $name", ({ patch }) => {
+    const { fixture, plan, context } = terminalFixture();
+    const before = plan.before as RawPresentState;
+    const bytes = before.bytes as RawPayloadRef;
+    const changed = {
+      ...before,
+      ...("dev" in patch ? { dev: patch.dev, ino: patch.ino } : {}),
+      ...("hash" in patch ? { hash: patch.hash } : {}),
+      bytes: "bytesPath" in patch ? { ...bytes, path: fixture.payloadPath } : bytes,
+    };
+    admissionRefuses({ ...plan, before: changed }, context);
+  });
+
+  it("refuses a before that names bytes under the inline mode", () => {
+    const { plan, context } = terminalFixture("inline");
+    admissionRefuses(plan, context);
+  });
+
+  it("publishes the terminal plan over the transitional manifest inode", async () => {
+    const { fixture, plan, context } = terminalFixture();
+    const participant = fixture.recreate(context);
+    await expect(participant.apply(validateManifestStatePlan(plan, context))).resolves.toEqual({ state: "applied" });
+    expectAppliedInventory(fixture, "present", "present");
+  });
+});
+
+describe("preserveBefore/publishAfter split (D72 P2, P3)", () => {
+  const rows = [
+    ...executionRows.map((row) => ({ ...row, lifecycleIdentity: "inline" as const })),
+    ...executionRows
+      .filter((row) => row.envelope === "lifecycle")
+      .map((row) => ({ ...row, name: `${row.name} (construction evidence)`, lifecycleIdentity: "construction_evidence" as const })),
+  ];
+
+  it.each(rows)("preserveBefore then publishAfter equals apply for $name", async (row) => {
+    const applied = createFixture(row);
+    await applied.participant.apply(applied.admit());
+
+    const split = createFixture(row);
+    const plan = split.admit();
+    await split.participant.preserveBefore(plan);
+    await expect(split.participant.publishAfter(plan)).resolves.toEqual({ state: "applied" });
+
+    expect(split.fs.snapshot(split.paths)).toEqual(applied.fs.snapshot(applied.paths));
+    expectAppliedInventory(split, row.before, row.after);
+  });
+
+  it("recovers a death between the two through observe", async () => {
+    const fixture = createFixture({ lifecycleIdentity: "construction_evidence" });
+    const plan = fixture.admit();
+    await expect(fixture.participant.preserveBefore(plan)).resolves.toEqual({ state: "preimage_preserved" });
+    fixture.fs.clearFaultAndEvents();
+
+    await expect(fixture.recreate().observe(plan)).resolves.toEqual({ state: "preimage_preserved" });
+    await expect(fixture.recreate().publishAfter(plan)).resolves.toEqual({ state: "applied" });
+    expectAppliedInventory(fixture, "present", "present");
+  });
+
+  it("recovers a death inside preserveBefore by rerunning it", async () => {
+    const fixture = createFixture();
+    const plan = fixture.admit();
+    fixture.fs.armDeath("after:move:preserve-preimage");
+    await expect(fixture.participant.preserveBefore(plan)).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    fixture.fs.clearFaultAndEvents();
+
+    await expect(fixture.recreate().preserveBefore(plan)).resolves.toEqual({ state: "preimage_preserved" });
+    await expect(fixture.recreate().publishAfter(plan)).resolves.toEqual({ state: "applied" });
+    expectAppliedInventory(fixture, "present", "present");
+  });
+
+  it("refuses publishAfter before a present before is preserved", async () => {
+    const fixture = createFixture();
+    await refusesAndPreserves(fixture, () => fixture.participant.publishAfter(fixture.admit()));
+  });
+
+  it("keeps preserveBefore idempotent once the plan is applied", async () => {
+    const fixture = createFixture();
+    const plan = fixture.admit();
+    await fixture.participant.apply(plan);
+    await expect(fixture.recreate().preserveBefore(plan)).resolves.toEqual({ state: "applied" });
+    expectAppliedInventory(fixture, "present", "present");
   });
 });

@@ -12,18 +12,16 @@ import {
   type LaunchdEffectIdV1,
   type LowerHexSha256,
   type UInt64DecimalV1,
-  type UtcTimestampV1,
 } from "@developer-os/core";
 import type { SupervisedPhaseV1, SupervisedProcessEvidenceV1, SupervisedSpawnRequestV1 } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { LaunchdDistributionUnsupportedError, SUPPORTED_LAUNCHD_DISTRIBUTION } from "./distribution.js";
+import { LaunchdDistributionUnsupportedError } from "./distribution.js";
+import { LAUNCHCTL_IDENTITY, hostWith } from "./distribution.test-fixtures.js";
 import { encodeLaunchdPlist } from "./plist.js";
 import {
-  SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   expandLaunchdProcessTable,
   type LaunchdProcessDirectoryIdentityV1,
-  type SupportedLaunchdProcessTableTemplateV1,
   type SupportedLaunchdProcessTableV1,
 } from "./process-table.js";
 import { generatedLabel, launchdGuiDomain, parseScheduledProductHome, scheduledProgramArguments } from "./registry.js";
@@ -44,14 +42,6 @@ const GENERATION = "3".repeat(64) as LowerHexSha256;
 const NONCE = "a".repeat(64);
 const EFFECT_ID = `le_${NONCE}_7` as LaunchdEffectIdV1;
 const PLAN_HASH = "b".repeat(64) as LowerHexSha256;
-
-const certifiedTemplate: SupportedLaunchdProcessTableTemplateV1 = {
-  ...SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
-  certification: {
-    certifiedAt: "2026-09-24T10:00:00.000Z" as UtcTimestampV1,
-    fixtureTranscriptSha256: "c".repeat(64) as LowerHexSha256,
-  },
-};
 
 class Crash extends Error {}
 
@@ -136,7 +126,7 @@ afterEach(async () => {
 
 const phase: SupervisedPhaseV1 = { id: "launchd-transition", deadlineAtMs: 30000, remainingMilliseconds: () => 30000 };
 
-async function createFixture(template: SupportedLaunchdProcessTableTemplateV1 = certifiedTemplate): Promise<Fixture> {
+async function createFixture(): Promise<Fixture> {
   const base = await realpath(await mkdtemp(join(tmpdir(), "dos-launchd-snapshot-")));
   fixtures.push(base);
   const productHome = join(base, "product home & <co>");
@@ -146,7 +136,7 @@ async function createFixture(template: SupportedLaunchdProcessTableTemplateV1 = 
   for (const path of [root, join(root, "home"), join(root, "tmp")]) await chmod(path, 0o700);
   const table = expandLaunchdProcessTable(
     { root: await directoryIdentity(root), home: await directoryIdentity(join(root, "home")), tmp: await directoryIdentity(join(root, "tmp")) },
-    template,
+    LAUNCHCTL_IDENTITY,
   );
 
   const plist: LaunchdPlistDictionaryV1 = {
@@ -204,10 +194,8 @@ async function createFixture(template: SupportedLaunchdProcessTableTemplateV1 = 
       new LaunchdSnapshotBootstrapper({
         runner,
         fs: NODE_FS,
-        template,
         effectiveUid: () => uid,
-        operatingSystem: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.operatingSystem }),
-        inspectExecutable: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.executable, kind: "file" as const }),
+        host: hostWith(),
         ...overrides,
       }),
   };
@@ -466,27 +454,38 @@ describe("LaunchdSnapshotBootstrapper", () => {
     expect(fixture.runner.requests).toHaveLength(1);
   });
 
-  it("refuses when uncertified, with no linked or pathname fallback", async () => {
-    const fixture = await createFixture(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE);
+  it("refuses a retired pinned table ID, with no linked or pathname fallback", async () => {
+    const fixture = await createFixture();
+    const retired = { ...fixture.request, table: { ...fixture.table, id: "launchctl-macos-26.6.2-25G83-fd3-v1" as unknown as SupportedLaunchdProcessTableV1["id"] } };
     const baseline = openDescriptorCount();
     const bootstrapper = fixture.bootstrapper();
-    await expect(bootstrapper.prepare(fixture.request)).rejects.toThrow("unsupported_launchd_distribution");
-    await expect(bootstrapper.prepare(fixture.request)).rejects.toThrow(LaunchdDistributionUnsupportedError);
-    await expect(bootstrapper.recover(null, fixture.request)).rejects.toThrow(LaunchdDistributionUnsupportedError);
+    await expect(bootstrapper.prepare(retired)).rejects.toThrow("unsupported_launchd_distribution");
+    await expect(bootstrapper.prepare(retired)).rejects.toThrow(LaunchdDistributionUnsupportedError);
+    await expect(bootstrapper.recover(null, retired)).rejects.toThrow(LaunchdDistributionUnsupportedError);
     expect(await fixture.stagingChildren()).toEqual([]);
     expect(fixture.runner.requests).toHaveLength(0);
     expect(openDescriptorCount()).toBe(baseline);
   });
 
-  it("refuses a drifted host before spawn and still closes the snapshot", async () => {
+  it.each([
+    ["a ProductVersion below the floor", hostWith({ productVersion: "26.6.1" })],
+    ["a macOS update since the table was bound", hostWith({ productVersion: "26.7", buildVersion: "25H1" })],
+    ["a launchctl sha256 change since the table was bound", hostWith({ paths: { "/bin/launchctl": { sha256: "c".repeat(64) } } })],
+  ])("refuses %s before spawn and still closes the snapshot", async (_name, host) => {
     const fixture = await createFixture();
     const baseline = openDescriptorCount();
-    const bootstrapper = fixture.bootstrapper({
-      operatingSystem: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.operatingSystem, buildVersion: "25G84" }),
-    });
+    const bootstrapper = fixture.bootstrapper({ host });
     await expect(bootstrapper.bootstrap(await bootstrapper.prepare(fixture.request))).rejects.toThrow(LaunchdDistributionUnsupportedError);
     expect(fixture.runner.requests).toHaveLength(0);
     expect(openDescriptorCount()).toBe(baseline);
+  });
+
+  it("never compares the macOS build", async () => {
+    const fixture = await createFixture();
+    const bootstrapper = fixture.bootstrapper({ host: hostWith({ buildVersion: "25G84" }) });
+    const table = { ...fixture.table, launchctlIdentity: { ...LAUNCHCTL_IDENTITY, buildVersion: "25G84" } };
+    await bootstrapper.bootstrap(await bootstrapper.prepare({ ...fixture.request, table }));
+    expect(fixture.runner.requests).toHaveLength(1);
   });
 
   it("refuses a source that is not the plan-bound identity before creating a leaf", async () => {

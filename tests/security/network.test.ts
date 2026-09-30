@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -21,10 +22,14 @@ import { runUninstall } from "@developer-os/cli/dist/commands/uninstall.js";
 import {
   createCommandFixture,
   removeCommandFixtures,
+  syntheticProbeHost,
 } from "@developer-os/cli/dist/commands/testing.js";
 import type { CommandFixture } from "@developer-os/cli/dist/commands/testing.js";
 import type { CliContext } from "@developer-os/cli/dist/context.js";
 import { run } from "@developer-os/cli/dist/main.js";
+import { runUpdate } from "@developer-os/cli/dist/commands/update/index.js";
+import type { CliUpdateContext } from "@developer-os/cli/dist/update/context.js";
+import { createUpdateFixture } from "@developer-os/cli/dist/update/testing.js";
 import { MacOsPlatformAdapter } from "@developer-os/platform-macos";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -78,19 +83,20 @@ import type { InstalledFixture, VendorCall } from "./helpers.js";
  */
 
 /**
- * What the vendor's child process is handed. Both adapters pass `env: {}`
- * (`packages/adapter-claude/src/invoke.ts:139`,
- * `packages/adapter-codex/src/invoke.ts:324`), so this is empty today.
+ * What the Claude child process is handed during ingest: `USER` and `LOGNAME`
+ * set to `os.userInfo().username`, and nothing else — admitted by NEW-75
+ * (2026-09-28, Claude Code 2.1.283) against a recorded observation of
+ * `env: {}` failing with "Not logged in", because the subscription credential
+ * is a Keychain item looked up by account name
+ * (`docs/architecture/vendor-invocation.md`, Task 6 section). Still no `HOME`.
  *
- * Declared as an expectation rather than written as `toEqual({})` inline: an
- * empty environment is stricter than spec §2.7 asks and this constant is where a
- * vendor CLI that genuinely needs `HOME` would be admitted, deliberately, in one
- * place a reviewer can see, against a recorded observation of it failing without
- * the variable — never for a proxy (the case below named "does not pass a
- * proxy..." already proves one does not reach the child). Kept empty per F2,
- * `docs/architecture/vendor-invocation.md`'s Task 6 section, 2026-09-05.
+ * Declared as an expectation rather than written inline: this constant is where
+ * a vendor variable is admitted, deliberately, in one place a reviewer can see,
+ * against a recorded observation of the vendor failing without it — never for a
+ * proxy (the case below named "does not pass a proxy..." already proves one
+ * does not reach the child).
  *
- * **What this constant being `{}` does not prove.** An empty environment is not
+ * **What this constant omitting `HOME` does not prove.** It is not
  * evidence the child cannot find the invoking user's home directory: both
  * installed binaries statically import `getpwuid_r` (`nm -u`), the libc call a
  * process with no `HOME` falls back to via the system password database — see
@@ -98,9 +104,12 @@ import type { InstalledFixture, VendorCall } from "./helpers.js";
  * no permitted probe could observe it at runtime. What actually keeps the
  * vendor away from the user's own settings and hooks is `--restricted` /
  * `--safe-mode` (Claude) and `--ignore-user-config` (Codex), not this
- * constant staying empty.
+ * constant staying small.
  */
-const EXPECTED_VENDOR_ENVIRONMENT: Readonly<Record<string, string>> = {};
+const EXPECTED_VENDOR_ENVIRONMENT: Readonly<Record<string, string>> = {
+  USER: userInfo().username,
+  LOGNAME: userInfo().username,
+};
 
 const PROXY = "http://proxy.invalid:8080";
 
@@ -138,7 +147,7 @@ const COMMANDS: readonly CommandCase[] = [
       runCapture(
         fixture.context,
         { text: "an observation with an agent" },
-        { cwd: () => fixture.project, detect: () => "claude" },
+        { cwd: () => fixture.project, detect: () => "claude", executables: syntheticProbeHost() },
       ),
   },
   {
@@ -275,9 +284,8 @@ describe("the one outbound call this product makes", () => {
    *
    * **The non-empty assertion is on the parent, not the child**, and that is the
    * one place this case departs from the shape the brief sketched. The child's
-   * environment is empty *by design* (`env: {}` at both adapters), so asserting
-   * `Object.keys(child.env).length > 0` would pin a property this product does
-   * not have and could only be made green by weakening the product. The rule
+   * environment is fixed *by design* (`USER`/`LOGNAME` only), so a non-empty
+   * child proves nothing about inheritance. The rule
    * that a sweep must be non-empty per scope is honoured on the scope that must
    * be non-empty: the environment the run was made under really did carry both
    * proxies.
@@ -468,8 +476,42 @@ describe("the bootstrap refusal paths", () => {
 const GIT_GATEWAY_TRAMPOLINE_SOURCE = "packages/security/src/git/gateways.ts";
 
 /**
- * **The update-only row.** No `update` command exists yet, so this row is a
- * static classifier rather than a command run: every non-test TypeScript
+ * **Rollback and recovery are local.** Spec 2 §11/§12 (D72 P7(f)): of the whole `update`
+ * surface only plan and apply reach the release transport. `update rollback` reads retained
+ * evidence alone, so a context whose every release port throws still previews it, and the
+ * recording transport it could have reached sees nothing. The on-disk apply, recovery and
+ * rollback legs assert the same over the real ports in `tests/integration/update/recovery.test.ts`.
+ */
+describe("update rollback reaches no network", () => {
+  afterEach(removeCommandFixtures);
+
+  it("previews a rollback with the FD 3 trust, transport, scratch and planner ports all unreachable", async () => {
+    const fixture = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+    const never = (): never => {
+      throw new Error("a release port was reached");
+    };
+    const update: CliUpdateContext = {
+      ...fixture.update,
+      readOfflineTrust: never,
+      createTransport: never,
+      scratch: { create: never, listRecoverableAttempts: never, recoverCleanup: never },
+      planner: { run: never },
+    };
+
+    const result = await runUpdate({ ...(await createCommandFixture("network-rollback-preview")).context, update }, { kind: "rollback", apply: false, json: true });
+
+    expect(result).toMatchObject({ ok: true, data: { outcome: "rollback_preview" } });
+    expect(fixture.requests).toStrictEqual([]);
+    expect(fixture.events.filter((event) => event.startsWith("transport") || event === "trust" || event === "planner")).toStrictEqual([]);
+    /** The positive control: the same fixture's update preview does reach its transport. */
+    await runUpdate({ ...(await createCommandFixture("network-update-preview")).context, update: fixture.update }, { kind: "update", version: null, apply: false, json: true });
+    expect(fixture.requests.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * **The update-only row, statically.** `tests/repository/check.ts`'s release authority gate
+ * holds the same boundary on every lint run; this row classifies the sources directly: every non-test TypeScript
  * source under `packages/` and `apps/` is read, and the set of files that can
  * open a socket — a network module import or a global `fetch` call — must be
  * exactly the fixed release transport. Total in both directions like the rows

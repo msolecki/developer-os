@@ -6,8 +6,9 @@ import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type Lowe
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { SupervisedProcessRunner, type SupervisedProcessEvidenceV1, type SupervisedSpawnRequestV1 } from "../supervised-process.js";
-import { SUPPORTED_GIT_DISTRIBUTION } from "./distribution.js";
-import { observedFromRow } from "./distribution.test-fixtures.js";
+import { admitPosixRootOwnedSync } from "../system-executables.js";
+import { GIT_DISTRIBUTION_POLICY } from "./distribution.js";
+import { DARWIN, stockAdmitted, stockHostSync } from "./distribution.test-fixtures.js";
 import {
   GIT_GATEWAY_TRAMPOLINE_TEMPLATE,
   materializeGitExecGateway,
@@ -36,7 +37,7 @@ import {
 } from "./supervisor.js";
 import type { ClosedGitProcessEdgeIdV1, ClosedGitProcessNodeIdV1, GitEnvironmentProfileIdV1, GitProcessNodeV1 } from "./types.js";
 
-const table = SUPPORTED_GIT_DISTRIBUTION.processTable;
+const table = GIT_DISTRIBUTION_POLICY.processTable;
 const UID = process.getuid?.() ?? 0;
 const TOKEN = "e".repeat(64);
 const COMMIT = "a".repeat(40);
@@ -44,7 +45,7 @@ const REFSPEC = `${COMMIT}:refs/heads/main`;
 const HTTPS_URL = "https://example.invalid/synthetic/brain.git";
 const QUARANTINE = parseCanonicalAbsolutePathText("/tmp/developer-os-test/quarantine");
 const SOURCE_SHADOW = parseCanonicalAbsolutePathText("/tmp/developer-os-test/source-shadow");
-const PINNED_EXECUTABLES: readonly string[] = SUPPORTED_GIT_DISTRIBUTION.executables.map((executable) => executable.invokedPath);
+const FIXED_EXECUTABLES: readonly string[] = DARWIN.map((row) => row.path);
 const sha = (bytes: Uint8Array): LowerHexSha256 => createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 
 const ENV_SLOTS: GitEnvironmentSlotValuesV1 = {
@@ -110,11 +111,9 @@ let executed: string[];
 
 beforeEach(() => {
   runner = new ScriptedRunner();
-  supervisor = new GitProcessSupervisor(
-    table,
-    runner,
-    admittingGitIdentityProbe(SUPPORTED_GIT_DISTRIBUTION, () => observedFromRow(SUPPORTED_GIT_DISTRIBUTION)),
-  );
+  // SSH is admitted here only to exercise the bridge's table machinery; admission refuses the SSH transport (D59 Q4-A).
+  const admitted = { ...stockAdmitted(), ssh: admitPosixRootOwnedSync(DARWIN[2], stockHostSync()) };
+  supervisor = new GitProcessSupervisor(table, runner, admittingGitIdentityProbe(() => admitted, DARWIN, stockHostSync()));
   executed = [];
 });
 
@@ -327,7 +326,7 @@ describe("runGitGateway", () => {
     };
     expect(await gatewayStep({ ...step, basename: "git-receive-pack" })).toMatchObject({ kind: "refused", exitCode: 126 });
     const outcome = await gatewayStep(step);
-    expect(outcome).toMatchObject({ kind: "exec", executable: SUPPORTED_GIT_DISTRIBUTION.executables[0]?.invokedPath });
+    expect(outcome).toMatchObject({ kind: "exec", executable: "/usr/bin/git" });
     expect(outcome.kind === "exec" ? outcome.admission.argv : []).toEqual(packArgv);
     expect(await gatewayStep(step)).toMatchObject({ kind: "refused", reason: "git_edge_uses_exceeded" });
   });
@@ -351,11 +350,11 @@ describe("runGitGateway", () => {
     expect(executed).toEqual([]);
   });
 
-  it("admits one HTTPS helper and no second request after a redirect", async () => {
+  it("refuses the HTTPS helper, which has no fixed system path, and any second request after a redirect", async () => {
     const { phase, push } = await beginPush("push_https");
     const { dispatch, helper } = await httpsChain(phase, push);
-    expect(helper).toMatchObject({ kind: "exec", executable: SUPPORTED_GIT_DISTRIBUTION.executables[1]?.invokedPath });
-    expect(helper.kind === "exec" ? helper.admission.env : {}).toEqual(env("https_helper"));
+    expect(helper).toMatchObject({ kind: "refused", exitCode: 126, reason: "unsupported_git_distribution" });
+    expect(executed).toEqual(["/usr/bin/git"]);
     expect(await helperStep(phase, dispatch)).toMatchObject({ kind: "refused", reason: "git_edge_uses_exceeded" });
   });
 });
@@ -535,6 +534,44 @@ describe("SanitizedLocalRemoteHelperV1", () => {
     await expect(helper.step("capabilities")).rejects.toThrow("git_local_helper_protocol");
   });
 
+  it("the receive-pack trampoline execs /usr/bin/git-receive-pack with git-receive-pack …", async () => {
+    const { phase, outcome, slots } = await enterHelper();
+    if (outcome.kind !== "enter") throw new Error("fixture: helper not entered");
+    const helper = new SanitizedLocalRemoteHelper({
+      supervisor,
+      table,
+      phase,
+      helperPermit: outcome.permit,
+      token: TOKEN,
+      destinationShadow: shadow,
+      receiveEnvironmentSlots: slots,
+      effectiveUid: UID,
+    });
+    helper.accept(outcome.admission.argv, outcome.admission.env);
+    await helper.step("capabilities");
+    const connected = await helper.step("connect git-receive-pack");
+    if (connected.kind !== "connect") throw new Error("fixture: helper not connected");
+    const receive = await runGitGateway(
+      {
+        supervisor,
+        table,
+        phase,
+        basename: "git-receive-pack",
+        request: connected.request,
+        transition: {
+          argvAlternative: 0,
+          argvSlots: { private_destination_shadow: shadow.gitDir },
+          environmentProfileId: "destination_receive",
+          environmentSlots: slots,
+          cwd: shadow.gitDir,
+        },
+      },
+      connected.permit,
+    );
+    expect(receive).toMatchObject({ kind: "exec", executable: "/usr/bin/git-receive-pack" });
+    expect(receive.kind === "exec" ? receive.admission.argv : []).toEqual(["git-receive-pack", "--skip-connectivity-check", shadow.gitDir]);
+  });
+
   const hostileLines = ["connect git-upload-pack", "option verbosity 1", "push refs/heads/main:refs/heads/main", "fetch", "", "export"];
 
   it.each(hostileLines)("refuses the protocol line %j", async (line) => {
@@ -631,7 +668,7 @@ describe("hostile Git configuration is inert", () => {
     const argvs = runner.requests.flatMap((request) => [...request.argv, ...Object.values(request.env)]);
     return {
       hostileExecutions: [
-        ...everything.filter((path) => !PINNED_EXECUTABLES.includes(path)),
+        ...everything.filter((path) => !FIXED_EXECUTABLES.includes(path)),
         ...argvs.filter((value) => value.includes(fixture.marker) || value.includes(`${root}/brain/.git`)),
       ],
       shadowBytes: shadow.bytes,

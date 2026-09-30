@@ -37,7 +37,7 @@ describe("resolveVendorHomes", () => {
 describe("vendor instruction paths", () => {
   const homes = resolveVendorHomes({ CODEX_HOME: "/synthetic/codex" }, H, P);
 
-  it("derives the Claude targets of spec §2.2 and §4", () => {
+  it("derives the Claude targets of foundation.md §12.5 and claude-adapter.md §18", () => {
     expect(claudeInstructionPaths(homes)).toStrictEqual({
       pluginRoot: `${H}/.claude/skills/developer-os`,
       rulesDir: `${H}/.claude/rules`,
@@ -47,7 +47,7 @@ describe("vendor instruction paths", () => {
     });
   });
 
-  it("derives the Codex targets of spec §2.2, §4 and §6.4", () => {
+  it("derives the Codex targets of foundation.md §12.5 and codex-adapter.md §16", () => {
     expect(codexInstructionPaths(homes)).toStrictEqual({
       agentsDir: "/synthetic/codex/agents",
       instructionFile: "/synthetic/codex/AGENTS.md",

@@ -8,7 +8,8 @@ import {
 } from "@developer-os/security";
 import { describe, expect, it } from "vitest";
 
-import { LaunchdDistributionUnsupportedError, SUPPORTED_LAUNCHD_DISTRIBUTION } from "./distribution.js";
+import { LaunchdDistributionUnsupportedError, type LaunchdHostObserverV1 } from "./distribution.js";
+import { hostWith } from "./distribution.test-fixtures.js";
 import {
   LaunchdObserver,
   type LaunchdEmptyDirectoryObservationV1,
@@ -69,8 +70,7 @@ function host(runner: LaunchdObservationDependenciesV1["runner"], overrides: Par
     runner,
     effectiveUid: () => UID,
     consoleUserUid: () => Promise.resolve(UID),
-    operatingSystem: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.operatingSystem }),
-    inspectExecutable: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.executable, kind: "file" as const }),
+    host: hostWith(),
     inspectEmptyDirectory: () => Promise.resolve({ ...emptyDirectory }),
     ...overrides,
   };
@@ -225,17 +225,21 @@ describe("LaunchdObserver", () => {
 
   it("verifies the OS, launchctl and the empty directory before every process and the directory after it", async () => {
     const calls = { os: 0, executable: 0, directory: 0 };
+    const admitted = hostWith();
+    const counting: LaunchdHostObserverV1 = {
+      operatingSystem: () => {
+        calls.os += 1;
+        return admitted.operatingSystem();
+      },
+      inspect: (path) => {
+        if (path === "/bin/launchctl") calls.executable += 1;
+        return admitted.inspect(path);
+      },
+    };
     const runner = new ScriptedRunner();
     await new LaunchdObserver(
       host(runner, {
-        operatingSystem: () => {
-          calls.os += 1;
-          return Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.operatingSystem });
-        },
-        inspectExecutable: () => {
-          calls.executable += 1;
-          return Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.executable, kind: "file" as const });
-        },
+        host: counting,
         inspectEmptyDirectory: () => {
           calls.directory += 1;
           return Promise.resolve({ ...emptyDirectory });
@@ -247,12 +251,20 @@ describe("LaunchdObserver", () => {
     expect(calls).toEqual({ os: processes, executable: processes, directory: 1 + 2 * processes });
   });
 
+  it("never compares the macOS build", async () => {
+    const runner = new ScriptedRunner();
+    await expect(new LaunchdObserver(host(runner, { host: hostWith({ buildVersion: "25G84" }) })).observe({ domain, jobs: [replaceDoctor] })).resolves.toMatchObject({
+      kind: "observed",
+    });
+  });
+
   it.each([
-    { name: "OS build", overrides: { operatingSystem: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.operatingSystem, buildVersion: "25G84" }) } },
-    {
-      name: "same-path different launchctl",
-      overrides: { inspectExecutable: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.executable, kind: "file" as const, sha256: "0".repeat(64) }) },
-    },
+    { name: "macOS below the floor", overrides: { host: hostWith({ productVersion: "26.6.1" }) } },
+    { name: "malformed macOS version", overrides: { host: hostWith({ productVersion: "26.x" }) } },
+    { name: "user-owned launchctl", overrides: { host: hostWith({ paths: { "/bin/launchctl": { ownerUid: UID } } }) } },
+    { name: "group-writable launchctl", overrides: { host: hostWith({ paths: { "/bin/launchctl": { mode: 0o775 } } }) } },
+    { name: "symlinked launchctl", overrides: { host: hostWith({ paths: { "/bin/launchctl": { kind: "symlink" as const } } }) } },
+    { name: "group-writable /bin", overrides: { host: hostWith({ paths: { "/bin": { mode: 0o775 } } }) } },
     { name: "empty directory owner", overrides: { inspectEmptyDirectory: () => Promise.resolve({ ...emptyDirectory, ownerUid: UID }) } },
     { name: "empty directory mode", overrides: { inspectEmptyDirectory: () => Promise.resolve({ ...emptyDirectory, mode: 0o777 }) } },
     { name: "empty directory symlink", overrides: { inspectEmptyDirectory: () => Promise.resolve({ ...emptyDirectory, kind: "symlink" as const }) } },
@@ -265,13 +277,16 @@ describe("LaunchdObserver", () => {
 
   it("refuses launchctl drift between two probes of one pass", async () => {
     let inspections = 0;
+    const [first, later] = [hostWith(), hostWith({ paths: { "/bin/launchctl": { size: 300001 } } })];
     const runner = new ScriptedRunner();
     const observer = new LaunchdObserver(
       host(runner, {
-        inspectExecutable: () => {
-          inspections += 1;
-          const size = SUPPORTED_LAUNCHD_DISTRIBUTION.executable.size + (inspections > 1 ? 1 : 0);
-          return Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.executable, kind: "file" as const, size });
+        host: {
+          operatingSystem: () => first.operatingSystem(),
+          inspect: (path) => {
+            if (path === "/bin/launchctl") inspections += 1;
+            return (inspections > 1 ? later : first).inspect(path);
+          },
         },
       }),
     );

@@ -2,20 +2,20 @@ import { EXIT_CODES, parseSafeReasonCode } from "@developer-os/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderPath } from "../../context.js";
-import { applyUpdate } from "../../update/apply.js";
+import { applyUpdate, recoverUpdate } from "../../update/apply.js";
 import type * as ApplyModule from "../../update/apply.js";
 import type { UpdateApplyPortsV1 } from "../../update/apply.js";
 import { planRollback, planUpdate, UpdatePlanningRefusal } from "../../update/planning.js";
 import { applyRollback } from "../../update/rollback-apply.js";
 import type * as RollbackApplyModule from "../../update/rollback-apply.js";
-import { createUpdateFixture, FILE_A_PATH, unreachableUpdateContext } from "../../update/testing.js";
+import { createUpdateFixture, FILE_A_PATH, SYNTHETIC_COORDINATOR_ID, unreachableUpdateContext } from "../../update/testing.js";
 import { createCommandFixture, removeCommandFixtures } from "../testing.js";
 import { parseUpdateArgv, renderUpdate, runUpdate } from "./index.js";
 
 /** Pass-through by default; a case stubs one automatic-rollback outcome with `mockImplementationOnce`. */
 vi.mock("../../update/apply.js", async (original) => {
   const actual = await original<typeof ApplyModule>();
-  return { ...actual, applyUpdate: vi.fn(actual.applyUpdate) };
+  return { ...actual, applyUpdate: vi.fn(actual.applyUpdate), recoverUpdate: vi.fn(actual.recoverUpdate) };
 });
 vi.mock("../../update/rollback-apply.js", async (original) => {
   const actual = await original<typeof RollbackApplyModule>();
@@ -204,6 +204,33 @@ describe("runUpdate", () => {
     expect(result.ok).toBe(false);
     expect(result.code).toBe(code);
     if (!result.ok) expect(result.error).toMatchObject({ kind: "update_rollback_compensated", message: cause });
+  });
+
+  it.each([
+    [{ kind: "update", version: null, apply: true, json: false }, "update_rolled_back_automatically", "update_verifier_rejected", EXIT_CODES.securityRefusal],
+    [{ kind: "update", version: null, apply: true, json: false }, "update_rolled_back_automatically", "update_step_not_applied", EXIT_CODES.operationalFailure],
+    [{ kind: "rollback", apply: true, json: false }, "update_rollback_compensated", "update_verifier_rejected", EXIT_CODES.securityRefusal],
+  ] as const)("exits a resumed %j compensated by %s with the persisted cause's class (Review Focus 4)", async (invocation, kind, cause, code) => {
+    const commandFixture = await createCommandFixture(`update-resumed-${invocation.kind}-${cause}`);
+    const update = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+    const apply: UpdateApplyPortsV1 = {
+      ...unreachableApplyPorts(),
+      withGlobalLock: (work) => work(),
+      closure: () => Promise.resolve({ kind: "clear" }),
+      composeRollback: () => Promise.reject(new Error("unreachable")),
+    };
+    vi.mocked(recoverUpdate).mockImplementationOnce(() =>
+      Promise.resolve({ kind: "coordinator", outcome: { kind: "rolled_back", id: SYNTHETIC_COORDINATOR_ID, cause: parseSafeReasonCode(cause) } }));
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply } }, invocation);
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(code);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({ kind, message: cause });
+      expect(result.error.recovery).toContain("Developer OS 1.1.0 is still active");
+    }
+    expect(update.events).not.toContain("planner");
+    expect(update.requests).toStrictEqual([]);
   });
 
   it("returns the plan-only arms through the injected ports", async () => {

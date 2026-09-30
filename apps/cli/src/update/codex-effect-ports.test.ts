@@ -8,7 +8,6 @@ import {
   parseLowerHexSha256,
   parsePositiveUInt32,
   parseUInt64Decimal,
-  type EffectiveUidV1,
   type OwnerExternalEffectLiteralV1,
   type OwnerExternalEffectProcessPolicyV1,
 } from "@developer-os/core";
@@ -20,7 +19,8 @@ import type { OwnerEffectProcessRequestV1, OwnerEffectProcessResultV1 } from "./
 
 const encoder = new TextEncoder();
 const SECRET_MARKER = "SYNTHETIC-SECRET-MARKER";
-const tokens = { managedPluginRoot: "/synthetic/codex/plugin-root", pluginId: "developer-os@developer-os", privateEffectTmp: "/synthetic/tmp/effect", managedVendorHome: "/synthetic/codex/home" };
+// A non-default Codex home: the refresh must target it through CODEX_HOME, never `<home>/.codex`.
+const tokens = { managedPluginRoot: "/synthetic/codex/plugin-root", pluginId: "developer-os@developer-os", privateEffectTmp: "/synthetic/tmp/effect", managedVendorHome: "/synthetic/elsewhere/codex-home" };
 const homes: string[] = [];
 
 afterEach(async () => {
@@ -31,10 +31,10 @@ const policy: OwnerExternalEffectProcessPolicyV1 = {
   kind: "codex_registration_refresh",
   providerProtocol: parsePositiveUInt32(3),
   executable: "pinned_codex_cli",
-  executableIdentity: { ownerUid: 501 as EffectiveUidV1, mode: 493, nlink: 1, bytes: 2048, sha256: parseLowerHexSha256(createHash("sha256").update("synthetic codex").digest("hex")), dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("2") },
+  executableIdentity: { dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("2"), mode: 493, sha256: parseLowerHexSha256(createHash("sha256").update("synthetic codex").digest("hex")) },
   argv: [{ kind: "literal", value: "plugin" as OwnerExternalEffectLiteralV1 }, { kind: "token", value: "plugin_id" }],
   cwd: "managed_plugin_root",
-  environment: [{ name: "HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
+  environment: [{ name: "CODEX_HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
   stdin: "closed",
   network: false,
   model: false,
@@ -119,7 +119,7 @@ describe("the production Codex observer", () => {
     expect(requests).toEqual([{
       executable: "/synthetic/bin/codex",
       argv: ["plugin", "list", "--json"],
-      env: { HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
+      env: { CODEX_HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
       cwd: tokens.managedPluginRoot,
       stdin: "ignore",
       stdoutCap: 4096,
@@ -147,7 +147,7 @@ describe("the production owner-effect run", () => {
     return run({
       executable: process.execPath,
       argv: ["-e", script],
-      env: { HOME: `${home}/vendor`, TMPDIR: `${home}/tmp` },
+      env: { CODEX_HOME: `${home}/vendor`, TMPDIR: `${home}/tmp` },
       cwd: home,
       stdin: "ignore",
       stdoutCap: 4096,
@@ -163,7 +163,7 @@ describe("the production owner-effect run", () => {
     // empty environment; the child's own loader wrote it, not the runner.
     const result = await runScript("process.stdout.write(JSON.stringify(Object.keys(process.env).filter((key) => key !== '__CF_USER_TEXT_ENCODING').sort())); process.stderr.write('warn');");
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(new TextDecoder().decode(result.stdout))).toEqual(["HOME", "TMPDIR"]);
+    expect(JSON.parse(new TextDecoder().decode(result.stdout))).toEqual(["CODEX_HOME", "TMPDIR"]);
     expect(new TextDecoder().decode(result.stderr)).toBe("warn");
   });
 

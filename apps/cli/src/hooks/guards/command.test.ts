@@ -170,7 +170,7 @@ describe("shellSegments", () => {
   });
 });
 
-// Spec §5.2 step 3 (amended, D62): a line break collapses to one LF, and an unquoted LF ends a segment.
+// `hooks.md` §3.4 (D62): a line break collapses to one LF, and an unquoted LF ends a segment.
 describe("a command on its own line", () => {
   it.each(["cd /tmp\nrm -rf ~", "cd /tmp\r\nrm -rf ~", "cd /tmp\rrm -rf ~", "cd /tmp\n\r\n\rrm -rf ~"])(
     "blocks recursive-delete-root: %j",

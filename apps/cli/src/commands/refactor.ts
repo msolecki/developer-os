@@ -18,6 +18,7 @@ import {
   resolveBrainConfig,
 } from "@developer-os/brain";
 import type {
+  BrainConfigV1,
   RefactorPlanV1,
   RefactorRefusalCodeV1,
   RefactorRequestV1,
@@ -26,6 +27,7 @@ import type {
 import { failureFrom, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
 import { readConfig } from "./brain.js";
+import { isTopicNotePath } from "./capture.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
 
 export interface BrainRefactorResultV1 {
@@ -107,29 +109,44 @@ function pathRefused(path: string, why: string): BrainRefactorRefusal {
 }
 
 /**
- * Spec §6.2's containment, stated directly: no component below the content
- * root is a symlink, the path canonicalizes inside a configured topic folder
+ * The refactor containment of `brain.md` §6.13, stated directly: no component
+ * below the content root is a symlink, the path canonicalizes inside a configured topic folder
  * (or `_graveyard/` for retire and merge), and a `create` target is absent.
+ *
+ * **An aliased folder is a topic folder here too** (NEW-128), because the indexer admits its
+ * notes and a refactor rewrites their links. Its head segment is admitted only when the whole
+ * path passes `isTopicNotePath` (own-property alias lookup, no private, dot or indexes
+ * segment), and only when that folder already exists: a move never creates an alias folder.
+ * Containment is then proven against the physical folder, never the topic it names.
  * Returns the canonical absolute target.
  */
 async function containedTarget(
   context: CliContext,
   contentRoot: string,
-  topicFolders: readonly string[],
+  brainConfig: BrainConfigV1,
   mode: RefactorPlanV1["mode"],
   operation: "create" | "replace" | "remove",
   path: string,
 ): Promise<string> {
   const segments = path.split("/");
   let exists = true;
+  let headIsDirectory = false;
   for (let i = 1; i <= segments.length && exists; i += 1) {
     try {
       const stats = await context.fs.lstat(join(contentRoot, ...segments.slice(0, i)));
       if (stats.isSymbolicLink()) throw pathRefused(path, "passes through a symbolic link");
+      if (i === 1) headIsDirectory = stats.isDirectory();
     } catch (error) {
       if (!isMissing(error)) throw error;
       exists = false;
     }
+  }
+
+  const [head = ""] = segments;
+  const aliased =
+    !brainConfig.topicFolders.includes(head) && isTopicNotePath(path, brainConfig) ? [head] : [];
+  if (aliased.length > 0 && !headIsDirectory) {
+    throw pathRefused(path, "names a topic alias that is not an existing folder");
   }
 
   const graveyard =
@@ -138,7 +155,7 @@ async function containedTarget(
       : [];
   const canonical = await context.guards.canonicalize(join(contentRoot, path));
   let inside = false;
-  for (const folder of [...topicFolders, ...graveyard]) {
+  for (const folder of [...brainConfig.topicFolders, ...aliased, ...graveyard]) {
     if (containsPath(await context.guards.canonicalize(join(contentRoot, folder)), canonical)) {
       inside = true;
       break;
@@ -214,7 +231,7 @@ export async function runRefactor(
         await containedTarget(
           context,
           contentRoot,
-          brainConfig.topicFolders,
+          brainConfig,
           plan.mode,
           mutation.operation,
           mutation.path,

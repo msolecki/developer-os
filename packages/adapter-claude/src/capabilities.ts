@@ -17,7 +17,7 @@ export type ClaudeCapabilities = Readonly<
  *
  * `plugin_hooks` and `session_start_injection` left this list with A13: the
  * observation for both keys is a firing record under `state/hooks/`, never a
- * listing or a validate run (A13 §8.1). `plugin_hooks` is observed by any
+ * listing or a validate run (`hooks.md` §3.6). `plugin_hooks` is observed by any
  * Claude firing record, `session_start_injection` by the `SessionStart` one.
  * The two capture keys stay because knowledge-pipeline architecture note §2
  * declines both automatic capture paths: no capture hook fires, and no
@@ -37,12 +37,26 @@ export const CLAUDE_NOT_USED_KEYS: readonly ClaudeCapabilityKey[] = [
 ];
 
 /**
+ * The two keys observed only through firing records (`hooks.md` §3.6). A record can
+ * witness that a hook fired; no record is not evidence that it cannot, so an
+ * `absent` for either stays `unknown`, never `no`.
+ */
+const FIRING_KEYS: ReadonlySet<ClaudeCapabilityKey> = new Set([
+  "plugin_hooks",
+  "session_start_injection",
+]);
+
+/**
  * The asymmetry is the mechanism, not a mood.
  *
  * A capability the probe could not settle reports `unknown` (Claude architecture former §9.2) —
  * never `no`, because "we could not ask" and "the answer is no" are different
  * facts and only one of them justifies telling a user their install lacks a
- * feature. Everything else uncertain reports `unknown` too: it used to report
+ * feature. The other one does: a probe that asked and reports `absent` resolves
+ * to `no`, whatever the version, because the table gates `yes` and says nothing
+ * about a feature that is not there (NEW-62). A key the probe never mentioned is
+ * not `absent` — nothing asked — and reports `unknown`, as do the
+ * `FIRING_KEYS` above. Everything else uncertain reports `unknown` too: it used to report
  * `wrapper-required`, which claimed a wrapper produced the same capture, and
  * knowledge-pipeline architecture note §2 declines to build that wrapper.
  *
@@ -70,8 +84,8 @@ export function resolveCapabilities(
 ): ClaudeCapabilities {
   const stateOf = (key: ClaudeCapabilityKey): CapabilityState => {
     if (CLAUDE_NOT_USED_KEYS.includes(key)) return "not-used";
-    const observation = observations.get(key) ?? "absent";
-    if (observation === "unavailable") return "unknown";
+    const observation = observations.get(key);
+    if (observation === "absent") return FIRING_KEYS.has(key) ? "unknown" : "no";
     return tablePermits(key, version) && observation === "observed"
       ? "yes"
       : "unknown";

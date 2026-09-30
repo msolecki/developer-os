@@ -89,7 +89,7 @@ export async function loadRepositoryInstructionDefaults(
   return loadInstructionDefaults(release, new Set(workflows.map((workflow) => workflow.id)));
 }
 
-/** Defaults alone, never overrides (spec §3.1). */
+/** Defaults alone, never overrides (`foundation.md` §12.1). */
 export async function loadDefaultInstructionSources(
   vendor: "claude" | "codex",
   workflows: readonly WorkflowContractV1[],

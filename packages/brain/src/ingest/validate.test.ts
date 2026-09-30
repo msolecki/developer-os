@@ -603,9 +603,8 @@ describe("secret-scan", () => {
   /**
    * **A `user-pattern` hit means "narrow your config", every other class means "a real
    * secret is in the proposal".** One message for both sent a user hunting a credential
-   * that was never there (BACKLOG NEW-24). The message still names no value
-   * and no table entry — it cannot; `RedactionFinding` carries a class and a fingerprint
-   * and nothing that identifies which row matched.
+   * that was never there (BACKLOG NEW-24). The message still names no value; since D73
+   * it names the table row by index.
    */
   it("says a user-configured pattern matched, rather than reporting a secret", async () => {
     const context: IngestValidationContext = {
@@ -625,6 +624,39 @@ describe("secret-scan", () => {
     expect(message).not.toContain("provider-token");
   });
 
+  it("names the matching table row by index and never by value (NEW-24, D73)", async () => {
+    const context: IngestValidationContext = {
+      ...contextFor(await makeVault()),
+      redact: (text: string) =>
+        redactText(text, KEY, { userPatterns: ["Contoso", "Northwind"] }),
+    };
+    const result = await validateProposal(
+      proposal(note("DEV/client.md", {}, "the Northwind migration is planned\n")),
+      context,
+    );
+
+    const message = result.findings.find((f) => f.validator === "secret-scan")?.message;
+    expect(message).toContain("patterns[1] from the [redaction] table in config.toml");
+    expect(message).not.toContain("patterns[0]");
+    expect(message).not.toContain("Northwind");
+    expect(message).not.toContain("over-broad");
+  });
+
+  it("calls an entry over-broad when its matches cover much of the note (NEW-24, D73)", async () => {
+    const context: IngestValidationContext = {
+      ...contextFor(await makeVault()),
+      redact: (text: string) => redactText(text, KEY, { userPatterns: ["Northwind", "e"] }),
+    };
+    const result = await validateProposal(
+      proposal(note("DEV/client.md", {}, `${"see ".repeat(80)}\n`)),
+      context,
+    );
+
+    const message = result.findings.find((f) => f.validator === "secret-scan")?.message;
+    expect(message).toContain("patterns[1] matches so much of the text that it is over-broad");
+    expect(message).not.toContain("patterns[0]");
+  });
+
   it("names the real classes as well when both are present", async () => {
     const context: IngestValidationContext = {
       ...contextFor(await makeVault()),
@@ -641,6 +673,26 @@ describe("secret-scan", () => {
     expect(message).toContain("provider-token");
     expect(message).toContain("[redaction] table in config.toml");
   });
+
+  /** NEW-129: a model copied a redaction marker into a file name; the marker holds no secret. */
+  for (const path of [
+    "DEV/refetch-ma[REDACTED:provider-token].md",
+    "[REDACTED:high-entropy].md",
+    "DEV/[redacted:x].md",
+    "DEV/[REDACTED: high-entropy].md",
+    "DEV/[ Redacted :x].md",
+  ]) {
+    it(`refuses a destination path carrying a redaction marker: ${path}`, async () => {
+      const result = await validateProposal(
+        proposal({ path, contents: noteText(), sourceCaptureId: CAPTURE_ID }),
+        contextFor(await makeVault()),
+      );
+
+      expect(result.ok).toBe(false);
+      const message = result.findings.find((f) => f.validator === "secret-scan")?.message;
+      expect(message).toContain("path carries a [REDACTED:...] marker");
+    });
+  }
 
   it("accepts a proposal the redactor finds nothing in", async () => {
     const result = await validateProposal(proposal(validNote()), contextFor(await makeVault()));
@@ -943,6 +995,45 @@ describe("write-scope", () => {
     expect(validators(result)).toContain("write-scope");
   });
 
+  it("refuses a path prefixed with the content root name, which lands in content/content (2026-09-29)", async () => {
+    const result = await validateProposal(
+      proposal(note("content/DEV/x.md")),
+      contextFor(await makeVault()),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("write-scope");
+  });
+
+  it("accepts a path whose first segment is a configured topic folder", async () => {
+    expectClean(await validateProposal(proposal(note("DEV/x.md")), contextFor(await makeVault())));
+  });
+
+  it("refuses a path whose first segment is no configured topic folder", async () => {
+    for (const path of ["NOTES/x.md", "x.md", "dev/x.md"]) {
+      const result = await validateProposal(proposal(note(path)), contextFor(await makeVault()));
+      expect(validators(result), path).toContain("write-scope");
+    }
+  });
+
+  it("accepts an alias folder whose target is a topic folder, and refuses one whose target is not", async () => {
+    const vault = await makeVault();
+    const base = contextFor(vault);
+    const withAliases = (topicAliases: Readonly<Record<string, string>>): IngestValidationContext => ({
+      ...base,
+      brain: { ...base.brain, config: { ...DEFAULT_BRAIN_CONFIG, topicAliases } },
+    });
+
+    expectClean(
+      await validateProposal(proposal(note("PROJEKTY/x.md")), withAliases({ PROJEKTY: "PROJECTS" })),
+    );
+    const dangling = await validateProposal(
+      proposal(note("PROJEKTY/x.md")),
+      withAliases({ PROJEKTY: "NOWHERE" }),
+    );
+    expect(validators(dangling)).toContain("write-scope");
+  });
+
   it("names the offending path byte for byte, so the caller can act on it", async () => {
     const result = await validateProposal(
       proposal(note("_raw/quarantine/evil.md")),
@@ -954,7 +1045,7 @@ describe("write-scope", () => {
   });
 });
 
-describe("a replacing note capture (spec §§3.4, 5.1)", () => {
+describe("a replacing note capture (brain.md §6.13, verbatim ingest)", () => {
   it("passes a replacing note capture that keeps created and collides only with its own old bytes", async () => {
     const vault = await vaultWith({
       "DEV/a.md": noteText({ title: "A", created: "2026-01-01" }, "See [[existing]].\n"),
@@ -1006,7 +1097,7 @@ describe("a replacing note capture (spec §§3.4, 5.1)", () => {
     expect(validators(result)).toContain("duplicate-detection");
   });
 
-  it("passes all nine when the projection carries only isolated and gap findings (spec §5.1)", async () => {
+  it("passes all nine when the projection carries only isolated and gap findings (brain.md §6.13)", async () => {
     // Three notes sharing tag "t", none compiled, none linked: isolated x3 and gap x1 in projection lint.
     const vault = await vaultWith({
       "DEV/a.md": noteText({ title: "A", tags: "[t]" }),

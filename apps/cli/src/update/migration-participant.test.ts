@@ -107,7 +107,7 @@ async function fixture(domain: "product_state" | "brain"): Promise<MigrationFixt
   };
   const planPath = updateLeafPlanPath(root, "schema_migration", plan.id);
   await writeOwned(planPath, updateParticipantDocumentBytes(plan));
-  const planHash = updateParticipantDocumentHash(plan);
+  const planHash = updateParticipantDocumentHash("schema_migration", plan);
   const initial = encoder.encode(encodeCanonicalJson({ schemaVersion: 1, id: plan.id, coordinatorId, planHash, phase: "planned", nextForwardFoundation: 0, compensationNext: null, compactionNext: null, createdAt: at, updatedAt: at }));
   const stagedPath = parseCanonicalAbsolutePathText(`${root}/update/initial-journals/schema_migration/${plan.id}.json`);
   await writeOwned(stagedPath, initial);

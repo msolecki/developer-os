@@ -9,9 +9,10 @@ import {
   type SupervisedProcessEvidenceV1,
   type SupervisedSpawnRequestV1,
 } from "../supervised-process.js";
-import { SUPPORTED_GIT_DISTRIBUTION } from "./distribution.js";
-import { observedFromRow, sameVersionOtherHash } from "./distribution.test-fixtures.js";
-import { SUPPORTED_GIT_DISTRIBUTION_ID } from "./process-table.js";
+import type { SystemPathInspectorSyncV1 } from "../system-executables.js";
+import { GIT_DISTRIBUTION_POLICY } from "./distribution.js";
+import { DARWIN, stockAdmitted, stockHostSync } from "./distribution.test-fixtures.js";
+import { GIT_DISTRIBUTION_POLICY_ID } from "./process-table.js";
 import {
   admittingGitIdentityProbe,
   GitProcessSupervisor,
@@ -21,10 +22,10 @@ import {
   type GitProcessPermitV1,
   type GitProcessPhaseV1,
 } from "./supervisor.js";
-import type { ClosedGitProcessNodeIdV1, GitProcessNodeV1, ObservedGitDistributionV1 } from "./types.js";
+import type { ClosedGitProcessNodeIdV1, GitProcessNodeV1 } from "./types.js";
 
-const table = SUPPORTED_GIT_DISTRIBUTION.processTable;
-const GIT = "/Applications/Xcode.app/Contents/Developer/usr/bin/git";
+const table = GIT_DISTRIBUTION_POLICY.processTable;
+const GIT = "/usr/bin/git";
 const QUARANTINE = parseCanonicalAbsolutePathText("/tmp/developer-os-test/quarantine");
 const SOURCE_SHADOW = parseCanonicalAbsolutePathText("/tmp/developer-os-test/source-shadow");
 const COMMIT = "a".repeat(40);
@@ -51,7 +52,7 @@ const ENV_SLOTS: GitEnvironmentSlotValuesV1 = {
 };
 
 const PROBE_ENV = {
-  DEVELOPER_OS_GIT_DISTRIBUTION: SUPPORTED_GIT_DISTRIBUTION_ID,
+  DEVELOPER_OS_GIT_DISTRIBUTION: GIT_DISTRIBUTION_POLICY_ID,
   DEVELOPER_OS_GIT_INVOCATION_CAPABILITY: "b".repeat(64),
   DEVELOPER_OS_GIT_PHASE: "distribution_probe",
   DEVELOPER_OS_GIT_SUPERVISOR_SOCKET: "/tmp/developer-os-test/supervisor.sock",
@@ -124,12 +125,14 @@ class ScriptedRunner extends SupervisedProcessRunner {
   }
 }
 
+/** The invocation's admitted evidence stays fixed; the host it rechecks against can change under it. */
 class SwappableIdentity {
-  observation: ObservedGitDistributionV1 = observedFromRow(SUPPORTED_GIT_DISTRIBUTION);
-  readonly probe = admittingGitIdentityProbe(SUPPORTED_GIT_DISTRIBUTION, () => this.observation);
+  inspect: SystemPathInspectorSyncV1 = stockHostSync();
+  readonly admitted = stockAdmitted();
+  readonly probe = admittingGitIdentityProbe(() => this.admitted, DARWIN, (path) => this.inspect(path));
 
   swapAfterIssue(): void {
-    this.observation = sameVersionOtherHash();
+    this.inspect = stockHostSync({ "/usr/bin/git": { sha256: "d".repeat(64) } });
   }
 }
 
@@ -239,6 +242,21 @@ describe("GitProcessSupervisor permits", () => {
     await expect(supervisor.run(permit, probeRequest)).rejects.toThrow("unsupported_git_distribution");
     expect(runner.spawnCount).toBe(0);
     await expect(supervisor.run(permit, probeRequest)).rejects.toThrow("permit_consumed");
+  });
+
+  it("a recheck that sees a changed sha256 refuses before the permit runs", async () => {
+    const phase = supervisor.beginPhase("distribution_probe");
+    const permit = supervisor.issue(node("distribution_probe_git"), null, phase, probeIntent);
+    identity.inspect = stockHostSync({ "/usr/bin/git-receive-pack": { sha256: "e".repeat(64) } });
+    await expect(supervisor.run(permit, probeRequest)).rejects.toThrow("unsupported_git_distribution");
+    expect(runner.spawnCount).toBe(0);
+  });
+
+  it("names the git-receive-pack fixed path for real_receive_pack and refuses the HTTPS helper", () => {
+    expect(identity.probe.recheck("git_receive_pack")).toBe("/usr/bin/git-receive-pack");
+    expect(identity.probe.recheck("git_main")).toBe("/usr/bin/git");
+    expect(() => identity.probe.recheck("git_remote_https")).toThrow("unsupported_git_distribution");
+    expect(() => identity.probe.recheck("system_ssh")).toThrow("unsupported_git_distribution");
   });
 
   it("refuses an unsupported distribution before any phase or spawn", () => {

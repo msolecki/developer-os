@@ -72,6 +72,12 @@ export const ALLOWED_SPAWN_SITES: readonly string[] = [
   "packages/security/src/update/planner-process.ts::spawnNodePlannerChild",
 ];
 
+/** Sites outside a Git or launchd entrypoint that may hold the supervised primitive's real dependencies, and nothing rawer. */
+export const ALLOWED_SUPERVISED_SITES: readonly string[] = [
+  // Spec 2 P6 (D72): the one closed `codex plugin add <id> --json` refresh and its `plugin list` observation.
+  "apps/cli/src/update/apply-ports.ts::codexRuntime",
+];
+
 const CHILD_PROCESS_MODULES = new Set(["node:child_process", "child_process"]);
 
 /**
@@ -216,7 +222,11 @@ export async function inspectOptInAuthoritySurfaces(repositoryRoot: string): Pro
       else unexpected.add(site);
     }
     const entrypoint = facts.constructsGitSupervisor || facts.namesLaunchctl;
-    for (const site of facts.supervisedSites) if (!entrypoint) unexpected.add(`${site} (${SUPERVISED_SPAWN_AUTHORITY})`);
+    for (const site of facts.supervisedSites) {
+      if (entrypoint) continue;
+      if (ALLOWED_SUPERVISED_SITES.includes(site)) allowed.add(site);
+      else unexpected.add(`${site} (${SUPERVISED_SPAWN_AUTHORITY})`);
+    }
   }
 
   return {

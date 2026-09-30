@@ -39,7 +39,7 @@ function denyList(parsed: unknown): readonly string[] | null {
 }
 
 /**
- * Spec §8. Never throws, never returns "fail": `guarded()` would turn a throw
+ * `claude-adapter.md` §15. Never throws, never returns "fail": `guarded()` would turn a throw
  * into `fail`, so this check is not registered through it. Messages are built
  * only from constants and rule ids, never from the file's content.
  */
@@ -74,7 +74,7 @@ export async function checkVendorConfig(
     try {
       parsed = JSON.parse(text);
     } catch {
-      // JSON.parse quotes the input in its message; it is discarded (spec §4.2).
+      // JSON.parse quotes the input in its message; it is discarded (`claude-adapter.md` §15).
       return warn("the Claude user settings file is not valid JSON", paths);
     }
     const deny = denyList(parsed);

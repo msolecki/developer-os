@@ -129,16 +129,16 @@ carries both the staging flag and a real vault write — different axes, not an 
 ## 7. Workflow gaps after DOS-P6
 
 The four workflow gaps recorded here on 2026-08-10 are closed. DOS-P6 added `capture.edit` to
-`review` (`workflows/review/workflow.yaml:41`), reindexed after `ingest`
+`review` (`workflows/review/workflow.yaml:47`), reindexed after `ingest`
 (`workflows/ingest/workflow.yaml:41`), made `brain-search` read selected notes
 (`workflows/brain-search/workflow.yaml:43`), and aligned `doctor` with its report-only contract.
 DOS-P4 and DOS-P5 also made the shared preamble part of every rendered skill body
-(`packages/workflow-schema/src/skill.ts:201`). These are historical outcomes, not open work.
+(`packages/workflow-schema/src/skill.ts:203-205`). These are historical outcomes, not open work.
 
 Two genuine gaps remain:
 
 1. **`agent.prompt` has no step executor.** It is the sole item in §5 and is owned by the adapters
-   (`packages/workflow-schema/src/vocabulary.ts:119`).
+   (`packages/workflow-schema/src/vocabulary.ts:125`).
 2. **A declared trigger is not validated against an observable host capability.** DOS-P6 removed
    the unfireable `session_start` and `session_end` declarations and both shipped contracts are
    manual-only, so no current workflow exercises this gap. Reintroducing a non-manual trigger must
@@ -281,6 +281,13 @@ touches the filesystem, network, a process or vault must be a verb. The compiler
 footprints and requires exact equality with declared read/write scopes, rejecting both under- and
 over-declaration. Only `agent.prompt` remains unimplemented; configured vault roots resolve at the
 handler boundary rather than by templating canonical workflow YAML.
+
+Only `ingest` declares a write scope outside `content/_raw/quarantine/**`, and it expresses that in
+effect verbs only; a workflow whose only write is quarantine may carry prose, because prose writes
+nothing (`tests/contracts/workflows/canonical.test.ts`). Steps carry no condition, so an optional
+write is preceded by a prose gate step. Capture text reaches `developer-os capture [--note <path>]`
+on stdin through a quoted heredoc whose command starts with `developer-os`, never through a pipe, so
+a `Bash(developer-os:*)` permission admits it and shell metacharacters in the text stay inert.
 
 ### 10.4 Refusals and exit codes
 

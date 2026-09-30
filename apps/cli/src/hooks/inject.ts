@@ -19,7 +19,7 @@ export const VAULT_MAP_TRUNCATED_MARKER = "[developer-os: vault map truncated]";
 
 const byteLength = (text: string): number => new TextEncoder().encode(text).byteLength;
 
-/** The vault map is truncated first, at a line boundary, so the project note survives whole (§5.1). */
+/** The vault map is truncated first, at a line boundary, so the project note survives whole (`hooks.md` §3.4.1). */
 export function composeInjection(context: BrainSessionContextV1): string | null {
   const note = context.projectNote === null ? "" : `# ${context.projectNote.title}\n\n${context.projectNote.text}`;
   if (context.vaultMap === null) return note === "" ? null : capUtf8Bytes(note, MAX_INJECTED_CONTEXT_BYTES);

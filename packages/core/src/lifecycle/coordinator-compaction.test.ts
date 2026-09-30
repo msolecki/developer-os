@@ -85,7 +85,10 @@ interface UninstallWorldV1 {
 }
 
 /** `uninstall/present_manifest_without_launchd`: the one variant whose compaction carries the control-file suffix. */
-async function uninstallWorld(label: string): Promise<UninstallWorldV1> {
+async function uninstallWorld(
+  label: string,
+  options: { readonly failCommitAbsence?: boolean } = {},
+): Promise<UninstallWorldV1> {
   const { created, home } = await createSyntheticLifecycleHome(label);
   const roots = deriveLifecycleLedgerRoots(home);
   const publisher = createLinkUnlinkRenameNoReplace();
@@ -265,6 +268,7 @@ async function uninstallWorld(label: string): Promise<UninstallWorldV1> {
       },
       publishAfter: () => Promise.resolve(),
       commitAbsence: async () => {
+        if (options.failCommitAbsence === true) throw new SyntheticDeath("M(commit_absence)");
         await nodeFs.rm(manifestPath, { force: true });
         manifestState.value = "applied";
       },
@@ -307,12 +311,14 @@ async function uninstallWorld(label: string): Promise<UninstallWorldV1> {
       },
     },
     controlFiles: {
-      removeAllocator: async () => {
-        removedControlFiles.push("allocator");
+      removeAllocator: async (_plan, outcome) => {
+        removedControlFiles.push(`allocator:${outcome}`);
+        if (outcome === "rolled_back") return;
         await nodeFs.rm(join(created, "state", "lifecycle-id-allocator.json"), { force: true });
       },
-      removeNonce: async () => {
-        removedControlFiles.push("nonce");
+      removeNonce: async (_plan, outcome) => {
+        removedControlFiles.push(`nonce:${outcome}`);
+        if (outcome === "rolled_back") return;
         await nodeFs.rm(join(created, "state", "lifecycle-install-nonce"), { force: true });
       },
     },
@@ -450,8 +456,38 @@ describe("terminal coordinator compaction", () => {
     );
 
     expect(order).toStrictEqual(["allocator", "nonce", "journal", "lock", "plan"]);
-    expect(world.removedControlFiles).toStrictEqual(["allocator", "nonce"]);
+    expect(world.removedControlFiles).toStrictEqual(["allocator:finalized", "nonce:finalized"]);
     expect(await world.exists("state/.lifecycle.lock")).toBe(true);
+  }, 120_000);
+
+  it("hands a rolled-back uninstall's terminal outcome to the control-file adapter (NEW-97)", async () => {
+    const world = await uninstallWorld("compaction-rolled-back", { failCommitAbsence: true });
+    await world.execute();
+    expect((await world.journal())?.phase).toBe("rolled_back");
+
+    await compactTerminalCoordinator(world.dependencies(), await terminalRecord(world), world.global);
+
+    expect(world.removedControlFiles).toStrictEqual(["allocator:rolled_back", "nonce:rolled_back"]);
+  }, 120_000);
+
+  it("emits no control_file_removed boundary for a rolled-back uninstall that keeps its control files (NEW-122)", async () => {
+    const world = await uninstallWorld("compaction-rolled-back-boundaries", { failCommitAbsence: true });
+    await world.execute();
+    expect((await world.journal())?.phase).toBe("rolled_back");
+
+    const order: string[] = [];
+    await compactTerminalCoordinator(
+      world.dependencies((boundary) => {
+        if (boundary.kind === "control_file_removed") order.push(boundary.file);
+        if (boundary.kind === "envelope_leaf_removed") order.push(boundary.leaf);
+      }),
+      await terminalRecord(world),
+      world.global,
+    );
+
+    expect(order).toStrictEqual(["journal", "lock", "plan"]);
+    expect(await world.exists("state/lifecycle-id-allocator.json")).toBe(true);
+    expect(await world.exists("state/lifecycle-install-nonce")).toBe(true);
   }, 120_000);
 
   it("accepts each entry's exact absence when it dies after the deletion and before the rewrite", async () => {

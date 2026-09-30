@@ -76,8 +76,6 @@ function sourcePlan(overrides: Partial<BundleSourceStagingPlanV1> = {}): BundleS
     sourceRoot: paths.sourceRoot,
     evidenceRoot: paths.evidenceRoot,
     sourceRootBefore: { state: "absent" },
-    sourceParentDev: u64("1"),
-    sourceParentIno: u64("2"),
     entries,
     inventoryHash: bundleInventoryHash(entries),
     aggregateBytes: bundleAggregateBytes(entries),
@@ -225,6 +223,11 @@ describe("BundleSourceStagingPlanV1", () => {
   it("refuses an unknown key and another coordinator", () => {
     expect(() => validateBundleSourceStagingPlan({ ...sourcePlan(), extra: 1 }, root)).toThrow();
     expect(() => validateBundleSourceStagingPlan(sourcePlan({ coordinatorId: `lc_${nonce}_4` as LifecycleCoordinatorIdV1 }), root)).toThrow();
+  });
+
+  it("refuses the withdrawn parent identity fields as unknown keys (P1)", () => {
+    expect(() => validateBundleSourceStagingPlan({ ...sourcePlan(), sourceParentDev: u64("1") }, root)).toThrow(/keys/u);
+    expect(() => validateBundleSourceStagingPlan({ ...sourcePlan(), sourceParentDev: u64("1"), sourceParentIno: u64("2") }, root)).toThrow(/keys/u);
   });
 });
 

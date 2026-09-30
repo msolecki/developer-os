@@ -223,19 +223,40 @@ have missed.
 > product has. NEW-75 stays open and now names that as its closure condition.
 > The decision below is therefore unchanged.
 
-**Decision: the empty environment is retained. No variable is admitted.** Both
-adapters pass `env: {}` today (`packages/adapter-claude/src/invoke.ts:140`,
-`packages/adapter-codex/src/invoke.ts:323`), so both vendors start with **no
-environment at all** — not `HOME`, not a proxy variable, nothing inherited
-from the parent. Task 1 Step 6 recorded both binaries exiting `0` under
-`env -i … --help` (Claude row 13, Codex row 7 above), and no observation
-anywhere in this document — across Tasks 1, 4 or 6 — records either vendor
-failing for want of a variable. Per the Task 6 brief's own Step 1, this is the
-expected outcome, and it is what the plan's roadmap correction sanctions.
-`EXPECTED_VENDOR_ENVIRONMENT` in `tests/security/network.test.ts:72` remains
+> **Amended 2026-09-28 (NEW-75, Claude half): Claude gets `USER` and `LOGNAME`.**
+> Observed on the founder machine with Claude Code 2.1.283. The production ingest
+> invocation (the shipped argv, `env: {}`) returned `is_error` with result
+> `Not logged in · Please run /login`, so every `ingest --agent claude` refused with
+> "the claude agent did not return a usable proposal". The identical argv with
+> `env { USER, LOGNAME }` only — no `HOME` — succeeded. The subscription credential
+> is a macOS Keychain item looked up by account name, and the empty environment
+> left the vendor without one. `invokeClaude` therefore passes exactly
+> `{ USER: <account>, LOGNAME: <account> }`, the account taken from
+> `os.userInfo().username` (the password database), never from the parent's
+> `process.env`. Nothing else is admitted; D15's refusal of `HOME` stands, and the
+> Codex arm is unchanged. `EXPECTED_VENDOR_ENVIRONMENT` in
+> `tests/security/network.test.ts` carries the two names.
+>
+> The same observation showed that `--output-format json` wraps the answer in a
+> `type: "result"` envelope whose `result` string holds the model's text, and that
+> `is_error: true` arrives at exit `0`. `invokeClaude` now unwraps it and reports
+> `is_error` as `vendor-error` — `docs/architecture/claude-adapter.md` §11.1.
+
+**Decision: no variable is admitted from the parent.** Claude
+is spawned with `env: { USER, LOGNAME }` set to the account name (the amendment above, not
+inherited from the parent) (`packages/adapter-claude/src/invoke.ts`); Codex
+always gets `env: { CODEX_HOME: <isolated per-run home> }`: `codexHome` is required and
+`invokeCodex` refuses a call without it (D73, NEW-106), and every product call supplies it
+through `invokeIsolatedCodex` (`apps/cli/src/commands/ingest.ts`). Beyond these product-chosen
+variables, neither vendor inherits anything from the parent — not `HOME`, not a
+proxy variable. Task 1 Step 6 recorded both binaries exiting `0` under
+`env -i … --help` (Claude row 13, Codex row 7 above); until 2026-09-28 no
+observation in this document recorded either vendor failing for want of a
+variable, and the one that now does (the amendment above) admits two names only.
+`EXPECTED_VENDOR_ENVIRONMENT` in `tests/security/network.test.ts:109` remains
 the single place a future admission would be made, and it may be made only
 against a recorded observation of a vendor failing without the variable —
-never for a proxy variable, which `tests/security/network.test.ts:228`
+never for a proxy variable, which `tests/security/network.test.ts:293`
 (`"does not pass a proxy the parent process was given"`) already proves does
 not reach the child.
 
@@ -280,7 +301,7 @@ or existence reveals) is not something `env: {}` closes off. Isolation from
 the user's own settings and hooks is bought by the flags Tasks 2 and 3 added
 — `--restricted`, `--safe-mode` and `--strict-mcp-config` for Claude
 (`packages/adapter-claude/src/invoke.ts:124-126`); `--ignore-user-config` and
-`--ignore-rules` for Codex (`packages/adapter-codex/src/invoke.ts:289-297`)
+`--ignore-rules` for Codex (`packages/adapter-codex/src/invoke.ts:304-305`)
 — not by the empty environment. A future change that relaxes any of those
 flags is not compensated for by `EXPECTED_VENDOR_ENVIRONMENT` staying `{}`.
 
@@ -298,7 +319,8 @@ on and supplying a fake key, so no model turn can complete.
   a per-process `.json` and `.key`. The flag's own help text says sessions "will not be saved to
   disk and cannot be resumed"; what was observed is narrower than that sentence. The harness pins
   this set, so a change in it fails a test rather than passing unnoticed.
-- **This compounds with the empty environment.** The child is handed `env: {}`, so it has no
+- **This compounds with the empty environment.** The child is handed no `HOME` (only `USER` and
+  `LOGNAME` since NEW-75), so it has no
   `HOME` of its own and resolves one through `getpwuid_r` (see the Task 6 section above) — which
   means the files above land in the *developer's real* `~/.claude` during a production ingest run,
   not in a sandbox. The test avoids this only because it sets `HOME` explicitly, which production
@@ -314,7 +336,8 @@ on and supplying a fake key, so no model turn can complete.
 **Decision: Codex is no longer told to treat the vault as its working root.**
 `apps/cli/src/commands/ingest.ts` passed the vault's own `contentRoot` as
 `-C <DIR>`; it now passes an empty scratch directory, `prepareAgentWorkspace`'s
-`join(tmpdir(), "developer-os-agent-workspace")`. The asymmetry this closes was
+`join(tmpdir(), "developer-os-agent-workspace-<uuid>")`, one leaf per Codex call, removed after
+the child exits (NEW-76, 2026-09-28). The asymmetry this closes was
 created by roadmap Phase 1, which left Claude with no read grant at all
 (`--tools ""`, an empty tool set) while Codex kept a directory argument pointing
 at the user's notes — one verb, two read scopes, depending on which binary
@@ -341,7 +364,7 @@ genuine read-scoping mechanism in Codex or the same tool-free invocation Claude
 gets; neither exists in 0.151.0 as observed here.
 
 **And `-C` is not the child's only relationship to the vault.**
-`packages/adapter-codex/src/invoke.ts:314` spawns with `cwd: cwd()` — this
+`packages/adapter-codex/src/invoke.ts:323` spawns with `cwd: cwd()` — this
 process's own working directory, which *is* the vault whenever the user runs
 `developer-os ingest` from inside it. What this decision changed is the directory
 the agent is *told* to treat as its root; the directory the child process
@@ -352,10 +375,12 @@ reach".
 **Why the directory is checked and not merely created.** `tmpdir()` reads
 `$TMPDIR` and falls back to the shared `/tmp` when it, `TMP` and `TEMP` are all
 unset — the environment a launchd daemon, a cron entry or a container hands this
-process. On a shared `/tmp` a fixed name is pre-creatable by another local user,
-and `mkdir` with `recursive` swallows the `EEXIST` while silently *not* applying
-its `mode` to what is already there. `prepareAgentWorkspace` therefore decides on
-the `lstat` that follows: it refuses a leaf that is not a real directory, one
+process. On a shared `/tmp` a fixed name was pre-creatable by another local user,
+and `mkdir` with `recursive` swallowed the `EEXIST` while silently *not* applying
+its `mode` to what was already there. Since NEW-76 the leaf carries a random UUID
+and `mkdir` runs without `recursive`, so an existing path fails `EEXIST` rather
+than being adopted; `prepareAgentWorkspace` still decides on the `lstat` that
+follows: it refuses a leaf that is not a real directory, one
 this user does not own, and one any other user can reach. The mode test proves
 what the leaf grants and nothing about its ancestors — on `/tmp` what stops a
 non-owner replacing the directory outright is that directory's own sticky bit.

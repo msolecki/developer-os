@@ -16,7 +16,6 @@ import {
   type ExactProductStatePathV1,
   type FreshV2InitIdV1,
   type LowerHexSha256,
-  type ManifestMigrationIdV1,
   type UtcTimestampV1,
 } from "@developer-os/core";
 
@@ -84,9 +83,7 @@ function sameIdentity(stats: Pick<BigIntStats, "dev" | "ino">, expected: FileIde
 
 /**
  * `Buffer.compare` is one `memcmp` where `every` invoked a closure per byte.
- * `decodeExactCanonical` re-encodes and re-compares every record on every read
- * — deliberately, it is the proof the stored bytes were canonical — so this
- * runs over whole plans, and a 512 KiB comparison cost 2.1 ms as a closure.
+ * This runs over whole plans, and a 512 KiB comparison cost 2.1 ms as a closure.
  */
 function exactBytes(left: Uint8Array, right: Uint8Array): boolean {
   return Buffer.compare(left, right) === 0;
@@ -282,10 +279,9 @@ async function readBounded(
   return bytes;
 }
 
+/** `decodeCanonicalJson` already re-encodes and refuses any byte that is not canonical (NEW-53). */
 function decodeExactCanonical(bytes: Uint8Array, maximumBytes: number): unknown {
-  const value = decodeCanonicalJson(bytes, maximumBytes);
-  if (!exactBytes(bytes, encoded(value))) return fail();
-  return value;
+  return decodeCanonicalJson(bytes, maximumBytes);
 }
 
 function decodeObserved(bytes: Uint8Array, maximumBytes: number): unknown {
@@ -323,7 +319,7 @@ function validatePlanContract(
 }
 
 function planPathOf(plan: BootstrapRetainedExecutionPlanV1): ExactProductStatePathV1 {
-  return plan.operation === "fresh_v2_init" ? plan.planPath : plan.paths.plan;
+  return plan.planPath;
 }
 
 function slotIdentityFromStats(
@@ -523,8 +519,7 @@ function exactSlotTuple(
 
 export interface BootstrapJournalStoreOpenRequestV1 {
   readonly planPath: ExactProductStatePathV1;
-  readonly expectedOperation: "fresh_v2_init" | "v1_to_v2";
-  readonly expectedId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly expectedId: FreshV2InitIdV1;
   readonly validatePlan: (value: unknown) => BootstrapRetainedExecutionPlanV1;
   readonly validateSlots: (
     plan: BootstrapRetainedExecutionPlanV1,
@@ -757,7 +752,7 @@ export class BootstrapJournalStore {
       const plan = request.validatePlan(decodeExactCanonical(planBytes, MAX_PLAN_BYTES));
       if (!exactBytes(encoded(plan), planBytes)) return fail();
       validatePlanContract(plan, request.planPath);
-      if (plan.operation !== request.expectedOperation || plan.id !== request.expectedId) return fail();
+      if (plan.id !== request.expectedId) return fail();
       if (planBytes.byteLength > plan.maximumPlanBytes) return fail();
 
       slot0 = await openBoundRegularFile(
@@ -915,9 +910,9 @@ export class BootstrapJournalStore {
       this.#ownerUid,
       this.plan.maximumPlanBytes,
     );
+    // `#planBytes` is `encoded(this.plan)`, proved in `create`/`open`, and `this.plan` is deep-frozen,
+    // so decoding and re-encoding here could only repeat this comparison (NEW-53).
     if (!exactBytes(planBytes, this.#planBytes)) return fail();
-    const persistedPlan = decodeExactCanonical(planBytes, this.plan.maximumPlanBytes);
-    if (!exactBytes(encoded(persistedPlan), encoded(this.plan))) return fail();
     const raw = await Promise.all(([0, 1] as const).map((slot) => readBounded(
       this.plan.journalSlots[slot].path,
       this.#handles.slots[slot],

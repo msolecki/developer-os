@@ -48,7 +48,7 @@ export type CanonicalStatePayloadRoleV1 =
   | "release_trust"
   | "active_release"
   | "rollback_record";
-export type BootstrapPayloadOperationV1 = "fresh_v2_init" | "v1_to_v2";
+export type BootstrapPayloadOperationV1 = "fresh_v2_init";
 
 const encoder = new TextEncoder();
 
@@ -89,7 +89,7 @@ export function parseCanonicalStatePayloadRole(value: unknown): CanonicalStatePa
 }
 
 function parseBootstrapPayloadOperation(value: unknown): BootstrapPayloadOperationV1 {
-  if (value === "fresh_v2_init" || value === "v1_to_v2") return value;
+  if (value === "fresh_v2_init") return value;
   fail("BootstrapPayloadOperationV1");
 }
 
@@ -204,11 +204,8 @@ export function deriveBootstrapPayloadPath(
   ordinal: number,
 ): BootstrapPayloadPathV1 {
   if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal > 999_999) fail("bootstrap payload ordinal");
-  const admittedOperation = parseBootstrapPayloadOperation(operation);
-  let prefix: "fresh-v2-init" | "manifest-migration";
-  if (admittedOperation === "fresh_v2_init") prefix = "fresh-v2-init";
-  else prefix = "manifest-migration";
-  return derive(productHome, `state/.${prefix}.${id}.${ordinal.toString(10).padStart(10, "0")}.payload`) as BootstrapPayloadPathV1;
+  parseBootstrapPayloadOperation(operation);
+  return derive(productHome, `state/.fresh-v2-init.${id}.${ordinal.toString(10).padStart(10, "0")}.payload`) as BootstrapPayloadPathV1;
 }
 
 export function deriveManifestPayloadPath(

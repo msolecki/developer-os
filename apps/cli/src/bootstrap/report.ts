@@ -17,6 +17,7 @@ import {
   encodeCanonicalJson,
   hashBytes,
   lifecycleBookkeepingPaths,
+  ManifestStateError,
   selectBootstrapJournal,
   validateBootstrapJournal,
   validateBootstrapPayloadEvidence,
@@ -51,7 +52,7 @@ import type {
   UInt64DecimalV1,
 } from "@developer-os/core";
 
-import { decodeManifestAnchor, isOwnedManifestAnchorShape, manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
+import { decodeManifestAnchor, isCodeDefect, isOwnedManifestAnchorShape, manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
 import { projectBootstrapRetentionPostimage } from "./retention.js";
 
@@ -89,8 +90,14 @@ export interface BootstrapEvidenceGuardedEntryV1 {
 }
 
 export interface BootstrapEvidenceGuardedReaderV1 {
+  /**
+   * `leaves: true` reports a directory root as that one entry instead of walking it. Namespace
+   * containers (the product home, `state`, retention row parents) must stay unrecorded, or they
+   * would join `retainedPaths` (NEW-126).
+   */
   inventoryExactNamespaces(
     roots: readonly CanonicalAbsolutePathV1[],
+    options?: { readonly leaves?: boolean },
   ): Promise<readonly BootstrapEvidenceGuardedEntryV1[]>;
   readRegularFile(
     entry: BootstrapEvidenceGuardedEntryV1,
@@ -124,8 +131,31 @@ export interface BootstrapEvidenceAdmissionV1 {
   } | null;
   readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
   /**
+   * Foundation participant IDs (`tx_fi_…_{f|c}`) of every reported envelope, verified or not: the
+   * plan binds the names, so an unverified fresh init's `_f` staging stays attributable to it
+   * (NEW-114); without admitted plan bytes they derive from the ID (NEW-123).
+   */
+  readonly bootstrapParticipantIds: readonly string[];
+  /**
+   * The part of `retainedPaths` and `bootstrapParticipantIds` only an `unverified` envelope
+   * contributes. Uninstall admits it; every other mutation must not, or altered retained evidence
+   * would read as a clear ledger (NEW-99).
+   */
+  readonly unverifiedResidue: {
+    readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
+    readonly bootstrapParticipantIds: readonly string[];
+  };
+  /** `retainedPaths` with the identity this inspection observed, which a fresh plan records (Spec 2 P8). */
+  readonly retainedIdentities: readonly {
+    readonly path: CanonicalAbsolutePathV1;
+    readonly dev: UInt64DecimalV1;
+    readonly ino: UInt64DecimalV1;
+  }[];
+  /**
    * The maximal roots `retainedPaths` collapses to: each retained subtree's
-   * `sourcePath`/`tombstonePath` rather than every descendant. A prefix-match
+   * `sourcePath`/`tombstonePath` rather than every descendant, with no member
+   * nested under another. Every `retainedPaths` entry lies at or below one of
+   * them; a `sourcePath` may name an absent entry. A prefix-match
    * exclusion check needs only these, and callers that list every retained
    * path (like `uninstall`'s removability guard) pay an O(retained-file-count)
    * cost that this set avoids.
@@ -358,12 +388,10 @@ export function admitBootstrapEvidencePlan(
     record(candidate.bootstrapIdentity)?.path !== join(input.stateDirectory, ".lifecycle-bootstrap.lock")
   ) throw new Error("persisted bootstrap plan failed bounded structural admission");
   const freshCandidate = candidate as unknown as FreshV2InitPlanV1;
-  const admitted = validateBootstrapPlan(
+  return validateBootstrapPlan(
     freshCandidate,
     planAdmission(freshCandidate, input.productHome, input.stateDirectory),
   );
-  if (admitted.operation !== "fresh_v2_init") throw new Error("persisted bootstrap plan changed operation");
-  return admitted;
 }
 
 function terminalJournal(current: BootstrapJournalRecordV1): BootstrapJournalRecordV1 | null {
@@ -435,6 +463,13 @@ async function guardedValue<T>(
   };
 }
 
+/** Spec 2 P8: a retained row's parent no longer carries the identity its envelope recorded. */
+class RetentionParentIdentityChangedError extends Error {
+  constructor() {
+    super("retention parent changed its recorded identity");
+  }
+}
+
 /** Complete retained-table projection shared by reporting and executor recovery. */
 export async function buildBootstrapRetentionEvidence(
   request: BootstrapEvidenceInspectionRequestV1,
@@ -463,9 +498,16 @@ export async function buildBootstrapRetentionEvidence(
     if ((source === null) === (retained === null)) throw new Error("retention path is in a third state");
     return source === null ? retainedPath : logicalPath;
   };
+  /**
+   * Spec 2 P8 (NEW-86): a row's parent identity comes from recorded evidence
+   * whenever the plan holds any, and the projection must agree with it.
+   * `recorded` is null only for a parent the plan neither created nor
+   * observed, whose projection is then the only identity there is.
+   */
   const retentionRow = async (
     role: BootstrapRetentionEvidenceProjectionV1["rows"][number]["role"],
     sourcePath: CanonicalAbsolutePathV1,
+    recorded: { readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 } | null,
   ): Promise<BootstrapRetentionEvidenceProjectionV1["rows"][number]> => {
     const physical = await physicalPath(sourcePath);
     const physicalParent = await physicalPath(dirname(sourcePath) as CanonicalAbsolutePathV1);
@@ -474,6 +516,9 @@ export async function buildBootstrapRetentionEvidence(
       request.projectPostimage(physicalParent),
     ]);
     if (postimage === null || parent?.kind !== "directory_tree") throw new Error("retention authority changed before projection");
+    if (recorded !== null && (parent.dev !== recorded.dev || parent.ino !== recorded.ino)) {
+      throw new RetentionParentIdentityChangedError();
+    }
     return {
       role,
       sourcePath,
@@ -493,7 +538,7 @@ export async function buildBootstrapRetentionEvidence(
       (value) => validateBootstrapPayloadEvidence(value, row.ref, row.source),
     ));
   }
-  const createdPathEvidence = [];
+  const createdPathEvidence: BootstrapRetentionEvidenceProjectionV1["createdPathEvidence"][number][] = [];
   for (const scope of ["ordinary", "launchability"] as const) {
     const count = scope === "ordinary" ? terminal.nextCreatedPath : terminal.nextLaunchabilityPath;
     const plannedPaths = scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths;
@@ -551,10 +596,23 @@ export async function buildBootstrapRetentionEvidence(
    * `locations` for tombstone redirection; only row construction needs the
    * uncollapsed set.
    */
+  const recordedParent = (path: string): { readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 } | null => {
+    const created = createdPathEvidence.find(({ value }) =>
+      value.kind === "directory" &&
+      (value.scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths)[value.ordinal]?.path === path,
+    )?.value;
+    const preexisting = [...plan.createdPaths, ...plan.launchabilityPaths]
+      .map((planned) => planned.parent)
+      .find((parent) => parent.kind === "preexisting" && parent.path === path);
+    return created ??
+      (preexisting?.kind === "preexisting" ? preexisting : null) ??
+      plan.admittedPreexistingPaths.find((admitted) => admitted.path === path) ??
+      null;
+  };
   const authorities = deriveBootstrapRetentionAuthorities(plan, terminal);
   const rows: BootstrapRetentionEvidenceProjectionV1["rows"][number][] = [];
   for (const authority of authorities) {
-    rows.push(await retentionRow(authority.role, authority.sourcePath));
+    rows.push(await retentionRow(authority.role, authority.sourcePath, recordedParent(dirname(authority.sourcePath))));
   }
   const directoryRows = rows.filter((row) => row.postimage.kind === "directory_tree")
     .sort((left, right) => left.sourcePath.length - right.sourcePath.length);
@@ -660,6 +718,26 @@ function hasAncestorIn(path: string, roots: ReadonlySet<string>): boolean {
   }
 }
 
+/** Every path with no proper ancestor in the set, so a prefix match over the result covers the whole input. */
+function maximalRoots(paths: readonly CanonicalAbsolutePathV1[]): CanonicalAbsolutePathV1[] {
+  const all = new Set<string>(paths);
+  return [...new Set(paths)]
+    .filter((path) => dirname(path) === path || !hasAncestorIn(dirname(path), all))
+    .sort();
+}
+
+/**
+ * What uninstall reports as preserved retention (NEW-56): each present retained
+ * subtree once, at its maximal root. Listing `retainedPaths` printed every file
+ * inside a retained Brain tombstone.
+ */
+export function preservedRetentionRoots(
+  evidence: Pick<BootstrapEvidenceAdmissionV1, "retainedPaths" | "retainedRoots">,
+): readonly CanonicalAbsolutePathV1[] {
+  const present = new Set<string>(evidence.retainedPaths);
+  return evidence.retainedRoots.filter((root) => present.has(root));
+}
+
 function sumEntries(entries: Iterable<BootstrapEvidenceGuardedEntryV1>): { readonly entries: number; readonly bytes: bigint } {
   let count = 0;
   let bytes = 0n;
@@ -708,7 +786,8 @@ async function exactV2Handoff(
         reason: "retained manifest bytes are hash-pinned to plan.manifest.after.hash before this call; no live owner authority exists for a historical plan",
       }),
     });
-  } catch {
+  } catch (error) {
+    if (isCodeDefect(error)) throw error;
     return null;
   }
 }
@@ -739,7 +818,8 @@ async function supersededV2Handoff(
     const bytes = await request.reader.readRegularFile(manifest.entry, plan.manifest.maximumPlanBytes);
     return hashBytes(bytes) === anchored.manifestHash &&
       isStructurallyValidV2Manifest(bytes, request.productHome);
-  } catch {
+  } catch (error) {
+    if (isCodeDefect(error)) throw error;
     return false;
   }
 }
@@ -826,7 +906,7 @@ async function restoredTargets(
 }
 
 type BootstrapEnvelopeReadV1 =
-  | { readonly state: "plan_unverified"; readonly id: FreshV2InitIdV1 }
+  | { readonly state: "plan_unverified"; readonly id: FreshV2InitIdV1; readonly preP8Grammar: boolean }
   | {
       readonly state: "slots_unbound";
       readonly id: FreshV2InitIdV1;
@@ -849,12 +929,20 @@ async function readBootstrapEnvelope(
   const id = FRESH_PLAN.exec(basename(planEntry.path))?.[1] as FreshV2InitIdV1 | undefined;
   if (id === undefined) throw new Error("bootstrap evidence plan filename is malformed");
   let plan: FreshV2InitPlanV1;
+  let value: unknown = null;
   try {
-    const value = decodeCanonicalJson(await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES), MAX_PLAN_BYTES);
-    plan = request.validatePlan(value) as FreshV2InitPlanV1;
+    value = decodeCanonicalJson(await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES), MAX_PLAN_BYTES);
+    plan = request.validatePlan(value);
     if (plan.id !== id || plan.planPath !== planEntry.path) throw new Error("bootstrap plan identity is unbound");
   } catch {
-    return { state: "plan_unverified", id };
+    /**
+     * Spec 2 P8: a complete plan whose admitted paths carry no identity was
+     * interrupted under the old grammar. Unlike a torn plan write it may have
+     * mutated the home, so it refuses instead of letting a new ID start beside it.
+     */
+    const admitted = record(value)?.admittedPreexistingPaths;
+    const preP8Grammar = Array.isArray(admitted) && admitted.some((entry) => typeof entry === "string");
+    return { state: "plan_unverified", id, preP8Grammar };
   }
   const slots = await request.reader.inventoryExactNamespaces(plan.journalSlots.map((slot) => slot.path));
   const slotEntries = plan.journalSlots.map((slot) => slots.find((candidate) => candidate.path === slot.path) ?? null);
@@ -925,7 +1013,7 @@ async function inspectPlan(
       roots: [planEntry.path],
       parentAuthorities: [],
       verifiedEnvelope: null,
-      blocksNewIntent: false,
+      blocksNewIntent: envelope.preP8Grammar,
     };
   }
   const { plan, slots: initial } = envelope;
@@ -939,7 +1027,8 @@ async function inspectPlan(
       roots: [planEntry.path, ...initial.map((entry) => entry.path)],
       parentAuthorities: [],
       verifiedEnvelope: null,
-      blocksNewIntent: false,
+      /** NEW-123 (founder decision B): §6.4 lets a new init start beside it only once no live target is attributable. */
+      blocksNewIntent: !await restoredTargets(request, plan, null),
     };
   }
   const slotValues = envelope.values;
@@ -985,6 +1074,7 @@ async function inspectPlan(
   let table: ReturnType<typeof deriveBootstrapRetentionTable> | null = null;
   let exactEvidence: BootstrapRetentionEvidenceProjectionV1 | null = null;
   let exactSelection = false;
+  let parentIdentityChanged = false;
   try {
     const evidence: BootstrapRetentionEvidenceProjectionV1 = terminal === null
       ? {
@@ -1006,7 +1096,8 @@ async function inspectPlan(
       if (!loneSlotRemainsCurrent(plan, evidence, selection, slotValues, table)) throw error;
     }
     exactSelection = true;
-  } catch {
+  } catch (error) {
+    parentIdentityChanged = error instanceof RetentionParentIdentityChangedError;
     if (selection.current.phase !== "retained" && selection.current.phase !== "retaining") {
       const counted = sumEntries([planEntry, ...initial]);
       return {
@@ -1239,14 +1330,42 @@ async function inspectPlan(
       ...initialForId.map((entry) => entry.path),
       ...roots,
     ])],
-    parentAuthorities: exactSelection && terminalRetained && table !== null
+    parentAuthorities: exactSelection && summary.status === "verified" && table !== null
       ? [...new Map(table.map((row) => [row.parent.path, row.parent] as const)).values()]
       : [],
-    blocksNewIntent: terminalRetained ? !inert : !exactSelection,
+    /** Spec 2 P8: a swapped retained parent would otherwise leave only the swapped identity to admit. */
+    blocksNewIntent: parentIdentityChanged || (terminalRetained ? !inert : !exactSelection),
     verifiedEnvelope: summary.status === "verified" && exactSelection && terminal !== null && exactEvidence !== null
       ? { plan, terminalJournal: terminal, evidence: exactEvidence }
       : null,
   };
+}
+
+/**
+ * NEW-114: an unverified envelope skips the retention inventory, which is what put the tombstones
+ * retention left in its Foundation roots into `retainedPaths`. Only the retained namespace is read
+ * here, so a live Foundation journal or staged leaf stays visible to the lifecycle ledger.
+ */
+function foundationTombstonesOf(
+  request: BootstrapEvidenceInspectionRequestV1,
+  participantIds: readonly string[],
+): Promise<readonly BootstrapEvidenceGuardedEntryV1[]> {
+  return request.reader.inventoryExactNamespaces([
+    join(request.stateDirectory, "transactions"),
+    ...participantIds.flatMap((participantId) => [
+      join(request.productHome, "staging", "transactions", participantId),
+      join(request.productHome, "backups", "transactions", participantId),
+    ]),
+  ] as CanonicalAbsolutePathV1[]);
+}
+
+/**
+ * NEW-123: an envelope with no admitted plan still names its participants, because
+ * `BootstrapExecutor` allocates exactly the ordinal-0 pair from the init ID.
+ */
+function executorFoundationParticipantIds(id: string): readonly string[] {
+  const uuid = id.slice("fi_".length);
+  return [`tx_fi_${uuid}_0000000000_c`, `tx_fi_${uuid}_0000000000_f`];
 }
 
 export async function inspectBootstrapEvidenceAdmission(
@@ -1310,12 +1429,8 @@ export async function inspectBootstrapEvidenceAdmission(
           (!isSlot || BigInt(candidate.bytes) <= BigInt(MAX_JOURNAL_BYTES)) &&
           (!isPlan || BigInt(candidate.bytes) <= BigInt(MAX_PLAN_BYTES));
       }
-      if (isTombstone || insideTombstone) {
-        return candidate.kind === "directory"
-          ? candidate.mode === 0o700
-          : (candidate.mode === 0o600 || candidate.mode === 0o700) && candidate.nlink === 1;
-      }
-      return false;
+      /** NEW-123 (founder decision B): retained tombstones are inert, so a new init may start beside them. */
+      return isTombstone || insideTombstone;
     });
     if (!confined) unverifiedBlocked = true;
     if (reportedIds.has(rawId as FreshV2InitIdV1)) continue;
@@ -1335,6 +1450,23 @@ export async function inspectBootstrapEvidenceAdmission(
       });
     }
   }
+  const planParticipantIds = new Map(results.flatMap((result) => result.plan === null
+    ? []
+    : [[result.plan.id as string, result.plan.foundationParticipants.map((participant) => participant.id as string)] as const]));
+  const participantIdsOf = (id: string): readonly string[] =>
+    planParticipantIds.get(id) ?? executorFoundationParticipantIds(id);
+  const unverifiedPaths: CanonicalAbsolutePathV1[] = [];
+  for (const summary of summaries) {
+    if (summary.status !== "unverified") continue;
+    for (const candidate of await foundationTombstonesOf(request, participantIdsOf(summary.id))) {
+      if (!allEntries.has(candidate.path)) unverifiedPaths.push(candidate.path);
+      allEntries.set(candidate.path, candidate);
+    }
+  }
+  const verifiedParticipantIds = new Set<string>(results.flatMap((result) =>
+    result.verifiedEnvelope === null ? [] : result.verifiedEnvelope.plan.foundationParticipants.map((participant) => participant.id),
+  ));
+  const bootstrapParticipantIds = [...new Set(summaries.flatMap((summary) => participantIdsOf(summary.id)))].sort();
   summaries.sort((left, right) => Buffer.compare(Buffer.from(left.id), Buffer.from(right.id)));
   const counted = sumEntries(allEntries.values());
   /**
@@ -1370,10 +1502,12 @@ export async function inspectBootstrapEvidenceAdmission(
    * identity, which for a retained one is the third state §6.4 refuses; an
    * unattributed exact leaf is coordination residue a later init may start
    * beside. Anything else at that path stayed in the inventory above and is
-   * unknown residue, so the name alone decides nothing either way (A3).
+   * unknown residue, so the name alone decides nothing either way (A3). An `unverified` envelope
+   * attributes nothing: its leaf is coordination residue like an unattributed one (NEW-123, B).
    */
   const attributedIds = results.flatMap((result) =>
-    exactLeaf !== null && result.plan !== null && identityMatches(exactLeaf, result.plan.bootstrapIdentity)
+    exactLeaf !== null && result.plan !== null && result.summary.status !== "unverified" &&
+    identityMatches(exactLeaf, result.plan.bootstrapIdentity)
       ? [result.plan.id]
       : []);
   const bootstrapLeaf = exactLeaf === null ? null : {
@@ -1401,10 +1535,15 @@ export async function inspectBootstrapEvidenceAdmission(
     report,
     active: active.length === 1 ? active[0] ?? null : null,
     retainedPaths: [...allEntries.keys()].sort(),
-    retainedRoots: [...new Set([
-      ...initial.map((candidate) => candidate.path),
-      ...results.flatMap((result) => result.roots),
-    ])].sort(),
+    bootstrapParticipantIds,
+    unverifiedResidue: {
+      retainedPaths: [...new Set(unverifiedPaths)].sort(),
+      bootstrapParticipantIds: bootstrapParticipantIds.filter((id) => !verifiedParticipantIds.has(id)),
+    },
+    retainedIdentities: [...allEntries.values()]
+      .map((entry) => ({ path: entry.path, dev: entry.dev, ino: entry.ino }))
+      .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
+    retainedRoots: maximalRoots([...allEntries.keys(), ...results.flatMap((result) => result.roots)]),
     retainedParentAuthorities: orderedParentAuthorities,
     fingerprint,
     blocksNewIntent: active.length > 1 || conflictingParentAuthority || unverifiedBlocked ||
@@ -1496,8 +1635,10 @@ export function isStructurallyValidV2Manifest(bytes: Uint8Array, productHome: st
         reason: "routing only decides whether a structurally valid V2 manifest exists; configuration and Brain location belong to each command's own confined read",
       }),
     }).schemaVersion === 2;
-  } catch {
-    return false;
+  } catch (error) {
+    // NEW-92: only the validator's own refusal means malformed; a defect must not send a healthy home to recovery.
+    if (error instanceof ManifestStateError) return false;
+    throw error;
   }
 }
 
@@ -1598,7 +1739,7 @@ async function guardedFile(
 ): Promise<GuardedFileObservationV1> {
   let inventoried: readonly BootstrapEvidenceGuardedEntryV1[];
   try {
-    inventoried = await request.reader.inventoryExactNamespaces([path as CanonicalAbsolutePathV1]);
+    inventoried = await request.reader.inventoryExactNamespaces([path as CanonicalAbsolutePathV1], { leaves: true });
   } catch (error) {
     // NEW-82: a defect in the reader is not a fact about the leaf.
     if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) throw error;

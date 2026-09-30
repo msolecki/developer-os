@@ -38,11 +38,15 @@ import {
   type LowerHexSha256,
   type ReleaseBundleEntryV1,
   type UInt64DecimalV1,
+  type UpdateConstructionJournalV1,
+  type UpdateConstructionPlanV1,
   type UpdateEntryStepV1,
   type UpdateEntryWriteStateV1,
   type UtcTimestampV1,
 } from "@developer-os/core";
 import type { VerifiedScratchBundleV1 } from "@developer-os/security";
+
+import { resolveSourceParent } from "./construction.js";
 
 /** Where a test may kill the process; each point follows a durable effect. */
 export type BundleEntryDeathPointV1 = "journal_rewritten" | "entry_created" | "entry_written" | "evidence_created" | "evidence_written" | "compensation_step" | "compaction_step";
@@ -448,9 +452,9 @@ export class BundleSourceExecutor {
     return next;
   }
 
-  /** `update/source/bundle`, bound by the plan's parent identity before the envelope exists. */
-  async #sourceParent(plan: BundleSourceStagingPlanV1): Promise<LifecycleGuardedEntryV1> {
-    return this.#io.ownedDirectory(bundleSourcePaths(this.#root, plan.id).parent, { dev: plan.sourceParentDev, ino: plan.sourceParentIno });
+  /** `update/source/bundle`, reopened no-follow under the construction journal's recorded identity (P1). */
+  async #sourceParent(plan: BundleSourceStagingPlanV1, construction: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1): Promise<LifecycleGuardedEntryV1> {
+    return this.#io.ownedDirectory(bundleSourcePaths(this.#root, plan.id).parent, resolveSourceParent(journal, construction, "bundle"));
   }
 
   async #structure(journal: BundleSourceStagingJournalV1, ordinal: number): Promise<LifecycleGuardedEntryV1> {
@@ -473,13 +477,14 @@ export class BundleSourceExecutor {
    * Structures, then every entry in inventory order, then ready evidence. Legal only from the
    * construction-published initial journal in the still-running originating process.
    */
-  async stage(value: BundleSourceStagingPlanV1, source: VerifiedScratchBundleV1): Promise<BundleSourceReadyEvidenceV1> {
+  async stage(value: BundleSourceStagingPlanV1, source: VerifiedScratchBundleV1, construction: UpdateConstructionPlanV1, constructionJournal: UpdateConstructionJournalV1): Promise<BundleSourceReadyEvidenceV1> {
     const { plan, journal: file } = await this.#open(value);
     if ((file.value as BundleSourceStagingJournalV1).phase !== "planned") refuseBundle("bundle_source_not_fresh", file.path);
     if (source.entries !== plan.entries.length) refuseBundle("bundle_source_scratch", source.root);
+    const sourceParent = await this.#sourceParent(plan, construction, constructionJournal);
     const structures = bundleSourceStructures(plan);
     for (let journal = file.value as BundleSourceStagingJournalV1; journal.nextStructure < 3; journal = file.value as BundleSourceStagingJournalV1) {
-      const parent = journal.nextStructure === 0 ? await this.#sourceParent(plan) : await this.#structure(journal, 0);
+      const parent = journal.nextStructure === 0 ? sourceParent : await this.#structure(journal, 0);
       await this.#advance(plan, file, { kind: "structure_intent" });
       const created = await this.#io.fs.mkdirExclusive((structures[journal.nextStructure] as (typeof structures)[number]).path);
       this.#interrupt("structure_made");
@@ -508,13 +513,13 @@ export class BundleSourceExecutor {
         },
       });
     }
-    return this.#publishReady(plan, file);
+    return this.#publishReady(plan, file, construction, constructionJournal);
   }
 
-  async #publishReady(plan: BundleSourceStagingPlanV1, file: BundleJournalFile<BundleSourceStagingJournalV1>): Promise<BundleSourceReadyEvidenceV1> {
+  async #publishReady(plan: BundleSourceStagingPlanV1, file: BundleJournalFile<BundleSourceStagingJournalV1>, construction: UpdateConstructionPlanV1, constructionJournal: UpdateConstructionJournalV1): Promise<BundleSourceReadyEvidenceV1> {
     const evidence = bundleSourceReadyEvidence(plan, file.value as BundleSourceStagingJournalV1, await bundleSourceEvidenceSetHash(this.#io, plan));
     const bytes = bundleSourceReadyEvidenceBytes(evidence);
-    const parent = await this.#sourceParent(plan);
+    const parent = await this.#sourceParent(plan, construction, constructionJournal);
     await this.#advance(plan, file, { kind: "ready_intent" });
     const ready = await this.#io.createEmpty(bundleSourcePaths(this.#root, plan.id).ready, 0o600);
     try {
@@ -559,13 +564,15 @@ export class BundleSourceExecutor {
   /**
    * Compensation-only recovery for any reached prefix, including `source_ready` before an outer
    * plan exists: ready evidence, then entries (entry, then evidence) in reverse, then structures
-   * in reverse. It never resumes a copy, re-reads scratch, or adopts an unrecorded path.
+   * in reverse. It never resumes a copy, re-reads scratch, or adopts an unrecorded path. The parent
+   * must still be the construction journal's recorded inode before anything is bound or removed.
    */
-  async compensate(value: BundleSourceStagingPlanV1): Promise<void> {
+  async compensate(value: BundleSourceStagingPlanV1, construction: UpdateConstructionPlanV1, constructionJournal: UpdateConstructionJournalV1): Promise<void> {
     const { plan, journal: file } = await this.#open(value);
     const phase = (file.value as BundleSourceStagingJournalV1).phase;
     if (phase === "rolled_back") return;
     if (phase === "compacting") refuseBundle("bundle_source_compacting", file.path);
+    await this.#sourceParent(plan, construction, constructionJournal);
     if (phase !== "compensating") {
       await this.#bindIntents(plan, file);
       await this.#advance(plan, file, { kind: "compensate" });

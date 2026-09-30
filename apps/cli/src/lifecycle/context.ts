@@ -74,9 +74,11 @@ const COORDINATOR_LEAF_GRAMMAR = /^\.?lc_([0-9a-f]{64})_(?:0|[1-9][0-9]*)[.]/u;
 
 export interface LifecycleResidueEvidenceV1 {
   readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
-  readonly retainedEnvelopes: readonly {
-    readonly plan: { readonly foundationParticipants: readonly { readonly id: string }[] };
-  }[];
+  readonly bootstrapParticipantIds: readonly string[];
+  readonly unverifiedResidue: {
+    readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
+    readonly bootstrapParticipantIds: readonly string[];
+  };
 }
 
 export interface CliLifecycleContext {
@@ -158,14 +160,22 @@ export async function coordinatorNonceOf(
   return found;
 }
 
+/** Every mutation's residue: an `unverified` envelope's evidence stays a ledger finding (NEW-99). */
 export function residueFrom(evidence: LifecycleResidueEvidenceV1): LifecycleBookkeepingResidueV1 {
-  const bootstrapParticipantIds = new Set<string>();
-  for (const envelope of evidence.retainedEnvelopes) {
-    for (const participant of envelope.plan.foundationParticipants) {
-      bootstrapParticipantIds.add(participant.id);
-    }
-  }
-  return { retainedPaths: new Set<string>(evidence.retainedPaths), bootstrapParticipantIds };
+  const unverifiedPaths = new Set<string>(evidence.unverifiedResidue.retainedPaths);
+  const unverifiedIds = new Set(evidence.unverifiedResidue.bootstrapParticipantIds);
+  return {
+    retainedPaths: new Set(evidence.retainedPaths.filter((path) => !unverifiedPaths.has(path))),
+    bootstrapParticipantIds: new Set(evidence.bootstrapParticipantIds.filter((id) => !unverifiedIds.has(id))),
+  };
+}
+
+/** Uninstall's residue also attributes an `unverified` envelope's staging, so it stays uninstallable (NEW-114). */
+export function uninstallResidueFrom(evidence: LifecycleResidueEvidenceV1): LifecycleBookkeepingResidueV1 {
+  return {
+    retainedPaths: new Set<string>(evidence.retainedPaths),
+    bootstrapParticipantIds: new Set(evidence.bootstrapParticipantIds),
+  };
 }
 
 const NODE_TRANSACTION_FILE_SYSTEM = {

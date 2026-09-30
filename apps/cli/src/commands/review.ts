@@ -30,7 +30,7 @@ import type {
   ReviewDecision,
 } from "@developer-os/brain";
 import { createRedactor } from "@developer-os/security";
-import type { Redactor } from "@developer-os/security";
+import type { RedactionScope, Redactor } from "@developer-os/security";
 
 import {
   exitCodeOf,
@@ -52,7 +52,7 @@ import { isDirectory, readConfigFile } from "./doctor.js";
 export interface ReviewedCaptureV1 {
   readonly captureId: string;
   readonly status: CaptureStatus;
-  /** The note a note capture creates or replaces (spec §3.3); `null` for a plain capture. */
+  /** The note a note capture creates or replaces (`brain.md` §6.13); `null` for a plain capture. */
   readonly note: { readonly path: string; readonly replaces: boolean } | null;
   readonly redactionCount: number;
 }
@@ -669,7 +669,8 @@ async function decideOne(
 function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
   return {
     ...guards,
-    redactDiagnostic: (text: string): string => redact(text).text,
+    redactDiagnostic: (text: string, scope?: RedactionScope): string =>
+      redact(text, scope).text,
   };
 }
 

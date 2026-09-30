@@ -45,7 +45,7 @@ import { deriveUpdateExecutorRecordPath, parseCanonicalAbsolutePathText, type Ca
 import { PLANNER_PROTOCOL_V1, PLANNER_WIRE_BOUNDS_V1 } from "../update/planner.js";
 import { parseRollbackPayloadId, type PlannerTranscriptIdentityV1 } from "../update/preview.js";
 import { validateReleaseIdentity, type ReleaseIdentityV1 } from "../update/release.js";
-import { parseLowerHexSha256, parsePositiveUInt32, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256 } from "../update/scalars.js";
+import { parseLowerHexSha256, parsePositiveUInt32, parseSafeReasonCode, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256 } from "../update/scalars.js";
 import { encodeCanonicalJson } from "./canonical-json.js";
 import { createLifecycleCodecs } from "./codecs.js";
 import { deriveLifecycleLedgerRoots } from "./foundation-ledger.js";
@@ -169,7 +169,7 @@ function execution(id: LifecycleCoordinatorIdV1, operation: UpdateOperationV1): 
   };
 }
 
-function outerPlan(id: LifecycleCoordinatorIdV1 = FIRST, operation: UpdateOperationV1 = "update_apply"): UpdateLifecycleCoordinatorPlanV2 {
+function outerPlan(id: LifecycleCoordinatorIdV1 = FIRST, operation: UpdateOperationV1 = "update_apply", constructionHash = hex("construction")): UpdateLifecycleCoordinatorPlanV2 {
   const owners: readonly UpdateStepOwnerV1[] = [
     { id: ref(id, "owner_update", "owner_core").id, owner: "core", externalEffects: [] },
     { id: ref(id, "owner_update", "owner_codex").id, owner: "codex", externalEffects: [{ id: ref(id, "owner_external_effect", `oe_${NONCE}_9`).id }] },
@@ -177,7 +177,7 @@ function outerPlan(id: LifecycleCoordinatorIdV1 = FIRST, operation: UpdateOperat
   return buildUpdateCoordinatorPlan({
     execution: execution(id, operation),
     executionRef: ref(id, "update_execution", "execution"),
-    construction: { path: parseCanonicalAbsolutePathText(`${updateCoordinatorStagingRoot(HOME, id)}/update-construction.plan.json`), hash: hex("construction"), bytes: 4096 },
+    construction: { path: parseCanonicalAbsolutePathText(`${updateCoordinatorStagingRoot(HOME, id)}/update-construction.plan.json`), hash: constructionHash, bytes: 4096 },
     owners,
     retainPayloadId: operation === "update_apply" ? parseRollbackPayloadId(`rb_${NONCE}_10`) : null,
   });
@@ -196,7 +196,7 @@ function activeIndex(plan: UpdateLifecycleCoordinatorPlanV2): number {
 }
 
 function compensating(plan: UpdateLifecycleCoordinatorPlanV2): UpdateLifecycleCoordinatorJournalV2 {
-  return advanceUpdateCoordinatorJournal(plan, walk(plan, upTo(activeIndex(plan))), { kind: "compensation_started" }, later);
+  return advanceUpdateCoordinatorJournal(plan, walk(plan, upTo(activeIndex(plan))), { kind: "compensation_started", cause: parseSafeReasonCode("update_step_failed") }, later);
 }
 
 function rolledBack(plan: UpdateLifecycleCoordinatorPlanV2): UpdateLifecycleCoordinatorJournalV2 {
@@ -553,6 +553,20 @@ describe("closure V2 over construction envelopes", () => {
     await write(home, `state/lifecycle-journals/${FIRST}.plan.json`, `{"schemaVersion":2,`);
 
     expect((await inspect(home)).closure).toStrictEqual(REQUIRED);
+  });
+
+  it.each([
+    ["yields update_recovery for a lone construction plan its compacting coordinator binds by hash", true],
+    ["refuses a lone construction plan beside a compacting coordinator bound to another hash", false],
+  ] as const)("%s", async (_label, bound) => {
+    const home = await newHome();
+    const construction = constructionPlan();
+    const plan = outerPlan(FIRST, "update_rollback", bound ? constructionPlanHash(construction) : hex("another"));
+    await plantEnvelope(home, plan, advanceUpdateCoordinatorJournal(plan, rolledBack(plan), { kind: "compaction_started" }, later));
+    await mkdirs(home, root);
+    await write(home, `${root}/update-construction.plan.json`, constructionPlanBytes(construction));
+
+    expect((await inspect(home)).closure).toStrictEqual(bound ? { kind: "update_recovery", coordinatorId: FIRST, operation: "update_rollback", direction: "compensating" } : REQUIRED);
   });
 
   it("refuses a handed-off construction journal with no outer journal", async () => {

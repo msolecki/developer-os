@@ -100,7 +100,7 @@ export function codexRegistrationObserver(dependencies: CodexRegistrationObserve
     const result = await dependencies.run({
       executable,
       argv: PLUGIN_LIST_ARGV,
-      env: { HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
+      env: { CODEX_HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
       cwd: tokens.managedPluginRoot,
       stdin: "ignore",
       stdoutCap: policy.stdoutBytes,

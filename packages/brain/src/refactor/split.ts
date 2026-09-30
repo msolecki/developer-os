@@ -17,7 +17,7 @@ import {
 } from "./plan.js";
 import type { ModePlanV1, PreStateV1, RefactorMutationV1 } from "./plan.js";
 
-/** Spec §6.1's bound on `<heading>`; the slug's path length alone does not enforce it. */
+/** `brain.md` §6.11's bound on `<heading>`; the slug's path length alone does not enforce it. */
 const MAX_HEADING_CHARS = 512;
 
 const ATX = /^ {0,3}(#{1,6})(?:[ \t]|$)/u;
@@ -46,7 +46,7 @@ function anchorOf(tail: string): string | null {
 
 /**
  * Moves one `##`–`######` section into a fresh sibling note and leaves
- * `See [[slug]].` in its place (spec §6.3). Only links anchored at that heading
+ * `See [[slug]].` in its place (`brain.md` §6.13, modes). Only links anchored at that heading
  * follow the section; every other link to the parent stays.
  */
 export function planSplit(state: PreStateV1, note: string, heading: string): ModePlanV1 {

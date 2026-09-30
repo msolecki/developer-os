@@ -3,6 +3,7 @@ export {
   decodeCanonicalJson,
   encodeCanonicalJson,
   hashCanonicalJson,
+  sortUtf8,
 } from "./lifecycle/canonical-json.js";
 export type { CanonicalJsonV1, CanonicalJsonValue } from "./lifecycle/canonical-json.js";
 export {
@@ -196,6 +197,7 @@ export type { HookFiringRecordsShapeV1, HookFiringRecordV1 } from "./hooks/firin
 export {
   CODEX_INGEST_AUTH_LINK,
   CODEX_INGEST_HOME_RELATIVE_PATH,
+  CODEX_INGEST_HOME_REPAIR,
   inspectCodexIngestHomeShape,
 } from "./lifecycle/codex-ingest-home.js";
 export type { CodexIngestHomeEntryV1, CodexIngestHomeShapeV1 } from "./lifecycle/codex-ingest-home.js";
@@ -269,6 +271,7 @@ export {
   containsPath,
   containsPathLoosely,
   foldPath,
+  isRedactionKeyPath,
   detectDrift,
   deriveBootstrapCreationEvidencePaths,
   deriveBootstrapEnvelopePaths,
@@ -306,7 +309,6 @@ export {
   validateManifestBytes,
   validateManifestV1,
   validateManifestV2,
-  validateMigratableManifestV1,
   validateRetentionTerminalBinding,
 } from "./manifest/index.js";
 export type {
@@ -337,7 +339,6 @@ export type {
   ManagedArtifactSchemaRegistry,
   ManagedArtifactEphemeralRegistryV1,
   ManifestAdmissionContextV1,
-  MigratableInstallationManifestV1,
   OwnerPathArmV1,
   BootstrapExpectedPayloadRefV1,
   BootstrapEvidenceClassificationInputV1,
@@ -350,7 +351,6 @@ export type {
   BootstrapExternalShapeEntryV1,
   BootstrapExternalShapeProjectionV1,
   BootstrapJournalPhaseV1,
-  BootstrapMigrationPreimageAuthorityV1,
   BootstrapPayloadEvidenceV1,
   BootstrapPayloadPlanV1,
   BootstrapPayloadSourceV1,
@@ -382,10 +382,6 @@ export type {
   LifecycleInstallNonceV1,
   ManifestBytesStateV1,
   ManifestExternalEffectRefV1,
-  ManifestMigrationIdV1,
-  ManifestMigrationJournalV1,
-  ManifestMigrationPathsV1,
-  ManifestMigrationPlanV1,
   ManifestParticipantIdV1,
   ManifestParticipantObservationV1,
   ManifestPayloadIdentityV1,

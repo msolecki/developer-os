@@ -46,7 +46,7 @@ export interface ClaudeCapabilityRequest {
   readonly probe?: boolean;
   /**
    * `plugin_hooks` and `session_start_injection` as read from the firing
-   * records under `state/hooks/` (A13 §8.1). They are the only source for those
+   * records under `state/hooks/` (`hooks.md` §3.6). They are the only source for those
    * two keys: a probe that lists or validates the tree saw it loaded, not firing.
    */
   readonly firingObservations?: ReadonlyMap<string, ProbeObservation>;

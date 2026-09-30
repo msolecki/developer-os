@@ -20,13 +20,13 @@ import {
   type UpdateParticipantObservationV1,
 } from "@developer-os/core";
 
-import { participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { participantPlanFileHash, participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
 
 /** The concrete child the closed policy resolves to; Security's supervised runner executes it. */
 export interface OwnerEffectProcessRequestV1 {
   readonly executable: string;
   readonly argv: readonly string[];
-  readonly env: Readonly<Record<"HOME" | "TMPDIR", string>>;
+  readonly env: Readonly<Record<"CODEX_HOME" | "TMPDIR", string>>;
   readonly cwd: string;
   readonly stdin: "ignore";
   readonly stdoutCap: number;
@@ -82,7 +82,7 @@ export function resolveOwnerEffectProcess(policy: OwnerExternalEffectProcessPoli
   return {
     executable,
     argv: policy.argv.map((arg) => (arg.kind === "literal" ? arg.value : token[arg.value])),
-    env: { HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
+    env: { CODEX_HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
     cwd: tokens.managedPluginRoot,
     stdin: "ignore",
     stdoutCap: policy.stdoutBytes,
@@ -151,18 +151,18 @@ export class OwnerExternalEffectParticipant {
   /** The outer compaction entry: evidence, journal, then the immutable plan last. */
   async compact(step: OwnerExternalEffectStepV1): Promise<void> {
     const { journals, stagingRoot } = this.#dependencies;
-    if (!(await journals.unreached(step.journal))) {
+    if (await journals.exists(step.journal.finalPath)) {
       const journal = await this.openJournal(step);
       if (journal.phase !== "finalized" && journal.phase !== "rolled_back") refuseParticipant("update_effect_compaction_not_terminal", step.journal.finalPath);
       for (const direction of ["compensating", "forward"] as const) await journals.remove(ownerExternalEffectEvidencePath(stagingRoot, step.plan.id, direction));
       await journals.remove(step.journal.finalPath);
     }
-    await journals.remove(step.planRef.path, step.planRef.hash);
+    await journals.remove(step.planRef.path, participantPlanFileHash(step.planRef, step.plan));
   }
 
   private async openJournal(step: OwnerExternalEffectStepV1): Promise<OwnerExternalEffectJournalV1> {
     const { plan, planRef, journal } = step;
-    if (planRef.hash !== updateParticipantDocumentHash(plan) || journal.kind !== "owner_external_effect" || journal.id !== plan.id || journal.planHash !== planRef.hash) refuseParticipant("update_effect_binding", journal.finalPath);
+    if (planRef.hash !== updateParticipantDocumentHash("owner_external_effect", plan) || journal.kind !== "owner_external_effect" || journal.id !== plan.id || journal.planHash !== planRef.hash) refuseParticipant("update_effect_binding", journal.finalPath);
     if (plan.processPolicyHash !== ownerExternalEffectProcessPolicyHash(plan.processPolicy)) refuseParticipant("update_effect_policy", journal.finalPath);
     return validateOwnerExternalEffectJournal(await this.#dependencies.journals.open(journal), plan);
   }
@@ -204,7 +204,7 @@ export class OwnerExternalEffectParticipant {
       schemaVersion: 1,
       id: plan.id,
       coordinatorId: plan.coordinatorId,
-      planHash: updateParticipantDocumentHash(plan),
+      planHash: updateParticipantDocumentHash("owner_external_effect", plan),
       direction,
       observedStateHash: after,
       processPolicyHash: plan.processPolicyHash,

@@ -37,7 +37,7 @@ import {
   type NormalizedRemoteUrlV1,
 } from "@developer-os/core";
 
-import { SUPPORTED_GIT_DISTRIBUTION_ID } from "./process-table.js";
+import { GIT_DISTRIBUTION_POLICY_ID } from "./process-table.js";
 
 const PUSH_PLAN_DOMAIN = "developer-os:git-push-plan:v1";
 
@@ -65,7 +65,7 @@ export interface PersistedGitPushPlanV1 {
   readonly destination: PersistedGitPushDestinationV1;
   readonly sourceBefore: GitSourceStateV1;
   readonly sourceAfter: GitSourceStateV1;
-  readonly distributionId: typeof SUPPORTED_GIT_DISTRIBUTION_ID;
+  readonly distributionId: typeof GIT_DISTRIBUTION_POLICY_ID;
   readonly processTableHash: LowerHexSha256;
 }
 
@@ -139,7 +139,7 @@ export function validatePersistedGitPushPlan(value: unknown): PersistedGitPushPl
   const input = exact(value, PUSH_PLAN_KEYS, label);
   if (input.schemaVersion !== 1) fail(`${label}.schemaVersion`);
   if (input.remoteName !== GIT_REMOTE_NAME) fail(`${label}.remoteName`);
-  if (input.distributionId !== SUPPORTED_GIT_DISTRIBUTION_ID) fail(`${label}.distributionId`);
+  if (input.distributionId !== GIT_DISTRIBUTION_POLICY_ID) fail(`${label}.distributionId`);
   const branchRef = parseFullBranchRef(input.branchRef);
   const commitOid = parseLowerHexSha1(input.commitOid);
   const sourceBefore = validateGitSourceState(input.sourceBefore);
@@ -159,7 +159,7 @@ export function validatePersistedGitPushPlan(value: unknown): PersistedGitPushPl
     destination,
     sourceBefore,
     sourceAfter,
-    distributionId: SUPPORTED_GIT_DISTRIBUTION_ID,
+    distributionId: GIT_DISTRIBUTION_POLICY_ID,
     processTableHash: parseLowerHexSha256(input.processTableHash),
   };
 }

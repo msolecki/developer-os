@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 
-import { EXIT_CODES } from "@developer-os/core";
-import { detectSourceAgent, parseCaptureFile } from "@developer-os/brain";
+import { EXIT_CODES, loadConfig, serializeConfig } from "@developer-os/core";
+import { DEFAULT_BRAIN_CONFIG, detectSourceAgent, parseCaptureFile } from "@developer-os/brain";
 import type {
   AgentDiscovery,
   AgentName,
@@ -14,13 +14,16 @@ import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { discoverSourceAgent, runCapture } from "./capture.js";
+import { discoverSourceAgent, isTopicNotePath, runCapture } from "./capture.js";
 import type { CaptureOptions } from "./capture.js";
+import type { ProbeFileSystemV1 } from "../pinned-executable.js";
 import { runInit } from "./init.js";
 import {
   createCommandFixture,
   REAL_FILESYSTEM_TIMEOUT_MS,
+  probeObservation,
   removeCommandFixtures,
+  syntheticProbeHost,
 } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 import { loadOrCreateRedactionKey } from "../context.js";
@@ -43,6 +46,7 @@ interface CaptureFixture extends CommandFixture {
     options: CaptureOptions,
     /** Overrides the real detection table, for a vendor that has no row in it. */
     detect?: (env: Readonly<Record<string, string | undefined>>) => string,
+    executables?: ProbeFileSystemV1,
   ): ReturnType<typeof runCapture>;
 }
 
@@ -74,8 +78,8 @@ async function installedFixture(
   return {
     ...fixture,
     project,
-    run: (context, captureOptions, detect = detectSourceAgent) =>
-      runCapture(context, captureOptions, { cwd: () => project, detect }),
+    run: (context, captureOptions, detect = detectSourceAgent, executables = syntheticProbeHost()) =>
+      runCapture(context, captureOptions, { cwd: () => project, detect, executables }),
   };
 }
 
@@ -233,21 +237,31 @@ describe("runCapture", () => {
    * **The check is real here even though the outcome is quiet**: `capture` became the
    * second executor, and the most-run one, when Task 17 made the detection row live.
    */
-  it("records an unknown source agent when the discovered binary is not trusted", async () => {
+  it("records an unknown source agent, spawning nothing, when PATH selects a binary in a group-writable directory (NEW-46)", async () => {
+    const spawned: string[] = [];
     const fixture = await installedFixture("capture-untrusted-binary", {
       fixture: {
-        untrustedExecutable: new Error(
-          "The executable is not trusted: /synthetic/bin is writable by any user",
-        ),
+        agents: CLAUDE_INSTALLED,
+        runner: {
+          run: (request): Promise<ProcessResult> => {
+            spawned.push(request.executable);
+            return Promise.reject(new Error("an untrusted binary must never spawn"));
+          },
+        },
       },
     });
+    const shadowing = syntheticProbeHost();
+    shadowing.table.set("/synthetic/bin", probeObservation("directory", { mode: 0o775 }));
+    spawned.length = 0;
 
     const result = await fixture.run(
       fixture.context,
       { text: "an observation taken beside an untrusted binary" },
       () => "claude",
+      shadowing,
     );
 
+    expect(spawned).toStrictEqual([]);
     expect(result.ok, "the capture must still succeed").toBe(true);
     if (!result.ok) return;
 
@@ -283,6 +297,28 @@ describe("runCapture", () => {
     expect(written).toContain("[REDACTED:user-pattern]");
     /** The rest of the observation survives: this redacts a name, not the note. */
     expect(written).toContain("migration needs a rollback plan");
+    /** D73: the persisted finding names the table row, and the name is not over-broad. */
+    expect(written).toContain("patternIndex: 0");
+    expect(result.warnings.join("\n")).not.toContain("over-broad");
+  });
+
+  it("warns, by index and never by value, about a pattern that covers much of the capture (NEW-24)", async () => {
+    const fixture = await installedFixture("capture-over-broad-redaction");
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders", "e"]\n',
+      "utf8",
+    );
+
+    const result = await fixture.run(fixture.context, { text: "see ".repeat(80) });
+
+    expect(result.ok, "the capture must succeed").toBe(true);
+    if (!result.ok) return;
+    const warnings = result.warnings.join("\n");
+    expect(warnings).toContain("patterns[1]");
+    expect(warnings).toContain("over-broad");
+    expect(warnings).not.toContain("patterns[0]");
+    expect(warnings).not.toContain("Northwind");
   });
 
   /**
@@ -330,9 +366,9 @@ describe("runCapture", () => {
    * A vault reached through a symlink is ordinary — a synced folder, a second
    * volume — and on such an install a canonicalized `path` would print and
    * publish a location the user never wrote in `config.toml`, in `--json` as
-   * well as on the terminal. The quarantine root **is** canonicalized, for the
-   * containment question that has to be asked of the destination; what must not
-   * follow from that is the canonical form leaking into the contract, or into
+   * well as on the terminal. The quarantine root **is** canonicalized, and every
+   * read and write goes through that form (NEW-20); what must not follow from
+   * that is the canonical form leaking into the contract, or into
    * `validateChangePlan`'s `ownedRoots`, where a pre-resolved root makes its
    * grew-authority test compare a string against itself.
    */
@@ -353,6 +389,55 @@ describe("runCapture", () => {
     expect(await nodeFs.readFile(result.data.path, "utf8")).toContain(
       `captureId: ${result.data.captureId}`,
     );
+  });
+
+  /**
+   * NEW-20: the containment proof holds for the canonical quarantine, so a
+   * symlink retargeted after the proof must not carry the write with it. The
+   * content-root link is swapped the moment the proof has resolved it; a write
+   * through the declared path would follow the link into `elsewhere`, which
+   * `validateChangePlan` permits as a sideways relocation.
+   *
+   * Out of reach here: a real directory on the canonical chain replaced by a
+   * symlink after the proof has the same string in both forms, and pinning that
+   * needs descriptor-relative operations rather than paths.
+   */
+  it("refuses at exit 5 and writes nowhere when the content root is retargeted after the proof", async () => {
+    const fixture = await installedFixture("capture-symlink-swap");
+    const content = join(fixture.paths.brain, "content");
+    const real = join(fixture.paths.brain, "real-content");
+    await nodeFs.rename(content, real);
+    await nodeFs.symlink(real, content);
+    const elsewhere = join(fixture.root, "elsewhere");
+    await nodeFs.mkdir(join(elsewhere, "_raw", "quarantine"), {
+      recursive: true,
+      mode: 0o700,
+    });
+    const declaredQuarantine = quarantineDirectory(fixture);
+    const before = await nodeFs.readdir(join(real, "_raw", "quarantine"));
+
+    let swapped = false;
+    const canonicalize = async (path: string): Promise<string> => {
+      const resolved = await fixture.context.guards.canonicalize(path);
+      if (!swapped && path === declaredQuarantine) {
+        swapped = true;
+        await nodeFs.unlink(content);
+        await nodeFs.symlink(elsewhere, content);
+      }
+      return resolved;
+    };
+    const context: CliContext = {
+      ...fixture.context,
+      guards: { ...fixture.context.guards, canonicalize },
+    };
+
+    const result = await fixture.run(context, { text: OBSERVATION });
+
+    expect(swapped, "the swap must happen for the test to mean anything").toBe(true);
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    expect(await nodeFs.readdir(join(elsewhere, "_raw", "quarantine"))).toStrictEqual([]);
+    expect(await nodeFs.readdir(join(real, "_raw", "quarantine"))).toStrictEqual(before);
+    expect(await captureTransactions(fixture)).toHaveLength(0);
   });
 
   it("names the file after the capture id, which is the deduplication key", async () => {
@@ -947,7 +1032,7 @@ describe("runCapture", () => {
   });
 });
 
-/** A complete, parseable note: `capture --note` refuses anything less (spec §3.1 step 2). */
+/** A complete, parseable note: `capture --note` refuses anything less (`brain.md` §6.13). */
 function noteText(title: string, body = "A synthetic note body."): string {
   return [
     "---",
@@ -1150,7 +1235,10 @@ describe("runCapture --note", () => {
   });
 
   it("reports a note capture of an existing plain capture's text as that duplicate, keeping its envelope", async () => {
-    /** Spec R3: the deduplication hash is content-only. Task 16 reports this as a gap. */
+    /**
+     * `brain.md` §6.13 R3: the deduplication hash is content-only. Task 16 reports this as
+     * a gap.
+     */
     const fixture = await installedFixture("note-duplicate");
     const plain = await fixture.run(fixture.context, { text: NEW_NOTE });
     expect(plain.ok).toBe(true);
@@ -1200,7 +1288,7 @@ describe("discoverSourceAgent", () => {
       },
     });
 
-    expect(await discoverSourceAgent(fixture.context, "claude")).toStrictEqual({
+    expect(await discoverSourceAgent(fixture.context, "claude", syntheticProbeHost())).toStrictEqual({
       sourceAgent: "claude",
       sourceAgentVersion: "2.1.216",
     });
@@ -1264,10 +1352,96 @@ describe("discoverSourceAgent", () => {
       options,
     );
 
-    expect(await discoverSourceAgent(fixture.context, "claude")).toStrictEqual({
+    expect(await discoverSourceAgent(fixture.context, "claude", syntheticProbeHost())).toStrictEqual({
       sourceAgent: "unknown",
       sourceAgentVersion: "unknown",
     });
+  });
+});
+
+describe("discoverSourceAgent: the pinned vendor executable (NEW-46, D72 Q2-A, D73 addendum)", () => {
+  const LINK = "/synthetic/bin/claude";
+  const REAL = "/synthetic/Cellar/claude/bin/claude";
+
+  async function recordingFixture(label: string): Promise<{ fixture: CommandFixture; spawned: string[] }> {
+    const spawned: string[] = [];
+    const fixture = await createCommandFixture(label, {
+      agents: CLAUDE_INSTALLED,
+      runner: {
+        run: (request): Promise<ProcessResult> => {
+          spawned.push(request.executable);
+          return runnerReturning("2.1.216 (Claude Code)\n").run(request);
+        },
+      },
+    });
+    return { fixture, spawned };
+  }
+
+  it("spawns the PATH entry's real path, never the link", async () => {
+    const { fixture, spawned } = await recordingFixture("probe-pinned-link");
+
+    const source = await discoverSourceAgent(fixture.context, "claude", syntheticProbeHost([REAL], { [LINK]: REAL }));
+
+    expect(source).toStrictEqual({ sourceAgent: "claude", sourceAgentVersion: "2.1.216" });
+    expect(spawned).toStrictEqual([REAL]);
+  });
+
+  it.each([
+    ["a different file swapped in", { ino: "43" }],
+    ["the same inode rewritten in place", { ctimeNs: "2000" }],
+    ["the same inode resized", { size: 65 }],
+    ["the mode changed", { mode: 0o700 }],
+  ] as const)("records unknown and spawns nothing when the target shows %s between resolve and spawn", async (_label, changed) => {
+    const { fixture, spawned } = await recordingFixture(`probe-swap-${Object.keys(changed).join("")}`);
+    const host = syntheticProbeHost([REAL], { [LINK]: REAL });
+    let observed = 0;
+    const swapping: ProbeFileSystemV1 = {
+      ...host,
+      inspect: (path) => {
+        if (path !== REAL) return host.inspect(path);
+        observed += 1;
+        return Promise.resolve(probeObservation("file", observed === 1 ? {} : changed));
+      },
+    };
+
+    const source = await discoverSourceAgent(fixture.context, "claude", swapping);
+
+    expect(observed, "the target is observed at resolve and again at the recheck").toBe(2);
+    expect(source).toStrictEqual({ sourceAgent: "unknown", sourceAgentVersion: "unknown" });
+    expect(spawned).toStrictEqual([]);
+  });
+
+  it("records unknown and spawns nothing when an ancestor turns group-writable between resolve and spawn", async () => {
+    const { fixture, spawned } = await recordingFixture("probe-swap-ancestor");
+    const host = syntheticProbeHost([REAL], { [LINK]: REAL });
+    let observed = 0;
+    const loosening: ProbeFileSystemV1 = {
+      ...host,
+      inspect: (path) => {
+        if (path !== "/synthetic/Cellar") return host.inspect(path);
+        observed += 1;
+        return Promise.resolve(probeObservation("directory", observed === 1 ? {} : { mode: 0o775 }));
+      },
+    };
+
+    expect(await discoverSourceAgent(fixture.context, "claude", loosening)).toStrictEqual({ sourceAgent: "unknown", sourceAgentVersion: "unknown" });
+    expect(spawned).toStrictEqual([]);
+  });
+
+  it.each([
+    ["a target owned by another user", { [REAL]: probeObservation("file", { ownerUid: 502 }) }],
+    ["a group-writable target", { [REAL]: probeObservation("file", { mode: 0o775 }) }],
+    ["a setuid target", { [REAL]: probeObservation("file", { mode: 0o4755 }) }],
+    ["a target without the owner-execute bit", { [REAL]: probeObservation("file", { mode: 0o644 }) }],
+    ["an other-writable ancestor", { "/synthetic/Cellar/claude": probeObservation("directory", { mode: 0o757 }) }],
+    ["an ancestor owned by another user", { "/synthetic": probeObservation("directory", { ownerUid: 502 }) }],
+  ] as const)("records unknown and spawns nothing for %s", async (label, overrides) => {
+    const { fixture, spawned } = await recordingFixture(`probe-refuse-${label.replaceAll(" ", "-")}`);
+    const host = syntheticProbeHost([REAL], { [LINK]: REAL });
+    for (const [path, observation] of Object.entries(overrides)) host.table.set(path, observation);
+
+    expect(await discoverSourceAgent(fixture.context, "claude", host)).toStrictEqual({ sourceAgent: "unknown", sourceAgentVersion: "unknown" });
+    expect(spawned).toStrictEqual([]);
   });
 });
 
@@ -1285,4 +1459,44 @@ describe("runCapture on a V2 home", () => {
     expect(result.data.path.startsWith(quarantineDirectory(fixture))).toBe(true);
     expect(await nodeFs.readFile(fixture.paths.manifestFile, "utf8")).toBe(manifestText);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+/**
+ * NEW-128: `topicAliases` maps a physical folder to a configured topic, and the indexer admits
+ * notes there. `--note` (and `ingest`, which asks `isTopicNotePath` again) must admit the same
+ * folders, and no more: own-property lookup only, never a private folder.
+ */
+describe("--note with topicAliases (NEW-128)", () => {
+  const ALIASED = { ...DEFAULT_BRAIN_CONFIG, topicAliases: { PROJEKTY: "PROJECTS", _outputs: "DEV" } };
+
+  it.each([
+    ["PROJEKTY/x.md", true],
+    ["PROJECTS/x.md", true],
+    ["_outputs/x.md", false],
+    ["PROJEKTY/_raw/x.md", false],
+    ["__proto__/x.md", false],
+    ["constructor/x.md", false],
+    ["toString/x.md", false],
+    ["hasOwnProperty/x.md", false],
+  ] as const)("isTopicNotePath(%s) is %s", (path, admitted) => {
+    expect(isTopicNotePath(path, ALIASED)).toBe(admitted);
+  });
+
+  it("quarantines a note capture for a note in an aliased folder", async () => {
+    const fixture = await installedFixture("note-alias");
+    const config = loadConfig(await nodeFs.readFile(fixture.paths.configFile, "utf8"));
+    await nodeFs.writeFile(
+      fixture.paths.configFile,
+      serializeConfig({ ...config, brain: { ...DEFAULT_BRAIN_CONFIG, topicAliases: { PROJEKTY: "PROJECTS" } } }),
+      { mode: 0o600 },
+    );
+    await nodeFs.mkdir(join(fixture.paths.brain, "content", "PROJEKTY"), { mode: 0o700 });
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: "PROJEKTY/new-note.md" });
+
+    expect(result.ok ? result.data.note : result.error).toStrictEqual({
+      path: "PROJEKTY/new-note.md",
+      beforeSha256: null,
+    });
+  });
 });

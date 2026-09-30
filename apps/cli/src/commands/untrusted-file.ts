@@ -66,7 +66,7 @@ function isMissingEntry(error: unknown): boolean {
 }
 
 /**
- * Spec §4.2: the only reader for user, vault, vendor and override files.
+ * `threat-model.md` §5.1: the only reader for user, vault, vendor and override files.
  * `path` must be absolute; a relative path is a programming error (RangeError).
  */
 export async function readUntrustedText(

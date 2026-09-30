@@ -29,7 +29,10 @@ const envelope: CaptureEnvelopeV1 = {
   note: null,
 };
 
-/** The exact bytes this envelope rendered to before `note` existed (spec §3.2). */
+/**
+ * The exact bytes this envelope rendered to before `note` existed (`brain.md` §6.13,
+ * `CaptureEnvelopeV1.note`).
+ */
 const PRE_NOTE_FIXTURE_TEXT = [
   "---",
   "schemaVersion: 1",
@@ -136,6 +139,18 @@ describe("renderCaptureFile", () => {
     expect(frontmatter).toContain("- class: provider-token");
     expect(frontmatter).toContain("fingerprint: abcdef0123456789");
     expect(frontmatter).not.toMatch(/line|column|offset|location|value/u);
+  });
+
+  it("renders a user-pattern finding's non-secret pattern index (NEW-24, D73)", () => {
+    const { frontmatter } = split(
+      renderCaptureFile({
+        ...envelope,
+        redaction: [{ class: "user-pattern", fingerprint: "abcdef0123456789", patternIndex: 2 }],
+      }),
+    );
+
+    expect(frontmatter).toContain("- class: user-pattern");
+    expect(frontmatter).toContain("patternIndex: 2");
   });
 
   it("keeps a finding narrowed even when the caller's own object already carries a third key", () => {

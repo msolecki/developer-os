@@ -77,7 +77,7 @@ export interface AbsentManifestDependenciesV1 {
 }
 
 /**
- * A12 spec §3.2 (Spec 1 §6 amendment): the user's instruction overrides are
+ * `foundation.md` §12.1 (Spec 1 §6 amendment): the user's instruction overrides are
  * user data, never residue. The subtree is still walked with the same bounds
  * and entry rules; only its classification changes.
  */

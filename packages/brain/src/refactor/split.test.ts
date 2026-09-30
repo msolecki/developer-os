@@ -4,7 +4,7 @@ import { planRefactor } from "./plan.js";
 import { splitSlug } from "./split.js";
 import { memoryInput, noteText } from "./testing.js";
 
-/** 600 characters, but the slug is "a": only an explicit bound refuses it (spec §6.1). */
+/** 600 characters, but the slug is "a": only an explicit bound refuses it (`brain.md` §6.11). */
 const LONG_HEADING = `a${"!".repeat(599)}`;
 const PARENT_BODY = "\n## Intro\n\ni\n\n## Deep Dive\n\nd\n\n### Sub\n\ns\n\n## Next\n\nn\n";
 

@@ -82,7 +82,7 @@ describe("renderInstructionTree", () => {
     expect(renderInstructionTree(reversed(defaults), none, P)).toEqual(first);
   });
 
-  it("places each category at its §4 Claude target", () => {
+  it("places each category at its claude-adapter.md §18 target", () => {
     const render = renderInstructionTree(defaults, none, P);
     expect(render.pluginFiles.map((file) => file.path)).toEqual([
       "agents/reviewer.md",

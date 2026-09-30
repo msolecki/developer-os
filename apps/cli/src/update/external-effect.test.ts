@@ -23,7 +23,6 @@ import {
   type AllocatedLifecycleIdV1,
   type CanonicalAbsolutePathV1,
   type CodexRegistrationProjectionV1,
-  type EffectiveUidV1,
   type LifecycleCoordinatorIdV1,
   type LowerHexSha256,
   type OwnerExternalEffectIdV1,
@@ -56,10 +55,10 @@ const policy: OwnerExternalEffectProcessPolicyV1 = {
   kind: "codex_registration_refresh",
   providerProtocol: parsePositiveUInt32(1),
   executable: "pinned_codex_cli",
-  executableIdentity: { ownerUid: uid as EffectiveUidV1, mode: 493, nlink: 1, bytes: 2048, sha256: sha("synthetic codex"), dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("2") },
+  executableIdentity: { dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("2"), mode: 493, sha256: sha("synthetic codex") },
   argv: [{ kind: "literal", value: literal("plugin") }, { kind: "literal", value: literal("add") }, { kind: "token", value: "plugin_id" }, { kind: "literal", value: literal("--json") }],
   cwd: "managed_plugin_root",
-  environment: [{ name: "HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
+  environment: [{ name: "CODEX_HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
   stdin: "closed",
   network: false,
   model: false,
@@ -113,7 +112,7 @@ async function fixture(): Promise<EffectFixture> {
   };
   const planPath = updateLeafPlanPath(root, "owner_external_effect", effectId);
   await writeOwned(planPath, updateParticipantDocumentBytes(plan));
-  const planHash = updateParticipantDocumentHash(plan);
+  const planHash = updateParticipantDocumentHash("owner_external_effect", plan);
   const initial = encoder.encode(encodeCanonicalJson({ schemaVersion: 1, id: effectId, coordinatorId, planHash, phase: "planned", direction: "forward", nextTransition: 0, evidenceHash: null, createdAt: at, updatedAt: at }));
   const stagedPath = parseCanonicalAbsolutePathText(`${root}/update/initial-journals/owner_external_effect/${effectId}.json`);
   await writeOwned(stagedPath, initial);
@@ -171,7 +170,7 @@ describe("owner external effect", () => {
     expect(request).toEqual({
       executable: "/synthetic/bin/codex",
       argv: ["plugin", "add", "developer-os@developer-os", "--json"],
-      env: { HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
+      env: { CODEX_HOME: tokens.managedVendorHome, TMPDIR: tokens.privateEffectTmp },
       cwd: tokens.managedPluginRoot,
       stdin: "ignore",
       stdoutCap: 4096,

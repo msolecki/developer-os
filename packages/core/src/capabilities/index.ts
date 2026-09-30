@@ -15,14 +15,21 @@
  * the `developer-os run claude|codex` wrapper produces the same capture
  * anyway"; decision 3.1 declines that wrapper, so all that survived was advice
  * to run a command that will not exist — a state that validates while the
- * property it names is false. What is left says one of three honest things: we
- * observed it (`yes`), we could not settle it (`unknown`), or this product does
- * not touch that surface at all (`not-used`).
+ * property it names is false. What is left says one of four honest things: we
+ * observed it (`yes`), we asked and it is not there (`no`), we could not settle
+ * it (`unknown`), or this product does not touch that surface at all
+ * (`not-used`).
+ *
+ * **`no` exists because `absent` and `unavailable` are different facts**
+ * (NEW-62). Without it both adapters folded "we asked and it is not there" into
+ * the same `unknown` as "we could not ask", and `doctor` printed `skills=unknown`
+ * for a plugin verifiably not installed. `no` is reached only from an explicit
+ * `absent` observation — a key the probe never mentioned is `unknown`.
  *
  * Substituting a member rather than adding one is the mechanism: every
  * consumer of the old union is a compile error until it is updated.
  */
-export const CAPABILITY_STATES = ["yes", "unknown", "not-used"] as const;
+export const CAPABILITY_STATES = ["yes", "no", "unknown", "not-used"] as const;
 export type CapabilityState = (typeof CAPABILITY_STATES)[number];
 
 export const PROBE_OBSERVATIONS = ["observed", "absent", "unavailable"] as const;

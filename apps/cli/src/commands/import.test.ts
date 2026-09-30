@@ -358,6 +358,46 @@ describe("import from a path", () => {
     expect(await digests(fixture)).toEqual(before);
     expect(await nodeFs.readdir(outside)).toEqual([]);
   });
+
+  /**
+   * NEW-20, as `capture` pins it: the content-root link is retargeted once
+   * both proofs have resolved it. A read or write through the declared
+   * quarantine would follow the link into `elsewhere`.
+   */
+  it("refuses at exit 5 and writes nowhere when the content root is retargeted after the proof", async () => {
+    const fixture = await installed("import-symlink-swap");
+    await plant(inboxOf(fixture), { "a.md": "an observation" });
+    const content = contentOf(fixture);
+    const real = join(fixture.paths.brain, "real-content");
+    await nodeFs.rename(content, real);
+    await nodeFs.symlink(real, content);
+    const elsewhere = join(fixture.root, "elsewhere");
+    await nodeFs.mkdir(join(elsewhere, "_raw", "quarantine"), { recursive: true, mode: 0o700 });
+    const before = await nodeFs.readdir(join(real, "_raw", "quarantine"));
+
+    let swapped = false;
+    const canonicalize = async (path: string): Promise<string> => {
+      const resolved = await fixture.context.guards.canonicalize(path);
+      if (!swapped && path === inboxOf(fixture)) {
+        swapped = true;
+        await nodeFs.unlink(content);
+        await nodeFs.symlink(elsewhere, content);
+      }
+      return resolved;
+    };
+    const context: CliContext = {
+      ...fixture.context,
+      guards: { ...fixture.context.guards, canonicalize },
+    };
+
+    const result = await importWith(fixture, {}, context);
+
+    expect(swapped, "the swap must happen for the test to mean anything").toBe(true);
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    expect(await nodeFs.readdir(join(elsewhere, "_raw", "quarantine"))).toEqual([]);
+    expect(await nodeFs.readdir(join(real, "_raw", "quarantine"))).toEqual(before);
+    expect(await importJournals(fixture)).toEqual([]);
+  });
 });
 
 describe("per-file and protected refusals", () => {
@@ -442,6 +482,48 @@ describe("redaction precedes everything", () => {
       expect([...finding.matchAll(/^\s*(\w+):/gmu)].map((match) => match[1]).sort()).toEqual(["class", "fingerprint"]);
     }
     expect(JSON.stringify(result)).not.toContain(SENTINEL);
+  });
+
+  it("warns, by index and never by value, about a pattern that covers much of a file (NEW-24)", async () => {
+    const fixture = await installed("import-over-broad-redaction");
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders", "e"]\n',
+      "utf8",
+    );
+    await plant(inboxOf(fixture), { "broad.md": "see ".repeat(80) });
+
+    const result = await importWith(fixture);
+
+    expect(dataOf(result).files.map((file) => file.outcome)).toEqual(["imported"]);
+    if (!result.ok) return;
+    const warnings = result.warnings.join("\n");
+    expect(warnings).toContain("patterns[1]");
+    expect(warnings).toContain("over-broad");
+    expect(warnings).not.toContain("patterns[0]");
+    expect(warnings).not.toContain("Northwind");
+  });
+
+  it("still warns about an over-broad pattern when another file in the batch is refused (NEW-24)", async () => {
+    const fixture = await installed("import-over-broad-mixed-batch");
+    /** Not `"e"`: failure data and message pass through the user's patterns, which would redact `imported` and `over-broad` themselves. */
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders", "see"]\n',
+      "utf8",
+    );
+    await plant(inboxOf(fixture), { "broad.md": "see ".repeat(80), "empty.md": "   \n" });
+
+    const result = await importWith(fixture);
+
+    const data = failureDataOf(result) as ImportResultV1 & { readonly overBroadPatterns?: readonly number[] };
+    expect(data.files.find((file) => file.path === "broad.md")?.outcome).toBe("imported");
+    expect(data.files.find((file) => file.path === "empty.md")?.outcome).toBe("refused");
+    expect(data.overBroadPatterns).toEqual([1]);
+    if (result.ok) return;
+    expect(result.error.message).toContain("patterns[1]");
+    expect(result.error.message).toContain("over-broad");
+    expect(JSON.stringify(result)).not.toContain("Northwind");
   });
 
   it.each([["--json"], ["human"]] as const)(

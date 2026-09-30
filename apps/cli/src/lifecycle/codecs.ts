@@ -244,6 +244,7 @@ export function lifecycleManifestPlanAdmission(
       }
     },
     admitExternalEffect: (ref) => (owned.some((effect) => sameExternalEffect(effect, ref)) ? ref.id : "refused"),
+    lifecycleIdentity: "inline",
     /**
      * The staged postimage's identity is the one the plan hash binds; the participant's guarded
      * move re-proves it against the inode before the payload is published.

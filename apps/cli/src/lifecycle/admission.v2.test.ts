@@ -31,7 +31,7 @@ import type { BootstrapEvidenceInspectionRequestV1 } from "../bootstrap/report.j
 import { runDoctorReport } from "../commands/doctor.js";
 import { runInit } from "../commands/init.js";
 import { runStatus } from "../commands/status.js";
-import { manifestAdmissionFor } from "../commands/uninstall.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import {
   createCommandFixture,
   REAL_FILESYSTEM_TIMEOUT_MS,

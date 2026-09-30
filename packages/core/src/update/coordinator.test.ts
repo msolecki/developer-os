@@ -8,6 +8,10 @@ import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { updateLeafPlanPath, updateRecoveryExecutorStagedPath, type ImmutableUpdatePlanRefV1, type UpdateLeafPlanKindV1 } from "./construction.js";
 import {
   MAXIMUM_LIFECYCLE_EXECUTION_PLAN_BYTES,
+  MAXIMUM_UPDATE_COMPACTION_ENTRIES,
+  MAXIMUM_UPDATE_COORDINATOR_JOURNAL_BYTES,
+  MAXIMUM_UPDATE_COORDINATOR_STEPS,
+  MAXIMUM_UPDATE_RETIREMENT_LEAVES,
   UpdateLifecycleCoordinator,
   advanceUpdateCoordinatorJournal,
   assertUpdateCoordinatorDerivation,
@@ -17,6 +21,7 @@ import {
   initialUpdateCoordinatorJournal,
   readLifecycleExecutionPlanV2,
   updateCompensationCursor,
+  updateCoordinatorJournalBytes,
   updateCoordinatorOuterBytes,
   updateCoordinatorPlanBytes,
   updateCoordinatorPlanHash,
@@ -46,7 +51,7 @@ import { PLANNER_PROTOCOL_V1, PLANNER_WIRE_BOUNDS_V1 } from "./planner.js";
 import type { PlannerTranscriptIdentityV1 } from "./preview.js";
 import { parseRollbackPayloadId } from "./preview.js";
 import { validateReleaseIdentity, type ReleaseIdentityV1 } from "./release.js";
-import { parseLowerHexSha256, parsePositiveUInt32, parseUtcTimestamp, type LowerHexSha256 } from "./scalars.js";
+import { parseLowerHexSha256, parsePositiveUInt32, parseSafeReasonCode, parseUtcTimestamp, type LowerHexSha256 } from "./scalars.js";
 
 const nonce = "c".repeat(64);
 const coordinatorId = `lc_${nonce}_5` as LifecycleCoordinatorIdV1;
@@ -347,13 +352,16 @@ describe("UpdateLifecycleCoordinatorJournalV2", () => {
   const verifier = built.steps.findIndex((step) => step.kind === "target_verifier");
   const retire = built.steps.findIndex((step) => step.kind === "terminal_retire");
   const upTo = (index: number): UpdateCoordinatorJournalEventV1[] => [{ kind: "start" }, ...Array.from({ length: index }, (): UpdateCoordinatorJournalEventV1 => ({ kind: "step_completed" }))];
+  const active = built.steps.findIndex((step) => step.kind === "active");
+  const cause = parseSafeReasonCode("update_verifier_rejected");
+  const compensationStarted: UpdateCoordinatorJournalEventV1 = { kind: "compensation_started", cause };
 
   it("admits only the verifier's durable success as the point of no return", () => {
     expect(() => walk(built, [...upTo(verifier), { kind: "step_completed" }])).toThrow();
     const crossed = walk(built, [...upTo(verifier), { kind: "point_of_no_return" }]);
     expect(crossed.phase).toBe("verifying");
     expect(crossed.pointOfNoReturnReached).toBe(true);
-    expect(() => advanceUpdateCoordinatorJournal(built, crossed, { kind: "compensation_started" }, clock())).toThrow();
+    expect(() => advanceUpdateCoordinatorJournal(built, crossed, compensationStarted, clock())).toThrow();
   });
 
   it("bounds retirement to terminal_retire and compaction to compacting", () => {
@@ -368,8 +376,7 @@ describe("UpdateLifecycleCoordinatorJournalV2", () => {
   });
 
   it("walks the reached reverse list and terminalizes as rolled back", () => {
-    const active = built.steps.findIndex((step) => step.kind === "active");
-    let journal = advanceUpdateCoordinatorJournal(built, walk(built, upTo(active)), { kind: "compensation_started" }, clock());
+    let journal = advanceUpdateCoordinatorJournal(built, walk(built, upTo(active)), compensationStarted, clock());
     const visited: number[] = [];
     while (journal.compensationNext !== null && journal.compensationNext >= 0) {
       visited.push(journal.compensationNext);
@@ -378,7 +385,65 @@ describe("UpdateLifecycleCoordinatorJournalV2", () => {
     expect(visited.map((index) => (built.steps[index] as UpdateLifecycleCoordinatorStepV1).kind)).not.toContain("trust");
     expect(visited[0]).toBe(active);
     journal = advanceUpdateCoordinatorJournal(built, journal, { kind: "rolled_back" }, clock());
-    expect(journal).toMatchObject({ phase: "rolled_back", terminalOutcome: "rolled_back", compensationNext: -1 });
+    expect(journal).toMatchObject({ phase: "rolled_back", terminalOutcome: "rolled_back", compensationNext: -1, compensationCause: cause });
+  });
+
+  it("keeps the compensation cause null while forward and writes it with compensation_started (P7(b))", () => {
+    const forward = walk(built, upTo(active));
+    expect(forward.compensationCause).toBeNull();
+    const compensating = advanceUpdateCoordinatorJournal(built, forward, compensationStarted, clock());
+    expect(compensating).toMatchObject({ direction: "compensating", phase: "compensating", compensationCause: cause });
+    expect(validateUpdateCoordinatorJournal(JSON.parse(encodeCanonicalJson(compensating as unknown as CanonicalJsonValue)), built, compensating.planHash)).toEqual(compensating);
+    const crossed = advanceUpdateCoordinatorJournal(built, walk(built, [...upTo(verifier), { kind: "point_of_no_return" }]), { kind: "step_completed" }, clock());
+    expect(crossed.compensationCause).toBeNull();
+  });
+
+  it("reserves room in the plan's own journal bound for every journal, including the widest cause", () => {
+    const widestCause = { kind: "compensation_started", cause: parseSafeReasonCode("a".repeat(64)) } as const;
+    for (const journal of [walk(built, upTo(1)), advanceUpdateCoordinatorJournal(built, walk(built, upTo(active)), widestCause, clock())]) {
+      expect(() => updateCoordinatorJournalBytes(built, journal)).not.toThrow();
+    }
+  });
+
+  it("refuses a compensating journal without a cause and a forward journal with one", () => {
+    const forward = walk(built, upTo(active));
+    const compensating = advanceUpdateCoordinatorJournal(built, forward, compensationStarted, clock());
+    let rolledBack = compensating;
+    while (rolledBack.compensationNext !== null && rolledBack.compensationNext >= 0) rolledBack = advanceUpdateCoordinatorJournal(built, rolledBack, { kind: "compensation_step_completed" }, clock());
+    rolledBack = advanceUpdateCoordinatorJournal(built, rolledBack, { kind: "rolled_back" }, clock());
+    const compactingRolledBack = advanceUpdateCoordinatorJournal(built, rolledBack, { kind: "compaction_started" }, clock());
+    for (const broken of [
+      { ...compensating, compensationCause: null },
+      { ...rolledBack, compensationCause: null },
+      { ...compactingRolledBack, compensationCause: null },
+      { ...forward, compensationCause: cause },
+      { ...compensating, compensationCause: "Not-Safe" },
+      { ...compensating, compensationCause: "x".repeat(65) },
+    ]) {
+      expect(() => validateUpdateCoordinatorJournal(broken, built, forward.planHash)).toThrow();
+    }
+    const legacy: Record<string, unknown> = { ...compensating };
+    delete legacy.compensationCause;
+    expect(() => validateUpdateCoordinatorJournal(legacy, built, forward.planHash)).toThrow();
+  });
+
+  it("keeps the journal at its widest values within the 1 MiB bound", () => {
+    const widest = {
+      ...walk(built, upTo(active)),
+      phase: "terminal_finalizing",
+      direction: "compensating",
+      nextStep: MAXIMUM_UPDATE_COORDINATOR_STEPS,
+      compensationNext: MAXIMUM_UPDATE_COORDINATOR_STEPS - 1,
+      pointOfNoReturnReached: false,
+      terminalOutcome: "rolled_back",
+      compensationCause: "a".repeat(64),
+      retirementNext: MAXIMUM_UPDATE_RETIREMENT_LEAVES,
+      compactionNext: MAXIMUM_UPDATE_COMPACTION_ENTRIES,
+    } as const;
+    const bytes = new TextEncoder().encode(`${encodeCanonicalJson(widest)}\n`);
+    expect(bytes.byteLength).toBeLessThanOrEqual(MAXIMUM_UPDATE_COORDINATOR_JOURNAL_BYTES);
+    expect(built.maximumJournalBytes).toBeLessThanOrEqual(MAXIMUM_UPDATE_COORDINATOR_JOURNAL_BYTES);
+    expect(updateCoordinatorJournalBytes(built, advanceUpdateCoordinatorJournal(built, walk(built, upTo(active)), { kind: "compensation_started", cause: parseSafeReasonCode("a".repeat(64)) }, clock())).byteLength).toBeLessThan(bytes.byteLength);
   });
 
   it("refuses mismatched identities, leaps, and unused non-null cursors", () => {
@@ -470,6 +535,7 @@ async function interruptUpdateCoordinator(
         journal = null;
         return Promise.resolve();
       },
+      removeRewriteTemps: () => Promise.resolve(),
     },
     participants: {
       apply: (step) => {
@@ -595,6 +661,15 @@ describe("UpdateLifecycleCoordinator", () => {
     const fixture = await interruptUpdateCoordinator(point, "active");
     const outcome = await fixture.recoverWithoutNetwork();
     expect(outcome === null || outcome.kind === "rolled_back").toBe(true);
+    if (outcome !== null) expect(outcome).toEqual({ kind: "rolled_back", id: coordinatorId, cause: "synthetic_step_failed" });
+    expect(await fixture.assertExpectedTerminal()).toBe(true);
+  });
+
+  it.each(compensationDeathPoints)("resumes a verifier rejection killed at $name with the persisted cause (Review Focus 4)", async (point) => {
+    const fixture = await interruptUpdateCoordinator(point, "target_verifier", () => Promise.reject(new UpdateStepRejectedError("update_verifier_rejected", [])));
+    expect(fixture.firstRun.error).toBeInstanceOf(Killed);
+    expect(fixture.firstRun.journal?.compensationCause).toBe("update_verifier_rejected");
+    expect(await fixture.recoverWithoutNetwork()).toEqual({ kind: "rolled_back", id: coordinatorId, cause: "update_verifier_rejected" });
     expect(await fixture.assertExpectedTerminal()).toBe(true);
   });
 

@@ -1,12 +1,9 @@
-import { stat } from "node:fs/promises";
+import { readlink, stat } from "node:fs/promises";
 import { homedir, release } from "node:os";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
-import {
-  canonicalizePlannedPath,
-  type ProcessRunner,
-} from "@developer-os/security";
+import { canonicalizePlannedPath, type ProcessRunner } from "@developer-os/security";
 
 import type {
   AgentDiscovery,
@@ -24,6 +21,8 @@ const PROPOSED_BRAIN_DIRECTORY = "DeveloperBrain";
 const AGENT_NAMES: readonly string[] = ["claude", "codex"];
 const UNUSABLE_PATH_CHARACTERS = /\p{Cc}/u;
 const REDACTION_MARKER = "[REDACTED:";
+/** macOS `MAXSYMLINKS`: the kernel's own limit before `ELOOP`. */
+const MAX_SYMLINK_HOPS = 32;
 
 export class MacOsPlatformUnsupportedError extends Error {
   readonly code = EXIT_CODES.capabilityUnavailable;
@@ -85,6 +84,8 @@ export interface MacOsPlatformAdapterOptions {
    * whole `Stats`.
    */
   readonly stat?: (path: string) => Promise<{ uid: number; mode: number }>;
+  /** A link's target, `null` when the path is not a link, and a rejection otherwise. */
+  readonly readlink?: (path: string) => Promise<string | null>;
   readonly currentUid?: () => number;
 }
 
@@ -102,20 +103,13 @@ function nodeEnvironment(): MacOsPlatformEnvironment {
   };
 }
 
-/**
- * The resolved path and every ancestor up to `/`, deepest first. Deepest first so a
- * refusal names the most specific offending component, which is the one a user can act on.
- */
-function ancestorsOf(resolved: string): readonly string[] {
-  const chain: string[] = [];
-  let current = normalize(resolved);
-  for (;;) {
-    chain.push(current);
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
+async function readlinkOrNull(path: string): Promise<string | null> {
+  try {
+    return await readlink(path);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "EINVAL") return null;
+    throw error;
   }
-  return chain;
 }
 
 function missingAgent(name: AgentName): AgentDiscovery {
@@ -176,6 +170,7 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
 
   readonly #canonicalize: (path: string) => Promise<string>;
   readonly #stat: (path: string) => Promise<{ uid: number; mode: number }>;
+  readonly #readlink: (path: string) => Promise<string | null>;
   readonly #currentUid: () => number;
 
   constructor(options: MacOsPlatformAdapterOptions) {
@@ -191,6 +186,7 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
         const stats = await stat(path);
         return { uid: stats.uid, mode: stats.mode };
       });
+    this.#readlink = options.readlink ?? readlinkOrNull;
     this.#currentUid = options.currentUid ?? (() => process.getuid?.() ?? -1);
   }
 
@@ -247,15 +243,59 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
     return { name, installed: true, executablePath, version: null };
   }
 
-  /** Canonicalizes, or refuses: a path that cannot be resolved cannot be vouched for. */
-  async #resolveOrRefuse(path: string): Promise<string> {
-    try {
-      return await this.#canonicalize(path);
-    } catch {
-      throw new MacOsPlatformTrustError(
-        `The executable could not be verified: ${path} cannot be resolved`,
-      );
+  /**
+   * **Resolves the way the kernel does, one component at a time**, and returns every real
+   * directory the resolution passed through — among them the directory holding each
+   * intermediate link, which canonicalizing the declared and resolved paths as wholes
+   * never visits (BACKLOG NEW-32). `..` climbs from the real directory reached so far,
+   * never lexically: `link/..` means the link target's parent, not the link's.
+   *
+   * **Every resolver failure is a refusal**, not a raw filesystem error: `ENOENT`,
+   * `EACCES` and a loop past the kernel's own limit carry string codes that would
+   * otherwise fall through `exitCodeOf` as an operational failure, and an attacker who
+   * can write a PATH directory would pick which exit the user sees.
+   */
+  async #resolveStepwise(
+    path: string,
+  ): Promise<{ resolved: string; visited: readonly string[] }> {
+    const pending = path.split("/");
+    const visited = ["/"];
+    let current = "/";
+    let hops = 0;
+    for (
+      let component = pending.shift();
+      component !== undefined;
+      component = pending.shift()
+    ) {
+      if (component === "" || component === ".") continue;
+      if (component === "..") {
+        current = dirname(current);
+        continue;
+      }
+      const candidate = join(current, component);
+      let target: string | null;
+      try {
+        target = await this.#readlink(candidate);
+      } catch {
+        throw new MacOsPlatformTrustError(
+          `The executable could not be verified: ${candidate} cannot be resolved`,
+        );
+      }
+      if (target === null) {
+        current = candidate;
+        visited.push(current);
+        continue;
+      }
+      hops += 1;
+      if (hops > MAX_SYMLINK_HOPS) {
+        throw new MacOsPlatformTrustError(
+          `The executable could not be verified: ${path} has too many symbolic links`,
+        );
+      }
+      if (isAbsolute(target)) current = "/";
+      pending.unshift(...target.split("/"));
     }
+    return { resolved: current, visited };
   }
 
   /**
@@ -289,18 +329,20 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
    * **It fails closed.** An ancestor that cannot be inspected is a refusal, because a
    * check that treats "I could not look" as "it is fine" is not a check.
    *
-   * **Three residuals, none of them closable here, in the order a reader should fix
-   * them** — an earlier version led with the least of the three. **A middle symlink hop**
-   * (BACKLOG NEW-32) is a working bypass and needs no race: a declared path resolving
-   * through a directory the attacker owns before reaching a trusted target is on none of
-   * the three chains, because closing it needs stepwise `readlink` resolution rather than
-   * two canonicalizations. **macOS ACLs are invisible to mode bits**: a directory can be
-   * `0755` and writable by another user through an ACL entry, which `stat().mode` cannot
-   * see, so this check is a floor rather than a proof. And the **check-then-use window**
-   * (BACKLOG NEW-35) is the weakest: the target is resolved and checked, then executed by
-   * path, and closing it needs an exec-by-descriptor this runtime does not offer. It is
-   * **not** NEW-20 — this sentence said it was, and NEW-32's own row corrects the
-   * conflation: NEW-20 is `capture`'s quarantine race, on a path only the user can write.
+   * **Every hop is inspected (BACKLOG NEW-32).** The first version walked three chains —
+   * the resolved target's, the declared directory's, and that directory canonicalized —
+   * and a declared path resolving *through* a directory the attacker owns before reaching
+   * a trusted target was on none of them: a working bypass needing no race. The path is
+   * now resolved component by component and every real directory the resolution enters
+   * is checked, including the one holding each intermediate link, file or directory.
+   *
+   * **Two residuals, none of them closable here.** **macOS ACLs are invisible to mode
+   * bits**: a directory can be `0755` and writable by another user through an ACL entry,
+   * which `stat().mode` cannot see, so this check is a floor rather than a proof. And the
+   * **check-then-use window** (BACKLOG NEW-35): the target is resolved and checked, then
+   * executed by path, and closing it needs an exec-by-descriptor this runtime does not
+   * offer. It is **not** NEW-20, which is `capture`'s quarantine race on a path only the
+   * user can write.
    */
   async assertTrustedExecutable(path: string): Promise<void> {
     this.#assertSupportedPlatform();
@@ -311,50 +353,17 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
     }
 
     /**
-     * **The resolver is wrapped too, and leaving it unwrapped made "fails closed" only
-     * half true.** `realpath` raises `ELOOP` on a symlink loop and `EACCES` on an
-     * unsearchable directory, and those errors carry a *string* `code` — so they fell
-     * through `exitCodeOf`'s numeric check and surfaced as an operational failure at
-     * exit 1 rather than the security refusal at exit 5. An attacker who can write a
-     * directory on `PATH` plants a loop named `claude` and picks which of those the user
-     * sees. Nothing untrusted ran either way; what leaked was the product's own account
-     * of why it stopped.
+     * **The directories the resolution entered, not the links it read, because the caller
+     * executes the *declared* path.** A link in a directory the attacker owns is
+     * retargeted after the check and before the spawn, however trusted its target was at
+     * check time; they own that directory permanently, so they lose nothing by losing a
+     * round. A link's own entry is skipped: its mode is not meaningful on macOS, and
+     * refusing links is the policy that was withdrawn. Latest entered first, so a refusal
+     * names the component nearest the executable, which is the one a user can act on.
      */
-    const resolved = await this.#resolveOrRefuse(path);
+    const { resolved, visited } = await this.#resolveStepwise(path);
     const uid = this.#currentUid();
-
-    /**
-     * **Both chains, because the caller executes the *declared* path.** Checking only the
-     * resolved chain left the hole this guard exists to close: a symlink in a directory
-     * the attacker owns, pointing at a trusted target, passed — a real file in the same
-     * directory was refused — and the attacker retargets the link after the check and
-     * before the spawn. They own that directory permanently, so they lose nothing by
-     * losing a round.
-     *
-     * The declared path's own entry is skipped: a symbolic link's mode is not meaningful
-     * on macOS and refusing links is the policy that was withdrawn. What matters is the
-     * **directory holding it, and the real directory that one resolves to** — see the
-     * third chain below, and the residual for what a *middle* hop can still hide.
-     */
-    /**
-     * **Three chains, and the third exists because `ancestorsOf` is string arithmetic
-     * while `stat` follows links.** Walking the declared path's parents *lexically* sees
-     * a symlinked directory component's **target** mode and then keeps climbing the
-     * link's own parents — so an attacker-owned directory the link points *into* is
-     * visited by nobody. A PATH directory that is itself a symlink into a world-writable
-     * one was accepted with the first two chains alone.
-     *
-     * Canonicalizing the declared directory drags that target's real parents into the
-     * walk. On an ordinary install it changes nothing — `~/.local/bin` and
-     * `/opt/homebrew/bin` canonicalize to themselves — so both vendors and every
-     * `brew install` still pass.
-     */
-    const declaredDirectory = dirname(normalize(path));
-    const chain = new Set([
-      ...ancestorsOf(resolved),
-      ...ancestorsOf(declaredDirectory),
-      ...ancestorsOf(await this.#resolveOrRefuse(declaredDirectory)),
-    ]);
+    const chain = [...new Set(visited)].reverse();
 
     /**
      * **A trusted *executable*, not merely a trusted path.** Without this,

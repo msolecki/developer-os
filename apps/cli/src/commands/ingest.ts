@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { rm, symlink } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { getuid } from "node:process";
@@ -7,6 +7,7 @@ import { getuid } from "node:process";
 import {
   CODEX_INGEST_AUTH_LINK,
   CODEX_INGEST_HOME_RELATIVE_PATH,
+  CODEX_INGEST_HOME_REPAIR,
   containsPath,
   EXIT_CODES,
   inspectCodexIngestHomeShape,
@@ -47,7 +48,7 @@ import type {
 } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
 import { createRedactor } from "@developer-os/security";
-import type { Redactor } from "@developer-os/security";
+import type { RedactionScope, Redactor } from "@developer-os/security";
 import { resolveScopeGlob } from "@developer-os/workflow-schema";
 
 import {
@@ -306,7 +307,7 @@ const UNTOUCHED_RECOVERY =
 /**
  * A note capture refused as `note_changed_since_capture` is also left untouched, but
  * `UNTOUCHED_RECOVERY`'s "the next run tries it again" is false for it: the bound hash never
- * changes, so every rerun refuses the same way (spec §3.4).
+ * changes, so every rerun refuses the same way (`brain.md` §6.13, verbatim ingest).
  */
 const NOTE_CHANGED_RECOVERY =
   "a capture refused as note_changed_since_capture was written against a note that has changed since, and running ingest again refuses it the same way: developer-os review --id <id> --decision reject, then run the workflow again against the current note";
@@ -655,8 +656,9 @@ async function selectCaptures(
     if (!outcome.ok) {
       const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
       unreadable.push({ captureId, status: "failed", notes: [] });
+      /** NEW-38: a message, so the name renders through `renderPath`; `captureId` above stays byte-exact. */
       warnings.push(
-        `${fileName} is not a readable capture (${outcome.reason}), so it is failed rather than waiting to be ingested`,
+        `${renderPath(fileName)} is not a readable capture (${outcome.reason}), so it is failed rather than waiting to be ingested`,
       );
       continue;
     }
@@ -829,7 +831,7 @@ function errnoCode(error: unknown): string {
  * `--ignore-user-config` leaves auth on `$CODEX_HOME`, which derives from
  * `$HOME`. NEW-75 is the row for that; see `docs/architecture/vendor-invocation.md`.
  */
-const AGENT_WORKSPACE_LEAF = "developer-os-agent-workspace";
+const AGENT_WORKSPACE_PREFIX = "developer-os-agent-workspace-";
 
 /**
  * **The directory travels as a `path`, never inside the message.** `failureFrom`
@@ -867,34 +869,22 @@ function workspaceRefusal(workspace: string, complaint: string): IngestRefusal {
  * before the vendor branch instead, it refused the default vendor over a path that
  * run does not use.
  *
- * `mkdir` with `recursive` reports success on an existing directory *and*
- * follows a symlink at the leaf, and it does not re-apply `mode` to something
- * already there — so it settles almost nothing on its own. The `lstat` after it
- * is what decides, and it decides on the link rather than its target.
+ * **One leaf per run, removed after it (NEW-76).** The name carries a random
+ * UUID and `mkdir` runs without `recursive`, so a path that already exists —
+ * a symlink, or a directory another local user pre-created on a shared `/tmp`
+ * (what `tmpdir()` falls back to under launchd, cron or a container) — fails
+ * `EEXIST` instead of being adopted. That is `mkdtemp`'s property, bought through
+ * the `CliFileSystem.mkdir` the injected filesystems already carry. The caller
+ * removes the leaf with `removeAgentWorkspace` once the child exits.
  *
- * **Ownership and mode are checked because the path is predictable.**
- * `tmpdir()` reads `$TMPDIR` and falls back to `/tmp` when it is unset, which is
- * what a launchd daemon, a cron entry or a container gives this process. On a
- * shared `/tmp` another local user can pre-create this exact name; without these
- * two checks `recursive: true` would swallow the `EEXIST` and hand the agent a
- * directory somebody else controls.
- *
- * **Why a fixed name and not `mkdtemp`, now that nothing reuses this directory.**
- * `mkdtemp` would be stronger on every axis this function defends: it creates
- * `0o700` atomically, fails rather than adopting an existing path, and produces
- * an unguessable name no other user can pre-create, which would retire the two
- * checks above rather than merely satisfy them. It is not used because it is not
- * on `CliFileSystem`, and widening that interface obliges every injected
- * filesystem in the suite to grow a method — a Foundation-shaped change to buy a
- * property two `lstat` fields already establish. Recorded so the next reader
- * knows the trade was made and not missed.
- *
- * The `mkdir`→`lstat` window stays open, and it is the smaller of two: the one
- * that matters is `lstat` → the vendor's own `open`, which no flag available to
- * this process can close.
+ * The `lstat` after it still decides, on the link rather than its target:
+ * a real directory, owned by this user, reachable by nobody else. The
+ * `mkdir`→`lstat` window stays open, and it is the smaller of two: the one that
+ * matters is `lstat` → the vendor's own `open`, which no flag available to this
+ * process can close.
  */
 export async function prepareAgentWorkspace(context: CliContext): Promise<string> {
-  const workspace = join(tmpdir(), AGENT_WORKSPACE_LEAF);
+  const workspace = join(tmpdir(), `${AGENT_WORKSPACE_PREFIX}${randomUUID()}`);
 
   /**
    * `tmpdir()` returns `$TMPDIR` verbatim, so a relative one makes this path
@@ -909,7 +899,7 @@ export async function prepareAgentWorkspace(context: CliContext): Promise<string
 
   let stats;
   try {
-    await context.fs.mkdir(workspace, { recursive: true, mode: 0o700 });
+    await context.fs.mkdir(workspace, { mode: 0o700 });
     stats = await context.fs.lstat(workspace);
   } catch (error) {
     throw workspaceRefusal(workspace, `could not be prepared (${errnoCode(error)})`);
@@ -922,32 +912,47 @@ export async function prepareAgentWorkspace(context: CliContext): Promise<string
   return workspace;
 }
 
+/** NEW-76: best effort, because a leftover leaf is unique to its run and never reused. */
+async function removeAgentWorkspace(workspace: string): Promise<void> {
+  await rm(workspace, { recursive: true, force: true }).catch(() => undefined);
+}
+
 function codexIngestHomeRefusal(path: string, complaint: string): IngestRefusal {
   return new IngestRefusal(
     EXIT_CODES.operationalFailure,
     `the isolated Codex home this run gives the agent ${complaint}`,
     [path],
-    "if the path this run names is a regular auth.json, Codex may have refreshed your credential there: move it over the auth.json in your own Codex home; otherwise remove the path this run names, and ingest recreates what it needs",
+    CODEX_INGEST_HOME_REPAIR,
   );
 }
 
+/** NEW-105: the prefix of each run's own `CODEX_HOME` under `state/codex-ingest-home`. */
+const CODEX_INGEST_RUN_PREFIX = "run-";
+
 /**
- * D52 (BACKLOG NEW-102): the `CODEX_HOME` an ingest run hands Codex, reconciled on every run.
- * Given the user's own Codex home, Codex loads its `AGENTS.md` (the product's instruction block
- * among it) and `agents/*.toml` roles into the request even under `--ignore-user-config
- * --ignore-rules` (codex-adapter.md §15), which breaks D8. This directory holds, at rest, only a
- * symlink `auth.json` to the user's resolved credential. The credential is never read or copied:
- * its presence is a `stat`, and the link is the only thing written.
+ * D52 (BACKLOG NEW-102): the `CODEX_HOME` an ingest run hands Codex. Given the user's own Codex
+ * home, Codex loads its `AGENTS.md` (the product's instruction block among it) and `agents/*.toml`
+ * roles into the request even under `--ignore-user-config --ignore-rules` (codex-adapter.md §15),
+ * which breaks D8.
  *
- * - Anything besides that one symlink is refused, never repaired: `sweepCodexIngestHome` removes
- *   Codex's own run residue after each run, so a leftover means a crashed run or a third party.
- * - A link whose target changed (a new `CODEX_HOME`) is re-pointed. With no credential the link is
- *   dropped and the run goes ahead, so Codex refuses on missing auth exactly as it did before.
- * - `symlink` and `rm` come from `node:fs/promises` because `CliFileSystem` carries neither.
+ * NEW-105: every run gets its own `mkdtemp` directory `run-XXXXXX` under the isolated home, holding
+ * only a fresh symlink `auth.json` to the user's resolved credential, so concurrent ingests never
+ * share Codex state. The credential is never read or copied: its presence is a `stat`, and the
+ * link is the only thing written. At rest the isolated home is empty.
+ *
+ * - The isolated home itself must be a private directory this user owns. Its children may be
+ *   sibling runs (owned directories, left alone: one may be live) and a pre-NEW-105 `auth.json`
+ *   link, which is unlinked; anything else is refused, never repaired.
+ * - A sibling whose `auth.json` is no longer a link may hold a credential Codex refreshed, so it is
+ *   refused by name rather than ignored or deleted.
+ * - With no credential no link is made and the run goes ahead, so Codex refuses on missing auth
+ *   exactly as it did before.
+ * - `mkdtemp`, `symlink` and `rm` come from `node:fs/promises` because `CliFileSystem` carries none.
  */
 export async function prepareCodexIngestHome(context: CliContext): Promise<string> {
   const home = join(context.paths.home, CODEX_INGEST_HOME_RELATIVE_PATH);
   const link = join(home, CODEX_INGEST_AUTH_LINK);
+  const effectiveUid = getuid?.() ?? -1;
   const credential = join(
     resolveVendorHomes(context.env, context.userHome, context.paths.home).codexHome,
     CODEX_INGEST_AUTH_LINK,
@@ -974,7 +979,13 @@ export async function prepareCodexIngestHome(context: CliContext): Promise<strin
           ownerUid: stats.uid,
           mode: stats.mode & 0o777,
         };
-  const shape = inspectCodexIngestHomeShape(entry(directoryStats), names, () => entry(linkStats), getuid?.() ?? -1);
+  const runs = names.filter((name) => name.startsWith(CODEX_INGEST_RUN_PREFIX));
+  const shape = inspectCodexIngestHomeShape(
+    entry(directoryStats),
+    names.filter((name) => !runs.includes(name)),
+    () => entry(linkStats),
+    effectiveUid,
+  );
   if (!shape.admitted) {
     throw codexIngestHomeRefusal(
       shape.offendingName === null ? home : join(home, shape.offendingName),
@@ -983,39 +994,90 @@ export async function prepareCodexIngestHome(context: CliContext): Promise<strin
         : "holds an entry it never keeps",
     );
   }
+  for (const name of runs) {
+    const sibling = join(home, name);
+    if (await admitSiblingRun(context, sibling, effectiveUid)) {
+      context.io.stderr(
+        `warning: ${renderPath(sibling)} belongs to another ingest; if none is running, an interrupted one left it with that run's Codex state, and uninstall and init refuse until it is removed: remove it`,
+      );
+    }
+  }
 
   const present = await context.fs.stat(credential).then(
     () => true,
     () => false,
   );
+  let runHome: string;
   try {
-    const current = linkStats === null ? null : await context.fs.readlink(link);
-    const wanted = present ? credential : null;
-    if (current !== wanted) {
-      if (current !== null) await context.fs.unlink(link);
-      if (wanted !== null) await symlink(wanted, link);
+    /** A concurrent run may unlink the legacy link first. */
+    if (linkStats !== null) {
+      await context.fs.unlink(link).catch((error: unknown) => {
+        if (errnoCode(error) !== "ENOENT") throw error;
+      });
     }
+    runHome = await mkdtemp(join(home, CODEX_INGEST_RUN_PREFIX));
   } catch (error) {
-    throw codexIngestHomeRefusal(link, `could not link the Codex credential (${errnoCode(error)})`);
+    throw codexIngestHomeRefusal(home, `could not be prepared (${errnoCode(error)})`);
   }
-  return home;
+  try {
+    if (present) await symlink(credential, join(runHome, CODEX_INGEST_AUTH_LINK));
+  } catch (error) {
+    await rm(runHome, { recursive: true, force: true }).catch(() => undefined);
+    throw codexIngestHomeRefusal(runHome, `could not link the Codex credential (${errnoCode(error)})`);
+  }
+  return runHome;
 }
 
 /**
- * Removes what Codex wrote into the isolated home during the run (codex-adapter.md §15 D52 lists
- * it: sqlite state, `installation_id`, `shell_snapshots/`, `skills/.system/`, `tmp/`, `.tmp/`), so
- * the resting shape is again the one `prepareCodexIngestHome` and uninstall admit. `rm` unlinks a
- * symlink rather than following it, and `auth.json` is never touched here — if Codex replaced the
- * link with a file, that file may be a refreshed credential, and the next run refuses naming it
- * rather than deleting it. A failed sweep is not fatal: the next run refuses on the residue.
+ * NEW-105: a sibling run directory may belong to an ingest running right now, so only what would
+ * make it unsafe is checked. A sibling that vanished between `readdir` and `lstat` finished its run,
+ * and is reported absent.
  */
-export async function sweepCodexIngestHome(context: CliContext, home: string): Promise<void> {
+async function admitSiblingRun(context: CliContext, path: string, effectiveUid: number): Promise<boolean> {
+  const absent = (error: unknown): null => {
+    if (errnoCode(error) === "ENOENT") return null;
+    throw error;
+  };
+  let stats;
+  let auth;
   try {
-    for (const name of await context.fs.readdir(home)) {
-      if (name !== CODEX_INGEST_AUTH_LINK) await rm(join(home, name), { recursive: true, force: true });
+    stats = await context.fs.lstat(path).catch(absent);
+    auth = stats?.isDirectory() === true ? await context.fs.lstat(join(path, CODEX_INGEST_AUTH_LINK)).catch(absent) : null;
+  } catch (error) {
+    throw codexIngestHomeRefusal(path, `could not be prepared (${errnoCode(error)})`);
+  }
+  if (stats === null) return false;
+  if (!stats.isDirectory() || stats.isSymbolicLink() || stats.uid !== effectiveUid) {
+    throw codexIngestHomeRefusal(path, "holds an entry it never keeps");
+  }
+  if (auth !== null && !auth.isSymbolicLink()) {
+    throw codexIngestHomeRefusal(join(path, CODEX_INGEST_AUTH_LINK), "holds an entry it never keeps");
+  }
+  return true;
+}
+
+/**
+ * Removes this run's `CODEX_HOME` and everything Codex wrote into it (codex-adapter.md §15 D52
+ * lists it: sqlite state, `installation_id`, `shell_snapshots/`, `skills/.system/`, `tmp/`,
+ * `.tmp/`). `rm` unlinks a symlink rather than following it. If Codex replaced the `auth.json`
+ * link with a file, that file may be a refreshed credential: it is kept, with its run directory,
+ * and the next run refuses naming it rather than deleting it. A failed sweep is not fatal.
+ */
+export async function sweepCodexIngestHome(context: CliContext, runHome: string): Promise<void> {
+  try {
+    const auth = await context.fs.lstat(join(runHome, CODEX_INGEST_AUTH_LINK)).catch((error: unknown) => {
+      if (errnoCode(error) === "ENOENT") return null;
+      throw error;
+    });
+    if (auth === null || auth.isSymbolicLink()) {
+      await rm(runHome, { recursive: true, force: true });
+      return;
+    }
+    for (const name of await context.fs.readdir(runHome)) {
+      if (name !== CODEX_INGEST_AUTH_LINK) await rm(join(runHome, name), { recursive: true, force: true });
     }
   } catch {
-    // ponytail: best effort; the next prepareCodexIngestHome names what is left.
+    // ponytail: best effort; uninstall names a leftover run directory.
   }
 }
 
@@ -1048,11 +1110,30 @@ export async function sweepCodexIngestHome(context: CliContext, home: string): P
  * here because a reader will otherwise assume both calls are constrained the
  * same way.
  */
-/** D52: Codex runs with the isolated home as its `CODEX_HOME`, swept whatever the outcome. */
-async function invokeIsolatedCodex(
+/** NEW-76: ingest's scratch working root is this run's own leaf, removed whatever the outcome. */
+async function invokeCodexInWorkspace(
   context: CliContext,
-  invocation: Omit<Parameters<typeof invokeCodex>[1], "codexHome">,
+  invocation: Omit<Parameters<typeof invokeCodex>[1], "codexHome" | "workingRoot">,
   installation: Parameters<typeof invokeCodex>[0],
+  dependencies: Parameters<typeof invokeCodex>[2],
+): ReturnType<typeof invokeCodex> {
+  const workingRoot = await prepareAgentWorkspace(context);
+  try {
+    return await invokeIsolatedCodex(context, installation, { ...invocation, workingRoot }, dependencies);
+  } finally {
+    await removeAgentWorkspace(workingRoot);
+  }
+}
+
+/**
+ * D52, D73 (NEW-106): the one door every product Codex call goes through, ingest's and a workflow
+ * `agent.prompt` step's alike. Codex runs with its own per-run home under `state/codex-ingest-home`
+ * as `CODEX_HOME`, swept whatever the outcome; `invokeCodex` refuses a call without one.
+ */
+export async function invokeIsolatedCodex(
+  context: CliContext,
+  installation: Parameters<typeof invokeCodex>[0],
+  invocation: Omit<Parameters<typeof invokeCodex>[1], "codexHome">,
   dependencies: Parameters<typeof invokeCodex>[2],
 ): ReturnType<typeof invokeCodex> {
   const codexHome = await prepareCodexIngestHome(context);
@@ -1091,9 +1172,8 @@ async function invokeVendor(
           },
           dependencies,
         )
-      : await invokeIsolatedCodex(context, {
+      : await invokeCodexInWorkspace(context, {
           prompt,
-          workingRoot: await prepareAgentWorkspace(context),
           writeScopes: [],
           outputSchemaPath: schemaPath,
           timeoutMs: INGEST_TIMEOUT_MS,
@@ -1139,7 +1219,9 @@ async function invokeVendor(
   const detail = result.reason === "refused" ? `: ${result.detail}` : "";
   throw new IngestRefusal(
     EXIT_CODES.operationalFailure,
-    `the ${vendor.name} agent did not return a usable proposal (${result.reason}${detail})`,
+    result.reason === "vendor-error"
+      ? `the ${vendor.name} agent reported an error (vendor-error); check that \`${vendor.name}\` is logged in`
+      : `the ${vendor.name} agent did not return a usable proposal (${result.reason}${detail})`,
     [],
     RETRY_LATER,
   );
@@ -1265,8 +1347,8 @@ async function exists(context: CliContext, path: string): Promise<boolean> {
  * existing notes. The refusal is raised before the transaction so the user meets
  * a sentence about their own vault rather than a `TransactionPlanError`.
  *
- * **The one exception is a note capture (spec §3.4)**, where a person reviewed the exact
- * bytes: its bound destination is a `replace` carrying the capture-time hash as
+ * **The one exception is a note capture (`brain.md` §6.13, verbatim ingest)**, where a
+ * person reviewed the exact bytes: its bound destination is a `replace` carrying the capture-time hash as
  * `expectedBeforeHash`, or a `create` that refuses as `note_changed_since_capture`.
  *
  * **No `validateChangePlan`**, for the reason a capture skips it: a note is the
@@ -1486,9 +1568,10 @@ async function leftAtOf(
 /* ------------------------------------------------------------ one capture */
 
 /**
- * Spec §3.4's precondition, checked before the capture is staged: the destination still
- * holds the bytes `capture --note` hashed, or is still absent for a create. Any mismatch,
- * including a replaced note that is now gone, is `note_changed_since_capture`.
+ * The verbatim-ingest precondition (`brain.md` §6.13), checked before the capture is
+ * staged: the destination still holds the bytes `capture --note` hashed, or is still
+ * absent for a create. Any mismatch, including a replaced note that is now gone, is
+ * `note_changed_since_capture`.
  */
 async function assertNoteUnchanged(
   context: CliContext,
@@ -1530,10 +1613,12 @@ interface IngestEnvironment {
   readonly vendor: Vendor | null;
   readonly ingestContract: readonly string[];
   /**
-   * Read once here, from the vault's own index, rather than once per capture
-   * — see `readIndexExcerpt`, which reads it and is called once in `runIngest`.
+   * Read at run setup and re-read after each capture that wrote notes, so a later
+   * capture sees what an earlier one created (BACKLOG NEW-116) — see `readIndexExcerpt`.
    */
   readonly indexExcerpt: readonly IndexExcerptEntryV1[];
+  /** Note paths written earlier in this run, in write order (BACKLOG NEW-116). */
+  readonly takenPaths: readonly string[];
 }
 
 /**
@@ -1580,7 +1665,8 @@ async function ingestOne(
   environment: IngestEnvironment,
   fileName: string,
 ): Promise<CaptureOutcome> {
-  const { brainConfig, indexExcerpt, paths, quarantine, redact, vendor } = environment;
+  const { brainConfig, indexExcerpt, paths, quarantine, redact, takenPaths, vendor } =
+    environment;
   const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
 
   /**
@@ -1663,7 +1749,7 @@ async function ingestOne(
         await invokeVendor(
           context,
           vendor,
-          buildIngestPrompt(envelope, { config: brainConfig, indexExcerpt }),
+          buildIngestPrompt(envelope, { config: brainConfig, indexExcerpt, takenPaths }),
           outputSchemaPath(paths.home, INGEST_VERB),
         )
       ).payload;
@@ -1832,7 +1918,8 @@ async function ingestOne(
 function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
   return {
     ...guards,
-    redactDiagnostic: (text: string): string => redact(text).text,
+    redactDiagnostic: (text: string, scope?: RedactionScope): string =>
+      redact(text, scope).text,
   };
 }
 
@@ -1861,9 +1948,11 @@ function isIndexDocumentShape(
 
 /**
  * The vault's own index, as the bounded excerpt `buildIngestPrompt` carries in
- * place of a read scope over the vault. Read once here, at run setup, and
- * handed down on `IngestEnvironment` — never re-read per capture, which would
- * make one run's cost scale with its capture count instead of its vault size.
+ * place of a read scope over the vault. Read at run setup and handed down on
+ * `IngestEnvironment`, then re-read only after a capture that wrote notes — the
+ * reindex that capture triggered has already paid the vault-sized cost, and a
+ * read-once excerpt hid every note the run created from every later capture
+ * (BACKLOG NEW-116: 35 of 106 refused, mostly on a path that already holds a file).
  *
  * **A fresh vault has no index until the first `brain reindex`, and that is
  * not this run's problem to solve.** Absent, unreadable or unparsable, the
@@ -2030,7 +2119,8 @@ export interface RunReportV1 {
  * it renamed ordinary files; and it closed nothing, because the *success* arm published the
  * same filename raw throughout. `threat-model.md`'s rule is byte-exact everywhere, rendered
  * at the terminal, and the residue — `JSON.stringify` escaping `\p{Cc}` and not `\p{Cf}` —
- * is NEW-38.
+ * was NEW-38, closed where the name becomes a sentence: `selectCaptures` renders it through
+ * `renderPath` in the warning, and the id here stays byte-exact.
  *
  * **Note paths are not screened, and screening them was the defect.** A proposed path
  * carrying `\p{Cc}` or `\p{Cf}`, or exceeding the cap, is refused by `proposal.ts` before it
@@ -2046,15 +2136,11 @@ export interface RunReportV1 {
  *
  * `redactDeep` is not a substitute for either: it redacts secrets, not format characters.
  *
- * **What is still unscreened, so a green gate is not over-read.** `selection.warnings` are
- * English sentences that embed the raw quarantine file name, and they ship verbatim in
- * `reportLines`' message *and* on the success arm's `warnings`; `RunReportV1.refused[]`
- * carries `message` and `recovery` as the refusal produced them. None of those is a *new*
- * exposure — every one of them already reached the user through the failure message this
- * field sits beside — but the enumeration is the point: a first version of this paragraph
- * named only the warnings and read as exhaustive. `RunReportV1` publishes `unreadable`
- * structurally rather than repeating the warning sentences, which narrows the exposure
- * without closing it.
+ * **What is still unscreened, so a green gate is not over-read.** `RunReportV1.refused[]`
+ * carries `message` and `recovery` as the refusal produced them; that is not a *new*
+ * exposure — it already reached the user through the failure message this field sits beside.
+ * `selection.warnings`, which embed the quarantine file name, render it through `renderPath`
+ * since NEW-38, in `reportLines`' message and on the success arm's `warnings` alike.
  *
  * **Every field is copied and published as it stands; nothing here transforms a value.**
  * Two helpers used to — `screened` on the capture ids and `carriedNotes` on the note paths —
@@ -2270,15 +2356,13 @@ export async function runIngest(
     });
     guards = guardsWith(context.guards, redact);
 
-    /**
-     * Once per run, not once per capture — see `readIndexExcerpt`.
-     */
-    const indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
+    /** Refreshed in the capture loop below — see `readIndexExcerpt`. */
+    let indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
 
     const selection = await selectCaptures(context, quarantine, redact, limit);
 
     /**
-     * After selection, because only a plain capture needs a vendor (spec §3.4): a batch of
+     * After selection, because only a plain capture needs a vendor (`brain.md` §6.13): a batch of
      * note captures is applied verbatim, so neither resolution nor its exit-4 refusal
      * applies to it. The key is loaded before this now; selection needs it to parse.
      */
@@ -2286,9 +2370,9 @@ export async function runIngest(
     const vendor = anyPlain ? await selectVendor(context, requested) : null;
 
     /**
-     * Validated once per run, for its refusal rather than its value — the value
-     * `invokeVendor` uses comes from its own call, which is two idempotent
-     * syscalls by then.
+     * Validated once per run, for its refusal rather than its value — the leaf is
+     * removed at once, and each `invokeVendor` call prepares and removes its own
+     * (NEW-76).
      *
      * **The reason is classification, not cost.** An unusable scratch directory
      * is a run-wide, deterministic environment failure: it persists, so every
@@ -2299,9 +2383,8 @@ export async function runIngest(
      * it and `reportLines` prints it — so what the loop adds is not a wrong
      * recovery but N copies of the same one, under `refusedRecovery`'s
      * run-level "rerun, and reject captures to stop retrying", which is the
-     * useless half: neither fixes a directory owned by somebody else. One
-     * `sudo developer-os ingest` leaving a root-owned leaf is enough to reach
-     * that state. Raised here it is one refusal, correctly classified, with
+     * useless half: neither fixes a relative or unwritable `TMPDIR`. Raised
+     * here it is one refusal, correctly classified, with
      * nothing telling the user to try again.
      *
      * Ordered after `selectCaptures`, and gated on the vendor, for the same
@@ -2310,7 +2393,7 @@ export async function runIngest(
      * use this directory, and neither may be failed by it.
      */
     if (vendor?.name === "codex" && anyPlain) {
-      await prepareAgentWorkspace(context);
+      await removeAgentWorkspace(await prepareAgentWorkspace(context));
     }
 
     const environment: IngestEnvironment = {
@@ -2322,6 +2405,7 @@ export async function runIngest(
       redact,
       vendor,
       indexExcerpt,
+      takenPaths: [],
       /**
        * Resolved once per invocation, here, because resolution is per-install:
        * the declared globs are constants and the strings they become depend on
@@ -2352,12 +2436,28 @@ export async function runIngest(
     const ingested: IngestedCaptureV1[] = [];
     const refused: RefusedCaptureV1[] = [];
     const order: string[] = [];
+    const takenPaths: string[] = [];
 
+    /**
+     * Each selected capture is attempted exactly once per run, so a refused one is never
+     * retried inside it (BACKLOG NEW-116). Across runs the order is still `captureId`, so a
+     * capture that keeps refusing stays at the head of every `--limit N` window; no
+     * per-capture field records a refused attempt, and ordering on one needs a state file.
+     */
     for (const { fileName } of selection.accepted) {
       order.push(fileName.slice(0, -CAPTURE_FILE_SUFFIX.length));
-      const outcome = await ingestOne(context, environment, fileName);
+      const outcome = await ingestOne(
+        context,
+        { ...environment, indexExcerpt, takenPaths },
+        fileName,
+      );
       if (outcome.ok) ingested.push(outcome.capture);
       else refused.push(outcome.refusal);
+      const written = outcome.ok ? outcome.capture.notes : outcome.refusal.appliedNotes;
+      if (written.length > 0) {
+        takenPaths.push(...written.map((note) => redact(note).text));
+        indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
+      }
     }
 
     const captures = [...ingested, ...selection.unreadable].sort(compareIds);

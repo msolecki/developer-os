@@ -193,7 +193,7 @@ describe("createOwnerPathAdmission", () => {
   });
 });
 
-describe("createOwnerPathAdmission — spec §2.2 closed vendor authorization", () => {
+describe("createOwnerPathAdmission — foundation.md §12.5 closed vendor authorization", () => {
   const H = "/synthetic/user";
   const P = "/synthetic/user/.developer-os";
   const B = "/synthetic/brain";

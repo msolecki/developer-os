@@ -71,7 +71,7 @@ async function readRecord(path: string): Promise<HookFiringRecordV1 | null> {
 }
 
 /**
- * Spec §7.3: best effort after the outcome is written; never creates a directory, never throws. One
+ * `hooks.md` §3.6: best effort after the outcome is written; never creates a directory, never throws. One
  * record per verb, named `<vendor>.<verb>.json`, carrying the verb's event: `command`, `commit` and
  * `path` share `PreToolUse`, and a per-event record would hide an untrusted `path` behind a firing
  * `command` (hooks.md §3.7).

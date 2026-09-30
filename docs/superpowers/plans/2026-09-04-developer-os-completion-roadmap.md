@@ -158,7 +158,10 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
 ### Phase 5 — A12: instruction artifacts · L
 
 - **D47 (2026-09-22).** Specs A12, A12b, A13 and A14 (`specs/2026-09-22-developer-os-{instruction-artifacts,brain-workflows,hooks,tooling-verbs}-design.md`)
-  approved with every recommended answer, except A12 Q1: no production for now — local unsigned build
+  approved with every recommended answer (A12b's was deleted on 2026-09-29 after its contracts moved
+  to `docs/architecture/brain.md` §6.13: `git show
+  343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`; A12's, A13's and
+  A14's retired the same day, readable at `git show 59a6be11:docs/superpowers/specs/<name>`), except A12 Q1: no production for now — local unsigned build
   only, no release path. Also decided: Spec 1 §1 holds — `import` and `ingest` stay manual and leave
   Phase 9's job registry. The D44 lane (lint per commit, tests and review at phase close, no push)
   applies to Phases 5–7 as well, on the founder's instruction to skip tests for now.
@@ -236,7 +239,7 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   error envelope, exit 5 for `update_verifier_rejected`, 1 otherwise; trust stays advanced), F4-A (the
   two V2 ref types are an accepted residual in §13.3).
 - **D61 (2026-09-24).** Two spec amendments follow shipped security fixes: the hooks spec
-  (`specs/2026-09-22-developer-os-hooks-design.md`) names firing records per verb
+  (retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md`) names firing records per verb
   (`<vendor>.<verb>.json`) and scopes G7's "never the user home" base to Claude, with Codex patch paths
   resolved against the canonical `cwd`; Spec 1 §4.2 (`specs/2026-08-21-developer-os-opt-in-surfaces-design.md`)
   refuses a backslash in `GitConfigQuotedPathV1`, matching Core's `CanonicalAbsolutePathV1`. Also
@@ -298,6 +301,60 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   (7) Codex hook approval and A13 Task 18 Steps 2–3 run after 2026-10-22, when Codex quota returns.
   (8) After A15, NEW-113 is designed before NEW-110.
   (9) L1: MIT is the license proposed for qualified legal review.
+- **D70 (2026-09-28), a build-only lane for everything startable, amends D69 (8) and SESSION.md §4.**
+  The founder asked to finish every implementable plan item before retiring the legacy shared
+  directory and vault, without running tests and without reinstalling the product. (1) The session
+  orchestrates separate headless implementer sessions, one worktree each under
+  `../developer-os.worktrees/`, several `ORDER.md` rows at once (overrides "one entry per session").
+  (2) Each task writes its tests but does not run them; a commit runs `npm run lint` only; the full
+  suite and fresh-context review run at plan close, as under D56. (3) NEW-113 and NEW-110 are drafted
+  in parallel now, before A15 completes; each spec amendment still needs founder approval before code.
+  (4) Commits stay local; `development` needs a PR (GH013), opened at the close. Accepted risk: D56's.
+  Expires when the rows it started close.
+- **D71 (2026-09-28), NEW-113's design and NEW-25's overlap rule.** (1) Git, `launchctl` and `ssh`
+  are admitted at the operating system's standard fixed path (macOS `/usr/bin/git`, `/bin/launchctl`,
+  `/usr/bin/ssh`; the spawn scrubs `xcrun`-steering variables) by root ownership, no group/other
+  write on the executable and `/`, `/usr`, `/usr/bin`, `/bin`, a version floor and a capability
+  probe. (2) The launchd certification field is dropped; a post-bootstrap observation compensates and
+  refuses on failure. (3) The admission is a per-platform table behind the platform interface: v1
+  implements macOS only (Spec v1 §4 stands), but no contract may pin macOS, so Linux and Windows rows
+  can follow without a contract change. (4) The Phase 9 gate covers local/file transport only; HTTPS
+  and SSH stay refused (D59 Q4-A). (5) NEW-25: `high-entropy` stays first-wins on overlap; every
+  other redaction class merges partially overlapping ranges, so persisted fingerprints do not change.
+- **D72 (2026-09-28), NEW-110's Spec 2 revision pass.** The founder approved every recommended
+  answer of `plans/2026-09-28-new-110-spec2-apply.md`: signed metadata inline as `plan_derived` rows
+  (Q1-A); Codex re-registration on `update` pins `codex`'s real path owned by the user or root with no
+  group/other write on it or its ancestors (Q2-A, NEW-61); a `compensationCause` journal field (Q3-A);
+  the spawn-time capability scan is removed, the repository graph gate stays (Q4-A); production ports
+  bind now and the fallback port refuses `update_fallback_unavailable` until Task 11b (Q5-A); Task 26
+  proves the lifecycle on a synthetic arm64+x64 fixture, Git and automation join after NEW-113 (Q6-A).
+  Task 11b stays parked (D46), so `update` reaches a real release only after it.
+- **D73 (2026-09-28), three backlog decisions.** NEW-106: every product invocation of Codex runs
+  under the isolated `CODEX_HOME` that `ingest` uses (D8 covers them). NEW-24: a persisted redaction
+  finding may carry the non-secret index of the user pattern that produced it; over-broad patterns
+  are detected by match density. NEW-31: stray U+200D between non-joining characters is a Brain lint
+  warning; emoji ZWJ sequences and Indic/Persian shaping stay legal. Addenda to D71 from NEW-113
+  Task 2: the Git supervisor stays synchronous with a synchronous inspector/recheck pair, and
+  `real_receive_pack` execs the standard `/usr/bin/git-receive-pack` shim, so the same-PID argv
+  invariant is untouched.
+- **D74 (2026-09-28), A15 steps 8–10 without step 7b's full gate.** The founder waived the rest of
+  step 7b's `npm run check` for this install: lint, `test:bootstrap` (94) and `test:suite` (306 files)
+  had passed on `dbca633`, the commit installed; the full `check` runs at the end of the day's work.
+  The runbook's step 10 precondition is corrected by observation: `path`, `format` and `edit` fire
+  only on Edit/Write, so a read-only session proves `inject`, `prompt`, `command`, `commit` and
+  `stop`, and `path` is proven by the refused `.env` probe.
+- **D75 (2026-09-29), closing the D70 lane's plans before the full suite.** The founder closes the
+  NEW-113 and NEW-110 plans without waiting for the full `npm run check` (the D70 lane's tests were
+  written, not run); the founder runs the full check later, and a red run reopens the rows its
+  failures belong to. Fresh-context review ran for both plans (NEW-110: REQUEST CHANGES with two
+  Critical, fixed and re-reviewed APPROVE WITH FIXES, minors fixed; NEW-113: APPROVE WITH FIXES,
+  fixed; the other rows: APPROVE WITH FIXES, fixed).
+- **D76 (2026-09-29), two founder answers after D75.** (1) NEW-113 Task 5, the Phase 9 gate on a
+  disposable macOS account, is skipped: the founder closes NEW-113 without it. Git sync and
+  automation ship proven only by their written tests and the D75 full suite; they stay disabled on the
+  live machine until the founder enables them, and the first enable on any Mac is their first real run.
+  (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
+  push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
@@ -324,7 +381,7 @@ Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 - Spec, plan and Tasks 1–28 of the A12 plan (closed and deleted 2026-09-28) landed and
   the phase close ran: install/uninstall wiring (NEW-60) `be9b6de`, `022dc98`; loading assertions
   (NEW-65) `084f1ba`; Codex registration at install `485ca5a`.
-- [ ] Codex cache: an in-place re-render is not loaded until `codex plugin add` runs again; the update lifecycle must re-register (NEW-61). Registration at install landed; re-registration on `update` belongs with Phase 8.
+- [x] Codex cache: an in-place re-render is not loaded until `codex plugin add` runs again; the update lifecycle must re-register (NEW-61, closed 2026-09-29). Registration at install landed; re-registration on `update` landed with Phase 8's apply path (`dab8064a`, `b2c258e8`, `b7a593be`; D75: tests written, full check owed).
 - [x] Founder stops: the billed row (NEW-101, `claude-adapter.md` §14.1) emptied
   `UNPROVEN_CLAUDE_CATEGORIES`, the real-vendor loading and isolation files ran green, and the
   private-pattern scan (18 patterns, outside the repository) found 0 over `instructions/` and
@@ -350,13 +407,18 @@ Gate: each workflow proven end to end on the synthetic vault with a fake vendor 
 
 Scope: inventory §4.
 
-- Spec and the Claude half landed as Tasks 3–14, 16, 17 of `plans/2026-09-22-developer-os-hooks.md`
-  (Claude hooks installed by `init`, `a156b0c`).
+- Spec and the Claude half landed as Tasks 3–14, 16, 17 of the A13 plan (closed and deleted
+  2026-09-29, `git show 343f8453:docs/superpowers/plans/2026-09-22-developer-os-hooks.md`; Claude
+  hooks installed by `init`, `a156b0c`). Its surviving constraints are in `docs/architecture/hooks.md`.
 - Task 15, the Codex half (Codex hooks bundled in the plugin manifest and trusted manually, D7), and
   Task 1's remaining observations landed under D57 (`4041286`, `4e308d2`, `2e75574`, `2bec6a7`).
 - The phase close (Task 19) ran.
-- [ ] Task 2: legacy parity check (founder stop point), never run.
-- [ ] Task 18: "observed firing" proven in the real-agent matrix on both vendors (founder stop point).
+- [x] Task 2: legacy parity check, done under D67 (`d157227..28cfe19`).
+- [x] Task 18 for Claude: every verb observed firing, the `command` and `path` guards refusing and
+  session-start injection working on the founder machine in A15 step 10 (D68; `hooks.md` §4.1). The
+  plan closed on 2026-09-29 with the rest moved to `BACKLOG.md`: **except** NEW-127 (Claude's
+  unobserved rows and the isolated-`ingest` check) and NEW-104 (the Codex matrix, after 2026-10-22),
+  both founder stop points.
 
 Gate: every supported hook observed firing on Claude; on Codex after manual trust; capability keys `session_start_injection` and `plugin_hooks` resolve to `yes` where observed.
 
@@ -368,8 +430,8 @@ Scope: inventory §5, §6.
   15 of `plans/2026-09-22-developer-os-tooling-verbs.md`; Task 14's Claude observations (NEW-109) were
   recorded under D57 (`4041286`). The phase close ran and the plan was deleted on 2026-09-26; its
   scope decisions are amended into the tooling-verbs spec §6 and §8 ("Amended 2026-09-26 (NEW-108)").
-- [ ] The `project init` templates' founder-local scan, run with A12's (see below). The inventory
-  status flip ran on 2026-09-26.
+- [x] The `project init` templates' founder-local scan, run with A12's: 0 findings over
+  `templates/project/` (Phase 5 above, 2026-09-28). The inventory status flip ran on 2026-09-26.
 - The automation job registry is Spec 1b's and belongs to Phase 9 (D16). It is Spec 1 §5.1's four jobs: `brain-reindex`, `brain-lint`, `doctor` and `git-sync`. `import` and `ingest` stay manual and are not registry entries (D47, Spec 1 §1).
 
 Gate: every inventoried script is a verb or a recorded refusal.
@@ -382,8 +444,8 @@ The phase closes ran (above). What is left of them is founder work, executed fro
   0 findings (2026-09-28).
 - [x] A12b: real-vendor run done 2026-09-26 (five `pass` rows, `d7043d5`); `test:vendor-ingest` green
   the same day.
-- [ ] A13 (`plans/2026-09-22-developer-os-hooks.md`): Task 18 real-agent matrix on both vendors;
-  Task 2 legacy parity check.
+- [x] A13: Task 2 done (D67); the plan closed 2026-09-29 after Task 18's Claude evidence
+  (`hooks.md` §4.1). Still owed as founder stop points: NEW-127 and NEW-104 (Phase 6 above).
 
 ### Phase 8 — Spec 2 Tasks 12–26: release transport, update, rollback · L
 
@@ -392,27 +454,35 @@ Runs after Phase 10 (D16). Tasks 10–11 moved to Phase 4b.
 NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the §5.3/§6.3 limit conflict is resolved, the exact-maximum gates are read against both bounds, and the `symlink` arm is accepted residual 9. Tasks 20 and 26 carry what that leaves them. Execute the baseline plan.
 
 - Tasks 12–25 of the release plan and Tasks 1–8 of the Spec 2 closure plan landed under D56, and the
-  Phase 8 close ran. Both plans were closed on 2026-09-26 (D68); their open bodies are behind the
-  `git show` pointers in `BACKLOG.md` NEW-110 and NEW-111.
-- [ ] Closure Tasks 9–10 (`update --apply` / `update rollback --apply` composition): blocked on design,
-  NEW-110; parked by D61.
-- [ ] Task 26 (the lifecycle proof) and Task 11b: parked (D56, D46).
+  Phase 8 close ran. Both plans were closed on 2026-09-26 (D68); their open bodies are behind
+  `git show a03499c:` pointers (NEW-110, closed 2026-09-29, consumed the closure plan's; Task 11b's
+  is in `BACKLOG.md` NEW-111).
+- [x] Closure Tasks 9–10 (`update --apply` / `update rollback --apply` composition): NEW-110's Spec 2
+  revision pass (D72, `plans/2026-09-28-new-110-spec2-apply.md`, closed and deleted 2026-09-29 under
+  D75) landed them as its Tasks 10 (`b2c258e8`, `e91f4e2d`, `ba842b7b`, `e1e1755e`, `b7a593be`) and 11
+  (`c5b65eac`, `1c52d4ce`, `6824e034`), on Tasks 1–9 and 13; review fixes `c8960d46`..`a3cebf2d`.
+- [x] Task 26 (the lifecycle proof) on the synthetic arm64 and x64 fixture: NEW-110 Task 12
+  (`b9faa189`, `e672ae1f`, `00afee8b`, `26baedd4`, `8b29e3c9`); the surviving contracts are in
+  `docs/architecture/foundation.md` §11. D75: tests written, the full check is owed.
+- [ ] Task 11b: parked (D46), with NEW-111 and NEW-112. The real-release half of the gate waits for it
+  and A16, and so do the persisted-format migrations Spec 2's D72 block owes "no later than Task 11b".
 
-Gate: `update` dry-run and apply and rollback proven on a disposable install, then once on the founder machine.
+Gate: `update` dry-run and apply and rollback proven on a disposable install, then once on the founder machine. The synthetic half (disposable install, both architectures) landed with NEW-110 Task 12; the real-release half and the founder machine wait on Task 11b.
 
 ### Phase 9 — Spec 1b: git and launchd · L
 
 Runs after Phase 8 (D16), and takes over the automation job registry bullet from Phase 7. The registry is Spec 1 §5.1's four jobs (`brain-reindex`, `brain-lint`, `doctor`, `git-sync`); `import` and `ingest` stay manual (D47, Spec 1 §1).
 
-Preconditions (NEW-84): a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
-
 - Plan 1b (D59; closed and deleted 2026-09-26, `git show 84a50f1:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`) Tasks 1–18 and 20 landed
-  under D56; the rows were measured and re-pinned in the spec (NEW-84, D59). The phase close
-  (Task 21) ran except `npm run test:pinned-host`, which moves to NEW-113.
-- [ ] NEW-113 (D65, supersedes Task 19): replace the exact-build pin through a Spec 1 amendment, then
-  prove the gate below on a disposable macOS account.
-- The architecture carry-over of plan 1b's decisions ran on 2026-09-26 (`foundation.md` §10,
-  `foundation-constraints.md`, `threat-model.md` §5.15).
+  under D56. The phase close (Task 21) ran except `npm run test:pinned-host`, which moved to NEW-113.
+- [x] NEW-113's code (D65, D71, D73 addenda; supersedes plan 1b Task 19 and NEW-84's pin): fixed-path
+  admission from a per-platform table replaced the exact-build pin. Plan
+  `plans/2026-09-28-new-113-fixed-path-admission.md` Tasks 1–3 landed (`a9d50032`, `cfed0476`,
+  `b1a7c6a5`; review fixes `83647122`, `d92759a0`, `0c799c68`) and the plan closed on 2026-09-29 under
+  D75; its surviving constraints are in `foundation.md` §10, `foundation-constraints.md` and
+  `threat-model.md` §5.15. D75: tests written, the full check and `npm run test:pinned-host` are owed.
+- [ ] The gate below, on a disposable macOS account: NEW-113's Task 5, a founder step whose body is in
+  `BACKLOG.md` NEW-113.
 
 Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; scheduled runs observed.
 
@@ -424,7 +494,12 @@ Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; s
   guards (closes D3's accepted risk), legacy surfaces removed, reinstall preserving the Brain and
   overrides, retired jobs run by hand until Phase 9, Git and launchd left disabled, rollback
   exercised once.
-- [ ] Execute it. Do not delete the legacy repositories; archive them after one stable cycle.
+- [x] Steps 1–15 executed on the live machine (steps 8–10 on 2026-09-28 under D69 and D74, steps
+  11–15 on 2026-09-28/29; `ORDER.md` has the evidence). The runs found NEW-114 (closed), NEW-115,
+  NEW-116 and the ingest fixes `588c866d`, `cb19f7c6`, `26807aed` and `3ebc505d`.
+- [ ] Steps 16–18 (per-adapter gate cycle, exercised rollback) after one week of use; step 19 after one
+  stable cycle; Codex hook approval after 2026-10-22. Do not delete the legacy repositories; archive
+  them after one stable cycle.
 
 Gate: one complete capture → review → ingest → search → reinstall → uninstall cycle on the live machine; rollback to the legacy runtime exercised.
 
@@ -450,12 +525,12 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | Phase | Document |
 |---|---|
 | 4b | baseline plan Tasks 10–11 plus the production wiring step Phase 4b adds |
-| 5 | `specs/<date>-developer-os-instruction-artifacts-design.md` and its plan |
-| 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |
-| 6 | `specs/<date>-developer-os-hooks-design.md` and its plan |
-| 7 | `specs/2026-09-22-developer-os-tooling-verbs-design.md` (its plan closed and was deleted 2026-09-26) |
-| 8 | a fresh plan from NEW-110's Spec 2 revision pass (both earlier plans closed 2026-09-26) |
-| 9 | plan 1b (closed 2026-09-26) and the Spec 1 amendment NEW-113 names |
+| 5 | `docs/architecture/foundation.md` §4 and §12, `claude-adapter.md` §18 and `codex-adapter.md` §16 (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`; its plan closed and was deleted 2026-09-28) |
+| 5b | `docs/architecture/brain.md` §6.13 (the spec was deleted 2026-09-29: `git show 343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`; its plan closed 2026-09-26) |
+| 6 | `docs/architecture/hooks.md` (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md`; its plan closed and was deleted 2026-09-29) |
+| 7 | `docs/architecture/foundation.md` §13, `knowledge-pipeline.md` §3.1 and `claude-adapter.md` §15 (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`; its plan closed and was deleted 2026-09-26) |
+| 8 | `plans/2026-09-28-new-110-spec2-apply.md` from NEW-110's Spec 2 revision pass (closed 2026-09-29, D75; both earlier plans closed 2026-09-26); Task 11b has no plan yet, its body is behind `BACKLOG.md` NEW-111's pointer |
+| 9 | plan 1b (closed 2026-09-26), Spec 1's D71 amendment and `plans/2026-09-28-new-113-fixed-path-admission.md` (closed 2026-09-29, D75; Task 5 is in `BACKLOG.md` NEW-113) |
 | 10 | `docs/migration/founder-cutover.md` |
 | 11 | program plan Task 9 |
 

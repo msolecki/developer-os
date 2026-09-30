@@ -1,6 +1,6 @@
 import { join, relative, sep } from "node:path";
 
-import { compareCanonical, compareRawBytes } from "../discovery/index.js";
+import { compareCanonical, compareRawBytes, topicOfFolder } from "../discovery/index.js";
 import { buildIndex, createLinkResolver } from "../indexes/index.js";
 import type { IndexBuildRequest, IndexBuildResult, IndexedNote } from "../indexes/index.js";
 import { isUnsafeProposedNotePath } from "../ingest/index.js";
@@ -58,7 +58,7 @@ export class RefactorRefusal extends Error {
   }
 }
 
-/** The executor's participant bound (spec §6.6). */
+/** The executor's participant bound (`brain.md` §6.13, refactor algorithm). */
 export const MAX_REFACTOR_MUTATIONS = 256;
 
 export interface RefactorInputV1 {
@@ -159,8 +159,8 @@ export function requireNote(state: PreStateV1, path: string): IndexedNote {
 
 /**
  * Rewrites every link in another note whose old resolution is `moved` and whose
- * text no longer reaches `target` once `moved` is gone (spec §6.4). Title- and
- * alias-tier links keep resolving and are left alone.
+ * text no longer reaches `target` once `moved` is gone (`brain.md` §6.13, link
+ * rewriting). Title- and alias-tier links keep resolving and are left alone.
  */
 export function rewriteReferrers(
   state: PreStateV1,
@@ -176,9 +176,7 @@ export function rewriteReferrers(
   const projected = notes.filter((note) => note.path !== P);
   if (movedNote !== undefined && !projected.some((note) => note.path === T)) {
     const folder = target.split("/")[0] ?? "";
-    const topicFolder = state.input.build.config.topicFolders.includes(folder)
-      ? folder
-      : movedNote.topicFolder;
+    const topicFolder = topicOfFolder(folder, state.input.build.config) ?? movedNote.topicFolder;
     projected.push({ ...movedNote, path: T, topicFolder });
   }
   projected.sort((a, b) => byPath(a.path, b.path));
@@ -299,8 +297,9 @@ function modePlan(state: PreStateV1, request: RefactorRequestV1): ModePlanV1 {
     }
     case "move": {
       requireNote(state, request.note);
-      if (!state.input.build.config.topicFolders.includes(request.folder)) {
-        throw invalid(`${request.folder} is not a configured topic folder`);
+      /** A topic alias is a destination too (NEW-128); the CLI requires its folder to exist. */
+      if (topicOfFolder(request.folder, state.input.build.config) === null) {
+        throw invalid(`${request.folder} is not a configured topic folder or topic alias`);
       }
       return relocatePlan(state, request.note, `${request.folder}/${basename(request.note)}`);
     }
@@ -427,7 +426,7 @@ async function checkPostconditions(
 
 /**
  * Pure: reads through `input.build` and returns a plan, writing nothing
- * (spec I4). Every refusal is a `RefactorRefusal`.
+ * (`brain.md` §2). Every refusal is a `RefactorRefusal`.
  */
 export async function planRefactor(
   request: RefactorRequestV1,

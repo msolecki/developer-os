@@ -52,6 +52,22 @@ function expectRedacted(result: RedactionResult, secret: string): void {
   ).toBe(true);
 }
 
+function toLowerCaseCalls(run: () => void): number {
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
+  const original = String.prototype.toLowerCase;
+  let calls = 0;
+  try {
+    String.prototype.toLowerCase = function toLowerCase(this: string) {
+      calls += 1;
+      return original.call(this);
+    };
+    run();
+  } finally {
+    String.prototype.toLowerCase = original;
+  }
+  return calls;
+}
+
 describe("redactText", () => {
   it("redacts an environment secret assignment", () => {
     const result = redactText(
@@ -93,6 +109,72 @@ describe("redactText", () => {
     );
 
     expectRedacted(result, highEntropySecret);
+  });
+
+  /** NEW-129: Brain note paths, slugs and wikilinks are not secrets. */
+  describe("note paths and slugs", () => {
+    const slug = "developer-os-release-handoff-review-fixes-quickly-jumping-zebras";
+    const benign = [
+      slug,
+      `[[DEV/${slug}]]`,
+      `content/DEV/${slug}.md`,
+      "content/DEV/check-trust-at-every-symlink-hop.md",
+      "[[DEV/what-must-live-in-the-durable-journal]]",
+      "_raw/processed/2026-07-16-143736-48639-przedsiebiorcze-trojmiasto.md",
+      "docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md",
+      "packages/core/src/lifecycle/foundation-ledger.ts:911",
+    ];
+    for (const value of benign) {
+      it(`leaves ${value} in the clear`, () => {
+        const result = redactText(`see ${value} for details`, deterministicKey);
+
+        expect(result.text).toBe(`see ${value} for details`);
+        expect(result.findings).toEqual([]);
+      });
+    }
+
+    const pathEmbeddedToken = "Qm4Zx9Tp2Lk7Wr5Vn8Bc3Hy6Jd1Fs0Ga4Ue7Io9Pz2K"; // gitleaks:allow -- synthetic test fixture
+    const slashedBase64 = "aZ3+kQ9/Xw7mP2+vL8/tR4nB6+yH1/cJ5sD0fG7=="; // gitleaks:allow -- synthetic test fixture
+    const hyphenatedRandom = "k3m9x2p7q4-z8w1v6b3n5-r2t7y4u9i0-h5g8f1d3s6-a9l2"; // gitleaks:allow -- synthetic test fixture
+    const secrets = {
+      "a mixed-case base64 token": highEntropySecret,
+      "a hex digest": lowercaseHexSecret,
+      "a lowercase alphanumeric token": lowercaseAlphanumericSecret,
+      "a base64 token containing / and +": slashedBase64,
+      "a token embedded as one path segment": `config/${pathEmbeddedToken}/x`,
+      "a hyphen-joined random token": hyphenatedRandom,
+      /** Review of NEW-129: the exemption is bounded in part count and part length. */
+      "thirteen random word-like chunks": "qazu-wexi-rymo-tupa-kelo-jivu-fyze-gowa-bidu-nesy-hoke-lamu-cyvo", // gitleaks:allow -- synthetic test fixture
+      "a random letter chunk longer than a word": "zqvbeytrwkxmolpfn-hazdusi-gerwopyk-lemtovaq", // gitleaks:allow -- synthetic test fixture
+    };
+    for (const [name, secret] of Object.entries(secrets)) {
+      it(`still redacts ${name}`, () => {
+        const result = redactText(`value ${secret} end`, deterministicKey);
+
+        expect(result.text).not.toContain(secret);
+        expect(result.findings.map((f) => f.class)).toContain("high-entropy");
+      });
+    }
+
+    /** An all-word passphrase is exempt from high-entropy, so its label has to catch it. */
+    const passphrase = "lantern-quiver-mosaic-bramble-oyster-plinth-tundra"; // gitleaks:allow -- synthetic test fixture
+    for (const line of [
+      `the vault passphrase is ${passphrase}`,
+      `mnemonic: ${passphrase}`,
+      `recovery key = ${passphrase}`,
+    ]) {
+      it(`redacts a labelled passphrase: ${line.replace(passphrase, "<words>")}`, () => {
+        const result = redactText(line, deterministicKey);
+
+        expect(result.text).not.toContain(passphrase);
+        expect(result.findings.map((f) => f.class)).toEqual(["credential-store"]);
+      });
+    }
+
+    it("leaves the same words in prose without a label", () => {
+      const line = `see ${passphrase} for details`;
+      expect(redactText(line, deterministicKey).text).toBe(line);
+    });
   });
 
   it("redacts a 64-character lowercase hexadecimal secret", () => {
@@ -435,6 +517,87 @@ describe("redactText", () => {
     });
   });
 
+  /**
+   * NEW-25: first-wins dropped a partially overlapping candidate whole, leaving its
+   * non-overlapping part in the clear. Merged ranges keep the class of the earliest
+   * scanned contributor and fingerprint the whole merged span. `high-entropy` stays
+   * first-wins (D71).
+   */
+  describe("merging partially overlapping ranges across classes", () => {
+    const fingerprintOf = (secret: string): string =>
+      createHmac("sha256", deterministicKey).update(secret).digest("hex").slice(0, 16);
+
+    it("extends a provider token over a user pattern that overlaps its tail", () => {
+      const { text, findings } = redactText(
+        `key ${providerToken} tail end`,
+        deterministicKey,
+        { userPatterns: ["a1a1 tail"] },
+      );
+
+      expect(text).toBe("key [REDACTED:provider-token] end");
+      expect(findings).toEqual([
+        { class: "provider-token", fingerprint: fingerprintOf(`${providerToken} tail`) },
+      ]);
+    });
+
+    it("extends a service credential over a user pattern that overlaps its head", () => {
+      const { text, findings } = redactText(
+        `id ${awsAccessKeyId} here`,
+        deterministicKey,
+        { userPatterns: ["id akia"] },
+      );
+
+      expect(text).toBe("[REDACTED:service-credential] here");
+      expect(findings).toEqual([
+        { class: "service-credential", fingerprint: fingerprintOf(`id ${awsAccessKeyId}`) },
+      ]);
+    });
+
+    it("joins two disjoint findings of different classes that a later pattern bridges", () => {
+      const source = `${providerToken} ${awsAccessKeyId} tail`;
+      const { text, findings } = redactText(source, deterministicKey, {
+        userPatterns: ["a1 akia"],
+      });
+
+      expect(text).toBe("[REDACTED:provider-token] tail");
+      expect(findings).toEqual([
+        {
+          class: "provider-token",
+          fingerprint: fingerprintOf(`${providerToken} ${awsAccessKeyId}`),
+        },
+      ]);
+    });
+
+    /** D71: a whole `KEY=value` line is high-entropy-shaped; merging it would change this fingerprint. */
+    it("does not merge a high-entropy run into an env secret, keeping key name and fingerprint", () => {
+      const { text, findings } = redactText(`API_TOKEN=${environmentSecret}`, deterministicKey);
+
+      expect(text).toBe("API_TOKEN=[REDACTED:env-secret]");
+      expect(findings).toEqual([
+        { class: "env-secret", fingerprint: fingerprintOf(environmentSecret) },
+      ]);
+    });
+
+    /** D71 residual, pinned so it is not mistaken for coverage. */
+    it("drops a high-entropy run that partially overlaps an earlier candidate, leaving its tail", () => {
+      const { text, findings } = redactText(`opaque ${highEntropySecret}`, deterministicKey, {
+        userPatterns: [highEntropySecret.slice(0, 6)],
+      });
+
+      expect(text).toBe(`opaque [REDACTED:user-pattern]${highEntropySecret.slice(6)}`);
+      expect(findings.map((f) => f.class)).toEqual(["user-pattern"]);
+    });
+
+    it("keeps touching but non-overlapping ranges as separate findings", () => {
+      const { text, findings } = redactText("x acmecorp y", deterministicKey, {
+        userPatterns: ["acme", "corp"],
+      });
+
+      expect(text).toBe("x [REDACTED:user-pattern][REDACTED:user-pattern] y");
+      expect(findings).toHaveLength(2);
+    });
+  });
+
   describe("user-pattern", () => {
     it("matches a user pattern case-insensitively and as a literal, never as a regex", () => {
       const { text, findings } = redactText("The ACME Corp report", deterministicKey, {
@@ -456,148 +619,45 @@ describe("redactText", () => {
     });
 
     /**
-     * Finding 10 (fix pass 1 review): this proves the pattern is never
-     * *compiled* as a regular expression — an unescaped `(a+)+$` catastrophically
-     * backtracks in well under 50,000 characters if it reaches `RegExp`, so
-     * a sub-second result here is evidence the literal path was taken. It
-     * does **not** prove the literal-matching implementation itself is
-     * linear in text size or pattern count — see the `indexOf`-performance
-     * tests below for that.
+     * Finding 10 (fix pass 1 review): the pattern is never compiled as a
+     * regular expression. A compiled `(a+)+$` matches an all-`a` text and
+     * would redact it; a literal one does not occur in it.
      */
-    it("does not backtrack on a pathological pattern", () => {
-      const started = performance.now();
-      redactText("a".repeat(50_000), deterministicKey, {
+    it("treats a pathological pattern as literal text over a long input", () => {
+      const source = "a".repeat(50_000);
+      const result = redactText(source, deterministicKey, {
         userPatterns: ["(a+)+$"],
       });
-      expect(performance.now() - started).toBeLessThan(1_000);
+
+      expect(result.text).toBe(source);
+      expect(result.findings).toHaveLength(0);
     });
 
     /**
-     * Important 5 (fix pass 1 review, ceiling corrected in fix pass 2,
-     * ceiling replaced with a same-run ratio in fix pass 3, baseline
-     * corrected to share the ratio's allocation profile in fix pass 4,
-     * input size and repetition count cut in fix pass 5): the first
-     * shipped implementation re-sliced and re-lowered a window at every
-     * text position for every pattern — O(n·m) per pattern.
-     *
-     * An absolute wall-clock ceiling is a race against whatever else the
-     * machine is doing (fix pass 1: 697 ms measured against a 600 ms
-     * ceiling on otherwise-passing hardware). A ratio against a
-     * zero-pattern baseline is not load-invariant either, because
-     * `addUserPatterns` returns before `buildFoldedHaystack` ever runs at
-     * zero patterns, so the baseline never pays the allocation the
-     * measurement does (fix pass 4). Giving the baseline one pattern
-     * instead of zero fixed that — but at 2 MB and five repetitions each,
-     * the fixed version of this test cost ~4.2 s in isolation, and went
-     * over vitest's 5 s default under `npm run check`'s parallel workers
-     * (fix pass 4 verified only `pnpm vitest run` in isolation, which does
-     * not reproduce parallel-worker contention — exactly how this reached
-     * the coordinator).
-     *
-     * Cut to **512 KB, three repetitions each** (six `redactText` calls
-     * total, plus two untimed warm-ups) rather than widening the timeout
-     * around the larger size: the separation between the fixed and buggy
-     * implementations is a property of the *algorithm's shape*
-     * (allocate-once-then-`indexOf`-per-pattern vs. reslice-and-refold
-     * per position per pattern), not of input size, so there was no reason
-     * to keep paying for 2 MB once that was confirmed. Recalibrated,
-     * min-of-3, 512 KB, by temporarily reintroducing the exact pre-fix
-     * shape:
-     * - Fixed, no load, 20 samples across independent process launches:
-     *   ratio 0.63-1.25.
-     * - Fixed, under 16-way background CPU load
-     *   (`node -e 'while(true){Math.sqrt(Math.random())}'` ×16, `pkill`
-     *   after), 5 samples: ratio 0.66-1.46 — still no meaningful drift
-     *   from the no-load range at this smaller size.
-     * - Buggy (reintroduced), no load, 20 samples: ratio 6.32-7.99.
-     * - Buggy, no separate under-load measurement taken at this size: the
-     *   no-load floor (6.32) already sits far above every fixed ceiling
-     *   observed (1.46), and fix pass 4 already established the buggy
-     *   shape's ratio *rises* under load rather than falling, so a
-     *   dedicated under-load buggy measurement would only widen the gap
-     *   further, not narrow it.
-     * Every fixed measurement observed, loaded or not, stayed under 1.5;
-     * every buggy measurement observed stayed over 6.3. 3 keeps wide
-     * margin on both sides — roughly 2× the highest fixed measurement and
-     * half the lowest buggy one — same as fix pass 4's ceiling, unchanged
-     * because the *ratio* a correct implementation produces does not
-     * depend on input size, only the absolute time to compute it does.
-     *
-     * This proves the *shape* changed back to a per-position rescan if it
-     * regresses; it does not certify a specific throughput bound for
-     * arbitrary text or pattern sizes.
+     * Important 5 (fix pass 1 review), NEW-29: the first shipped implementation
+     * re-sliced and re-lowered a window at every text position for every
+     * pattern — O(n·m) per pattern. Counted through `toLowerCase`, which
+     * `foldForMatching` calls once per code point: folding the haystack once
+     * makes each extra pattern cost its own length, a per-position rescan makes
+     * it cost the text's.
      */
-    it(
-      "adds bounded per-pattern overhead over a single-pattern baseline, not a per-position rescan",
-      () => {
-        const text = "x".repeat(512 * 1024);
-        const baselinePattern = ["pattern-0-not-present-in-text-xyz"];
-        const patterns = Array.from(
-          { length: 10 },
-          (_, index) => `pattern-${String(index)}-not-present-in-text-xyz`,
-        );
+    it("folds the text once, whatever the pattern count, not once per pattern per position", () => {
+      const text = "x".repeat(4096);
+      const patterns = Array.from(
+        { length: 10 },
+        (_, index) => `pattern-${String(index)}-not-present-in-text-xyz`,
+      );
 
-        function minElapsed(run: () => void, repetitions: number): number {
-          let best = Infinity;
-          for (let index = 0; index < repetitions; index += 1) {
-            const started = performance.now();
-            run();
-            const elapsed = performance.now() - started;
-            if (elapsed < best) best = elapsed;
-          }
-          return best;
-        }
+      const baseline = toLowerCaseCalls(() =>
+        redactText(text, deterministicKey, { userPatterns: patterns.slice(0, 1) }),
+      );
+      const withPatterns = toLowerCaseCalls(() =>
+        redactText(text, deterministicKey, { userPatterns: patterns }),
+      );
 
-        // One untimed warm-up call each, so the first *timed* repetition is
-        // not the one absorbing JIT compilation for a code path the rest of
-        // this suite may not have exercised yet.
-        redactText(text, deterministicKey, { userPatterns: baselinePattern });
-        redactText(text, deterministicKey, { userPatterns: patterns });
-
-        const baseline = minElapsed(
-          () => redactText(text, deterministicKey, { userPatterns: baselinePattern }),
-          3,
-        );
-        const withPatterns = minElapsed(
-          () => redactText(text, deterministicKey, { userPatterns: patterns }),
-          3,
-        );
-
-        // `+ 20` absorbs timer-resolution noise when `baseline` itself is
-        // small; the multiplier is what actually separates the two
-        // implementations, per the calibration above.
-        expect(withPatterns).toBeLessThan(baseline * 3 + 20);
-      },
-      // **2,000 ms was arithmetically wrong and is corrected to 15,000 ms on
-      // 2026-09-07.** The assertion above is unchanged; only the budget moves.
-      //
-      // The old note derived 2,000 from "the heaviest combined `baseline` +
-      // `withPatterns` min-time observed ... was ~550 ms". That 550 ms is the
-      // sum of two *minimums*, i.e. two passes. The body runs **eight**: two
-      // untimed warm-ups plus three timed repetitions each. At ~275 ms a pass
-      // under load that is ~2,200 ms of work inside a 2,000 ms budget, so this
-      // was already short on this laptop and only ever passed because the
-      // machine was usually quieter than the calibration run. GitHub's
-      // `macos-15` runner, measured at ~1.9x this machine on 2026-09-07, made
-      // it fail outright: `Test timed out in 2000ms` in run 34133320221.
-      //
-      // 15,000 ms is ~3.5x the projected 4,180 ms on that runner. It is
-      // deliberately loose because this budget guards against a hang, while the
-      // *ratio* assertion above is what guards the algorithm — a wide timeout
-      // costs nothing when the test passes and prevents a false red when the
-      // machine is busy.
-      //
-      // **Why this is still an elapsed-time test, against NEW-29's preference
-      // for deterministic counts.** The property is that `addUserPatterns`
-      // folds the haystack once and then scans it per needle, rather than
-      // re-folding per pattern. Counting that directly means observing
-      // `buildFoldedHaystack` invocations, and it is module-private with no
-      // injection seam; exporting it purely for a test would widen this
-      // package's public surface to measure an internal. So NEW-29's documented
-      // fallback applies here, and the row records what production seam would
-      // retire this test's timing dependence.
-      15_000,
-    );
+      expect(baseline).toBeGreaterThanOrEqual(text.length);
+      expect(withPatterns - baseline).toBeLessThan(text.length);
+    });
 
     it("keeps overlap resolution: the first candidate wins and the second is dropped", () => {
       const { findings } = redactText(awsAccessKeyId, deterministicKey, {
@@ -741,20 +801,21 @@ describe("redactText", () => {
      * used here because 8,000 stays under the 1 s ceiling even unfixed and
      * would not have caught this — bounding the body length caps each
      * failed attempt's rescan instead of letting it run to end-of-string.
+     * NEW-29: the bound is asserted as behavior, not as elapsed time — a body
+     * far past it is not matched, which an unbounded rescan would match.
      */
-    it("does not go quadratic on many unterminated certificate markers", () => {
-      const source = "-----BEGIN CERTIFICATE-----\n".repeat(16_000);
-      const started = performance.now();
-      redactText(source, deterministicKey);
-      expect(performance.now() - started).toBeLessThan(1_000);
-    });
+    it.each(["CERTIFICATE", "PRIVATE KEY"])(
+      "bounds the %s body rescanned per BEGIN marker",
+      (label) => {
+        const block = (body: string): string =>
+          `-----BEGIN ${label}-----\n${body}\n-----END ${label}-----`;
+        const realistic = block("A".repeat(4_000));
+        const oversized = block("A".repeat(100_000));
 
-    it("does not go quadratic on many unterminated private-key markers", () => {
-      const source = "-----BEGIN PRIVATE KEY-----\n".repeat(16_000);
-      const started = performance.now();
-      redactText(source, deterministicKey);
-      expect(performance.now() - started).toBeLessThan(1_000);
-    });
+        expect(redactText(realistic, deterministicKey).findings).toHaveLength(1);
+        expect(redactText(oversized, deterministicKey).text).toContain(`-----BEGIN ${label}-----`);
+      },
+    );
   });
 
   describe("REDACTION_CLASSES", () => {
@@ -833,7 +894,7 @@ describe("createRedactor", () => {
   });
 
   /**
-   * `addCandidate` is first-wins on overlap, so an unordered scan made the result depend
+   * `addCandidate` was first-wins on overlap, so an unordered scan made the result depend
    * on how the user typed the table: with `["Acme", "Acme Corp"]` the short form won and
    * **`Corp` stayed in the clear**. Listing both forms of a client name is the obvious
    * thing to do, so this is the ordinary case rather than an edge one.
@@ -968,7 +1029,7 @@ describe("createRedactor", () => {
   /**
    * De-duplication is on the folded needle, so two spellings of one name are one scan.
    * Asserted on a **case variant** rather than a byte-identical repeat: `addCandidate`
-   * refuses an overlap either way, so a byte-identical pair produces one finding with or
+   * merges an overlap either way, so a byte-identical pair produces one finding with or
    * without the dedupe and pins nothing.
    */
   it("treats two case spellings of one pattern as one needle", () => {
@@ -979,20 +1040,170 @@ describe("createRedactor", () => {
     expect(result.findings.filter((f) => f.class === "user-pattern")).toHaveLength(1);
   });
 
-  /**
-   * **What longest-first does not close**, asserted so nobody reads the ordering as a
-   * guarantee it is not. Two patterns that interleave rather than contain cannot both
-   * win under `addCandidate`'s first-wins rule. Not a regression — the unordered scan
-   * leaked here too — and registered as `BACKLOG.md` §1 **NEW-25**.
-   */
-  it("leaves the tail of a partially overlapping pattern, which ordering cannot fix", () => {
+  /** NEW-25: under first-wins, `"Acme "` stayed in the clear here. */
+  it("merges two partially overlapping patterns into one redaction", () => {
     const result = createRedactor(deterministicKey, {
       userPatterns: ["Acme Corp", "Corp Holdings"],
     })("x Acme Corp Holdings y");
-    expect(result.text).toBe("x Acme [REDACTED:user-pattern] y");
+    expect(result.text).toBe("x [REDACTED:user-pattern] y");
+    expect(result.findings.map((f) => f.class)).toEqual(["user-pattern"]);
   });
 
   it("still refuses a key shorter than the floor redactText enforces", () => {
     expect(() => createRedactor(new Uint8Array(31))("anything")).toThrow(RangeError);
+  });
+});
+
+describe("redaction scopes (NEW-36, NEW-39)", () => {
+  const redact = createRedactor(deterministicKey, { userPatterns: ["Acme Corp"] });
+  const quarantinePath = "/tmp/developer-os-a1b2c3d4e5f6a7b8/_raw/quarantine/a1b2c3d4e5f60718.md";
+  const decomposed = "DEV/Café.md";
+
+  it("keeps the bytes of an NFD path with nothing to redact", () => {
+    const result = redact(decomposed, "path");
+
+    expect(result.text).toBe(decomposed);
+    expect(result.findings).toStrictEqual([]);
+  });
+
+  it("still returns NFC in the default text scope", () => {
+    expect(redact(decomposed).text).toBe(decomposed.normalize("NFC"));
+  });
+
+  it("keeps the bytes of an NFD string leaf in the value scope", () => {
+    expect(redact(decomposed, "value").text).toBe(decomposed);
+  });
+
+  it("does not apply high-entropy to a path", () => {
+    const path = `DEV/notes ${highEntropySecret}.md`;
+
+    expect(redact(path, "path").text).toBe(path);
+    expect(redact(path).text).toContain("[REDACTED:high-entropy]");
+  });
+
+  it("leaves a quarantine path intact but redacts a configured pattern in a path", () => {
+    expect(redact(quarantinePath, "path").text).toBe(quarantinePath);
+    expect(redact("DEV/Acme Corp notes.md", "path").text).toBe(
+      "DEV/[REDACTED:user-pattern] notes.md",
+    );
+  });
+
+  it("matches a configured pattern in a decomposed path", () => {
+    const withAccent = createRedactor(deterministicKey, { userPatterns: ["Café"] });
+
+    expect(withAccent(decomposed, "path").text).toBe("DEV/[REDACTED:user-pattern].md");
+  });
+
+  it("applies provider classes to a path", () => {
+    expect(redact(`DEV/${providerToken}.md`, "path").text).toBe(
+      "DEV/[REDACTED:provider-token].md",
+    );
+  });
+
+  it("never applies a user pattern to a name, and still applies provider classes", () => {
+    const names = createRedactor(deterministicKey, { userPatterns: ["captureId"] });
+
+    expect(names("captureId", "name")).toStrictEqual({ text: "captureId", findings: [] });
+    expect(names("captureId", "value").text).toBe("[REDACTED:user-pattern]");
+    expect(names(providerToken, "name").text).toBe("[REDACTED:provider-token]");
+  });
+
+  it("redacts a matched value exactly as the text scope does", () => {
+    const line = `MY_API_KEY=${environmentSecret}`;
+
+    expect(redact(line).findings.length).toBeGreaterThan(0);
+    expect(redact(line, "value")).toStrictEqual(redact(line));
+  });
+});
+
+/**
+ * NEW-24, founder decision D73: a persisted finding may carry the zero-based index of the
+ * configured pattern that produced it, and an over-broad pattern is detected by the fraction
+ * of the input its own matches cover — never by its length, which refused `EY` and every
+ * two-character CJK name when it was tried.
+ */
+describe("user pattern index and match density (NEW-24, D73)", () => {
+  /** 300 code units, hand-countable: every other one is an `a`, so `a` covers 50%. */
+  const alternating = "ab".repeat(150);
+  /** 300 code units carrying one four-character name: 4 / 300 is about 1.3%. */
+  const oneMention = `Acme ${"x".repeat(295)}`;
+
+  it("indexes a finding by the pattern's position as configured, not by scan order", () => {
+    const { findings } = redactText("x Acme Corp Holdings y Acme z", deterministicKey, {
+      userPatterns: ["Acme", "Acme Corp Holdings"],
+    });
+
+    expect(findings.map((f) => f.patternIndex)).toEqual([1, 0]);
+  });
+
+  it("indexes two spellings of one needle by the first one configured", () => {
+    const { findings } = redactText("x ACME y", deterministicKey, {
+      userPatterns: ["Northwind", "acme", "Acme"],
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.patternIndex).toBe(1);
+  });
+
+  it("keeps the index of the longest contributor when two patterns merge", () => {
+    const { findings } = redactText("x Acme Corp Holdings y", deterministicKey, {
+      userPatterns: ["Acme Corp", "Corp Holdings"],
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.patternIndex).toBe(1);
+  });
+
+  it("carries no index on a finding whose class is not user-pattern, even after a merge", () => {
+    const { findings } = redactText(`key ${providerToken} tail end`, deterministicKey, {
+      userPatterns: ["a1a1 tail"],
+    });
+
+    expect(findings.map((f) => f.class)).toEqual(["provider-token"]);
+    expect(Object.keys(findings[0] ?? {})).toEqual(["class", "fingerprint"]);
+  });
+
+  it("flags a pattern whose matches cover much of the input", () => {
+    const result = redactText(alternating, deterministicKey, {
+      userPatterns: ["Acme", "a"],
+    });
+
+    expect(result.overBroadPatterns).toEqual([1]);
+  });
+
+  it("does not flag a name mentioned once in a longer text", () => {
+    const result = redactText(oneMention, deterministicKey, { userPatterns: ["Acme"] });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.overBroadPatterns).toBeUndefined();
+  });
+
+  it("does not flag a short input that is nothing but the name", () => {
+    const result = redactText("Acme Corp", deterministicKey, { userPatterns: ["Acme Corp"] });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.overBroadPatterns).toBeUndefined();
+  });
+
+  it("measures each pattern's own matches, so a long name lends a short one no coverage", () => {
+    /** `Acme Corp Holdings` covers 54 / 300 = 18%; `Acme` alone covers 12 / 300 = 4%. */
+    const text = `${"Acme Corp Holdings ".repeat(3)}${"y".repeat(243)}`;
+    const result = redactText(text, deterministicKey, {
+      userPatterns: ["Acme", "Acme Corp Holdings"],
+    });
+
+    expect(result.overBroadPatterns).toEqual([1]);
+  });
+
+  it("reports nothing over-broad in the name scope, which applies no user pattern", () => {
+    const result = createRedactor(deterministicKey, { userPatterns: ["a"] })(alternating, "name");
+
+    expect(result).toStrictEqual({ text: alternating, findings: [] });
+  });
+
+  it("leaves the result shape unchanged when no pattern is over-broad", () => {
+    const result = redactText(oneMention, deterministicKey, { userPatterns: ["Acme"] });
+
+    expect(Object.keys(result)).toEqual(["text", "findings"]);
   });
 });

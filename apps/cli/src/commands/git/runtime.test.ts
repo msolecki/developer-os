@@ -3,11 +3,78 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Duplex } from "node:stream";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
-import type { GitProcessPhaseV1 } from "@developer-os/security";
+import { DARWIN_SYSTEM_EXECUTABLES } from "@developer-os/platform-macos";
+import { admitGitExecutables, recheckSystemExecutable } from "@developer-os/security";
+import type { GitProcessPhaseV1, SystemPathInspectorV1, SystemPathObservationV1 } from "@developer-os/security";
 
-import { bridgeReceivePack, readLine, withoutGitChildAdditions, withoutReceiveQuarantine } from "./runtime.js";
+import { bridgeReceivePack, createProductionGitRuntime, readLine, withoutGitChildAdditions, withoutReceiveQuarantine } from "./runtime.js";
+
+type PresentObservation = Exclude<SystemPathObservationV1, { kind: "absent" }>;
+
+/** A stock macOS host: every fixed path and ancestor root-owned `0755`; `overrides` change fields of one path. */
+function stockHost(overrides: Readonly<Record<string, Partial<PresentObservation>>> = {}): SystemPathInspectorV1 {
+  const directory: PresentObservation = { kind: "directory", ownerUid: 0, mode: 0o755, dev: "1", ino: "2", size: 64, sha256: null };
+  const file = (ino: string, sha256: string): PresentObservation => ({ kind: "file", ownerUid: 0, mode: 0o755, dev: "1", ino, size: 119_000, sha256 });
+  const paths: Record<string, PresentObservation> = {
+    "/": directory,
+    "/usr": directory,
+    "/usr/bin": directory,
+    "/usr/bin/git": file("10", "a".repeat(64)),
+    "/usr/bin/git-receive-pack": file("11", "b".repeat(64)),
+  };
+  for (const [path, change] of Object.entries(overrides)) paths[path] = { ...(paths[path] as PresentObservation), ...change };
+  return (path) => Promise.resolve(paths[path] ?? { kind: "absent" });
+}
+
+const GIT_ROW = DARWIN_SYSTEM_EXECUTABLES.find((row) => row.id === "git");
+
+describe("fixed-path Git admission (D71)", () => {
+  it("the production runtime spawns /usr/bin/git under a hostile PATH and DEVELOPER_DIR", async () => {
+    const seen: string[] = [];
+    const host = stockHost();
+    const inspect: SystemPathInspectorV1 = (path) => {
+      seen.push(path);
+      return host(path);
+    };
+    vi.stubEnv("PATH", "/tmp/evil/bin");
+    vi.stubEnv("DEVELOPER_DIR", "/tmp/evil/Developer");
+    try {
+      await createProductionGitRuntime({ inspect, architecture: "arm64" }).admitDistribution("local");
+      expect([...new Set(seen)].sort()).toEqual(["/", "/usr", "/usr/bin", "/usr/bin/git", "/usr/bin/git-receive-pack"]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("retry re-admits after a binary change between plan and retry", async () => {
+    if (GIT_ROW === undefined) throw new Error("fixture: no darwin git row");
+    const first = await admitGitExecutables(DARWIN_SYSTEM_EXECUTABLES, stockHost(), "arm64", "local");
+    const updated = stockHost({ "/usr/bin/git": { sha256: "d".repeat(64), ino: "42" } });
+    await expect(admitGitExecutables(DARWIN_SYSTEM_EXECUTABLES, updated, "arm64", "local")).resolves.toBeDefined();
+    await expect(recheckSystemExecutable(GIT_ROW, updated, first.git)).rejects.toThrow();
+  });
+
+  it("refuses HTTPS and SSH before observing any path", async () => {
+    const seen: string[] = [];
+    const inspect: SystemPathInspectorV1 = (path) => {
+      seen.push(path);
+      return stockHost()(path);
+    };
+    for (const transport of ["https", "ssh"] as const) {
+      await expect(createProductionGitRuntime({ inspect, architecture: "arm64" }).admitDistribution(transport)).rejects.toThrow("unsupported_git_distribution");
+    }
+    expect(seen).toEqual([]);
+  });
+
+  it("no Git module reads PATH or DEVELOPER_DIR", async () => {
+    for (const file of ["runtime.ts", "../../../../../packages/security/src/git/distribution.ts"]) {
+      const source = await nodeFs.readFile(new URL(file, import.meta.url), "utf8");
+      expect(source).not.toMatch(/process\.env(\.|\[")(PATH|DEVELOPER_DIR)/u);
+    }
+  });
+});
 
 const roots: string[] = [];
 
@@ -77,7 +144,6 @@ describe("the receive-pack bridge", () => {
     const grandchildPid = join(root, "grandchild.pid");
     await nodeFs.writeFile(trampoline, '#!/bin/sh\n/bin/sleep 60 &\necho $! > "$1"\nwait\n', { mode: 0o700 });
 
-    const started = performance.now();
     const bridged = bridgeReceivePack({
       executable: trampoline,
       argv: [grandchildPid],
@@ -88,8 +154,8 @@ describe("the receive-pack bridge", () => {
       phase: phase(500),
     });
 
+    // The trampoline sleeps 60 s, so the 15 s test budget is what proves the deadline, not the exit, ended it.
     await expect(bridged).rejects.toThrow("git_process_failed");
-    expect(performance.now() - started).toBeLessThan(5_000);
     expect(isAlive(Number((await nodeFs.readFile(grandchildPid, "utf8")).trim()))).toBe(false);
   }, 15_000);
 });

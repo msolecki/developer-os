@@ -6,6 +6,7 @@ import {
   decodeCanonicalJson,
   encodeCanonicalJson,
   hashCanonicalJson,
+  sortUtf8,
 } from "./canonical-json.js";
 
 const escapedCodeUnits: readonly number[] = [
@@ -239,6 +240,58 @@ describe("CanonicalJsonV1", () => {
     expect(() => decodeCanonicalJson(new TextEncoder().encode('{"a":1}\n'), 7)).toThrow();
   });
 
+  /**
+   * NEW-53 removed repeated encodes around this module, never the encoder, so a
+   * plan-sized document is pinned against a reference that shares no code with
+   * it, and a same-length noncanonical copy that differs only near its last byte
+   * must still be refused by the decoder's byte comparison.
+   */
+  it("catches a large plan-shaped document whose bytes differ from an independent reference or survive a late noncanonical edit", () => {
+    const encoder = new TextEncoder();
+    const reference = (value: unknown): string => {
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
+        return JSON.stringify(value);
+      }
+      if (Array.isArray(value)) return `[${value.map(reference).join(",")}]`;
+      const object = value as Record<string, unknown>;
+      return `{${Object.keys(object)
+        .sort((left, right) => Buffer.compare(encoder.encode(left), encoder.encode(right)))
+        .map((key) => `${JSON.stringify(key)}:${reference(object[key])}`)
+        .join(",")}}`;
+    };
+    const payloads = Array.from({ length: 2000 }, (_, ordinal) => ({
+      ordinal,
+      path: `/Users/founder/Library/Application Support/developer-os/payload-${String(ordinal)}/notes é\u{10000}.md`,
+      sha256: createHash("sha256").update(String(ordinal)).digest("hex"),
+      recordedAt: "2030-01-01T08:00:00Z",
+      mode: ordinal % 2 === 0 ? 0o600 : 0o644,
+      executable: ordinal % 3 === 0,
+      previous: ordinal === 0 ? null : ordinal - 1,
+      label: `line\t${String(ordinal)}\n"quoted"\\`,
+      "": { "\u{10000}": [ordinal, "ß"] },
+    }));
+    const document = {
+      schemaVersion: 1,
+      payloads,
+      createdPaths: payloads.map((payload) => payload.path),
+      maximumPlanBytes: 268_435_456,
+      y: 1,
+      z: 1,
+    };
+
+    const canonical = encodeCanonicalJson(document);
+    expect(canonical).toBe(`${reference(document)}\n`);
+    expect(canonical.endsWith(',"y":1,"z":1}\n')).toBe(true);
+
+    const bytes = encoder.encode(canonical);
+    expect(decodeCanonicalJson(bytes, bytes.byteLength)).toEqual(document);
+    const lateSwap = encoder.encode(`${canonical.slice(0, -14)},"z":1,"y":1}\n`);
+    expect(lateSwap.byteLength).toBe(bytes.byteLength);
+    expect(() => decodeCanonicalJson(lateSwap, lateSwap.byteLength)).toThrow(
+      "invalid canonical JSON: input is not byte-for-byte canonical",
+    );
+  });
+
   it("catches an encoder that serializes sparse array holes as invalid commas or drops them", () => {
     const oneAfterHole = new Array<number>(2);
     oneAfterHole[1] = 1;
@@ -252,6 +305,14 @@ describe("CanonicalJsonV1", () => {
  * routes through it, so a second implementation would be the defect: the digest of a
  * plan, a record or a fingerprint is compared across subsystems and versions.
  */
+describe("sortUtf8", () => {
+  it("catches a sort that places a surrogate-pair key before a higher BMP key by UTF-16 code unit", () => {
+    const rows = [{ path: "a/\u{1F600}" }, { path: "a/�" }];
+
+    expect(sortUtf8(rows, (row) => row.path).map((row) => row.path)).toEqual(["a/�", "a/\u{1F600}"]);
+  });
+});
+
 describe("hashCanonicalJson", () => {
   it("hashes the ASCII domain, its trailing NUL, then the canonical bytes including the LF", () => {
     const expected = createHash("sha256")

@@ -9,7 +9,7 @@ import type { CliResult, ExitCode, RuntimePaths } from "@developer-os/core";
 import { buildCapture } from "@developer-os/brain";
 import type { CaptureBuildResult } from "@developer-os/brain";
 import { createRedactor, SecurityRefusalError } from "@developer-os/security";
-import type { Redactor } from "@developer-os/security";
+import type { RedactionScope, Redactor } from "@developer-os/security";
 
 import {
   failureFrom,
@@ -20,7 +20,7 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext } from "../context.js";
-import { MAX_CAPTURE_INPUT_BYTES } from "./capture.js";
+import { MAX_CAPTURE_INPUT_BYTES, overBroadWarnings } from "./capture.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
 import {
   fingerprintDirectory,
@@ -42,7 +42,7 @@ export interface ImportFileResultV1 {
   readonly path: string; // source-relative, redacted
   readonly outcome: "imported" | "skipped" | "refused" | "would_import";
   readonly captureId: string | null;
-  readonly reason: string | null; // spec §5.6 reason, or "unsupported_type"
+  readonly reason: string | null; // `knowledge-pipeline.md` §3.1 reason, or "unsupported_type"
   readonly redactionCount: number;
 }
 
@@ -83,7 +83,7 @@ type FailureExitCode = Exclude<ExitCode, typeof EXIT_CODES.success>;
 
 const ACCEPTED_EXTENSIONS = new Set([".md", ".markdown", ".txt"]);
 
-/** Spec §5.6, per-file rows. The run's code is the most severe of these. */
+/** `knowledge-pipeline.md` §3.1, per-file rows. The run's code is the most severe of these. */
 const FILE_REFUSAL_CODES: Readonly<Record<string, FailureExitCode>> = {
   import_source_protected: EXIT_CODES.securityRefusal,
   import_source_symlink: EXIT_CODES.securityRefusal,
@@ -95,7 +95,7 @@ const FILE_REFUSAL_CODES: Readonly<Record<string, FailureExitCode>> = {
 
 const NOT_INITIALIZED = "developer-os init";
 
-/** A run-level refusal (spec §5.6). The name is the published `kind`. */
+/** A run-level refusal (`knowledge-pipeline.md` §3.1). The name is the published `kind`. */
 export class ImportRunRefusal extends Error {
   constructor(
     readonly reason: string,
@@ -243,7 +243,7 @@ const enumerationLimit = (root: string): ImportRunRefusal =>
   );
 
 /**
- * Spec §5.5: list `<vendor-home>/projects` and each project's memory
+ * `claude-adapter.md` §15: list `<vendor-home>/projects` and each project's memory
  * directory, nothing else. A project directory holds session transcripts,
  * so it is never listed itself.
  */
@@ -324,7 +324,8 @@ export async function processCandidates(input: {
   readonly captureMethod: "import" | "import-claude-memory";
   readonly projectSlug: "inbox" | "import" | "claude-memory";
   readonly source: ImportResultV1["source"];
-  readonly quarantine: string;
+  readonly quarantine: string; // declared: only `validateChangePlan`'s owned root
+  readonly canonicalQuarantine: string; // what the containment proof held for: every read and write (NEW-20)
   readonly paths: RuntimePaths;
   readonly key: Uint8Array;
   readonly keyDurable: boolean; // false: dry run on an ephemeral key → no duplicate detection
@@ -337,6 +338,8 @@ export async function processCandidates(input: {
   let duplicateCount = 0;
   let remaining = 0;
   let newCount = 0;
+  /** Pattern indexes the redactor called over-broad on any file, warned once each (NEW-24). */
+  const overBroad = new Set<number>();
 
   const prepare = async (candidate: ImportCandidate): Promise<Prepared> => {
     let text: string;
@@ -360,6 +363,7 @@ export async function processCandidates(input: {
       createdAt: context.now().toISOString(),
       redact,
     });
+    for (const patternIndex of built.overBroadPatterns) overBroad.add(patternIndex);
     return built.envelope.content.length === 0 ? { refused: "import_source_empty" } : { built };
   };
 
@@ -367,7 +371,7 @@ export async function processCandidates(input: {
     input.keyDurable &&
     (await readExistingCapture(
       context,
-      join(input.quarantine, built.fileName),
+      join(input.canonicalQuarantine, built.fileName),
       built.fileName,
       redact,
     )) !== null;
@@ -427,7 +431,7 @@ export async function processCandidates(input: {
         continue;
       }
 
-      const target = join(input.quarantine, built.fileName);
+      const target = join(input.canonicalQuarantine, built.fileName);
       try {
         await writeQuarantineCapture(
           context,
@@ -454,10 +458,13 @@ export async function processCandidates(input: {
     return failureFrom({ guards: context.guards }, error, [], recoveryOf(error), result());
   }
 
+  const overBroadPatterns = [...overBroad].sort((a, b) => a - b);
   const refused = rows.filter((file) => file.outcome === "refused");
-  if (refused.length === 0) return success(result());
+  if (refused.length === 0) {
+    return success(result(), overBroadWarnings(overBroadPatterns));
+  }
 
-  // Exit codes 1..6 rank by severity in numeric order (spec §4.1).
+  // Exit codes 1..6 rank by severity in numeric order (`foundation.md` §6).
   const code = Math.max(
     ...refused.map(
       (file) => FILE_REFUSAL_CODES[file.reason ?? ""] ?? EXIT_CODES.operationalFailure,
@@ -467,16 +474,19 @@ export async function processCandidates(input: {
     { guards: context.guards },
     new ImportRefusal(
       code,
-      `import refused ${String(refused.length)} file(s); every other file was processed`,
+      [
+        `import refused ${String(refused.length)} file(s); every other file was processed`,
+        ...overBroadWarnings(overBroadPatterns),
+      ].join("\n"),
     ),
     [],
     undefined,
-    result(),
+    { ...result(), overBroadPatterns },
   );
 }
 
 /**
- * `developer-os import [<path>]`, spec §5 under Q5 A: sources are read and
+ * `developer-os import [<path>]`, `knowledge-pipeline.md` §3.1 (A14 Q5 A): sources are read and
  * never moved, and every new capture is one Foundation transaction.
  */
 export async function runImport(
@@ -496,7 +506,7 @@ export async function runImport(
         "the Claude Code memory layout has not been observed for this product; nothing was read",
       );
     }
-    // Spec §5.5: the variable is not followed, so the memory under it would be missed silently.
+    // `claude-adapter.md` §15: the variable is not followed, so the memory under it would be missed silently.
     if (options.claudeMemory && context.env.CLAUDE_CONFIG_DIR !== undefined && context.env.CLAUDE_CONFIG_DIR !== "") {
       throw new ImportRunRefusal(
         "claude_config_dir_not_followed",
@@ -542,7 +552,7 @@ export async function runImport(
         refused,
         "restore the directory inside the vault's content root; an import never reads from or writes through a path that leaves it",
       );
-    const { contentRoot, quarantine } = await resolveQuarantine(
+    const { contentRoot, quarantine, canonicalQuarantine } = await resolveQuarantine(
       context,
       config,
       paths,
@@ -561,11 +571,15 @@ export async function runImport(
       options.dryRun ? (existingKey ?? randomBytes(32)) : loadOrCreateRedactionKey(paths.stateDir);
     const bind = (key: Uint8Array): Redactor => {
       const redact = createRedactor(key, { userPatterns: config.redaction?.patterns ?? [] });
-      guards = { ...context.guards, redactDiagnostic: (text: string) => redact(text).text };
+      guards = {
+        ...context.guards,
+        redactDiagnostic: (text: string, scope?: RedactionScope) => redact(text, scope).text,
+      };
       return redact;
     };
     const common = {
       quarantine,
+      canonicalQuarantine,
       paths,
       keyDurable: !options.dryRun || existingKey !== null,
       cap: Math.min(options.limit ?? IMPORT_MAX_FILES_PER_RUN, IMPORT_MAX_FILES_PER_RUN),

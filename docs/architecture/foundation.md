@@ -12,16 +12,22 @@ product is built on top of it, by the subsystems listed in `docs/superpowers/BAC
 
 ## 1. Boundaries
 
-Four packages and one test package. The dependency direction is strictly downward; nothing
-below the CLI knows a command exists.
+Foundation is four packages and one test package. The workspace (`pnpm-workspace.yaml`) holds ten;
+the other five belong to the subsystems built on top of Foundation — `@developer-os/brain`
+(`brain.md`), `@developer-os/workflow-schema` (`workflow-schema.md`), `@developer-os/adapter-claude`
+(`claude-adapter.md`), `@developer-os/adapter-codex` (`codex-adapter.md`), and the installed launcher
+`@developer-os/launcher` (`apps/launcher`, release-update design). `brain` and `workflow-schema`
+depend on `core` and `security`; both adapters add `workflow-schema`; the launcher adds
+`platform-macos`; none of them depends on `cli`. The dependency direction is strictly downward;
+nothing below the CLI knows a command exists.
 
 | Package | Owns | May depend on |
 |---|---|---|
 | `@developer-os/core` | result and exit contracts, configuration, runtime paths, change plans, transactions, manifest and drift | nothing in this repository |
 | `@developer-os/security` | canonical paths and containment, the protected-path policy, redaction, shell-free process execution | `core` |
 | `@developer-os/platform-macos` | macOS facts, agent discovery, the transaction lock | `core`, `security` |
-| `@developer-os/cli` | argv, output, exit status, one module per command, and the composition root | all three |
-| `@developer-os/tests` | process-level evidence against the compiled binary | `core` and `security` at runtime, `cli` for types only |
+| `@developer-os/cli` | argv, output, exit status, the command modules, and the composition root | every package except `launcher` and `tests` |
+| `@developer-os/tests` | process-level evidence against the compiled binary | every package except `brain` and `launcher`; it imports `cli`'s compiled `dist/` modules at runtime, not only its types |
 
 Within those packages, one responsibility per path:
 
@@ -31,7 +37,7 @@ Within those packages, one responsibility per path:
 | `apps/cli/src/main.ts` | pure command dispatch returning `CliResult` |
 | `apps/cli/src/io.ts` | injectable user interaction |
 | `apps/cli/src/context.ts` | the composition root and the guards it supplies |
-| `apps/cli/src/commands/` | one command per module |
+| `apps/cli/src/commands/` | one module or directory per top-level command (`automation/`, `git/` and `update/` are directories; `brain.ts` dispatches `reindex.ts` and `refactor.ts`; `project` has no module of its own, and `main.ts` routes `project init` to `project-init.ts` and `project check` to `project-check.ts`), plus shared support modules that are not commands: `brain-dependencies.ts`, `brain-template.ts`, `claude-capabilities.ts`, `codex-capabilities.ts`, `output-schemas.ts`, `project-template.ts`, `quarantine.ts`, `testing.ts`, `untrusted-file.ts` and `vendor-config.ts` |
 | `packages/core/src/result.ts` | stable exit and error contracts |
 | `packages/core/src/config/` | runtime paths and TOML configuration |
 | `packages/core/src/plans/` | exact change-plan model |
@@ -94,18 +100,20 @@ and `core/src/config/` now also owns and exports `BrainConfigV1`. The change is 
 section only when the key is present, and `exactOptionalPropertyTypes` keeps "absent"
 distinguishable from "present-and-undefined" — so a configuration written before the section
 existed still loads and still serializes byte-identically. The surviving rationale is in
-`docs/architecture/brain.md` §3; every amendment to a frozen interface is indexed in
-`docs/superpowers/BACKLOG.md` §8.
+`docs/architecture/brain.md` §3. Every amendment to a frozen interface was indexed in
+`docs/superpowers/BACKLOG.md` §8 until `d72287a` (2026-08-28) replaced that section with an
+inbound-reference index; the amendment record is §8 of `git show d72287a^:docs/superpowers/BACKLOG.md`.
 
 **A second amendment landed on 2026-08-17, on exactly the same terms.** Track R entry R2 gave
 `DeveloperOsConfigV1` an optional `redaction?: { patterns }` member — a bounded list of literal
-substrings, never expressions — because `threat-model.md` §5.7 and `BACKLOG.md` §1 NEW-16 record the
+substrings, never expressions — because `threat-model.md` §5.7 and the since-closed `BACKLOG.md` §1 NEW-16 recorded the
 user-extensible redaction class that was **unreachable**: `redactText` accepted the option and no
 production caller passed it, and this schema had no key a user could set.
 Additive in the same three senses as `brain`: `.strict()` and `schemaVersion = 1` are unchanged, the
 table is emitted only when present, and a configuration predating it loads and re-serializes
-byte-identically. `BACKLOG.md` §8 carries the row, **unratified** — the founder decided to implement
-NEW-16, which is not the same as ratifying the amendment it required.
+byte-identically. The row's last record is §8 of `git show d72287a^:docs/superpowers/BACKLOG.md`,
+**unratified** — the founder decided to implement NEW-16, which is not the same as ratifying the
+amendment it required — and `d72287a` removed it without recording a ratification.
 
 **A third amendment landed on 2026-08-19, and it is the first to touch `CliError` rather than
 the configuration.** Track R entry R2 gave `CliError` an optional `data?: RedactedPayload` member, because
@@ -189,8 +197,9 @@ root. A sixth round then found five more ways to reach it — `as never`, a type
 `asserts` signature, a variable bound to the producer, and a re-export of it — so the sweep's
 coverage is a measured list rather than an argument.
 
-`BACKLOG.md` §8 carries the row, **unratified** — the founder decided to implement Foundation
-request 3, which is not the same as ratifying the amendment it required.
+The row's last record is §8 of `git show d72287a^:docs/superpowers/BACKLOG.md`, **unratified** — the
+founder decided to implement Foundation request 3, which is not the same as ratifying the amendment
+it required — and `d72287a` removed it without recording a ratification.
 
 **A fourth frozen-interface amendment was ratified for DOS-P7 on 2026-08-25, before its code
 lands.** `DeveloperOsConfigV1` keeps `schemaVersion: 1`, its required `git.enabled` and
@@ -208,7 +217,7 @@ clear Git `retry_only` outcome that may consume only its persisted push plan, an
 `uninstall_draining` outcome that grants only silent exit to a runner whose bound lease was removed.
 The active opt-in-
 surfaces design §2.2 is the full lifecycle contract, and
-`BACKLOG.md` §8 carries the same-change ratification record.
+§8 of `git show d72287a^:docs/superpowers/BACKLOG.md` carries the same-change ratification record.
 
 **The 2026-08-27 final review correction closes the command interface around that schema without
 widening it.** `config get/set` has exhaustive readable/mutable dotted-key unions, one
@@ -283,8 +292,8 @@ Launchd uses plan-derived generation labels observable through exact domain-targ
 `launchctl print gui/<uid>/<label>` service probes rather than claiming launchd exposes plist hashes or
 using the caller's implicit bootstrap namespace. Its hash-bound process table also confines
 `bootstrap`/`bootout`, streams, deadlines, and whole-group termination. Authority, pre-recorded inode
-evidence, no-replace verification/compensation, and the push-last exception are indexed in
-`BACKLOG.md` §8. Git execution is additionally confined to an exact root-owned
+evidence, no-replace verification/compensation, and the push-last exception are indexed in §8 of
+`git show d72287a^:docs/superpowers/BACKLOG.md`. Git execution is additionally confined to an exact root-owned
 `SupportedGitDistributionV1`/canonical `SupportedGitProcessTableV1` row and an owner-only
 `GitExecGatewayV1` whose Node-24 trampolines and one-shot `GitProcessSupervisorV1` graph mediate every
 dynamic child. SSH enters its internal bridge through that gateway and consumes a second supervised
@@ -324,7 +333,7 @@ the validated Git policy or an existing log requires them; compensation restores
 `GitConfigQuotedPathV1` excludes controls/line breaks from generated config paths, and the in-process
 pack/ref reader streams under exact compressed/object/inflation/delta/RAM/temp limits plus the one
 inherited 600-second phase. Launchd bootstrap no longer passes the verified plist's mutable pathname:
-on a separately certified pinned row it inherits only the descriptor of the already-unlinked,
+on an admitted `/bin/launchctl` (§10, D71) it inherits only the descriptor of the already-unlinked,
 immutable private snapshot as FD 3 and passes only `/dev/fd/3`; the real source plist descriptor is
 never inherited and there is no fallback. A scheduled runner first authenticates manifest/plist/generation
 installation evidence independently of current active provenance, then under its lease/global lock
@@ -380,9 +389,28 @@ activation path; no V1 claim is adopted or retyped there. The active opt-in-surf
 freezes every retained sync/marker/status/lock/log path and record schema plus the three owned journal
 directories that spec 2 must reserve/create at migration.
 
+**The `instruction` kind (A12, 2026-09-26).** `ManagedArtifactV2` has two `instruction` arms
+(`packages/core/src/manifest/v2.ts` — `instructionArtifact`). A `content` row is a whole file the
+product created: `mergeStrategy: "dedicated"`, `existedBefore: false`, null restore fields, and an
+identity `{ category, id, source }`. A `block` row is the one marked block in a shared vendor
+instruction file: `mergeStrategy: "marked-block"`, owner `claude` or `codex`, category
+`vendor-file`, source `default`, 1 to 64 `members` in strict `(category, id)` order, and at most
+one per owner. Its `existedBefore` follows the file, and the whole-file backup is evidence only,
+never restored. `marked-block` is refused on every other arm. Drift hashes a `content` row like a
+regular file and a `block` row by its extracted block alone: absent markers are `missing`,
+malformed ones `block_malformed`, an edit `content_changed`, and bytes outside the block are never
+drift. Uninstall never downcasts a `block` row
+(`apps/cli/src/commands/uninstall.ts` — `downcastArtifactV2`); the instruction detach (§12.4)
+removes it first.
+
 **V1 refusal, bootstrap recovery routing, and the V2 handoff admission — 2026-09-17 (decision D18).**
 The migration half of the amendment above is withdrawn: no V1 manifest is ever migrated, and only
-Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
+Spec 2's fresh V2 `init` creates V2 state. The `v1_to_v2` arm Core had already shipped was deleted
+on 2026-09-28 (NEW-78): the bootstrap plan, journal, payload-path, Foundation-participant and
+manifest-envelope grammars admit only `fresh_v2_init`, so a persisted `v1_to_v2` plan, an `mm_` or
+`tx_mm_` identifier, a `manifest-migration` path, a `guarded_migration_preimage` source or a
+`v1_migration` envelope is malformed bootstrap state and is refused. Core's unused
+`validateMigratableManifestV1` went with it. Three contracts take the migration's place.
 
 - **`init` refuses a V1 manifest once the packaged bootstrap capability is available.** It exits 4
   (`capabilityUnavailable`) with reason `manifest_v1_not_migratable`, names the manifest path, and
@@ -479,16 +507,17 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
   the per-member refusal table, `refuses a directory at %s as %s instead of treating it as absent
   (NEW-82)`, and `lets a programming error escape instead of relabelling it (NEW-82)`.
 
-  **NEW-82 is closed here and still open one layer out.** `admission.ts` reaches the filesystem
-  through the guarded port, whose `lstat` refuses a directory or a symlink with the member's own
-  reason. `assertOrdinaryCommandAdmitted` does not: `inventoryExactNamespaces` routes a directory at
-  `installation-manifest.json` to its direct-namespace branch, which records children only, so no
-  entry matches the root and the leaf reports absent. The command then falls through to the
-  absent-manifest arm and, on an installed home, refuses exit 6 telling the user to archive bootstrap
-  evidence when the fault is a directory at their manifest path. A plan path is unaffected, because
-  its basename matches `INITIAL_NAMESPACE` and routes to `inventoryTree`, which records the root. The
-  open half is that one path; `apps/cli/src/bootstrap/report.test.ts` carries it as a failing
-  expectation.
+  **NEW-82 and NEW-126 close it one layer out too.** `admission.ts` reaches the filesystem through
+  the guarded port, whose `lstat` refuses a directory or a symlink with the member's own reason.
+  `report.ts`'s `guardedFile`, which `assertOrdinaryCommandAdmitted` reads the manifest and each plan
+  through (and the superseded-handoff check its anchor), calls `inventoryExactNamespaces` with
+  `leaves: true`, which reports a directory root as that one entry, so
+  a directory at `installation-manifest.json` refuses as `NON_REGULAR_BOOTSTRAP_LEAF` naming it
+  instead of reading as an absent manifest. Every other caller keeps the default, where a
+  direct-namespace root records its children only: the product home, `state` and the retention row
+  parents are containers, and recording them would put them into `retainedPaths`. Evidence:
+  `apps/cli/src/bootstrap/report.test.ts` — `distinguishes a directory at the manifest path from an
+  absent one (NEW-126)` and `keeps namespace-container roots out of the inventory (NEW-126)`.
 
 None of these refusal paths spawns a process, which is the only way this product reaches a network:
 `tests/security/network.test.ts` — `the bootstrap refusal paths`.
@@ -502,7 +531,7 @@ only no-replace moves, and every concurrent third state is preserved rather than
 unlinked. The composite journal retains its bytes, tombstones, and backups until the manifest postimage
 and all participants are terminal, so recovery can finish or restore around every move, publication,
 or absence-commit boundary. The active opt-in-surfaces design §2.4 owns ordering and failure semantics;
-`BACKLOG.md` §8 carries the same-change ratification record.
+§8 of `git show d72287a^:docs/superpowers/BACKLOG.md` carries the same-change ratification record.
 
 For coordinator-owned Foundation participants, §2.4 also pre-stages the exact canonical initial
 `planned` journal and records its device/inode before coordinator intent is published. Under the
@@ -741,12 +770,19 @@ not exist here" look identical from outside and are not the same thing.
   all proxy variables pointed at a closed port.
 
   The workspace list is **discovered, not written down**, and that is the whole of the fix
-  for `BACKLOG.md` NEW-1: it used to be a hard-coded array of four directories, so
+  for the closed `BACKLOG.md` NEW-1: it used to be a hard-coded array of four directories, so
   `packages/brain` was added on 2026-08-07 and scanned by nothing while this paragraph
   claimed otherwise. The non-empty assertion is made per workspace rather than over the
   total, because a floor over the sum is satisfied by one populated directory while every
   other goes unread — which is how the gap stayed invisible. No module count is stated here
   any more: a number in prose that no test pins is the same defect in a different shape.
+
+  **Amended 2026-09-28 (Spec 2, D72 P7(f)): one explicit exception.** The release transport
+  (`packages/security/src/update/transport.ts`) is the product's only network module, and only
+  `update` plan and apply compose it (§11). The same scan classifies it by name, and the lint
+  gate's `inspectReleaseAuthoritySurfaces` (`tests/repository/check.ts`) holds both halves on
+  every run: exactly that module reaches a network, and exactly `apps/cli/src/update/context.ts`
+  composes it.
 - **No agent integration.** Agents are *discovered* — `/usr/bin/which`, with a `PATH` and
   nothing else — and never executed. `AgentDiscovery.version` is permanently `null` in
   Foundation because determining it requires running the binary. Discovery that refuses, or
@@ -946,7 +982,18 @@ record.
   exact shape: the lock as an owner `0600` zero-byte single-link regular file, every directory owner
   `0700`, and every child either a bookkeeping path, a retained-evidence path, an ancestor of one, or
   a bootstrap-participant lock/staging entry named by `LifecycleBookkeepingResidueV1`. Shape grants no
-  authority by itself — a lock's liveness is decided only by acquiring it.
+  authority by itself — a lock's liveness is decided only by acquiring it. The residue's participant
+  IDs come from every reported fresh-init envelope, verified or `unverified`: from its plan when the
+  plan bytes were admitted, otherwise derived from the init ID as the ordinal-0 pair
+  `BootstrapExecutor` allocates (NEW-123). An `unverified` envelope's tombstones under
+  `state/transactions` and its participants' staging and backup directories join the retained
+  paths, so a fresh init that died after its handoff stays uninstallable in place (NEW-114). Once no
+  live target is attributable to an `unverified` envelope, it no longer blocks a new intent: its
+  retained tombstones (whatever their mode) and its bootstrap leaf count as inert residue, and a later
+  `init` installs a new ID beside it, with both envelopes retained (founder decision B, NEW-123). Other
+  residue named with its ID (a live staging subtree, a `.fresh-v2-init.<id>.*` leaf) still blocks, and
+  `altered` envelopes are unaffected. Evidence: `apps/cli/src/bootstrap/executor.test.ts` —
+  `installs a new ID beside the unverified envelope after its uninstall, retaining both (NEW-123)`.
 - **The two present-manifest uninstall variants and their derivation (D24).** `deriveVariant`
   (`apps/cli/src/lifecycle/uninstall.ts`) calls Core's `deriveUninstallLaunchdEvidence` on the
   observed manifest's plist rows, the validated configuration's `automation.lifecycle` record, and
@@ -968,11 +1015,11 @@ record.
   is called with `"mf"` only once the four Foundation IDs are already bound
   (`apps/cli/src/lifecycle/uninstall.ts`). The reserved-prefix order for the present-manifest,
   no-launchd coordinator is exactly `lc, tx, tx, tx, tx, mf`.
-- **The capacity refusal (D26).** `MAX_ARTIFACT_MUTATIONS` is 256 (`apps/cli/src/lifecycle/uninstall.ts`);
+- **The capacity refusal (D26, D45).** `MAX_UNINSTALL_ARTIFACTS` is 31 `F(uninstall_artifacts)`
+  steps of 256 mutations, 7,936 (`apps/cli/src/lifecycle/uninstall.ts` — `MAX_UNINSTALL_ARTIFACTS`);
   `LifecycleUninstaller.preview` throws `UninstallCapacityError` (`reason:
   "uninstall_artifact_capacity_exceeded"`, exit 4) before any ID is reserved when the partitioned
-  artifact mutations exceed it. A release bundle over roughly 197 files cannot be uninstalled until
-  Phase 4b decides the durable cap (`BACKLOG.md` NEW-85).
+  artifact mutations exceed it. D45 replaced the single 256-mutation step; NEW-85 closed 2026-09-26.
 - **The non-creating global lock and lock order.** `packages/core/src/lifecycle/locks.ts` states the
   rule its types enforce: the global lock at `state/.lifecycle.lock` is created only by Spec 2's
   fresh `init`, so every other acquirer opens an existing path without `O_CREAT` and refuses
@@ -1047,7 +1094,16 @@ record.
   `packages/core/src/git/effect-journal.ts`, at most `MAX_GIT_EFFECT_JOURNAL_BYTES`, 16 MiB) and
   `state/launchd-effect-journals` (`LaunchdEffectJournalV1`,
   `packages/platform-macos/src/launchd/effect-journal.ts`, at most `MAX_LAUNCHD_EFFECT_JOURNAL_BYTES`,
-  1 MiB), both inspected by the ledger. `LifecycleUnsupportedLeafError` is still defined in
+  1 MiB), both inspected by the ledger. **Amended 2026-09-28 (NEW-113 review finding 1):**
+  `LaunchdEffectJournalV1.launchctlIdentityHash` records the `launchctl` identity the journal was
+  opened with (`null` exactly for a zero-transition effect). A resumed `apply` or `compensate` whose
+  freshly admitted `launchctl` differs — a macOS update between a killed run and its resume — refuses
+  `unsupported_launchd_distribution` with the manual `launchctl bootout gui/<uid>/<label>` for every
+  label the plan may have loaded (`refuseUnsupportedLaunchd`, mapped in `createLifecycleEffectAdapters`),
+  instead of recovery-required `launchd_process_table_changed`, which still covers a changed staging
+  identity. The field changes `maximumLaunchdEffectJournalBytes` and therefore every launchd effect
+  plan hash; no migration exists because no production launchd effect journal was ever written
+  (automation had never been enabled on any install). `LifecycleUnsupportedLeafError` is still defined in
   `codecs.ts` but nothing throws it, so `unsupported_until_plan_1b` is no longer a reachable reason.
   - **Commands.** `git enable|disable|status|sync` (`createGitService`,
     `apps/cli/src/commands/git/service.ts`) and `automation enable|disable|status`
@@ -1071,36 +1127,381 @@ record.
     writes the per-job status (≤ `MAX_AUTOMATION_STATUS_BYTES`, 64 KiB) and ten rotated log slots
     (`AUTOMATION_LOG_SLOTS`, ≤ `MAX_AUTOMATION_LOG_BYTES`, 1 MiB each), redacted before they are
     bounded; each job runs under its `AutomationRunnerLeaseV1`, the lease uninstall drains.
-- **What still refuses: the distribution rows and the re-pinning rule (NEW-84, D59).** Every Git
-  operation admits the executable against `SUPPORTED_GIT_DISTRIBUTION`
-  (`packages/security/src/git/distribution.ts`) and every launchd operation admits `launchctl` against
-  `SUPPORTED_LAUNCHD_DISTRIBUTION` (`packages/platform-macos/src/launchd/distribution.ts`); a mismatch
-  in any pinned field refuses `unsupported_git_distribution` or `unsupported_launchd_distribution`
-  before any live authority. Both rows were measured read-only on 2026-09-23 (macOS 26.6.2 `25G83`,
-  Xcode 27.0 `27A266a`, Apple Git-157) and are the spec's values (Spec 1 §4.2, §5.3, "Amended
-  2026-09-23 (D59)"). Two refusals stand until NEW-113 (D65, 2026-09-26) replaces the exact-build pin with fixed
-  system paths, ownership and a version floor: the launchd row's `certification` is `null`, so every launchd mutation refuses (read-only
-  observation, preview and `automation status` still report state, and an unsupported or uncertified
-  row names the manual `launchctl bootout gui/<uid>/<label>` per installed label, residual 10); and
-  only the local/file Git transport is traced, so an HTTPS or SSH remote refuses
-  `unsupported_git_distribution`. Tests that exec the pinned Git or `launchctl` are
-  `*.pinned-host.test.ts` files, run by `npm run test:pinned-host` and never by hosted CI. The re-pinning rule below is superseded by D65 and stays only
-  while the pin does:
-  1. **One row per package, as data.** The Git row is the one constant `SUPPORTED_GIT_DISTRIBUTION`;
-     the launchd rows are the one constants file `packages/platform-macos/src/launchd/distribution.ts`.
-     No other file restates a hash, size, build or version literal; tests import the constant and
-     mutate one field at a time.
-  2. **Measure read-only.** The command list never runs `launchctl bootstrap`, `bootout`, `load`,
-     `unload`, `enable`, `disable` or `kickstart`, and never writes under `~/Library/LaunchAgents`
-     (it is in
-     `git show d2f18b4:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`, "NEW-84").
-  3. **Refuse on any drift.** OS product version or build, executable path, owner, mode, size or hash,
-     Xcode selection, build-option line, link target and SSH bytes are all compared; version text is
-     never trusted on its own.
-  4. **Re-pin in one change.** Measure the new row, amend the spec rows with a dated founder-approved
-     amendment, replace the constant, update every exact-set test that imports it, record the Git
-     process trace and run the FD 3 bootstrap certification on a disposable host at that exact
-     build, and review — one commit. A row is replaced, not added; a row is kept only while a
-     certified host for it still exists.
-  5. **Stop when unsupported.** Until certification evidence exists for the pinned launchd row, every
-     launchd mutation refuses.
+- **Which Git, `ssh` and `launchctl` run: fixed-path admission (D65, D71; NEW-113's code, 2026-09-28).**
+  The exact macOS build plus binary SHA-256 pin of D59 is gone; Spec 1 §4.2 and §5.3 "Amended
+  2026-09-28 (D71)" and their D71 addendum are normative. What the code relies on:
+  1. **One per-platform table.** `SystemExecutableRowV1` and the `posix_root_owned` predicate live in
+     `packages/security/src/system-executables.ts`; the `darwin` rows are `DARWIN_SYSTEM_EXECUTABLES`
+     in `packages/platform-macos/src/system-executables.ts`. That table is the platform seam:
+     `admitGitExecutables` (`apps/cli/src/commands/git/runtime.ts`) and the launchd `schedulerRow`
+     (`packages/platform-macos/src/launchd/distribution.ts`) read it directly, and `PlatformAdapter`
+     carries no system-executable method (NEW-117 removed three that had no production caller). Four
+     rows are implemented: `git` `/usr/bin/git`, `git-receive-pack` `/usr/bin/git-receive-pack` (both
+     Apple shims following the `xcode-select` choice), `ssh` `/usr/bin/ssh` and `scheduler`
+     `/bin/launchctl`. Linux (`/usr/bin/git`, `/usr/bin/ssh`, systemd user units) and Windows
+     (`%ProgramFiles%\Git\cmd\git.exe`) are recorded in the spec as intended, not implemented; no
+     contract field names a macOS build, an Xcode version or a certificate. `PATH`, `DEVELOPER_DIR`
+     and `xcrun` are never consulted, and every Git child environment is an exact profile, so no
+     `xcrun`-steering variable reaches the shim.
+  2. **`posix_root_owned`.** The path is a regular file (a symbolic link refuses), uid `0`,
+     `(mode & 0o022) == 0`, owner-execute set, neither setuid nor setgid; each ancestor (`/`, `/usr`,
+     `/usr/bin` for Git and ssh; `/`, `/bin` for `launchctl`) is a uid-`0` directory with
+     `(mode & 0o022) == 0`.
+  3. **Floors and a probe, no ceiling.** Git `2.54.0` with `(Apple Git-<n>)`, `n >= 157`, read from
+     `git --version --build-options` through the shim, which must also print `cpu: arm64`,
+     `shell-path: /bin/sh`, `default-hash: sha1` and `default-ref-format: files` exactly once (other
+     lines ignored, more than 32 or a non-zero exit refuses); ssh `OpenSSH_10.3p1`; macOS
+     `ProductVersion >= 26.6.2`, with `ProductBuildVersion` recorded and never compared. Policies:
+     `GIT_DISTRIBUTION_POLICY` (`apple-git-arm64-v2`, process table `apple-git-process-v2`) and
+     `LAUNCHD_DISTRIBUTION_POLICY` (`launchctl-macos-preview-v2`, `launchctl-macos-fd3-v2`); an old
+     ID in a persisted plan or journal refuses.
+  4. **Evidence per invocation, rechecked before every exec.** Admission returns
+     `AdmittedSystemExecutableV1` (`dev`, `ino`, `size`, `sha256`). Git holds it in memory for one
+     top-level invocation and never persists it, so a `push_pending` retry after a macOS or Xcode
+     update re-admits. `GitProcessSupervisor` stays synchronous: it rechecks each admitted file
+     before every real exec through the synchronous pair `inspectSystemPathSync` /
+     `recheckSystemExecutableSync`, whose digest cache is keyed by the file's full identity including
+     `mtimeNs`/`ctimeNs`. Launchd binds `LaunchctlIdentityV1` into the execution table through
+     `processTableHash` (the template and preview carry only the `launchctl_identity` slot, so two
+     admitted Macs hash equal) and `recheckLaunchdHost` compares it before every process;
+     `LaunchdEffectJournalV1.launchctlIdentityHash` (above) makes a resume on a changed `launchctl`
+     refuse with the manual `bootout` list. The production launchd runner spawns `/bin/launchctl`
+     and nothing else (`launchctlRunner`, `apps/cli/src/lifecycle/adapters.ts`).
+  5. **What still refuses.** `certification` is removed; the FD-3 contract is enforced on every run by
+     the post-bootstrap observation, whose failure compensates and refuses
+     `unsupported_launchd_distribution`. A host below a floor names the manual
+     `launchctl bootout gui/<uid>/<label>` per installed label (Spec 1 residual 10). Only the
+     local/file Git transport is traced: `git_remote_https` has no row and an HTTPS or SSH remote
+     refuses `unsupported_git_distribution` (D59 Q4-A, D71 Q4). Accepted: the Git tree behind the
+     shim is not admitted by mode (residual 13), and the shim still decides its developer directory
+     (residual 14). Tests that exec the real binaries are `*.pinned-host.test.ts`, run by
+     `npm run test:pinned-host` on any admitted host (refusing, never skipping, below a floor) and
+     never by hosted CI; the Phase 9 gate on a disposable account (NEW-113's Task 5) was skipped
+     when NEW-113 closed under D76 (2026-09-29), so the first enable on any Mac is the first real run.
+
+## 11. Release, update and rollback (Spec 2)
+
+**Added 2026-09-28** by NEW-110 Task 12, carrying the contracts of Spec 2
+(`docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`, amended by D72 P1–P9)
+that the shipped code now implements. The spec stays normative for every literal while Task 11b
+and NEW-112 depend on it; this section is what a reader of the code needs.
+
+### 11.1 The installed release
+
+- **Layout.** A release lives at `releases/<version>/darwin-<arch>/` with its three signed metadata
+  documents retained under `state/release-metadata/`. `state/active-release.json` names the one
+  active release, `state/release-trust.json` holds the trust high watermarks, and
+  `state/update-rollback.json` plus `rollback/<payload-id>/` hold the one retained rollback set.
+  `state/update-executor.json` names the recovery executor while an update runs. Each is written
+  only by a coordinator step; nothing else mutates them.
+- **Trust.** A release is admitted only through the signed chain: an offline root (the launcher's
+  FD 3 handoff) delegates one release key, which signs the release index, which names each
+  bundle's archive and manifest by size and SHA-256 for both `arm64` and `x64`. Delegation, index
+  and accepted-release sequences are high watermarks: a lower one refuses as replay (exit 5), and
+  trust never moves backwards — not on compensation, not on rollback.
+- **Architecture.** The installed release's architecture selects the bundle (`arm64` is ordinal 0,
+  `x64` ordinal 1 in every index entry); the bundle manifest, the release identity and the bundle
+  root carry it, and a bundle, archive or manifest of the other architecture refuses.
+
+### 11.2 `update` and `update rollback`
+
+- **Plan-only by default.** `update` reads the home, the FD 3 trust, the signed metadata and the
+  bundle, runs the target planner over one attempt-owned scratch and prints a preview; it writes
+  nothing durable. `update rollback` reads only retained local evidence: no FD 3, transport,
+  scratch or planner.
+- **Apply.** `--apply` heals any update residue first, then revalidates under the global lock: a
+  clear V2 closure, the same home, the same retained evidence, and a planner rerun whose
+  transcript and candidate equal the preview's. It reserves one allocator block for every prefix
+  (D72 P7(e)), composes every leaf plan and the construction plan (`apps/cli/src/update/compose.ts`),
+  rechecks exact capacity, stages the construction envelope and hands off to the V2 coordinator.
+- **Forward order** (§9.3): bundle, owner files, rollback payload, the transitional manifest
+  (preserve, publish), trust, rollback record, active, target verifier, recovery executor switch to
+  the fallback, terminal retirement of the prior rollback set, the terminal manifest (publish,
+  finalize tombstones). **Rollback order** (§10.2): verify the previous bundle, the retained payload
+  and the record in place, owner files inverse, the transitional manifest, the previous active
+  record, the previous verifier, the executor switch, retirement of the consumed set and the
+  rejected release, the terminal manifest.
+- **The point of no return** is the target verifier's durable success. A failure before it
+  compensates to the old release (trust stays advanced); after it every step force-forwards. A
+  resumed run reports the exit class of the persisted `compensationCause` (D72 P7(b)): a verifier
+  rejection is exit 5, anything else exit 1.
+- **Fallback handoff.** Production binds `--apply` with no fallback until Task 11b extends the
+  launcher's FD 3 document, so it refuses `update_fallback_unavailable`, exit 4, before any write
+  (D72 P7(d)). Only the synthetic fixture supplies one.
+- **Codex.** A Codex tree change re-registers the plugin exactly once (`codex-adapter.md` §14).
+
+### 11.3 The D72 rules the code relies on
+
+- **P1** — source parents are construction directories; a source executor takes a parent's identity
+  only from the construction journal, never from a use-time `lstat`.
+- **P2** — a lifecycle manifest postimage carries no inode; its identity comes from reopened
+  construction evidence (`lifecycleIdentity: "construction_evidence"`), while Spec 1's Git and
+  automation plans keep `"inline"`.
+- **P3** — the four `manifest/*` steps run over two plans, transitional and terminal; the terminal
+  set is the transitional set minus exactly the retired partition, or the handler refuses exit 6.
+- **P4** — the three signed metadata documents are construction `plan_derived` rows with the role
+  `release_metadata_after`, bound to their signed hashes.
+- **P5** — an ephemeral reservation may be absent or empty; `keep` never reads or hashes it, so a
+  home without `state/update-rollback.json` or `state/git-sync.json` updates.
+- **P8** — admitted bookkeeping paths carry their planned identity (NEW-86).
+- **P9** — rollback restores each owner file from its retained blob, reopened no-follow under
+  `rollback/<payload-id>/blobs/` and bound to the retained inventory; owner and migration slots
+  follow the operation.
+
+### 11.4 Exit codes on the update surface
+
+Spec 2 §11's mapping on top of §6: 1 for a bounded transport interruption or a failure after a prior
+capacity check; 2 for a malformed request, a nonexistent release or a downgrade; 3 for managed
+drift, a post-update edit blocking rollback, or a Codex registration that is not `registered`; 4
+for an unsupported architecture, a launcher or protocol too old, or no fallback handoff; 5 for any
+signature, checksum, origin, archive, process or verifier refusal; 6 for an incomplete or
+contradictory journal, a third state, missing rollback evidence, or malformed trust, active or
+manifest state. Messages carry fixed reason codes only.
+
+### 11.5 Accepted residuals (Spec 2 §13.3, unchanged)
+
+No first-observation freeze resistance; one root and one active release key; one previous version
+only; rollback never merges; one fixed online source; the signed target planner is not OS-sandboxed;
+protocol growth refuses until the launcher upgrades; publication is A16's; the `symlink` artifact
+arm is validated but unreachable (held as an exact set by `tests/security/symlink-escape.test.ts`);
+two V2 Foundation ref types.
+
+### 11.6 Proof scope (D72 P7(f))
+
+Spec 2's §12 gate is proven on the synthetic release for both architectures: install, preview and apply,
+a second apply, rollback, reapply and uninstall (`tests/e2e/release-update.test.ts`); every durable
+death point of apply, rollback and a verifier-rejected update recovers
+(`tests/integration/update/recovery.test.ts`); the signature chain runs through the production
+transport (`tests/integration/update/signature-transport.test.ts`); archives and the planner's
+request/result binding for both architectures (`tests/integration/update/archive-planner.test.ts`).
+The synthetic home carries the core owner only. The Git and automation leg joins with NEW-113, and
+the real-release half waits for Task 11b and A16.
+
+## 12. Instruction artifacts (A12)
+
+**Added 2026-09-29**, carrying the contracts of the A12 design (approved D47, amended D51 and D62)
+that the shipped code implements; the spec retired on 2026-09-29
+(`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`)
+and this section is the contract. The block grammar lives in Core beside drift; each adapter
+renders its own vendor tree (`claude-adapter.md` §18, `codex-adapter.md` §16) and imports neither
+the other adapter nor the CLI.
+
+### 12.1 Sources and bounds
+
+- **Defaults** are the release's `instructions/` tree, read only through the admitted release
+  (`apps/cli/src/instructions/sources.ts` — `loadInstructionDefaults`); the working tree is never
+  read. The catalog is strict
+  (`packages/core/src/instructions/catalog.ts` — `validateInstructionCatalog`): `schemaVersion: 1`,
+  rows `{ category, id, legacyName, vendors, thinCommand }` sorted and unique, `thinCommand` only
+  on a `skill`. A file no row claims, or a row with no file, refuses `instruction_catalog_invalid`,
+  exit 2. `plugins/claude/` and `plugins/codex/` are rendered from the defaults alone.
+- **Overrides** live under `<product-home>/instructions/<vendor>/`, in the category directories
+  `rules`, `scoped-rules`, `output-styles`, `agents` and `skills`; the id is `<id>.md` or the skill
+  directory name (`apps/cli/src/instructions/sources.ts` — `loadInstructionOverrides`). An override
+  with a default's `(category, id)` replaces it on that vendor, a skill as a whole directory
+  keeping the default's `thinCommand`; a new pair adds an artifact; both record `source: "user"`.
+  An unknown category directory refuses; a category the vendor lacks (Codex `output-styles`) is
+  reported `unsupported-vendor`. The product never creates, edits or deletes anything under the
+  tree, it is never a manifest row, fresh `init` admits it as opaque user data, and the
+  absent-manifest walk classifies it as user data
+  (`packages/core/src/lifecycle/absent-manifest.ts` — `USER_DATA_HOME_ENTRIES`).
+- **Bounds** (`packages/core/src/instructions/bounds.ts` — `INSTRUCTION_BOUNDS_V1`): an id matches
+  `^[a-z0-9][a-z0-9-]{0,63}$`, is not prefixed `developer-os-` and names no workflow; a relative
+  segment matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` at depth ≤ 4; a file is ≤ 256 KiB of UTF-8
+  with no BOM, NUL or CR; a skill is ≤ 64 files and ≤ 1 MiB; a vendor after the merge is ≤ 128
+  artifacts and ≤ 8 MiB; a scoped rule's `paths:` holds 1 to 32 globs of ≤ 256 bytes; rule and
+  scoped-rule text may not contain a block marker. A violation refuses
+  `instruction_source_invalid`, exit 2, naming path and line only. The rendered Codex block body
+  is ≤ 64 KiB (`instruction_block_too_large`, exit 2). A product home whose segments are not all
+  `[A-Za-z0-9._-]` cannot appear in a Claude `@` line and refuses
+  `instruction_path_not_importable`, exit 2.
+- **Redaction.** `tests/repository/instruction-defaults.test.ts` scans `instructions/` and
+  `templates/project/` on every run. A commit that adds or changes a default also runs the same
+  scanner with a private pattern file kept outside the repository, `--patterns <file>`
+  (`tests/tools/scan-instruction-defaults.ts` — `scanInstructionDefaults`), and records the command
+  and its zero finding count. The author of a default never opens a legacy path; the founder
+  supplies legacy text through a copy outside the repository.
+
+### 12.2 The marked block
+
+- **Grammar** (`packages/core/src/manifest/instruction-block.ts` — `extractInstructionBlock`):
+  `<!-- developer-os:begin v1 -->`, a managed-by header line naming
+  `<product-home>/instructions/<vendor>/`, the body, `<!-- developer-os:end v1 -->`. It is
+  well-formed when each marker occurs exactly once on its own LF-terminated line, begin before
+  end; the block's bytes run from the begin line through the end line's LF. Any other count or
+  order is malformed.
+- **First insertion**
+  (`packages/core/src/manifest/instruction-block.ts` — `insertInstructionBlock`) appends after the
+  file's final LF, adding one LF first if a non-empty file lacks it; that LF is the only byte an
+  install and uninstall cycle may leave. A missing file is created holding only the block.
+- **Merge** (`packages/core/src/manifest/instruction-block.ts` — `decideInstructionBlockMerge`),
+  base = the row's `blockHash`: malformed markers refuse `instruction_block_malformed`, exit 3;
+  absent markers re-insert the proposal (reported `restored` when a base exists); a current block
+  equal to the proposal writes nothing; equal to the base, it writes the proposal; anything else
+  refuses `instruction_block_conflict`, exit 3, with conflict evidence: three hashes and a redacted
+  two-way diff bounded at 1 MiB and 1,000 lines. The write is one `replace` of the whole file
+  guarded by the whole-file hash read at plan time, so a concurrent edit anywhere refuses. Every
+  exit-3 refusal carries one recovery text
+  (`apps/cli/src/instructions/attach.ts` — `instructionConflictRecovery`): move the edits into
+  `<product-home>/instructions/<vendor>/`, delete the whole block, re-run.
+
+### 12.3 `init` installs and reconciles
+
+- `init --adapters <claude,codex|claude|codex|none>`
+  (`apps/cli/src/instructions/apply.ts` — `parseAdaptersFlag`; any other value
+  `adapters_flag_invalid`, exit 2). A fresh `init` without the flag selects `none`, writes nothing
+  into a vendor home and names the flag; a re-run without it keeps the stored `adapters.*`. A
+  selected vendor whose CLI is absent, unreadable or below its floor refuses
+  `adapter_unavailable`, exit 4, before any mutation; no admitted release refuses
+  `packaged_release_unavailable`, exit 4; a release whose version or `releaseIdentityHash` differs
+  from the installed one refuses `release_mismatch`, exit 4
+  (`apps/cli/src/instructions/apply.ts` — `assertInstalledRelease`).
+- The step runs after the bootstrap handoff, is not in `INIT_OWNED_CHECKS`, and its failure never
+  reverts the installed home; `init` exits with its code. On an installed V2 home
+  (`apps/cli/src/commands/init.ts` — `settleExistingV2`) drift in a `claude` or `codex` row is
+  left to the planners below; drift in any other row still refuses.
+- `apps/cli/src/instructions/apply.ts` — `applyInstructions` runs, each under its own gate entry:
+  detach every deselected vendor (§12.4); attach the selection as one Foundation transaction
+  (`apps/cli/src/instructions/attach.ts` — `planInstructionAttach`: every file, both blocks, any
+  whole-file backup, the `adapters.*` values and the manifest rewrite); then register Codex
+  (`codex-adapter.md` §16). An unchanged re-run writes and registers nothing.
+- **Content targets.** An unmanaged entry refuses `instruction_target_occupied`, exit 3, and is
+  never adopted; a managed file the user edited refuses `instruction_target_drifted`, exit 3; a
+  deleted managed file is re-created (`restored`); a row the render no longer produces is removed
+  unless edited.
+- **Parents.** A missing parent of an authorized target becomes a `directory` row; the caller
+  creates it `0700` before `execute()` (the executor creates no directory) and removes the ones it
+  created, deepest first, if the transaction refuses. A parent that already exists is never a row.
+- **Backups.** A pre-existing vendor file's whole-file backup is the content-addressed
+  `backups/instruction-<owner>-<sha256>`, reused when identical, admitted by the bookkeeping shape
+  (`packages/core/src/lifecycle/bookkeeping.ts` — `INSTRUCTION_BACKUP_NAME`), never restored.
+
+### 12.4 Detach and `uninstall`
+
+- `apps/cli/src/instructions/detach.ts` — `planInstructionDetach` removes the detached vendor's
+  rows outside the product home, plus the Codex home record when Codex detaches. A drifted content
+  file refuses `managed_drift`, exit 3; a vanished one drops its row. A block equal to its base is
+  stripped (`replace` with the file minus the block, or `remove` when the product created the file
+  and nothing remains); absent markers drop the row; malformed markers or an edited block refuse
+  exit 3, an edit with conflict evidence. The same transaction sets the vendor's `adapters.*` to
+  `false`. After the commit, product-created directories the plan emptied are removed deepest
+  first; any others are kept and reported. Codex is unregistered before any file changes.
+- `uninstall` detaches both vendors before the drained uninstall
+  (`apps/cli/src/lifecycle/uninstall.ts` — `detachVendorInstructions`), which then sees only
+  product-home rows; its dry run and prompt preview do not detach. A vendor's product-home rows
+  (`<product-home>/claude/instructions/`, the Codex marketplace tree, `codex/registration.json`)
+  stay after a deselection and leave with the drained uninstall.
+
+### 12.5 Vendor homes and the closed authorization
+
+- `H`, `P` and `C` are resolved once per command
+  (`apps/cli/src/instructions/vendor-homes.ts` — `resolveVendorHomes`). `C` is the Codex home the
+  Codex attach recorded in `<product-home>/codex/codex-home`
+  (`apps/cli/src/instructions/vendor-homes.ts` — `codexHomeRecordPath`), read no-follow and
+  owner-checked; before any attach it is `CODEX_HOME` when absolute, else `H/.codex`. A set
+  absolute `CODEX_HOME` that differs refuses `codex_home_mismatch`, exit 3; deselecting Codex
+  removes the record. `CLAUDE_CONFIG_DIR` is never followed, and `doctor`'s `instructions` check
+  warns while it is set.
+- `apps/cli/src/bootstrap/admission.ts` — `isVendorAuthorized` is the whole external
+  authorization, exact per owner and arm, refusing `.` and `..` segments. `claude`: the subtree
+  `H/.claude/skills/developer-os/` (`file`, `directory`, and `instruction` content of category
+  `agent`, `skill` or `command`); `H/.claude/rules/developer-os-<id>.md` (`scoped-rule`);
+  `H/.claude/output-styles/developer-os-<id>.md` (`output-style`); exactly `H/.claude/CLAUDE.md`
+  (block only); the directories `H/.claude`, `H/.claude/skills`, the plugin root,
+  `H/.claude/rules` and `H/.claude/output-styles`. `codex`: `C/agents/developer-os-<id>.toml`
+  (`agent`), exactly `C/AGENTS.md` (block only), and the directories `C` and `C/agents`. A symlink
+  at any component of a target refuses `instruction_target_symlinked`, exit 5.
+
+### 12.6 `doctor`
+
+- `instructions` (`apps/cli/src/commands/doctor.ts` — `inspectInstructions`) lists, per selected
+  vendor, every installed catalog row, every override and the vendor's `vendor-file` block, sorted
+  by `(owner, category, id)`, each `installed`, `drifted`, `missing`, `emulated` (a Codex scoped
+  rule), `unsupported-vendor` (a Codex output style) or `held-back`. Any drifted row makes its
+  artifact `drifted`. It fails, exit 3, on `drifted`, `missing` or `block_malformed`, and warns on
+  `unsupported-vendor`, `held-back` and a set `CLAUDE_CONFIG_DIR`. Human output is one
+  `<owner> <category>/<id>: <source>, <state>` line per artifact.
+- `held-back` is a Claude category in
+  `apps/cli/src/instructions/attach.ts` — `UNPROVEN_CLAUDE_CATEGORIES`: not installed until a real
+  session proves it loads. The set has been empty since the billed row passed
+  (`claude-adapter.md` §14.1).
+- `codex-registration` (`apps/cli/src/commands/doctor.ts` — `checkCodexRegistration`):
+  `unregistered` or `stale` fail exit 1, `cache-stale` only under `--probe`, an absent CLI warns;
+  the recovery is re-running `init`. Neither check is init-owned.
+
+### 12.7 Accepted residuals
+
+- A default cannot be disabled, only replaced by an override.
+- Codex registration is an unjournaled external effect: a crash between the attach commit and
+  registration leaves an unregistered tree until the next `init`.
+- The conflict diff is two-way; the base block's bytes are not retained.
+
+## 13. Project templates: `project init` and `project check` (A14)
+
+**Added 2026-09-29**, carrying the contracts of the A14 tooling-verbs design (D47, amended by
+NEW-108) that the shipped code implements; the spec retired on 2026-09-29
+(`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`) and
+this section is the contract.
+
+**Command surface.** A14 adds three verbs and changes no other command; none of them opens the
+network or spawns a process.
+
+| Command | Options | Positionals | Mutates | Contract |
+|---|---|---|---|---|
+| `import [<path>]` | `--claude-memory`, `--limit <n>`, `--dry-run`, `--json` | 0..1 | the vault quarantine only | `knowledge-pipeline.md` §3.1 |
+| `project init [<dir>]` | `--dry-run`, `--json` | 0..1 after the subcommand | files in `<dir>`, create-only | §13.1 |
+| `project check [<dir>]` | `--json` | 0..1 after the subcommand | nothing | §13.2 |
+
+Dispatch lives in `apps/cli/src/main.ts`: `import` is in `COMMAND_OPTIONS` and
+`COMMAND_POSITIONALS`, and `--claude-memory` with a `<path>` exits 2 at parse time; `project` is a
+group whose `PROJECT_SUBCOMMANDS` admits `init` and `check`, and an unknown subcommand exits 2. The
+ordinary-command bootstrap gate (`assertOrdinaryCommandAdmitted`) applies to all three, as to every
+command but `init`. Output follows `emit`/`publish`: human lines through `renderPath`, one `--json`
+line, every string leaf redacted. The `doctor` check `vendor-config` is `claude-adapter.md` §15.
+`repo audit|bootstrap|secrets-scan` and `project worktree` are recorded refusals with no dispatch
+entry (`docs/migration/instruction-inventory.md` §5).
+
+### 13.1 `project init [<dir>] [--dry-run] [--json]`
+
+- **Template set.** `PROJECT_TEMPLATE` (`apps/cli/src/commands/project-template.ts` —
+  `PROJECT_TEMPLATE`) embeds the flat files of `templates/project/`: `AGENTS.md`, `CLAUDE.md` and
+  `_Context.md`. They are static bytes with no substitution, and every file lands at the project root.
+  `project-template.test.ts` pins the exact names, at most `PROJECT_TEMPLATE_MAX_FILES` (8), each at
+  most `PROJECT_TEMPLATE_MAX_BYTES` (64 KiB), byte-equal to the checked-in copy and finding-free. An
+  empty set refuses `project_templates_unavailable`, exit 4, before any read or write.
+- **Before any write.** An uninitialized product refuses `project_not_initialized`, exit 1: the
+  journals live in the product home. `<dir>` defaults to the working directory, is canonicalized and
+  must be an existing directory (`project_root_not_directory`, exit 2). A root inside, containing or
+  equal to the product home or the Brain refuses `project_root_overlaps_product`, exit 5.
+- **Overrides (D5).** `<product-home>/templates/project/<name>` replaces the default of the same name
+  as a whole file; any other name is ignored with a warning. An override is read through
+  `readUntrustedText` at the 64 KiB bound. An unreadable one refuses `project_template_unreadable`
+  with the reader's exit code; any redactor finding refuses `project_template_secret`, exit 5,
+  because the output is a repository file that may be pushed.
+- **Create-only.** If any target exists, `project_file_exists`, exit 3, lists every existing path and
+  nothing is written; there is no merge and no `--force`. Otherwise one Foundation transaction, kind
+  `project-init`, all `create`, with `<dir>` the owned root and the product home and the Brain
+  excluded. `--dry-run` writes nothing and returns `transactionId: null`.
+- **The user's files.** They get no manifest row and no drift check, and `uninstall` never removes
+  them. No vendor settings file is ever written (`threat-model.md` §7).
+- **Key.** Never created: `readRedactionKey`, else an ephemeral key, which only decides whether a
+  finding exists.
+
+### 13.2 `project check [<dir>] [--json]`
+
+Read-only; it spawns nothing and needs no installed product: an unreadable configuration means no
+user patterns, and an absent key means an ephemeral one. `ProjectCheckReportV1` carries
+`DoctorCheck` rows from a closed set:
+
+| Check | Status | When |
+|---|---|---|
+| `instruction-file` | `warn` | neither `AGENTS.md` nor `CLAUDE.md` exists |
+| `instruction-size` | `warn` | an instruction file exceeds `PROJECT_INSTRUCTION_WARN_BYTES` (40,000, product-chosen) |
+| `instruction-secrets` | `fail` | a redactor finding in an instruction or template file (exit 5), or a file over `PROJECT_CHECK_MAX_READ_BYTES` (1 MiB), not read past the bound (exit 1) |
+| `instruction-secrets` | `warn` | a present file was not scanned: a link or a special file |
+| `template-set` | `warn` | a template name is absent from `<dir>` |
+
+A secret is reported as file, class and 1-based line: a whole-file pass, then one pass per line,
+with line `null` when no single line carries the finding (a multi-line key block). The value and the
+fingerprint are never printed. `doctorExitCode` picks the exit code (§6's order); warnings alone
+exit 0.

@@ -239,7 +239,7 @@ async function loadSources(
   return { workflows, sources };
 }
 
-/** Spec §6.4: registers when the tree changed or Codex does not list it; success records the tree hash. */
+/** `codex-adapter.md` §16: registers when the tree changed or Codex does not list it; success records the tree hash. */
 async function reconcileRegistration(
   context: CliContext,
   lifecycle: CliLifecycleContext,
@@ -320,7 +320,7 @@ export async function stableNodePath(execPath: string): Promise<string> {
 const EMPTY_REPORT: InstructionApplyReportV1 = { installed: [], restored: [], unchanged: [], emulated: [], unsupported: [], heldBack: [] };
 
 /**
- * Spec §6.1 and §6.2: detach every deselected vendor, attach the selection, then register Codex.
+ * `foundation.md` §12.3: detach every deselected vendor, attach the selection, then register Codex.
  * Each transaction runs under its own gate entry, so each plans against the home the previous
  * one committed.
  */
@@ -443,7 +443,7 @@ export async function applyInstructions(context: CliContext, input: {
       }
       await context.executor.execute({ kind: "instructions", mutations: plan.mutations });
     } catch (error) {
-      // Spec §2.2: a parent belongs to the transaction, so a refused one leaves none, deepest first.
+      // `foundation.md` §12.3: a parent belongs to the transaction, so a refused one leaves none, deepest first.
       for (const directory of created.reverse()) await nodeFs.rmdir(directory).catch(() => undefined);
       throw error;
     }
@@ -455,7 +455,7 @@ export async function applyInstructions(context: CliContext, input: {
     ? await reconcileRegistration(context, lifecycle, homes, codex)
     : null;
   if (report.heldBack.length > 0) warnings.push(`held back until their Claude loading is proven: ${report.heldBack.join(", ")}`);
-  // Spec §7.2: Codex runs no hook until the user trusts it, and the product never writes that trust.
+  // `hooks.md` §3.7: Codex runs no hook until the user trusts it, and the product never writes that trust.
   if (selection.includes("codex")) warnings.push(CODEX_HOOK_TRUST_STEP);
   return { ...report, registration, warnings };
 }

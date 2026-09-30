@@ -121,9 +121,10 @@ describe("strict update paths", () => {
     expect(deriveBootstrapPayloadPath(productHome, "fresh_v2_init", run, 0)).toBe(
       "/synthetic/product/state/.fresh-v2-init.run_1.0000000000.payload",
     );
-    expect(deriveBootstrapPayloadPath(productHome, "v1_to_v2", run, 999_999)).toBe(
-      "/synthetic/product/state/.manifest-migration.run_1.0000999999.payload",
+    expect(deriveBootstrapPayloadPath(productHome, "fresh_v2_init", run, 999_999)).toBe(
+      "/synthetic/product/state/.fresh-v2-init.run_1.0000999999.payload",
     );
+    expect(() => deriveBootstrapPayloadPath(productHome, "v1_to_v2" as never, run, 0)).toThrow();
     expect(() => deriveBootstrapPayloadPath(productHome, "manifest_migration" as never, run, 0)).toThrow();
     expect(deriveManifestPayloadPath(productHome, run, parseSafeReasonCode("manifest_1"))).toBe(
       "/synthetic/product/staging/lifecycle/run_1/participants/manifest/manifest_1/after.json",

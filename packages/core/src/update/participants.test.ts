@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { AllocatedLifecycleIdV1, EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ManagedArtifactV2 } from "../manifest/types.js";
+import { updateLeafPlanHash } from "./bundle-participant.js";
 import type { ImmutableUpdatePlanRefV1, OwnerExternalEffectIdV1 } from "./construction.js";
 import { updateFoundationStagedPath, type SchemaMigrationPlanV1, type UpdateFoundationMutationRefV1, type UpdateFoundationParticipantRefV2, type UpdatePayloadRefV1 } from "./migrations.js";
 import {
@@ -15,8 +16,10 @@ import {
   ownerInverseOperationHash,
   ownerPostimagesHash,
   updateCompensationSteps,
+  updateParticipantDocumentBytes,
   updateParticipantDocumentHash,
   validateCanonicalStateFilePlan,
+  validateOwnerExternalEffectEvidence,
   validateOwnerExternalEffectJournal,
   validateOwnerExternalEffectPlan,
   validateOwnerUpdateJournal,
@@ -121,14 +124,15 @@ const policy: OwnerExternalEffectProcessPolicyV1 = {
   kind: "codex_registration_refresh",
   providerProtocol: parsePositiveUInt32(1),
   executable: "pinned_codex_cli",
-  executableIdentity: { ownerUid: 501 as EffectiveUidV1, mode: 493, nlink: 1, bytes: 1024, sha256: sha("codex binary"), dev, ino: ino(40) },
+  executableIdentity: { dev, ino: ino(40), mode: 0o755, sha256: sha("codex binary") },
   argv: [
     { kind: "literal", value: "plugin" as never },
     { kind: "literal", value: "add" as never },
     { kind: "token", value: "plugin_id" },
+    { kind: "literal", value: "--json" as never },
   ],
   cwd: "managed_plugin_root",
-  environment: [{ name: "HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
+  environment: [{ name: "CODEX_HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
   stdin: "closed",
   network: false,
   model: false,
@@ -164,7 +168,7 @@ function buildEffect(): OwnerExternalEffectPlanV1 {
 }
 
 function effectRef(effect: OwnerExternalEffectPlanV1): ImmutableUpdatePlanRefV1<"owner_external_effect"> {
-  return { kind: "owner_external_effect", id: effect.id, path: path(`/product/staging/lifecycle/${coordinatorId}/update/plans/owner_external_effect/${effect.id}.plan.json`), hash: updateParticipantDocumentHash(effect), bytes: 100 };
+  return { kind: "owner_external_effect", id: effect.id, path: path(`/product/staging/lifecycle/${coordinatorId}/update/plans/owner_external_effect/${effect.id}.plan.json`), hash: updateParticipantDocumentHash("owner_external_effect", effect), bytes: 100 };
 }
 
 function buildOwner(overrides: Partial<OwnerUpdatePlanV1> = {}): OwnerUpdatePlanV1 {
@@ -211,9 +215,86 @@ describe("owner update plans", () => {
     expect(() => validateOwnerUpdatePlan(mutate(clone(buildOwner())), context)).toThrow();
   });
 
+  describe("slot admission follows the operation (D72 P9)", () => {
+    const inverseSlots = (plan: OwnerUpdatePlanV1): OwnerUpdatePlanV1 => ({ ...plan, foundation: plan.foundation.map((ref) => ({ ...ref, slot: "owner_inverse_files" as const })) });
+
+    it("admits a rollback owner plan whose refs all take owner_inverse_files", () => {
+      expect(validateOwnerUpdatePlan(inverseSlots(buildOwner()), { ...context, operation: "update_rollback" }).foundation.every((ref) => ref.slot === "owner_inverse_files")).toBe(true);
+    });
+
+    it("refuses a rollback owner plan with an owner_forward_files ref", () => {
+      expect(() => validateOwnerUpdatePlan(buildOwner(), { ...context, operation: "update_rollback" })).toThrow(/not an owner slot/u);
+    });
+
+    it("refuses an update owner plan whose forward ref takes owner_inverse_files", () => {
+      expect(() => validateOwnerUpdatePlan(inverseSlots(buildOwner()), { ...context, operation: "update_apply" })).toThrow(/not an owner slot/u);
+    });
+  });
+
+  describe("an ephemeral reservation (D72 P5)", () => {
+    const reservation = path(`${root}/state.json`);
+    const ephemeral = { ...artifact(reservation, "file", null), verification: { mode: "ephemeral" } } as ManagedArtifactV2;
+    const present = { state: "ephemeral_present" as const, mode: 384 as const, dev, ino: ino(3) };
+
+    function withReservation(row: Partial<PersistedOwnerChangeOperationV1>, installed: ManagedArtifactV2 = ephemeral): () => OwnerUpdatePlanV1 {
+      const partition = [...currentPartition, installed];
+      const operation: PersistedOwnerChangeOperationV1 = { operation: "keep", owner: "codex", targetPath: reservation, expectedBefore: { state: "absent" }, afterArtifact: installed, content: null, ...row };
+      const plan = buildOwner({ operations: [...operations, operation], currentPartitionHash: ownerCurrentPartitionHash("codex", partition) });
+      return () => validateOwnerUpdatePlan(plan, { productHome, currentPartition: partition });
+    }
+
+    it("keeps over an absent reservation", () => {
+      expect(withReservation({})().operations).toHaveLength(4);
+    });
+
+    it("keeps over an ephemeral_present reservation without reading its bytes", () => {
+      expect(withReservation({ expectedBefore: present })().operations[3]?.expectedBefore).toEqual(present);
+    });
+
+    it("refuses an ephemeral replace", () => {
+      expect(withReservation({ operation: "replace", expectedBefore: present, content: payload(2, "x") })).toThrow(/an ephemeral reservation only keeps/u);
+    });
+
+    it("refuses an ephemeral keep over a hashed file before", () => {
+      expect(withReservation({ expectedBefore: { state: "file", mode: 384, hash: sha("s"), bytes: 1, dev, ino: ino(3) } })).toThrow(/an ephemeral keep over a hashed before/u);
+    });
+
+    it("refuses a file keep over absent", () => {
+      const file = artifact(reservation, "file", sha("s"));
+      expect(withReservation({ afterArtifact: file }, file)).toThrow(/keep is not byte-identical/u);
+    });
+
+    it("refuses ephemeral_present before a non-ephemeral artifact", () => {
+      const file = artifact(reservation, "file", sha("s"));
+      expect(withReservation({ expectedBefore: present, afterArtifact: file }, file)).toThrow(/an ephemeral reservation only keeps/u);
+    });
+
+    it("refuses ephemeral_present as a postimage", () => {
+      expect(withReservation({ expectedBefore: present, afterArtifact: present as never })).toThrow();
+    });
+
+    describe("a keep over bytes the product rewrote since install", () => {
+      const moved = { state: "file" as const, mode: 384 as const, hash: sha("advanced"), bytes: 8, dev, ino: ino(3) };
+
+      it("admits a schema row, which is verified by its schema, never its hash", () => {
+        const schema = { ...artifact(reservation, "file", null), verification: { mode: "schema", schemaId: "lifecycle-id-allocator-v1", installedHash: sha("installed") } } as ManagedArtifactV2;
+        expect(withReservation({ expectedBefore: moved, afterArtifact: schema }, schema)().operations).toHaveLength(4);
+      });
+
+      it("refuses a content row", () => {
+        const file = artifact(reservation, "file", sha("installed"));
+        expect(withReservation({ expectedBefore: moved, afterArtifact: file }, file)).toThrow(/keep changes the recorded hash/u);
+      });
+    });
+
+    it("refuses an ephemeral_present state that carries a hash", () => {
+      expect(withReservation({ expectedBefore: { ...present, hash: sha("s") } as never })).toThrow(/expectedBefore: keys/u);
+    });
+  });
+
   it("binds the owner journal cursors to their phase", () => {
     const plan = buildOwner();
-    const base = { schemaVersion: 1, id: plan.id, coordinatorId, planHash: updateParticipantDocumentHash(plan), nextForwardFoundation: 0, nextExternalEffect: 0, compensationNext: null, compactionNext: null, createdAt: at, updatedAt: at };
+    const base = { schemaVersion: 1, id: plan.id, coordinatorId, planHash: updateParticipantDocumentHash("owner_update", plan), nextForwardFoundation: 0, nextExternalEffect: 0, compensationNext: null, compactionNext: null, createdAt: at, updatedAt: at };
     expect(validateOwnerUpdateJournal({ ...base, phase: "planned" }, plan).phase).toBe("planned");
     expect(validateOwnerUpdateJournal({ ...base, phase: "effects_applying", nextForwardFoundation: 1 }, plan).phase).toBe("effects_applying");
     expect(validateOwnerUpdateJournal({ ...base, phase: "verified", nextForwardFoundation: 1, nextExternalEffect: 1 }, plan).phase).toBe("verified");
@@ -228,6 +309,25 @@ describe("owner update plans", () => {
 describe("owner external effects", () => {
   it("admits the closed Codex refresh and binds its policy digest", () => {
     expect(validateOwnerExternalEffectPlan(buildEffect(), buildOwner()).processPolicyHash).toBe(ownerExternalEffectProcessPolicyHash(policy));
+  });
+
+  it.each([0o700, 0o755, 0o555, 0o500])("admits the executable mode %o (D72 Q2-A)", (mode) => {
+    expect(() => ownerExternalEffectProcessPolicyHash({ ...policy, executableIdentity: { ...policy.executableIdentity, mode } })).not.toThrow();
+  });
+
+  it.each<[string, unknown]>([
+    ["HOME instead of CODEX_HOME", { environment: [{ name: "HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }] }],
+    ["TMPDIR before CODEX_HOME", { environment: [{ name: "TMPDIR", value: "private_effect_tmp" }, { name: "CODEX_HOME", value: "managed_vendor_home" }] }],
+    ["a group-writable executable", { executableIdentity: { ...policy.executableIdentity, mode: 0o775 } }],
+    ["an other-writable executable", { executableIdentity: { ...policy.executableIdentity, mode: 0o757 } }],
+    ["an executable without the owner-execute bit", { executableIdentity: { ...policy.executableIdentity, mode: 0o644 } }],
+    ["a setuid executable", { executableIdentity: { ...policy.executableIdentity, mode: 0o4755 } }],
+    ["a negative mode", { executableIdentity: { ...policy.executableIdentity, mode: -1 } }],
+    ["the withdrawn link count", { executableIdentity: { ...policy.executableIdentity, nlink: 1 } }],
+    ["the withdrawn owner", { executableIdentity: { ...policy.executableIdentity, ownerUid: 501 } }],
+    ["a missing digest", { executableIdentity: { dev, ino: ino(40), mode: 0o755 } }],
+  ])("refuses a policy with %s (D72 Q2-A)", (_name, patch) => {
+    expect(() => ownerExternalEffectProcessPolicyHash({ ...policy, ...(patch as object) })).toThrow();
   });
 
   it.each([
@@ -256,7 +356,7 @@ describe("owner external effects", () => {
 
   it("binds evidence to observed phases", () => {
     const effect = buildEffect();
-    const base = { schemaVersion: 1, id: effectId, coordinatorId, planHash: updateParticipantDocumentHash(effect), createdAt: at, updatedAt: at };
+    const base = { schemaVersion: 1, id: effectId, coordinatorId, planHash: updateParticipantDocumentHash("owner_external_effect", effect), createdAt: at, updatedAt: at };
     expect(validateOwnerExternalEffectJournal({ ...base, phase: "forward_intent", direction: "forward", nextTransition: 0, evidenceHash: null }, effect).phase).toBe("forward_intent");
     expect(validateOwnerExternalEffectJournal({ ...base, phase: "forward_observed", direction: "forward", nextTransition: 1, evidenceHash: sha("e") }, effect).phase).toBe("forward_observed");
     expect(() => validateOwnerExternalEffectJournal({ ...base, phase: "forward_observed", direction: "forward", nextTransition: 1, evidenceHash: null }, effect)).toThrow();
@@ -307,12 +407,12 @@ describe("canonical state files", () => {
     const plan = validateCanonicalStateFilePlan(statePlan("active_release"), productHome);
     expect(Object.keys(plan.after).sort()).toEqual(["hash", "mode", "nlink", "ownerUid", "payload", "size", "state"]);
     expect(Object.keys(plan.before)).toEqual(expect.arrayContaining(["dev", "ino"]));
-    expect(updateParticipantDocumentHash(plan)).toBe(updateParticipantDocumentHash(statePlan("active_release")));
+    expect(updateParticipantDocumentHash("active_release_state", plan)).toBe(updateParticipantDocumentHash("active_release_state", statePlan("active_release")));
   });
 
   it("accepts only the linear transition prefix", () => {
     const plan = statePlan("active_release");
-    const base = { schemaVersion: 1, kind: "active_release_state", id: plan.id, coordinatorId, planHash: updateParticipantDocumentHash(plan), createdAt: at, updatedAt: at };
+    const base = { schemaVersion: 1, kind: "active_release_state", id: plan.id, coordinatorId, planHash: updateParticipantDocumentHash("active_release_state", plan), createdAt: at, updatedAt: at };
     expect(validateStateParticipantJournal({ ...base, phase: "published", nextTransition: 2, compensationNext: null }, "active_release_state", plan, base.planHash).phase).toBe("published");
     expect(validateStateParticipantJournal({ ...base, phase: "compensating", nextTransition: 2, compensationNext: 1 }, "active_release_state", plan, base.planHash).phase).toBe("compensating");
     expect(() => validateStateParticipantJournal({ ...base, phase: "published", nextTransition: 1, compensationNext: null }, "active_release_state", plan, base.planHash)).toThrow();
@@ -355,10 +455,46 @@ describe("participant compensation order", () => {
   });
 });
 
+describe("leaf plan ref hashes (D72 P7(a))", () => {
+  const plainSha256 = (plan: unknown): LowerHexSha256 => parseLowerHexSha256(createHash("sha256").update(updateParticipantDocumentBytes(plan)).digest("hex"));
+
+  it("hashes in the developer-os/update-leaf/<kind>/v1 domain over the persisted bytes", () => {
+    const owner = buildOwner();
+    expect(updateParticipantDocumentHash("owner_update", owner)).toBe(updateLeafPlanHash("owner_update", updateParticipantDocumentBytes(owner)));
+    expect(updateParticipantDocumentHash("owner_update", owner)).not.toBe(plainSha256(owner));
+    expect(updateParticipantDocumentHash("owner_update", owner)).not.toBe(updateParticipantDocumentHash("schema_migration", owner));
+  });
+
+  it("admits a domain-hashed effect ref and refuses a plain SHA-256 one", () => {
+    const effect = buildEffect();
+    expect(validateOwnerExternalEffectPlan(effect, buildOwner()).id).toBe(effect.id);
+    const plain = buildOwner({ externalEffects: [{ ...effectRef(effect), hash: plainSha256(effect) }] });
+    expect(() => validateOwnerExternalEffectPlan(effect, plain)).toThrow(/differs from the owner plan's ref/u);
+  });
+
+  it("refuses a journal or evidence bound by a plain SHA-256 plan hash", () => {
+    const owner = buildOwner();
+    const effect = buildEffect();
+    const ownerJournal = { schemaVersion: 1, id: owner.id, coordinatorId, planHash: plainSha256(owner), phase: "planned", nextForwardFoundation: 0, nextExternalEffect: 0, compensationNext: null, compactionNext: null, createdAt: at, updatedAt: at };
+    expect(() => validateOwnerUpdateJournal(ownerJournal, owner)).toThrow(/planHash/u);
+    const effectJournal = { schemaVersion: 1, id: effectId, coordinatorId, planHash: plainSha256(effect), phase: "planned", direction: "forward", nextTransition: 0, evidenceHash: null, createdAt: at, updatedAt: at };
+    expect(() => validateOwnerExternalEffectJournal(effectJournal, effect)).toThrow(/planHash/u);
+    const evidence = { schemaVersion: 1, id: effectId, coordinatorId, planHash: plainSha256(effect), direction: "forward", observedStateHash: effect.proposedStateHash, processPolicyHash: effect.processPolicyHash, exitCode: 0, redactedStdoutHash: sha(""), redactedStderrHash: sha(""), completedAt: at };
+    expect(() => validateOwnerExternalEffectEvidence(evidence, effect, "forward", effect.proposedStateHash)).toThrow(/not this plan's evidence/u);
+    expect(validateOwnerExternalEffectEvidence({ ...evidence, planHash: updateParticipantDocumentHash("owner_external_effect", effect) }, effect, "forward", effect.proposedStateHash).id).toBe(effectId);
+  });
+
+  it("refuses a plain SHA-256 owner ref in the owner postimage digest", () => {
+    const owner = buildOwner();
+    const row = { ref: { kind: "owner_update" as const, id: owner.id, path: path("/product/p/owner.plan.json"), hash: plainSha256(owner), bytes: 10 }, plan: owner, effects: [{ ref: owner.externalEffects[0] as ImmutableUpdatePlanRefV1<"owner_external_effect">, plan: buildEffect() }] };
+    expect(() => ownerPostimagesHash([row])).toThrow(/a ref that is not its plan/u);
+  });
+});
+
 describe("recovery digests", () => {
   const owner = buildOwner();
   const effect = buildEffect();
-  const ownerRow = { ref: { kind: "owner_update" as const, id: owner.id, path: path("/product/p/owner.plan.json"), hash: updateParticipantDocumentHash(owner), bytes: 10 }, plan: owner, effects: [{ ref: owner.externalEffects[0] as ImmutableUpdatePlanRefV1<"owner_external_effect">, plan: effect }] };
+  const ownerRow = { ref: { kind: "owner_update" as const, id: owner.id, path: path("/product/p/owner.plan.json"), hash: updateParticipantDocumentHash("owner_update", owner), bytes: 10 }, plan: owner, effects: [{ ref: owner.externalEffects[0] as ImmutableUpdatePlanRefV1<"owner_external_effect">, plan: effect }] };
   const migration: SchemaMigrationPlanV1 = {
     schemaVersion: 1,
     id: parseSchemaMigrationId("migration_config-v2"),
@@ -370,7 +506,7 @@ describe("recovery digests", () => {
     foundation: [],
     maximumPlanBytes: 65_536,
   };
-  const migrationRow = { ref: { kind: "schema_migration" as const, id: migration.id, path: path("/product/p/m.plan.json"), hash: updateParticipantDocumentHash(migration), bytes: 10 }, plan: migration };
+  const migrationRow = { ref: { kind: "schema_migration" as const, id: migration.id, path: path("/product/p/m.plan.json"), hash: updateParticipantDocumentHash("schema_migration", migration), bytes: 10 }, plan: migration };
 
   it("hashes the empty migration set as the canonical empty array", () => {
     expect(migrationPostimagesHash([])).toBe(parseLowerHexSha256(createHash("sha256").update("developer-os/update-migration-postimages/v1\0[]").digest("hex")));

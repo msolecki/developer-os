@@ -1,21 +1,20 @@
 import {
   hashCanonicalJson,
   parseCanonicalAbsolutePathText,
-  parseLowerHexSha256,
-  parseUtcTimestamp,
   type CanonicalAbsolutePathV1,
+  type CanonicalJsonValue,
   type EffectiveUidV1,
   type LowerHexSha256,
   type UInt64DecimalV1,
 } from "@developer-os/core";
 
 import {
+  LAUNCHD_DISTRIBUTION_POLICY,
   LaunchdDistributionUnsupportedError,
-  SUPPORTED_LAUNCHD_DISTRIBUTION,
-  type LaunchdCertificationV1,
+  type LaunchctlIdentityV1,
   type LaunchdEmptyDirectoryIdentityV1,
-  type LaunchdExecutableIdentityV1,
-  type LaunchdOperatingSystemV1,
+  type LaunchdExecutablePolicyV1,
+  type LaunchdOperatingSystemPolicyV1,
 } from "./distribution.js";
 import { LaunchdInputError } from "./types.js";
 
@@ -58,7 +57,7 @@ export type LaunchdMutationIoProfileV1 = {
 export type LaunchdProcessIoProfileV1 = LaunchdQueryIoProfileV1 | LaunchdMutationIoProfileV1;
 
 /**
- * The argv slots a pinned table can carry: the domain and targets are fixed per call from the
+ * The argv slots a table can carry: the domain and targets are fixed per call from the
  * validated console user and the plan-bound labels, never from caller text.
  */
 export type LaunchdArgvSlotV1 =
@@ -98,9 +97,9 @@ export type LaunchdProcessArgvV1 =
 
 export type LaunchdPreviewObservationProcessTableV1 = {
   readonly schemaVersion: 1;
-  readonly id: `launchctl-macos-${string}-preview-v1`;
-  readonly operatingSystem: LaunchdOperatingSystemV1;
-  readonly executable: LaunchdExecutableIdentityV1;
+  readonly id: "launchctl-macos-preview-v2";
+  readonly operatingSystem: LaunchdOperatingSystemPolicyV1;
+  readonly executable: LaunchdExecutablePolicyV1;
   readonly emptyDirectory: LaunchdEmptyDirectoryIdentityV1;
   readonly environment: {
     readonly HOME: "/private/var/empty";
@@ -124,9 +123,11 @@ type LaunchdProcessTableArgvV1 = readonly [
 
 export type SupportedLaunchdProcessTableV1 = {
   readonly schemaVersion: 1;
-  readonly id: `launchctl-macos-${string}-fd3-v1`;
-  readonly operatingSystem: LaunchdOperatingSystemV1;
-  readonly executable: LaunchdExecutableIdentityV1;
+  readonly id: "launchctl-macos-fd3-v2";
+  readonly operatingSystem: LaunchdOperatingSystemPolicyV1;
+  readonly executable: LaunchdExecutablePolicyV1;
+  /** Spec §5.3 rule 4 (D71): the admitted launchctl this table binds, rechecked before every process. */
+  readonly launchctlIdentity: LaunchctlIdentityV1;
   readonly staging: {
     readonly root: LaunchdProcessDirectoryIdentityV1;
     readonly home: LaunchdProcessDirectoryIdentityV1;
@@ -139,7 +140,6 @@ export type SupportedLaunchdProcessTableV1 = {
   readonly observationDeadlineMs: 30000;
   readonly transitionDeadlineMs: 30000;
   readonly terminationGraceMs: 100;
-  readonly certification: LaunchdCertificationV1;
 };
 
 export type LaunchdProcessDirectorySlotV1 =
@@ -150,8 +150,9 @@ export type LaunchdProcessDirectorySlotV1 =
 export type SupportedLaunchdProcessTableTemplateV1 = {
   readonly schemaVersion: 1;
   readonly id: SupportedLaunchdProcessTableV1["id"];
-  readonly operatingSystem: LaunchdOperatingSystemV1;
-  readonly executable: LaunchdExecutableIdentityV1;
+  readonly operatingSystem: LaunchdOperatingSystemPolicyV1;
+  readonly executable: LaunchdExecutablePolicyV1;
+  readonly launchctlIdentity: { readonly slot: "launchctl_identity" };
   readonly staging: {
     readonly root: { readonly slot: "launchd_process_root" };
     readonly home: { readonly slot: "launchd_process_home" };
@@ -170,7 +171,6 @@ export type SupportedLaunchdProcessTableTemplateV1 = {
   readonly observationDeadlineMs: 30000;
   readonly transitionDeadlineMs: 30000;
   readonly terminationGraceMs: 100;
-  readonly certification: LaunchdCertificationV1;
 };
 
 const QUERY_PROFILE: LaunchdQueryIoProfileV1 = Object.freeze({
@@ -215,7 +215,7 @@ const BOOTOUT: LaunchdBootoutArgvV1 = Object.freeze({
   argv: Object.freeze(["/bin/launchctl", "bootout", Object.freeze({ slot: "launchd_generated_service_target" })] as const),
 });
 
-const row = SUPPORTED_LAUNCHD_DISTRIBUTION;
+const row = LAUNCHD_DISTRIBUTION_POLICY;
 
 export const LAUNCHD_PREVIEW_OBSERVATION_TABLE: LaunchdPreviewObservationProcessTableV1 = Object.freeze({
   schemaVersion: 1,
@@ -241,6 +241,7 @@ export const SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE: SupportedLaunchdProcessTa
   id: row.mutationTableId,
   operatingSystem: row.operatingSystem,
   executable: row.executable,
+  launchctlIdentity: Object.freeze({ slot: "launchctl_identity" }),
   staging: Object.freeze({
     root: Object.freeze({ slot: "launchd_process_root" }),
     home: Object.freeze({ slot: "launchd_process_home" }),
@@ -259,7 +260,6 @@ export const SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE: SupportedLaunchdProcessTa
   observationDeadlineMs: 30000,
   transitionDeadlineMs: 30000,
   terminationGraceMs: 100,
-  certification: row.certification,
 });
 
 /** SHA-256 over `developer-os:launchd-preview-observation-table:v1\0` plus the table's canonical JSON. */
@@ -278,7 +278,13 @@ export function launchdProcessTableTemplateHash(
 
 /** SHA-256 over `developer-os:launchd-process-table:v1\0` plus the expanded table's canonical JSON. */
 export function launchdProcessTableHash(table: SupportedLaunchdProcessTableV1): LowerHexSha256 {
-  return hashCanonicalJson("developer-os:launchd-process-table:v1", table);
+  // `AdmittedSystemExecutableV1` is an interface, which carries no index signature for the JSON type.
+  return hashCanonicalJson("developer-os:launchd-process-table:v1", table as unknown as CanonicalJsonValue);
+}
+
+/** SHA-256 over `developer-os:launchctl-identity:v1\0` plus the identity's canonical JSON. */
+export function launchctlIdentityHash(identity: LaunchctlIdentityV1): LowerHexSha256 {
+  return hashCanonicalJson("developer-os:launchctl-identity:v1", identity as unknown as CanonicalJsonValue);
 }
 
 function refuse(message: string): never {
@@ -300,7 +306,8 @@ function stagingIdentity(
 
 /**
  * Fills the template's three staging slots with the guarded identities of
- * `<product home>/staging/lifecycle/<coordinator-id>/launchd-process` and its `home`/`tmp` children.
+ * `<product home>/staging/lifecycle/<coordinator-id>/launchd-process` and its `home`/`tmp` children,
+ * and its `launchctl_identity` slot with what apply's fresh `admitLaunchdHost` returned.
  */
 export function expandLaunchdProcessTable(
   staging: {
@@ -308,6 +315,7 @@ export function expandLaunchdProcessTable(
     readonly home: LaunchdProcessDirectoryIdentityV1;
     readonly tmp: LaunchdProcessDirectoryIdentityV1;
   },
+  launchctl: LaunchctlIdentityV1,
   template: SupportedLaunchdProcessTableTemplateV1 = SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
 ): SupportedLaunchdProcessTableV1 {
   const ownerUid = staging.root.ownerUid;
@@ -321,6 +329,7 @@ export function expandLaunchdProcessTable(
     id: template.id,
     operatingSystem: template.operatingSystem,
     executable: template.executable,
+    launchctlIdentity: launchctl,
     staging: Object.freeze({ root, home, tmp }),
     bootstrapPlistFd: template.bootstrapPlistFd,
     environment: Object.freeze({ HOME: home.path, LANG: "C", LC_ALL: "C", PATH: LAUNCHD_PROCESS_PATH, TMPDIR: tmp.path }),
@@ -329,7 +338,6 @@ export function expandLaunchdProcessTable(
     observationDeadlineMs: template.observationDeadlineMs,
     transitionDeadlineMs: template.transitionDeadlineMs,
     terminationGraceMs: template.terminationGraceMs,
-    certification: template.certification,
   });
 }
 
@@ -343,6 +351,7 @@ export function deslotLaunchdProcessTable(table: SupportedLaunchdProcessTableV1)
     id: table.id,
     operatingSystem: table.operatingSystem,
     executable: table.executable,
+    launchctlIdentity: { slot: "launchctl_identity" },
     staging: { root: { slot: "launchd_process_root" }, home: { slot: "launchd_process_home" }, tmp: { slot: "launchd_process_tmp" } },
     bootstrapPlistFd: table.bootstrapPlistFd,
     environment: {
@@ -357,27 +366,18 @@ export function deslotLaunchdProcessTable(table: SupportedLaunchdProcessTableV1)
     observationDeadlineMs: table.observationDeadlineMs,
     transitionDeadlineMs: table.transitionDeadlineMs,
     terminationGraceMs: table.terminationGraceMs,
-    certification: table.certification,
   };
 }
 
 /**
- * Spec §5.3 (amended 2026-09-23, D59): a mutation table must de-slot to the pinned template and
- * carry certification evidence. Read-only observation never calls this.
+ * Spec §5.3 (amended 2026-09-28, D71): a mutation table must de-slot to the compiled template.
+ * The host is admitted by `admitLaunchdHost` and rechecked before every process, not here.
  */
-export function requireLaunchdMutationCertified(
+export function requireLaunchdMutationTable(
   table: SupportedLaunchdProcessTableV1,
   template: SupportedLaunchdProcessTableTemplateV1 = SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
 ): void {
   if (launchdProcessTableTemplateHash(deslotLaunchdProcessTable(table)) !== launchdProcessTableTemplateHash(template)) {
-    throw new LaunchdDistributionUnsupportedError("process table is not the pinned row");
-  }
-  const certification = table.certification;
-  if (certification === null) throw new LaunchdDistributionUnsupportedError("launchctl row is not certified");
-  try {
-    parseUtcTimestamp(certification.certifiedAt);
-    parseLowerHexSha256(certification.fixtureTranscriptSha256);
-  } catch (error) {
-    throw new LaunchdDistributionUnsupportedError("launchctl certification is malformed", { cause: error });
+    throw new LaunchdDistributionUnsupportedError("process table is not the compiled template");
   }
 }

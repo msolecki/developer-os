@@ -44,6 +44,7 @@ import {
   type FreshInitDeathPointV1,
 } from "../bootstrap/executor.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
+import type { ProbeFileSystemV1, ProbePathObservationV1 } from "../pinned-executable.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import type { BootstrapEvidenceReportV1 } from "../bootstrap/report.js";
 import {
@@ -227,6 +228,47 @@ class RecordingLockProvider implements TransactionLockProvider {
  */
 export const REAL_FILESYSTEM_TIMEOUT_MS = 900_000;
 
+const PROBE_UID = 501;
+
+type PresentProbeObservation = Exclude<ProbePathObservationV1, { kind: "absent" }>;
+
+/** A user-owned `0755` observation of `kind`, with `overrides` applied. */
+export function probeObservation(
+  kind: "file" | "directory",
+  overrides: Partial<Omit<PresentProbeObservation, "kind">> = {},
+): PresentProbeObservation {
+  return {
+    kind,
+    ownerUid: PROBE_UID,
+    mode: 0o755,
+    dev: "1",
+    ino: kind === "file" ? "42" : "10",
+    size: 64,
+    sha256: null,
+    ctimeNs: "1000",
+    ...overrides,
+  };
+}
+
+/**
+ * A synthetic host for `capture`'s version-probe admission (NEW-46): each path in `files` is a
+ * user-owned `0755` regular file, every other path a user-owned `0755` directory, `table`
+ * entries override either, and `links` resolve through `realpath`. The synthetic vendor paths
+ * do not exist on disk, so the real host would refuse them.
+ */
+export function syntheticProbeHost(
+  files: readonly string[] = ["/synthetic/bin/claude", "/synthetic/bin/codex"],
+  links: Readonly<Record<string, string>> = {},
+): ProbeFileSystemV1 & { readonly table: Map<string, ProbePathObservationV1> } {
+  const table = new Map<string, ProbePathObservationV1>();
+  return {
+    table,
+    effectiveUid: PROBE_UID,
+    realpath: (path) => Promise.resolve(links[path] ?? path),
+    inspect: (path) => Promise.resolve(table.get(path) ?? probeObservation(files.includes(path) ? "file" : "directory")),
+  };
+}
+
 export interface FakePlatformOptions {
   readonly userHome: string;
   readonly agents?: Readonly<Record<AgentName, AgentDiscovery>>;
@@ -399,6 +441,8 @@ export interface FixtureOptions {
    * `bundle/workflows/`. Absent, it carries neither.
    */
   readonly instructions?: readonly ReleaseFileV1[];
+  /** With `bootstrapAvailable`, the synthetic release's architecture; absent, `arm64`. */
+  readonly architecture?: "arm64" | "x64";
   /** Uses the real kernel-backed lifecycle lock provider for exclusion tests. */
   readonly bootstrapProductionLocks?: boolean;
   /** Inserts an adversarial namespace race immediately before lifecycle lock acquisition. */
@@ -440,6 +484,7 @@ async function repositoryWorkflowFiles(): Promise<readonly ReleaseFileV1[]> {
 async function createSyntheticPackagedRelease(
   root: string,
   instructions: readonly ReleaseFileV1[] | undefined,
+  architecture: "arm64" | "x64",
 ) {
   const packageRoot = join(root, "packaged-release");
   const retained = {
@@ -490,7 +535,7 @@ async function createSyntheticPackagedRelease(
     releaseIndexHash: digest(indexBytes),
     bundleManifestHash: digest(manifestBytes),
     platform: "darwin",
-    architecture: "arm64",
+    architecture,
     launcherProtocol: 1,
     updateProtocol: 1,
   };
@@ -527,7 +572,7 @@ export async function createCommandFixture(
   const guards = createGuards(policy, REDACTION_KEY);
   const paths = resolveRuntimePaths(pathEnvironmentFor({ userHome, env }));
   const packagedRelease = options.bootstrapAvailable === true
-    ? await createSyntheticPackagedRelease(root, options.instructions)
+    ? await createSyntheticPackagedRelease(root, options.instructions, options.architecture ?? "arm64")
     : null;
   const bootstrapTrace: string[] = [];
   const lifecycleLockEvents: string[] = [];

@@ -1,6 +1,7 @@
 import { isAbsolute, join } from "node:path";
 
 import {
+  CODEX_INGEST_HOME_REPAIR,
   containsPath,
   containsPathLoosely,
   detectDrift,
@@ -8,6 +9,7 @@ import {
   failure,
   hashBytes,
   LifecycleRecoveryRefusalError,
+  LifecycleRecoveryRequiredError,
   ManifestUnsupportedArtifactError,
   success,
   validateChangePlan,
@@ -20,7 +22,6 @@ import type {
   InstallationManifest,
   ManagedArtifactV1,
   ManagedArtifactV2,
-  ManifestAdmissionContextV1,
   ManagedArtifactSchemaIdV1,
   InstallationManifestV1,
   PlannedFileMutation,
@@ -34,11 +35,9 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext } from "../context.js";
-import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
-import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
-import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import { inspectBootstrapEvidenceAdmission, preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import {
   ABSENT_MANIFEST_ARCHIVE_RECOVERY,
@@ -50,6 +49,7 @@ import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { createManagedArtifactSchemaRegistry } from "../lifecycle/schema-registry.js";
 import { CodexRegistrationFailedError } from "../instructions/codex-registration.js";
 import { InstructionRefusal } from "../instructions/detach.js";
+import { manifestAdmissionFor } from "../lifecycle/manifest-admission.js";
 import { LifecycleMutationRefusal } from "../lifecycle/mutation-gate.js";
 import { detachVendorInstructions, LifecycleUninstaller, planUninstallDetach } from "../lifecycle/uninstall.js";
 import type { LifecycleUninstallRequestV1 } from "../lifecycle/uninstall.js";
@@ -554,63 +554,6 @@ function describePlan(removable: readonly string[]): string {
 }
 
 /**
- * `uninstall` has no live install request the way `BootstrapExecutor` does —
- * it is reading a manifest a past, possibly unrelated `init` wrote. The roots
- * authoritative for that read are the ones `init` itself would have used to
- * build this exact manifest: the product home and the Brain, both resolved
- * fresh from the current environment and configuration. That is also, not
- * coincidentally, the same pair `runUninstall` builds `ownedRoots` and
- * `excludedRoots` from a few lines below — reading the manifest and removing
- * from it are bounded by the same authority. Confining here mirrors
- * `BootstrapExecutor.manifestAdmission` (`apps/cli/src/bootstrap/executor.ts`)
- * instead of admitting every path irrespective of owner, which is what an
- * identity `admitOwnerPath` did by accident (NEW-51). Removal itself stays
- * independently bounded by `isRemovableAt` regardless of what this predicate
- * decides, so a manifest whose Brain moved out from under it refuses to
- * *parse* rather than silently widening what a stale record can direct.
- *
- * `sourceRoot` is `productHome`, not a package root, and that is a deliberate
- * choice, not the accidental one this predicate used to carry alongside its
- * identity `admitOwnerPath`: a bare on-disk manifest records only a
- * `VaultFreeRelativePathV1` string (e.g. `"templates/file"`), never the
- * package root it was resolved against, so — unlike `BootstrapExecutor`,
- * which holds the live packaged release's `packageRoot`, and unlike
- * `report.ts`'s `exactV2Handoff`, which can recover one from the retained
- * plan's own `guarded_package_file` payload — there is no root here to
- * recover a package identity from. `productHome` is the only root this
- * function can name with any honesty, matching `report.ts`'s own fallback
- * for the case where no such payload root exists.
- *
- * `refusedOwnerPaths` is populated, not thrown from, here: `admitOwnerPath`'s
- * contract is a value comparison the caller turns into a refusal
- * (`packages/core/src/manifest/v2.ts:31`), so this wrapper cannot itself
- * distinguish "confinement refused this artifact" from "the document never
- * got this far" — it can only record what it saw before `readOptional`
- * collapses every cause into one generic `ManifestStateError`. Whoever awaits
- * `readOptional` reads this array *after* the rejection to recover that
- * distinction.
- */
-export function manifestAdmissionFor(
-  paths: RuntimePaths,
-  refusedOwnerPaths: string[],
-  vendors: VendorHomesV1 | null = null,
-): ManifestAdmissionContextV1 {
-  const productHome = paths.home as CanonicalAbsolutePathV1;
-  const brainPath = paths.brain as CanonicalAbsolutePathV1;
-  const admitOwnerPath = createOwnerPathAdmission({ kind: "confined", roots: [productHome, brainPath], vendors });
-  return {
-    evidence: createCanonicalPathEvidence(),
-    sourceRoot: productHome,
-    backupRoot: paths.backupsDir as CanonicalAbsolutePathV1,
-    admitOwnerPath: (owner, path, arm) => {
-      const admitted = admitOwnerPath(owner, path, arm);
-      if (admitted !== path) refusedOwnerPaths.push(path);
-      return admitted;
-    },
-  };
-}
-
-/**
  * An `ephemeral` V2 artifact carries no hash at all — its content is expected
  * to vary after install, which is exactly why V2's own drift inspection
  * (`inspectV2Artifact`, `packages/core/src/manifest/drift.ts:243`) never
@@ -671,7 +614,7 @@ export async function downcastArtifactV2(
   context: CliContext,
   artifact: ManagedArtifactV2,
 ): Promise<ManagedArtifactV1> {
-  // Block rows leave the manifest through the detach step before the drained uninstall (spec §6.3).
+  // Block rows leave the manifest through the detach step before the drained uninstall (`foundation.md` §12.4).
   if (artifact.verification.mode === "block") throw new ManifestUnsupportedArtifactError();
   const installedHash = artifact.kind === "directory"
     ? hashBytes(new Uint8Array())
@@ -805,7 +748,7 @@ export async function uninstallRuntimePaths(context: CliContext): Promise<Runtim
  * is admitted by `dispatchUninstall`, which owns the relocated-Brain diagnosis; the
  * coordinator's own manifest arm is deliberately unconfined (I2).
  *
- * A12 spec §6.3: vendor rows leave first, through the instruction detach, and the drained
+ * `foundation.md` §12.4: vendor rows leave first, through the instruction detach, and the drained
  * uninstall then runs unchanged over a home re-admitted after it. The dry run and the prompt
  * preview the coordinator over the manifest the detach would leave, so neither detaches.
  */
@@ -961,7 +904,7 @@ export async function runUninstall(
         schemaVersion: 1,
         removed: preview.removable.map((entry) => entry.artifact.path),
         restored: [],
-        preserved: [...new Set([...preview.preserved, ...evidence.retainedPaths])],
+        preserved: [...new Set([...preview.preserved, ...preservedRetentionRoots(evidence)])],
         retainedBootstrapEvidence: evidence.report.ids,
         transactionId: null,
       });
@@ -993,7 +936,7 @@ export async function runUninstall(
     return success({
       schemaVersion: 1,
       ...outcome,
-      preserved: [...new Set([...outcome.preserved, ...evidence.retainedPaths])],
+      preserved: [...new Set([...outcome.preserved, ...preservedRetentionRoots(evidence)])],
       retainedBootstrapEvidence: evidence.report.ids,
     });
   } catch (error) {
@@ -1009,6 +952,9 @@ export async function runUninstall(
       error instanceof InstructionRefusal
         ? error
         : null;
+    const codexIngestHome =
+      error instanceof LifecycleRecoveryRequiredError && error.reason === "codex_ingest_home_shape" ? error : null;
+    if (codexIngestHome !== null) return failureFrom(context, error, codexIngestHome.paths, CODEX_INGEST_HOME_REPAIR);
     const paths = refusal?.paths ?? (error instanceof CodexRegistrationFailedError ? error.paths : []);
     const evidence = error instanceof InstructionRefusal && error.evidence !== null ? { evidence: error.evidence } : undefined;
     return failureFrom(context, error, paths, refusal?.recovery, evidence);

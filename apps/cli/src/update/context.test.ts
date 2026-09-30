@@ -11,7 +11,7 @@ import {
   retainedInversePlanHash,
   validateRetainedOwnerInverseProjection,
 } from "@developer-os/core";
-import type { CanonicalJsonValue, RollbackPayloadIdV1, UpdateRollbackPreviewV1 } from "@developer-os/core";
+import type { CanonicalJsonValue, RollbackPayloadIdV1 } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runInit } from "../commands/init.js";
@@ -25,7 +25,7 @@ import type { CommandFixture } from "../commands/testing.js";
 import { createCliUpdateContext } from "./context.js";
 import { releaseIdentityOf, UpdatePlanningRefusal } from "./planning.js";
 import type { RollbackRecordV1 } from "./planning.js";
-import { applyRollback } from "./rollback-apply.js";
+import type { UpdateRollbackComposeInputV1 } from "./apply.js";
 import { NEW_A, OLD_A, PLANNED_AT, sha256 } from "./testing.js";
 
 afterEach(removeCommandFixtures);
@@ -99,16 +99,29 @@ describe("readHome", () => {
 });
 
 describe("apply ports", () => {
-  it("leaves --apply unbound in production so the command refuses before any port", async () => {
-    const fixture = await createCommandFixture("update-apply-unbound");
-    expect(createCliUpdateContext(fixture.context).apply).toBeUndefined();
-  });
+  it("binds --apply in production with no fallback handoff, which refuses exit 4 before allocation and writes nothing (P7(d))", async () => {
+    const fixture = await installed("update-apply-no-fallback");
+    const ports = createCliUpdateContext(fixture.context).apply;
+    if (ports === undefined) throw new Error("production binds the --apply ports");
+    const before = await inventoryDigest(fixture.root);
 
-  it("leaves rollback --apply unbound in production so it refuses without reading the home", async () => {
-    const fixture = await createCommandFixture("update-rollback-apply-unbound");
-    const update = createCliUpdateContext(fixture.context);
-    expect(update.apply?.composeRollback).toBeUndefined();
-    expect(await refusal(applyRollback(update, {} as UpdateRollbackPreviewV1))).toMatchObject({ reason: "update_apply_unavailable", code: EXIT_CODES.capabilityUnavailable });
+    expect(await refusal(ports.withGlobalLock(() => ports.allocate(["lc", "rb", "mf", "mf"])))).toMatchObject({ reason: "update_fallback_unavailable", code: EXIT_CODES.capabilityUnavailable });
+    expect(await inventoryDigest(fixture.root)).toEqual(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("reads a clear V2 closure through the bound ports under the global lock", async () => {
+    const fixture = await installed("update-apply-closure");
+    const ports = createCliUpdateContext(fixture.context).apply;
+    if (ports === undefined) throw new Error("production binds the --apply ports");
+
+    expect((await ports.withGlobalLock(() => ports.closure())).kind).toBe("clear");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("binds rollback --apply in production; without the fallback handoff its derivation refuses exit 4 before any read", async () => {
+    const fixture = await createCommandFixture("update-rollback-apply-bound");
+    const ports = createCliUpdateContext(fixture.context).apply;
+    if (ports?.composeRollback === undefined) throw new Error("production binds the rollback derivation");
+    expect(await refusal(ports.composeRollback({} as UpdateRollbackComposeInputV1))).toMatchObject({ reason: "update_fallback_unavailable", code: EXIT_CODES.capabilityUnavailable });
   });
 });
 

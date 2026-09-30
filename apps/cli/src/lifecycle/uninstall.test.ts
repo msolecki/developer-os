@@ -18,8 +18,8 @@ import type {
   LowerHexSha256,
   ScheduledJobIdV1,
 } from "@developer-os/core";
-import { LaunchdObserver, SUPPORTED_LAUNCHD_DISTRIBUTION, launchdEffectPlan, parseGeneratedLabel } from "@developer-os/platform-macos";
-import type { GeneratedLaunchdLabelV1 } from "@developer-os/platform-macos";
+import { LaunchdObserver, launchdEffectPlan, parseGeneratedLabel } from "@developer-os/platform-macos";
+import type { GeneratedLaunchdLabelV1, LaunchdHostObserverV1 } from "@developer-os/platform-macos";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
@@ -30,7 +30,7 @@ import type { AdmittedV2HomeV1 } from "./admission.js";
 import { createLifecycleExecutionPlanCodec, lifecycleVariantFacts } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import type { CliLifecycleContext } from "./context.js";
-import { scriptedLaunchd, syntheticInstalledPlist, syntheticUninstall } from "./testing.js";
+import { hostWith, scriptedLaunchd, syntheticInstalledPlist, syntheticUninstall } from "./testing.js";
 import type { SyntheticInstalledPlistV1 } from "./testing.js";
 import { LifecycleUninstaller } from "./uninstall.js";
 import type { LifecycleUninstallRequestV1 } from "./uninstall.js";
@@ -148,9 +148,8 @@ function launchdLeaf(plan: LifecycleExecutionPlanV1): NonNullable<LifecycleExecu
   return launchd;
 }
 
-/** A launchd host whose OS build drifted from the pinned row, recording every spawn it is asked for. */
-function driftedObserver(spawned: string[]): LifecycleEffectPortsV1["launchd"]["observer"] {
-  const row = SUPPORTED_LAUNCHD_DISTRIBUTION;
+/** A real observer on a host below the macOS floor, recording every spawn it is asked for. */
+function belowFloorObserver(spawned: string[]): LifecycleEffectPortsV1["launchd"]["observer"] {
   return new LaunchdObserver({
     runner: {
       beginPhase: (id, milliseconds) => ({ id, deadlineAtMs: milliseconds, remainingMilliseconds: () => milliseconds }),
@@ -161,11 +160,21 @@ function driftedObserver(spawned: string[]): LifecycleEffectPortsV1["launchd"]["
     },
     effectiveUid: () => UID,
     consoleUserUid: () => Promise.resolve(UID),
-    operatingSystem: () => Promise.resolve({ ...row.operatingSystem, buildVersion: `${row.operatingSystem.buildVersion}x` }),
-    inspectExecutable: () => Promise.resolve({ ...row.executable, kind: "file" as const }),
+    host: hostWith({ productVersion: "26.6.1" }),
     inspectEmptyDirectory: () =>
       Promise.resolve({ kind: "directory" as const, ownerUid: 0, mode: 493, dev: "1", ino: "1", entryCount: 0 }),
   });
+}
+
+/** `doctor`'s plist installed and its label loaded in a scripted domain whose process tables admit `host`. */
+async function presentManifestWithLoadedLabel(options: { readonly host: LaunchdHostObserverV1 }) {
+  const home = await syntheticUninstallHome({ withLaunchd: true });
+  const plist = home.plist;
+  if (plist === null) throw new Error("the home installs a plist");
+  const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock, host: options.host });
+  launchd.loaded.set(DOCTOR, plist.label);
+  const request = await home.request(launchd.ports);
+  return { home, plist, launchd, run: () => new LifecycleUninstaller().preview(request, home.global) };
 }
 
 describe("uninstall/present_manifest (P)", () => {
@@ -173,7 +182,7 @@ describe("uninstall/present_manifest (P)", () => {
     const home = await syntheticUninstallHome({ withLaunchd: true });
     const plist = home.plist;
     if (plist === null) throw new Error("the home installs a plist");
-    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock, certified: true });
+    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock });
     launchd.loaded.set(DOCTOR, plist.label);
 
     const preview = await new LifecycleUninstaller().preview(await home.request(launchd.ports), home.global);
@@ -226,13 +235,13 @@ describe("uninstall/present_manifest (P)", () => {
     expect(plan.participants.launchdBeforeFiles).toBeNull();
   });
 
-  it("refuses before any mutation on an unsupported launchctl row", async () => {
+  it("refuses before any mutation when the observation's host is below the macOS floor", async () => {
     const home = await syntheticUninstallHome({ withLaunchd: true });
     const plist = home.plist;
     if (plist === null) throw new Error("the home installs a plist");
     const spawned: string[] = [];
-    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock, certified: true });
-    const request = await home.request({ ...launchd.ports, observer: driftedObserver(spawned) });
+    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock });
+    const request = await home.request({ ...launchd.ports, observer: belowFloorObserver(spawned) });
     const before = await inventoryDigest(home.fixture.userHome);
 
     const refusal: unknown = await new LifecycleUninstaller().preview(request, home.global).then(() => null, (error: unknown) => error);
@@ -244,32 +253,34 @@ describe("uninstall/present_manifest (P)", () => {
     expect(await inventoryDigest(home.fixture.userHome)).toStrictEqual(before);
   });
 
-  it("refuses a loaded label on an uncertified row, and plans an unloaded one without certification", async () => {
-    const home = await syntheticUninstallHome({ withLaunchd: true });
-    const plist = home.plist;
-    if (plist === null) throw new Error("the home installs a plist");
-    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock, certified: false });
-    launchd.loaded.set(DOCTOR, plist.label);
-    const before = await inventoryDigest(home.fixture.userHome);
-
-    await expect(new LifecycleUninstaller().preview(await home.request(launchd.ports), home.global)).rejects.toMatchObject({
-      code: EXIT_CODES.capabilityUnavailable,
-      message: expect.stringContaining(`launchctl bootout gui/${String(UID)}/${plist.label}`) as unknown,
-    });
-    expect(await inventoryDigest(home.fixture.userHome)).toStrictEqual(before);
-
-    launchd.loaded.clear();
-    const preview = await new LifecycleUninstaller().preview(await home.request(launchd.ports), home.global);
+  it("unloads a loaded label on an admitted host without certification", async () => {
+    const { plist, run } = await presentManifestWithLoadedLabel({ host: hostWith() });
+    const preview = await run();
     const { plan } = preview.builder.build(placeholderIds(preview.builder.slotCount, true));
-    expect(launchdEffectPlan(launchdLeaf(plan), "before_files")?.transitions).toStrictEqual([]);
-    expect(launchdLeaf(plan).entries[0]?.bootstrapPlists).toStrictEqual({ before: null, after: null });
+    expect(launchdEffectPlan(launchdLeaf(plan), "before_files")?.transitions.map((transition) => [transition.label, transition.after.state]))
+      .toStrictEqual([[plist.label, "unloaded"]]);
+  });
+
+  it("admits a later macOS and another launchctl binary, and never compares the build", async () => {
+    const host = hostWith({ productVersion: "27.0", buildVersion: "26A1", paths: { "/bin/launchctl": { sha256: "c".repeat(64), size: 400000 } } });
+    const { run } = await presentManifestWithLoadedLabel({ host });
+    await expect(run()).resolves.toMatchObject({ variant: "uninstall/present_manifest" });
+  });
+
+  it("names the manual bootout for every label on a host below the floor", async () => {
+    const { home, plist, run } = await presentManifestWithLoadedLabel({ host: hostWith({ productVersion: "26.5" }) });
+    const before = await inventoryDigest(home.fixture.userHome);
+    await expect(run()).rejects.toMatchObject({ reason: "unsupported_launchd_distribution", code: EXIT_CODES.capabilityUnavailable });
+    await expect(run()).rejects.toThrow(/launchctl bootout gui\/\d+\//u);
+    await expect(run()).rejects.toThrow(`launchctl bootout gui/${String(UID)}/${plist.label}`);
+    expect(await inventoryDigest(home.fixture.userHome)).toStrictEqual(before);
   });
 
   it("refuses a loaded generation whose label is not the retained plist's", async () => {
     const home = await syntheticUninstallHome({ withLaunchd: true });
     const plist = home.plist;
     if (plist === null) throw new Error("the home installs a plist");
-    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock, certified: true });
+    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock });
     const foreign = `${plist.label}0` as GeneratedLaunchdLabelV1;
     const observer: LifecycleEffectPortsV1["launchd"]["observer"] = {
       observe: () =>
@@ -289,7 +300,7 @@ describe("uninstall/present_manifest (P)", () => {
     const plist = home.plist;
     if (plist === null) throw new Error("the home installs a plist");
     await nodeFs.writeFile(plist.path, `${plist.bytes}\n`, { mode: 0o600 });
-    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock, certified: true });
+    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock });
 
     await expect(new LifecycleUninstaller().preview(await home.request(launchd.ports), home.global)).rejects.toMatchObject({
       code: EXIT_CODES.decisionRequired,

@@ -148,7 +148,7 @@ export class BundlePublicationParticipant {
   async #publish(plan: BundlePublicationPlanV1, file: Journal): Promise<void> {
     const source = await this.#stagedSource(plan);
     if ((file.value as BundlePublicationJournalV1).nextRootTransition === 0) {
-      const parent = await this.#io.ownedDirectory(parentPath(plan.target.bundleRoot));
+      const parent = await this.#versionDirectory(plan);
       await this.#advance(plan, file, { kind: "root_intent" });
       const created = await this.#io.fs.mkdirExclusive(plan.target.bundleRoot);
       this.#interrupt("root_made");
@@ -185,6 +185,23 @@ export class BundlePublicationParticipant {
       if (bundleMetadataCreates(plan, ordinal)) await this.#publishMetadata(plan, file, plan.metadata[ordinal] as BundleMetadataStatePlanV1);
       else await this.#verifyMetadata(plan, file, plan.metadata[ordinal] as BundleMetadataStatePlanV1);
     }
+  }
+
+  /**
+   * D72 addendum: a new release's `releases/<version>` is created no-replace under the retained
+   * `releases` root, or reused when a compensated attempt already made it. It is outside the
+   * coordinator staging root, so it cannot be a construction directory; it is never removed here,
+   * because only the empty directory can remain and the next attempt reuses it.
+   * ponytail: identity is not journaled; a bundle journal structure transition would record it.
+   */
+  async #versionDirectory(plan: BundlePublicationPlanV1): Promise<LifecycleGuardedEntryV1> {
+    const path = parentPath(plan.target.bundleRoot);
+    if ((await this.#io.fs.lstat(path)) === null) {
+      const releases = await this.#io.ownedDirectory(parentPath(path));
+      await this.#io.fs.mkdirExclusive(path);
+      await this.#io.fs.syncDirectory(releases);
+    }
+    return this.#io.ownedDirectory(path);
   }
 
   /**
@@ -371,10 +388,12 @@ export class BundlePublicationParticipant {
   /**
    * After the outer point of no return: `verified` → `finalized`, then publication evidence in
    * reverse ordinal order. It never removes a retained target entry; the outer compaction entry
-   * removes the journal and immutable plan afterwards.
+   * removes the journal and immutable plan afterwards. A `rolled_back` publication is terminal:
+   * its compensation already removed every entry, evidence file, metadata file and the root.
    */
   async compact(value: BundlePublicationPlanV1): Promise<void> {
     const { plan, file } = await this.#open(value);
+    if ((file.value as BundlePublicationJournalV1).phase === "rolled_back") return;
     if ((file.value as BundlePublicationJournalV1).phase === "verified") await this.#advance(plan, file, { kind: "finalize" });
     if ((file.value as BundlePublicationJournalV1).phase === "finalized") await this.#advance(plan, file, { kind: "compaction_step" });
     if ((file.value as BundlePublicationJournalV1).phase !== "compacting") refuseBundle("bundle_publication_not_terminal", file.path);

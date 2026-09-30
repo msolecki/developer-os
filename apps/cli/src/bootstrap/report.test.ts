@@ -28,6 +28,7 @@ import {
   inspectBootstrapEvidenceAdmission,
   NON_REGULAR_BOOTSTRAP_LEAF,
 } from "./report.js";
+import { manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
 import { projectBootstrapRetentionPostimage, projectRetainedDirectoryTreeOnce } from "./retention.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
@@ -171,6 +172,84 @@ describe("inspectBootstrapEvidence", () => {
     expect(await nodeFs.readFile(unrelated, "utf8")).toBe("unrelated sibling\n");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("withholds retained parent authorities from an altered envelope whose journal selection stays exact", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-altered-authorities", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const verified = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+    expect(verified.report.ids[0]?.status).toBe("verified");
+    expect(verified.retainedParentAuthorities.length).toBeGreaterThan(0);
+    const target = await firstExternalRegularFile(
+      await retainedTombstones(fixture.root),
+      [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
+    );
+    if (target === null) throw new Error("fixture retained no external-parent regular-file tombstone");
+    const id = /^\.developer-os-retained\.(fi_[0-9a-f-]+)\./u.exec(basename(target))?.[1];
+    if (id === undefined) throw new Error("fixture tombstone has no bootstrap ID");
+    await nodeFs.writeFile(
+      join(dirname(target), `.developer-os-retained.${id}.9999999999.tombstone`),
+      RETAINED_SECRET,
+      { mode: 0o600 },
+    );
+
+    const altered = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+
+    expect(altered.report.ids[0]?.status).toBe("altered");
+    expect(altered.active).not.toBeNull();
+    expect(altered.retainedParentAuthorities).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-56: one home never holds two active plans, because `init` resumes the
+   * one it finds. Two homes each interrupted right after their first journal
+   * write do, once a single inspection spans both state directories and admits
+   * each plan against its own home. Removing each home's bootstrap leaf keeps
+   * the attributed-leaf term false, so the single-home baseline pins every
+   * other `blocksNewIntent` term false and only `active.length > 1` remains.
+   */
+  it("blocks new intent when two admitted plans are both active", async () => {
+    const interruptedAfterJournal = async (name: string) => {
+      const fixture = await createCommandFixture(name, {
+        bootstrapAvailable: true,
+        bootstrapInterruptAfter: "after_journal",
+      });
+      expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+      const bootstrap = fixture.context.bootstrap;
+      if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+      await bootstrap.executor.close();
+      await nodeFs.rm(join(fixture.paths.stateDir, ".lifecycle-bootstrap.lock"), { force: true });
+      return fixture;
+    };
+    const first = await interruptedAfterJournal("bootstrap-report-two-active-first");
+    const second = await interruptedAfterJournal("bootstrap-report-two-active-second");
+    const firstRequest = requestFor(first);
+    const secondRequest = requestFor(second);
+
+    const single = await inspectBootstrapEvidenceAdmission(firstRequest);
+
+    expect(single.active).not.toBeNull();
+    expect(single.blocksNewIntent).toBe(false);
+
+    const ownedBySecond = (value: unknown): boolean => {
+      const planPath = (value as { readonly planPath?: unknown }).planPath;
+      return typeof planPath === "string" && planPath.startsWith(`${second.paths.home}/`);
+    };
+    const doubled = await inspectBootstrapEvidenceAdmission({
+      ...firstRequest,
+      initialRoots: [...firstRequest.initialRoots, second.paths.stateDir as CanonicalAbsolutePathV1],
+      validatePlan: (value) =>
+        ownedBySecond(value) ? secondRequest.validatePlan(value) : firstRequest.validatePlan(value),
+    });
+
+    expect(doubled.report.ids.map((summary) => summary.status)).toStrictEqual(["incomplete", "incomplete"]);
+    expect(doubled.bootstrapLeaf).toBeNull();
+    expect(doubled.retainedParentAuthorities).toStrictEqual([]);
+    expect(doubled.active).toBeNull();
+    expect(doubled.blocksNewIntent).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("reports a pre-plan prefix as unverified without adopting or changing it", async () => {
     const fixture = await createCommandFixture("bootstrap-report-unverified", {
       bootstrapAvailable: true,
@@ -269,6 +348,45 @@ describe("inspectBootstrapEvidence", () => {
     expect(report.ids[0]?.status).toBe("verified");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("lets a reader defect in the exact V2 handoff escape instead of reading the handoff as gone (NEW-124)", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-exact-handoff-defect", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const manifest = fixture.paths.manifestFile as CanonicalAbsolutePathV1;
+    const real = new NodeBootstrapEvidenceGuardedReader();
+    /** Only the exact handoff inventories the manifest without `leaves` and still rethrows a defect. */
+    const reader: BootstrapEvidenceGuardedReaderV1 = {
+      inventoryExactNamespaces: (roots, options) => roots.includes(manifest) && options?.leaves !== true
+        ? Promise.reject(new TypeError("synthetic"))
+        : real.inventoryExactNamespaces(roots, options),
+      readRegularFile: (entry, maximumBytes) => real.readRegularFile(entry, maximumBytes),
+    };
+
+    await expect(inspectBootstrapEvidenceAdmission({ ...requestFor(fixture), reader })).rejects.toBeInstanceOf(TypeError);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("lets a reader defect in the superseded V2 handoff escape instead of reading it as unsettled (NEW-124)", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-superseded-handoff-defect", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    /** A changed manifest fails the exact handoff, which is what sends inspection to the superseded check. */
+    await nodeFs.appendFile(fixture.paths.manifestFile, "\n");
+    const anchor = manifestAnchorPath(fixture.paths.home);
+    const real = new NodeBootstrapEvidenceGuardedReader();
+    const reader: BootstrapEvidenceGuardedReaderV1 = {
+      inventoryExactNamespaces: (roots, options) => roots.includes(anchor as CanonicalAbsolutePathV1)
+        ? Promise.reject(new TypeError("synthetic"))
+        : real.inventoryExactNamespaces(roots, options),
+      readRegularFile: (entry, maximumBytes) => real.readRegularFile(entry, maximumBytes),
+    };
+
+    await expect(inspectBootstrapEvidenceAdmission({ ...requestFor(fixture), reader })).rejects.toBeInstanceOf(TypeError);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("projects a retained directory tree exactly twice per inspection", async () => {
     const fixture = await createCommandFixture("bootstrap-report-projection-count", {
       bootstrapAvailable: true,
@@ -326,15 +444,15 @@ describe("inspectBootstrapEvidence", () => {
      * through the total above: one call carries every retention root and row
      * parent, and no second call carries a subset of them.
      */
-    expect(arities.filter((arity) => arity > 2)).toStrictEqual([4, 326]);
+    expect(arities.filter((arity) => arity > 2)).toStrictEqual([4, 328]);
 
     /**
-     * Measured against this fixture's 161-location plan: the outer
+     * Measured against this fixture's 162-location plan: the outer
      * `initialRoots` walk (1), the plan's journal-slot walk (1), one walk per
-     * payload/created-path/foundation-participant evidence read (156),
+     * payload/created-path/foundation-participant evidence read (157),
      * the manifest-handoff check (1) — and, until the roots/row-parents walks are
-     * grouped into one call, two more instead of one. 160 is that total with
-     * the group, whose one call carries 326 roots (161 sources, 161 tombstones,
+     * grouped into one call, two more instead of one. 161 is that total with
+     * the group, whose one call carries 328 roots (162 sources, 162 tombstones,
      * 4 row parents); it moves in lockstep with the fixture's shape, not a fixed
      * constant, so a future change to the fixture is expected to move it too.
      * It was 155 against a 156-location plan until plan 1a Task 1 (2026-09-17)
@@ -343,9 +461,10 @@ describe("inspectBootstrapEvidence", () => {
      * creation-evidence reads and three more locations. It was 158 against 159
      * until the 2026-09-22/23 init work added one more location; first
      * measured in the 2026-09-24 full-suite run. It was 159 against 160 until
-     * NEW-94 made `staging/lifecycle` one more created path.
+     * NEW-94 made `staging/lifecycle` one more created path, and 160 against
+     * 161 until NEW-88's residual made `backups/transactions` one more.
      */
-    expect(walks).toBe(160);
+    expect(walks).toBe(161);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("looks up retained rows by key instead of scanning them per location", async () => {
@@ -464,29 +583,29 @@ describe("assertOrdinaryCommandAdmitted over the production reader", () => {
     });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  /**
-   * NEW-82, open half, so this states the contract and `it.fails` records that
-   * the product does not meet it yet: it goes red the moment it does.
-   * `inventoryExactNamespaces` inventories a directory root by its children,
-   * and a directory here has no child matching the bootstrap-evidence
-   * namespace, so the inventory comes back empty and the gate cannot tell it
-   * from an absent manifest. On a bare home that merely admits; on an installed
-   * home the absent-manifest arm finds the installed files as live residue and
-   * refuses exit 6 with `BOOTSTRAP_MANUAL_ARCHIVE`, telling the user to archive
-   * bootstrap evidence when the fault is a directory at their manifest path.
-   * Closing it means recording the root entry itself in the reader's
-   * direct-namespace branch, the way its tree branch already does, which
-   * changes what every other exact-namespace caller inventories.
-   */
-  it.fails("distinguishes a directory at the manifest path from an absent one (NEW-82, open)", async () => {
+  /** NEW-126: an empty directory used to inventory as nothing and pass as an absent manifest. */
+  it("distinguishes a directory at the manifest path from an absent one (NEW-126)", async () => {
     await bareHome(async (home) => {
       const manifest = join(home, "installation-manifest.json");
       await nodeFs.mkdir(manifest, { mode: 0o700 });
 
       await expect(assertOrdinaryCommandAdmitted(requestForHome(home))).rejects.toMatchObject({
         code: EXIT_CODES.recoveryRequired,
+        name: "BootstrapRecoveryRequiredError",
+        message: NON_REGULAR_BOOTSTRAP_LEAF,
         paths: [manifest],
       });
+    });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("keeps namespace-container roots out of the inventory (NEW-126)", async () => {
+    await bareHome(async (home) => {
+      const reader = new NodeBootstrapEvidenceGuardedReader();
+      const roots = [home, join(home, "state")] as CanonicalAbsolutePathV1[];
+
+      expect(await reader.inventoryExactNamespaces(roots)).toStrictEqual([]);
+      expect((await reader.inventoryExactNamespaces(roots, { leaves: true })).map((found) => found.path))
+        .toStrictEqual(roots);
     });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
@@ -691,7 +810,7 @@ describe("assertOrdinaryCommandAdmitted", () => {
  * regardless of status: a bounded read plus one admission attempt.
  */
 describe("gate cost with many retained envelope ids (NEW-81 §2)", () => {
-  it("measures assertOrdinaryCommandAdmitted's cost against the cap on retained envelope ids", async () => {
+  it("reads each retained envelope id a bounded number of times at the cap", async () => {
     const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-gate-cost-"));
     const home = join(root, "product-home");
     const state = join(home, "state");
@@ -706,29 +825,36 @@ describe("gate cost with many retained envelope ids (NEW-81 §2)", () => {
           { mode: 0o600 },
         );
       }
+      const real = new NodeBootstrapEvidenceGuardedReader();
+      let inventories = 0;
+      let reads = 0;
+      const countingReader: BootstrapEvidenceGuardedReaderV1 = {
+        inventoryExactNamespaces: (roots) => {
+          inventories += 1;
+          return real.inventoryExactNamespaces(roots);
+        },
+        readRegularFile: (entry, maximumBytes) => {
+          reads += 1;
+          return real.readRegularFile(entry, maximumBytes);
+        },
+      };
       const request = createBootstrapEvidenceInspectionRequest({
         productHome: home,
         stateDirectory: state,
         initialRoots: [home, state, root],
+        reader: countingReader,
       });
 
-      const started = performance.now();
       await assertOrdinaryCommandAdmitted(request).catch(() => undefined);
-      const elapsedMs = performance.now() - started;
 
       /**
-       * No bound or short-circuit is added for this row: measured below
-       * `MEASURED_TOLERANCE_MS`, an ordinary command's gate check at the
-       * product's own hard cap on retained envelopes is not something a CLI
-       * user would notice, let alone find unusable — evidence against
-       * building unneeded complexity for a problem this measurement does not
-       * show.
+       * NEW-29: a count, not an elapsed time. No bound or short-circuit is
+       * added for NEW-81 §2 as long as the gate's I/O stays linear in the
+       * envelope count — one bounded read per id, never a rescan per id.
        */
-      const MEASURED_TOLERANCE_MS = 3000;
-      console.log(
-        `NEW-81 §2 measured: ${elapsedMs.toFixed(1)}ms for ${String(BOOTSTRAP_RETAINED_MAX_IDS)} retained envelope ids (tolerance ${String(MEASURED_TOLERANCE_MS)}ms)`,
-      );
-      expect(elapsedMs).toBeLessThan(MEASURED_TOLERANCE_MS);
+      expect(reads).toBeGreaterThanOrEqual(BOOTSTRAP_RETAINED_MAX_IDS);
+      expect(reads).toBeLessThanOrEqual(4 * BOOTSTRAP_RETAINED_MAX_IDS);
+      expect(inventories).toBeLessThanOrEqual(4 * BOOTSTRAP_RETAINED_MAX_IDS);
     } finally {
       await nodeFs.rm(root, { recursive: true, force: true });
     }

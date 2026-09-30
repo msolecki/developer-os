@@ -3,7 +3,6 @@
  * the coordinator's `LifecycleEffectAdapterV1`, the manifest participant of every non-uninstall
  * lifecycle operation, and the macOS host probes the launchd rows are admitted against.
  */
-import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname } from "node:path";
@@ -28,6 +27,7 @@ import type {
 } from "@developer-os/core";
 import {
   LaunchdBootoutRunner,
+  LaunchdDistributionUnsupportedError,
   LaunchdEffectExecutor,
   LaunchdEffectJournalStore,
   LaunchdObserver,
@@ -35,12 +35,15 @@ import {
   NodeLaunchdPlistReader,
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   SpawnRenameAtxRunner,
+  inspectSystemPath,
   loadLaunchdProcessTable,
 } from "@developer-os/platform-macos";
 import type {
+  GeneratedLaunchdLabelV1,
+  LaunchdPlanV1,
   LaunchdEffectDependenciesV1,
   LaunchdEmptyDirectoryObservationV1,
-  ObservedLaunchdDistributionV1,
+  LaunchdHostObserverV1,
 } from "@developer-os/platform-macos";
 import { SecurityRefusalError, SupervisedProcessRunner, nodeSupervisedProcessDependencies } from "@developer-os/security";
 
@@ -61,8 +64,11 @@ export interface LifecycleEffectPortsV1 {
   readonly git: GitEffectDependenciesV1;
   /** The pinned Git boundary `git sync` plans and pushes through; fixtures script it. */
   readonly gitRuntime: GitRuntimeV1;
-  /** The per-coordinator plan, journal store and process table are bound per effect reference. */
-  readonly launchd: Omit<LaunchdEffectDependenciesV1, "plan" | "journals" | "processTable">;
+  /**
+   * The per-coordinator plan, journal store and process table are bound per effect reference;
+   * `host` is what every process table load admits.
+   */
+  readonly launchd: Omit<LaunchdEffectDependenciesV1, "plan" | "journals" | "processTable"> & { readonly host: LaunchdHostObserverV1 };
   readonly push: {
     push(plan: LifecycleExecutionPlanV1, pushPlanHash: LowerHexSha256): Promise<"succeeded" | "failed">;
   };
@@ -72,18 +78,44 @@ export interface LifecycleEffectPortsV1 {
 export interface LaunchdHostV1 {
   readonly runner: Pick<SupervisedProcessRunner, "beginPhase" | "run">;
   consoleUserUid(): Promise<number>;
-  operatingSystem(): Promise<ObservedLaunchdDistributionV1["operatingSystem"]>;
-  inspectExecutable(path: "/bin/launchctl"): Promise<ObservedLaunchdDistributionV1["executable"]>;
+  readonly host: LaunchdHostObserverV1;
   inspectEmptyDirectory(path: "/private/var/empty"): Promise<LaunchdEmptyDirectoryObservationV1>;
 }
 
 const LAUNCHD_TRANSITION_MS = 30_000;
 const SYSTEM_VERSION_PLIST = "/System/Library/CoreServices/SystemVersion.plist";
 const MAX_SYSTEM_VERSION_BYTES = 65_536;
-const MAX_EXECUTABLE_BYTES = 67_108_864;
 
 function recovery(reason: string, path: string): never {
   throw new LifecycleRecoveryRequiredError(reason, [path]);
+}
+
+/**
+ * Residual 10 (D59): a launchctl row this host no longer matches cannot `bootout`, so uninstall
+ * preserves every file and names the manual unload for each installed generated label.
+ * `failureFrom` publishes `kindOf(name)`, so the name is spelled to make it the `reason`.
+ */
+export function refuseUnsupportedLaunchd(
+  uid: number,
+  labels: readonly GeneratedLaunchdLabelV1[],
+  cause: LaunchdDistributionUnsupportedError,
+): never {
+  const detail = cause.message.replace(/^unsupported_launchd_distribution: /u, "");
+  const manual = labels.length === 0
+    ? "no generated label is installed"
+    : `unload by hand: ${labels.map((label) => `launchctl bootout gui/${String(uid)}/${label}`).join("; ")}`;
+  const error = new LaunchdDistributionUnsupportedError(`${detail}; every file is preserved; ${manual}`, { cause });
+  error.name = "Unsupported_launchd_distributionError";
+  throw error;
+}
+
+/** Every generated label a coordinator's launchd plan may have loaded: each job's prior and its postimage. */
+function plannedLabels(plan: LaunchdPlanV1): readonly GeneratedLaunchdLabelV1[] {
+  const labels = plan.entries.flatMap((entry) => [
+    ...(entry.beforeLiveState.state === "loaded" ? [entry.beforeLiveState.label] : []),
+    ...(entry.generatedLabel === null ? [] : [entry.generatedLabel]),
+  ]);
+  return [...new Set(labels)];
 }
 
 export function createLifecycleEffectAdapters(
@@ -106,28 +138,42 @@ export function createLifecycleEffectAdapters(
    * executor is bound to one coordinator's plan — so the plan is resolved from the published
    * effect plan's own coordinator ID, and the executor re-derives and hash-binds the rest.
    */
-  const launchdFor = async (ref: LifecycleEffectRefV1<string>): Promise<LaunchdEffectExecutor> => {
+  const launchdFor = async (
+    ref: LifecycleEffectRefV1<string>,
+  ): Promise<{ readonly executor: LaunchdEffectExecutor; readonly labels: readonly GeneratedLaunchdLabelV1[] }> => {
     const effect = await journals.readPlan(ref);
     const key = lifecycleHomeKeyFromCoordinatorId(context.roots.productHome, effect.coordinatorId);
     const { plan } = await context.store(key).read(effect.coordinatorId);
     if (plan.participants.launchd === null) recovery("launchd_effect_unbound", ref.id);
-    return new LaunchdEffectExecutor({
+    const executor = new LaunchdEffectExecutor({
       ...ports.launchd,
       plan: plan.participants.launchd,
       journals,
-      /** The same template the executor certifies against, or every table de-slots to a foreign row. */
+      /** The same template the executor checks against, or every table de-slots to a foreign one. */
       processTable: () =>
         loadLaunchdProcessTable(key.productHome, effect.coordinatorId, {
           template: ports.launchd.template ?? SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+          host: ports.launchd.host,
         }),
     });
+    return { executor, labels: plannedLabels(plan.participants.launchd) };
+  };
+  /** A resumed journal whose launchctl moved (a macOS update) names the manual unload, residual 10. */
+  const unloadByHandOnHostChange = async (ref: LifecycleEffectRefV1<string>, method: "apply" | "compensate"): Promise<void> => {
+    const { executor, labels } = await launchdFor(ref);
+    try {
+      await executor[method](ref);
+    } catch (error) {
+      if (error instanceof LaunchdDistributionUnsupportedError) refuseUnsupportedLaunchd(context.effectiveUid, labels, error);
+      throw error;
+    }
   };
   const launchd: LifecycleEffectAdapterV1 = {
-    apply: async (ref) => (await launchdFor(ref)).apply(ref),
-    finalize: async (ref) => (await launchdFor(ref)).finalize(ref),
-    compensate: async (ref) => (await launchdFor(ref)).compensate(ref),
-    observe: async (ref) => (await launchdFor(ref)).observe(ref),
-    compact: async (ref, outcome) => (await launchdFor(ref)).compact(ref, outcome),
+    apply: (ref) => unloadByHandOnHostChange(ref, "apply"),
+    finalize: async (ref) => (await launchdFor(ref)).executor.finalize(ref),
+    compensate: (ref) => unloadByHandOnHostChange(ref, "compensate"),
+    observe: async (ref) => (await launchdFor(ref)).executor.observe(ref),
+    compact: async (ref, outcome) => (await launchdFor(ref)).executor.compact(ref, outcome),
   };
 
   return {
@@ -336,13 +382,9 @@ const UNSUPPORTED_NETWORK_PUSH: LifecycleEffectPortsV1["push"] = {
 
 function launchdPort(context: CliLifecycleContext, host: LaunchdHostV1): LifecycleEffectPortsV1["launchd"] {
   const effectiveUid = (): number => context.effectiveUid;
-  const admission = {
-    runner: host.runner,
-    effectiveUid,
-    operatingSystem: () => host.operatingSystem(),
-    inspectExecutable: (path: "/bin/launchctl") => host.inspectExecutable(path),
-  };
+  const admission = { runner: host.runner, effectiveUid, host: host.host };
   return {
+    host: host.host,
     observer: new LaunchdObserver({
       ...admission,
       consoleUserUid: () => host.consoleUserUid(),
@@ -379,8 +421,10 @@ export const REJECTING_LAUNCHD_HOST: LaunchdHostV1 = {
     run: () => Promise.reject(new Error("a lifecycle fixture spawned launchctl without injecting a runner")),
   },
   consoleUserUid: () => Promise.reject(new Error("unexpected console user probe")),
-  operatingSystem: () => Promise.reject(new Error("unexpected operating system probe")),
-  inspectExecutable: () => Promise.reject(new Error("unexpected executable probe")),
+  host: {
+    operatingSystem: () => Promise.reject(new Error("unexpected operating system probe")),
+    inspect: () => Promise.reject(new Error("unexpected system path probe")),
+  },
   inspectEmptyDirectory: () => Promise.reject(new Error("unexpected empty directory probe")),
 };
 
@@ -389,8 +433,8 @@ function plistString(text: string, key: string): string {
   return match?.[1] ?? "";
 }
 
-/** `sw_vers` reads this record; a missing key yields "", which the pinned row then refuses. */
-async function macOsVersion(): Promise<ObservedLaunchdDistributionV1["operatingSystem"]> {
+/** `sw_vers` reads this record; a missing key yields "", which the macOS floor then refuses. */
+async function macOsVersion(): Promise<Awaited<ReturnType<LaunchdHostObserverV1["operatingSystem"]>>> {
   const bytes = await readFile(SYSTEM_VERSION_PLIST);
   const text = bytes.byteLength > MAX_SYSTEM_VERSION_BYTES ? "" : new TextDecoder().decode(bytes);
   return {
@@ -404,30 +448,6 @@ function kindOf(stats: { isFile(): boolean; isDirectory(): boolean; isSymbolicLi
   if (stats.isSymbolicLink()) return "symlink";
   if (stats.isDirectory()) return "directory";
   return stats.isFile() ? "file" : "other";
-}
-
-/** Hashed through the descriptor whose identity matched the no-follow `lstat`. */
-async function inspectExecutable(path: "/bin/launchctl"): Promise<ObservedLaunchdDistributionV1["executable"]> {
-  const observed = await lstat(path, { bigint: true });
-  const common = {
-    path,
-    kind: kindOf(observed),
-    ownerUid: Number(observed.uid),
-    mode: Number(observed.mode & 0o7777n),
-    size: Number(observed.size),
-  };
-  if (!observed.isFile() || observed.size > BigInt(MAX_EXECUTABLE_BYTES)) return { ...common, sha256: "" };
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    const opened = await handle.stat({ bigint: true });
-    if (opened.dev !== observed.dev || opened.ino !== observed.ino || opened.size !== observed.size) {
-      return { ...common, sha256: "" };
-    }
-    const bytes = await handle.readFile();
-    return { ...common, sha256: createHash("sha256").update(bytes).digest("hex") };
-  } finally {
-    await handle.close();
-  }
 }
 
 async function inspectEmptyDirectory(path: "/private/var/empty"): Promise<LaunchdEmptyDirectoryObservationV1> {
@@ -447,12 +467,23 @@ async function consoleUserUid(): Promise<number> {
   return Number((await stat("/dev/console", { bigint: true })).uid);
 }
 
+/** The launchd rows' one supervised spawn authority: `/bin/launchctl` and nothing else. */
+function launchctlRunner(): LaunchdHostV1["runner"] {
+  const runner = new SupervisedProcessRunner(nodeSupervisedProcessDependencies);
+  return {
+    beginPhase: (id, wallMs) => runner.beginPhase(id, wallMs),
+    run: (request, sink) =>
+      request.executable === "/bin/launchctl"
+        ? runner.run(request, sink)
+        : Promise.reject(new Error(`the launchd runner spawns only /bin/launchctl, not ${request.executable}`)),
+  };
+}
+
 export function createProductionLaunchdHost(): LaunchdHostV1 {
   return {
-    runner: new SupervisedProcessRunner(nodeSupervisedProcessDependencies),
+    runner: launchctlRunner(),
     consoleUserUid,
-    operatingSystem: macOsVersion,
-    inspectExecutable,
+    host: { operatingSystem: macOsVersion, inspect: inspectSystemPath },
     inspectEmptyDirectory,
   };
 }

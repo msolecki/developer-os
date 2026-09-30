@@ -76,16 +76,24 @@ function compareUtf8Bytes(left: Uint8Array, right: Uint8Array): number {
   return left.length - right.length;
 }
 
+/** Unsigned UTF-8 byte order for one comparison; a sort uses `sortUtf8` instead. */
+export function compareUtf8(left: string, right: string): number {
+  return compareUtf8Bytes(encoder.encode(left), encoder.encode(right));
+}
+
 /**
  * Encodes each key once rather than once per comparison. `sort` performs
  * O(k log k) comparisons, so encoding inside the comparator made key ordering
  * the largest single cost in `developer-os init`.
  */
-function sortKeysUtf8(keys: readonly string[]): readonly string[] {
-  if (keys.length < 2) return keys;
-  const encoded = keys.map((key) => ({ key, bytes: encoder.encode(key) }));
+export function sortUtf8<T>(values: readonly T[], key: (value: T) => string): T[] {
+  const encoded = values.map((value) => ({ value, bytes: encoder.encode(key(value)) }));
   encoded.sort((left, right) => compareUtf8Bytes(left.bytes, right.bytes));
-  return encoded.map((entry) => entry.key);
+  return encoded.map((entry) => entry.value);
+}
+
+function sortKeysUtf8(keys: readonly string[]): readonly string[] {
+  return keys.length < 2 ? keys : sortUtf8(keys, (key) => key);
 }
 
 function encodeValue(value: CanonicalJsonValue, stack: Set<object>): string {
@@ -292,8 +300,6 @@ export function decodeCanonicalJson(bytes: Uint8Array, maximumBytes: number): Ca
   const value = new JsonParser(decoded.slice(0, -1)).parse();
   const canonical = encodeCanonicalJson(value);
   const canonicalBytes = encoder.encode(canonical);
-  if (canonicalBytes.byteLength !== bytes.byteLength || canonicalBytes.some((byte, index) => byte !== bytes[index])) {
-    fail("input is not byte-for-byte canonical");
-  }
+  if (Buffer.compare(canonicalBytes, bytes) !== 0) fail("input is not byte-for-byte canonical");
   return value;
 }

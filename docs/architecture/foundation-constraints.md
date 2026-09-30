@@ -44,7 +44,7 @@ execution envelopes, closes `config get/set` key/value/result/redaction-output g
 enable the sole publisher of a new `.git`; every sync uses bounded object/index/reflog/ref effects.
 Required source/destination reflogs are exact staged CAS postimages, generated Git-config paths reject
 controls/line breaks, and the in-process pack reader has explicit compressed/object/inflation/delta/
-RAM/temp/deadline budgets. On a certified pinned row, Launchd bootstrap inherits as FD 3 only the
+RAM/temp/deadline budgets. On an admitted `/bin/launchctl` (D71), Launchd bootstrap inherits as FD 3 only the
 descriptor of the already-unlinked, immutable private snapshot; the real source plist descriptor is
 never inherited and there is no pathname fallback. Runner admission first authenticates installed manifest/plist/
 generation evidence, then decides active handler versus inert `automation_disabled` status under its
@@ -465,18 +465,18 @@ recorded here because that is where a reader looks for what Foundation cannot do
 
 **Found 2026-08-07, by the fresh-context review of DOS-P2 Task 1.**
 
-`init` records `config.toml` as a managed artifact (`apps/cli/src/commands/init.ts:226`), and
+`init` records `config.toml` as a managed artifact (`apps/cli/src/commands/init.ts:474-480`), and
 drift compares its content hash. Foundation ships **no command that edits configuration**, so
 the only way to change any setting is to edit the file by hand — which is drift.
 
 The consequence is worse than inconvenient, and it is the shape of residual 1: `doctor` reports
 the drift and prints "uninstall, then initialize again" as its recovery, and `uninstall` refuses
 on that same drift (`planUninstall` in `apps/cli/src/commands/uninstall.ts`). `init` refuses too. The user's only exit is deleting the
-product home by hand. `tests/e2e/foundation.test.ts:1271-1275` already states the mechanism in its own
+product home by hand. `tests/e2e/foundation.test.ts:1349-1352` already states the mechanism in its own
 comment; what it does not say is that no supported path exists to reach the state legitimately.
 
 **This is not new with DOS-P2.** `git.enabled` and `automation.enabled` are written as fixed
-defaults by `init` (`init.ts:112`) and have had the identical problem since Foundation shipped.
+defaults by `init` (`init.ts:179-180`) and have had the identical problem since Foundation shipped.
 The `[brain]` section added by DOS-P2 is mechanically the third instance, and is unreachable
 until a command writes or reads it.
 
@@ -486,6 +486,9 @@ rewrites `config.toml` and re-records its manifest hash serves all three. **Reco
 record, not a decision**: DOS-P2 ships `[brain]` written by `init` inside the existing
 transaction and not editable afterwards; DOS-P7 adds the general command. Settle it before
 DOS-P7 starts, not during.
+
+**Superseded 2026-09-21 by `config set`** (`2a95c94`, `apps/cli/src/commands/config.ts:37`): a
+supported edit path now exists.
 
 ### Residual 10: a filesystem identity has exactly one encoding
 
@@ -556,7 +559,10 @@ as the Task 5–8 notes above.
   journaled: `observeSecretOpaqueKey` only `open`s and `fstat`s the descriptor
   (`apps/cli/src/lifecycle/redaction-key.ts`). The tombstone is
   `state/.redaction.key.<coordinator-id>.tombstone`
-  (`apps/cli/src/lifecycle/redaction-key.ts`, `redactionKeyTombstonePath`).
+  (`apps/cli/src/lifecycle/redaction-key.ts`, `redactionKeyTombstonePath`). The bootstrap
+  retention walk records the key and its tombstone from `lstat` alone, with `sha256: null`, and
+  refuses to project either as a row (`isRedactionKeyPath`,
+  `packages/core/src/manifest/bootstrap-retention.ts`; NEW-93).
 - **Locks.** `state/.lifecycle.lock` is created only by fresh `init` and opened
   elsewhere without `O_CREAT`, and never unlinked — the rule and its enforcing classes are stated
   together at the top of `packages/core/src/lifecycle/locks.ts`. Lock order is runner lease → global →
@@ -569,15 +575,15 @@ as the Task 5–8 notes above.
   `LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS` (`packages/core/src/lifecycle/bookkeeping.ts`); see
   `foundation.md` §10 for its shape-admission rule.
 - **Uninstall artifact capacity (D26; not itself a Global Constraints line, but the plan 1a bound
-  the section above cross-references).** `MAX_ARTIFACT_MUTATIONS = 256`
-  (`apps/cli/src/lifecycle/uninstall.ts`); a release bundle above roughly 197 files cannot be
-  uninstalled until Phase 4b (`BACKLOG.md` NEW-85).
+  the section above cross-references).** `MAX_UNINSTALL_ARTIFACTS`, 31 steps of 256 mutations
+  (7,936) since D45 (`apps/cli/src/lifecycle/uninstall.ts` — `MAX_UNINSTALL_ARTIFACTS`); the
+  single-step 256 bound this line used to state closed with NEW-85 on 2026-09-26.
 
 Every bound above is a ceiling the code refuses past, not a target it approaches — none of these
 constants moved during plan 1a's implementation; they were fixed at the plan's writing and this
 record exists so a later change that raises one does so having read what depends on it. The
 section names files and symbols, not lines: plan 1b edited several of these files, and a line
-citation would have silently moved (`BACKLOG.md` NEW-87).
+citation would have silently moved (`BACKLOG.md` NEW-87, closed 2026-09-29).
 
 ## Plan 1b: Git and launchd bounds
 
@@ -613,6 +619,54 @@ literal; this is the index from bound to symbol. Cite symbols, not lines.
 - **Identity encoding (D31).** Every recorded `dev`/`ino` in the Git and launchd code comes from
   `{ bigint: true }` stats; `findIdentityRenderings` and `findNumberValuedStats` in
   `tests/repository/check.ts` enforce it at lint.
-- **Distribution rows.** `SUPPORTED_GIT_DISTRIBUTION` and `SUPPORTED_LAUNCHD_DISTRIBUTION` are the
-  only places a pinned hash, size, build or version literal appears; `foundation.md` §10 records the
-  re-pinning rule.
+- **System executables (amended 2026-09-28, D71; NEW-113's code).** The `darwin` rows are the one
+  constant `DARWIN_SYSTEM_EXECUTABLES` (`packages/platform-macos/src/system-executables.ts`): `git`
+  `/usr/bin/git`, `git-receive-pack` `/usr/bin/git-receive-pack`, `ssh` `/usr/bin/ssh`, `scheduler`
+  `/bin/launchctl`, each `posix_root_owned` over the ancestors `/`, `/usr`, `/usr/bin` (or `/`,
+  `/bin` for `launchctl`): regular file, uid `0`, `(mode & 0o022) == 0`, owner-execute, no
+  setuid/setgid. A file above 64 MiB (`MAX_HASHED_BYTES`) is observed but not hashed, so admission
+  refuses it. Floors live only in `GIT_DISTRIBUTION_POLICY` (Git `2.54.0`, `Apple Git-157`; ssh
+  `OpenSSH_10.3p1`; four required build-option lines; at most 32 probe lines) and
+  `LAUNCHD_DISTRIBUTION_POLICY` (macOS `26.6.2`); no ceiling, and no build, Xcode version or binary
+  hash literal exists anywhere. `LaunchdEffectJournalV1.launchctlIdentityHash` is `null` exactly for
+  a zero-transition effect and counts toward `MAX_LAUNCHD_EFFECT_JOURNAL_BYTES`. `foundation.md` §10
+  has the admission contract.
+
+## Spec 2: release, update and rollback bounds
+
+Added 2026-09-28 (NEW-110 Task 12, D72). The bounds Spec 2 fixes, as the shipped code names them;
+`foundation.md` §11 has the contract. Cite symbols, not lines.
+
+- **Transport.** 64 KiB response headers, a 30-second idle deadline re-armed on progress, one
+  15-minute wall per attempt shared with the planner and verifier; bodies of at most 64 KiB
+  (delegation), 4 MiB (index), 16 MiB (bundle manifest) and 2 GiB (archive), each asset also held
+  to its exact signed size (`MAXIMUM_BODY_BYTES` and the constants beside it in
+  `packages/security/src/update/transport.ts`).
+- **Archive.** One Zstandard frame with a window of at most 128 MiB (`MAXIMUM_ZSTD_WINDOW_LOG`) over
+  exactly `expectedUstarBytes(manifest)` of ustar (`packages/security/src/update/archive.ts`).
+- **Planner wire.** `PLANNER_WIRE_BOUNDS_V1` (`packages/core/src/update/planner.ts`): 256 MiB of
+  request or result JSON, 1,000,000 blobs and 1 GiB of blob bytes each way, 1 MiB of stderr,
+  512 MiB resident, a 30-second idle and 600-second wall deadline, one process. The target verifier
+  narrows it to its plan's own caps and zero output blobs (`targetVerifierWireBounds`,
+  `packages/security/src/update/verifier-process.ts`).
+- **Plans.** Every leaf plan ≤ 16 MiB (`MAXIMUM_LEAF_PLAN_BYTES`), the construction plan ≤ 512 MiB
+  (`MAXIMUM_CONSTRUCTION_PLAN_BYTES`, `packages/core/src/update/construction.ts`); the V2 coordinator
+  journal ≤ 1 MiB, at most 10,031 steps and 20,100 compaction entries
+  (`MAXIMUM_UPDATE_COORDINATOR_JOURNAL_BYTES`, `MAXIMUM_UPDATE_COORDINATOR_STEPS`,
+  `MAXIMUM_UPDATE_COMPACTION_ENTRIES`, `packages/core/src/update/coordinator.ts`).
+- **Rollback payload.** The record, inverse plan and inventory are each canonical and ≤ 64 MiB
+  (`MAXIMUM_ROLLBACK_DOCUMENT_BYTES`); at most 1,000,000 entries, each ≤ 16 MiB, 2 GiB in aggregate
+  (`MAXIMUM_ROLLBACK_PAYLOAD_ENTRIES`, `MAXIMUM_ROLLBACK_BLOB_BYTES`,
+  `MAXIMUM_ROLLBACK_PAYLOAD_AGGREGATE_BYTES`, `packages/core/src/update/rollback.ts`).
+- **Retirement.** At most 16 inventories per set, 1,000,007 leaves per inventory and 1,200,012 in
+  all (`MAXIMUM_RETIREMENT_INVENTORIES`, `MAXIMUM_RETIREMENT_INVENTORY_LEAVES`,
+  `MAXIMUM_UPDATE_RETIREMENT_LEAVES`). **Both bounds bind (amendment A6):** the 64 MiB inventory holds
+  far fewer than 1,000,000 entries, so the largest payload any update can retire is derived from the
+  byte bound, not from the declared count — `tests/integration/update/recovery.test.ts` derives it,
+  admits it and refuses one entry more.
+- **Capacity.** Active, old rollback, target, scratch, staging, backups, inverse, journals and
+  compaction headroom are checked together for bytes and entries before any reservation, and again
+  against the exact composition after allocation (`projectUpdateCapacity`); a first-over refusal
+  consumes only the allocator gap.
+- **Codex refresh.** 64 KiB stdout and stderr, a 30-second idle and 60-second wall, one process
+  (`codexRefreshPolicy`, `apps/cli/src/update/codex-refresh.ts`).

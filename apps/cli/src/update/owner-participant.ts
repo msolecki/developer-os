@@ -17,7 +17,7 @@ import {
 } from "@developer-os/core";
 
 import type { OwnerExternalEffectParticipant, OwnerExternalEffectStepV1 } from "./external-effect.js";
-import { participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { participantPlanFileHash, participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
 
 /**
  * Spec 1's Foundation participant over a V2 update ref. It publishes the ref's evidence-bound staged
@@ -175,7 +175,7 @@ export class OwnerUpdateParticipant {
   /** The `owner_update` compaction entry: every paired Foundation ref in ID order, the journal, then the plan. */
   async compact(step: OwnerUpdateStepV1): Promise<void> {
     const { journals, foundation } = this.#dependencies;
-    if (!(await journals.unreached(step.journal))) {
+    if (await journals.exists(step.journal.finalPath)) {
       let journal = await this.openJournal(step);
       if (journal.phase === "finalized" || journal.phase === "rolled_back") journal = await this.persist(step, { ...journal, phase: "compacting", compactionNext: 0 });
       if (journal.phase !== "compacting" || journal.compactionNext === null) return refuseParticipant("update_owner_compaction_not_terminal", step.journal.finalPath);
@@ -185,12 +185,12 @@ export class OwnerUpdateParticipant {
       }
       await journals.remove(step.journal.finalPath);
     }
-    await journals.remove(step.planRef.path, step.planRef.hash);
+    await journals.remove(step.planRef.path, participantPlanFileHash(step.planRef, step.plan));
   }
 
   private async openJournal(step: OwnerUpdateStepV1): Promise<OwnerUpdateJournalV1> {
     const { plan, planRef, journal, effect } = step;
-    if (planRef.hash !== updateParticipantDocumentHash(plan) || planRef.id !== plan.id || journal.kind !== "owner_update" || journal.id !== plan.id || journal.planHash !== planRef.hash) refuseParticipant("update_owner_binding", journal.finalPath);
+    if (planRef.hash !== updateParticipantDocumentHash("owner_update", plan) || planRef.id !== plan.id || journal.kind !== "owner_update" || journal.id !== plan.id || journal.planHash !== planRef.hash) refuseParticipant("update_owner_binding", journal.finalPath);
     if ((effect === null) !== (plan.externalEffects.length === 0) || (effect !== null && effect.planRef.hash !== plan.externalEffects[0]?.hash)) refuseParticipant("update_owner_effect_binding", journal.finalPath);
     return validateOwnerUpdateJournal(await this.#dependencies.journals.open(journal), plan);
   }

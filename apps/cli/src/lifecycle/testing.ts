@@ -41,7 +41,6 @@ import type {
 } from "@developer-os/core";
 import {
   NodeLaunchdPlistReader,
-  SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   buildLaunchdPlanPreview,
   launchdGuiDomain,
   launchdPlistBytesHash,
@@ -52,14 +51,14 @@ import {
 import type {
   GeneratedLaunchdLabelV1,
   LaunchdBootstrapSnapshotAttemptV1,
+  LaunchdHostObserverV1,
   LaunchdLiveObservationV1,
   LaunchdPlanPreviewV1,
   LaunchdPriorJobStateV1,
   LaunchdSnapshotRequestV1,
-  SupportedLaunchdProcessTableTemplateV1,
 } from "@developer-os/platform-macos";
-import { PERSISTED_GIT_PUSH_PLAN_CODEC, SUPPORTED_GIT_DISTRIBUTION } from "@developer-os/security";
-import type { PersistedGitPushPlanV1 } from "@developer-os/security";
+import { GIT_DISTRIBUTION_POLICY_ID, PERSISTED_GIT_PUSH_PLAN_CODEC } from "@developer-os/security";
+import type { PersistedGitPushPlanV1, SystemPathObservationV1 } from "@developer-os/security";
 
 import type { LifecycleEffectPortsV1 } from "./adapters.js";
 import type { LifecycleExecutionPlanV1, LifecyclePlanPreviewV1 } from "./codecs.js";
@@ -539,7 +538,7 @@ export function syntheticPushPlan(
           },
     sourceBefore,
     sourceAfter,
-    distributionId: SUPPORTED_GIT_DISTRIBUTION.id,
+    distributionId: GIT_DISTRIBUTION_POLICY_ID,
     processTableHash: hex("0"),
   });
 }
@@ -886,11 +885,26 @@ export function syntheticAutomationPreview(productHome: CanonicalAbsolutePathV1)
   });
 }
 
-/** The pinned mutation template with synthetic certification evidence, as Task 19 will fill it. */
-export function certifiedLaunchdTemplate(): SupportedLaunchdProcessTableTemplateV1 {
+type PresentSystemPathV1 = Exclude<SystemPathObservationV1, { readonly kind: "absent" }>;
+
+const ROOT_DIRECTORY: PresentSystemPathV1 = { kind: "directory", ownerUid: 0, mode: 0o755, dev: "16777232", ino: "2", size: 64, sha256: null };
+const LAUNCHCTL_FILE: PresentSystemPathV1 = { kind: "file", ownerUid: 0, mode: 0o755, dev: "16777232", ino: "4096", size: 300000, sha256: "b".repeat(64) };
+
+/**
+ * A launchd host that spec §5.3 (D71) admits: macOS 26.6.2 / 25G83, root-owned 0755 `/`, `/bin`
+ * and `/bin/launchctl`. Each option overrides one observation; an unlisted path is absent.
+ */
+export function hostWith(options: {
+  readonly productVersion?: string;
+  readonly buildVersion?: string;
+  readonly paths?: Readonly<Record<string, Partial<PresentSystemPathV1>>>;
+} = {}): LaunchdHostObserverV1 {
+  const paths: Record<string, PresentSystemPathV1> = { "/": ROOT_DIRECTORY, "/bin": { ...ROOT_DIRECTORY, ino: "3" }, "/bin/launchctl": LAUNCHCTL_FILE };
+  for (const [path, change] of Object.entries(options.paths ?? {})) paths[path] = { ...(paths[path] ?? LAUNCHCTL_FILE), ...change };
   return {
-    ...SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
-    certification: { certifiedAt: "2026-09-23T00:00:00.000Z" as UtcTimestampV1, fixtureTranscriptSha256: hex("a") },
+    operatingSystem: () =>
+      Promise.resolve({ productName: "macOS", productVersion: options.productVersion ?? "26.6.2", buildVersion: options.buildVersion ?? "25G83" }),
+    inspect: (path) => Promise.resolve(paths[path] ?? { kind: "absent" }),
   };
 }
 
@@ -904,11 +918,12 @@ export interface ScriptedLaunchdV1 {
 
 /**
  * An injected launchd domain: observation reads `loaded`, `bootout` and bootstrap edit it, and the
- * plan-bound plist checks run against the real files. No process is ever spawned.
+ * plan-bound plist checks run against the real files. No process is ever spawned; `host` (an
+ * admitted `hostWith()` by default) is what every process table load admits.
  */
 export function scriptedLaunchd(options: {
   readonly clock: () => UtcTimestampV1;
-  readonly certified: boolean;
+  readonly host?: LaunchdHostObserverV1;
   readonly beforeBootout?: (label: GeneratedLaunchdLabelV1) => void | Promise<void>;
 }): ScriptedLaunchdV1 {
   const loaded = new Map<ScheduledJobIdV1, GeneratedLaunchdLabelV1>();
@@ -962,7 +977,7 @@ export function scriptedLaunchd(options: {
     beginTransition: () => ({ id: "launchd-transition", deadlineAtMs: Number.MAX_SAFE_INTEGER, remainingMilliseconds: () => 30_000 }),
     clock: options.clock,
     pause: () => Promise.resolve(),
-    template: options.certified ? certifiedLaunchdTemplate() : SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+    host: options.host ?? hostWith(),
   } as unknown as LifecycleEffectPortsV1["launchd"];
   return { loaded, events, ports };
 }

@@ -3,11 +3,21 @@ import { createHmac } from "node:crypto";
 export interface RedactionFinding {
   readonly class: string;
   readonly fingerprint: string;
+  /**
+   * `user-pattern` only: the zero-based position in `userPatterns` of the entry that
+   * produced it, as configured. Non-secret — it names a table row, never its text (D73).
+   */
+  readonly patternIndex?: number;
 }
 
 export interface RedactionResult {
   readonly text: string;
   readonly findings: readonly RedactionFinding[];
+  /**
+   * Indexes of the user patterns whose own matches cover at least `OVER_BROAD_COVERAGE`
+   * of this input (NEW-24). Absent, never empty, when there are none.
+   */
+  readonly overBroadPatterns?: readonly number[];
 }
 
 /**
@@ -23,6 +33,20 @@ export interface RedactionResult {
 export interface RedactionOptions {
   readonly userPatterns?: readonly string[];
 }
+
+/**
+ * **Which leaf of a published document is being redacted** (NEW-36, NEW-39). `text` is the
+ * historical contract — every class, NFC output — and stays the default because capture
+ * content relies on it. The other three are for structured output and return the caller's
+ * bytes unchanged when nothing matched, so a path handed out as NFD opens again.
+ *
+ * - `value`: every class; a string leaf of a payload.
+ * - `path`: every class except `high-entropy`, which fires on a sixteen-hex capture id and a
+ *   temporary directory's name and would destroy the path rather than a secret in it.
+ * - `name`: every class except `user-pattern` — a product-owned key name keeps its schema
+ *   whatever the user configured, while provider and credential shapes still redact in it.
+ */
+export type RedactionScope = "text" | "value" | "path" | "name";
 
 /**
  * Declaration order is the contract a consumer can rely on to enumerate
@@ -42,11 +66,15 @@ export const REDACTION_CLASSES = Object.freeze([
   "user-pattern",
 ] as const);
 
+/**
+ * A span of the normalized text; the secret is sliced from it at output, so a
+ * merged range fingerprints exactly the text it redacts.
+ */
 interface RedactionCandidate {
   readonly start: number;
   readonly end: number;
   readonly class: string;
-  readonly secret: string;
+  readonly patternIndex?: number;
 }
 
 function overlaps(
@@ -56,17 +84,39 @@ function overlaps(
   return left.start < right.end && right.start < left.end;
 }
 
+/**
+ * Merges a candidate with every existing one it overlaps (NEW-25). Dropping it
+ * instead left its non-overlapping part in the clear. The merged range keeps the
+ * class of the earliest-scanned contributor, so the class order in `redactText`
+ * still decides classification. Touching ranges are not overlaps and stay apart.
+ *
+ * `high-entropy` is the exception and stays first-wins (founder decision D71): its
+ * run spans a `KEY=` prefix, so merging it would change the persisted fingerprint of
+ * an ordinary env or credential line. The known residual is a token tail left in the
+ * clear when an earlier candidate covers only part of a high-entropy run.
+ */
 function addCandidate(
   candidates: RedactionCandidate[],
   candidate: RedactionCandidate,
 ): void {
-  if (
-    candidate.secret.length === 0 ||
-    candidates.some((existing) => overlaps(existing, candidate))
-  ) {
+  if (candidate.end <= candidate.start) return;
+  const overlapping = candidates.filter((existing) => overlaps(existing, candidate));
+  const [owner] = overlapping;
+  if (owner === undefined) {
+    candidates.push(candidate);
     return;
   }
-  candidates.push(candidate);
+  if (candidate.class === "high-entropy") return;
+  const merged: RedactionCandidate = {
+    class: owner.class,
+    start: overlapping.reduce((start, e) => Math.min(start, e.start), candidate.start),
+    end: overlapping.reduce((end, e) => Math.max(end, e.end), candidate.end),
+    ...(owner.patternIndex === undefined ? {} : { patternIndex: owner.patternIndex }),
+  };
+  candidates[candidates.indexOf(owner)] = merged;
+  for (const absorbed of overlapping.slice(1)) {
+    candidates.splice(candidates.indexOf(absorbed), 1);
+  }
 }
 
 function addWholeMatches(
@@ -81,7 +131,6 @@ function addWholeMatches(
       start: match.index,
       end: match.index + secret.length,
       class: findingClass,
-      secret,
     });
   }
 }
@@ -107,7 +156,6 @@ function addCapturedMatches(
       start,
       end: start + secret.length,
       class: findingClass,
-      secret,
     });
   }
 }
@@ -224,47 +272,54 @@ function foldForMatching(value: string): string {
   return folded.replace(/ς/gu, "σ");
 }
 
+/**
+ * **Over-broad is a property of the text, measured as the fraction of it one pattern's own
+ * matches cover** (NEW-24, D73) — not of the pattern's length, which refused `EY` and every
+ * two-character CJK name when it was tried (`redactionSchema` in the config loader). A
+ * client name mentioned a few times covers 1–5% of a note; a common letter or word covers
+ * 8% and up. Below the floor an input is too short to tell the two apart: a capture that is
+ * nothing but the name covers all of it.
+ *
+ * ponytail: fixed threshold and floor; make them configurable if real notes disagree.
+ */
+const OVER_BROAD_COVERAGE = 0.08;
+const OVER_BROAD_MIN_LENGTH = 256;
+
+/** Returns the indexes of the patterns over-broad for `text`, ascending. */
 function addUserPatterns(
   text: string,
   patterns: readonly string[],
   candidates: RedactionCandidate[],
-): void {
-  if (patterns.length === 0) return;
+): number[] {
+  if (patterns.length === 0) return [];
 
   const folded = buildFoldedHaystack(text);
   /**
-   * **Folded first, then de-duplicated, then sorted longest-first — in that order, and
-   * the order is the whole correctness argument.**
+   * **Folded first, then de-duplicated, then sorted longest-first.**
    *
-   * `addCandidate` is first-wins on overlap, so an unsorted scan makes the result depend
-   * on how the user typed the table: `["Acme", "Acme Corp"]` over `"hello Acme Corp bye"`
-   * redacts the short form and **leaves `Corp` in the clear**, while the reverse order
-   * redacts the whole name. Listing both the short and the long form of a client name is
-   * the obvious thing for a founder to do.
+   * The ordering was the correctness argument while `addCandidate` was first-wins: an
+   * unsorted scan let `["Acme", "Acme Corp"]` leave `Corp` in the clear, and a sort on the
+   * raw rather than the folded string did the same for a decomposed (NFD) short form.
+   * `addCandidate` now merges overlapping ranges (NEW-25), which closes both that and the
+   * partial-overlap case ordering never could (`["Acme Corp", "Corp Holdings"]`); the
+   * sort stays to keep the scan order independent of how the table was typed, which also
+   * makes a merged finding keep the longest contributor's `patternIndex`.
    *
-   * **Sorting on the raw string instead of the folded one reintroduces exactly that bug,
-   * deterministically.** Matching happens on `normalize("NFC").toLowerCase()`, and the
-   * two lengths disagree whenever a pattern arrives decomposed — which macOS filenames,
-   * Finder copy-paste and several editors all produce. A decomposed `"Nguyễn Văn Ánh"` is
-   * eighteen raw units and fourteen folded ones, so it sorts *ahead* of a composed
-   * `"Nguyễn Văn Ánh Co"` at seventeen, claims fourteen characters, and drops the longer
-   * candidate as an overlap: `" Co"` left in the clear in **both** configured orders.
-   *
-   * Folding before the `Set` also makes the de-duplication mean what its name says:
-   * `["Acme", "acme"]` is one needle, scanned once, where a byte-identical dedupe scanned
-   * it twice.
-   *
-   * **What longest-first does not close: partial overlap.** Two patterns that interleave
-   * rather than contain — `["Acme Corp", "Corp Holdings"]` over `"x Acme Corp Holdings y"`
-   * — still cannot both win, and `"Acme"` stays in the clear. That is `addCandidate`'s
-   * first-wins rule and predates this ordering; it is recorded as `BACKLOG.md` §1 **NEW-25**
-   * rather than silently implied to be handled.
+   * Folding before de-duplicating makes it mean what it says: `["Acme", "acme"]` is one
+   * needle, scanned once, and indexed by the first of the two as configured (D73).
    */
-  const ordered = [
-    ...new Set(patterns.map((pattern) => foldForMatching(pattern.normalize("NFC")))),
-  ].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0));
-  for (const needle of ordered) {
+  const firstIndexOf = new Map<string, number>();
+  patterns.forEach((pattern, index) => {
+    const needle = foldForMatching(pattern.normalize("NFC"));
+    if (!firstIndexOf.has(needle)) firstIndexOf.set(needle, index);
+  });
+  const ordered = [...firstIndexOf].sort(
+    ([a], [b]) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0),
+  );
+  const overBroad: number[] = [];
+  for (const [needle, patternIndex] of ordered) {
     if (needle.length === 0) continue;
+    let covered = 0;
     for (
       let at = folded.haystack.indexOf(needle);
       at >= 0;
@@ -272,14 +327,19 @@ function addUserPatterns(
     ) {
       const range = toOriginalRange(folded, at, needle.length);
       if (range === null) continue;
+      covered += range.end - range.start;
       addCandidate(candidates, {
         start: range.start,
         end: range.end,
         class: "user-pattern",
-        secret: text.slice(range.start, range.end),
+        patternIndex,
       });
     }
+    if (text.length >= OVER_BROAD_MIN_LENGTH && covered >= OVER_BROAD_COVERAGE * text.length) {
+      overBroad.push(patternIndex);
+    }
   }
+  return overBroad.sort((a, b) => a - b);
 }
 
 function shannonEntropy(value: string): number {
@@ -346,6 +406,35 @@ function looksHighEntropy(value: string): boolean {
   return entropy >= 4 && normalizedEntropy >= 0.7;
 }
 
+/**
+ * A word: one case throughout, a vowel unless it is at most three letters (`src`, `cli`),
+ * and no longer than a real word gets. Short digit runs are dates and ids.
+ */
+function isWordLikePart(part: string): boolean {
+  if (/^[0-9]{1,8}$/u.test(part)) return true;
+  if (!/^(?:[a-z]{1,16}|[A-Z]{1,16})$/u.test(part)) return false;
+  return part.length <= 3 || /[aeiouy]/iu.test(part);
+}
+
+/** The longest real note path seen (NEW-129) has 11 parts; a longer word chain is not exempt. */
+const MAX_WORD_LIKE_PARTS = 12;
+
+/**
+ * NEW-129: a note path, wikilink target or kebab slug — every `/` segment made only of
+ * word-like `-`/`_` parts, at most `MAX_WORD_LIKE_PARTS` of them in all. Anything else
+ * (mixed case, letters beside digits, `+`, `=`) falls back to the whole-run entropy check,
+ * so a token sitting in one segment still redacts the run. Known cost: an unlabelled
+ * all-word passphrase joined by `-` is exempt too; a labelled one is credential-store.
+ * ponytail: vowel test, not a dictionary; random vowel-bearing letter chunks still pass.
+ */
+function isWordLikePath(run: string): boolean {
+  const parts = run
+    .split("/")
+    .flatMap((segment) => segment.split(/[-_]/u))
+    .filter((part) => part.length > 0);
+  return parts.length > 0 && parts.length <= MAX_WORD_LIKE_PARTS && parts.every(isWordLikePart);
+}
+
 function fingerprint(secret: string, key: Uint8Array): string {
   return createHmac("sha256", key)
     .update(secret)
@@ -378,7 +467,7 @@ function boundedPemPattern(label: string): RegExp {
 /**
  * A redactor with its key and its user patterns already bound.
  */
-export type Redactor = (text: string) => RedactionResult;
+export type Redactor = (text: string, scope?: RedactionScope) => RedactionResult;
 
 /**
  * **The one production entry to `redactText`, and the reason it exists is the key rather
@@ -399,13 +488,14 @@ export function createRedactor(
   key: Uint8Array,
   options: RedactionOptions = {},
 ): Redactor {
-  return (text: string) => redactText(text, key, options);
+  return (text: string, scope?: RedactionScope) => redactText(text, key, options, scope);
 }
 
 export function redactText(
   text: string,
   key: Uint8Array,
   options: RedactionOptions = {},
+  scope: RedactionScope = "text",
 ): RedactionResult {
   if (key.byteLength < 32) {
     throw new RangeError("Redaction key must contain at least 32 bytes");
@@ -505,14 +595,15 @@ export function redactText(
    * `"password [REDACTED:credential-store] Corp Holdings"`, "Corp
    * Holdings" left in the clear). Running `user-pattern` first means it
    * claims the full configured span, so the password pattern's later,
-   * narrower attempt at the same region is the one the overlap resolver
-   * drops. `addUserPatterns` still no-ops when no patterns are configured,
+   * narrower attempt at the same region is absorbed into it and the merged
+   * range keeps the `user-pattern` class. `addUserPatterns` still no-ops when no patterns are configured,
    * so this reordering does not change output for any of the calls that
    * pass none. **That was every production call site until 2026-08-17**; `capture`,
    * `review` and `ingest` now pass the user's configured patterns, so this ordering is
    * live rather than latent (BACKLOG NEW-16).
    */
-  addUserPatterns(normalizedText, options.userPatterns ?? [], candidates);
+  const overBroadPatterns =
+    scope === "name" ? [] : addUserPatterns(normalizedText, options.userPatterns ?? [], candidates);
   /**
    * `.netrc`'s space-separated `password <value>` cannot be named by a
    * fixed key, so it is anchored by context instead: `password` as the
@@ -539,18 +630,41 @@ export function redactText(
     1,
     candidates,
   );
+  /**
+   * NEW-129 review: an all-word passphrase is exempt from high-entropy (`isWordLikePath`),
+   * so a labelled one is caught here instead. `\bis\b`, not `is`, so "this" is no label.
+   * Captures the first token only: a space-separated mnemonic keeps its later words.
+   */
+  addCapturedMatches(
+    normalizedText,
+    /\b(?:pass ?phrase|mnemonic|seed phrase|recovery (?:phrase|key))\b[^\r\n]{0,20}?(?:\bis\b|[:=])\s*(\S+)/giu,
+    "credential-store",
+    1,
+    candidates,
+  );
 
-  for (const match of normalizedText.matchAll(/[A-Za-z0-9+/=_-]{40,}/gu)) {
-    if (!looksHighEntropy(match[0])) {
+  /**
+   * Skipped at collection rather than filtered afterwards: a dropped candidate may have been
+   * the owner another one merged into, so filtering would change NEW-25's merge outcome.
+   */
+  const heuristicRuns =
+    scope === "path" ? [] : normalizedText.matchAll(/[A-Za-z0-9+/=_-]{40,}/gu);
+  for (const match of heuristicRuns) {
+    if (isWordLikePath(match[0]) || !looksHighEntropy(match[0])) {
       continue;
     }
     addCandidate(candidates, {
       start: match.index,
       end: match.index + match[0].length,
       class: "high-entropy",
-      secret: match[0],
     });
   }
+
+  /**
+   * Matching still ran on NFC, so an NFD path carrying a configured pattern is caught; only a
+   * leaf with nothing to redact keeps its bytes. A redacted leaf is destroyed either way.
+   */
+  if (scope !== "text" && candidates.length === 0) return { text, findings: [] };
 
   candidates.sort((left, right) => left.start - right.start);
 
@@ -562,11 +676,17 @@ export function redactText(
     redacted += `[REDACTED:${candidate.class}]`;
     findings.push({
       class: candidate.class,
-      fingerprint: fingerprint(candidate.secret, key),
+      fingerprint: fingerprint(
+        normalizedText.slice(candidate.start, candidate.end),
+        key,
+      ),
+      ...(candidate.patternIndex === undefined ? {} : { patternIndex: candidate.patternIndex }),
     });
     cursor = candidate.end;
   }
   redacted += normalizedText.slice(cursor);
 
-  return { text: redacted, findings };
+  return overBroadPatterns.length === 0
+    ? { text: redacted, findings }
+    : { text: redacted, findings, overBroadPatterns };
 }

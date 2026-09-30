@@ -6,7 +6,13 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ALLOWED_SPAWN_SITES, inspectOptInAuthoritySurfaces } from "./opt-in-authority.js";
+import {
+  describeReleaseAuthorityProblems,
+  inspectReleaseAuthoritySurfaces,
+  RELEASE_NETWORK_ENTRYPOINTS,
+  RELEASE_TRANSPORT_COMPOSITION,
+} from "./check.js";
+import { ALLOWED_SPAWN_SITES, ALLOWED_SUPERVISED_SITES, inspectOptInAuthoritySurfaces } from "./opt-in-authority.js";
 
 const run = promisify(execFile);
 
@@ -75,9 +81,19 @@ const OPT_IN_SEEDS: Readonly<Record<string, string>> = {
   "apps/cli/src/scheduled-entry.ts": "export type Handlers = ScheduledJobHandlersV1;\n",
 };
 
+/**
+ * The release authority gate is total too: the release transport, its one composition and the
+ * launcher's exec stand in for the real modules unless a case says otherwise.
+ */
+const RELEASE_SEEDS: Readonly<Record<string, string>> = {
+  "packages/security/src/update/transport.ts": 'import { request } from "node:https";\nexport const exchange = request;\n',
+  "apps/cli/src/update/context.ts": "export const transport = (): unknown => nodeReleaseExchange;\n",
+  "apps/launcher/src/main.ts": "export const launch = (): unknown => execAdmittedRelease();\n",
+};
+
 async function sandbox(
   files: Readonly<Record<string, string>>,
-  options: { readonly stage?: boolean; readonly name?: string; readonly planner?: boolean; readonly optIn?: boolean } = {},
+  options: { readonly stage?: boolean; readonly name?: string; readonly planner?: boolean; readonly optIn?: boolean; readonly release?: boolean } = {},
 ): Promise<string> {
   const root = await mkdtemp(join("/tmp", options.name ?? "dosSc"));
   sandboxes.push(root);
@@ -87,7 +103,8 @@ async function sandbox(
     ? {}
     : Object.fromEntries([PLANNER_ENTRY, ...PROVIDER_PLANNER_ENTRIES].map((entry) => [entry, "export const planned = 1;\n"]));
   const optIn = options.optIn === false ? {} : OPT_IN_SEEDS;
-  for (const [path, content] of Object.entries({ ...planner, ...optIn, ...files })) {
+  const release = options.release === false ? {} : RELEASE_SEEDS;
+  for (const [path, content] of Object.entries({ ...planner, ...optIn, ...release, ...files })) {
     const full = join(root, path);
     await mkdir(join(full, ".."), { recursive: true });
     await writeFile(full, content);
@@ -301,6 +318,78 @@ describe("the repository check gate", () => {
     expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
   });
 
+  /**
+   * NEW-90: the exemption covers the port's receiver, not the whole file. A
+   * direct `node:fs` stat inside an exempted module renders exactly like the
+   * approved encoder, so only the stat call can fail it.
+   */
+  /**
+   * The update ports module also holds `context.fs`, the CLI's own filesystem, whose receiver is
+   * spelled `fs` too; there only the lifecycle port's `lifecycle.fs` is exempt.
+   */
+  it("exempts only the lifecycle port's receiver in the update ports module", async () => {
+    const root = await sandbox({
+      "apps/cli/src/update/apply-ports.ts":
+        `const entry = await lifecycle.fs.lstat(path);\n` +
+        `const stats = await context.fs.lstat(path);\n` +
+        `export const ino = [entry.ino, stats.ino];\n`,
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("apps/cli/src/update/apply-ports.ts:2");
+    expect(outcome.stderr).not.toContain("apps/cli/src/update/apply-ports.ts:1");
+  });
+
+  it("fails on a direct number-valued stat inside a guarded port caller", async () => {
+    const root = await sandbox({
+      "packages/core/src/lifecycle/allocator.ts":
+        `const entry = await fs.lstat(path);\n` +
+        `const stats = await nodeFs.lstat(path);\n` +
+        `export const ino = parseUInt64Decimal(stats.ino.toString(10));\n`,
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("packages/core/src/lifecycle/allocator.ts:2");
+    expect(outcome.stderr).not.toContain("packages/core/src/lifecycle/allocator.ts:1");
+  });
+
+  /** NEW-119: the exemption keys on the receiver's name, so `fs` may only ever be the guarded port. */
+  it.each([
+    { name: "a namespace import", source: 'import * as fs from "node:fs";' },
+    { name: "a default import", source: 'import fs from "node:fs";' },
+    { name: "a named import from node:fs/promises", source: 'import {\n  lstat,\n  promises as fs,\n} from "node:fs/promises";' },
+    { name: "a bare fs specifier", source: "import fs, { constants } from 'fs';" },
+  ])("fails when a guarded port caller binds node:fs to fs through $name", async ({ source }) => {
+    const root = await sandbox({
+      "packages/core/src/lifecycle/allocator.ts":
+        `${source}\nconst entry = await fs.lstat(path);\nexport const ino = entry.ino;\n`,
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("packages/core/src/lifecycle/allocator.ts:1");
+  });
+
+  it("accepts a guarded port caller whose fs is the port and whose node:fs has another name", async () => {
+    const root = await sandbox({
+      "packages/core/src/lifecycle/allocator.ts":
+        'import * as nodeFs from "node:fs/promises";\n' +
+        'import { constants, lstat as fsLstat } from "node:fs";\n' +
+        "export async function allocate(fs: LifecycleGuardedFs): Promise<string> {\n" +
+        "  const entry = await fs.lstat(path);\n" +
+        "  const stats = await nodeFs.lstat(path, { bigint: true });\n" +
+        "  return `${entry.ino}:${stats.ino}:${String(constants.O_RDONLY)}:${typeof fsLstat}`;\n" +
+        "}\n",
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
   it("fails when the compiled planner entrypoint is missing", async () => {
     const root = await sandbox({ "src/fine.ts": "export const a = 1;\n" }, { planner: false });
 
@@ -425,6 +514,36 @@ describe("the repository check gate", () => {
     expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
   });
 
+  it("keeps a raw spawn unexpected at a site allowlisted only for the supervised primitive", async () => {
+    const root = await sandbox({
+      "apps/cli/src/update/apply-ports.ts": 'import { spawn } from "node:child_process";\nexport function codexRuntime(): void {\n  spawn("/usr/bin/true");\n}\n',
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("unexpected spawn site: apps/cli/src/update/apply-ports.ts::codexRuntime");
+  });
+
+  it("accepts the supervised primitive at its allowlisted site", async () => {
+    const root = await sandbox({
+      "apps/cli/src/update/apply-ports.ts": "export function codexRuntime(): unknown {\n  return new SupervisedProcessRunner(nodeSupervisedProcessDependencies);\n}\n",
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  it("keeps the supervised primitive unexpected at a site allowlisted only for a raw spawn", async () => {
+    const root = await sandbox({
+      "packages/security/src/process.ts": "export class NodeProcessRunner {\n  run(): unknown {\n    return new SupervisedProcessRunner(nodeSupervisedProcessDependencies);\n  }\n}\n",
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("unexpected spawn site: packages/security/src/process.ts::NodeProcessRunner (nodeSupervisedProcessDependencies)");
+  });
+
   it.each([
     { removed: "apps/cli/src/git-entry.ts", problem: "no file constructs a GitProcessSupervisor" },
     { removed: "apps/cli/src/launchd-entry.ts", problem: "no file names /bin/launchctl" },
@@ -437,6 +556,57 @@ describe("the repository check gate", () => {
 
     expect(outcome.exitCode).toBe(1);
     expect(outcome.stderr).toContain(problem);
+  });
+
+  it.each([
+    { removed: "packages/security/src/update/transport.ts", problem: "no module reaches the release transport's network" },
+    { removed: "apps/cli/src/update/context.ts", problem: "no module composes the release transport" },
+    { removed: "apps/launcher/src/main.ts", problem: "no launcher module execs an admitted release" },
+  ])("fails when a release authority scope is empty: $problem", async ({ removed, problem }) => {
+    const seeds = Object.fromEntries(Object.entries(RELEASE_SEEDS).filter(([path]) => path !== removed));
+    const root = await sandbox(seeds, { release: false });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("release-authority");
+    expect(outcome.stderr).toContain(problem);
+  });
+
+  it.each([
+    { name: "a global fetch", path: "packages/core/src/stray-fetch.ts", source: "export const load = (url: string): unknown => fetch(url);\n" },
+    { name: "globalThis.fetch", path: "packages/core/src/stray-global-this.ts", source: "export const load = (url: string): unknown => globalThis.fetch(url);\n" },
+    { name: "self.fetch", path: "packages/core/src/stray-self.ts", source: "export const load = (url: string): unknown => self.fetch(url);\n" },
+    { name: "window.fetch", path: "packages/core/src/stray-window.ts", source: "export const load = (url: string): unknown => window.fetch (url);\n" },
+    { name: "fetch.call", path: "packages/core/src/stray-call.ts", source: "export const load = (url: string): unknown => fetch.call(globalThis, url);\n" },
+    { name: "fetch.apply", path: "packages/core/src/stray-apply.ts", source: "export const load = (url: string): unknown => fetch . apply(globalThis, [url]);\n" },
+    { name: "globalThis?.fetch", path: "packages/core/src/stray-optional.ts", source: "export const load = (url: string): unknown => globalThis?.fetch(url);\n" },
+    { name: "self?.fetch", path: "packages/core/src/stray-optional-self.ts", source: "export const load = (url: string): unknown => self?.fetch(url);\n" },
+    { name: "window?.fetch", path: "packages/core/src/stray-optional-window.ts", source: "export const load = (url: string): unknown => window?.fetch?.(url);\n" },
+    { name: "an https import", path: "apps/cli/src/commands/stray-https.ts", source: 'import { get } from "node:https";\nexport const probe = get;\n' },
+    { name: "a dynamic tls import", path: "apps/cli/src/stray-tls.ts", source: 'export const later = (): unknown => import("node:tls");\n' },
+  ])("fails, and names the module, on $name outside the release transport", async ({ path, source }) => {
+    const root = await sandbox({ [path]: source });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain(`unexpected network entrypoint: ${path}`);
+  });
+
+  it("fails when a command other than update composes the release transport", async () => {
+    const root = await sandbox({ "apps/cli/src/commands/doctor-network.ts": "export const probe = (): unknown => new FixedReleaseTransport();\n" });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("unexpected release transport composition: apps/cli/src/commands/doctor-network.ts");
+  });
+
+  it("does not read the composer's name in a comment or a string as a composition", async () => {
+    const root = await sandbox({ "apps/cli/src/commands/notes.ts": '// nodeReleaseExchange is update-only\nexport const label = "FixedReleaseTransport";\n' });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
   });
 
   it("fails outside a git checkout instead of finding nothing", async () => {
@@ -463,8 +633,9 @@ describe("the opt-in authority surfaces of this repository", () => {
 
   it("observes every allowlisted spawn site, so the allowlist cannot outlive the code it names", async () => {
     expect(ALLOWED_SPAWN_SITES.length).toBeGreaterThan(0);
+    expect(ALLOWED_SUPERVISED_SITES.length).toBeGreaterThan(0);
     const report = await inspectOptInAuthoritySurfaces(repositoryRoot);
-    expect(report.allowedSpawnSites).toStrictEqual([...ALLOWED_SPAWN_SITES].sort());
+    expect(report.allowedSpawnSites).toStrictEqual([...ALLOWED_SPAWN_SITES, ...ALLOWED_SUPERVISED_SITES].sort());
   });
 
   it("finds the Git supervisor composition, the launchd adapters and the scheduled runner", async () => {
@@ -472,5 +643,31 @@ describe("the opt-in authority surfaces of this repository", () => {
     expect(report.gitEntrypoints).toContain("apps/cli/src/commands/git/runtime.ts");
     expect(report.launchdEntrypoints).toContain("apps/cli/src/lifecycle/adapters.ts");
     expect(report.scheduledEntrypoints).toContain("apps/cli/src/commands/automation/runner.ts");
+  });
+});
+
+describe("the release authority surfaces of this repository (Spec 2 §12, D72 P7(f))", () => {
+  const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+  it("enumerates every network, launcher and planner-graph scope non-empty", async () => {
+    const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
+    expect(report.networkEntrypoints.length).toBeGreaterThan(0);
+    expect(report.transportCompositions.length).toBeGreaterThan(0);
+    expect(report.launcherEntrypoints.length).toBeGreaterThan(0);
+    expect(report.plannerGraphs.length).toBeGreaterThan(0);
+    expect(report.plannerGraphs.every((graph) => graph.modules.length > 0)).toBe(true);
+    expect(describeReleaseAuthorityProblems(report)).toEqual([]);
+  });
+
+  it("finds the network in exactly the release transport, composed only by the update context", async () => {
+    const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
+    expect(report.networkEntrypoints).toStrictEqual([...RELEASE_NETWORK_ENTRYPOINTS]);
+    expect(report.transportCompositions).toStrictEqual([...RELEASE_TRANSPORT_COMPOSITION]);
+  });
+
+  it("finds the launcher's exec and each planner entrypoint in its own graph", async () => {
+    const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
+    expect(report.launcherEntrypoints).toEqual(expect.arrayContaining(["apps/launcher/src/handoff.ts", "apps/launcher/src/main.ts"]));
+    for (const graph of report.plannerGraphs) expect(graph.modules).toContain(graph.entrypoint);
   });
 });

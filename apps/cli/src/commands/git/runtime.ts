@@ -1,6 +1,6 @@
 /**
  * Spec 1 §4.2's process boundary for `git sync`, composed for the CLI: the
- * pinned-distribution observation, the read-only commit reader planning
+ * fixed-path distribution admission (D71), the read-only commit reader planning
  * uses instead of a Git process, and the one closed local transport — a
  * quarantine rebuild of every planned object followed by a push through the
  * gateway trampolines into a private bare destination shadow.
@@ -9,7 +9,7 @@
  * until their process traces are recorded, so this runtime carries no network transport.
  */
 import { createHash } from "node:crypto";
-import { constants, lstatSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
+import { constants } from "node:fs";
 import { mkdir, mkdtemp, open, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import type { Server, Socket } from "node:net";
@@ -28,13 +28,15 @@ import type {
   LowerHexSha1,
   LowerHexSha256,
 } from "@developer-os/core";
+import { DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath, inspectSystemPathSync } from "@developer-os/platform-macos";
 import {
+  GIT_DISTRIBUTION_POLICY,
   GitProcessSupervisor,
-  SUPPORTED_GIT_DISTRIBUTION,
   SanitizedLocalRemoteHelper,
   SecurityRefusalError,
   SupervisedProcessRunner,
-  admitGitDistribution,
+  admitGitCapability,
+  admitGitExecutables,
   admittingGitIdentityProbe,
   createOpaqueGitLocalToken,
   expandGitArgv,
@@ -53,13 +55,14 @@ import type {
   GitExecGatewayV1,
   GitLocalReceivePreparationV1,
   GitLocalReceiveRunV1,
+  GitProcessEvidenceV1,
   GitProcessPermitV1,
   GitProcessPhaseV1,
   GitProcessSupervisorV1,
-  ObservedGitDistributionV1,
   SanitizedBareDestinationShadowV1,
   SanitizedGitShadowConfigTemplateV1,
-  SupportedGitDistributionV1,
+  SystemPathInspectorSyncV1,
+  SystemPathInspectorV1,
 } from "@developer-os/security";
 
 /** The Git objects one sync plans, as the quarantine rebuild recomputes them. */
@@ -142,7 +145,6 @@ export const GIT_SHADOW_TEMPLATE_HASHES = {
   destination: hashShadowConfigTemplate(DESTINATION_SHADOW_TEMPLATE),
 } as const;
 
-const XCODE_VERSION_PLIST = "/Applications/Xcode.app/Contents/version.plist";
 const MAX_LOOSE_COMMIT_BYTES = 1_048_576;
 const MAX_PROTOCOL_LINE_BYTES = 4096;
 const MAX_REPORT_LINE_BYTES = 16_777_216;
@@ -156,78 +158,15 @@ function refuse(reason: string): never {
   throw new SecurityRefusalError(reason);
 }
 
-function plistString(text: string, key: string): string {
-  return new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`, "u").exec(text)?.[1] ?? "";
-}
-
 /**
- * The executable hash is cached per exact file identity: every consumed distribution permit
- * rechecks the row, and rehashing a 3.8-MB binary for each of up to 200,001 object rebuilds
- * would dominate the phase budget.
+ * Where the runtime observes the fixed paths: the admission inspector, its synchronous twin
+ * for the per-exec recheck, and the host architecture. Production passes the platform's own;
+ * nothing here reads `PATH` or `DEVELOPER_DIR`.
  */
-const hashCache = new Map<string, string>();
-
-function hashTarget(path: string): { readonly ownerUid: number; readonly mode: number; readonly size: number; readonly sha256: string } {
-  const stats = lstatSync(path, { bigint: true });
-  const key = `${path}\0${stats.dev.toString(10)}\0${stats.ino.toString(10)}\0${stats.size.toString(10)}\0${stats.mtimeNs.toString(10)}\0${stats.ctimeNs.toString(10)}`;
-  let sha256 = hashCache.get(key);
-  if (sha256 === undefined) {
-    sha256 = stats.isFile() ? createHash("sha256").update(readFileSync(path)).digest("hex") : "";
-    hashCache.set(key, sha256);
-  }
-  return { ownerUid: Number(stats.uid), mode: Number(stats.mode & 0o7777n), size: Number(stats.size), sha256 };
-}
-
-function linkChainOf(path: string): readonly { readonly path: string; readonly target: string }[] {
-  const chain: { path: string; target: string }[] = [];
-  let current = path;
-  for (let depth = 0; depth < 8; depth += 1) {
-    if (!lstatSync(current, { bigint: true }).isSymbolicLink()) return chain;
-    const target = readlinkSync(current);
-    chain.push({ path: current, target });
-    current = target.startsWith("/") ? target : join(current, "..", target);
-  }
-  return unsupported();
-}
-
-/**
- * The measured half of the pinned row, taken from the file system alone. Version and build
- * text come from the one supervised probe once it ran; before that the row's own text stands
- * in, and the probe's output is then compared line for line, so text is never identity alone.
- */
-export function observeGitDistribution(
-  row: SupportedGitDistributionV1,
-  probed: { readonly versionLines: readonly string[]; readonly buildOptionLines: readonly string[] } | null,
-): ObservedGitDistributionV1 {
-  try {
-    const plist = readFileSync(XCODE_VERSION_PLIST, "utf8");
-    return {
-      xcode: { version: plistString(plist, "CFBundleShortVersionString"), build: plistString(plist, "ProductBuildVersion") },
-      architecture: process.arch,
-      buildOptionLines: probed?.buildOptionLines ?? row.buildOptionLines,
-      executables: row.executables.map((executable) => ({
-        id: executable.id,
-        invokedPath: executable.invokedPath,
-        linkChain: linkChainOf(executable.invokedPath),
-        target: { canonicalPath: realpathSync(executable.invokedPath), ...hashTarget(realpathSync(executable.invokedPath)) },
-        versionLines: executable.id === "git_main" && probed !== null ? probed.versionLines : executable.versionLines,
-      })),
-      execPathLinks: row.execPathLinks.map((link) => {
-        const stats = lstatSync(link.path, { bigint: true });
-        return {
-          name: link.name,
-          path: link.path,
-          ownerUid: Number(stats.uid),
-          mode: Number(stats.mode & 0o7777n),
-          size: Number(stats.size),
-          target: stats.isSymbolicLink() ? readlinkSync(link.path) : "",
-        };
-      }),
-    };
-  } catch (error) {
-    if (error instanceof SecurityRefusalError) throw error;
-    return unsupported();
-  }
+export interface GitRuntimeHostV1 {
+  readonly inspect: SystemPathInspectorV1;
+  readonly inspectSync: SystemPathInspectorSyncV1;
+  readonly architecture: string;
 }
 
 /** `<type> <size>\0<content>` from one guarded loose object; a packed-only object refuses. */
@@ -474,7 +413,7 @@ class GitGatewayServer {
 
   constructor(input: GitGatewayServerInputV1) {
     this.#input = input;
-    const table = SUPPORTED_GIT_DISTRIBUTION.processTable;
+    const table = GIT_DISTRIBUTION_POLICY.processTable;
     const packArgv = expandGitArgv(table.edges.find((edge) => edge.id === "spawn_pack_gateway")?.argvAlternatives[0] ?? unsupported(), {});
     const tokenSlots = { opaque_local_token: input.token };
     this.#pending.push(
@@ -539,7 +478,7 @@ class GitGatewayServer {
     const report = parseReport(line);
     if (report === null || report.capability !== this.#input.capability || rest.byteLength !== 0) refuse("git_gateway_report_invalid");
     const { supervisor, phase } = this.#input;
-    const table = SUPPORTED_GIT_DISTRIBUTION.processTable;
+    const table = GIT_DISTRIBUTION_POLICY.processTable;
     const env = withoutReceiveQuarantine(withoutGitChildAdditions(report.env), report.cwd, this.#input.destinationShadow.gitDir);
     const request = { argv: report.argv, env, cwd: report.cwd, stdin: "ignore" as const };
 
@@ -627,7 +566,7 @@ class GitGatewayServer {
   ): Promise<void> {
     const helper = new SanitizedLocalRemoteHelper({
       supervisor: this.#input.supervisor,
-      table: SUPPORTED_GIT_DISTRIBUTION.processTable,
+      table: GIT_DISTRIBUTION_POLICY.processTable,
       phase: this.#input.phase,
       helperPermit,
       token: this.#input.token,
@@ -680,7 +619,7 @@ export interface ReceivePackBridgeV1 {
  */
 export async function bridgeReceivePack(input: ReceivePackBridgeV1): Promise<void> {
   const { socket } = input;
-  const io = SUPPORTED_GIT_DISTRIBUTION.processTable.ioProfiles.find((profile) => profile.id === "receive_stream") ?? unsupported();
+  const io = GIT_DISTRIBUTION_POLICY.processTable.ioProfiles.find((profile) => profile.id === "receive_stream") ?? unsupported();
   const stdin = { overLimit: false };
   try {
     const evidence = await new SupervisedProcessRunner(nodeSupervisedProcessDependencies).run(
@@ -731,7 +670,8 @@ async function* connectionBytes(rest: Uint8Array, socket: Duplex, cap: number, s
   }
 }
 
-async function runCoordinatorGit(
+/** One direct edge's evidence and stdout, whatever its exit; the caller judges the outcome. */
+async function spawnCoordinatorGit(
   supervisor: GitProcessSupervisorV1,
   phase: GitProcessPhaseV1,
   edgeId: "direct_distribution_probe" | "direct_source_build",
@@ -741,8 +681,8 @@ async function runCoordinatorGit(
   environmentSlots: GitEnvironmentSlotValuesV1,
   cwd: CanonicalAbsolutePathV1,
   stdin: Uint8Array | null,
-): Promise<string> {
-  const table = SUPPORTED_GIT_DISTRIBUTION.processTable;
+): Promise<{ readonly evidence: GitProcessEvidenceV1; readonly stdout: string }> {
+  const table = GIT_DISTRIBUTION_POLICY.processTable;
   const edge = table.edges.find((candidate) => candidate.id === edgeId) ?? unsupported();
   const node = table.nodes.find((candidate) => candidate.id === edge.to) ?? unsupported();
   const argv = expandGitArgv(edge.argvAlternatives[argvAlternative] ?? unsupported(), argvSlots);
@@ -760,25 +700,29 @@ async function runCoordinatorGit(
   const evidence = await supervisor.run(permit, { argv, env, cwd, stdin: stdin === null ? "ignore" : { bytes: stdin } }, (chunk, stream) => {
     if (stream === "stdout") chunks.push(Buffer.from(chunk));
   });
+  return { evidence, stdout: Buffer.concat(chunks).toString("utf8") };
+}
+
+async function runCoordinatorGit(...args: Parameters<typeof spawnCoordinatorGit>): Promise<string> {
+  const { evidence, stdout } = await spawnCoordinatorGit(...args);
   if (evidence.termination !== "exited" || evidence.exitCode !== 0) refuse("git_process_failed");
-  return Buffer.concat(chunks).toString("utf8");
+  return stdout;
 }
 
 function committerDate(committer: GitCommitterV1): string {
   return `${String(committer.unixSeconds)} ${committer.utcOffset}`;
 }
 
-async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLocalPushPreparationV1> {
-  const row = SUPPORTED_GIT_DISTRIBUTION;
-  const table = row.processTable;
+async function prepareLocalPush(host: GitRuntimeHostV1, request: GitLocalPushRequestV1): Promise<GitLocalPushPreparationV1> {
+  const table = GIT_DISTRIBUTION_POLICY.processTable;
+  const admitted = await admitGitExecutables(DARWIN_SYSTEM_EXECUTABLES, host.inspect, host.architecture, "local");
   const root = canonical(await realpath(await mkdtemp(join(tmpdir(), "dos-git-"))));
   let server: GitGatewayServer | null = null;
   try {
-    let probed: { readonly versionLines: readonly string[]; readonly buildOptionLines: readonly string[] } | null = null;
     const supervisor = new GitProcessSupervisor(
       table,
       new SupervisedProcessRunner(nodeSupervisedProcessDependencies),
-      admittingGitIdentityProbe(row, () => observeGitDistribution(row, probed)),
+      admittingGitIdentityProbe(() => admitted, DARWIN_SYSTEM_EXECUTABLES, host.inspectSync),
     );
     const gateway = await materializeGitExecGateway({
       directory: canonical(join(root, "gateway")),
@@ -829,11 +773,9 @@ async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLoca
     };
 
     const probePhase = supervisor.beginPhase("distribution_probe");
-    const probe = (await runCoordinatorGit(supervisor, probePhase, "direct_distribution_probe", 0, {}, "distribution_probe", base, root, null))
-      .split("\n")
-      .filter((line) => line.length > 0);
-    probed = { versionLines: probe.slice(0, 1), buildOptionLines: probe.slice(1) };
-    admitGitDistribution(observeGitDistribution(row, probed), row);
+    const probe = await spawnCoordinatorGit(supervisor, probePhase, "direct_distribution_probe", 0, {}, "distribution_probe", base, root, null);
+    if (probe.evidence.termination !== "exited" || probe.evidence.exitCode === null) refuse("git_process_failed");
+    admitGitCapability(admitted, probe.stdout, probe.evidence.exitCode);
 
     const buildPhase = supervisor.beginPhase("source_build");
     const committer = candidate.commit?.committer;
@@ -940,17 +882,20 @@ async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLoca
   }
 }
 
-export function createProductionGitRuntime(): GitRuntimeV1 {
-  const row = SUPPORTED_GIT_DISTRIBUTION;
+/** Each top-level invocation admits afresh; nothing admitted here outlives it (spec §4.2 rule 6). */
+export function createProductionGitRuntime(options: Partial<GitRuntimeHostV1> = {}): GitRuntimeV1 {
+  const host: GitRuntimeHostV1 = {
+    inspect: options.inspect ?? inspectSystemPath,
+    inspectSync: options.inspectSync ?? inspectSystemPathSync,
+    architecture: options.architecture ?? process.arch,
+  };
   return {
-    processTableHash: hashGitProcessTable(row.processTable),
+    processTableHash: hashGitProcessTable(GIT_DISTRIBUTION_POLICY.processTable),
     admitDistribution: async (transport) => {
-      await Promise.resolve();
-      if (transport !== "local") unsupported();
-      admitGitDistribution(observeGitDistribution(row, null), row);
+      await admitGitExecutables(DARWIN_SYSTEM_EXECUTABLES, host.inspect, host.architecture, transport);
     },
     commitTree: async (gitDirectory, commit) => (await readCommit(gitDirectory, commit)).tree,
     commitParents: async (gitDirectory, commit) => (await readCommit(gitDirectory, commit)).parents,
-    prepareLocalPush,
+    prepareLocalPush: (request) => prepareLocalPush(host, request),
   };
 }

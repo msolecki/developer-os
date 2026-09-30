@@ -18,6 +18,7 @@ import {
   parseCaptureFile,
 } from "@developer-os/brain";
 import type { CaptureStatus, ProposedNote } from "@developer-os/brain";
+import { invocationFromAgentPrompt } from "@developer-os/adapter-codex";
 import type { CliContext } from "../context.js";
 import { redactText } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
@@ -32,6 +33,7 @@ import {
   INGEST_DECLARED_WRITE_SCOPES,
   renderIngest,
   CAPTURE_LEFT_AT,
+  invokeIsolatedCodex,
   prepareAgentWorkspace,
   renderValidationFinding,
   runIngest,
@@ -208,7 +210,8 @@ async function installedFixture(
        * Each vendor's own dialect, because each adapter parses a different one:
        * Codex streams JSONL and `invokeCodex` takes the response out of the last
        * `item.completed` whose `item.type` is `agent_message`, while
-       * `invokeClaude` parses stdout as one JSON document. A fake that spoke one
+       * `invokeClaude` takes it from the `result` string of one `type: "result"`
+       * envelope (Claude Code 2.1.283, 2026-09-28). A fake that spoke one
        * dialect to both would let a bridge that confused them pass.
        *
        * **This spoke a dialect no vendor speaks until 2026-08-20.** It put the
@@ -234,7 +237,7 @@ async function installedFixture(
               }),
               "",
             ].join("\n")
-          : document;
+          : JSON.stringify({ type: "result", subtype: "success", is_error: false, result: document });
       return { stdout, stderr: "", exitCode: 0, signal: null, timedOut: false };
     },
   };
@@ -1087,7 +1090,7 @@ describe("runIngest, a batch that is not uniform", () => {
 
     fixture.reply((call) => {
       const target = seeded.find((capture) =>
-        call.args.join("\n").includes(capture.id),
+        call.args.join("\n").includes(`Capture ${capture.id}`),
       );
       if (target === undefined) return nothingProposed();
       return target.id === refusing.id
@@ -1234,6 +1237,48 @@ describe("runIngest, a batch that is not uniform", () => {
     await expect(
       nodeFs.stat(join(fixture.quarantine, `${awkward}.md`)),
     ).resolves.toBeDefined();
+  });
+
+  /**
+   * NEW-38. The warning sentence is a message, not data: it renders the file name through
+   * `renderPath`, so a bidi override cannot reach `--json` through `error.message`, while the
+   * structured `unreadable[].captureId` beside it stays byte-exact and still names the file.
+   */
+  it("screens format characters in the unreadable-capture warning, not in the id", async () => {
+    const fixture = await installedFixture("ingest-warning-format-characters");
+    const refusing = await fixture.seedAccepted("an observation that refuses");
+    const hostile = "cap\u202Eevil  two";
+    await nodeFs.writeFile(join(fixture.quarantine, `${hostile}.md`), "not a capture at all\n", {
+      mode: 0o600,
+    });
+    fixture.reply(() => oneNote(refusing.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).not.toContain("\u202E");
+    expect(result.error.message).toContain("cap�evil  two.md is not a readable capture");
+    const report = result.error.data as unknown as {
+      readonly unreadable: readonly { readonly captureId: string }[];
+    };
+    expect(report.unreadable[0]?.captureId).toBe(hostile);
+  });
+
+  it("screens format characters in the success arm's warnings too", async () => {
+    const fixture = await installedFixture("ingest-warning-format-characters-success");
+    const readable = await fixture.seedAccepted("an observation that ingests");
+    await nodeFs.writeFile(join(fixture.quarantine, "cap\u202Eevil.md"), "not a capture at all\n", {
+      mode: 0o600,
+    });
+    fixture.reply(() => oneNote(readable.id));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings.join("\n")).not.toContain("\u202E");
+    expect(result.warnings.join("\n")).toContain("cap�evil.md is not a readable capture");
   });
 
   /**
@@ -1423,7 +1468,7 @@ describe("runIngest, a batch that is not uniform", () => {
       oneNote(id, `DEV/note-${id}.md`, `Note ${id}`, `The note for ${id}.`);
     fixture.reply((call) => {
       const target = seeded.find((capture) =>
-        call.args.join("\n").includes(capture.id),
+        call.args.join("\n").includes(`Capture ${capture.id}`),
       );
       if (target === undefined) return nothingProposed();
       return target.id === middle.id
@@ -1562,12 +1607,12 @@ describe("runIngest, resolved against this vault rather than a default", () => {
 });
 
 /**
- * `prepareAgentWorkspace` decides on `lstat`, not on `mkdir` — `mkdir` with
- * `recursive` succeeds on an existing directory, follows a symlink at the leaf,
- * and does not re-apply `mode` to something already there. These drive it
- * through an injected filesystem because the real path is a fixed name under
- * `tmpdir()`, which every parallel test file would share.
+ * `prepareAgentWorkspace` decides on `lstat`, not on `mkdir` alone. NEW-76: the leaf is unique
+ * per run and created without `recursive`, so an existing path fails rather than being adopted.
+ * These drive it through an injected filesystem so no unit case touches the real `tmpdir()`.
  */
+const WORKSPACE_LEAF = /^developer-os-agent-workspace-[0-9a-f-]{36}$/;
+
 describe("prepareAgentWorkspace", () => {
   function contextWith(fs: {
     mkdir?: () => Promise<void>;
@@ -1595,7 +1640,20 @@ describe("prepareAgentWorkspace", () => {
   it("returns a private directory this user owns", async () => {
     const workspace = await prepareAgentWorkspace(contextWith({}));
     expect(isAbsolute(workspace)).toBe(true);
-    expect(basename(workspace)).toBe("developer-os-agent-workspace");
+    expect(basename(workspace)).toMatch(WORKSPACE_LEAF);
+  });
+
+  /** NEW-76: a fixed leaf was one shared directory every run and every test file reused. */
+  it("gives each run its own leaf", async () => {
+    const context = contextWith({});
+    expect(await prepareAgentWorkspace(context)).not.toBe(await prepareAgentWorkspace(context));
+  });
+
+  /** Without `recursive`, `mkdir` fails `EEXIST` on a pre-created path instead of adopting it. */
+  it("creates the leaf exclusively, never adopting an existing path", async () => {
+    const mkdir = vi.fn((): Promise<void> => Promise.resolve());
+    const workspace = await prepareAgentWorkspace(contextWith({ mkdir }));
+    expect(mkdir).toHaveBeenCalledWith(workspace, { mode: 0o700 });
   });
 
   it("refuses a symlink at the leaf, which mkdir reports as success", async () => {
@@ -1707,7 +1765,7 @@ describe("prepareAgentWorkspace", () => {
         }),
       ),
     ).rejects.toMatchObject({
-      paths: [join(tmpdir(), "developer-os-agent-workspace")],
+      paths: [expect.stringMatching(/\/developer-os-agent-workspace-[0-9a-f-]{36}$/) as unknown as string],
       recovery: expect.stringContaining("TMPDIR") as unknown as string,
     });
   });
@@ -1818,6 +1876,31 @@ describe("runIngest, the agent call", () => {
     /** The property the architecture note argues for: outside the closed set. */
     expect(workingRoot?.startsWith(fixture.paths.home)).toBe(false);
     expect(workingRoot?.startsWith(fixture.paths.brain)).toBe(false);
+  });
+
+  /** NEW-76: the scratch leaf is the run's own and is removed once the child exits. */
+  it("leaves no scratch directory behind after a codex run", async () => {
+    const fixture = await installedFixture("ingest-codex-scratch-removed", {
+      claude: false,
+    });
+    const seeded = await fixture.seedAccepted("an observation for codex");
+    fixture.reply(() => oneNote(seeded.id));
+    const scratch = join(fixture.root, "scratch-tmp");
+    await nodeFs.mkdir(scratch, { mode: 0o700 });
+    vi.stubEnv("TMPDIR", scratch);
+    expect(tmpdir()).toBe(scratch);
+    let during: string[] = [];
+    fixture.duringCall(async () => {
+      during = await nodeFs.readdir(scratch);
+    });
+
+    await fixture.run();
+
+    const call = fixture.calls[0];
+    const workingRoot = call?.args[call.args.indexOf("-C") + 1] ?? "";
+    expect(basename(workingRoot)).toMatch(WORKSPACE_LEAF);
+    expect(during).toStrictEqual([basename(workingRoot)]);
+    expect(await nodeFs.readdir(scratch)).toStrictEqual([]);
   });
 
   it("falls to codex when claude is not installed", async () => {
@@ -2024,6 +2107,30 @@ describe("runIngest, the agent call", () => {
     expect(await fixture.statusOf(seeded.id)).toBe("accepted");
   });
 
+  it("tells the user to check the claude login when the agent reports an error envelope", async () => {
+    const fixture = await installedFixture("ingest-vendor-error");
+    const seeded = await fixture.seedAccepted("an observation claude cannot answer");
+    fixture.reply(() =>
+      JSON.stringify({
+        type: "result",
+        subtype: "success",
+        is_error: true,
+        result: "Not logged in · Please run /login",
+        terminal_reason: "api_error",
+      }),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.code).toBe(EXIT_CODES.operationalFailure);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    if (result.ok) return;
+    expect(result.error.message).toContain(
+      "the claude agent reported an error (vendor-error); check that `claude` is logged in",
+    );
+    expect(result.error.message).not.toContain("Please run /login");
+  });
+
   it("treats a proposal naming a path the parser refuses as malformed output", async () => {
     const fixture = await installedFixture("ingest-unsafe-path");
     const seeded = await fixture.seedAccepted("an observation with a bad path");
@@ -2140,6 +2247,34 @@ describe("runIngest, the agent call", () => {
     expect(sent).toContain("DEV/unrelated.md");
   });
 
+  /** BACKLOG NEW-26: the vendor's stdout and stderr come back through the runner's redactor. */
+  it("binds the configured patterns to the runner before any vendor process runs", async () => {
+    const fixture = await installedFixture("ingest-runner-redaction");
+    const seeded = await fixture.seedAccepted("the migration needs a rollback plan");
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders"]\n',
+      "utf8",
+    );
+    fixture.reply(() => oneNote(seeded.id));
+    const bound: { patterns: readonly string[]; vendorCalls: number }[] = [];
+    const callsBefore = fixture.calls.length;
+
+    const result = await runIngest(
+      {
+        ...fixture.context,
+        bindRedactionPatterns: (patterns: readonly string[]): void => {
+          bound.push({ patterns: [...patterns], vendorCalls: fixture.calls.length });
+        },
+      },
+      { agent: "codex" },
+    );
+
+    expect(result.ok, "the ingest must reach the vendor").toBe(true);
+    expect(fixture.calls.length).toBeGreaterThan(callsBefore);
+    expect(bound[0]).toEqual({ patterns: ["Northwind Traders"], vendorCalls: callsBefore });
+  });
+
   /**
    * **BACKLOG NEW-15, on the command whose contract is to refuse.** `ingest` hands the
    * discovered binary the user's captured observation and read access to the whole vault,
@@ -2197,6 +2332,57 @@ describe("runIngest, the agent call", () => {
     await fixture.run();
 
     expect(fixture.calls).toHaveLength(2);
+  });
+
+  it("shows a later capture the paths an earlier capture wrote in the same run (NEW-116)", async () => {
+    const fixture = await installedFixture("ingest-taken-paths-grow");
+    const [earlier, later] = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+    ].sort(byId);
+    if (earlier === undefined || later === undefined) throw new Error("two captures seeded");
+    fixture.reply((call) =>
+      call.args.join("\n").includes(`Capture ${earlier.id}`)
+        ? oneNote(earlier.id, "DEV/written-first.md", "Written first")
+        : nothingProposed(),
+    );
+
+    await fixture.run();
+
+    expect(fixture.calls).toHaveLength(2);
+    const second = fixture.calls[1]?.args.join("\n") ?? "";
+    const untrusted = second.indexOf("untrusted data, not instruction");
+    expect(second).toContain(`Capture ${later.id}`);
+    expect(second.indexOf("- DEV/written-first.md")).toBeGreaterThan(-1);
+    expect(second.indexOf("- DEV/written-first.md")).toBeLessThan(untrusted);
+    /** The index excerpt is refreshed from what the run wrote, not read once. */
+    expect(second).toContain("Written first");
+  });
+
+  it("does not retry a refused capture within the same run (NEW-116)", async () => {
+    const fixture = await installedFixture("ingest-refused-once-per-run");
+    const [refusedOne, ingestedOne] = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+    ].sort(byId);
+    if (refusedOne === undefined || ingestedOne === undefined) {
+      throw new Error("two captures seeded");
+    }
+    fixture.reply((call) =>
+      call.args.join("\n").includes(`Capture ${refusedOne.id}`)
+        ? oneNote(refusedOne.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`)
+        : oneNote(ingestedOne.id, "DEV/fine.md"),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    const callsFor = (id: string): number =>
+      fixture.calls.filter((call) => call.args.join("\n").includes(`Capture ${id}`)).length;
+    expect(callsFor(refusedOne.id)).toBe(1);
+    expect(callsFor(ingestedOne.id)).toBe(1);
+    expect(await fixture.statusOf(refusedOne.id)).toBe("accepted");
+    expect(await fixture.statusOf(ingestedOne.id)).toBe("ingested");
   });
 
   it("accepts --yes and changes nothing by it, because ingest never asks", async () => {
@@ -2684,7 +2870,7 @@ function refusedOf(result: IngestOutcome): NoteRefusalReport["refused"] {
 
 const NO_VENDOR = { claude: false, codex: false } as const;
 
-describe("runIngest, note captures applied verbatim (spec §3.4)", () => {
+describe("runIngest, note captures applied verbatim (brain.md §6.13)", () => {
   it("applies a create note capture verbatim without resolving or invoking a vendor", async () => {
     const fixture = await installedFixture("verbatim-create", NO_VENDOR);
     const id = await seedNote(fixture, "DEV/new-note.md", NEW_NOTE);
@@ -2894,7 +3080,8 @@ describe("runIngest, note captures applied verbatim (spec §3.4)", () => {
 /**
  * D52 (BACKLOG NEW-102): Codex resolves `CODEX_HOME` from the user's real home under `env: {}` and
  * loads its `AGENTS.md` and `agents/*.toml` into the ingest request despite `--ignore-user-config
- * --ignore-rules`. Ingest now hands it a product-owned home that holds only a credential link.
+ * --ignore-rules`. Ingest now hands each run its own product-owned home (NEW-105) that holds only a
+ * credential link.
  */
 describe("ingest's isolated Codex home (D52)", () => {
   async function userCodexHome(fixture: CommandFixture, withAuth: boolean): Promise<string> {
@@ -2908,65 +3095,210 @@ describe("ingest's isolated Codex home (D52)", () => {
 
   const isolatedHome = (fixture: CommandFixture): string => join(fixture.paths.stateDir, "codex-ingest-home");
 
-  it("passes CODEX_HOME to a directory holding only a symlink to the user's credential", async () => {
+  const RUN_HOME = /^run-[A-Za-z0-9]{6}$/;
+  const codexHomeOf = (fixture: IngestFixture, index = 0): string => fixture.calls[index]?.env.CODEX_HOME ?? "";
+
+  /** NEW-105: each run gets its own `CODEX_HOME` under the isolated home, removed after the child exits. */
+  it("passes CODEX_HOME to a per-run directory holding only a symlink to the user's credential", async () => {
     const fixture = await installedFixture("ingest-codex-home-isolated");
     const codexHome = await userCodexHome(fixture, true);
     const home = isolatedHome(fixture);
     const seeded = await fixture.seedAccepted("an observation for an isolated codex");
     fixture.reply(() => oneNote(seeded.id));
-    let during: string[] = [];
+    let parentDuring: string[] = [];
+    let runDuring: string[] = [];
     fixture.duringCall(async () => {
-      during = (await nodeFs.readdir(home)).sort();
-      expect((await nodeFs.lstat(join(home, "auth.json"))).isSymbolicLink()).toBe(true);
-      expect(await nodeFs.readlink(join(home, "auth.json"))).toBe(join(codexHome, "auth.json"));
+      const runHome = codexHomeOf(fixture);
+      parentDuring = await nodeFs.readdir(home);
+      runDuring = await nodeFs.readdir(runHome);
+      expect((await nodeFs.stat(runHome)).mode & 0o777).toBe(0o700);
+      expect((await nodeFs.lstat(join(runHome, "auth.json"))).isSymbolicLink()).toBe(true);
+      expect(await nodeFs.readlink(join(runHome, "auth.json"))).toBe(join(codexHome, "auth.json"));
       /** What a real run leaves behind (codex-adapter.md §15, D52 note), including a link out. */
-      await nodeFs.writeFile(join(home, "state_5.sqlite"), "");
-      await nodeFs.mkdir(join(home, "skills", ".system"), { recursive: true });
-      await nodeFs.mkdir(join(home, "tmp", "arg0"), { recursive: true });
-      await nodeFs.symlink(join(codexHome, "AGENTS.md"), join(home, "tmp", "arg0", "apply_patch"));
+      await nodeFs.writeFile(join(runHome, "state_5.sqlite"), "");
+      await nodeFs.mkdir(join(runHome, "skills", ".system"), { recursive: true });
+      await nodeFs.mkdir(join(runHome, "tmp", "arg0"), { recursive: true });
+      await nodeFs.symlink(join(codexHome, "AGENTS.md"), join(runHome, "tmp", "arg0", "apply_patch"));
     });
 
     const result = await fixture.run({ agent: "codex" });
 
     expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
-    expect(fixture.calls.map((call) => call.env)).toStrictEqual([{ CODEX_HOME: home }]);
-    expect(during).toStrictEqual(["auth.json"]);
-    /** Swept after the run, never following the link out; no instruction surface was ever created. */
-    expect(await nodeFs.readdir(home)).toStrictEqual(["auth.json"]);
+    const runHome = codexHomeOf(fixture);
+    expect(fixture.calls.map((call) => call.env)).toStrictEqual([{ CODEX_HOME: runHome }]);
+    expect(join(home, basename(runHome))).toBe(runHome);
+    expect(basename(runHome)).toMatch(RUN_HOME);
+    expect(parentDuring).toStrictEqual([basename(runHome)]);
+    expect(runDuring).toStrictEqual(["auth.json"]);
+    /** Removed after the run, never following the link out; no instruction surface was ever created. */
+    expect(await nodeFs.readdir(home)).toStrictEqual([]);
     expect((await nodeFs.stat(home)).mode & 0o777).toBe(0o700);
     expect(await nodeFs.readFile(join(codexHome, "AGENTS.md"), "utf8")).toContain("developer-os:begin");
     expect(await nodeFs.readFile(join(codexHome, "auth.json"), "utf8")).toBe('{"synthetic":true}\n');
   });
 
-  it("re-points a stale link to the resolved credential", async () => {
-    const fixture = await installedFixture("ingest-codex-home-repoint");
+  /** NEW-106 (D73): D8 covers every product Codex call, not only ingest's. */
+  it("runs a workflow agent.prompt Codex call in its own isolated home, never the user's AGENTS.md", async () => {
+    const fixture = await installedFixture("agent-prompt-codex-home-isolated");
     const codexHome = await userCodexHome(fixture, true);
     const home = isolatedHome(fixture);
-    await nodeFs.mkdir(home, { mode: 0o700 });
-    await nodeFs.symlink(join(fixture.root, "old-codex", "auth.json"), join(home, "auth.json"));
-    const seeded = await fixture.seedAccepted("an observation after a moved codex home");
+    const built = invocationFromAgentPrompt(
+      { prompt: "summarise the vault" },
+      { workingRoot: fixture.root, writeScopes: [], outputSchemaPath: join(fixture.root, "schema.json") },
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    fixture.reply(() => nothingProposed());
+    let runDuring: string[] = [];
+    fixture.duringCall(async () => {
+      runDuring = await nodeFs.readdir(codexHomeOf(fixture));
+    });
+
+    const result = await invokeIsolatedCodex(
+      fixture.context,
+      { executable: CODEX, version: "0.155.1" },
+      built.invocation,
+      { runner: fixture.context.runner },
+    );
+
+    expect(result.ok).toBe(true);
+    const runHome = codexHomeOf(fixture);
+    expect(fixture.calls.map((call) => call.env)).toStrictEqual([{ CODEX_HOME: runHome }]);
+    expect(runHome).not.toBe(codexHome);
+    expect(join(home, basename(runHome))).toBe(runHome);
+    expect(runDuring).toStrictEqual(["auth.json"]);
+    expect(await nodeFs.readdir(home)).toStrictEqual([]);
+  });
+
+  it("gives every Codex call its own home rather than one shared directory", async () => {
+    const fixture = await installedFixture("ingest-codex-home-per-run");
+    await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    await fixture.seedAccepted("a first observation");
+    await fixture.seedAccepted("a second observation");
+    fixture.reply(() => nothingProposed());
+
+    await fixture.run({ agent: "codex" });
+
+    expect(fixture.calls).toHaveLength(2);
+    expect(codexHomeOf(fixture, 0)).not.toBe(codexHomeOf(fixture, 1));
+    expect(await nodeFs.readdir(home)).toStrictEqual([]);
+  });
+
+  /**
+   * A second ingest running at the same moment owns a sibling run directory. Refusing it would
+   * serialise ingests by refusal, so it is left alone.
+   */
+  it("does not refuse or touch a sibling run's home", async () => {
+    const fixture = await installedFixture("ingest-codex-home-sibling");
+    const codexHome = await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    const sibling = join(home, "run-live01");
+    await nodeFs.mkdir(sibling, { recursive: true, mode: 0o700 });
+    await nodeFs.chmod(home, 0o700);
+    await nodeFs.symlink(join(codexHome, "auth.json"), join(sibling, "auth.json"));
+    await nodeFs.writeFile(join(sibling, "state_5.sqlite"), "");
+    const seeded = await fixture.seedAccepted("an observation beside a live run");
     fixture.reply(() => oneNote(seeded.id));
 
     const result = await fixture.run({ agent: "codex" });
 
-    expect(result.ok).toBe(true);
-    expect(await nodeFs.readlink(join(home, "auth.json"))).toBe(join(codexHome, "auth.json"));
+    expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+    expect(codexHomeOf(fixture)).not.toBe(sibling);
+    expect(await nodeFs.readdir(home)).toStrictEqual(["run-live01"]);
+    expect((await nodeFs.readdir(sibling)).sort()).toStrictEqual(["auth.json", "state_5.sqlite"]);
   });
 
-  it("runs with an empty isolated home when the user has no Codex credential, as before", async () => {
+  /** An interrupted run leaves its sibling for ever; the user hears of it, and it is still never deleted. */
+  it("warns on stderr about a sibling run's home and leaves it in place", async () => {
+    const fixture = await installedFixture("ingest-codex-home-sibling-warning");
+    const codexHome = await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    const sibling = join(home, "run-crash1");
+    await nodeFs.mkdir(sibling, { recursive: true, mode: 0o700 });
+    await nodeFs.chmod(home, 0o700);
+    await nodeFs.symlink(join(codexHome, "auth.json"), join(sibling, "auth.json"));
+    const seeded = await fixture.seedAccepted("an observation beside an abandoned run");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+    const warning = fixture.io.err.find((line) => line.includes("run-crash1"));
+    expect(warning).toContain("belongs to another ingest");
+    expect(warning).toContain("remove it");
+    expect(await nodeFs.readdir(home)).toStrictEqual(["run-crash1"]);
+  });
+
+  /** A pre-NEW-105 install left the link at the top level; it is unlinked, its target untouched. */
+  it("removes a legacy top-level credential link without following it", async () => {
+    const fixture = await installedFixture("ingest-codex-home-legacy-link");
+    const codexHome = await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    await nodeFs.mkdir(home, { mode: 0o700 });
+    await nodeFs.symlink(join(codexHome, "auth.json"), join(home, "auth.json"));
+    const seeded = await fixture.seedAccepted("an observation after an older ingest");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+    expect(await nodeFs.readdir(home)).toStrictEqual([]);
+    expect(await nodeFs.readFile(join(codexHome, "auth.json"), "utf8")).toBe('{"synthetic":true}\n');
+  });
+
+  it("runs with an empty per-run home when the user has no Codex credential, as before", async () => {
     const fixture = await installedFixture("ingest-codex-home-no-auth");
     await userCodexHome(fixture, false);
     const home = isolatedHome(fixture);
-    await nodeFs.mkdir(home, { mode: 0o700 });
-    await nodeFs.symlink(join(fixture.userHome, ".codex", "auth.json"), join(home, "auth.json"));
     const seeded = await fixture.seedAccepted("an observation without codex auth");
     fixture.reply(() => oneNote(seeded.id));
+    let runDuring: string[] | null = null;
+    fixture.duringCall(async () => {
+      runDuring = await nodeFs.readdir(codexHomeOf(fixture));
+    });
 
     await fixture.run({ agent: "codex" });
 
     /** The vendor is still reached and refuses on missing auth itself, exactly as before D52. */
-    expect(fixture.calls.map((call) => call.env)).toStrictEqual([{ CODEX_HOME: home }]);
+    expect(fixture.calls).toHaveLength(1);
+    expect(runDuring).toStrictEqual([]);
     expect(await nodeFs.readdir(home)).toStrictEqual([]);
+  });
+
+  /**
+   * If Codex refreshes the credential by write-then-rename, the link becomes a regular file. It
+   * may be the only copy of a rotated token, so the run keeps it and the next run names it.
+   */
+  it("keeps a credential Codex wrote over the link and refuses the next run naming it", async () => {
+    const fixture = await installedFixture("ingest-codex-home-rotated-during-run");
+    await userCodexHome(fixture, true);
+    const first =await fixture.seedAccepted("an observation whose run rotates the credential");
+    fixture.reply(() => oneNote(first.id));
+    fixture.duringCall(async () => {
+      const runHome = codexHomeOf(fixture);
+      await nodeFs.unlink(join(runHome, "auth.json"));
+      await nodeFs.writeFile(join(runHome, "auth.json"), "rotated\n", { mode: 0o600 });
+      await nodeFs.writeFile(join(runHome, "state_5.sqlite"), "");
+    });
+
+    await fixture.run({ agent: "codex" });
+
+    const runHome = codexHomeOf(fixture);
+    expect(await nodeFs.readdir(runHome)).toStrictEqual(["auth.json"]);
+    expect(await nodeFs.readFile(join(runHome, "auth.json"), "utf8")).toBe("rotated\n");
+
+    fixture.duringCall(() => Promise.resolve());
+    const second = await fixture.seedAccepted("an observation after the rotation");
+    fixture.reply(() => oneNote(second.id));
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.paths).toContain(join(runHome, "auth.json"));
+    expect(fixture.calls).toHaveLength(1);
+    expect(await nodeFs.readFile(join(runHome, "auth.json"), "utf8")).toBe("rotated\n");
+    expect(await fixture.statusOf(second.id)).toBe("accepted");
   });
 
   it("refuses without spawning when the isolated home holds anything but the link", async () => {

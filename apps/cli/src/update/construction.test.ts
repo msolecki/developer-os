@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import {
   buildConstructionPlan,
+  constructionPlanBytes,
   constructionPlanHash,
   createNodeLifecycleGuardedFileSystem,
   encodeCanonicalJson,
@@ -31,11 +32,14 @@ import {
   type UpdateConstructionClosureV1,
   type UpdateConstructionFileInputV1,
   type UpdateConstructionFilePlanV1,
+  type UpdateConstructionJournalV1,
   type UpdateConstructionPlanV1,
 } from "@developer-os/core";
+import type { RedactionScope } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  resolveSourceParent,
   UPDATE_CONSTRUCTION_STORE_DEATH_POINTS,
   UpdateConstructionStore,
   type UpdateConstructionSourcePortV1,
@@ -137,7 +141,7 @@ function sources(fixtureValue: Fixture, overrides: Partial<UpdateConstructionSou
   };
 }
 
-function store(fixtureValue: Fixture, options: { readonly interrupt?: (point: UpdateConstructionStoreDeathPointV1) => void; readonly sources?: Partial<UpdateConstructionSourcePortV1>; readonly screen?: (bytes: Uint8Array) => void } = {}): UpdateConstructionStore {
+function store(fixtureValue: Fixture, options: { readonly interrupt?: (point: UpdateConstructionStoreDeathPointV1) => void; readonly sources?: Partial<UpdateConstructionSourcePortV1>; readonly screen?: (bytes: Uint8Array, scope: RedactionScope) => void } = {}): UpdateConstructionStore {
   const fs = createNodeLifecycleGuardedFileSystem({
     effectiveUid: uid,
     renameNoReplace: async ({ sourcePath, destinationPath }) => {
@@ -366,6 +370,20 @@ describe("UpdateConstructionStore", () => {
     expect(await exists((refusing.plan.files[6] as UpdateConstructionFilePlanV1).path)).toBe(false);
   });
 
+  it("screens product-derived documents in the path scope and foreign bytes in the text scope", async () => {
+    const value = await fixture();
+    const scopes = new Map<string, RedactionScope>();
+    await construct(value, store(value, { screen: (bytes, scope) => { scopes.set(Buffer.from(bytes).toString("hex"), scope); } }));
+    const scopeOf = (bytes: Uint8Array): RedactionScope | undefined => scopes.get(Buffer.from(bytes).toString("hex"));
+    expect(scopeOf(constructionPlanBytes(value.plan))).toBe("path");
+    for (const frame of value.frames) expect(scopeOf(frame.content)).toBe("text");
+    for (const row of value.plan.files.filter((file) => file.role.kind !== "payload" || file.role.source.kind === "plan_derived")) {
+      expect(scopeOf(value.rowBytes.get(row.ordinal) ?? new Uint8Array()), `row ${String(row.ordinal)}`).toBe("path");
+    }
+    expect(scopeOf(outerBytes.plan)).toBe("path");
+    expect(scopeOf(outerBytes.journal)).toBe("path");
+  });
+
   it("refuses a frame that differs from its planned identity", async () => {
     const value = await fixture();
     const target = store(value);
@@ -417,5 +435,62 @@ describe("UpdateConstructionStore", () => {
     await resumed.compact(value.plan);
     await resumed.removeEnvelope(value.plan);
     expect(await nodeFs.readdir(value.root)).toEqual([]);
+  });
+});
+
+describe("source parents from the construction journal (P1)", () => {
+  async function identity(path: string): Promise<{ readonly dev: string; readonly ino: string }> {
+    const stats = await nodeFs.lstat(path, { bigint: true });
+    return { dev: stats.dev.toString(10), ino: stats.ino.toString(10) };
+  }
+
+  it("creates update/source/rollback as a construction directory and hands its journaled identity to the source port", async () => {
+    const value = await fixture();
+    const seen: UpdateConstructionJournalV1[] = [];
+    const record = (_plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1): Promise<void> => {
+      seen.push(journal);
+      return Promise.resolve();
+    };
+    await construct(value, store(value, { sources: { prepareSources: record, finishSources: record } }));
+    expect(seen).toHaveLength(2);
+    for (const journal of seen) {
+      const parent = resolveSourceParent(journal, value.plan, "rollback");
+      expect(value.plan.directories[parent.ordinal]?.path).toBe(`${value.root}/update/source/rollback`);
+      expect({ dev: parent.dev, ino: parent.ino }).toStrictEqual(await identity(`${value.root}/update/source/rollback`));
+    }
+  });
+
+  it("refuses a parent the journal has not recorded, a kind without a source row, and another plan's journal", async () => {
+    const value = await fixture();
+    const initial = await store(value).publish(value.plan);
+    expect(() => resolveSourceParent(initial, value.plan, "rollback")).toThrow(LifecycleRecoveryRequiredError);
+    expect(() => resolveSourceParent(initial, value.plan, "bundle")).toThrow(LifecycleRecoveryRequiredError);
+    const other = await fixture();
+    expect(() => resolveSourceParent(initial, other.plan, "rollback")).toThrow(LifecycleRecoveryRequiredError);
+  });
+
+  it("recovers in a fresh process after death between directory creation and source staging, passing the persisted identities", async () => {
+    const value = await fixture();
+    await expect(construct(value, store(value, { interrupt: killAt("file_created") }))).rejects.toBeInstanceOf(Killed);
+    const recorded = await identity(`${value.root}/update/source/rollback`);
+    const seen: UpdateConstructionJournalV1[] = [];
+    const record = (_plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1): Promise<void> => {
+      seen.push(journal);
+      return Promise.resolve();
+    };
+    await store(value, { sources: { compensateSources: record } }).recover(await closureFor(value));
+    const parent = resolveSourceParent(seen[0] as UpdateConstructionJournalV1, value.plan, "rollback");
+    expect({ dev: parent.dev, ino: parent.ino }).toStrictEqual(recorded);
+    expect(await assertNoTargetMutation(value)).toBe(true);
+  });
+
+  it("refuses a swapped source parent inode on recovery, exit 6, and preserves it", async () => {
+    const value = await fixture();
+    await expect(construct(value, store(value, { interrupt: killAt("file_created") }))).rejects.toBeInstanceOf(Killed);
+    const parent = `${value.root}/update/source/rollback`;
+    await nodeFs.rmdir(parent);
+    await nodeFs.mkdir(parent, { mode: 0o700 });
+    await expect(store(value).recover(await closureFor(value))).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await exists(parent)).toBe(true);
   });
 });

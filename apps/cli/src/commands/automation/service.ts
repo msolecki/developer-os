@@ -58,10 +58,10 @@ import {
   LaunchdInputError,
   MAX_LAUNCHD_PLIST_BYTES,
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+  admitLaunchdHost,
   buildLaunchdPlanPreview,
   gitSyncEligible,
   launchdEffectPlan,
-  launchdEntryTransitions,
   launchdGuiDomain,
   launchdJob,
   launchdObservationProcessTableHash,
@@ -330,6 +330,17 @@ export async function verifiedAutomationExecutable(
 
 function launchdTemplate(lifecycle: CliLifecycleContext): SupportedLaunchdProcessTableTemplateV1 {
   return lifecycle.effectPorts().launchd.template ?? SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE;
+}
+
+/** Spec §5.3 rules 1–2 (D71) alone: `status` reports the admission, it never refuses on it. */
+async function launchdDistribution(lifecycle: CliLifecycleContext): Promise<"supported" | "unsupported_launchd_distribution"> {
+  try {
+    await admitLaunchdHost(lifecycle.effectPorts().launchd.host);
+    return "supported";
+  } catch (error) {
+    if (error instanceof LaunchdDistributionUnsupportedError) return "unsupported_launchd_distribution";
+    throw error;
+  }
 }
 
 function domainOf(lifecycle: CliLifecycleContext): ReturnType<typeof launchdGuiDomain> {
@@ -640,14 +651,6 @@ function hasEffect(inputs: AutomationApplyInputsV1, position: "before" | "after"
   const { operation, liveOnly } = inputs.planned;
   if (liveOnly) return position === "after";
   return position === "before" ? operation !== "automation_enable" : operation !== "automation_disable";
-}
-
-/** Whether any row of the §5.3 table would run `launchctl bootstrap` or `bootout`. */
-function needsLaunchctl(launchd: LaunchdPlanPreviewV1): boolean {
-  return launchd.entries.some((entry) => {
-    const { unload, load } = launchdEntryTransitions(entry);
-    return unload !== null || load !== null;
-  });
 }
 
 function placeholderRef(
@@ -984,16 +987,6 @@ async function executeCoordinator(
   }
 }
 
-/** D59 residual 10: an uncertified row cannot run `launchctl`, so nothing moves and the manual unload is named. */
-function requireCertified(planned: PlannedAutomationV1, uid: number): void {
-  if (planned.template.certification !== null || !needsLaunchctl(planned.preview.launchd as LaunchdPlanPreviewV1)) return;
-  refuseUnsupportedLaunchd(
-    uid,
-    [...planned.retained.values()].map((plist) => plist.label),
-    new LaunchdDistributionUnsupportedError("launchctl row is not certified"),
-  );
-}
-
 // ---------------------------------------------------------------------------------------------
 // Status
 
@@ -1076,7 +1069,6 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
       planned = await planDisable(prepared.home);
     }
     if (planned.preview.previewHash !== preview.previewHash) stale();
-    requireCertified(planned, lifecycle.effectiveUid);
 
     const inputs: AutomationApplyInputsV1 = { planned, createdAt: lifecycle.clock(), staged: null };
     const builder = automationBuilder(inputs);
@@ -1124,8 +1116,7 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
     for (const job of SCHEDULED_JOB_IDS) states.set(job, await inspectPlist(context, lifecycle, home, job));
     const expected = await currentLabels(lifecycle, context, home);
     const retained = [...states.values()].flatMap((state) => (state.kind === "retained" ? [state.plist] : []));
-    let distribution: "supported" | "unsupported_launchd_distribution" =
-      launchdTemplate(lifecycle).certification === null ? "unsupported_launchd_distribution" : "supported";
+    let distribution = await launchdDistribution(lifecycle);
     let live: ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1 | "third_state"> | null = null;
     try {
       live = await observeLiveStates(lifecycle, retained.map((plist) => ({ job: plist.job, retained: plist.label, planned: null })), home.key.productHome);

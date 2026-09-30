@@ -102,8 +102,6 @@ export interface BundleSourceStagingPlanV1 {
   readonly sourceRoot: CanonicalAbsolutePathV1;
   readonly evidenceRoot: CanonicalAbsolutePathV1;
   readonly sourceRootBefore: { readonly state: "absent" };
-  readonly sourceParentDev: UInt64DecimalV1;
-  readonly sourceParentIno: UInt64DecimalV1;
   readonly entries: readonly ReleaseBundleEntryV1[];
   readonly inventoryHash: LowerHexSha256;
   readonly aggregateBytes: number;
@@ -331,7 +329,7 @@ const METADATA_STORES = ["delegations", "indexes", "bundles"] as const;
 const SOURCE_PHASES: readonly BundleSourceStagingPhaseV1[] = ["planned", "structure_staging", "entries_staging", "source_ready", "compensating", "rolled_back", "compacting"];
 const PUBLICATION_PHASES: readonly BundlePublicationPhaseV1[] = ["planned", "root_publishing", "entries_publishing", "metadata_publishing", "verified", "compensating_metadata", "compensating_entries", "compensating_root", "finalized", "rolled_back", "compacting"];
 const PUBLICATION_FORWARD: readonly BundlePublicationPhaseV1[] = ["planned", "root_publishing", "entries_publishing", "metadata_publishing", "verified"];
-const SOURCE_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "sourceRoot", "evidenceRoot", "sourceRootBefore", "sourceParentDev", "sourceParentIno", "entries", "inventoryHash", "aggregateBytes", "maximumPlanBytes", "maximumJournalBytes"];
+const SOURCE_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "sourceRoot", "evidenceRoot", "sourceRootBefore", "entries", "inventoryHash", "aggregateBytes", "maximumPlanBytes", "maximumJournalBytes"];
 const SOURCE_JOURNAL_KEYS = ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "nextStructure", "structureIdentities", "structureWriteState", "nextEntry", "entryWriteState", "readyWriteState", "readyIdentity", "compensationNext", "compensationPart", "compensationStructureNext", "compactionNext", "createdAt", "updatedAt"];
 const PUBLICATION_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "action", "target", "source", "targetRootBefore", "metadata", "entries", "inventoryHash", "maximumPlanBytes", "maximumJournalBytes"];
 const PUBLICATION_JOURNAL_KEYS = ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "nextRootTransition", "rootWriteState", "targetRootIdentity", "nextEntry", "entryWriteState", "nextMetadata", "metadataWriteState", "metadataIdentities", "compensationMetadataNext", "compensationNext", "compensationPart", "compensationRootNext", "compactionNext", "createdAt", "updatedAt"];
@@ -409,7 +407,7 @@ export function updateLeafPlanHash(kind: UpdateLeafPlanKindV1, bytes: Uint8Array
 }
 
 export interface BundleSourcePathsV1 {
-  /** `update/source/bundle`: the pre-existing parent `sourceParentDev/Ino` binds. */
+  /** `update/source/bundle`: a construction directory; its identity comes only from the construction journal. */
   readonly parent: CanonicalAbsolutePathV1;
   readonly envelope: CanonicalAbsolutePathV1;
   readonly sourceRoot: CanonicalAbsolutePathV1;
@@ -536,8 +534,6 @@ export function validateBundleSourceStagingPlan(value: unknown, stagingRoot: Can
   const paths = bundleSourcePaths(stagingRoot, id);
   if (input.sourceRoot !== paths.sourceRoot || input.evidenceRoot !== paths.evidenceRoot) fail(`${label}: not the derived source paths`);
   if (exact(input.sourceRootBefore, ["state"], `${label}.sourceRootBefore`).state !== "absent") fail(`${label}.sourceRootBefore`);
-  parseUInt64Decimal(input.sourceParentDev);
-  parseUInt64Decimal(input.sourceParentIno);
   const entries = validateBundleEntries(input.entries, `${label}.entries`);
   if (input.inventoryHash !== bundleInventoryHash(entries)) fail(`${label}.inventoryHash`);
   if (integer(input.aggregateBytes, 1, MAXIMUM_AGGREGATE_BYTES, `${label}.aggregateBytes`) !== bundleAggregateBytes(entries)) fail(`${label}.aggregateBytes`);

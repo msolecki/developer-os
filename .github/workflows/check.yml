@@ -50,25 +50,28 @@ concurrency:
 # preserves what the single `npm run check` step was protecting: CI cannot drift
 # from local, because neither side spells the vitest invocations itself.
 #
-# Both paths cover the same files, by different routes. Here: six jobs, two
+# Both paths cover the same files, by different routes. Here: seven jobs, four
 # of them matrices, all in parallel — `lint` (`npm run lint`, the build,
 # `git diff --check`), `bootstrap-executor` (two shards,
 # `npm run test:bootstrap:main` and `:fine-grained`, which together are
 # `npm run test:bootstrap`), `suite` (`npm run test:suite`, which excludes the
-# executor file, `e2e/**`, `integration/ingest/no-user-hooks.test.ts` and
-# `**/*.v2.test.ts`), `lifecycle-v2` (three shards,
-# `npm run test:lifecycle:uninstall`, `:core` and `:rest`, which together are
-# `npm run test:lifecycle`), `e2e` (`npm run test:e2e`), and `vendor-ingest`
-# (`npm run test:vendor-ingest`). Locally: `npm run check` runs
-# `npm run lint`, then `npm test` (`test:bootstrap`, `test:suite` and
-# `test:lifecycle`), then `npm run test:e2e`, then `npm run test:vendor-ingest`,
+# executor file, `e2e/**`, `integration/ingest/no-user-hooks.test.ts`,
+# `integration/update/recovery.test.ts` and `**/*.v2.test.ts`),
+# `lifecycle-v2` (three shards, `npm run test:lifecycle:uninstall`, `:core`
+# and `:rest`, which together are `npm run test:lifecycle`),
+# `update-recovery` (two shards, `npm run test:update-recovery:deaths` and
+# `:rest`, which together are `npm run test:update-recovery`), `e2e`
+# (`npm run test:e2e`), and `vendor-ingest` (`npm run test:vendor-ingest`).
+# Locally: `npm run check` runs `npm run lint`, then `npm test`
+# (`test:bootstrap`, `test:suite`, `test:lifecycle` and
+# `test:update-recovery`), then `npm run test:e2e`, then `npm run test:vendor-ingest`,
 # then the build, then `git diff --check`. `test:e2e` and `test:vendor-ingest` are spelled out in
 # `check` because `test:suite` excludes `e2e/**` and
 # `integration/ingest/no-user-hooks.test.ts` for the sharding above, so
 # `npm test` alone no longer reaches either.
 #
 # The shard scripts are the one place this drift guarantee is weaker: they
-# restate `test:bootstrap`'s and `test:lifecycle`'s filters instead of being
+# restate `test:bootstrap`'s, `test:lifecycle`'s and `test:update-recovery`'s filters instead of being
 # composed from them, so changing either side means changing the other and
 # re-checking, with `vitest list` per filter, that the shards still partition
 # the aggregate by test id.
@@ -207,6 +210,19 @@ jobs:
     # in a row. Lower it to the first green run's real figure plus margin, and
     # cite that run. An unused budget minute is not billed; a killed job costs a
     # whole cycle.
+    #
+    # **Sharded 6 ways on 2026-09-30 (first 3).** PR #19's run 36653103882 cancelled the
+    # unsharded job at this 150-minute bound with no test failed: the D70 lane
+    # added the NEW-110 update recovery sweeps (a full `init` per death point)
+    # to `test:suite`. Vitest's `--shard` splits the files; each shard keeps the
+    # 150-minute bound until a green run gives real per-shard figures. Three
+    # shards were not enough: run 36685922570's shard 3/3 was cancelled at 150
+    # minutes with no test failed (shard 1/3 took 93 min, 2/3 49 min).
+    name: suite (${{ matrix.shard }}/6)
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     runs-on: macos-15
     timeout-minutes: 150
     steps:
@@ -224,7 +240,7 @@ jobs:
         # tests/security and tests/repository import the compiled CLI from dist.
         run: pnpm --pm-on-fail=ignore build
       - name: Suite
-        run: npm run test:suite
+        run: npm run test:suite -- --shard=${{ matrix.shard }}/6
 
   lifecycle-v2:
     # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
@@ -314,6 +330,57 @@ jobs:
         run: pnpm --pm-on-fail=ignore build
       - name: Lifecycle V2 (${{ matrix.shard }})
         run: npm run test:lifecycle:${{ matrix.shard }}
+
+  update-recovery:
+    # `tests/integration/update/recovery.test.ts` alone, excluded from `suite`
+    # on 2026-09-30: every case is a real `init` plus an update (~60 s
+    # locally), and the file ran past every suite shard's 150-minute bound, so
+    # run 36710745888 reported nothing about it — including real recovery
+    # defects that a local run then found.
+    #
+    # **The three death-point sweeps are not run here, and cannot be.** They
+    # kill `update --apply` (2213 points), `update rollback --apply` (1480) and
+    # a rejected-verifier update (2267) after every durable mutation, and each
+    # point costs more than the last: locally, apply points 1-667 alone took
+    # 2301 s over five runs (2.2 s a point at first, 5 s by the end), and every
+    # apply point past ~1278 resumes forward and rebuilds its
+    # home (~75 s), about 19 hours for that sweep. No 300-minute shard holds
+    # one. `npm run test:update-recovery:sweeps` runs them on a machine that can
+    # spare the hours; the fixes they found are pinned below by targeted cases.
+    #
+    # Two `-t` shards that partition the 14 remaining cases (17 in the file,
+    # minus the sweeps), checked by running each filter: `deaths` (11, local
+    # 671 s) is every case whose name injects a death, `rest` (3, local 121 s)
+    # the others. Budget as for `lifecycle-v2`: ceil(local x 3 / 60), floored
+    # at 20. `npm test` runs both through `test:update-recovery`.
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: deaths
+            # ceil(671 x 3 / 60)
+            timeout: 34
+          - shard: rest
+            # ceil(121 x 3 / 60), floored
+            timeout: 20
+    timeout-minutes: ${{ matrix.timeout }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Enable pnpm through corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        # The file imports the compiled CLI from `dist`.
+        run: pnpm --pm-on-fail=ignore build
+      - name: Update recovery (${{ matrix.shard }})
+        run: npm run test:update-recovery:${{ matrix.shard }}
 
   e2e:
     # Separate here as it is locally: these spawn the compiled binary under a

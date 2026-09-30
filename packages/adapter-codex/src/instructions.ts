@@ -100,7 +100,7 @@ function section(artifact: InstructionSourceV1Like): string {
 }
 
 /**
- * Pure and byte-deterministic under any input order. Commands collapse to their skill (spec §4):
+ * Pure and byte-deterministic under any input order. Commands collapse to their skill (`codex-adapter.md` §16):
  * a `thinCommand` skill renders exactly as any other skill. `AGENTS.override.md` is never a target.
  */
 export function renderInstructionTree(

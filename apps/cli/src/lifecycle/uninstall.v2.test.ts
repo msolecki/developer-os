@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CODEX_INGEST_HOME_REPAIR,
   EXIT_CODES,
   MANIFEST_ANCHOR_RELATIVE_PATH,
   SCHEDULED_JOB_IDS,
@@ -33,7 +34,8 @@ import {
   removeCommandFixtures,
 } from "../commands/testing.js";
 import type { CommandFixture, FixtureOptions } from "../commands/testing.js";
-import { manifestAdmissionFor, runUninstall } from "../commands/uninstall.js";
+import { runUninstall } from "../commands/uninstall.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import type { CliContext } from "../context.js";
 import { admitInstalledV2Home } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
@@ -421,18 +423,11 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     const retained = await fixture.bootstrapEvidenceIdentities();
     expect(retained.length).toBeGreaterThan(0);
     const expectedResidue = await bookkeepingSetAndRetainedEvidence(fixture);
-    /**
-     * The baseline is one bootstrap evidence inspection, whose `projectRegularEntry` hashes
-     * every regular file under `state` — the orphaned key included. That shipped read predates
-     * this arm (`lifecycle/absent-manifest-uninstall.v2.test.ts`), so what §6 binds here is that
-     * the coordinator adds none of its own: `uninstall` inspects evidence exactly once.
-     */
     keyReads.path = join(fixture.paths.stateDir, "redaction.key");
+    expect((await nodeFs.lstat(keyReads.path)).isFile()).toBe(true);
     keyReads.count = 0;
     await evidenceOf(fixture);
-    const walkReads = keyReads.count;
-    expect(walkReads).toBeGreaterThan(0);
-    keyReads.count = 0;
+    expect(keyReads.count).toBe(0);
 
     const result = await runUninstall(fixture.context, ACCEPTED);
 
@@ -475,7 +470,7 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     expect(targets).not.toContain(join(fixture.paths.stateDir, "lifecycle-id-allocator.json"));
     expect(targets).not.toContain(fixture.paths.manifestFile);
     expect(targets.some((target) => target.startsWith(`${fixture.paths.brain}/`))).toBe(false);
-    expect(keyReads.count).toBe(walkReads);
+    expect(keyReads.count).toBe(0);
     expect(fixture.vendorProcesses).toStrictEqual([]);
     expect(await fixture.bootstrapEvidenceIdentities()).toStrictEqual(retained);
     expect(await productHomeResidue(fixture)).toStrictEqual(expectedResidue);
@@ -834,6 +829,22 @@ describe("V2 uninstall and D52's state/codex-ingest-home", () => {
 
     expect(await allocatorCounter(fixture)).toBe(before);
     expect(await nodeFs.readFile(join(home, "auth.json"), "utf8")).toBe("rotated\n");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("names the repair when an interrupted ingest left a run directory", async () => {
+    const fixture = await initializedV2Fixture("uninstall-codex-ingest-home-abandoned-run");
+    const abandoned = join(fixture.paths.stateDir, "codex-ingest-home", "run-a1b2c3");
+    await nodeFs.mkdir(abandoned, { recursive: true, mode: 0o700 });
+    await nodeFs.chmod(join(abandoned, ".."), 0o700);
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("codex_ingest_home_shape");
+    expect(result.error.paths).toStrictEqual([abandoned]);
+    expect(result.error.recovery).toBe(CODEX_INGEST_HOME_REPAIR);
+    expect(await exists(abandoned)).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 

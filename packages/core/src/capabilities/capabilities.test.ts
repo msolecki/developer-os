@@ -7,8 +7,8 @@ import { CAPABILITY_STATES, PROBE_OBSERVATIONS } from "./index.js";
  * would make its own contract a translation layer.
  */
 describe("the shared capability vocabulary", () => {
-  it("has exactly three states, in the order the model reads them", () => {
-    expect([...CAPABILITY_STATES]).toEqual(["yes", "unknown", "not-used"]);
+  it("has exactly four states, in the order the model reads them", () => {
+    expect([...CAPABILITY_STATES]).toEqual(["yes", "no", "unknown", "not-used"]);
   });
 
   /**

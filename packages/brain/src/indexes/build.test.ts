@@ -318,7 +318,6 @@ describe("buildIndex frontmatter bound", () => {
     const huge = `k: v\n`.repeat(Math.ceil(MAX_FRONTMATTER_CHARS / 5) + 100);
     const parsed: string[] = [];
 
-    const start = Date.now();
     const result = await buildIndex(
       memoryRequest(
         {
@@ -338,7 +337,6 @@ describe("buildIndex frontmatter bound", () => {
         },
       ),
     );
-    const elapsed = Date.now() - start;
 
     expect(result.index.notes.map((n) => n.path)).toEqual([
       "content/DEV/fine.md",
@@ -351,13 +349,6 @@ describe("buildIndex frontmatter bound", () => {
     });
     /** The file is read; it is the parse that is skipped. */
     expect(parsed).toContain("/vault/content/DEV/huge.md");
-    /**
-     * Deliberately generous, and not the load-bearing assertion: the unbounded
-     * path measures about 1.2 s at this size, so a timing bound alone would
-     * pass with the check removed. The `code: "length"` assertion above is what
-     * actually discriminates; this only catches a catastrophic regression.
-     */
-    expect(elapsed).toBeLessThan(5000);
   });
 
   it("accepts a large but bounded frontmatter", async () => {

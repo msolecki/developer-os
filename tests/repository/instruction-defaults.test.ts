@@ -12,7 +12,7 @@ import {
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const INSTRUCTIONS = join(ROOT, "instructions");
 
-describe("default instructions are redacted (spec §3.3)", () => {
+describe("default instructions are redacted (foundation.md §12.1)", () => {
   it("enumerates the catalog, and every listed artifact once the catalog has rows", () => {
     const files = listInstructionFiles(INSTRUCTIONS);
     expect(files).toContain("catalog.json");

@@ -7,6 +7,7 @@ import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import {
   advanceConstructionJournal,
   buildConstructionPlan,
+  checkRetainedRollbackBlobSource,
   constructionCompactionTarget,
   constructionDeletionAuthority,
   constructionEvidenceBytes,
@@ -15,6 +16,7 @@ import {
   constructionPlanHash,
   initialConstructionJournal,
   payloadSourceProjectionHash,
+  retainedRollbackBlobPath,
   rollbackEntrySourceProjectionHash,
   rollbackSourceEntriesProjectionHash,
   updateConstructionEvidencePath,
@@ -29,10 +31,11 @@ import {
   type UpdateConstructionPayloadSourceV1,
   type UpdateConstructionPlanInputV1,
   type UpdateConstructionPlanV1,
+  type UpdateConstructionRetainedRollbackBlobSourceV1,
   type UpdateConstructionStepV1,
 } from "./construction.js";
 import { buildUpdateFoundationParticipantRef, updateFoundationStagedDigestBytes, type UpdatePayloadRefV1 } from "./migrations.js";
-import { deriveUpdatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
+import { deriveCanonicalStatePayloadPath, deriveUpdatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
 import type { PreparedUpdateCandidateV1, RollbackPayloadEntryV1, RollbackPayloadIdV1 } from "./preview.js";
 import { parseLowerHexSha256, parseSafeReasonCode, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256, type SafeReasonCodeV1 } from "./scalars.js";
 
@@ -272,6 +275,42 @@ describe("update construction plan", () => {
     expect(() => buildConstructionPlan({ ...base, files: rows })).toThrow(/authority selects two rows/u);
   });
 
+  it("lists update/source and each planned source's parent as construction directories (P1)", () => {
+    const base = input("update_rollback");
+    const bundleJournal = path("update/journals/bundle_source_staging/bundle_source.json");
+    const rows = [...base.files];
+    rows.splice(4, 0, leaf("bundle_source_staging", "bundle_source", `{"bundle_source":1}\n`), row({ kind: "initial_journal", journalKind: "bundle_source_staging", id: parseSafeReasonCode("bundle_source"), finalPath: bundleJournal }, bundleJournal, `{"bundle_journal":0}\n`));
+    const plan = buildConstructionPlan({ ...base, files: rows });
+    expect(validateConstructionBijections(plan)).toBe(true);
+    const ordinal = (relative: string): number => plan.directories.findIndex((directory) => directory.path === path(relative));
+    expect(ordinal("update/source")).toBeGreaterThan(0);
+    expect(ordinal("update/source/bundle")).toBeGreaterThan(ordinal("update/source"));
+    expect(plan.directories[ordinal("update/source/bundle")]?.parent).toEqual({ kind: "created_directory", ordinal: ordinal("update/source") });
+    expect(ordinal("update/source/rollback")).toBe(-1);
+
+    const apply = buildConstructionPlan(input());
+    expect(apply.directories.map((directory) => directory.path)).toContain(path("update/source/rollback"));
+    expect(apply.directories.map((directory) => directory.path)).not.toContain(path("update/source/bundle"));
+  });
+
+  it("refuses update/source/bundle as an unused directory without its source plan row (P1)", () => {
+    const plan = mutable(buildConstructionPlan(input("update_rollback")));
+    const directories = plan.directories as unknown as Record<string, unknown>[];
+    const at = directories.length;
+    directories.push({ ordinal: at, path: path("update/source"), expectedBefore: "absent", ownerUid: uid, mode: 448, parent: { kind: "created_directory", ordinal: 0 } });
+    directories.push({ ordinal: at + 1, path: path("update/source/bundle"), expectedBefore: "absent", ownerUid: uid, mode: 448, parent: { kind: "created_directory", ordinal: at } });
+    expect(() => validateConstructionBijections(plan)).toThrow(/update\/source\/bundle without exactly its source plan row/u);
+  });
+
+  it("refuses an apply plan whose rollback source parent is missing (P1)", () => {
+    const plan = mutable(buildConstructionPlan(input()));
+    const directories = plan.directories as unknown as { path: string }[];
+    const parent = directories.find((directory) => directory.path === path("update/source/rollback"));
+    if (parent === undefined) throw new Error("apply plan lists update/source/rollback");
+    parent.path = path("update/source/other");
+    expect(() => validateConstructionBijections(plan)).toThrow(/update\/source\/rollback without exactly its source plan row/u);
+  });
+
   it("refuses an output blob that no row or entry consumes", () => {
     const extra = { ...candidate, materialization: { ...candidate.materialization, outputBlobs: [...candidate.materialization.outputBlobs, { ordinal: 2, bytes: 1, sha256: sha("x") }] } } as PreparedUpdateCandidateV1;
     expect(() => buildConstructionPlan({ ...input(), candidate: extra })).toThrow(/no consumer/u);
@@ -452,5 +491,184 @@ describe("Foundation construction rows (Spec 2 §5.3, D60)", () => {
   it("refuses a Foundation journal re-encoded as canonical JSON", () => {
     const canonicalText = (text: string): string => encodeCanonicalJson(JSON.parse(text) as never);
     expect(() => buildConstructionPlan(withFoundationRows(`${sha(content)}\n`, canonicalText))).toThrow();
+  });
+});
+
+describe("signed metadata construction rows (Spec 2 P4, D72)", () => {
+  const delegation = encodeCanonicalJson({ document: "delegation", sequence: "2" });
+  const releaseIndex = encodeCanonicalJson({ document: "release_index", sequence: "2" });
+  const bundleManifest = encodeCanonicalJson({ document: "bundle_manifest", entries: [] });
+  const documents = [delegation, releaseIndex, bundleManifest];
+
+  interface MetadataRowSpec {
+    readonly metadata: number;
+    readonly value: string;
+    readonly payloadKind?: "state_after" | "owner_content";
+    readonly rowContent?: string;
+    readonly kind?: string;
+  }
+
+  function metadataRow(spec: MetadataRowSpec, index: number): UpdateConstructionFileInputV1 {
+    const source = { kind: spec.kind ?? "plan_derived", role: "release_metadata_after", metadata: spec.metadata, value: spec.value, valueBytes: encoder.encode(spec.value).byteLength - 1 } as unknown as UpdateConstructionPayloadSourceV1;
+    const rowPath = deriveCanonicalStatePayloadPath(home, coordinatorId as string as SafeReasonCodeV1, "release_metadata", parseSafeReasonCode(`release_metadata_${index.toString(10)}`));
+    return row({ kind: "payload", payloadKind: spec.payloadKind ?? "state_after", source }, rowPath, spec.rowContent ?? spec.value);
+  }
+
+  /** Inserts the metadata rows before the manifest postimage, the other plan-derived `state_after` row. */
+  function withMetadataRows(specs: readonly MetadataRowSpec[]): UpdateConstructionPlanInputV1 {
+    const base = input();
+    const rows = [...base.files];
+    const at0 = rows.findIndex((file) => file.role.kind === "payload" && file.role.payloadKind === "state_after");
+    rows.splice(at0, 0, ...specs.map(metadataRow));
+    return { ...base, files: rows };
+  }
+
+  const all = documents.map((value, metadata) => ({ metadata, value }));
+
+  it("admits the delegation, release index and bundle manifest as plan-derived state rows", () => {
+    const plan = buildConstructionPlan(withMetadataRows(all));
+    expect(validateConstructionBijections(plan)).toBe(true);
+    const rows = plan.files.filter((file) => file.role.kind === "payload" && file.role.source.kind === "plan_derived" && file.role.source.role === "release_metadata_after");
+    expect(rows.map((file) => file.sha256)).toEqual(documents.map((value) => sha(value)));
+  });
+
+  it("refuses a value whose hash does not match its row", () => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata: 0, value: delegation, rowContent: releaseIndex }, { metadata: 1, value: releaseIndex }, { metadata: 2, value: bundleManifest }]))).toThrow(/differs from its row/);
+  });
+
+  it("refuses the role on a row that is not state_after", () => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata: 0, value: delegation, payloadKind: "owner_content" }]))).toThrow(/owner_content/);
+  });
+
+  it.each([[3], [-1]])("refuses metadata ordinal %s", (metadata) => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata, value: delegation }]))).toThrow(/metadata/);
+  });
+
+  it("refuses two rows bound to one metadata ordinal", () => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata: 0, value: delegation }, { metadata: 0, value: releaseIndex }]))).toThrow(/an authority selects two rows/);
+  });
+
+  it("refuses a value that is not canonical JSON", () => {
+    expect(() => buildConstructionPlan(withMetadataRows([{ metadata: 0, value: `{ "document": "delegation" }\n` }]))).toThrow(/canonical/);
+  });
+
+  it("fits a 16 MiB bundle manifest at the exact maximum", () => {
+    const value = encodeCanonicalJson("m".repeat(16_777_216 - 3));
+    expect(encoder.encode(value).byteLength).toBe(16_777_216);
+    const plan = buildConstructionPlan(withMetadataRows([{ metadata: 0, value: delegation }, { metadata: 1, value: releaseIndex }, { metadata: 2, value }]));
+    expect(validateConstructionBijections(plan)).toBe(true);
+    expect(constructionPlanBytes(plan).byteLength).toBeLessThanOrEqual(plan.maximumPlanBytes);
+  }, 60_000);
+
+  it("refuses the withdrawn guarded_signed_metadata arm as unknown", () => {
+    const plan = mutable(buildConstructionPlan(withMetadataRows(all)));
+    const target = plan.files.find((file) => file.role.kind === "payload" && file.role.source.kind === "plan_derived" && file.role.source.role === "release_metadata_after");
+    if (target?.role.kind !== "payload") throw new Error("fixture has a metadata row");
+    const withdrawn = { kind: "guarded_signed_metadata", metadata: {}, role: "delegation", path: target.path, ownerUid: uid, mode: 384, nlink: 1, bytes: target.bytes, sha256: target.sha256, dev: identity.dev, ino: identity.ino } as unknown as UpdateConstructionPayloadSourceV1;
+    (target.role as { source: UpdateConstructionPayloadSourceV1; sourceProjectionHash: LowerHexSha256 }).source = withdrawn;
+    (target.role as { sourceProjectionHash: LowerHexSha256 }).sourceProjectionHash = payloadSourceProjectionHash(withdrawn);
+    expect(() => validateConstructionBijections(plan)).toThrow(/\.kind/);
+  });
+});
+
+describe("Codex registration construction rows (D72 addendum, P6(d))", () => {
+  const record = encodeCanonicalJson({ codexHome: "/synthetic/home/.codex", treeHash: "a".repeat(64) });
+  const ownerPlan = (id: string): ImmutableUpdatePlanRefV1<"owner_update"> => ({
+    kind: "owner_update", id: parseSafeReasonCode(id), path: updateLeafPlanPath(root, "owner_update", id), hash: sha(`owner/${id}`), bytes: 128,
+  });
+
+  interface RegistrationRowSpec {
+    readonly payloadKind?: "owner_content" | "state_after";
+    readonly rowContent?: string;
+  }
+
+  function withRegistrationRows(specs: readonly RegistrationRowSpec[]): UpdateConstructionPlanInputV1 {
+    const base = input();
+    const rows = [...base.files];
+    const at0 = rows.findIndex((file) => file.role.kind === "payload" && file.role.payloadKind === "state_after");
+    rows.splice(at0, 0, ...specs.map((spec, index) => {
+      const source = { kind: "plan_derived", role: "codex_registration_after", plan: ownerPlan("owner_codex"), value: record, valueBytes: encoder.encode(record).byteLength - 1 } as UpdateConstructionPayloadSourceV1;
+      return row({ kind: "payload", payloadKind: spec.payloadKind ?? "owner_content", source }, path(`update/payloads/${(at0 + index).toString(10).padStart(10, "0")}.payload`), spec.rowContent ?? record);
+    }));
+    return { ...base, files: rows };
+  }
+
+  it("admits the record as plan-derived owner content at its ordinal payload path", () => {
+    const plan = buildConstructionPlan(withRegistrationRows([{}]));
+    expect(validateConstructionBijections(plan)).toBe(true);
+    const found = plan.files.find((file) => file.role.kind === "payload" && file.role.source.kind === "plan_derived" && file.role.source.role === "codex_registration_after");
+    expect(found?.sha256).toBe(sha(record));
+  });
+
+  it("refuses the role on a row that is not owner content", () => {
+    expect(() => buildConstructionPlan(withRegistrationRows([{ payloadKind: "state_after" }]))).toThrow(/state_after/);
+  });
+
+  it("refuses a value whose hash does not match its row", () => {
+    expect(() => buildConstructionPlan(withRegistrationRows([{ rowContent: "{}\n" }]))).toThrow(/differs from its row/);
+  });
+
+  it("refuses two registration rows for one owner plan", () => {
+    expect(() => buildConstructionPlan(withRegistrationRows([{}, {}]))).toThrow(/an authority selects two rows/);
+  });
+});
+
+describe("retained rollback blob construction rows (D72 P9)", () => {
+  const restored = encoder.encode("owner preimage v1\n");
+  const payloadId = `rb_${nonce}_3` as RollbackPayloadIdV1;
+  const preimage: RollbackPayloadEntryV1 = { ordinal: 0, path: "blobs/0000000000.bin" as RollbackPayloadEntryV1["path"], role: "owner_preimage", bytes: restored.byteLength, sha256: sha(restored) };
+  const retainedInventory = { payloadId, entries: [preimage] };
+  const blobSource = (overrides: Partial<UpdateConstructionRetainedRollbackBlobSourceV1> = {}): UpdateConstructionRetainedRollbackBlobSourceV1 => ({ kind: "retained_rollback_blob", payloadId, ordinal: 0, bytes: restored.byteLength, sha256: sha(restored), mode: 384, ...overrides });
+
+  function withBlobRows(operation: "update_apply" | "update_rollback", sources: readonly UpdateConstructionRetainedRollbackBlobSourceV1[], payloadKind: "owner_content" | "state_after" = "owner_content"): UpdateConstructionPlanInputV1 {
+    const base = input(operation);
+    const rows = [...base.files];
+    const at0 = rows.findIndex((file) => file.role.kind === "payload");
+    rows.splice(at0, 0, ...sources.map((source, index): UpdateConstructionFileInputV1 => ({ role: { kind: "payload", payloadKind, source }, path: path(`update/payloads/${(at0 + index).toString(10).padStart(10, "0")}.payload`), bytes: restored.byteLength, sha256: sha(restored), mode: 384 })));
+    return { ...base, files: rows };
+  }
+
+  it("admits a retained blob as owner content of an update_rollback plan", () => {
+    const plan = buildConstructionPlan(withBlobRows("update_rollback", [blobSource()]));
+    expect(validateConstructionBijections(plan)).toBe(true);
+    expect(plan.files.some((file) => file.role.kind === "payload" && file.role.source.kind === "retained_rollback_blob")).toBe(true);
+  });
+
+  it("refuses a retained blob in an update_apply plan", () => {
+    expect(() => buildConstructionPlan(withBlobRows("update_apply", [blobSource()]))).toThrow(/outside update_rollback/);
+  });
+
+  it("refuses a retained blob as state_after", () => {
+    expect(() => buildConstructionPlan(withBlobRows("update_rollback", [blobSource()], "state_after"))).toThrow(/state_after/);
+  });
+
+  it("refuses a source whose hash differs from its row", () => {
+    expect(() => buildConstructionPlan(withBlobRows("update_rollback", [blobSource({ sha256: sha("other") })]))).toThrow(/differs from its row/);
+  });
+
+  it("refuses two rows bound to one retained blob", () => {
+    expect(() => buildConstructionPlan(withBlobRows("update_rollback", [blobSource(), blobSource()]))).toThrow(/an authority selects two rows/);
+  });
+
+  it("derives the blob path under the retained payload root", () => {
+    expect(retainedRollbackBlobPath(home, blobSource())).toBe(`${home}/rollback/${payloadId}/blobs/0000000000.bin`);
+  });
+
+  it("admits the source against its retained inventory row", () => {
+    expect(checkRetainedRollbackBlobSource(blobSource(), retainedInventory)).toEqual(preimage);
+  });
+
+  it.each([
+    ["another payload", blobSource({ payloadId: `rb_${nonce}_4` as RollbackPayloadIdV1 }), /not the retained payload/],
+    ["an ordinal past the inventory", blobSource({ ordinal: 1 }), /not a retained preimage row/],
+    ["different bytes", blobSource({ bytes: 1 }), /differs from its inventory row/],
+    ["a different hash", blobSource({ sha256: sha("other") }), /differs from its inventory row/],
+  ] as const)("refuses %s against the retained inventory", (_name, source, message) => {
+    expect(() => checkRetainedRollbackBlobSource(source, retainedInventory)).toThrow(message);
+  });
+
+  it("refuses an inverse-plan leaf row as a restore blob", () => {
+    const leafRow: RollbackPayloadEntryV1 = { ...preimage, path: "plans/owner_inverse/owner_codex.plan.json" as RollbackPayloadEntryV1["path"], role: "inverse_plan_leaf" };
+    expect(() => checkRetainedRollbackBlobSource(blobSource(), { payloadId, entries: [leafRow] })).toThrow(/not a retained preimage row/);
   });
 });

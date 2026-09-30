@@ -22,7 +22,7 @@ import type { TempHome } from "../../helpers/temp-home.js";
 const run = promisify(execFile);
 
 /**
- * Spec §7.3: each workflow's rendered skill, loaded into a real Claude Code
+ * `brain.md` §6.13 item 9: each workflow's rendered skill, loaded into a real Claude Code
  * through `--plugin-dir`, drives the built CLI against a disposable vault.
  * **Every case spends the founder's credits**, so `npm run test:vendor-brain`
  * runs it by hand and neither `test:suite` nor `check` does.
@@ -113,7 +113,7 @@ afterAll(async () => {
   if (sandbox !== null) await removeTempHome(sandbox);
 });
 
-/** One compatibility-matrix row per passing case (spec §7.3), for Task 16. */
+/** One compatibility-matrix row per passing case (`brain.md` §6.13 item 9), for Task 16. */
 async function record(workflow: string, command: string): Promise<void> {
   const yaml = await readFile(
     join(ROOT, "workflows", workflow, "workflow.yaml"),

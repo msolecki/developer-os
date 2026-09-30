@@ -329,7 +329,10 @@ export async function runBrain(
   context: CliContext,
   options: BrainOptions,
 ): Promise<CliResult<BrainResultV1>> {
-  /** Before `readConfig`: the agent-session refusal comes before any read (spec §6.7). */
+  /**
+   * Before `readConfig`: the agent-session refusal comes before any read (`brain.md` §6.13,
+   * agent sessions).
+   */
   if (
     (options.subcommand === "retire" || options.subcommand === "refactor") &&
     options.refactor !== undefined

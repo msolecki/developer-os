@@ -54,6 +54,8 @@ export function renderCaptureFile(envelope: CaptureEnvelopeV1): string {
       redaction: envelope.redaction.map((finding) => ({
         class: finding.class,
         fingerprint: finding.fingerprint,
+        /** Named, not spread: the one widening D73 decided (NEW-24). */
+        ...(finding.patternIndex === undefined ? {} : { patternIndex: finding.patternIndex }),
       })),
       ...(envelope.note === null
         ? {}

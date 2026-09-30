@@ -228,7 +228,10 @@ describe("reportClaudeCapabilities", () => {
       listPluginFiles: () =>
         Promise.resolve([".claude-plugin/plugin.json"]),
     });
-    expect(report.capabilities.skills).toBe("unknown");
+    // NEW-62: we asked and nothing is there, which doctor must print
+    // differently from a probe that could not run (the case below).
+    expect(report.capabilities.skills).toBe("no");
+    expect(report.summary).toContain("skills=no");
   });
 
   it("reports unknown when the plugin directory cannot be listed at all", async () => {
@@ -240,6 +243,7 @@ describe("reportClaudeCapabilities", () => {
       listPluginFiles: () => Promise.reject(new Error("ENOENT")),
     });
     expect(report.capabilities.skills).toBe("unknown");
+    expect(report.summary).toContain("skills=unknown");
   });
 
   /**
@@ -272,7 +276,7 @@ describe("reportClaudeCapabilities", () => {
 });
 
 /**
- * A13 §8.1 and NEW-65: the observation for the two hook keys is a firing
+ * `hooks.md` §3.6 and NEW-65: the observation for the two hook keys is a firing
  * record, never what the probe saw. A validated or listed tree is loaded, not
  * firing.
  */
@@ -330,7 +334,7 @@ describe("the hook keys come from firing records", () => {
         ["session_end_capture", "observed"],
       ]),
     });
-    expect(report.capabilities.skills).toBe("unknown");
+    expect(report.capabilities.skills).toBe("no");
     expect(report.capabilities.session_end_capture).toBe("not-used");
   });
 

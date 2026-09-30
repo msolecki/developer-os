@@ -110,7 +110,7 @@ function isExcludedSegment(
   return name === config.indexesDir || PRIVATE_FOLDERS.includes(name);
 }
 
-function resolveTopic(name: string, config: BrainConfigV1): string | null {
+export function resolveTopic(name: string, config: BrainConfigV1): string | null {
   /**
    * `Object.hasOwn` rather than a plain lookup. `topicAliases` is user data, so
    * a folder whose name is also an inherited property would otherwise resolve
@@ -121,6 +121,16 @@ function resolveTopic(name: string, config: BrainConfigV1): string | null {
     : name;
   if (aliased === undefined) return null;
   return config.topicFolders.includes(aliased) ? aliased : null;
+}
+
+/**
+ * The topic a top-level folder name resolves to, exactly as discovery decides it: an excluded
+ * name (dot-prefixed, private, the indexes directory) first, then `resolveTopic`. BACKLOG
+ * NEW-128: every command that admits a note path by folder asks this, so an aliased folder is
+ * admitted wherever it is indexed and a private folder never becomes admissible through an alias.
+ */
+export function topicOfFolder(name: string, config: BrainConfigV1): string | null {
+  return isExcludedSegment(name, false, config) ? null : resolveTopic(name, config);
 }
 
 /**

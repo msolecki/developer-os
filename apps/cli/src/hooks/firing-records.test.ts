@@ -77,7 +77,7 @@ function record(event: string, firstSeen: Date, lastSeen: Date, vendor: HookVend
 }
 
 describe("HOOK_EVENT_OF", () => {
-  it("maps every verb to its §3 event, with the same PascalCase names on Codex", () => {
+  it("maps every verb to its hooks.md §3.4 event, with the same PascalCase names on Codex", () => {
     expect(HOOK_EVENT_OF.claude).toStrictEqual({
       inject: "SessionStart",
       command: "PreToolUse",
@@ -302,26 +302,23 @@ describe("runHookMode and the firing record", () => {
 
   it("returns the exit code without waiting for a record write that never settles", async () => {
     HOOK_HANDLERS.stop = () => Promise.resolve({ kind: "block", ruleId: "synthetic", detail: "synthetic" });
+    let recordCalls = 0;
     const environment: HookEnvironment = {
       env: {},
       userHome: root,
       processCwd: () => root,
       nodeExecutable: "/usr/local/bin/node",
-      recordFiring: () =>
-        new Promise<void>(() => {
+      recordFiring: () => {
+        recordCalls += 1;
+        return new Promise<void>(() => {
           // never settles
-        }),
+        });
+      },
     };
-    const pending = Symbol("pending");
-    const code = await Promise.race([
-      runHookMode(["guard", "stop", "--vendor", "claude"], io, factory, environment),
-      new Promise<typeof pending>((resolve) => {
-        setTimeout(() => {
-          resolve(pending);
-        }, 1_000);
-      }),
-    ]);
+    // NEW-29: no race against a timer; awaiting the write would hang this test past its own budget.
+    const code = await runHookMode(["guard", "stop", "--vendor", "claude"], io, factory, environment);
     expect(code).toBe(2);
+    expect(recordCalls).toBe(1);
   });
 
   it("does not record a firing when the recursion marker short-circuits the hook", async () => {

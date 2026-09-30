@@ -20,10 +20,9 @@ import type {
 } from "@developer-os/core";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
-import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import { inspectBootstrapEvidenceAdmission, preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import {
-  manifestAdmissionFor,
   relocatedBrainRefusal,
   runCoordinatorUninstall,
   uninstallRuntimePaths,
@@ -35,8 +34,9 @@ import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { admitInstalledV2Home, observeManifestSchema } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
-import { coordinatorNonceOf, residueFrom } from "./context.js";
+import { coordinatorNonceOf, uninstallResidueFrom } from "./context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import {
   createUninstallAdapters,
   createUninstallParticipants,
@@ -201,7 +201,7 @@ export async function admitRecoveryOnlyUninstall(
   const key: LifecycleHomeKeyV1 = { productHome, nonce };
 
   const admitted = evidence ?? (await evidenceFor(context));
-  const snapshot = await lifecycle.inspectLedger(key, residueFrom(admitted));
+  const snapshot = await lifecycle.inspectLedger(key, uninstallResidueFrom(admitted));
   const [finding] = snapshot.findings;
   if (finding !== undefined) refuse(finding.reason, finding.path);
 
@@ -370,7 +370,7 @@ async function resumeUninstall(
       schemaVersion: 1,
       removed: [],
       restored: [],
-      preserved: evidence.retainedPaths,
+      preserved: preservedRetentionRoots(evidence),
       retainedBootstrapEvidence: evidence.report.ids,
       transactionId: dispatch.id,
     });
@@ -413,7 +413,7 @@ async function resumeUninstall(
           holds,
           preserved,
         }),
-        residueFrom(evidence),
+        uninstallResidueFrom(evidence),
       )
       .recover(global, { resumeUninstall: true });
     holds.global = recovered.global;
@@ -425,7 +425,7 @@ async function resumeUninstall(
     schemaVersion: 1,
     removed,
     restored: [],
-    preserved: [...new Set([...evidence.retainedPaths, ...preserved])],
+    preserved: [...new Set([...preservedRetentionRoots(evidence), ...preserved])],
     retainedBootstrapEvidence: evidence.report.ids,
     transactionId: dispatch.id,
   });

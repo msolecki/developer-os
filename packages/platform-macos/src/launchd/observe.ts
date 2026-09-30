@@ -3,8 +3,10 @@ import type { SupervisedPhaseV1, SupervisedProcessRunner } from "@developer-os/s
 
 import {
   LaunchdDistributionUnsupportedError,
-  admitLaunchdDistribution,
-  type ObservedLaunchdDistributionV1,
+  admitLaunchdHost,
+  recheckLaunchdHost,
+  type LaunchctlIdentityV1,
+  type LaunchdHostObserverV1,
 } from "./distribution.js";
 import { LAUNCHD_PREVIEW_OBSERVATION_TABLE } from "./process-table.js";
 import { launchdJob, parseGeneratedLabel } from "./registry.js";
@@ -34,9 +36,7 @@ export interface LaunchdObservationDependenciesV1 {
   effectiveUid(): number;
   /** The validated console user's UID, from the platform record, never from `HOME` or `USER`. */
   consoleUserUid(): Promise<number>;
-  /** `sw_vers` values read through an injected probe, never a shell. */
-  operatingSystem(): Promise<ObservedLaunchdDistributionV1["operatingSystem"]>;
-  inspectExecutable(path: "/bin/launchctl"): Promise<ObservedLaunchdDistributionV1["executable"]>;
+  readonly host: LaunchdHostObserverV1;
   inspectEmptyDirectory(path: "/private/var/empty"): Promise<LaunchdEmptyDirectoryObservationV1>;
 }
 
@@ -67,7 +67,10 @@ export type LaunchdLiveObservationV1 =
   | { readonly kind: "observed"; readonly jobs: readonly { readonly job: ScheduledJobIdV1; readonly state: LaunchdObservedStateV1 }[] }
   | { readonly kind: "unobservable"; readonly reason: LaunchdUnobservableReasonV1 };
 
-type ProbeResultV1 = { readonly kind: "exited"; readonly exitCode: number } | { readonly kind: "unobservable"; readonly reason: LaunchdUnobservableReasonV1 };
+/** One observation pass: the first probe's host admission and the empty directory's identity. */
+type Pass = { launchctl: LaunchctlIdentityV1 | null; readonly baseline: LaunchdEmptyDirectoryObservationV1 };
+
+type ProbeResultV1 ={ readonly kind: "exited"; readonly exitCode: number } | { readonly kind: "unobservable"; readonly reason: LaunchdUnobservableReasonV1 };
 
 const encoder = new TextEncoder();
 const table = LAUNCHD_PREVIEW_OBSERVATION_TABLE;
@@ -120,8 +123,9 @@ function classify(entry: LaunchdObservationJobV1, present: ReadonlySet<LaunchdOb
  * exit 0, then `print <domain>/<candidate>` per closed candidate, where exit 0 is present and 113 is
  * absent. Output is byte-counted and discarded, never parsed, hashed into a result, logged or
  * persisted, because `launchctl print` may expose unrelated service environment. Every probe shares
- * one absolute 30,000-ms deadline; the OS, `/bin/launchctl` and the empty `HOME`/`TMPDIR` directory
- * are re-verified before every process and the directory again after it.
+ * one absolute 30,000-ms deadline. The first probe admits the host (spec §5.3 rules 1–3, D71); each
+ * later one rechecks that admission, and the empty `HOME`/`TMPDIR` directory is re-verified before
+ * every process and after it, so only drift within one pass counts.
  */
 export class LaunchdObserver {
   readonly #dependencies: LaunchdObservationDependenciesV1;
@@ -135,8 +139,9 @@ export class LaunchdObserver {
     const jobs = validateJobs(request.jobs);
     const phase = this.#dependencies.runner.beginPhase("launchd-observation", table.observationDeadlineMs);
     const baseline = await this.#admitEmptyDirectory(null);
+    const pass: Pass = { launchctl: null, baseline };
 
-    const domainProbe = await this.#probe(domain, phase, baseline);
+    const domainProbe = await this.#probe(domain, phase, pass);
     if (domainProbe.kind === "unobservable") return domainProbe;
     if (domainProbe.exitCode !== 0) return { kind: "unobservable", reason: "exit" };
 
@@ -149,7 +154,7 @@ export class LaunchdObserver {
       }).sort((left, right) => byUtf8(left.target, right.target));
       const present = new Set<LaunchdObservedLabelV1>();
       for (const { label, target } of targets) {
-        const probe = await this.#probe(target, phase, baseline);
+        const probe = await this.#probe(target, phase, pass);
         if (probe.kind === "unobservable") return probe;
         if (probe.exitCode === 0) present.add(label);
         else if (probe.exitCode !== LAUNCHD_SERVICE_ABSENT_EXIT) return { kind: "unobservable", reason: "exit" };
@@ -168,11 +173,9 @@ export class LaunchdObserver {
     return domain;
   }
 
-  async #admitHost(): Promise<void> {
-    admitLaunchdDistribution({
-      operatingSystem: await this.#dependencies.operatingSystem(),
-      executable: await this.#dependencies.inspectExecutable(table.executable.path),
-    });
+  async #admitHost(pass: Pass): Promise<void> {
+    if (pass.launchctl === null) pass.launchctl = await admitLaunchdHost(this.#dependencies.host);
+    else await recheckLaunchdHost(this.#dependencies.host, pass.launchctl);
   }
 
   async #admitEmptyDirectory(baseline: LaunchdEmptyDirectoryObservationV1 | null): Promise<LaunchdEmptyDirectoryObservationV1> {
@@ -188,8 +191,9 @@ export class LaunchdObserver {
     return directory;
   }
 
-  async #probe(target: string, phase: SupervisedPhaseV1, baseline: LaunchdEmptyDirectoryObservationV1): Promise<ProbeResultV1> {
-    await this.#admitHost();
+  async #probe(target: string, phase: SupervisedPhaseV1, pass: Pass): Promise<ProbeResultV1> {
+    const { baseline } = pass;
+    await this.#admitHost(pass);
     await this.#admitEmptyDirectory(baseline);
     if (phase.remainingMilliseconds() <= 0) return { kind: "unobservable", reason: "truncated" };
     const evidence = await this.#dependencies.runner.run({

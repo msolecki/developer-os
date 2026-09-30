@@ -17,7 +17,7 @@ describe("normalizeShellCommand", () => {
     if (normalized.ok) expect(normalized.text).not.toMatch(/\r/u);
   });
 
-  it("collapses every run of LF, CR and CRLF to one LF (spec §5.2 step 3, D62)", () => {
+  it("collapses every run of LF, CR and CRLF to one LF (hooks.md §3.4, D62)", () => {
     expect(normalizeShellCommand("cd a\r\n\n\rgit push\rls")).toStrictEqual({ ok: true, text: "cd a\ngit push\nls" });
   });
 

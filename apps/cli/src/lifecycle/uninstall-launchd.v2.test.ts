@@ -16,7 +16,7 @@ import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { runInit } from "../commands/init.js";
 import { createCommandFixture, exists, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
-import { manifestAdmissionFor } from "../commands/uninstall.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import { admitInstalledV2Home } from "./admission.js";
 import { lifecycleVariantFacts } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
@@ -100,7 +100,6 @@ async function launchdHome(
   if (base === undefined) throw new Error("the fixture composed no lifecycle context");
   const launchd = scriptedLaunchd({
     clock: base.clock,
-    certified: true,
     ...(beforeBootout === undefined ? {} : { beforeBootout }),
   });
   launchd.loaded.set(DOCTOR, plist.label);

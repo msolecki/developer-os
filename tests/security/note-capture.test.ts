@@ -27,8 +27,8 @@ import type { TempHome } from "../helpers/temp-home.js";
 import { oneNote, SENTINEL, statusOfText } from "./helpers.js";
 
 /**
- * Spec §7.4, the capture and ingest half: a note capture is refused before it can
- * escape a topic folder, is redacted before it lands, and replaces only the bytes it
+ * `threat-model.md` §5.4 and `brain.md` §6.13, the capture and ingest half: a note
+ * capture is refused before it can escape a topic folder, is redacted before it lands, and replaces only the bytes it
  * was taken against. Every case runs the compiled binary under a temporary HOME.
  */
 

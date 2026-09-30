@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  buildConstructionPlan,
   buildRollbackPayload,
   buildRollbackPayloadSourceStagingPlan,
   createNodeLifecycleGuardedFileSystem,
+  decodeCanonicalJson,
   encodeCanonicalJson,
   initialRollbackPayloadSourceJournal,
   parseCanonicalAbsolutePathText,
@@ -16,15 +18,18 @@ import {
   parseUtcTimestamp,
   rollbackEntrySourceProjectionHash,
   rollbackPayloadSourceJournalBytes,
-  rollbackPayloadSourcePaths,
   rollbackPayloadSourceStagingPlanBytes,
   rollbackPayloadSourceStagingPlanRef,
   rollbackSourceEntriesProjectionHash,
   rollbackStepListHash,
+  updateConstructionEnvelopePaths,
   updateLeafPlanPath,
   updateParticipantJournalPath,
+  updateRecoveryExecutorStagedPath,
+  validateConstructionJournal,
   type CanonicalAbsolutePathV1,
   type CanonicalJsonValue,
+  type ExactProductStatePathV1,
   type LifecycleCoordinatorIdV1,
   type LifecycleGuardedFileSystemV1,
   type LowerHexSha256,
@@ -34,9 +39,13 @@ import {
   type RollbackPayloadEntryV1,
   type RollbackPayloadIdV1,
   type RollbackPayloadSourceStagingPlanV1,
+  type SafeReasonCodeV1,
   type SchemaMigrationIdV1,
   type SecretScreenedBlobV1,
   type UInt64DecimalV1,
+  type UpdateConstructionFileInputV1,
+  type UpdateConstructionJournalV1,
+  type UpdateConstructionPlanInputV1,
   type UpdateConstructionPlanV1,
   type UpdateConstructionRollbackEntrySourceV1,
 } from "@developer-os/core";
@@ -46,6 +55,7 @@ import type {
 } from "@developer-os/core";
 
 import type { BundleParticipantDependenciesV1 } from "./bundle-source.js";
+import { UpdateConstructionStore } from "./construction.js";
 import { RollbackPayloadSourceExecutor } from "./rollback-source.js";
 
 /** Synthetic only: no path, byte, or identity here belongs to a real release or person. */
@@ -62,12 +72,92 @@ const uid = process.getuid?.() ?? -1;
 export const sha = (value: Uint8Array | string): LowerHexSha256 => parseLowerHexSha256(createHash("sha256").update(value).digest("hex"));
 const canonical = (value: unknown): string => encodeCanonicalJson(value as CanonicalJsonValue);
 
+export interface SourceConstructionV1 {
+  readonly plan: UpdateConstructionPlanV1;
+  /** The persisted journal after `stageDirectories`, as a fresh process reads it. */
+  readonly journal: UpdateConstructionJournalV1;
+}
+
+export interface SourceConstructionRowV1 {
+  readonly kind: "bundle_source_staging" | "rollback_payload_source";
+  readonly id: SafeReasonCodeV1;
+  readonly plan: Uint8Array;
+  readonly journal: Uint8Array;
+}
+
+function constructionRow(role: UpdateConstructionFileInputV1["role"], path: CanonicalAbsolutePathV1, bytes: Uint8Array): UpdateConstructionFileInputV1 {
+  return { role, path, bytes: bytes.byteLength, sha256: sha(bytes), mode: 384 };
+}
+
+const UNUSED_SOURCE_PORT = {
+  readRow: () => Promise.reject(new Error("the synthetic construction stages no file rows")),
+  prepareSources: () => Promise.resolve(),
+  consumeRollbackEntry: () => Promise.resolve(),
+  finishSources: () => Promise.resolve(),
+  compensateSources: () => Promise.resolve(),
+  nestedTerminal: () => Promise.resolve(false),
+};
+
+/** What a fresh process sees: the persisted construction journal, validated against its plan. */
+export async function readConstructionJournal(root: CanonicalAbsolutePathV1, plan: UpdateConstructionPlanV1): Promise<UpdateConstructionJournalV1> {
+  const bytes = await nodeFs.readFile(updateConstructionEnvelopePaths(root).journal);
+  return validateConstructionJournal(decodeCanonicalJson(bytes, plan.maximumJournalBytes), plan);
+}
+
+/**
+ * A real construction run through `stageDirectories` over the empty coordinator root, so each
+ * source's parent exists only as a construction directory with a journaled identity (P1). The
+ * caller writes the exact source plan and initial journal bytes its rows name.
+ */
+export async function stageSourceConstruction(options: {
+  readonly root: CanonicalAbsolutePathV1;
+  readonly coordinatorId: LifecycleCoordinatorIdV1;
+  readonly sources: readonly SourceConstructionRowV1[];
+  readonly rollbackSource: UpdateConstructionPlanInputV1["rollbackSource"];
+  readonly candidate: PreparedUpdateCandidateV1 | null;
+}): Promise<SourceConstructionV1> {
+  const { root, coordinatorId } = options;
+  const home = root.slice(0, root.lastIndexOf("/staging/lifecycle/"));
+  await nodeFs.mkdir(root, { recursive: true, mode: 0o700 });
+  const stats = await nodeFs.lstat(root, { bigint: true });
+  const text = (value: string): Uint8Array => new TextEncoder().encode(value);
+  const execution = parseSafeReasonCode("execution");
+  const files: UpdateConstructionFileInputV1[] = [
+    constructionRow({ kind: "immutable_plan", planKind: "update_execution", id: execution }, updateLeafPlanPath(root, "update_execution", execution), text(`{"execution":1}\n`)),
+    ...options.sources.map((source) => constructionRow({ kind: "immutable_plan", planKind: source.kind, id: source.id }, updateLeafPlanPath(root, source.kind, source.id), source.plan)),
+    ...options.sources.map((source) => {
+      const path = updateParticipantJournalPath(root, source.kind, source.id);
+      return constructionRow({ kind: "initial_journal", journalKind: source.kind, id: source.id, finalPath: path }, path, source.journal);
+    }),
+    constructionRow({ kind: "recovery_executor", state: "executing" }, updateRecoveryExecutorStagedPath(root, "executing"), text(`{"state":"executing"}\n`)),
+    constructionRow({ kind: "recovery_executor", state: "terminal_cleanup" }, updateRecoveryExecutorStagedPath(root, "terminal_cleanup"), text(`{"state":"terminal_cleanup"}\n`)),
+  ];
+  const plan = buildConstructionPlan({
+    coordinatorId,
+    operation: options.rollbackSource === null ? "update_rollback" : "update_apply",
+    executionBindingHash: sha("synthetic execution binding"),
+    stagingRoot: { path: root, ownerUid: uid as EffectiveUidV1, mode: 448, dev: parseUInt64Decimal(stats.dev.toString(10)), ino: parseUInt64Decimal(stats.ino.toString(10)) },
+    files,
+    rollbackSource: options.rollbackSource,
+    candidate: options.candidate,
+    constructionJournalCreatedAt: ROLLBACK_AT,
+    outerJournalCreatedAt: ROLLBACK_AT,
+    outerPlanPath: parseCanonicalAbsolutePathText(`${home}/state/lifecycle-journals/${coordinatorId}.plan.json`) as ExactProductStatePathV1,
+    outerJournalPath: parseCanonicalAbsolutePathText(`${home}/state/lifecycle-journals/${coordinatorId}.json`) as ExactProductStatePathV1,
+  });
+  const store = new UpdateConstructionStore({ fs: guardedFs(), effectiveUid: uid, now: () => new Date("2026-09-23T10:00:01.000Z"), screen: () => undefined, sources: UNUSED_SOURCE_PORT }, root);
+  await store.publish(plan);
+  await store.stageDirectories(plan);
+  return { plan, journal: await readConstructionJournal(root, plan) };
+}
+
 export interface RollbackSourceFixtureV1 {
   readonly home: CanonicalAbsolutePathV1;
   readonly root: CanonicalAbsolutePathV1;
   readonly payload: PreparedRollbackPayloadV1;
   readonly plan: RollbackPayloadSourceStagingPlanV1;
   readonly construction: UpdateConstructionPlanV1;
+  readonly constructionJournal: UpdateConstructionJournalV1;
   /** The one planner output frame: the migration inverse, consumed by inventory ordinal 1. */
   readonly frame: SecretScreenedBlobV1;
   readonly preimagePath: CanonicalAbsolutePathV1;
@@ -112,8 +202,7 @@ export async function createRollbackSourceFixture(homes: string[]): Promise<Roll
   const home = parseCanonicalAbsolutePathText(await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "dos-rollback-"))));
   homes.push(home);
   const root = parseCanonicalAbsolutePathText(`${home}/staging/lifecycle/${ROLLBACK_COORDINATOR}`);
-  const paths = rollbackPayloadSourcePaths(root, ROLLBACK_PAYLOAD_ID);
-  for (const directory of [paths.parent, `${root}/update/journals/rollback_payload_source`, `${root}/update/journals/rollback_payload_state`, `${root}/update/plans/rollback_payload_source`, `${home}/rollback`, `${home}/work`]) {
+  for (const directory of [`${home}/rollback`, `${home}/work`]) {
     await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
   }
   const preimagePath = parseCanonicalAbsolutePathText(`${home}/work/replaced.md`);
@@ -175,8 +264,8 @@ export async function createRollbackSourceFixture(homes: string[]): Promise<Roll
   const sources: readonly UpdateConstructionRollbackEntrySourceV1[] = [
     { kind: "guarded_preimage", authority: { kind: "owner_operation_before", ownerPlan, operationOrdinal: 1 }, path: preimagePath, ownerUid: uid as EffectiveUidV1, mode: 384, nlink: 1, bytes: Buffer.byteLength(OLD_OWNER), sha256: sha(OLD_OWNER), ...preimage },
     { kind: "planner_output", ordinal: 0 },
-    { kind: "plan_derived", role: "owner_inverse_plan", plan: ownerPlan, value: leaves[0].projection as CanonicalJsonV1, valueBytes: Buffer.byteLength(leaves[0].projection) },
-    { kind: "plan_derived", role: "schema_migration_inverse_plan", plan: migrationPlan, value: leaves[1].projection as CanonicalJsonV1, valueBytes: Buffer.byteLength(leaves[1].projection) },
+    { kind: "plan_derived", role: "owner_inverse_plan", plan: ownerPlan, value: leaves[0].projection as CanonicalJsonV1, valueBytes: Buffer.byteLength(leaves[0].projection) - 1 },
+    { kind: "plan_derived", role: "schema_migration_inverse_plan", plan: migrationPlan, value: leaves[1].projection as CanonicalJsonV1, valueBytes: Buffer.byteLength(leaves[1].projection) - 1 },
   ];
   const partial = {
     payloadId: ROLLBACK_PAYLOAD_ID,
@@ -185,20 +274,27 @@ export async function createRollbackSourceFixture(homes: string[]): Promise<Roll
     entries: sources.map((source, ordinal) => ({ ordinal, entry: payload.inventory.entries[ordinal] as RollbackPayloadEntryV1, source, sourceProjectionHash: rollbackEntrySourceProjectionHash(source) })),
   };
   const entriesProjectionHash = rollbackSourceEntriesProjectionHash(partial);
-  const construction = { coordinatorId: ROLLBACK_COORDINATOR, rollbackSource: { sourcePlanId: ROLLBACK_SOURCE_ID, ...partial, entriesProjectionHash } } as unknown as UpdateConstructionPlanV1;
-
-  const parent = await identityOf(paths.parent);
-  const plan = buildRollbackPayloadSourceStagingPlan({ id: ROLLBACK_SOURCE_ID, coordinatorId: ROLLBACK_COORDINATOR, stagingRoot: root, sourceParentDev: parent.dev, sourceParentIno: parent.ino, payload, entriesProjectionHash });
-  await nodeFs.writeFile(rollbackPayloadSourceStagingPlanRef(plan, root).path, rollbackPayloadSourceStagingPlanBytes(plan), { mode: 0o600, flag: "wx" });
-  await nodeFs.writeFile(updateParticipantJournalPath(root, "rollback_payload_source", ROLLBACK_SOURCE_ID), rollbackPayloadSourceJournalBytes(initialRollbackPayloadSourceJournal(plan, ROLLBACK_AT)), { mode: 0o600, flag: "wx" });
+  const plan = buildRollbackPayloadSourceStagingPlan({ id: ROLLBACK_SOURCE_ID, coordinatorId: ROLLBACK_COORDINATOR, stagingRoot: root, payload, entriesProjectionHash });
+  const planBytes = rollbackPayloadSourceStagingPlanBytes(plan);
+  const journalBytes = rollbackPayloadSourceJournalBytes(initialRollbackPayloadSourceJournal(plan, ROLLBACK_AT));
   const content = new TextEncoder().encode(BRAIN_BEFORE);
+  const { plan: construction, journal: constructionJournal } = await stageSourceConstruction({
+    root,
+    coordinatorId: ROLLBACK_COORDINATOR,
+    sources: [{ kind: "rollback_payload_source", id: ROLLBACK_SOURCE_ID, plan: planBytes, journal: journalBytes }],
+    rollbackSource: { sourcePlanId: ROLLBACK_SOURCE_ID, payloadId: ROLLBACK_PAYLOAD_ID, rollbackBindingHash: partial.rollbackBindingHash, inventoryHash: partial.inventoryHash, sources },
+    candidate: { materialization: { outputBlobs: [{ ordinal: 0, bytes: content.byteLength, sha256: sha(content) }], rollbackInventoryEntries: payload.inventory.entries } } as unknown as PreparedUpdateCandidateV1,
+  });
+  await nodeFs.mkdir(`${root}/update/journals/rollback_payload_state`, { mode: 0o700 });
+  await nodeFs.writeFile(rollbackPayloadSourceStagingPlanRef(plan, root).path, planBytes, { mode: 0o600, flag: "wx" });
+  await nodeFs.writeFile(updateParticipantJournalPath(root, "rollback_payload_source", ROLLBACK_SOURCE_ID), journalBytes, { mode: 0o600, flag: "wx" });
   const frame = { ordinal: 0, bytes: content.byteLength, sha256: sha(content), content } as SecretScreenedBlobV1;
-  return { home, root, payload, plan, construction, frame, preimagePath };
+  return { home, root, payload, plan, construction, constructionJournal, frame, preimagePath };
 }
 
 /** The originating process's whole source walk: structures and documents, the frame, then the tail and ready. */
 export async function stageRollbackSource(fixture: RollbackSourceFixtureV1, executor = new RollbackPayloadSourceExecutor(rollbackDependencies(), fixture.root)): Promise<void> {
-  await executor.prepare(fixture.plan, fixture.construction, { inversePlan: fixture.payload.inversePlanBytes, inventory: fixture.payload.inventoryBytes });
+  await executor.prepare(fixture.plan, fixture.construction, fixture.constructionJournal, { inversePlan: fixture.payload.inversePlanBytes, inventory: fixture.payload.inventoryBytes });
   await executor.consume(fixture.plan, fixture.construction, 1, fixture.frame);
-  await executor.finish(fixture.plan, fixture.construction);
+  await executor.finish(fixture.plan, fixture.construction, fixture.constructionJournal);
 }

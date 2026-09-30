@@ -44,7 +44,6 @@ import type {
   TransactionPlan,
 } from "@developer-os/core";
 
-import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import type { CliContext } from "../context.js";
@@ -55,6 +54,7 @@ import type { AdmittedV2HomeV1 } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "./context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import {
   cleanManifestAnchorTemp,
   isCodeDefect,
@@ -129,25 +129,9 @@ function globalLockPath(paths: RuntimePaths): CanonicalAbsolutePathV1 {
   return join(paths.stateDir, GLOBAL_LOCK_LEAF) as CanonicalAbsolutePathV1;
 }
 
-/**
- * The same confined owner-path authority `uninstall` builds. It is constructed here rather
- * than imported from `commands/uninstall.ts`, which would make `context.ts` →
- * `lifecycle/mutation-gate.ts` → `commands/uninstall.ts` → `context.ts` a runtime import
- * cycle through the composition root.
- */
 export function gateManifestAdmission(context: CliContext): ManifestAdmissionContextV1 {
   const { paths } = context;
-  const productHome = paths.home as CanonicalAbsolutePathV1;
-  return {
-    evidence: createCanonicalPathEvidence(),
-    sourceRoot: productHome,
-    backupRoot: paths.backupsDir as CanonicalAbsolutePathV1,
-    admitOwnerPath: createOwnerPathAdmission({
-      kind: "confined",
-      roots: [productHome, paths.brain as CanonicalAbsolutePathV1],
-      vendors: resolveVendorHomes(context.env, context.userHome, paths.home),
-    }),
-  };
+  return manifestAdmissionFor(paths, [], resolveVendorHomes(context.env, context.userHome, paths.home));
 }
 
 function guardedPortFor(
@@ -323,8 +307,9 @@ export async function requireLifecycleStagingRoot(
  * which `assertRecoverable` would refuse — so a mutator cleans it before the recovery pass.
  * The cheap inspection runs first because the temp is absent on every healthy home, and the
  * full ledger read is only needed for the surviving allocated IDs the cleanup re-verifies.
+ * `update --apply` allocates through the same allocator, so its recovery calls this too.
  */
-async function cleanAllocatorTemp(
+export async function cleanAllocatorTemp(
   context: CliContext,
   lifecycle: CliLifecycleContext,
   key: LifecycleHomeKeyV1,
@@ -526,6 +511,7 @@ export async function withLifecycleMutation<T>(
   work: (authority: LifecycleMutationAuthorityV1) => Promise<T>,
   resolution?: { readonly standaloneFoundationId: string },
   borrowed?: { readonly global: HeldLifecycleStableLockV1 },
+  residueOf: typeof residueFrom = residueFrom,
 ): Promise<T> {
   const home = await classifyMutationHome(context, lifecycle);
   if (home.kind !== "v2") refuseNonV2(home, context.paths);
@@ -552,7 +538,7 @@ export async function withLifecycleMutation<T>(
 
     await requireLifecycleStagingRoot(lifecycle, context.paths);
     const key = lifecycleHomeKeyFromAdmission(admitted, context.paths);
-    const residue = residueFrom(
+    const residue = residueOf(
       await inspectBootstrapEvidenceAdmission(
         createBootstrapEvidenceInspectionRequest({
           productHome: context.paths.home,

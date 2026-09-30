@@ -268,6 +268,24 @@ describe("buildCapture", () => {
     expect(Object.keys(finding ?? {})).toEqual(["class", "fingerprint"]);
   });
 
+  it("records a user-pattern finding's pattern index and passes over-broad patterns through (NEW-24, D73)", () => {
+    const built = buildCapture({
+      ...request,
+      text: "ab".repeat(150),
+      redact: (text) => redactText(text, TEST_KEY, { userPatterns: ["Northwind", "a"] }),
+    });
+    const [finding] = built.envelope.redaction;
+
+    expect(Object.keys(finding ?? {})).toEqual(["class", "fingerprint", "patternIndex"]);
+    expect(finding?.patternIndex).toBe(1);
+    expect(built.overBroadPatterns).toEqual([1]);
+    expect(built.contents).toContain("patternIndex: 1");
+  });
+
+  it("reports no over-broad pattern when the redactor reported none", () => {
+    expect(buildCapture(request).overBroadPatterns).toEqual([]);
+  });
+
   it("records nothing when nothing was redacted", () => {
     expect(buildCapture(request).envelope.redaction).toEqual([]);
   });

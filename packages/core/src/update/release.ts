@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { EXIT_CODES } from "../result.js";
 import { admitCanonicalAbsolutePath, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1 } from "./paths.js";
 import {
@@ -224,11 +224,7 @@ function array(value: unknown, label: string, minimum: number, maximum: number):
 }
 function string(value: unknown, label: string): string { if (typeof value !== "string") invalid(label); return value; }
 function bytes(value: string): number { return textEncoder.encode(value).byteLength; }
-export function compareUtf8(left: string, right: string): number {
-  const a = textEncoder.encode(left); const b = textEncoder.encode(right);
-  for (let index = 0; index < Math.min(a.length, b.length); index += 1) { const difference = (a[index] as number) - (b[index] as number); if (difference !== 0) return difference; }
-  return a.length - b.length;
-}
+export { compareUtf8 };
 function compareUInt64(left: UInt64DecimalV1, right: UInt64DecimalV1): number { return BigInt(left) === BigInt(right) ? 0 : BigInt(left) < BigInt(right) ? -1 : 1; }
 function compareSemver(left: StableSemverV1, right: StableSemverV1): number {
   const a = left.split(".").map(Number); const b = right.split(".").map(Number);

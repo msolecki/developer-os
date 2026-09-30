@@ -103,7 +103,7 @@ function isPrefixedLeaf(dir: string, extension: string, path: string): boolean {
   }
 }
 
-/** Spec §2.2's closed table: exact, owner-bound and arm-bound. Nothing here is a general root. */
+/** `foundation.md` §12.5's closed table: exact, owner-bound and arm-bound. Nothing here is a general root. */
 function isVendorAuthorized(vendors: VendorHomesV1, owner: ArtifactOwner, path: string, arm: OwnerPathArmV1): boolean {
   if (path.split("/").slice(1).some((segment) => segment === "" || segment === "." || segment === "..")) return false;
   if (owner === "claude") {
@@ -138,7 +138,7 @@ function isVendorAuthorized(vendors: VendorHomesV1, owner: ArtifactOwner, path: 
  * cannot compile without a written justification, and readers see it right at
  * the call rather than trusting an absent argument.
  *
- * `vendors` adds spec §2.2's closed vendor authorization on top of `roots`;
+ * `vendors` adds `foundation.md` §12.5's closed vendor authorization on top of `roots`;
  * `null` confines to `roots` alone.
  *
  * A refused path is rewritten to a value that is guaranteed to differ from

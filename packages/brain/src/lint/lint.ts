@@ -138,6 +138,32 @@ const WHITESPACE = /\s/u;
  */
 const MIN_SWALLOWED_PROSE_LENGTH = 24;
 
+const EMOJI_BEFORE_JOINER =
+  /^[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Variation_Selector}]$/u;
+const EMOJI_AFTER_JOINER = /^\p{Extended_Pictographic}$/u;
+const SHAPING_SCRIPT =
+  /^[\p{scx=Arabic}\p{scx=Syriac}\p{scx=Devanagari}\p{scx=Bengali}\p{scx=Gurmukhi}\p{scx=Gujarati}\p{scx=Oriya}\p{scx=Tamil}\p{scx=Telugu}\p{scx=Kannada}\p{scx=Malayalam}\p{scx=Sinhala}]$/u;
+
+/**
+ * A U+200D that joins nothing (BACKLOG NEW-31, D73). `perceptualKey` keeps every joiner,
+ * so a stray one between two letters is invisible yet keeps two titles apart.
+ *
+ * **The shaping test is one-sided on purpose.** A Malayalam chillu ends a word with a
+ * joiner, and Persian puts one after a final letter to force its joining form; requiring a
+ * shaping letter on both sides would warn on both, and a benign warning trains users to
+ * ignore the class.
+ */
+function hasStrayJoiner(value: string): boolean {
+  const chars = Array.from(value);
+  return chars.some((char, i) => {
+    if (char !== "\u200D") return false;
+    const before = chars[i - 1] ?? "";
+    const after = chars[i + 1] ?? "";
+    const emoji = EMOJI_BEFORE_JOINER.test(before) && EMOJI_AFTER_JOINER.test(after);
+    return !emoji && !SHAPING_SCRIPT.test(before) && !SHAPING_SCRIPT.test(after);
+  });
+}
+
 function frontmatterFindings(
   build: IndexBuildResult,
   config: BrainConfigV1,
@@ -282,6 +308,17 @@ function frontmatterFindings(
           note.path,
           "aliases",
           "an alias with no visible character is a link target nobody can type; remove it or give it a name",
+        ),
+      );
+    }
+    if (hasStrayJoiner(note.title)) {
+      findings.push(
+        finding(
+          "frontmatter",
+          "warn",
+          note.path,
+          "title",
+          "this title carries a zero-width joiner between characters that do not join, which is invisible and can hide a duplicate title; remove it",
         ),
       );
     }
@@ -634,7 +671,8 @@ function duplicateFindings(build: IndexBuildResult): readonly LintFinding[] {
      * reported, and the catalog again showed two rows a human reads as identical. That is
      * the failure this class was opened for, one character class over. The perceptual key
      * removes the default-ignorable set — **except U+200D**, which every screen in this
-     * repository carves out so a joined emoji is not read as three people — and folds
+     * repository carves out so a joined emoji is not read as three people, and whose stray
+     * uses `hasStrayJoiner` reports as a `frontmatter` warning instead (NEW-31) — and folds
      * NFC. It keeps whitespace and every diacritic, so `Caf\u00E9` never groups with
      * `Cafe`.
      *
@@ -758,7 +796,7 @@ function isolatedFindings(build: IndexBuildResult): readonly LintFinding[] {
     );
 }
 
-/** A constant, not configuration (spec §5.3). */
+/** A constant, not configuration (`brain.md` §3, `gap`). */
 const GAP_MIN_NOTES = 3;
 
 function gapFindings(build: IndexBuildResult): readonly LintFinding[] {

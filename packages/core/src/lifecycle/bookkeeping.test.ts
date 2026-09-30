@@ -317,6 +317,43 @@ describe("the closed lifecycle bookkeeping set", () => {
     ).toStrictEqual({ admitted: false, offendingPath: ancestor });
   });
 
+  it("refuses an empty ancestor whose retained evidence names a child that is gone (NEW-89)", () => {
+    const lifecycle = join(HOME, "staging", "lifecycle");
+    const ancestor = join(lifecycle, "lc_0000");
+    const tombstone = join(ancestor, "plan.json.tombstone");
+    expect(
+      inspectLifecycleBookkeepingShape(
+        HOME,
+        lifecycle,
+        observing({ [lifecycle]: directory(["lc_0000"]), [ancestor]: directory() }),
+        UID,
+        residue([tombstone]),
+      ),
+    ).toStrictEqual({ admitted: false, offendingPath: ancestor });
+  });
+
+  it("refuses an empty nested ancestor beneath a non-empty one, naming the empty one (NEW-89)", () => {
+    const lifecycle = join(HOME, "staging", "lifecycle");
+    const ancestor = join(lifecycle, "lc_0000");
+    const nested = join(ancestor, "inner");
+    const kept = join(ancestor, "plan.json.tombstone");
+    const gone = join(nested, "gone.json.tombstone");
+    expect(
+      inspectLifecycleBookkeepingShape(
+        HOME,
+        lifecycle,
+        observing({
+          [lifecycle]: directory(["lc_0000"]),
+          [ancestor]: directory(["plan.json.tombstone", "inner"]),
+          [kept]: { kind: "regular_file", ownerUid: UID, mode: 0o600, nlink: 1, size: 7n },
+          [nested]: directory(),
+        }),
+        UID,
+        residue([kept, gone]),
+      ),
+    ).toStrictEqual({ admitted: false, offendingPath: nested });
+  });
+
   it("never admits a path outside the set", () => {
     for (const relative of ["logs", "schemas", "state", "state/transactions/child", "staging/fresh-v2-init"]) {
       const path = join(HOME, relative);
@@ -332,7 +369,7 @@ describe("the closed lifecycle bookkeeping set", () => {
     }
   });
 
-  describe("an instruction backup left by uninstall (A12 spec §6.3)", () => {
+  describe("an instruction backup left by uninstall (foundation.md §12.3)", () => {
     const backups = join(HOME, "backups");
     const transactions = join(backups, "transactions");
     const HEX = "0123456789abcdef".repeat(4);

@@ -9,7 +9,7 @@ import type { UpdateFoundationParticipantRefV2 } from "./migrations.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
 import type { PreparedUpdateCandidateV1, RollbackPayloadEntryV1, RollbackPayloadIdV1 } from "./preview.js";
 import { parseRollbackPayloadId } from "./preview.js";
-import { compareUtf8, parseBundleRelativePath, validateReleaseMetadataIdentity, type BundleRelativePathV1, type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
+import { compareUtf8, parseBundleRelativePath, type BundleRelativePathV1, type ReleaseIdentityV1 } from "./release.js";
 import {
   encodeTenDigitOrdinal,
   parseLowerHexSha256,
@@ -147,7 +147,11 @@ export type UpdateConstructionPlanDerivedSourceV1 =
   | { readonly kind: "plan_derived"; readonly role: "manifest_after"; readonly plan: ImmutableUpdatePlanRefV1<"manifest_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
   | { readonly kind: "plan_derived"; readonly role: "release_trust_after"; readonly plan: ImmutableUpdatePlanRefV1<"release_trust_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
   | { readonly kind: "plan_derived"; readonly role: "active_release_after"; readonly plan: ImmutableUpdatePlanRefV1<"active_release_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
-  | { readonly kind: "plan_derived"; readonly role: "rollback_record_after"; readonly plan: ImmutableUpdatePlanRefV1<"rollback_record_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number };
+  | { readonly kind: "plan_derived"; readonly role: "rollback_record_after"; readonly plan: ImmutableUpdatePlanRefV1<"rollback_record_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
+  /** P4 (D72): the signed delegation (0), release index (1) or bundle manifest (2) of the bundle plan's metadata. */
+  | { readonly kind: "plan_derived"; readonly role: "release_metadata_after"; readonly metadata: 0 | 1 | 2; readonly value: CanonicalJsonV1; readonly valueBytes: number }
+  /** D72 addendum: the Codex registration record's `replace` content, derived by the CLI owner provider (P6(d)). */
+  | { readonly kind: "plan_derived"; readonly role: "codex_registration_after"; readonly plan: ImmutableUpdatePlanRefV1<"owner_update">; readonly value: CanonicalJsonV1; readonly valueBytes: number };
 
 export type UpdateConstructionPayloadSourceV1 =
   | { readonly kind: "planner_output"; readonly ordinal: number }
@@ -165,21 +169,19 @@ export type UpdateConstructionPayloadSourceV1 =
       readonly sourceDev: UInt64DecimalV1;
       readonly sourceIno: UInt64DecimalV1;
     }
-  | {
-      readonly kind: "guarded_signed_metadata";
-      readonly metadata: ReleaseMetadataIdentityV1;
-      readonly role: "delegation" | "release_index" | "bundle_manifest";
-      readonly path: CanonicalAbsolutePathV1;
-      readonly ownerUid: EffectiveUidV1;
-      readonly mode: 384;
-      readonly nlink: 1;
-      readonly bytes: number;
-      readonly sha256: LowerHexSha256;
-      readonly dev: UInt64DecimalV1;
-      readonly ino: UInt64DecimalV1;
-    }
+  | UpdateConstructionRetainedRollbackBlobSourceV1
   | GuardedPreimageSourceV1
   | UpdateConstructionPlanDerivedSourceV1;
+
+/** P9 (D72): `update_rollback`'s restore bytes, one blob of the retained payload by inventory ordinal. */
+export interface UpdateConstructionRetainedRollbackBlobSourceV1 {
+  readonly kind: "retained_rollback_blob";
+  readonly payloadId: RollbackPayloadIdV1;
+  readonly ordinal: number;
+  readonly bytes: number;
+  readonly sha256: LowerHexSha256;
+  readonly mode: 384 | 448;
+}
 
 export type UpdateConstructionPayloadKindV1 = "foundation_initial" | "foundation_content" | "foundation_digest" | "owner_content" | "migration_content" | "state_after";
 
@@ -398,8 +400,12 @@ const MAX_FRAMES = 1_000_000;
 const MAX_FRAME_BYTES = 16_777_216;
 const MAX_ROLLBACK_ENTRIES = 1_000_000;
 const MAX_LEAF_ID_BYTES = 106;
-const PAYLOAD_SOURCE_ORDER: readonly UpdateConstructionPayloadSourceV1["kind"][] = ["planner_output", "signed_bundle_entry", "guarded_preimage", "guarded_signed_metadata", "plan_derived"];
+const PAYLOAD_SOURCE_ORDER: readonly UpdateConstructionPayloadSourceV1["kind"][] = ["planner_output", "signed_bundle_entry", "retained_rollback_blob", "guarded_preimage", "plan_derived"];
+const RETAINED_BLOB_KEYS = ["kind", "payloadId", "ordinal", "bytes", "sha256", "mode"];
+const RETAINED_BLOB_ROLES: readonly RollbackPayloadEntryV1["role"][] = ["owner_preimage", "migration_preimage", "external_effect_preimage"];
 const SOURCE_JOURNAL_KINDS: readonly UpdateConstructionJournalKindV1[] = ["bundle_source_staging", "rollback_payload_source"];
+/** P1 (D72): each planned source's fixed parent is a construction directory under `update/source`. */
+const SOURCE_PARENTS = [["bundle_source_staging", "update/source/bundle"], ["rollback_payload_source", "update/source/rollback"]] as const;
 const TARGET_JOURNAL_KINDS: readonly UpdateTargetJournalKindV1[] = ["bundle_publication", "owner_update", "owner_external_effect", "schema_migration", "manifest_state", "release_trust_state", "active_release_state", "rollback_record_state", "rollback_payload_state"];
 const LEAF_KINDS: readonly UpdateLeafPlanKindV1[] = ["update_execution", "bundle_source_staging", "bundle_publication", "owner_update", "owner_external_effect", "schema_migration", "manifest_state", "release_trust_state", "active_release_state", "rollback_record_state", "rollback_payload_source", "rollback_payload_state", "target_verification", "terminal_retirement"];
 const PHASES: readonly UpdateConstructionPhaseV1[] = ["planned", "directories_staging", "files_staging", "sources_staging", "files_ready", "outer_plan_publishing", "outer_journal_publishing", "handed_off", "compensating", "rolled_back", "compacting"];
@@ -515,6 +521,27 @@ export function payloadSourceProjectionHash(source: UpdateConstructionPayloadSou
   return noLfHash(`developer-os/update-construction-payload-source/${source.kind}/v1`, source);
 }
 
+/** `<product-home>/rollback/<payload-id>/blobs/<ten-digit-ordinal>.bin`, the blob a retained source reopens. */
+export function retainedRollbackBlobPath(productHome: CanonicalAbsolutePathV1, source: Pick<UpdateConstructionRetainedRollbackBlobSourceV1, "payloadId" | "ordinal">): CanonicalAbsolutePathV1 {
+  const ordinal = integer(source.ordinal, 0, MAX_ROLLBACK_ENTRIES - 1, "UpdateConstructionRetainedRollbackBlobSourceV1.ordinal");
+  return parseCanonicalAbsolutePathText(`${productHome}/rollback/${parseRollbackPayloadId(source.payloadId)}/blobs/${encodeTenDigitOrdinal(ordinal)}.bin`);
+}
+
+/**
+ * P9 (D72): a retained blob source names exactly one preimage row of the reopened retained
+ * inventory — same payload, ordinal-derived blob path, bytes and hash. Any mismatch throws; the
+ * caller classifies it as exit 6.
+ */
+export function checkRetainedRollbackBlobSource(source: UpdateConstructionRetainedRollbackBlobSourceV1, inventory: { readonly payloadId: RollbackPayloadIdV1; readonly entries: readonly RollbackPayloadEntryV1[] }): RollbackPayloadEntryV1 {
+  const label = "UpdateConstructionRetainedRollbackBlobSourceV1";
+  if (source.payloadId !== inventory.payloadId) fail(`${label}.payloadId: not the retained payload`);
+  const entry = inventory.entries[source.ordinal];
+  if (entry?.ordinal !== source.ordinal || !RETAINED_BLOB_ROLES.includes(entry.role)) fail(`${label}.ordinal: not a retained preimage row`);
+  if ((entry.path as string) !== `blobs/${encodeTenDigitOrdinal(source.ordinal)}.bin`) fail(`${label}.ordinal: not the ordinal's blob path`);
+  if (entry.bytes !== source.bytes || entry.sha256 !== source.sha256) fail(`${label}: differs from its inventory row`);
+  return entry;
+}
+
 export function rollbackEntrySourceProjectionHash(source: UpdateConstructionRollbackEntrySourceV1): LowerHexSha256 {
   return noLfHash(`developer-os/update-rollback-entry-source/${source.kind}/v1`, source);
 }
@@ -559,7 +586,7 @@ function fileRank(role: UpdateConstructionFileInputRoleV1): number {
     case "payload":
       return 3 + PAYLOAD_SOURCE_ORDER.indexOf(role.source.kind);
     case "recovery_executor":
-      return role.state === "executing" ? 9 : 10;
+      return role.state === "executing" ? 4 + PAYLOAD_SOURCE_ORDER.length : 5 + PAYLOAD_SOURCE_ORDER.length;
   }
 }
 
@@ -638,9 +665,20 @@ function checkGuardedPreimage(source: Readonly<Record<string, unknown>>, staging
 }
 
 /** The payload arm's legality for its row, returning the authority key a guarded preimage selects. */
-function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: UpdateConstructionPayloadKindV1, source: Readonly<Record<string, unknown>>, stagingRoot: CanonicalAbsolutePathV1, label: string): string | null {
+function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: UpdateConstructionPayloadKindV1, source: Readonly<Record<string, unknown>>, stagingRoot: CanonicalAbsolutePathV1, operation: UpdateConstructionPlanV1["operation"], label: string): string | null {
   const matches = (bytes: unknown, sha256: unknown, mode: unknown): boolean => bytes === row.bytes && sha256 === row.sha256 && mode === row.mode;
   switch (source.kind) {
+    case "retained_rollback_blob": {
+      exact(source, RETAINED_BLOB_KEYS, label);
+      if (operation !== "update_rollback") fail(`${label}: a retained blob outside update_rollback`);
+      oneOf(payloadKind, ["foundation_content", "owner_content", "migration_content"], `${label}: retained blob for ${payloadKind}`);
+      const payloadId = parseRollbackPayloadId(source.payloadId);
+      const ordinal = integer(source.ordinal, 0, MAX_ROLLBACK_ENTRIES - 1, `${label}.ordinal`);
+      integer(source.bytes, 0, MAX_FRAME_BYTES, `${label}.bytes`);
+      parseLowerHexSha256(source.sha256);
+      if (!matches(source.bytes, source.sha256, source.mode)) fail(`${label}: differs from its row`);
+      return `retained_rollback_blob/${payloadId}/${ordinal.toString(10)}`;
+    }
     case "planner_output":
       exact(source, ["kind", "ordinal"], label);
       integer(source.ordinal, 0, MAX_FRAMES - 1, `${label}.ordinal`);
@@ -656,19 +694,6 @@ function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: Upda
       parseLowerHexSha256(source.inventoryHash);
       integer(source.sourceBytes, 0, MAXIMUM_CONSTRUCTION_PLAN_BYTES, `${label}.sourceBytes`);
       if (!matches(source.sourceBytes, source.sourceHash, source.sourceMode)) fail(`${label}: differs from its row`);
-      return null;
-    case "guarded_signed_metadata":
-      exact(source, ["kind", "metadata", "role", "path", "ownerUid", "mode", "nlink", "bytes", "sha256", "dev", "ino"], label);
-      if (payloadKind !== "state_after") fail(`${label}: signed metadata for ${payloadKind}`);
-      validateReleaseMetadataIdentity(source.metadata);
-      oneOf(source.role, ["delegation", "release_index", "bundle_manifest"], `${label}.role`);
-      parseCanonicalAbsolutePathText(source.path);
-      integer(source.ownerUid, 0, 4_294_967_295, `${label}.ownerUid`);
-      if (source.nlink !== 1) fail(`${label}.nlink`);
-      integer(source.bytes, 1, MAXIMUM_CONSTRUCTION_JOURNAL_BYTES, `${label}.bytes`);
-      parseUInt64Decimal(source.dev);
-      parseUInt64Decimal(source.ino);
-      if (!matches(source.bytes, source.sha256, source.mode) || source.mode !== 384) fail(`${label}: differs from its row`);
       return null;
     case "guarded_preimage": {
       oneOf(payloadKind, ["foundation_content", "owner_content", "migration_content"], `${label}: preimage for ${payloadKind}`);
@@ -699,6 +724,22 @@ function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: Upda
         if (derived.sha256 !== source.plannedBytesHash) fail(`${label}.plannedBytesHash`);
         if (derived.bytes !== row.bytes || derived.sha256 !== row.sha256 || row.mode !== 384) fail(`${label}: differs from its row`);
         return null;
+      }
+      let authority: string | null = null;
+      if (source.role === "codex_registration_after") {
+        exact(source, ["kind", "role", "plan", "value", "valueBytes"], label);
+        if (payloadKind !== "owner_content") fail(`${label}: Codex registration record for ${payloadKind}`);
+        const plan = checkPlanRef(source.plan, "owner_update", stagingRoot, `${label}.plan`);
+        const derived = checkDerivedValue(source.value, source.valueBytes, MAXIMUM_LEAF_PLAN_BYTES - 1, label);
+        if (derived.bytes !== row.bytes || derived.sha256 !== row.sha256 || row.mode !== 384) fail(`${label}: differs from its row`);
+        // One registration record per Codex owner plan; the plan's `replace` row names this payload.
+        return `codex_registration/${String(plan.id)}`;
+      }
+      if (source.role === "release_metadata_after") {
+        exact(source, ["kind", "role", "metadata", "value", "valueBytes"], label);
+        if (payloadKind !== "state_after") fail(`${label}: release metadata for ${payloadKind}`);
+        // One row per signed document. The plan holds no release identity, so the ordinal's signed hash binds where the row is composed.
+        authority = `release_metadata/${oneOf(source.metadata, [0, 1, 2], `${label}.metadata`).toString(10)}`;
       } else {
         exact(source, ["kind", "role", "plan", "value", "valueBytes"], label);
         const kinds = { manifest_after: "manifest_state", release_trust_after: "release_trust_state", active_release_after: "active_release_state", rollback_record_after: "rollback_record_state" } as const;
@@ -708,7 +749,7 @@ function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: Upda
       }
       const derived = checkDerivedValue(source.value, source.valueBytes, MAXIMUM_CONSTRUCTION_JOURNAL_BYTES - 1, label);
       if (derived.bytes !== row.bytes || derived.sha256 !== row.sha256 || row.mode !== 384) fail(`${label}: differs from its row`);
-      return null;
+      return authority;
     }
     default:
       return fail(`${label}.kind`);
@@ -745,7 +786,7 @@ function checkRollbackEntrySource(entry: UpdateConstructionRollbackSourceEntryV1
   }
 }
 
-/** §5.3/§9.2 payload paths; guarded signed metadata has no derivation of its own here. */
+/** §5.3/§9.2 payload paths; a release-metadata row's path derives from its bundle plan, which this plan does not hold. */
 function derivedPayloadPath(root: string, ordinal: number, payloadKind: UpdateConstructionPayloadKindV1, role: Extract<UpdateConstructionFileRoleV1, { readonly kind: "payload" }>): string | null {
   const source = role.source;
   if (payloadKind === "foundation_content" || payloadKind === "foundation_digest" || payloadKind === "owner_content" || payloadKind === "migration_content") return `${root}/update/payloads/${encodeTenDigitOrdinal(ordinal)}.payload`;
@@ -754,6 +795,8 @@ function derivedPayloadPath(root: string, ordinal: number, payloadKind: UpdateCo
     case "foundation_initial_journal":
       return `${root}/participants/foundation/${source.participant.id}/initial-journal.json`;
     case "foundation_staged_digest":
+    case "release_metadata_after":
+    case "codex_registration_after":
       return null;
     case "manifest_after":
       return `${root}/participants/manifest/${source.plan.id}/after.json`;
@@ -888,7 +931,7 @@ export function validateConstructionBijections(plan: UpdateConstructionPlanV1): 
         exact(role, ["kind", "payloadKind", "source", "sourceProjectionHash"], `${rowLabel}.role`);
         const payloadKind = oneOf(role.payloadKind, ["foundation_initial", "foundation_content", "foundation_digest", "owner_content", "migration_content", "state_after"] as const, `${rowLabel}.role.payloadKind`);
         const source = record(role.source, `${rowLabel}.role.source`);
-        takeAuthority(authorities, checkPayloadSource(row, payloadKind, source, rootPath, `${rowLabel}.role.source`), rowLabel);
+        takeAuthority(authorities, checkPayloadSource(row, payloadKind, source, rootPath, operation, `${rowLabel}.role.source`), rowLabel);
         const derived = derivedPayloadPath(rootPath, index, payloadKind, row.role as Extract<UpdateConstructionFileRoleV1, { readonly kind: "payload" }>);
         if (derived !== null && derived !== path) fail(`${rowLabel}.path: not the derived payload path`);
         if (role.sourceProjectionHash !== payloadSourceProjectionHash(source as unknown as UpdateConstructionPayloadSourceV1)) fail(`${rowLabel}.role.sourceProjectionHash`);
@@ -912,7 +955,14 @@ export function validateConstructionBijections(plan: UpdateConstructionPlanV1): 
   });
   if (executionPlans !== 1) fail(`${label}.files: not exactly one update_execution plan`);
   if (recoveryStates.join(",") !== "executing,terminal_cleanup" || files.length < 2) fail(`${label}.files: the two recovery records`);
-  if (directories.some((directory) => directory.path !== evidenceDirectory && !directoryParents.has(directory.path))) fail(`${label}.directories: an unused directory`);
+  const sourceParents = new Set<string>();
+  for (const [kind, relative] of SOURCE_PARENTS) {
+    const parent = `${rootPath}/${relative}`;
+    const planned = [...leafPlans].some((key) => key.startsWith(`${kind}/`));
+    if (planned !== directories.some((directory) => directory.path === parent)) fail(`${label}.directories: ${relative} without exactly its source plan row`);
+    if (planned) sourceParents.add(parent);
+  }
+  if (directories.some((directory) => directory.path !== evidenceDirectory && !sourceParents.has(directory.path) && !directoryParents.has(directory.path))) fail(`${label}.directories: an unused directory`);
 
   // Rollback source: present exactly for apply, its entries contiguous and hashed both ways.
   const rollback = input.rollbackSource as UpdateConstructionRollbackSourceV1 | null;
@@ -991,7 +1041,8 @@ export function buildConstructionPlan(input: UpdateConstructionPlanInputV1): Upd
   const ordered = input.files;
 
   const needed = new Set<string>([`${root}/update`, `${root}/update/construction/evidence`]);
-  for (const path of [...ordered.map((file) => file.path), `${root}/update/construction/evidence/x`]) {
+  const sourceParents = SOURCE_PARENTS.filter(([kind]) => ordered.some((file) => file.role.kind === "immutable_plan" && file.role.planKind === kind)).map(([, relative]) => `${root}/${relative}/x`);
+  for (const path of [...ordered.map((file) => file.path), `${root}/update/construction/evidence/x`, ...sourceParents]) {
     for (let parent = parentOf(path); below(parent, root); parent = parentOf(parent)) needed.add(parent);
   }
   const update = `${root}/update`;

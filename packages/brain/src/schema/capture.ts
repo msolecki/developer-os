@@ -43,10 +43,15 @@ export const CAPTURE_STATUSES: readonly CaptureStatus[] = Object.freeze([
  * disagreement is recorded rather than silently resolved: widening this to
  * carry a location is a decision for the subsystem whose threat model owns
  * untrusted input, not a gap to fill in passing.
+ *
+ * **One widening was decided, and it is not a location** (founder decision D73, NEW-24): a
+ * `user-pattern` finding carries `patternIndex`, the zero-based row of the `[redaction]`
+ * table that produced it. It names the user's own configuration, never the text matched.
  */
 export interface CaptureRedactionFinding {
   readonly class: string;
   readonly fingerprint: string;
+  readonly patternIndex?: number;
 }
 
 /** The note a note capture replaces or creates, recorded at capture time. */

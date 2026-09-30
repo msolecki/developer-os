@@ -201,10 +201,9 @@ export const redactionSchema = z
            * and `"e"` share is not shortness; it is that they match ubiquitously, which
            * is a property of the *text* and cannot be measured here.
            *
-           * **So over-matching is deliberately not bounded by this schema.** A pattern
-           * short or common enough to match most of a note still refuses every ingest,
-           * and closing that needs a redaction-time density check plus a refusal that
-           * names the offending entry. `BACKLOG.md` §1 **NEW-24** carries it.
+           * **So over-matching is deliberately not bounded by this schema.** It is
+           * measured at redaction time by match density instead, and `capture` and
+           * `ingest` name the offending entry by index (NEW-24, D73).
            */
           .refine((value) => value.trim().length > 0, {
             message: "A redaction pattern must contain a non-whitespace character",

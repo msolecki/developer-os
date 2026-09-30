@@ -1,3 +1,4 @@
+import { userInfo } from "node:os";
 import { isAbsolute } from "node:path";
 import { cwd } from "node:process";
 import { parseStructuredPayload, screenProseArgument } from "@developer-os/security";
@@ -16,6 +17,7 @@ export type ClaudeRunResult =
   | { readonly ok: false; readonly reason: "signal"; readonly signal: string }
   | { readonly ok: false; readonly reason: "exit"; readonly exitCode: number }
   | { readonly ok: false; readonly reason: "malformed-output" }
+  | { readonly ok: false; readonly reason: "vendor-error" }
   | { readonly ok: false; readonly reason: "spawn-failed" }
   | { readonly ok: false; readonly reason: "refused"; readonly detail: string };
 
@@ -47,6 +49,15 @@ const MAX_TURNS_CEILING = 50;
  * Claude table rows 14-17.
  */
 export const DEFAULT_MAX_TURNS = 5;
+
+// NEW-75, Claude Code 2.1.283: under `env: {}` the Keychain login is not found
+// ("Not logged in"); `USER`/`LOGNAME` alone fix it. Read from the password
+// database, never `process.env`; `HOME` stays refused (D15) —
+// `docs/architecture/vendor-invocation.md`, Task 6.
+function keychainAccountEnvironment(): Readonly<Record<string, string>> {
+  const account = userInfo().username;
+  return { USER: account, LOGNAME: account };
+}
 
 export async function invokeClaude(
   installation: ClaudeInstallation,
@@ -137,7 +148,7 @@ export async function invokeClaude(
       cwd: cwd(),
       stdin: "",
       timeoutMs: invocation.timeoutMs,
-      env: {},
+      env: keychainAccountEnvironment(),
     });
   } catch {
     return { ok: false, reason: "spawn-failed" };
@@ -153,5 +164,34 @@ export async function invokeClaude(
   if (result.exitCode !== 0) {
     return { ok: false, reason: "exit", exitCode: result.exitCode ?? 1 };
   }
-  return parseStructuredPayload(result.stdout);
+  return parsePrintEnvelope(result.stdout);
+}
+
+// Claude Code 2.1.283 wraps the model's final text in a `type: "result"`
+// envelope and reports errors such as "Not logged in" as `is_error: true` at
+// exit 0 — `docs/architecture/claude-adapter.md` §11.1.
+function parsePrintEnvelope(stdout: string): ClaudeRunResult {
+  const parsed = parseStructuredPayload(stdout);
+  if (!parsed.ok) return parsed;
+  const envelope = parsed.payload;
+  if (
+    typeof envelope !== "object" ||
+    envelope === null ||
+    !("type" in envelope) ||
+    envelope.type !== "result"
+  ) {
+    return { ok: false, reason: "malformed-output" };
+  }
+  if ("is_error" in envelope && envelope.is_error === true) {
+    return { ok: false, reason: "vendor-error" };
+  }
+  if (!("result" in envelope) || typeof envelope.result !== "string") {
+    return { ok: false, reason: "malformed-output" };
+  }
+  const direct = parseStructuredPayload(envelope.result);
+  if (direct.ok) return direct;
+  const fenced = /^```(?:json)?\n([\s\S]*)\n```$/u.exec(envelope.result.trim());
+  return fenced?.[1] === undefined
+    ? { ok: false, reason: "malformed-output" }
+    : parseStructuredPayload(fenced[1]);
 }

@@ -127,8 +127,8 @@ export interface RecordingRunner extends ProcessRunner {
 /**
  * Records every request and answers each vendor in its own dialect: Codex
  * streams JSONL and takes the response from the last `item.completed` whose
- * `item.type` is `agent_message`, while Claude parses stdout as one JSON
- * document. A fake that spoke one dialect to both would let a bridge that
+ * `item.type` is `agent_message`, while Claude takes it from the `result`
+ * string of one `type: "result"` envelope. A fake that spoke one dialect to both would let a bridge that
  * confused them pass.
  *
  * **That justification described coverage this file did not have until
@@ -229,7 +229,7 @@ export function createRecordingRunner(): RecordingRunner {
               }),
               "",
             ].join("\n")
-          : document;
+          : JSON.stringify({ type: "result", subtype: "success", is_error: false, result: document });
       return { stdout, stderr: "", exitCode: 0, signal: null, timedOut: false };
     },
   };
@@ -371,6 +371,8 @@ export async function createSecurityFixture(
           stat: () =>
             /** `S_IFREG` included: the guard checks the file type, not only the bits. */
             Promise.resolve({ uid: process.getuid?.() ?? 0, mode: 0o100755 }),
+          /** No link on the synthetic chain; NEW-32's stepwise resolver would otherwise readlink a path that does not exist. */
+          readlink: () => Promise.resolve(null),
         })
       : new FakePlatformAdapter({ userHome, agents });
 

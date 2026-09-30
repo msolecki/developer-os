@@ -159,11 +159,14 @@ describe("reportCodexCapabilities", () => {
       pluginRoot: "/synthetic/plugin",
       probe: true,
     });
-    expect(report.capabilities.skills).toBe("unknown");
+    // NEW-62: the listing answered and our tree is not in it — a definite
+    // negative, printed differently from a listing that could not be read.
+    expect(report.capabilities.skills).toBe("no");
+    expect(report.summary).toContain("skills=no");
   });
 
   /**
-   * A13 §8.1 and NEW-65: a plugin listing proves the tree is loaded, not that
+   * `hooks.md` §3.6 and NEW-65: a plugin listing proves the tree is loaded, not that
    * a hook fired, so without a firing record `plugin_hooks` stays `unknown`.
    */
   it("reports plugin_hooks as unknown when the probe observes our tree but nothing fired", async () => {
@@ -298,7 +301,7 @@ describe("the hook keys come from firing records", () => {
         ["session_end_capture", "observed"],
       ]),
     });
-    expect(report.capabilities.skills).toBe("unknown");
+    expect(report.capabilities.skills).toBe("no");
     expect(report.capabilities.session_end_capture).toBe("not-used");
   });
 

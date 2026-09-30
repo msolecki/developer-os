@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { cwd as processCwd } from "node:process";
 
-import { containsPath, EXIT_CODES, success } from "@developer-os/core";
+import { containsPath, EXIT_CODES, parseCanonicalAbsolutePathText, success } from "@developer-os/core";
 import type {
   CliResult,
   DeveloperOsConfigV1,
@@ -20,11 +20,12 @@ import {
   parseNote,
   PRIVATE_FOLDERS,
   resolveBrainConfig,
+  topicOfFolder,
 } from "@developer-os/brain";
 import type { BrainConfigV1, CaptureNoteTargetV1, CaptureStatus } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
 import { createRedactor } from "@developer-os/security";
-import type { Redactor } from "@developer-os/security";
+import type { RedactionScope, Redactor } from "@developer-os/security";
 import type {
   CliInstallation,
   DiscoverCliDependencies,
@@ -37,6 +38,12 @@ import {
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
+import {
+  PROBE_FILE_SYSTEM,
+  pinProbeExecutable,
+  recheckProbeExecutable,
+} from "../pinned-executable.js";
+import type { ProbeFileSystemV1 } from "../pinned-executable.js";
 import { slugify } from "../project-slug.js";
 import {
   fingerprintDirectory,
@@ -99,6 +106,8 @@ export interface CaptureDependencies {
   readonly detect: (
     env: Readonly<Record<string, string | undefined>>,
   ) => string;
+  /** The host the version probe's executable is admitted and rechecked against; absent means the real one. */
+  readonly executables?: ProbeFileSystemV1;
 }
 
 const DEFAULT_DEPENDENCIES: CaptureDependencies = {
@@ -202,12 +211,15 @@ function isAgentName(agent: string): agent is AgentName {
  * 2026-08-15 and that date only the first was live, because NEW-21 had not
  * observed the second.
  *
- * **What it spawns is a PATH-resolved binary, and this command now pays the check
- * that makes it safe to.** `PlatformAdapter`'s own type says whoever executes a
- * discovered binary owes an owner and mode check first; no caller paid it until
- * 2026-08-17, and this command had joined the offenders on 2026-08-15 when the
- * Claude row made the path live. `CLAUDECODE` is trivially settable, so the
- * trigger was never a privilege an attacker had to earn.
+ * **What it spawns is the PATH-selected binary's real path, pinned and rechecked
+ * (BACKLOG NEW-46).** `CLAUDECODE` is trivially settable, so the trigger was never a
+ * privilege an attacker had to earn. The selection is resolved once through
+ * `admitOwnedExecutable` (D72 Q2-A's ownership and ancestor rule), pinned by
+ * `{dev, ino, mode, size, ctimeNs}` rather than a hash so a vendor binary over the 64 MiB
+ * `inspectSystemPath` limit is never read (D73 addendum), and re-resolved inside the runner immediately before the
+ * spawn: a swap or in-place rewrite in between changes `ctime` and records `unknown`.
+ * A binary the same uid planted in a directory only that uid can write still passes;
+ * `threat-model.md` §5.11 records that residual.
  *
  * **The refusal is swallowed here and fatal in `ingest`, and the asymmetry is the
  * point.** Spec §5.4 records an agent this command cannot identify as `unknown`,
@@ -231,6 +243,7 @@ function isAgentName(agent: string): agent is AgentName {
 export async function discoverSourceAgent(
   context: CliContext,
   agent: string,
+  executables: ProbeFileSystemV1 = PROBE_FILE_SYSTEM,
 ): Promise<SourceAgent> {
   if (!isAgentName(agent)) return UNKNOWN_SOURCE;
 
@@ -248,10 +261,18 @@ export async function discoverSourceAgent(
      * version, and failing the whole capture over a `--version` it declined to run would
      * cost the user their note for nothing.
      */
-    await context.platform.assertTrustedExecutable(discovery.executablePath);
+    const pinned = await pinProbeExecutable(
+      parseCanonicalAbsolutePathText(discovery.executablePath),
+      executables,
+    );
     const installation = await VERSION_PROBES[agent]({
-      runner: context.runner,
-      executable: discovery.executablePath,
+      runner: {
+        run: async (request) => {
+          await recheckProbeExecutable(pinned, executables);
+          return context.runner.run(request);
+        },
+      },
+      executable: pinned.canonicalPath,
     });
     return installation === null
       ? UNKNOWN_SOURCE
@@ -370,7 +391,8 @@ function isMissingEntry(error: unknown): boolean {
 }
 
 /**
- * The string half of `--note`'s containment: inside a configured topic folder, and no segment
+ * The string half of `--note`'s containment: inside a configured topic folder or a folder
+ * `topicAliases` maps to one, resolved as the indexer does (NEW-128), and no segment
  * a dot-folder, a private folder or the indexes directory. `ingest` asks it again of the
  * envelope, which a person can edit between capture and ingest.
  */
@@ -385,7 +407,7 @@ export function isTopicNotePath(notePath: string, brainConfig: BrainConfigV1): b
   return (
     topicFolder !== undefined &&
     segments.length >= 2 &&
-    brainConfig.topicFolders.includes(topicFolder) &&
+    topicOfFolder(topicFolder, brainConfig) !== null &&
     !segments.some(
       (segment) =>
         segment.startsWith(".") ||
@@ -395,7 +417,7 @@ export function isTopicNotePath(notePath: string, brainConfig: BrainConfigV1): b
 }
 
 /**
- * `--note <path>`, spec §3.1 steps 1 and 3: the destination proven inside a
+ * `--note <path>`, `brain.md` §6.13 (`capture --note`): the destination proven inside a
  * topic folder, and bound to the SHA-256 of its bytes when it exists. Runs
  * before the redaction key is loaded, so a refused path writes nothing at all.
  *
@@ -486,7 +508,10 @@ async function resolveNoteTarget(
   return { path: notePath, beforeSha256 };
 }
 
-/** Spec §3.1 step 2 and its bound: the normalized capture must be a whole, parseable note. */
+/**
+ * `brain.md` §6.13 (`capture --note`) and its bound: the normalized capture must be a
+ * whole, parseable note.
+ */
 function assertNoteContent(content: string): void {
   const note = `${content}\n`;
   if (note.length > MAX_PROPOSED_NOTE_CHARS) {
@@ -509,6 +534,14 @@ function assertNoteContent(content: string): void {
   }
 }
 
+/** By index, never by value: the pattern is usually a client name (NEW-24, D73). */
+export function overBroadWarnings(indexes: readonly number[]): readonly string[] {
+  return indexes.map(
+    (index) =>
+      `[redaction] patterns[${String(index)}] in config.toml matches so much of this capture that it is over-broad; narrow it if that was not intended`,
+  );
+}
+
 /**
  * Diagnostics redacted with the key this command loaded, not with whatever the
  * context closed over. `init` records the rule this follows: redact with the
@@ -519,7 +552,8 @@ function assertNoteContent(content: string): void {
 function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
   return {
     ...guards,
-    redactDiagnostic: (text: string): string => redact(text).text,
+    redactDiagnostic: (text: string, scope?: RedactionScope): string =>
+      redact(text, scope).text,
   };
 }
 
@@ -578,6 +612,7 @@ export async function runCapture(
     const source = await discoverSourceAgent(
       context,
       dependencies.detect(context.env),
+      dependencies.executables,
     );
 
     const built = buildCapture({
@@ -616,7 +651,7 @@ export async function runCapture(
      * break (`:186-188`). Which root is legitimate is this command's question,
      * not that validator's.
      */
-    const { quarantine } = await resolveQuarantine(
+    const { quarantine, canonicalQuarantine } = await resolveQuarantine(
       context,
       config,
       paths,
@@ -628,7 +663,13 @@ export async function runCapture(
           "restore the quarantine directory inside the vault's content root; an observation is never written through a quarantine path that leaves it",
         ),
     );
+    /**
+     * `target` is only ever reported; `canonicalTarget` is only ever touched
+     * (NEW-20). The file name is joined onto the canonical root rather than the
+     * whole path canonicalized, so `readText`'s `O_NOFOLLOW` still sees the leaf.
+     */
     const target = join(quarantine, built.fileName);
+    const canonicalTarget = join(canonicalQuarantine, built.fileName);
     const redactionCount = built.envelope.redaction.length;
 
     const duplicate = (found: ExistingCapture): CliResult<CaptureResultV1> =>
@@ -642,12 +683,15 @@ export async function runCapture(
           redactionCount,
           note: found.note,
         },
-        found.warning === null ? [] : [found.warning],
+        [
+          ...(found.warning === null ? [] : [found.warning]),
+          ...overBroadWarnings(built.overBroadPatterns),
+        ],
       );
 
     const existing = await readExistingCapture(
       context,
-      target,
+      canonicalTarget,
       built.fileName,
       redact,
     );
@@ -658,7 +702,7 @@ export async function runCapture(
         context,
         paths,
         quarantine,
-        target,
+        canonicalTarget,
         built.contents,
         "capture",
       );
@@ -691,22 +735,25 @@ export async function runCapture(
        * refused guard, a full disk, an unreadable staging directory, an
        * interrupted apply: every one of them still surfaces as itself.
        */
-      const raced = await readCaptureQuietly(context, target, built.fileName, redact);
+      const raced = await readCaptureQuietly(context, canonicalTarget, built.fileName, redact);
       if (raced === null || !raced.parsed || raced.contents === built.contents) {
         throw error;
       }
       return duplicate(raced);
     }
 
-    return success({
-      schemaVersion: 1,
-      captureId: built.envelope.captureId,
-      path: target,
-      duplicate: false,
-      status: built.envelope.status,
-      redactionCount,
-      note: built.envelope.note,
-    });
+    return success(
+      {
+        schemaVersion: 1,
+        captureId: built.envelope.captureId,
+        path: target,
+        duplicate: false,
+        status: built.envelope.status,
+        redactionCount,
+        note: built.envelope.note,
+      },
+      overBroadWarnings(built.overBroadPatterns),
+    );
   } catch (error) {
     return failureFrom(
       { guards },

@@ -45,7 +45,7 @@ implementation plan was deleted when its last step closed; git history is the ar
    test asserts no byte lands outside a temporary `HOME`.
    **Amended 2026-09-22 (A12):** instruction artifacts add writes outside
    `H/.claude/skills/developer-os/`, and only to the rows of the closed, owner-bound authorization in
-   spec `2026-09-22-developer-os-instruction-artifacts-design.md` §2.2:
+   `foundation.md` §12.5:
    `H/.claude/rules/developer-os-<id>.md` (scoped rules), `H/.claude/output-styles/developer-os-<id>.md`
    (output styles), one marked block in exactly `H/.claude/CLAUDE.md`, and the product-created parent
    directories `H/.claude`, `H/.claude/skills`, `H/.claude/rules` and `H/.claude/output-styles`. The
@@ -58,7 +58,7 @@ implementation plan was deleted when its last step closed; git history is the ar
    **Amended 2026-09-22 (A12):** still true for `settings.json`: A12 writes no settings key and
    selects no output style (an installed style is only available; the user picks it). The one file
    A12 does share with the user, `H/.claude/CLAUDE.md`, is merged by the marked block's three-way
-   table (spec §5.2), and its conflict is reported through `buildConflictEvidence`'s block arm — §9
+   table (`foundation.md` §12.2), and its conflict is reported through `buildConflictEvidence`'s block arm — §9
    residual 8.
 4. **It never opens `transcript_path`**, on any code path. The hook verbs read their payload
    through `decodeHookPayload`, an allow-list of named fields that never iterates the payload, and
@@ -70,10 +70,13 @@ implementation plan was deleted when its last step closed; git history is the ar
    fields as warnings and such a plugin still loads. The drift check is the authority on what our
    manifest contains; the probe catches syntax and schema errors early, which is a different job.
 
-## 3. The capability model — two gates, three values
+## 3. The capability model — two gates, four values
 
 `yes` requires a documented version floor to permit the capability **and** a probe to observe it.
-A probe that could not run yields `unknown`. DOS-P6 removed `wrapper-required`:
+A probe that could not run yields `unknown`. A probe that asked and reports `absent` yields `no`,
+whatever the version — the table gates `yes`, not `no` — and a key no probe mentioned stays
+`unknown` (NEW-62). `doctor --probe` therefore prints `skills=no` for a plugin tree that is
+verifiably missing its skills and `skills=unknown` when the probe could not run. DOS-P6 removed `wrapper-required`:
 `session_end_capture`, `pre_compact_backup`, `subagents` and `durable_project_guidance` are unused
 by this product and resolve to `not-used` before either gate (`CLAUDE_NOT_USED_KEYS`).
 
@@ -246,7 +249,8 @@ regenerator and the drift check call the same function. A generator and its gate
 different code check nothing.
 
 **Ratified by the founder on 2026-08-11**, and reversible: restoring the CLI verb means deciding
-where it may write and how that write is owned. `BACKLOG.md` §8 carries the row.
+where it may write and how that write is owned. This section is the record; the `BACKLOG.md` §8
+row that indexed it left once ratified (`1564314`).
 
 ## 8. What the program checkpoint got, and what DOS-P6 completed
 
@@ -295,7 +299,7 @@ capture cannot faithfully obtain agent-authored observation text without reading
 8. **CLOSED 2026-09-22 by A12: `buildConflictEvidence` has its consumer.** The marked instruction
    block in `H/.claude/CLAUDE.md` and `C/AGENTS.md` is the first real three-way merge; a block
    conflict calls the new block arm of `ConflictEvidenceRequest`, which reports three hashes and a
-   redacted two-way diff (spec §5.3). **Amended 2026-09-22 (A12).**
+   redacted two-way diff (`foundation.md` §12.2). **Amended 2026-09-22 (A12).**
 9. **The integration test proves the tree does not anger `claude plugin validate`, not that the
    six skills load.** Its only substantive assertion is a clean exit and a clean stderr; a renderer
    gutted to emit only the manifest would still pass it. Proving discovery needs a real session —
@@ -343,7 +347,12 @@ claude -p <prompt> --output-format json --max-turns <N> --tools "" --strict-mcp-
   --restricted --safe-mode --no-session-persistence --permission-prompts none
 ```
 
-Stdin and environment are empty. The prompt is screened as prose before spawn. `maxTurns` must be
+Stdin is empty. The environment is exactly `{ USER, LOGNAME }`, both set to
+`os.userInfo().username` and never read from the parent's `process.env`; there is no `HOME`
+(D15). Observed 2026-09-28 on Claude Code 2.1.283 (NEW-75): with `env: {}` the shipped argv
+returned `is_error` with `Not logged in · Please run /login`, because the subscription credential
+is a macOS Keychain item looked up by account name; the identical argv with `USER` and `LOGNAME`
+only succeeded (`docs/architecture/vendor-invocation.md`, Task 6 amendment). The prompt is screened as prose before spawn. `maxTurns` must be
 an integer from 1 through 50; the exported default is 5 for the future cross-vendor call site. The
 shared `agent.prompt` argument parser in `packages/core` is strict, accepts only bounded non-empty
 `prompt`, refuses hostile prototype keys, and currently refuses a workflow-supplied `maxTurns` until
@@ -363,8 +372,32 @@ starts with hooks, plugins, skills, CLAUDE.md, MCP servers, custom commands and 
 equality in `invoke.test.ts`.
 
 The runner enforces `timeoutMs`; timeout, signal death, non-zero exit, spawn failure, argument
-refusal and malformed structured output remain distinct result variants. Only a zero-exit JSON
-structured payload reaches a consumer, and malformed output is never best-effort parsed.
+refusal, vendor error and malformed structured output remain distinct result variants. Only a
+zero-exit JSON structured payload reaches a consumer, and malformed output is never best-effort parsed.
+
+### 11.1 The `--output-format json` envelope (observed 2026-09-28, Claude Code 2.1.283)
+
+Stdout is not the model's answer but one JSON envelope around it. Observed keys include `type`
+(`"result"`), `subtype`, `is_error` (boolean), `result` (string: the model's final text),
+`session_id`, `terminal_reason`, `stop_reason`, `num_turns`, `usage`, `modelUsage`,
+`total_cost_usd`, `permission_denials` and `duration_ms`. A failure is still exit `0`: not logged in,
+the envelope carried `is_error: true`, `result: "Not logged in · Please run /login"` and
+`terminal_reason: "api_error"`. Until this was observed `invokeClaude` returned the whole envelope as
+the payload, so every ingest proposal failed `unknown-key`.
+
+`invokeClaude` therefore:
+
+1. parses stdout with `parseStructuredPayload` (top-level `__proto__` refused) and requires an
+   object with `type === "result"`, else `malformed-output`;
+2. returns `vendor-error` when `is_error === true` — the vendor's text is never echoed, and `ingest`
+   tells the user to check that `claude` is logged in;
+3. requires `result` to be a string, else `malformed-output`;
+4. parses `result` with `parseStructuredPayload`; if that fails it accepts exactly one surrounding
+   ` ```json ` or ` ``` ` fence with nothing but whitespace outside it, and anything else is
+   `malformed-output`. A bare proposal on stdout (the pre-envelope shape) is `malformed-output`.
+
+Pinned in `packages/adapter-claude/src/invoke.test.ts`, describe block "the --output-format json
+envelope".
 
 ## 12. Former spec section map
 
@@ -419,14 +452,14 @@ Measured in a disposable `HOME` during the 2026-09-04 audit; each row names the 
   `docs/migration/instruction-inventory.md` §4 maps onto one of these. §5's decline of
   transcript-based capture stands; the founder's 2026-09-04 decision reopens
   `session_start_injection` for A13.
-- **`proposeClaudeUninstall` filters by path prefix only**, without the `owner` check its Codex
-  twin performs. Owner: roadmap Phase 5.
+- **Closed by A12:** `proposeClaudeUninstall` now performs the owner check its Codex twin performs
+  (`packages/adapter-claude/src/install.ts` — `proposeClaudeUninstall`).
 
 ## 14. Observed for A12 against Claude Code 2.1.280 on 2026-09-22
 
 Recorded by A12 plan Task 2 (spec §10.1), re-pinned to the installed version by founder decision
-D48. Each row names the §4 row or §10.1 bullet of
-`docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md` it answers.
+D48. Each row names the §4 row or §10.1 bullet it answers of the A12 spec, retired 2026-09-29:
+`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`.
 
 **Isolation, for every row.** `T=$(realpath "$(mktemp -d "$TMPDIR/x.XXXX")")`; every command ran as
 `env -i PATH="$PATH" TMPDIR="$TMPDIR" HOME="$T" CODEX_HOME="$T/.codex" XDG_CONFIG_HOME="$T/.config"
@@ -519,6 +552,14 @@ allow and ask lists are personal choices and `env` routinely holds credentials. 
 on an exact string match. The check reports missing **rule IDs**, never a user string, and never
 returns `fail`. Codex is not examined, and the message says so.
 
+A rule ID counts as present only when every string of its `CLAUDE_DENY_RULES` entry is present. An
+absent file, one over `VENDOR_SETTINGS_MAX_BYTES` (1 MiB), invalid JSON (a fixed message, because
+`JSON.parse` quotes its input) and a `permissions.deny` of the wrong shape each `warn`. Exact
+matching warns about an equivalent rule spelled differently; that false warning is the safe
+direction, and the match widens only with observed vendor semantics. `doctor` adds the check
+outside `guarded` (`apps/cli/src/commands/doctor.ts` — `checkVendorConfig`), because `guarded`
+turns a throw into `fail`.
+
 ### 15.1 Observed against Claude Code 2.1.280 on 2026-09-23
 
 Recorded under founder decision D57 by a headless agent session.
@@ -563,8 +604,43 @@ originals instead:
 - `excalidraw-diagram` — <https://github.com/coleam00/excalidraw-diagram-skill>
 
 A skill you own, including a modified copy of one of these, lives under
-`<product-home>/instructions/<vendor>/skills/<id>/` as a **user override** (spec §3.2). `init`
+`<product-home>/instructions/<vendor>/skills/<id>/` as a **user override** (`foundation.md` §12.1). `init`
 installs it beside the defaults, `doctor` reports it as `user`, and re-running `init` reconciles a
 change to it. It is trusted as your own text: the product reads it with no-follow guards and bounds
 and never reviews its content.
 
+
+## 17. The Claude owner across update and rollback (Spec 2 §8.3)
+
+**Added 2026-09-28** by NEW-110 Task 12 (D72); `foundation.md` §11 has the update contract.
+
+- **The provider is a pure file-tree diff.** `claudeOwnerUpdateProvider`
+  (`packages/adapter-claude/src/update/plan.ts`) plans the `claude` partition with
+  `planOwnedFileTree`: an installed content file whose source the target ships is kept on an equal
+  hash and replaced otherwise, one the target stops shipping is removed, and a new entry is created.
+  Directories, symlinks, ephemeral and block rows are keep-only. It declares every replaceable
+  Claude file a content dependency, so each replace or remove carries the bytes its inverse needs.
+- **No external effect.** Claude discovers the installed tree in place (§4), so an update requests
+  no registration refresh for this owner; a second effect or any non-Codex effect refuses the whole
+  plan.
+- **Rollback** restores each replaced or removed Claude file from its retained blob and removes each
+  file the update created, before the manifest and active record move back.
+
+## 18. Instruction projection (A12)
+
+`packages/adapter-claude/src/instructions.ts` — `renderInstructionTree` is pure and
+byte-deterministic; `foundation.md` §12 has the lifecycle.
+
+- `rule`: `<product-home>/claude/instructions/<id>.md`, imported by one
+  `@<product-home>/claude/instructions/<id>.md` line per rule, sorted by id, inside the
+  `H/.claude/CLAUDE.md` block.
+- `scoped-rule`: `H/.claude/rules/developer-os-<id>.md`, `paths:` frontmatter kept.
+- `output-style`: `H/.claude/output-styles/developer-os-<id>.md`, never selected.
+- `agent`, `skill`: the plugin's `agents/<id>.md` and `skills/<id>/`.
+- A `thinCommand` skill also gets a generated `commands/<id>.md` whose body only invokes
+  `developer-os:<id>`.
+- Instruction ids carry no prefix; an instruction and a workflow claiming one plugin path refuse.
+- **Proof scope.** The planner-level rules are held by the core owner tests; the synthetic on-disk
+  lifecycle (`tests/e2e/release-update.test.ts`) installs no Claude owner. The draft grammar
+  (`PlannerManagedArtifactDraftV2` in `packages/core/src/update/planner.ts`) has no `instruction`
+  arm, so a home holding instruction rows is not covered by that proof.

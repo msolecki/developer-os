@@ -16,7 +16,6 @@ import {
   rollbackEntryParentStructure,
   rollbackPayloadMetadataPath,
   rollbackPayloadPublicationJournalBytes,
-  rollbackPayloadRetirementLeaves,
   rollbackPayloadSourcePaths,
   rollbackPayloadStructures,
   rollbackPublicationCompactionOrdinal,
@@ -66,7 +65,7 @@ import {
 } from "./bundle-source.js";
 import { rollbackEntryAsFile, rollbackSourceEvidenceSetHash } from "./rollback-source.js";
 
-export type RollbackPublicationDeathPointV1 = BundleEntryDeathPointV1 | "structure_made" | "metadata_created" | "metadata_written" | "retired_leaf";
+export type RollbackPublicationDeathPointV1 = BundleEntryDeathPointV1 | "structure_made" | "metadata_created" | "metadata_written";
 
 export const ROLLBACK_PUBLICATION_DEATH_POINTS: readonly RollbackPublicationDeathPointV1[] = Object.freeze([
   "journal_rewritten",
@@ -77,7 +76,6 @@ export const ROLLBACK_PUBLICATION_DEATH_POINTS: readonly RollbackPublicationDeat
   "evidence_written",
   "metadata_created",
   "metadata_written",
-  "retired_leaf",
   "compensation_step",
   "compaction_step",
 ]);
@@ -164,51 +162,12 @@ export async function verifyRetainedRollbackPayload(io: BundleGuardedIo, retaine
   return inventory;
 }
 
-async function removeCheckedFile(io: BundleGuardedIo, path: CanonicalAbsolutePathV1, bytes: number, sha256: string): Promise<void> {
-  const found = await io.fs.lstat(path);
-  if (found === null) return;
-  if (!io.isBoundedRegular(found, 0o600, bytes) || (await io.fs.hashRegular(found, BigInt(bytes))) !== sha256) refuseBundle("rollback_retired_leaf", path);
-  await io.removeFile(path, 0o600, bytes, found);
-}
-
-async function removeEmptyDirectory(io: BundleGuardedIo, path: CanonicalAbsolutePathV1): Promise<void> {
-  const found = await io.fs.lstat(path);
-  if (found === null) return;
-  const directory = await io.ownedDirectory(path);
-  if (!(await io.emptyDirectory(directory))) refuseBundle("rollback_retained_unknown_child", path);
-  await io.removeDirectory(path, directory);
-}
-
-/**
- * Removes one retained payload through its exact retirement inventory after the point of no return.
- * Each file is hash-checked before its guarded unlink; `inventory.json` goes last among files so a
- * crash leaves the authority for whatever remains. Rerunning after death force-forwards: an absent
- * leaf is already retired, and with the inventory gone only empty fixed directories may remain.
- */
-export async function removeRetainedRollbackPayload(io: BundleGuardedIo, retained: RollbackPayloadIdentityV1, interrupt: (point: "retired_leaf") => void = () => undefined): Promise<void> {
-  const inventoryPath = rollbackPayloadMetadataPath(retained.root, 1);
-  const found = await io.readBounded(inventoryPath, 0o600, MAXIMUM_ROLLBACK_DOCUMENT_BYTES);
-  if (found === null) {
-    if ((await io.fs.lstat(rollbackPayloadMetadataPath(retained.root, 0))) !== null) refuseBundle("rollback_retired_leaf", rollbackPayloadMetadataPath(retained.root, 0));
-    for (const ordinal of [4, 3, 2, 1, 0]) {
-      await removeEmptyDirectory(io, (rollbackPayloadStructures(retained.root)[ordinal] as { readonly path: CanonicalAbsolutePathV1 }).path);
-      interrupt("retired_leaf");
-    }
-    return;
-  }
-  for (const leaf of rollbackPayloadRetirementLeaves(retained, decodeRollbackPayloadInventory(found.bytes, retained))) {
-    if (leaf.kind === "directory") await removeEmptyDirectory(io, leaf.path);
-    else await removeCheckedFile(io, leaf.path, leaf.bytes ?? MAXIMUM_ROLLBACK_DOCUMENT_BYTES, leaf.sha256 as string);
-    interrupt("retired_leaf");
-  }
-}
-
 /**
  * Spec 2 §9.2's rollback-payload state participant. `publish` creates the five fixed structures,
  * copies every inventory entry from the ready source with recorded-inode evidence, then the inverse
- * plan and inventory; nothing is replaced. A verify-only plan proves the retained payload read-only,
- * and only `retire`, after the rollback point of no return, removes it. Deletion authority is the
- * journal's recorded identities or the retained inventory; never a recursive removal.
+ * plan and inventory; nothing is replaced. A verify-only plan proves the retained payload read-only;
+ * `terminal_retire` alone removes it. Deletion authority is the journal's recorded identities; never
+ * a recursive removal.
  */
 export class RollbackPayloadParticipant {
   readonly #dependencies: BundleParticipantDependenciesV1<RollbackPublicationDeathPointV1>;
@@ -389,25 +348,6 @@ export class RollbackPayloadParticipant {
     return observe(file.value as RollbackPayloadPublicationJournalV1);
   }
 
-  /**
-   * `terminal_retire/consumed_rollback_and_rejected_release`, after the previous verifier's durable
-   * success: removes the verified retained payload through its inventory, then finalizes.
-   */
-  async retire(value: RollbackPayloadStatePlanV1): Promise<RollbackPayloadObservationV1> {
-    const { plan, file } = await this.#open(value);
-    const retained = plan.retainedBefore;
-    if (plan.publish !== null || retained === null) return refuseBundle("rollback_payload_not_verify_only", file.path);
-    const phase = (file.value as RollbackPayloadPublicationJournalV1).phase;
-    if (phase === "finalized" || phase === "compacting") return observe(file.value as RollbackPayloadPublicationJournalV1);
-    if (phase !== "verified") refuseBundle("rollback_payload_not_verified", file.path);
-    await removeRetainedRollbackPayload(this.#io, retained, (point) => {
-      this.#interrupt(point);
-    });
-    if ((await this.#io.fs.lstat(retained.root)) !== null) refuseBundle("rollback_retired_leaf", retained.root);
-    await this.#advance(plan, file, { kind: "finalize" });
-    return observe(file.value as RollbackPayloadPublicationJournalV1);
-  }
-
   async #bindIntents(plan: RollbackPayloadStatePlanV1, file: Journal, source: StagedSource | null): Promise<void> {
     const published = this.#published(plan);
     const journal = file.value as RollbackPayloadPublicationJournalV1;
@@ -499,8 +439,7 @@ export class RollbackPayloadParticipant {
 
   /**
    * After the outer point of no return: a published payload goes `verified` → `finalized` (a
-   * verify-only plan finalizes only through `retire`), then publication evidence in reverse ordinal
-   * order. The retained payload is never touched; its own `inventory.json` names the rows.
+   * verify-only plan never compacts), then publication evidence in reverse ordinal order. The retained payload is never touched; its own `inventory.json` names the rows.
    */
   async compact(value: RollbackPayloadStatePlanV1): Promise<void> {
     const { plan, file } = await this.#open(value);

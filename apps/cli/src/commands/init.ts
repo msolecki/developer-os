@@ -23,6 +23,7 @@ import {
   canonicalizePlannedPath,
   createRedactor,
 } from "@developer-os/security";
+import type { RedactionScope } from "@developer-os/security";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import {
@@ -46,6 +47,7 @@ import {
   BRAIN_TEMPLATE_DIRECTORIES,
 } from "./brain-template.js";
 import type { CliContext } from "../context.js";
+import { FreshBootstrapError } from "../bootstrap/executor.js";
 import type {
   FreshInitOutcomeV1,
   FreshInitPreviewV1,
@@ -300,7 +302,7 @@ async function assertV2Undrifted(
     if (typeof artifact.path !== "string") continue;
     unchanged.push(artifact.path);
     if (artifact.verification?.mode === "ephemeral") continue;
-    // Vendor rows are resolved by the instruction planners (spec §6.2), not refused here.
+    // Vendor rows are resolved by the instruction planners (`foundation.md` §12.3), not refused here.
     if (artifact.owner === "claude" || artifact.owner === "codex") continue;
     try {
       const stats = await context.fs.lstat(artifact.path);
@@ -976,7 +978,7 @@ export async function runInit(
       // D53: before the instructions, whose Claude hooks name it.
       await installEntrypoint(context);
       /**
-       * After the handoff, never inside it (spec §6.1): an instruction failure leaves a complete
+       * After the handoff, never inside it (`foundation.md` §12.3): an instruction failure leaves a complete
        * V2 home, and `init` exits with the instruction step's code.
        */
       const selection = options.adapters ?? null;
@@ -1061,14 +1063,14 @@ export async function runInit(
     const durableKey = loadOrCreateRedactionKey(plan.paths.stateDir);
     guards = {
       ...context.guards,
-      redactDiagnostic: (text: string): string =>
+      redactDiagnostic: (text: string, scope?: RedactionScope): string =>
         /**
          * **No user patterns, and there can be none.** `init` is what *creates* the
          * configuration file; a `[redaction]` table cannot exist before this command
          * finishes. The built-in classes are the whole of what applies here, which is
          * correct rather than a gap (BACKLOG NEW-16).
          */
-        createRedactor(durableKey)(text).text,
+        createRedactor(durableKey)(text, scope).text,
     };
 
     const journal = await context.executor.execute({
@@ -1125,7 +1127,7 @@ export async function runInit(
     return failureFrom(
       { guards },
       error,
-      error instanceof InitRefusal ? error.paths : [],
+      error instanceof InitRefusal || error instanceof FreshBootstrapError ? error.paths : [],
       error instanceof InitRefusal ? error.recovery : undefined,
     );
   }

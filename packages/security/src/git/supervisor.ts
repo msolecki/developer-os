@@ -1,7 +1,7 @@
 /**
  * Spec 1 §4.2's one-shot Git process permits over the closed process graph.
  * Every permit binds one edge, its literal expanded argv and environment, its
- * cwd and stdin class; consuming it rechecks the pinned executable identity
+ * cwd and stdin class; consuming it rechecks the admitted executable evidence
  * immediately before exec. Each phase budget begins once per supervisor, which
  * is one top-level invocation: nothing here persists a clock or elapsed time.
  */
@@ -22,7 +22,13 @@ import type {
   SupervisedProcessRunner,
   SupervisedSpawnRequestV1,
 } from "../supervised-process.js";
-import { admitGitDistribution } from "./distribution.js";
+import {
+  recheckSystemExecutableSync,
+  type AdmittedSystemExecutableV1,
+  type SystemExecutableRowV1,
+  type SystemPathInspectorSyncV1,
+} from "../system-executables.js";
+import { GIT_DISTRIBUTION_POLICY, type AdmittedGitExecutablesV1 } from "./distribution.js";
 import { expandGitArgv, validateSupportedGitProcessTable, type GitArgSlotValuesV1 } from "./process-table.js";
 import type {
   ClosedGitProcessEdgeIdV1,
@@ -36,8 +42,6 @@ import type {
   GitProcessIoProfileV1,
   GitProcessNodeV1,
   GitProcessPhaseBudgetIdV1,
-  ObservedGitDistributionV1,
-  SupportedGitDistributionV1,
   SupportedGitProcessTableV1,
 } from "./types.js";
 
@@ -158,17 +162,37 @@ function sha256Hex(bytes: Uint8Array): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
 
-/** A probe that re-admits one fresh observation against the row on every call. */
+function recheckAll(files: readonly AdmittedSystemExecutableV1[], rows: readonly SystemExecutableRowV1[], inspect: SystemPathInspectorSyncV1): void {
+  try {
+    for (const file of files) {
+      const row = rows.find((candidate) => candidate.platform === file.platform && candidate.id === file.id);
+      if (row === undefined) refuse("unsupported_git_distribution");
+      recheckSystemExecutableSync(row, inspect, file);
+    }
+  } catch {
+    refuse("unsupported_git_distribution");
+  }
+}
+
+/**
+ * Rechecks every file the invocation admitted against a fresh synchronous observation on
+ * each call, then names the fixed path for the requested image. An image without a
+ * system row (`git_remote_https`) or not admitted this invocation refuses.
+ */
 export function admittingGitIdentityProbe(
-  row: SupportedGitDistributionV1,
-  observe: () => ObservedGitDistributionV1,
+  admitted: () => AdmittedGitExecutablesV1,
+  rows: readonly SystemExecutableRowV1[],
+  inspect: SystemPathInspectorSyncV1,
 ): GitExecutableIdentityProbeV1 {
   return {
     recheck(executableId) {
-      admitGitDistribution(observe(), row);
-      const executable = row.executables.find((candidate) => candidate.id === executableId);
-      if (executable === undefined) refuse("unsupported_git_distribution");
-      return executable.invokedPath;
+      const current = admitted();
+      const files = current.ssh === null ? [current.git, current.receivePack] : [current.git, current.receivePack, current.ssh];
+      recheckAll(files, rows, inspect);
+      const system = GIT_DISTRIBUTION_POLICY.executables.find((candidate) => candidate.id === executableId)?.system ?? null;
+      const file = files.find((candidate) => candidate.id === system);
+      if (file === undefined) refuse("unsupported_git_distribution");
+      return file.canonicalPath;
     },
   };
 }

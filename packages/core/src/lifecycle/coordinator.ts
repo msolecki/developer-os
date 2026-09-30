@@ -38,6 +38,7 @@ import type {
   LifecycleCoordinatorPlanCoreV1,
   LifecycleCoordinatorStepV1,
   LifecycleEffectRefV1,
+  LifecycleTerminalOutcomeV1,
 } from "./types.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
@@ -86,9 +87,13 @@ export interface LifecycleParticipantAdaptersV1<TPlan> {
   readonly drainRunners: null | {
     drain(plan: TPlan, global: HeldLifecycleStableLockV1): Promise<HeldLifecycleStableLockV1>;
   };
+  /**
+   * Reached for every terminal uninstall, `rolled_back` included; the adapter decides from
+   * `outcome`, because a compensated home still needs both files for §2.1 to admit it (NEW-97).
+   */
   readonly controlFiles: {
-    removeAllocator(plan: TPlan): Promise<void>;
-    removeNonce(plan: TPlan): Promise<void>;
+    removeAllocator(plan: TPlan, outcome: LifecycleTerminalOutcomeV1): Promise<void>;
+    removeNonce(plan: TPlan, outcome: LifecycleTerminalOutcomeV1): Promise<void>;
   };
   /**
    * Called before every forward application of `step`, on first execution and on recovery alike,

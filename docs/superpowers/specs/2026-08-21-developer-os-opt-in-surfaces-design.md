@@ -40,11 +40,15 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-25 | founder, after the whole-phase reviews (D62) | `git_commit_not_loose` refuses only when the tip commit read by the fast-forward check is packed; a packed target commit or subtree makes the shadow advertise nothing and the push sends the whole history (residual 11, until A16); §4.2 push argv carries `--no-thin` and pack-objects drops `--thin`; the gateway's pinned Git child-environment reconciliation; the destination shadow's fixed deny booleans (residual 12). Amended 2026-09-25 (D62) | §4.2, §8.3 |
 | 2026-09-26 | A12 design §11, approved 2026-09-22 (D47) | `<product-home>/instructions/` is user data in the absent-manifest walk | §6 |
 | 2026-09-26 | founder, D42 (2026-09-22) | plan 1a Task 24's deferred round-trip and kill-matrix contract moved here unchanged when the plan file was deleted (NEW-100) | §7.1 |
+| 2026-09-28 | founder, NEW-113 questions (D71, under D65) | the exact macOS build + SHA-256 pin is replaced by fixed-path admission from a per-platform `SystemExecutableTableV1` (darwin implemented; linux and win32 recorded as intended): `/usr/bin/git` (the Apple shim, with `xcrun` inputs absent from every child environment), `/usr/bin/ssh` and `/bin/launchctl`, admitted by root ownership, no group/other write, version floors and a capability probe, with per-invocation evidence; `certification` removed; HTTPS and SSH still refuse; residuals 6 and 10 rewritten, 13 and 14 added | §4.2, §5.3, §7, §8.3 |
+| 2026-09-28 | founder, NEW-113 Task 2 addenda to D71 (roadmap D73), folded in at the plan close 2026-09-29 | a fourth `darwin` row `/usr/bin/git-receive-pack`, which `real_receive_pack` executes with argv0 `git-receive-pack`; the Git supervisor stays synchronous with a synchronous inspector/recheck pair | §4.2, §7 |
+| 2026-09-29 | NEW-110 plan close (Spec 2 D72 P8, NEW-86) | pointer: admitted bookkeeping paths carry their planned `dev`/`ino` | §2.1 |
+| 2026-09-29 | founder, closed-phase spec retirement | pointers: the retired A13 hooks spec §7.3 is `docs/architecture/hooks.md` §3.6; the retired A12 instruction-artifacts spec §6.3 is `docs/architecture/foundation.md` §12.4 | §2.1, §6 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
 change is marked "Amended 2026-09-22 (A13 Q3-A)"; the later ones are marked with their decision
 number, "Amended 2026-09-23 (D59)", "Amended 2026-09-24 (D61)", "Added 2026-09-25 (D62)" and
-"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)"; the NEW-100 row is marked "Added 2026-09-26 (NEW-100)".
+"Amended 2026-09-25 (D62)"; the A12 row is marked "Amended 2026-09-26 (A12 §11, D47)"; the NEW-100 row is marked "Added 2026-09-26 (NEW-100)"; the NEW-113 row is marked "Amended 2026-09-28 (D71)"; its Task 2 addenda are marked "Amended 2026-09-28 (D71 addendum)"; the P8 pointer is marked "Amended 2026-09-29 (pointer to Spec 2 D72 P8, NEW-86)"; the spec-retirement pointers are marked "Amended 2026-09-29: … retired".
 
 ---
 
@@ -158,8 +162,11 @@ restate Spec 2's rows. The rows both specifications use have these owners:
 | `state/hooks` (amended 2026-09-22, A13 Q3-A) | fresh `init` | hook firing-record writes only | Spec 1 uninstall, after both plugin trees |
 
 **Amended 2026-09-22 (A13 Q3-A, D47).** `state/hooks` is a **reserved runtime path** for the hook
-firing records of `specs/2026-09-22-developer-os-hooks-design.md` §7.3. It is not in the bookkeeping
+firing records of `docs/architecture/hooks.md` §3.6. It is not in the bookkeeping
 set, because the bookkeeping set is never removed and this path is.
+
+**Amended 2026-09-29: the A13 hooks spec retired; its firing-record contract (§7.3) is
+`docs/architecture/hooks.md` §3.6.**
 
 - **Owner:** fresh `init` creates `state/hooks` as a directory with mode 0700, owned by the effective
   uid. It is never a manifest row.
@@ -192,6 +199,16 @@ entries are other bookkeeping paths, that projected bootstrap residue, or ancest
 Shape grants no authority: the directories hold nothing live. Fresh `init` decides whether the lock is
 live by acquiring it; absent-manifest uninstall never acquires it and only leaves it in place. No directory is adopted beyond
 what Spec 2 §6.1 admits.
+
+**Amended 2026-09-29 (pointer to Spec 2 D72 P8, NEW-86).** What fresh `init` admits by shape is now
+recorded with its identity: Spec 2's block "Amended 2026-09-28 (D72)", item P8, changes §6.1's
+`admittedPreexistingPaths` to `{ path, dev, ino }` entries written into the immutable plan, and
+execution and recovery resolve an admitted Foundation publication parent only from that recorded
+identity, refusing a changed inode as exit 6. P8 names "Spec 1 §2.1's sentence that
+`admittedPreexistingPaths`' grammar covers the bookkeeping set"; no sentence of this section uses that
+name, and the one it means is the paragraph above: each bookkeeping path fresh `init` admits by shape
+is an entry of that grammar. Shape still grants no authority; P8 only binds the admitted path to what
+planning observed.
 
 Every reservation has `existedBefore: false` and null restore evidence. New `init` refuses before
 mutation if any reserved path already exists, except what Spec 2 §6.1 admits. The product never claims or backs
@@ -2520,6 +2537,157 @@ root-owned mode `0755`, size 1,584,576, SHA-256
 machine identity, and is rechecked immediately before exec. Any other system SSH bytes refuse the SSH
 transport while HTTPS/local remain independently available under the same Git row.
 
+**Amended 2026-09-28 (D71).** This block replaces the exact-build pin of the four D59 blocks above
+(D65, NEW-113); where they conflict, this block governs. An exact macOS build plus binary SHA-256
+refuses every other Mac and every point update (D65), so the compiled row becomes a **policy** and
+the measured bytes become **per-invocation evidence**:
+
+1. **A per-platform table of standard fixed paths.** Every external executable this specification
+   runs is one row of `SystemExecutableTableV1`. The platform package owns the table and exposes it
+   through `PlatformAdapter` (`packages/platform-macos/src/types.ts`), keyed by platform and executable
+   ID. A row names the operating system's standard fixed path. No lookup consults `PATH`, and no
+   contract field names a macOS build, an Xcode version or a macOS-only certificate. Version 1
+   implements the `darwin` rows only (§1: macOS scheduled jobs). The other rows record the intended
+   contract for a later platform package and are not implemented:
+
+   | Platform | `git` | `ssh` | `scheduler` | Admission predicate | Status |
+   |---|---|---|---|---|---|
+   | `darwin` | `/usr/bin/git` | `/usr/bin/ssh` | `/bin/launchctl` (§5.3) | `posix_root_owned` | implemented in v1 |
+   | `linux` | `/usr/bin/git` | `/usr/bin/ssh` | `/usr/bin/systemctl --user`, with systemd user units instead of launchd plists | `posix_root_owned` | intended |
+   | `win32` | `%ProgramFiles%\Git\cmd\git.exe` | not yet chosen | not yet chosen | a Windows owner/ACL predicate, designed with that package | intended |
+
+   Adding a platform adds rows and, where needed, an admission predicate. It changes no Git or
+   launchd contract in this specification.
+2. **darwin Git is the Apple shim (D71 Q1).** `git_main` is `/usr/bin/git`, the root-owned Apple shim
+   that executes the Git of the `xcode-select` choice (Xcode or Command Line Tools). The product does
+   not resolve a developer directory, does not read `/var/db/xcode_select_link` or an Xcode
+   `version.plist`, and admits no path under a developer directory. Every Git child environment is one
+   of this section's exact environment profiles, so `DEVELOPER_DIR`, `SDKROOT`, `TOOLCHAINS` and every
+   other variable that steers `xcrun` are absent by construction. §7 pins that absence, and residual 14
+   records what the shim still decides. `system_ssh` is `/usr/bin/ssh`. `git_remote_https` has no
+   standard fixed path of its own, because it lives in the selected developer directory, so its row is
+   unavailable. The HTTPS helper node therefore refuses `unsupported_git_distribution` until the HTTPS
+   trace is recorded with a reviewed helper rule (D71 Q4 keeps D59's refusal of HTTPS and SSH). The six
+   `execPathLinks` leave the contract, because the gateway's `GIT_EXEC_PATH` already hides the
+   distribution's own exec path from every child. The `real_receive_pack` node executes `/usr/bin/git`
+   with argv0 `git` and a leading literal argument `receive-pack`, instead of argv0 `git-receive-pack`.
+   Git treats the two forms the same, and no Apple contract says a shim dispatches on argv0.
+3. **Admission by ownership and mode (`posix_root_owned`, D71 Q3).** The standard path itself is a
+   regular file. A symbolic link at that path refuses. The file is owned by uid `0`, has
+   `(mode & 0o022) == 0` and the owner-execute bit, and is neither setuid nor setgid. Each ancestor
+   directory is a directory owned by uid `0` with `(mode & 0o022) == 0`: `/`, `/usr` and `/usr/bin`
+   for `git` and `ssh`, and `/` and `/bin` for `scheduler`. The Git tree that the shim executes is not
+   admitted by mode (residual 13). `architecture` stays the darwin row's traced `"arm64"`. An Intel row
+   is a new reviewed row, not a contract change.
+4. **Version floor.** The darwin Git floor is `git version 2.54.0` with the build suffix
+   `(Apple Git-<n>)`, `n >= 157`. That is the row measured on 2026-09-23. The build suffix is a field
+   of the darwin row (`vendorBuild`), and a row without one compares only
+   `<major>.<minor>.<patch>`. The line is read from the capability probe, which runs through the shim,
+   so it measures the Git the shim will execute. All integers are canonical decimals. Any other shape
+   or a lower value is `unsupported_git_distribution`. The `system_ssh` floor is `OpenSSH_10.3p1`. The
+   SSH trace's own probe edge reads its version line once that trace is recorded.
+5. **Capability probe.** The existing `direct_distribution_probe` edge (`git --version
+   --build-options`, no child) runs through the gateway exactly as before. Its first line is the version
+   line of rule 4. Of the remaining lines, these four must each be present exactly once:
+   `cpu: <row architecture>`, `shell-path: /bin/sh`, `default-hash: sha1` and
+   `default-ref-format: files`. Every other build-option line is ignored, so a point update that bumps
+   a library still admits. More than 32 lines, a duplicated required line, or a line that fails
+   `BoundedTextLineV1` refuses. A shim with no developer tools selected exits non-zero, and macOS may
+   then offer the Command Line Tools installer; the failed probe refuses `unsupported_git_distribution`.
+   The closed process table stays the runtime capability check: a Git that spawns an undeclared child,
+   argv or environment is refused by the supervisor mid-run, as before.
+6. **Evidence, not identity.** `size` and `sha256` leave the compiled row. Each top-level invocation
+   (plan, apply, sync, or a `push_pending` retry) admits afresh. It records
+   `AdmittedSystemExecutableV1` for `/usr/bin/git`, and for `/usr/bin/ssh` when SSH is selected, plus
+   the probed version line, as `AdmittedGitDistributionV1`, and holds that record in memory for the
+   invocation. A fresh observation is rechecked against the record before each Git phase and
+   immediately before each real exec. Any difference inside one invocation is
+   `unsupported_git_distribution`, exactly as the D59 recheck was. The record is not persisted:
+   `PersistedGitPushPlanV1` keeps only the policy `distributionId` and the `processTableHash`. A macOS
+   or Xcode update between a plan and its retry is therefore not drift. The retry re-admits, and a Git
+   that no longer passes rules 3–5 refuses without consuming the plan.
+7. **Version-neutral IDs.** `SupportedGitDistributionV1` becomes `GitDistributionPolicyV2` with
+   `id: "apple-git-arm64-v2"`; the process table's `id` becomes `"apple-git-process-v2"` and its
+   `distributionId` and the `DEVELOPER_OS_GIT_DISTRIBUTION` environment literal follow the policy ID. A
+   persisted push plan (`PersistedGitPushPlanV1.distributionId`) that names the old ID refuses
+   `unsupported_git_distribution` and the user re-plans. The founder cutover leaves Git disabled
+   (roadmap Phase 10), so no live home carries one.
+
+```text
+SystemPlatformV1 = "darwin" | "linux" | "win32"
+SystemExecutableIdV1 = "git" | "ssh" | "scheduler"
+
+SystemExecutableRowV1 = {
+  platform: SystemPlatformV1,
+  id: SystemExecutableIdV1,
+  path: BoundedArgV1,
+  ancestors: readonly CanonicalAbsolutePathV1[0..8],
+  admission: "posix_root_owned",
+  status: "implemented" | "intended"
+}
+
+AdmittedSystemExecutableV1 = {
+  platform: SystemPlatformV1, id: SystemExecutableIdV1,
+  canonicalPath: CanonicalAbsolutePathV1, dev: UInt64DecimalV1, ino: UInt64DecimalV1,
+  size: Integer[1..2^53-1], sha256: LowerHexSha256
+}
+
+GitDistributionPolicyV2 = {
+  schemaVersion: 2,
+  id: "apple-git-arm64-v2",
+  platform: "darwin",
+  architecture: "arm64",
+  gitVersionFloor: { major: 2, minor: 54, patch: 0,
+    vendorBuild: { prefix: "Apple Git-", minimum: 157 } | null },
+  sshVersionFloor: { major: 10, minor: 3, portable: 1 },
+  requiredBuildOptionLines: readonly ["cpu: arm64", "default-hash: sha1",
+    "default-ref-format: files", "shell-path: /bin/sh"],
+  executables: readonly { id: "git_main" | "git_remote_https" | "system_ssh",
+    system: "git" | "ssh" | null }[3],
+  processTable: SupportedGitProcessTableV1
+}
+
+AdmittedGitDistributionV1 = {
+  schemaVersion: 1,
+  policyId: "apple-git-arm64-v2",
+  gitVersionLine: BoundedTextLineV1,
+  executables: readonly { id: "git_main" | "system_ssh", file: AdmittedSystemExecutableV1 }[1..2]
+}
+```
+
+`SystemExecutableRowV1.path` is absolute on POSIX rows. On a `win32` row it is the documented
+environment-expanded form, which that platform package resolves by its own rule, never through
+`PATH`. The `admission` union grows only when a platform package adds its predicate. `system: null`
+marks an executable with no row (`git_remote_https`), and it refuses `unsupported_git_distribution`.
+Every record is exact-key `CanonicalJsonV1`, with arrays sorted by `id`. `ExecutableFileIdentityV1`,
+`SupportedGitExecutableV1.versionLines`, `linkChain`, `execPathLinks`, `xcode` and `buildOptionLines`
+leave the compiled schema. Statements elsewhere in §4.2 that say "pinned Git", "pinned target" or
+"the row" read as "the admitted distribution of `AdmittedGitDistributionV1`".
+
+**Amended 2026-09-28 (D71 addendum).** Two founder addenda from NEW-113 Task 2 (roadmap D73) change
+this block where they conflict; everything else in it stands.
+
+1. **A fourth `darwin` row, `git-receive-pack`.** Rule 2's `real_receive_pack` sentence is replaced:
+   the node executes the standard Apple shim `/usr/bin/git-receive-pack` with argv0
+   `git-receive-pack`, exactly the argv the D59 table already records, so the same-PID argv invariant
+   of the gateway → real receive-pack exec is untouched. `SystemExecutableIdV1` gains
+   `"git-receive-pack"`, and the `darwin` table gains the row
+   `{ id: "git-receive-pack", path: "/usr/bin/git-receive-pack", ancestors: ["/", "/usr", "/usr/bin"],
+   admission: "posix_root_owned", status: "implemented" }`, admitted by rule 3 exactly as `git`.
+   `GitDistributionPolicyV2.executables` becomes four entries, adding
+   `{ id: "git_receive_pack", system: "git-receive-pack" }`; each local-transport invocation admits
+   `/usr/bin/git` and `/usr/bin/git-receive-pack`, and `AdmittedGitDistributionV1` carries both files
+   (plus `/usr/bin/ssh` when SSH is selected), so its executables list is `[2..3]`. The version floor
+   and capability probe run through `/usr/bin/git` only. The `linux` and `win32` rows gain the
+   matching entry when their platform package is designed.
+2. **The supervisor stays synchronous.** Rule 6's recheck before each real exec runs inside the Git
+   supervisor's synchronous permit consumption, so the platform supplies a synchronous inspector and
+   recheck pair beside the asynchronous admission (`inspectSystemPathSync`,
+   `recheckSystemExecutableSync`). The synchronous inspector observes with `lstat` and hashes through
+   an `O_NOFOLLOW` descriptor whose `dev`, `ino`, `size`, `mtimeNs` and `ctimeNs` must equal that
+   `lstat`; it may cache a digest keyed by that whole identity, because any write to the file changes
+   `ctime`. A mismatch leaves the hash null and refuses `unsupported_git_distribution`.
+
 `GitExecGatewayV1` makes the child policy enforceable. For each invocation, the coordinator creates an
 owner-only directory containing exact generated 0700 Node-24 trampoline scripts named only `git`,
 `git-remote-https`, `git-remote-developer-os-local`, `git-receive-pack`, and
@@ -3832,6 +4000,56 @@ still-linked snapshot.
 `unsupported_launchd_distribution`; read-only observation, preview and `automation status` still
 report state. The re-pin change that certifies the row fills the field.
 
+**Amended 2026-09-28 (D71).** This block replaces the exact-build pin of the two D59 blocks above
+and the "pinned row" sentences of this section (D65, NEW-113); where they conflict, this block
+governs.
+
+1. **Fixed path from the platform table.** The scheduler is the `darwin` `scheduler` row of §4.2's
+   `SystemExecutableTableV1`: `/bin/launchctl`, spawned by that absolute path. `PATH` is never
+   consulted, and the child's fixed `PATH` literal is unchanged. It is admitted by that row's
+   `posix_root_owned` predicate: a regular file owned by uid `0`, `(mode & 0o022) == 0`, owner-execute
+   set, neither setuid nor setgid, with `/` and `/bin` both owned by uid `0` and `(mode & 0o022) == 0`.
+   `size` and `sha256` leave the compiled `executable` record, which becomes
+   `{ path: "/bin/launchctl", ownerUid: 0 }`. The launchd plan, plist and FD-3 contract remain
+   macOS-specific, which is §1's version 1 scope. The intended `linux` row (systemd user units through
+   `/usr/bin/systemctl --user`) is a separate scheduler contract for a later platform package; nothing
+   in this section binds it.
+2. **OS floor, no build match.** `operatingSystem` becomes
+   `{ productName: "macOS", minimumProductVersion: "26.6.2" }`, the version measured on 2026-09-23.
+   `ProductVersion` from `/System/Library/CoreServices/SystemVersion.plist` (read as today) is parsed
+   as two or three canonical decimal integers, a missing patch reading as `0`, and must compare
+   `>= 26.6.2`; any other shape or a lower value is `unsupported_launchd_distribution`.
+   `ProductBuildVersion` is recorded as evidence and never compared. There is no ceiling: a later
+   macOS whose `print` output the bounded parser cannot read refuses, and a bootstrap whose
+   post-observation is not the planned state compensates (rule 5), so an incompatible release fails
+   closed.
+3. **Capability probe.** Before any mutation, the preview observation's `print gui/<uid>` must exit
+   `0` and parse through the existing bounded domain parser. This is the observation preview and
+   revalidation already run; it becomes an admission condition rather than a new process.
+4. **Evidence, not identity.** `SupportedLaunchdProcessTableV1` gains
+   `launchctlIdentity: { dev, ino, size, sha256, productVersion, buildVersion }`, captured by apply
+   when it allocates the staging identities, after rules 1–3 admit the host. The template carries the
+   slot `{ slot: "launchctl_identity" }`, and neither it nor the preview observation table carries a
+   host literal, so `mutationProcessTableTemplateHash` and `observationProcessTableHash` are equal on
+   every admitted Mac. `LaunchdPlanPreviewV1` is unchanged: the preview stays byte-inert and
+   inode-free (§2.2), and apply re-admits the host before it binds. `processTableHash` then binds one
+   exact launchctl to every process of the execution plan, and the adapter's recheck before every
+   process compares a fresh observation with `launchctlIdentity`; any difference is
+   `unsupported_launchd_distribution`. Read-only preview and `automation status` observations admit by
+   rules 1–3 alone. Table IDs become `launchctl-macos-preview-v2` and
+   `launchctl-macos-fd3-v2`; a retained journal or plan naming a `25G83` table ID refuses as
+   recovery-required with the manual `bootout` of residual 10, and the founder cutover leaves launchd
+   disabled (roadmap Phase 10), so no live home carries one.
+5. **`certification` is removed (D71 Q2).** Without an exact build there is nothing stable for a
+   certificate to name. The FD-3 contract is enforced on every run instead: after each forward or
+   reverse bootstrap the existing domain-targeted observation must show exactly the generated label
+   the plan expects, both staging children empty and the open-FD baseline restored. Anything else
+   takes the journal's compensating path and ends `unsupported_launchd_distribution`, with no
+   pathname or still-linked fallback. The Phase 9 gate on a disposable macOS account proves the
+   contract once on an admitted host and is recorded as gate evidence, never as a runtime key.
+   `automation enable`, `disable`, `status` and the `uninstall/present_manifest` variant therefore
+   gate `launchctl` on rules 1–4 alone.
+
 Before any forward or reverse bootstrap, the adapter guarded-opens the exact plan-bound plist with
 no-follow semantics and verifies its `LaunchdBootstrapPlistIdentityV1`, hash, generated Label, and
 ProgramArguments. The owning effect journal must already durably name the exact current forward
@@ -4238,7 +4456,10 @@ overrides, is user data, never residue. The absent-manifest walks still visit it
 bounds and entry rules, but it is projected away like the bootstrap leaf and left in place (a non-directory there refuses
 `absent_manifest_user_data`), and it is never a ledger or manifest row (`USER_DATA_HOME_ENTRIES`, `packages/core/src/lifecycle/absent-manifest.ts`).
 The removable partition and §2.4's grammar are unchanged, because the instruction detach step runs
-before the drained uninstall (instruction-artifacts spec §6.3).
+before the drained uninstall (`docs/architecture/foundation.md` §12.4).
+
+**Amended 2026-09-29: the A12 instruction-artifacts spec retired; its detach-before-uninstall
+contract (§6.3) is `docs/architecture/foundation.md` §12.4.**
 
 **Amended 2026-09-22 (A13 Q3-A, D47).** The absent-manifest walks also admit §2.1's reserved runtime
 path `state/hooks` by its shape: an owner-only `0700` directory owned by the effective user
@@ -4352,6 +4573,31 @@ a file named `*.pinned-host.test.ts`. On any other host it refuses by design, an
 default suite (`test:suite`) excludes these files, and `npm run test:pinned-host` runs them locally
 at phase close and at every re-pin; CI still runs every injected-runner test. A `*.pinned-host.test.ts`
 file is never also a `*.v2.test.ts` file.
+
+**Amended 2026-09-28 (D71).** With §4.2 and §5.3's fixed-path admission, these rows read as
+follows; every other row is unchanged.
+
+| Gate | Required evidence |
+|---|---|
+| system executable table is closed (new) | exact-set tests of the `darwin` rows (`git` `/usr/bin/git`, `ssh` `/usr/bin/ssh`, `scheduler` `/bin/launchctl`, their ancestor lists and `posix_root_owned`), `status: "implemented"` only on `darwin`, and a `linux`/`win32` row refused by the macOS adapter as not implemented; no row or policy field contains a macOS build, an Xcode version or a certificate |
+| Git distribution admission is closed (replaces "Git distribution identity is exact") | injected-filesystem fixtures make `/usr/bin/git`, `/usr/bin/ssh`, `/`, `/usr` and `/usr/bin` non-root, group-writable, other-writable, setuid, setgid, non-executable, a symbolic link or absent, one at a time; version lines `2.53.9`, `Apple Git-156`, a line without the Apple suffix, malformed and the exact floor; each required build-option line missing or duplicated, an unknown extra line admitted, and a non-zero probe exit refused; every environment profile is proven free of `DEVELOPER_DIR`, `SDKROOT`, `TOOLCHAINS` and every `xcrun_*` name, and a hostile caller `PATH`/`DEVELOPER_DIR` changes neither the spawned path nor a child environment; `dev`, `ino`, `size` or `sha256` changed between one invocation's admission and a real exec refuses `unsupported_git_distribution` before repository or network spawn, while a changed binary between a persisted plan and its `push_pending` retry re-admits |
+| process table is canonical | as written, except the pinned distribution ID is `apple-git-arm64-v2`, the table ID `apple-git-process-v2`, "13 build lines" reads "the four required build-option lines", six exec-path links are no longer part of the row, and `real_receive_pack` has argv0 `git` with a leading `receive-pack` |
+| process tree is level-closed | as written, run through `/usr/bin/git` on the admitted Apple Git (floor 2.54.0, Apple Git-157) of the gate host rather than an exact build |
+| SSH bridge is deterministic | as written, except `/usr/bin/ssh` is admitted by §4.2 rule 3 and its per-invocation `AdmittedSystemExecutableV1` is rechecked before exec, not a compiled hash |
+| launchd identity is closed | as written, except the admitted `/bin/launchctl` (rule 1, macOS `>= 26.6.2`) replaces "the pinned 25G83 identity"; fixtures cover each owner/mode/type drift of `/bin/launchctl`, `/bin` and `/`, `ProductVersion` `26.6.1`, `26.6`, `26.6.2`, `27.0`, malformed and missing, an identity change between apply's admission and a process and between two processes, and equal template/observation hashes for two different admitted identities |
+| launchd replace is ordered | as written, except "a disposable pinned-macOS certification" reads "the Phase 9 disposable-account gate", and "unsupported certification, including a `null` `certification` field" reads "a bootstrap whose post-observation is not the exact planned generated label, or leaves a staging child or an extra descriptor, compensates and refuses `unsupported_launchd_distribution`" |
+
+A `*.pinned-host.test.ts` file now runs on any host that the policy admits, and refuses — never
+skips — on a host below a floor or failing a capability. It stays excluded from `test:suite`, and
+`npm run test:pinned-host` runs it locally at phase close and on the Phase 9 gate account.
+
+**Amended 2026-09-28 (D71 addendum).** With §4.2's D71 addendum: the "system executable table is
+closed" row's exact set has four `darwin` rows, adding `git-receive-pack`
+`/usr/bin/git-receive-pack`; the "Git distribution admission is closed" fixtures cover
+`/usr/bin/git-receive-pack` like `/usr/bin/git`, and a change to either between admission and a real
+exec refuses, observed through the synchronous inspector; and in the "process table is canonical"
+row, `real_receive_pack` executes `/usr/bin/git-receive-pack` with argv0 `git-receive-pack`, not
+`/usr/bin/git` with argv0 `git` and a leading `receive-pack`.
 
 ### 7.1 Deferred gate: uninstall → `init` round trip and A9 kill matrix (NEW-100)
 
@@ -4540,3 +4786,43 @@ filesystem/process/clock dependencies rather than reaching global state directly
     ref only from its planned preimage; deletion stays refused by
     `denyDeletes=true`. **Owner: the accepted local-write boundary; mirroring needs a read-only
     destination alternate and a new reviewed design. Amended 2026-09-25 (D62).**
+
+**Amended 2026-09-28 (D71).** Residuals 6 and 10 are replaced, and residuals 13 and 14 are added:
+
+6. **Git support is a floor, not a trace of every build.** Any Apple Git at or above 2.54.0 /
+   Apple Git-157 that passes §4.2's ownership, mode and capability rules is admitted, although only
+   the gate host's build was traced. A later build whose process tree leaves the closed table is
+   refused mid-run by the supervisor (`unsupported_git_distribution`); one whose output a bounded
+   parser cannot read refuses the same way. Both fail closed and never fall back to version text.
+   **Owner: DOS-P9 compatibility documentation; a newly observed refusal is a table amendment.**
+10. **A host below the floor strands loaded jobs.** When `/bin/launchctl` or macOS no longer passes
+    §5.3's rules (a downgrade, a changed owner or mode, a failing `print`), when a retained journal
+    names a replaced `25G83` table, or when a macOS update lands while a launchd effect journal is
+    non-terminal (its bound `launchctlIdentity` no longer matches), `automation disable` and the `uninstall/present_manifest` variant
+    cannot `bootout`, and uninstall refuses. The refusal names the exact manual
+    `launchctl bootout gui/<uid>/<generated-label>` for each installed generated label and preserves
+    every file. **Owner: DOS-P9 compatibility documentation.**
+13. **The Git tree behind the shim is not admitted.** Admission covers `/usr/bin/git` and its
+    ancestors, which sit on the sealed system volume. The Git that the shim executes lives in the
+    `xcode-select` developer directory, and no ownership, mode or byte rule reaches it. For Xcode that
+    is under `/Applications`, which is `root:admin` mode `0775` on a stock Mac. An administrator —
+    normally the same user — can therefore rename or replace `Xcode.app` there, including with a
+    bundle that root did not install, and the shim will execute its Git. Changing the selection itself
+    needs root (`xcode-select -s`). What still applies to that Git is the version floor, the
+    capability probe, the exact environment profiles, the gateway's `PATH`/`GIT_EXEC_PATH`, and the
+    closed process table for every child it asks for. No code-signature check is made. **Owner: the
+    accepted local-write boundary; a stronger rule needs a new reviewed design (for example a
+    signature check through a fixed-path `codesign` row).**
+14. **The Apple shim decides part of the Git invocation.** The product scrubs the `xcrun` inputs it
+    controls: every Git child environment is an exact profile, so `DEVELOPER_DIR`, `SDKROOT`,
+    `TOOLCHAINS` and every `xcrun_*` variable are absent. The shim still decides the rest from system
+    state: which developer directory it uses (the root-set `xcode-select` choice or Apple's default),
+    whether it offers the Command Line Tools installer when none is present, and whether it keeps a
+    lookup cache in the user's Darwin temporary directory, outside the product's staging. Its exec of
+    the selected Git happens inside the same process image before any Git code runs, so the
+    supervisor sees it as the permitted `/usr/bin/git` exec. The per-invocation evidence binds the
+    shim's bytes, not the selected Git's. The probe runs once, at the start of an invocation, so an
+    `xcode-select` change during that invocation is caught only if the newly selected Git requests a
+    child, argv or environment outside the process table. **Owner: the accepted
+    local-write boundary; Apple's shim behaviour is recorded in the DOS-P9 compatibility
+    documentation.**

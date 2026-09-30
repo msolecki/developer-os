@@ -11,6 +11,7 @@ import type {
   ExitCode,
   LifecycleBookkeepingResidueV1,
   LifecycleCoordinatorIdV1,
+  LifecycleIdPrefixV1,
   LifecycleJournalClosureV2,
   ReleaseIdentityV1,
   SafeReasonCodeV1,
@@ -23,6 +24,7 @@ import type {
 } from "@developer-os/core";
 
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "../lifecycle/context.js";
+import { updateApplyPrefixes } from "./compose.js";
 import type { UpdateConstructionOuterBytesV1, UpdateConstructionStore } from "./construction.js";
 import type { CliUpdateContext } from "./context.js";
 import { materializeUpdate, UpdatePlanningRefusal } from "./planning.js";
@@ -64,8 +66,11 @@ export interface UpdateApplyPortsV1 {
   readonly withGlobalLock: <T>(work: () => Promise<T>) => Promise<T>;
   /** Spec 2 §9.2's V2 closure over the ledger, construction envelopes, and executor record. */
   readonly closure: () => Promise<LifecycleJournalClosureV2>;
-  /** Durably reserves the coordinator's allocator block; nothing else is written. */
-  readonly allocate: () => Promise<LifecycleCoordinatorIdV1>;
+  /**
+   * Durably reserves one allocator block for every prefix, in order (D72 P7(e)); the first is the
+   * coordinator's `lc` and every later ID follows its counter. Nothing else is written.
+   */
+  readonly allocate: (prefixes: readonly LifecycleIdPrefixV1[]) => Promise<LifecycleCoordinatorIdV1>;
   readonly compose: (input: UpdateApplyComposeInputV1) => Promise<UpdateApplyCompositionV1>;
   /** `update rollback --apply`'s derivation; absent, the rollback arm refuses before any port. */
   readonly composeRollback?: (input: UpdateRollbackComposeInputV1) => Promise<UpdateApplyCompositionV1>;
@@ -73,6 +78,13 @@ export interface UpdateApplyPortsV1 {
   readonly coordinator: (coordinatorId: LifecycleCoordinatorIdV1) => UpdateLifecycleCoordinatorDependenciesV1;
   readonly envelope: UpdateRecoveryRoutesV1["envelope"];
   readonly executorCleanup: UpdateRecoveryRoutesV1["executorCleanup"];
+  /**
+   * Under the lock: removes each empty `staging/lifecycle/<lc>` no coordinator plan or journal
+   * claims — what an allocation left before its construction envelope, or a cleaned envelope left.
+   */
+  readonly removeEmptyStagingRoots?: () => Promise<void>;
+  /** Under the lock, before the closure is read: removes the one pre-rename allocator temp a death after its write left. */
+  readonly cleanAllocatorTemp?: () => Promise<void>;
 }
 
 /** A verifier or step failure before the point of no return: the old release was restored. */
@@ -137,7 +149,13 @@ async function recoverLocked(ports: UpdateApplyPortsV1, closure: LifecycleJourna
  */
 export function recoverUpdate(update: CliUpdateContext): Promise<UpdateRecoveryRouteOutcomeV1> {
   const ports = updateApplyPorts(update);
-  return ports.withGlobalLock(async () => recoverLocked(ports, await ports.closure()));
+  return ports.withGlobalLock(async () => {
+    await ports.cleanAllocatorTemp?.();
+    await ports.removeEmptyStagingRoots?.();
+    const recovered = await recoverLocked(ports, await ports.closure());
+    await ports.removeEmptyStagingRoots?.();
+    return recovered;
+  });
 }
 
 /**
@@ -210,7 +228,7 @@ export async function applyUpdate(update: CliUpdateContext, prepared: PreparedUp
     const ports = updateApplyPorts(update);
     return await ports.withGlobalLock(async () => {
       const { home, materialized } = await revalidate(update, ports, prepared);
-      const coordinatorId = await ports.allocate();
+      const coordinatorId = await ports.allocate(updateApplyPrefixes(materialized));
       const composition = await ports.compose({ coordinatorId, home, inputs: prepared.inputs, materialized });
       const plan = composition.construction;
       if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_apply") refuse("update_composition_identity", EXIT_CODES.recoveryRequired);

@@ -6,8 +6,8 @@ import type { ModePlanV1, PreStateV1 } from "./plan.js";
 
 /**
  * Appends the source body under its title to the target, graveyards the source
- * and retargets links to it (spec §6.3). The target's header stays byte-exact:
- * nothing from the source's frontmatter is unioned in (R6).
+ * and retargets links to it (`brain.md` §6.13, modes). The target's header stays
+ * byte-exact: nothing from the source's frontmatter is unioned in (`brain.md` §6.13 R6).
  */
 export function planMerge(state: PreStateV1, source: string, target: string): ModePlanV1 {
   const sourceBytes = bytesOf(state, source);

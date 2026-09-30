@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { userInfo } from "node:os";
+import { describe, expect, it, vi } from "vitest";
 import type {
   ProcessRequest,
   ProcessResult,
@@ -17,6 +18,27 @@ const invocation: ClaudeInvocation = {
   maxTurns: 3,
   timeoutMs: 60_000,
 };
+
+const PROPOSAL = { schemaVersion: 1, notes: [] };
+
+/** The key set observed from `claude -p --output-format json` on 2.1.283. */
+function envelope(result: string, fields: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    type: "result",
+    subtype: "success",
+    is_error: false,
+    result,
+    session_id: "00000000-0000-0000-0000-000000000000",
+    stop_reason: "end_turn",
+    num_turns: 1,
+    duration_ms: 1,
+    total_cost_usd: 0,
+    usage: { input_tokens: 1, output_tokens: 1 },
+    modelUsage: {},
+    permission_denials: [],
+    ...fields,
+  });
+}
 
 function capturing(result: Partial<ProcessResult>): {
   runner: ProcessRunner;
@@ -72,11 +94,28 @@ describe("invokeClaude", () => {
     ]);
   });
 
-  it("passes an empty environment, so nothing inherits by accident", async () => {
+  it("passes only USER and LOGNAME, set to the account name, so the Keychain login resolves and nothing else inherits", async () => {
     const { runner, seen } = capturing({ stdout: "{}" });
     await invokeClaude(installation, invocation, { runner });
-    expect(seen()?.env).toEqual({});
+    const account = userInfo().username;
+    expect(seen()?.env).toStrictEqual({ USER: account, LOGNAME: account });
+    expect(seen()?.env).not.toHaveProperty("HOME");
     expect(seen()?.stdin).toBe("");
+  });
+
+  it("takes the account name from the password database, never from the parent's USER or LOGNAME", async () => {
+    vi.stubEnv("USER", "impostor");
+    vi.stubEnv("LOGNAME", "impostor");
+    vi.stubEnv("HOME", "/tmp/impostor-home");
+    try {
+      const { runner, seen } = capturing({ stdout: "{}" });
+      await invokeClaude(installation, invocation, { runner });
+      const account = userInfo().username;
+      expect(account).not.toBe("impostor");
+      expect(seen()?.env).toStrictEqual({ USER: account, LOGNAME: account });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   /**
@@ -123,7 +162,7 @@ describe("invokeClaude", () => {
   });
 
   it("returns the parsed payload on success", async () => {
-    const { runner } = capturing({ stdout: '{"result":"done"}' });
+    const { runner } = capturing({ stdout: envelope('{"result":"done"}') });
     expect(await invokeClaude(installation, invocation, { runner })).toEqual({
       ok: true,
       payload: { result: "done" },
@@ -159,7 +198,7 @@ describe("invokeClaude", () => {
    * capture carrying one could never be ingested while both rules applied here.
    */
   it("invokes rather than refusing when the prompt is prose naming a permission", async () => {
-    const { runner, seen } = capturing({ stdout: '{"result":"done"}' });
+    const { runner, seen } = capturing({ stdout: envelope('{"result":"done"}') });
     const prompt = "npm ERR! EACCES: permission denied, open /usr/local/lib";
     const result = await invokeClaude(installation, { ...invocation, prompt }, {
       runner,
@@ -201,7 +240,7 @@ describe("invokeClaude", () => {
    * file's import instead of leaving the change silently green.
    */
   it("keeps DEFAULT_MAX_TURNS within the bound invokeClaude enforces on every invocation", async () => {
-    const { runner, seen } = capturing({ stdout: "{}" });
+    const { runner, seen } = capturing({ stdout: envelope("{}") });
     const result = await invokeClaude(
       installation,
       { ...invocation, maxTurns: DEFAULT_MAX_TURNS },
@@ -230,9 +269,9 @@ describe("invokeClaude", () => {
     });
   });
 
-  it("refuses a payload carrying a top-level __proto__ rather than returning it", async () => {
+  it("refuses an envelope carrying a top-level __proto__ rather than returning it", async () => {
     const { runner } = capturing({
-      stdout: '{"result":"x","__proto__":{"polluted":true}}',
+      stdout: '{"type":"result","result":"{}","__proto__":{"polluted":true}}',
     });
     expect(await invokeClaude(installation, invocation, { runner })).toEqual({
       ok: false,
@@ -240,4 +279,91 @@ describe("invokeClaude", () => {
     });
   });
 
+  it("refuses a result payload carrying a top-level __proto__ rather than returning it", async () => {
+    const { runner } = capturing({
+      stdout: envelope('{"notes":[],"__proto__":{"polluted":true}}'),
+    });
+    expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+      ok: false,
+      reason: "malformed-output",
+    });
+  });
+
+  describe("the --output-format json envelope (Claude Code 2.1.283, observed 2026-09-28)", () => {
+    it("returns the proposal parsed out of the envelope's result", async () => {
+      const { runner } = capturing({ stdout: envelope(JSON.stringify(PROPOSAL)) });
+      expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+        ok: true,
+        payload: PROPOSAL,
+      });
+    });
+
+    it("reports an is_error envelope as a vendor error without echoing its text", async () => {
+      const { runner } = capturing({
+        stdout: envelope("Not logged in · Please run /login", {
+          is_error: true,
+          terminal_reason: "api_error",
+        }),
+      });
+      expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+        ok: false,
+        reason: "vendor-error",
+      });
+    });
+
+    it("accepts a result wrapped in exactly one json fence", async () => {
+      const fenced = `\`\`\`json\n${JSON.stringify(PROPOSAL)}\n\`\`\``;
+      const { runner } = capturing({ stdout: envelope(fenced) });
+      expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+        ok: true,
+        payload: PROPOSAL,
+      });
+    });
+
+    it("accepts a result wrapped in exactly one bare fence", async () => {
+      const fenced = `\`\`\`\n${JSON.stringify(PROPOSAL)}\n\`\`\`\n`;
+      const { runner } = capturing({ stdout: envelope(fenced) });
+      expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+        ok: true,
+        payload: PROPOSAL,
+      });
+    });
+
+    it("reports prose around a fence as malformed output", async () => {
+      const fenced = `Here is the proposal:\n\`\`\`json\n${JSON.stringify(PROPOSAL)}\n\`\`\`\nDone.`;
+      const { runner } = capturing({ stdout: envelope(fenced) });
+      expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+        ok: false,
+        reason: "malformed-output",
+      });
+    });
+
+    it("reports a bare proposal on stdout, the pre-envelope shape, as malformed output", async () => {
+      const { runner } = capturing({ stdout: JSON.stringify(PROPOSAL) });
+      expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+        ok: false,
+        reason: "malformed-output",
+      });
+    });
+
+    it("reports an envelope whose result is not a string as malformed output", async () => {
+      const { runner } = capturing({
+        stdout: JSON.stringify({ type: "result", is_error: false, result: PROPOSAL }),
+      });
+      expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+        ok: false,
+        reason: "malformed-output",
+      });
+    });
+
+    it("reports an envelope of another type as malformed output", async () => {
+      const { runner } = capturing({
+        stdout: JSON.stringify({ type: "assistant", result: JSON.stringify(PROPOSAL) }),
+      });
+      expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+        ok: false,
+        reason: "malformed-output",
+      });
+    });
+  });
 });

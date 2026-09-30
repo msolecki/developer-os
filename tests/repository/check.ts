@@ -7,8 +7,10 @@
  * rule and why each of its allowlist entries is there.
  */
 
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { inspectPlannerGraph } from "@developer-os/security";
 
@@ -118,7 +120,11 @@ const FORWARDED_OPTIONS = /\b(?:options|parameters)\b/u;
 /**
  * The lifecycle guarded port's `lstat` takes a path and nothing else, and
  * returns an already-exact decimal identity, so these callers cannot pass
- * the option and have nothing to gain from it.
+ * the option and have nothing to gain from it. The exemption covers only a
+ * call whose receiver is the port, spelled `fs` in every one of them: a direct
+ * `nodeFs.lstat` in the same file still needs the option (NEW-90), because a
+ * file-wide exemption let `stats.ino.toString(10)` on a number-valued stat
+ * through both halves of the guard.
  */
 const STAT_OPTION_EXEMPT: readonly string[] = [
   "packages/core/src/lifecycle/testing.ts",
@@ -141,6 +147,31 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
   "apps/cli/src/update/recovery.ts",
   "apps/cli/src/update/foundation-port.ts",
 ];
+
+const GUARDED_PORT_RECEIVER = /(?:^|[^A-Za-z0-9_$])fs$/u;
+
+/**
+ * The exemption above trusts the receiver's name, so an exempted module may not
+ * bind `node:fs` to that name (NEW-119): `import * as fs from "node:fs"` would
+ * make every direct stat look like a port call.
+ */
+const NODE_FS_IMPORT = /\bimport\s+([^;]*?)\s*from\s*["'](?:node:)?fs(?:\/promises)?["']/gu;
+const LOCAL_FS_BINDING = /(?:^(?:type\s+)?|[,{]|\bas)\s*fs\s*(?:$|[,}])/u;
+
+function findNodeFsBoundToPortName(path: string, content: string): readonly Violation[] {
+  return [...content.matchAll(NODE_FS_IMPORT)]
+    .filter((match) => LOCAL_FS_BINDING.test(match[1] ?? ""))
+    .map((match) => ({
+      path,
+      line: content.slice(0, match.index).split("\n").length,
+      match: `${match[0].replace(/\s+/gu, " ")} (fs is reserved for the guarded port)`,
+    }));
+}
+
+/** Modules that also hold `context.fs`, the CLI's own filesystem, exempt only the receiver `lifecycle.fs`. */
+const LIFECYCLE_PORT_RECEIVER_ONLY: ReadonlyMap<string, RegExp> = new Map([
+  ["apps/cli/src/update/apply-ports.ts", /(?:^|[^A-Za-z0-9_$.])lifecycle\.fs$/u],
+]);
 
 /**
  * A single call may opt out where the option would change what it reads: on
@@ -169,17 +200,18 @@ function findNumberValuedStats(
   content: string,
 ): readonly Violation[] {
   if (!path.endsWith(".ts") || path.endsWith(".test.ts")) return [];
-  if (STAT_OPTION_EXEMPT.includes(path)) return [];
+  const portReceiver = LIFECYCLE_PORT_RECEIVER_ONLY.get(path) ?? (STAT_OPTION_EXEMPT.includes(path) ? GUARDED_PORT_RECEIVER : null);
+  const violations: Violation[] = portReceiver === GUARDED_PORT_RECEIVER ? [...findNodeFsBoundToPortName(path, content)] : [];
 
   const code = codeWithoutLiterals(content);
-  if (!IDENTITY_FIELD.test(code)) return [];
+  if (!IDENTITY_FIELD.test(code)) return violations;
 
   const lines = content.split("\n");
-  const violations: Violation[] = [];
   STAT_CALL.lastIndex = 0;
   for (const match of code.matchAll(STAT_CALL)) {
     const args = callArguments(code, match.index + match[0].length - 1);
     if (args === null) continue;
+    if (portReceiver?.test(code.slice(Math.max(0, match.index - 16), match.index)) === true) continue;
     if (args.includes("bigint") || FORWARDED_OPTIONS.test(args)) continue;
     const line = code.slice(0, match.index).split("\n").length;
     const marked = lines
@@ -198,9 +230,9 @@ function findNumberValuedStats(
 /**
  * Spec 2 §2's capability-absence gate. No shipped planner bundle exists yet, so the entry
  * list is the compiled protocol module every target planner imports plus the owner and
- * migration planners a bundle composes; the bundle's own planner entrypoint joins it when the
- * release packer produces one. `lint` builds before this runs, so a missing entrypoint is a
- * failure, never a skip.
+ * migration planners a bundle composes; the bundle's own planner and target verifier entrypoints
+ * join it when Task 11b's release packer produces them. `lint` builds before this runs, so a
+ * missing entrypoint is a failure, never a skip.
  */
 const PLANNER_ENTRYPOINTS: readonly string[] = [
   "packages/core/dist/update/planner.js",
@@ -211,13 +243,88 @@ const PLANNER_ENTRYPOINTS: readonly string[] = [
 
 function findPlannerCapabilities(root: string): readonly string[] {
   const problems: string[] = [];
-  const relative = (path: string): string => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path);
   for (const entrypoint of PLANNER_ENTRYPOINTS) {
     const graph = inspectPlannerGraph(join(root, entrypoint));
     if (graph.modules.length === 0) problems.push(`${entrypoint}: the compiled graph is empty or missing`);
     for (const finding of graph.forbidden) {
-      problems.push(`${entrypoint}: ${relative(finding.module)}: ${finding.capability} (${finding.evidence})`);
+      problems.push(`${entrypoint}: ${relative(root, finding.module)}: ${finding.capability} (${finding.evidence})`);
     }
+  }
+  return problems;
+}
+
+/**
+ * Spec 2 §12's "network remains explicit" row, as a total classifier (D72 P7(f)): the release
+ * transport is the only product module that can reach a network, only the update context composes
+ * it, the launcher execs a release from its own entrypoints, and every planner graph is non-empty.
+ * `node:net` is not listed: the Git gateway's Unix-domain socket is classified by
+ * `tests/security/network.test.ts`, which also proves the socket never leaves the host.
+ */
+export const RELEASE_NETWORK_ENTRYPOINTS: readonly string[] = ["packages/security/src/update/transport.ts"];
+export const RELEASE_TRANSPORT_COMPOSITION: readonly string[] = ["apps/cli/src/update/context.ts"];
+
+const REMOTE_NETWORK_MODULE =
+  /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
+/** Bracket access (`globalThis["fetch"]`) is a declared residual: `codeWithoutLiterals` erases the key. */
+const GLOBAL_FETCH = /(?<![.\w$])(?:(?:globalThis|self|window)\s*\??\.\s*)?fetch\s*(?:(?:\?\.\s*)?\(|\.\s*(?:call|apply)\s*\()/u;
+const TRANSPORT_COMPOSER = /\b(?:nodeReleaseExchange|FixedReleaseTransport)\b/u;
+const LAUNCHER_EXEC = /\bexecAdmittedRelease\b/u;
+const PRODUCT_SOURCE = /^(?:packages|apps)\/[^/]+\/src\/.*\.ts$/u;
+/** The transport's own module and the package barrels that re-export it name the composer without composing it. */
+const TRANSPORT_DEFINITION = /^packages\/security\/src\/(?:update\/(?:transport|index)|index)\.ts$/u;
+
+export interface ReleaseAuthorityReportV1 {
+  /** Product modules that import a remote network module or call the global `fetch`. */
+  readonly networkEntrypoints: readonly string[];
+  /** Product modules outside the transport's definition that compose the release transport. */
+  readonly transportCompositions: readonly string[];
+  /** Launcher modules that exec an admitted release. */
+  readonly launcherEntrypoints: readonly string[];
+  /** Each compiled planner entrypoint and the transitive module graph it reaches. */
+  readonly plannerGraphs: readonly { readonly entrypoint: string; readonly modules: readonly string[] }[];
+}
+
+export async function inspectReleaseAuthoritySurfaces(root: string): Promise<ReleaseAuthorityReportV1> {
+  const networkEntrypoints: string[] = [];
+  const transportCompositions: string[] = [];
+  const launcherEntrypoints: string[] = [];
+  const sources = (await candidateFiles(root)).filter(
+    (path) => PRODUCT_SOURCE.test(path) && !path.endsWith(".test.ts") && !path.endsWith(".d.ts"),
+  );
+  for (const path of sources) {
+    let content: string;
+    try {
+      content = await readFile(join(root, path), "utf8");
+    } catch (error) {
+      if (isMissing(error)) continue;
+      throw error;
+    }
+    const code = codeWithoutLiterals(content);
+    if (REMOTE_NETWORK_MODULE.test(content) || GLOBAL_FETCH.test(code)) networkEntrypoints.push(path);
+    if (!TRANSPORT_DEFINITION.test(path) && TRANSPORT_COMPOSER.test(code)) transportCompositions.push(path);
+    if (path.startsWith("apps/launcher/src/") && LAUNCHER_EXEC.test(code)) launcherEntrypoints.push(path);
+  }
+  const plannerGraphs = PLANNER_ENTRYPOINTS.map((entrypoint) => ({
+    entrypoint,
+    modules: inspectPlannerGraph(join(root, entrypoint)).modules.map((module) => relative(root, module)),
+  }));
+  return { networkEntrypoints, transportCompositions, launcherEntrypoints, plannerGraphs };
+}
+
+/** The lint gate's reading: every scope non-empty, and exactly the allowlisted network and transport sites. */
+export function describeReleaseAuthorityProblems(report: ReleaseAuthorityReportV1): readonly string[] {
+  const problems: string[] = [];
+  if (report.networkEntrypoints.length === 0) problems.push("no module reaches the release transport's network");
+  for (const path of report.networkEntrypoints) {
+    if (!RELEASE_NETWORK_ENTRYPOINTS.includes(path)) problems.push(`unexpected network entrypoint: ${path}`);
+  }
+  if (report.transportCompositions.length === 0) problems.push("no module composes the release transport");
+  for (const path of report.transportCompositions) {
+    if (!RELEASE_TRANSPORT_COMPOSITION.includes(path)) problems.push(`unexpected release transport composition: ${path}`);
+  }
+  if (report.launcherEntrypoints.length === 0) problems.push("no launcher module execs an admitted release");
+  for (const graph of report.plannerGraphs) {
+    if (graph.modules.length === 0) problems.push(`the planner graph of ${graph.entrypoint} is empty`);
   }
   return problems;
 }
@@ -330,7 +437,8 @@ async function main(): Promise<number> {
     for (const problem of authority) process.stderr.write(`  ${problem}\n`);
     process.stderr.write(
       "\nA new process spawn is new authority: route it through an existing entrypoint, or add it to\n" +
-        "ALLOWED_SPAWN_SITES in tests/repository/opt-in-authority.ts in a reviewed change.\n",
+        "ALLOWED_SPAWN_SITES (a raw spawn) or ALLOWED_SUPERVISED_SITES (the supervised primitive) in\n" +
+        "tests/repository/opt-in-authority.ts in a reviewed change.\n",
     );
   }
 
@@ -346,8 +454,21 @@ async function main(): Promise<number> {
     );
   }
 
+  const release = describeReleaseAuthorityProblems(await inspectReleaseAuthoritySurfaces(root));
+  if (release.length > 0) {
+    process.stderr.write(
+      `release-authority: ${String(release.length)} problem(s) with the network, transport, launcher and planner scopes\n`,
+    );
+    for (const problem of release) process.stderr.write(`  ${problem}\n`);
+    process.stderr.write(
+      "\nOnly `update` plan and apply reach a network, through packages/security/src/update/transport.ts composed in\n" +
+        "apps/cli/src/update/context.ts. A new network path is a threat-model change, not a lint fix.\n",
+    );
+  }
+
   return violations.length > 0 ||
     authority.length > 0 ||
+    release.length > 0 ||
     capabilities.length > 0 ||
     renderings.length > 0 ||
     numberValued.length > 0 ||
@@ -356,4 +477,7 @@ async function main(): Promise<number> {
     : 0;
 }
 
-process.exitCode = await main();
+// Imported by `check.test.ts` for the enumerators; only the lint gate's own invocation runs it.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  process.exitCode = await main();
+}

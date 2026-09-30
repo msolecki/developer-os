@@ -15,7 +15,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { argv, cwd, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -85,6 +85,19 @@ export function thirdPartyPackageDirectory(input: string): string | undefined {
   return input.slice(0, at + marker.length) + segments.slice(0, length).join("/");
 }
 
+/**
+ * The spelling of a bundled input that does not depend on where the checkout or its pnpm store
+ * lives (NEW-107). esbuild names every module in the bundle by its realpath relative to the
+ * checkout, and a worktree whose `node_modules` links into another checkout's store would embed
+ * that checkout's location; a store path is cut back to its `node_modules/…` tail. Anything else
+ * outside the checkout refuses: it would be another checkout's code.
+ */
+export function checkoutIndependentInput(input: string): string {
+  const path = /(?:^|\/)(node_modules\/.*)$/u.exec(input)?.[1] ?? input;
+  if (path.startsWith("../") || isAbsolute(path)) throw new Error(`refusing to pack: bundled input ${input} lies outside the checkout`);
+  return path;
+}
+
 async function license(root: string, directory: string): Promise<string> {
   const base = join(root, directory);
   const manifest = JSON.parse(await readFile(join(base, "package.json"), "utf8")) as { name?: unknown; version?: unknown };
@@ -98,8 +111,8 @@ async function license(root: string, directory: string): Promise<string> {
 /**
  * The CLI as one ESM module at {@link LOCAL_BUNDLE_CLI_ENTRY} plus {@link THIRD_PARTY_LICENSES}.
  * Only Node builtins stay external (`platform: "node"`); no minification or source map, names
- * kept, and every path esbuild writes is relative to the checkout, so the same checkout bundles to
- * the same bytes.
+ * kept, and every path esbuild writes is relative to the checkout with store paths cut by
+ * {@link checkoutIndependentInput}, so two checkouts of one commit bundle to the same bytes.
  */
 export async function bundleCli(root: string): Promise<readonly ReleaseFileV1[]> {
   const result = await build({
@@ -123,13 +136,19 @@ export async function bundleCli(root: string): Promise<readonly ReleaseFileV1[]>
   const [output, ...rest] = result.outputFiles;
   if (output === undefined || rest.length > 0) throw new Error("refusing to pack: esbuild did not emit exactly one module");
   const packages = new Set<string>();
+  const prefixes = new Set<string>();
   for (const input of Object.keys(result.metafile.inputs)) {
     const directory = thirdPartyPackageDirectory(input);
     if (directory !== undefined) packages.add(directory);
+    const path = checkoutIndependentInput(input);
+    if (path !== input) prefixes.add(input.slice(0, input.length - path.length));
   }
+  let text = output.text;
+  // Longest first: a shorter prefix can be the tail of a longer one.
+  for (const prefix of [...prefixes].sort((a, b) => b.length - a.length)) text = text.replaceAll(`${prefix}node_modules/`, "node_modules/");
   const licenses = await Promise.all([...packages].map((directory) => license(root, directory)));
   return [
-    { relativePath: LOCAL_BUNDLE_CLI_ENTRY, bytes: output.contents, mode: 0o600 },
+    { relativePath: LOCAL_BUNDLE_CLI_ENTRY, bytes: new TextEncoder().encode(text), mode: 0o600 },
     { relativePath: THIRD_PARTY_LICENSES, bytes: new TextEncoder().encode(licenses.sort().join("\n")), mode: 0o600 },
   ];
 }

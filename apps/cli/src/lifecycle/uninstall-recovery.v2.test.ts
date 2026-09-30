@@ -10,6 +10,7 @@ import type {
   LifecycleCoordinatorRecordV1,
   LifecycleCoordinatorStepV1,
   LifecycleCoordinatorStore,
+  LifecycleTerminalOutcomeV1,
 } from "@developer-os/core";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
@@ -24,7 +25,8 @@ import {
   removeCommandFixtures,
 } from "../commands/testing.js";
 import type { CommandFixture, FixtureOptions } from "../commands/testing.js";
-import { manifestAdmissionFor, runUninstall } from "../commands/uninstall.js";
+import { runUninstall } from "../commands/uninstall.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import type { CliContext } from "../context.js";
 import { admitInstalledV2Home } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
@@ -344,10 +346,10 @@ async function dieInsideEnvelopeCompaction(fixture: V2FixtureV1): Promise<void> 
     const killing = {
       ...adapters,
       controlFiles: {
-        removeAllocator: (plan: LifecycleExecutionPlanV1) =>
-          adapters.controlFiles.removeAllocator(plan),
-        removeNonce: async (plan: LifecycleExecutionPlanV1) => {
-          await adapters.controlFiles.removeNonce(plan);
+        removeAllocator: (plan: LifecycleExecutionPlanV1, outcome: LifecycleTerminalOutcomeV1) =>
+          adapters.controlFiles.removeAllocator(plan, outcome),
+        removeNonce: async (plan: LifecycleExecutionPlanV1, outcome: LifecycleTerminalOutcomeV1) => {
+          await adapters.controlFiles.removeNonce(plan, outcome);
           throw new SyntheticDeath("coordinator_envelope after nonce removal");
         },
       },
@@ -644,4 +646,46 @@ describe("the recovery-only arm's coordinator selection", () => {
       selectUninstallCoordinator([sole, record("lc_a_3", "update")], HOME),
     ).toThrow(expect.objectContaining({ code: EXIT_CODES.recoveryRequired }));
   });
+});
+
+describe("the uninstall control-file adapter (NEW-97)", () => {
+  it("keeps the marker, the nonce and the allocator on a rolled-back outcome with the manifest gone", async () => {
+    const fixture = await initializedV2Fixture("uninstall-control-files-rolled-back");
+    await died(fixture, dieAtStepReturn(manifestStep("preserve_before"), () => currentPlan(fixture)));
+    /**
+     * `preserve_before` has already moved the manifest to its tombstone, which the retired guard
+     * read as a committed uninstall; the outcome alone decides now.
+     */
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+
+    const context = fixture.rebuildContext();
+    const lifecycle = lifecycleOf(context);
+    const request: LifecycleUninstallRequestV1 = {
+      context,
+      lifecycle,
+      key: await recoveryKeyOf(fixture, context),
+      admitted: null,
+      evidence: await evidenceOf(fixture),
+      options: ACCEPTED,
+    };
+    const holds: UninstallHoldsV1 = {
+      global: await lifecycle.locks.acquireExisting(globalLockPath(fixture)),
+      leases: [],
+    };
+    try {
+      const adapters = createUninstallAdapters({
+        request,
+        ...createUninstallParticipants(request),
+        holds,
+      });
+      await adapters.controlFiles.removeAllocator(currentPlan(fixture), "rolled_back");
+      await adapters.controlFiles.removeNonce(currentPlan(fixture), "rolled_back");
+    } finally {
+      await releaseUninstallHolds(holds);
+    }
+
+    expect(await exists(join(fixture.paths.stateDir, "uninstalling.json"))).toBe(true);
+    expect(await exists(join(fixture.paths.stateDir, "lifecycle-install-nonce"))).toBe(true);
+    expect(await exists(join(fixture.paths.stateDir, "lifecycle-id-allocator.json"))).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

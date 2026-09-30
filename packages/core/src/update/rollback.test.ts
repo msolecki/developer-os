@@ -38,6 +38,7 @@ import {
   validateRollbackPayloadPublicationJournal,
   validateRollbackPayloadSourceJournal,
   validateRollbackPayloadSourceReadyEvidence,
+  validateRollbackPayloadSourceStagingPlan,
   validateRollbackPayloadStatePlan,
   type PreparedRollbackPayloadV1,
   type RollbackPayloadIdentityV1,
@@ -295,10 +296,10 @@ describe("retained inverse plans", () => {
       kind: "codex_registration_refresh",
       providerProtocol: 1,
       executable: "pinned_codex_cli",
-      executableIdentity: { ownerUid: 501, mode: 493, nlink: 1, bytes: 1024, sha256: sha("codex"), dev: "1", ino: "2" },
+      executableIdentity: { dev: "1", ino: "2", mode: 493, sha256: sha("codex") },
       argv: [{ kind: "literal", value: "plugin" }, { kind: "token", value: "plugin_id" }],
       cwd: "managed_plugin_root",
-      environment: [{ name: "HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
+      environment: [{ name: "CODEX_HOME", value: "managed_vendor_home" }, { name: "TMPDIR", value: "private_effect_tmp" }],
       stdin: "closed",
       network: false,
       model: false,
@@ -389,8 +390,6 @@ function sourcePlan(): RollbackPayloadSourceStagingPlanV1 {
     id: parseSafeReasonCode("rollback_source"),
     coordinatorId,
     stagingRoot,
-    sourceParentDev: u64("10"),
-    sourceParentIno: u64("20"),
     payload: payload(),
     entriesProjectionHash: sha("entries projection"),
   });
@@ -422,7 +421,12 @@ describe("rollback payload source staging", () => {
       ["inverse_plan", "/inverse-plan.json", payload().identity.inversePlanHash],
       ["inventory", "/inventory.json", payload().identity.inventoryHash],
     ]);
-    expect(() => buildRollbackPayloadSourceStagingPlan({ id: parseSafeReasonCode("rollback_source"), coordinatorId, stagingRoot: parseCanonicalAbsolutePathText("/elsewhere"), sourceParentDev: u64("1"), sourceParentIno: u64("2"), payload: payload(), entriesProjectionHash: sha("x") })).toThrow();
+    expect(() => buildRollbackPayloadSourceStagingPlan({ id: parseSafeReasonCode("rollback_source"), coordinatorId, stagingRoot: parseCanonicalAbsolutePathText("/elsewhere"), payload: payload(), entriesProjectionHash: sha("x") })).toThrow();
+  });
+
+  it("refuses the withdrawn parent identity fields as unknown keys (P1)", () => {
+    expect(() => validateRollbackPayloadSourceStagingPlan({ ...sourcePlan(), sourceParentDev: u64("10") }, stagingRoot)).toThrow(/keys/u);
+    expect(() => validateRollbackPayloadSourceStagingPlan({ ...sourcePlan(), sourceParentDev: u64("10"), sourceParentIno: u64("20") }, stagingRoot)).toThrow(/keys/u);
   });
 
   it("walks structures, metadata, entries, and ready in order, then compacts the exact flattened set", () => {

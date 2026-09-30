@@ -1,6 +1,6 @@
 /**
  * Regenerate `plugins/codex/` from `workflows/` and the default `instructions/`
- * (never user overrides; spec §3.1).
+ * (never user overrides; `foundation.md` §12.1).
  *
  * **Not a CLI command, and that is a correction to the plan.** The Claude
  * adapter's `render-claude.ts` records why: `plugins/codex/` exists only in a

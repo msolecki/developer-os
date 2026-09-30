@@ -136,7 +136,7 @@ export class InstructionRefusal extends Error {
   }
 }
 
-/** Spec §5.2: one text for every exit-3 refusal. */
+/** `foundation.md` §12.2: one text for every exit-3 refusal. */
 export function instructionConflictRecovery(productHome: string, vendor: Vendor): string {
   return `move the edits into ${productHome}/instructions/${vendor}/, delete the whole block (both markers included), and re-run the command`;
 }
@@ -241,7 +241,7 @@ class Planner {
     return root;
   }
 
-  /** Spec §2.2: a symlink at any component refuses; missing parents become `directory` rows. */
+  /** `foundation.md` §12.5: a symlink at any component refuses; missing parents become `directory` rows. */
   async #inspect(owner: Vendor, target: string, recordParents = true): Promise<BigIntStats | null> {
     const anchor = this.#anchor(target);
     const parts = target.slice(anchor.length + 1).split("/");
@@ -408,7 +408,7 @@ class Planner {
     });
   }
 
-  /** Spec §2.1: a pre-existing vendor file's whole-file backup, kept as evidence and never restored. */
+  /** `foundation.md` §12.3: a pre-existing vendor file's whole-file backup, kept as evidence and never restored. */
   async #backup(owner: Vendor, file: Uint8Array) {
     const beforeHash = hashBytes(file) as LowerHexSha256;
     const relative = `instruction-${owner}-${beforeHash}`;
@@ -596,7 +596,7 @@ function unsupportedOf(input: InstructionAttachInputV1, vendors: readonly Vendor
 }
 
 /**
- * Spec §6.1 steps 1–4 as one guarded plan: every file, both blocks, the `adapters.*` values and
+ * `foundation.md` §12.3's attach as one guarded plan: every file, both blocks, the `adapters.*` values and
  * the manifest rewrite. Writes nothing; every refusal names paths only.
  */
 export async function planInstructionAttach(input: InstructionAttachInputV1): Promise<InstructionAttachPlanV1> {

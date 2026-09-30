@@ -82,6 +82,7 @@ import {
   LaunchdEffectJournalStore,
   MAX_LAUNCHD_PLIST_BYTES,
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+  admitLaunchdHost,
   assertLaunchdPlanBindings,
   buildLaunchdPlanPreview,
   launchdEffectPlan,
@@ -110,11 +111,11 @@ import type {
 } from "@developer-os/platform-macos";
 
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
+import { preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import { readConfigFile } from "../commands/doctor.js";
 import {
   downcastArtifactV2,
-  manifestAdmissionFor,
   planUninstall,
   removeDirectories,
   UninstallRefusal,
@@ -130,7 +131,7 @@ import { unregisterCodexPlugin } from "../instructions/codex-registration.js";
 import { planInstructionDetach } from "../instructions/detach.js";
 import type { InstructionDetachInputV1, InstructionDetachPlanV1, InstructionFileSystemV1 } from "../instructions/detach.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
-import { createLifecycleEffectAdapters } from "./adapters.js";
+import { createLifecycleEffectAdapters, refuseUnsupportedLaunchd } from "./adapters.js";
 import { observeLifecycleActivationRecord, observeManifestSchema, V2HomeAdmissionError } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
 import {
@@ -139,7 +140,8 @@ import {
   uninstallLeasePaths,
 } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
-import { residueFrom } from "./context.js";
+import { uninstallResidueFrom } from "./context.js";
+import { manifestAdmissionFor } from "./manifest-admission.js";
 import { isCodeDefect, MANIFEST_ANCHOR_WARNING, removeManifestAnchor } from "./manifest-anchor.js";
 import { withLifecycleMutation } from "./mutation-gate.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
@@ -236,24 +238,7 @@ export class UninstallCapacityError extends Error {
   }
 }
 
-/**
- * Residual 10 (D59): a launchctl row this host no longer matches cannot `bootout`, so uninstall
- * preserves every file and names the manual unload for each installed generated label.
- * `failureFrom` publishes `kindOf(name)`, so the name is spelled to make it the `reason`.
- */
-export function refuseUnsupportedLaunchd(
-  uid: number,
-  labels: readonly GeneratedLaunchdLabelV1[],
-  cause: LaunchdDistributionUnsupportedError,
-): never {
-  const detail = cause.message.replace(/^unsupported_launchd_distribution: /u, "");
-  const manual = labels.length === 0
-    ? "no generated label is installed"
-    : `unload by hand: ${labels.map((label) => `launchctl bootout gui/${String(uid)}/${label}`).join("; ")}`;
-  const error = new LaunchdDistributionUnsupportedError(`${detail}; every file is preserved; ${manual}`, { cause });
-  error.name = "Unsupported_launchd_distributionError";
-  throw error;
-}
+export { refuseUnsupportedLaunchd };
 
 /** identity-free stat: the guarded port takes a path and nothing else, and returns an already-exact decimal identity. */
 function guardedEntry(
@@ -793,7 +778,7 @@ function directoryRowsOf(
   evidence: BootstrapEvidenceAdmissionV1,
 ): readonly string[] {
   const bookkeeping = lifecycleBookkeepingPaths(productHome);
-  const retained = [...evidence.retainedRoots, ...evidence.retainedPaths];
+  const retained = evidence.retainedRoots;
   return manifest.artifacts
     .filter((artifact) => artifact.kind === "directory")
     .map((artifact) => artifact.path as string)
@@ -801,13 +786,6 @@ function directoryRowsOf(
     .filter((path) => !bookkeeping.has(path))
     .filter((path) => !retained.some((root) => path === root || path.startsWith(`${root}/`)))
     .sort((left, right) => right.length - left.length);
-}
-
-async function uninstallCommitted(
-  fs: LifecycleGuardedFileSystemV1,
-  plan: LifecycleExecutionPlanV1,
-): Promise<boolean> {
-  return (await guardedEntry(fs, plan.authority.manifestPath)) === null;
 }
 
 function observationOf(
@@ -1091,19 +1069,18 @@ export function createUninstallAdapters(input: {
      * inverse still describes the world it is proved against while the earlier entries run.
      *
      * `removeEnvelopeLeaves` reaches these hooks for *every* terminal uninstall, rolled back
-     * included, and it carries no terminal outcome to tell them apart. Taking the nonce and the
-     * allocator from a home whose uninstall compensated would leave an installation that
-     * §2.1 can no longer admit, so the restored manifest is the discriminator: it is present
-     * exactly when this coordinator rolled back, and then nothing here is collected.
+     * included. Taking the nonce and the allocator from a home whose uninstall compensated would
+     * leave an installation that §2.1 can no longer admit, so a `rolled_back` outcome collects
+     * nothing here (NEW-97).
      */
     controlFiles: {
-      removeAllocator: async (plan) => {
-        if (!(await uninstallCommitted(fs, plan))) return;
+      removeAllocator: async (_plan, outcome) => {
+        if (outcome === "rolled_back") return;
         await removeStateLeaf(fs, productHome, MARKER_LEAF);
         await removeStateLeaf(fs, productHome, ALLOCATOR_LEAF);
       },
-      removeNonce: async (plan) => {
-        if (!(await uninstallCommitted(fs, plan))) return;
+      removeNonce: async (_plan, outcome) => {
+        if (outcome === "rolled_back") return;
         /** Before the nonce: the nonce is what makes a death here resume through this hook again. */
         await removeHookFiringRecords(fs, productHome, request.lifecycle.effectiveUid);
         await removeCodexIngestHome(fs, productHome, request.lifecycle.effectiveUid);
@@ -1314,8 +1291,8 @@ async function observeLabels(
 
 /**
  * The `P` variant's launchd inputs, observed before any ID is reserved: every manifest-owned
- * plist admitted and read, every label's live state, and — when a label is loaded — a certified
- * mutation row, so an unsupported host refuses here instead of rolling back after the marker.
+ * plist admitted and read, every label's live state, and — when a label is loaded — an admitted
+ * launchctl host, so an unsupported host refuses here instead of rolling back after the marker.
  */
 async function planUninstallLaunchd(
   request: LifecycleUninstallRequestV1,
@@ -1339,9 +1316,7 @@ async function planUninstallLaunchd(
   let live: ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1>;
   try {
     live = await observeLabels(ports.observer, lifecycle.effectiveUid, rows, productHome);
-    if (template.certification === null && [...live.values()].some((state) => state.state === "loaded")) {
-      throw new LaunchdDistributionUnsupportedError("launchctl row is not certified");
-    }
+    if ([...live.values()].some((state) => state.state === "loaded")) await admitLaunchdHost(ports.host);
   } catch (error) {
     if (error instanceof LaunchdDistributionUnsupportedError) {
       refuseUnsupportedLaunchd(lifecycle.effectiveUid, rows.map((row) => row.label), error);
@@ -1401,7 +1376,9 @@ export async function stageLaunchdProcessTable(
   }
   await lifecycle.fs.syncDirectory(root);
   await syncDirectoryAt(lifecycle.fs, coordinatorStaging);
-  return launchdProcessTableHash(await loadLaunchdProcessTable(productHome, coordinatorId, { template }));
+  return launchdProcessTableHash(
+    await loadLaunchdProcessTable(productHome, coordinatorId, { template, host: lifecycle.effectPorts().launchd.host }),
+  );
 }
 
 /**
@@ -1569,7 +1546,7 @@ export class LifecycleUninstaller {
         ...(hooks === null ? [] : [hooks.directory.path]),
         ...(codexIngestHome === null ? [] : [codexIngestHome.directory.path]),
       ].sort(),
-      preserved: [...new Set([...partitioned.preserved, ...evidence.retainedPaths])],
+      preserved: [...new Set([...partitioned.preserved, ...preservedRetentionRoots(evidence)])],
       builder: uninstallBuilder(inputs),
     };
   }
@@ -1598,7 +1575,7 @@ export class LifecycleUninstaller {
         holds,
         preserved: preservedDirectories,
       });
-      const residue = residueFrom(evidence);
+      const residue = uninstallResidueFrom(evidence);
       const recovered = await lifecycle
         .recovery(request.key, adapters, residue)
         .recover(current(), { resumeUninstall: true });
@@ -1649,7 +1626,8 @@ export class LifecycleUninstaller {
         coordinatorId,
         ids.slice(1, inputs.launchd === null ? -1 : -2),
       );
-      if (inputs.launchd !== null) {
+      /** No loaded label means no transition, so the executor never loads the table and the host is never admitted. */
+      if (inputs.launchd?.preview.entries.some((entry) => entry.beforeLiveState.state === "loaded") === true) {
         inputs.launchd.processTableHash = await stageLaunchdProcessTable(
           lifecycle,
           productHome,
@@ -1864,7 +1842,7 @@ async function cleanAllocatorTemp(
   );
   if (observed.temp === null) return;
   const allocatedIds = allocatedIdsFrom(
-    await lifecycle.inspectLedger(request.key, residueFrom(request.evidence)),
+    await lifecycle.inspectLedger(request.key, uninstallResidueFrom(request.evidence)),
   );
   const rechecked = await inspectLifecycleAllocator(
     lifecycle.fs,
@@ -1926,7 +1904,7 @@ export interface UninstallDetachOutcomeV1 {
 }
 
 /**
- * Spec §6.3's detach, planned from one read of the manifest and one of the configuration: the
+ * `foundation.md` §12.4's detach, planned from one read of the manifest and one of the configuration: the
  * transaction's `expectedBeforeHash` guards are the hashes of the very bytes planned from.
  * `null` when no row is vendor-owned, so a home that never attached a vendor does not enter the
  * mutation gate at all.
@@ -1965,7 +1943,7 @@ async function codexExecutable(context: CliContext): Promise<string | null> {
 }
 
 /**
- * Spec §6.3 steps 1–3 under the mutation gate, re-planned under its lock: a refusal fires before
+ * `foundation.md` §12.4's detach under the mutation gate, re-planned under its lock: a refusal fires before
  * Codex is unregistered, and unregistration runs before any file changes. The executor writes
  * files only, so the directories the plan empties are removed after the commit, through the same
  * re-resolving `rmdir` the V1 revert uses.
@@ -2004,5 +1982,5 @@ export async function detachVendorInstructions(context: CliContext, lifecycle: C
       preserved: [...plan.preserved, ...outcome.preserved],
       warnings,
     };
-  });
+  }, undefined, undefined, uninstallResidueFrom);
 }

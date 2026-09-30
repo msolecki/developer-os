@@ -8,7 +8,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EXIT_CODES, formatJsonResult } from "@developer-os/core";
-import { ProtectedPathPolicy, redactText, SecurityRefusalError } from "@developer-os/security";
+import {
+  createRedactor,
+  ProtectedPathPolicy,
+  redactText,
+  SecurityRefusalError,
+} from "@developer-os/security";
 import type * as SecurityModule from "@developer-os/security";
 
 import {
@@ -65,13 +70,16 @@ vi.mock("@developer-os/security", async (importOriginal) => {
   };
 });
 
-function fingerprintOf(context: CliContext, secret: string): string | undefined {
+/** `createGuards` builds its redactor once, so the context must be created after `redactionKeyUses` is cleared. */
+function contextWithRedactionKeys(build: () => CliContext): { readonly context: CliContext; readonly fingerprintOf: (secret: string) => string | undefined } {
   redactionKeyUses.length = 0;
-  context.guards.redactDiagnostic(secret);
-  const used = redactionKeyUses[0];
-  return used === undefined
-    ? undefined
-    : redactText(secret, used).findings[0]?.fingerprint;
+  const context = build();
+  const keys = [...redactionKeyUses];
+  const fingerprintOf = (secret: string): string | undefined => {
+    const fingerprints = new Set(keys.map((key) => redactText(secret, key).findings[0]?.fingerprint));
+    return fingerprints.size === 1 ? [...fingerprints][0] : undefined;
+  };
+  return { context, fingerprintOf };
 }
 
 const REDACTION_KEY = new Uint8Array(32).fill(7);
@@ -478,18 +486,20 @@ describe("createProductionContext", () => {
     await nodeFs.mkdir(stateDir, { recursive: true, mode: 0o700 });
     const durable = loadOrCreateRedactionKey(stateDir);
 
-    const context = createProductionContext({
-      io: NULL_IO,
-      env: {},
-      userHome: fixture.homeDir,
-    });
+    const { context, fingerprintOf } = contextWithRedactionKeys(() =>
+      createProductionContext({
+        io: NULL_IO,
+        env: {},
+        userHome: fixture.homeDir,
+      }),
+    );
     const secret = `ghp_${"a".repeat(36)}`;
 
     expect(context.guards.redactDiagnostic(secret)).toBe(
       redactText(secret, durable).text,
     );
-    expect(fingerprintOf(context, secret)).toMatch(/^[a-f0-9]{16}$/u);
-    expect(fingerprintOf(context, secret)).toBe(
+    expect(fingerprintOf(secret)).toMatch(/^[a-f0-9]{16}$/u);
+    expect(fingerprintOf(secret)).toBe(
       redactText(secret, durable).findings[0]?.fingerprint,
     );
   });
@@ -533,6 +543,31 @@ describe("createProductionContext", () => {
     createProductionContext({ io, env: {}, userHome: fixture.homeDir });
 
     expect(io.err.join("\n")).toContain("cannot be compared");
+  });
+
+  it("redacts vendor stdout and stderr with the configured patterns once they are bound", async () => {
+    const fixture = await createFixture("production-context-runner-patterns");
+    const context = createProductionContext({ io: NULL_IO, env: {}, userHome: fixture.homeDir });
+    const request = {
+      executable: "/bin/sh",
+      args: ["-c", "echo 'Northwind Traders log'; echo 'Northwind Traders diagnostic' >&2"],
+      cwd: fixture.homeDir,
+      stdin: "",
+      timeoutMs: 10_000,
+      env: {},
+    };
+
+    const before = await context.runner.run(request);
+    expect(before.stdout).toContain("Northwind Traders log");
+    expect(before.stderr).toContain("Northwind Traders diagnostic");
+
+    context.bindRedactionPatterns?.(["Northwind Traders"]);
+    const after = await context.runner.run(request);
+
+    expect(after.stdout).not.toContain("Northwind Traders");
+    expect(after.stderr).not.toContain("Northwind Traders");
+    expect(after.stdout).toContain("[REDACTED:user-pattern] log");
+    expect(after.stderr).toContain("[REDACTED:user-pattern] diagnostic");
   });
 
   it("says nothing when the durable key is there", async () => {
@@ -809,14 +844,53 @@ describe("failureFrom", () => {
     const published = JSON.stringify(result.error.data);
     expect(published).not.toContain("abc123def456ghi789");
     expect(published).toContain("[REDACTED:bearer-token]");
-    /**
-     * A `number` leaf survives unchanged — not because it cannot carry a secret, but
-     * because the redactor is `string => string` and applying it here would publish
-     * `"5"` where the schema declares a number. NEW-37 carries the limitation; the
-     * assertion pins the published *type*, which is what this test is about.
-     */
+    /** A `number` leaf is published as a number by contract (NEW-37). */
     expect(result.error.data).toMatchObject({
       refused: [{ code: 5, captureId: "cap-a" }],
+    });
+  });
+
+  it("redacts a configured pattern in error.paths and leaves a quarantine path intact (NEW-39)", () => {
+    const redact = createRedactor(REDACTION_KEY, { userPatterns: ["Acme Corp"] });
+    const guards = {
+      redactDiagnostic: (text: string, scope?: "text" | "value" | "path" | "name") =>
+        redact(text, scope).text,
+    };
+    const quarantine = "/tmp/vault/content/_raw/quarantine/a1b2c3d4e5f60718.md";
+    const decomposed = "/tmp/vault/content/DEV/Café.md";
+
+    const result = failureFrom({ guards } as never, new Error("refused"), [
+      quarantine,
+      "/tmp/vault/content/DEV/Acme Corp.md",
+      decomposed,
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.paths).toStrictEqual([
+      quarantine,
+      "/tmp/vault/content/DEV/[REDACTED:user-pattern].md",
+      decomposed,
+    ]);
+  });
+
+  it("keeps a configured pattern in a data key and redacts it in a data value (NEW-36)", () => {
+    const redact = createRedactor(REDACTION_KEY, { userPatterns: ["captureId"] });
+    const guards = {
+      redactDiagnostic: (text: string, scope?: "text" | "value" | "path" | "name") =>
+        redact(text, scope).text,
+    };
+
+    const result = failureFrom({ guards } as never, new Error("refused"), [], undefined, {
+      schemaVersion: 1,
+      refused: [{ captureId: "the captureId field" }],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.data).toStrictEqual({
+      schemaVersion: 1,
+      refused: [{ captureId: "the [REDACTED:user-pattern] field" }],
     });
   });
 

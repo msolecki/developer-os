@@ -14,7 +14,7 @@ import {
 } from "@developer-os/core";
 
 import { applyForwardRef, committedForwardTargets, compensateForwardRef, type UpdateFoundationPortV1, type UpdateTargetHashPortV1 } from "./owner-participant.js";
-import { participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { participantPlanFileHash, participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
 
 export interface SchemaMigrationParticipantDependenciesV1 {
   readonly journals: UpdateParticipantJournalStore;
@@ -100,7 +100,7 @@ export class SchemaMigrationParticipant {
   /** The `schema_migration` compaction entry: paired refs in ID order, the journal, then the plan. */
   async compact(step: SchemaMigrationStepV1): Promise<void> {
     const { journals, foundation } = this.#dependencies;
-    if (!(await journals.unreached(step.journal))) {
+    if (await journals.exists(step.journal.finalPath)) {
       let journal = await this.openJournal(step);
       if (journal.phase === "finalized" || journal.phase === "rolled_back") journal = await this.persist(step, { ...journal, phase: "compacting", compactionNext: 0 });
       if (journal.phase !== "compacting" || journal.compactionNext === null) return refuseParticipant("update_migration_compaction_not_terminal", step.journal.finalPath);
@@ -110,12 +110,12 @@ export class SchemaMigrationParticipant {
       }
       await journals.remove(step.journal.finalPath);
     }
-    await journals.remove(step.planRef.path, step.planRef.hash);
+    await journals.remove(step.planRef.path, participantPlanFileHash(step.planRef, step.plan));
   }
 
   private async openJournal(step: SchemaMigrationStepV1): Promise<SchemaMigrationExecutionJournalV1> {
     const { plan, planRef, journal } = step;
-    if (planRef.hash !== updateParticipantDocumentHash(plan) || planRef.id !== plan.id || journal.kind !== "schema_migration" || journal.id !== plan.id || journal.planHash !== planRef.hash) refuseParticipant("update_migration_binding", journal.finalPath);
+    if (planRef.hash !== updateParticipantDocumentHash("schema_migration", plan) || planRef.id !== plan.id || journal.kind !== "schema_migration" || journal.id !== plan.id || journal.planHash !== planRef.hash) refuseParticipant("update_migration_binding", journal.finalPath);
     return validateSchemaMigrationExecutionJournal(await this.#dependencies.journals.open(journal), plan);
   }
 

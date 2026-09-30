@@ -907,9 +907,8 @@ describe("runDoctor --probe", () => {
     expect(probesOf(observing.spawned, CODEX)).toHaveLength(1);
 
     /**
-     * The probe ran and saw no `SKILL.md`. A clean exit code over a directory
-     * holding no skill is not an observation of one — the scan asserts its own
-     * set is non-empty, which is why this is `unknown` rather than `yes`.
+     * The probe ran and saw no `SKILL.md`: it asked and the answer is absent,
+     * which is `no` rather than `yes` or `unknown` (NEW-62).
      */
     const silent = await createProbeFixture("doctor-probe-silent", {
       skill: false,
@@ -917,7 +916,7 @@ describe("runDoctor --probe", () => {
     const unobserved = reportOf(
       await runDoctor(silent.fixture.context, { probe: true }),
     );
-    expect(capabilityIn(unobserved, "skills")).toBe("unknown");
+    expect(capabilityIn(unobserved, "skills")).toBe("no");
     expect(probesOf(silent.spawned, CLAUDE)).toHaveLength(1);
 
     /**

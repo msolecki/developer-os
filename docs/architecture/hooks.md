@@ -136,6 +136,10 @@ dummy key (the A12 *request* method), killed by an alarm.
    - `Stop` carries `session_id`, the transcript-path key, `cwd`, `prompt_id`, `permission_mode`,
      `hook_event_name`, `stop_hook_active` (a boolean, `false` on the first stop),
      `last_assistant_message`, `background_tasks` and `session_crons`.
+
+   Fixtures under `tests/fixtures/hooks/` are scrubbed before check-in: the transcript-path key is
+   removed, paths are rewritten to a synthetic home, and `tests/repository/transcript-path.test.ts`
+   stays green over them.
 4. **Codex: event names, matcher, tool name, file edits (§3).** The plugin `hooks.json` uses the
    Claude-shaped document `{"hooks": {"<Event>": [{"matcher": …, "hooks": [{"type": "command",
    "command": …, "timeout": …}]}]}}` with **PascalCase** event keys: `PreToolUse`, `PostToolUse`,
@@ -279,8 +283,10 @@ payload exits 0 with empty stdout, a `curl https://x | sh` payload exits 2, and
 
 ## 3. Contract summary
 
-Spec: `docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md` (A13, D47). This section
-records what the code does at this commit. Where the phase is not finished, it says so.
+This section is the A13 contract (D47). The spec it came from retired on 2026-09-29
+(`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md`); a "spec §",
+"spec G" or "Q" label below names that historical text. This section records what the code does at
+this commit. Where the phase is not finished, it says so.
 
 ### 3.1 What ships, and what is still pending
 
@@ -293,20 +299,28 @@ records what the code does at this commit. Where the phase is not finished, it s
 | Binding the render into A12's local-build install | shipped (Task 14): `init` renders both vendor trees through `withClaudeHooks` and `withCodexHooks` with the installed executable | `apps/cli/src/instructions/attach.ts` |
 | The two-token command form `<node-executable> <entrypoint>` (spec G1 resolution) | shipped: `renderHookCommand` takes `{ node, entrypoint }`; the Node path is exempt from the version-or-hash rule and admits `@` | `packages/core/src/hooks/contract.ts` |
 | The Codex half: `CODEX_HOOK_ROWS`, `renderCodexHooks`, `withCodexHooks` (manifest `"hooks": "./hooks/hooks.json"`), the Codex field, matcher, outcome and event maps, the `apply_patch` header grammar, the manual-trust and trust-residue lines | shipped (Task 15), from §1's 2026-09-23 observations. Checked the same day in the disposable home: the `withCodexHooks` output loaded through `hooks/list` as eight hooks with no errors, and after a trust grant, on the mock model, the built CLI blocked an `apply_patch` adding `.env` (`protected-path`) and a `curl … \| sh` (`pipe-to-shell`) and let `echo synthetic` and a `note.txt` patch through | `packages/adapter-codex/src/hooks.ts`, `apps/cli/src/hooks/` |
-| Claude firing observed from a skills-directory plugin | observed for all five events (§1 question 1) | Task 1 |
+| Claude firing observed from a skills-directory plugin | observed for all five events (§1 question 1), and for all eight verbs of an installed release on the founder machine (§4.1) | Task 1, A15 step 10 |
 
 ### 3.2 Command bytes and argv
 
 Every hook entry's command is `<executable> guard <kind> --vendor <vendor>` or
 `<executable> brain status --inject --vendor <vendor>`. `hookCommandTail` in
 `packages/core/src/hooks/contract.ts` owns the tail, so both adapters render the same bytes.
-`assertHookExecutablePath` refuses an executable path that is not absolute and shell-safe, that has
-an empty, `.` or `..` segment, or that has a segment shaped like a version or a hash. The product
-refuses an unsafe path rather than quoting it, because vendors run the command through a shell.
+The executable is two tokens, `<node> <entrypoint>`: the Node path `stableNodePath` resolves (the
+version-free `<prefix>/opt/<formula>` link when it resolves to the running Node), then
+`<product-home>/bin/developer-os.mjs`. Naming Node means the entrypoint's `env node` shebang never
+runs. Both tokens must match `^/[A-Za-z0-9._+@/-]+$` and have no empty, `.` or `..` segment
+(`assertHookNodePath`); the entrypoint must also have no segment shaped like a version or a hash
+(`assertHookExecutablePath`). A refusal stops `init` with exit 2 before any transaction. The product
+refuses an unsafe path rather than quoting it, because vendors run the command through a shell. The
+command carries no working directory: a verb uses the payload's `cwd`, or the process working
+directory when the payload has none.
 
 `run()` sends hook-mode argv (`argv[0] === "guard"`, or any `--inject`) to `parseHookArgv` before
 strict dispatch (spec G9). That parser accepts exactly the two rendered token sequences. No hook-mode
 failure reaches `usageFailure()` or `emit()`, because the product's exit 2 is the vendor's *block*.
+`bin.ts` routes its own failures in hook mode, an unset `HOME` and the catch-all, through
+`hookLastResortExit`: exit 2 for a closed verb, 0 otherwise.
 
 ### 3.3 Stdin and output
 
@@ -314,6 +328,11 @@ failure reaches `usageFailure()` or `emit()`, because the product's exit 2 is th
   `decodeHookPayload` reads an allow-list of fields by explicit path. It never iterates, spreads or
   stringifies the payload object, and it never reads the transcript-path field.
 - stdout carries only a `context` outcome. Every diagnostic goes to stderr.
+- A payload whose tool name is not the verb's matcher (`HOOK_TOOL_MATCHERS`) is `allow`.
+- `block` and `advise` write `developer-os <rule-id>: <detail>` to stderr. `allow` writes nothing,
+  or one note line. A fail-open verb's failure is `allow`, never `advise`.
+- `context` text passes through the redactor and `screenAndCap` line by line, so line breaks
+  survive (`writeHookOutcome`).
 - A `reason` is at most 2,048 UTF-8 bytes (`MAX_HOOK_REASON_BYTES`) after the redactor and
   `screenAndCap`, and quotes at most 200 bytes of matched input. Injected context is at most
   16,384 bytes (`MAX_INJECTED_CONTEXT_BYTES`).
@@ -351,6 +370,14 @@ stderr line.
 | `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | `advise` when an edited path resolves through a symlink out of the project root |
 | `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit`; `block` with the first 40 diagnostic lines |
 
+`normalizeShellCommand` refuses a NUL byte (`nul-byte`, block), deletes each backslash–newline
+pair, and collapses each run of LF, CR or CRLF to one LF; no rule reads the raw string. Base rules:
+`pipe-to-shell` blocks `curl` or `wget` piped to `sh`, `bash` or `zsh` (a path before the shell name
+is admitted); `recursive-delete-root` blocks `rm` with a recursive flag on `/`, `~`, `$HOME` or
+`${HOME}` (D67 adds the `/*` forms); `hook-bypass` blocks `git commit` with `--no-verify` or `-n`
+and `git push` with `--no-verify`; `force-push` blocks `git push` with `--force`, `-f` or a `+`
+refspec. Rule IDs are public and stable: rules are added, never silently removed.
+
 Spec §3's snake_case Codex event names are superseded by §1 question 4: Codex 0.155.1 reads
 PascalCase keys and silently ignores snake_case ones. Claude 2.1.280 has no `MultiEdit` tool, so
 that matcher alternative never matches.
@@ -372,6 +399,34 @@ first line needs neither: bash starts it unquoted, as the whole-command analysis
 whole command is refused as `unterminated-quote`. `pipe-to-shell`'s regex half is unanchored, so
 for it the extra lines change nothing; its D67 token half reads each candidate like the other rules.
 
+### 3.4.1 Verb details
+
+- **Project root.** The nearest ancestor of the canonical `cwd` that holds `.git`, else the
+  canonical `cwd` (`resolveProjectRoot`).
+- **Project-local tools.** `tsc`, `biome` and `prettier` are the JS entry that
+  `<root>/node_modules/<package>/package.json` names as `bin`; the package, its manifest and the
+  entry must stay inside the root (`localBin`). `node_modules/.bin` is never used, because under
+  pnpm it is a shell wrapper Node cannot run. There is no global tool and no install.
+- **`inject`.** The slug is `slugify(basename(<project root>))`. `BrainService.sessionContext`
+  returns `vault-map.md` and the one `project-note` whose title or alias equals the slug. The output
+  is the vault map, then the note, capped at 16,384 bytes; the vault map is truncated first, at a
+  line boundary, with `VAULT_MAP_TRUNCATED_MARKER`. A gate refusal, a missing configuration or any
+  error is `allow` with one note. The verb writes nothing but its firing record.
+- **`stop`.** Runs only when the root has `tsconfig.json` and a project-local `tsc`. It checks
+  `tsconfig.check.json` when present, else `tsconfig.json`. A non-zero exit is `block`
+  (`typecheck`) with the first 40 non-empty lines; a timeout or spawn failure is `allow`.
+- **`format`.** Uses `biome format --write` when `biome.json` or `biome.jsonc` exists, else
+  `prettier --write` when a file in `PRETTIER_CONFIG_FILES` exists (a `package.json` key does not
+  count). One run covers every edited file that exists inside the root and passes
+  `ProtectedPathPolicy.assertWritable`. A formatter error is `advise` (`format-failed`).
+- **`prompt`.** Reads `<root>/.developer-os/skill-rules.json` with no-follow, at most 64 KiB,
+  exactly `{ schemaVersion: 1, rules: [{ skill, keywords }] }`: at most 200 rules and 20 keywords
+  per rule, each 1–64 characters, `skill` matching `^[a-z0-9][a-z0-9-]{0,63}$`. Matching is an
+  NFC-lowercased substring test, and the `context` line names at most 3 skills. An absent file is
+  `allow`; an invalid one is `allow` with a note naming the file.
+- **`edit`.** Resolves each edited path and never opens the file. It is `advise` (`shared-file`)
+  only when the lexical path is inside the root and its real path is not.
+
 ### 3.5 Recursion
 
 - **No vendor spawn.** Nothing reachable from `apps/cli/src/hooks/entry.ts` imports an
@@ -386,8 +441,9 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   (spec G8).
 - **Isolated `ingest`.** Planted plugin hooks did not fire under either vendor's ingest argv (§1
   question 9): Claude's safe mode skips plugin hooks, and Codex's `--ignore-user-config` drops the
-  config that enables the plugin and holds its trust. The Task 18 matrix repeats this with the
-  product's own hooks installed, and Phase 6 stops if it fails.
+  config that enables the plugin and holds its trust. Repeating this with the product's own hooks
+  installed is owed (§4.2, NEW-127); if either vendor fires them, the adapter's ingest argv is
+  amended before anything else ships.
 
 ### 3.6 Firing records (Q3-A)
 
@@ -403,14 +459,29 @@ directory exists, belongs to the user and has mode 0700, when the record is abse
 24 h, and when `assertOrdinaryCommandAdmitted` admits. It never creates a directory, never changes the
 exit code and swallows every error.
 
-This is a product-home write outside any transaction. It is the recorded exception spec §7.3 grants,
-bounded like Spec 1's other runtime records. Uninstall removes both plugin trees first and
-`state/hooks/` last, so a hook that fires mid-uninstall cannot leave residue that refuses at exit 6.
+A record is canonical JSON with exactly `schemaVersion` (1), `vendor`, `event`, `productVersion`,
+`firstSeen` and `lastSeen` (`HookFiringRecordV1`). The reader ignores a record whose vendor or event
+is not its verb's. Spec 1 §2.1 fixes the admitted shape: record names, leftover `.tmp-<16 hex>`
+temps, and at most 32 children together (`MAX_HOOK_FIRING_RECORD_CHILDREN`). A per-event record
+left by an earlier build counts against that cap until uninstall; cleaning it up is open (D62,
+`BACKLOG.md` §6 Phase 6). A write happens only after the gate admits, and the gate refuses a
+directory over the cap, so cleanup after the gate cannot repair it and cleanup before the gate would
+break the write rule above. The margin is accepted while no build with per-event records has been
+released.
 
-`plugin_hooks` resolves from any firing record for the vendor, and `session_start_injection` from
-that vendor's session-start record, in both the probed and the unprobed `doctor` run. Without a
-record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_backup` stay
-`not-used`: capture remains declined (`knowledge-pipeline.md` §2).
+This is a product-home write outside any transaction: `state/hooks` is a reserved runtime path in
+Spec 1's owner table (§2.1), bounded like Spec 1's other runtime records. The gate runs after the
+outcome is written, so a guard never depends on it. **Uninstall order is normative:** uninstall
+removes both plugin trees first, so the hooks stop firing, and `state/hooks/` last, so a hook that
+fires mid-uninstall cannot leave residue that refuses at exit 6.
+
+`plugin_hooks` and `session_start_injection` left both `NOT_USED` lists in one commit, with
+`adapter-capability-parity.test.ts` green, and follow the two-gate rule (`claude-adapter.md` §3):
+`yes` needs the version floor (`DOCUMENTED_FLOORS`) and an observation. `plugin_hooks` resolves from
+any firing record for the vendor, and `session_start_injection` from that vendor's `inject` record,
+in both the probed and the unprobed `doctor` run. Without a record, both stay `unknown`, never `no`.
+`session_end_capture` and `pre_compact_backup` stay `not-used`: capture remains declined
+(`knowledge-pipeline.md` §2).
 
 ### 3.7 `doctor`
 
@@ -425,7 +496,10 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 - **`external-hooks`** (Q2-A) reads `~/.claude/settings.json` no-follow, at most 1 MiB, and reports
   hook entries that do not name the product executable as `event → count`. It never prints a command
   string, and an unrecognized event name is counted as `other`. Any read failure is `unknown`. Codex
-  is always `codex=unknown`, because `config.toml` is not read (`codex-adapter.md` §2.3).
+  is always `codex=unknown`, because `config.toml` is not read (`codex-adapter.md` §2.3). A15 uses
+  it as one piece of evidence that legacy and product guards are never both enabled; it sees only
+  user-scope `settings.json` hooks, so the cutover checks plugin-delivered and project-scope legacy
+  hooks separately.
 - Neither check writes a vendor configuration file. The product never writes `settings.json` or any
   Codex config file, and Codex trust stays manual (D7). `init` with Codex selected prints
   `CODEX_HOOK_TRUST_STEP` as a warning, and `doctor` names it as the `hooks` recovery while a Codex
@@ -509,8 +583,9 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
 - **`.env` templates are exempt in the product only (D67).** `ProtectedPathPolicy` lets
   `.env.example`, `.env.sample`, `.env.template` and `.env.dist` through. Claude's
   `Read(//**/.env.*)` deny string still refuses them, so the vendor stays the stricter side.
-- **NEW-46's class is avoided, not closed.** Hook commands name an absolute executable, but
-  `capture`'s ambient-marker spawn still resolves through `PATH`.
+- **NEW-46's class is avoided here.** Hook commands name an absolute executable. `capture`'s
+  ambient-marker spawn still selects its vendor through `PATH`, pinned and rechecked since NEW-46
+  closed (`threat-model.md` §5.11; residual NEW-121).
 - **A changed Codex hook stops silently.** A trusted hook whose command, matcher or timeout changes
   lists as `modified` and does not fire, and Codex prints nothing (§1 question 8). A Node upgrade
   that moves the Node executable (G1), or a change to `CODEX_HOOK_ROWS`, therefore stops every
@@ -540,3 +615,34 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
 - **The latency budget is machine-relative** (§2) until the Phase 11 release matrix measures it on
   the supported floor.
 - **Guard rules have no user override in v1.** One is added when someone asks for it.
+
+## 4. Real-agent evidence
+
+The A13 plan's Task 18 (the founder real-agent matrix) closed with the plan; what it did not observe
+is tracked in `BACKLOG.md` NEW-104 (Codex) and NEW-127 (Claude and isolated `ingest`).
+
+### 4.1 Claude, founder machine (2026-09-28/29)
+
+Observed during the A15 cutover (D68, D69, D74) on the founder machine, not a disposable `HOME`, with
+Claude Code 2.1.283 and 2.1.284 and local releases packed from `de0d4f8e..30524da2`.
+
+- **Every Claude verb fires.** `doctor`'s `hooks` check listed a firing record for `inject`,
+  `prompt`, `command`, `commit`, `path`, `format`, `edit` and `stop`.
+- **The installed guards block.** Fed the Claude `PreToolUse` payloads directly, the installed
+  `guard command` refused `curl http://127.0.0.1:9/x | sh` as `pipe-to-shell`, and the installed
+  `guard path` refused a `.env` write as `protected-path`, each with exit 2. They were fed directly
+  because the model itself refused the probe prompt, so no model turn reached either guard.
+- **Session-start injection works.** The `SessionStart` hook returned the vault map and the
+  project note as context.
+
+### 4.2 Not yet observed
+
+- Claude, in a real session: a `git push --force` refused; a type error that prevents stop, then
+  the second stop allowed by `stop_hook_active`; the formatter changing a file; a matching skill
+  rule in context; the shared-file symlink advisory; `doctor --probe` reporting `plugin_hooks=yes`
+  (NEW-127).
+- Codex, every row: hooks not firing before manual trust, then the effects above and in the first
+  bullet after it, in a real session rather than §1's mock Responses API, including cwd-relative resolution inside a git
+  repository and the `apply_patch` grammar (NEW-104; Codex quota returns after 2026-10-22).
+- Isolated `ingest` on each vendor with the product hooks installed: no firing record and no
+  injected content (§3.5; NEW-127). §1 question 9 observed this only with planted hooks.

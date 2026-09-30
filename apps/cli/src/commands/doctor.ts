@@ -779,7 +779,7 @@ async function reportVendorHooks(
     ...(installed.conflicting ? ["executable=inconsistent"] : []),
     ...(installed.executableLive ? [] : ["executable=missing"]),
   ];
-  // Spec §8.2: an untrusted Codex hook never fires, and Codex says nothing about it (hooks.md §1 question 6).
+  // hooks.md §3.7: an untrusted Codex hook never fires, and Codex says nothing about it (§1 question 6).
   // Per verb: `path` shares `PreToolUse` with `command`, and an untrusted `path` must not hide behind it.
   // A record older than the hooks file was left by the previous command bytes, which Codex re-gates.
   const writtenAt = installed.writtenAt ?? -Infinity;
@@ -809,7 +809,7 @@ async function checkProductHooks(
   return recovery === null ? finding : { ...finding, check: { ...finding.check, recovery } };
 }
 
-/** Spec §8.2 (Q2-A): structural only; no command string ever reaches the message. */
+/** `hooks.md` §3.7 (Q2-A): structural only; no command string ever reaches the message. */
 async function checkExternalHooks(context: CliContext, installed: InstalledHooks): Promise<Finding> {
   const id = "external-hooks";
   let path: string | null = null;
@@ -858,7 +858,7 @@ async function hookFindings(context: CliContext, stateDirectory: string): Promis
   ];
 }
 
-/** `hooks` and `external-hooks`, never `fail` and never init-owned (spec §8.2). */
+/** `hooks` and `external-hooks`, never `fail` and never init-owned (`hooks.md` §3.7). */
 export async function checkHooks(context: CliContext, stateDirectory: string): Promise<readonly DoctorCheck[]> {
   return (await hookFindings(context, stateDirectory)).map((finding) => finding.check);
 }
@@ -957,7 +957,7 @@ async function checkConfiguration(
 }
 
 /**
- * The authority `init` built the manifest with: the product home, the Brain and spec §2.2's vendor
+ * The authority `init` built the manifest with: the product home, the Brain and `foundation.md` §12.5's vendor
  * paths. Built here rather than imported from `commands/uninstall.ts`, which imports this module.
  */
 export function manifestAdmission(paths: RuntimePaths, homes: VendorHomesV1): ManifestAdmissionContextV1 {
@@ -1346,7 +1346,7 @@ function key(category: InstructionCategoryV1, id: string): string {
   return `${category}/${id}`;
 }
 
-/** Any drifted row makes the artifact drifted; a missing piece makes it missing (spec §7). */
+/** Any drifted row makes the artifact drifted; a missing piece makes it missing (`foundation.md` §12.6). */
 function stateOf(findings: readonly (DriftFinding | undefined)[], absent: boolean, installed: InstructionState): InstructionState {
   const present = findings.filter((finding): finding is DriftFinding => finding !== undefined);
   if (present.some((finding) => finding.kind !== "missing")) return "drifted";
@@ -1500,7 +1500,7 @@ async function inspectInstructions(
   return { statuses, finding: instructionAdvisories(context, statuses, `${String(statuses.length)} instruction artifacts match their record`) };
 }
 
-/** Spec §2.2: a set `CLAUDE_CONFIG_DIR` is not followed, so the managed files are not what Claude reads. */
+/** `foundation.md` §12.5: a set `CLAUDE_CONFIG_DIR` is not followed, so the managed files are not what Claude reads. */
 function instructionAdvisories(context: CliContext, statuses: readonly InstructionStatusV1[], passMessage: string): Finding {
   const unsupported = statuses.filter((status) => status.state === "unsupported-vendor");
   const heldBack = statuses.filter((status) => status.state === "held-back");
@@ -1808,9 +1808,9 @@ async function collectFindings(
     await guarded(context, "codex-capabilities", [], () =>
       checkCodexCapabilities(context, options.probe),
     ),
-    // Not through `guarded`: both checks catch everything and never return "fail" (spec §8.2).
+    // Not through `guarded`: both checks catch everything and never return "fail" (`hooks.md` §3.7).
     ...await hookFindings(context, paths.stateDir),
-    // Not through `guarded`: it turns a throw into "fail", which spec §8 forbids.
+    // Not through `guarded`: it turns a throw into "fail", which `claude-adapter.md` §15 forbids.
     { check: await checkVendorConfig(context), code: EXIT_CODES.success },
     await guarded(context, "instructions", [], async () => {
       const current = inspected;
@@ -1858,7 +1858,7 @@ async function manifestAnchorFindings(context: CliContext): Promise<readonly Fin
   }
 }
 
-/** Human output: one line per artifact (spec §7). */
+/** Human output: one line per artifact (`foundation.md` §12.6). */
 export function describeInstructions(report: DoctorReportV1): readonly string[] {
   return report.instructions.map(
     (status) => `${status.owner} ${status.category}/${status.id}: ${status.source}, ${status.state}`,

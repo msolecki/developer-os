@@ -21,6 +21,7 @@ import {
   CODEX_INGEST_HOME_RELATIVE_PATH,
   HOOK_FIRING_RECORDS_RELATIVE_PATH,
   inspectCodexIngestHomeShape,
+  CODEX_INGEST_HOME_REPAIR,
   inspectHookFiringRecordsShape,
   inspectLifecycleBookkeepingShape,
   lifecycleBookkeepingPaths,
@@ -197,10 +198,12 @@ export interface BootstrapExecutorDependencies {
   readonly inspectEvidence?: (() => Promise<BootstrapEvidenceAdmissionV1>) | undefined;
 }
 
-class FreshBootstrapError extends Error {
+/** `paths` reach `failureFrom`'s `path` scope; a path quoted in `message` may redact as high-entropy (NEW-39). */
+export class FreshBootstrapError extends Error {
   constructor(
     readonly code: typeof EXIT_CODES.recoveryRequired | typeof EXIT_CODES.securityRefusal | typeof EXIT_CODES.invalidInput,
     message: string,
+    readonly paths: readonly string[] = [],
   ) {
     super(message);
     this.name = "FreshBootstrapError";
@@ -222,6 +225,32 @@ interface HeldLifecycleLocks {
 interface PlanIdentityStats {
   readonly dev: string | number | bigint;
   readonly ino: string | number | bigint;
+}
+
+type AdmittedPreexistingPath = FreshV2InitPlanV1["admittedPreexistingPaths"][number];
+
+/**
+ * Spec 2 P8 (NEW-86): one entry per admitted path, carrying the identity the
+ * planning process observed. A path two observations disagree on has no
+ * single identity to record, so it refuses rather than picking one.
+ */
+function admittedIdentities(
+  observations: readonly (readonly [string, PlanIdentityStats])[],
+): AdmittedPreexistingPath[] {
+  const admitted = new Map<string, AdmittedPreexistingPath>();
+  for (const [path, stats] of observations) {
+    const entry = {
+      path: path as CanonicalAbsolutePathV1,
+      dev: (typeof stats.dev === "string" ? stats.dev : stats.dev.toString(10)) as UInt64DecimalV1,
+      ino: (typeof stats.ino === "string" ? stats.ino : stats.ino.toString(10)) as UInt64DecimalV1,
+    };
+    const existing = admitted.get(path);
+    if (existing !== undefined && (existing.dev !== entry.dev || existing.ino !== entry.ino)) {
+      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "an admitted pre-existing path has conflicting identities");
+    }
+    admitted.set(path, entry);
+  }
+  return [...admitted.values()];
 }
 
 function lowerHash(bytes: Uint8Array | string): LowerHexSha256 {
@@ -682,7 +711,7 @@ export class BootstrapExecutor {
   /** A12: a plan that admitted a pre-existing lock has no ordinal-zero row and no creation evidence for one. */
   private async reacquireAdmittedGlobalLock(plan: FreshV2InitPlanV1): Promise<void> {
     const path = join(this.#dependencies.paths.stateDir, ".lifecycle.lock");
-    if (!plan.admittedPreexistingPaths.includes(path as CanonicalAbsolutePathV1)) {
+    if (!plan.admittedPreexistingPaths.some((entry) => entry.path === path)) {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "global lock is not ordinal zero");
     }
     const stats = await lstatOptional(path);
@@ -788,7 +817,7 @@ export class BootstrapExecutor {
       retentionNext: null,
       createdAt: timestamp,
       updatedAt: timestamp,
-    }) as FreshV2InitJournalV1;
+    });
   }
 
   private emptyRetentionEvidence(
@@ -858,7 +887,7 @@ export class BootstrapExecutor {
         candidates.push(validateBootstrapJournal(
           plan,
           decodeCanonicalJson(bytes, plan.maximumJournalBytes),
-        ) as FreshV2InitJournalV1);
+        ));
       } catch {
         // The store alone classifies a partial initial write after its exact
         // plan/state/slot authority is reopened and rechecked.
@@ -885,7 +914,6 @@ export class BootstrapExecutor {
     }
     const store = await BootstrapJournalStore.open({
       planPath: plan.planPath,
-      expectedOperation: "fresh_v2_init",
       expectedId: plan.id,
       validatePlan: (value) => this.admitPersistedPlanStructure(value, plan.id),
       validateSlots: (candidate, slots) => selectBootstrapJournal(
@@ -894,9 +922,9 @@ export class BootstrapExecutor {
         slots,
       ),
       buildInitialJournal: (candidate, timestamp) =>
-        this.initialJournalForTimestamp(candidate as FreshV2InitPlanV1, timestamp),
+        this.initialJournalForTimestamp(candidate, timestamp),
       admitInitialWrite: (candidate) =>
-        this.admitPostPlanInitialWrite(candidate as FreshV2InitPlanV1),
+        this.admitPostPlanInitialWrite(candidate),
       now: this.#dependencies.now,
       interrupt: (point) => {
         this.checkpoint(point);
@@ -981,8 +1009,9 @@ export class BootstrapExecutor {
      * a process that resumes after a crash replays the same admitted set the
      * planning process observed under the lock.
      */
-    const retainedHomeNames = retainedChildNames(paths.home, plan.admittedPreexistingPaths);
-    const retainedStateNames = retainedChildNames(paths.stateDir, plan.admittedPreexistingPaths);
+    const admittedPaths = plan.admittedPreexistingPaths.map((entry) => entry.path);
+    const retainedHomeNames = retainedChildNames(paths.home, admittedPaths);
+    const retainedStateNames = retainedChildNames(paths.stateDir, admittedPaths);
     const [homeStats, stateStats, lockStats, homeNames, stateNames] = await Promise.all([
       nodeFs.lstat(paths.home, { bigint: true }),
       nodeFs.lstat(paths.stateDir, { bigint: true }),
@@ -995,6 +1024,13 @@ export class BootstrapExecutor {
     const lifecycleLock = join(paths.stateDir, ".lifecycle.lock");
     const lifecycleLockStats = await lstatOptional(lifecycleLock);
     const lifecycleLockName = lifecycleLockStats === null ? [] : [basename(lifecycleLock)];
+    /** NEW-71: a present lock is only the reusable one the plan admitted, bound by identity as the pre-intent inventory binds its held lock. */
+    const admittedLifecycleLock = plan.admittedPreexistingPaths.find((entry) => entry.path === lifecycleLock);
+    const lifecycleLockIsAdmitted = lifecycleLockStats === null || (
+      admittedLifecycleLock !== undefined &&
+      lifecycleLockStats.dev.toString(10) === admittedLifecycleLock.dev &&
+      lifecycleLockStats.ino.toString(10) === admittedLifecycleLock.ino
+    );
     if (
       lifecycleLockStats !== null &&
       (!lifecycleLockStats.isFile() || lifecycleLockStats.isSymbolicLink() ||
@@ -1024,6 +1060,7 @@ export class BootstrapExecutor {
       lockStats.dev.toString(10) !== plan.bootstrapIdentity.dev ||
       lockStats.ino.toString(10) !== plan.bootstrapIdentity.ino ||
       held.dev !== plan.bootstrapIdentity.dev || held.ino !== plan.bootstrapIdentity.ino ||
+      !lifecycleLockIsAdmitted ||
       !sameValue(homeNames, expectedHomeNames) ||
       !sameValue(stateNames, expectedStateNames)
     ) {
@@ -1101,7 +1138,7 @@ export class BootstrapExecutor {
       admittedBookkeeping: new Map(
         [...admittedBookkeeping.keys()].map((path) => [path, projectedIdentity]),
       ),
-      retainedPaths,
+      retainedPaths: new Map(retainedPaths.map((path) => [path, projectedIdentity])),
       nonce: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" as LowerHexSha256,
     });
     const plan = {
@@ -1233,7 +1270,7 @@ export class BootstrapExecutor {
       }
       result.set(path, stats);
     }
-    /** A12 spec §3.2: the user's override tree is opaque user data a fresh `init` admits, never claims. */
+    /** `foundation.md` §12.1: the user's override tree is opaque user data a fresh `init` admits, never claims. */
     for (const name of USER_DATA_HOME_ENTRIES) {
       const path = join(this.#dependencies.paths.home, name);
       const stats = await lstatOptional(path);
@@ -1285,10 +1322,11 @@ export class BootstrapExecutor {
         : null;
       const shape = inspectCodexIngestHomeShape(entryOf(codexIngestStats), names, () => entryOf(link), uid());
       if (!shape.admitted) {
+        const offending = shape.offendingName === null ? codexIngestHome : join(codexIngestHome, shape.offendingName);
         throw new FreshBootstrapError(
           EXIT_CODES.recoveryRequired,
-          `product home contains a Codex ingest home of an unadmitted shape (codex_ingest_home_shape): ${
-            shape.offendingName === null ? codexIngestHome : join(codexIngestHome, shape.offendingName)}`,
+          `product home contains a Codex ingest home of an unadmitted shape (codex_ingest_home_shape): ${offending}; ${CODEX_INGEST_HOME_REPAIR}`,
+          [offending],
         );
       }
       result.set(codexIngestHome, codexIngestStats);
@@ -1309,9 +1347,7 @@ export class BootstrapExecutor {
     const roots = lifecycleBookkeepingPaths(paths.home);
     const residue: LifecycleBookkeepingResidueV1 = {
       retainedPaths: new Set(admitted.retainedPaths),
-      bootstrapParticipantIds: new Set(admitted.retainedEnvelopes.flatMap((envelope) =>
-        envelope.plan.foundationParticipants.map((participant) => participant.id),
-      )),
+      bootstrapParticipantIds: new Set(admitted.bootstrapParticipantIds),
     };
     const { observations, present } = await observeBookkeepingTree(
       roots,
@@ -1553,7 +1589,7 @@ export class BootstrapExecutor {
         brainStats,
         preexistingDirectories: reusableAfter,
         admittedBookkeeping: bookkeepingAfter,
-        retainedPaths: evidenceAfterLock.retainedPaths,
+        retainedPaths: new Map(evidenceAfterLock.retainedIdentities.map((entry) => [entry.path, entry])),
         nonce: Buffer.from((this.#dependencies.nonce ?? (() => randomBytes(32)))()).toString("hex") as LowerHexSha256,
       });
       const store = await BootstrapJournalStore.create({
@@ -1565,7 +1601,7 @@ export class BootstrapExecutor {
           return authorityPlan;
         },
         buildInitialJournal: (candidate, timestamp) =>
-          this.initialJournalForTimestamp(candidate as FreshV2InitPlanV1, timestamp),
+          this.initialJournalForTimestamp(candidate, timestamp),
         validatePlan: (value) => {
           if (authorityPlan === null) {
             throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap plan authority was not constructed");
@@ -1588,7 +1624,7 @@ export class BootstrapExecutor {
           if (point === "after_initial_state_sync") this.checkpoint("after_journal");
         },
       });
-      const admitted = store.plan as FreshV2InitPlanV1;
+      const admitted = store.plan;
       this.#journalStores.set(id, store);
       this.#preflightEvidence.delete(id);
       this.#preflightReusableDirectories.delete(id);
@@ -1605,7 +1641,7 @@ export class BootstrapExecutor {
 
   async executeFreshInit(plan: FreshV2InitPlanV1): Promise<FreshInitOutcomeV1> {
     const store = await this.storeFor(plan);
-    let journal = store.current() as FreshV2InitJournalV1;
+    let journal = store.current();
     try {
       if (journal.phase === "retained") {
         if (journal.terminalOutcome !== "finalized") {
@@ -1638,13 +1674,13 @@ export class BootstrapExecutor {
         return await this.completedOutcome(plan);
       } catch (error) {
         if (error instanceof FreshBootstrapInterruption) throw error;
-        const latest = store.current() as FreshV2InitJournalV1;
+        const latest = store.current();
         if (latest.manifestCursor < 2 && latest.terminalOutcome === null) {
           await this.compensate(plan, latest);
           await this.retainTerminal(
             plan,
             store,
-            store.current() as FreshV2InitJournalV1,
+            store.current(),
           );
         }
         throw error;
@@ -1790,7 +1826,7 @@ export class BootstrapExecutor {
     readonly brainStats: PlanIdentityStats | null;
     readonly preexistingDirectories: ReadonlyMap<string, PlanIdentityStats>;
     readonly admittedBookkeeping: ReadonlyMap<string, PlanIdentityStats>;
-    readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
+    readonly retainedPaths: ReadonlyMap<string, PlanIdentityStats>;
     readonly nonce: LowerHexSha256;
   }): Promise<{ readonly plan: FreshV2InitPlanV1 }> {
     const paths = this.#dependencies.paths;
@@ -1994,6 +2030,7 @@ export class BootstrapExecutor {
 
     const ordinaryDirectories = [
       paths.backupsDir,
+      join(paths.backupsDir, "transactions"),
       paths.logsDir,
       join(paths.home, "schemas"),
       paths.stagingDir,
@@ -2135,14 +2172,13 @@ export class BootstrapExecutor {
       operation: "fresh_v2_init",
       id: input.id,
       admittedExternalShapeHash: bootstrapExternalShapeHash(input.externalShape),
-      admittedPreexistingPaths: [...new Set<string>([
+      admittedPreexistingPaths: admittedIdentities([
         ...input.retainedPaths,
-        ...input.preexistingDirectories.keys(),
-        ...input.admittedBookkeeping.keys(),
-      ])]
-        .filter((path) => path === paths.home || path.startsWith(`${paths.home}/`))
-        .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
-        .map((path) => path as CanonicalAbsolutePathV1),
+        ...input.preexistingDirectories,
+        ...input.admittedBookkeeping,
+      ])
+        .filter(({ path }) => path === paths.home || path.startsWith(`${paths.home}/`))
+        .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
       v2ManifestHash: manifestRef.hash,
       bootstrapIdentity: {
         path: join(paths.stateDir, ".lifecycle-bootstrap.lock") as CanonicalAbsolutePathV1,
@@ -2386,9 +2422,7 @@ export class BootstrapExecutor {
         ? source.relativePath
         : source.kind === "constant_empty"
           ? `generated/reservations/${createHash("sha256").update(path).digest("hex")}`
-          : source.kind === "plan_derived"
-            ? `generated/${source.role}`
-            : "generated/migration-preimage";
+          : `generated/${source.role}`;
       if (source.kind === "constant_empty") {
         return {
           ...base,
@@ -2437,7 +2471,7 @@ export class BootstrapExecutor {
    * confinement, not a placeholder — unlike `report.ts`'s `exactV2Handoff`,
    * which inspects a retained plan with no live request in scope. `vendors`
    * is null: a fresh-init manifest never carries a vendor row, since attach
-   * runs later in its own gated transaction (spec §6.1).
+   * runs later in its own gated transaction (`foundation.md` §12.3).
    */
   private manifestAdmission(
     request: FreshInitRequestV1,
@@ -2606,7 +2640,7 @@ export class BootstrapExecutor {
   }
 
   private async readOrCreateJournal(plan: FreshV2InitPlanV1): Promise<FreshV2InitJournalV1> {
-    return (await this.storeFor(plan)).current() as FreshV2InitJournalV1;
+    return (await this.storeFor(plan)).current();
   }
 
   private async writeJournal(
@@ -2615,7 +2649,7 @@ export class BootstrapExecutor {
     patch: Partial<FreshV2InitJournalV1>,
   ): Promise<FreshV2InitJournalV1> {
     const store = await this.storeFor(plan);
-    const current = store.current() as FreshV2InitJournalV1;
+    const current = store.current();
     if (!sameValue(current, journal)) {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap journal cursor changed before advance");
     }
@@ -2629,9 +2663,9 @@ export class BootstrapExecutor {
         encoder.encode(encodeCanonicalJson(current as unknown as CanonicalJsonValue)),
       ),
       updatedAt: this.#dependencies.now().toISOString(),
-    }) as FreshV2InitJournalV1;
+    });
     await store.advance(next);
-    return store.current() as FreshV2InitJournalV1;
+    return store.current();
   }
   private assertPublicPayload(bytes: Uint8Array): void {
     const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
@@ -2655,8 +2689,7 @@ export class BootstrapExecutor {
       return packaged.readFile(row.source.relativePath);
     }
     if (row.source.kind === "plan_derived") return derivedPayloadBytes(row.source);
-    if (row.source.kind === "constant_empty") return new Uint8Array();
-    throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "fresh init cannot consume migration preimages");
+    return new Uint8Array();
   }
 
   private async guardReadOwnedFile(
@@ -3346,31 +3379,32 @@ export class BootstrapExecutor {
     const retained = evidenceAdmission.retainedParentAuthorities.find((candidate) => candidate.path === path);
     const stats = await lstatOptional(path);
     /**
-     * A12: a bookkeeping directory this plan admitted by shape carries neither
-     * creation evidence nor a plan-recorded identity, because it pre-dates the
-     * plan, so its shape is the whole authority the specification grants — and
-     * only where retention recorded no authority for it, so that a retained row
-     * keeps deciding wherever one exists. Neither identity is durable: the
-     * retained row's parent is itself projected at inspection time, in
-     * `report.ts`'s `retentionRow`.
+     * Spec 2 P8 (NEW-86): a bookkeeping directory this plan admitted by shape
+     * resolves only from the identity the planning process recorded in the
+     * immutable plan, which a recovering process replays. The `lstat` below
+     * checks that identity and never supplies it. Where retention also recorded
+     * an authority for the directory, the two durable identities must agree.
      */
-    if (
-      retained === undefined &&
-      lifecycleBookkeepingPaths(this.#dependencies.paths.home).has(path) &&
-      plan.admittedPreexistingPaths.includes(path)
-    ) {
+    const admitted = plan.admittedPreexistingPaths.find((candidate) => candidate.path === path);
+    if (admitted !== undefined && lifecycleBookkeepingPaths(this.#dependencies.paths.home).has(path)) {
       if (
         stats === null || !stats.isDirectory() || stats.isSymbolicLink() ||
         Number(stats.uid) !== uid() || mode(stats) !== 0o700
       ) {
         throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent escaped its admitted bookkeeping shape");
       }
+      if (
+        stats.dev.toString(10) !== admitted.dev || stats.ino.toString(10) !== admitted.ino ||
+        (retained !== undefined && (retained.dev !== admitted.dev || retained.ino !== admitted.ino))
+      ) {
+        throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent changed its admitted identity");
+      }
       return {
         path,
         ownerUid: uid(),
         mode: 0o700 as const,
-        dev: stats.dev.toString(10) as UInt64DecimalV1,
-        ino: stats.ino.toString(10) as UInt64DecimalV1,
+        dev: admitted.dev,
+        ino: admitted.ino,
       };
     }
     if (

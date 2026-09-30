@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { hashBytes, validateChangePlan } from "@developer-os/core";
 import type {
@@ -63,7 +63,10 @@ export function fingerprintDirectory(canonical: string, key: Uint8Array): string
 
 export interface QuarantineRoots {
   readonly contentRoot: string;
+  /** The declared path: the public result and `validateChangePlan`'s owned root. */
   readonly quarantine: string;
+  /** The form the containment proof held for: every read and write goes here. */
+  readonly canonicalQuarantine: string;
 }
 
 /**
@@ -80,9 +83,12 @@ export async function resolveQuarantine(
   const contentRoot = join(paths.brain, resolveBrainConfig(config).contentRoot);
   const quarantine = join(contentRoot, ...QUARANTINE_SEGMENTS);
   /**
-   * **The answer is the check, and the canonical form is deliberately
-   * discarded.** Every path this command goes on to use is the *declared* one,
-   * for two reasons that both bite:
+   * **Both forms are returned, and each has one job.** The canonical form is
+   * the one the proof below held for, so every read, `mkdir` and write goes
+   * through it (BACKLOG NEW-20): re-resolving the declared path afterwards
+   * reopens the window in which an ancestor symlink is retargeted between the
+   * proof and the write. The declared form is kept for two reasons that both
+   * bite:
    *
    * - `validateChangePlan` canonicalizes the owned root it is given, and
    *   `assertUsableRoots` refuses a root that resolved to an **ancestor** of
@@ -96,15 +102,20 @@ export async function resolveQuarantine(
    * - `CaptureResultV1.path` is a contract, printed and published in `--json`.
    *   On a vault reached through a symlink the canonical form names a location
    *   the user never configured.
+   *
+   * Handing `validateChangePlan` the declared root beside a canonical target
+   * also makes a retarget in that window fail closed: the root re-resolves to
+   * the new location, the target does not, and the plan is refused as
+   * `outside_owned_roots`.
    */
-  await resolveContainedRoot(
+  const canonicalQuarantine = await resolveContainedRoot(
     context,
     contentRoot,
     quarantine,
     "the quarantine directory resolves outside the content root",
     refuse,
   );
-  return { contentRoot, quarantine };
+  return { contentRoot, quarantine, canonicalQuarantine };
 }
 
 export interface ExistingCapture {
@@ -273,10 +284,13 @@ export async function writeQuarantineCapture(
    * first — the same reason `init` and `brain reindex` create theirs before
    * executing. It is normally there from `init`'s template; this is the path
    * that matters when a user deleted it. Guarded first, because the vault root
-   * comes from a config-supplied `brainPath`.
+   * comes from a config-supplied `brainPath`. The target's own directory, not
+   * `quarantine`: a caller holding the canonical target must not have it
+   * re-resolved through the declared root here.
    */
-  await context.guards.transaction.assertTarget(quarantine);
-  await context.fs.mkdir(quarantine, { recursive: true, mode: 0o700 });
+  const directory = dirname(target);
+  await context.guards.transaction.assertTarget(directory);
+  await context.fs.mkdir(directory, { recursive: true, mode: 0o700 });
 
   const content = new TextEncoder().encode(contents);
   const manifest = (await readAdmittedManifest(context, paths)) ?? EMPTY_MANIFEST;

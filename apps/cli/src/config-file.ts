@@ -32,6 +32,8 @@ export class ConfigurationError extends Error {
  * lines in `TomlError.message`, so propagating it would print the contents of
  * whatever file was read into `status`, `doctor`, and their JSON output.
  * Redaction is a heuristic and must not be the only thing standing there.
+ *
+ * Once parsed, the `[redaction]` patterns are bound into the context's runner (NEW-26).
  */
 export async function readConfigFile(
   context: CliContext,
@@ -51,9 +53,12 @@ export async function readConfigFile(
 
   const serialized = await context.guards.readText(configFile);
 
+  let config: DeveloperOsConfigV1;
   try {
-    return loadConfig(serialized);
+    config = loadConfig(serialized);
   } catch {
     throw new ConfigurationError();
   }
+  context.bindRedactionPatterns?.(config.redaction?.patterns ?? []);
+  return config;
 }

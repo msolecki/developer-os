@@ -243,9 +243,9 @@ function preamble(
   shared: WorkflowContractV1,
   rendered: WorkflowContractV1,
 ): readonly string[] {
+  // No note saying where this came from: the body is model-visible, and a
+  // rendering note there is noise the agent has to read past (NEW-66).
   return [
-    `<!-- preamble from ${SHARED_WORKFLOW_ID}; concatenated, not referenced -->`,
-    "",
     "## Always",
     "",
     ...preambleBody(shared, new Set(rendered.refusals.map((refusal) => refusal.when))),
@@ -306,6 +306,9 @@ function renderRefusals(
   );
 }
 
+const INPUT_PLACEHOLDER_NOTE =
+  "A value written `$input.<name>` stands for the workflow input `<name>`: replace it with what the user supplied for that input.";
+
 /**
  * A step is prose or a verb, never both and never neither — the contract
  * enforces that, so the `else` branch here is a verb by construction. `with` is
@@ -356,7 +359,11 @@ function renderSteps(contract: WorkflowContractV1): readonly string[] {
       lines.push(...fenced(screen(command), "text"), "");
     }
     if (step.with !== undefined) {
-      lines.push(...fenced(screen(JSON.stringify(step.with)), "json"), "");
+      const json = JSON.stringify(step.with);
+      if (json.includes('"$input.')) {
+        lines.push(INPUT_PLACEHOLDER_NOTE, "");
+      }
+      lines.push(...fenced(screen(json), "json"), "");
     }
   }
   return lines;

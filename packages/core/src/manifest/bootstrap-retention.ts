@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 
 import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { CanonicalAbsolutePathV1, ExactProductStatePathV1 } from "../update/paths.js";
+import { compareUtf8 } from "../update/release.js";
 import {
   parseLowerHexSha256,
   parseUInt64Decimal,
@@ -17,11 +18,10 @@ import type {
   BootstrapRetentionTerminalPreimageV1,
   CreatedPathEvidenceV1,
   FreshV2InitPlanV1,
-  ManifestMigrationPlanV1,
   PlannedCreatedPathV1,
 } from "./bootstrap.js";
 import { BootstrapStateError, validateBootstrapPayloadEvidence } from "./bootstrap.js";
-import type { FreshV2InitIdV1, ManifestMigrationIdV1 } from "./manifest-state.js";
+import type { FreshV2InitIdV1 } from "./manifest-state.js";
 
 export const BOOTSTRAP_RETAINED_MAX_IDS = 256;
 export const BOOTSTRAP_RETAINED_MAX_ENTRIES = 1_000_000;
@@ -46,13 +46,7 @@ export interface BootstrapJournalSlotIdentityV1 {
   readonly ino: UInt64DecimalV1;
 }
 
-type FreshV2InitRetainedPlanV1 = FreshV2InitPlanV1;
-
-type ManifestMigrationRetainedPlanV1 = ManifestMigrationPlanV1;
-
-export type BootstrapRetainedExecutionPlanV1 =
-  | FreshV2InitRetainedPlanV1
-  | ManifestMigrationRetainedPlanV1;
+export type BootstrapRetainedExecutionPlanV1 = FreshV2InitPlanV1;
 
 export type BootstrapRetainedJournalPhaseV1 =
   | "planned"
@@ -70,7 +64,7 @@ export type BootstrapRetainedJournalPhaseV1 =
 
 export interface BootstrapJournalRecordV1 {
   readonly schemaVersion: 1;
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly id: FreshV2InitIdV1;
   readonly planHash: LowerHexSha256;
   readonly slot: 0 | 1;
   readonly sequence: UInt64DecimalV1;
@@ -156,6 +150,16 @@ export interface BootstrapFoundationTerminalJournalEvidenceV1 {
   readonly postimage: Extract<BootstrapRetentionPostimageV1, { kind: "regular_file" }>;
 }
 
+const REDACTION_KEY_LEAF = /^(?:redaction\.key|\.redaction\.key\.lc_[0-9a-f]{64}_[0-9]+\.tombstone)$/u;
+
+/**
+ * NEW-93: the redaction key and its uninstall tombstone are never opened, read or hashed (Global
+ * Constraint), so a retained-tree walk records either one from `lstat` alone, with `sha256: null`.
+ */
+export function isRedactionKeyPath(path: string): boolean {
+  return REDACTION_KEY_LEAF.test(basename(path)) && basename(dirname(path)) === "state";
+}
+
 export type BootstrapRetentionDirectoryEntryV1 =
   | {
       readonly relativePath: string;
@@ -164,7 +168,8 @@ export type BootstrapRetentionDirectoryEntryV1 =
       readonly mode: 0o600 | 0o700;
       readonly nlink: 1;
       readonly bytes: UInt64DecimalV1;
-      readonly sha256: LowerHexSha256;
+      /** `null` exactly when `isRedactionKeyPath` holds for the entry. */
+      readonly sha256: LowerHexSha256 | null;
       readonly dev: UInt64DecimalV1;
       readonly ino: UInt64DecimalV1;
     }
@@ -186,7 +191,7 @@ export interface BootstrapRetentionDirectoryTreeEvidenceV1 {
 }
 
 export interface BootstrapRetentionEvidenceProjectionV1 {
-  readonly bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly bootstrapId: FreshV2InitIdV1;
   /** Present only once retention starts; fixes the plan-derived retention prefix. */
   readonly terminalJournal: BootstrapJournalRecordV1 | null;
   /** Admitted persisted payload values and evidence-file identities; this pure projection does not widen bootstrap codecs. */
@@ -228,7 +233,7 @@ export interface BootstrapRetentionLocationV1 {
 
 export interface BootstrapRetentionEntryV1 {
   readonly schemaVersion: 1;
-  readonly bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly bootstrapId: FreshV2InitIdV1;
   readonly ordinal: number;
   readonly role: BootstrapRetentionRoleV1;
   readonly sourcePath: CanonicalAbsolutePathV1;
@@ -243,9 +248,9 @@ export interface BootstrapJournalSelectionV1 {
 }
 
 export interface BootstrapEvidenceSummaryV1 {
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly id: FreshV2InitIdV1;
   readonly status: "verified" | "incomplete" | "altered" | "unverified";
-  readonly operation: "fresh_v2_init" | "v1_to_v2";
+  readonly operation: "fresh_v2_init";
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   readonly vaultPath: CanonicalAbsolutePathV1;
   readonly entryCount: number;
@@ -257,9 +262,9 @@ export interface SameParentRenameNoReplaceV1 {
 }
 
 export interface BootstrapEvidenceClassificationInputV1 {
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly id: FreshV2InitIdV1;
   readonly planPath: CanonicalAbsolutePathV1;
-  readonly operation: "fresh_v2_init" | "v1_to_v2";
+  readonly operation: "fresh_v2_init";
   readonly journal: BootstrapJournalSelectionV1 | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   /**
@@ -831,17 +836,6 @@ const ROLE_ORDER: Readonly<Record<BootstrapRetentionRoleV1, number>> = {
   bootstrap_lock: 7,
 };
 
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = encoder.encode(left);
-  const rightBytes = encoder.encode(right);
-  const common = Math.min(leftBytes.length, rightBytes.length);
-  for (let index = 0; index < common; index += 1) {
-    const difference = (leftBytes[index] as number) - (rightBytes[index] as number);
-    if (difference !== 0) return difference;
-  }
-  return leftBytes.length - rightBytes.length;
-}
-
 /**
  * Evidence rows, retention locations, and the verified retention table must
  * all land in this exact order, because callers compare one against another
@@ -853,6 +847,37 @@ function compareRetentionRowOrder(
   right: { readonly role: BootstrapRetentionRoleV1; readonly sourcePath: CanonicalAbsolutePathV1 },
 ): number {
   return ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || compareUtf8(left.sourcePath, right.sourcePath);
+}
+
+/**
+ * NEW-63: the one collapse -> role order pipeline behind both retention
+ * locations and the retention table. The two once carried separate copies, and
+ * any drift between them assigns a tombstone ordinal the reader never checks.
+ */
+function collapseAndOrder<Row extends { readonly role: BootstrapRetentionRoleV1; readonly sourcePath: CanonicalAbsolutePathV1 }>(
+  rows: readonly Row[],
+  isDirectory: (row: Row) => boolean,
+): { readonly maximalRoots: readonly Row[]; readonly ordered: readonly Row[] } {
+  const directoryRoots = rows
+    .filter(isDirectory)
+    .sort((left, right) => left.sourcePath.length - right.sourcePath.length || compareUtf8(left.sourcePath, right.sourcePath));
+  const maximalRoots = directoryRoots.filter((row, index) =>
+    !directoryRoots.slice(0, index).some((ancestor) => row.sourcePath.startsWith(`${ancestor.sourcePath}/`)),
+  );
+  const ordered = rows
+    .filter((row) =>
+      !maximalRoots.some((root) => row.sourcePath !== root.sourcePath && row.sourcePath.startsWith(`${root.sourcePath}/`)),
+    )
+    .sort(compareRetentionRowOrder);
+  return { maximalRoots, ordered };
+}
+
+function retentionTombstonePath(
+  plan: BootstrapRetainedExecutionPlanV1,
+  sourcePath: CanonicalAbsolutePathV1,
+  ordinal: number,
+): CanonicalAbsolutePathV1 {
+  return `${dirname(sourcePath)}/.developer-os-retained.${plan.id}.${String(ordinal).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1;
 }
 
 function canonicalRelativePath(value: unknown, rootPath: CanonicalAbsolutePathV1): string {
@@ -899,7 +924,9 @@ function validateDirectoryTreeEvidence(value: unknown): BootstrapRetentionDirect
         kind: "regular_file" as const,
         mode: mode === 0o600 ? 0o600 as const : 0o700 as const,
         nlink: 1 as const,
-        sha256: sha256(entry.sha256),
+        sha256: isRedactionKeyPath(`${rootPath}/${relativePath}`)
+          ? (entry.sha256 === null ? null : refuse())
+          : sha256(entry.sha256),
       };
     }
     if (entry.kind === "directory") {
@@ -991,12 +1018,11 @@ function validatePostimage(
 }
 
 function planRoot(plan: BootstrapRetainedExecutionPlanV1): CanonicalAbsolutePathV1 {
-  const planPath = plan.operation === "fresh_v2_init" ? plan.planPath : plan.paths.plan;
-  return dirname(dirname(planPath)) as CanonicalAbsolutePathV1;
+  return dirname(dirname(plan.planPath)) as CanonicalAbsolutePathV1;
 }
 
 function stagingRoot(plan: BootstrapRetainedExecutionPlanV1): CanonicalAbsolutePathV1 {
-  return plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+  return plan.stagingRoot;
 }
 
 function creationEvidencePath(
@@ -1004,8 +1030,7 @@ function creationEvidencePath(
   scope: "ordinary" | "launchability",
   ordinal: number,
 ): CanonicalAbsolutePathV1 {
-  const prefix = plan.operation === "fresh_v2_init" ? "fresh-v2-init" : "manifest-migration";
-  return `${planRoot(plan)}/state/.${prefix}.${plan.id}.${scope}.${String(ordinal).padStart(10, "0")}.creation.json` as CanonicalAbsolutePathV1;
+  return `${planRoot(plan)}/state/.fresh-v2-init.${plan.id}.${scope}.${String(ordinal).padStart(10, "0")}.creation.json` as CanonicalAbsolutePathV1;
 }
 
 interface Authority {
@@ -1147,7 +1172,7 @@ function manifestPayloadOrdinal(plan: BootstrapRetainedExecutionPlanV1): number 
 }
 
 function forbiddenCompensationTargets(plan: BootstrapRetainedExecutionPlanV1): ReadonlySet<CanonicalAbsolutePathV1> {
-  const planPath = plan.operation === "fresh_v2_init" ? plan.planPath : plan.paths.plan;
+  const planPath = plan.planPath;
   return new Set([
     plan.bootstrapIdentity.path,
     plan.manifest.manifestPath,
@@ -1244,10 +1269,7 @@ function authorities(
   const stagingOrdinal = plan.createdPaths.findIndex((planned) =>
     planned.kind === "directory" && planned.path === retainedStagingRoot,
   );
-  if (
-    plan.operation !== "fresh_v2_init" ||
-    (stagingOrdinal >= 0 && stagingOrdinal < journal.nextCreatedPath)
-  ) {
+  if (stagingOrdinal >= 0 && stagingOrdinal < journal.nextCreatedPath) {
     const planned = stagingOrdinal < 0 ? undefined : plan.createdPaths[stagingOrdinal];
     result.push({
       role: "staging_subtree",
@@ -1300,30 +1322,15 @@ export function deriveBootstrapRetentionLocations(
   terminalValue: unknown,
 ): readonly BootstrapRetentionLocationV1[] {
   const journal = terminalRetentionJournal(plan, terminalValue);
-  const listed = listedRetentionAuthorities(plan, journal);
-  const directoryRoots = listed
-    .filter((authority) =>
-      authority.role === "staging_subtree" || authority.planned?.kind === "directory",
-    )
-    .sort((left, right) =>
-      left.sourcePath.length - right.sourcePath.length || compareUtf8(left.sourcePath, right.sourcePath),
-    );
-  const maximalRoots = directoryRoots.filter((row, index) =>
-    !directoryRoots.slice(0, index).some((ancestor) =>
-      row.sourcePath.startsWith(`${ancestor.sourcePath}/`),
-    ),
+  const { maximalRoots, ordered } = collapseAndOrder(
+    listedRetentionAuthorities(plan, journal),
+    (authority) => authority.role === "staging_subtree" || authority.planned?.kind === "directory",
   );
-  const collapsed = listed.filter((row) =>
-    !maximalRoots.some((root) =>
-      row.sourcePath !== root.sourcePath && row.sourcePath.startsWith(`${root.sourcePath}/`),
-    ),
-  );
-  collapsed.sort(compareRetentionRowOrder);
-  return collapsed.map((row, ordinal) => ({
+  return ordered.map((row, ordinal) => ({
     ordinal,
     role: row.role,
     sourcePath: row.sourcePath,
-    tombstonePath: `${dirname(row.sourcePath)}/.developer-os-retained.${plan.id}.${String(ordinal).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1,
+    tombstonePath: retentionTombstonePath(plan, row.sourcePath, ordinal),
     collapsesDescendants: maximalRoots.some((root) => root.sourcePath === row.sourcePath),
   }));
 }
@@ -1982,16 +1989,8 @@ function deriveBootstrapRetentionTableUncached(
     verifyAuthority(plan, authority, row, payloadEvidence, createdPathEvidence, foundationEvidence);
   }
 
-  const directoryRoots = rows
-    .filter((row) => row.postimage.kind === "directory_tree")
-    .sort((left, right) => left.sourcePath.length - right.sourcePath.length || compareUtf8(left.sourcePath, right.sourcePath));
-  const maximalRoots = directoryRoots.filter((row, index) =>
-    !directoryRoots.slice(0, index).some((ancestor) => row.sourcePath.startsWith(`${ancestor.sourcePath}/`)),
-  );
+  const { maximalRoots, ordered: collapsed } = collapseAndOrder(rows, (row) => row.postimage.kind === "directory_tree");
   const directoryTrees = verifyDirectoryTrees(rows, maximalRoots, evidence.directoryTrees);
-  const collapsed = rows.filter((row) =>
-    !maximalRoots.some((root) => row.sourcePath !== root.sourcePath && row.sourcePath.startsWith(`${root.sourcePath}/`)),
-  );
 
   const identities = new Set<string>();
   for (const tree of directoryTrees) {
@@ -2007,7 +2006,6 @@ function deriveBootstrapRetentionTableUncached(
     identities.add(identity);
   }
 
-  collapsed.sort(compareRetentionRowOrder);
   const table = collapsed.map((row, ordinal): BootstrapRetentionEntryV1 => {
     let postimage = row.postimage;
     if (postimage.kind === "directory_tree") {
@@ -2021,7 +2019,7 @@ function deriveBootstrapRetentionTableUncached(
       ordinal,
       role: row.role,
       sourcePath: row.sourcePath,
-      tombstonePath: `${dirname(row.sourcePath)}/.developer-os-retained.${plan.id}.${String(ordinal).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1,
+      tombstonePath: retentionTombstonePath(plan, row.sourcePath, ordinal),
       parent: row.parent,
       postimage,
     };

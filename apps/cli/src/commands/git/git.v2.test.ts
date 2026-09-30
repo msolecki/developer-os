@@ -32,7 +32,7 @@ import { lifecycleHomeKeyFromAdmission, residueFrom } from "../../lifecycle/cont
 import { runBrain } from "../brain.js";
 import { runConfig } from "../config.js";
 import { runInit } from "../init.js";
-import { manifestAdmissionFor } from "../uninstall.js";
+import { manifestAdmissionFor } from "../../lifecycle/manifest-admission.js";
 import { createCommandFixture, createLowEntropyFixtureRoot, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../testing.js";
 import type { CommandFixture } from "../testing.js";
 import { runGit } from "./index.js";

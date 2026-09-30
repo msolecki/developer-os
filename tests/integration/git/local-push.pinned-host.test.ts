@@ -5,17 +5,21 @@ import { tmpdir } from "node:os";
 import { parseCanonicalAbsolutePathText, parseFullBranchRef, parseLowerHexSha1, type LowerHexSha1, type LowerHexSha256 } from "@developer-os/core";
 import { createProductionGitRuntime } from "@developer-os/cli/dist/commands/git/runtime.js";
 import type { GitLocalPushPreparationV1 } from "@developer-os/cli/dist/commands/git/runtime.js";
-import { SUPPORTED_GIT_DISTRIBUTION } from "@developer-os/security";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath } from "@developer-os/platform-macos";
+import { admitGitExecutables } from "@developer-os/security";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 /**
- * The production `prepareLocalPush` on the pinned host (founder Q5, D62):
+ * The production `prepareLocalPush` on an admitted host (founder Q5, D62, D71):
  * the real gateway graph against synthetic repositories under a fresh
- * `mktemp` directory. On any other Git distribution it refuses
- * `unsupported_git_distribution`: a skip would read as a pass.
+ * `mktemp` directory. A host whose fixed-path Git does not admit refuses
+ * `unsupported_git_distribution` and fails the file: a skip would read as a pass.
  */
 
-const GIT = SUPPORTED_GIT_DISTRIBUTION.executables.find((candidate) => candidate.id === "git_main")?.invokedPath ?? "";
+let GIT = "";
+beforeAll(async () => {
+  GIT = (await admitGitExecutables(DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath, process.arch, "local")).git.canonicalPath;
+});
 const UID = process.getuid?.() ?? 0;
 const BRANCH = parseFullBranchRef("refs/heads/main");
 

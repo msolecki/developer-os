@@ -54,9 +54,9 @@ one capability vocabulary — this note says so rather than restating it as a co
    omitted. `durable_project_guidance` is therefore reported and used by nothing (§11.5).
    **Amended 2026-09-22 (A12):** the first half no longer holds as written. The product now writes
    exactly one marked block (`<!-- developer-os:begin v1 -->` … `<!-- developer-os:end v1 -->`) in exactly `C/AGENTS.md`,
-   merged three-way with the user's text around it (spec
-   `2026-09-22-developer-os-instruction-artifacts-design.md` §5), plus `C/agents/developer-os-<id>.toml`
-   agents; both are rows of the closed §2.2 authorization. It still never writes
+   merged three-way with the user's text around it (`foundation.md` §12.2), plus
+   `C/agents/developer-os-<id>.toml` agents; both are rows of the closed `foundation.md` §12.5
+   authorization. It still never writes
    `AGENTS.override.md` at any scope (`packages/adapter-codex/src/instructions.ts`).
    `durable_project_guidance` stays `not-used`: the block is user-scope guidance in the Codex home,
    not project guidance.
@@ -89,10 +89,13 @@ one capability vocabulary — this note says so rather than restating it as a co
 8. **It spawns no process itself.** Execution goes through `packages/security`'s runner, and the
    two `codex plugin` steps are *proposed*, not run, by this package.
 
-## 3. The capability model — two gates, three values, and one observable key
+## 3. The capability model — two gates, four values, and one observable key
 
 `yes` requires a documented version floor to permit the capability **and** a probe to observe it.
-A probe that could not run yields `unknown`. DOS-P6 removed `wrapper-required`:
+A probe that could not run yields `unknown`. A probe that asked and reports `absent` yields `no`,
+whatever the version — the table gates `yes`, not `no` — and a key no probe mentioned stays
+`unknown` (NEW-62). `doctor --probe` therefore prints `skills=no` when the listing answered without
+our enabled tree and `skills=unknown` when it could not be read. DOS-P6 removed `wrapper-required`:
 `session_end_capture`, `pre_compact_backup`, `subagents` and `durable_project_guidance` are unused
 by this product and resolve to `not-used` before either gate (`CODEX_NOT_USED_KEYS`). Both adapters
 share this vocabulary and their key lists are asserted equal.
@@ -478,7 +481,7 @@ rather than performed; and the provisional JSONL reduction was replaced after a 
 9. **CLOSED 2026-09-22 by A12: `buildConflictEvidence` has its consumer.** The marked instruction
    block in `C/AGENTS.md` (and `H/.claude/CLAUDE.md`) is the first real three-way merge; a block
    conflict uses the new block arm of `ConflictEvidenceRequest`: three hashes plus a redacted
-   two-way diff (spec §5.3). **Amended 2026-09-22 (A12).**
+   two-way diff (`foundation.md` §12.2). **Amended 2026-09-22 (A12).**
 10. **Line-wrap drift across several files.** No formatter and no `max-len` rule is configured, so
     nothing enforces either convention and a hand pass would drift again by the next commit. This
     wants a repository lint decision, not a hand pass. **Owner: whoever configures repository
@@ -500,7 +503,7 @@ rather than performed; and the provisional JSONL reduction was replaced after a 
     post-install edit under the product home is invisible to the model until Codex resyncs its
     cache on some schedule this adapter has never observed. **Owner: DOS-P7**, whose update
     lifecycle is what re-renders the tree in place.
-    **CLOSED 2026-09-22 by A12 (amended in place):** spec §6.4's registration step runs
+    **CLOSED 2026-09-22 by A12 (amended in place):** §16's registration step runs
     `codex plugin add developer-os@developer-os --json` on every install and on every reconcile whose
     plugin-tree hash differs from the one recorded in `P/codex/registration.json`
     (`codex-registration-v1`), which re-stages the cache copy, then checks `codex plugin list --json`.
@@ -556,8 +559,28 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
   prompt-input` roots the skills at `<CODEX_HOME>/plugins/cache/developer-os/developer-os/0.0.0/skills`,
   and an edit to the product tree is invisible until `codex plugin add` runs again. §4's premise
   holds for listing and fails for loading; §11.14 is confirmed rather than suspected. The
-  `PLUGIN_VERSION` literal `0.0.0` names the cache directory. Owner: `BACKLOG.md` NEW-61 (roadmap
-  Phase 5 and the update lifecycle).
+  `PLUGIN_VERSION` literal `0.0.0` names the cache directory. `BACKLOG.md` NEW-61 closed 2026-09-29:
+  install re-registers on a changed tree, and so does `update` (next item).
+- **Amended 2026-09-28 (Spec 2 D72 P6, NEW-61): an update re-registers the plugin.** Every update
+  whose Codex owner plan changes a file carries exactly one `codex_registration_refresh` effect:
+  `codex plugin add developer-os@developer-os --json` from the managed plugin root, with exactly
+  `CODEX_HOME=<recorded Codex home>` and `TMPDIR=<private effect directory>`, closed stdin, one
+  process, 64 KiB output bounds and a 60-second wall (`codexRefreshPolicy` in
+  `apps/cli/src/update/codex-refresh.ts`). `plugin list --json` observes the projection before and
+  after under the same policy. The marketplace is never added by an update.
+  - **The executable** is the `codex` discovery selected, pinned at its canonical real path: a
+    regular file owned by the user or root with no group or other write on it or on any ancestor.
+    Its device, inode, mode and SHA-256 are rechecked before every spawn, so a Homebrew or npm link
+    is admitted and a replaced binary refuses.
+  - **The record.** The owner files step rewrites `codex/registration.json` to the postimage tree
+    hash before the effect runs, so a failed refresh compensates the record with the tree and
+    `doctor` reads `registered` after a successful one.
+  - **Planning refuses** an update while the registration is `unregistered` or `stale`
+    (`update_codex_registration_<state>`, exit 3) before allocation.
+  - **Evidence:** `apps/cli/src/update/codex-refresh.test.ts` and the Codex rows of
+    `tests/integration/update/archive-planner.test.ts` (one refresh leaf, the rewritten record).
+    The refresh has run only against scripted Codex output; the synthetic on-disk lifecycle
+    installs no Codex owner.
 - **Hook events available:** `pre_tool_use`, `post_tool_use`, `pre_compact`, `session_start`,
   `user_prompt_submit`, `stop`, `subagent_start`. There is no session-end event, so
   `sessionEndCapture` parity is impossible on this vendor. A plugin manifest may carry `"hooks"`.
@@ -578,15 +601,16 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
   Owner: NEW-45 still, for whether a real turn ever emits more than one `agent_message`.
 - **`renderMarketplace` emits no `policy`/`category`**, so the plugin inherits the vendor's default
   `authPolicy: ON_INSTALL`.
-- **Capability resolution has no `no` state**: `absent` and `unavailable` probe observations both
-  resolve to `unknown` (`packages/core/src/capabilities/index.ts`), contrary to the docblocks in both
-  adapters' `capabilities.ts`. Owner: NEW-62.
+- **Capability resolution had no `no` state**: `absent` and `unavailable` probe observations both
+  resolved to `unknown` (`packages/core/src/capabilities/index.ts`), contrary to the docblocks in both
+  adapters' `capabilities.ts`. Closed by NEW-62: `absent` now resolves to `no` (§3), except for the
+  two firing-record keys, which stay `unknown` without a record.
 
 ## 15. Observed for A12 against Codex CLI 0.155.1 on 2026-09-22
 
 Recorded by A12 plan Task 2 (spec §10.1), re-pinned to the installed version by founder decision
-D48. Each row names the §4 row or §10.1 bullet of
-`docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md` it answers.
+D48. Each row names the §4 row or §10.1 bullet it answers of the A12 spec, retired 2026-09-29:
+`git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`.
 
 **Isolation, for every row.** `T=$(realpath "$(mktemp -d "$TMPDIR/x.XXXX")")`, `C=$T/.codex`; every
 command ran as `env -i PATH="$PATH" TMPDIR="$TMPDIR" HOME="$T" CODEX_HOME="$C"
@@ -631,7 +655,7 @@ line and a §5.1 block with a `## probe-rule` section; `$C/agents/developer-os-p
   `POST to http://127.0.0.1:9/v1/responses: `, never on `prompt-input` alone, which shows neither
   agent roles nor the effect of `codex exec` flags.
 
-### D52 — ingest runs Codex with an isolated `CODEX_HOME` (2026-09-22, BACKLOG NEW-102)
+### D52 — ingest runs Codex with an isolated `CODEX_HOME` (2026-09-22, BACKLOG NEW-102, closed 2026-09-26)
 
 `ingest` no longer lets Codex resolve the user's Codex home. Before each Codex run it reconciles
 `<product-home>/state/codex-ingest-home/` (`0700`, product-owned) to hold nothing but a symlink
@@ -643,8 +667,34 @@ refused and never deleted. After the run, in a `finally`, every child except `au
 without following links, so the resting shape is the one fresh `init`, both uninstall arms and the
 absent-manifest walk admit (`inspectCodexIngestHomeShape`, reason `codex_ingest_home_shape`).
 Uninstall unlinks the link and removes the directory. The link is the only thing it removes; the
-user's credential is never touched. Workflow `agent.prompt` callers of `invokeCodex` pass no
-`codexHome` and still spawn with `env: {}`.
+user's credential is never touched. ~~Workflow `agent.prompt` callers of `invokeCodex` pass no
+`codexHome` and still spawn with `env: {}`.~~ Superseded by D73 below.
+
+**Amended 2026-09-28 (NEW-106, D73): every product Codex call is isolated.** D8 covers every
+caller of `invokeCodex`, not only `ingest`. `CodexInvocation.codexHome` is required and
+`invokeCodex` refuses (`refused`, nothing spawned) a call without an absolute one, so no call can
+fall back to the user's home and its `AGENTS.md` or agent roles. `invocationFromAgentPrompt`
+returns an invocation without `codexHome`; the one helper that supplies it is
+`invokeIsolatedCodex` in `apps/cli/src/commands/ingest.ts`, which prepares the per-run home
+below, invokes and sweeps. `ingest` wraps it with its scratch working root (NEW-76) and is today its only production
+caller. No workflow step invokes Codex yet; `invocationFromAgentPrompt` is exercised only by tests.
+The contract for a future `agent.prompt` caller is to pass its compiler-derived working root
+through `invokeIsolatedCodex` unchanged, never to call `invokeCodex` directly. The home keeps
+its `state/codex-ingest-home` path, which core, admission, retention and uninstall pin.
+
+**Amended 2026-09-28 (NEW-105): one `CODEX_HOME` per run.** Two concurrent ingests shared the
+directory above with no ordering. Each Codex call now gets its own `mkdtemp` directory
+`state/codex-ingest-home/run-XXXXXX` (`0700`), with a fresh `auth.json` symlink to the resolved
+credential made in it (never read or copied), and `invokeCodex` spawns with
+`env: { CODEX_HOME: <run dir> }`. After the child exits the run directory is removed whole, links
+unlinked and never followed, so the isolated home rests **empty**. Before creating its own, a run
+admits the parent (owned `0700` directory), leaves sibling `run-*` directories alone — one may be
+a live ingest — and unlinks a pre-NEW-105 top-level `auth.json` link; any other entry is refused.
+If Codex replaced a run's link with a regular file, that file may be a refreshed credential: the
+sweep keeps it with its run directory, and the next run refuses naming it. The shared shape check
+(`inspectCodexIngestHomeShape`) is unchanged, so init, both uninstall arms and the absent-manifest
+walk still admit an empty home or the legacy link, and refuse a leftover run directory (a live or
+crashed run) instead of deleting it.
 
 **Observed 2026-09-22, Codex CLI 0.155.1, with the §15 *request* method** (disposable `T`; the
 user home `$T/home/.codex` held the §15 `AGENTS.md` block, `agents/developer-os-probe.toml` and a
@@ -675,4 +725,55 @@ dummy `auth.json`; the isolated home held only the `auth.json` symlink; ingest f
   Second, whether Codex refreshes a ChatGPT token by write-temp-then-rename. A rename would replace
   the link with the rotated credential. The product would then refuse the next run and name the
   file instead of deleting it.
+
+## 16. Instruction projection and registration (A12)
+
+`foundation.md` §12 has the lifecycle.
+
+**Projection** (`packages/adapter-codex/src/instructions.ts` — `renderInstructionTree`, pure and
+byte-deterministic):
+
+- The `C/AGENTS.md` block holds `## <id>` sections for rules, then
+  `## <id> — applies only to paths matching: <globs>` sections for scoped rules (emulated: the
+  path restriction is prose only), each sorted by id.
+- `output-style` is unsupported and nothing is written.
+- `agent` becomes `C/agents/developer-os-<id>.toml` with exactly the keys `name` (as
+  `developer-os-<id>`), `description` and `developer_instructions` (§15).
+- `skill` becomes `<product-home>/codex/plugins/developer-os/skills/<id>/`; a command collapses to
+  its skill.
+- An instruction skill that claims a workflow path refuses.
+
+**Registration**
+(`apps/cli/src/instructions/codex-registration.ts` — `registerCodexPlugin`) runs after the attach
+commits, only when `codex plugin list --json` does not show the plugin enabled at its root, or
+when the record is missing or its `treeHash` or `codexHome` differ. It is the vendor CLI's own
+write to its own configuration: an unjournaled external effect, run outside the Foundation
+transaction through the security runner.
+
+- It runs `plugin marketplace add <product-home>/codex` only when `plugin marketplace list` lacks
+  it, then always `plugin add developer-os@developer-os --json` (the call that refreshes Codex's
+  cache copy, §14), then requires `plugin list --json` to show an `installed[]` entry whose
+  `source.path` equals the plugin root with `enabled: true`.
+- Every call is an argv array with `env` exactly `{ CODEX_HOME: C }`, so the CLI registers against
+  the home whose `AGENTS.md` and `agents/` the product writes.
+- Success rewrites `<product-home>/codex/registration.json` in a second gated transaction. It is a
+  manifest-owned `schema` row, schema id `codex-registration-v1`, holding exactly
+  `{ codexHome, treeHash }` (`validateCodexRegistrationRecord`). `treeHash` is
+  `codexPluginTreeHash`: domain `developer-os:codex-plugin-tree:v1` over the sorted
+  `(path, sha256)` of the plugin tree's content rows.
+- A failing step is `codex_registration_failed`, exit 1, after the commit.
+
+**Unregistration**
+(`apps/cli/src/instructions/codex-registration.ts` — `unregisterCodexPlugin`) runs before any file
+changes: `plugin remove` when listed, then `plugin marketplace remove developer-os` when listed.
+An absent CLI is the warning `codex registration not removed: codex CLI absent`; a present CLI
+that fails aborts with exit 1 before any mutation.
+
+**Partial states,** each reported by `doctor`'s `codex-registration` and recovered by re-running
+`init`:
+
+- The tree is installed but not registered, or the detach failed after unregistering:
+  `unregistered`.
+- The tree changed since the last registration: `stale`.
+- Codex's cache copy differs from the tree: `cache-stale`, under `--probe` only.
 

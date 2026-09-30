@@ -56,7 +56,7 @@ import {
   createRedactor,
   SecurityRefusalError,
 } from "@developer-os/security";
-import type { ProcessRunner } from "@developer-os/security";
+import type { ProcessRunner, RedactionResult, RedactionScope, Redactor } from "@developer-os/security";
 
 import type { CliIo } from "./io.js";
 import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js";
@@ -144,7 +144,13 @@ export interface CliGuards {
    * component unresolved.
    */
   readonly canonicalize: (path: string) => Promise<string>;
-  readonly redactDiagnostic: (text: string) => string;
+  /**
+   * `scope` selects the classes (NEW-36): `failureFrom` asks for `path` on `error.paths` and
+   * `redactPayload` for `name`/`value` on `data`. **Every override must forward it** — a
+   * `(text) => redact(text).text` still type-checks and silently redacts paths with
+   * `high-entropy` again.
+   */
+  readonly redactDiagnostic: (text: string, scope?: RedactionScope) => string;
   /**
    * **The bound redactor for structured data that is not a failure arm** — a scheduled run's
    * log record. The walk is the same one `failureFrom` runs on `data`, bound in `createGuards`
@@ -193,6 +199,13 @@ export interface CliContext {
    * drive a fake, which is the discipline every other dependency here follows.
    */
   readonly runner: ProcessRunner;
+  /**
+   * Rebinds `runner`'s output redactor to the user's `[redaction]` patterns once
+   * `readConfigFile` has them (BACKLOG NEW-26). Optional so a test context keeps its fake
+   * runner untouched; the key stays the composition root's, since runner output carries
+   * redaction markers and no fingerprint.
+   */
+  readonly bindRedactionPatterns?: ((patterns: readonly string[]) => void) | undefined;
   /**
    * Fresh-install authority is intentionally narrower than the command-wide
    * context. Older direct context literals stay source-compatible, while the
@@ -417,6 +430,10 @@ export function createGuards(
   redactionKey: Uint8Array,
 ): CliGuards {
   const transaction = createTransactionGuards(policy, redactionKey);
+  /** Built-in classes only, for the reason `createTransactionGuards` states. */
+  const redact = createRedactor(redactionKey);
+  const redactDiagnostic = (text: string, scope?: RedactionScope): string =>
+    redact(text, scope).text;
 
   return {
     manifest: createManifestGuards(policy),
@@ -426,10 +443,8 @@ export function createGuards(
       reader?: (handle: FileHandle) => Promise<string>,
     ): Promise<string> => policy.readText(path, reader),
     canonicalize: canonicalizePlannedPath,
-    redactDiagnostic: (text: string): string =>
-      transaction.redactDiagnostic(text),
-    redactData: (data: unknown) =>
-      redactPayload((text: string): string => transaction.redactDiagnostic(text), data),
+    redactDiagnostic,
+    redactData: (data: unknown) => redactPayload(redactDiagnostic, data),
   };
 }
 
@@ -475,17 +490,10 @@ function kindOf(error: unknown): string {
  * redactor**: `message`, because it may quote a path, a command or file content; `data`,
  * every leaf of it; and `paths` and `recovery` beside them.
  *
- * **`paths` is the exception, and it is an open defect rather than a decision.** A secret in
- * a model-chosen note path publishes raw there while the same string redacts in `message` and
- * in `data` — one value, three renderings of one document, one of them clear. Redacting the
- * field is the obvious fix and it cannot ship: the redactor's `high-entropy` class fires on a
- * sixteen-hex capture id, so `_raw/quarantine/a1b2c3d4e5f60718.md` comes back
- * `[REDACTED:high-entropy].md` — the most important path this product publishes, destroyed,
- * and with it every absolute path under a temporary directory. Measured both ways.
- *
- * Closing it needs a redactor that applies the *pattern* classes and not the heuristic one,
- * which is the capability NEW-36 already registers as absent and out of this task's scope.
- * The row is **NEW-39**; this comment exists so the exemption is not read as considered.
+ * **`paths` is redacted in the `path` scope (NEW-39)**: every pattern class, the user's
+ * `[redaction] patterns` included, and not `high-entropy`, which fires on a sixteen-hex
+ * capture id and would publish `_raw/quarantine/[REDACTED:high-entropy].md`. A path with
+ * nothing to redact keeps its bytes.
  *
  * **`data` is typed `object` rather than `unknown`**, which is narrower than the field it
  * populates. `recovery` is object-proof already, so the two cannot be swapped in that
@@ -509,11 +517,9 @@ export function failureFrom(
   return failure(exitCodeOf(error), {
     kind: kindOf(error),
     message,
-    paths,
+    paths: paths.map((path) => redact(path, "path")),
     ...(recovery === undefined ? {} : { recovery: redact(recovery) }),
-    ...(data === undefined
-      ? {}
-      : { data: redactPayload(context.guards.redactDiagnostic, data) }),
+    ...(data === undefined ? {} : { data: redactPayload(redact, data) }),
   });
 }
 
@@ -745,22 +751,15 @@ export function createProductionContext(
   const redactionKey = durable ?? randomBytes(REDACTION_KEY_BYTES);
   const guards = createGuards(policy, redactionKey);
   const lockProvider = new MacOsTransactionLockProvider();
+  /**
+   * Built-in classes until `readConfigFile` calls `bindRedactionPatterns`: this runner —
+   * shared with `platform` below — is built before any configuration is read, and a
+   * per-command runner would bypass the fake every command test injects (NEW-26).
+   */
+  const runnerRedactor: { current: Redactor } = { current: createRedactor(redactionKey) };
   const runner = new NodeProcessRunner({
     assertCommand: assertSafeCommand,
-    /**
-     * **Built-in classes only, and deliberately so rather than by oversight.** This
-     * runner redacts a child process's stdout and stderr — including a vendor model's
-     * proposal on the way back into `ingest` — and it is constructed here, at the
-     * composition root, *before any configuration file has been read*. The user's
-     * `[redaction]` patterns are not available yet and cannot be without making the
-     * runner per-command, which would bypass the fake runner every command test injects.
-     *
-     * **What limits the exposure**: the return leg is model output, not user content, and
-     * `validateProposal`'s `secret-scan` runs the *config-bound* redactor over every
-     * proposed note — so a proposal carrying a configured pattern is refused rather than
-     * written. Registered as `BACKLOG.md` §1 **NEW-26**.
-     */
-    redact: createRedactor(redactionKey),
+    redact: (text: string): RedactionResult => runnerRedactor.current(text),
   });
   const now = (): Date => new Date();
   const executorWith = (generateId: () => string): TransactionExecutor =>
@@ -806,6 +805,9 @@ export function createProductionContext(
     paths,
     productVersion: PRODUCT_VERSION,
     runner,
+    bindRedactionPatterns: (patterns: readonly string[]): void => {
+      runnerRedactor.current = createRedactor(redactionKey, { userPatterns: patterns });
+    },
     bootstrap: localBootstrap(options, paths, transactionExecutor, lockProvider, now),
     lifecycle,
   };

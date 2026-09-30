@@ -16,7 +16,7 @@ import {
   validateGitPackReaderBudget,
 } from "@developer-os/core";
 import type { GitEffectTransitionV1 } from "@developer-os/core";
-import { SUPPORTED_GIT_DISTRIBUTION, SecurityRefusalError, hashGitProcessTable } from "@developer-os/security";
+import { GIT_DISTRIBUTION_POLICY, SecurityRefusalError, hashGitProcessTable } from "@developer-os/security";
 
 import { createLifecycleEffectPorts, REJECTING_LAUNCHD_HOST } from "../../lifecycle/adapters.js";
 import type { LifecycleEffectPortsV1 } from "../../lifecycle/adapters.js";
@@ -131,7 +131,7 @@ export function scriptedGitRuntime(): ScriptedGitRuntimeV1 {
     spawns: [],
     networkCalls: [],
     drifted: false,
-    processTableHash: hashGitProcessTable(SUPPORTED_GIT_DISTRIBUTION.processTable),
+    processTableHash: hashGitProcessTable(GIT_DISTRIBUTION_POLICY.processTable),
     admitDistribution: (transport) => {
       if (runtime.drifted || transport !== "local") return Promise.reject(new SecurityRefusalError("unsupported_git_distribution"));
       return Promise.resolve();

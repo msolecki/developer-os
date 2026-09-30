@@ -20,7 +20,8 @@ import {
 import type { SupervisedPhaseV1, SupervisedProcessEvidenceV1, SupervisedSpawnRequestV1 } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { LaunchdDistributionUnsupportedError, SUPPORTED_LAUNCHD_DISTRIBUTION } from "./distribution.js";
+import { LaunchdDistributionUnsupportedError, type LaunchdHostObserverV1 } from "./distribution.js";
+import { LAUNCHCTL_IDENTITY, hostWith } from "./distribution.test-fixtures.js";
 import {
   encodeLaunchdEffectJournal,
   launchdEffectPlanHash,
@@ -52,11 +53,9 @@ import {
 } from "./plan.js";
 import { buildLaunchdPlanPreview } from "./plist.js";
 import {
-  SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   expandLaunchdProcessTable,
   launchdProcessTableHash,
   type LaunchdProcessDirectoryIdentityV1,
-  type SupportedLaunchdProcessTableTemplateV1,
   type SupportedLaunchdProcessTableV1,
 } from "./process-table.js";
 import { generatedLabel, launchdGuiDomain, launchdJob, parseScheduledProductHome } from "./registry.js";
@@ -79,20 +78,15 @@ const TIMESTAMP = "2026-09-23T10:00:00.000Z" as UtcTimestampV1;
 const daily = { cadence: "daily", hour: 2, minute: 0 } as const;
 const encoder = new TextEncoder();
 
-const certifiedTemplate: SupportedLaunchdProcessTableTemplateV1 = {
-  ...SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
-  certification: { certifiedAt: "2026-09-24T10:00:00.000Z" as UtcTimestampV1, fixtureTranscriptSha256: "c".repeat(64) as LowerHexSha256 },
-};
-
 function stagingIdentity(path: string, ino: string): LaunchdProcessDirectoryIdentityV1 {
   return { path: path as CanonicalAbsolutePathV1, ownerUid: uid, mode: 448, dev: "16777220" as UInt64DecimalV1, ino: ino as UInt64DecimalV1 };
 }
 
-function processTable(template: SupportedLaunchdProcessTableTemplateV1 = certifiedTemplate): SupportedLaunchdProcessTableV1 {
+function processTable(): SupportedLaunchdProcessTableV1 {
   const root = `${productHome}/staging/lifecycle/${COORDINATOR}/launchd-process`;
   return expandLaunchdProcessTable(
     { root: stagingIdentity(root, "10"), home: stagingIdentity(`${root}/home`, "11"), tmp: stagingIdentity(`${root}/tmp`, "12") },
-    template,
+    LAUNCHCTL_IDENTITY,
   );
 }
 
@@ -359,8 +353,7 @@ function fixture(fixturePlan: LaunchdPlanV1, table = processTable(), world = new
     runner: runnerFor(world),
     effectiveUid: () => uid,
     consoleUserUid: () => Promise.resolve(uid),
-    operatingSystem: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.operatingSystem }),
-    inspectExecutable: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.executable, kind: "file" as const }),
+    host: hostWith(),
     inspectEmptyDirectory: () => Promise.resolve({ kind: "directory", ownerUid: 0, mode: 493, dev: "1", ino: "2", entryCount: 0 }),
   };
   return {
@@ -379,7 +372,6 @@ function fixture(fixturePlan: LaunchdPlanV1, table = processTable(), world = new
         launchctl,
         plists,
         processTable: () => Promise.resolve(table),
-        template: certifiedTemplate,
         beginTransition: () => {
           world.phases += 1;
           return { id: "launchd-transition", deadlineAtMs: 30_000, remainingMilliseconds: () => world.remaining };
@@ -664,19 +656,106 @@ describe("LaunchdEffectExecutor", () => {
         home: stagingIdentity(fx.table.staging.home.path, "11"),
         tmp: stagingIdentity(fx.table.staging.tmp.path, "99"),
       },
-      certifiedTemplate,
+      LAUNCHCTL_IDENTITY,
     );
     await expect(fx.executor({ processTable: () => Promise.resolve(other) }).apply(fx.ref("after_files"))).rejects.toThrow(LifecycleRecoveryRequiredError);
     expect(await phaseOf(fx, "after_files")).toBeNull();
   });
 
-  it("refuses every mutation while the pinned row is uncertified, before writing a journal (Q2)", async () => {
-    const uncertified = processTable(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE);
-    const fx = fixture(plan("automation_enable", ["doctor"], {}, uncertified), uncertified);
-    const executor = fx.executor({ template: SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE });
+  it("refuses a process table bound to another launchctl identity than the plan's", async () => {
+    const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    const updated = expandLaunchdProcessTable(fx.table.staging, { ...LAUNCHCTL_IDENTITY, productVersion: "26.7" });
+    await expect(fx.executor({ processTable: () => Promise.resolve(updated) }).apply(fx.ref("after_files"))).rejects.toThrow(LifecycleRecoveryRequiredError);
+    expect(await phaseOf(fx, "after_files")).toBeNull();
+  });
 
-    await expect(executor.apply(fx.ref("after_files"))).rejects.toThrow(LaunchdDistributionUnsupportedError);
+  /** Five journal writes (planned … applied), then the doctor bootstrap: the kill lands with the job loaded. */
+  const KILLED_AFTER_BOOTSTRAP = 6;
+
+  /** Spec §5.3 rule 4: a macOS update between a killed apply and its resume moves launchctl. */
+  it("refuses unsupported_launchd_distribution, not recovery, when launchctl changed after the journal was opened", async () => {
+    const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    publishPlists(fx);
+    fx.world.crashAt = fx.world.boundaries + KILLED_AFTER_BOOTSTRAP;
+    await expect(fx.executor().apply(fx.ref("after_files"))).rejects.toThrow(Crash);
+    fx.world.crashAt = null;
+    expect(await phaseOf(fx, "after_files")).toBe("applied");
+    const loadedBefore = liveSet(fx);
+    const updated = expandLaunchdProcessTable(fx.table.staging, { ...LAUNCHCTL_IDENTITY, productVersion: "26.7" });
+
+    for (const run of [
+      () => fx.executor({ processTable: () => Promise.resolve(updated) }).apply(fx.ref("after_files")),
+      () => fx.executor({ processTable: () => Promise.resolve(updated) }).compensate(fx.ref("after_files")),
+    ]) {
+      const refused: unknown = await run().then(() => null, (error: unknown) => error);
+      expect(refused).toBeInstanceOf(LaunchdDistributionUnsupportedError);
+      expect(refused).not.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    }
+    expect([await phaseOf(fx, "after_files"), liveSet(fx)]).toStrictEqual(["applied", loadedBefore]);
+  });
+
+  it("still refuses recovery-required when only the staging identities changed after the journal was opened", async () => {
+    const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    publishPlists(fx);
+    fx.world.crashAt = fx.world.boundaries + KILLED_AFTER_BOOTSTRAP;
+    await expect(fx.executor().apply(fx.ref("after_files"))).rejects.toThrow(Crash);
+    fx.world.crashAt = null;
+    const restaged = expandLaunchdProcessTable(
+      { root: fx.table.staging.root, home: fx.table.staging.home, tmp: stagingIdentity(fx.table.staging.tmp.path, "99") },
+      LAUNCHCTL_IDENTITY,
+    );
+
+    await expect(fx.executor({ processTable: () => Promise.resolve(restaged) }).apply(fx.ref("after_files"))).rejects.toMatchObject({
+      reason: "launchd_process_table_changed",
+    });
+  });
+
+  it("refuses a table carrying a retired pinned table ID, before writing a journal", async () => {
+    const retired = { ...processTable(), id: "launchctl-macos-26.6.2-25G83-fd3-v1" as unknown as SupportedLaunchdProcessTableV1["id"] };
+    const fx = fixture(plan("automation_enable", ["doctor"], {}, retired), retired);
+
+    await expect(fx.executor().apply(fx.ref("after_files"))).rejects.toThrow(LaunchdDistributionUnsupportedError);
     expect([await phaseOf(fx, "after_files"), fx.world.probes, fx.world.events]).toStrictEqual([null, [], []]);
+  });
+
+  function bootstrapperLoading(fx: Fixture, label: (planned: string) => string | null): LaunchdEffectDependenciesV1["bootstrapper"] {
+    return {
+      inspect: () => Promise.resolve(null),
+      recover: (_creation, request) => Promise.resolve({ role: request.role, source: request.source, inheritedFd: 3, label: request.plist.Label } as unknown as LaunchdBootstrapSnapshotAttemptV1),
+      bootstrap: (attempt) => {
+        const loaded = label((attempt as unknown as { readonly label: string }).label);
+        if (loaded !== null) fx.world.loaded.add(loaded);
+        return Promise.resolve({
+          argvId: "bootstrap",
+          attempt,
+          process: { exitCode: 0, signal: null, termination: "exited", stdoutBytes: 0, stderrBytes: 0, groupReaped: true },
+        } as LaunchdMutationEvidenceV1);
+      },
+      recheckSource: () => Promise.resolve(),
+    };
+  }
+
+  it("compensates and refuses unsupported_launchd_distribution when a bootstrap's post-observation is not the planned generated label", async () => {
+    const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    publishPlists(fx);
+
+    await expect(fx.executor({ bootstrapper: bootstrapperLoading(fx, () => null) }).apply(fx.ref("after_files"))).rejects.toThrow(
+      "unsupported_launchd_distribution",
+    );
+    expect(await phaseOf(fx, "after_files")).toBe("applied");
+
+    fx.world.remaining = 30_000;
+    await fx.executor().compensate(fx.ref("after_files"));
+    expect([await phaseOf(fx, "after_files"), liveSet(fx)]).toStrictEqual(["rolled_back", []]);
+  });
+
+  it("refuses unsupported_launchd_distribution when a bootstrap loads a label other than the planned one", async () => {
+    const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    publishPlists(fx);
+
+    const foreign = bootstrapperLoading(fx, () => launchdJob("doctor").baseLabel);
+    await expect(fx.executor({ bootstrapper: foreign }).apply(fx.ref("after_files"))).rejects.toThrow(LaunchdDistributionUnsupportedError);
+    expect(await phaseOf(fx, "after_files")).toBe("applied");
   });
 
   it("refuses a ref that is not one of the plan's bound effects or whose published plan differs", async () => {
@@ -696,7 +775,7 @@ describe("LaunchdBootoutRunner", () => {
     for (const base of bases.splice(0)) await rm(base, { recursive: true, force: true });
   });
 
-  async function staging(template: SupportedLaunchdProcessTableTemplateV1 = certifiedTemplate) {
+  async function staging(host: LaunchdHostObserverV1 = hostWith()) {
     const base = await realpath(await mkdtemp(join(tmpdir(), "dos-launchd-bootout-")));
     bases.push(base);
     const root = `${base}/staging/lifecycle/${COORDINATOR}/launchd-process`;
@@ -708,7 +787,10 @@ describe("LaunchdBootoutRunner", () => {
       const stats = await lstat(path, { bigint: true });
       return { ...stagingIdentity(path, stats.ino.toString(10)), dev: stats.dev.toString(10) as UInt64DecimalV1 };
     };
-    const table = expandLaunchdProcessTable({ root: await withDevice(root), home: await withDevice(`${root}/home`), tmp: await withDevice(`${root}/tmp`) }, template);
+    const table = expandLaunchdProcessTable(
+      { root: await withDevice(root), home: await withDevice(`${root}/home`), tmp: await withDevice(`${root}/tmp`) },
+      LAUNCHCTL_IDENTITY,
+    );
     const requests: SupervisedSpawnRequestV1[] = [];
     const runner = new LaunchdBootoutRunner({
       runner: {
@@ -726,10 +808,8 @@ describe("LaunchdBootoutRunner", () => {
           });
         },
       },
-      template: certifiedTemplate,
       effectiveUid: () => uid,
-      operatingSystem: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.operatingSystem }),
-      inspectExecutable: () => Promise.resolve({ ...SUPPORTED_LAUNCHD_DISTRIBUTION.executable, kind: "file" as const }),
+      host,
     });
     return { base, root, table, runner, requests };
   }
@@ -773,19 +853,40 @@ describe("LaunchdBootoutRunner", () => {
     expect(requests).toStrictEqual([]);
   });
 
-  it("refuses another uid's domain, a base label, and an uncertified row", async () => {
+  it("refuses another uid's domain and a base label", async () => {
     const { table, runner, requests } = await staging();
     await expect(runner.bootout(table, `gui/${String(uid + 1)}/${generatedLabel("doctor", OLD_GENERATION)}` as typeof target, phase)).rejects.toThrow(LaunchdInputError);
     await expect(runner.bootout(table, `${domain}/com.developer-os.doctor` as unknown as typeof target, phase)).rejects.toThrow(LaunchdInputError);
-    const uncertified = (await staging(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE)).table;
-    await expect(runner.bootout(uncertified, target, phase)).rejects.toThrow(LaunchdDistributionUnsupportedError);
     expect(requests).toStrictEqual([]);
   });
 
-  it("re-derives the bound table from the guarded staging directories", async () => {
+  it("refuses a sha256 change between loadLaunchdProcessTable and the bootout spawn before the runner runs", async () => {
+    const { base, runner, requests } = await staging(hostWith({ paths: { "/bin/launchctl": { sha256: "c".repeat(64) } } }));
+    const loaded = await loadLaunchdProcessTable(base as CanonicalAbsolutePathV1, COORDINATOR, { host: hostWith() });
+
+    await expect(runner.bootout(loaded, target, phase)).rejects.toThrow(LaunchdDistributionUnsupportedError);
+    expect(requests).toStrictEqual([]);
+  });
+
+  it("refuses a macOS update between loadLaunchdProcessTable and the bootout spawn", async () => {
+    const { base, runner, requests } = await staging(hostWith({ productVersion: "26.7", buildVersion: "25H1" }));
+    const loaded = await loadLaunchdProcessTable(base as CanonicalAbsolutePathV1, COORDINATOR, { host: hostWith() });
+
+    await expect(runner.bootout(loaded, target, phase)).rejects.toThrow("unsupported_launchd_distribution");
+    expect(requests).toStrictEqual([]);
+  });
+
+  it("re-derives the bound table from the guarded staging directories and a fresh admission", async () => {
     const { base, table } = await staging();
-    const loaded = await loadLaunchdProcessTable(base as CanonicalAbsolutePathV1, COORDINATOR, { template: certifiedTemplate });
+    const loaded = await loadLaunchdProcessTable(base as CanonicalAbsolutePathV1, COORDINATOR, { host: hostWith() });
     expect(launchdProcessTableHash(loaded)).toBe(launchdProcessTableHash(table));
+  });
+
+  it("refuses to load a table on a host below the macOS floor", async () => {
+    const { base } = await staging();
+    await expect(loadLaunchdProcessTable(base as CanonicalAbsolutePathV1, COORDINATOR, { host: hostWith({ productVersion: "26.5" }) })).rejects.toThrow(
+      LaunchdDistributionUnsupportedError,
+    );
   });
 });
 

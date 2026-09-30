@@ -8,8 +8,7 @@ import type { TargetVerificationPlanV1 } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
 import { SecurityRefusalError } from "../paths.js";
-import type { RedactionResult } from "../redaction.js";
-import type { PlannerGraphV1 } from "./graph.js";
+import { createRedactor, type RedactionResult } from "../redaction.js";
 import type { PlannerChildProcessV1, PlannerProcessSampleV1, PlannerSpawnRequestV1 } from "./planner-process.js";
 import { TargetVerifierSupervisor, targetVerifierWireBounds, type TargetVerifierRunRequestV1 } from "./verifier-process.js";
 
@@ -122,9 +121,7 @@ interface Timer {
   cancelled: boolean;
 }
 
-const cleanGraph = (entrypoint: string): PlannerGraphV1 => ({ entrypoint, modules: [entrypoint], builtins: [], forbidden: [] });
-
-function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null = { residentBytes: 1024, descendants: 0 }, inspectGraph: ((entrypoint: string) => PlannerGraphV1) | "real" = cleanGraph) {
+function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null = { residentBytes: 1024, descendants: 0 }) {
   const timers: Timer[] = [];
   const spawned: PlannerSpawnRequestV1[] = [];
   let child: FakeVerifierChild | null = null;
@@ -145,7 +142,6 @@ function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null = { r
     sample: () => Promise.resolve(sample),
     redactor: (text: string): RedactionResult => ({ text, findings: text.includes(SECRET_MARKER) ? [{ class: "provider-token", fingerprint: "synthetic" }] : [] }),
     sampleIntervalMilliseconds: SAMPLE,
-    ...(inspectGraph === "real" ? {} : { inspectGraph }),
   });
   const fire = (milliseconds: number): void => {
     for (const timer of timers.filter((entry) => !entry.cancelled && entry.milliseconds === milliseconds)) timer.callback();
@@ -197,6 +193,44 @@ describe("target verifier supervision", () => {
     expect(child().reaped).toBe(true);
   });
 
+  describe("the real redactor over the product-generated request", () => {
+    const tmpHome = "/private/var/folders/j3/z6tddtv93jx1396f2d7vnqnc0000gn/T/developer-os-e2e-FP6Kwf/home/.developer-os";
+    const withRedactor = (behavior: Behavior): { readonly supervisor: TargetVerifierSupervisor; readonly spawned: PlannerSpawnRequestV1[] } => {
+      const base = harness(behavior);
+      return { supervisor: new TargetVerifierSupervisor({ ...base.supervisor.dependencies, redactor: createRedactor(new Uint8Array(32).fill(7)) }), spawned: base.spawned };
+    };
+    const request = (bundleRoot: string): TargetVerifierRunRequestV1 => run({ plan: plan({ release: { version: "2.0.0", bundleRoot } }), snapshot: echo, inputBlobs: [] });
+
+    it("admits sha256 fields and a random TMPDIR bundle root, and spawns the verifier", async () => {
+      const { supervisor, spawned } = withRedactor(answer({ outcome: "disagree" }, 1));
+      await expect(supervisor.run(request(`${tmpHome}/releases/2.0.0/darwin-arm64`))).rejects.toSatisfy(rejection);
+      expect(spawned).toHaveLength(1);
+    });
+
+    it("admits a strictly valid three-digest result frame", async () => {
+      const { supervisor } = withRedactor(answer(echo));
+      expect(await supervisor.run(request(`${tmpHome}/releases/2.0.0/darwin-arm64`))).toEqual({ exitCode: 0, ...echo });
+    });
+
+    it.each([
+      ["an extra string key", { ...echo, note: `sk-${"A1b2C3d4".repeat(4)}` }],
+      ["non-hex text in a digest field", { ...echo, ownerPostimagesHash: `sk-${"A1b2C3d4".repeat(4)}` }],
+    ])("rejects a result frame with %s as the contract refusal, without screening it", async (_name, frame) => {
+      const screened: string[] = [];
+      const real = createRedactor(new Uint8Array(32).fill(7));
+      const base = harness(answer(frame));
+      const supervisor = new TargetVerifierSupervisor({ ...base.supervisor.dependencies, redactor: (text, scope) => { screened.push(text); return real(text, scope); } });
+      await expect(supervisor.run(request(BUNDLE_ROOT))).rejects.toSatisfy(rejection);
+      expect(screened.some((text) => text.includes("sk-"))).toBe(false);
+    });
+
+    it("still refuses a provider token planted in the request, before any spawn", async () => {
+      const { supervisor, spawned } = withRedactor(answer(echo));
+      await expect(supervisor.run(request(`/product/sk-${"A1b2C3d4".repeat(4)}/darwin-arm64`))).rejects.toBeInstanceOf(SecurityRefusalError);
+      expect(spawned).toEqual([]);
+    });
+  });
+
   it("returns mismatched digests for `runTargetVerifier` to reject", async () => {
     const { supervisor } = harness(answer({ ...echo, manifestHash: sha("other") }));
     expect(await supervisor.run(run())).toEqual({ exitCode: 0, ...echo, manifestHash: sha("other") });
@@ -209,6 +243,7 @@ describe("target verifier supervision", () => {
     { name: "a clean exit with an extra key", behavior: answer({ ...echo, note: "extra" }) },
     { name: "a clean exit with a missing digest", behavior: answer({ manifestHash: echo.manifestHash, ownerPostimagesHash: echo.ownerPostimagesHash }) },
     { name: "a clean exit with a malformed digest", behavior: answer({ ...echo, migrationPostimagesHash: "ABC" }) },
+    { name: "a secret in a digest field of the result frame", behavior: answer({ ...echo, manifestHash: SECRET_MARKER }) },
     { name: "a clean exit without its end frame", behavior: (child) => { child.stdout.push(output(echo).subarray(0, -9)); child.exit(0); } },
   ])("rejects $name so the coordinator compensates", async ({ behavior }) => {
     const { supervisor, child } = harness(behavior);
@@ -222,7 +257,6 @@ describe("target verifier supervision", () => {
     { name: "stderr beyond the plan's byte bound", behavior: (child) => { child.stderr.push(new Uint8Array(65)); } },
     { name: "an output blob frame", behavior: (child) => { const bad = output(echo); child.stdout.push(Uint8Array.from([...bad.subarray(0, -9), 0x12, 0, 0, 0, 0, 0, 0, 0, 1, 7])); } },
     { name: "a wrong magic", behavior: (child) => { const bad = output(echo); bad[0] = 0x58; child.stdout.push(bad); } },
-    { name: "a secret in the result frame", behavior: answer({ ...echo, manifestHash: SECRET_MARKER }) },
     { name: "a termination by signal", behavior: (child) => { child.exit(null, "SIGSEGV"); } },
   ])("refuses $name and reaps the child", async ({ behavior }) => {
     const { supervisor, child } = harness(behavior);
@@ -284,34 +318,19 @@ describe("target verifier supervision", () => {
   });
 });
 
-describe("the verifier's capability graph", () => {
-  it("refuses a graph with a forbidden capability or no modules before spawning", async () => {
-    for (const graph of [
-      (entrypoint: string) => ({ ...cleanGraph(entrypoint), forbidden: [{ module: entrypoint, capability: "filesystem" as const, evidence: "fs" }] }),
-      (entrypoint: string) => ({ ...cleanGraph(entrypoint), modules: [] }),
-    ]) {
-      const { supervisor, spawned } = harness(answer(echo), undefined, graph);
-      await expect(supervisor.run(run())).rejects.toThrow("forbidden capability");
-      expect(spawned).toEqual([]);
-    }
-  });
-
-  it("inspects the bundle's own verifier entrypoint by default", async () => {
-    const root = await realpath(await mkdtemp(joinPath(tmpdir(), "dos-verifier-graph-")));
+// D72 Q4-A: the repository graph gate (`tests/repository/check.ts`) is the only capability gate.
+describe("the verifier entrypoint", () => {
+  it("supervises a verifier that reads its counted request from stdin to completion", async () => {
+    const root = await realpath(await mkdtemp(joinPath(tmpdir(), "dos-verifier-stdin-")));
     try {
       await mkdir(joinPath(root, "bin"));
       const entrypoint = joinPath(root, "bin", "verifier");
+      await writeFile(entrypoint, "const chunks = [];\nfor await (const chunk of process.stdin) chunks.push(chunk);\nprocess.stdout.write(Buffer.concat(chunks));\n");
       const bound = run({ plan: plan({ release: { version: "2.0.0", bundleRoot: root } }) });
-
-      await writeFile(entrypoint, "export const verified = 1;\n");
-      const clean = harness((child) => { child.stdout.push(output(echo, bound.plan)); child.exit(0); }, undefined, "real");
-      expect(await clean.supervisor.run(bound)).toEqual({ exitCode: 0, ...echo });
-      expect(clean.spawned[0]?.args).toEqual([entrypoint]);
-
-      await writeFile(entrypoint, 'import { writeFileSync } from "node:fs";\nwriteFileSync("x", "y");\n');
-      const writer = harness(answer(echo), undefined, "real");
-      await expect(writer.supervisor.run(bound)).rejects.toBeInstanceOf(SecurityRefusalError);
-      expect(writer.spawned).toEqual([]);
+      const { supervisor, spawned, child } = harness((verifier) => { verifier.stdout.push(output(echo, bound.plan)); verifier.exit(0); });
+      expect(await supervisor.run(bound)).toEqual({ exitCode: 0, ...echo });
+      expect(spawned).toEqual([{ executable: bound.runtime, args: [entrypoint], cwd: bound.cwd, env: {} }]);
+      expect(child().reaped).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

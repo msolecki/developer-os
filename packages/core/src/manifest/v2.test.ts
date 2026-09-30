@@ -3,11 +3,9 @@ import { describe, expect, it } from "vitest";
 import { encodeCanonicalJson } from "../lifecycle/canonical-json.js";
 import { admitCanonicalAbsolutePath, type CanonicalPathEvidenceV1 } from "../update/paths.js";
 import {
-  ManifestV1NotMigratableError,
   ManifestStateError,
   validateManifestBytes,
   validateManifestV2,
-  validateMigratableManifestV1,
 } from "./index.js";
 import type { InstallationManifestV2, ManagedArtifactV2, ManifestAdmissionContextV1 } from "./index.js";
 
@@ -41,19 +39,6 @@ function manifestWith(...artifacts: readonly ManagedArtifactV2[]): InstallationM
   return { schemaVersion: 2, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts } as InstallationManifestV2;
 }
 
-function legacyBytes(rows: readonly Record<string, unknown>[], overrides: Record<string, unknown> = {}): Uint8Array {
-  return new TextEncoder().encode(`${JSON.stringify({ schemaVersion: 1, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts: rows, ...overrides })}\n`);
-}
-
-function legacyRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { owner: "core", path: "/synthetic/product/file", kind: "file", productVersion: "1.2.3", existedBefore: false, beforeHash: null, backupRelativePath: null, installedHash: hash, source: "templates/file", mergeStrategy: "dedicated", verifiedAt: "2026-08-29T12:00:00.000Z", ...overrides };
-}
-
-function expectMigratableRefusal(bytes: Uint8Array, context = admission()): void {
-  expect(() => validateMigratableManifestV1(bytes, context)).toThrow(ManifestV1NotMigratableError);
-  expect(() => validateMigratableManifestV1(bytes, context)).toThrow(expect.objectContaining({ reason: "manifest_v1_not_migratable" }));
-}
-
 describe("InstallationManifestV2", () => {
   it("requires one admission context to bind owner, source, and backup authority", () => {
     const value = manifestWith(artifact({ existedBefore: true, beforeHash: hash, backupRelativePath: "before/file" }));
@@ -79,17 +64,6 @@ describe("InstallationManifestV2", () => {
       if (legal) expect(validateManifestV2(value, admission())).toStrictEqual(value);
       else expect(() => validateManifestV2(value, admission())).toThrow(ManifestStateError);
     }
-  });
-
-  it("maps every migratable V1 refusal to the content-free reason", () => {
-    const bytes = new TextEncoder().encode(`${JSON.stringify({ schemaVersion: 1, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts: [{ owner: "core", path: "/synthetic/product/file", kind: "symlink", productVersion: "1.2.3", existedBefore: false, beforeHash: null, backupRelativePath: null, installedHash: hash, source: "templates/file", mergeStrategy: "dedicated", verifiedAt: "2026-08-29T12:00:00.000Z" }] })}\n`);
-    expect(() => validateMigratableManifestV1(bytes, admission())).toThrow(ManifestV1NotMigratableError);
-    expect(() => validateMigratableManifestV1(bytes, admission())).toThrow(expect.objectContaining({ reason: "manifest_v1_not_migratable" }));
-  });
-
-  it("accepts a fully admitted positive migratable V1 row", () => {
-    const legacy = { schemaVersion: 1, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts: [{ owner: "core", path: "/synthetic/product/file", kind: "file", productVersion: "1.2.3", existedBefore: true, beforeHash: hash, backupRelativePath: "before/file", installedHash: hash, source: "templates/file", mergeStrategy: "dedicated", verifiedAt: "2026-08-29T12:00:00.000Z" }] };
-    expect(validateMigratableManifestV1(new TextEncoder().encode(`${JSON.stringify(legacy)}\n`), admission())).toStrictEqual(legacy);
   });
 
   it("isolates source and backup root evidence refusals", () => {
@@ -233,40 +207,9 @@ describe("InstallationManifestV2", () => {
     expect(() => validateManifestBytes(unknown)).toThrow(ManifestStateError);
   });
 
-  it.each([
-    { name: "symlink", patch: { kind: "symlink" } },
-    { name: "config entry", patch: { kind: "config-entry" } },
-    { name: "pre-existing directory", patch: { kind: "directory", existedBefore: true, beforeHash: hash, backupRelativePath: "backups/file" } },
-    { name: "directory without empty sentinel", patch: { kind: "directory", installedHash: hash } },
-    { name: "unsafe source", patch: { source: "../private" } },
-    { name: "unsafe backup", patch: { existedBefore: true, beforeHash: hash, backupRelativePath: "../backup" } },
-  ])("refuses non-migratable V1 $name", ({ patch }) => {
-    expectMigratableRefusal(legacyBytes([legacyRow(patch)]));
-  });
-
-  it.each([
-    { name: "empty", bytes: legacyBytes([]) },
-    { name: "manifest unstable semver", bytes: legacyBytes([legacyRow()], { productVersion: "1.02.3" }) },
-    { name: "artifact unstable semver", bytes: legacyBytes([legacyRow({ productVersion: "1.02.3" })]) },
-    { name: "loose installed timestamp", bytes: legacyBytes([legacyRow()], { installedAt: "2026-08-29T12:00:00Z" }) },
-    { name: "loose verified timestamp", bytes: legacyBytes([legacyRow({ verifiedAt: "2026-08-29T12:00:00Z" })]) },
-    { name: "exact collision", bytes: legacyBytes([legacyRow(), legacyRow()]) },
-    { name: "folded collision", bytes: legacyBytes([legacyRow({ path: "/synthetic/product/FILE" }), legacyRow({ path: "/synthetic/product/file" })]) },
-    { name: "non NFC path", bytes: legacyBytes([legacyRow({ path: "/synthetic/product/e\u0301" })]) },
-  ])("gives only the migration refusal reason for V1 $name", ({ bytes }) => {
-    expectMigratableRefusal(bytes);
-  });
-
-  it("accepts both V1 restore variants", () => {
-    expect(validateMigratableManifestV1(legacyBytes([legacyRow()]), admission())).toMatchObject({ artifacts: [legacyRow()] });
-    expect(validateMigratableManifestV1(legacyBytes([legacyRow({ existedBefore: true, beforeHash: hash, backupRelativePath: "before/file" })]), admission())).toMatchObject({ artifacts: [legacyRow({ existedBefore: true, beforeHash: hash, backupRelativePath: "before/file" })] });
-  });
-
-  it("does no admission work for byte and cardinality refusal before content could be read", () => {
+  it("does no admission work for a cardinality refusal before content could be read", () => {
     let admissions = 0;
     const context = admission({ admitOwnerPath: (_owner, path) => { admissions += 1; return path; } });
-    expectMigratableRefusal(new TextEncoder().encode('{\n}'), context);
-    expect(admissions).toBe(0);
     let elementReads = 0;
     const firstOver = new Proxy([], {
       get(_target, key) {
@@ -281,12 +224,27 @@ describe("InstallationManifestV2", () => {
     expect(admissions).toBe(0);
   });
 
-  it("refuses a legacy alternate encoding before artifact bytes are read", () => {
-    const legacy = { schemaVersion: 1, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts: [{ owner: "core", path: "/synthetic/product/file", kind: "file", productVersion: "1.2.3", existedBefore: false, beforeHash: null, backupRelativePath: null, installedHash: hash, source: "templates/file", mergeStrategy: "dedicated", verifiedAt: "2026-08-29T12:00:00.000Z" }] };
-    let admissions = 0;
-    const context = admission({ admitOwnerPath: (_owner, path) => { admissions += 1; return path; } });
-    expectMigratableRefusal(new TextEncoder().encode(JSON.stringify(legacy, null, 2) + "\n"), context);
-    expect(admissions).toBe(0);
+  describe("lets a defect in an admission callback escape instead of reading it as a malformed manifest (NEW-92)", () => {
+    const defective = admission({ admitOwnerPath: () => { throw new TypeError("synthetic"); } });
+    const canonical = new TextEncoder().encode(encodeCanonicalJson(manifestWith(artifact()) as never));
+
+    it("validateManifestV2 rethrows an admitOwnerPath defect", () => {
+      expect(() => validateManifestV2(manifestWith(artifact()), defective)).toThrow(TypeError);
+    });
+
+    it("validateManifestV2 rethrows a plain Error from admitOwnerPath, whose contract is return-not-throw", () => {
+      const throwing = admission({ admitOwnerPath: () => { throw new Error("synthetic"); } });
+      expect(() => validateManifestV2(manifestWith(artifact()), throwing)).toThrow("synthetic");
+    });
+
+    it("validateManifestV2 rethrows a path-evidence defect", () => {
+      const context = admission({ evidence: { ...evidence, hasFoldedAlias: () => { throw new TypeError("synthetic"); } } });
+      expect(() => validateManifestV2(manifestWith(artifact()), context)).toThrow(TypeError);
+    });
+
+    it("validateManifestBytes rethrows an admitOwnerPath defect for canonical V2 bytes", () => {
+      expect(() => validateManifestBytes(canonical, defective)).toThrow(TypeError);
+    });
   });
 });
 

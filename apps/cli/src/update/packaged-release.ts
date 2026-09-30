@@ -8,6 +8,7 @@ import {
   decodeCanonicalJson,
   encodeCanonicalJson,
   EXIT_CODES,
+  sortUtf8,
   UNSIGNED_LOCAL_RELEASE_KEY_ID,
 } from "@developer-os/core";
 import type { LowerHexSha256 } from "@developer-os/core";
@@ -203,10 +204,6 @@ async function readGuardedFile(path: string, listed: BigIntStats): Promise<Uint8
   }
 }
 
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left), Buffer.from(right));
-}
-
 async function inventory(packageRoot: string): Promise<{
   readonly root: { readonly dev: string; readonly ino: string };
   readonly directories: readonly DirectorySnapshot[];
@@ -226,8 +223,7 @@ async function inventory(packageRoot: string): Promise<{
   while (pending.length > 0) {
     const directory = pending.shift();
     if (directory === undefined) break;
-    const entries = await nodeFs.readdir(directory, { withFileTypes: true });
-    entries.sort((left, right) => compareUtf8(left.name, right.name));
+    const entries = sortUtf8(await nodeFs.readdir(directory, { withFileTypes: true }), (entry) => entry.name);
     for (const entry of entries) {
       count += 1;
       if (count > MAX_PACKAGE_ENTRIES) securityRefusal("packaged release inventory is too large");
@@ -258,16 +254,16 @@ async function inventory(packageRoot: string): Promise<{
       });
     }
   }
-  directories.sort((left, right) => compareUtf8(left.relativePath, right.relativePath));
-  files.sort((left, right) => compareUtf8(left.relativePath, right.relativePath));
+  const orderedDirectories = sortUtf8(directories, (directory) => directory.relativePath);
+  const orderedFiles = sortUtf8(files, (file) => file.relativePath);
   const hash = createHash("sha256")
     .update("developer-os/packaged-release-inventory/v1\0")
-    .update(encodeCanonicalJson({ directories, files } as never).slice(0, -1))
+    .update(encodeCanonicalJson({ directories: orderedDirectories, files: orderedFiles } as never).slice(0, -1))
     .digest("hex") as LowerHexSha256;
   return {
     root: { dev: rootStats.dev.toString(10), ino: rootStats.ino.toString(10) },
-    directories,
-    files,
+    directories: orderedDirectories,
+    files: orderedFiles,
     hash,
   };
 }

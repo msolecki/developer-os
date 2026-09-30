@@ -946,6 +946,31 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
     }
   });
 
+  it('refuses a participant in the withdrawn tx_mm_ grammar without publishing (D18, NEW-78)', async () => {
+    const fixture = await createFixture('bootstrap-foundation-withdrawn-migration-id');
+    try {
+      const bootstrap = await installBootstrapFoundationFixture(fixture);
+      const participant = {
+        ...bootstrap.participant,
+        id: `tx_mm_${BOOTSTRAP_FOUNDATION_UUID}_0000000000_f`,
+      } as never as FoundationParticipantRefV2;
+      const stagedStats = await nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true });
+      const calls: string[] = [];
+
+      await expect((async () => bootstrapFoundationExecutor(fixture, noReplacePublisher(calls))
+        .executeBootstrapFoundationParticipant(
+          await admitFoundationInitialJournal(participant, bootstrap.evidence, Number(stagedStats.uid)),
+        ))()).rejects.toBeInstanceOf(Error);
+
+      expect(calls).toEqual([]);
+      await expect(nodeFs.stat(bootstrap.initialJournalPath)).resolves.toBeDefined();
+      await expectMissing(bootstrap.finalJournalPath);
+      await expectMissing(bootstrap.targetPath);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it('catches the bridge consulting ambient process UID instead of the owner identity admitted by its controller', async () => {
     const fixture = await createFixture('bootstrap-foundation-owner-admission');
     try {

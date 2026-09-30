@@ -34,7 +34,7 @@ export interface CaptureBuildRequest {
   readonly workingDirectoryFingerprint: string;
   readonly createdAt: string;
   readonly redact: (text: string) => RedactionResult;
-  /** Absent for a plain capture. Not part of the deduplication hash (spec R3). */
+  /** Absent for a plain capture. Not part of the deduplication hash (`brain.md` §6.13 R3). */
   readonly note?: CaptureNoteTargetV1;
 }
 
@@ -44,6 +44,8 @@ export interface CaptureBuildResult {
   readonly fileName: string;
   /** Frontmatter and body, ready for an `O_EXCL` create. */
   readonly contents: string;
+  /** Not persisted: whether a pattern is over-broad depends on this text alone (NEW-24). */
+  readonly overBroadPatterns: readonly number[];
 }
 
 /**
@@ -151,6 +153,8 @@ export interface NormalizedCapture {
   readonly content: string;
   readonly deduplicationHash: string;
   readonly redaction: readonly CaptureRedactionFinding[];
+  /** The redactor's `overBroadPatterns`, empty when it reported none (NEW-24). */
+  readonly overBroadPatterns: readonly number[];
 }
 
 /**
@@ -169,7 +173,8 @@ export interface NormalizedCapture {
  *
  * The findings are rebuilt as class and fingerprint rather than passed through,
  * so a widened `RedactionFinding` upstream cannot carry a secret's location
- * into a persisted envelope without someone deciding to.
+ * into a persisted envelope without someone deciding to. `patternIndex` is the one
+ * key someone did decide to carry (D73), and it is copied by name like the other two.
  */
 export function redactAndNormalize(
   text: string,
@@ -184,7 +189,9 @@ export function redactAndNormalize(
     redaction: redacted.findings.map((finding) => ({
       class: finding.class,
       fingerprint: finding.fingerprint,
+      ...(finding.patternIndex === undefined ? {} : { patternIndex: finding.patternIndex }),
     })),
+    overBroadPatterns: redacted.overBroadPatterns ?? [],
   };
 }
 
@@ -207,7 +214,7 @@ export function redactAndNormalize(
  * question, and `developer-os capture` answers it before it gets here.
  */
 export function buildCapture(request: CaptureBuildRequest): CaptureBuildResult {
-  const { content, deduplicationHash, redaction } = redactAndNormalize(
+  const { content, deduplicationHash, redaction, overBroadPatterns } = redactAndNormalize(
     request.text,
     request.redact,
   );
@@ -237,5 +244,6 @@ export function buildCapture(request: CaptureBuildRequest): CaptureBuildResult {
     envelope,
     fileName: `${captureId}.md`,
     contents: renderCaptureFile(envelope),
+    overBroadPatterns,
   };
 }
