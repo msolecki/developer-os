@@ -1,6 +1,6 @@
 import { join, relative, sep } from "node:path";
 
-import { compareCanonical, compareRawBytes } from "../discovery/index.js";
+import { compareCanonical, compareRawBytes, topicOfFolder } from "../discovery/index.js";
 import { buildIndex, createLinkResolver } from "../indexes/index.js";
 import type { IndexBuildRequest, IndexBuildResult, IndexedNote } from "../indexes/index.js";
 import { isUnsafeProposedNotePath } from "../ingest/index.js";
@@ -176,9 +176,7 @@ export function rewriteReferrers(
   const projected = notes.filter((note) => note.path !== P);
   if (movedNote !== undefined && !projected.some((note) => note.path === T)) {
     const folder = target.split("/")[0] ?? "";
-    const topicFolder = state.input.build.config.topicFolders.includes(folder)
-      ? folder
-      : movedNote.topicFolder;
+    const topicFolder = topicOfFolder(folder, state.input.build.config) ?? movedNote.topicFolder;
     projected.push({ ...movedNote, path: T, topicFolder });
   }
   projected.sort((a, b) => byPath(a.path, b.path));
@@ -299,8 +297,9 @@ function modePlan(state: PreStateV1, request: RefactorRequestV1): ModePlanV1 {
     }
     case "move": {
       requireNote(state, request.note);
-      if (!state.input.build.config.topicFolders.includes(request.folder)) {
-        throw invalid(`${request.folder} is not a configured topic folder`);
+      /** A topic alias is a destination too (NEW-128); the CLI requires its folder to exist. */
+      if (topicOfFolder(request.folder, state.input.build.config) === null) {
+        throw invalid(`${request.folder} is not a configured topic folder or topic alias`);
       }
       return relocatePlan(state, request.note, `${request.folder}/${basename(request.note)}`);
     }

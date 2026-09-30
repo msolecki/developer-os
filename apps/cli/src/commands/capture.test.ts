@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 
-import { EXIT_CODES } from "@developer-os/core";
-import { detectSourceAgent, parseCaptureFile } from "@developer-os/brain";
+import { EXIT_CODES, loadConfig, serializeConfig } from "@developer-os/core";
+import { DEFAULT_BRAIN_CONFIG, detectSourceAgent, parseCaptureFile } from "@developer-os/brain";
 import type {
   AgentDiscovery,
   AgentName,
@@ -14,7 +14,7 @@ import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { discoverSourceAgent, runCapture } from "./capture.js";
+import { discoverSourceAgent, isTopicNotePath, runCapture } from "./capture.js";
 import type { CaptureOptions } from "./capture.js";
 import type { ProbeFileSystemV1 } from "../pinned-executable.js";
 import { runInit } from "./init.js";
@@ -1459,4 +1459,44 @@ describe("runCapture on a V2 home", () => {
     expect(result.data.path.startsWith(quarantineDirectory(fixture))).toBe(true);
     expect(await nodeFs.readFile(fixture.paths.manifestFile, "utf8")).toBe(manifestText);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+/**
+ * NEW-128: `topicAliases` maps a physical folder to a configured topic, and the indexer admits
+ * notes there. `--note` (and `ingest`, which asks `isTopicNotePath` again) must admit the same
+ * folders, and no more: own-property lookup only, never a private folder.
+ */
+describe("--note with topicAliases (NEW-128)", () => {
+  const ALIASED = { ...DEFAULT_BRAIN_CONFIG, topicAliases: { PROJEKTY: "PROJECTS", _outputs: "DEV" } };
+
+  it.each([
+    ["PROJEKTY/x.md", true],
+    ["PROJECTS/x.md", true],
+    ["_outputs/x.md", false],
+    ["PROJEKTY/_raw/x.md", false],
+    ["__proto__/x.md", false],
+    ["constructor/x.md", false],
+    ["toString/x.md", false],
+    ["hasOwnProperty/x.md", false],
+  ] as const)("isTopicNotePath(%s) is %s", (path, admitted) => {
+    expect(isTopicNotePath(path, ALIASED)).toBe(admitted);
+  });
+
+  it("quarantines a note capture for a note in an aliased folder", async () => {
+    const fixture = await installedFixture("note-alias");
+    const config = loadConfig(await nodeFs.readFile(fixture.paths.configFile, "utf8"));
+    await nodeFs.writeFile(
+      fixture.paths.configFile,
+      serializeConfig({ ...config, brain: { ...DEFAULT_BRAIN_CONFIG, topicAliases: { PROJEKTY: "PROJECTS" } } }),
+      { mode: 0o600 },
+    );
+    await nodeFs.mkdir(join(fixture.paths.brain, "content", "PROJEKTY"), { mode: 0o700 });
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: "PROJEKTY/new-note.md" });
+
+    expect(result.ok ? result.data.note : result.error).toStrictEqual({
+      path: "PROJEKTY/new-note.md",
+      beforeSha256: null,
+    });
+  });
 });

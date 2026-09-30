@@ -20,6 +20,7 @@ import {
   parseNote,
   PRIVATE_FOLDERS,
   resolveBrainConfig,
+  topicOfFolder,
 } from "@developer-os/brain";
 import type { BrainConfigV1, CaptureNoteTargetV1, CaptureStatus } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
@@ -390,7 +391,8 @@ function isMissingEntry(error: unknown): boolean {
 }
 
 /**
- * The string half of `--note`'s containment: inside a configured topic folder, and no segment
+ * The string half of `--note`'s containment: inside a configured topic folder or a folder
+ * `topicAliases` maps to one, resolved as the indexer does (NEW-128), and no segment
  * a dot-folder, a private folder or the indexes directory. `ingest` asks it again of the
  * envelope, which a person can edit between capture and ingest.
  */
@@ -405,7 +407,7 @@ export function isTopicNotePath(notePath: string, brainConfig: BrainConfigV1): b
   return (
     topicFolder !== undefined &&
     segments.length >= 2 &&
-    brainConfig.topicFolders.includes(topicFolder) &&
+    topicOfFolder(topicFolder, brainConfig) !== null &&
     !segments.some(
       (segment) =>
         segment.startsWith(".") ||

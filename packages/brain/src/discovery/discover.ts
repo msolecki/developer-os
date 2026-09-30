@@ -124,6 +124,16 @@ export function resolveTopic(name: string, config: BrainConfigV1): string | null
 }
 
 /**
+ * The topic a top-level folder name resolves to, exactly as discovery decides it: an excluded
+ * name (dot-prefixed, private, the indexes directory) first, then `resolveTopic`. BACKLOG
+ * NEW-128: every command that admits a note path by folder asks this, so an aliased folder is
+ * admitted wherever it is indexed and a private folder never becomes admissible through an alias.
+ */
+export function topicOfFolder(name: string, config: BrainConfigV1): string | null {
+  return isExcludedSegment(name, false, config) ? null : resolveTopic(name, config);
+}
+
+/**
  * Brain architecture former §5: every path is resolved through Foundation's canonicalization, so a
  * link out of the vault is refused rather than followed. Returns nothing —
  * clearing an in-vault link does not make it followable, and every caller

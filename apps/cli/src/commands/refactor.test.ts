@@ -1,7 +1,8 @@
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
-import { EXIT_CODES } from "@developer-os/core";
+import { EXIT_CODES, loadConfig, serializeConfig } from "@developer-os/core";
+import { DEFAULT_BRAIN_CONFIG } from "@developer-os/brain";
 import type { RefactorRequestV1 } from "@developer-os/brain";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -83,6 +84,25 @@ function recording(
       },
     },
   };
+}
+
+/**
+ * NEW-128: `PROJEKTY` is a physical folder that `topicAliases` maps to the configured topic
+ * `PROJECTS`, the way the indexer resolves it. Writes the `[brain]` section and creates the folder.
+ */
+const ALIAS = "PROJEKTY";
+
+async function withAliases(
+  fixture: Installed,
+  topicAliases: Readonly<Record<string, string>> = { [ALIAS]: "PROJECTS" },
+): Promise<void> {
+  const config = loadConfig(await nodeFs.readFile(fixture.paths.configFile, "utf8"));
+  await nodeFs.writeFile(
+    fixture.paths.configFile,
+    serializeConfig({ ...config, brain: { ...DEFAULT_BRAIN_CONFIG, topicAliases } }),
+    { mode: 0o600 },
+  );
+  await nodeFs.mkdir(join(fixture.content, ALIAS), { recursive: true, mode: 0o700 });
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -309,6 +329,109 @@ describe("runRefactor", () => {
       expect(!result.ok && result.error.paths).toStrictEqual([REFERRER]);
       expect(!result.ok && result.error.recovery).toContain("developer-os brain refactor --merge");
     }
+    expect(await inventoryDigest(fixture.root)).toEqual(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("runRefactor with topicAliases (NEW-128)", () => {
+  it("renames a note inside an aliased folder and rewrites the link to it", async () => {
+    const fixture = await installed("refactor-alias-rename");
+    await withAliases(fixture);
+    await nodeFs.writeFile(join(fixture.content, ALIAS, "plan.md"), note("Plan"), { mode: 0o600 });
+    await nodeFs.writeFile(join(fixture.content, "DEV", "cites-plan.md"), note("Cites plan", "[[PROJEKTY/plan]]"), {
+      mode: 0o600,
+    });
+
+    const result = await runRefactor(fixture.context, {
+      subcommand: "refactor",
+      request: { mode: "rename", note: `${ALIAS}/plan.md`, newName: "roadmap.md" },
+      dryRun: false,
+    });
+
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(result.data.rewrittenLinks).toBe(1);
+    expect(await exists(join(fixture.content, ALIAS, "plan.md"))).toBe(false);
+    expect(await exists(join(fixture.content, ALIAS, "roadmap.md"))).toBe(true);
+    const referrer = await nodeFs.readFile(join(fixture.content, "DEV", "cites-plan.md"), "utf8");
+    expect(referrer).toContain("roadmap]]");
+    expect(referrer).not.toContain("[[PROJEKTY/plan]]");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("renames a DEV note whose backlink lives in an aliased folder and rewrites that backlink", async () => {
+    const fixture = await installed("refactor-alias-backlink");
+    await withAliases(fixture);
+    const backlink = join(fixture.content, ALIAS, "links.md");
+    await nodeFs.writeFile(backlink, note("Links", "[[DEV/example-knowledge-note]]"), { mode: 0o600 });
+
+    const result = await runRefactor(fixture.context, {
+      subcommand: "refactor",
+      request: { mode: "rename", note: REFERRER, newName: "writing.md" },
+      dryRun: false,
+    });
+
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(result.data.rewrittenLinks).toBe(1);
+    expect(await exists(join(fixture.content, "DEV", "writing.md"))).toBe(true);
+    const text = await nodeFs.readFile(backlink, "utf8");
+    expect(text).toContain("writing]]");
+    expect(text).not.toContain("[[DEV/example-knowledge-note]]");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("retires a note in an aliased folder to _graveyard", async () => {
+    const fixture = await installed("refactor-alias-retire");
+    await withAliases(fixture);
+    await nodeFs.writeFile(join(fixture.content, ALIAS, "done.md"), note("Done"), { mode: 0o600 });
+
+    const result = await runRefactor(fixture.context, {
+      subcommand: "retire",
+      request: { mode: "retire", note: `${ALIAS}/done.md` },
+      dryRun: false,
+    });
+
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(await exists(join(fixture.content, ALIAS, "done.md"))).toBe(false);
+    expect(await exists(join(fixture.content, "_graveyard", ALIAS, "done.md"))).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("moves a note into an aliased folder that exists on disk", async () => {
+    const fixture = await installed("refactor-alias-move");
+    await withAliases(fixture);
+
+    const result = await runRefactor(fixture.context, {
+      subcommand: "refactor",
+      request: { mode: "move", note: ISOLATED, folder: ALIAS },
+      dryRun: false,
+    });
+
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(await exists(join(fixture.content, ALIAS, "example-compiled-note.md"))).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * An alias widens admission only to a physical folder whose name maps, by own property, to a
+   * configured topic: never to a private folder, never through the prototype chain, and never to
+   * an alias with no folder behind it.
+   */
+  it.each([
+    ["an alias key naming a private folder", "_outputs", EXIT_CODES.invalidInput, "brain_refactor_input_invalid"],
+    ["an inherited property name", "constructor", EXIT_CODES.invalidInput, "brain_refactor_input_invalid"],
+    ["an inherited property name", "toString", EXIT_CODES.invalidInput, "brain_refactor_input_invalid"],
+    ["an alias with no folder on disk", "GHOST", EXIT_CODES.securityRefusal, "brain_refactor_path_refused"],
+  ] as const)("refuses --move into %s (%s) and writes nothing", async (_why, folder, code, kind) => {
+    const fixture = await installed(`refactor-alias-refuse-${folder}`);
+    await withAliases(fixture, { [ALIAS]: "PROJECTS", _outputs: "DEV", GHOST: "PROJECTS" });
+    for (const physical of ["constructor", "toString"]) {
+      await nodeFs.mkdir(join(fixture.content, physical), { mode: 0o700 });
+    }
+    const before = await inventoryDigest(fixture.root);
+
+    const result = await runRefactor(fixture.context, {
+      subcommand: "refactor",
+      request: { mode: "move", note: ISOLATED, folder },
+      dryRun: false,
+    });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([code, kind]);
     expect(await inventoryDigest(fixture.root)).toEqual(before);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

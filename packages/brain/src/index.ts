@@ -3,6 +3,7 @@ export {
   compareRawBytes,
   discoverNotes,
   PRIVATE_FOLDERS,
+  topicOfFolder,
 } from "./discovery/index.js";
 export type {
   DirectoryEntry,
