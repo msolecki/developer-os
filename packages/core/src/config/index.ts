@@ -17,9 +17,11 @@ export type {
   PublishableDeveloperOsConfigV1,
 } from "./keys.js";
 export {
+  OPTIONAL_SCHEDULED_JOB_IDS,
   SCHEDULED_JOB_IDS,
   encodeLifecycleActivationRecord,
   gitScopeFingerprint,
+  isOptionalScheduledJob,
   lifecycleConfigHash,
   parseLifecycleActivationRecord,
   parseNormalizedRemoteUrl,
@@ -43,6 +45,7 @@ export { resolveRuntimePaths } from "./paths.js";
 export { pathSegmentViolation } from "./segment.js";
 export type {
   BrainConfigV1,
+  BrainGardenConfigV1,
   DeveloperOsConfigV1,
   PathEnvironment,
   RuntimePaths,

@@ -27,6 +27,8 @@ export type ConfigReadableKeyV1 =
   | "automation"
   | "automation.enabled"
   | "automation.lifecycle"
+  | "automation.brainGarden.agent"
+  | "automation.brainGarden.executable"
   | "redaction"
   | "redaction.patterns"
   | "telemetry";
@@ -69,6 +71,8 @@ export const CONFIG_READABLE_KEYS: readonly ConfigReadableKeyV1[] = [
   "automation",
   "automation.enabled",
   "automation.lifecycle",
+  "automation.brainGarden.agent",
+  "automation.brainGarden.executable",
   "redaction",
   "redaction.patterns",
   "telemetry",

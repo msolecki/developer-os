@@ -571,6 +571,10 @@ export function createScheduledJobHandlers(
                 data: null,
               })
             : gitSync.run(job, global);
+        case "brain-garden":
+        case "brain-pulse":
+          // Temporary (NEW-134 Task 1): Task 10 wires these handlers.
+          throw new Error(`${job} is wired in NEW-134 Task 10`);
         default: {
           const unknown: never = job;
           throw new Error(`unknown scheduled job ${String(unknown)}`);

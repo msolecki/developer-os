@@ -160,7 +160,7 @@ describe("the closed config key sets", () => {
   it("enumerates exactly the Spec 1 key unions", () => {
     expect(CONFIG_READABLE_KEYS).not.toHaveLength(0);
     expect(CONFIG_MUTABLE_KEYS).not.toHaveLength(0);
-    expect(CONFIG_READABLE_KEYS).toHaveLength(24);
+    expect(CONFIG_READABLE_KEYS).toHaveLength(26);
     expect(CONFIG_MUTABLE_KEYS).toHaveLength(14);
     expect(CONFIG_MUTABLE_KEYS.every((key) => CONFIG_READABLE_KEYS.includes(key))).toBe(true);
   });
@@ -188,6 +188,8 @@ describe("the closed config key sets", () => {
       "automation",
       "automation.enabled",
       "automation.lifecycle",
+      "automation.brainGarden.agent",
+      "automation.brainGarden.executable",
       "redaction",
       "redaction.patterns",
       "telemetry",
@@ -327,6 +329,8 @@ describe("readConfigValue", () => {
     "brain.staleness.reviewAfterDays",
     "git.lifecycle",
     "automation.lifecycle",
+    "automation.brainGarden.agent",
+    "automation.brainGarden.executable",
     "redaction",
     "redaction.patterns",
   ] as const)("returns null for the absent section or child %s", (key) => {

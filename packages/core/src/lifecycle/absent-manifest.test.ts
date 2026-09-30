@@ -471,10 +471,10 @@ describe("the closed external plist paths", () => {
     expect(error.paths).toStrictEqual([plist]);
   });
 
-  it("admits a key-only home when all four plists are absent", async () => {
+  it("admits a key-only home when all six plists are absent", async () => {
     const home = memoryHome("state_key_only");
 
-    expect(SCHEDULED_JOB_IDS.length).toBe(4);
+    expect(SCHEDULED_JOB_IDS.length).toBe(6);
     expect((await inspectAbsentManifestProductHome(home.dependencies)).shape).toBe("state_key_only");
   });
 });

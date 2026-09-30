@@ -56,6 +56,8 @@ describe("the package's public door", () => {
         "readConfigValue",
         "setConfigValue",
         "SCHEDULED_JOB_IDS",
+        "OPTIONAL_SCHEDULED_JOB_IDS",
+        "isOptionalScheduledJob",
         "encodeLifecycleActivationRecord",
         "gitScopeFingerprint",
         "lifecycleConfigHash",

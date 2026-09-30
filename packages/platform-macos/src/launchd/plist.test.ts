@@ -41,7 +41,7 @@ const hostileHome = "/Users/a b/&<\"é>/.developer-os";
 const observationHash = "1".repeat(64) as LowerHexSha256;
 const templateHash = "2".repeat(64) as LowerHexSha256;
 
-function projectionFor(home: string, job: ScheduledJobIdV1 = "brain-reindex"): LaunchdGenerationProjectionV1 {
+function projectionFor(home: string, job: Exclude<ScheduledJobIdV1, "brain-garden" | "brain-pulse"> = "brain-reindex"): LaunchdGenerationProjectionV1 {
   const productHome = parseScheduledProductHome(home);
   return {
     job,
@@ -202,7 +202,7 @@ function request(overrides: Partial<LaunchdPreviewRequestV1> = {}): LaunchdPrevi
     productHome,
     executablePath: executable,
     automation: threeJobs,
-    prior: { "brain-reindex": unloaded(), "brain-lint": unloaded(), doctor: unloaded(), "git-sync": unloaded() },
+    prior: { "brain-reindex": unloaded(), "brain-lint": unloaded(), doctor: unloaded(), "git-sync": unloaded(), "brain-garden": unloaded(), "brain-pulse": unloaded() },
     ...overrides,
   };
 }
@@ -264,7 +264,7 @@ describe("buildLaunchdPlanPreview", () => {
       beforeLiveState: { state: "loaded", label: generatedLabel("brain-lint", oldGeneration), generation: oldGeneration },
     };
     const preview = buildLaunchdPlanPreview(
-      request({ prior: { "brain-reindex": keepPrior, "brain-lint": replacePrior, doctor: unloaded(), "git-sync": unloaded() } }),
+      request({ prior: { "brain-reindex": keepPrior, "brain-lint": replacePrior, doctor: unloaded(), "git-sync": unloaded(), "brain-garden": unloaded(), "brain-pulse": unloaded() } }),
     );
     expect(preview.entries.map((entry) => entry.operation)).toEqual(["keep", "replace", "install"]);
     expect(preview.entries[0]?.plistBytes).toBe(reindex.plistBytes);
@@ -285,6 +285,8 @@ describe("buildLaunchdPlanPreview", () => {
             beforeGeneration: retained,
             beforeLiveState: { state: "loaded", label: generatedLabel("git-sync", retained), generation: retained },
           },
+          "brain-garden": unloaded(),
+          "brain-pulse": unloaded(),
         },
       }),
     );
@@ -312,7 +314,7 @@ describe("buildLaunchdPlanPreview", () => {
       beforeLiveState: { state: "unloaded" },
     };
     expect(() =>
-      buildLaunchdPlanPreview(request({ prior: { "brain-reindex": drifted, "brain-lint": unloaded(), doctor: unloaded(), "git-sync": unloaded() } })),
+      buildLaunchdPlanPreview(request({ prior: { "brain-reindex": drifted, "brain-lint": unloaded(), doctor: unloaded(), "git-sync": unloaded(), "brain-garden": unloaded(), "brain-pulse": unloaded() } })),
     ).toThrow();
   });
 
@@ -323,7 +325,7 @@ describe("buildLaunchdPlanPreview", () => {
     ["a file hash without a generation", { beforeFileHash: "d".repeat(64) as LowerHexSha256, beforeGeneration: null, beforeLiveState: { state: "unloaded" } }],
   ])("refuses %s", (_label, prior) => {
     expect(() =>
-      buildLaunchdPlanPreview(request({ prior: { "brain-reindex": prior, "brain-lint": unloaded(), doctor: unloaded(), "git-sync": unloaded() } })),
+      buildLaunchdPlanPreview(request({ prior: { "brain-reindex": prior, "brain-lint": unloaded(), doctor: unloaded(), "git-sync": unloaded(), "brain-garden": unloaded(), "brain-pulse": unloaded() } })),
     ).toThrow();
   });
 

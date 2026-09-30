@@ -5,9 +5,11 @@ import { describe, expect, it } from "vitest";
 import { decodeCanonicalJson, encodeCanonicalJson } from "../lifecycle/canonical-json.js";
 import { loadConfig, serializeConfig } from "./loader.js";
 import {
+  OPTIONAL_SCHEDULED_JOB_IDS,
   SCHEDULED_JOB_IDS,
   encodeLifecycleActivationRecord,
   gitScopeFingerprint,
+  isOptionalScheduledJob,
   lifecycleConfigHash,
   parseLifecycleActivationRecord,
   parseNormalizedRemoteUrl,
@@ -488,8 +490,63 @@ describe("the Git scope snapshot", () => {
 });
 
 describe("the automation schedule registry", () => {
-  it("names the four jobs in reconciliation order", () => {
-    expect(SCHEDULED_JOB_IDS).toStrictEqual(["brain-reindex", "brain-lint", "doctor", "git-sync"]);
+  it("names the six jobs in reconciliation order", () => {
+    expect(SCHEDULED_JOB_IDS).toStrictEqual([
+      "brain-reindex",
+      "brain-lint",
+      "doctor",
+      "git-sync",
+      "brain-garden",
+      "brain-pulse",
+    ]);
+    expect(OPTIONAL_SCHEDULED_JOB_IDS).toStrictEqual(["brain-garden", "brain-pulse"]);
+    expect(isOptionalScheduledJob("brain-pulse")).toBe(true);
+    expect(isOptionalScheduledJob("git-sync")).toBe(false);
+  });
+
+  describe("optional jobs", () => {
+    const weekly = "{ cadence = \"weekly\", day = \"sun\", hour = 17, minute = 0 }";
+    const entry = (job: string): string =>
+      `\n[[automation.lifecycle.schedules]]\njob = "${job}"\nschedule = ${weekly}\n`;
+    const head = automationToml.slice(0, automationToml.indexOf('\n[[automation.lifecycle.schedules]]\njob = "git-sync"'));
+    const tomlWith = (...jobs: string[]): string => head + jobs.map(entry).join("");
+
+    it("accepts optional brain-garden and brain-pulse after the mandatory jobs, without git-sync", () => {
+      expect(loadedAutomationLifecycle(tomlWith("brain-garden", "brain-pulse")).schedules).toHaveLength(5);
+    });
+
+    it("accepts git-sync fourth followed by brain-pulse only", () => {
+      expect(loadedAutomationLifecycle(tomlWith("git-sync", "brain-pulse")).schedules).toHaveLength(5);
+    });
+
+    it("refuses optional jobs out of registry order", () => {
+      expect(() => loadConfig(tomlWith("brain-pulse", "brain-garden"))).toThrow(/registry order/);
+    });
+
+    it("refuses an optional job before git-sync", () => {
+      expect(() => loadConfig(tomlWith("brain-garden", "git-sync"))).toThrow(/registry order/);
+    });
+  });
+
+  describe("automation.brainGarden", () => {
+    const withGarden = (executable: string): string =>
+      automationToml.replace(
+        "[automation.lifecycle]",
+        `[automation.brainGarden]\nagent = "claude"\nexecutable = "${executable}"\n\n[automation.lifecycle]`,
+      );
+
+    it("reads the table, round-trips it, and leaves lifecycleConfigHash unchanged", () => {
+      const config = loadConfig(withGarden("/opt/homebrew/bin/claude"));
+      expect(config.automation.brainGarden).toStrictEqual({ agent: "claude", executable: "/opt/homebrew/bin/claude" });
+      expect(loadConfig(serializeConfig(config))).toStrictEqual(config);
+      expect(lifecycleConfigHash("automation", loadedAutomationLifecycle(withGarden("/opt/homebrew/bin/claude")))).toBe(
+        lifecycleConfigHash("automation", loadedAutomationLifecycle(automationToml)),
+      );
+    });
+
+    it("refuses a relative executable", () => {
+      expect(() => loadConfig(withGarden("bin/claude"))).toThrow(/absolute/);
+    });
   });
 
   it("accepts the three mandatory entries without the optional fourth", () => {

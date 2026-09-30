@@ -343,17 +343,33 @@ const automationConfigSchema = z
           .strict(),
       )
       .min(3)
-      .max(4)
+      .max(SCHEDULED_JOB_IDS.length)
       /**
-       * One rule for four refusals: a missing mandatory job, the mandatory jobs out of
-       * order, a duplicate, and `git-sync` anywhere but fourth are all "entry `i` is not
-       * `SCHEDULED_JOB_IDS[i]`". No input spelling is stored, so there is nothing else
-       * the order could be recovered from.
+       * The mandatory three lead in registry order; everything after them (`git-sync` if
+       * eligible, then the optional jobs) is a strictly increasing subsequence of the
+       * registry, which also refuses duplicates. No input spelling is stored, so there is
+       * nothing else the order could be recovered from.
        */
-      .refine((entries) => entries.every((entry, index) => entry.job === SCHEDULED_JOB_IDS[index]), {
-        message:
-          "schedules must be the mandatory three in registry order, with git-sync exactly fourth",
-      }),
+      .refine(
+        (entries) => {
+          const order = entries.map((entry) => SCHEDULED_JOB_IDS.indexOf(entry.job));
+          const mandatory = entries
+            .slice(0, 3)
+            .every((entry, index) => entry.job === SCHEDULED_JOB_IDS[index]);
+          return mandatory && order.every((position, index) => index === 0 || position > (order[index - 1] ?? Infinity));
+        },
+        {
+          message:
+            "schedules must be the mandatory three, then git-sync if eligible, then optional jobs, in registry order",
+        },
+      ),
+  })
+  .strict();
+
+const brainGardenSchema = z
+  .object({
+    agent: z.enum(["claude", "codex"]),
+    executable: z.string().refine((path) => path.startsWith("/"), "executable must be an absolute path"),
   })
   .strict();
 
@@ -419,6 +435,7 @@ const configSchema = z
       .object({
         enabled: z.boolean(),
         lifecycle: automationLifecycleSchema.optional(),
+        brainGarden: brainGardenSchema.optional(),
       })
       .strict(),
     brain: brainSchema.optional(),
@@ -469,10 +486,11 @@ export function loadConfig(source: string): DeveloperOsConfigV1 {
       git.lifecycle === undefined
         ? { enabled: git.enabled }
         : { enabled: git.enabled, lifecycle: git.lifecycle },
-    automation:
-      automation.lifecycle === undefined
-        ? { enabled: automation.enabled }
-        : { enabled: automation.enabled, lifecycle: automation.lifecycle },
+    automation: {
+      enabled: automation.enabled,
+      ...(automation.lifecycle === undefined ? {} : { lifecycle: automation.lifecycle }),
+      ...(automation.brainGarden === undefined ? {} : { brainGarden: automation.brainGarden }),
+    },
   };
   const withBrain = brain === undefined ? withTables : { ...withTables, brain };
   return redaction === undefined ? withBrain : { ...withBrain, redaction };
@@ -502,6 +520,9 @@ export function serializeConfig(config: DeveloperOsConfigV1): string {
       ...(validated.automation.lifecycle === undefined
         ? {}
         : { lifecycle: validated.automation.lifecycle }),
+      ...(validated.automation.brainGarden === undefined
+        ? {}
+        : { brainGarden: validated.automation.brainGarden }),
     },
     /**
      * Conditional so a configuration without the section serializes to exactly

@@ -19,6 +19,11 @@ export interface BrainConfigV1 {
 
 import type { AutomationConfigV1, GitSyncConfigV1 } from "./lifecycle.js";
 
+export interface BrainGardenConfigV1 {
+  readonly agent: "claude" | "codex";
+  readonly executable: string;
+}
+
 export interface DeveloperOsConfigV1 {
   readonly schemaVersion: 1;
   readonly brainPath: string;
@@ -40,6 +45,8 @@ export interface DeveloperOsConfigV1 {
   readonly automation: {
     readonly enabled: boolean;
     readonly lifecycle?: AutomationConfigV1;
+    /** Beside `lifecycle`, not inside it, so `lifecycleConfigHash` is unchanged. */
+    readonly brainGarden?: BrainGardenConfigV1;
   };
   /**
    * Optional, and `schemaVersion` deliberately stays `1`. Every configuration

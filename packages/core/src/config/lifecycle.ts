@@ -52,7 +52,13 @@ export type NormalizedScheduleV1 =
       readonly minute: number;
     };
 
-export type ScheduledJobIdV1 = "brain-reindex" | "brain-lint" | "doctor" | "git-sync";
+export type ScheduledJobIdV1 =
+  | "brain-reindex"
+  | "brain-lint"
+  | "doctor"
+  | "git-sync"
+  | "brain-garden"
+  | "brain-pulse";
 
 export interface AutomationConfigV1 {
   readonly schemaVersion: 1;
@@ -77,12 +83,21 @@ export interface LifecycleActivationRecordV1 {
  * entries as mandatory and `git-sync` as exactly the fourth when it was eligible at
  * apply, and Task 9's lease acquisition walks the same order.
  */
-export const SCHEDULED_JOB_IDS: readonly ["brain-reindex", "brain-lint", "doctor", "git-sync"] = [
+export const SCHEDULED_JOB_IDS = [
   "brain-reindex",
   "brain-lint",
   "doctor",
   "git-sync",
-];
+  "brain-garden",
+  "brain-pulse",
+] as const satisfies readonly ScheduledJobIdV1[];
+
+/** Registry order. The first three are mandatory; `git-sync` is fourth when Git is eligible; the last two are optional. */
+export const OPTIONAL_SCHEDULED_JOB_IDS = ["brain-garden", "brain-pulse"] as const;
+
+export function isOptionalScheduledJob(job: ScheduledJobIdV1): boolean {
+  return (OPTIONAL_SCHEDULED_JOB_IDS as readonly string[]).includes(job);
+}
 
 export const WEEKDAY_IDS: readonly ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] = [
   "mon",
