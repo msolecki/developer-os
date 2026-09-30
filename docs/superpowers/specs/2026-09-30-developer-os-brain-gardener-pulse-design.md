@@ -157,7 +157,7 @@ Per kind:
 
 - `hub`: the target is a new path inside a configured topic folder (aliases resolved as NEW-128 does),
   occupied by no note and no quarantined capture (`target_occupied`, `target_outside_topics`); `type:
-  compiled-note`; `sources` names only notes from the context bundle; at least 3 wikilinks to them
+  compiled-note`; `sources` names only notes from the context bundle (`sources_outside_bundle`); at least 3 wikilinks to them
   (`hub_too_thin`).
 - `related`: the target is one of the selected isolated notes (`target_not_selected`). The proposal
   equals the note's current bytes except a `## Related` section (added at the end, or replacing an
