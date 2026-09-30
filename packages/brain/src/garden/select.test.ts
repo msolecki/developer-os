@@ -41,4 +41,10 @@ describe("selectGardenTargets", () => {
       { tag: "flagged", notePaths: ["DEV/i.md", "DEV/j.md", "DEV/k.md", "DEV/l.md"] },
     ]);
   });
+
+  it("folds pending note paths before comparing them (Ruling 12)", () => {
+    const notes = [note("content/DEV/n0.md"), note("content/DEV/n1.md", { created: "2026-02-01" })];
+    const targets = selectGardenTargets({ notes, findings: notes.map((n) => isolated(n.path)), pendingNotePaths: new Set(["dev/N0.md"]) });
+    expect(targets.isolated).toEqual(["DEV/n1.md"]);
+  });
 });

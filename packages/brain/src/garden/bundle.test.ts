@@ -31,4 +31,10 @@ describe("buildGardenPrompt", () => {
     expect(untrusted).toContain("DEV/b.md — Rebasing");
     expect(untrusted).not.toContain("Unrelated");
   });
+
+  it("offers only hub and related, and says a Related section holds links only (Ruling 6, 11)", () => {
+    const { prompt } = buildGardenPrompt({ targets: { gaps: [], isolated: [] }, notes: [], readNote: () => "" });
+    expect(prompt).not.toMatch(/"fix"|`fix`/u);
+    expect(prompt).toContain("links only");
+  });
 });

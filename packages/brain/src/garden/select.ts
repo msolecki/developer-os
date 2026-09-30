@@ -21,6 +21,11 @@ export function contentRelative(vaultPath: string): string {
   return vaultPath.slice(vaultPath.indexOf("/") + 1);
 }
 
+/** NFC plus lowercase: two paths that land on one file on a folding volume compare equal. */
+export function fold(path: string): string {
+  return path.normalize("NFC").toLowerCase();
+}
+
 function byPath(a: string, b: string): number {
   return compareCanonical(a, b) || compareRawBytes(a, b);
 }
@@ -61,6 +66,7 @@ export function selectGardenTargets(input: {
     .slice(0, GARDEN_MAX_GAPS)
     .map(([tag, paths]) => ({ tag, notePaths: paths.map(contentRelative).sort(byPath) }));
 
+  const pending = new Set([...input.pendingNotePaths].map(fold));
   const created = new Map(input.notes.map((note) => [note.path, note.created]));
   const isolated = [
     ...new Set(
@@ -69,7 +75,7 @@ export function selectGardenTargets(input: {
         .map((finding) => finding.path),
     ),
   ]
-    .filter((path) => !input.pendingNotePaths.has(contentRelative(path)))
+    .filter((path) => !pending.has(fold(contentRelative(path))))
     .sort((a, b) => byPath(created.get(a) ?? "", created.get(b) ?? "") || byPath(a, b))
     .slice(0, GARDEN_MAX_ISOLATED)
     .map(contentRelative);
