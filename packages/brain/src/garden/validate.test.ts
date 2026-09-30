@@ -522,4 +522,23 @@ describe("validateGardenResponse", () => {
       expect(run(current + list)).toBe("accepted");
     });
   });
+
+  describe("fix round 3", () => {
+    const codeOf = (response: unknown): string =>
+      validate(response).rejected.map((r) => r.code).join(",") || "accepted";
+    const hub = (note: string): unknown => ({ proposals: [{ kind: "hub", target: "DEV/testing-hub.md", note }] });
+
+    it("rejects a link the index and the validator extract differently (Ruling 19)", () => {
+      expect(codeOf(hub(HUB + "[`x`[_raw/quarantine/secret]]\n"))).toBe("link_unresolved");
+      expect(codeOf(hub(HUB + "[``[Private/secret]]\n"))).toBe("link_unresolved");
+    });
+
+    it("rejects format characters that hide or reorder text (Ruling 20)", () => {
+      const note = text("DEV/alpha.md") + "\n## Related\n\n- [[Beta|‮evil]]\n- [[Gamma]]\n";
+      expect(codeOf({ proposals: [{ kind: "related", target: "DEV/alpha.md", note }] })).toBe("related_changes_body");
+      for (const character of ["​", "‏", "‪", "⁠", "⁤", "⁦", "⁩", "﻿"]) {
+        expect(codeOf(hub(HUB + `x${character}y\n`))).toBe("frontmatter_invalid");
+      }
+    });
+  });
 });

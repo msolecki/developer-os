@@ -2,7 +2,7 @@ import type { BrainConfigV1 } from "@developer-os/core";
 import { parseAllDocuments } from "yaml";
 
 import { PRIVATE_FOLDERS, topicOfFolder } from "../discovery/index.js";
-import { createLinkResolver, findWikilinks } from "../indexes/index.js";
+import { createLinkResolver, extractLinks, findWikilinks } from "../indexes/index.js";
 import type { IndexedNote } from "../indexes/index.js";
 import { isUnsafeProposedNotePath } from "../ingest/index.js";
 import type { LintFinding } from "../lint/index.js";
@@ -250,10 +250,13 @@ function checkFix(current: string, proposed: string, allowed: ReadonlySet<string
 /**
  * Ruling 14: CR, every C0 control but `\n` and `\t`, DEL, every C1 control and
  * the Unicode line and paragraph separators. Each can end a line for some
- * reader while this module's line-based checks see one line.
+ * reader while this module's line-based checks see one line. Ruling 20 adds the
+ * format characters that hide or reorder text: zero-width, bidi embeddings and
+ * isolates, invisible operators, and U+FEFF.
  */
-// eslint-disable-next-line no-control-regex -- matching control characters is the point
-const LINE_BREAKING = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u2028\u2029]/u;
+const LINE_BREAKING =
+  // eslint-disable-next-line no-control-regex -- matching control characters is the point
+  /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/u;
 
 /** The kind's own "you changed something you may not" code. */
 const CONTROL_CODE: Readonly<Record<GardenProposalV1["kind"], Code>> = {
@@ -266,6 +269,11 @@ const CONTROL_CODE: Readonly<Record<GardenProposalV1["kind"], Code>> = {
  * Ruling 15: links counted on the offset-preserving blanked body. Every raw
  * `[[` must start an occurrence `findWikilinks` counts; one inside code, or one
  * that a deleted code span would splice together, is hidden.
+ *
+ * Ruling 19: the index's graph uses `extractLinks`, which *deletes* code spans,
+ * so `[`x`[target]]` is a link to the index and none to the blanked view. When
+ * the two views disagree as multisets the body is hidden-linked; the union is
+ * returned so every link either view sees is resolved and privacy-checked.
  */
 function linksOf(body: string): { readonly links: readonly string[]; readonly hidden: boolean } {
   const occurrences = findWikilinks(body);
@@ -274,7 +282,11 @@ function linksOf(body: string): { readonly links: readonly string[]; readonly hi
   for (let index = body.indexOf("[["); index !== -1; index = body.indexOf("[[", index + 1)) {
     if (!starts.has(index)) hidden = true;
   }
-  return { links: occurrences.map((occurrence) => occurrence.text.trim()), hidden };
+  const blanked = occurrences.map((occurrence) => occurrence.text.trim()).filter((text) => text.length > 0);
+  const deleted = extractLinks(body);
+  const sorted = (links: readonly string[]): string => JSON.stringify([...links].sort());
+  if (sorted(blanked) !== sorted(deleted)) hidden = true;
+  return { links: [...new Set([...blanked, ...deleted])], hidden };
 }
 
 interface Checked {
