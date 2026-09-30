@@ -5,6 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { SCHEDULED_JOB_IDS } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { PULSE_REPORT_SLOTS } from "../lifecycle/runtime-records.js";
 import { runInit } from "../commands/init.js";
 import { createCommandFixture, inventory, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
@@ -80,7 +81,7 @@ describe("fresh V2 init layout", () => {
       // Spec 1 §2.1 amended 2026-09-22 (A13 Q3-A): fresh `init` creates `state/hooks`.
       "hooks",
       ...jobs.flatMap((job) => [`automation-${job}.status.json`, `.automation-${job}.lock`]),
-      ...Array.from({ length: 8 }, (_unused, slot) => `pulse.${String(slot)}.md`),
+      ...Array.from({ length: PULSE_REPORT_SLOTS }, (_unused, slot) => `pulse.${String(slot)}.md`),
     ].map((name) => join(state, name)).toSorted();
     const expectedLogs = jobs
       .flatMap((job) => Array.from({ length: 10 }, (_, slot) => `automation-${job}.${String(slot)}.json`))

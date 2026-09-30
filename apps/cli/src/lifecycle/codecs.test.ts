@@ -510,12 +510,14 @@ describe("the redaction-key state-plan codec", () => {
 });
 
 describe("the uninstall lease paths", () => {
-  it("names the four automation locks in registry order", () => {
+  it("names the six automation locks in registry order", () => {
     expect(uninstallLeasePaths(HOME)).toStrictEqual([
       "/product/state/.automation-brain-reindex.lock",
       "/product/state/.automation-brain-lint.lock",
       "/product/state/.automation-doctor.lock",
       "/product/state/.automation-git-sync.lock",
+      "/product/state/.automation-brain-garden.lock",
+      "/product/state/.automation-brain-pulse.lock",
     ]);
   });
 });

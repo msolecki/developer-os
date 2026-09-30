@@ -489,6 +489,33 @@ describe("structural V2 home admission", () => {
     );
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("refuses an installation made before brain-garden, brain-pulse and the pulse slots existed", async () => {
+    const fixture = await sharedInitializedV2Fixture();
+    const manifest = await manifestValue(fixture);
+    const rows = artifactRows(manifest);
+    const newRow = (path: unknown): boolean => typeof path === "string" && (
+      /automation-brain-(garden|pulse)\./u.test(path) || /[/]pulse\.[0-7]\.md$/u.test(path));
+    const pulse7 = join(fixture.paths.stateDir, "pulse.7.md");
+    expect(rows.some((row) => row.path === pulse7)).toBe(true);
+    expect(rows.filter((row) => newRow(row.path))).toHaveLength(32);
+
+    for (const keep of [(path: unknown) => !newRow(path), (path: unknown) => path !== pulse7]) {
+      await withBytesAt(
+        fixture.paths.manifestFile,
+        encodeCanonicalJson({
+          ...manifest,
+          artifacts: rows.filter((row) => keep(row.path)) as unknown as CanonicalJsonValue,
+        }),
+        async () => {
+          await expect(admit(fixture)).rejects.toMatchObject({
+            reason: "reservations_incomplete",
+            code: EXIT_CODES.recoveryRequired,
+          });
+        },
+      );
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("reports an unreadable activation record as recovery-required rather than absent (NEW-82)", async () => {
     const fixture = await sharedInitializedV2Fixture();
     const activation = join(fixture.paths.stateDir, "lifecycle-activation.json");
