@@ -178,6 +178,7 @@ async function rollbackFixture(options: RollbackFixtureOptions = {}): Promise<Ro
         world.coordinator = null;
         return Promise.resolve();
       },
+      removeRewriteTemps: () => Promise.resolve(),
     },
     participants,
     executor: {

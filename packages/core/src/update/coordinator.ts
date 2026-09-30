@@ -1102,6 +1102,8 @@ export interface UpdateLifecycleCoordinatorStoreV1 {
   rewrite(plan: UpdateLifecycleCoordinatorPlanV2, current: UpdateLifecycleCoordinatorJournalV2, next: UpdateLifecycleCoordinatorJournalV2): Promise<void>;
   /** Spec 1's envelope order: journal, held stable lock, then the immutable plan last. */
   removeEnvelope(plan: UpdateLifecycleCoordinatorPlanV2, journal: UpdateLifecycleCoordinatorJournalV2): Promise<void>;
+  /** Spec 1 §2.4's `rewrite_temp`: a dead writer's temp the admitted final journal never took. */
+  removeRewriteTemps(plan: UpdateLifecycleCoordinatorPlanV2): Promise<void>;
 }
 
 export interface UpdateCoordinatorParticipantsV1 extends UpdateParticipantAdapterV1 {
@@ -1182,7 +1184,9 @@ export class UpdateLifecycleCoordinator {
 
   /** Resumes in the persisted direction under the global lock, with no network or planner authority. */
   async recover(id: LifecycleCoordinatorIdV1): Promise<UpdateLifecycleOutcomeV1> {
-    return this.#run(await this.#open(id));
+    const session = await this.#open(id);
+    await this.#dependencies.store.removeRewriteTemps(session.plan);
+    return this.#run(session);
   }
 
   async #open(id: LifecycleCoordinatorIdV1): Promise<UpdateSessionV1> {

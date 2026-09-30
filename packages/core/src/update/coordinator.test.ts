@@ -535,6 +535,7 @@ async function interruptUpdateCoordinator(
         journal = null;
         return Promise.resolve();
       },
+      removeRewriteTemps: () => Promise.resolve(),
     },
     participants: {
       apply: (step) => {

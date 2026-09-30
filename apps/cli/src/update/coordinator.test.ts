@@ -125,6 +125,23 @@ describe("UpdateCoordinatorJournalStore", () => {
     expect(await nodeFs.readFile(paths.journal)).toEqual(before);
   });
 
+  it("removes only this coordinator's dead rewrite temp, beside an untouched journal", async () => {
+    const { plan, paths, store } = await envelope();
+    const root = paths.journal.slice(0, paths.journal.lastIndexOf("/"));
+    const { journal } = await store().read(SYNTHETIC_COORDINATOR_ID);
+    const killer = store((point) => {
+      if (point === "rewrite_temp_written") throw new Killed(point);
+    });
+    await expect(killer.rewrite(plan, journal, advanceUpdateCoordinatorJournal(plan, journal, { kind: "start" }, clock))).rejects.toBeInstanceOf(Killed);
+    const foreign = `${root}/.lc_${"e".repeat(64)}_1.${uuid()}.json.tmp`;
+    await nodeFs.writeFile(foreign, "{}", { mode: 0o600 });
+
+    await store().removeRewriteTemps(plan);
+
+    expect((await nodeFs.readdir(root)).sort()).toEqual([foreign.slice(root.length + 1), `${plan.id}.json`, `${plan.id}.plan.json`].sort());
+    expect((await store().read(SYNTHETIC_COORDINATOR_ID)).journal).toEqual(journal);
+  });
+
   it("refuses a V1 plan, a non-canonical journal, and a widened mode", async () => {
     const first = await envelope();
     await nodeFs.writeFile(first.paths.plan, `${encodeCanonicalJson({ schemaVersion: 1, id: SYNTHETIC_COORDINATOR_ID }).trimEnd()}\n`);

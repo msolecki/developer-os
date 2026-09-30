@@ -140,6 +140,21 @@ export class UpdateCoordinatorJournalStore implements UpdateLifecycleCoordinator
     this.#dependencies.interrupt?.("envelope_plan_removed");
   }
 
+  /** Collected before any unlink; each temp must still be the owner-only single-link leaf it was. */
+  async removeRewriteTemps(plan: UpdateLifecycleCoordinatorPlanV2): Promise<void> {
+    const { fs, productHome } = this.#dependencies;
+    const root = await this.#root(updateCoordinatorEnvelopePaths(productHome, plan.id).journal);
+    const prefix = `.${plan.id}.`;
+    const temps: CanonicalAbsolutePathV1[] = [];
+    for await (const name of fs.names(root)) {
+      if (name.startsWith(prefix) && name.endsWith(".json.tmp") && LOWERCASE_V4_UUID.test(name.slice(prefix.length, -".json.tmp".length))) {
+        temps.push(parseCanonicalAbsolutePathText(`${root.path}/${name}`));
+      }
+    }
+    for (const temp of temps) await fs.unlinkExact(await this.#guardedLeaf(temp, plan.maximumJournalBytes, "update_coordinator_temp_shape"));
+    if (temps.length > 0) await fs.syncDirectory(root);
+  }
+
   /** The Spec 1 plan-only envelope suffix: the journal is already gone, so only lock and plan remain. */
   async isEnvelopeSuffix(id: LifecycleCoordinatorIdV1): Promise<boolean> {
     const paths = updateCoordinatorEnvelopePaths(this.#dependencies.productHome, id);

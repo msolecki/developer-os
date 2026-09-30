@@ -177,6 +177,7 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
         world.coordinator = null;
         return Promise.resolve();
       },
+      removeRewriteTemps: () => Promise.resolve(),
     },
     participants,
     executor: {
