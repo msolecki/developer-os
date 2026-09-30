@@ -38,10 +38,12 @@ import type { UpdatableHomeV1 } from "@developer-os/cli/dist/update/testing.js";
  *
  * A home the recovery left on the old release is reused for the next point (only trust and the
  * allocator moved, as a real retry would find them); one it carried forward is rebuilt. Identities
- * are inode-bound (P1, P8), so a home is never copied. Expect this file to take tens of minutes.
+ * are inode-bound (P1, P8), so a home is never copied. A sweep takes hours, not minutes (measured
+ * 2026-09-30: 2213 apply, 1480 rollback and 2267 rejected points, each point costlier than the last),
+ * so `test:update-recovery` runs every other case and `test:update-recovery:sweeps` runs these.
  */
 
-const SWEEP_TIMEOUT_MS = 3_600_000;
+const SWEEP_TIMEOUT_MS = 172_800_000;
 const CASE_TIMEOUT_MS = 900_000;
 const MAXIMUM_DEATH_POINTS = 5_000;
 
@@ -183,6 +185,46 @@ describe("a construction that died between a source plan row's exclusive create 
     await recoverUpdate(home.update());
 
     expect((await settled(home)).active.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
+});
+
+/** Dies right after the first `writeExclusive` of `leaf` that follows an unlink under `after`. */
+function dieWritingAfterUnlink(context: DyingCliContext, after: string, leaf: string): ReturnType<typeof dieWhen> {
+  let unlinked = false;
+  return dieWhen(context, (name, args) => {
+    if (name === "unlinkExact" && (args[0] as { readonly path: string }).path.includes(after)) unlinked = true;
+    return unlinked && name === "writeExclusive" && String(args[0]).endsWith(leaf);
+  });
+}
+
+describe("a death inside a terminal compaction entry, between two of its removals", () => {
+  it.each([
+    ["an owner update's final journal", (context: DyingCliContext) => dieAfterUnlinking(context, "/update/journals/owner_update/")],
+    ["the rollback payload source's journal", (context: DyingCliContext) => dieAfterUnlinking(context, "/update/journals/rollback_payload_source/")],
+    ["the construction journal", (context: DyingCliContext) => dieAfterUnlinking(context, "/update-construction.journal.json")],
+    ["the execution leaf, at the next construction journal rewrite temp", (context: DyingCliContext) => dieWritingAfterUnlink(context, "/update/plans/update_execution/", "/update-construction.journal.rewrite.pending")],
+  ])("resumes after %s", async (_label, die) => {
+    const home = await installUpdatableHome("recovery-compaction-resume", "arm64");
+    const dying = die(home.fixture.context);
+
+    expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    await recoverUpdate(home.update());
+
+    const settledHome = await settled(home);
+    expect(settledHome.active.version).toBe("1.1.0");
+    expect(settledHome.rollback?.previous.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
+});
+
+describe("a coordinator that died between its journal rewrite temp and the rename", () => {
+  it("removes the dead temp before resuming, so the closure clears", async () => {
+    const home = await installUpdatableHome("recovery-coordinator-rewrite-temp", "arm64");
+    const dying = dieWhen(home.fixture.context, (name, args) => name === "writeExclusive" && /\/lifecycle-journals\/\.lc_[^/]+\.json\.tmp$/u.test(String(args[0])));
+
+    expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    await recoverUpdate(home.update());
+
+    expect((await settled(home)).active.version).toBe("1.1.0");
   }, CASE_TIMEOUT_MS);
 });
 
