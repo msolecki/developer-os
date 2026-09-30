@@ -2,7 +2,7 @@ import type { BrainConfigV1 } from "@developer-os/core";
 import { parseAllDocuments } from "yaml";
 
 import { PRIVATE_FOLDERS, topicOfFolder } from "../discovery/index.js";
-import { createLinkResolver, extractLinks } from "../indexes/index.js";
+import { createLinkResolver, findWikilinks } from "../indexes/index.js";
 import type { IndexedNote } from "../indexes/index.js";
 import { isUnsafeProposedNotePath } from "../ingest/index.js";
 import type { LintFinding } from "../lint/index.js";
@@ -139,6 +139,19 @@ function split(text: string): { readonly header: string; readonly frontmatter: s
   return { header: text.slice(0, text.length - body.length), frontmatter: match[1] ?? "", body };
 }
 
+/**
+ * Ruling 16: a block the proposal may change is exactly one line, `key: <scalar>`,
+ * with no comment and no continuation. A quoted scalar may hold `#`; a plain one
+ * may not hold `#` at all.
+ */
+const SINGLE_LINE_SCALAR =
+  /^[^\s:#'"][^:\n]*: (?:"(?:[^"\\\n]|\\.)*"|'(?:[^'\n]|'')*'|[^\s#"'[\]{}&*!|>%@`][^#\n]*?)[ \t]*\n$/u;
+
+function singleLine(blocks: readonly HeaderBlock[], keys: Iterable<string>): boolean {
+  const wanted = new Set(keys);
+  return blocks.every((block) => block.key === null || !wanted.has(block.key) || SINGLE_LINE_SCALAR.test(block.text));
+}
+
 const RELATED_KEYS: ReadonlySet<string> = new Set(["updated", "reviewed"]);
 const LINK_ITEM = String.raw`- \[\[[^\[\]|\n\x60]+(?:\|[^\[\]|\n\x60]+)?\]\]\n`;
 /** Ruling 11: the heading, one blank line, 2–5 link items, a final newline, nothing after. */
@@ -147,7 +160,7 @@ const RELATED_SECTION = new RegExp(
   "u",
 );
 /** An existing section the proposal may replace: the same shape with any number of items. */
-const EXISTING_SECTION = /^## Related\n\n(?:- \[\[[^\n]*\]\]\n)*$/u;
+const EXISTING_SECTION = new RegExp(`^## Related\\n\\n(?:${LINK_ITEM})*$`, "u");
 
 /** Offset of the last line that is exactly `## Related`, or -1. */
 function lastRelatedHeading(body: string): number {
@@ -170,6 +183,7 @@ function checkRelated(current: string, proposed: string): Code | null {
   const left = headerBlocks(before.header);
   const right = headerBlocks(after.header);
   if (without(left, RELATED_KEYS) !== without(right, RELATED_KEYS)) return "related_changes_body";
+  if (!singleLine(right, RELATED_KEYS)) return "related_changes_body";
   const reviewed = blockOf(right, "reviewed");
   if (reviewed !== blockOf(left, "reviewed") && !/^reviewed: null\r?\n$/u.test(reviewed)) {
     return "related_changes_body";
@@ -226,9 +240,41 @@ function checkFix(current: string, proposed: string, allowed: ReadonlySet<string
   );
   if (changed.size === 0) return "fix_out_of_scope";
   if ([...changed].some((key) => !allowed.has(key) || FIX_FORBIDDEN.has(key))) return "fix_out_of_scope";
-  return without(headerBlocks(before.header), changed) === without(headerBlocks(after.header), changed)
+  const proposedBlocks = headerBlocks(after.header);
+  if (!singleLine(proposedBlocks, changed)) return "fix_out_of_scope";
+  return without(headerBlocks(before.header), changed) === without(proposedBlocks, changed)
     ? null
     : "fix_out_of_scope";
+}
+
+/**
+ * Ruling 14: CR, every C0 control but `\n` and `\t`, DEL, every C1 control and
+ * the Unicode line and paragraph separators. Each can end a line for some
+ * reader while this module's line-based checks see one line.
+ */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
+const LINE_BREAKING = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u2028\u2029]/u;
+
+/** The kind's own "you changed something you may not" code. */
+const CONTROL_CODE: Readonly<Record<GardenProposalV1["kind"], Code>> = {
+  hub: "frontmatter_invalid",
+  related: "related_changes_body",
+  fix: "fix_out_of_scope",
+};
+
+/**
+ * Ruling 15: links counted on the offset-preserving blanked body. Every raw
+ * `[[` must start an occurrence `findWikilinks` counts; one inside code, or one
+ * that a deleted code span would splice together, is hidden.
+ */
+function linksOf(body: string): { readonly links: readonly string[]; readonly hidden: boolean } {
+  const occurrences = findWikilinks(body);
+  const starts = new Set(occurrences.map((occurrence) => occurrence.index));
+  let hidden = false;
+  for (let index = body.indexOf("[["); index !== -1; index = body.indexOf("[[", index + 1)) {
+    if (!starts.has(index)) hidden = true;
+  }
+  return { links: occurrences.map((occurrence) => occurrence.text.trim()), hidden };
 }
 
 interface Checked {
@@ -290,7 +336,7 @@ export function validateGardenResponse(
       if (tags.some((tag) => claimed.has(tag))) return "duplicate_target";
       for (const tag of tags) claimed.add(tag);
       const linked = new Set(
-        extractLinks(parsed.body)
+        linksOf(parsed.body).links
           .map(resolveIndexed)
           .filter((path): path is string => path !== null)
           .map(contentRelative)
@@ -332,11 +378,11 @@ export function validateGardenResponse(
     if (seen.has(key)) return reject("duplicate_target");
     seen.add(key);
     if (Buffer.byteLength(proposal.note, "utf8") > GARDEN_NOTE_MAX_BYTES) return reject("too_large");
+    if (LINE_BREAKING.test(proposal.note)) return reject(CONTROL_CODE[proposal.kind]);
     const parsed = validNote(proposal.note);
     if (parsed === null) return reject("frontmatter_invalid");
-    const links = extractLinks(parsed.body);
-    const opened = parsed.body.match(/\[\[/gu)?.length ?? 0;
-    return { proposal, early: kindCheck(proposal, parsed), parsed, links, hiddenLink: opened > links.length };
+    const { links, hidden } = linksOf(parsed.body);
+    return { proposal, early: kindCheck(proposal, parsed), parsed, links, hiddenLink: hidden };
   });
 
   const redacted = checked.map(
