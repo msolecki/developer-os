@@ -581,13 +581,13 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
     owner_update: async (entry) => {
       const step = ownerSteps.get(entry.owner);
       if (step === undefined) return;
-      await finalizeThenCompact(step.journal, () => owners.observe(step),() => owners.finalize(step), () => owners.compact(step));
+      await finalizeThenCompact(step.journal, () => owners.observe(step), () => owners.finalize(step), () => owners.compact(step));
       await journals.remove(step.journal.stagedPath);
     },
     schema_migration: async (entry) => {
       const step = migrationSteps.get(entry.id);
       if (step === undefined) return;
-      await finalizeThenCompact(step.journal, () => migrations.observe(step),() => migrations.finalize(step), () => migrations.compact(step));
+      await finalizeThenCompact(step.journal, () => migrations.observe(step), () => migrations.finalize(step), () => migrations.compact(step));
       await journals.remove(step.journal.stagedPath);
     },
     owner_external_effect: async (entry) => {
@@ -628,7 +628,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
       default: {
         const step = entry.participant === "trust" ? trustStep : entry.participant === "active" ? activeStep : recordStep;
         if (step === null) return;
-        await finalizeThenCompact(step.journal, () => state.observe(step),() => state.finalize(step), () => state.compact(step));
+        await finalizeThenCompact(step.journal, () => state.observe(step), () => state.finalize(step), () => state.compact(step));
         await journals.remove(step.journal.stagedPath);
       }
     }
@@ -1076,8 +1076,9 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
       },
       verifyPlan: async (plan, journal) => {
         const { reopened } = await load(plan);
-        // Compaction removes the owner leaves first, so from then on the hash-bound outer plan alone remains.
-        if (reopened.execution === null || journal.phase === "compacting") return;
+        // Compaction removes the owner leaves first; once one is gone the hash-bound outer plan alone remains.
+        if (reopened.execution === null) return;
+        if (journal.phase === "compacting" && reopened.owners.length !== reopened.execution.owners.length) return;
         assertUpdateCoordinatorDerivation(plan, reopened.execution, reopened.owners);
       },
       requireLock: () => {
