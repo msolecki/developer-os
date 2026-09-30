@@ -108,7 +108,8 @@ The full closure conditions are in `BACKLOG.md` §1.
 Startable without another product gate (one worktree each):
 
 - NEW-115 (`init` does not exit after success) and NEW-116 (ingest yield and head-of-line blocking).
-- NEW-128 (`brain refactor` ignores `topicAliases`).
+- NEW-128 (`brain refactor` ignores `topicAliases`) and NEW-129 (high-entropy redaction of note
+  paths and wikilinks).
 - Residuals of the D70 lane: NEW-117, NEW-119, NEW-122, NEW-123, NEW-124, NEW-126.
 - NEW-53 (the `init` encoder cost) and NEW-29 (the elapsed-time assertion class).
 
