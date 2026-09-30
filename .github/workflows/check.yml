@@ -208,16 +208,18 @@ jobs:
     # cite that run. An unused budget minute is not billed; a killed job costs a
     # whole cycle.
     #
-    # **Sharded 3 ways on 2026-09-30.** PR #19's run 36653103882 cancelled the
+    # **Sharded 6 ways on 2026-09-30 (first 3).** PR #19's run 36653103882 cancelled the
     # unsharded job at this 150-minute bound with no test failed: the D70 lane
     # added the NEW-110 update recovery sweeps (a full `init` per death point)
     # to `test:suite`. Vitest's `--shard` splits the files; each shard keeps the
-    # 150-minute bound until a green run gives real per-shard figures.
-    name: suite (${{ matrix.shard }}/3)
+    # 150-minute bound until a green run gives real per-shard figures. Three
+    # shards were not enough: run 36685922570's shard 3/3 was cancelled at 150
+    # minutes with no test failed (shard 1/3 took 93 min, 2/3 49 min).
+    name: suite (${{ matrix.shard }}/6)
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6]
     runs-on: macos-15
     timeout-minutes: 150
     steps:
@@ -235,7 +237,7 @@ jobs:
         # tests/security and tests/repository import the compiled CLI from dist.
         run: pnpm --pm-on-fail=ignore build
       - name: Suite
-        run: npm run test:suite -- --shard=${{ matrix.shard }}/3
+        run: npm run test:suite -- --shard=${{ matrix.shard }}/6
 
   lifecycle-v2:
     # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
