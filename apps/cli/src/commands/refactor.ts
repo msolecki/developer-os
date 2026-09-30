@@ -130,12 +130,12 @@ async function containedTarget(
 ): Promise<string> {
   const segments = path.split("/");
   let exists = true;
-  let depth = 0;
+  let headIsDirectory = false;
   for (let i = 1; i <= segments.length && exists; i += 1) {
     try {
       const stats = await context.fs.lstat(join(contentRoot, ...segments.slice(0, i)));
       if (stats.isSymbolicLink()) throw pathRefused(path, "passes through a symbolic link");
-      depth = i;
+      if (i === 1) headIsDirectory = stats.isDirectory();
     } catch (error) {
       if (!isMissing(error)) throw error;
       exists = false;
@@ -145,8 +145,8 @@ async function containedTarget(
   const [head = ""] = segments;
   const aliased =
     !brainConfig.topicFolders.includes(head) && isTopicNotePath(path, brainConfig) ? [head] : [];
-  if (aliased.length > 0 && depth === 0) {
-    throw pathRefused(path, "names a topic alias whose folder does not exist");
+  if (aliased.length > 0 && !headIsDirectory) {
+    throw pathRefused(path, "names a topic alias that is not an existing folder");
   }
 
   const graveyard =

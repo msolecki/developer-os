@@ -407,6 +407,97 @@ describe("runRefactor with topicAliases (NEW-128)", () => {
     expect(await exists(join(fixture.content, ALIAS, "example-compiled-note.md"))).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("writes the full aliased path when the new short name is ambiguous, and the link resolves to the moved note", async () => {
+    const fixture = await installed("refactor-alias-ambiguous");
+    await withAliases(fixture);
+    await nodeFs.writeFile(join(fixture.content, ALIAS, "plan.md"), note("Plan"), { mode: 0o600 });
+    await nodeFs.writeFile(join(fixture.content, "DEV", "roadmap.md"), note("Dev roadmap"), { mode: 0o600 });
+    const cites = join(fixture.content, "DEV", "cites-plan.md");
+    await nodeFs.writeFile(cites, note("Cites plan", "[[PROJEKTY/plan]]"), { mode: 0o600 });
+
+    const result = await runRefactor(fixture.context, {
+      subcommand: "refactor",
+      request: { mode: "rename", note: `${ALIAS}/plan.md`, newName: "roadmap.md" },
+      dryRun: false,
+    });
+
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(await nodeFs.readFile(cites, "utf8")).toContain("[[PROJEKTY/roadmap]]");
+    const graph = JSON.parse(
+      await nodeFs.readFile(join(fixture.content, "_indexes", "graph.json"), "utf8"),
+    ) as { readonly edges: readonly { readonly source: string; readonly target: string }[] };
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({ source: "content/DEV/cites-plan.md", target: "content/PROJEKTY/roadmap.md" }),
+    );
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("merges two notes inside an aliased folder", async () => {
+    const fixture = await installed("refactor-alias-merge");
+    await withAliases(fixture);
+    await nodeFs.writeFile(join(fixture.content, ALIAS, "a.md"), note("A", "Alpha."), { mode: 0o600 });
+    await nodeFs.writeFile(join(fixture.content, ALIAS, "b.md"), note("B", "Beta."), { mode: 0o600 });
+
+    const result = await runRefactor(fixture.context, {
+      subcommand: "refactor",
+      request: { mode: "merge", source: `${ALIAS}/a.md`, target: `${ALIAS}/b.md` },
+      dryRun: false,
+    });
+
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(await exists(join(fixture.content, ALIAS, "a.md"))).toBe(false);
+    expect(await nodeFs.readFile(join(fixture.content, ALIAS, "b.md"), "utf8")).toContain("Alpha.");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("splits a section out of a note inside an aliased folder", async () => {
+    const fixture = await installed("refactor-alias-split");
+    await withAliases(fixture);
+    await nodeFs.writeFile(
+      join(fixture.content, ALIAS, "p.md"),
+      note("Parent", "## Intro\n\ni\n\n## Deep Dive\n\nd"),
+      { mode: 0o600 },
+    );
+
+    const result = await runRefactor(fixture.context, {
+      subcommand: "refactor",
+      request: { mode: "split", note: `${ALIAS}/p.md`, heading: "Deep Dive" },
+      dryRun: false,
+    });
+
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(await nodeFs.readFile(join(fixture.content, ALIAS, "deep-dive.md"), "utf8")).toContain("## Deep Dive");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it.each([
+    ["a symbolic link", "symlink"],
+    ["a regular file", "file"],
+  ] as const)("refuses --move into an alias that is %s, exit 5 brain_refactor_path_refused", async (_why, shape) => {
+    const fixture = await installed(`refactor-alias-${shape}`);
+    await withAliases(fixture);
+    const physical = join(fixture.content, ALIAS);
+    await nodeFs.rm(physical, { recursive: true });
+    const elsewhere = join(fixture.content, "_outputs", "alias-elsewhere");
+    if (shape === "symlink") {
+      await nodeFs.mkdir(elsewhere, { recursive: true, mode: 0o700 });
+      await nodeFs.symlink(elsewhere, physical);
+    } else {
+      await nodeFs.writeFile(physical, "not a folder\n", { mode: 0o600 });
+    }
+    const before = await inventoryDigest(fixture.root);
+
+    const result = await runRefactor(fixture.context, {
+      subcommand: "refactor",
+      request: { mode: "move", note: ISOLATED, folder: ALIAS },
+      dryRun: false,
+    });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.securityRefusal,
+      "brain_refactor_path_refused",
+    ]);
+    expect(await inventoryDigest(fixture.root)).toEqual(before);
+    if (shape === "symlink") expect(await nodeFs.readdir(elsewhere)).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   /**
    * An alias widens admission only to a physical folder whose name maps, by own property, to a
    * configured topic: never to a private folder, never through the prototype chain, and never to
