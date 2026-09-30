@@ -31,6 +31,8 @@ import type {
   RuntimePaths,
 } from "@developer-os/core";
 
+import { PULSE_REPORT_SLOTS } from "./runtime-records.js";
+
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 const MAX_ALLOCATOR_BYTES = 1_024;
 const MAX_NONCE_BYTES = 65;
@@ -113,6 +115,11 @@ export const LIFECYCLE_RESERVATION_ROWS: readonly {
       mode: "ephemeral" as const,
     })),
   ]),
+  ...Array.from({ length: PULSE_REPORT_SLOTS }, (_unused, slot) => ({
+    path: `state/pulse.${String(slot)}.md`,
+    kind: "file" as const,
+    mode: "ephemeral" as const,
+  })),
 ];
 
 function refuse(reason: V2HomeAdmissionReasonV1, path: string): never {

@@ -541,13 +541,13 @@ describe("structural V2 home admission", () => {
 
   it("reserves exactly the closed lifecycle set Spec 1 §2.1 enumerates", () => {
     expect(LIFECYCLE_RESERVATION_ROWS.length).toBeGreaterThan(0);
-    expect(LIFECYCLE_RESERVATION_ROWS).toHaveLength(52);
-    expect(LIFECYCLE_RESERVATION_ROWS.filter((row) => row.mode === "ephemeral")).toHaveLength(50);
+    expect(LIFECYCLE_RESERVATION_ROWS).toHaveLength(84);
+    expect(LIFECYCLE_RESERVATION_ROWS.filter((row) => row.mode === "ephemeral")).toHaveLength(82);
     expect(LIFECYCLE_RESERVATION_ROWS.filter((row) => row.mode === "content").map((row) => row.path))
       .toStrictEqual(["state/lifecycle-install-nonce"]);
     expect(LIFECYCLE_RESERVATION_ROWS.filter((row) => row.mode === "schema").map((row) => row.path))
       .toStrictEqual(["state/lifecycle-id-allocator.json"]);
-    expect(new Set(LIFECYCLE_RESERVATION_ROWS.map((row) => row.path)).size).toBe(52);
+    expect(new Set(LIFECYCLE_RESERVATION_ROWS.map((row) => row.path)).size).toBe(84);
     expect(SCHEDULED_JOB_IDS.length).toBeGreaterThan(0);
     for (const job of SCHEDULED_JOB_IDS) {
       expect(
@@ -555,6 +555,16 @@ describe("structural V2 home admission", () => {
         job,
       ).toHaveLength(12);
     }
+  });
+
+  it("reserves eight ephemeral pulse report slots beside the six jobs", () => {
+    const pulse = LIFECYCLE_RESERVATION_ROWS.filter((row) => row.path.startsWith("state/pulse."));
+    expect(pulse.map((row) => row.path)).toStrictEqual(
+      Array.from({ length: 8 }, (_unused, n) => `state/pulse.${String(n)}.md`),
+    );
+    expect(pulse.every((row) => row.mode === "ephemeral")).toBe(true);
+    expect(SCHEDULED_JOB_IDS).toContain("brain-garden");
+    expect(SCHEDULED_JOB_IDS).toContain("brain-pulse");
   });
 
   it("admits status and doctor on a drifted V2 home whose closure is recovery-required (A7)", async () => {

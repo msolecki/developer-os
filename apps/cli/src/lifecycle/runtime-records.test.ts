@@ -28,6 +28,8 @@ import {
   AutomationRuntimeRecordStore,
   MAX_AUTOMATION_LOG_BYTES,
   MAX_AUTOMATION_STATUS_BYTES,
+  PULSE_REPORT_SLOTS,
+  pulseReportSlotPath,
   MAX_REDACTED_JSON_DEPTH,
   MAX_REDACTED_JSON_ENTRIES,
   automationLogSlotPath,
@@ -316,5 +318,16 @@ describe("the uninstalling marker", () => {
     const fixture = await storeFixture();
     await nodeFs.writeFile(join(fixture.productHome, "state", "uninstalling.json"), "not json", { mode: 0o600 });
     expect(await uninstallingMarkerPresent(guardedFs(), fixture.productHome)).toBe(true);
+  });
+});
+
+describe("pulse report slots", () => {
+  const paths = { stateDir: "/home/state" } as never;
+
+  it("names eight slots under the state directory and refuses any other ordinal", () => {
+    expect(PULSE_REPORT_SLOTS).toBe(8);
+    expect(pulseReportSlotPath(paths, 0)).toBe("/home/state/pulse.0.md");
+    expect(pulseReportSlotPath(paths, 7)).toBe("/home/state/pulse.7.md");
+    for (const bad of [-1, 8, 1.5, Number.NaN]) expect(() => pulseReportSlotPath(paths, bad)).toThrow(RangeError);
   });
 });

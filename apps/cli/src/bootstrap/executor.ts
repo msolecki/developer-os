@@ -16,6 +16,7 @@ import {
   deriveBootstrapRetentionTable,
   encodeCanonicalJson,
   EXIT_CODES,
+  SCHEDULED_JOB_IDS,
   hashBytes,
   CODEX_INGEST_AUTH_LINK,
   CODEX_INGEST_HOME_RELATIVE_PATH,
@@ -94,6 +95,7 @@ import type {
   AdmittedPackagedReleaseV1,
   PackagedReleaseSourceV1,
 } from "../update/packaged-release.js";
+import { PULSE_REPORT_SLOTS, pulseReportSlotPath } from "../lifecycle/runtime-records.js";
 import { inspectPackagedRelease } from "../update/packaged-release.js";
 
 const encoder = new TextEncoder();
@@ -1760,7 +1762,7 @@ export class BootstrapExecutor {
 
   private runtimeReservationPaths(): readonly string[] {
     const { stateDir, logsDir } = this.#dependencies.paths;
-    const jobs = ["brain-reindex", "brain-lint", "doctor", "git-sync"] as const;
+    const jobs = SCHEDULED_JOB_IDS;
     return [
       join(stateDir, ".lifecycle.lock"),
       join(stateDir, "lifecycle-install-nonce"),
@@ -1776,6 +1778,7 @@ export class BootstrapExecutor {
           join(logsDir, `automation-${job}.${String(ordinal)}.json`),
         ),
       ]),
+      ...Array.from({ length: PULSE_REPORT_SLOTS }, (_unused, slot) => pulseReportSlotPath(this.#dependencies.paths, slot)),
     ];
   }
 

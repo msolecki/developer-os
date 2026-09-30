@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
+import { SCHEDULED_JOB_IDS } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runInit } from "../commands/init.js";
@@ -54,7 +55,7 @@ function effectiveUid(): number {
 }
 
 describe("fresh V2 init layout", () => {
-  it("creates exactly the fresh plan path set Spec 2 §3.2 and Spec 1 §2.1 reserve", async () => {
+  it("creates exactly the fresh plan path set, brain-garden and brain-pulse records and pulse slots included, Spec 2 §3.2 and Spec 1 §2.1 reserve", async () => {
     const fixture = await createCommandFixture("bootstrap-exact-created-set", { bootstrapAvailable: true });
     const bootstrap = fixture.context.bootstrap;
     if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
@@ -68,7 +69,7 @@ describe("fresh V2 init layout", () => {
       .flatMap((rows) => rows as Array<{ readonly path: string }>)
       .map((row) => row.path);
     const childrenOf = (root: string): readonly string[] => created.filter((path) => dirname(path) === root).toSorted();
-    const jobs = ["brain-reindex", "brain-lint", "doctor", "git-sync"];
+    const jobs = SCHEDULED_JOB_IDS;
     const state = fixture.paths.stateDir;
     const metadata = join(state, "release-metadata");
     const expectedState = [
@@ -79,6 +80,7 @@ describe("fresh V2 init layout", () => {
       // Spec 1 §2.1 amended 2026-09-22 (A13 Q3-A): fresh `init` creates `state/hooks`.
       "hooks",
       ...jobs.flatMap((job) => [`automation-${job}.status.json`, `.automation-${job}.lock`]),
+      ...Array.from({ length: 8 }, (_unused, slot) => `pulse.${String(slot)}.md`),
     ].map((name) => join(state, name)).toSorted();
     const expectedLogs = jobs
       .flatMap((job) => Array.from({ length: 10 }, (_, slot) => `automation-${job}.${String(slot)}.json`))

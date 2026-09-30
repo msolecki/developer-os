@@ -4,6 +4,8 @@
  * is one Foundation transaction the caller runs under the global lock it already holds; the
  * lease is only ever the pre-created `state/.automation-<job>.lock` that fresh `init` reserved.
  */
+import { join } from "node:path";
+
 import {
   SCHEDULED_JOB_IDS,
   decodeCanonicalJson,
@@ -19,6 +21,7 @@ import type {
   LifecycleGuardedFileSystemV1,
   PlannedFileMutation,
   RedactedPayload,
+  RuntimePaths,
   SafeReasonCodeV1,
   ScheduledJobIdV1,
   TransactionPlan,
@@ -299,6 +302,13 @@ export function automationRunnerLeasePath(
   job: ScheduledJobIdV1,
 ): AutomationRunnerLeaseV1 {
   return parseCanonicalAbsolutePathText(`${productHome}/state/.automation-${scheduledJob(job)}.lock`) as AutomationRunnerLeaseV1;
+}
+
+export const PULSE_REPORT_SLOTS = 8;
+
+export function pulseReportSlotPath(paths: RuntimePaths, slot: number): string {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= PULSE_REPORT_SLOTS) throw new RangeError(`pulse slot ${String(slot)}`);
+  return join(paths.stateDir, `pulse.${String(slot)}.md`);
 }
 
 export function uninstallingMarkerPath(productHome: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {

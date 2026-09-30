@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   EXIT_CODES,
+  SCHEDULED_JOB_IDS,
   TransactionStore,
   createNodeLifecycleGuardedFileSystem,
   encodeLifecycleIdAllocator,
@@ -61,7 +62,7 @@ const OTHER_NONCE: LifecycleInstallNonceV1 = parseLowerHexSha256("c1".repeat(32)
 const DEV: UInt64DecimalV1 = parseUInt64Decimal("16777232");
 const INO: UInt64DecimalV1 = parseUInt64Decimal("184467440737095516");
 const MANIFEST_BYTES = "{}\n";
-const LEASE_JOBS = ["brain-reindex", "brain-lint", "doctor", "git-sync"] as const;
+const LEASE_JOBS = SCHEDULED_JOB_IDS;
 
 const EMPTY_RESIDUE: LifecycleBookkeepingResidueV1 = {
   retainedPaths: new Set(),
