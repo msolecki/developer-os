@@ -108,13 +108,12 @@ The full closure conditions are in `BACKLOG.md` §1.
 Startable without another product gate (one worktree each):
 
 - NEW-115 (`init` does not exit after success) and NEW-116 (ingest yield and head-of-line blocking).
-- NEW-128 (`brain refactor` ignores `topicAliases`) and NEW-129 (high-entropy redaction of note
-  paths and wikilinks).
 - Residuals of the D70 lane: NEW-117, NEW-119, NEW-122, NEW-123, NEW-124, NEW-126.
 - NEW-53 (the `init` encoder cost) and NEW-29 (the elapsed-time assertion class).
 
 Needs a human, a policy decision, or an external application:
 
+- NEW-130 — accept or fix NEW-129's redaction residuals.
 - Task 11b (NEW-111, NEW-112, NEW-118) — parked by D46 on the founder's root-key decision.
 - NEW-120 — redact a partially covered high-entropy tail, or accept it.
 - NEW-121 — design manifest-owned persisted executable identity for `capture`'s probe, or accept the
