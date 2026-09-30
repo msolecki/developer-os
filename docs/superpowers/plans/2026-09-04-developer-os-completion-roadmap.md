@@ -355,6 +355,13 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D77 (2026-09-30), scheduled Brain upkeep (NEW-134).** The product schedules a Brain gardener and a
+  Brain pulse through `automation` (launchd), both default-off. An unattended vendor-agent call is
+  allowed only to produce proposals the product validates and writes into quarantine: one isolated
+  call per gardener run, at most 8 captures, no call when the review queue holds 20 or more captures or
+  lint has errors. The pulse runs no agent. `import` and `ingest` stay manual (D47 unchanged). The
+  `scheduled` workflow trigger ships in the same change. Spec:
+  `specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
