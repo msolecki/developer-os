@@ -412,25 +412,27 @@ function looksHighEntropy(value: string): boolean {
  */
 function isWordLikePart(part: string): boolean {
   if (/^[0-9]{1,8}$/u.test(part)) return true;
-  if (!/^(?:[a-z]{1,24}|[A-Z]{1,24})$/u.test(part)) return false;
+  if (!/^(?:[a-z]{1,16}|[A-Z]{1,16})$/u.test(part)) return false;
   return part.length <= 3 || /[aeiouy]/iu.test(part);
 }
 
+/** The longest real note path seen (NEW-129) has 11 parts; a longer word chain is not exempt. */
+const MAX_WORD_LIKE_PARTS = 12;
+
 /**
  * NEW-129: a note path, wikilink target or kebab slug — every `/` segment made only of
- * word-like `-`/`_` parts. Anything else (mixed case, letters beside digits, `+`, `=`)
- * falls back to the whole-run entropy check, so a token sitting in one segment still
- * redacts the run. Known cost: a long all-word passphrase joined by `-` is exempt too.
+ * word-like `-`/`_` parts, at most `MAX_WORD_LIKE_PARTS` of them in all. Anything else
+ * (mixed case, letters beside digits, `+`, `=`) falls back to the whole-run entropy check,
+ * so a token sitting in one segment still redacts the run. Known cost: an unlabelled
+ * all-word passphrase joined by `-` is exempt too; a labelled one is credential-store.
+ * ponytail: vowel test, not a dictionary; random vowel-bearing letter chunks still pass.
  */
 function isWordLikePath(run: string): boolean {
-  const segments = run.split("/").filter((segment) => segment.length > 0);
-  return (
-    segments.length > 0 &&
-    segments.every((segment) => {
-      const parts = segment.split(/[-_]/u).filter((part) => part.length > 0);
-      return parts.length > 0 && parts.every(isWordLikePart);
-    })
-  );
+  const parts = run
+    .split("/")
+    .flatMap((segment) => segment.split(/[-_]/u))
+    .filter((part) => part.length > 0);
+  return parts.length > 0 && parts.length <= MAX_WORD_LIKE_PARTS && parts.every(isWordLikePart);
 }
 
 function fingerprint(secret: string, key: Uint8Array): string {
@@ -624,6 +626,18 @@ export function redactText(
   addCapturedMatches(
     normalizedText,
     /\b(?:machine|login|account|default)\b[^\r\n]*?\bpassword\b\s*[:=]?\s*(\S+)/giu,
+    "credential-store",
+    1,
+    candidates,
+  );
+  /**
+   * NEW-129 review: an all-word passphrase is exempt from high-entropy (`isWordLikePath`),
+   * so a labelled one is caught here instead. `\bis\b`, not `is`, so "this" is no label.
+   * Captures the first token only: a space-separated mnemonic keeps its later words.
+   */
+  addCapturedMatches(
+    normalizedText,
+    /\b(?:pass ?phrase|mnemonic|seed phrase|recovery (?:phrase|key))\b[^\r\n]{0,20}?(?:\bis\b|[:=])\s*(\S+)/giu,
     "credential-store",
     1,
     candidates,

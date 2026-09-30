@@ -502,6 +502,9 @@ function confidenceAndLifecycle(
   return findings;
 }
 
+/** `[REDACTED:<class>]` in any case or spacing; no `g` flag, so `test` keeps no state. */
+const REDACTION_MARKER_PATTERN = /\[\s*redacted\s*:/iu;
+
 function secretScan(
   notes: readonly ProposedNote[],
   redact: (text: string) => RedactionResult,
@@ -515,7 +518,7 @@ function secretScan(
      * `DEV/refetch-ma[REDACTED:provider-token].md`. A name built from a redacted value is
      * refused, not written.
      */
-    if (note.path.includes("[REDACTED:")) {
+    if (REDACTION_MARKER_PATTERN.test(note.path)) {
       findings.push(
         finding(
           "secret-scan",

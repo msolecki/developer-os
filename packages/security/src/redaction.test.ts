@@ -143,6 +143,9 @@ describe("redactText", () => {
       "a base64 token containing / and +": slashedBase64,
       "a token embedded as one path segment": `config/${pathEmbeddedToken}/x`,
       "a hyphen-joined random token": hyphenatedRandom,
+      /** Review of NEW-129: the exemption is bounded in part count and part length. */
+      "thirteen random word-like chunks": "qazu-wexi-rymo-tupa-kelo-jivu-fyze-gowa-bidu-nesy-hoke-lamu-cyvo", // gitleaks:allow -- synthetic test fixture
+      "a random letter chunk longer than a word": "zqvbeytrwkxmolpfn-hazdusi-gerwopyk-lemtovaq", // gitleaks:allow -- synthetic test fixture
     };
     for (const [name, secret] of Object.entries(secrets)) {
       it(`still redacts ${name}`, () => {
@@ -152,6 +155,26 @@ describe("redactText", () => {
         expect(result.findings.map((f) => f.class)).toContain("high-entropy");
       });
     }
+
+    /** An all-word passphrase is exempt from high-entropy, so its label has to catch it. */
+    const passphrase = "lantern-quiver-mosaic-bramble-oyster-plinth-tundra"; // gitleaks:allow -- synthetic test fixture
+    for (const line of [
+      `the vault passphrase is ${passphrase}`,
+      `mnemonic: ${passphrase}`,
+      `recovery key = ${passphrase}`,
+    ]) {
+      it(`redacts a labelled passphrase: ${line.replace(passphrase, "<words>")}`, () => {
+        const result = redactText(line, deterministicKey);
+
+        expect(result.text).not.toContain(passphrase);
+        expect(result.findings.map((f) => f.class)).toEqual(["credential-store"]);
+      });
+    }
+
+    it("leaves the same words in prose without a label", () => {
+      const line = `see ${passphrase} for details`;
+      expect(redactText(line, deterministicKey).text).toBe(line);
+    });
   });
 
   it("redacts a 64-character lowercase hexadecimal secret", () => {

@@ -675,7 +675,13 @@ describe("secret-scan", () => {
   });
 
   /** NEW-129: a model copied a redaction marker into a file name; the marker holds no secret. */
-  for (const path of ["DEV/refetch-ma[REDACTED:provider-token].md", "[REDACTED:high-entropy].md"]) {
+  for (const path of [
+    "DEV/refetch-ma[REDACTED:provider-token].md",
+    "[REDACTED:high-entropy].md",
+    "DEV/[redacted:x].md",
+    "DEV/[REDACTED: high-entropy].md",
+    "DEV/[ Redacted :x].md",
+  ]) {
     it(`refuses a destination path carrying a redaction marker: ${path}`, async () => {
       const result = await validateProposal(
         proposal({ path, contents: noteText(), sourceCaptureId: CAPTURE_ID }),
