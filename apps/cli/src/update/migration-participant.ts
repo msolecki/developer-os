@@ -100,7 +100,7 @@ export class SchemaMigrationParticipant {
   /** The `schema_migration` compaction entry: paired refs in ID order, the journal, then the plan. */
   async compact(step: SchemaMigrationStepV1): Promise<void> {
     const { journals, foundation } = this.#dependencies;
-    if (!(await journals.unreached(step.journal))) {
+    if (await journals.exists(step.journal.finalPath)) {
       let journal = await this.openJournal(step);
       if (journal.phase === "finalized" || journal.phase === "rolled_back") journal = await this.persist(step, { ...journal, phase: "compacting", compactionNext: 0 });
       if (journal.phase !== "compacting" || journal.compactionNext === null) return refuseParticipant("update_migration_compaction_not_terminal", step.journal.finalPath);

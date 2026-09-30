@@ -736,7 +736,13 @@ export class UpdateConstructionStore {
    * read-only leaves itself. The caller then runs `removeEnvelope`.
    */
   async compact(plan: UpdateConstructionPlanV1): Promise<void> {
-    const current = this.#current?.plan === plan ? this.#current : await this.#loadJournal(plan);
+    if (this.#current?.plan !== plan) {
+      // A resumed compaction: `removeEnvelope` may already have taken the compacted journal.
+      if ((await this.#dependencies.fs.lstat(this.#paths.journal)) === null) return;
+      await this.#removeRewriteTemp(plan);
+      await this.#loadJournal(plan);
+    }
+    const current = this.#plan(plan);
     if (current.journal.phase === "handed_off") await this.#advance(plan, { kind: "compaction_step" });
     else if (current.journal.phase !== "compacting") refuse("update_construction_not_terminal", this.#root);
     const F = plan.files.length;

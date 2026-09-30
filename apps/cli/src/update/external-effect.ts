@@ -151,7 +151,7 @@ export class OwnerExternalEffectParticipant {
   /** The outer compaction entry: evidence, journal, then the immutable plan last. */
   async compact(step: OwnerExternalEffectStepV1): Promise<void> {
     const { journals, stagingRoot } = this.#dependencies;
-    if (!(await journals.unreached(step.journal))) {
+    if (await journals.exists(step.journal.finalPath)) {
       const journal = await this.openJournal(step);
       if (journal.phase !== "finalized" && journal.phase !== "rolled_back") refuseParticipant("update_effect_compaction_not_terminal", step.journal.finalPath);
       for (const direction of ["compensating", "forward"] as const) await journals.remove(ownerExternalEffectEvidencePath(stagingRoot, step.plan.id, direction));

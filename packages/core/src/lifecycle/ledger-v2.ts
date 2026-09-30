@@ -386,7 +386,10 @@ function resolveUpdate(
 ): LifecycleClosureV2ObservationV1["updateCoordinators"][number] | UpdateConstructionClosureV1 | "malformed" {
   if (staging?.malformed === true) return "malformed";
   const construction = staging?.construction ?? null;
-  if (construction !== null && construction !== "handed_off") {
+  // §9.2's `plan_only_suffix` of a compaction crash: the lone plan belongs to this compacting coordinator.
+  const compactedSuffix = construction !== null && construction !== "handed_off" && construction.frontier === "journal_bootstrap" && construction.journal === "absent" &&
+    envelope?.journal?.phase === "compacting" && envelope.plan?.construction.hash === construction.constructionPlanHash;
+  if (construction !== null && construction !== "handed_off" && !compactedSuffix) {
     // Only the `journal` frontier can have reached the outer intents that write these leaves.
     if (construction.frontier !== "journal" && outerPresent) return "malformed";
     return { coordinatorId: id, construction };

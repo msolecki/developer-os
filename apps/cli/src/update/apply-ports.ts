@@ -309,19 +309,22 @@ function executionFallback(value: unknown): UpdateFallbackHandoffV1 {
   return { bundleManifestHash: parseLowerHexSha256(executor.bundleManifestHash), launcherProtocol: parsePositiveUInt32(executor.launcherProtocol), updateProtocol: parsePositiveUInt32(executor.updateProtocol) };
 }
 
+async function reopenConstruction(lifecycle: CliLifecycleContext, plan: UpdateLifecycleCoordinatorPlanV2): Promise<UpdateConstructionPlanV1 | null> {
+  const bytes = await readBound(lifecycle, plan.construction.path, MAXIMUM_CONSTRUCTION_PLAN_BYTES);
+  if (bytes === null) return null;
+  const construction = decodeCanonicalJson(bytes, MAXIMUM_CONSTRUCTION_PLAN_BYTES) as unknown as UpdateConstructionPlanV1;
+  validateConstructionBijections(construction);
+  if (constructionPlanHash(construction) !== plan.construction.hash) thirdState("update_construction_plan", plan.construction.path);
+  return construction;
+}
+
 async function reopen(lifecycle: CliLifecycleContext, productHome: CanonicalAbsolutePathV1, plan: UpdateLifecycleCoordinatorPlanV2): Promise<ReopenedV1> {
   const evidence = createCanonicalPathEvidence();
   const raw = await readLeaf(lifecycle, plan.update);
-  // ponytail: a leaf removed by its own compaction entry is absent; the entries after it never read it.
-  if (raw === null) return { execution: null, construction: null, leaves: new Map(), owners: [] };
+  const construction = await reopenConstruction(lifecycle, plan);
+  // ponytail: a leaf removed by its own compaction entry is absent; only `coordinator_staging` still runs, over the construction plan.
+  if (raw === null) return { execution: null, construction, leaves: new Map(), owners: [] };
   const execution = validateUpdateExecutionPlan(raw, { productHome, evidence, fallback: executionFallback(raw) });
-  const constructionBytes = await readBound(lifecycle, plan.construction.path, MAXIMUM_CONSTRUCTION_PLAN_BYTES);
-  let construction: UpdateConstructionPlanV1 | null = null;
-  if (constructionBytes !== null) {
-    construction = decodeCanonicalJson(constructionBytes, MAXIMUM_CONSTRUCTION_PLAN_BYTES) as unknown as UpdateConstructionPlanV1;
-    validateConstructionBijections(construction);
-    if (constructionPlanHash(construction) !== plan.construction.hash) thirdState("update_construction_plan", plan.construction.path);
-  }
   const leaves = new Map<string, unknown>();
   const refs: readonly ImmutableUpdatePlanRefV1[] = [execution.bundle, ...execution.owners, ...execution.migrations, execution.manifest.transitional, execution.manifest.terminal, ...(execution.trust === null ? [] : [execution.trust]), execution.active, execution.rollback, execution.rollbackPayload, execution.verification, execution.retirement];
   for (const ref of refs) leaves.set(ref.path, await readLeaf(lifecycle, ref));
@@ -561,8 +564,9 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
     },
   };
 
-  const finalizeThenCompact = async (observe: () => Promise<UpdateParticipantObservationV1>, finalize: () => Promise<void>, compact: () => Promise<void>): Promise<void> => {
-    if ((await observe()).state === "verified") await finalize();
+  // A final journal this entry already removed must not be reopened: only its plan leaf remains.
+  const finalizeThenCompact = async (journal: UpdateInitialJournalRefV1, observe: () => Promise<UpdateParticipantObservationV1>, finalize: () => Promise<void>, compact: () => Promise<void>): Promise<void> => {
+    if ((await journals.exists(journal.finalPath)) && (await observe()).state === "verified") await finalize();
     await compact();
   };
   // The plan leaf goes first: a retry that still opens it would compact against a journal already gone.
@@ -577,13 +581,13 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
     owner_update: async (entry) => {
       const step = ownerSteps.get(entry.owner);
       if (step === undefined) return;
-      await finalizeThenCompact(() => owners.observe(step), () => owners.finalize(step), () => owners.compact(step));
+      await finalizeThenCompact(step.journal, () => owners.observe(step),() => owners.finalize(step), () => owners.compact(step));
       await journals.remove(step.journal.stagedPath);
     },
     schema_migration: async (entry) => {
       const step = migrationSteps.get(entry.id);
       if (step === undefined) return;
-      await finalizeThenCompact(() => migrations.observe(step), () => migrations.finalize(step), () => migrations.compact(step));
+      await finalizeThenCompact(step.journal, () => migrations.observe(step),() => migrations.finalize(step), () => migrations.compact(step));
       await journals.remove(step.journal.stagedPath);
     },
     owner_external_effect: async (entry) => {
@@ -624,7 +628,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
       default: {
         const step = entry.participant === "trust" ? trustStep : entry.participant === "active" ? activeStep : recordStep;
         if (step === null) return;
-        await finalizeThenCompact(() => state.observe(step), () => state.finalize(step), () => state.compact(step));
+        await finalizeThenCompact(step.journal, () => state.observe(step),() => state.finalize(step), () => state.compact(step));
         await journals.remove(step.journal.stagedPath);
       }
     }
@@ -788,21 +792,24 @@ async function verifierPort(context: CliContext, lifecycle: CliLifecycleContext)
  * participant-made empty directories, the construction rows and directories, the construction
  * envelope, and finally the allocator-reserved staging root.
  */
-async function compactStaging(dispatch: DispatchContextV1): Promise<void> {
+async function compactStaging(dispatch: Pick<DispatchContextV1, "lifecycle" | "context" | "root" | "reopened">): Promise<void> {
   const { lifecycle, context, root } = dispatch;
   const construction = dispatch.reopened.construction;
   if (construction === null) return removeEmptyDirectory(lifecycle, root);
   const deps = { fs: lifecycle.fs, effectiveUid: lifecycle.effectiveUid, now: () => context.now() };
   const journals = new UpdateParticipantJournalStore({ fs: lifecycle.fs, effectiveUid: lifecycle.effectiveUid });
   const sources = await sourcePlansOf(lifecycle, construction, construction.files.length);
+  // A plan row whose journal is gone died between the two removals: its source already compacted.
   if (sources.rollback !== null) {
-    await new RollbackPayloadSourceExecutor(deps, root).compact(sources.rollback.plan);
-    await journals.remove(updateParticipantJournalPath(root, "rollback_payload_source", sources.rollback.plan.id));
+    const journal = updateParticipantJournalPath(root, "rollback_payload_source", sources.rollback.plan.id);
+    if (await journals.exists(journal)) await new RollbackPayloadSourceExecutor(deps, root).compact(sources.rollback.plan);
+    await journals.remove(journal);
     await journals.remove(sources.rollback.row.path, sources.rollback.row.sha256);
   }
   if (sources.bundle !== null) {
-    await new BundleSourceExecutor(deps, root).compact(sources.bundle.plan);
-    await journals.remove(updateParticipantJournalPath(root, "bundle_source_staging", sources.bundle.plan.id));
+    const journal = updateParticipantJournalPath(root, "bundle_source_staging", sources.bundle.plan.id);
+    if (await journals.exists(journal)) await new BundleSourceExecutor(deps, root).compact(sources.bundle.plan);
+    await journals.remove(journal);
     await journals.remove(sources.bundle.row.path, sources.bundle.row.sha256);
   }
   await removeParticipantDirectories(lifecycle, construction);
@@ -1045,7 +1052,12 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
         apply: async (step) => (await dispatcher()).apply(step),
         observe: async (step) => (await dispatcher()).observe(step),
         compensate: async (step) => (await dispatcher()).compensate(step),
-        compact: async (entry) => (await dispatcher()).compact(entry),
+        compact: async (entry) => {
+          const { reopened } = await load();
+          // Its own row compaction removed the execution leaf; the construction plan still drives the rest.
+          if (entry.kind === "coordinator_staging" && reopened.execution === null) return compactStaging({ context, lifecycle: lifecycle(), root, reopened });
+          return (await dispatcher()).compact(entry);
+        },
         retirementLeaves: async (step) => (await dispatcher()).retirementLeaves(step),
         retireLeaf: async (step, ordinal) => (await dispatcher()).retireLeaf(step, ordinal),
       },

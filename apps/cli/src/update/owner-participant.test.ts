@@ -324,6 +324,17 @@ describe("owner update participant", () => {
     expect(await readJson(step.planRef.path)).toBeNull();
   });
 
+  it("finishes a compaction that died after its journal's removal by removing only the plan", async () => {
+    const { step, events, participant } = await fixture();
+    await participant.apply(step);
+    await participant.finalize(step);
+    await nodeFs.rm(step.journal.finalPath);
+    events.length = 0;
+    await participant.compact(step);
+    expect(events).toEqual([]);
+    expect(await readJson(step.planRef.path)).toBeNull();
+  });
+
   it("refuses a plan ref and journal bound by a plain SHA-256 instead of the leaf domain (D72 P7(a))", async () => {
     const { step, events, participant } = await fixture({ effect: false });
     const plain = sha(updateParticipantDocumentBytes(step.plan));
