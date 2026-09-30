@@ -124,6 +124,30 @@ export type {
   ValidatorId,
 } from "./ingest/index.js";
 export {
+  buildGardenPrompt,
+  GARDEN_BUNDLE_MAX_BYTES,
+  GARDEN_GAP_MIN_NOTES,
+  GARDEN_HUB_MIN_LINKS,
+  GARDEN_MAX_CANDIDATES,
+  GARDEN_MAX_GAPS,
+  GARDEN_MAX_ISOLATED,
+  GARDEN_MAX_PROPOSALS,
+  GARDEN_NOTE_MAX_BYTES,
+  GARDEN_RELATED_MAX_LINKS,
+  GARDEN_RELATED_MIN_LINKS,
+  parseGardenResponse,
+  selectGardenTargets,
+  validateGardenResponse,
+} from "./garden/index.js";
+export type {
+  GardenProposalKindV1,
+  GardenProposalV1,
+  GardenRejectCodeV1,
+  GardenTargetsV1,
+  GardenValidationInputV1,
+  GardenValidationV1,
+} from "./garden/index.js";
+export {
   MAX_REFACTOR_MUTATIONS,
   planRefactor,
   RefactorRefusal,
