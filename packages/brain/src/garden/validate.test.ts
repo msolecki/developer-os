@@ -541,4 +541,95 @@ describe("validateGardenResponse", () => {
       }
     });
   });
+
+  describe("fix round 4", () => {
+    const SECRET = "_raw/quarantine/secret";
+    const hub = (note: string): unknown => ({ proposals: [{ kind: "hub", target: "DEV/testing-hub.md", note }] });
+    const run = (response: unknown, current: ReadonlyMap<string, string> = TEXTS, findings: readonly LintFinding[] = [SUMMARY_FINDING]): string => {
+      const result = validateGardenResponse({
+        response,
+        targets: TARGETS,
+        notes: NOTES,
+        config: DEFAULT_BRAIN_CONFIG,
+        readNote: (path) => current.get(path) ?? null,
+        pendingNotePaths: new Set(),
+        findings,
+        redactionFindings: () => 0,
+      });
+      if ("invalid" in result) return "invalid";
+      return result.rejected.map((r) => r.code).join(",") || "accepted";
+    };
+
+    it("rejects a hub that links other than by wikilink, in the body or the frontmatter (Ruling 21)", () => {
+      for (const body of [
+        `[x](${SECRET}.md)\n`,
+        `![x](${SECRET}.md)\n`,
+        `<a href="${SECRET}.md">x</a>\n`,
+        `<A HREF=${SECRET}.md>x</A>\n`,
+        `<img src="${SECRET}.png">\n`,
+        "SRC=x\n",
+        `[x]\n\n[x]: ${SECRET}.md\n`,
+        `   [x]: ${SECRET}.md\n`,
+        "<b>[[Beta]]</b>\n",
+        "<!-- hidden -->\n",
+        "<https://example.com>\n",
+      ]) {
+        expect(run(hub(HUB + body))).toBe("link_unresolved");
+      }
+      expect(run(hub(HUB.replace('summary: "About Testing hub."', `summary: "[[${SECRET}]]"`)))).toBe("link_unresolved");
+      expect(run(hub(HUB.replace('summary: "About Testing hub."', `summary: "[x](${SECRET}.md)"`)))).toBe("link_unresolved");
+      expect(run(hub(HUB + "a < b, 2<3 and [x] alone.\n"))).toBe("accepted");
+    });
+
+    it("checks a frontmatter value as YAML decodes it, so an escape cannot spell a link or a hidden character", () => {
+      const withSummary = (value: string): string => HUB.replace('summary: "About Testing hub."', `summary: ${value}`);
+      for (const value of ['"\\x5b\\x5b_raw/quarantine/secret]]"', '"\\u005b\\u005b_raw/quarantine/secret]]"', '"\\x3cb>x"']) {
+        expect(run(hub(withSummary(value)))).toBe("link_unresolved");
+      }
+      for (const value of ['"x\\u200By"', '"x\\Ny"', '"x\\u0007y"']) {
+        expect(run(hub(withSummary(value)))).toBe("frontmatter_invalid");
+      }
+      const gamma = text("DEV/gamma.md");
+      for (const value of ['"\\x5b\\x5b_raw/quarantine/secret]]"', '"\\x3ca>x"', '"x\\u200By"']) {
+        const note = gamma.replace('summary: "About Gamma."', `summary: ${value}`);
+        expect(run({ proposals: [{ kind: "fix", target: "DEV/gamma.md", note }] })).toBe("fix_out_of_scope");
+      }
+      const alpha = text("DEV/alpha.md").replace("reviewed: null", 'reviewed: null\nupdated: "\\x5b\\x5bx]]"');
+      expect(run({ proposals: [{ kind: "related", target: "DEV/alpha.md", note: alpha + "\n## Related\n\n- [[Beta]]\n- [[Gamma]]\n" }] }))
+        .not.toBe("accepted");
+    });
+
+    it("rejects a Related label that carries HTML or a Markdown link (Ruling 21)", () => {
+      const alpha = text("DEV/alpha.md");
+      for (const label of ["<img src=x>", "<b>x</b>", "href=x", "x](y"]) {
+        const note = alpha + `\n## Related\n\n- [[Beta|${label}]]\n- [[Gamma]]\n`;
+        expect(run({ proposals: [{ kind: "related", target: "DEV/alpha.md", note }] })).toBe("related_changes_body");
+      }
+    });
+
+    it("rejects a fix whose changed lines link other than by plain text (Ruling 21)", () => {
+      const gamma = text("DEV/gamma.md");
+      for (const summary of [`"[[${SECRET}]]"`, `"See [x](${SECRET}.md)."`, `"<a href=x>y</a>"`, `"Uses <T> generics."`]) {
+        const note = gamma.replace('summary: "About Gamma."', `summary: ${summary}`);
+        expect(run({ proposals: [{ kind: "fix", target: "DEV/gamma.md", note }] })).toBe("fix_out_of_scope");
+      }
+    });
+
+    it("does not check the unchanged human text of a related or fix target (Ruling 21)", () => {
+      const markup = "See [x](https://example.com), <b>bold</b> and ![i](img.png).\n\n[r]: https://example.com\n";
+      const alpha = text("DEV/alpha.md") + markup;
+      const gamma = text("DEV/gamma.md") + markup;
+      const current = new Map([...TEXTS, ["DEV/alpha.md", alpha], ["DEV/gamma.md", gamma]]);
+      expect(run({ proposals: [
+        { kind: "related", target: "DEV/alpha.md", note: alpha + "\n## Related\n\n- [[Beta]]\n- [[Gamma]]\n" },
+        { kind: "fix", target: "DEV/gamma.md", note: gamma.replace("About Gamma.", "Better.") },
+      ] }, current)).toBe("accepted");
+    });
+
+    it("rejects the Arabic letter mark and the deprecated format characters (Ruling 22)", () => {
+      for (const character of ["؜", "⁪", "⁫", "⁬", "⁭", "⁮", "⁯"]) {
+        expect(run(hub(HUB + `x${character}y\n`))).toBe("frontmatter_invalid");
+      }
+    });
+  });
 });

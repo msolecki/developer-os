@@ -152,6 +152,27 @@ function singleLine(blocks: readonly HeaderBlock[], keys: Iterable<string>): boo
   return blocks.every((block) => block.key === null || !wanted.has(block.key) || SINGLE_LINE_SCALAR.test(block.text));
 }
 
+/**
+ * Ruling 21: agent-authored text may link only with a body `[[wikilink]]`, the
+ * one form this module resolves and privacy-checks. A Markdown link or embed, a
+ * reference definition, an `href`/`src` attribute or any HTML tag (comments
+ * included) is a link it cannot see; so is `[[` inside frontmatter, which lint
+ * and the index do not treat as a body link.
+ */
+const OTHER_LINK = /\]\(|href=|src=|^ {0,3}\[[^\]]+\]:|<[a-z/!]/imu;
+
+function linksOtherwise(header: string, body: string): boolean {
+  return header.includes("[[") || OTHER_LINK.test(header) || OTHER_LINK.test(body);
+}
+
+/** The proposed blocks of `keys` that differ from the current ones: the agent's header lines. */
+function changedBlocks(left: readonly HeaderBlock[], right: readonly HeaderBlock[], keys: Iterable<string>): string {
+  return [...keys]
+    .filter((key) => blockOf(left, key) !== blockOf(right, key))
+    .map((key) => blockOf(right, key))
+    .join("");
+}
+
 const RELATED_KEYS: ReadonlySet<string> = new Set(["updated", "reviewed"]);
 const LINK_ITEM = String.raw`- \[\[[^\[\]|\n\x60]+(?:\|[^\[\]|\n\x60]+)?\]\]\n`;
 /** Ruling 11: the heading, one blank line, 2–5 link items, a final newline, nothing after. */
@@ -198,7 +219,10 @@ function checkRelated(current: string, proposed: string): Code | null {
   if (heading === -1 || !RELATED_SECTION.test(after.body.slice(heading))) return "related_changes_body";
   const separators = kept === "" || kept.endsWith("\n") ? ["", "\n"] : ["\n", "\n\n"];
   const prefix = after.body.slice(0, heading);
-  return separators.some((separator) => prefix === kept + separator) ? null : "related_changes_body";
+  if (!separators.some((separator) => prefix === kept + separator)) return "related_changes_body";
+  return linksOtherwise(changedBlocks(left, right, RELATED_KEYS), after.body.slice(heading))
+    ? "related_changes_body"
+    : null;
 }
 
 /** The raw frontmatter mapping, parsed as `parseNote` parses it; `null` when it is not one. */
@@ -215,6 +239,17 @@ function frontmatterMapping(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Every key and string a parsed mapping holds, one per line, as YAML decoded
+ * them: a double-quoted `"\x5b\x5b…"` or `"\u200B"` escape is invisible in the
+ * raw bytes, so the raw-text checks run on this text too.
+ */
+function decoded(value: unknown): string {
+  if (typeof value === "string") return `${value}\n`;
+  if (value === null || typeof value !== "object") return "";
+  return Object.entries(value).map(([key, inner]) => `${key}\n${decoded(inner)}`).join("");
 }
 
 /** Provenance a `fix` may never touch, whatever a finding names (Ruling 10). */
@@ -240,11 +275,13 @@ function checkFix(current: string, proposed: string, allowed: ReadonlySet<string
   );
   if (changed.size === 0) return "fix_out_of_scope";
   if ([...changed].some((key) => !allowed.has(key) || FIX_FORBIDDEN.has(key))) return "fix_out_of_scope";
+  const currentBlocks = headerBlocks(before.header);
   const proposedBlocks = headerBlocks(after.header);
   if (!singleLine(proposedBlocks, changed)) return "fix_out_of_scope";
-  return without(headerBlocks(before.header), changed) === without(proposedBlocks, changed)
-    ? null
-    : "fix_out_of_scope";
+  if (without(currentBlocks, changed) !== without(proposedBlocks, changed)) return "fix_out_of_scope";
+  const values = decoded(Object.fromEntries([...changed].map((key) => [key, right[key]])));
+  const unsafe = LINE_BREAKING.test(values) || linksOtherwise(changedBlocks(currentBlocks, proposedBlocks, changed) + values, "");
+  return unsafe ? "fix_out_of_scope" : null;
 }
 
 /**
@@ -252,11 +289,12 @@ function checkFix(current: string, proposed: string, allowed: ReadonlySet<string
  * the Unicode line and paragraph separators. Each can end a line for some
  * reader while this module's line-based checks see one line. Ruling 20 adds the
  * format characters that hide or reorder text: zero-width, bidi embeddings and
- * isolates, invisible operators, and U+FEFF.
+ * isolates, invisible operators, and U+FEFF; Ruling 22 the Arabic letter mark
+ * U+061C and the deprecated format characters U+206A–U+206F.
  */
 const LINE_BREAKING =
   // eslint-disable-next-line no-control-regex -- matching control characters is the point
-  /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/u;
+  /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202E\u061C\u2060-\u2064\u2066-\u206F\uFEFF]/u;
 
 /** The kind's own "you changed something you may not" code. */
 const CONTROL_CODE: Readonly<Record<GardenProposalV1["kind"], Code>> = {
@@ -312,7 +350,8 @@ interface Checked {
  * already claimed → `hub_too_thin` → `sources_outside_bundle`; related:
  * `target_not_selected` → `related_changes_body`; fix: `target_occupied` →
  * `fix_out_of_scope`) → `link_unresolved` (a hidden `[[`, or a link that does
- * not resolve) → `redaction_would_alter`.
+ * not resolve, or a hub linking other than by body wikilink) → `redaction_would_alter`.
+ * Related and fix apply Ruling 21 to their own new text as their last kind rule.
  */
 export function validateGardenResponse(
   input: GardenValidationInputV1,
@@ -394,7 +433,14 @@ export function validateGardenResponse(
     const parsed = validNote(proposal.note);
     if (parsed === null) return reject("frontmatter_invalid");
     const { links, hidden } = linksOf(parsed.body);
-    return { proposal, early: kindCheck(proposal, parsed), parsed, links, hiddenLink: hidden };
+    /** Ruling 21: a hub is agent-authored throughout, frontmatter included, as written and as decoded. */
+    const parts = split(proposal.note);
+    const mapping = parts === null ? null : frontmatterMapping(parts.frontmatter);
+    const values = mapping === null ? null : decoded(mapping);
+    if (proposal.kind === "hub" && (values === null || LINE_BREAKING.test(values))) return reject(CONTROL_CODE.hub);
+    const otherwise =
+      proposal.kind === "hub" && (parts === null || linksOtherwise(`${parts.header}${values ?? ""}`, parts.body));
+    return { proposal, early: kindCheck(proposal, parsed), parsed, links, hiddenLink: hidden || otherwise };
   });
 
   const redacted = checked.map(

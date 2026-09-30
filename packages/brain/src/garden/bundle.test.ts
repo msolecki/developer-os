@@ -37,4 +37,10 @@ describe("buildGardenPrompt", () => {
     expect(prompt).not.toMatch(/"fix"|`fix`/u);
     expect(prompt).toContain("links only");
   });
+
+  it("tells the agent to link only with wikilinks, never Markdown or HTML links (Ruling 21)", () => {
+    const { prompt } = buildGardenPrompt({ targets: { gaps: [], isolated: [] }, notes: [], readNote: () => "" });
+    expect(prompt).toContain("Link only with `[[wikilinks]]` in the body");
+    expect(prompt).toContain("no HTML tags");
+  });
 });
