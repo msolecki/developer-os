@@ -1070,9 +1070,13 @@ describe("a fresh init killed after the bootstrap publication and before the ins
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
-/** NEW-88 residual: the lock and nonce exist before any Foundation transaction creates backups/transactions lazily. */
+/**
+ * NEW-88 residual: the lock and nonce exist before any Foundation transaction creates backups/transactions
+ * lazily. The envelope is still active (pre-handoff), so the absent-manifest arm refuses it as such — not as
+ * `lifecycle_ledger_root_shape`; only a post-handoff death uninstalls in place (NEW-114).
+ */
 describe("a fresh init killed after its created paths and before the Foundation transaction", () => {
-  it("uninstalls, because the fresh layout already created backups/transactions", async () => {
+  it("refuses uninstall on the active init, not on a missing backups/transactions", async () => {
     const fixture = await createCommandFixture("bootstrap-killed-after-created-paths-uninstall", {
       bootstrapAvailable: true,
       bootstrapInterruptAfter: "after_created_paths",
@@ -1086,7 +1090,10 @@ describe("a fresh init killed after its created paths and before the Foundation 
 
     const removed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
 
-    if (!removed.ok) throw new Error(JSON.stringify(removed));
+    if (removed.ok) throw new Error("uninstall admitted an active fresh init");
+    expect(removed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(removed.error.message).toContain("absent_manifest_active_residue");
+    expect(removed.error.paths).toStrictEqual([fixture.paths.home]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
