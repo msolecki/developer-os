@@ -578,7 +578,9 @@ describe("validateGardenResponse", () => {
       }
       expect(run(hub(HUB.replace('summary: "About Testing hub."', `summary: "[[${SECRET}]]"`)))).toBe("link_unresolved");
       expect(run(hub(HUB.replace('summary: "About Testing hub."', `summary: "[x](${SECRET}.md)"`)))).toBe("link_unresolved");
-      expect(run(hub(HUB + "a < b, 2<3 and [x] alone.\n"))).toBe("accepted");
+      // Task 6b (Ruling 26): a `<` anywhere in a hub body now rejects; plain `[x]` prose still accepts.
+      expect(run(hub(HUB + "a < b, 2<3 and [x] alone.\n"))).toBe("link_unresolved");
+      expect(run(hub(HUB + "a is below b and [x] alone.\n"))).toBe("accepted");
     });
 
     it("checks a frontmatter value as YAML decodes it, so an escape cannot spell a link or a hidden character", () => {
@@ -682,7 +684,8 @@ describe("validateGardenResponse", () => {
       }
       expect(run(related("```QUERY"))).toBe("related_changes_body");
       expect(run(fix('"```dataview"'))).toBe("fix_out_of_scope");
-      expect(run(hub(HUB + "```ts\nconst x = 1;\n```\n"))).toBe("accepted");
+      // Task 6b (Ruling 26): a hub body holds no code at all, so any fence rejects.
+      expect(run(hub(HUB + "```ts\nconst x = 1;\n```\n"))).toBe("link_unresolved");
     });
 
     it("rejects obsidian: and file: URIs in agent-authored text, decoded frontmatter included (Ruling 24c)", () => {
@@ -695,6 +698,42 @@ describe("validateGardenResponse", () => {
       expect(run(related("obsidian://open?file=_raw%2Fx"))).toBe("related_changes_body");
       expect(run(fix('"file:///x/_raw/y"'))).toBe("fix_out_of_scope");
       expect(run(hub(HUB + "The config file: settings.json.\n"))).toBe("accepted");
+    });
+  });
+
+  describe("Task 6b: agent-written hub bodies are plain prose and wikilinks only (Ruling 26)", () => {
+    const SECRET = "_raw/quarantine/secret";
+    const run = (body: string): string => {
+      const result = validate({ proposals: [{ kind: "hub", target: "DEV/testing-hub.md", note: HUB + body }] });
+      return result.rejected.map((r) => r.code).join(",") || "accepted";
+    };
+
+    it("rejects a backslash, an ampersand, a backtick or a `<` anywhere in a hub body", () => {
+      const bodies = [
+        `[r\\]] and [[Delta|x\n\n[r\\]]: ${SECRET}.md\n`,
+        `[r\\]] ok\n\n# [[Delta|x\n[r\\]]: ${SECRET}.md\n`,
+        `[r\\]] and [[Delta|x\n\n[r\\]]: <${SECRET}.md>\n`,
+        "```&#100;ataview\nLIST FROM \"_raw\"\n```\n",
+        "~~~&#x71;uery\npath:_raw\n~~~\n",
+        '`= link("_raw/quarantine/secret")`\n',
+        "`$= dv.list(dv.pages('\"_raw\"').file.link)`\n",
+        `![r\\]]\n`,
+        "a \\ b\n",
+        "salt & pepper\n",
+        "a `b` c\n",
+        "2 < 3\n",
+      ];
+      expect(bodies.map(run)).toEqual(bodies.map(() => "link_unresolved"));
+    });
+
+    it("rejects a counted wikilink that spans a line or holds a `[` after its opening", () => {
+      expect(["[[Delta|x\ny]]\n", "[[Delta|x [y]]\n"].map(run)).toEqual(["link_unresolved", "link_unresolved"]);
+    });
+
+    it("still accepts plain prose with headings, lists and wikilinks", () => {
+      expect(run("- [[Beta]]: explains rebasing\n")).toBe("accepted");
+      expect(run("[[Gamma|the step]]: and more\n")).toBe("accepted");
+      expect(run("## Overview\n\nPlain prose, with a list:\n\n1. one step\n2. [[Beta|another]] step\n\n- a point\n")).toBe("accepted");
     });
   });
 });

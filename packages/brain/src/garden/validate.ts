@@ -347,6 +347,24 @@ function linksOf(body: string): {
   return { links: [...new Set([...blanked, ...deleted])], hidden, referenceColon: rest.includes("]:") };
 }
 
+/**
+ * Ruling 26: a hub body is plain prose, headings, lists and wikilinks. Five
+ * rounds of per-syntax patterns each missed a spelling (an escaped label, an
+ * entity in a fence info string, an inline query); a character policy closes
+ * them by construction. A backslash (escapes), `&` (entities), a backtick (code
+ * spans and fences, so inline and fenced queries), `<` (HTML and autolinks), or
+ * a counted wikilink spanning a line or holding a `[` after its opening `[[`
+ * rejects. The earlier checks stay as defence in depth.
+ */
+const HUB_BODY_FORBIDDEN = /[\\&`<]/u;
+
+function notPlainHubBody(body: string): boolean {
+  return (
+    HUB_BODY_FORBIDDEN.test(body) ||
+    findWikilinks(body).some(({ index, length }) => /[\n[]/u.test(body.slice(index + 2, index + length)))
+  );
+}
+
 interface Checked {
   readonly proposal: GardenProposalV1;
   /** The first failing check before links, or null. */
@@ -371,7 +389,8 @@ interface Checked {
  * `target_not_selected` → `related_changes_body`; fix: `target_occupied` →
  * `fix_out_of_scope`) → `link_unresolved` (a hidden `[[`, or a link that does
  * not resolve, or a hub linking other than by body wikilink, a `]:` outside a
- * wikilink, a vault query block or an `obsidian:`/`file:` URI) → `redaction_would_alter`.
+ * wikilink, a vault query block, an `obsidian:`/`file:` URI, or a hub body
+ * that is not plain prose and wikilinks) → `redaction_would_alter`.
  * Related and fix apply Ruling 21 to their own new text as their last kind rule.
  */
 export function validateGardenResponse(
@@ -461,7 +480,7 @@ export function validateGardenResponse(
     if (proposal.kind === "hub" && (values === null || LINE_BREAKING.test(values))) return reject(CONTROL_CODE.hub);
     const otherwise =
       proposal.kind === "hub" &&
-      (parts === null || referenceColon || linksOtherwise(`${parts.header}${values ?? ""}`, parts.body));
+      (parts === null || referenceColon || notPlainHubBody(parsed.body) || linksOtherwise(`${parts.header}${values ?? ""}`, parts.body));
     return { proposal, early: kindCheck(proposal, parsed), parsed, links, hiddenLink: hidden || otherwise };
   });
 

@@ -50,4 +50,10 @@ describe("buildGardenPrompt", () => {
     expect(prompt).toContain("no `query`, `dataview`, `dataviewjs` or `tasks` code blocks");
     expect(prompt).toContain("no `obsidian:` or `file:` URIs");
   });
+
+  it("tells the agent a hub is plain prose, headings, lists and wikilinks only (Ruling 26)", () => {
+    const { prompt } = buildGardenPrompt({ targets: { gaps: [], isolated: [] }, notes: [], readNote: () => "" });
+    expect(prompt).toContain("A hub body is plain prose, headings, lists and `[[wikilinks]]` only");
+    expect(prompt).toContain("no code, no HTML, no `&`, no backslashes");
+  });
 });
