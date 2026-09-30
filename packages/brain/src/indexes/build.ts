@@ -481,16 +481,32 @@ function resolveLink(text: string, lookups: Lookups): Resolution | null {
 /**
  * The same tiers and lowest-path choice `buildIndex` uses. Returns the resolved
  * note's vault-relative path, or null when the text resolves to nothing.
- * `fileNamesOnly` keeps just the path, suffix and basename tiers — the ones
- * Obsidian shares; it resolves titles and aliases differently or not at all.
+ *
+ * `fileNamesOnly` is for links an agent writes (garden Ruling 30): only the
+ * spellings Obsidian resolves the same way — the content-root-relative path
+ * (the Obsidian vault root is the content root, so no `content/` prefix, and
+ * no topic-folder suffix, which Obsidian matches against the real path and can
+ * land in `_graveyard`) and the bare file name. Matched case-folded, and a text
+ * that fits more than one note is null rather than the lowest path.
  */
 export function createLinkResolver(
   notes: readonly IndexedNote[],
   contentRoot: string,
   options: { readonly fileNamesOnly?: boolean } = {},
 ): (text: string) => string | null {
-  const all = buildLookups(notes, contentRoot);
-  const lookups = options.fileNamesOnly === true ? all.slice(0, 3) : all;
+  if (options.fileNamesOnly === true) {
+    const byName = emptyTier();
+    const prefix = `${contentRoot}/`;
+    for (const note of notes) {
+      const relative = note.path.startsWith(prefix) ? note.path.slice(prefix.length) : note.path;
+      for (const key of [relative, withoutExtension(relative), basename(note.path)]) pushKey(byName, key, note);
+    }
+    return (text) => {
+      const hit = pick(byName.folded.get(fold(text)));
+      return hit !== null && hit.candidates.length === 1 ? hit.note.path : null;
+    };
+  }
+  const lookups = buildLookups(notes, contentRoot);
   return (text) => resolveLink(text, lookups)?.note.path ?? null;
 }
 

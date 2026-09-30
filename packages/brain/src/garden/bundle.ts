@@ -57,9 +57,10 @@ const INSTRUCTIONS = [
   "- Every `[[wikilink]]` resolves to a note listed below or to a hub proposed in this",
   "  response; never link into `_raw`, `_outputs`, `_graveyard`, the indexes or a dot folder,",
   "  and never put `[[` inside code.",
-  "- Link a note by its file name, without folder or `.md`, as each note below is listed:",
-  "  `[[rebase]]` for `DEV/git/rebase.md`; a `|label` may carry the title. A link that",
-  "  matches only a note's title or alias is rejected.",
+  "- Link a note exactly as it is listed below: by its file name without `.md`",
+  "  (`[[rebase]]` for `DEV/git/rebase.md`), or by its full path from the topic folder",
+  "  when another note shares the name (`[[DEV/a/dup]]`); a `|label` may carry the title.",
+  "  A link by title, alias or partial path, or a name two notes share, is rejected.",
   "- Link only with `[[wikilinks]]` in the body. No Markdown links or images (`[x](y)`,",
   "  `![x](y)`), no reference definitions (`[x]: y`), no HTML tags or `href=`/`src=`, and",
   "  no `[[` in frontmatter; a hub, a `## Related` section or a changed frontmatter line",
@@ -82,14 +83,20 @@ const INSTRUCTIONS = [
   "",
 ].join("\n");
 
-/** The name an agent link must use (Ruling 28): the file name without `.md`. */
-function linkName(path: string): string {
-  return `[[${scalar(posix.basename(path, ".md"))}]]`;
+const fileName = (path: string): string => posix.basename(path, ".md").normalize("NFC").toLowerCase();
+
+/**
+ * The name an agent link must use (Rulings 28, 30): the file name without
+ * `.md`, or the content-root-relative path when another note shares the name.
+ */
+function linkName(path: string, shared: ReadonlySet<string>): string {
+  const name = shared.has(fileName(path)) ? path.replace(/\.md$/u, "") : posix.basename(path, ".md");
+  return `[[${scalar(name)}]]`;
 }
 
-function listed(note: IndexedNote): string {
+function listed(note: IndexedNote, shared: ReadonlySet<string>): string {
   const path = contentRelative(note.path);
-  return `- ${scalar(path)} — ${linkName(path)} — ${boundedProse(note.title, SCALAR_CAP)}`;
+  return `- ${scalar(path)} — ${linkName(path, shared)} — ${boundedProse(note.title, SCALAR_CAP)}`;
 }
 
 /**
@@ -99,10 +106,15 @@ function listed(note: IndexedNote): string {
  * sizes the fence past every backtick run inside, so the text cannot close it;
  * everything under the untrusted heading is data either way.
  */
-function noteBlock(path: string, notes: ReadonlyMap<string, IndexedNote>, text: string): string {
+function noteBlock(
+  path: string,
+  notes: ReadonlyMap<string, IndexedNote>,
+  text: string,
+  shared: ReadonlySet<string>,
+): string {
   const indexed = notes.get(path);
   return [
-    `### ${scalar(path)} — ${linkName(path)} — ${boundedProse(indexed?.title ?? "", SCALAR_CAP)}`,
+    `### ${scalar(path)} — ${linkName(path, shared)} — ${boundedProse(indexed?.title ?? "", SCALAR_CAP)}`,
     "",
     ...(indexed === undefined ? [] : [`Summary: ${boundedProse(indexed.summary, SUMMARY_CAP)}`, ""]),
     ...fenced(text, "markdown"),
@@ -135,6 +147,13 @@ export function buildGardenPrompt(input: {
   readonly readNote: (contentRelativePath: string) => string;
 }): { readonly prompt: string; readonly targets: GardenTargetsV1 } {
   const byPath = new Map(input.notes.map((note) => [contentRelative(note.path), note]));
+  const seen = new Set<string>();
+  const shared = new Set<string>();
+  for (const note of input.notes) {
+    const name = fileName(note.path);
+    if (seen.has(name)) shared.add(name);
+    seen.add(name);
+  }
 
   const sections: { readonly kind: "gap" | "isolated"; readonly index: number; readonly text: string }[] = [
     ...input.targets.gaps.map((gap, index) => ({
@@ -143,7 +162,7 @@ export function buildGardenPrompt(input: {
       text: [
         `## Gap: notes tagged ${scalar(gap.tag)} with no compiled note`,
         "",
-        ...gap.notePaths.map((path) => noteBlock(path, byPath, input.readNote(path))),
+        ...gap.notePaths.map((path) => noteBlock(path, byPath, input.readNote(path), shared)),
       ].join("\n"),
     })),
     ...input.targets.isolated.map((path, index) => {
@@ -155,10 +174,10 @@ export function buildGardenPrompt(input: {
         text: [
           `## Isolated note: ${scalar(path)}`,
           "",
-          noteBlock(path, byPath, input.readNote(path)),
+          noteBlock(path, byPath, input.readNote(path), shared),
           "Candidate link targets:",
           "",
-          ...(linkable.length === 0 ? ["- (none)"] : linkable.map(listed)),
+          ...(linkable.length === 0 ? ["- (none)"] : linkable.map((note) => listed(note, shared))),
           "",
         ].join("\n"),
       };

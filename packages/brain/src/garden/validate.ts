@@ -526,10 +526,10 @@ export function validateGardenResponse(
       });
       if (!resolves) return "link_unresolved";
       /**
-       * Ruling 28: an agent link must land on the same note through the tiers
-       * Obsidian shares (path, suffix, basename). A title or alias match may
-       * open a different file in Obsidian — a private one it indexes and we do
-       * not — so a link that needs those tiers is rejected.
+       * Ruling 28 and 30: an agent link must land on the same note through
+       * the spellings Obsidian resolves alike — a content-root-relative path or
+       * a unique file name. A title, alias or topic-folder suffix may open a
+       * different file in Obsidian, a private one it indexes and we do not.
        */
       if (!entry.agentLinks.every((link) => byFileName(link) === resolve(link))) {
         return entry.proposal.kind === "hub" ? "link_unresolved" : "related_changes_body";

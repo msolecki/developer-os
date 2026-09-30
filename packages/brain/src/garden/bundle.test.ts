@@ -61,7 +61,19 @@ describe("buildGardenPrompt", () => {
     const notes = [note("content/DEV/a.md", { tags: ["git"] }), note("content/DEV/sub/rebase.md", { tags: ["git"], title: "Rebasing" })];
     const { prompt } = buildGardenPrompt({ targets: { gaps: [], isolated: ["DEV/a.md"] }, notes, readNote: () => "" });
     expect(prompt).toContain("DEV/sub/rebase.md — [[rebase]] — Rebasing");
-    expect(prompt).toContain("Link a note by its file name");
+    expect(prompt).toContain("Link a note exactly as it is listed below");
     expect(prompt).toContain("no `~~~` fences and no URLs");
+  });
+
+  it("names a note whose file name is not unique by its content-root-relative path (Ruling 30)", () => {
+    const notes = [
+      note("content/DEV/a.md", { tags: ["git"] }),
+      note("content/DEV/a/dup.md", { tags: ["git"], title: "Dup A" }),
+      note("content/DEV/z/Dup.md", { tags: ["git"], title: "Dup Z" }),
+    ];
+    const { prompt } = buildGardenPrompt({ targets: { gaps: [], isolated: ["DEV/a.md"] }, notes, readNote: () => "" });
+    expect(prompt).toContain("DEV/a/dup.md — [[DEV/a/dup]] — Dup A");
+    expect(prompt).toContain("DEV/z/Dup.md — [[DEV/z/Dup]] — Dup Z");
+    expect(prompt).toContain("DEV/a.md — [[a]]");
   });
 });

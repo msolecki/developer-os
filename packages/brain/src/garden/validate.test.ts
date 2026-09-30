@@ -783,4 +783,45 @@ describe("validateGardenResponse", () => {
       ] }).rejected).toEqual([]);
     });
   });
+
+  describe("Task 6b review 2: agent links resolve only by vault-relative path or unique file name (Ruling 30)", () => {
+    const NESTED = [
+      ...NOTES,
+      note("content/DEV/a/dup.md", { title: "Dup A" }),
+      note("content/DEV/z/dup.md", { title: "Dup Z" }),
+      note("content/DEV/sub/rebase.md", { title: "Rebasing" }),
+    ];
+    const run = (proposal: unknown): string => {
+      const result = validateGardenResponse({
+        response: { proposals: [proposal] },
+        targets: TARGETS,
+        notes: NESTED,
+        config: DEFAULT_BRAIN_CONFIG,
+        readNote: (path) => TEXTS.get(path) ?? null,
+        pendingNotePaths: new Set(),
+        findings: [],
+        redactionFindings: () => 0,
+      });
+      if ("invalid" in result) return "invalid";
+      return result.rejected.map((r) => r.code).join(",") || "accepted";
+    };
+    const hub = (link: string): unknown => ({ kind: "hub", target: "DEV/testing-hub.md", note: `${HUB}[[${link}]]\n` });
+    const related = (link: string): unknown => ({
+      kind: "related",
+      target: "DEV/alpha.md",
+      note: text("DEV/alpha.md") + `\n## Related\n\n- [[${link}]]\n- [[beta]]\n`,
+    });
+    const both = (link: string): readonly string[] => [run(hub(link)), run(related(link))];
+
+    it("rejects a topic-folder suffix, a content-prefixed path and an ambiguous file name", () => {
+      const links = ["DEV/rebase", "content/DEV/sub/rebase", "dup"];
+      expect(links.map(both)).toEqual(links.map(() => ["link_unresolved", "related_changes_body"]));
+    });
+
+    it("accepts a content-root-relative path or a unique file name", () => {
+      for (const link of ["DEV/sub/rebase", "DEV/sub/rebase.md", "rebase", "DEV/a/dup"]) {
+        expect(both(link), link).toEqual(["accepted", "accepted"]);
+      }
+    });
+  });
 });
