@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -198,17 +198,123 @@ describe("pack (D55: one bundled CLI module)", () => {
     const home = join(root, "home");
     await mkdir(home, { mode: 0o700 });
 
-    const result = spawnSync(process.execPath, [join(out, "bundle", LOCAL_BUNDLE_CLI_ENTRY), "init", "--yes", "--local-release", out, "--adapters", "none"], {
-      cwd: "/",
-      env: { HOME: home, PATH: "/usr/bin:/bin" },
-      encoding: "utf8",
-      // A fresh init takes ~100 s locally and about twice that on a hosted runner;
-      // the defect (NEW-115) never exits at all, so a generous bound still catches it.
-      timeout: 600_000,
-      killSignal: "SIGKILL",
-    });
+    const reports = join(root, "reports");
+    await mkdir(reports);
 
-    expect(result.error, "init did not exit within 600 s").toBeUndefined();
-    expect(result.status, result.stderr).toBe(0);
+    // A fresh init takes ~100 s locally and about twice that on a hosted runner;
+    // the defect (NEW-115) never exits at all, so a generous bound still catches it.
+    const result = await runWithHangReport(
+      process.execPath,
+      [join(out, "bundle", LOCAL_BUNDLE_CLI_ENTRY), "init", "--yes", "--local-release", out, "--adapters", "none"],
+      { HOME: home, PATH: "/usr/bin:/bin" },
+      reports,
+      600_000,
+    );
+
+    expect(result.hang, `init did not exit within 600 s\n${result.diagnostic}`).toBeNull();
+    expect(result.status, result.diagnostic).toBe(0);
   }, 900_000);
+});
+
+interface HangAwareResult {
+  readonly status: number | null;
+  /** The node report taken on the hang, or `null` when the child exited within the bound. */
+  readonly hang: string | null;
+  readonly diagnostic: string;
+}
+
+const tail = (text: string): string => text.slice(-4_000);
+
+/**
+ * `spawnSync` with the same stdio (stdin closed at once), except that a child still alive at the
+ * bound is asked for a node diagnostic report (SIGUSR2) before it is killed, so a hang on a hosted
+ * runner names the handle it waits on.
+ */
+async function runWithHangReport(
+  command: string,
+  args: readonly string[],
+  env: Readonly<Record<string, string>>,
+  reportDirectory: string,
+  timeoutMs: number,
+): Promise<HangAwareResult> {
+  const child = spawn(command, args, {
+    cwd: "/",
+    env: { ...env, NODE_OPTIONS: `--report-on-signal --report-signal=SIGUSR2 --report-compact --report-directory=${reportDirectory}` },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  child.stdin.end();
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
+  child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
+  // `exit`, not `close`: an orphaned grandchild holding the pipes must not hide the report.
+  const exited = new Promise<number | null>((resolve) => { child.once("exit", (code) => { resolve(code); }); });
+  const drained = new Promise<void>((resolve) => { child.once("close", () => { resolve(); }); });
+
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<"timeout">((resolve) => { timer = setTimeout(() => { resolve("timeout"); }, timeoutMs); });
+  const first = await Promise.race([exited, timedOut]);
+  clearTimeout(timer);
+
+  let hang: string | null = null;
+  if (first === "timeout") {
+    child.kill("SIGUSR2");
+    hang = await awaitReport(reportDirectory, 10_000);
+    child.kill("SIGKILL");
+  }
+  const status = await exited;
+  await Promise.race([drained, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+  return {
+    status,
+    hang,
+    diagnostic: [`hang report:\n${hang ?? "none"}`, `stdout tail:\n${tail(stdout)}`, `stderr tail:\n${tail(stderr)}`].join("\n"),
+  };
+}
+
+async function awaitReport(directory: string, waitMs: number): Promise<string> {
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    const name = (await readdir(directory)).find((entry) => entry.endsWith(".json"));
+    if (name !== undefined) {
+      try {
+        return summarizeReport(JSON.parse(await readFile(join(directory, name), "utf8")) as NodeReport);
+      } catch {
+        // The report is still being written; the next poll reads it whole.
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return `no node report within ${String(waitMs)} ms`;
+}
+
+interface NodeReport {
+  readonly javascriptStack?: { readonly message?: string; readonly stack?: readonly string[] };
+  readonly libuv?: readonly Record<string, unknown>[];
+  readonly resourceUsage?: { readonly userCpuSeconds?: number; readonly kernelCpuSeconds?: number };
+}
+
+function summarizeReport(report: NodeReport): string {
+  const stack = report.javascriptStack;
+  const handles = (report.libuv ?? [])
+    .filter((handle) => handle.is_active === true || handle.is_referenced === true)
+    .map((handle) => `  ${JSON.stringify(handle)}`);
+  // Pending threadpool work (an fsync) is no libuv handle; CPU seconds tell "still working" from "idle".
+  const usage = report.resourceUsage;
+  return [
+    `cpu seconds: user ${String(usage?.userCpuSeconds ?? "?")}, kernel ${String(usage?.kernelCpuSeconds ?? "?")}`,
+    `javascriptStack: ${stack?.message ?? ""}`,
+    ...(stack?.stack ?? []).map((frame) => `  ${frame}`),
+    "active or referenced libuv handles:",
+    ...handles,
+  ].join("\n");
+}
+
+describe("hang report", () => {
+  it("names the handle a child that never exits is waiting on", async () => {
+    const root = await temporary();
+    const result = await runWithHangReport(process.execPath, ["-e", "setInterval(() => undefined, 60_000)"], { PATH: "/usr/bin:/bin" }, root, 2_000);
+
+    expect(result.hang).toMatch(/"type":"timer"/u);
+    expect(result.status).toBeNull();
+  }, 30_000);
 });
