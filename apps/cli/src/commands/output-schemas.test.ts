@@ -131,7 +131,15 @@ describe("the embedded output schemas", () => {
      */
     const verbs = structuredResultVerbs();
     expect(verbs.length).toBeGreaterThan(0);
-    expect(OUTPUT_SCHEMAS.map((schema) => schema.verb)).toStrictEqual([...verbs]);
+    /**
+     * `garden.proposals` (NEW-134) is the one schema with no workflow verb: the
+     * gardener is a scheduled job, not a workflow step, so nothing in
+     * `EFFECT_VOCABULARY` names it. It is listed here, last, on purpose.
+     */
+    expect(OUTPUT_SCHEMAS.map((schema) => schema.verb)).toStrictEqual([
+      ...verbs,
+      "garden.proposals",
+    ]);
   });
 
   it("keeps the verb's dotted name in the filename it installs", () => {

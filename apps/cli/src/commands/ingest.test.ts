@@ -33,6 +33,7 @@ import {
   INGEST_DECLARED_WRITE_SCOPES,
   renderIngest,
   CAPTURE_LEFT_AT,
+  invokeAgentOnce,
   invokeIsolatedCodex,
   prepareAgentWorkspace,
   renderValidationFinding,
@@ -3334,5 +3335,34 @@ describe("ingest's isolated Codex home (D52)", () => {
     expect(result.ok).toBe(false);
     expect(fixture.calls).toStrictEqual([]);
     expect(await nodeFs.readFile(join(home, "auth.json"), "utf8")).toBe("rotated\n");
+  });
+});
+
+describe("invokeAgentOnce, the one door for a single isolated reply", () => {
+  it("returns a timeout reply instead of throwing when the agent times out", async () => {
+    const runner: ProcessRunner = {
+      run: (): Promise<ProcessResult> =>
+        Promise.resolve({
+          stdout: "",
+          stderr: "",
+          exitCode: null,
+          signal: "SIGTERM",
+          timedOut: true,
+        }),
+    };
+    const fixture = await createCommandFixture("agent-once-timeout", {
+      runner,
+      agents: { claude: discovery("claude", CLAUDE), codex: discovery("codex", null) },
+    });
+
+    const reply = await invokeAgentOnce(
+      fixture.context,
+      { name: "claude", executable: CLAUDE },
+      "prompt",
+      "garden.proposals",
+      1_000,
+    );
+
+    expect(reply).toEqual({ ok: false, reason: "timeout" });
   });
 });

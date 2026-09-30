@@ -524,10 +524,13 @@ async function assertVaultPresent(
   }
 }
 
-interface Vendor {
-  readonly name: AgentName;
+/** The vendor an agent call goes to, with the executable already admitted by `selectVendor`. */
+export interface AgentVendorV1 {
+  readonly name: "claude" | "codex";
   readonly executable: string;
 }
+
+type Vendor = AgentVendorV1;
 
 /**
  * The first installed vendor in `VENDOR_ORDER`, or the one `--agent` named.
@@ -553,10 +556,10 @@ interface Vendor {
  * is the reverse of refusing. This command hands the binary the user's captured
  * observation and read access to the whole vault (BACKLOG NEW-15).
  */
-async function selectVendor(
+export async function selectVendor(
   context: CliContext,
   requested: AgentName | null,
-): Promise<Vendor> {
+): Promise<AgentVendorV1> {
   const candidates = requested === null ? VENDOR_ORDER : [requested];
 
   for (const name of candidates) {
@@ -795,6 +798,20 @@ function isPreconditionRefusal(error: unknown): boolean {
 }
 
 /* ---------------------------------------------------------- the agent call */
+
+/**
+ * One isolated agent reply. `failure` is the vendor's own reason, kept only so
+ * `ingest` can word its refusal exactly as before; a scheduled caller reads
+ * `reason` and nothing else.
+ */
+export type AgentReplyV1 =
+  | { readonly ok: true; readonly payload: unknown }
+  | { readonly ok: false; readonly reason: "timeout" }
+  | {
+      readonly ok: false;
+      readonly reason: "error";
+      readonly failure: { readonly reason: string; readonly detail: string | null };
+    };
 
 interface AgentOutcome {
   readonly payload: unknown;
@@ -1144,12 +1161,14 @@ export async function invokeIsolatedCodex(
   }
 }
 
-async function invokeVendor(
+export async function invokeAgentOnce(
   context: CliContext,
-  vendor: Vendor,
+  vendor: AgentVendorV1,
   prompt: string,
-  schemaPath: string,
-): Promise<AgentOutcome> {
+  schema: "ingest.stage" | "garden.proposals",
+  timeoutMs: number,
+): Promise<AgentReplyV1> {
+  const schemaPath = outputSchemaPath(runtimePathsFor(context).home, schema);
   const installation = { executable: vendor.executable, version: UNKNOWN_VERSION };
   const dependencies = { runner: context.runner };
 
@@ -1168,7 +1187,7 @@ async function invokeVendor(
           {
             prompt,
             maxTurns: DEFAULT_MAX_TURNS,
-            timeoutMs: INGEST_TIMEOUT_MS,
+            timeoutMs,
           },
           dependencies,
         )
@@ -1176,10 +1195,27 @@ async function invokeVendor(
           prompt,
           writeScopes: [],
           outputSchemaPath: schemaPath,
-          timeoutMs: INGEST_TIMEOUT_MS,
+          timeoutMs,
         }, installation, dependencies);
 
-  if (result.ok) return { payload: result.payload };
+  if (result.ok) return { ok: true, payload: result.payload };
+  if (result.reason === "timeout") return { ok: false, reason: "timeout" };
+  return {
+    ok: false,
+    reason: "error",
+    failure: { reason: result.reason, detail: result.reason === "refused" ? result.detail : null },
+  };
+}
+
+async function invokeVendor(
+  context: CliContext,
+  vendor: Vendor,
+  prompt: string,
+): Promise<AgentOutcome> {
+  const reply = await invokeAgentOnce(context, vendor, prompt, INGEST_VERB, INGEST_TIMEOUT_MS);
+  if (reply.ok) return { payload: reply.payload };
+  const result =
+    reply.reason === "timeout" ? { reason: "timeout", detail: null } : reply.failure;
 
   /**
    * Each failure keeps its own identity, because they mean different things to
@@ -1216,7 +1252,7 @@ async function invokeVendor(
    * covers it end-to-end any more**, which is recorded at the inverted case in
    * `ingest.test.ts` and as a BACKLOG §1 row.
    */
-  const detail = result.reason === "refused" ? `: ${result.detail}` : "";
+  const detail = result.reason === "refused" ? `: ${String(result.detail)}` : "";
   throw new IngestRefusal(
     EXIT_CODES.operationalFailure,
     result.reason === "vendor-error"
@@ -1750,7 +1786,6 @@ async function ingestOne(
           context,
           vendor,
           buildIngestPrompt(envelope, { config: brainConfig, indexExcerpt, takenPaths }),
-          outputSchemaPath(paths.home, INGEST_VERB),
         )
       ).payload;
     } else {
