@@ -169,7 +169,8 @@ describe("validateGardenResponse", () => {
   });
 
   it("resolves a link to a hub accepted in the same run, but not to a rejected or private one", () => {
-    const linking = goodFor("DEV/alpha.md").replace("- [[Gamma]]", "- [[Testing hub]]");
+    // Ruling 28: an agent link names the hub by file name, not by title.
+    const linking = goodFor("DEV/alpha.md").replace("- [[Gamma]]", "- [[testing-hub]]");
     expect(validate({ proposals: [
       { kind: "related", target: "DEV/alpha.md", note: linking },
       { kind: "hub", target: "DEV/testing-hub.md", note: HUB },
@@ -734,6 +735,52 @@ describe("validateGardenResponse", () => {
       expect(run("- [[Beta]]: explains rebasing\n")).toBe("accepted");
       expect(run("[[Gamma|the step]]: and more\n")).toBe("accepted");
       expect(run("## Overview\n\nPlain prose, with a list:\n\n1. one step\n2. [[Beta|another]] step\n\n- a point\n")).toBe("accepted");
+    });
+  });
+
+  describe("Task 6b review: no tilde fences or URLs in hubs; agent links resolve by file name only", () => {
+    const SECRET = "_raw/quarantine/secret";
+    const codes = (response: unknown): string => validate(response).rejected.map((r) => r.code).join(",") || "accepted";
+    const hub = (note: string): unknown => ({ proposals: [{ kind: "hub", target: "DEV/testing-hub.md", note }] });
+
+    it("rejects a tilde fence of any info string in a hub body (Ruling 27)", () => {
+      const bodies = [
+        '~~~base\nfilters:\n  and:\n    - file.inFolder("content/_raw/quarantine")\n~~~\n',
+        `~~~mermaid\ngraph TD\nA[${SECRET}]\nclass A internal-link;\n~~~\n`,
+        '~~~\u00A0dataview\nLIST FROM "_raw"\n~~~\n',
+        '~~~\u2003dataview\nLIST FROM "_raw"\n~~~\n',
+      ];
+      expect(bodies.map((body) => codes(hub(HUB + body)))).toEqual(bodies.map(() => "link_unresolved"));
+      expect(codes(hub(HUB + "Some ~~strike~~ text.\n"))).toBe("accepted");
+    });
+
+    it("rejects a URL of any scheme in a hub body (Ruling 29)", () => {
+      const bodies = [`Open vscode://file/Users/me/vault/content/${SECRET}.md now.\n`, "See https://x for more.\n"];
+      expect(bodies.map((body) => codes(hub(HUB + body)))).toEqual(bodies.map(() => "link_unresolved"));
+    });
+
+    it("rejects an agent link that resolves only by title or alias, same-run hubs included (Ruling 28)", () => {
+      const aliased = HUB.replace("reviewed: null\n", 'reviewed: null\naliases: ["secret"]\n');
+      const titled = HUB.replace('title: "Testing hub"', 'title: "secret"').replace("# Testing hub", "# secret");
+      expect([
+        codes(hub(aliased + "![[secret]]\n")),
+        codes(hub(titled + "![[secret]]\n")),
+        codes(hub(titled + "[[secret]]\n")),
+      ]).toEqual(["link_unresolved", "link_unresolved", "link_unresolved"]);
+      const byTitle = goodFor("DEV/alpha.md").replace("- [[Gamma]]", "- [[Testing hub]]");
+      expect(validate({ proposals: [
+        { kind: "related", target: "DEV/alpha.md", note: byTitle },
+        { kind: "hub", target: "DEV/testing-hub.md", note: HUB },
+      ] }).rejected).toEqual([{ index: 0, target: "DEV/alpha.md", code: "related_changes_body" }]);
+    });
+
+    it("accepts agent links by basename or path", () => {
+      expect(codes(hub(HUB + "[[beta]] and [[DEV/beta]]\n"))).toBe("accepted");
+      const byName = goodFor("DEV/alpha.md").replace("- [[Gamma]]", "- [[testing-hub|Testing hub]]");
+      expect(validate({ proposals: [
+        { kind: "related", target: "DEV/alpha.md", note: byName },
+        { kind: "hub", target: "DEV/testing-hub.md", note: HUB },
+      ] }).rejected).toEqual([]);
     });
   });
 });

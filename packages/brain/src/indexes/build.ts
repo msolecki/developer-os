@@ -481,12 +481,16 @@ function resolveLink(text: string, lookups: Lookups): Resolution | null {
 /**
  * The same tiers and lowest-path choice `buildIndex` uses. Returns the resolved
  * note's vault-relative path, or null when the text resolves to nothing.
+ * `fileNamesOnly` keeps just the path, suffix and basename tiers — the ones
+ * Obsidian shares; it resolves titles and aliases differently or not at all.
  */
 export function createLinkResolver(
   notes: readonly IndexedNote[],
   contentRoot: string,
+  options: { readonly fileNamesOnly?: boolean } = {},
 ): (text: string) => string | null {
-  const lookups = buildLookups(notes, contentRoot);
+  const all = buildLookups(notes, contentRoot);
+  const lookups = options.fileNamesOnly === true ? all.slice(0, 3) : all;
   return (text) => resolveLink(text, lookups)?.note.path ?? null;
 }
 

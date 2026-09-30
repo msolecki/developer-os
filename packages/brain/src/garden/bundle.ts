@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+
 import { boundedProse, fenced, screenAndCap } from "@developer-os/security";
 
 import { tokenize } from "../indexes/index.js";
@@ -39,11 +41,11 @@ const INSTRUCTIONS = [
   "  is a new path inside the topic folder of the gap's notes, never an existing note. Its",
   "  `tags` include the gap tag; its frontmatter carries `author: \"agent\"`, `reviewed: null`",
   "  and `stage: \"emerging\"`; `sources` lists the notes it draws on, only notes shown below;",
-  "  and the body links at least 3 of them as `[[Title]]`.",
+  "  and the body links at least 3 of them as `[[<file name>]]`.",
   "- `related`: for one isolated note below. The note exactly as given, byte for byte, then",
   "  one blank line and a `## Related` section at the very end (added, or replacing an",
   "  existing one). The section holds links only: the heading line, one blank line, then 2",
-  "  to 5 lines of the form `- [[Title]]` or `- [[Title|label]]`, nothing else, ending with",
+  "  to 5 lines of the form `- [[<file name>]]` or `- [[<file name>|<title>]]`, nothing else, ending with",
   "  a newline. You may add or change `updated` and set `reviewed` to null; every other",
   "  frontmatter byte stays as it is.",
   "",
@@ -55,6 +57,9 @@ const INSTRUCTIONS = [
   "- Every `[[wikilink]]` resolves to a note listed below or to a hub proposed in this",
   "  response; never link into `_raw`, `_outputs`, `_graveyard`, the indexes or a dot folder,",
   "  and never put `[[` inside code.",
+  "- Link a note by its file name, without folder or `.md`, as each note below is listed:",
+  "  `[[rebase]]` for `DEV/git/rebase.md`; a `|label` may carry the title. A link that",
+  "  matches only a note's title or alias is rejected.",
   "- Link only with `[[wikilinks]]` in the body. No Markdown links or images (`[x](y)`,",
   "  `![x](y)`), no reference definitions (`[x]: y`), no HTML tags or `href=`/`src=`, and",
   "  no `[[` in frontmatter; a hub, a `## Related` section or a changed frontmatter line",
@@ -64,7 +69,7 @@ const INSTRUCTIONS = [
   "  and no `obsidian:` or `file:` URIs.",
   "- A hub body is plain prose, headings, lists and `[[wikilinks]]` only:",
   "  no code, no HTML, no `&`, no backslashes, no `<` and no backticks; a wikilink",
-  "  stays on one line and holds no `[`.",
+  "  stays on one line and holds no `[`; no `~~~` fences and no URLs (`://`).",
   "- Never copy a secret, token or credential into a note; a proposal the redactor would",
   "  change is rejected.",
   `- A note is at most ${String(GARDEN_NOTE_MAX_BYTES)} bytes.`,
@@ -77,8 +82,14 @@ const INSTRUCTIONS = [
   "",
 ].join("\n");
 
+/** The name an agent link must use (Ruling 28): the file name without `.md`. */
+function linkName(path: string): string {
+  return `[[${scalar(posix.basename(path, ".md"))}]]`;
+}
+
 function listed(note: IndexedNote): string {
-  return `- ${scalar(contentRelative(note.path))} — ${boundedProse(note.title, SCALAR_CAP)}`;
+  const path = contentRelative(note.path);
+  return `- ${scalar(path)} — ${linkName(path)} — ${boundedProse(note.title, SCALAR_CAP)}`;
 }
 
 /**
@@ -91,7 +102,7 @@ function listed(note: IndexedNote): string {
 function noteBlock(path: string, notes: ReadonlyMap<string, IndexedNote>, text: string): string {
   const indexed = notes.get(path);
   return [
-    `### ${scalar(path)} — ${boundedProse(indexed?.title ?? "", SCALAR_CAP)}`,
+    `### ${scalar(path)} — ${linkName(path)} — ${boundedProse(indexed?.title ?? "", SCALAR_CAP)}`,
     "",
     ...(indexed === undefined ? [] : [`Summary: ${boundedProse(indexed.summary, SUMMARY_CAP)}`, ""]),
     ...fenced(text, "markdown"),

@@ -354,9 +354,11 @@ function linksOf(body: string): {
  * them by construction. A backslash (escapes), `&` (entities), a backtick (code
  * spans and fences, so inline and fenced queries), `<` (HTML and autolinks), or
  * a counted wikilink spanning a line or holding a `[` after its opening `[[`
- * rejects. The earlier checks stay as defence in depth.
+ * rejects. The earlier checks stay as defence in depth. Ruling 27 adds a
+ * tilde fence (`base`, `mermaid` and any Unicode-spaced info string render
+ * vault content), Ruling 29 any `://` URL.
  */
-const HUB_BODY_FORBIDDEN = /[\\&`<]/u;
+const HUB_BODY_FORBIDDEN = /[\\&`<]|~~~|:\/\//u;
 
 function notPlainHubBody(body: string): boolean {
   return (
@@ -373,6 +375,8 @@ interface Checked {
   readonly links: readonly string[];
   /** A `[[` the link extractor did not count: inside code, escaped, or otherwise hidden. */
   readonly hiddenLink: boolean;
+  /** Links the agent wrote: a hub's body links, a related proposal's section items (Ruling 28). */
+  readonly agentLinks: readonly string[];
 }
 
 /**
@@ -463,7 +467,14 @@ export function validateGardenResponse(
 
   const seen = new Set<string>();
   const checked: Checked[] = response.proposals.map((proposal, index) => {
-    const reject = (early: Code): Checked => ({ proposal, early, parsed: null, links: [], hiddenLink: false });
+    const reject = (early: Code): Checked => ({
+      proposal,
+      early,
+      parsed: null,
+      links: [],
+      hiddenLink: false,
+      agentLinks: [],
+    });
     if (index >= GARDEN_MAX_PROPOSALS) return reject("over_limit");
     const key = fold(proposal.target);
     if (seen.has(key)) return reject("duplicate_target");
@@ -481,7 +492,8 @@ export function validateGardenResponse(
     const otherwise =
       proposal.kind === "hub" &&
       (parts === null || referenceColon || notPlainHubBody(parsed.body) || linksOtherwise(`${parts.header}${values ?? ""}`, parts.body));
-    return { proposal, early: kindCheck(proposal, parsed), parsed, links, hiddenLink: hidden || otherwise };
+    const early = kindCheck(proposal, parsed);
+    return { proposal, early, parsed, links, hiddenLink: hidden || otherwise, agentLinks: agentLinksOf(proposal, parsed, links) };
   });
 
   const redacted = checked.map(
@@ -500,6 +512,11 @@ export function validateGardenResponse(
       [...notes, ...hubs.map((hub) => asIndexed(hub, config))],
       config.contentRoot,
     );
+    const byFileName = createLinkResolver(
+      [...notes, ...hubs.map((hub) => asIndexed(hub, config))],
+      config.contentRoot,
+      { fileNamesOnly: true },
+    );
     codes = checked.map((entry, index) => {
       if (entry.early !== null) return entry.early;
       if (entry.hiddenLink) return "link_unresolved";
@@ -508,6 +525,15 @@ export function validateGardenResponse(
         return path !== null && path.startsWith(prefix) && !isPrivate(contentRelative(path), config);
       });
       if (!resolves) return "link_unresolved";
+      /**
+       * Ruling 28: an agent link must land on the same note through the tiers
+       * Obsidian shares (path, suffix, basename). A title or alias match may
+       * open a different file in Obsidian — a private one it indexes and we do
+       * not — so a link that needs those tiers is rejected.
+       */
+      if (!entry.agentLinks.every((link) => byFileName(link) === resolve(link))) {
+        return entry.proposal.kind === "hub" ? "link_unresolved" : "related_changes_body";
+      }
       return redacted[index] === true ? "redaction_would_alter" : null;
     });
     const surviving = hubs.filter((hub) => codes[checked.indexOf(hub)] === null);
@@ -523,6 +549,17 @@ export function validateGardenResponse(
     else rejected.push({ index, target: proposal.target, code });
   });
   return { accepted, rejected };
+}
+
+/** Ruling 28 scope: agent-written links; the human text of a related or fix target is not the agent's. */
+function agentLinksOf(proposal: GardenProposalV1, parsed: ParsedNote, links: readonly string[]): readonly string[] {
+  if (proposal.kind === "hub") return links;
+  if (proposal.kind === "fix") return [];
+  const heading = lastRelatedHeading(parsed.body);
+  if (heading === -1) return [];
+  return findWikilinks(parsed.body.slice(heading))
+    .map((occurrence) => occurrence.text.trim())
+    .filter((text) => text.length > 0);
 }
 
 /** A same-run hub as the resolver sees it: only path, folder, title and aliases are read. */
