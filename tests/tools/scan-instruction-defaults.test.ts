@@ -127,7 +127,7 @@ describe("scanInstructionDefaults", () => {
 
   it("admits a file of exactly the cap", () => {
     expect(scanFixture({ "cap.md": "a".repeat(256 * 1024) })).toStrictEqual([]);
-    // ~55 s locally and over 120 s on a hosted runner, before and after the D70 lane (NEW-130).
+    // ~55 s locally and over 120 s on a hosted runner, before and after the D70 lane (NEW-131).
   }, 300_000);
 
   it("reports a symlink instead of following it", () => {
