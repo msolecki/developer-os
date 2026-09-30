@@ -202,11 +202,13 @@ describe("pack (D55: one bundled CLI module)", () => {
       cwd: "/",
       env: { HOME: home, PATH: "/usr/bin:/bin" },
       encoding: "utf8",
-      timeout: 60_000,
+      // A fresh init takes ~100 s locally and about twice that on a hosted runner;
+      // the defect (NEW-115) never exits at all, so a generous bound still catches it.
+      timeout: 600_000,
       killSignal: "SIGKILL",
     });
 
-    expect(result.error, "init did not exit within 60 s").toBeUndefined();
+    expect(result.error, "init did not exit within 600 s").toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
-  });
+  }, 900_000);
 });
