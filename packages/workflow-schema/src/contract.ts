@@ -2,7 +2,7 @@ import type { ExitCode } from "@developer-os/core";
 import { EXIT_CODES } from "@developer-os/core";
 import { z } from "zod";
 
-export const WORKFLOW_TRIGGERS = ["manual", "session_start", "session_end"] as const;
+export const WORKFLOW_TRIGGERS = ["manual", "session_start", "session_end", "scheduled"] as const;
 export type WorkflowTrigger = (typeof WORKFLOW_TRIGGERS)[number];
 
 /**
@@ -53,27 +53,6 @@ const SLUG = /^[a-z][a-z0-9-]*$/u;
 const SEMVER = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
 
 /**
- * Named rather than inferred, because the message is the whole decision. A
- * workflow author who writes `scheduled` is not making a typo — they are asking
- * for a scheduler — and being told the value is invalid teaches them nothing.
- * Workflow architecture former §15.8.
- */
-const RETIRED_TRIGGERS: ReadonlyMap<string, string> = new Map([
-  [
-    "scheduled",
-    "`scheduled` is not a v1 trigger: the scheduler is launchd and belongs to DOS-P7, which adds this value in the same change that makes it fire",
-  ],
-]);
-
-/**
- * A `Map`, not an object literal. As a literal this was not a lookup — it
- * inherited: `RETIRED_TRIGGERS["toString"]` returned a `Function`, which is not
- * `undefined`, so a trigger named after any `Object.prototype` member took the
- * retired branch and put a **function** where a message belongs. The redaction
- * seam then threw `value.replace is not a function` and the whole validation
- * aborted — four characters in a file crashed the validator. Found by this
- * task's review.
- *
  * The refinement is piped into a closed enum so the parsed field's type is
  * `WorkflowTrigger`, not `string`. Inference alone gave `string[]`, which left
  * the exported `WorkflowTrigger` describing a field it was never the type of,
@@ -82,11 +61,6 @@ const RETIRED_TRIGGERS: ReadonlyMap<string, string> = new Map([
 const triggerSchema = z
   .string()
   .superRefine((value, context) => {
-    const retired = RETIRED_TRIGGERS.get(value);
-    if (retired !== undefined) {
-      context.addIssue({ code: "custom", message: retired });
-      return;
-    }
     if (!(WORKFLOW_TRIGGERS as readonly string[]).includes(value)) {
       context.addIssue({
         code: "custom",
@@ -221,6 +195,13 @@ export const workflowContractSchema = z
   })
   .strict()
   .superRefine((workflow, context) => {
+    if (workflow.triggers.includes("scheduled") && !workflow.triggers.includes("manual")) {
+      context.addIssue({
+        code: "custom",
+        path: ["triggers"],
+        message: "scheduled requires manual; a scheduled-only workflow cannot be run by hand to debug it",
+      });
+    }
     const seen = new Set<string>();
     for (const step of workflow.steps) {
       if (seen.has(step.id)) {

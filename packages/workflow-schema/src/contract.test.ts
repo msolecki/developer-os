@@ -39,20 +39,20 @@ describe("workflowContractSchema", () => {
     expect(workflowContractSchema.safeParse(contract({ schemaVersion: "1" })).success).toBe(false);
   });
 
-  it("refuses the scheduled trigger and names DOS-P7", () => {
-    /**
-     * Workflow architecture former §15.8. A trigger that validates and never fires is a passing check
-     * about a false property, which is the shape this repository has shipped
-     * twice. DOS-P7 adds the value in the change that makes launchd fire it.
-     */
-    const result = workflowContractSchema.safeParse(contract({ triggers: ["scheduled"] }));
-    expect(result.success).toBe(false);
-    expect(JSON.stringify(result.error?.issues)).toContain("DOS-P7");
+  it("accepts scheduled alongside manual", () => {
+    const result = workflowContractSchema.safeParse(contract({ triggers: ["manual", "scheduled"] }));
+    expect(result.success).toBe(true);
   });
 
-  it("treats a prototype member as an unknown trigger, not as a retired one", () => {
+  it("refuses scheduled without manual", () => {
+    const result = workflowContractSchema.safeParse(contract({ triggers: ["scheduled"] }));
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toMatch(/scheduled requires manual/);
+  });
+
+  it("treats a prototype member as an unknown trigger, not as a known one", () => {
     /**
-     * `RETIRED_TRIGGERS[value]` on a plain object literal is not a lookup — it
+     * A lookup on a plain object literal is not a lookup — it
      * inherits. `toString` resolved to a `Function`, which is not `undefined`,
      * so the retired branch fired and put a **function** where a message
      * belongs; `screenControlCharacters` then threw `value.replace is not a

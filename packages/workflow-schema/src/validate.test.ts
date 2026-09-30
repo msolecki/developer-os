@@ -107,16 +107,14 @@ describe("validateWorkflow", () => {
   it("keeps an authored message whole while capping the value inside it", () => {
     /**
      * Also ruled on 2026-08-10. Capping the whole message at 64 graphemes cut
-     * the `scheduled` refusal off at "the scheduler is la", removing the
-     * `DOS-P7` that Task 10 asserts on and that tells the author where the
-     * feature actually lives. The bound belongs on the interpolated fragment,
-     * which is the author-controlled part.
+     * an authored refusal off mid-sentence. The bound belongs on the
+     * interpolated fragment, which is the author-controlled part.
      */
     const result = validateWorkflow(
       "workflows/sample/workflow.yaml",
       raw({ triggers: ["scheduled"] }),
     );
-    expect(JSON.stringify(result.findings)).toContain("DOS-P7");
+    expect(JSON.stringify(result.findings)).toContain("scheduled requires manual");
 
     const long = validateWorkflow(
       "workflows/sample/workflow.yaml",

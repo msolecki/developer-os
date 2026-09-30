@@ -4,6 +4,7 @@ version: 1.0.0
 description: Turn brain lint findings into proposals - note captures for content fixes, printed dry-run commands for structural ones - and never change the vault directly.
 triggers:
   - manual
+  - scheduled
 inputs:
   limit:
     type: integer
