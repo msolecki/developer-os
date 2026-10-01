@@ -330,7 +330,7 @@ export async function uninstallingMarkerPresent(
 }
 
 /** The current bytes of one reserved regular file, or null when it is absent. */
-async function currentBytes(
+export async function currentBytes(
   fs: LifecycleGuardedFileSystemV1,
   path: CanonicalAbsolutePathV1,
   effectiveUid: number,
@@ -345,7 +345,7 @@ async function currentBytes(
   return fs.readRegular(entry, maximumBytes);
 }
 
-function writeMutation(targetPath: string, before: Uint8Array | null, content: Uint8Array): PlannedFileMutation {
+export function writeMutation(targetPath: string, before: Uint8Array | null, content: Uint8Array): PlannedFileMutation {
   return before === null
     ? { targetPath, operation: "create", content }
     : { targetPath, operation: "replace", content, expectedBeforeHash: hashBytes(before) };
