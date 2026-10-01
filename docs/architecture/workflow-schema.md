@@ -45,9 +45,10 @@ The compiler unions those footprints and requires the result to *equal* the decl
    The package is still testable with neither agent installed, because nothing it renders names
    one.
 3. **It makes no network request** and imports no networking module.
-4. **`scheduled` is not a v1 trigger.** It is refused with an error naming DOS-P7, which adds
-   the value in the same change that makes launchd fire it. A trigger that validates and never
-   fires is a passing check about a false property.
+4. **`scheduled` fires only through `developer-os automation`** (added 2026-10-01, NEW-134). It
+   arrived in the same change that makes launchd fire it, as this rule required: the `brain-garden`
+   automation job runs the `brain-garden` workflow's checks in product code. A contract may declare
+   `scheduled` only together with `manual`, so every scheduled workflow can be run by hand.
 5. **Pre-release and build metadata are not valid workflow versions.** `MAJOR.MINOR.PATCH` only,
    no leading zeros. An overlay pins `id@version` exactly, and comparing `1.2.3-rc.1` against
    `1.2.3` there would mean nothing. This deliberately narrows the original design's bare word
@@ -260,7 +261,7 @@ are rejected by strict schemas at every level.
 | `id` | directory-matching slug, `^[a-z][a-z0-9-]*$` |
 | `version` | `MAJOR.MINOR.PATCH`, no leading zero, pre-release or build metadata |
 | `description` | non-empty string |
-| `triggers` | non-empty ordered array from `manual`, `session_start`, `session_end`; `scheduled` remains refused until DOS-P7 makes it fire |
+| `triggers` | non-empty ordered array from `manual`, `session_start`, `session_end`, `scheduled`; `scheduled` requires `manual` |
 | `inputs`, `output` | slug-keyed records of strict `{ type, required, description }`; type is `string`, `integer`, `boolean` or `path` |
 | `capabilities` | ordered array from `structured_result`, `non_interactive_run`, `session_start_injection`, `session_end_capture`, `file_write`; `file_write` is reserved and currently named by no verb footprint |
 | `scopes` | strict `{ read: string[], write: string[] }`, declared and equal to derived footprints |

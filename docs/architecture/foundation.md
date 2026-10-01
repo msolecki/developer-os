@@ -1111,8 +1111,18 @@ record.
     allocation-free preview and an `--apply` that re-acquires the global lock, recomputes the
     preview hash, proves feasibility, and only then reserves IDs and persists the plan. The hidden
     scheduled runner (`AutomationRunner`, `apps/cli/src/commands/automation/runner.ts`) runs Spec 1
-    §5.1's four jobs (`brain-reindex`, `brain-lint`, `doctor`, `git-sync`); `import` and `ingest` are
-    never scheduled (D47).
+    §5.1's four jobs (`brain-reindex`, `brain-lint`, `doctor`, `git-sync`) and, since NEW-134
+    (2026-10-01, D77), two optional ones in registry order after them: `brain-garden` (one isolated
+    vendor call whose validated proposals become quarantined captures) and `brain-pulse` (an
+    agent-free health report in `state/pulse.0.md`…`pulse.7.md` with a macOS notification on
+    attention or failure). Optional jobs are scheduled only when named
+    (`--schedule brain-garden=weekly@sun,17:00`) and removed with `--schedule <job>=off`;
+    `automation enable` pins the gardener's vendor executable in `automation.brainGarden` (re-pinned
+    only with `--garden-agent` or when the job is newly scheduled, so switching vendor goes with a
+    schedule change). Every job's status, lease and log slots, and the pulse slots, are manifest
+    reservations, so an installation made before NEW-134 refuses admission
+    (`reservations_incomplete`) until it is reinstalled. `import` and `ingest` are never scheduled
+    (D47).
   - **Inert until enabled.** Schema-valid `git.*`/`automation.*` configuration is never authority by
     itself: operation needs the matching `LifecycleActivationRecordV1` arm and a clear closure. A
     disabled Git spawns no Git process and opens no network connection; disabled automation writes no

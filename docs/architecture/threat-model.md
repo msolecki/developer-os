@@ -896,7 +896,7 @@ piece defends. Spec 1 §4 and §5 remain normative for every literal.
 | A push that fails is retried, never re-planned | the pending push plan (`PersistedGitPushPlanV1`) is written before any network call; a failed push leaves a `retry_only` closure and the next `git sync` retries only that plan. Fetch, pull, merge, rebase, checkout, force-push and history rewriting are not implemented | `apps/cli/src/commands/git/git.v2.test.ts` (`preserves the prior sync record when push fails and retries only the persisted push`) |
 | launchd bootstraps only bytes the product planned | the plist is bootstrapped from an already-unlinked snapshot descriptor (`LaunchdSnapshotBootstrapper`, `packages/platform-macos/src/launchd/snapshot.ts`); install, replace, keep and remove are journaled launchd effects with intent before mutation and observation before the cursor moves (`packages/platform-macos/src/launchd/effects.ts`); raw `launchctl` output is byte-counted and discarded | `packages/platform-macos/src/launchd/snapshot.test.ts`, `effects.test.ts`; `tests/integration/launchd/fd3-bootstrap.pinned-host.test.ts` on an admitted host |
 | A scheduled run cannot outlive uninstall or collide with an interactive mutation | each job holds its `AutomationRunnerLeaseV1` for its lifetime and rechecks the `state/uninstalling.json` marker; uninstall drains all four leases with no global lock held. A handler reuses the global lock its runner holds after a `dev`/`ino` check instead of taking a second one; the runner waits at most `SCHEDULED_GLOBAL_LOCK_WAIT_MS` and otherwise exits silently; an interactive command meeting a scheduled holder refuses exit 6 | `apps/cli/src/commands/automation/runner.test.ts`, `runner.v2.test.ts`; `apps/cli/src/lifecycle/mutation-gate.test.ts` (`refuses a home that is not V2 before any work, and never releases the borrowed lock`) |
-| A scheduled run writes only bounded, redacted records | status and the ten log slots are redacted before they are bounded (`redactScheduledData`, `boundedLogRecord`, `apps/cli/src/lifecycle/runtime-records.ts`); no scheduled job invokes a model or a vendor CLI, and `import` and `ingest` are never scheduled (D47) | `apps/cli/src/commands/automation/handlers.test.ts` |
+| A scheduled run writes only bounded, redacted records | status and the ten log slots are redacted before they are bounded (`redactScheduledData`, `boundedLogRecord`, `apps/cli/src/lifecycle/runtime-records.ts`); no scheduled job invokes a model or a vendor CLI except `brain-garden` (**amended 2026-10-01, D77**: the registry's `maySpawnVendor` is `true` for that job alone, and `invokeAgentOnce` refuses `vendor_spawn_forbidden` from any other scheduled job); `import` and `ingest` are never scheduled (D47) | `apps/cli/src/commands/automation/handlers.test.ts`; §5.17 |
 
 - **What stays open.** The trampoline's reported `ppid` is not bound to the parent PID in the permit,
   because the permit carries no PIDs; a real push through `/usr/bin/git` after the I1 fix, `git
@@ -928,6 +928,30 @@ defends. Spec 2 stays normative for every literal.
   proof yet: the synthetic lifecycle installs the core owner only.
 
 ---
+
+### 5.17 The unattended Brain gardener (NEW-134, D77)
+
+**Added 2026-10-01.** `brain-garden` is the only scheduled job that runs a vendor agent: one isolated
+call per run (the `ingest` invocation: no shell, no write tools, a product-owned environment), with
+the executable pinned in `automation.brainGarden` at `automation enable` and re-admitted by
+`assertTrustedExecutable` at the start of the run and again immediately before the spawn. The agent
+only returns JSON proposals; the product validates every one and writes accepted ones through the
+`capture` path into quarantine. Nothing reaches the vault without `review` and `ingest`.
+`brain-pulse` runs no agent. Spec: `docs/superpowers/specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`.
+
+| Boundary | Mechanism | Evidence |
+|---|---|---|
+| No vendor call when the Brain needs a human first | gates before any spawn: pinned executable present and trusted (Codex also needs the `garden.proposals` schema), index present, no doctor `[fail]`, no lint error, fewer than 20 quarantined captures | `apps/cli/src/commands/automation/garden.test.ts` (each gate asserts zero agent calls) |
+| An agent proposal cannot change a human note beyond a links section | `related` must equal the note byte for byte except a trailing `## Related` section of 2–5 exact `- [[target]]` lines, `updated`, and `reviewed: null`; `fix` may change only the single-line keys a lint finding names and never `author`, `reviewed`, `stage` or `created`; control, line-breaking and Unicode format characters reject every kind | `packages/brain/src/garden/validate.test.ts` |
+| An agent-written hub cannot link, embed or query outside the public topic folders | hub bodies are plain prose, headings, lists and `[[wikilinks]]` only: no `\`, `&`, backtick, `<`, `~~~`, `://`, `](`, reference definition (`]:`), `obsidian:`/`file:` URI, query fence, or multi-line wikilink; the index's and the validator's link extraction must agree; every link must resolve, outside private folders, by a vault-relative path or a unique file name — the tiers Obsidian shares (title and alias links reject) | `packages/brain/src/garden/validate.test.ts` |
+| A hub cannot make a link ambiguous | a hub's case-folded file name must not equal any indexed note's, any pending capture's or another proposed hub's | `validate.test.ts` (`target_occupied` cases) |
+| A proposal is captured exactly as validated | the redaction preview uses the capture redactor, key and patterns, and any change rejects `redaction_would_alter`; `runCapture` takes the validated bytes' hash (or "must not exist" for a hub) and refuses `target_changed` if the note moved during the agent call | `garden.test.ts` (note edited / hub created during the call) |
+
+- **Accepted residuals.** Obsidian may resolve a unique public file name to a same-named file in a
+  private folder (capture files are hash-named, so this needs a crafted file there); a `related` link
+  label is display text and is not character-filtered; rejecting format characters also rejects
+  legitimate ZWJ/ZWNJ text in agent output; the agent's prose itself is untrusted model output that
+  only a human reviewer judges.
 
 ## 6. Statuses, and the invariant under every failure
 

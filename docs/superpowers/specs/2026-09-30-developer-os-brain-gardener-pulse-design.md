@@ -137,6 +137,16 @@ that makes launchd fire it, as `workflow-schema.md` §2 item 4 requires. Only `b
 
 ## 4. Proposal validation
 
+**Amended during implementation (2026-10-01; rulings in the plan's ledger, carried into
+`threat-model.md` §5.17):** provenance (`author: agent`, `reviewed: null`, `stage: emerging`) applies
+to hubs only — a `related` proposal keeps the note's header except `updated` and may set `reviewed`
+to null; a `fix` never changes `author`, `reviewed`, `stage` or `created`; the `## Related` section is
+exactly 2–5 `- [[target]]` lines; hub bodies are plain prose, headings, lists and wikilinks (no code,
+HTML, entities, escapes or URLs); agent links resolve only by vault-relative path or unique file name;
+a hub's file name is unique across indexed notes, pending captures and the run; the prompt offers only
+`hub` and `related`; captures are bound to the validated bytes (`target_changed`). The rules below are
+the original design and are narrowed by this paragraph where they differ.
+
 The product rejects the whole response, writing no capture, when it is not valid JSON or does not match
 the schema (`failed(agent_output_invalid)`). Otherwise each proposal is checked alone, rejected ones are
 recorded with their code, and the rest are written:

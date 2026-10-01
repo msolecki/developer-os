@@ -69,7 +69,8 @@ schema-valid configuration alone is never authority.
 The subsystem preserves the standing product boundaries:
 
 - no command here invokes a model or model-vendor CLI;
-- no scheduled job can spend vendor credits;
+- no scheduled job can spend vendor credits (superseded for the optional `brain-garden` job alone by
+  D77, 2026-09-30: `specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`);
 - no scheduler captures or ingests content automatically;
 - Git never fetches, pulls, merges, rebases, checks out, resolves, force-pushes, or rewrites history;
 - the product never stores or prompts for a Git credential;

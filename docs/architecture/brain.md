@@ -474,3 +474,15 @@ Added 2026-09-28 by NEW-110 Task 12 (D72); `foundation.md` §11 has the update c
   so `update rollback` restores a migrated note from its retained blob.
 - **Preview and rollback write nothing to the Brain**, and uninstall after any update, rollback or
   reapply leaves every Brain note byte-identical (`tests/e2e/release-update.test.ts`).
+
+### 6.15 The scheduled gardener writes only captures (NEW-134)
+
+Added 2026-10-01. The optional `brain-garden` automation job selects up to two `gap` tags (≥ 4 notes,
+no `compiled-note`, none pending) and up to five oldest `isolated` notes, asks one isolated vendor
+agent for proposals, and writes the accepted ones as note captures; `review` and `ingest` stay the only
+way into the vault (D47, D77). A `related` proposal adds only a trailing `## Related` list of 2–5
+wikilinks and sets `updated` and `reviewed: null`, so a human note that gains agent links needs review
+again. A hub is a `compiled-note` of plain prose and wikilinks that resolve by vault-relative path or a
+unique file name. The rules and their tests: `threat-model.md` §5.17 and
+`packages/brain/src/garden/`.
+
