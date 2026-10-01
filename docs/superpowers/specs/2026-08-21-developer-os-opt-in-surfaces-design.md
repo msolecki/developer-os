@@ -1228,7 +1228,7 @@ LifecycleCoordinatorPlanV1 = {
     activationPath: CanonicalAbsolutePathV1,
     manifestPath: CanonicalAbsolutePathV1,
     repositoryRoot: CanonicalAbsolutePathV1 | null,
-    plistPaths: readonly CanonicalAbsolutePathV1[0..4]
+    plistPaths: readonly CanonicalAbsolutePathV1[0..6]   // 0..4 before NEW-134 (2026-10-01): one per registry job
   },
   participants: {
     foundation: readonly FoundationParticipantRefV1[0..64],
@@ -3621,7 +3621,7 @@ each installed plist uses its generated descendant defined below:
 `<canonical-user-home>` is the guarded canonical home of the current console user, not an environment
 string. No label alias, filename override, alternate launchd domain, or additional plist is legal.
 
-Every registry member carries literal metadata `maySpawnVendor: false`. The scheduled-safe doctor
+Every registry member carries literal metadata `maySpawnVendor: false` (**amended 2026-10-01, NEW-134 / D77:** the registry grew to six jobs — the optional `brain-garden` and `brain-pulse` after `git-sync` — and `maySpawnVendor` is `true` for `brain-garden` alone; every `[0..4]` bound and "four jobs" statement in this spec reads as six; the gardener contract is `specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`). The scheduled-safe doctor
 profile omits external vendor probes; it performs only configuration, manifest, path, and local
 artifact checks. The registry is exhaustively switched and its tests first assert that the enum is
 non-empty and exactly the four values above, so a vacuous `every()` cannot pass the no-vendor gate.
@@ -3847,7 +3847,7 @@ LaunchdPlanPreviewV1 = {
   schemaVersion: 1,
   observationProcessTableHash: LowerHexSha256,
   mutationProcessTableTemplateHash: LowerHexSha256,
-  entries: readonly LaunchdPlanPreviewEntryV1[0..4]
+  entries: readonly LaunchdPlanPreviewEntryV1[0..6]
 }
 
 LaunchdBootstrapPlistIdentityV1 = {
@@ -3913,11 +3913,11 @@ LaunchdPlanV1 = {
   processTableHash: LowerHexSha256,
   config: LifecycleFileBindingV1,
   activation: LifecycleFileBindingV1 | null,
-  plistFiles: readonly LifecycleFileBindingV1[0..4],
+  plistFiles: readonly LifecycleFileBindingV1[0..6],
   manifest: LaunchdManifestBindingV1,
   beforeFilesEffect: { id: LaunchdEffectIdV1, planHash: LowerHexSha256 } | null,
   afterFilesEffect: { id: LaunchdEffectIdV1, planHash: LowerHexSha256 } | null,
-  entries: readonly LaunchdPlanEntryV1[0..4]
+  entries: readonly LaunchdPlanEntryV1[0..6]
 }
 ```
 
