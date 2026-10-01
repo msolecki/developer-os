@@ -97,7 +97,7 @@ it("reads automation.brainGarden and refuses a relative executable", () => {
 });
 ```
 
-Use the helper the file already uses for parsing the automation lifecycle record and for loading config text; if none is exported under these names, call the same functions the neighbouring automation cases call and keep these names as local wrappers. Update the pinned counts: `keys.test.ts` readable 24 → 26; `index.test.ts:58` and `lifecycle.test.ts:492` expect six ids; `absent-manifest.test.ts:477` expects six plist names.
+Use the helper the file already uses for parsing the automation lifecycle record and for loading config text; if none is exported under these names, call the same functions the neighbouring automation cases call and keep these names as local wrappers. Update the pinned counts: `keys.test.ts` readable 24 → 26; `packages/core/src/index.test.ts:58` and `packages/core/src/config/lifecycle.test.ts:492` expect six ids; `absent-manifest.test.ts:477` expects six plist names.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -257,7 +257,7 @@ it("refuses admission of an installation made before brain-garden existed", asyn
 });
 ```
 
-Use the row field names the file already uses (read `admission.ts:98-118` first; adapt `relativePath` to the actual key). In `fresh-layout.v2.test.ts` add one case asserting a fresh `init` creates the empty reserved files for `brain-garden`, `brain-pulse` and `state/pulse.0.md`.
+Use the row field names the file already uses (read `apps/cli/src/lifecycle/admission.ts:98-118` first; adapt `relativePath` to the actual key). In `fresh-layout.v2.test.ts` add one case asserting a fresh `init` creates the empty reserved files for `brain-garden`, `brain-pulse` and `state/pulse.0.md`.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -313,7 +313,7 @@ it("refuses scheduled without manual", () => {
 });
 ```
 
-and update `validate.test.ts:105-119,157` to the same contract. `canonical.test.ts` must still find no error findings with the yaml change.
+and update `packages/workflow-schema/src/validate.test.ts:105-119,157` to the same contract. `canonical.test.ts` must still find no error findings with the yaml change.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -610,7 +610,7 @@ git commit -m "refactor(ingest): export one door for a single isolated agent rep
 - Test: `garden.test.ts`, `service.test.ts` (filtered)
 
 **Interfaces:**
-- Consumes: Tasks 1, 5, 6, 7; existing `runCapture(context, { text, note })` (`capture.ts:574`), `createRedactor`/`loadOrCreateRedactionKey` (as `capture.ts` uses them), `BrainService.lint()`, `runScheduledDoctorReport` (`doctor.ts:1899`), `assertTrustedExecutable` (as `ingest.ts` calls it).
+- Consumes: Tasks 1, 5, 6, 7; existing `runCapture(context, { text, note })` (`apps/cli/src/commands/capture.ts:574`), `createRedactor`/`loadOrCreateRedactionKey` (as `capture.ts` uses them), `BrainService.lint()`, `runScheduledDoctorReport` (`doctor.ts:1899`), `assertTrustedExecutable` (as `ingest.ts` calls it).
 - Produces:
 
 ```ts
