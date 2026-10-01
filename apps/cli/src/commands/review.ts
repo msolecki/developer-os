@@ -20,6 +20,7 @@ import {
   decisionsFrom,
   isReviewDecision,
   parseCaptureFile,
+  parseNote,
   renderCaptureFile,
   resolveBrainConfig,
   REVIEW_DECISIONS,
@@ -721,6 +722,14 @@ export interface QuarantinedCaptureSummaryV1 {
   /** `envelope.note?.path`; `null` for a plain capture. */
   readonly notePath: string | null;
   readonly status: CaptureStatus;
+  /** The tags of a capture proposing a new `compiled-note` (a pending hub); empty otherwise. */
+  readonly hubTags: readonly string[];
+}
+
+function hubTagsOf(envelope: CaptureEnvelopeV1): readonly string[] {
+  if (envelope.note === null || envelope.note.beforeSha256 !== null) return [];
+  const parsed = parseNote(`${envelope.content}\n`);
+  return parsed.ok && parsed.note.frontmatter.type === "compiled-note" ? parsed.note.frontmatter.tags : [];
 }
 
 /** Captures at one status with their creation time, for callers that need more than `runReview` publishes. Refusals propagate. */
@@ -735,6 +744,7 @@ export async function listCaptureSummaries(
     createdAt: envelope.createdAt,
     notePath: envelope.note?.path ?? null,
     status: envelope.status,
+    hubTags: hubTagsOf(envelope),
   }));
 }
 

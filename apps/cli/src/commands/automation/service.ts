@@ -28,6 +28,7 @@ import {
 import type {
   AllocatedLifecycleIdV1,
   AutomationConfigV1,
+  BrainGardenConfigV1,
   CanonicalAbsolutePathV1,
   CanonicalJsonValue,
   ExitCode,
@@ -88,6 +89,7 @@ import type {
 } from "@developer-os/platform-macos";
 
 import type { CliContext } from "../../context.js";
+import { selectVendor } from "../ingest.js";
 import { compareManifestRows } from "../../instructions/attach.js";
 import type { LifecycleExecutionPlanV1, LifecyclePlanPreviewV1 } from "../../lifecycle/codecs.js";
 import { lifecyclePushPlanHash, lifecycleVariantFacts } from "../../lifecycle/codecs.js";
@@ -117,9 +119,17 @@ import {
 import type { GitHomeV1 } from "../git/service.js";
 
 export type AutomationCommandRequestV1 =
-  | { readonly subcommand: "enable"; readonly schedules: readonly string[]; readonly apply: boolean }
+  | {
+      readonly subcommand: "enable";
+      readonly schedules: readonly string[];
+      /** `--garden-agent`; absent or null means the pinned agent, else the first installed one. */
+      readonly gardenAgent?: GardenAgentV1 | null;
+      readonly apply: boolean;
+    }
   | { readonly subcommand: "disable"; readonly apply: boolean }
   | { readonly subcommand: "status" };
+
+export type GardenAgentV1 = BrainGardenConfigV1["agent"];
 
 export type AutomationOperationV1 = "automation_enable" | "automation_reconcile" | "automation_disable";
 
@@ -160,8 +170,8 @@ export interface AutomationCommandResultV1 {
 }
 
 export interface AutomationService {
-  previewEnable(schedules: readonly string[]): Promise<LifecyclePlanPreviewV1>;
-  applyEnable(preview: LifecyclePlanPreviewV1, global: HeldLifecycleStableLockV1): Promise<AutomationCommandResultV1>;
+  previewEnable(schedules: readonly string[], gardenAgent?: GardenAgentV1 | null): Promise<LifecyclePlanPreviewV1>;
+  applyEnable(preview: LifecyclePlanPreviewV1, global: HeldLifecycleStableLockV1, gardenAgent?: GardenAgentV1 | null): Promise<AutomationCommandResultV1>;
   previewDisable(): Promise<LifecyclePlanPreviewV1>;
   applyDisable(preview: LifecyclePlanPreviewV1, global: HeldLifecycleStableLockV1): Promise<AutomationCommandResultV1>;
   status(): Promise<AutomationCommandResultV1>;
@@ -457,7 +467,13 @@ function manifestAfter(home: GitHomeV1, activation: Uint8Array, launchd: Launchd
   return encoder.encode(encodeCanonicalJson(manifest as unknown as CanonicalJsonValue));
 }
 
-function automationFiles(home: GitHomeV1, launchd: LaunchdPlanPreviewV1, enabled: boolean, lifecycleConfig: AutomationConfigV1 | undefined): AutomationFilesV1 {
+function automationFiles(
+  home: GitHomeV1,
+  launchd: LaunchdPlanPreviewV1,
+  enabled: boolean,
+  lifecycleConfig: AutomationConfigV1 | undefined,
+  brainGarden: BrainGardenConfigV1 | undefined,
+): AutomationFilesV1 {
   const record: LifecycleActivationRecordV1 = {
     schemaVersion: 1,
     git: home.activation?.git ?? { state: "inactive" },
@@ -467,7 +483,11 @@ function automationFiles(home: GitHomeV1, launchd: LaunchdPlanPreviewV1, enabled
         : { state: "inactive" },
   };
   const activation = encoder.encode(encodeLifecycleActivationRecord(record));
-  const automation = lifecycleConfig === undefined ? { enabled } : { enabled, lifecycle: lifecycleConfig };
+  const automation = {
+    enabled,
+    ...(lifecycleConfig === undefined ? {} : { lifecycle: lifecycleConfig }),
+    ...(brainGarden === undefined ? {} : { brainGarden }),
+  };
   return {
     activation,
     config: encoder.encode(serializeConfig({ ...home.config, automation })),
@@ -520,6 +540,35 @@ function targetSchedules(home: GitHomeV1, flags: readonly string[]): AutomationC
   }
 }
 
+/**
+ * NEW-134 §3.1: while `brain-garden` is scheduled, the vendor it may spawn is pinned by
+ * absolute path — resolved here through discovery and the trust check `ingest` uses, never by
+ * the scheduled run. Re-resolved on every enable that keeps the job (the named agent, else the
+ * pinned one, else the first installed), so preview and apply agree or the apply is stale.
+ */
+async function gardenPin(
+  context: CliContext,
+  home: GitHomeV1,
+  target: AutomationConfigV1,
+  gardenAgent: GardenAgentV1 | null,
+): Promise<BrainGardenConfigV1 | undefined> {
+  if (!target.schedules.some((entry) => entry.job === "brain-garden")) {
+    if (gardenAgent !== null) {
+      refuse("automation_garden_agent_without_job", EXIT_CODES.invalidInput, [home.authority.configPath], "developer-os automation enable --schedule brain-garden=<schedule> --garden-agent <agent>");
+    }
+    return undefined;
+  }
+  try {
+    const vendor = await selectVendor(context, gardenAgent ?? home.config.automation.brainGarden?.agent ?? null);
+    return { agent: vendor.name, executable: vendor.executable };
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === EXIT_CODES.capabilityUnavailable) {
+      return refuse("capability_unavailable", EXIT_CODES.capabilityUnavailable, [], "install claude or codex, then developer-os doctor to confirm it is found");
+    }
+    return refuse("garden_executable_untrusted", EXIT_CODES.securityRefusal, [], "developer-os doctor");
+  }
+}
+
 function operationOf(entries: readonly LaunchdPlanPreviewEntryV1[], enabling: boolean): { readonly operation: AutomationOperationV1; readonly liveOnly: boolean } {
   if (!enabling) return { operation: "automation_disable", liveOnly: false };
   if (entries.every((entry) => entry.operation === "install")) return { operation: "automation_enable", liveOnly: false };
@@ -531,6 +580,7 @@ async function planAutomation(
   lifecycle: CliLifecycleContext,
   home: GitHomeV1,
   target: AutomationConfigV1 | null,
+  brainGarden: BrainGardenConfigV1 | undefined,
 ): Promise<PlannedAutomationV1> {
   const retained = await retainedPlists(context, lifecycle, home);
   const productHome = parseScheduledProductHome(home.key.productHome);
@@ -590,7 +640,7 @@ async function planAutomation(
   if (!liveOnly && mutatedEntries(launchd).length === 0) recoveryRequired("automation_plists_missing", home.authority.configPath);
   const enabledAfter = target !== null;
   const lifecycleConfig = target ?? home.config.automation.lifecycle;
-  const files = automationFiles(home, launchd, enabledAfter, lifecycleConfig);
+  const files = automationFiles(home, launchd, enabledAfter, lifecycleConfig, brainGarden);
   if (liveOnly && !(sameBytes(home.activationFile.bytes, files.activation) && sameBytes(home.configFile.bytes, files.config) && sameBytes(home.manifestFile.bytes, files.manifest))) {
     recoveryRequired("automation_reconcile_without_plist_change", home.authority.configPath);
   }
@@ -1039,15 +1089,22 @@ async function currentLabels(lifecycle: CliLifecycleContext, context: CliContext
 // Service
 
 export function createAutomationService(context: CliContext, lifecycle: CliLifecycleContext): AutomationService {
-  const planEnable = async (home: GitHomeV1, flags: readonly string[]): Promise<PlannedAutomationV1> =>
-    planAutomation(context, lifecycle, home, targetSchedules(home, flags));
+  const planTarget = async (home: GitHomeV1, target: AutomationConfigV1, gardenAgent: GardenAgentV1 | null): Promise<PlannedAutomationV1> =>
+    planAutomation(context, lifecycle, home, target, await gardenPin(context, home, target, gardenAgent));
+
+  const planEnable = (home: GitHomeV1, flags: readonly string[], gardenAgent: GardenAgentV1 | null): Promise<PlannedAutomationV1> =>
+    planTarget(home, targetSchedules(home, flags), gardenAgent);
 
   const planDisable = async (home: GitHomeV1): Promise<PlannedAutomationV1> => {
     requireEnabledSomewhere(home, (await retainedPlists(context, lifecycle, home)).size > 0);
-    return planAutomation(context, lifecycle, home, null);
+    return planAutomation(context, lifecycle, home, null, home.config.automation.brainGarden);
   };
 
-  const applyPreview = async (preview: LifecyclePlanPreviewV1, global: HeldLifecycleStableLockV1): Promise<AutomationCommandResultV1> => {
+  const applyPreview = async (
+    preview: LifecyclePlanPreviewV1,
+    global: HeldLifecycleStableLockV1,
+    gardenAgent: GardenAgentV1 | null,
+  ): Promise<AutomationCommandResultV1> => {
     const projection = preview.normalizedProjection;
     if (projection.subsystem !== "automation" || preview.launchd === null) refuse("lifecycle_preview_invalid", EXIT_CODES.invalidInput);
     const prepared = await prepareUnderLock(context, lifecycle, global);
@@ -1064,7 +1121,7 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
         if (!(error instanceof LaunchdInputError)) throw error;
         return stale();
       }
-      planned = await planAutomation(context, lifecycle, home, target);
+      planned = await planTarget(home, target, gardenAgent);
     } else {
       planned = await planDisable(prepared.home);
     }
@@ -1157,15 +1214,16 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
   };
 
   return {
-    previewEnable: async (schedules) => (await planEnable(await observeHome(context, lifecycle), schedules)).preview,
-    applyEnable: (preview, global) => {
+    previewEnable: async (schedules, gardenAgent = null) =>
+      (await planEnable(await observeHome(context, lifecycle), schedules, gardenAgent)).preview,
+    applyEnable: (preview, global, gardenAgent = null) => {
       if (preview.command !== "automation_enable") refuse("lifecycle_preview_invalid", EXIT_CODES.invalidInput);
-      return applyPreview(preview, global);
+      return applyPreview(preview, global, gardenAgent);
     },
     previewDisable: async () => (await planDisable(await observeHome(context, lifecycle))).preview,
     applyDisable: (preview, global) => {
       if (preview.command !== "automation_disable") refuse("lifecycle_preview_invalid", EXIT_CODES.invalidInput);
-      return applyPreview(preview, global);
+      return applyPreview(preview, global, null);
     },
     status,
   };

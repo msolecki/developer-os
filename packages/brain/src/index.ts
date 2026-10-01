@@ -79,6 +79,7 @@ export {
   buildCapture,
   detectSourceAgent,
   parseCaptureFile,
+  redactAndNormalize,
   renderCaptureFile,
 } from "./capture/index.js";
 export type {

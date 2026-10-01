@@ -8,7 +8,7 @@
  * material. The transaction that writes the file, the environment the agent is
  * detected from, and the key the redaction runs under all belong to the CLI.
  */
-export { buildCapture } from "./build.js";
+export { buildCapture, redactAndNormalize } from "./build.js";
 export type { CaptureBuildRequest, CaptureBuildResult } from "./build.js";
 export { renderCaptureFile } from "./render.js";
 export { parseCaptureFile } from "./parse.js";

@@ -105,6 +105,7 @@ const USAGE = [
   "  --remote <url>   the bare local repository, or HTTPS or SSH URL, Git pushes to (git enable)",
   "  --branch <name>  the branch to synchronize; the attached branch or main by default (git enable)",
   "  --schedule <job>=<schedule>  hourly@MM, daily@HH:MM or weekly@<day>,HH:MM; one per job (automation enable)",
+  "  --garden-agent <claude|codex>  the agent brain-garden pins; the first installed one by default (automation enable)",
 ].join("\n");
 
 const OPTIONS = {
@@ -133,6 +134,7 @@ const OPTIONS = {
   remote: { type: "string" },
   branch: { type: "string" },
   schedule: { type: "string", multiple: true },
+  "garden-agent": { type: "string" },
 } as const;
 
 type OptionName = keyof typeof OPTIONS;
@@ -172,7 +174,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   import: ["claude-memory", "limit", "dry-run", "json"],
   project: ["dry-run", "json"],
   git: ["remote", "branch", "apply", "json"],
-  automation: ["schedule", "apply", "json"],
+  automation: ["schedule", "garden-agent", "apply", "json"],
 };
 
 /**
@@ -227,7 +229,7 @@ const GIT_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = {
 };
 
 const AUTOMATION_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = {
-  enable: ["schedule", "apply", "json"],
+  enable: ["schedule", "garden-agent", "apply", "json"],
   disable: ["apply", "json"],
   status: ["json"],
 };
@@ -393,6 +395,8 @@ function parse(argv: readonly string[]): Invocation | null {
       }
     }
     if (jobs.size !== schedules.length) return null;
+    const gardenAgent = values["garden-agent"];
+    if (gardenAgent !== undefined && gardenAgent !== "claude" && gardenAgent !== "codex") return null;
   }
 
   // `import_path_conflict` is a usage failure, like every other argv error.
@@ -630,7 +634,15 @@ function scheduleFlags(values: OptionValues): readonly string[] {
 function automationRequestFor(invocation: Invocation): AutomationCommandRequestV1 {
   const [subcommand] = invocation.positionals;
   const apply = invocation.values.apply === true;
-  if (subcommand === "enable") return { subcommand, schedules: scheduleFlags(invocation.values), apply };
+  if (subcommand === "enable") {
+    const gardenAgent = optionString(invocation.values["garden-agent"]);
+    return {
+      subcommand,
+      schedules: scheduleFlags(invocation.values),
+      gardenAgent: gardenAgent === "claude" || gardenAgent === "codex" ? gardenAgent : null,
+      apply,
+    };
+  }
   return subcommand === "disable" ? { subcommand, apply } : { subcommand: "status" };
 }
 

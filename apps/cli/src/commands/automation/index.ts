@@ -62,9 +62,10 @@ async function execute(context: CliContext, lifecycle: CliLifecycleContext, requ
     case "status":
       return service.status();
     case "enable": {
-      const preview = await service.previewEnable(request.schedules);
+      const gardenAgent = request.gardenAgent ?? null;
+      const preview = await service.previewEnable(request.schedules, gardenAgent);
       if (!request.apply) return { exitCode: EXIT_CODES.success, data: { kind: "preview", command: "automation_enable", preview } };
-      return withGlobalLock(context, lifecycle, (global) => service.applyEnable(preview, global));
+      return withGlobalLock(context, lifecycle, (global) => service.applyEnable(preview, global, gardenAgent));
     }
     case "disable": {
       const preview = await service.previewDisable();
