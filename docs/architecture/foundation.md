@@ -1119,7 +1119,11 @@ record.
     (`--schedule brain-garden=weekly@sun,17:00`) and removed with `--schedule <job>=off`;
     `automation enable` pins the gardener's vendor executable in `automation.brainGarden` (re-pinned
     only with `--garden-agent` or when the job is newly scheduled, so switching vendor goes with a
-    schedule change). Every job's status, lease and log slots, and the pulse slots, are manifest
+    schedule change). The pin is Claude only, run with `--tools ""`: Codex is refused at enable
+    (`capability_unavailable`) and a Codex pin at run time is `garden_agent_unsupported`, until Codex
+    offers a tool-free mode (Ruling 38). The pin is part of the automation activation hash, so editing
+    `automation.brainGarden` in `config.toml` after enable makes every scheduled run
+    `automation_disabled` until `automation enable` runs again (Ruling 37). Every job's status, lease and log slots, and the pulse slots, are manifest
     reservations, so an installation made before NEW-134 refuses admission
     (`reservations_incomplete`) until it is reinstalled. `import` and `ingest` are never scheduled
     (D47).
