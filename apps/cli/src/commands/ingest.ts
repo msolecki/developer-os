@@ -46,6 +46,7 @@ import type {
   PlannedNoteWriteV1,
   ValidatorId,
 } from "@developer-os/brain";
+import { launchdJob } from "@developer-os/platform-macos";
 import type { AgentName } from "@developer-os/platform-macos";
 import { createRedactor } from "@developer-os/security";
 import type { RedactionScope, Redactor } from "@developer-os/security";
@@ -61,6 +62,7 @@ import {
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
+import { currentScheduledJob } from "./automation/scheduled-scope.js";
 import { isTopicNotePath } from "./capture.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
 import { outputSchemaPath } from "./output-schemas.js";
@@ -1168,6 +1170,11 @@ export async function invokeAgentOnce(
   schema: "ingest.stage" | "garden.proposals",
   timeoutMs: number,
 ): Promise<AgentReplyV1> {
+  /** NEW-134: a scheduled job spawns a vendor only when its registry entry says it may; a manual call is unscoped. */
+  const job = currentScheduledJob();
+  if (job !== undefined && !launchdJob(job).maySpawnVendor) {
+    throw Object.assign(new Error(`the scheduled job ${job} may not spawn a vendor`), { reason: "vendor_spawn_forbidden" });
+  }
   const schemaPath = outputSchemaPath(runtimePathsFor(context).home, schema);
   const installation = { executable: vendor.executable, version: UNKNOWN_VERSION };
   const dependencies = { runner: context.runner };

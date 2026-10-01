@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { EXIT_CODES, parseCanonicalAbsolutePathText, parseSafeReasonCode, SCHEDULED_JOB_IDS } from "@developer-os/core";
+import { EXIT_CODES, parseCanonicalAbsolutePathText, parseSafeReasonCode, parseUtcTimestamp, SCHEDULED_JOB_IDS } from "@developer-os/core";
 
 import { createCommandFixture, removeCommandFixtures } from "../testing.js";
 import { admitScheduledProductHome, parseScheduledInvocation, renderAutomation, scheduledExitCode } from "./index.js";
@@ -95,5 +95,24 @@ describe("renderAutomation", () => {
     expect(lines).toContain("distribution   unsupported_launchd_distribution");
     expect(lines.some((line) => line.startsWith("doctor") && line.includes("current loaded last run never"))).toBe(true);
     expect(lines.some((line) => line.startsWith("git-sync") && line.includes("ineligible stale - last run invalid"))).toBe(true);
+  });
+
+  it("appends the brain-pulse verdict from its last run's reason code, and no other job's", () => {
+    const at = parseUtcTimestamp("2026-10-01T07:00:01.000Z");
+    const run = (job: "brain-pulse" | "doctor", reasonCode: string) =>
+      ({ schemaVersion: 1, job, outcome: "success", reasonCode: parseSafeReasonCode(reasonCode), startedAt: at, completedAt: at }) as const;
+    const lines = renderAutomation({
+      kind: "status",
+      enabled: true,
+      activation: "active",
+      distribution: "supported",
+      closure: "clear",
+      jobs: [
+        { job: "brain-pulse", schedule: null, eligible: true, installed: "current", live: null, lastRun: run("brain-pulse", "pulse_attention") },
+        { job: "doctor", schedule: null, eligible: true, installed: "current", live: null, lastRun: run("doctor", "ok") },
+      ],
+    });
+    expect(lines).toContain("brain-pulse    eligible current - last run success at 2026-10-01T07:00:01.000Z verdict attention");
+    expect(lines).toContain("doctor         eligible current - last run success at 2026-10-01T07:00:01.000Z");
   });
 });

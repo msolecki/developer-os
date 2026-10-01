@@ -29,7 +29,7 @@ import { createProductionScheduledHandlers } from "./handlers.js";
 import { AutomationRunner, createAutomationRunnerDependencies, ScheduledAuthenticationError } from "./runner.js";
 import type { ScheduledRunOutcomeV1, ScheduledRunRequestV1 } from "./runner.js";
 import { AutomationCommandRefusal, createAutomationService, verifiedAutomationExecutable } from "./service.js";
-import type { AutomationCommandDataV1, AutomationCommandRequestV1, AutomationCommandResultV1 } from "./service.js";
+import type { AutomationCommandDataV1, AutomationCommandRequestV1, AutomationCommandResultV1, AutomationJobStatusV1 } from "./service.js";
 
 export type { AutomationCommandDataV1, AutomationCommandRequestV1, AutomationCommandResultV1, AutomationService } from "./service.js";
 export { createAutomationService } from "./service.js";
@@ -93,6 +93,13 @@ export async function runAutomation(context: CliContext, request: AutomationComm
   }
 }
 
+/** NEW-134: a `brain-pulse` run's verdict is its `pulse_<verdict>` reason code; an inert record carries none. */
+function verdictOf(job: AutomationJobStatusV1): string {
+  if (job.job !== "brain-pulse" || job.lastRun === null || job.lastRun === "invalid") return "";
+  const verdict = /^pulse_(.+)$/u.exec(job.lastRun.reasonCode)?.[1];
+  return verdict === undefined ? "" : ` verdict ${verdict}`;
+}
+
 export function renderAutomation(data: AutomationCommandDataV1): readonly string[] {
   switch (data.kind) {
     case "preview": {
@@ -113,7 +120,7 @@ export function renderAutomation(data: AutomationCommandDataV1): readonly string
         `distribution   ${data.distribution}`,
         `lifecycle      ${data.closure}`,
         ...data.jobs.map((job) => {
-          const last = job.lastRun === null ? "never" : job.lastRun === "invalid" ? "invalid" : `${job.lastRun.outcome} at ${job.lastRun.completedAt}`;
+          const last = job.lastRun === null ? "never" : job.lastRun === "invalid" ? "invalid" : `${job.lastRun.outcome} at ${job.lastRun.completedAt}${verdictOf(job)}`;
           return `${job.job.padEnd(14)} ${job.eligible ? "eligible" : "ineligible"} ${job.installed} ${job.live ?? "-"} last run ${last}`;
         }),
       ];

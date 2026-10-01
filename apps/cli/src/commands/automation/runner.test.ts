@@ -58,6 +58,7 @@ import {
   authenticateScheduledGeneration,
 } from "./runner.js";
 import type { ScheduledEligibilityV1, ScheduledRunRequestV1 } from "./runner.js";
+import { currentScheduledJob } from "./scheduled-scope.js";
 
 const PRODUCT_HOME = parseCanonicalAbsolutePathText("/synthetic-user/.developer-os");
 const USER_HOME = parseCanonicalAbsolutePathText("/synthetic-user");
@@ -257,6 +258,21 @@ describe("AutomationRunner step order", () => {
     expect(JSON.stringify(fixture.logs[0])).not.toContain(SECRET);
     expect(fixture.logs[0]?.data).toStrictEqual({ note: "[redacted]" });
     expect(fixture.statuses).toStrictEqual([]);
+  });
+
+  it("marks the handler's async scope with its job, and only the handler's", async () => {
+    let seen: ScheduledJobIdV1 | undefined;
+    const fixture = runnerFixture({
+      job: "brain-lint",
+      handler: async () => {
+        await Promise.resolve();
+        seen = currentScheduledJob();
+        return { outcome: "success", reasonCode: parseSafeReasonCode("ok"), data: null };
+      },
+    });
+    await fixture.runner.run(fixture.request);
+    expect(seen).toBe("brain-lint");
+    expect(currentScheduledJob()).toBeUndefined();
   });
 
   it("records a handler that throws as handler_failed", async () => {
@@ -471,7 +487,7 @@ describe("authenticateScheduledGeneration", () => {
   }
 
   it("authenticates every registry job from exact retained evidence alone", () => {
-    expect(SCHEDULED_JOB_IDS.length).toBe(4);
+    expect(SCHEDULED_JOB_IDS.length).toBe(6);
     for (const job of SCHEDULED_JOB_IDS) {
       const { request, evidence } = installed(job);
       expect(() => {

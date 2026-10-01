@@ -218,4 +218,17 @@ describe("automation enable pins the brain-garden vendor", () => {
     // Removing the job drops the pin.
     expect(await pinAfter({ subcommand: "enable", schedules: ["brain-garden=off"], apply: true })).toBeUndefined();
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("installs and loads a current plist for both optional jobs beside the mandatory three", async () => {
+    const { fixture } = await pinHome();
+
+    const result = await runAutomation(fixture.context, { subcommand: "enable", schedules: [...schedules, "brain-pulse=daily@07:00"], apply: true });
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true, data: { kind: "applied", operation: "automation_enable" } });
+
+    const status = await runAutomation(fixture.context, { subcommand: "status" });
+    if (!status.ok || status.data.kind !== "status") throw new Error(JSON.stringify(status));
+    const installed = status.data.jobs.filter((job) => job.eligible && job.installed === "current").map((job) => job.job);
+    // git-sync stays ineligible without Git, so five of the six registry jobs.
+    expect(installed).toStrictEqual(["brain-reindex", "brain-lint", "doctor", "brain-garden", "brain-pulse"]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

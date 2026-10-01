@@ -274,7 +274,7 @@ describe("automation on a real V2 home", () => {
         const status = dataOf(await runAutomation(home.context, { subcommand: "status" }));
         expect(status).toMatchObject({ kind: "status", enabled: true, activation: "absent", closure: "clear" });
         if (status.kind !== "status") throw new Error("unreachable");
-        expect(status.jobs.length).toBe(4);
+        expect(status.jobs.length).toBe(6);
         expect(status.jobs.every((job) => !job.eligible && job.installed === "absent")).toBe(true);
         expect(launchd.events).toStrictEqual([]);
       } finally {

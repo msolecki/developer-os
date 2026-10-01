@@ -75,6 +75,9 @@ import type {
 } from "../../lifecycle/runtime-records.js";
 import { runScheduledBrain } from "../brain.js";
 import { runScheduledDoctor } from "../doctor.js";
+import { runScheduledGarden } from "./garden.js";
+import { runScheduledPulse } from "./pulse.js";
+import { withScheduledJob } from "./scheduled-scope.js";
 
 /** §2.3: a scheduled run waits at most ten minutes for the global lock, then tries once more. */
 export const SCHEDULED_GLOBAL_LOCK_WAIT_MS = 600_000;
@@ -308,7 +311,7 @@ export class AutomationRunner {
 
   async #invoke(job: ScheduledJobIdV1, global: HeldLifecycleStableLockV1): Promise<ScheduledHandlerResultV1> {
     try {
-      return await this.#dependencies.handlers.run(job, global);
+      return await withScheduledJob(job, () => this.#dependencies.handlers.run(job, global));
     } catch (error) {
       return {
         outcome: "handler_failed",
@@ -548,7 +551,7 @@ export function createAutomationRunnerDependencies(
 }
 
 /**
- * The three local §5.1 handlers. `git-sync` is the §4 sync handler, which only the Git
+ * The local §5.1 handlers, plus NEW-134's `brain-garden` and `brain-pulse`. `git-sync` is the §4 sync handler, which only the Git
  * command owns; until it is supplied the job refuses rather than running something else.
  */
 export function createScheduledJobHandlers(
@@ -572,9 +575,9 @@ export function createScheduledJobHandlers(
               })
             : gitSync.run(job, global);
         case "brain-garden":
+          return runScheduledGarden(context, global);
         case "brain-pulse":
-          // Temporary (NEW-134 Task 1): Task 10 wires these handlers.
-          throw new Error(`${job} is wired in NEW-134 Task 10`);
+          return runScheduledPulse(context, global);
         default: {
           const unknown: never = job;
           throw new Error(`unknown scheduled job ${String(unknown)}`);
