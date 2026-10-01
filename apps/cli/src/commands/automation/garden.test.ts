@@ -25,6 +25,12 @@ import type { GardenRunDataV1 } from "./garden.js";
 
 afterAll(removeCommandFixtures);
 
+/** A proxied adapter's own methods run on the adapter itself, whose private fields a proxy lacks. */
+function bound(target: object, property: string | symbol): unknown {
+  const value: unknown = Reflect.get(target, property);
+  return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+}
+
 type Reply = { readonly proposals: unknown } | { readonly raw: string } | "timeout" | "vendor-error";
 
 interface GardenOptions {
@@ -41,6 +47,8 @@ interface GardenOptions {
   readonly pinned?: false | "missing";
   readonly reindex?: boolean;
   readonly redactionPatterns?: readonly string[];
+  /** One note links every other, so no note is isolated. */
+  readonly linked?: boolean;
   /** Extra notes written verbatim, content-relative path to text. */
   readonly extra?: Readonly<Record<string, string>>;
 }
@@ -52,6 +60,8 @@ interface SharedHomeV1 {
   readonly calls: string[];
   reply: Reply;
   executable: string;
+  /** Runs inside the vendor call, before it replies: the vault changing while the agent thinks. */
+  during: (() => Promise<void>) | null;
 }
 
 const GIT_NOTES = ["DEV/git-one.md", "DEV/git-two.md", "DEV/git-three.md", "DEV/git-four.md"];
@@ -109,24 +119,25 @@ function sharedHome(): Promise<SharedHomeV1> {
     const calls: string[] = [];
     let home: SharedHomeV1 | null = null;
     const runner: ProcessRunner = {
-      run: (request): Promise<ProcessResult> => {
+      run: async (request): Promise<ProcessResult> => {
         if (home === null || request.executable !== home.executable) {
-          return Promise.resolve({ stdout: "", stderr: "", exitCode: 1, signal: null, timedOut: false });
+          return { stdout: "", stderr: "", exitCode: 1, signal: null, timedOut: false };
         }
         calls.push(JSON.stringify(request));
+        await home.during?.();
         const { reply } = home;
-        if (reply === "timeout") return Promise.resolve({ stdout: "", stderr: "", exitCode: null, signal: "SIGTERM", timedOut: true });
+        if (reply === "timeout") return { stdout: "", stderr: "", exitCode: null, signal: "SIGTERM", timedOut: true };
         const envelope =
           reply === "vendor-error"
             ? { type: "result", subtype: "success", is_error: true, result: "Not logged in: detail that must not be stored" }
             : { type: "result", subtype: "success", is_error: false, result: "raw" in reply ? reply.raw : JSON.stringify(reply) };
-        return Promise.resolve({ stdout: JSON.stringify(envelope), stderr: "", exitCode: 0, signal: null, timedOut: false });
+        return { stdout: JSON.stringify(envelope), stderr: "", exitCode: 0, signal: null, timedOut: false };
       },
     };
     const fixture = await createCommandFixture("garden-shared", { bootstrapAvailable: true, runner });
     const installed = await runInit(fixture.context, { dryRun: false, assumeYes: true });
     if (!installed.ok) throw new Error(`fixture init failed: ${JSON.stringify(installed)}`);
-    home = { fixture, config: await nodeFs.readFile(fixture.paths.configFile, "utf8"), calls, reply: { proposals: [] }, executable: "" };
+    home = { fixture, config: await nodeFs.readFile(fixture.paths.configFile, "utf8"), calls, reply: { proposals: [] }, executable: "", during: null };
     return home;
   })();
   return shared;
@@ -144,6 +155,7 @@ async function garden(options: GardenOptions = {}): Promise<SharedHomeV1> {
   const { fixture } = home;
   const content = join(fixture.paths.brain, "content");
   home.calls.length = 0;
+  home.during = null;
   home.reply = options.reply ?? { proposals: [] };
   await removeEntries(join(content, "DEV"), (name) => name === "example-knowledge-note.md");
   await removeEntries(join(content, "_raw", "quarantine"), (name) => name === ".gitkeep");
@@ -155,6 +167,10 @@ async function garden(options: GardenOptions = {}): Promise<SharedHomeV1> {
   };
   await write("DEV/beta.md", note("Beta"));
   await write("DEV/gamma.md", note("Gamma"));
+  if (options.linked === true) {
+    const everything = ["beta", "gamma", "INFRA/example-compiled-note", "TOOLS/example-reference-note", "PROJECTS/example-project-note", "DEV/example-knowledge-note"];
+    await write("DEV/map.md", `${note("Map")}\n${everything.map((link) => `- [[${link}]]`).join("\n")}\n`);
+  }
   for (const path of options.isolated ?? []) await write(path, note(baseName(path), { created: "2000-01-01" }));
   if (options.gitGap === true) {
     for (const path of GIT_NOTES) await write(path, note(baseName(path), { tags: ["git"], created: "2000-01-03" }));
@@ -252,6 +268,12 @@ describe("runScheduledGarden", () => {
     const captures = await quarantined(home);
     expect(captures).toHaveLength(1);
     expect(captures[0]).toMatchObject({ notePath: "DEV/delta.md", captureId: dataOf(result).accepted[0]?.captureId });
+    const capture = await nodeFs.readFile(
+      join(home.fixture.paths.brain, "content", "_raw", "quarantine", `${String(captures[0]?.captureId)}.md`),
+      "utf8",
+    );
+    expect(capture).toMatch(/^sourceAgent: "?claude"?$/mu);
+    expect(capture).toMatch(/^captureMethod: "?agent-authored"?$/mu);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("does not re-offer a gap whose hub already waits in review", async () => {
@@ -283,7 +305,7 @@ describe("runScheduledGarden", () => {
     const home = await garden({ isolated: ["DEV/alpha.md"] });
     const untrusted = new Proxy(home.fixture.context.platform, {
       get: (target, property): unknown =>
-        property === "assertTrustedExecutable" ? () => Promise.reject(new Error("group-writable")) : Reflect.get(target, property),
+        property === "assertTrustedExecutable" ? () => Promise.reject(new Error("group-writable")) : bound(target, property),
     });
     const result = await run(home, { ...home.fixture.context, platform: untrusted });
     expect(result).toMatchObject({ outcome: "handler_refused", reasonCode: "garden_executable_untrusted" });
@@ -340,10 +362,16 @@ describe("runScheduledGarden", () => {
     expect(await quarantined(home)).toHaveLength(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("fails agent_timeout when the agent times out", async () => {
-    const home = await garden({ isolated: ["DEV/alpha.md"], reply: "timeout" });
+  it("fails agent_timeout when the agent times out, still listing structural dry-run commands", async () => {
+    const twin = (created: string): string => note("Twin", { created }).replace("tags: [twin]", "tags: [twin-a]");
+    const home = await garden({
+      isolated: ["DEV/alpha.md"],
+      reply: "timeout",
+      extra: { "DEV/twin-a.md": twin("2000-01-04"), "DEV/twin-b.md": twin("2000-01-05").replace("holds one", "holds another") },
+    });
     const result = await run(home);
     expect(result).toMatchObject({ outcome: "handler_failed", reasonCode: "agent_timeout" });
+    expect(dataOf(result).structural).toEqual(["developer-os brain refactor --merge 'DEV/twin-b.md' 'DEV/twin-a.md' --dry-run"]);
     expect(await quarantined(home)).toHaveLength(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
@@ -353,5 +381,93 @@ describe("runScheduledGarden", () => {
     expect(result).toMatchObject({ outcome: "handler_failed", reasonCode: "agent_error" });
     expect(dataOf(result).agentReason).toBe("vendor-error");
     expect(JSON.stringify(result.data)).not.toContain("Not logged in");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("rejects target_changed when the related note is edited during the agent call, capturing nothing", async () => {
+    const home = await garden({ isolated: ["DEV/delta.md"] });
+    const path = join(home.fixture.paths.brain, "content", "DEV", "delta.md");
+    const delta = await nodeFs.readFile(path, "utf8");
+    home.reply = { proposals: [{ kind: "related", target: "DEV/delta.md", note: related(delta, ["beta", "gamma"]) }] };
+    home.during = () => nodeFs.writeFile(path, delta.replace("holds one", "holds an edited"));
+
+    const result = await run(home);
+
+    expect(result).toMatchObject({ outcome: "success", reasonCode: "ok" });
+    expect(dataOf(result).rejected).toEqual([{ target: "DEV/delta.md", code: "target_changed" }]);
+    expect(dataOf(result).accepted).toEqual([]);
+    expect(await quarantined(home)).toHaveLength(0);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("never captures a hub whose target appeared during the agent call", async () => {
+    const home = await garden({ isolated: ["DEV/alpha.md"], gitGap: true });
+    home.reply = { proposals: [{ kind: "hub", target: "DEV/git-hub.md", note: hubNote("git", GIT_NOTES.map(baseName), GIT_NOTES) }] };
+    home.during = () => nodeFs.writeFile(join(home.fixture.paths.brain, "content", "DEV", "git-hub.md"), note("Someone else"));
+
+    const result = await run(home);
+
+    expect(dataOf(result).accepted).toEqual([]);
+    expect(dataOf(result).rejected.map((entry) => entry.target)).toEqual(["DEV/git-hub.md"]);
+    expect(await quarantined(home)).toHaveLength(0);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("binds a capture to the expected bytes: a note that now exists refuses capture_target_changed", async () => {
+    const home = await garden({ isolated: ["DEV/alpha.md"] });
+    const text = hubNote("misc", ["beta", "gamma", "alpha"], ["DEV/beta.md"]);
+    const refused = await runCapture(home.fixture.context, { text, note: "DEV/beta.md", expectedBeforeSha256: null });
+    expect(refused).toMatchObject({ ok: false, error: { kind: "capture_target_changed" } });
+    expect(await quarantined(home)).toHaveLength(0);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("records a proposal whose capture already exists as duplicate_capture", async () => {
+    const home = await garden({ isolated: ["DEV/delta.md"] });
+    const delta = await readVaultNote(home, "DEV/delta.md");
+    const proposal = related(delta, ["beta", "gamma"]);
+    const earlier = await runCapture(home.fixture.context, { text: proposal });
+    expect(earlier.ok).toBe(true);
+    home.reply = { proposals: [{ kind: "related", target: "DEV/delta.md", note: proposal }] };
+
+    const result = await run(home);
+
+    expect(dataOf(result).rejected).toEqual([{ target: "DEV/delta.md", code: "duplicate_capture" }]);
+    expect(dataOf(result).accepted).toEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("re-runs the trust check immediately before the agent call", async () => {
+    const home = await garden({ isolated: ["DEV/alpha.md"] });
+    let checks = 0;
+    const swapped = new Proxy(home.fixture.context.platform, {
+      get: (target, property): unknown =>
+        property === "assertTrustedExecutable"
+          ? () => {
+              checks += 1;
+              return checks === 1 ? Promise.resolve() : Promise.reject(new Error("swapped"));
+            }
+          : bound(target, property),
+    });
+    const result = await run(home, { ...home.fixture.context, platform: swapped });
+    expect(result).toMatchObject({ outcome: "handler_refused", reasonCode: "garden_executable_untrusted" });
+    expect(checks).toBe(2);
+    expect(home.calls).toHaveLength(0);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("skips doctor_failed when a doctor check fails", async () => {
+    const home = await garden({ isolated: ["DEV/alpha.md"] });
+    const schema = outputSchemaPath(home.fixture.paths.home, "garden.proposals");
+    const bytes = await nodeFs.readFile(schema);
+    await nodeFs.writeFile(schema, "{}\n");
+    try {
+      const result = await run(home);
+      expect(result).toMatchObject({ outcome: "success", reasonCode: "skipped_doctor_failed" });
+      expect(home.calls).toHaveLength(0);
+    } finally {
+      await nodeFs.writeFile(schema, bytes, { mode: 0o600 });
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("skips nothing_to_do without calling the agent when no note needs tending", async () => {
+    const home = await garden({ linked: true });
+    const result = await run(home);
+    expect(result).toMatchObject({ outcome: "success", reasonCode: "skipped_nothing_to_do" });
+    expect(home.calls).toHaveLength(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

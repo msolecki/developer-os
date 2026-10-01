@@ -543,8 +543,11 @@ function targetSchedules(home: GitHomeV1, flags: readonly string[]): AutomationC
 /**
  * NEW-134 §3.1: while `brain-garden` is scheduled, the vendor it may spawn is pinned by
  * absolute path — resolved here through discovery and the trust check `ingest` uses, never by
- * the scheduled run. Re-resolved on every enable that keeps the job (the named agent, else the
- * pinned one, else the first installed), so preview and apply agree or the apply is stale.
+ * the scheduled run. Ruling 34: resolved only when `--garden-agent` names an agent, the job is
+ * newly scheduled, or no pin exists (the named agent, else the pinned one, else the first
+ * installed); otherwise the pin is kept as it is, so an uninstalled agent never blocks an
+ * unrelated schedule change. Removing the job drops the pin. Preview and apply decide alike
+ * from the same recorded configuration, so they agree or the apply is stale.
  */
 async function gardenPin(
   context: CliContext,
@@ -558,8 +561,11 @@ async function gardenPin(
     }
     return undefined;
   }
+  const pinned = home.config.automation.brainGarden;
+  const scheduled = (home.config.automation.lifecycle?.schedules ?? []).some((entry) => entry.job === "brain-garden");
+  if (gardenAgent === null && scheduled && pinned !== undefined) return pinned;
   try {
-    const vendor = await selectVendor(context, gardenAgent ?? home.config.automation.brainGarden?.agent ?? null);
+    const vendor = await selectVendor(context, gardenAgent ?? pinned?.agent ?? null);
     return { agent: vendor.name, executable: vendor.executable };
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && error.code === EXIT_CODES.capabilityUnavailable) {

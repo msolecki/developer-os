@@ -28,6 +28,12 @@ import { AutomationCommandRefusal, createAutomationService, verifiedAutomationEx
 
 afterEach(removeCommandFixtures);
 
+/** A proxied adapter's own methods run on the adapter itself, whose private fields a proxy lacks. */
+function bound(target: object, property: string | symbol): unknown {
+  const value: unknown = Reflect.get(target, property);
+  return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+}
+
 const ENTRYPOINT = "// synthetic entrypoint\n";
 
 function lifecycleOf(fixture: CommandFixture): NonNullable<CommandFixture["context"]["lifecycle"]> {
@@ -159,13 +165,13 @@ describe("automation enable pins the brain-garden vendor", () => {
     })();
   }
 
-  it("refuses capability_unavailable without a discoverable agent and writes nothing, then pins the discovered path (garden)", async () => {
+  it("refuses capability_unavailable without a discoverable agent and writes nothing, then pins and keeps the discovered path (garden)", async () => {
     const { fixture, claude } = await pinHome();
     const nothingInstalled = new Proxy(fixture.context.platform, {
       get: (target, property): unknown =>
         property === "discoverExecutable"
           ? (name: AgentName) => Promise.resolve({ name, installed: false, executablePath: null, version: null })
-          : Reflect.get(target, property),
+          : bound(target, property),
     });
     const context: CliContext = { ...fixture.context, platform: nothingInstalled };
     const before = await inventoryDigest(fixture.paths.home);
@@ -183,5 +189,33 @@ describe("automation enable pins the brain-garden vendor", () => {
     const config = loadConfig(await nodeFs.readFile(fixture.paths.configFile, "utf8"));
     expect(config.automation.brainGarden).toStrictEqual({ agent: "claude", executable: claude });
     expect(config.automation.lifecycle?.schedules.map((entry) => entry.job)).toContain("brain-garden");
+
+    const pinAfter = async (request: Parameters<typeof runAutomation>[1], on: CliContext = fixture.context) => {
+      const applied = await runAutomation(on, request);
+      expect(applied, JSON.stringify(applied)).toMatchObject({ ok: true, data: { kind: "applied" } });
+      return loadConfig(await nodeFs.readFile(fixture.paths.configFile, "utf8")).automation.brainGarden;
+    };
+    // Ruling 34: an unrelated schedule change keeps the pin, even with the agent uninstalled.
+    expect(await pinAfter({ subcommand: "enable", schedules: ["doctor=weekly@tue,03:00"], apply: true }, context)).toStrictEqual({
+      agent: "claude",
+      executable: claude,
+    });
+    // --garden-agent re-pins.
+    const codex = join(dirname(claude), "codex");
+    await nodeFs.writeFile(codex, "#!/bin/sh\n", { mode: 0o755 });
+    const codexInstalled = new Proxy(fixture.context.platform, {
+      get: (target, property): unknown =>
+        property === "discoverExecutable"
+          ? (name: AgentName) => Promise.resolve({ name, installed: name === "codex", executablePath: name === "codex" ? codex : null, version: null })
+          : bound(target, property),
+    });
+    expect(
+      await pinAfter({ subcommand: "enable", schedules: ["doctor=weekly@wed,03:00"], gardenAgent: "codex", apply: true }, { ...fixture.context, platform: codexInstalled }),
+    ).toStrictEqual({ agent: "codex", executable: codex });
+    // Disable keeps the pin; enable without --garden-agent keeps it without resolving anything.
+    expect(await pinAfter({ subcommand: "disable", apply: true })).toStrictEqual({ agent: "codex", executable: codex });
+    expect(await pinAfter({ subcommand: "enable", schedules: [], apply: true }, context)).toStrictEqual({ agent: "codex", executable: codex });
+    // Removing the job drops the pin.
+    expect(await pinAfter({ subcommand: "enable", schedules: ["brain-garden=off"], apply: true })).toBeUndefined();
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

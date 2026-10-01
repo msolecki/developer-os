@@ -3,6 +3,7 @@
  * vendor executable, whose reply is data: every proposal passes `validateGardenResponse` before
  * the ordinary `capture` path quarantines it for a person to review. Nothing here writes the vault.
  */
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import { parseSafeReasonCode } from "@developer-os/core";
@@ -19,6 +20,7 @@ import {
   selectGardenTargets,
   validateGardenResponse,
 } from "@developer-os/brain";
+import type { IndexedNote, LintFinding } from "@developer-os/brain";
 import { createRedactor } from "@developer-os/security";
 
 import { readConfigFile } from "../../config-file.js";
@@ -39,6 +41,11 @@ export interface GardenRunDataV1 {
   readonly rejected: readonly { readonly target: string; readonly code: string }[];
   /** The gate that skipped the run, e.g. `review_queue_full`; `null` when it ran. */
   readonly skipped: string | null;
+  /**
+   * Spec §3.4: one `--dry-run` command per lint `duplicates` group, for the person to run; the
+   * gardener never proposes a structural change itself.
+   */
+  readonly structural: readonly string[];
   /** The adapter's failure token on `agent_error` (never its detail); absent otherwise. */
   readonly agentReason?: string;
 }
@@ -46,7 +53,7 @@ export interface GardenRunDataV1 {
 export const GARDEN_REVIEW_QUEUE_LIMIT = 20;
 export const GARDEN_AGENT_TIMEOUT_MS = 120_000;
 
-const EMPTY: GardenRunDataV1 = { targets: { gaps: 0, isolated: 0 }, accepted: [], rejected: [], skipped: null };
+const EMPTY: GardenRunDataV1 = { targets: { gaps: 0, isolated: 0 }, accepted: [], rejected: [], skipped: null, structural: [] };
 
 function result(
   outcome: ScheduledHandlerResultV1["outcome"],
@@ -56,8 +63,34 @@ function result(
   return { outcome, reasonCode: parseSafeReasonCode(reasonCode), data };
 }
 
-function skipped(reason: string): ScheduledHandlerResultV1 {
-  return result("success", `skipped_${reason}`, { ...EMPTY, skipped: reason });
+function skipped(reason: string, base: GardenRunDataV1 = EMPTY): ScheduledHandlerResultV1 {
+  return result("success", `skipped_${reason}`, { ...base, skipped: reason });
+}
+
+/**
+ * The manual `brain-garden` workflow's wording: notes a `duplicates` finding groups (same
+ * folder and title, or same content) fold into the first by `brain refactor --merge`; a note
+ * left alone in its group gets `brain retire`. Paths are content-relative and single-quoted; a
+ * path holding a single quote is skipped, as the workflow says.
+ */
+function structuralCommands(findings: readonly LintFinding[], notes: readonly IndexedNote[], contentRoot: string): readonly string[] {
+  const byPath = new Map(notes.map((note) => [note.path, note]));
+  const groups = new Map<string, string[]>();
+  for (const finding of findings) {
+    const note = byPath.get(finding.path);
+    if (finding.class !== "duplicates" || note === undefined) continue;
+    const key = finding.key === "title" ? `title\0${note.topicFolder}\0${note.title.toLowerCase()}` : `content\0${note.contentHash}`;
+    const path = note.path.slice(contentRoot.length + 1);
+    if (path.includes("'")) continue;
+    groups.set(key, [...(groups.get(key) ?? []), path]);
+  }
+  return [...groups.values()].flatMap((paths) => {
+    const [target, ...sources] = [...new Set(paths)].sort();
+    if (target === undefined) return [];
+    return sources.length === 0
+      ? [`developer-os brain retire '${target}' --dry-run`]
+      : sources.map((source) => `developer-os brain refactor --merge '${source}' '${target}' --dry-run`);
+  });
 }
 
 function isMissingEntry(error: unknown): boolean {
@@ -122,10 +155,11 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
   const service = new BrainService(dependenciesFor(context, paths.brain, config));
   const lint = await service.lint();
   if (lint.errorCount > 0) return skipped("lint_errors");
-  const pending = await listCaptureSummaries(context, "quarantined");
-  if (pending.length >= GARDEN_REVIEW_QUEUE_LIMIT) return skipped("review_queue_full");
-
   const { notes } = (await service.reindex()).build.index;
+  const base: GardenRunDataV1 = { ...EMPTY, structural: structuralCommands(lint.findings, notes, brainConfig.contentRoot) };
+  const pending = await listCaptureSummaries(context, "quarantined");
+  if (pending.length >= GARDEN_REVIEW_QUEUE_LIMIT) return skipped("review_queue_full", base);
+
   const pendingNotePaths = new Set(pending.flatMap((capture) => (capture.notePath === null ? [] : [capture.notePath])));
   const selected = selectGardenTargets({
     notes,
@@ -133,7 +167,7 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
     pendingNotePaths,
     pendingHubTags: new Set(pending.flatMap((capture) => capture.hubTags)),
   });
-  if (selected.gaps.length === 0 && selected.isolated.length === 0) return skipped("nothing_to_do");
+  if (selected.gaps.length === 0 && selected.isolated.length === 0) return skipped("nothing_to_do", base);
 
   /** A path with no entry reads `null`; one the guard refuses reads as occupied, never as free. */
   const readNote = async (path: string): Promise<string | null> => {
@@ -150,13 +184,21 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
   const { prompt, targets } = buildGardenPrompt({ targets: selected, notes, readNote: (path) => texts.get(path) ?? "" });
   const counts = { gaps: targets.gaps.length, isolated: targets.isolated.length };
 
+  /** Re-admitted at the last moment: the prompt build can take long enough for a swap. */
+  try {
+    await context.platform.assertTrustedExecutable(vendor.executable);
+  } catch {
+    return result("handler_refused", "garden_executable_untrusted", {
+      message: "the pinned gardener executable is no longer trusted; re-pin it with developer-os automation enable",
+    });
+  }
   const reply = await invokeAgentOnce(context, vendor, prompt, "garden.proposals", GARDEN_AGENT_TIMEOUT_MS);
-  if (!reply.ok && reply.reason === "timeout") return result("handler_failed", "agent_timeout", { ...EMPTY, targets: counts });
+  if (!reply.ok && reply.reason === "timeout") return result("handler_failed", "agent_timeout", { ...base, targets: counts });
   if (!reply.ok) {
     /** An unparseable reply is output the product cannot read, not a vendor complaint (spec §4). */
     const invalid = reply.failure.reason === "malformed-output";
     return result("handler_failed", invalid ? "agent_output_invalid" : "agent_error", {
-      ...EMPTY,
+      ...base,
       targets: counts,
       ...(invalid ? {} : { agentReason: reply.failure.reason }),
     });
@@ -195,17 +237,32 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
     findings: lint.findings,
     redactionFindings,
   });
-  if ("invalid" in validated) return result("handler_failed", "agent_output_invalid", { ...EMPTY, targets: counts });
+  if ("invalid" in validated) return result("handler_failed", "agent_output_invalid", { ...base, targets: counts });
 
   const rejected: { target: string; code: string }[] = validated.rejected.map(({ target, code }) => ({ target, code }));
   const accepted: { target: string; captureId: string }[] = [];
-  /** One capture at a time, each atomic: a crash leaves whole captures and this list names them. */
+  /**
+   * One capture at a time, each atomic: a crash leaves whole captures and this list names them.
+   * Ruling 36: each is bound to the bytes the validator checked (a hub to "absent"), so a note
+   * edited during the agent call refuses `target_changed` instead of reverting the edit.
+   */
   for (const proposal of validated.accepted) {
-    const captured = await runCapture(context, { text: proposal.note, note: proposal.target });
-    if (captured.ok) accepted.push({ target: proposal.target, captureId: captured.data.captureId });
-    else rejected.push({ target: proposal.target, code: "capture_refused" });
+    const checked = files.get(proposal.target) ?? null;
+    const captured = await runCapture(context, {
+      text: proposal.note,
+      note: proposal.target,
+      expectedBeforeSha256: proposal.kind === "hub" || checked === null ? null : createHash("sha256").update(checked, "utf8").digest("hex"),
+      source: { sourceAgent: vendor.name, sourceAgentVersion: "unknown" },
+    });
+    if (!captured.ok) {
+      rejected.push({ target: proposal.target, code: captured.error.kind === "capture_target_changed" ? "target_changed" : "capture_refused" });
+    } else if (captured.data.duplicate) {
+      rejected.push({ target: proposal.target, code: "duplicate_capture" });
+    } else {
+      accepted.push({ target: proposal.target, captureId: captured.data.captureId });
+    }
   }
-  return result("success", "ok", { targets: counts, accepted, rejected, skipped: null });
+  return result("success", "ok", { ...base, targets: counts, accepted, rejected });
 }
 
 /**

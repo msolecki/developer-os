@@ -83,6 +83,18 @@ export interface CaptureOptions {
   readonly text?: string;
   /** `--note <path>`, content-root-relative: the note this capture creates or replaces. */
   readonly note?: string;
+  /**
+   * Not a flag: the binding a programmatic caller already validated (the scheduled gardener).
+   * With `note`, the destination's SHA-256 must still equal it — `null` meaning it must not
+   * exist — or the capture refuses as `capture_target_changed` before anything is written.
+   * Absent means no expectation, as for `--note`.
+   */
+  readonly expectedBeforeSha256?: string | null;
+  /**
+   * Not a flag: the agent that wrote the text, credited without detecting or probing one.
+   * Absent means detection from the environment, as for the command.
+   */
+  readonly source?: SourceAgent;
 }
 
 export interface CaptureDependencies {
@@ -159,6 +171,14 @@ class CaptureNoteInvalidError extends CaptureRefusal {
   constructor(message: string, paths: readonly string[] = []) {
     super(EXIT_CODES.invalidInput, message, paths);
     this.name = "CaptureNoteInvalidError";
+  }
+}
+
+/** Published as `capture_target_changed`. */
+class CaptureTargetChangedError extends CaptureRefusal {
+  constructor(paths: readonly string[] = []) {
+    super(EXIT_CODES.decisionRequired, "the note changed after the capture text was written against it", paths);
+    this.name = "CaptureTargetChangedError";
   }
 }
 
@@ -589,6 +609,9 @@ export async function runCapture(
       options.note === undefined
         ? undefined
         : await resolveNoteTarget(context, config, paths, options.note);
+    if (note !== undefined && options.expectedBeforeSha256 !== undefined && note.beforeSha256 !== options.expectedBeforeSha256) {
+      throw new CaptureTargetChangedError([note.path]);
+    }
 
     const key = loadOrCreateRedactionKey(paths.stateDir);
     /**
@@ -609,11 +632,13 @@ export async function runCapture(
     const workingDirectory = await context.guards.canonicalize(
       dependencies.cwd(),
     );
-    const source = await discoverSourceAgent(
-      context,
-      dependencies.detect(context.env),
-      dependencies.executables,
-    );
+    const source =
+      options.source ??
+      (await discoverSourceAgent(
+        context,
+        dependencies.detect(context.env),
+        dependencies.executables,
+      ));
 
     const built = buildCapture({
       text,
