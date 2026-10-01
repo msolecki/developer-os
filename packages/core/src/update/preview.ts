@@ -486,6 +486,8 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
 
   if (input.inverseLeaves.length < 1 || input.inverseLeaves.length > 10_016) fail("PreparedUpdateMaterializationV1.inversePlanProjections: count");
   let maximumCanonicalBytes = Math.max(canonicalBytes(input.targetDraft), canonicalBytes(input.concreteManifest), canonicalBytes(input.inversePlan));
+  /** An owner leaf's position in OWNER_ORDER (OWNER_UPDATE_ORDER), read once from its projection's `owner`. */
+  const ownerRanks = new Map<string, number>();
   const inversePlanProjections = input.inverseLeaves
     .map((leaf): PreparedInverseProjectionV1 => {
       if (!INVERSE_KIND_ORDER.includes(leaf.kind)) fail("PreparedInverseProjectionV1.kind");
@@ -494,9 +496,18 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
       const projection = encodeCanonicalJson(leaf.projection);
       const bytes = integer(encoder.encode(projection).byteLength, 1, MAX_BLOB_BYTES, "PreparedInverseProjectionV1.bytes");
       maximumCanonicalBytes = Math.max(maximumCanonicalBytes, bytes);
+      if (leaf.kind === "owner_inverse") {
+        const owner = (leaf.projection as { readonly owner?: unknown } | null)?.owner;
+        ownerRanks.set(id, OWNER_ORDER.indexOf(owner as ArtifactOwner));
+      }
       return { kind: leaf.kind, id, projection, projectionHash: hashNoLineFeed("developer-os/prepared-inverse-leaf/v1", leaf.projection), bytes };
     })
-    .sort((left, right) => INVERSE_KIND_ORDER.indexOf(left.kind) - INVERSE_KIND_ORDER.indexOf(right.kind) || compareUtf8(left.id, right.id));
+    /**
+     * Owner leaves in canonical owner order — the order the planner emits them, their inventory rows
+     * follow, and `buildRollbackPayload` requires — and migrations by ID. Sorting owners by ID put
+     * `owner_claude`/`owner_codex` before `owner_core` and refused every multi-owner update.
+     */
+    .sort((left, right) => INVERSE_KIND_ORDER.indexOf(left.kind) - INVERSE_KIND_ORDER.indexOf(right.kind) || (ownerRanks.get(left.id) ?? 0) - (ownerRanks.get(right.id) ?? 0) || compareUtf8(left.id, right.id));
   for (let index = 1; index < inversePlanProjections.length; index += 1) {
     const prior = inversePlanProjections[index - 1] as PreparedInverseProjectionV1;
     const current = inversePlanProjections[index] as PreparedInverseProjectionV1;

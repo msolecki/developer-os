@@ -300,6 +300,28 @@ describe("prepared update materialization", () => {
     expect(built.maximumCanonicalBytes).toBe(Math.max(...sizes));
   });
 
+  it("orders owner leaves in canonical owner order, as the planner emits them and the rollback payload requires", () => {
+    const input = materializationInput();
+    const [preimage, , migration] = input.rollbackInventoryEntries as [RollbackPayloadEntryV1, RollbackPayloadEntryV1, RollbackPayloadEntryV1];
+    const entries: RollbackPayloadEntryV1[] = [
+      preimage,
+      { ordinal: 1, path: payloadPath("plans/owner_inverse/owner_core.plan.json"), role: "inverse_plan_leaf", bytes: 20, sha256: sha("leaf-core") },
+      { ordinal: 2, path: payloadPath("plans/owner_inverse/owner_codex.plan.json"), role: "inverse_plan_leaf", bytes: 40, sha256: sha("leaf-codex") },
+      { ...migration, ordinal: 3 },
+    ];
+    const built = buildPreparedUpdateMaterialization({
+      ...input,
+      inverseLeaves: [
+        { kind: "owner_inverse", id: parseSafeReasonCode("owner_codex"), projection: { owner: "codex", paths: ["/product/codex/a-new"] } },
+        { kind: "owner_inverse", id: parseSafeReasonCode("owner_core"), projection: { owner: "core", paths: ["/product/core/a-new"] } },
+        ...input.inverseLeaves.filter((leaf) => leaf.kind === "schema_migration_inverse"),
+      ],
+      rollbackInventoryEntries: entries,
+    });
+    /** By id, `owner_codex` sorts before `owner_core`; by OWNER_UPDATE_ORDER, core comes first. */
+    expect(built.inversePlanProjections.map((leaf) => leaf.id)).toEqual(["owner_core", "owner_codex", "migration_brain-v2"]);
+  });
+
   it("refuses non-contiguous rows, allocation-bound fields, and a broken leaf/inventory bijection", () => {
     const input = materializationInput();
     expect(() => buildPreparedUpdateMaterialization({ ...input, outputBlobs: [{ ordinal: 1, bytes: 0, sha256: sha("") }] })).toThrow("not contiguous");
