@@ -535,9 +535,9 @@ describe("validateGardenResponse", () => {
     });
 
     it("rejects format characters that hide or reorder text (Ruling 20)", () => {
-      const note = text("DEV/alpha.md") + "\n## Related\n\n- [[Beta|‮evil]]\n- [[Gamma]]\n";
+      const note = text("DEV/alpha.md") + "\n## Related\n\n- [[Beta|\u202Eevil]]\n- [[Gamma]]\n";
       expect(codeOf({ proposals: [{ kind: "related", target: "DEV/alpha.md", note }] })).toBe("related_changes_body");
-      for (const character of ["​", "‏", "‪", "⁠", "⁤", "⁦", "⁩", "﻿"]) {
+      for (const character of ["\u200B", "\u200F", "\u202A", "\u2060", "\u2064", "\u2066", "\u2069", "\uFEFF"]) {
         expect(codeOf(hub(HUB + `x${character}y\n`))).toBe("frontmatter_invalid");
       }
     });
@@ -630,7 +630,7 @@ describe("validateGardenResponse", () => {
     });
 
     it("rejects the Arabic letter mark and the deprecated format characters (Ruling 22)", () => {
-      for (const character of ["؜", "⁪", "⁫", "⁬", "⁭", "⁮", "⁯"]) {
+      for (const character of ["\u061C", "\u206A", "\u206B", "\u206C", "\u206D", "\u206E", "\u206F"]) {
         expect(run(hub(HUB + `x${character}y\n`))).toBe("frontmatter_invalid");
       }
     });
