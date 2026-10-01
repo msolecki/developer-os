@@ -934,8 +934,8 @@ defends. Spec 2 stays normative for every literal.
 **Added 2026-10-01.** `brain-garden` is the only scheduled job that runs a vendor agent: one isolated
 call per run, with the executable pinned in `automation.brainGarden` at `automation enable` and
 re-admitted by `assertTrustedExecutable` at the start of the run and again immediately before the
-spawn. The pin is Claude only, invoked as `ingest` invokes it — `--tools ""` (no tool at all, so no
-shell and no write), a product-owned environment and closed stdin. Codex is refused for this job:
+spawn. The pin is Claude only, invoked as `ingest` invokes it — `--tools ""`, a product-owned
+environment and closed stdin. Codex is refused for this job:
 `automation enable --garden-agent codex`, or a resolution that finds only Codex, refuses
 `capability_unavailable`, and a Codex pin met at run time is `handler_refused`
 `garden_agent_unsupported` with no spawn, because Codex has no tool-free mode yet (Ruling 38).
