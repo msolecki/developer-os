@@ -28,8 +28,8 @@
 
 1. An installation made before this change: `automation status` / any lifecycle command must refuse with `reservations_incomplete` and name the reinstall, never crash or half-run (Task 3 pins it).
 2. An agent reply that is valid JSON but hostile: a `related` proposal that also rewrites the body, a hub whose `sources` name a note outside the bundle, a link into `_raw/` — each rejected with its code while the other proposals in the same reply are still written (Task 6 and Task 8 pin it).
-3. The pinned executable replaced after `enable` (different inode, group-writable, or deleted): the run refuses before spawning, and the pulse surfaces it (Task 8 pins it).
-4. An empty or brand-new vault (0 notes, no index, no previous pulse report): gardener skips cleanly (`index-missing` → `handler_refused`), pulse reports without a trend and does not throw (Tasks 8 and 9 pin it).
+3. The pinned executable replaced after `enable` (group-writable, wrong owner, or deleted; a trusted same-path replacement is an accepted residual — the pin is a path, not an inode): the run refuses before spawning, and the pulse surfaces it (Task 8 pins it).
+4. An empty or brand-new vault (0 notes, no index, no previous pulse report): gardener skips cleanly (`success` / `skipped_index_missing`), pulse reports without a trend and does not throw (Tasks 8 and 9 pin it).
 5. A proposal that would be redacted (a secret-shaped string in a hub body): rejected as `redaction_would_alter`, never quarantined in mangled form (Task 6 pins it).
 
 ## Waves

@@ -32,6 +32,15 @@ nothing reaches the vault without the user's `review` and `ingest`.
 
 ## 3. Components
 
+**Amended after the final review and security audit (2026-10-01, Rulings 37–39):** the scheduled
+gardener runs Claude only (`--tools ""`); a Codex pin is refused at `automation enable` and at run
+time (`garden_agent_unsupported`) because Codex has no tool-free mode and its read-only sandbox can
+still read the whole disk. The pin is bound to the activation: `lifecycleConfigHash` covers
+`automation.brainGarden`, so editing config.toml after `enable` disables the job until `enable` runs
+again. The pulse reads the index's `generatedAt` for freshness instead of the last `ingest` and
+`reindex` times listed in §3.2, and a refused gardener run counts toward attention/failure like a
+failed one.
+
 ### 3.1 Two new scheduled jobs
 
 `SCHEDULED_JOB_IDS` (`packages/core/src/config/lifecycle.ts`) gains `brain-garden` and `brain-pulse`
