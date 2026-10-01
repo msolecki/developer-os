@@ -122,12 +122,16 @@ function exactObject(value: unknown, keys: readonly string[], label: string): Re
 }
 
 /**
- * §2.1: `success` carries exactly `ok`, each inert outcome its own name, and a refusal or
- * failure neither; `startedAt` never follows `completedAt`.
+ * §2.1: `success` carries `ok`, a gate's `skipped_<gate>` (NEW-134 garden) or a `pulse_<verdict>`
+ * — never an inert name (Ruling 39) —, each inert outcome its own name, and a refusal or failure
+ * neither `ok` nor an inert name; `startedAt` never follows `completedAt`.
  */
 function assertReasonCode(outcome: string, reasonCode: SafeReasonCodeV1): void {
   if (outcome === "success") {
-    if (reasonCode !== "ok") refuse("success requires reason code ok");
+    const allowed = reasonCode === "ok" || /^(skipped|pulse)_/u.test(reasonCode);
+    if (!allowed || (INERT_OUTCOMES as readonly string[]).includes(reasonCode)) {
+      refuse("success requires reason code ok, skipped_<gate> or pulse_<verdict>");
+    }
     return;
   }
   if ((INERT_OUTCOMES as readonly string[]).includes(outcome)) {

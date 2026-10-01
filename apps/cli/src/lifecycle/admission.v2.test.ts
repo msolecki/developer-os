@@ -511,6 +511,7 @@ describe("structural V2 home admission", () => {
             reason: "reservations_incomplete",
             code: EXIT_CODES.recoveryRequired,
           });
+          await expect(admit(fixture)).rejects.toThrow(/; reinstall: developer-os init$/u);
         },
       );
     }

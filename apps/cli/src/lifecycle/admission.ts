@@ -75,7 +75,8 @@ export class V2HomeAdmissionError extends Error {
   readonly paths: readonly string[];
 
   constructor(reason: V2HomeAdmissionReasonV1, paths: readonly string[]) {
-    super(`the product home is not an admitted V2 installation: ${reason}`);
+    // Ruling 39 M3: a home installed before a reservation existed is fixed by reinstalling, so say so.
+    super(`the product home is not an admitted V2 installation: ${reason}${reason === "reservations_incomplete" ? "; reinstall: developer-os init" : ""}`);
     this.code = REASON_EXIT_CODES[reason];
     this.reason = reason;
     this.paths = [...paths];

@@ -127,6 +127,8 @@ describe("AutomationStatusRecordV1", () => {
   it("round-trips every outcome through its exact canonical bytes", () => {
     const all: readonly AutomationStatusRecordV1[] = [
       { schemaVersion: 1, job: "brain-reindex", outcome: "success", reasonCode: parseSafeReasonCode("ok"), startedAt: STARTED, completedAt: COMPLETED },
+      { schemaVersion: 1, job: "brain-garden", outcome: "success", reasonCode: parseSafeReasonCode("skipped_index_missing"), startedAt: STARTED, completedAt: COMPLETED },
+      { schemaVersion: 1, job: "brain-pulse", outcome: "success", reasonCode: parseSafeReasonCode("pulse_attention"), startedAt: STARTED, completedAt: COMPLETED },
       inert("git_disabled"),
       inert("automation_disabled"),
       inert("skipped_lock_timeout"),
@@ -142,6 +144,7 @@ describe("AutomationStatusRecordV1", () => {
 
   it.each([
     ["success without ok", { outcome: "success", reasonCode: "done" }],
+    ["success reusing the inert skipped_lock_timeout", { outcome: "success", reasonCode: "skipped_lock_timeout" }],
     ["an inert outcome with another reason", { outcome: "git_disabled", reasonCode: "automation_disabled", startedAt: null }],
     ["a failure reusing ok", { outcome: "handler_failed", reasonCode: "ok" }],
     ["a refusal reusing an inert name", { outcome: "handler_refused", reasonCode: "skipped_lock_timeout" }],

@@ -459,10 +459,10 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
       (ref) => artifactStep?.kind === "foundation" && ref.id === artifactStep.participantId,
     );
     const targets = (artifacts?.mutations ?? []).map((mutation) => mutation.targetPath as string);
-    expect(targets.slice(0, 4)).toStrictEqual(
+    expect(targets.slice(0, SCHEDULED_JOB_IDS.length)).toStrictEqual(
       SCHEDULED_JOB_IDS.map((job) => join(fixture.paths.stateDir, `.automation-${job}.lock`)),
     );
-    const rest = targets.slice(4);
+    const rest = targets.slice(SCHEDULED_JOB_IDS.length);
     expect([...rest].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))))
       .toStrictEqual(rest);
     expect(targets).not.toContain(join(fixture.paths.stateDir, "uninstalling.json"));
@@ -475,6 +475,29 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     expect(await fixture.bootstrapEvidenceIdentities()).toStrictEqual(retained);
     expect(await productHomeResidue(fixture)).toStrictEqual(expectedResidue);
     expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("removes every pulse report slot and the brain-garden and brain-pulse status, lock and log files once they hold runs (NEW-134)", async () => {
+    const fixture = await initializedV2Fixture("uninstall-new-134-runtime");
+    const jobs = ["brain-garden", "brain-pulse"] as const;
+    const written = [
+      ...Array.from({ length: 8 }, (_unused, slot) => join(fixture.paths.stateDir, `pulse.${String(slot)}.md`)),
+      ...jobs.flatMap((job) => [
+        join(fixture.paths.stateDir, `automation-${job}.status.json`),
+        ...Array.from({ length: 10 }, (_unused, slot) => join(fixture.paths.home, "logs", `automation-${job}.${String(slot)}.json`)),
+      ]),
+    ];
+    const leases = jobs.map((job) => join(fixture.paths.stateDir, `.automation-${job}.lock`));
+    for (const path of written) {
+      expect(await exists(path), path).toBe(true);
+      await nodeFs.writeFile(path, "a recorded run\n", { mode: 0o600 });
+    }
+    for (const path of leases) expect(await exists(path), path).toBe(true);
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(`${String(result.code)} ${result.error.kind}: ${result.error.message}`);
+    for (const path of [...written, ...leases]) expect(await exists(path), path).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it.each([
