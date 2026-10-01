@@ -355,6 +355,13 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D78 (2026-10-01), NEW-134 reinstall gate reuses one stage.** For the step 7b gate on `23b32060`,
+  `test:bootstrap` is not rerun: it passed in full (1 + 104 cases) on `9350243a`, and
+  `9350243a..23b32060` changes only tests, docs and `packages/core/src/update/preview.ts`, whose only
+  caller is the update planner, which bootstrap never reaches. Every other stage (lint, `test:suite`,
+  `test:lifecycle`, `test:e2e`, `test:vendor-ingest`, build, `git diff --check`, `test:pinned-host`,
+  `test:vendor-brain`) runs on `23b32060` itself. The founder approved it to save ~4 h of `init`-bound
+  runtime (NEW-133). It applies to this one gate run.
 - **D77 (2026-09-30), scheduled Brain upkeep (NEW-134).** The product schedules a Brain gardener and a
   Brain pulse through `automation` (launchd), both default-off. An unattended vendor-agent call is
   allowed only to produce proposals the product validates and writes into quarantine: one isolated
