@@ -95,9 +95,10 @@ describe("negative fixtures", () => {
     expect(result.contract).toBeNull();
   });
 
-  it("refuses the scheduled trigger and names DOS-P7", async () => {
+  it("refuses a scheduled-only trigger: scheduled requires manual", async () => {
     const result = await load("scheduled-trigger");
-    expect(JSON.stringify(result.findings)).toContain("DOS-P7");
+    expect(result.findings.map((f) => f.rule)).toStrictEqual(["schema"]);
+    expect(result.findings[0]?.message).toContain("triggers: scheduled requires manual");
     expect(result.contract).toBeNull();
   });
 
