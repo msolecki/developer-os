@@ -118,7 +118,11 @@ export async function runScheduledPulse(context: CliContext, held: HeldLifecycle
   const input: PulseInputV1 = {
     now: context.now(),
     doctorFailing: doctor.checks.filter((check) => check.status === "fail").length,
-    lintErrors: lint === null ? 1 : lint.errorCount,
+    // Ruling 33: with no index yet, "never been built" drift is the missing index (reported as such), not a lint failure.
+    lintErrors:
+      lint === null
+        ? 1
+        : findings.filter((f) => f.severity === "error" && !(facts.generatedAt === null && f.class === "index-drift")).length,
     quarantined: await listCaptureSummaries(context, "quarantined"),
     accepted: await listCaptureSummaries(context, "accepted"),
     notes: facts.notes,
@@ -158,8 +162,15 @@ export async function runScheduledPulse(context: CliContext, held: HeldLifecycle
       { global: held },
     );
   } catch (error) {
-    if (!(error instanceof LifecycleMutationRefusal)) throw error;
-    return { outcome: "handler_refused", reasonCode: parseSafeReasonCode("handler_refused"), data: { code: error.code, paths: error.paths } };
+    if (error instanceof LifecycleMutationRefusal) {
+      return { outcome: "handler_refused", reasonCode: parseSafeReasonCode("handler_refused"), data: { code: error.code, paths: error.paths } };
+    }
+    // e.g. a slot edited between the read and the write: the precondition fails and nothing is written.
+    return {
+      outcome: "handler_failed",
+      reasonCode: parseSafeReasonCode("pulse_rotation_failed"),
+      data: { message: error instanceof Error ? error.message : "the rotation failed" },
+    };
   }
 
   let notified: boolean | null = null;

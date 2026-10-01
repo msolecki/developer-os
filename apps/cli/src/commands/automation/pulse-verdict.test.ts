@@ -50,6 +50,21 @@ describe("computePulse", () => {
     expect(computePulse({ ...base, indexGeneratedAt: "2026-09-26T07:59:00Z" }, null).header.verdict).toBe("attention");
     expect(() => computePulse({ ...base, notes: 0, edges: 0, isolated: 0, indexGeneratedAt: null }, null)).not.toThrow();
   });
+  it("needs attention, not a silent healthy, for an unreadable date", () => {
+    const bad = computePulse({ ...base, quarantined: [{ createdAt: "yesterday" }] }, null);
+    expect(bad.header.verdict).toBe("attention");
+    expect(bad.reasons).toContain("capture_date_unreadable");
+    expect(computePulse({ ...base, accepted: [{ createdAt: "" }] }, null).reasons).toContain("capture_date_unreadable");
+    const index = computePulse({ ...base, indexGeneratedAt: "not a date" }, null);
+    expect(index.header.verdict).toBe("attention");
+    expect(index.reasons).toContain("index_unreadable");
+  });
+  it("tells the reader to reindex when there is no index", () => {
+    const input = { ...base, indexGeneratedAt: null };
+    const { header, reasons } = computePulse(input, null);
+    expect(reasons).toContain("index_missing");
+    expect(renderPulseReport(header, reasons, input)).toContain("developer-os brain reindex");
+  });
   it("round-trips the header line", () => {
     const { header, reasons } = computePulse(base, null);
     expect(parsePulseHeader(renderPulseReport(header, reasons, base))).toEqual(header);

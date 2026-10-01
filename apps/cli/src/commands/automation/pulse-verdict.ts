@@ -27,9 +27,10 @@ const DAY_MS = 86_400_000;
 const CAPTURE_WAIT_DAYS = 14;
 const INDEX_MAX_AGE_DAYS = 8;
 
-function olderThan(now: Date, timestamp: string, days: number): boolean {
+/** `null` for an unreadable timestamp, so the caller reports it instead of treating it as young. */
+function olderThan(now: Date, timestamp: string, days: number): boolean | null {
   const at = Date.parse(timestamp);
-  return Number.isFinite(at) && now.getTime() - at > days * DAY_MS;
+  return Number.isFinite(at) ? now.getTime() - at > days * DAY_MS : null;
 }
 
 export function computePulse(
@@ -43,13 +44,22 @@ export function computePulse(
 
   const attention: string[] = [];
   if (input.gardenLast[0] === "failed" && input.gardenLast[1] !== "failed") attention.push("garden_failed");
-  if (input.quarantined.some((c) => olderThan(input.now, c.createdAt, CAPTURE_WAIT_DAYS))) attention.push("quarantined_capture_waiting");
-  if (input.accepted.some((c) => olderThan(input.now, c.createdAt, CAPTURE_WAIT_DAYS))) attention.push("accepted_capture_not_ingested");
+  const ages = (captures: readonly { readonly createdAt: string }[]): (boolean | null)[] =>
+    captures.map((c) => olderThan(input.now, c.createdAt, CAPTURE_WAIT_DAYS));
+  const quarantinedAges = ages(input.quarantined);
+  const acceptedAges = ages(input.accepted);
+  if (quarantinedAges.includes(true)) attention.push("quarantined_capture_waiting");
+  if (acceptedAges.includes(true)) attention.push("accepted_capture_not_ingested");
+  if (quarantinedAges.includes(null) || acceptedAges.includes(null)) attention.push("capture_date_unreadable");
   const isolatedGrew = previous !== null && input.notes > 0 && input.isolated > previous.isolated;
   if (isolatedGrew && previous.isolatedGrew) attention.push("isolated_growing");
   if (input.gardenLast[0] === "skipped_review_queue_full") attention.push("garden_skipped_review_queue_full");
   if (input.indexGeneratedAt === null) attention.push("index_missing");
-  else if (olderThan(input.now, input.indexGeneratedAt, INDEX_MAX_AGE_DAYS)) attention.push("index_stale");
+  else {
+    const stale = olderThan(input.now, input.indexGeneratedAt, INDEX_MAX_AGE_DAYS);
+    if (stale === null) attention.push("index_unreadable");
+    else if (stale) attention.push("index_stale");
+  }
 
   const verdict: PulseVerdictV1 = failures.length > 0 ? "failure" : attention.length > 0 ? "attention" : "healthy";
   return {
@@ -65,6 +75,7 @@ export function renderPulseReport(header: PulseHeaderV1, reasons: readonly strin
     `# Brain pulse ${header.date}: ${header.verdict}`,
     "",
     ...(reasons.length === 0 ? ["No findings."] : reasons.map((reason) => `- ${reason}`)),
+    ...(reasons.includes("index_missing") ? ["", "Run `developer-os brain reindex`."] : []),
     "",
     `- notes: ${String(input.notes)}`,
     `- edges: ${String(input.edges)}`,
