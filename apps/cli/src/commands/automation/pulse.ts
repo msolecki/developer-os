@@ -66,22 +66,31 @@ async function indexFacts(
   config: Parameters<typeof resolveBrainConfig>[0],
 ): Promise<{ notes: number; edges: number; generatedAt: string | null }> {
   const artifacts = artifactPaths(resolveBrainConfig(config));
-  const read = async (relative: string): Promise<Record<string, unknown> | null> => {
+  // Absent and unreadable differ: `readText` wraps its errors, so a plain `lstat` tells them apart.
+  type Read = { readonly kind: "absent" | "unreadable" } | { readonly kind: "ok"; readonly doc: Record<string, unknown> };
+  const read = async (relative: string): Promise<Read> => {
+    const path = join(vaultRoot, relative);
     try {
-      const value: unknown = JSON.parse(await context.guards.readText(join(vaultRoot, relative)));
-      return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+      await context.fs.lstat(path);
+    } catch (error) {
+      return { kind: (error as { code?: unknown }).code === "ENOENT" ? "absent" : "unreadable" };
+    }
+    try {
+      const value: unknown = JSON.parse(await context.guards.readText(path));
+      return typeof value === "object" && value !== null ? { kind: "ok", doc: value as Record<string, unknown> } : { kind: "unreadable" };
     } catch {
-      return null;
+      return { kind: "unreadable" };
     }
   };
   const index = await read(artifacts.index);
   const graph = await read(artifacts.graph);
-  const count = (doc: Record<string, unknown> | null, key: string): number =>
-    doc !== null && Array.isArray(doc[key]) ? doc[key].length : 0;
+  const count = (doc: Read, key: string): number => (doc.kind === "ok" && Array.isArray(doc.doc[key]) ? doc.doc[key].length : 0);
+  const generated = index.kind === "ok" ? index.doc.generatedAt : undefined;
   return {
     notes: count(index, "notes"),
     edges: count(graph, "edges"),
-    generatedAt: typeof index?.generatedAt === "string" ? index.generatedAt : null,
+    // an unparseable value reports `index_unreadable`; only an absent file reports `index_missing`
+    generatedAt: typeof generated === "string" ? generated : index.kind === "absent" ? null : "unreadable",
   };
 }
 

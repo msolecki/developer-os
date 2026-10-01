@@ -106,6 +106,23 @@ describe("brain-pulse", () => {
     clock.at = START + 38 * DAY;
     expect(await pulse(fixture, racing)).toMatchObject({ outcome: "handler_failed", reasonCode: "pulse_rotation_failed" });
     expect(await dateOf(fixture, 0)).toBe("2026-09-05");
+
+    // Ruling 33's other half: with an index present, drift is a lint error and the verdict is failure
+    const catalog = join(fixture.paths.brain, "content", "_indexes", "catalog.md");
+    await nodeFs.appendFile(catalog, "\nedited after the build\n");
+    clock.at = START + 39 * DAY;
+    expect(await pulse(fixture)).toMatchObject({ outcome: "success", reasonCode: "pulse_failure" });
+    const drifted = await nodeFs.readFile(slot(fixture, 0), "utf8");
+    expect(drifted).toContain('"verdict":"failure"');
+    expect(drifted).toContain("lint_errors");
+
+    // a corrupt index.json is unreadable, not missing
+    await nodeFs.writeFile(join(fixture.paths.brain, "content", "_indexes", "index.json"), "{ not json");
+    clock.at = START + 40 * DAY;
+    await pulse(fixture);
+    const corrupt = await nodeFs.readFile(slot(fixture, 0), "utf8");
+    expect(corrupt).toContain("index_unreadable");
+    expect(corrupt).not.toContain("index_missing");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("needs attention, with no throw, when no index exists yet", async () => {
