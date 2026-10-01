@@ -1,3 +1,4 @@
+import { SCHEDULED_JOB_IDS } from "../config/lifecycle.js";
 import type { FoundationMutationRefV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { UpdateConstructionClosureV1 } from "../update/construction.js";
@@ -120,8 +121,8 @@ export const LIFECYCLE_PLAN_BOUNDS = {
   steps: { minimum: 1, maximum: 256 },
   foundationRefs: { minimum: 0, maximum: 64 },
   mutationsPerRef: { minimum: 1, maximum: 256 },
-  /** One per registry job (`SCHEDULED_JOB_IDS`, six since NEW-134). */
-  plistPaths: { minimum: 0, maximum: 6 },
+  /** One per registry job. */
+  plistPaths: { minimum: 0, maximum: SCHEDULED_JOB_IDS.length },
   previewFiles: { minimum: 0, maximum: 16 },
   compactionEntries: { minimum: 2, maximum: 70 },
   nextStep: { minimum: 0, maximum: 256 },

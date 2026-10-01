@@ -1155,12 +1155,33 @@ export async function invokeIsolatedCodex(
   invocation: Omit<Parameters<typeof invokeCodex>[1], "codexHome">,
   dependencies: Parameters<typeof invokeCodex>[2],
 ): ReturnType<typeof invokeCodex> {
+  assertScheduledVendorSpawn();
   const codexHome = await prepareCodexIngestHome(context);
   try {
     return await invokeCodex(installation, { ...invocation, codexHome }, dependencies);
   } finally {
     await sweepCodexIngestHome(context, codexHome);
   }
+}
+
+/**
+ * NEW-134 (D77): inside a scheduled run only a job whose registry entry may spawn a vendor reaches
+ * one, and only for proposals; a manual call is unscoped. Every vendor door calls this first.
+ */
+function assertScheduledVendorSpawn(schema?: "ingest.stage" | "garden.proposals"): void {
+  const job = currentScheduledJob();
+  if (job === undefined) return;
+  if (!launchdJob(job).maySpawnVendor || (schema !== undefined && schema !== "garden.proposals")) {
+    throw Object.assign(new Error(`the scheduled job ${job} may not spawn a vendor${schema === undefined ? "" : ` for ${schema}`}`), {
+      reason: "vendor_spawn_forbidden",
+    });
+  }
+}
+
+/** The Claude door, guarded like `invokeIsolatedCodex`. */
+async function invokeGuardedClaude(...args: Parameters<typeof invokeClaude>): ReturnType<typeof invokeClaude> {
+  assertScheduledVendorSpawn();
+  return invokeClaude(...args);
 }
 
 export async function invokeAgentOnce(
@@ -1170,11 +1191,7 @@ export async function invokeAgentOnce(
   schema: "ingest.stage" | "garden.proposals",
   timeoutMs: number,
 ): Promise<AgentReplyV1> {
-  /** NEW-134: a scheduled job spawns a vendor only when its registry entry says it may; a manual call is unscoped. */
-  const job = currentScheduledJob();
-  if (job !== undefined && !launchdJob(job).maySpawnVendor) {
-    throw Object.assign(new Error(`the scheduled job ${job} may not spawn a vendor`), { reason: "vendor_spawn_forbidden" });
-  }
+  assertScheduledVendorSpawn(schema);
   const schemaPath = outputSchemaPath(runtimePathsFor(context).home, schema);
   const installation = { executable: vendor.executable, version: UNKNOWN_VERSION };
   const dependencies = { runner: context.runner };
@@ -1189,7 +1206,7 @@ export async function invokeAgentOnce(
    */
   const result =
     vendor.name === "claude"
-      ? await invokeClaude(
+      ? await invokeGuardedClaude(
           installation,
           {
             prompt,

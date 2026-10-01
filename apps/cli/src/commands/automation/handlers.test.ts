@@ -7,7 +7,7 @@ import type { HeldLifecycleStableLockV1 } from "@developer-os/core";
 import { LAUNCHD_JOBS, launchdJob } from "@developer-os/platform-macos";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
-import { invokeAgentOnce } from "../ingest.js";
+import { invokeAgentOnce, invokeIsolatedCodex } from "../ingest.js";
 import { createCommandFixture, removeCommandFixtures } from "../testing.js";
 import type { CommandFixture } from "../testing.js";
 import { createProductionScheduledHandlers } from "./handlers.js";
@@ -29,6 +29,23 @@ describe("the production scheduled handlers", () => {
         reason: "vendor_spawn_forbidden",
       });
     }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuse a direct Codex door call from a job that may not spawn a vendor, spawning nothing", async () => {
+    const { fixture, calls } = await vendorGuardFixture("vendor-guard-codex-door");
+    const invocation = { prompt: "p", workingRoot: fixture.paths.stateDir, writeScopes: [], outputSchemaPath: "/synthetic/schema.json", timeoutMs: 1_000 };
+    await expect(
+      withScheduledJob("brain-lint", () => invokeIsolatedCodex(fixture.context, { executable: "/synthetic/bin/codex", version: "0.0.0" }, invocation, { runner: fixture.context.runner })),
+    ).rejects.toMatchObject({ reason: "vendor_spawn_forbidden" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuse any schema but garden.proposals inside a scheduled run, even brain-garden's", async () => {
+    const { fixture, calls } = await vendorGuardFixture("vendor-guard-schema");
+    await expect(withScheduledJob("brain-garden", () => invokeAgentOnce(fixture.context, VENDOR, "p", "ingest.stage", 1_000))).rejects.toMatchObject({
+      reason: "vendor_spawn_forbidden",
+    });
     expect(calls).toHaveLength(0);
   });
 

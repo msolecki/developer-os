@@ -114,5 +114,24 @@ describe("renderAutomation", () => {
     });
     expect(lines).toContain("brain-pulse    eligible current - last run success at 2026-10-01T07:00:01.000Z verdict attention");
     expect(lines).toContain("doctor         eligible current - last run success at 2026-10-01T07:00:01.000Z");
+
+    const failed = renderAutomation({
+      kind: "status",
+      enabled: true,
+      activation: "active",
+      distribution: "supported",
+      closure: "clear",
+      jobs: [
+        {
+          job: "brain-pulse",
+          schedule: null,
+          eligible: true,
+          installed: "current",
+          live: null,
+          lastRun: { ...run("brain-pulse", "pulse_rotation_failed"), outcome: "handler_failed" },
+        },
+      ],
+    });
+    expect(failed).toContain("brain-pulse    eligible current - last run handler_failed at 2026-10-01T07:00:01.000Z");
   });
 });
