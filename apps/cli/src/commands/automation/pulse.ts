@@ -27,7 +27,7 @@ import { readConfig } from "../brain.js";
 import { dependenciesFor } from "../brain-dependencies.js";
 import { runScheduledDoctorReport } from "../doctor.js";
 import { listCaptureSummaries } from "../review.js";
-import { computePulse, parsePulseHeader, renderPulseReport } from "./pulse-verdict.js";
+import { computePulse, gardenRunKind, parsePulseHeader, renderPulseReport } from "./pulse-verdict.js";
 import type { PulseInputV1, PulseVerdictV1 } from "./pulse-verdict.js";
 
 const MAX_REPORT_BYTES = 65_536;
@@ -47,12 +47,7 @@ async function gardenLast(context: CliContext, productHome: CanonicalAbsolutePat
     if (bytes === null || bytes.byteLength === 0) break;
     try {
       const { outcome, reasonCode } = parseAutomationLogRecord(bytes);
-      last.push(
-        outcome === "success" && reasonCode === "ok" ? "success"
-        : outcome === "success" && reasonCode === "skipped_review_queue_full" ? "skipped_review_queue_full"
-        : outcome === "handler_failed" ? "failed"
-        : "other",
-      );
+      last.push(gardenRunKind(outcome, reasonCode));
     } catch {
       last.push("other");
     }
@@ -172,7 +167,7 @@ export async function runScheduledPulse(context: CliContext, held: HeldLifecycle
     );
   } catch (error) {
     if (error instanceof LifecycleMutationRefusal) {
-      return { outcome: "handler_refused", reasonCode: parseSafeReasonCode("handler_refused"), data: { code: error.code, paths: error.paths } };
+      return { outcome: "handler_refused", reasonCode: error.reason, data: { code: error.code, paths: error.paths } };
     }
     // e.g. a slot edited between the read and the write: the precondition fails and nothing is written.
     return {

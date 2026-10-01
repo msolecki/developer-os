@@ -9,6 +9,7 @@ import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
 import { parseLowerHexSha256 } from "../update/scalars.js";
 import type { LowerHexSha256 } from "../update/scalars.js";
 import { pathSegmentViolation } from "./segment.js";
+import type { BrainGardenConfigV1 } from "./types.js";
 
 declare const validatedGitBranchV1: unique symbol;
 declare const normalizedRemoteUrlV1: unique symbol;
@@ -409,12 +410,21 @@ const LIFECYCLE_HASH_DOMAINS: Readonly<Record<"git" | "automation", string>> = {
   automation: "developer-os:lifecycle:automation:v1",
 };
 
+/**
+ * NEW-134 Ruling 37: an automation activation also binds the `brain-garden` vendor pin, so
+ * retargeting `config.toml` after `automation enable` deactivates the arm. Absent, the
+ * projection is byte-identical to the one every earlier activation hashed.
+ */
 export function lifecycleConfigHash(
   subsystem: "git" | "automation",
   lifecycle: GitSyncConfigV1 | AutomationConfigV1,
+  brainGarden?: BrainGardenConfigV1,
 ): LowerHexSha256 {
   if (!Object.hasOwn(LIFECYCLE_HASH_DOMAINS, subsystem)) fail("lifecycle subsystem");
   return hashCanonicalJson(LIFECYCLE_HASH_DOMAINS[subsystem], {
+    ...(subsystem === "automation" && brainGarden !== undefined
+      ? { brainGarden: { agent: brainGarden.agent, executable: brainGarden.executable } }
+      : {}),
     enabled: true,
     lifecycle: lifecycle as unknown as CanonicalJsonValue,
   });

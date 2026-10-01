@@ -433,7 +433,8 @@ export function authenticateScheduledGeneration(
 }
 
 /**
- * §5.1 stage 2: exact active provenance, then `git-sync`'s Git eligibility. Malformed,
+ * §5.1 stage 2: exact active provenance — the lifecycle record and, since Ruling 37, the
+ * `brain-garden` pin — then `git-sync`'s Git eligibility. Malformed,
  * disabled, inactive, incomplete or mismatched state is `automation_disabled` — never a refusal,
  * because an inert record is the whole of what a stale plist may leave.
  */
@@ -457,7 +458,7 @@ export async function scheduledEligibility(
     !automation.enabled ||
     automation.lifecycle === undefined ||
     arm.state !== "active" ||
-    arm.configHash !== lifecycleConfigHash("automation", automation.lifecycle)
+    arm.configHash !== lifecycleConfigHash("automation", automation.lifecycle, automation.brainGarden)
   ) {
     return "automation_disabled";
   }

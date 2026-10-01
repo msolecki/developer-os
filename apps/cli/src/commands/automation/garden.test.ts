@@ -322,19 +322,26 @@ describe("runScheduledGarden", () => {
     expect(home.calls).toHaveLength(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("refuses a Codex pin on a home without the garden schema, naming init", async () => {
+  it("refuses a Codex pin garden_agent_unsupported before spawning anything (Ruling 38)", async () => {
     const home = await garden({ isolated: ["DEV/alpha.md"], agent: "codex" });
-    const schema = outputSchemaPath(home.fixture.paths.home, "garden.proposals");
-    const bytes = await nodeFs.readFile(schema);
-    await nodeFs.rm(schema);
-    try {
-      const result = await run(home);
-      expect(result).toMatchObject({ outcome: "handler_refused", reasonCode: "garden_schema_missing" });
-      expect(JSON.stringify(result.data)).toContain("developer-os init");
-      expect(home.calls).toHaveLength(0);
-    } finally {
-      await nodeFs.writeFile(schema, bytes, { mode: 0o600 });
-    }
+    const result = await run(home);
+    expect(result).toMatchObject({ outcome: "handler_refused", reasonCode: "garden_agent_unsupported" });
+    expect(JSON.stringify(result.data)).toContain("Codex has no tool-free mode");
+    expect(home.calls).toHaveLength(0);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses a Claude pin whose executable is not named claude (Ruling 37)", async () => {
+    const home = await garden({ isolated: ["DEV/alpha.md"] });
+    const config = loadConfig(await nodeFs.readFile(home.fixture.paths.configFile, "utf8"));
+    home.executable = join(dirname(home.executable), "sh");
+    await nodeFs.writeFile(home.executable, "#!/bin/sh\n", { mode: 0o755 });
+    await nodeFs.writeFile(
+      home.fixture.paths.configFile,
+      serializeConfig({ ...config, automation: { ...config.automation, brainGarden: { agent: "claude", executable: home.executable } } }),
+    );
+    const result = await run(home);
+    expect(result).toMatchObject({ outcome: "handler_refused", reasonCode: "garden_executable_untrusted" });
+    expect(home.calls).toHaveLength(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("skips index_missing when the vault has no index", async () => {

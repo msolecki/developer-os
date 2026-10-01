@@ -116,9 +116,23 @@ describe("brain-pulse", () => {
     expect(drifted).toContain('"verdict":"failure"');
     expect(drifted).toContain("lint_errors");
 
+    // security L1: a 70 KB generatedAt never reaches the report, so the next run can still read slot 0 and rotate
+    const indexPath = join(fixture.paths.brain, "content", "_indexes", "index.json");
+    const index = JSON.parse(await nodeFs.readFile(indexPath, "utf8")) as Record<string, unknown>;
+    await nodeFs.writeFile(indexPath, JSON.stringify({ ...index, generatedAt: `2026-09-01 ${"x".repeat(70_000)}` }));
+    for (const day of [40, 41]) {
+      clock.at = START + day * DAY;
+      expect(await pulse(fixture)).toMatchObject({ outcome: "success" });
+    }
+    expect(await dateOf(fixture, 0)).toBe("2026-09-09");
+    expect(await dateOf(fixture, 1)).toBe("2026-09-08");
+    const oversized = await nodeFs.readFile(slot(fixture, 0), "utf8");
+    expect(oversized).toContain("- index generated: unreadable\n");
+    expect(oversized.length).toBeLessThan(4_096);
+
     // a corrupt index.json is unreadable, not missing
     await nodeFs.writeFile(join(fixture.paths.brain, "content", "_indexes", "index.json"), "{ not json");
-    clock.at = START + 40 * DAY;
+    clock.at = START + 42 * DAY;
     await pulse(fixture);
     const corrupt = await nodeFs.readFile(slot(fixture, 0), "utf8");
     expect(corrupt).toContain("index_unreadable");

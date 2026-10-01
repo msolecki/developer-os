@@ -4,7 +4,7 @@
  * the ordinary `capture` path quarantines it for a person to review. Nothing here writes the vault.
  */
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { parseSafeReasonCode } from "@developer-os/core";
 import type { DeveloperOsConfigV1, HeldLifecycleStableLockV1 } from "@developer-os/core";
@@ -31,7 +31,6 @@ import type { ScheduledHandlerResultV1 } from "../../lifecycle/runtime-records.j
 import { isTopicNotePath, runCapture } from "../capture.js";
 import { hasFailingCheck, runScheduledDoctorReport } from "../doctor.js";
 import { invokeAgentOnce } from "../ingest.js";
-import { outputSchemaPath } from "../output-schemas.js";
 import { dependenciesFor } from "../reindex.js";
 import { listCaptureSummaries } from "../review.js";
 
@@ -109,32 +108,33 @@ async function exists(context: CliContext, path: string): Promise<boolean> {
 
 /**
  * The pinned executable, re-admitted exactly as `ingest` admits a discovered one — and never
- * searched for on `PATH` (spec §3.1). A Codex pin also needs the output schema `init` installs,
- * which a home installed before NEW-134 lacks.
+ * searched for on `PATH` (spec §3.1). Ruling 38: Claude only, whose basename must be `claude`;
+ * a Codex pin is refused before anything is spawned, because Codex has no tool-free mode yet.
  */
 async function admitPinned(
   context: CliContext,
   config: DeveloperOsConfigV1,
-): Promise<{ readonly name: "claude" | "codex"; readonly executable: string } | ScheduledHandlerResultV1> {
+): Promise<{ readonly name: "claude"; readonly executable: string } | ScheduledHandlerResultV1> {
   const pinned = config.automation.brainGarden;
+  if (pinned?.agent === "codex") {
+    return result("handler_refused", "garden_agent_unsupported", {
+      message: "the scheduled gardener runs Claude with no tools; Codex has no tool-free mode yet. Re-pin with developer-os automation enable --garden-agent claude",
+    });
+  }
   if (pinned === undefined || !(await exists(context, pinned.executable))) {
     return result("handler_refused", "garden_executable_missing", {
       message: "no pinned gardener executable; run developer-os automation enable --schedule brain-garden=<schedule>",
     });
   }
   try {
+    if (basename(pinned.executable) !== "claude") throw new Error("not claude");
     await context.platform.assertTrustedExecutable(pinned.executable);
   } catch {
     return result("handler_refused", "garden_executable_untrusted", {
       message: "the pinned gardener executable is no longer trusted; re-pin it with developer-os automation enable",
     });
   }
-  if (pinned.agent === "codex" && !(await exists(context, outputSchemaPath(runtimePathsFor(context, config).home, "garden.proposals")))) {
-    return result("handler_refused", "garden_schema_missing", {
-      message: "the garden.proposals output schema is not installed; run developer-os init",
-    });
-  }
-  return { name: pinned.agent, executable: pinned.executable };
+  return { name: "claude", executable: pinned.executable };
 }
 
 async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {

@@ -5,9 +5,18 @@ import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { EXIT_CODES, hashBytes, loadConfig, parseCanonicalAbsolutePathText, parseUtcTimestamp } from "@developer-os/core";
+import {
+  EXIT_CODES,
+  hashBytes,
+  loadConfig,
+  parseCanonicalAbsolutePathText,
+  parseEffectiveUid,
+  parseLowerHexSha256,
+  parseUtcTimestamp,
+  serializeConfig,
+} from "@developer-os/core";
 import type { InstallationManifestV2, ManagedArtifactV2 } from "@developer-os/core";
-import { NodeLaunchdPlistReader, parseCanonicalLaunchdPlist } from "@developer-os/platform-macos";
+import { launchdGuiDomain, launchdPlistPath, NodeLaunchdPlistReader, parseCanonicalLaunchdPlist } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName, LaunchdBootstrapPlistIdentityV1, LaunchdPlistPortV1 } from "@developer-os/platform-macos";
 
 import { failureFrom } from "../../context.js";
@@ -17,6 +26,7 @@ import { gatedState, manifestMutation } from "../../instructions/apply.js";
 import type { LifecycleEffectPortsV1 } from "../../lifecycle/adapters.js";
 import type { CliLifecycleContext } from "../../lifecycle/context.js";
 import { withLifecycleMutation } from "../../lifecycle/mutation-gate.js";
+import { automationStatusPath, parseAutomationStatusRecord } from "../../lifecycle/runtime-records.js";
 import { hostWith, scriptedLaunchd } from "../../lifecycle/testing.js";
 import { entrypointPath } from "../../update/local-release.js";
 import { scriptedEffectPorts, scriptedGitRuntime } from "../git/testing.js";
@@ -24,6 +34,7 @@ import { runInit } from "../init.js";
 import { createCommandFixture, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../testing.js";
 import type { CommandFixture } from "../testing.js";
 import { runAutomation } from "./index.js";
+import { AutomationRunner, createAutomationRunnerDependencies, scheduledEligibility } from "./runner.js";
 import { AutomationCommandRefusal, createAutomationService, verifiedAutomationExecutable } from "./service.js";
 
 afterEach(removeCommandFixtures);
@@ -98,7 +109,6 @@ describe("verifiedAutomationExecutable", () => {
 });
 
 describe("automation enable pins the brain-garden vendor", () => {
-  const launchd = scriptedLaunchd({ clock: () => parseUtcTimestamp("2026-10-01T00:00:00.000Z"), host: hostWith() });
   /** As automation.v2.test.ts: the published plist's inode is never the staged one, so only it is unchecked. */
   const plists: LaunchdPlistPortV1 = {
     read: async (identity: LaunchdBootstrapPlistIdentityV1) => {
@@ -108,7 +118,8 @@ describe("automation enable pins the brain-garden vendor", () => {
     },
     verifyHash: (path, hash) => new NodeLaunchdPlistReader().verifyHash(path, hash),
   };
-  const effectPorts = (context: CliLifecycleContext): LifecycleEffectPortsV1 => ({
+  /** One scripted launchd per home: its loaded labels are per job, so a shared one leaks between cases. */
+  const effectPorts = (launchd: ReturnType<typeof scriptedLaunchd>) => (context: CliLifecycleContext): LifecycleEffectPortsV1 => ({
     ...scriptedEffectPorts(scriptedGitRuntime(), { on: false })(context),
     launchd: { ...launchd.ports, plists },
   });
@@ -153,7 +164,7 @@ describe("automation enable pins the brain-garden vendor", () => {
       const discovery = (name: AgentName, path: string | null): AgentDiscovery => ({ name, installed: path !== null, executablePath: path, version: null });
       const fixture = await createCommandFixture("automation-garden-pin", {
         bootstrapAvailable: true,
-        effectPorts,
+        effectPorts: effectPorts(scriptedLaunchd({ clock: () => parseUtcTimestamp("2026-10-01T00:00:00.000Z"), host: hostWith() })),
         agents: { claude: discovery("claude", claude), codex: discovery("codex", null) },
       });
       await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
@@ -200,23 +211,80 @@ describe("automation enable pins the brain-garden vendor", () => {
       agent: "claude",
       executable: claude,
     });
-    // --garden-agent re-pins.
+    // Ruling 38: the scheduled gardener refuses Codex — named, or resolved because claude is absent — and writes nothing.
     const codex = join(dirname(claude), "codex");
     await nodeFs.writeFile(codex, "#!/bin/sh\n", { mode: 0o755 });
-    const codexInstalled = new Proxy(fixture.context.platform, {
-      get: (target, property): unknown =>
-        property === "discoverExecutable"
-          ? (name: AgentName) => Promise.resolve({ name, installed: name === "codex", executablePath: name === "codex" ? codex : null, version: null })
-          : bound(target, property),
-    });
-    expect(
-      await pinAfter({ subcommand: "enable", schedules: ["doctor=weekly@wed,03:00"], gardenAgent: "codex", apply: true }, { ...fixture.context, platform: codexInstalled }),
-    ).toStrictEqual({ agent: "codex", executable: codex });
+    const codexOnly: CliContext = {
+      ...fixture.context,
+      platform: new Proxy(fixture.context.platform, {
+        get: (target, property): unknown =>
+          property === "discoverExecutable"
+            ? (name: AgentName) => Promise.resolve({ name, installed: name === "codex", executablePath: name === "codex" ? codex : null, version: null })
+            : bound(target, property),
+      }),
+    };
+    const refusesCodex = async (request: Parameters<typeof runAutomation>[1], on: CliContext): Promise<void> => {
+      const unchanged = await inventoryDigest(fixture.paths.home);
+      const codexRefused = await runAutomation(on, request);
+      expect(codexRefused).toMatchObject({ ok: false, code: EXIT_CODES.capabilityUnavailable, error: { kind: "capability_unavailable" } });
+      expect(JSON.stringify(codexRefused)).toContain("Codex has no tool-free mode");
+      expect(await inventoryDigest(fixture.paths.home)).toStrictEqual(unchanged);
+    };
+    await refusesCodex({ subcommand: "enable", schedules: ["doctor=weekly@wed,03:00"], gardenAgent: "codex", apply: true }, fixture.context);
+    await refusesCodex({ subcommand: "enable", schedules: ["doctor=weekly@wed,03:00"], gardenAgent: "codex", apply: false }, codexOnly);
     // Disable keeps the pin; enable without --garden-agent keeps it without resolving anything.
-    expect(await pinAfter({ subcommand: "disable", apply: true })).toStrictEqual({ agent: "codex", executable: codex });
-    expect(await pinAfter({ subcommand: "enable", schedules: [], apply: true }, context)).toStrictEqual({ agent: "codex", executable: codex });
-    // Removing the job drops the pin.
+    expect(await pinAfter({ subcommand: "disable", apply: true })).toStrictEqual({ agent: "claude", executable: claude });
+    expect(await pinAfter({ subcommand: "enable", schedules: [], apply: true }, context)).toStrictEqual({ agent: "claude", executable: claude });
+    // Removing the job drops the pin and removes its plist (Ruling 39).
+    const gardenPlist = launchdPlistPath(parseCanonicalAbsolutePathText(fixture.userHome), "brain-garden");
+    expect((await nodeFs.lstat(gardenPlist)).isFile()).toBe(true);
     expect(await pinAfter({ subcommand: "enable", schedules: ["brain-garden=off"], apply: true })).toBeUndefined();
+    await expect(nodeFs.lstat(gardenPlist)).rejects.toMatchObject({ code: "ENOENT" });
+    // Scheduling it again with only codex installed resolves codex, which is refused the same way.
+    await refusesCodex({ subcommand: "enable", schedules: ["brain-garden=weekly@sun,17:00"], apply: true }, codexOnly);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** Ruling 37: the pin is part of the activation, so retargeting config.toml after enable stops the job. */
+  it("records automation_disabled and spawns nothing when config.toml's pinned executable changes after enable", async () => {
+    const { fixture } = await pinHome();
+    const lifecycle = lifecycleOf(fixture);
+    const enabled = await runAutomation(fixture.context, { subcommand: "enable", schedules, gardenAgent: "claude", apply: true });
+    expect(enabled, JSON.stringify(enabled)).toMatchObject({ ok: true, data: { kind: "applied" } });
+    expect(await scheduledEligibility(fixture.context, lifecycle, "brain-garden")).toBe("active");
+
+    const config = loadConfig(await nodeFs.readFile(fixture.paths.configFile, "utf8"));
+    await nodeFs.writeFile(
+      fixture.paths.configFile,
+      serializeConfig({ ...config, automation: { ...config.automation, brainGarden: { agent: "claude", executable: "/bin/sh" } } }),
+      { mode: 0o600 },
+    );
+    expect(await scheduledEligibility(fixture.context, lifecycle, "brain-garden")).toBe("automation_disabled");
+
+    const spawned: string[] = [];
+    const uid = process.getuid?.() ?? 0;
+    const production = createAutomationRunnerDependencies(fixture.context, lifecycle, {
+      userHome: parseCanonicalAbsolutePathText(fixture.userHome),
+      domain: launchdGuiDomain(parseEffectiveUid(uid, uid)),
+      executablePath: parseCanonicalAbsolutePathText(entrypointPath(fixture.paths.home)),
+    });
+    const runner = new AutomationRunner({
+      ...production,
+      authenticate: () => Promise.resolve(),
+      handlers: {
+        run: (job) => {
+          spawned.push(job);
+          return Promise.reject(new Error("the handler must not run"));
+        },
+      },
+    });
+
+    expect(await runner.run({ job: "brain-garden", generation: parseLowerHexSha256("b".repeat(64)) })).toStrictEqual({
+      kind: "recorded",
+      outcome: "automation_disabled",
+    });
+    expect(spawned).toStrictEqual([]);
+    const status = parseAutomationStatusRecord(await nodeFs.readFile(automationStatusPath(parseCanonicalAbsolutePathText(fixture.paths.home), "brain-garden")));
+    expect(status).toMatchObject({ job: "brain-garden", outcome: "automation_disabled", reasonCode: "automation_disabled" });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("installs and loads a current plist for both optional jobs beside the mandatory three", async () => {

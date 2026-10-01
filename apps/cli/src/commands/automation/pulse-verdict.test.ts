@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computePulse, parsePulseHeader, renderPulseReport } from "./pulse-verdict.js";
+import { computePulse, gardenRunKind, parsePulseHeader, renderPulseReport } from "./pulse-verdict.js";
 import type { PulseInputV1 } from "./pulse-verdict.js";
 
 const base: PulseInputV1 = {
@@ -72,5 +72,34 @@ describe("computePulse", () => {
   it("parses nothing from an empty or foreign first line", () => {
     expect(parsePulseHeader("")).toBeNull();
     expect(parsePulseHeader("<!-- pulse {\"date\":1} -->\n")).toBeNull();
+  });
+  it("renders only a parsed ISO timestamp, missing or unreadable for the index date (security L1)", () => {
+    const render = (indexGeneratedAt: string | null): string => {
+      const input = { ...base, indexGeneratedAt };
+      const { header, reasons } = computePulse(input, null);
+      return renderPulseReport(header, reasons, input);
+    };
+    expect(render("2026-10-04T17:00:00Z")).toContain("- index generated: 2026-10-04T17:00:00.000Z\n");
+    expect(render(null)).toContain("- index generated: missing\n");
+    const huge = `2026-10-04 ${"<script>".repeat(9_000)}`;
+    const report = render(huge);
+    expect(report).toContain("- index generated: unreadable\n");
+    expect(report).not.toContain("<script>");
+    expect(report.length).toBeLessThan(4_096);
+  });
+});
+
+describe("gardenRunKind", () => {
+  it("reads a gardener refusal as failed, like a failure (Ruling 39 I1)", () => {
+    expect(gardenRunKind("handler_refused", "garden_agent_unsupported")).toBe("failed");
+    expect(gardenRunKind("handler_failed", "agent_timeout")).toBe("failed");
+    expect(computePulse({ ...base, gardenLast: [gardenRunKind("handler_refused", "x"), gardenRunKind("handler_refused", "x")] }, null).header.verdict).toBe("failure");
+    expect(computePulse({ ...base, gardenLast: [gardenRunKind("handler_refused", "x"), "success"] }, null).reasons).toContain("garden_failed");
+  });
+  it("keeps success, the full-queue skip and every other record apart", () => {
+    expect(gardenRunKind("success", "ok")).toBe("success");
+    expect(gardenRunKind("success", "skipped_review_queue_full")).toBe("skipped_review_queue_full");
+    expect(gardenRunKind("success", "skipped_index_missing")).toBe("other");
+    expect(gardenRunKind("automation_disabled", "automation_disabled")).toBe("other");
   });
 });

@@ -27,6 +27,23 @@ const DAY_MS = 86_400_000;
 const CAPTURE_WAIT_DAYS = 14;
 const INDEX_MAX_AGE_DAYS = 8;
 
+export type GardenRunKindV1 = PulseInputV1["gardenLast"][number];
+
+/** Ruling 39 I1: a refusal is a gardener that did not run, so it counts as failed, as a failure does. */
+export function gardenRunKind(outcome: string, reasonCode: string): GardenRunKindV1 {
+  if (outcome === "handler_failed" || outcome === "handler_refused") return "failed";
+  if (outcome === "success" && reasonCode === "ok") return "success";
+  if (outcome === "success" && reasonCode === "skipped_review_queue_full") return "skipped_review_queue_full";
+  return "other";
+}
+
+/** Security L1: the index's own text never reaches the report — only a re-rendered timestamp. */
+function renderGeneratedAt(value: string | null): string {
+  if (value === null) return "missing";
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? new Date(at).toISOString() : "unreadable";
+}
+
 /** `null` for an unreadable timestamp, so the caller reports it instead of treating it as young. */
 function olderThan(now: Date, timestamp: string, days: number): boolean | null {
   const at = Date.parse(timestamp);
@@ -85,7 +102,7 @@ export function renderPulseReport(header: PulseHeaderV1, reasons: readonly strin
     `- accepted captures awaiting ingest: ${String(input.accepted.length)}`,
     `- failing doctor checks: ${String(input.doctorFailing)}`,
     `- lint errors: ${String(input.lintErrors)}`,
-    `- index generated: ${input.indexGeneratedAt ?? "missing"}`,
+    `- index generated: ${renderGeneratedAt(input.indexGeneratedAt)}`,
     "",
   ].join("\n");
 }

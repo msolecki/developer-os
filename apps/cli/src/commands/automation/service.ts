@@ -479,7 +479,7 @@ function automationFiles(
     git: home.activation?.git ?? { state: "inactive" },
     automation:
       enabled && lifecycleConfig !== undefined
-        ? { state: "active", configHash: lifecycleConfigHash("automation", lifecycleConfig) }
+        ? { state: "active", configHash: lifecycleConfigHash("automation", lifecycleConfig, brainGarden) }
         : { state: "inactive" },
   };
   const activation = encoder.encode(encodeLifecycleActivationRecord(record));
@@ -544,8 +544,7 @@ function targetSchedules(home: GitHomeV1, flags: readonly string[]): AutomationC
  * NEW-134 §3.1: while `brain-garden` is scheduled, the vendor it may spawn is pinned by
  * absolute path — resolved here through discovery and the trust check `ingest` uses, never by
  * the scheduled run. Ruling 34: resolved only when `--garden-agent` names an agent, the job is
- * newly scheduled, or no pin exists (the named agent, else the pinned one, else the first
- * installed); otherwise the pin is kept as it is, so an uninstalled agent never blocks an
+ * newly scheduled, or no pin exists (always Claude, Ruling 38); otherwise the pin is kept as it is, so an uninstalled agent never blocks an
  * unrelated schedule change. Removing the job drops the pin. Preview and apply decide alike
  * from the same recorded configuration, so they agree or the apply is stale.
  */
@@ -564,12 +563,18 @@ async function gardenPin(
   const pinned = home.config.automation.brainGarden;
   const scheduled = (home.config.automation.lifecycle?.schedules ?? []).some((entry) => entry.job === "brain-garden");
   if (gardenAgent === null && scheduled && pinned !== undefined) return pinned;
+  /**
+   * Ruling 38: only Claude, which runs with `--tools ""`; Codex has no tool-free mode, so it is
+   * refused whether named or the only agent installed — never resolved as a fallback.
+   */
+  const noCodex = "the scheduled gardener runs Claude with no tools; Codex has no tool-free mode yet. Install claude, then developer-os automation enable --schedule brain-garden=<schedule> --garden-agent claude";
+  if (gardenAgent === "codex") return refuse("capability_unavailable", EXIT_CODES.capabilityUnavailable, [], noCodex);
   try {
-    const vendor = await selectVendor(context, gardenAgent ?? pinned?.agent ?? null);
-    return { agent: vendor.name, executable: vendor.executable };
+    const vendor = await selectVendor(context, "claude");
+    return { agent: "claude", executable: vendor.executable };
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && error.code === EXIT_CODES.capabilityUnavailable) {
-      return refuse("capability_unavailable", EXIT_CODES.capabilityUnavailable, [], "install claude or codex, then developer-os doctor to confirm it is found");
+      return refuse("capability_unavailable", EXIT_CODES.capabilityUnavailable, [], noCodex);
     }
     return refuse("garden_executable_untrusted", EXIT_CODES.securityRefusal, [], "developer-os doctor");
   }
@@ -1050,8 +1055,8 @@ function activationArm(home: GitHomeV1): "absent" | "inactive" | "active" | "mis
   const arm = home.activation?.automation;
   if (arm === undefined) return "absent";
   if (arm.state === "inactive") return "inactive";
-  const lifecycleConfig = home.config.automation.lifecycle;
-  return lifecycleConfig !== undefined && arm.configHash === lifecycleConfigHash("automation", lifecycleConfig) ? "active" : "mismatched";
+  const { lifecycle: lifecycleConfig, brainGarden } = home.config.automation;
+  return lifecycleConfig !== undefined && arm.configHash === lifecycleConfigHash("automation", lifecycleConfig, brainGarden) ? "active" : "mismatched";
 }
 
 async function lastRunOf(lifecycle: CliLifecycleContext, productHome: CanonicalAbsolutePathV1, job: ScheduledJobIdV1): Promise<AutomationJobStatusV1["lastRun"]> {

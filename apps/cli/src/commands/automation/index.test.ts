@@ -112,7 +112,7 @@ describe("renderAutomation", () => {
         { job: "doctor", schedule: null, eligible: true, installed: "current", live: null, lastRun: run("doctor", "ok") },
       ],
     });
-    expect(lines).toContain("brain-pulse    eligible current - last run success at 2026-10-01T07:00:01.000Z verdict attention");
+    expect(lines).toContain("brain-pulse    eligible current - last run success at 2026-10-01T07:00:01.000Z verdict attention report state/pulse.0.md");
     expect(lines).toContain("doctor         eligible current - last run success at 2026-10-01T07:00:01.000Z");
 
     const failed = renderAutomation({

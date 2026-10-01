@@ -93,11 +93,11 @@ export async function runAutomation(context: CliContext, request: AutomationComm
   }
 }
 
-/** NEW-134: a successful `brain-pulse` run's verdict is its `pulse_<verdict>` reason code; any other record carries none. */
+/** NEW-134: a successful `brain-pulse` run's verdict is its `pulse_<verdict>` reason code, and its report is slot 0; any other record carries none. */
 function verdictOf(job: AutomationJobStatusV1): string {
   if (job.job !== "brain-pulse" || job.lastRun === null || job.lastRun === "invalid" || job.lastRun.outcome !== "success") return "";
   const verdict = /^pulse_(healthy|attention|failure)$/u.exec(job.lastRun.reasonCode)?.[1];
-  return verdict === undefined ? "" : ` verdict ${verdict}`;
+  return verdict === undefined ? "" : ` verdict ${verdict} report state/pulse.0.md`;
 }
 
 export function renderAutomation(data: AutomationCommandDataV1): readonly string[] {

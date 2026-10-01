@@ -10,20 +10,26 @@ import {
   parseLowerHexSha256,
   parseSafeReasonCode,
   parseUInt64Decimal,
+  parseUtcTimestamp,
 } from "@developer-os/core";
-import type { CanonicalAbsolutePathV1, HeldLifecycleStableLockV1 } from "@developer-os/core";
+import type { CanonicalAbsolutePathV1, HeldLifecycleStableLockV1, ScheduledJobIdV1 } from "@developer-os/core";
 import { launchdGuiDomain } from "@developer-os/platform-macos";
 
 import type { CliLifecycleContext } from "../../lifecycle/context.js";
 import { withLifecycleMutation } from "../../lifecycle/mutation-gate.js";
+import { hostWith, scriptedLaunchd } from "../../lifecycle/testing.js";
+import { scriptedEffectPorts, scriptedGitRuntime } from "../git/testing.js";
 import {
   automationRunnerLeasePath,
   automationStatusPath,
   parseAutomationStatusRecord,
 } from "../../lifecycle/runtime-records.js";
+import type { BoundedRedactedJsonV1 } from "../../lifecycle/runtime-records.js";
 import { runScheduledBrain } from "../brain.js";
 import { runConfig } from "../config.js";
 import { runInit } from "../init.js";
+import { renderAutomation, runAutomation } from "./index.js";
+import { runScheduledPulse } from "./pulse.js";
 import {
   createCommandFixture,
   inventoryDigest,
@@ -44,7 +50,12 @@ let sharedHome: Promise<CommandFixture> | null = null;
 /** One real fresh V2 `init` per file; every case restores what it holds before it returns. */
 function sharedV2Home(): Promise<CommandFixture> {
   sharedHome ??= (async () => {
-    const fixture = await createCommandFixture("runner-shared", { bootstrapAvailable: true });
+    // A scripted launchd host, so `automation status` can observe the distribution; no case here loads a job.
+    const launchd = scriptedLaunchd({ clock: () => parseUtcTimestamp("2026-10-01T00:00:00.000Z"), host: hostWith() });
+    const fixture = await createCommandFixture("runner-shared", {
+      bootstrapAvailable: true,
+      effectPorts: (context) => ({ ...scriptedEffectPorts(scriptedGitRuntime(), { on: false })(context), launchd: launchd.ports }),
+    });
     // No pre-created brain: fresh init seeds the template vault the scheduled brain jobs walk.
     const result = await runInit(fixture.context, ACCEPTED);
     if (!result.ok) throw new Error(`fixture init failed: ${JSON.stringify(result)}`);
@@ -247,6 +258,57 @@ describe("runtime records through the real gate", () => {
     } finally {
       await held.release();
       await lease.release();
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * Ruling 39 C1: a garden skip and every pulse run are `success` with a reason other than `ok`.
+   * Written through the real record store and read back through `automation status`, never a stub.
+   */
+  it("records success/skipped_* and success/pulse_* and shows them in automation status; pulse reads two garden refusals as failure", async () => {
+    const home = await sharedV2Home();
+    const lifecycle = lifecycleOf(home);
+    const productHome = parseCanonicalAbsolutePathText(home.paths.home);
+    const production = createAutomationRunnerDependencies(home.context, lifecycle, {
+      userHome: parseCanonicalAbsolutePathText(home.userHome),
+      domain: launchdGuiDomain(parseEffectiveUid(UID, UID)),
+      executablePath: parseCanonicalAbsolutePathText(join(home.paths.home, "bin", "developer-os.mjs")),
+    });
+    const jobs = ["brain-garden", "brain-pulse"] as const;
+    const leases = new Map<ScheduledJobIdV1, Awaited<ReturnType<typeof lifecycle.locks.acquireExisting>>>();
+    for (const job of jobs) leases.set(job, await lifecycle.locks.acquireExisting(automationRunnerLeasePath(productHome, job)));
+    const { held, borrowed } = await heldGlobal(home);
+    const write = async (job: ScheduledJobIdV1, outcome: "success" | "handler_refused", reasonCode: string, data: BoundedRedactedJsonV1 = null) => {
+      const lock = leases.get(job);
+      if (lock === undefined) throw new Error(`no lease for ${job}`);
+      const at = lifecycle.clock();
+      await production.records(borrowed).writeLog(
+        { schemaVersion: 1, job, outcome, reasonCode: parseSafeReasonCode(reasonCode), startedAt: at, completedAt: at, data },
+        { job, lock },
+      );
+    };
+    try {
+      await write("brain-garden", "success", "skipped_index_missing", { skipped: "index_missing" });
+      await write("brain-pulse", "success", "pulse_healthy", { verdict: "healthy", report: "state/pulse.0.md", notified: null });
+
+      const status = await runAutomation(home.context, { subcommand: "status" });
+      if (!status.ok || status.data.kind !== "status") throw new Error(JSON.stringify(status));
+      const last = (job: ScheduledJobIdV1) => status.data.kind === "status" ? status.data.jobs.find((entry) => entry.job === job)?.lastRun : undefined;
+      expect(last("brain-garden")).toMatchObject({ outcome: "success", reasonCode: "skipped_index_missing" });
+      expect(last("brain-pulse")).toMatchObject({ outcome: "success", reasonCode: "pulse_healthy" });
+      expect(renderAutomation(status.data).find((line) => line.startsWith("brain-pulse"))).toMatch(
+        / last run success at \S+ verdict healthy report state\/pulse\.0\.md$/u,
+      );
+
+      // Ruling 39 I1: the gardener refused twice in a row reads as failed twice, not as "other".
+      await write("brain-garden", "handler_refused", "garden_agent_unsupported", { message: "refused" });
+      await write("brain-garden", "handler_refused", "garden_agent_unsupported", { message: "refused" });
+      const pulse = await runScheduledPulse(home.context, borrowed);
+      expect(pulse).toMatchObject({ outcome: "success", reasonCode: "pulse_failure" });
+      expect(await nodeFs.readFile(join(home.paths.stateDir, "pulse.0.md"), "utf8")).toContain("- garden_failed_twice");
+    } finally {
+      await held.release();
+      for (const lease of leases.values()) await lease.release();
     }
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

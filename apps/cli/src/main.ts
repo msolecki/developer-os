@@ -105,7 +105,7 @@ const USAGE = [
   "  --remote <url>   the bare local repository, or HTTPS or SSH URL, Git pushes to (git enable)",
   "  --branch <name>  the branch to synchronize; the attached branch or main by default (git enable)",
   "  --schedule <job>=<schedule>  hourly@MM, daily@HH:MM or weekly@<day>,HH:MM; one per job (automation enable)",
-  "  --garden-agent <claude|codex>  the agent brain-garden pins; the first installed one by default (automation enable)",
+  "  --garden-agent <claude|codex>  the agent brain-garden pins: claude only, codex is refused (no tool-free mode yet) (automation enable)",
 ].join("\n");
 
 const OPTIONS = {

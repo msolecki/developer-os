@@ -45,7 +45,7 @@ export interface DeveloperOsConfigV1 {
   readonly automation: {
     readonly enabled: boolean;
     readonly lifecycle?: AutomationConfigV1;
-    /** Beside `lifecycle`, not inside it, so `lifecycleConfigHash` is unchanged. */
+    /** Beside `lifecycle`, not inside it; `lifecycleConfigHash` binds it only when present (Ruling 37). */
     readonly brainGarden?: BrainGardenConfigV1;
   };
   /**

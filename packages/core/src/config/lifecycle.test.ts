@@ -535,13 +535,26 @@ describe("the automation schedule registry", () => {
         `[automation.brainGarden]\nagent = "claude"\nexecutable = "${executable}"\n\n[automation.lifecycle]`,
       );
 
-    it("reads the table, round-trips it, and leaves lifecycleConfigHash unchanged", () => {
+    it("reads the table and round-trips it", () => {
       const config = loadConfig(withGarden("/opt/homebrew/bin/claude"));
       expect(config.automation.brainGarden).toStrictEqual({ agent: "claude", executable: "/opt/homebrew/bin/claude" });
       expect(loadConfig(serializeConfig(config))).toStrictEqual(config);
-      expect(lifecycleConfigHash("automation", loadedAutomationLifecycle(withGarden("/opt/homebrew/bin/claude")))).toBe(
-        lifecycleConfigHash("automation", loadedAutomationLifecycle(automationToml)),
+    });
+
+    /** Ruling 37: the pin is bound to the activation; with no pin the bytes stay those every existing activation holds. */
+    it("binds the pin into the automation hash, and leaves the hash of a pin-free configuration unchanged", () => {
+      const lifecycle = loadedAutomationLifecycle(automationToml);
+      const recorded = "b230878484962dd17f3b503c54350ef017e481b7baf5a76212778e10328d6760";
+      expect(lifecycleConfigHash("automation", lifecycle)).toBe(recorded);
+      expect(lifecycleConfigHash("automation", lifecycle, undefined)).toBe(recorded);
+      const pinned = lifecycleConfigHash("automation", lifecycle, { agent: "claude", executable: "/opt/homebrew/bin/claude" });
+      expect(pinned).toBe(
+        createHash("sha256")
+          .update("developer-os:lifecycle:automation:v1\0", "ascii")
+          .update(`{"brainGarden":{"agent":"claude","executable":"/opt/homebrew/bin/claude"},"enabled":true,"lifecycle":${SPEC_AUTOMATION_RECORD}}\n`, "utf8")
+          .digest("hex"),
       );
+      expect(lifecycleConfigHash("automation", lifecycle, { agent: "claude", executable: "/usr/local/bin/claude" })).not.toBe(pinned);
     });
 
     it("refuses a relative executable", () => {
