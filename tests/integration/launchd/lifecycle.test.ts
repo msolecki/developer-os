@@ -110,6 +110,9 @@ describe("automation end to end through an injected launchd domain", () => {
         ["brain-lint", "current", "loaded"],
         ["doctor", "current", "loaded"],
         ["git-sync", "absent", null],
+        // NEW-134: the optional jobs are off until a --schedule names them.
+        ["brain-garden", "absent", null],
+        ["brain-pulse", "absent", null],
       ]);
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
@@ -168,9 +171,15 @@ describe("automation end to end through an injected launchd domain", () => {
       await recoverThroughNextMutation(home);
       const status = await statusOf(home);
       expect(status.closure).toBe("clear");
-      const eligible = status.jobs.filter((job) => job.eligible);
-      expect(eligible.map((job) => job.job)).toStrictEqual([...INSTALLED]);
-      expect(eligible.every((job) => job.installed === "current" && job.live === "loaded")).toBe(true);
+      /** NEW-134: an unscheduled optional job is eligible but off, so only the scheduled ones are installed. */
+      const scheduled = status.jobs.filter((job) => job.eligible && job.schedule !== null);
+      expect(scheduled.map((job) => job.job)).toStrictEqual([...INSTALLED]);
+      expect(scheduled.every((job) => job.installed === "current" && job.live === "loaded")).toBe(true);
+      expect(status.jobs.filter((job) => job.schedule === null).map((job) => [job.job, job.installed])).toStrictEqual([
+        ["git-sync", "absent"],
+        ["brain-garden", "absent"],
+        ["brain-pulse", "absent"],
+      ]);
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );

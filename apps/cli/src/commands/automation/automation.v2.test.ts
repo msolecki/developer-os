@@ -388,6 +388,9 @@ describe("automation on a real V2 home", () => {
         ["brain-lint", true, "current", "loaded", null],
         ["doctor", true, "current", "loaded", null],
         ["git-sync", false, "absent", null, null],
+        // NEW-134: the optional jobs are eligible, but off until a --schedule names them.
+        ["brain-garden", true, "absent", null, null],
+        ["brain-pulse", true, "absent", null, null],
       ]);
       expect(launchd.events).toStrictEqual(eventsBefore);
     },
@@ -424,6 +427,8 @@ describe("automation on a real V2 home", () => {
           ["brain-lint", "third_state"],
           ["doctor", "third_state"],
           ["git-sync", null],
+          ["brain-garden", null],
+          ["brain-pulse", null],
         ]);
       } finally {
         host.thirdState = false;
