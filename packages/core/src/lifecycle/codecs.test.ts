@@ -637,7 +637,7 @@ describe("the closed lifecycle tables", () => {
       steps: { minimum: 1, maximum: 256 },
       foundationRefs: { minimum: 0, maximum: 64 },
       mutationsPerRef: { minimum: 1, maximum: 256 },
-      plistPaths: { minimum: 0, maximum: 4 },
+      plistPaths: { minimum: 0, maximum: 6 },
       previewFiles: { minimum: 0, maximum: 16 },
       compactionEntries: { minimum: 2, maximum: 70 },
       nextStep: { minimum: 0, maximum: 256 },
@@ -714,7 +714,7 @@ describe("the coordinator execution-plan codec", () => {
   });
 
   it.each([
-    ["five plist paths", [`${HOME}/a`, `${HOME}/b`, `${HOME}/c`, `${HOME}/d`, `${HOME}/e`], /plistPaths: length/u],
+    ["seven plist paths", [`${HOME}/a`, `${HOME}/b`, `${HOME}/c`, `${HOME}/d`, `${HOME}/e`, `${HOME}/f`, `${HOME}/g`], /plistPaths: length/u],
     ["unsorted plist paths", [`${HOME}/b`, `${HOME}/a`], /plistPaths: order/u],
     ["duplicated plist paths", [`${HOME}/a`, `${HOME}/a`], /plistPaths: order/u],
   ])("refuses %s", (_name, plistPaths, reason) => {

@@ -120,7 +120,8 @@ export const LIFECYCLE_PLAN_BOUNDS = {
   steps: { minimum: 1, maximum: 256 },
   foundationRefs: { minimum: 0, maximum: 64 },
   mutationsPerRef: { minimum: 1, maximum: 256 },
-  plistPaths: { minimum: 0, maximum: 4 },
+  /** One per registry job (`SCHEDULED_JOB_IDS`, six since NEW-134). */
+  plistPaths: { minimum: 0, maximum: 6 },
   previewFiles: { minimum: 0, maximum: 16 },
   compactionEntries: { minimum: 2, maximum: 70 },
   nextStep: { minimum: 0, maximum: 256 },
