@@ -143,7 +143,7 @@ const GATE_COVERAGE: readonly GateCoverageV1[] = [
   {
     gate: "V2 new init registers ownership",
     tests: [
-      ["apps/cli/src/bootstrap/fresh-layout.v2.test.ts", "creates exactly the fresh plan path set Spec 2 §3.2 and Spec 1 §2.1 reserve"],
+      ["apps/cli/src/bootstrap/fresh-layout.v2.test.ts", "creates exactly the fresh plan path set, brain-garden and brain-pulse records and pulse slots included, Spec 2 §3.2 and Spec 1 §2.1 reserve"],
       ["apps/cli/src/bootstrap/bookkeeping.v2.test.ts", "keeps the bookkeeping set out of the V2 manifest"],
       ["apps/cli/src/lifecycle/mutation-gate.test.ts", "captures on a V1 home with the legacy executor's own ID and never creates a global lock"],
     ],
@@ -372,7 +372,7 @@ const GATE_COVERAGE: readonly GateCoverageV1[] = [
   {
     gate: "automation is closed",
     tests: [
-      ["apps/cli/src/commands/automation/handlers.test.ts", "cover exactly the closed four-job registry, none of which may spawn a vendor"],
+      ["apps/cli/src/commands/automation/handlers.test.ts", "cover exactly the closed six-job registry, of which only brain-garden may spawn a vendor"],
       ["packages/platform-macos/src/launchd/registry.test.ts", "ignores ambient HOME and product-home overrides"],
       ["apps/cli/src/commands/automation/index.test.ts", "accepts the exact ProgramArguments tail for every registry job"],
       ["tests/integration/launchd/lifecycle.test.ts", "refuses to plan over an unowned plist at a generated path and leaves it byte-identical"],
