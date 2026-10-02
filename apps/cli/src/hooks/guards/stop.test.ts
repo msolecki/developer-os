@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -312,6 +312,59 @@ describe("guardStop", () => {
     expect(await tree(root)).toStrictEqual(before);
     expect(await readFile(join(root, "keep.tsbuildinfo"), "utf8")).toBe("keep");
   }, 30_000);
+
+  /** A runner that, like tsc, drops `files` (path to content) while it runs. */
+  const writing = (files: string[]) => async (): Promise<ProcessResult> => {
+    for (const f of files) await writeFile(f, "x");
+    return OK;
+  };
+  const exists = (path: string) => lstat(path).then(() => true, () => false);
+
+  it("removes a build-info file the run created, including one named by an extended config", async () => {
+    const root = await project({ config: '{ "extends": "./base.json" }' });
+    await writeFile(join(root, "base.json"), '{ "compilerOptions": { "tsBuildInfoFile": "./out/b.tsbuildinfo" } }');
+    await mkdir(join(root, "out"));
+    const files = [join(root, "tsconfig.tsbuildinfo"), join(root, "out/b.tsbuildinfo")];
+    const { runtime } = runtimeFor(root, writing(files));
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
+    expect(await exists(files[0] as string)).toBe(false);
+    expect(await exists(files[1] as string)).toBe(false);
+  });
+
+  it.each([
+    ["absolute", (outside: string) => join(outside, "o.tsbuildinfo")],
+    ["../", () => "../outside-bi.tsbuildinfo"],
+  ])("never deletes a build-info candidate outside the repo (%s)", async (_n, target) => {
+    const outside = await tempDir();
+    const ref = target(outside);
+    const root = await project({ config: JSON.stringify({ compilerOptions: { tsBuildInfoFile: ref } }) });
+    const abs = join(root, ref);
+    const file = ref.startsWith("/") ? ref : abs;
+    const { runtime } = runtimeFor(root, writing([file]));
+    await guardStop(payload(false), runtime);
+    expect(await exists(file)).toBe(true);
+    await rm(file, { force: true });
+  });
+
+  it("keeps a pre-existing build-info file and a dangling symlink at a candidate path", async () => {
+    const root = await project({ config: '{ "references": [{ "path": "p" }] }' });
+    await mkdir(join(root, "p"));
+    await writeFile(join(root, "p/tsconfig.json"), "{}\n");
+    await writeFile(join(root, "p/tsconfig.tsbuildinfo"), "keep");
+    await symlink(join(root, "missing-target"), join(root, "tsconfig.tsbuildinfo"));
+    const { runtime } = runtimeFor(root);
+    await guardStop(payload(false), runtime);
+    expect(await readFile(join(root, "p/tsconfig.tsbuildinfo"), "utf8")).toBe("keep");
+    expect((await lstat(join(root, "tsconfig.tsbuildinfo"))).isSymbolicLink()).toBe(true);
+  });
+
+  it("survives a directory at a candidate path and still returns a result", async () => {
+    const root = await project();
+    await mkdir(join(root, "tsconfig.tsbuildinfo"));
+    const { runtime } = runtimeFor(root);
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
+    expect((await lstat(join(root, "tsconfig.tsbuildinfo"))).isDirectory()).toBe(true);
+  });
 
   it("blocks a failing typecheck with exactly the first 40 diagnostic lines", async () => {
     const lines = Array.from({ length: 60 }, (_, index) => `src/a.ts(${String(index + 1)},1): error TS2322: x`);

@@ -1,4 +1,4 @@
-import { readFile, realpath, rm } from "node:fs/promises";
+import { lstat, readFile, realpath, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import type { ProcessResult } from "@developer-os/security";
@@ -60,23 +60,62 @@ async function referencedConfigs(config: string, root: string): Promise<string[]
   return out;
 }
 
-/** Build-info files tsc may write for these configs: default name, `tsBuildInfoFile`, and under `outDir`. */
-async function buildInfoCandidates(configs: string[]): Promise<string[]> {
+/** outDir / tsBuildInfoFile of a config, following relative `extends` chains (package extends: given up silently). */
+async function buildOptions(config: string): Promise<{ outDir?: string; tsBuildInfoFile?: string }> {
+  const found: { outDir?: string; tsBuildInfoFile?: string } = {};
+  let current = config;
+  for (let depth = 0; depth < 10; depth++) {
+    const parsed = await readConfig(current);
+    const dir = dirname(current);
+    const { outDir, tsBuildInfoFile } = parsed.compilerOptions ?? {};
+    if (found.outDir === undefined && typeof outDir === "string") found.outDir = resolve(dir, outDir);
+    if (found.tsBuildInfoFile === undefined && typeof tsBuildInfoFile === "string") found.tsBuildInfoFile = resolve(dir, tsBuildInfoFile);
+    const ext = (parsed as { extends?: unknown }).extends;
+    if (typeof ext !== "string" || !ext.startsWith(".")) break;
+    current = resolve(dir, ext.endsWith(".json") ? ext : `${ext}.json`);
+  }
+  return found;
+}
+
+/** Real location of a path that may not exist yet: the nearest existing ancestor, realpath'd, plus the rest. */
+async function realish(path: string): Promise<string> {
+  const rest: string[] = [];
+  for (let cur = path; ; cur = dirname(cur)) {
+    try {
+      return join(await realpath(cur), ...rest);
+    } catch {
+      if (dirname(cur) === cur) throw new Error("no existing ancestor");
+      rest.unshift(basename(cur));
+    }
+  }
+}
+
+/** Build-info files tsc may write for these configs (default name, `tsBuildInfoFile`, under `outDir`), inside `root` only. */
+async function buildInfoCandidates(configs: string[], root: string): Promise<string[]> {
   const found = new Set<string>();
   for (const config of configs) {
-    const dir = dirname(config);
     const name = `${basename(config, ".json")}.tsbuildinfo`;
-    found.add(join(dir, name));
+    found.add(join(dirname(config), name));
     try {
-      const { outDir, tsBuildInfoFile } = (await readConfig(config)).compilerOptions ?? {};
-      if (typeof outDir === "string") found.add(resolve(dir, outDir, name));
-      if (typeof tsBuildInfoFile === "string") found.add(resolve(dir, tsBuildInfoFile));
+      const { outDir, tsBuildInfoFile } = await buildOptions(config);
+      if (outDir !== undefined) found.add(join(outDir, name));
+      if (tsBuildInfoFile !== undefined) found.add(tsBuildInfoFile);
     } catch {
       // unreadable config: the default name is still covered
     }
   }
-  return [...found].filter((path) => path.endsWith(".tsbuildinfo"));
+  const kept: string[] = [];
+  for (const path of found) {
+    try {
+      if (path.endsWith(".tsbuildinfo") && inside(root, await realish(path))) kept.push(path);
+    } catch {
+      // unresolvable: not a candidate
+    }
+  }
+  return kept;
 }
+
+const exists = (path: string) => lstat(path).then(() => true, () => false);
 
 /** Older tsc rejects `-b --noEmit` (TS5094, TS6310). */
 const BUILD_REJECTED = /^error (TS5094|TS6310)\b/mu;
@@ -97,9 +136,11 @@ export const guardStop: HookVerbHandler = async (payload, runtime) => {
   }
   if (refs === "outside") return { kind: "allow", note: "typecheck skipped: a tsconfig reference leaves the repo" };
   // A stop hook must leave the tree as it found it: remove only build-info files this run creates.
-  const candidates = await buildInfoCandidates([config, ...refs]);
+  const realRoot = await realpath(root);
+  const candidates = await buildInfoCandidates([config, ...refs], realRoot);
   const preexisting = new Set<string>();
-  for (const path of candidates) if (await isRegularFile(path)) preexisting.add(path);
+  for (const path of candidates) if (await exists(path)) preexisting.add(path);
+  let cleanupFailed = false;
   const deadline = Date.now() + TSC_TIMEOUT_MS;
   const run = (args: string[]) =>
     runtime.runner.run({
@@ -133,11 +174,20 @@ export const guardStop: HookVerbHandler = async (payload, runtime) => {
   } catch {
     return { kind: "allow", note: "typecheck could not run" };
   } finally {
-    for (const path of candidates) if (!preexisting.has(path)) await rm(path, { force: true });
+    for (const path of candidates) {
+      if (preexisting.has(path)) continue;
+      try {
+        if ((await lstat(path)).isFile() && inside(realRoot, await realish(path))) await rm(path);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") cleanupFailed = true;
+      }
+    }
   }
   if (result.timedOut) return { kind: "allow", note: `typecheck timed out after ${String(TSC_TIMEOUT_MS)} ms` };
   if (result.exitCode === null) return { kind: "allow", note: "typecheck ended without an exit code" };
-  if (result.exitCode === 0) return { kind: "allow" };
+  if (result.exitCode === 0) {
+    return cleanupFailed ? { kind: "allow", note: "build-info cleanup failed" } : { kind: "allow" };
+  }
   const diagnostics = `${result.stdout}\n${result.stderr}`
     .split("\n")
     .filter((line) => line.trim() !== "")
