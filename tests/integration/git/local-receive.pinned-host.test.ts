@@ -180,7 +180,7 @@ describe("local receive on the admitted fixed-path Git", () => {
     expect(result.destinationTransitions.map((transition) => transition.operation)).toEqual(["create", "create"]);
   });
 
-  it("validates a thin incremental pack whose fix-thin bases the destination already owns", async () => {
+  it("validates an incremental self-contained pack over an advertised target", async () => {
     await commitFile("a.md", `${"line\n".repeat(400)}alpha\n`);
     const prior = await commitFile("b.md", "beta\n");
     const head = await commitFile("a.md", `${"line\n".repeat(400)}gamma\n`);
