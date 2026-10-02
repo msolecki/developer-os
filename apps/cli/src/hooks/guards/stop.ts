@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { readFile, realpath, rm } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import type { ProcessResult } from "@developer-os/security";
 
@@ -11,43 +11,75 @@ import { HOOK_CHILD_ENV, isRegularFile, localBin, TSC_TIMEOUT_MS } from "./child
 const MAX_DIAGNOSTIC_LINES = 40;
 const MAX_DIAGNOSTIC_BYTES = 1800;
 
-/** Strip JSONC comments and trailing commas, string-aware. ponytail: no BOM or unterminated-string repair. */
+/** Strip a BOM, JSONC comments and trailing commas; both passes skip string literals. */
 function stripJsonc(text: string): string {
-  let out = "";
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i] as string;
-    if (c === '"') {
-      let j = i + 1;
-      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1;
-      out += text.slice(i, j + 1);
-      i = j;
-    } else if (c === "/" && text[i + 1] === "/") {
-      while (i < text.length && text[i] !== "\n") i++;
-      out += "\n";
-    } else if (c === "/" && text[i + 1] === "*") {
-      const end = text.indexOf("*/", i + 2);
-      i = end === -1 ? text.length : end + 1;
-    } else out += c;
-  }
-  return out.replace(/,(\s*[\]}])/gu, "$1");
+  const strings = String.raw`"(?:\\.|[^"\\])*"`;
+  const noComments = text
+    .replace(/^\uFEFF/u, "")
+    .replace(new RegExp(`${strings}|//[^\\n]*|/\\*[\\s\\S]*?\\*/`, "gu"), (m) => (m.startsWith('"') ? m : " "));
+  return noComments.replace(new RegExp(`${strings}|,(?=\\s*[\\]}])`, "gu"), (m) => (m === "," ? "" : m));
 }
 
-/** Absolute tsconfig paths of the config's `references`; throws when the config is not a JSONC object. */
-async function referencedConfigs(config: string): Promise<string[]> {
+interface TsConfigShape {
+  references?: unknown;
+  compilerOptions?: { outDir?: unknown; tsBuildInfoFile?: unknown };
+}
+
+/** Parse a tsconfig as JSONC; throws when it is not an object. */
+async function readConfig(config: string): Promise<TsConfigShape> {
   const parsed: unknown = JSON.parse(stripJsonc(await readFile(config, "utf8")));
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("tsconfig is not an object");
-  const refs = (parsed as { references?: unknown }).references;
-  if (!Array.isArray(refs)) return [];
-  return refs.flatMap((ref: unknown) => {
-    const path = (ref as { path?: unknown } | null)?.path;
-    if (typeof path !== "string" || path === "") return [];
-    const abs = isAbsolute(path) ? path : resolve(dirname(config), path);
-    return [abs.endsWith(".json") ? abs : join(abs, "tsconfig.json")];
-  });
+  return parsed;
 }
 
-/** Older tsc rejects `-b --noEmit` with a location-less option error. */
-const BUILD_REJECTED = /^error TS\d+:.*(noEmit|build)/imu;
+function inside(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+/**
+ * Real tsconfig paths of the config's `references`, or "outside" when one is missing,
+ * unresolvable or leaves the repo root (`tsc -b` would follow it). Throws on an unreadable config.
+ */
+async function referencedConfigs(config: string, root: string): Promise<string[] | "outside"> {
+  const refs = (await readConfig(config)).references;
+  if (!Array.isArray(refs)) return [];
+  const out: string[] = [];
+  for (const ref of refs) {
+    const path = (ref as { path?: unknown } | null)?.path;
+    if (typeof path !== "string" || path === "") continue;
+    const abs = resolve(dirname(config), path);
+    try {
+      const real = await realpath(abs.endsWith(".json") ? abs : join(abs, "tsconfig.json"));
+      if (!inside(root, real)) return "outside";
+      out.push(real);
+    } catch {
+      return "outside";
+    }
+  }
+  return out;
+}
+
+/** Build-info files tsc may write for these configs: default name, `tsBuildInfoFile`, and under `outDir`. */
+async function buildInfoCandidates(configs: string[]): Promise<string[]> {
+  const found = new Set<string>();
+  for (const config of configs) {
+    const dir = dirname(config);
+    const name = `${basename(config, ".json")}.tsbuildinfo`;
+    found.add(join(dir, name));
+    try {
+      const { outDir, tsBuildInfoFile } = (await readConfig(config)).compilerOptions ?? {};
+      if (typeof outDir === "string") found.add(resolve(dir, outDir, name));
+      if (typeof tsBuildInfoFile === "string") found.add(resolve(dir, tsBuildInfoFile));
+    } catch {
+      // unreadable config: the default name is still covered
+    }
+  }
+  return [...found].filter((path) => path.endsWith(".tsbuildinfo"));
+}
+
+/** Older tsc rejects `-b --noEmit` (TS5094, TS6310). */
+const BUILD_REJECTED = /^error (TS5094|TS6310)\b/mu;
 
 export const guardStop: HookVerbHandler = async (payload, runtime) => {
   if (payload.stopHookActive !== false) return { kind: "allow" };
@@ -57,12 +89,17 @@ export const guardStop: HookVerbHandler = async (payload, runtime) => {
   if (script === null) return { kind: "allow" };
   const checkConfig = join(root, "tsconfig.check.json");
   const config = (await isRegularFile(checkConfig)) ? checkConfig : join(root, "tsconfig.json");
-  let refs: string[];
+  let refs: string[] | "outside";
   try {
-    refs = await referencedConfigs(config);
+    refs = await referencedConfigs(config, await realpath(root));
   } catch {
     return { kind: "allow", note: "typecheck skipped: tsconfig could not be read" };
   }
+  if (refs === "outside") return { kind: "allow", note: "typecheck skipped: a tsconfig reference leaves the repo" };
+  // A stop hook must leave the tree as it found it: remove only build-info files this run creates.
+  const candidates = await buildInfoCandidates([config, ...refs]);
+  const preexisting = new Set<string>();
+  for (const path of candidates) if (await isRegularFile(path)) preexisting.add(path);
   const deadline = Date.now() + TSC_TIMEOUT_MS;
   const run = (args: string[]) =>
     runtime.runner.run({
@@ -95,6 +132,8 @@ export const guardStop: HookVerbHandler = async (payload, runtime) => {
     }
   } catch {
     return { kind: "allow", note: "typecheck could not run" };
+  } finally {
+    for (const path of candidates) if (!preexisting.has(path)) await rm(path, { force: true });
   }
   if (result.timedOut) return { kind: "allow", note: `typecheck timed out after ${String(TSC_TIMEOUT_MS)} ms` };
   if (result.exitCode === null) return { kind: "allow", note: "typecheck ended without an exit code" };
