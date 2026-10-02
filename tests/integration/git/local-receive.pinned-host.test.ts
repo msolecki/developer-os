@@ -122,10 +122,20 @@ async function scenario(input: ScenarioV1): Promise<Awaited<ReturnType<typeof pr
   const target: GitRefStateV1 =
     input.target === null ? { state: "absent" } : { state: "present", oid: input.target, bytesHash: "0".repeat(64) as LowerHexSha256 };
   const receive = async (): Promise<GitLocalReceiveRunV1> => {
+    // Git's local transport unsets GIT_ALTERNATE_OBJECT_DIRECTORIES (`local_repo_env`) before it
+    // starts receive-pack, so the alternate is set inside the `--receive-pack` shell command. An
+    // empty `core.alternateRefsCommand` keeps receive-pack from advertising the alternate's tips as
+    // `.have`, so send-pack still sees only the snapshot refs, as the production shadow advertises.
+    const objects = `GIT_ALTERNATE_OBJECT_DIRECTORIES=${source}/.git/objects`;
+    const noAlternateRefs = "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.alternateRefsCommand GIT_CONFIG_VALUE_0=true";
     run(
-      ["send-pack", `--receive-pack=${RECEIVE_PACK} --skip-connectivity-check`, shadow.gitDir, `${input.commitOid}:${BRANCH}`],
+      [
+        "send-pack",
+        `--receive-pack=${objects} ${noAlternateRefs} ${RECEIVE_PACK} --skip-connectivity-check`,
+        shadow.gitDir,
+        `${input.commitOid}:${BRANCH}`,
+      ],
       source,
-      { GIT_ALTERNATE_OBJECT_DIRECTORIES: `${source}/.git/objects` },
     );
     const count = await packHeaderCount(shadow);
     return {
