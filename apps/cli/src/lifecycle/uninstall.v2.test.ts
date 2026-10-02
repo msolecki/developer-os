@@ -1107,10 +1107,10 @@ describe("chunking artifact removals into F(uninstall_artifacts) steps (D45)", (
     expect(chunks.flat()).toStrictEqual(rows(count));
   });
 
-  it("keeps the leading rows — the four runner leases — in the first step", () => {
+  it("keeps the leading rows — the registry's runner leases — in the first step", () => {
     const chunks = chunkUninstallArtifacts(rows(600), "/product");
 
-    expect(chunks[0]?.slice(0, 4)).toStrictEqual([0, 1, 2, 3]);
+    expect(chunks[0]?.slice(0, SCHEDULED_JOB_IDS.length)).toStrictEqual(SCHEDULED_JOB_IDS.map((_, index) => index));
   });
 
   it.each([7_937, 10_000])("refuses %i removals with D26's capacity verdict", (count) => {

@@ -315,7 +315,7 @@ interface ArtifactMutationV1 {
 
 /**
  * D45: the lease-first removal order split into consecutive `F(uninstall_artifacts)` steps of at
- * most 256 mutations. The four runner leases lead that order, so they always land in the first
+ * most 256 mutations. The registry's runner leases lead that order, so they always land in the first
  * step, which is the one `admitsUninstallDraining` and the lease step hooks read. An empty
  * list keeps its single step, exactly as before chunking.
  */
@@ -1474,7 +1474,7 @@ export class LifecycleUninstaller {
         entry.artifact.kind !== "directory" &&
         partitioned.drift.get(entry.artifact.path)?.kind !== "missing",
     );
-    /** §6: the four runner leases first, in reconciliation order, then unsigned UTF-8 order. */
+    /** §6: the registry's runner leases first, in reconciliation order, then unsigned UTF-8 order. */
     const removalOrder = (left: string, right: string): number => {
       const leftLease = leaseOrder.get(left) ?? Number.MAX_SAFE_INTEGER;
       const rightLease = leaseOrder.get(right) ?? Number.MAX_SAFE_INTEGER;
