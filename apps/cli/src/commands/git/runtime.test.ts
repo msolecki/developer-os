@@ -189,6 +189,41 @@ describe("the trampoline report's environment", () => {
     expect(withoutGitChildAdditions({ ...base, PATH: "/g:/g", GIT_PREFIX: "", __CF_USER_TEXT_ENCODING: "0x1F5:0x0:0x0" })).toEqual(base);
   });
 
+  /** What `/usr/bin/git`'s `xcrun` step adds for the selected developer directory, measured verbatim on Apple Git-157. */
+  const xcode = "/Applications/Xcode.app/Contents/Developer";
+  const xcodeShim = {
+    SDKROOT: `${xcode}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk`,
+    MANPATH: `${xcode}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/share/man:${xcode}/Platforms/MacOSX.platform/usr/share/man:${xcode}/usr/share/man:${xcode}/Toolchains/XcodeDefault.xctoolchain/usr/share/man:`,
+    CPATH: "/usr/local/include",
+    LIBRARY_PATH: "/usr/local/lib",
+  };
+  const clt = "/Library/Developer/CommandLineTools";
+  const cltShim = {
+    SDKROOT: `${clt}/SDKs/MacOSX.sdk`,
+    MANPATH: `${clt}/SDKs/MacOSX.sdk/usr/share/man:${clt}/usr/share/man:${clt}/Toolchains/XcodeDefault.xctoolchain/usr/share/man:`,
+    CPATH: "/usr/local/include",
+    LIBRARY_PATH: "/usr/local/lib",
+  };
+
+  it("folds back the four variables the Apple shim adds for an Xcode or Command Line Tools developer directory", () => {
+    expect(withoutGitChildAdditions({ ...base, ...xcodeShim })).toEqual(base);
+    expect(withoutGitChildAdditions({ ...base, ...cltShim })).toEqual(base);
+  });
+
+  it("keeps the shim's variables unless all four have exactly the shim's shape", () => {
+    for (const changed of [
+      { SDKROOT: xcodeShim.SDKROOT, MANPATH: xcodeShim.MANPATH, LIBRARY_PATH: xcodeShim.LIBRARY_PATH },
+      { ...xcodeShim, CPATH: "/evil/include" },
+      { ...xcodeShim, LIBRARY_PATH: "/evil/lib" },
+      { ...xcodeShim, SDKROOT: "/evil/SDKs/MacOSX.sdk" },
+      { ...xcodeShim, SDKROOT: "relative/SDKs/MacOSX.sdk" },
+      { ...xcodeShim, MANPATH: `/evil/man:${xcodeShim.MANPATH}` },
+      { ...cltShim, MANPATH: xcodeShim.MANPATH },
+    ]) {
+      expect(withoutGitChildAdditions({ ...base, ...changed })).toEqual({ ...base, ...changed });
+    }
+  });
+
   it("keeps any other value so admission still refuses it", () => {
     expect(withoutGitChildAdditions({ ...base, PATH: "/evil:/g" })).toEqual({ ...base, PATH: "/evil:/g" });
     expect(withoutGitChildAdditions({ ...base, GIT_PREFIX: "sub/" })).toEqual({ ...base, GIT_PREFIX: "sub/" });

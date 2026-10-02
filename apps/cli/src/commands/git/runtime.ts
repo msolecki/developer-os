@@ -326,8 +326,10 @@ function parseReport(line: string): TrampolineReportV1 | null {
 /**
  * What the pinned Git adds to the environment of every child it starts, measured on the pinned
  * host: `GIT_PREFIX` empty for a bare/shadow run, `GIT_EXEC_PATH` prepended to `PATH`, and the
- * CoreFoundation text encoding macOS sets in each process. Each is removed only in exactly that
- * shape, so any other difference still refuses `git_env_mismatch` at admission; the admitted
+ * CoreFoundation text encoding macOS sets in each process. The Apple `/usr/bin/git` shim's `xcrun`
+ * step also adds `SDKROOT`, `MANPATH`, `CPATH` and `LIBRARY_PATH` for the selected developer
+ * directory (spec residual 14), which the product never passes. Each is removed only in exactly
+ * that shape, so any other difference still refuses `git_env_mismatch` at admission; the admitted
  * image is exec'd with the permit's own environment either way.
  */
 export function withoutGitChildAdditions(env: Readonly<Record<string, string>>): Readonly<Record<string, string>> {
@@ -337,7 +339,27 @@ export function withoutGitChildAdditions(env: Readonly<Record<string, string>>):
   if (encoding !== undefined && !/^0x[0-9A-F]+:0x[0-9A-F]+:0x[0-9A-F]+$/u.test(encoding)) result.__CF_USER_TEXT_ENCODING = encoding;
   const execPath = rest.GIT_EXEC_PATH;
   if (execPath !== undefined && rest.PATH?.startsWith(`${execPath}:`) === true) result.PATH = rest.PATH.slice(execPath.length + 1);
+  if (isAppleShimAddition(rest)) {
+    delete result.SDKROOT;
+    delete result.MANPATH;
+    delete result.CPATH;
+    delete result.LIBRARY_PATH;
+  }
   return result;
+}
+
+const XCODE_SDK = "/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk";
+const COMMAND_LINE_TOOLS_SDK = "/SDKs/MacOSX.sdk";
+
+/** The four `xcrun` variables exactly as the shim derives them from one developer directory, measured on Apple Git-157. */
+function isAppleShimAddition(env: Readonly<Record<string, string>>): boolean {
+  const { SDKROOT: sdk, MANPATH: manpath, CPATH: cpath, LIBRARY_PATH: library } = env;
+  if (cpath !== "/usr/local/include" || library !== "/usr/local/lib" || sdk?.startsWith("/") !== true) return false;
+  const xcode = sdk.endsWith(XCODE_SDK);
+  if (!xcode && !sdk.endsWith(COMMAND_LINE_TOOLS_SDK)) return false;
+  const developer = sdk.slice(0, -(xcode ? XCODE_SDK : COMMAND_LINE_TOOLS_SDK).length);
+  const platform = xcode ? `${developer}/Platforms/MacOSX.platform/usr/share/man:` : "";
+  return manpath === `${sdk}/usr/share/man:${platform}${developer}/usr/share/man:${developer}/Toolchains/XcodeDefault.xctoolchain/usr/share/man:`;
 }
 
 /**
