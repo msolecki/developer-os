@@ -9,7 +9,7 @@ import { DARWIN_SYSTEM_EXECUTABLES } from "@developer-os/platform-macos";
 import { admitGitExecutables, recheckSystemExecutable } from "@developer-os/security";
 import type { GitProcessPhaseV1, SystemPathInspectorV1, SystemPathObservationV1 } from "@developer-os/security";
 
-import { bridgeReceivePack, createProductionGitRuntime, readLine, withoutGitChildAdditions, withoutReceiveQuarantine } from "./runtime.js";
+import { bridgeReceivePack, createProductionGitRuntime, readLine, withoutAppleShimAdditions, withoutGitChildAdditions, withoutReceiveQuarantine } from "./runtime.js";
 
 type PresentObservation = Exclude<SystemPathObservationV1, { kind: "absent" }>;
 
@@ -206,8 +206,18 @@ describe("the trampoline report's environment", () => {
   };
 
   it("folds back the four variables the Apple shim adds for an Xcode or Command Line Tools developer directory", () => {
-    expect(withoutGitChildAdditions({ ...base, ...xcodeShim })).toEqual(base);
-    expect(withoutGitChildAdditions({ ...base, ...cltShim })).toEqual(base);
+    expect(withoutAppleShimAdditions("git", { ...base, ...xcodeShim }, null)).toEqual({ env: base, developerDirectory: xcode });
+    expect(withoutAppleShimAdditions("git", { ...base, ...cltShim }, null)).toEqual({ env: base, developerDirectory: clt });
+    expect(withoutAppleShimAdditions("git", { ...base, ...xcodeShim }, xcode)).toEqual({ env: base, developerDirectory: xcode });
+  });
+
+  it("never folds them for the receive-pack gateway, which the product starts without the shim", () => {
+    expect(withoutAppleShimAdditions("git-receive-pack", { ...base, ...xcodeShim }, null)).toEqual({ env: { ...base, ...xcodeShim }, developerDirectory: null });
+    expect(withoutAppleShimAdditions("git-receive-pack", { ...base, ...xcodeShim }, xcode)).toEqual({ env: { ...base, ...xcodeShim }, developerDirectory: xcode });
+  });
+
+  it("refuses a report whose shim variables name another developer directory than the first one of the invocation", () => {
+    expect(() => withoutAppleShimAdditions("git", { ...base, ...cltShim }, xcode)).toThrow("git_env_mismatch");
   });
 
   it("keeps the shim's variables unless all four have exactly the shim's shape", () => {
@@ -220,7 +230,7 @@ describe("the trampoline report's environment", () => {
       { ...xcodeShim, MANPATH: `/evil/man:${xcodeShim.MANPATH}` },
       { ...cltShim, MANPATH: xcodeShim.MANPATH },
     ]) {
-      expect(withoutGitChildAdditions({ ...base, ...changed })).toEqual({ ...base, ...changed });
+      expect(withoutAppleShimAdditions("git", { ...base, ...changed }, null)).toEqual({ env: { ...base, ...changed }, developerDirectory: null });
     }
   });
 
