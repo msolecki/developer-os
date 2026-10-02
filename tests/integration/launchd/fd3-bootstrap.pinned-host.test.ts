@@ -34,8 +34,8 @@ import { describe, expect, it } from "vitest";
 /**
  * Spec §5.3 rule 5's FD-3 contract, proven once on the Phase 9 disposable-account gate (D71). It
  * loads and unloads one synthetic generated label in the real `gui/<uid>` domain, so it runs only
- * on an admitted host with `DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable`. Everywhere else it throws
- * `unsupported_launchd_distribution`: a skip would read as a pass. The transcript hash it prints is
+ * on an admitted host with `DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable`. Everywhere else it is skipped (D76) and the
+ * body's guard throws `unsupported_launchd_distribution` if reached. The transcript hash it prints is
  * gate evidence, never a runtime key.
  */
 const DISPOSABLE_HOST = process.env.DEVELOPER_OS_LAUNCHD_GATE_HOST === "disposable";
@@ -67,7 +67,8 @@ async function directoryIdentity(path: string, ownerUid: EffectiveUidV1): Promis
 }
 
 describe("launchctl FD-3 bootstrap gate", () => {
-  it("loads the generated label from an already-unlinked inherited snapshot and leaves nothing behind", async () => {
+  // Skipped off a disposable account (D76); the in-body guard still refuses to touch launchd if the skip is bypassed.
+  it.skipIf(!DISPOSABLE_HOST)("loads the generated label from an already-unlinked inherited snapshot and leaves nothing behind (disposable-account gate; set DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable)", async () => {
     if (!DISPOSABLE_HOST) {
       throw new LaunchdDistributionUnsupportedError("the FD-3 gate runs only on a disposable account (DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable)");
     }
