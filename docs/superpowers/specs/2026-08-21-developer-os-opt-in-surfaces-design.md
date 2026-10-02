@@ -3086,8 +3086,10 @@ Each arrow in a chain is its own `GitProcessEdgeV1`; the second arrow is
 `exec_same_pid`/`enter_internal_same_pid` and preserves the exact expanded argv unless the row above
 explicitly gives the bridge's normalized system-SSH argv. Exactly one transport branch is always
 required. The pack pair is required exactly when the advertised target does not already equal the
-plan's `commitOid` and source Git emits a ref-update command; a command may still carry a canonical
-zero-object pack when the destination already owns the objects through another ref. If the advertised
+plan's `commitOid` and source Git emits a ref-update command. (A zero-object pack for a commit the
+destination owns through another ref is not a product path: the shadow materializes only `branchRef`,
+and a commit the target branch already contains is refused `non_fast_forward` before any receive —
+NEW-137, 2026-10-02.) If the advertised
 target already equals `commitOid`, source Git emits no ref command, the pack pair has zero permits,
 and successful `--porcelain` output is exactly
 `=\t<commitOid>:<branchRef>\t[up to date]\nDone\n` after one separately bounded `To` diagnostic. For
@@ -4816,7 +4818,12 @@ filesystem/process/clock dependencies rather than reaching global state directly
     signature check through a fixed-path `codesign` row).**
 14. **The Apple shim decides part of the Git invocation.** The product scrubs the `xcrun` inputs it
     controls: every Git child environment is an exact profile, so `DEVELOPER_DIR`, `SDKROOT`,
-    `TOOLCHAINS` and every `xcrun_*` variable are absent. The shim still decides the rest from system
+    `TOOLCHAINS` and every `xcrun_*` variable are absent from what the product passes. (**Amended
+    2026-10-02, NEW-137:** the shim itself adds `SDKROOT`, `MANPATH`, `CPATH` and `LIBRARY_PATH` to the
+    Git it execs, so gateway reports from Git and its helpers carry them; admission folds exactly those
+    four, only together, only in the shape `xcrun` derives from one developer directory, never for
+    `git-receive-pack`, and pins that directory for the rest of the invocation. Admitted images still
+    run with the permit's exact environment — `threat-model.md` §5.15.) The shim still decides the rest from system
     state: which developer directory it uses (the root-set `xcode-select` choice or Apple's default),
     whether it offers the Command Line Tools installer when none is present, and whether it keeps a
     lookup cache in the user's Darwin temporary directory, outside the product's staging. Its exec of
