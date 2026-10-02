@@ -322,6 +322,40 @@ describe("prepared update materialization", () => {
     expect(built.inversePlanProjections.map((leaf) => leaf.id)).toEqual(["owner_core", "owner_codex", "migration_brain-v2"]);
   });
 
+  it("orders migration leaves in chain order, as the planner emits them and their inventory rows follow (NEW-135)", () => {
+    const input = materializationInput();
+    const [preimage, owner] = input.rollbackInventoryEntries as [RollbackPayloadEntryV1, RollbackPayloadEntryV1];
+    /** Execution order: product_state before brain, then fromVersion; every ID sorts against it. */
+    const chain = [
+      { id: "migration_state-v2", domain: "product_state", fromVersion: 1, toVersion: 2 },
+      { id: "migration_brain-z-first", domain: "brain", fromVersion: 1, toVersion: 2 },
+      { id: "migration_brain-a-second", domain: "brain", fromVersion: 2, toVersion: 3 },
+    ];
+    const entries: RollbackPayloadEntryV1[] = [
+      preimage,
+      owner,
+      ...chain.map((migration, index): RollbackPayloadEntryV1 => ({
+        ordinal: index + 2,
+        path: payloadPath(`plans/schema_migration_inverse/${migration.id}.plan.json`),
+        role: "inverse_plan_leaf",
+        bytes: 30,
+        sha256: sha(`leaf-${migration.id}`),
+      })),
+    ];
+    const built = buildPreparedUpdateMaterialization({
+      ...input,
+      inverseLeaves: [
+        ...input.inverseLeaves.filter((leaf) => leaf.kind === "owner_inverse"),
+        ...chain.map((migration) => ({ kind: "schema_migration_inverse" as const, id: parseSchemaMigrationId(migration.id), projection: { kind: "schema_migration_inverse", ...migration } })),
+      ],
+      rollbackInventoryEntries: entries,
+    });
+    /** `#rollbackSourceEntries` pairs these leaves with the inventory's leaf rows by position. */
+    const leafRows = entries.filter((entry) => entry.role === "inverse_plan_leaf").map((entry) => entry.path);
+    expect(built.inversePlanProjections.map((leaf) => leaf.id)).toEqual(["core", ...chain.map((migration) => migration.id)]);
+    expect(built.inversePlanProjections.map((leaf) => payloadPath(`plans/${leaf.kind}/${leaf.id}.plan.json`))).toEqual(leafRows);
+  });
+
   it("refuses non-contiguous rows, allocation-bound fields, and a broken leaf/inventory bijection", () => {
     const input = materializationInput();
     expect(() => buildPreparedUpdateMaterialization({ ...input, outputBlobs: [{ ordinal: 1, bytes: 0, sha256: sha("") }] })).toThrow("not contiguous");

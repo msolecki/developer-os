@@ -4,6 +4,8 @@ import { encodeCanonicalJson, hashCanonicalJson, type CanonicalJsonV1, type Cano
 import { parseAllocatedLifecycleId, type AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
 import type { ArtifactOwner } from "../manifest/types.js";
 import { projectUpdateCapacity, type UpdateCapacityInputV1, type UpdateCapacityProjectionV1 } from "./capacity.js";
+import { SCHEMA_MIGRATION_DOMAIN_ORDER } from "./migration-planning.js";
+import type { SchemaMigrationDomainV1 } from "./migrations.js";
 import {
   parseCanonicalAbsolutePathText,
   parseVaultRelativePathText,
@@ -486,8 +488,11 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
 
   if (input.inverseLeaves.length < 1 || input.inverseLeaves.length > 10_016) fail("PreparedUpdateMaterializationV1.inversePlanProjections: count");
   let maximumCanonicalBytes = Math.max(canonicalBytes(input.targetDraft), canonicalBytes(input.concreteManifest), canonicalBytes(input.inversePlan));
-  /** An owner leaf's position in OWNER_ORDER (OWNER_UPDATE_ORDER), read once from its projection's `owner`. */
-  const ownerRanks = new Map<string, number>();
+  /**
+   * A leaf's position within its kind: an owner's in OWNER_ORDER (OWNER_UPDATE_ORDER), a migration's
+   * chain position (domain in SCHEMA_MIGRATION_DOMAIN_ORDER, then fromVersion), read once from its projection.
+   */
+  const ranks = new Map<string, readonly [number, number]>();
   const inversePlanProjections = input.inverseLeaves
     .map((leaf): PreparedInverseProjectionV1 => {
       if (!INVERSE_KIND_ORDER.includes(leaf.kind)) fail("PreparedInverseProjectionV1.kind");
@@ -496,18 +501,23 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
       const projection = encodeCanonicalJson(leaf.projection);
       const bytes = integer(encoder.encode(projection).byteLength, 1, MAX_BLOB_BYTES, "PreparedInverseProjectionV1.bytes");
       maximumCanonicalBytes = Math.max(maximumCanonicalBytes, bytes);
-      if (leaf.kind === "owner_inverse") {
-        const owner = (leaf.projection as { readonly owner?: unknown } | null)?.owner;
-        ownerRanks.set(id, OWNER_ORDER.indexOf(owner as ArtifactOwner));
-      }
+      const fields = leaf.projection as { readonly owner?: unknown; readonly domain?: unknown; readonly fromVersion?: unknown } | null;
+      if (leaf.kind === "owner_inverse") ranks.set(`${leaf.kind}/${id}`, [OWNER_ORDER.indexOf(fields?.owner as ArtifactOwner), 0]);
+      else ranks.set(`${leaf.kind}/${id}`, [SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(fields?.domain as SchemaMigrationDomainV1), typeof fields?.fromVersion === "number" ? fields.fromVersion : 0]);
       return { kind: leaf.kind, id, projection, projectionHash: hashNoLineFeed("developer-os/prepared-inverse-leaf/v1", leaf.projection), bytes };
     })
     /**
-     * Owner leaves in canonical owner order — the order the planner emits them, their inventory rows
-     * follow, and `buildRollbackPayload` requires — and migrations by ID. Sorting owners by ID put
-     * `owner_claude`/`owner_codex` before `owner_core` and refused every multi-owner update.
+     * Owner leaves in canonical owner order and migrations in chain order — the order the planner
+     * emits them, their inventory rows follow, `buildRollbackPayload` requires for owners, and
+     * compose's `#rollbackSourceEntries` pairs by position. Sorting by ID put `owner_claude`/`owner_codex`
+     * before `owner_core` and refused every multi-owner update; for migrations it refused any chain
+     * whose IDs sort against it at construction validation (NEW-135).
      */
-    .sort((left, right) => INVERSE_KIND_ORDER.indexOf(left.kind) - INVERSE_KIND_ORDER.indexOf(right.kind) || (ownerRanks.get(left.id) ?? 0) - (ownerRanks.get(right.id) ?? 0) || compareUtf8(left.id, right.id));
+    .sort((left, right) => {
+      const [leftRank, leftStep] = ranks.get(`${left.kind}/${left.id}`) ?? [0, 0];
+      const [rightRank, rightStep] = ranks.get(`${right.kind}/${right.id}`) ?? [0, 0];
+      return INVERSE_KIND_ORDER.indexOf(left.kind) - INVERSE_KIND_ORDER.indexOf(right.kind) || leftRank - rightRank || leftStep - rightStep || compareUtf8(left.id, right.id);
+    });
   for (let index = 1; index < inversePlanProjections.length; index += 1) {
     const prior = inversePlanProjections[index - 1] as PreparedInverseProjectionV1;
     const current = inversePlanProjections[index] as PreparedInverseProjectionV1;
