@@ -10,6 +10,7 @@ import {
   type LowerHexSha1,
   type LowerHexSha256,
 } from "@developer-os/core";
+import { DESTINATION_SHADOW_TEMPLATE } from "@developer-os/cli/dist/commands/git/runtime.js";
 import { DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath } from "@developer-os/platform-macos";
 import {
   admitGitCapability,
@@ -48,19 +49,8 @@ function lines(text: string): string[] {
   return text.split("\n").filter((line) => line !== "");
 }
 
-const destinationTemplate = validateShadowConfigTemplate({
-  schemaVersion: 1,
-  kind: "bare_destination",
-  core: { repositoryFormatVersion: 0, fileMode: true, bare: true, hooksPath: { slot: "hooks_directory" }, fsmonitor: false },
-  commit: { gpgSign: false },
-  tag: { gpgSign: false },
-  gc: { auto: 0 },
-  maintenance: { auto: false },
-  http: { proxy: "", followRedirects: false },
-  credential: { helper: "" },
-  remote: null,
-  receive: { unpackLimit: 0, denyNonFastForwards: true, denyDeletes: false },
-});
+/** The production destination shadow's own template: no destination objects, no fast-forward parse. */
+const destinationTemplate = validateShadowConfigTemplate(DESTINATION_SHADOW_TEMPLATE);
 
 let root: string;
 let source: string;
@@ -104,7 +94,7 @@ interface ScenarioV1 {
 /**
  * The real receive: `send-pack` from the source starts the pinned
  * `receive-pack --skip-connectivity-check` against the private shadow,
- * whose only view of existing objects is the source object alternate.
+ * which, like production's, holds none of the destination's objects.
  */
 async function scenario(input: ScenarioV1): Promise<Awaited<ReturnType<typeof prepareLocalReceive>>> {
   const quarantine = parseCanonicalAbsolutePathText(`${root}/staging/lifecycle/c1/git/destination/ge1`);
@@ -122,21 +112,10 @@ async function scenario(input: ScenarioV1): Promise<Awaited<ReturnType<typeof pr
   const target: GitRefStateV1 =
     input.target === null ? { state: "absent" } : { state: "present", oid: input.target, bytesHash: "0".repeat(64) as LowerHexSha256 };
   const receive = async (): Promise<GitLocalReceiveRunV1> => {
-    // Git's local transport unsets GIT_ALTERNATE_OBJECT_DIRECTORIES (`local_repo_env`) before it
-    // starts receive-pack, so the alternate is set inside the `--receive-pack` shell command. An
-    // empty `core.alternateRefsCommand` keeps receive-pack from advertising the alternate's tips as
-    // `.have`, so send-pack still sees only the snapshot refs, as the production shadow advertises.
-    const objects = `GIT_ALTERNATE_OBJECT_DIRECTORIES=${source}/.git/objects`;
-    const noAlternateRefs = "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.alternateRefsCommand GIT_CONFIG_VALUE_0=true";
-    run(
-      [
-        "send-pack",
-        `--receive-pack=${objects} ${noAlternateRefs} ${RECEIVE_PACK} --skip-connectivity-check`,
-        shadow.gitDir,
-        `${input.commitOid}:${BRANCH}`,
-      ],
-      source,
-    );
+    // As production: a self-contained (`--no-thin`) pack and nothing else to read from. Git's local
+    // transport unsets GIT_ALTERNATE_OBJECT_DIRECTORIES before receive-pack, and production's
+    // `destination_receive` profile and shadow carry no alternate either.
+    run(["send-pack", "--no-thin", `--receive-pack=${RECEIVE_PACK} --skip-connectivity-check`, shadow.gitDir, `${input.commitOid}:${BRANCH}`], source);
     const count = await packHeaderCount(shadow);
     return {
       nodes:
