@@ -1,4 +1,6 @@
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -22,10 +24,12 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function project(files: { tsconfig?: boolean; tsc?: boolean; check?: boolean } = {}): Promise<string> {
+async function project(
+  files: { tsconfig?: boolean; tsc?: boolean; check?: boolean; config?: string } = {},
+): Promise<string> {
   const root = await tempDir();
   await mkdir(join(root, ".git"));
-  if (files.tsconfig ?? true) await writeFile(join(root, "tsconfig.json"), "{}\n");
+  if (files.tsconfig ?? true) await writeFile(join(root, "tsconfig.json"), files.config ?? "{}\n");
   if (files.check ?? false) await writeFile(join(root, "tsconfig.check.json"), "{}\n");
   if (files.tsc ?? true) {
     await pnpmTool(root, "tsc", "typescript", { tsc: "bin/tsc", tsserver: "bin/tsserver" }, "bin/tsc");
@@ -125,6 +129,93 @@ describe("guardStop", () => {
     await guardStop(payload(false), runtime);
     expect(requests[0]?.args.slice(1)).toStrictEqual(["--noEmit", "-p", join(root, "tsconfig.check.json")]);
   });
+
+  const SOLUTION = '{ "files": [], "references": [{ "path": "packages/ui" }, { "path": "./packages/core/tsconfig.json" }] }';
+
+  it("builds a solution tsconfig through its references with tsc -b --noEmit", async () => {
+    const root = await project({ config: SOLUTION });
+    const { runtime, requests } = runtimeFor(root);
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.args.slice(1)).toStrictEqual(["-b", "--noEmit", join(root, "tsconfig.json")]);
+  });
+
+  it("detects references in a JSONC tsconfig with comments and trailing commas", async () => {
+    const config = `{
+      // solution config
+      "files": [], /* none */
+      "references": [
+        { "path": "packages/ui", }, // trailing comma
+      ],
+      "x": "// not a comment",
+    }`;
+    const { runtime, requests } = runtimeFor(await project({ config }));
+    await guardStop(payload(false), runtime);
+    expect(requests[0]?.args.slice(1, 3)).toStrictEqual(["-b", "--noEmit"]);
+  });
+
+  it("keeps -p for an empty references array and prefers tsconfig.check.json", async () => {
+    const empty = runtimeFor(await project({ config: '{ "references": [] }' }));
+    await guardStop(payload(false), empty.runtime);
+    expect(empty.requests[0]?.args[1]).toBe("--noEmit");
+    const root = await project({ config: SOLUTION, check: true });
+    const { runtime, requests } = runtimeFor(root);
+    await guardStop(payload(false), runtime);
+    expect(requests[0]?.args.slice(1)).toStrictEqual(["--noEmit", "-p", join(root, "tsconfig.check.json")]);
+  });
+
+  it("falls back to each referenced project with -p when tsc rejects -b --noEmit", async () => {
+    const root = await project({ config: SOLUTION });
+    let call = 0;
+    const { runtime, requests } = runtimeFor(root, () => {
+      call += 1;
+      if (call === 1) {
+        return Promise.resolve({ ...OK, exitCode: 1, stdout: "error TS5094: Option '--noEmit' cannot be used with '--build'.\n" });
+      }
+      return Promise.resolve(call === 2 ? { ...OK, exitCode: 1, stdout: "a.ts(1,1): error TS1: one\n" } : { ...OK, exitCode: 1, stdout: "b.ts(1,1): error TS2: two\n" });
+    });
+    const outcome = await guardStop(payload(false), runtime);
+    expect(requests.slice(1).map((r) => r.args.slice(1))).toStrictEqual([
+      ["--noEmit", "-p", join(root, "packages/ui", "tsconfig.json")],
+      ["--noEmit", "-p", join(root, "packages/core/tsconfig.json")],
+    ]);
+    expect(outcome).toStrictEqual({ kind: "block", ruleId: "typecheck", detail: "a.ts(1,1): error TS1: one\nb.ts(1,1): error TS2: two" });
+  });
+
+  it.each([["invalid JSON", "{ nope"], ["a non-object", "[1]"]])("allows with a note on %s", async (_n, config) => {
+    const { runtime } = runtimeFor(await project({ config }));
+    const outcome = await guardStop(payload(false), runtime);
+    expect(outcome.kind).toBe("allow");
+    expect(outcome.kind === "allow" ? outcome.note : undefined).toEqual(expect.any(String));
+  });
+
+  it("passes a real solution monorepo with a jsx package (no TS6142)", async () => {
+    const tsc = createRequire(import.meta.url).resolve("typescript/bin/tsc");
+    const root = await project({
+      config: '{ "files": [], "references": [{ "path": "packages/ui" }] }',
+    });
+    await mkdir(join(root, "packages/ui"), { recursive: true });
+    await writeFile(
+      join(root, "packages/ui/tsconfig.json"),
+      '{ "compilerOptions": { "jsx": "preserve", "composite": true, "strict": true, "skipLibCheck": true, "types": [] }, "include": ["*.ts", "*.tsx"] }',
+    );
+    await writeFile(join(root, "packages/ui/a.tsx"), "export const A = 1;\n");
+    await writeFile(join(root, "packages/ui/b.ts"), 'import { A } from "./a";\nexport const B: number = A;\n');
+    const { runtime } = runtimeFor(root);
+    const real: HookRuntime = {
+      ...runtime,
+      nodeExecutable: process.execPath,
+      runner: {
+        run: (request) =>
+          new Promise((done) => {
+            execFile(process.execPath, [tsc, ...request.args.slice(1)], { cwd: request.cwd }, (err, stdout, stderr) => {
+              done({ stdout, stderr, exitCode: err === null ? 0 : 1, signal: null, timedOut: false });
+            });
+          }),
+      },
+    };
+    expect(await guardStop(payload(false), real)).toStrictEqual({ kind: "allow" });
+  }, 30_000);
 
   it("blocks a failing typecheck with exactly the first 40 diagnostic lines", async () => {
     const lines = Array.from({ length: 60 }, (_, index) => `src/a.ts(${String(index + 1)},1): error TS2322: x`);
