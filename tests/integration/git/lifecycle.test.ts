@@ -7,14 +7,19 @@
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 
 import { afterAll, describe, expect, it } from "vitest";
 
 import {
   EXIT_CODES,
+  gitCommitObject,
   loadConfig,
+  looseObjectBytes,
+  looseObjectRelativePath,
   parseCanonicalAbsolutePathText,
   parseLifecycleActivationRecord,
+  parseLowerHexSha1,
   serializeConfig,
   validateLifecyclePlanGrammar,
 } from "@developer-os/core";
@@ -268,7 +273,7 @@ const GATE_COVERAGE: readonly GateCoverageV1[] = [
     tests: [
       ["packages/security/src/git/supervisor.test.ts", "admits a child transition through consume without spawning, then rechecks before the same-PID exec"],
       ["packages/security/src/git/local-receive.test.ts", "accepts the exact up-to-date target without pack/index children"],
-      ["tests/integration/git/local-receive.pinned-host.test.ts", "accepts a zero-object pack when the destination already owns the commit through another ref"],
+      ["tests/integration/git/lifecycle.test.ts", "refuses a commit the destination branch already contains before any receive, then syncs once the branch is restored"],
       ["tests/integration/git/local-push.pinned-host.test.ts", "takes the zero-transition up-to-date arm for an already-pushed commit"],
     ],
   },
@@ -701,6 +706,46 @@ describe("the opt-in lifecycle end to end: enable → sync → automation → di
       gitData(await runGit(home.context, { subcommand: "sync" }));
       expect(await remoteRef(home)).toBe(local);
       expect(home.runtime.networkCalls).toStrictEqual([]);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses a commit the destination branch already contains before any receive, then syncs once the branch is restored",
+    async () => {
+      const home = await chainHome();
+      await writeNote(home, "contained");
+      expect(gitData(await runGit(home.context, { subcommand: "sync" }))).toMatchObject({ kind: "sync", outcome: "pushed" });
+      const pushed = parseLowerHexSha1(((await localRef(home)) ?? "").trim());
+      const remoteBefore = await remoteRef(home);
+      const writeObject = async (gitDirectory: string, object: ReturnType<typeof gitCommitObject>): Promise<void> => {
+        const path = join(gitDirectory, looseObjectRelativePath(object.oid));
+        await nodeFs.mkdir(join(path, ".."), { recursive: true });
+        await nodeFs.writeFile(path, looseObjectBytes(object));
+      };
+      const committer = { name: "Elsewhere", email: "elsewhere@example.invalid", unixSeconds: 1, utcOffset: "+0000" };
+      // A hand-made commit on the same tree makes the next sync push_only: it pushes the branch tip as it is.
+      const tree = parseLowerHexSha1(/\0tree ([0-9a-f]{40})\n/u.exec(inflateSync(await nodeFs.readFile(join(home.gitDirectory, looseObjectRelativePath(pushed)))).toString("latin1"))?.[1] ?? "");
+      const tip = gitCommitObject(tree, pushed, committer);
+      await writeObject(home.gitDirectory, tip);
+      await nodeFs.writeFile(join(home.gitDirectory, "refs", "heads", "main"), `${tip.oid}\n`);
+      // The destination branch already contains that tip, under a descendant.
+      const ahead = gitCommitObject(tree, tip.oid, committer);
+      await writeObject(home.remote, tip);
+      await writeObject(home.remote, ahead);
+      await nodeFs.writeFile(join(home.remote, "refs", "heads", "main"), `${ahead.oid}\n`);
+      const spawns = [...home.runtime.spawns];
+      try {
+        const refused = await runGit(home.context, { subcommand: "sync" });
+        expect(kindOf(refused)).toBe("non_fast_forward");
+        expect(refused.code).toBe(EXIT_CODES.decisionRequired);
+        expect(home.runtime.spawns).toStrictEqual(spawns);
+        expect(await remoteRef(home)).toBe(`${ahead.oid}\n`);
+      } finally {
+        await nodeFs.writeFile(join(home.remote, "refs", "heads", "main"), remoteBefore ?? "");
+      }
+      expect(gitData(await runGit(home.context, { subcommand: "sync" }))).toMatchObject({ kind: "sync", outcome: "pushed" });
+      expect(await remoteRef(home)).toBe(`${tip.oid}\n`);
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );

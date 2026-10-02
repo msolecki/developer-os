@@ -139,6 +139,9 @@ async function scenario(input: ScenarioV1): Promise<Awaited<ReturnType<typeof pr
   return result;
 }
 
+// No raw receive of a commit the destination already owns is pinned here: production materializes only
+// the branch ref in the shadow, so a contained commit is either the up-to-date target below or refused
+// non_fast_forward before any receive-pack runs (tests/integration/git/lifecycle.test.ts).
 describe("local receive on the admitted fixed-path Git", () => {
   beforeEach(async () => {
     admitGitCapability(admitted, execFileSync(GIT, ["--version", "--build-options"], { encoding: "utf8", env: {} }), 0);
@@ -184,17 +187,6 @@ describe("local receive on the admitted fixed-path Git", () => {
     const result = await scenario({ commitOid: head, snapshot: [{ ref: BRANCH, oid: prior }], target: prior, boundary: reachable(prior) });
     expect(result.kind).toBe("pack_received");
     expect(result.closure?.budget.admittedObjectCount).toBe(result.closure?.budget.closedEffectObjectCount);
-  });
-
-  it("accepts a zero-object pack when the destination already owns the commit through another ref", async () => {
-    const head = await commitFile("a.md", "alpha\n");
-    const result = await scenario({
-      commitOid: head,
-      snapshot: [{ ref: "refs/heads/other", oid: head }],
-      target: null,
-      boundary: reachable(head),
-    });
-    expect(result.packReaderBudget).toMatchObject({ packHeaderObjectCount: 0, admittedObjectCount: 0, closedEffectObjectCount: 0 });
   });
 
   it("accepts the exact up-to-date target without pack/index children", async () => {
