@@ -19,6 +19,7 @@ import {
   type UpdateDownloadPreviewV1,
   type UpdatePlanPreviewV1,
 } from "./preview.js";
+import { orderMigrationChain } from "./migration-planning.js";
 import { compareUtf8, parseBundleRelativePath, validateReleaseIdentity, type BundleRelativePathV1, type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
 import {
   decodeTenDigitOrdinal,
@@ -665,7 +666,7 @@ function parseMigrations(value: unknown, context: DraftContext, keptOrUntouched:
   const brain = new Map(context.request.brain.entries.map((entry) => [entry.path as string, entry]));
   const firstSeen = new Set<string>();
   const domains = new Map<string, string>();
-  return array(value, "TargetUpdateDraftV1.migrations", 0, 10_000).map((row): SchemaMigrationDraftV1 => {
+  const migrations = array(value, "TargetUpdateDraftV1.migrations", 0, 10_000).map((row): SchemaMigrationDraftV1 => {
     const input = exact(row, label, ["id", "domain", "fromVersion", "toVersion", "mutations"]);
     const id = parseSchemaMigrationId(input.id);
     if (ids.has(id)) fail(`${label}.id: duplicate`);
@@ -722,6 +723,9 @@ function parseMigrations(value: unknown, context: DraftContext, keptOrUntouched:
     });
     return { id, domain, fromVersion, toVersion, mutations };
   });
+  // Composition, the inverse inventory, and rollback all walk the draft's order: admit only the canonical one.
+  if (orderMigrationChain(migrations).some((row, index) => row.id !== migrations[index]?.id)) fail("TargetUpdateDraftV1.migrations: planner output is not in canonical chain order");
+  return migrations;
 }
 
 function comparePathRefs(left: PlannerPathRefV1, right: PlannerPathRefV1): number {

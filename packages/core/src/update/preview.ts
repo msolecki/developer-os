@@ -502,8 +502,11 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
       const bytes = integer(encoder.encode(projection).byteLength, 1, MAX_BLOB_BYTES, "PreparedInverseProjectionV1.bytes");
       maximumCanonicalBytes = Math.max(maximumCanonicalBytes, bytes);
       const fields = leaf.projection as { readonly owner?: unknown; readonly domain?: unknown; readonly fromVersion?: unknown } | null;
-      if (leaf.kind === "owner_inverse") ranks.set(`${leaf.kind}/${id}`, [OWNER_ORDER.indexOf(fields?.owner as ArtifactOwner), 0]);
-      else ranks.set(`${leaf.kind}/${id}`, [SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(fields?.domain as SchemaMigrationDomainV1), typeof fields?.fromVersion === "number" ? fields.fromVersion : 0]);
+      // The order key is part of the projection; a leaf without one is refused, never ranked by a default.
+      const rank = leaf.kind === "owner_inverse" ? OWNER_ORDER.indexOf(fields?.owner as ArtifactOwner) : SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(fields?.domain as SchemaMigrationDomainV1);
+      const step = leaf.kind === "owner_inverse" ? 0 : fields?.fromVersion;
+      if (rank < 0 || typeof step !== "number") fail("PreparedInverseProjectionV1.projection: no order key");
+      ranks.set(`${leaf.kind}/${id}`, [rank, step]);
       return { kind: leaf.kind, id, projection, projectionHash: hashNoLineFeed("developer-os/prepared-inverse-leaf/v1", leaf.projection), bytes };
     })
     /**
@@ -514,8 +517,8 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
      * whose IDs sort against it at construction validation (NEW-135).
      */
     .sort((left, right) => {
-      const [leftRank, leftStep] = ranks.get(`${left.kind}/${left.id}`) ?? [0, 0];
-      const [rightRank, rightStep] = ranks.get(`${right.kind}/${right.id}`) ?? [0, 0];
+      const [leftRank, leftStep] = ranks.get(`${left.kind}/${left.id}`) as readonly [number, number];
+      const [rightRank, rightStep] = ranks.get(`${right.kind}/${right.id}`) as readonly [number, number];
       return INVERSE_KIND_ORDER.indexOf(left.kind) - INVERSE_KIND_ORDER.indexOf(right.kind) || leftRank - rightRank || leftStep - rightStep || compareUtf8(left.id, right.id);
     });
   for (let index = 1; index < inversePlanProjections.length; index += 1) {

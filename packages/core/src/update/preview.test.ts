@@ -154,7 +154,7 @@ function materializationInput(): PreparedUpdateMaterializationInputV1 {
     concreteManifest: { artifacts: [], schemaVersion: 2 },
     outputBlobs: [{ ordinal: 0, bytes: 5, sha256: sha("blob-0") }, { ordinal: 1, bytes: 0, sha256: sha("") }],
     inverseLeaves: [
-      { kind: "schema_migration_inverse", id: parseSchemaMigrationId("migration_brain-v2"), projection: { steps: ["inverse"] } },
+      { kind: "schema_migration_inverse", id: parseSchemaMigrationId("migration_brain-v2"), projection: { domain: "brain", fromVersion: 1, steps: ["inverse"] } },
       { kind: "owner_inverse", id: parseSafeReasonCode("core"), projection: { owner: "core", paths: ["/product/core/a-new"] } },
     ],
     inversePlan: { leaves: 2, operation: "update_inverse" },
@@ -371,6 +371,10 @@ describe("prepared update materialization", () => {
     expect(() => buildPreparedUpdateMaterialization({ ...input, inversePlan: { nested: [{ rollbackBindingHash: hex("x") }] } })).toThrow("allocation-bound");
     expect(() => buildPreparedUpdateMaterialization({ ...input, inverseLeaves: [leafA, leafA, leafB] })).toThrow("duplicate id");
     expect(() => buildPreparedUpdateMaterialization({ ...input, inverseLeaves: [] })).toThrow();
+    /** A leaf whose order key is missing is refused, never ranked by a default (NEW-135). */
+    expect(() => buildPreparedUpdateMaterialization({ ...input, inverseLeaves: [leafA, { ...leafB, projection: { paths: [] } }] })).toThrow("PreparedInverseProjectionV1.projection");
+    expect(() => buildPreparedUpdateMaterialization({ ...input, inverseLeaves: [{ ...leafA, projection: { domain: "elsewhere", fromVersion: 1 } }, leafB] })).toThrow("PreparedInverseProjectionV1.projection");
+    expect(() => buildPreparedUpdateMaterialization({ ...input, inverseLeaves: [{ ...leafA, projection: { domain: "brain" } }, leafB] })).toThrow("PreparedInverseProjectionV1.projection");
   });
 });
 

@@ -43,7 +43,7 @@ import {
   type UpdateStructureWriteStateV1,
 } from "./bundle-participant.js";
 import { MAXIMUM_LEAF_PLAN_BYTES, updateLeafPlanPath, type ImmutableUpdatePlanRefV1 } from "./construction.js";
-import { MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES, type RetainedInverseBlobRefV1, type RetainedSchemaMigrationInversePlanV1 } from "./migrations.js";
+import { MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES, SCHEMA_MIGRATION_DOMAIN_ORDER, type RetainedInverseBlobRefV1, type RetainedSchemaMigrationInversePlanV1 } from "./migrations.js";
 import { OWNER_UPDATE_ORDER } from "./owner.js";
 import { ownerExternalEffectProcessPolicyHash, ownerInverseOperationHash, type OwnerExternalEffectProcessPolicyV1 } from "./participants.js";
 import {
@@ -699,6 +699,7 @@ export function validateRollbackBindingGraph(payload: PreparedRollbackPayloadV1)
   const byPath = new Map(inventory.entries.map((entry) => [entry.path as string, entry]));
   const referencedBlobs = new Set<string>();
   let ownerRank = -1;
+  let migrationRank: readonly [number, number] = [-1, 0];
   refs.forEach((ref, index) => {
     const leaf = payload.leaves[index] as RetainedInverseLeafFileV1;
     const entry = byPath.get(ref.path);
@@ -710,6 +711,11 @@ export function validateRollbackBindingGraph(payload: PreparedRollbackPayloadV1)
       const rank = OWNER_UPDATE_ORDER.indexOf(projection.owner);
       if (rank <= ownerRank) fail(`${label}.ownerPlans: not canonical owner order`);
       ownerRank = rank;
+    } else {
+      // Chain order (orderMigrationChain): compose pairs these leaves with the inventory rows by position.
+      const rank = [SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(projection.domain), projection.fromVersion] as const;
+      if (rank[0] < migrationRank[0] || (rank[0] === migrationRank[0] && rank[1] <= migrationRank[1])) fail(`${label}.migrationPlans: not chain order`);
+      migrationRank = rank;
     }
     if (ref.retainedHash !== retainedInversePlanHash(bindRetainedInversePlan(projection, binding, ref.sourcePlanHash))) fail(`${label}.leaves[${index.toString(10)}].retainedHash`);
     for (const { ref: blob, role } of leafRoles(projection)) {

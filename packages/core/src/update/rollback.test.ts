@@ -262,6 +262,23 @@ describe("rollback payload binding graph", () => {
     const built = buildRollbackPayload(candidate(leaves, entries), allocation({ sourcePlanHashes: [sha("owner plan"), sha("first"), sha("second")] }));
     expect(built.inversePlan.migrationPlans.map((ref) => ref.id)).toStrictEqual(["migration_first", "migration_second"]);
   });
+
+  it("refuses migration leaves outside chain order, as compose pairs them with inventory rows by position (NEW-135)", () => {
+    const leaves: readonly Leaf[] = [
+      { kind: "owner_inverse", id: "owner_core", projection: ownerProjection() },
+      { kind: "schema_migration_inverse", id: "migration_second", projection: migrationProjection("migration_second", 2, { mutations: [{ path: "notes/second.md", expectedCurrentHash: sha("after second\n"), restoreHash: sha("second\n"), restoreBlob: blob(2, "second\n") }] }) },
+      { kind: "schema_migration_inverse", id: "migration_first", projection: migrationProjection("migration_first", 1) },
+    ];
+    const entries: RollbackPayloadEntryV1[] = [
+      ...inventoryEntries([]),
+      { ordinal: 2, path: blob(2, "second\n").path, role: "migration_preimage", bytes: 7, sha256: sha("second\n") } as RollbackPayloadEntryV1,
+      ...leaves.map((leaf, index): RollbackPayloadEntryV1 => {
+        const bytes = canonical(leaf.projection);
+        return { ordinal: 3 + index, path: `plans/${leaf.kind}/${leaf.id}.plan.json`, role: "inverse_plan_leaf", bytes: Buffer.byteLength(bytes), sha256: sha(bytes) } as RollbackPayloadEntryV1;
+      }),
+    ];
+    expect(() => buildRollbackPayload(candidate(leaves, entries), allocation({ sourcePlanHashes: [sha("owner plan"), sha("second"), sha("first")] }))).toThrow("migrationPlans: not chain order");
+  });
 });
 
 describe("retained inverse plans", () => {

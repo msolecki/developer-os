@@ -277,6 +277,12 @@ describe("target draft admission", () => {
     expect(() => admitTargetUpdateDraft(edit(draftValue(), path, next), request())).toThrow();
   });
 
+  it("refuses a migration chain that is not in canonical execution order (NEW-135)", () => {
+    const value = draftValue();
+    value.migrations = [...(value.migrations as unknown[])].reverse();
+    expect(() => admitTargetUpdateDraft(value, request())).toThrow("planner output is not in canonical chain order");
+  });
+
   it("refuses a migration target whose owner operation changes it", () => {
     const value = draftValue();
     const core = (value.ownerPlans as Record<string, unknown>[])[0] as Record<string, unknown>;
