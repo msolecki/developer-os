@@ -355,6 +355,11 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D80 (2026-10-02), the post-fix reinstall gate reuses `test:bootstrap` again.** The gate on
+  `232a7cb6` skips `test:bootstrap` on D78's grounds: since `9350243a`, where it passed in full, the
+  product changes are the update preview/planner/rollback order (NEW-135, and e73dd376), the stop
+  hook's typecheck (NEW-136) and the Git gateway's report admission (NEW-137) — none reached by `init`.
+  Every other stage runs on `232a7cb6`. Founder-approved by default (2026-10-02), one gate run.
 - **D78 (2026-10-01), NEW-134 reinstall gate reuses one stage.** For the step 7b gate on `23b32060`,
   `test:bootstrap` is not rerun: it passed in full (1 + 104 cases) on `9350243a`, and
   `9350243a..23b32060` changes only tests, docs and `packages/core/src/update/preview.ts`, whose only
