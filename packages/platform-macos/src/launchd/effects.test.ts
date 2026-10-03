@@ -542,8 +542,53 @@ describe("LaunchdEffectExecutor", () => {
 
     await expect(fx.executor({ launchctl: failing }).apply(fx.ref("after_files"))).rejects.toMatchObject({ reason: "launchd_command_failed" });
     expect(liveSet(fx)).toStrictEqual([fx.plan.entries[0]?.generatedLabel]);
+    // The plist now holds swapped bytes: the compensating unload goes by the planned label alone.
+    const path = fx.plan.entries[0]?.plistPath ?? "";
+    fx.world.plists.set(path, "f".repeat(64));
+    fx.world.events.length = 0;
     await fx.executor().compensate(fx.ref("after_files"));
-    expect([await phaseOf(fx, "after_files"), liveSet(fx)]).toStrictEqual(["rolled_back", []]);
+    expect([await phaseOf(fx, "after_files"), liveSet(fx), fx.world.events]).toStrictEqual(["rolled_back", [], ["bootout-new"]]);
+  });
+
+  /** A bootstrapper that loads the label and dies before its post-check, as a killed process would. */
+  function dyingAfterBootstrap(fx: Fixture): LaunchdEffectDependenciesV1["bootstrapper"] {
+    return {
+      bootstrap: (request) => {
+        fx.world.events.push("path-bootstrap-new");
+        fx.world.loaded.add(request.plist.Label);
+        return Promise.reject(new Crash("died between bootstrap and post-check"));
+      },
+      verifyLoaded: () => Promise.reject(new Error("unreachable")),
+    };
+  }
+
+  it("verifies a label a death left loaded between bootstrap and post-check before recording it (D82)", async () => {
+    const fx = fixture(plan("automation_reconcile", ["doctor"], { doctor: installedUnloaded("doctor") }));
+    await expect(fx.executor({ bootstrapper: dyingAfterBootstrap(fx) }).apply(fx.ref("after_files"))).rejects.toThrow(Crash);
+    expect(await phaseOf(fx, "after_files")).toBe("applied");
+
+    await fx.executor().apply(fx.ref("after_files"));
+
+    expect(fx.world.events).toEqual(["verify-new-plist", "path-bootstrap-new", "verify-new-plist", "verify-loaded"]);
+    expect(await phaseOf(fx, "after_files")).toBe("verified");
+    expect(liveSet(fx)).toStrictEqual([fx.plan.entries[0]?.generatedLabel]);
+  });
+
+  it("boots out a label a death left loaded when its resumed post-check fails or its plist no longer admits (D82)", async () => {
+    for (const fault of ["mismatch", "plist"] as const) {
+      const fx = fixture(plan("automation_reconcile", ["doctor"], { doctor: installedUnloaded("doctor") }));
+      await expect(fx.executor({ bootstrapper: dyingAfterBootstrap(fx) }).apply(fx.ref("after_files"))).rejects.toThrow(Crash);
+      if (fault === "mismatch") fx.world.loadedMatchesPlan = false;
+      else fx.world.plists.set(fx.plan.entries[0]?.plistPath ?? "", "f".repeat(64));
+      fx.world.events.length = 0;
+
+      await expect(fx.executor().apply(fx.ref("after_files"))).rejects.toMatchObject({ reason: "launchd_bootstrap_plist_changed" });
+
+      expect(fx.world.events, fault).toEqual(fault === "mismatch" ? ["verify-new-plist", "verify-loaded-mismatch", "bootout-new"] : ["bootout-new"]);
+      expect(liveSet(fx)).toStrictEqual([]);
+      await fx.executor().compensate(fx.ref("after_files"));
+      expect(await phaseOf(fx, "after_files")).toBe("rolled_back");
+    }
   });
 
   it("live-only reconcile performs only Q transitions with no Foundation or manifest arm", async () => {

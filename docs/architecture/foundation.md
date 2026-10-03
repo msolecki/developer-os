@@ -1225,7 +1225,7 @@ record.
      lines ignored, more than 32 or a non-zero exit refuses); ssh `OpenSSH_10.3p1`; macOS
      `ProductVersion >= 26.6.2`, with `ProductBuildVersion` recorded and never compared. Policies:
      `GIT_DISTRIBUTION_POLICY` (`apple-git-arm64-v2`, process table `apple-git-process-v2`) and
-     `LAUNCHD_DISTRIBUTION_POLICY` (`launchctl-macos-preview-v2`, `launchctl-macos-fd3-v2`); an old
+     `LAUNCHD_DISTRIBUTION_POLICY` (`launchctl-macos-preview-v2`, `launchctl-macos-path-v1` since D82); an old
      ID in a persisted plan or journal refuses.
   4. **Evidence per invocation, rechecked before every exec.** Admission returns
      `AdmittedSystemExecutableV1` (`dev`, `ino`, `size`, `sha256`). Git holds it in memory for one

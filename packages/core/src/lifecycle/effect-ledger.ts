@@ -28,6 +28,7 @@ export const LAUNCHD_PROCESS_STAGING_CHILDREN = ["home", "tmp"] as const;
 /**
  * The sole linked leaf `launchd-process` may hold, and only while its owning
  * effect's journal sits at the current bootstrap frontier (spec §2.4, §5.3).
+ * Retained only to recognise residue from builds before D82; nothing creates it now.
  */
 export const LAUNCHD_BOOTSTRAP_SNAPSHOT_CHILD = "tmp/bootstrap-plist";
 export const MAX_LAUNCHD_BOOTSTRAP_SNAPSHOT_BYTES = 1_048_576;

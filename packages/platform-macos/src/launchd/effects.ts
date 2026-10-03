@@ -522,7 +522,12 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
   ): Promise<void> {
     const phase = this.#dependencies.beginTransition();
     const [live] = await this.#observe(effect, [transition], phase);
-    if (live !== undefined && sameLaunchdLiveState(live, to)) return;
+    if (live !== undefined && sameLaunchdLiveState(live, to)) {
+      // D82: a death between a bootstrap and its post-check leaves the label loaded; it is recorded
+      // only after the same verification, and booted out otherwise.
+      if (to.state === "loaded") await this.#requireVerifiedLoad(effect, direction, index, transition, table, phase, null);
+      return;
+    }
     if (live === undefined || !sameLaunchdLiveState(live, from)) recovery("launchd_live_state_third_state", transition.plistPath);
     const bootstrap = await this.#command(effect, direction, index, transition, to, table, phase);
     try {
@@ -536,11 +541,13 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
   }
 
   /**
-   * Unloading is always the transition's own generated label; its plist must still hold the bound
-   * bytes, because every unload precedes its plist mutation and every compensating unload precedes
-   * the plist inverse. Loading (D82) admits the plan-bound plist through the reader, bootstraps it
-   * by its path, and immediately verifies the inode, bytes and the loaded job's program; a mismatch
-   * boots the label out and refuses `launchd_bootstrap_plist_changed`. Returns whether it bootstrapped.
+   * Unloading is always the transition's own generated label. A forward unload precedes its plist
+   * mutation, so its plist must still hold the bound bytes. A reverse unload undoes this plan's own
+   * bootstrap, so it proceeds by the planned label alone: after a failed post-check bootout the
+   * plist may hold swapped bytes, and the job must still come down. Loading (D82) admits the
+   * plan-bound plist through the reader, bootstraps it by its path, and immediately verifies the
+   * inode, bytes and the loaded job; a mismatch boots the label out and refuses
+   * `launchd_bootstrap_plist_changed`. Returns whether it bootstrapped.
    */
   async #command(
     effect: LaunchdEffectPlanV1,
@@ -552,15 +559,31 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
     phase: SupervisedPhaseV1,
   ): Promise<boolean> {
     if (to.state === "unloaded") {
-      await this.#dependencies.plists.verifyHash(transition.plistPath, transition.plistHash);
+      if (direction === "forward") await this.#dependencies.plists.verifyHash(transition.plistPath, transition.plistHash);
       const evidence = await this.#dependencies.launchctl.bootout(table, `${transition.domain}/${transition.label}`, phase);
       if (!commandSucceeded(evidence)) recovery("launchd_command_failed", transition.plistPath);
       return false;
     }
+    const request = await this.#bootstrapRequest(effect, direction, index, transition, table, phase);
+    const evidence = await this.#dependencies.bootstrapper.bootstrap(request);
+    if (!commandSucceeded(evidence.process)) recovery("launchd_command_failed", transition.plistPath);
+    await this.#requireVerifiedLoad(effect, direction, index, transition, table, phase, request);
+    return true;
+  }
+
+  /** The plan-bound bootstrap request, its source admitted by the plist reader. */
+  async #bootstrapRequest(
+    effect: LaunchdEffectPlanV1,
+    direction: Direction,
+    index: number,
+    transition: LaunchdEffectTransitionV1,
+    table: SupportedLaunchdProcessTableV1,
+    phase: SupervisedPhaseV1,
+  ): Promise<LaunchdBootstrapRequestV1> {
     const role = direction === "forward" ? "after" : "before";
     const bound = this.#entry(transition).bootstrapPlists[role] ?? recovery("launchd_bootstrap_plist_unbound", transition.plistPath);
     const { plist, source } = await this.#dependencies.plists.read(bound);
-    const request: LaunchdBootstrapRequestV1 = {
+    return {
       table,
       domain: transition.domain,
       effectId: effect.id,
@@ -572,16 +595,34 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
       plist,
       phase,
     };
-    const { bootstrapper, launchctl } = this.#dependencies;
-    const evidence = await bootstrapper.bootstrap(request);
-    if (!commandSucceeded(evidence.process)) recovery("launchd_command_failed", transition.plistPath);
-    if (!(await bootstrapper.verifyLoaded(request))) {
-      // D82: bound the life of a job loaded from swapped bytes to this post-check window. A failed
-      // bootout leaves it loaded, which compensation observes as the postimage and unloads.
-      const bootout = await launchctl.bootout(table, `${transition.domain}/${plist.Label}`, phase);
-      recovery(commandSucceeded(bootout) ? "launchd_bootstrap_plist_changed" : "launchd_command_failed", transition.plistPath);
+  }
+
+  /**
+   * D82's post-check, after a fresh bootstrap (`request`) or on finding the label already loaded
+   * after a death (`null`: the plist is re-admitted first, and a plist the reader refuses counts as
+   * a mismatch). On a mismatch the planned label is booted out, bounding a job loaded from swapped
+   * bytes to this window; a failed bootout leaves it loaded, which compensation observes as the
+   * postimage and unloads by label.
+   */
+  async #requireVerifiedLoad(
+    effect: LaunchdEffectPlanV1,
+    direction: Direction,
+    index: number,
+    transition: LaunchdEffectTransitionV1,
+    table: SupportedLaunchdProcessTableV1,
+    phase: SupervisedPhaseV1,
+    request: LaunchdBootstrapRequestV1 | null,
+  ): Promise<void> {
+    let verified: boolean;
+    try {
+      verified = await this.#dependencies.bootstrapper.verifyLoaded(request ?? (await this.#bootstrapRequest(effect, direction, index, transition, table, phase)));
+    } catch (error) {
+      if (request !== null || !(error instanceof LifecycleRecoveryRequiredError)) throw error;
+      verified = false;
     }
-    return true;
+    if (verified) return;
+    const bootout = await this.#dependencies.launchctl.bootout(table, `${transition.domain}/${transition.label}`, phase);
+    recovery(commandSucceeded(bootout) ? "launchd_bootstrap_plist_changed" : "launchd_command_failed", transition.plistPath);
   }
 
   async #awaitState(

@@ -92,7 +92,16 @@ const CAPTURED_PRINT_26_6_2 = [
   "",
 ].join("\n");
 
-/** The captured dump with its header, path, program and arguments substituted. */
+/**
+ * The top-level `environment` block of a third-party agent on the same 26.6.2 host whose plist's
+ * `EnvironmentVariables` sets only `PATH` (values redacted): the plist's variables print here,
+ * beside launchd's own `OSLogRateLimit` and `XPC_SERVICE_NAME`, and nowhere else.
+ */
+const CAPTURED_ENVIRONMENT_WITH_PLIST_VARIABLE = ["\tenvironment = {", "\t\tOSLogRateLimit => 64", "\t\tPATH => /usr/bin:/bin", "\t\tXPC_SERVICE_NAME => com.n138probe.print", "\t}"].join("\n");
+
+const PROBE_ENVIRONMENT = ["\tenvironment = {", "\t\tOSLogRateLimit => 64", "\t\tXPC_SERVICE_NAME => com.n138probe.print", "\t}"].join("\n");
+
+/** The captured dump with its header, path, program, arguments and service name substituted. */
 function printFor(target: string, path: string, args: readonly string[]): string {
   const lines = CAPTURED_PRINT_26_6_2.split("\n");
   const start = lines.indexOf("\targuments = {");
@@ -101,7 +110,8 @@ function printFor(target: string, path: string, args: readonly string[]): string
   return [`${target} = {`, ...body]
     .join("\n")
     .replace("\tpath = /Users/example/Library/LaunchAgents/com.n138probe.print.plist", `\tpath = ${path}`)
-    .replace("\tprogram = /usr/bin/true", `\tprogram = ${args[0] ?? ""}`);
+    .replace("\tprogram = /usr/bin/true", `\tprogram = ${args[0] ?? ""}`)
+    .replace("XPC_SERVICE_NAME => com.n138probe.print", `XPC_SERVICE_NAME => ${target.slice(target.indexOf("/", "gui/".length) + 1)}`);
 }
 
 /** Scripted `/bin/launchctl`: records each request and answers `print` with `printed`. */
@@ -213,7 +223,14 @@ describe("parseLaunchctlPrintedService (macOS 26.6.2 format)", () => {
       path: "/Users/example/Library/LaunchAgents/com.n138probe.print.plist",
       program: "/usr/bin/true",
       arguments: ["/usr/bin/true", "scheduled", "run", "--job", "doctor & x", ""],
+      environment: new Map([
+        ["OSLogRateLimit", "64"],
+        ["XPC_SERVICE_NAME", "com.n138probe.print"],
+      ]),
     });
+    expect(
+      parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace(PROBE_ENVIRONMENT, CAPTURED_ENVIRONMENT_WITH_PLIST_VARIABLE), "gui/501/com.n138probe.print")?.environment.get("PATH"),
+    ).toBe("/usr/bin:/bin");
   });
 
   it("is null for another target, a duplicated top-level field, a missing or unterminated arguments block, or a malformed argument line", () => {
@@ -224,6 +241,9 @@ describe("parseLaunchctlPrintedService (macOS 26.6.2 format)", () => {
     expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace("\targuments = {", "\targv = {"), target)).toBeNull();
     expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace("\t\trun\n", "\trun\n"), target)).toBeNull();
     expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.slice(0, CAPTURED_PRINT_26_6_2.indexOf("\t}")), target)).toBeNull();
+    expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace(PROBE_ENVIRONMENT, `${PROBE_ENVIRONMENT}\n${PROBE_ENVIRONMENT}`), target)).toBeNull();
+    expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace("\t\tOSLogRateLimit => 64", "\t\tXPC_SERVICE_NAME => other"), target)).toBeNull();
+    expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace(PROBE_ENVIRONMENT, ""), target)).toBeNull();
   });
 });
 
@@ -281,6 +301,29 @@ describe("LaunchdPathBootstrapper (D82)", () => {
       runner.printed = () => ({ exitCode: 0, stdout: printed });
       await expect(bootstrapper.verifyLoaded(request)).resolves.toBe(false);
     }
+  });
+
+  it("fails verification when the loaded job's environment carries a variable the plan does not, or names another service", async () => {
+    const { request, runner, bootstrapper, path, target } = await fixture();
+    const planned = printFor(target, path, request.plist.ProgramArguments);
+    const label = request.plist.Label;
+    expect(planned).toContain(`XPC_SERVICE_NAME => ${label}`);
+    for (const printed of [
+      planned.replace(`\t\tXPC_SERVICE_NAME => ${label}`, `\t\tNODE_OPTIONS => --require /tmp/evil.js\n\t\tXPC_SERVICE_NAME => ${label}`),
+      planned.replace(`\t\tXPC_SERVICE_NAME => ${label}`, "\t\tXPC_SERVICE_NAME => com.developer-os.other"),
+    ]) {
+      runner.printed = () => ({ exitCode: 0, stdout: printed });
+      await expect(bootstrapper.verifyLoaded(request)).resolves.toBe(false);
+    }
+  });
+
+  it("refuses a request whose path is not the planned label's LaunchAgents leaf", async () => {
+    const { request, bootstrapper, runner } = await fixture();
+    const elsewhere = { ...request, source: { ...request.source, path: request.source.path.replace("/Library/LaunchAgents/", "/Library/Other/") as typeof request.source.path } };
+    await expect(bootstrapper.bootstrap(elsewhere)).rejects.toThrow(/LaunchAgents leaf/u);
+    const renamed = { ...request, source: { ...request.source, path: request.source.path.replace("doctor", "brain-lint") as typeof request.source.path } };
+    await expect(bootstrapper.bootstrap(renamed)).rejects.toThrow(/LaunchAgents leaf/u);
+    expect(runner.requests).toStrictEqual([]);
   });
 
   it("fails verification when the print fails or the label is not loaded", async () => {

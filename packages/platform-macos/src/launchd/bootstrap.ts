@@ -26,7 +26,7 @@ import {
   type SupportedLaunchdProcessTableTemplateV1,
   type SupportedLaunchdProcessTableV1,
 } from "./process-table.js";
-import { launchdGuiDomain } from "./registry.js";
+import { launchdGuiDomain, launchdJob, parseGeneratedLabel } from "./registry.js";
 import { LaunchdInputError, type LaunchdGuiDomainV1, type LaunchdPlistDictionaryV1 } from "./types.js";
 
 /**
@@ -188,46 +188,80 @@ export interface LaunchdPrintedServiceV1 {
   readonly path: string;
   readonly program: string;
   readonly arguments: readonly string[];
+  /** The top-level `environment` block: the plist's `EnvironmentVariables` plus launchd's own keys. */
+  readonly environment: ReadonlyMap<string, string>;
+}
+
+/**
+ * The keys launchd itself adds to a gui-domain agent's top-level `environment` block on macOS
+ * 26.6.2. Every other key there comes from the plist's `EnvironmentVariables`: a third-party agent
+ * on the same host whose plist sets only `PATH` printed `OSLogRateLimit`, `PATH` and
+ * `XPC_SERVICE_NAME` there, while the user domain's variables print separately as
+ * `inherited environment` and launchd's defaults as `default environment`.
+ */
+const LAUNCHD_ADDED_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set(["OSLogRateLimit", "XPC_SERVICE_NAME"]);
+
+function parseBlock(lines: readonly string[], start: number): { readonly entries: string[]; readonly end: number } | null {
+  const entries: string[] = [];
+  let index = start;
+  for (; index < lines.length && lines[index] !== "\t}"; index += 1) {
+    const line = lines[index] as string;
+    if (!line.startsWith("\t\t")) return null;
+    entries.push(line.slice(2));
+  }
+  return index >= lines.length ? null : { entries, end: index };
 }
 
 /**
  * Conservative parser for the `launchctl print gui/<uid>/<label>` service dump, pinned to the
  * format of macOS 26.6.2 (25G83) by `bootstrap.test.ts`. The first line must be exactly
- * `<target> = {`. `path`, `program` and the `arguments` block are read only at top-level
- * indentation (one tab); each must occur exactly once, and every argument line is two tabs plus
- * its value, so a nested or injected duplicate (an inherited environment value with a newline,
- * say) yields `null`. Everything else, including every environment block, is ignored and never
- * retained.
+ * `<target> = {`. `path`, `program`, the `arguments` block and the `environment` block are read
+ * only at top-level indentation (one tab); each must occur exactly once, every block line is two
+ * tabs plus its value, and every environment line is `KEY => value` with a unique key, so a nested
+ * or injected duplicate (an inherited environment value with a newline, say) yields `null`. The
+ * `inherited environment` and `default environment` blocks, and everything else, are ignored and
+ * never retained.
  */
 export function parseLaunchctlPrintedService(text: string, target: string): LaunchdPrintedServiceV1 | null {
   const lines = text.split("\n");
   if (lines[0] !== `${target} = {`) return null;
   const scalars = new Map<string, string[]>();
-  const argumentBlocks: string[][] = [];
+  const blocks = new Map<string, string[][]>();
   for (let index = 1; index < lines.length; index += 1) {
     const line = lines[index] as string;
-    if (line === "\targuments = {") {
-      const block: string[] = [];
-      for (index += 1; index < lines.length && lines[index] !== "\t}"; index += 1) {
-        const argument = lines[index] as string;
-        if (!argument.startsWith("\t\t")) return null;
-        block.push(argument.slice(2));
-      }
-      if (index >= lines.length) return null;
-      argumentBlocks.push(block);
+    const opened = /^\t(arguments|environment) = \{$/u.exec(line)?.[1];
+    if (opened !== undefined) {
+      const block = parseBlock(lines, index + 1);
+      if (block === null) return null;
+      blocks.set(opened, [...(blocks.get(opened) ?? []), block.entries]);
+      index = block.end;
       continue;
     }
     const scalar = /^\t(path|program) = (.*)$/u.exec(line);
     if (scalar?.[1] !== undefined) scalars.set(scalar[1], [...(scalars.get(scalar[1]) ?? []), scalar[2] ?? ""]);
   }
-  const paths = scalars.get("path") ?? [];
-  const programs = scalars.get("program") ?? [];
-  const [path] = paths;
-  const [program] = programs;
-  const [args] = argumentBlocks;
-  if (path === undefined || program === undefined || args === undefined) return null;
-  if (paths.length !== 1 || programs.length !== 1 || argumentBlocks.length !== 1) return null;
-  return { path, program, arguments: args };
+  const once = <T>(values: readonly T[] | undefined): T | undefined => (values?.length === 1 ? values[0] : undefined);
+  const path = once(scalars.get("path"));
+  const program = once(scalars.get("program"));
+  const args = once(blocks.get("arguments"));
+  const environmentLines = once(blocks.get("environment"));
+  if (path === undefined || program === undefined || args === undefined || environmentLines === undefined) return null;
+  const environment = new Map<string, string>();
+  for (const line of environmentLines) {
+    const entry = /^([^\s=]+) => (.*)$/u.exec(line);
+    if (entry?.[1] === undefined || environment.has(entry[1])) return null;
+    environment.set(entry[1], entry[2] ?? "");
+  }
+  return { path, program, arguments: args, environment };
+}
+
+/**
+ * The plan's plists carry no `EnvironmentVariables`, so the loaded job's top-level environment may
+ * hold only launchd's own keys, with `XPC_SERVICE_NAME` naming the planned label. A swapped plist
+ * that adds a variable (`NODE_OPTIONS`, say) fails this.
+ */
+function environmentIsPlanned(environment: ReadonlyMap<string, string>, label: string): boolean {
+  return [...environment.keys()].every((key) => LAUNCHD_ADDED_ENVIRONMENT_KEYS.has(key)) && environment.get("XPC_SERVICE_NAME") === label;
 }
 
 /**
@@ -236,7 +270,7 @@ export function parseLaunchctlPrintedService(text: string, target: string): Laun
  * rechecks that the path still opens (no-follow) to the inode the reader captured, holding exactly
  * the plan bytes, and runs `launchctl bootstrap gui/<uid> <path>`. `verifyLoaded`, run immediately
  * after a successful bootstrap, re-proves the inode and bytes and requires `launchctl print` to
- * report the plan's path, program and arguments for the planned label; the caller boots the label
+ * report the plan's path, program, arguments and environment for the planned label; the caller boots the label
  * out and refuses on any mismatch. Residual: a same-uid process can swap the file between the
  * recheck and launchd's own open; the post-check detects it and the bootout bounds the swapped
  * job's life to that window.
@@ -297,7 +331,8 @@ export class LaunchdPathBootstrapper {
       printed.path === request.source.path &&
       printed.program === planned[0] &&
       printed.arguments.length === planned.length &&
-      printed.arguments.every((argument, index) => argument === planned[index])
+      printed.arguments.every((argument, index) => argument === planned[index]) &&
+      environmentIsPlanned(printed.environment, request.plist.Label)
     );
   }
 
@@ -337,6 +372,10 @@ export class LaunchdPathBootstrapper {
     if (!["before", "after"].includes(request.role)) refuse("launchd bootstrap role");
     if (!Number.isSafeInteger(request.transitionIndex) || request.transitionIndex < 0 || request.transitionIndex > 7) refuse("launchd bootstrap transition index");
     const source = admitSourceIdentity(request.source, uid);
+    // The path is the plan's, never caller text: the one LaunchAgents leaf the planned label's job owns.
+    if (!source.path.endsWith(`/Library/LaunchAgents/${launchdJob(parseGeneratedLabel(request.plist.Label).job).plistFileName}`)) {
+      refuse("bootstrap plist path is not the planned label's LaunchAgents leaf");
+    }
     if (request.table.staging.root.ownerUid !== uid) refuse("launchd process staging owner");
     const bytes = new TextEncoder().encode(encodeLaunchdPlist(request.plist));
     if (bytes.byteLength !== source.size || hashBytes(bytes) !== source.hash) refuse("bootstrap plist bytes are not the plan-bound identity");

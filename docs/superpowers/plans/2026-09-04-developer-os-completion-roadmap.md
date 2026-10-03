@@ -363,10 +363,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   `dev`/`ino`; the path is rechecked against that identity and the plan bytes right before
   `launchctl bootstrap gui/<uid> <path>`; immediately after a successful bootstrap it is re-proven
   (no-follow open, `fstat` and `lstat` identity, plan bytes) and `launchctl print gui/<uid>/<label>`
-  must report the plan's path, program and arguments, or the label is booted out and the transition
-  refuses `launchd_bootstrap_plist_changed`. Accepted residual: a same-uid process can swap the file
-  between the recheck and launchd's own open; the post-check detects it and the bootout bounds the
-  swapped job's life to that window. Such a process can already write `~/Library/LaunchAgents`, so the
+  must report the plan's path, program and arguments, and an `environment` block holding only launchd's own `OSLogRateLimit` and `XPC_SERVICE_NAME` (naming the planned label), since the plan sets no `EnvironmentVariables`, or the label is booted out and the transition refuses
+  `launchd_bootstrap_plist_changed`; a resume that finds the label already loaded runs the same
+  post-check first. Accepted residual: a same-uid process can swap the file between the recheck and
+  launchd's own open. The post-check detects a swap that changes the printed path, program,
+  arguments or plist environment, and the bootout bounds the swapped job's life to that window; a
+  swap that changes only what the check does not compare (the schedule, the output paths) is not
+  detected, and variables a same-uid process sets in the user domain (`launchctl setenv`, printed
+  as `inherited environment`) are outside the plist. Such a process can already write `~/Library/LaunchAgents`, so the
   same-uid boundary does not widen. The FD-3 snapshot code is deleted.
 - **D81 (2026-10-03), founder: reinstall `da9575f0` without finishing gate run 4.** The founder stopped
   the gate during `test:suite` and had the reinstall run. `da9575f0` adds to `23b32060` (which passed

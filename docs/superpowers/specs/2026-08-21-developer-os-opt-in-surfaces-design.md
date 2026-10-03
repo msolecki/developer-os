@@ -4047,15 +4047,23 @@ are superseded. A bootstrap is now:
    plan, never from caller text.
 3. *Post-check, immediately after a successful bootstrap.* It repeats the identity and byte check,
    then runs `launchctl print gui/<uid>/<label>` (the table's `probe_service` alternative) and requires
-   the dump — parsed conservatively for its header, top-level `path`, `program` and `arguments` only,
-   each exactly once, in the format of macOS 26.6.2 pinned by a captured fixture, and never retained —
-   to report the plan's path, `ProgramArguments[0]` and `ProgramArguments`. Any mismatch, a failed
-   print, or a missing label boots the label out and refuses `launchd_bootstrap_plist_changed`, which
-   takes the coordinator's compensating path as before.
+   the dump — parsed conservatively for its header, top-level `path`, `program`, `arguments` and
+   `environment` only, each exactly once, in the format of macOS 26.6.2 pinned by a captured fixture,
+   and never retained — to report the plan's path, `ProgramArguments[0]` and `ProgramArguments`, and
+   an `environment` block holding only launchd's own `OSLogRateLimit` and `XPC_SERVICE_NAME` (the
+   planned label). On 26.6.2 that block carries the plist's `EnvironmentVariables` beside those two,
+   while user-domain variables print as `inherited environment`, so a plist that adds a variable
+   fails. Any mismatch, a failed print, or a missing label boots the planned label out and refuses
+   `launchd_bootstrap_plist_changed`, which takes the coordinator's compensating path as before. A
+   resume that finds the label already loaded (a death between bootstrap and post-check) runs the
+   same post-check, re-admitting the plist first; a plist the reader refuses counts as a mismatch.
+   A compensating unload of this plan's own label does not re-hash the plist.
 4. *Residual (accepted).* A same-uid process can swap the file between step 2's recheck and launchd's
-   own open. Step 3 detects it after the fact and the bootout bounds the swapped job's life to that
-   window. Such a process can already write `~/Library/LaunchAgents`, so the same-uid boundary does
-   not widen.
+   own open. Step 3 detects a swap that changes the printed path, program, arguments or plist
+   environment, after the fact, and the bootout bounds the swapped job's life to that window. A swap
+   that changes only the schedule or the output paths is not detected, and user-domain variables
+   (`launchctl setenv`) are outside the plist. Such a process can already write
+   `~/Library/LaunchAgents`, so the same-uid boundary does not widen.
 
 The mutation table's ID becomes `launchctl-macos-path-v1` and loses `bootstrapPlistFd`. Core's
 `tmp/bootstrap-plist` staging admission is kept only so a leaf left by an older build stays a

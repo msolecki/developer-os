@@ -344,7 +344,8 @@ function launchdEffectTerminal(journal: unknown): LifecycleEffectTerminalV1 {
 
 /**
  * Every plan with a transition may bootstrap: forward for `after_files`, as compensation for
- * `before_files`. Only such a plan owns the one linked snapshot leaf in `tmp`.
+ * `before_files`. Only such a plan owns the one linked snapshot leaf in `tmp`, retained only to
+ * recognise residue from builds before D82, which no longer create it.
  */
 function launchdEffectStagingChildren(plan: unknown): readonly string[] {
   const { transitions } = plan as LaunchdEffectPlanV1;

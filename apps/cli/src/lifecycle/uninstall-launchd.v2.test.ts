@@ -292,4 +292,40 @@ describe("uninstall/present_manifest with an installed launchd job (plan 1b Task
     expect((await nodeFs.stat(home.plist.path)).ino).not.toBe(before.ino);
     expect(await exists(home.fixture.paths.manifestFile)).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** Dies after the plist was removed, then dies again after the compensating bootstrap loaded the label. */
+  async function diedBetweenBootstrapAndPostCheck(name: string): Promise<LaunchdHomeV1> {
+    const home = await launchdHome(name, undefined, "scripted");
+    const died = new LifecycleUninstaller({ afterBoundary: dieAfterPlistRemoval(() => home.plans) });
+    await expect(died.execute(await home.request())).rejects.toThrow(SyntheticDeath);
+    home.launchd.faults.dieAfterBootstrap = true;
+    await expect(recoverUninstall(home)).rejects.toThrow(/before the post-check/u);
+    expect(home.launchd.events).toStrictEqual([`bootout ${home.plist.label}`, `bootstrap ${home.plist.label}`]);
+    expect(home.launchd.loaded.get(DOCTOR)).toBe(home.plist.label);
+    expect(home.launchd.prints).toStrictEqual([]);
+    return home;
+  }
+
+  it("verifies a label left loaded by a death before its post-check when recovery resumes (NEW-138 round 3)", async () => {
+    const home = await diedBetweenBootstrapAndPostCheck("uninstall-launchd-resume-verify");
+    await recoverUninstall(home);
+
+    expect(home.launchd.prints).toStrictEqual([`gui/${String(UID)}/${home.plist.label}`]);
+    expect(home.launchd.events).toStrictEqual([`bootout ${home.plist.label}`, `bootstrap ${home.plist.label}`]);
+    expect(home.launchd.loaded.get(DOCTOR)).toBe(home.plist.label);
+    expect(await nodeFs.readFile(home.plist.path, "utf8")).toBe(home.plist.bytes);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("boots out a label left loaded by a death before its post-check when its plist was swapped meanwhile (NEW-138 round 3)", async () => {
+    const home = await diedBetweenBootstrapAndPostCheck("uninstall-launchd-resume-swapped");
+    const forged = Buffer.from(home.plist.bytes);
+    forged[forged.byteLength - 2] = 0x58;
+    await nodeFs.writeFile(`${home.plist.path}.swap`, forged, { mode: 0o600 });
+    await nodeFs.rename(`${home.plist.path}.swap`, home.plist.path);
+
+    await expect(recoverUninstall(home)).rejects.toMatchObject({ reason: "launchd_bootstrap_plist_changed" });
+
+    expect(home.launchd.events).toStrictEqual([`bootout ${home.plist.label}`, `bootstrap ${home.plist.label}`, `bootout ${home.plist.label}`]);
+    expect(home.launchd.loaded.has(DOCTOR)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

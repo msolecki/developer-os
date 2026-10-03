@@ -922,9 +922,16 @@ export interface ScriptedLaunchdV1 {
   readonly failingBootstraps: Set<GeneratedLaunchdLabelV1>;
   /**
    * One-shot `launchctl: "scripted"` faults: `afterBootstrap` runs once launchd has read the plist,
-   * and `print` makes the next service print report another program or exit 5.
+   * `dieAfterBootstrap` rejects the bootstrap process after launchd loaded the label (the CLI died
+   * before its post-check), and `print` makes the next service print report another program or exit 5.
    */
-  readonly faults: { afterBootstrap: ((path: string) => Promise<void>) | null; print: "other_program" | "exit_5" | null };
+  readonly faults: {
+    afterBootstrap: ((path: string) => Promise<void>) | null;
+    dieAfterBootstrap: boolean;
+    print: "other_program" | "exit_5" | null;
+  };
+  /** With `launchctl: "scripted"`, every service target the post-check printed, in order. */
+  readonly prints: string[];
   readonly ports: LifecycleEffectPortsV1["launchd"];
 }
 
@@ -944,7 +951,8 @@ export function scriptedLaunchd(options: {
   const loaded = new Map<ScheduledJobIdV1, GeneratedLaunchdLabelV1>();
   const events: string[] = [];
   const failingBootstraps = new Set<GeneratedLaunchdLabelV1>();
-  const faults: ScriptedLaunchdV1["faults"] = { afterBootstrap: null, print: null };
+  const faults: ScriptedLaunchdV1["faults"] = { afterBootstrap: null, dieAfterBootstrap: false, print: null };
+  const prints: string[] = [];
   /** What launchd itself read at bootstrap, per loaded label: its path and ProgramArguments. */
   const services = new Map<GeneratedLaunchdLabelV1, { readonly path: string; readonly args: readonly string[] }>();
   const exited = { exitCode: 0, signal: null, termination: "exited" as const, stdoutBytes: 0, stderrBytes: 0, groupReaped: true as const };
@@ -988,7 +996,7 @@ export function scriptedLaunchd(options: {
     pause: () => Promise.resolve(),
     host: options.host ?? hostWith(),
   } as unknown as LifecycleEffectPortsV1["launchd"];
-  if (options.launchctl !== "scripted") return { loaded, events, failingBootstraps, faults, ports };
+  if (options.launchctl !== "scripted") return { loaded, events, failingBootstraps, faults, prints, ports };
   const exit = (exitCode: number) => ({ ...exited, exitCode, stdoutSha256: EMPTY_SHA256, stderrSha256: EMPTY_SHA256 });
   const runner = {
     run: async (request: SupervisedSpawnRequestV1, sink?: (chunk: Uint8Array, stream: "stdout" | "stderr") => void) => {
@@ -997,6 +1005,7 @@ export function scriptedLaunchd(options: {
       const labelOf = (target: string): GeneratedLaunchdLabelV1 => target.slice(target.indexOf("/", "gui/".length) + 1) as GeneratedLaunchdLabelV1;
       if (command === "print") {
         const label = labelOf(String(domainOrTarget));
+        prints.push(String(domainOrTarget));
         const service = loaded.get(parseGeneratedLabel(label).job) === label ? services.get(label) : undefined;
         const fault = faults.print;
         faults.print = null;
@@ -1025,6 +1034,10 @@ export function scriptedLaunchd(options: {
         const after = faults.afterBootstrap;
         faults.afterBootstrap = null;
         await after?.(path);
+        if (faults.dieAfterBootstrap && !failed) {
+          faults.dieAfterBootstrap = false;
+          throw new Error("synthetic death after launchd loaded the label, before the post-check");
+        }
       }
       return exit(failed ? 1 : 0);
     },
@@ -1035,6 +1048,7 @@ export function scriptedLaunchd(options: {
     events,
     failingBootstraps,
     faults,
+    prints,
     ports: { ...ports, bootstrapper: new LaunchdPathBootstrapper(admission), launchctl: new LaunchdBootoutRunner(admission) },
   };
 }

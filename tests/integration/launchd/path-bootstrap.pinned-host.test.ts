@@ -104,7 +104,9 @@ describe("launchctl path bootstrap gate", () => {
         StandardErrorPath: "/dev/null",
       };
       const bytes = new TextEncoder().encode(encodeLaunchdPlist(plist));
-      const plistPath = join(base, "com.developer-os.doctor.plist");
+      // The bootstrapper accepts only the planned label's LaunchAgents leaf.
+      await mkdir(join(base, "Library", "LaunchAgents"), { recursive: true, mode: 0o700 });
+      const plistPath = join(base, "Library", "LaunchAgents", "com.developer-os.doctor.plist");
       await writeFile(plistPath, bytes, { mode: 0o600 });
       await chmod(plistPath, 0o600);
       const plistStats = await lstat(plistPath, { bigint: true });
