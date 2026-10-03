@@ -12,22 +12,13 @@ notes are the archive.
 1–3), NEW-110 (Tasks 0–13, with P9) and 35 other backlog rows are integrated and reviewed; both plans are
 closed and deleted, their surviving contracts in `docs/architecture/foundation.md` §10–§11,
 `foundation-constraints.md`, `threat-model.md` §5.15–§5.16, `codex-adapter.md` §14, `brain.md` §6.14
-and `claude-adapter.md` §17. Tests were written, not run. **Next, founder:** run `npm run check` and
-`npm run test:pinned-host` on the integrated tree (development Mac, both vendor CLIs installed, because
+and `claude-adapter.md` §17. The gate on `23b32060` passed every stage but `test:pinned-host`, whose
+failures became NEW-137 (fixed, proof owed). Gate run 4 on `da9575f0` was stopped during `test:suite`
+and `da9575f0` was installed (D81). **Next, founder:** run `npm run check` and
+`npm run test:pinned-host` on `da9575f0` or later (development Mac, both vendor CLIs installed, because
 `check` includes `test:vendor-ingest`); a red run reopens the rows its failures belong to (D75). Then
-push the branch and open the PR (`development` needs one, GH013); the founder merges.
-
-Named suspects for a red run, so the first failure has an owner:
-
-- NEW-71 (`52c667c7`): `admitPostPlanInitialWrite` now refuses a present `.lifecycle.lock` that the
-  plan's `admittedPreexistingPaths` does not name by `dev`/`ino`. If a fresh `init` creates the lock
-  after planning, every fresh `init` refuses — look here first for a red `executor.test.ts`.
-- NEW-113: a red `local-receive.pinned-host.test.ts` caused by the shim's receive-pack dispatch is a
-  stop condition to report, not to patch around.
-- NEW-110 Task 12's recovery sweeps run a full `init` per death point; budget their wall clock before
-  reading a timeout as a regression (`docs/architecture/foundation.md` §9).
-- NEW-93 changed a persisted schema (the key's retention entry carries a null `sha256`) and NEW-86 the
-  fresh `init` plan grammar; fixtures pinned to the old bytes will need regenerating, not the code.
+push the branch (`development` is 244 commits ahead of `origin` on 2026-10-03; GH013 needs the
+founder's bypass, D76); the founder merges.
 
 **A15, the founder cutover, steps 1–15 done on the live machine (2026-09-28/29).** Steps 8–10 ran on
 2026-09-28 under D69 and D74: the first step-9 `init` was killed mid-bootstrap by a host-session
@@ -39,17 +30,17 @@ directory remains (2026-09-29: two dead `~/.codex` symlinks step 13's grep could
 inert `~/.codex/config.toml` entries were removed, the grep gap closed in step 13's Verify); three
 reinstalls preserved the Brain, the overrides and the Brain config; 106 inbox files were imported and
 accepted, and the first real Claude ingest ingested 71 after four product fixes, then 75 after NEW-116's fix; the founder rejected the last 31 (`3ebc505d`,
-`588c866d`, `cb19f7c6`, `26807aed`; NEW-116 owns the other 35). Six notes written under
-`content/content/` were moved by hand; the validator landed in `72f0f5bf`. **Next:** step 13b (added
-2026-09-29: disable the vault's scheduled legacy CI workflow; its vault-scoped legacy skills and
-tooling are removed with step 19), steps 16–18 after one week
-of use, Codex hook approval after 2026-10-22, step 19 after one stable cycle. Git and launchd stay
+`588c866d`, `cb19f7c6`, `26807aed`; NEW-116 owns the yield on those 31). Six notes written under
+`content/content/` were moved by hand; the validator landed in `72f0f5bf`. Step 13b (the vault's scheduled
+legacy CI workflow disabled) is done: the workflow reports `disabled_manually` (founder, 2026-10-03);
+its vault-scoped legacy skills and tooling are removed with step 19. **Next:** steps 16–18 after one week
+of use (step 16 checks injection: the hook firing-record fix and a reinstall come first), Codex hook approval after 2026-10-22, step 19 after one stable cycle. Git and launchd stay
 disabled on the live machine until the founder enables them (D76: NEW-113's Task 5 is skipped).
 
 **Evidence the closed phases stand on (2026-09-26, run 4).** On `bc17550`, every part green: lint,
 `test:lifecycle` (21/21 files), `test:e2e`, `test:suite` (306/306 files, 9913 tests, 8 todo =
 documented residuals), `test:bootstrap` (94) and build; seven whole-phase fresh-context reviews. PR #15
-merged. The D70 lane's code has no run yet (above).
+merged. The D70 lane's code ran on `23b32060` (above); the full suite on `da9575f0` is owed (D81).
 
 **Lanes.** D44, D47, D56 and D70 each expired with the closes they governed (D70 with D75's plan
 closes). The next code-producing work runs `SESSION.md` §5 as written, except that `development`
@@ -59,8 +50,8 @@ requires a PR (see "Delivery evidence still owed").
 
 Each is executable from the document named; none is agent work.
 
-1. D75's full suite: `npm run check` and `npm run test:pinned-host` on the integrated tree, then the
-   push of `development` (D76: one branch, no PR branch; GH013 needs the founder's bypass).
+1. The full suite owed by D75 and D81: `npm run check` and `npm run test:pinned-host` on `da9575f0` or
+   later, then the push of `development` (D76: one branch, no PR branch; GH013 needs the founder's bypass).
 2. A15 steps 16–18 (per-adapter gate cycle, exercised rollback) after one week of use, step 19 after
    one stable cycle (`docs/migration/founder-cutover.md`), and the Codex hook approval after
    2026-10-22.
@@ -84,7 +75,7 @@ cutover (A15) and DOS-P9's release (A16 with L1, eight steps). It closes with A1
 earlier.
 
 Everything after `NOW` is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (the
-founder decisions D1–D75 and what each phase still owes). `docs/migration/instruction-inventory.md`
+founder decisions D1–D81 and what each phase still owes). `docs/migration/instruction-inventory.md`
 is the scope of A12, A12b, A13 and A14.
 
 ## Product path
@@ -107,9 +98,10 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate (one worktree each):
 
-- NEW-115 (`init` does not exit after success) and NEW-116 (ingest yield and head-of-line blocking).
-- Residuals of the D70 lane: NEW-117, NEW-119, NEW-122, NEW-123, NEW-124, NEW-126.
-- NEW-53 (the `init` encoder cost) and NEW-29 (the elapsed-time assertion class).
+- NEW-116 (ingest yield and head-of-line blocking).
+- NEW-53 (the `init` encoder cost, `encodeString` and the retention postimage left).
+- NEW-131 (instruction-defaults scanner), NEW-132 (update recovery sweeps), NEW-133 (fresh `init` cost).
+- NEW-137: fixed; `npm run test:pinned-host` green on the founder Mac closes it.
 - NEW-134 (scheduled Brain gardener and pulse, D77): implemented and reviewed 2026-10-01; plan close owes the founder's full `check` and one real Claude gardener run (founder stop points).
 
 Needs a human, a policy decision, or an external application:
@@ -136,8 +128,7 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
   run unsandboxed.
 - Measured gate and CI costs, and why the CI budgets are what they are, live in
   `docs/architecture/foundation.md` §9. That a green local `check` is not evidence about CI lives in
-  `BACKLOG.md` §5. Retain the complete log of any full-suite failure; NEW-29 owns the remaining
-  elapsed-time assertion class.
+  `BACKLOG.md` §5. Retain the complete log of any full-suite failure.
 
 ## Long-lead gates
 
@@ -150,10 +141,12 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (the parked Task 11b), A16. A13 left it
   on 2026-09-29; its founder rows are stop point 3.
-- Owed now: D75's full `check` and `test:pinned-host`, then the push of `development` (D76).
+- Owed now: the full `check` and `test:pinned-host` on `da9575f0` (D75, D81), then the push of
+  `development` (D76).
 - Implementation still to build: Task 11b (parked, D46) and A16's plan and work; the startable rows
   above.
 - Founder stop points: listed above. Long-lead gates L1 and L2 block A16.
-- Repository backlog: 26 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
-  and the §6 phase-close deferrals. Closed on 2026-09-29 under D75: 36 rows including NEW-110 (the list is in
+- Repository backlog: 25 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
+  and the §6 phase-close deferrals. Closed 2026-10-01/02: NEW-115, NEW-119, NEW-122, NEW-123,
+  NEW-124, NEW-126, NEW-135, NEW-136 and NEW-29. Closed on 2026-09-29 under D75: 36 rows including NEW-110 (the list is in
   `BACKLOG.md` §1), and NEW-54, NEW-82, NEW-87 and NEW-99 removed as already fixed or moot.
