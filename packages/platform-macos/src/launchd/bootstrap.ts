@@ -215,8 +215,9 @@ function parseBlock(lines: readonly string[], start: number): { readonly entries
 /**
  * Conservative parser for the `launchctl print gui/<uid>/<label>` service dump, pinned to the
  * format of macOS 26.6.2 (25G83) by `bootstrap.test.ts`. The first line must be exactly
- * `<target> = {`. `path`, `program`, the `arguments` block and the `environment` block are read
- * only at top-level indentation (one tab); each must occur exactly once, every block line is two
+ * `<target> = {`. Every one-tab block is skipped to its matching `\t}`, and a two-tab line or a
+ * `\t}` outside a block refuses the dump. `path`, `program`, the `arguments` block and the
+ * `environment` block are read only at top-level indentation (one tab); each must occur exactly once, every block line is two
  * tabs plus its value, and every environment line is `KEY => value` with a unique key, so a nested
  * or injected duplicate (an inherited environment value with a newline, say) yields `null`. The
  * `inherited environment` and `default environment` blocks, and everything else, are ignored and
@@ -229,7 +230,9 @@ export function parseLaunchctlPrintedService(text: string, target: string): Laun
   const blocks = new Map<string, string[][]>();
   for (let index = 1; index < lines.length; index += 1) {
     const line = lines[index] as string;
-    const opened = /^\t(arguments|environment) = \{$/u.exec(line)?.[1];
+    // Every one-tab block is skipped to its own closing `\t}`; a two-tab line or a `\t}` outside a
+    // block can only be a stray or injected line, so the whole dump is refused.
+    const opened = /^\t([^\t].*) = \{$/u.exec(line)?.[1];
     if (opened !== undefined) {
       const block = parseBlock(lines, index + 1);
       if (block === null) return null;
@@ -237,6 +240,7 @@ export function parseLaunchctlPrintedService(text: string, target: string): Laun
       index = block.end;
       continue;
     }
+    if (line.startsWith("\t\t") || line === "\t}") return null;
     const scalar = /^\t(path|program) = (.*)$/u.exec(line);
     if (scalar?.[1] !== undefined) scalars.set(scalar[1], [...(scalars.get(scalar[1]) ?? []), scalar[2] ?? ""]);
   }

@@ -244,6 +244,17 @@ describe("parseLaunchctlPrintedService (macOS 26.6.2 format)", () => {
     expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace(PROBE_ENVIRONMENT, `${PROBE_ENVIRONMENT}\n${PROBE_ENVIRONMENT}`), target)).toBeNull();
     expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace("\t\tOSLogRateLimit => 64", "\t\tXPC_SERVICE_NAME => other"), target)).toBeNull();
     expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace(PROBE_ENVIRONMENT, ""), target)).toBeNull();
+    // A stray line after a block closes, or a closer with no open block, refuses the whole dump.
+    expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2.replace("\t\t\n\t}\n", "\t\t\n\t}\n\t\t--x\n"), target)).toBeNull();
+    expect(
+      parseLaunchctlPrintedService(
+        CAPTURED_PRINT_26_6_2.replace(
+          PROBE_ENVIRONMENT,
+          ["\tenvironment = {", "\t\tOSLogRateLimit => 64", "\t\tXPC_SERVICE_NAME => com.n138probe.print", "\t}", "\t\tPATH => /x", "\t}"].join("\n"),
+        ),
+        target,
+      ),
+    ).toBeNull();
   });
 });
 
