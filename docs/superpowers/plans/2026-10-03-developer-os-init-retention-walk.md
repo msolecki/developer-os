@@ -50,8 +50,8 @@ spends re-walking and re-hashing `state/`, without changing any security or dura
 - **What:** `BootstrapRetainer.observeAll(entries)`; `observe(e)` is `observeAll([e])`. Used by the
   resume prefix and the final loop of `retainBootstrapEnvelope`.
 - **Where:** `apps/cli/src/bootstrap/retention.ts`, `retention.test.ts`.
-- **Test:** counting walk on the "reopens an already-retained journal" path: parent walks per
-  round are the same for 1 and 5 rows.
+- **Test:** counting `projectPostimage` on the "reopens an already-retained journal" path: parent projections per
+  round are the same for 3 and 8 rows (8 each; previously 12 and 32).
 
 ## Task 4 — measure and document (S)
 
@@ -59,4 +59,11 @@ spends re-walking and re-hashing `state/`, without changing any security or dura
   0 fail, one real-init v2 file before/after; `foundation.md` §9 and `BACKLOG.md` NEW-133.
 - **Test:** the recorded numbers and `doctor` output.
 
-**Next action:** Task 1.
+## Status (2026-10-03)
+
+- Task 1 done: `deaccd0c`.
+- Tasks 2 and 3 done together (same file): `0ff7485f`.
+- Task 4 done: `init` 453-523 s → 136-147 s; `doctor` 0 fail; numbers in `foundation.md` §9.
+
+**Next action:** CI re-measure of `tests/tools/pack-local-release.test.ts` on `macos-15`, then
+close NEW-133 and delete this plan.

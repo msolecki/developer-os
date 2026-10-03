@@ -963,6 +963,57 @@ red was entirely clock, not code. The budget now lives in one place,
 `executor.test.ts`. Lower it only against a measurement taken on the slowest machine that runs
 it.
 
+**Added 2026-10-03 (NEW-133): a fresh `init` was retention-walk-bound, not fsync- or
+osascript-bound.** A profile of `init --yes --adapters none` at `0b2d31df` found ~85% of its wall
+time in bootstrap retention re-walking `state/`: ~19.9k `readdir`s of `state/` (≈6,645 walks of
+≈466 entries), 3.09M `open`, 6.28M `lstat`, 6.18M `FileHandle.stat` and 2.88M reads for a home
+that ends with 603 files. Each retained row ran `observe` twice and the final loop once more; each
+`observe` projects the parent before and after; each projection walks twice and hashes every file.
+Canonical-JSON comparison of those trees cost another ~31 s (`sameValue` 13.1 s, the `treeHash`
+encode 10 s, key ordering 7.8 s).
+
+The fix keeps every comparison and changes only their cost (option A, founder 2026-10-03):
+
+- **Per-retainer content cache** (`BootstrapRetentionContentCacheV1` in
+  `apps/cli/src/bootstrap/retention.ts`, created in `executor.ts` `retainTerminal`): a regular
+  file's sha256 is reused while its bigint lstat key — dev, ino, size, mode, uid, nlink,
+  mtime_ns, ctime_ns — is unchanged; a hit opens nothing. **Why a hit cannot hide a change:** a
+  same-uid process cannot set ctime (`utimes` sets atime and mtime and itself moves ctime), and
+  every content write, truncate, chmod, chown or link change moves it; a replacement by rename has
+  another inode. A changed file therefore misses and is hashed as before, so the before/after
+  parent pair still detects a content change to any file in the observed tree. The remaining
+  hole, a write in the same ctime tick as the observation, is closed by caching only a file whose
+  ctime predates the wall clock sampled before its read, and only when every stat around the read
+  agrees on the key. The cache lives in memory for one retainer; it is never persisted or shared
+  across processes. `report.ts`'s evidence inspection does not use it.
+- **One observation round for loops that mutate nothing**: the resumed prefix and the final check
+  of `retainBootstrapEnvelope` project each distinct parent once before and once after all their
+  rows (`BootstrapRetainer.observeAll`). The retain loop stays one row per round, because its
+  rename and journal advance change `state/` between rows.
+- **Fresh-walk comparison by hash**: two walks this code just made compare `treeHash`,
+  `entryCount` and the root fields, since `treeHash` is sha256 over exactly
+  `encodeCanonicalJson(entries)`. A postimage read from a table or journal keeps the full
+  canonical comparison.
+- **Canonical-JSON key order** sorts keys with no code unit at or above U+D800 by code unit,
+  which equals UTF-8 byte order there, and encodes nothing; other keys keep the byte path. Output
+  bytes are pinned against the previous algorithm.
+- Directory entries are `lstat`ed eight at a time; results are processed in the same order.
+
+| Measurement (this laptop, unsandboxed, load average 4-42 from other sessions) | Before (`0b2d31df`) | After |
+|---|---|---|
+| `init --yes --local-release <pkg> --adapters none`, `/usr/bin/time -l`, packed release, fresh `HOME` | 475.80 s, 522.71 s, 453.36 s | **135.96 s, 146.53 s** |
+| `npx vitest run apps/cli/src/bootstrap/evidence-identity.v2.test.ts` (3 cases, real init) | 454.29 s | **180.75 s** |
+| `doctor` on the resulting home | 16 pass, 3 warn, 0 fail | 16 pass, 3 warn, 0 fail |
+
+**Residual.** A CPU profile of the fixed `init` (140.7 s) shows ~47 s on CPU and ~94 s waiting:
+the per-rename `osascript` (~20 s) and fsync (~9 s) are untouched by design. The profile does
+not attribute the rest of the wait; the largest known contributor is the retain loop, which
+still walks the parent eight times per row (two `observe`s × before/after × the projection's own
+first/second pair) — now `lstat`/`readdir` only for unchanged files, but still O(rows × tree) in
+metadata calls. Dropping the projection's internal pair inside `observe`
+would halve that; it is a founder decision, not taken here. Option B (metadata-only parent
+checks) was rejected.
+
 ## 10. Lifecycle kernel (Spec 1a)
 
 Plan 1a (Tasks 1–25, `43c6876..082e098`; the plan file was deleted 2026-09-26) shipped
