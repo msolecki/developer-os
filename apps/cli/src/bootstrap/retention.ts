@@ -98,14 +98,23 @@ function sameFreshProjection(left: BootstrapRetentionPostimageV1, right: Bootstr
  * read, so an unchanged file is not reopened on every walk of the same tree.
  *
  * Why a hit cannot hide a change: the key holds ctime_ns, and a same-uid process cannot set
- * ctime — `utimes` sets atime and mtime only, and itself moves ctime — while every content
- * write, truncate, chmod, chown or link-count change moves it. Replacement by rename brings a
+ * ctime — `utimes` sets atime and mtime only, and itself moves ctime — while every write(2),
+ * truncate, chmod, chown or link-count change moves it. Replacement by rename brings a
  * different inode. So a changed file has a different key, misses, and is hashed again as before.
- * The one hole is a write landing in the same ctime tick as the observation; a file is therefore
- * cached only when its ctime predates the wall clock sampled before the read began (the
- * "racy git" rule), and only when every stat taken around the read agrees on the key.
+ *
+ * ctime has the filesystem's granularity, not a nanosecond's: APFS stores nanoseconds, HFS+ one
+ * second, exFAT two. A same-size rewrite inside one granule keeps the whole key, so a file is
+ * cached only when its ctime is more than `RACY_CTIME_MARGIN_NS` (two seconds, the coarsest of
+ * these) older than the wall clock sampled before its read — the "racy git" rule with a margin
+ * — and only when every stat taken around the read agrees on the key. A younger file is hashed
+ * on every walk, exactly as without the cache.
+ *
+ * Residual: a writer that changes a file through a shared mmap without msync(2) may not move
+ * ctime until the pages are written back. No writer of `state/` uses mmap.
  */
 export type BootstrapRetentionContentCacheV1 = Map<string, LowerHexSha256>;
+
+const RACY_CTIME_MARGIN_NS = 2_000_000_000n;
 
 function contentKey(stats: BigIntStats): string {
   return [stats.dev, stats.ino, stats.size, stats.mode, stats.uid, stats.nlink, stats.mtimeNs, stats.ctimeNs]
@@ -217,7 +226,7 @@ async function projectRegularEntry(
     const sha256 = parseLowerHexSha256(digest.digest("hex"));
     if (
       cache !== undefined &&
-      before.ctimeNs < readStartedNs &&
+      before.ctimeNs + RACY_CTIME_MARGIN_NS < readStartedNs &&
       [opened, descriptorAfter, linkedAfter].every((stats) => contentKey(stats) === key)
     ) cache.set(key, sha256);
     return {
@@ -274,15 +283,21 @@ function judgedElsewhere(productHome: string, absolutePath: string, stats: BigIn
     stats.uid === BigInt(process.geteuid?.() ?? -1);
 }
 
-/** At most eight `lstat`s in flight; results keep the order of `paths`. */
+/** At most eight `lstat`s in flight; results keep the order of `paths`. The first failure stops every worker. */
 async function lstatBounded(paths: readonly string[]): Promise<BigIntStats[]> {
   const results: BigIntStats[] = [];
   let next = 0;
+  let failed = false;
   const worker = async (): Promise<void> => {
-    while (next < paths.length) {
+    while (!failed && next < paths.length) {
       const index = next;
       next += 1;
-      results[index] = await nodeFs.lstat(paths[index] as string, { bigint: true });
+      try {
+        results[index] = await nodeFs.lstat(paths[index] as string, { bigint: true });
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(8, paths.length) }, worker));

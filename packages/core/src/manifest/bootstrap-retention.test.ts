@@ -1464,8 +1464,12 @@ function admittedEvidence(
   };
 }
 
-/** Measured before the double-encode was removed: 1710 with it, 1074 without. */
-const BASELINE_DERIVATION_ENCODES = 1200;
+/**
+ * `Object.keys` calls per cold derivation, measured 2026-10-03 (NEW-133): 212 with one canonical
+ * encode per evidence row, 234 with the double encode. (The earlier TextEncoder baseline, 1074
+ * without and 1710 with, stopped discriminating once ASCII keys skipped encoding.)
+ */
+const BASELINE_DERIVATION_OBJECT_WALKS = 220;
 
 function retentionEntryCount(): number {
   return deriveBootstrapRetentionTable(plan, admittedEvidence()).length;
@@ -1542,23 +1546,20 @@ describe("retained bootstrap table derivation", () => {
 
   it("catches a derivation that canonically encodes each evidence row twice", () => {
     const evidence = admittedEvidence();
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
-    const original = TextEncoder.prototype.encode;
+    // NEW-133: ASCII keys no longer reach TextEncoder, so count the encoder's object walk instead.
+    const original = Object.keys;
     let calls = 0;
     try {
-      TextEncoder.prototype.encode = function encode(
-        this: InstanceType<typeof TextEncoder>,
-        input?: string,
-      ) {
+      Object.keys = (value: object): string[] => {
         calls += 1;
-        return original.call(this, input);
+        return original(value);
       };
       deriveBootstrapRetentionTable(plan, evidence);
     } finally {
-      TextEncoder.prototype.encode = original;
+      Object.keys = original;
     }
 
-    expect(calls).toBeLessThanOrEqual(BASELINE_DERIVATION_ENCODES);
+    expect(calls).toBeLessThanOrEqual(BASELINE_DERIVATION_OBJECT_WALKS);
   });
 
   it("derives exact restart locations from the terminal plan without observed pathname authority", () => {

@@ -979,12 +979,16 @@ The fix keeps every comparison and changes only their cost (option A, founder 20
   file's sha256 is reused while its bigint lstat key — dev, ino, size, mode, uid, nlink,
   mtime_ns, ctime_ns — is unchanged; a hit opens nothing. **Why a hit cannot hide a change:** a
   same-uid process cannot set ctime (`utimes` sets atime and mtime and itself moves ctime), and
-  every content write, truncate, chmod, chown or link change moves it; a replacement by rename has
+  every write(2), truncate, chmod, chown or link change moves it; a replacement by rename has
   another inode. A changed file therefore misses and is hashed as before, so the before/after
-  parent pair still detects a content change to any file in the observed tree. The remaining
-  hole, a write in the same ctime tick as the observation, is closed by caching only a file whose
-  ctime predates the wall clock sampled before its read, and only when every stat around the read
-  agrees on the key. The cache lives in memory for one retainer; it is never persisted or shared
+  parent pair still detects a content change to any file in the observed tree. ctime has the
+  filesystem's granularity — nanoseconds on APFS, one second on HFS+, two on exFAT — so a
+  same-size rewrite inside one granule keeps the whole key; a file is therefore cached only when
+  its ctime is more than two seconds older than the wall clock sampled before its read, and only
+  when every stat around the read agrees on the key. (Review round 1 found the first version,
+  which compared against the millisecond clock with no margin, defeated on an HFS+ image.)
+  **Residual:** a writer that changes a file through a shared mmap without msync(2) may not move
+  ctime until write-back; no writer of `state/` uses mmap. The cache lives in memory for one retainer; it is never persisted or shared
   across processes. `report.ts`'s evidence inspection does not use it.
 - **One observation round for loops that mutate nothing**: the resumed prefix and the final check
   of `retainBootstrapEnvelope` project each distinct parent once before and once after all their
@@ -1012,7 +1016,9 @@ still walks the parent eight times per row (two `observe`s × before/after × th
 first/second pair) — now `lstat`/`readdir` only for unchanged files, but still O(rows × tree) in
 metadata calls. Dropping the projection's internal pair inside `observe`
 would halve that; it is a founder decision, not taken here. Option B (metadata-only parent
-checks) was rejected.
+checks) was rejected. The content cache adds one detection residual: a change made through a
+shared mmap without msync(2) may not move ctime before write-back, so it could be missed until
+then; no writer of `state/` uses mmap.
 
 ## 10. Lifecycle kernel (Spec 1a)
 

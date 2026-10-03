@@ -1351,6 +1351,8 @@ describe("BootstrapRetainer content cache", () => {
       },
     };
     const cache = new Map<string, LowerHexSha256>();
+    // Age both files past the racy-ctime margin (two seconds) so the cache may admit them.
+    await new Promise((resolve) => { setTimeout(resolve, 2_100); });
     let armed: (() => Promise<void>) | undefined;
     const retainer = new BootstrapRetainer({
       renameSameParentNoReplace: () => Promise.reject(new Error("no rename expected")),
@@ -1366,6 +1368,24 @@ describe("BootstrapRetainer content cache", () => {
     });
     return { state, other, row, retainer, cache, arm: (mutation) => { armed = mutation; } };
   }
+
+  it("never caches a file whose ctime is inside the two-second racy margin", async () => {
+    const root = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-retained-racy-")));
+    roots.add(root);
+    await nodeFs.chmod(root, 0o700);
+    const file = join(root, "young");
+    await nodeFs.writeFile(file, "young", { mode: 0o600 });
+    // Older than any millisecond clock reading, younger than one HFS+ or exFAT ctime granule.
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+    const cache = new Map<string, LowerHexSha256>();
+    fsRaceControl.opened = [];
+
+    await projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME, undefined, cache);
+    await projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME, undefined, cache);
+
+    expect(cache.size).toBe(0);
+    expect(fsRaceControl.opened.filter((candidate) => candidate === file)).toHaveLength(4);
+  });
 
   it("answers an unchanged tree from the cache without opening a regular file", async () => {
     const fixture = await cachedFixture();
