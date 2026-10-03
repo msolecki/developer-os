@@ -355,6 +355,10 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D81 (2026-10-03), founder: reinstall `da9575f0` without finishing gate run 4.** The founder stopped
+  the gate during `test:suite` and had the reinstall run. `da9575f0` adds to `23b32060` (which passed
+  every stage but `test:pinned-host`) only the NEW-135/136/137 fixes, each with its own failing test
+  first and review. The full suite on `da9575f0` is owed before A16.
 - **D80 (2026-10-02), the post-fix reinstall gate reuses `test:bootstrap` again.** The gate on
   `232a7cb6` skips `test:bootstrap` on D78's grounds: since `9350243a`, where it passed in full, the
   product changes are the update preview/planner/rollback order (NEW-135, and e73dd376), the stop
