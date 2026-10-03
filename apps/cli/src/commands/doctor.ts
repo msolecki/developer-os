@@ -780,7 +780,7 @@ async function reportVendorHooks(
     ...(installed.conflicting ? ["executable=inconsistent"] : []),
     ...(installed.executableLive ? [] : ["executable=missing"]),
     // NEW-139: a record write failed, so a `never` above may be a hook that fired.
-    ...(recordFailed ? ["record=failed"] : []),
+    ...(recordFailed ? ["record=failed (clears on this vendor's next successful record write, within 24 h)"] : []),
   ];
   // hooks.md §3.7: an untrusted Codex hook never fires, and Codex says nothing about it (§1 question 6).
   // Per verb: `path` shares `PreToolUse` with `command`, and an untrusted `path` must not hide behind it.

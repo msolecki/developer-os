@@ -8,7 +8,7 @@ import { parseScheduledInvocation } from "./commands/automation/index.js";
 import { MAX_CAPTURE_INPUT_BYTES } from "./commands/capture.js";
 import { createProductionContext, PRODUCT_VERSION } from "./context.js";
 import { hookLastResortExit, isHookInvocation } from "./hooks/argv.js";
-import { settleFiringRecords } from "./hooks/entry.js";
+import { firingRecordWaitMs, settleFiringRecords } from "./hooks/entry.js";
 import type { HookEnvironment } from "./hooks/entry.js";
 import type { CliIo } from "./io.js";
 import { run } from "./main.js";
@@ -197,5 +197,6 @@ const drained = (stream: NodeJS.WriteStream): Promise<void> =>
   });
 await Promise.all([drained(process.stdout), drained(process.stderr)]);
 // NEW-139: the explicit exit below killed the in-flight firing record, so `doctor` read every hook as `never`.
-if (pendingRecords.length > 0) await settleFiringRecords(pendingRecords);
+// `performance.now()` counts from process start, so Node startup and the handler both come out of the budget.
+if (pendingRecords.length > 0) await settleFiringRecords(pendingRecords, firingRecordWaitMs(performance.now()));
 process.exit();

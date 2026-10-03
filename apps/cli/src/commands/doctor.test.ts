@@ -1447,7 +1447,7 @@ describe("hooks and external-hooks", () => {
 
     expect(hooks.status).toBe("warn");
     expect(hooks.message).toContain("claude=installed");
-    expect(hooks.message).toContain("record=failed");
+    expect(hooks.message).toContain("record=failed (clears on this vendor's next successful record write, within 24 h)");
     expect(hooks.message.endsWith("; codex=not-installed")).toBe(true);
   });
 

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CliIo } from "../io.js";
 import type { HookVendor, HookVerb } from "./argv.js";
-import { FIRING_RECORD_EXIT_BOUND_MS, runHookMode, settleFiringRecords } from "./entry.js";
+import { FIRING_RECORD_EXIT_BOUND_MS, firingRecordWaitMs, HOOK_EXIT_BUDGET_MS, runHookMode, settleFiringRecords } from "./entry.js";
 import type { HookEnvironment } from "./entry.js";
 import {
   FIRING_RECORD_REFRESH_MS,
@@ -162,18 +162,37 @@ describe("recordHookFiring", () => {
     expect(await readFile(join(hooks, "claude.stop.json"), "utf8")).toBe(record("Stop", NOW, NOW));
   });
 
-  it("writes only the vendor's empty failure marker when the gate refuses (NEW-139)", async () => {
+  it("writes nothing, not even a failure marker, when the gate refuses", async () => {
     await createHooksDirectory();
     await recordHookFiring(request({ admit: () => Promise.reject(new Error("synthetic refusal")) }));
-    expect(await readdir(hooks)).toStrictEqual(["claude.record_failed.json"]);
-    expect(await readFile(join(hooks, "claude.record_failed.json"), "utf8")).toBe("");
+    expect(await readdir(hooks)).toStrictEqual([]);
   });
 
-  it("writes only the failure marker when the real ordinary-command gate refuses a malformed V2 manifest", async () => {
+  it("writes nothing when the real ordinary-command gate refuses a malformed V2 manifest", async () => {
     await createHooksDirectory();
     await writeFile(join(productHome, "installation-manifest.json"), '{"schemaVersion":2}', { mode: 0o600 });
     await recordHookFiring(withoutGateSeam());
-    expect(await readdir(hooks)).toStrictEqual(["claude.record_failed.json"]);
+    expect(await readdir(hooks)).toStrictEqual([]);
+  });
+
+  it("writes nothing into a directory uninstall empties while the gate is still deciding", async () => {
+    await createHooksDirectory();
+    await writeFile(join(hooks, "claude.inject.json"), record("SessionStart", NOW, NOW), { mode: 0o600 });
+    // Uninstall removes the children, then the gate (seeing the home going away) refuses.
+    await recordHookFiring(request({
+      admit: async () => {
+        await rm(join(hooks, "claude.inject.json"));
+        throw new Error("synthetic refusal mid-uninstall");
+      },
+    }));
+    expect(await readdir(hooks)).toStrictEqual([]);
+  });
+
+  it("leaves an empty failure marker when the admitted write fails (NEW-139)", async () => {
+    await createHooksDirectory();
+    await mkdir(join(hooks, "claude.stop.json"));
+    await recordHookFiring(request());
+    expect(await readFile(join(hooks, "claude.record_failed.json"), "utf8")).toBe("");
   });
 
   it("clears the vendor's failure marker with the next written record, and leaves the other vendor's", async () => {
@@ -185,7 +204,7 @@ describe("recordHookFiring", () => {
   });
 
   it("never creates the hooks directory for a failure marker", async () => {
-    await recordHookFiring(request({ admit: () => Promise.reject(new Error("synthetic refusal")) }));
+    await recordHookFiring(request());
     expect(await readdir(stateDirectory).catch(() => [])).toStrictEqual([]);
   });
 
@@ -396,12 +415,20 @@ describe("settleFiringRecords (NEW-139)", () => {
     expect(FIRING_RECORD_EXIT_BOUND_MS).toBeLessThanOrEqual(500);
   });
 
+  it("waits only what is left of the exit budget after the handler ran, never below zero", () => {
+    expect(HOOK_EXIT_BUDGET_MS).toBeLessThanOrEqual(1_500);
+    expect(firingRecordWaitMs(0)).toBe(FIRING_RECORD_EXIT_BOUND_MS);
+    expect(firingRecordWaitMs(HOOK_EXIT_BUDGET_MS - 200)).toBe(200);
+    expect(firingRecordWaitMs(HOOK_EXIT_BUDGET_MS)).toBe(0);
+    expect(firingRecordWaitMs(HOOK_EXIT_BUDGET_MS + 5_000)).toBe(0);
+  });
+
   it("returns once every pending write has settled", async () => {
     let settled = false;
     const write = Promise.resolve().then(() => {
       settled = true;
     });
-    await settleFiringRecords([write]);
+    await settleFiringRecords([write], FIRING_RECORD_EXIT_BOUND_MS);
     expect(settled).toBe(true);
   });
 
@@ -409,7 +436,7 @@ describe("settleFiringRecords (NEW-139)", () => {
     vi.useFakeTimers();
     try {
       let done = false;
-      const settling = settleFiringRecords([new Promise<void>(() => undefined)]).then(() => {
+      const settling = settleFiringRecords([new Promise<void>(() => undefined)], FIRING_RECORD_EXIT_BOUND_MS).then(() => {
         done = true;
       });
       await vi.advanceTimersByTimeAsync(FIRING_RECORD_EXIT_BOUND_MS - 1);

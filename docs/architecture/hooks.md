@@ -458,13 +458,16 @@ absent-manifest walks. `recordHookFiring` runs after the outcome is written. It 
 directory exists, belongs to the user and has mode 0700, when the record is absent or older than
 24 h, and when `assertOrdinaryCommandAdmitted` admits. It never creates a directory, never changes the
 exit code and never throws. `runHookMode` does not await it; it hands the pending write to `bin.ts`,
-which lets it settle for at most `FIRING_RECORD_EXIT_BOUND_MS` (500 ms, under the vendors' 2 s
-timeout) after the outcome drains and before its explicit exit (NEW-115), then exits regardless
-(NEW-139: the unbounded exit killed every write). Opens of an existing record or marker use
-`O_NONBLOCK`, because a FIFO there would park a libuv worker and `process.exit()` waits on it. A
-failure once the directory check has passed (gate refusal, write or rename error) leaves an empty
-`<vendor>.record_failed.json`, inside the record grammar and one per vendor, and the next written
-record of that vendor removes it. A write abandoned at the bound leaves no marker.
+which lets it settle after the outcome drains and before its explicit exit (NEW-115), then exits
+regardless (NEW-139: the unbounded exit killed every write). The wait is
+`min(FIRING_RECORD_EXIT_BOUND_MS, HOOK_EXIT_BUDGET_MS − elapsed)`, floored at 0, where `elapsed`
+runs from process start: 500 ms at most, and Node startup, the handler and the wait together stay
+within 1.5 s, leaving 500 ms of the vendors' 2 s timeout as margin (`format` and `stop` have longer
+timeouts and get the same budget). Opens of an existing record or marker use `O_NONBLOCK`, because a
+FIFO there would park a libuv worker and `process.exit()` waits on it. A failure after the gate
+admits (temp open, write or rename) leaves an empty `<vendor>.record_failed.json`, inside the record
+grammar and one per vendor, and the next written record of that vendor removes it. A gate refusal
+writes nothing, and a write abandoned at the bound leaves no marker.
 
 A record is canonical JSON with exactly `schemaVersion` (1), `vendor`, `event`, `productVersion`,
 `firstSeen` and `lastSeen` (`HookFiringRecordV1`). The reader ignores a record whose vendor or event
@@ -501,7 +504,9 @@ in both the probed and the unprobed `doctor` run. Without a record, both stay `u
   every hook exits 127, which both vendors ignore) adds `executable=missing` with `recovery`
   `developer-os init`, which takes precedence over the trust step. A vendor's
   `<vendor>.record_failed.json` (§3.6) adds `record=failed`, so a `never` may be a hook that fired
-  and could not record it. It is `warn`, never `fail`.
+  and could not record it. The text says the marker clears on that vendor's next successful record
+  write (within 24 h): the fresh-record shortcut runs before the gate, so it never removes the
+  marker. It is `warn`, never `fail`.
 - **`external-hooks`** (Q2-A) reads `~/.claude/settings.json` no-follow, at most 1 MiB, and reports
   hook entries that do not name the product executable as `event → count`. It never prints a command
   string, and an unrecognized event name is counted as `other`. Any read failure is `unknown`. Codex

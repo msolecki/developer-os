@@ -47,14 +47,18 @@ async function recordFiring(environment: HookEnvironment, vendor: HookVendor, ve
   }
 }
 
-/** NEW-139: well under the vendors' 2 s hook timeout; a write still pending then is abandoned. */
+/** NEW-139: the longest wait for a pending record write; a write still pending then is abandoned. */
 export const FIRING_RECORD_EXIT_BOUND_MS = 500;
+/** NEW-139: process start to exit, leaving 500 ms of the vendors' 2 s hook timeout as margin. */
+export const HOOK_EXIT_BUDGET_MS = 1_500;
+
+/** What remains of `HOOK_EXIT_BUDGET_MS` after `elapsedMs` since process start, capped by the bound. */
+export function firingRecordWaitMs(elapsedMs: number): number {
+  return Math.max(0, Math.min(FIRING_RECORD_EXIT_BOUND_MS, HOOK_EXIT_BUDGET_MS - elapsedMs));
+}
 
 /** NEW-139: `bin.ts` exits explicitly (NEW-115), so it lets the pending record writes settle first, within a bound. */
-export async function settleFiringRecords(
-  pending: readonly Promise<void>[],
-  boundMs: number = FIRING_RECORD_EXIT_BOUND_MS,
-): Promise<void> {
+export async function settleFiringRecords(pending: readonly Promise<void>[], boundMs: number): Promise<void> {
   let timer: NodeJS.Timeout | undefined;
   await Promise.race([
     Promise.all(pending),

@@ -52,13 +52,13 @@ describe("a hook run through the compiled binary", () => {
     expect(run.stdout).toBe("");
   });
 
-  it("leaves a failure marker, and the same exit code and stdout, when admission refuses the write", async () => {
+  it("writes nothing, with the same exit code and stdout, when admission refuses the write", async () => {
     // A declared V2 manifest that is not one: `assertOrdinaryCommandAdmitted` refuses the record write.
     await writeFile(join(home.productHome, "installation-manifest.json"), '{"schemaVersion":2}', { mode: 0o600 });
     const run = await runCli(home, ARGS, { stdin: PAYLOAD, timeoutMs: 10_000 });
     expect(run.timedOut).toBe(false);
     expect(run.exitCode).toBe(0);
     expect(run.stdout).toBe("");
-    expect(await readdir(hooks)).toStrictEqual(["claude.record_failed.json"]);
+    expect(await readdir(hooks)).toStrictEqual([]);
   });
 });

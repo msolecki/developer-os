@@ -86,12 +86,12 @@ async function readRecord(path: string): Promise<HookFiringRecordV1 | null> {
  */
 export async function recordHookFiring(request: HookFiringRequest): Promise<void> {
   const directory = join(request.stateDirectory, "hooks");
-  let directoryAdmitted = false;
+  // Set only once the gate admits: before it, nothing may be written (hooks.md §3.6), not even a marker.
+  let gateAdmitted = false;
   try {
     const event = HOOK_EVENT_OF[request.vendor][request.verb];
     const stats = await lstat(directory);
     if (!stats.isDirectory() || stats.uid !== request.effectiveUid || (stats.mode & 0o777) !== 0o700) return;
-    directoryAdmitted = true;
 
     const name = hookFiringRecordName(request.vendor, request.verb);
     const target = join(directory, name);
@@ -105,6 +105,7 @@ export async function recordHookFiring(request: HookFiringRequest): Promise<void
         stateDirectory: request.stateDirectory,
         initialRoots: [request.productHome, request.stateDirectory, request.userHome],
       }))))();
+    gateAdmitted = true;
 
     const now = request.now.toISOString();
     const text = encodeHookFiringRecord({
@@ -135,7 +136,7 @@ export async function recordHookFiring(request: HookFiringRequest): Promise<void
     await unlink(join(directory, failureMarkerName(request.vendor))).catch(() => undefined);
   } catch {
     // A firing record is an observation, never a reason to change the hook's outcome; the marker is best effort.
-    if (!directoryAdmitted) return;
+    if (!gateAdmitted) return;
     await open(join(directory, failureMarkerName(request.vendor)), constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600)
       .then((handle) => handle.close())
       .catch(() => undefined);
