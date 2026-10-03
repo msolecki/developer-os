@@ -76,6 +76,13 @@ function compareUtf8Bytes(left: Uint8Array, right: Uint8Array): number {
   return left.length - right.length;
 }
 
+function holdsCodeUnitFromD800(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) >= 0xd800) return true;
+  }
+  return false;
+}
+
 /** Unsigned UTF-8 byte order for one comparison; a sort uses `sortUtf8` instead. */
 export function compareUtf8(left: string, right: string): number {
   return compareUtf8Bytes(encoder.encode(left), encoder.encode(right));
@@ -87,7 +94,23 @@ export function compareUtf8(left: string, right: string): number {
  * the largest single cost in `developer-os init`.
  */
 export function sortUtf8<T>(values: readonly T[], key: (value: T) => string): T[] {
-  const encoded = values.map((value) => ({ value, bytes: encoder.encode(key(value)) }));
+  /**
+   * NEW-133 fast path. Below U+D800 a UTF-16 code unit is the code point, and UTF-8 preserves
+   * code-point order, so code-unit order is byte order and nothing needs encoding. A surrogate
+   * (an astral scalar) sorts below U+E000..U+FFFF by code unit but above it by bytes, so any key
+   * holding a code unit at or above U+D800 takes the byte path. Both sorts are stable.
+   */
+  const keys = values.map(key);
+  if (!keys.some(holdsCodeUnitFromD800)) {
+    const indices = keys.map((_, index) => index);
+    indices.sort((left, right) => {
+      const a = keys[left] as string;
+      const b = keys[right] as string;
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+    return indices.map((index) => values[index] as T);
+  }
+  const encoded = values.map((value, index) => ({ value, bytes: encoder.encode(keys[index] as string) }));
   encoded.sort((left, right) => compareUtf8Bytes(left.bytes, right.bytes));
   return encoded.map((entry) => entry.value);
 }

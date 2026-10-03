@@ -1491,21 +1491,18 @@ describe("retained bootstrap table derivation", () => {
     const compensating = successor(forward, phaseRecord("compensating"));
     // A distinct object, so the measurement is not warmed by an earlier test.
     const unseenPlan = structuredClone(plan);
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
-    const original = TextEncoder.prototype.encode;
+    // NEW-133: below U+D800 key ordering no longer encodes, so count the object walk the encoder does instead.
+    const original = Object.keys;
     const measure = (): number => {
       let calls = 0;
       try {
-        TextEncoder.prototype.encode = function encode(
-          this: InstanceType<typeof TextEncoder>,
-          input?: string,
-        ) {
+        Object.keys = (value: object): string[] => {
           calls += 1;
-          return original.call(this, input);
+          return original(value);
         };
         validateBootstrapJournalSuccessor(unseenPlan, forward, compensating);
       } finally {
-        TextEncoder.prototype.encode = original;
+        Object.keys = original;
       }
       return calls;
     };

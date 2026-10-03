@@ -58,8 +58,9 @@ describe("CanonicalJsonV1", () => {
    * allocations. Init publishes its plan on every journal write, which made
    * this the single largest cost in `developer-os init` (48.8s of a 219s run).
    */
+  // Keys at or above U+D800 take the byte path; NEW-133's code-unit fast path below them encodes nothing.
   it("catches an encoder that re-encodes a key for every ordering comparison", () => {
-    const keys = Array.from({ length: 32 }, (_, index) => `key${String(31 - index)}`);
+    const keys = Array.from({ length: 32 }, (_, index) => `\u{1F600}key${String(31 - index)}`);
     const value = Object.fromEntries(keys.map((key) => [key, 1]));
     // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
     const original = TextEncoder.prototype.encode;
@@ -95,6 +96,28 @@ describe("CanonicalJsonV1", () => {
         return original.call(this, input);
       };
       encodeCanonicalJson({ only: 1 });
+    } finally {
+      TextEncoder.prototype.encode = original;
+    }
+
+    expect(encodeCalls).toBe(0);
+  });
+
+  it("orders keys below U+D800 without encoding any of them (NEW-133)", () => {
+    const value = Object.fromEntries(Array.from({ length: 32 }, (_, index) => [`k\u00e9y${String(31 - index)}`, 1]));
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
+    const original = TextEncoder.prototype.encode;
+    let encodeCalls = 0;
+
+    try {
+      TextEncoder.prototype.encode = function encode(
+        this: InstanceType<typeof TextEncoder>,
+        input?: string,
+      ) {
+        encodeCalls += 1;
+        return original.call(this, input);
+      };
+      encodeCanonicalJson(value);
     } finally {
       TextEncoder.prototype.encode = original;
     }
@@ -310,6 +333,71 @@ describe("sortUtf8", () => {
     const rows = [{ path: "a/\u{1F600}" }, { path: "a/�" }];
 
     expect(sortUtf8(rows, (row) => row.path).map((row) => row.path)).toEqual(["a/�", "a/\u{1F600}"]);
+  });
+
+  /** NEW-133: the pre-fast-path algorithm, kept verbatim as the oracle. */
+  const oracleEncoder = new TextEncoder();
+  function oracleSort<T>(values: readonly T[], key: (value: T) => string): T[] {
+    const encoded = values.map((value) => ({ value, bytes: oracleEncoder.encode(key(value)) }));
+    encoded.sort((left, right) => {
+      const common = Math.min(left.bytes.length, right.bytes.length);
+      for (let index = 0; index < common; index += 1) {
+        const difference = (left.bytes[index] as number) - (right.bytes[index] as number);
+        if (difference !== 0) return difference;
+      }
+      return left.bytes.length - right.bytes.length;
+    });
+    return encoded.map((entry) => entry.value);
+  }
+  type Value = string | number | readonly Value[] | { readonly [key: string]: Value };
+  function oracleEncode(value: Value): string {
+    if (Array.isArray(value)) return `[${(value as readonly Value[]).map(oracleEncode).join(",")}]`;
+    if (typeof value === "object") {
+      const object = value as { readonly [key: string]: Value };
+      return `{${oracleSort(Object.keys(object), (key) => key)
+        .map((key) => `${encodeCanonicalJson(key).slice(0, -1)}:${oracleEncode(object[key] as Value)}`)
+        .join(",")}}`;
+    }
+    return encodeCanonicalJson(value).slice(0, -1);
+  }
+  // `￿` against an astral key is the pair where UTF-16 code-unit order and UTF-8 byte order disagree.
+  const alphabet = ["", "a", "b", "Z", "0", "~", "\u007f", "é", "ࠀ", "퟿", "", "￿", "\u{10000}", "\u{1F600}", "\u{10FFFF}"];
+  function generator(seed: number): () => number {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+      mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+      return ((mixed ^ (mixed >>> 14)) >>> 0) / 4_294_967_296;
+    };
+  }
+
+  it("orders keys and encodes objects byte-identically to the pre-fast-path algorithm (NEW-133)", () => {
+    const random = generator(133);
+    const pick = (): string => alphabet[Math.floor(random() * alphabet.length)] as string;
+    const key = (): string => Array.from({ length: 1 + Math.floor(random() * 4) }, pick).join("");
+    const value = (depth: number): Value => {
+      const roll = random();
+      if (depth > 2 || roll < 0.3) return random() < 0.5 ? key() : Math.floor(random() * 1000);
+      if (roll < 0.45) return Array.from({ length: Math.floor(random() * 4) }, () => value(depth + 1));
+      const object: Record<string, Value> = {};
+      for (let index = Math.floor(random() * 8); index > 0; index -= 1) object[key()] = value(depth + 1);
+      return object;
+    };
+    let astralAgainstFfff = 0;
+    for (let round = 0; round < 2_000; round += 1) {
+      const sample = value(0);
+      expect(encodeCanonicalJson(sample)).toBe(`${oracleEncode(sample)}\n`);
+      const keys = Array.from({ length: Math.floor(random() * 12) }, key);
+      if (keys.some((entry) => entry.includes("￿")) && keys.some((entry) => /[\u{10000}-\u{10FFFF}]/u.test(entry))) {
+        astralAgainstFfff += 1;
+      }
+      expect(sortUtf8(keys, (entry) => entry)).toEqual(oracleSort(keys, (entry) => entry));
+    }
+    expect(astralAgainstFfff).toBeGreaterThan(50);
+    const ascii = ["b", "a~", "a", "Z", "a\u007f", ""];
+    expect(sortUtf8(ascii, (entry) => entry)).toEqual(oracleSort(ascii, (entry) => entry));
+    expect(sortUtf8(["\u{10000}", "￿", ""], (entry) => entry)).toEqual(["", "￿", "\u{10000}"]);
   });
 });
 
