@@ -532,6 +532,20 @@ describe("LaunchdEffectExecutor", () => {
     expect([await phaseOf(fx, "after_files"), liveSet(fx)]).toStrictEqual(["rolled_back", []]);
   });
 
+  it("refuses launchd_command_failed when the post-check bootout fails, and compensation unloads the label (D82)", async () => {
+    const liveOnlyPlan = plan("automation_reconcile", ["doctor"], { doctor: installedUnloaded("doctor") });
+    const fx = fixture(liveOnlyPlan);
+    fx.world.loadedMatchesPlan = false;
+    const failing: LaunchdBootoutPortV1 = {
+      bootout: () => Promise.resolve({ exitCode: 1, signal: null, termination: "exited", stdoutBytes: 0, stderrBytes: 0, groupReaped: true }),
+    };
+
+    await expect(fx.executor({ launchctl: failing }).apply(fx.ref("after_files"))).rejects.toMatchObject({ reason: "launchd_command_failed" });
+    expect(liveSet(fx)).toStrictEqual([fx.plan.entries[0]?.generatedLabel]);
+    await fx.executor().compensate(fx.ref("after_files"));
+    expect([await phaseOf(fx, "after_files"), liveSet(fx)]).toStrictEqual(["rolled_back", []]);
+  });
+
   it("live-only reconcile performs only Q transitions with no Foundation or manifest arm", async () => {
     const liveOnlyPlan = plan("automation_reconcile", ["doctor"], { doctor: installedUnloaded("doctor") });
     const fx = fixture(liveOnlyPlan);

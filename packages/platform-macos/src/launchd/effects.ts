@@ -576,9 +576,10 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
     const evidence = await bootstrapper.bootstrap(request);
     if (!commandSucceeded(evidence.process)) recovery("launchd_command_failed", transition.plistPath);
     if (!(await bootstrapper.verifyLoaded(request))) {
-      // D82: bound the life of a job loaded from swapped bytes to this post-check window.
-      await launchctl.bootout(table, `${transition.domain}/${plist.Label}`, phase);
-      recovery("launchd_bootstrap_plist_changed", transition.plistPath);
+      // D82: bound the life of a job loaded from swapped bytes to this post-check window. A failed
+      // bootout leaves it loaded, which compensation observes as the postimage and unloads.
+      const bootout = await launchctl.bootout(table, `${transition.domain}/${plist.Label}`, phase);
+      recovery(commandSucceeded(bootout) ? "launchd_bootstrap_plist_changed" : "launchd_command_failed", transition.plistPath);
     }
     return true;
   }

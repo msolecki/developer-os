@@ -29,14 +29,14 @@ const phase: SupervisedPhaseV1 = { id: "launchd-transition", deadlineAtMs: 30000
 
 /**
  * `launchctl print gui/501/<label>` for a probe agent bootstrapped by path, captured on macOS
- * 26.6.2 (25G83) on 2026-10-03 (D82). Only the inherited-environment values are redacted (they
- * carried host management settings and an agent socket); layout, tabs and the empty last argument
- * line are verbatim.
+ * 26.6.2 (25G83) on 2026-10-03 (D82). Redacted: the inherited-environment values (host management
+ * settings and an agent socket) and the plist path (a scratch path, rewritten to an example home);
+ * layout, tabs and the empty last argument line are verbatim.
  */
 const CAPTURED_PRINT_26_6_2 = [
   "gui/501/com.n138probe.print = {",
   "\tactive count = 0",
-  "\tpath = /private/tmp/claude-501/n138-e2e/probe/p2.plist",
+  "\tpath = /Users/example/Library/LaunchAgents/com.n138probe.print.plist",
   "\ttype = LaunchAgent",
   "\tstate = not running",
   "",
@@ -100,7 +100,7 @@ function printFor(target: string, path: string, args: readonly string[]): string
   const body = [...lines.slice(1, start), "\targuments = {", ...args.map((argument) => `\t\t${argument}`), ...lines.slice(end)];
   return [`${target} = {`, ...body]
     .join("\n")
-    .replace("\tpath = /private/tmp/claude-501/n138-e2e/probe/p2.plist", `\tpath = ${path}`)
+    .replace("\tpath = /Users/example/Library/LaunchAgents/com.n138probe.print.plist", `\tpath = ${path}`)
     .replace("\tprogram = /usr/bin/true", `\tprogram = ${args[0] ?? ""}`);
 }
 
@@ -210,7 +210,7 @@ async function fixture() {
 describe("parseLaunchctlPrintedService (macOS 26.6.2 format)", () => {
   it("reads path, program and every argument, including an escaped and an empty one, from the captured dump", () => {
     expect(parseLaunchctlPrintedService(CAPTURED_PRINT_26_6_2, "gui/501/com.n138probe.print")).toStrictEqual({
-      path: "/private/tmp/claude-501/n138-e2e/probe/p2.plist",
+      path: "/Users/example/Library/LaunchAgents/com.n138probe.print.plist",
       program: "/usr/bin/true",
       arguments: ["/usr/bin/true", "scheduled", "run", "--job", "doctor & x", ""],
     });
