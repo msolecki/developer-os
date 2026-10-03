@@ -167,11 +167,17 @@ function entry(
   };
 }
 
-function table(): readonly BootstrapRetentionEntryV1[] {
+function table(extraPayloads = 0): readonly BootstrapRetentionEntryV1[] {
   return [
     entry(0, "payload", path("/synthetic/state/000.payload"), regular("payload", "101")),
     entry(1, "staging_subtree", path("/synthetic/staging/attempt"), tree("201")),
-    entry(2, "bootstrap_lock", path("/synthetic/state/.lifecycle-bootstrap.lock"), regular("", "301")),
+    ...Array.from({ length: extraPayloads }, (_, index) => entry(
+      2 + index,
+      "payload",
+      path(`/synthetic/state/${String(index + 1).padStart(3, "0")}.payload`),
+      regular(`payload-${String(index)}`, String(401 + index)),
+    )),
+    entry(2 + extraPayloads, "bootstrap_lock", path("/synthetic/state/.lifecycle-bootstrap.lock"), regular("", "301")),
   ];
 }
 
@@ -347,6 +353,8 @@ interface RetentionFixture {
   readonly store: BootstrapJournalStore;
   readonly locks: HeldBootstrapLocksV1;
   readonly released: { bootstrap: number; global: number };
+  /** Every path handed to `projectPostimage`, in call order. */
+  readonly projected: string[];
   retainer(point?: BootstrapRetentionDeathPointV1): BootstrapRetainer;
   retain(point?: BootstrapRetentionDeathPointV1): Promise<BootstrapJournalRecordV1>;
 }
@@ -360,8 +368,10 @@ function retentionFixture(options: {
   readonly syncFailures?: number;
   readonly globalReached?: boolean;
   readonly provideGlobalLock?: boolean;
+  readonly extraPayloads?: number;
 } = {}): RetentionFixture {
-  const rows = table();
+  const rows = table(options.extraPayloads);
+  const projected: string[] = [];
   const projections = new Map<string, BootstrapRetentionPostimageV1>();
   for (const row of rows) {
     projections.set(row.sourcePath, structuredClone(row.postimage));
@@ -446,6 +456,7 @@ function retentionFixture(options: {
     return new BootstrapRetainer({
       renameSameParentNoReplace,
       projectPostimage: (candidate) => {
+        projected.push(candidate);
         const projection = projections.get(candidate);
         return Promise.resolve(projection === undefined ? null : structuredClone(projection));
       },
@@ -479,6 +490,7 @@ function retentionFixture(options: {
     store,
     locks,
     released,
+    projected,
     retainer: buildRetainer,
     retain: (point) => retainBootstrapEnvelope(rows, store, buildRetainer(point), freshLocks()),
   };
@@ -744,6 +756,24 @@ describe("retainBootstrapEnvelope crash convergence and lock ordering", () => {
     await expect(fixture.retain()).resolves.toMatchObject({ phase: "retained" });
     expect(fixture.renameRequests.map((request) => request.ordinal)).toEqual([0, 1, 2]);
     expect(fixture.released).toEqual({ bootstrap: 2, global: 2 });
+  });
+
+
+  // NEW-133: a round that mutates nothing observes each distinct parent once before and once after.
+  it("observes each parent a fixed number of times per non-mutating round, however many rows share it", async () => {
+    const parentProjections: number[] = [];
+    for (const extraPayloads of [0, 5]) {
+      const fixture = retentionFixture({ extraPayloads });
+      await fixture.retain();
+      fixture.projected.length = 0;
+
+      await expect(fixture.retain()).resolves.toMatchObject({ phase: "retained" });
+      parentProjections.push(fixture.projected.filter((candidate) =>
+        candidate === "/synthetic/state" || candidate === "/synthetic/staging").length);
+    }
+
+    // Two rounds (the resumed prefix and the final check), two parents, one before and one after.
+    expect(parentProjections).toEqual([8, 8]);
   });
 
   it("renames and syncs the held bootstrap lock before its durable cursor and release", async () => {
@@ -1285,5 +1315,95 @@ describe("projectRetainedDirectoryTree", () => {
 
     await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     expect((await nodeFs.readdir(root)).sort()).toEqual(namesBefore);
+  });
+});
+
+/**
+ * NEW-133: a per-retainer cache reuses a file's sha256 while its bigint lstat key
+ * (dev, ino, size, mode, uid, nlink, mtime_ns, ctime_ns) is unchanged. It must never let a
+ * content change inside the observed parent tree pass the parent before/after pair.
+ */
+describe("BootstrapRetainer content cache", () => {
+  async function cachedFixture(): Promise<{
+    readonly state: string;
+    readonly other: string;
+    readonly row: BootstrapRetentionEntryV1;
+    readonly retainer: BootstrapRetainer;
+    readonly cache: Map<string, LowerHexSha256>;
+    arm(mutation: () => Promise<void>): void;
+  }> {
+    const state = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-retained-cache-")));
+    roots.add(state);
+    await nodeFs.chmod(state, 0o700);
+    const source = join(state, "000.payload");
+    const other = join(state, "other");
+    await nodeFs.writeFile(source, "payload", { mode: 0o600 });
+    await nodeFs.writeFile(other, "AAAA", { mode: 0o600 });
+    const stateStats = await nodeFs.lstat(state, { bigint: true });
+    const postimage = await projectBootstrapRetentionPostimage(path(source), UNRELATED_HOME);
+    if (postimage === null) throw new Error("fixture source is absent");
+    const row = {
+      ...entry(0, "payload", path(source), postimage),
+      parent: {
+        path: path(state),
+        dev: parseUInt64Decimal(stateStats.dev.toString(10)),
+        ino: parseUInt64Decimal(stateStats.ino.toString(10)),
+      },
+    };
+    const cache = new Map<string, LowerHexSha256>();
+    let armed: (() => Promise<void>) | undefined;
+    const retainer = new BootstrapRetainer({
+      renameSameParentNoReplace: () => Promise.reject(new Error("no rename expected")),
+      syncDirectory: () => Promise.resolve(),
+      projectPostimage: async (candidate) => {
+        if (candidate === row.sourcePath && armed !== undefined) {
+          const mutation = armed;
+          armed = undefined;
+          await mutation();
+        }
+        return projectBootstrapRetentionPostimage(candidate, UNRELATED_HOME, undefined, cache);
+      },
+    });
+    return { state, other, row, retainer, cache, arm: (mutation) => { armed = mutation; } };
+  }
+
+  it("answers an unchanged tree from the cache without opening a regular file", async () => {
+    const fixture = await cachedFixture();
+    await expect(fixture.retainer.observe(fixture.row)).resolves.toMatchObject({ state: "before" });
+    expect(fixture.cache.size).toBeGreaterThan(0);
+    fsRaceControl.opened = [];
+
+    await expect(fixture.retainer.observe(fixture.row)).resolves.toMatchObject({ state: "before" });
+    expect(fsRaceControl.opened).not.toContain(fixture.other);
+    expect(fsRaceControl.opened).not.toContain(fixture.row.sourcePath);
+  });
+
+  it("refuses a same-size in-place rewrite between the parent before and after projections", async () => {
+    const fixture = await cachedFixture();
+    await fixture.retainer.observe(fixture.row);
+    expect(fixture.cache.size).toBeGreaterThan(0);
+    const before = await nodeFs.lstat(fixture.other, { bigint: true });
+    fixture.arm(async () => {
+      await nodeFs.writeFile(fixture.other, "BBBB");
+    });
+
+    await expect(fixture.retainer.observe(fixture.row)).rejects.toBeInstanceOf(BootstrapStateError);
+    const after = await nodeFs.lstat(fixture.other, { bigint: true });
+    expect([after.ino, after.size]).toEqual([before.ino, before.size]);
+  });
+
+  it("refuses a rename replacement with a different inode between the parent before and after projections", async () => {
+    const fixture = await cachedFixture();
+    await fixture.retainer.observe(fixture.row);
+    expect(fixture.cache.size).toBeGreaterThan(0);
+    const before = await nodeFs.lstat(fixture.other, { bigint: true });
+    fixture.arm(async () => {
+      const replacement = join(fixture.state, "replacement");
+      await nodeFs.writeFile(replacement, "CCCC", { mode: 0o600 });
+      await nodeFs.rename(replacement, fixture.other);
+    });
+
+    await expect(fixture.retainer.observe(fixture.row)).rejects.toBeInstanceOf(BootstrapStateError);
+    expect((await nodeFs.lstat(fixture.other, { bigint: true })).ino).not.toBe(before.ino);
   });
 });

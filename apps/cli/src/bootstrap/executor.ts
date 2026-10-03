@@ -75,6 +75,7 @@ import {
   BootstrapRetainer,
   projectBootstrapRetentionPostimage,
   retainBootstrapEnvelope,
+  type BootstrapRetentionContentCacheV1,
 } from "./retention.js";
 import { createBootstrapEvidenceInspectionRequest } from "./context.js";
 import {
@@ -3807,11 +3808,17 @@ export class BootstrapExecutor {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "terminal retention lock reachability is unbound");
     }
     this.checkpoint("during_retention");
+    /** NEW-133: this retainer's own in-memory content cache; see `BootstrapRetentionContentCacheV1`. */
+    const contentCache: BootstrapRetentionContentCacheV1 = new Map();
     const retainer = new BootstrapRetainer({
       renameSameParentNoReplace: this.#dependencies.renameSameParentNoReplace,
       syncDirectory: (path) => syncDirectory(path),
-      projectPostimage: (path) =>
-        projectBootstrapRetentionPostimage(path, this.#dependencies.paths.home as CanonicalAbsolutePathV1),
+      projectPostimage: (path) => projectBootstrapRetentionPostimage(
+        path,
+        this.#dependencies.paths.home as CanonicalAbsolutePathV1,
+        undefined,
+        contentCache,
+      ),
       interrupt: (point) => {
         this.checkpoint(point);
       },

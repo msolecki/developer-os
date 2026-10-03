@@ -72,6 +72,47 @@ function sameValue(left: unknown, right: unknown): boolean {
   }
 }
 
+/**
+ * Fresh-walk equality for two projections the same code just produced. A directory tree's
+ * `treeHash` is sha256 over exactly `encodeCanonicalJson(entries)` (see
+ * `projectRetainedDirectoryTreeOnce`), so equal hashes, counts and root fields mean equal
+ * entries without re-encoding them (NEW-133). A postimage read back from a table or journal
+ * carries a `treeHash` nobody recomputed here, so it is compared with `sameValue` instead.
+ */
+function sameFreshProjection(left: BootstrapRetentionPostimageV1, right: BootstrapRetentionPostimageV1): boolean {
+  if (left.kind !== "directory_tree" || right.kind !== "directory_tree") return sameValue(left, right);
+  return left.ownerUid === right.ownerUid &&
+    left.nlink === right.nlink &&
+    left.treeHash === right.treeHash &&
+    left.entryCount === right.entryCount &&
+    left.regularFileBytes === right.regularFileBytes &&
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.entries !== undefined &&
+    right.entries !== undefined;
+}
+
+/**
+ * NEW-133 content cache: one per retainer, in memory only — never persisted, never shared
+ * across processes. It maps a regular file's bigint lstat key to the sha256 an earlier walk
+ * read, so an unchanged file is not reopened on every walk of the same tree.
+ *
+ * Why a hit cannot hide a change: the key holds ctime_ns, and a same-uid process cannot set
+ * ctime — `utimes` sets atime and mtime only, and itself moves ctime — while every content
+ * write, truncate, chmod, chown or link-count change moves it. Replacement by rename brings a
+ * different inode. So a changed file has a different key, misses, and is hashed again as before.
+ * The one hole is a write landing in the same ctime tick as the observation; a file is therefore
+ * cached only when its ctime predates the wall clock sampled before the read began (the
+ * "racy git" rule), and only when every stat taken around the read agrees on the key.
+ */
+export type BootstrapRetentionContentCacheV1 = Map<string, LowerHexSha256>;
+
+function contentKey(stats: BigIntStats): string {
+  return [stats.dev, stats.ino, stats.size, stats.mode, stats.uid, stats.nlink, stats.mtimeNs, stats.ctimeNs]
+    .map((value) => value.toString(10))
+    .join(":");
+}
+
 function uint64(value: bigint): ReturnType<typeof parseUInt64Decimal> {
   if (value < 0n || value > UINT64_MAX) return refuse();
   return parseUInt64Decimal(value.toString());
@@ -123,8 +164,25 @@ async function projectRegularEntry(
   absolutePath: string,
   relativePath: string,
   before: BigIntStats,
+  cache?: BootstrapRetentionContentCacheV1,
 ): Promise<Extract<BootstrapRetentionDirectoryEntryV1, { kind: "regular_file" }> & { readonly sha256: LowerHexSha256 }> {
   if (!exactRegular(before)) return refuse();
+  const key = contentKey(before);
+  const cached = cache?.get(key);
+  if (cached !== undefined) {
+    return {
+      relativePath,
+      kind: "regular_file",
+      ownerUid: Number(before.uid),
+      mode: fileMode(before) === 0o600 ? 0o600 : 0o700,
+      nlink: 1,
+      bytes: uint64(before.size),
+      sha256: cached,
+      dev: uint64(before.dev),
+      ino: uint64(before.ino),
+    };
+  }
+  const readStartedNs = BigInt(Date.now()) * 1_000_000n;
   let handle: nodeFs.FileHandle | undefined;
   try {
     handle = await nodeFs.open(
@@ -156,6 +214,12 @@ async function projectRegularEntry(
       descriptorAfter.mode !== opened.mode ||
       linkedAfter.mode !== opened.mode
     ) return refuse();
+    const sha256 = parseLowerHexSha256(digest.digest("hex"));
+    if (
+      cache !== undefined &&
+      before.ctimeNs < readStartedNs &&
+      [opened, descriptorAfter, linkedAfter].every((stats) => contentKey(stats) === key)
+    ) cache.set(key, sha256);
     return {
       relativePath,
       kind: "regular_file",
@@ -163,7 +227,7 @@ async function projectRegularEntry(
       mode: fileMode(opened) === 0o600 ? 0o600 : 0o700,
       nlink: 1,
       bytes: uint64(opened.size),
-      sha256: parseLowerHexSha256(digest.digest("hex")),
+      sha256,
       dev: uint64(opened.dev),
       ino: uint64(opened.ino),
     };
@@ -210,6 +274,21 @@ function judgedElsewhere(productHome: string, absolutePath: string, stats: BigIn
     stats.uid === BigInt(process.geteuid?.() ?? -1);
 }
 
+/** At most eight `lstat`s in flight; results keep the order of `paths`. */
+async function lstatBounded(paths: readonly string[]): Promise<BigIntStats[]> {
+  const results: BigIntStats[] = [];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < paths.length) {
+      const index = next;
+      next += 1;
+      results[index] = await nodeFs.lstat(paths[index] as string, { bigint: true });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(8, paths.length) }, worker));
+  return results;
+}
+
 async function walkDirectory(
   productHome: string,
   root: string,
@@ -218,6 +297,7 @@ async function walkDirectory(
   identities: Set<string>,
   expectedDirectory: BigIntStats,
   skipped: Set<string>,
+  cache: BootstrapRetentionContentCacheV1 | undefined,
 ): Promise<void> {
   const absoluteDirectory = relativeDirectory.length === 0 ? root : join(root, relativeDirectory);
   let handle: nodeFs.FileHandle | undefined;
@@ -236,9 +316,12 @@ async function walkDirectory(
     const namesBefore = sortUtf8(await nodeFs.readdir(absoluteDirectory), (name) => name);
     for (const name of namesBefore) {
       if (name.length === 0 || name === "." || name === ".." || name.includes("/") || name.includes("\\")) return refuse();
-      const relativePath = relativeDirectory.length === 0 ? name : `${relativeDirectory}/${name}`;
+    }
+    const relativePaths = namesBefore.map((name) => relativeDirectory.length === 0 ? name : `${relativeDirectory}/${name}`);
+    const allStats = await lstatBounded(relativePaths.map((relativePath) => join(root, relativePath)));
+    for (const [index, relativePath] of relativePaths.entries()) {
       const absolutePath = join(root, relativePath);
-      const stats = await nodeFs.lstat(absolutePath, { bigint: true });
+      const stats = allStats[index] as BigIntStats;
       const identity = `${stats.dev.toString()}:${stats.ino.toString()}`;
       if (identities.has(identity) || entries.length >= BOOTSTRAP_RETAINED_MAX_ENTRIES) return refuse();
       identities.add(identity);
@@ -259,11 +342,11 @@ async function walkDirectory(
           dev: uint64(stats.dev),
           ino: uint64(stats.ino),
         });
-        await walkDirectory(productHome, root, relativePath, entries, identities, stats, skipped);
+        await walkDirectory(productHome, root, relativePath, entries, identities, stats, skipped, cache);
       } else if (stats.isFile() && !stats.isSymbolicLink()) {
         entries.push(isRedactionKeyPath(absolutePath)
           ? lstatOnlyRegularEntry(relativePath, stats)
-          : await projectRegularEntry(absolutePath, relativePath, stats));
+          : await projectRegularEntry(absolutePath, relativePath, stats, cache));
       } else {
         return refuse();
       }
@@ -293,13 +376,14 @@ async function walkDirectory(
 export async function projectRetainedDirectoryTreeOnce(
   root: CanonicalAbsolutePathV1,
   productHome: CanonicalAbsolutePathV1,
+  cache?: BootstrapRetentionContentCacheV1,
 ): Promise<Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>> {
   const rootBefore = await nodeFs.lstat(root, { bigint: true }).catch(() => refuse());
   if (!exactDirectory(rootBefore)) return refuse();
   const walked: BootstrapRetentionDirectoryEntryV1[] = [];
   const identities = new Set<string>([`${rootBefore.dev.toString()}:${rootBefore.ino.toString()}`]);
   const skipped = new Set<string>();
-  await walkDirectory(productHome, root, "", walked, identities, rootBefore, skipped);
+  await walkDirectory(productHome, root, "", walked, identities, rootBefore, skipped, cache);
   const entries = sortUtf8(walked, (entry) => entry.relativePath);
   let regularFileBytes = 0n;
   for (const entry of entries) {
@@ -343,6 +427,7 @@ export async function projectBootstrapRetentionPostimage(
   path: CanonicalAbsolutePathV1,
   productHome: CanonicalAbsolutePathV1,
   walkDirectoryTreeOnce: typeof projectRetainedDirectoryTreeOnce = projectRetainedDirectoryTreeOnce,
+  cache?: BootstrapRetentionContentCacheV1,
 ): Promise<BootstrapRetentionPostimageV1 | null> {
   let firstStats: BigIntStats;
   try {
@@ -352,15 +437,15 @@ export async function projectBootstrapRetentionPostimage(
     return refuse();
   }
   if (firstStats.isDirectory() && !firstStats.isSymbolicLink()) {
-    const first = await walkDirectoryTreeOnce(path, productHome);
-    const second = await walkDirectoryTreeOnce(path, productHome);
-    if (!sameValue(first, second)) return refuse();
-    return structuredClone(second);
+    const first = await walkDirectoryTreeOnce(path, productHome, cache);
+    const second = await walkDirectoryTreeOnce(path, productHome, cache);
+    if (!sameFreshProjection(first, second)) return refuse();
+    return second;
   }
   if (!firstStats.isFile() || firstStats.isSymbolicLink() || isRedactionKeyPath(path)) return refuse();
-  const firstEntry = await projectRegularEntry(path, "file", firstStats);
+  const firstEntry = await projectRegularEntry(path, "file", firstStats, cache);
   const secondStats = await nodeFs.lstat(path, { bigint: true }).catch(() => refuse());
-  const secondEntry = await projectRegularEntry(path, "file", secondStats);
+  const secondEntry = await projectRegularEntry(path, "file", secondStats, cache);
   if (
     firstEntry.relativePath !== "file" ||
     secondEntry.relativePath !== "file" ||
@@ -386,8 +471,8 @@ export async function projectRetainedDirectoryTree(
   if (expectedRoot.entries === undefined) return refuse();
   const first = await projectRetainedDirectoryTreeOnce(root, productHome);
   const second = await projectRetainedDirectoryTreeOnce(root, productHome);
-  if (!sameValue(first, second) || !sameValue(second, expectedRoot)) return refuse();
-  return structuredClone(second);
+  if (!sameFreshProjection(first, second) || !sameValue(second, expectedRoot)) return refuse();
+  return second;
 }
 
 export class BootstrapRetainer {
@@ -398,27 +483,48 @@ export class BootstrapRetainer {
   }
 
   async observe(entry: BootstrapRetentionEntryV1): Promise<BootstrapRetentionObservationV1> {
-    this.#validateEntry(entry);
-    const parentBefore = await this.#dependencies.projectPostimage(entry.parent.path);
-    const [source, tombstone] = await Promise.all([
-      this.#dependencies.projectPostimage(entry.sourcePath),
-      this.#dependencies.projectPostimage(entry.tombstonePath),
-    ]);
-    const parentAfter = await this.#dependencies.projectPostimage(entry.parent.path);
-    if (
-      parentBefore?.kind !== "directory_tree" ||
-      parentAfter?.kind !== "directory_tree" ||
-      parentBefore.dev !== entry.parent.dev ||
-      parentBefore.ino !== entry.parent.ino ||
-      !sameValue(parentBefore, parentAfter)
-    ) return refuse();
-    if (source !== null && tombstone === null && sameValue(source, entry.postimage)) {
-      return { state: "before", source: structuredClone(source) };
+    return (await this.observeAll([entry]))[0] as BootstrapRetentionObservationV1;
+  }
+
+  /**
+   * One observation round: every distinct parent is projected once before and once after all
+   * rows' source and tombstone projections, and must not change in between (NEW-133). Only a
+   * round with no mutation inside it may hold several rows; the retain loop observes one row at
+   * a time, because its renames and journal advances change the parent between rows.
+   */
+  async observeAll(entries: readonly BootstrapRetentionEntryV1[]): Promise<BootstrapRetentionObservationV1[]> {
+    for (const entry of entries) this.#validateEntry(entry);
+    const parents = [...new Set(entries.map((entry) => entry.parent.path))];
+    const parentsBefore = new Map<string, BootstrapRetentionPostimageV1 | null>();
+    for (const parent of parents) parentsBefore.set(parent, await this.#dependencies.projectPostimage(parent));
+    const projected: [BootstrapRetentionPostimageV1 | null, BootstrapRetentionPostimageV1 | null][] = [];
+    for (const entry of entries) {
+      projected.push(await Promise.all([
+        this.#dependencies.projectPostimage(entry.sourcePath),
+        this.#dependencies.projectPostimage(entry.tombstonePath),
+      ]));
     }
-    if (source === null && tombstone !== null && sameValue(tombstone, entry.postimage)) {
-      return { state: "after", tombstone: structuredClone(tombstone) };
+    for (const parent of parents) {
+      const parentBefore = parentsBefore.get(parent);
+      const parentAfter = await this.#dependencies.projectPostimage(parent);
+      if (
+        parentBefore?.kind !== "directory_tree" ||
+        parentAfter?.kind !== "directory_tree" ||
+        !sameFreshProjection(parentBefore, parentAfter)
+      ) return refuse();
     }
-    return refuse();
+    return entries.map((entry, index) => {
+      const parentBefore = parentsBefore.get(entry.parent.path);
+      if (parentBefore?.dev !== entry.parent.dev || parentBefore.ino !== entry.parent.ino) return refuse();
+      const [source, tombstone] = projected[index] as [BootstrapRetentionPostimageV1 | null, BootstrapRetentionPostimageV1 | null];
+      if (source !== null && tombstone === null && sameValue(source, entry.postimage)) {
+        return { state: "before", source: structuredClone(source) };
+      }
+      if (source === null && tombstone !== null && sameValue(tombstone, entry.postimage)) {
+        return { state: "after", tombstone: structuredClone(tombstone) };
+      }
+      return refuse();
+    });
   }
 
   async retain(entry: BootstrapRetentionEntryV1): Promise<void> {
@@ -583,8 +689,7 @@ export async function retainBootstrapEnvelope(
     (current.phase === "retaining" && current.retentionNext >= table.length)
   ) return refuse();
 
-  for (let ordinal = 0; ordinal < current.retentionNext; ordinal += 1) {
-    const retained = await retainer.observe(table[ordinal] as BootstrapRetentionEntryV1);
+  for (const retained of await retainer.observeAll(table.slice(0, current.retentionNext))) {
     if (retained.state !== "after") return refuse();
   }
 
@@ -611,8 +716,7 @@ export async function retainBootstrapEnvelope(
   }
 
   if (current.phase !== "retained") return refuse();
-  for (const entry of table) {
-    const retained = await retainer.observe(entry);
+  for (const retained of await retainer.observeAll(table)) {
     if (retained.state !== "after") return refuse();
   }
   if (!bootstrapReleased) await retainer.releaseHeldLock(locks.bootstrap);
