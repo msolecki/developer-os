@@ -35,6 +35,13 @@ export const HOOK_EVENT_OF: Readonly<Record<HookVendor, Readonly<Record<HookVerb
 
 export const FIRING_RECORD_REFRESH_MS = 86_400_000;
 
+/**
+ * NEW-139: an empty `<vendor>.record_failed.json`, inside the Spec 1 §2.1 record grammar and one per vendor so
+ * the 32-child cap holds. A failed write leaves it, the next written record removes it, and `doctor` reports it,
+ * so a hook whose record cannot be written no longer reads as one that never fired.
+ */
+const failureMarkerName = (vendor: HookVendor): string => hookFiringRecordName(vendor, "record_failed");
+
 const HOOK_VERBS: readonly HookVerb[] = ["inject", ...HOOK_GUARD_KINDS];
 
 type FiringKey = "plugin_hooks" | "session_start_injection";
@@ -54,7 +61,8 @@ export interface HookFiringRequest {
 
 async function readRecord(path: string): Promise<HookFiringRecordV1 | null> {
   try {
-    const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    // NEW-139: O_NONBLOCK, so a FIFO here cannot park a libuv worker; one parked worker hangs `process.exit()`.
+    const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
       if (!(await handle.stat()).isFile()) return null;
       const buffer = Buffer.alloc(MAX_HOOK_FIRING_RECORD_BYTES + 1);
@@ -77,11 +85,13 @@ async function readRecord(path: string): Promise<HookFiringRecordV1 | null> {
  * `command` (hooks.md §3.7).
  */
 export async function recordHookFiring(request: HookFiringRequest): Promise<void> {
+  const directory = join(request.stateDirectory, "hooks");
+  let directoryAdmitted = false;
   try {
     const event = HOOK_EVENT_OF[request.vendor][request.verb];
-    const directory = join(request.stateDirectory, "hooks");
     const stats = await lstat(directory);
     if (!stats.isDirectory() || stats.uid !== request.effectiveUid || (stats.mode & 0o777) !== 0o700) return;
+    directoryAdmitted = true;
 
     const name = hookFiringRecordName(request.vendor, request.verb);
     const target = join(directory, name);
@@ -118,11 +128,17 @@ export async function recordHookFiring(request: HookFiringRequest): Promise<void
         await handle.close();
       }
       await rename(temp, target);
-    } catch {
+    } catch (error) {
       await unlink(temp).catch(() => undefined);
+      throw error;
     }
+    await unlink(join(directory, failureMarkerName(request.vendor))).catch(() => undefined);
   } catch {
-    // A firing record is an observation, never a reason to change the hook's outcome.
+    // A firing record is an observation, never a reason to change the hook's outcome; the marker is best effort.
+    if (!directoryAdmitted) return;
+    await open(join(directory, failureMarkerName(request.vendor)), constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600)
+      .then((handle) => handle.close())
+      .catch(() => undefined);
   }
 }
 
@@ -135,11 +151,15 @@ export interface HookFiringObservation {
 export async function readHookFiringObservations(stateDirectory: string, vendor: HookVendor): Promise<{
   readonly observations: ReadonlyMap<FiringKey, "observed">;
   readonly records: readonly HookFiringObservation[];
+  /** NEW-139: the vendor's failure marker is present. */
+  readonly recordFailed: boolean;
 }> {
   const records: HookFiringObservation[] = [];
+  let recordFailed = false;
   try {
     const directory = join(stateDirectory, "hooks");
-    if (!(await lstat(directory)).isDirectory()) return { observations: new Map(), records: [] };
+    if (!(await lstat(directory)).isDirectory()) return { observations: new Map(), records: [], recordFailed };
+    recordFailed = await lstat(join(directory, failureMarkerName(vendor))).then((marker) => marker.isFile(), () => false);
     for (const verb of HOOK_VERBS) {
       const record = await readRecord(join(directory, hookFiringRecordName(vendor, verb)));
       if (record !== null && record.vendor === vendor && record.event === HOOK_EVENT_OF[vendor][verb]) {
@@ -147,12 +167,12 @@ export async function readHookFiringObservations(stateDirectory: string, vendor:
       }
     }
   } catch {
-    return { observations: new Map(), records: [] };
+    return { observations: new Map(), records: [], recordFailed };
   }
   const observations = new Map<FiringKey, "observed">();
   if (records.length > 0) observations.set("plugin_hooks", "observed");
   if (records.some((record) => record.verb === "inject")) {
     observations.set("session_start_injection", "observed");
   }
-  return { observations, records };
+  return { observations, records, recordFailed };
 }

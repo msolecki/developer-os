@@ -20,6 +20,8 @@ export interface HookEnvironment {
   readonly nodeExecutable: string;
   /** Test seam; defaults to `recordHookFiring` under the resolved product home. */
   readonly recordFiring?: (vendor: HookVendor, verb: HookVerb) => Promise<void>;
+  /** NEW-139: receives the pending record write (it never rejects), so `bin.ts` can let it settle before exiting. */
+  readonly onRecordPending?: (pending: Promise<void>) => void;
 }
 
 async function recordFiring(environment: HookEnvironment, vendor: HookVendor, verb: HookVerb): Promise<void> {
@@ -43,6 +45,24 @@ async function recordFiring(environment: HookEnvironment, vendor: HookVendor, ve
   } catch {
     // Any error is swallowed: the record is an observation, not part of the outcome.
   }
+}
+
+/** NEW-139: well under the vendors' 2 s hook timeout; a write still pending then is abandoned. */
+export const FIRING_RECORD_EXIT_BOUND_MS = 500;
+
+/** NEW-139: `bin.ts` exits explicitly (NEW-115), so it lets the pending record writes settle first, within a bound. */
+export async function settleFiringRecords(
+  pending: readonly Promise<void>[],
+  boundMs: number = FIRING_RECORD_EXIT_BOUND_MS,
+): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  await Promise.race([
+    Promise.all(pending),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, boundMs);
+    }),
+  ]);
+  clearTimeout(timer);
 }
 
 /**
@@ -102,7 +122,10 @@ export async function runHookMode(
     );
   } finally {
     // Not awaited, so the caller sets the exit code before the write settles (`hooks.md` §3.6: best effort
-    // after the outcome). A slow write still delays the process exit; it no longer withholds the code.
-    if (fired !== null && parsed.ok && environment !== undefined) void recordFiring(environment, parsed.vendor, fired);
+    // after the outcome). The caller gets the promise instead and bounds its wait before exiting (NEW-139).
+    if (fired !== null && parsed.ok && environment !== undefined) {
+      const pending = recordFiring(environment, parsed.vendor, fired);
+      environment.onRecordPending?.(pending);
+    }
   }
 }

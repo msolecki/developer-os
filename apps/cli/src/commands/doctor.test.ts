@@ -1437,6 +1437,20 @@ describe("hooks and external-hooks", () => {
     expect(hooks.message.endsWith("; codex=not-installed")).toBe(true);
   });
 
+  it("warns with record=failed while the vendor's failure marker is present, so a failed write never reads as unfired (NEW-139)", async () => {
+    const fixture = await hooksFixture("doctor-hooks-record-failed");
+    await plantHooks(fixture);
+    await plantRecord(fixture, "inject", "2026-09-22T09:00:00.000Z");
+    await nodeFs.writeFile(join(fixture.paths.stateDir, "hooks", "claude.record_failed.json"), "", { mode: 0o600 });
+
+    const { hooks } = await checksOf(fixture);
+
+    expect(hooks.status).toBe("warn");
+    expect(hooks.message).toContain("claude=installed");
+    expect(hooks.message).toContain("record=failed");
+    expect(hooks.message.endsWith("; codex=not-installed")).toBe(true);
+  });
+
   it("warns with the fixed trust step while an installed Codex hook has not fired, and passes once each has", async () => {
     const fixture = await hooksFixture("doctor-hooks-codex");
     expect(CODEX_HOOK_ROWS).toHaveLength(8);

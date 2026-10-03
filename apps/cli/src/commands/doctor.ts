@@ -763,7 +763,8 @@ async function reportVendorHooks(
     return { text: `${vendor}=${installed.state}`, healthy: installed.state === "not-installed", unfired: false, dead: false };
   }
   const lastSeen = new Map<string, number>();
-  for (const { verb, record } of (await readHookFiringObservations(stateDirectory, vendor)).records) {
+  const { records, recordFailed } = await readHookFiringObservations(stateDirectory, vendor);
+  for (const { verb, record } of records) {
     lastSeen.set(verb, Date.parse(record.lastSeen));
   }
   const now = context.now().getTime();
@@ -778,6 +779,8 @@ async function reportVendorHooks(
     ...(installed.missing.length === 0 ? [] : [`missing=${installed.missing.join(",")}`]),
     ...(installed.conflicting ? ["executable=inconsistent"] : []),
     ...(installed.executableLive ? [] : ["executable=missing"]),
+    // NEW-139: a record write failed, so a `never` above may be a hook that fired.
+    ...(recordFailed ? ["record=failed"] : []),
   ];
   // hooks.md §3.7: an untrusted Codex hook never fires, and Codex says nothing about it (§1 question 6).
   // Per verb: `path` shares `PreToolUse` with `command`, and an untrusted `path` must not hide behind it.
@@ -789,7 +792,7 @@ async function reportVendorHooks(
   });
   return {
     text: unfired ? `${parts.join(" ")} (${CODEX_UNTRUSTED_HOOK_MESSAGE})` : parts.join(" "),
-    healthy: installed.missing.length === 0 && !installed.conflicting && installed.executableLive && !unfired,
+    healthy: installed.missing.length === 0 && !installed.conflicting && installed.executableLive && !unfired && !recordFailed,
     unfired,
     dead: !installed.executableLive,
   };

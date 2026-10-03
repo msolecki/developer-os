@@ -8,6 +8,7 @@ import { parseScheduledInvocation } from "./commands/automation/index.js";
 import { MAX_CAPTURE_INPUT_BYTES } from "./commands/capture.js";
 import { createProductionContext, PRODUCT_VERSION } from "./context.js";
 import { hookLastResortExit, isHookInvocation } from "./hooks/argv.js";
+import { settleFiringRecords } from "./hooks/entry.js";
 import type { HookEnvironment } from "./hooks/entry.js";
 import type { CliIo } from "./io.js";
 import { run } from "./main.js";
@@ -120,11 +121,15 @@ const launchedArgv = process.argv.slice(2);
 const argv = launchedArgv[0] === LAUNCHER_TRUST_ARGUMENT ? launchedArgv.slice(1) : launchedArgv;
 const hookMode = isHookInvocation(argv);
 const scheduledMode = parseScheduledInvocation(argv) !== null;
+const pendingRecords: Promise<void>[] = [];
 const hookEnvironment = (userHome: string | null): HookEnvironment => ({
   env: process.env,
   userHome,
   processCwd: () => process.cwd(),
   nodeExecutable: process.execPath,
+  onRecordPending: (pending) => {
+    pendingRecords.push(pending);
+  },
 });
 
 if ((home === undefined || home.length === 0) && !scheduledMode) {
@@ -191,4 +196,6 @@ const drained = (stream: NodeJS.WriteStream): Promise<void> =>
     });
   });
 await Promise.all([drained(process.stdout), drained(process.stderr)]);
+// NEW-139: the explicit exit below killed the in-flight firing record, so `doctor` read every hook as `never`.
+if (pendingRecords.length > 0) await settleFiringRecords(pendingRecords);
 process.exit();

@@ -4,11 +4,11 @@ import { join } from "node:path";
 
 import { encodeHookFiringRecord } from "@developer-os/core";
 import type { HookFiringRecordV1 } from "@developer-os/core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CliIo } from "../io.js";
 import type { HookVendor, HookVerb } from "./argv.js";
-import { runHookMode } from "./entry.js";
+import { FIRING_RECORD_EXIT_BOUND_MS, runHookMode, settleFiringRecords } from "./entry.js";
 import type { HookEnvironment } from "./entry.js";
 import {
   FIRING_RECORD_REFRESH_MS,
@@ -162,17 +162,31 @@ describe("recordHookFiring", () => {
     expect(await readFile(join(hooks, "claude.stop.json"), "utf8")).toBe(record("Stop", NOW, NOW));
   });
 
-  it("writes nothing when the gate refuses", async () => {
+  it("writes only the vendor's empty failure marker when the gate refuses (NEW-139)", async () => {
     await createHooksDirectory();
     await recordHookFiring(request({ admit: () => Promise.reject(new Error("synthetic refusal")) }));
-    expect(await readdir(hooks)).toStrictEqual([]);
+    expect(await readdir(hooks)).toStrictEqual(["claude.record_failed.json"]);
+    expect(await readFile(join(hooks, "claude.record_failed.json"), "utf8")).toBe("");
   });
 
-  it("writes nothing when the real ordinary-command gate refuses a malformed V2 manifest", async () => {
+  it("writes only the failure marker when the real ordinary-command gate refuses a malformed V2 manifest", async () => {
     await createHooksDirectory();
     await writeFile(join(productHome, "installation-manifest.json"), '{"schemaVersion":2}', { mode: 0o600 });
     await recordHookFiring(withoutGateSeam());
-    expect(await readdir(hooks)).toStrictEqual([]);
+    expect(await readdir(hooks)).toStrictEqual(["claude.record_failed.json"]);
+  });
+
+  it("clears the vendor's failure marker with the next written record, and leaves the other vendor's", async () => {
+    await createHooksDirectory();
+    await writeFile(join(hooks, "claude.record_failed.json"), "", { mode: 0o600 });
+    await writeFile(join(hooks, "codex.record_failed.json"), "", { mode: 0o600 });
+    await recordHookFiring(request());
+    expect((await readdir(hooks)).sort()).toStrictEqual(["claude.stop.json", "codex.record_failed.json"]);
+  });
+
+  it("never creates the hooks directory for a failure marker", async () => {
+    await recordHookFiring(request({ admit: () => Promise.reject(new Error("synthetic refusal")) }));
+    expect(await readdir(stateDirectory).catch(() => [])).toStrictEqual([]);
   });
 
   it("records a Codex firing under the Codex vendor", async () => {
@@ -185,7 +199,7 @@ describe("recordHookFiring", () => {
     await createHooksDirectory();
     await mkdir(join(hooks, "claude.stop.json"));
     await expect(recordHookFiring(request())).resolves.toBeUndefined();
-    expect(await readdir(hooks)).toStrictEqual(["claude.stop.json"]);
+    expect((await readdir(hooks)).sort()).toStrictEqual(["claude.record_failed.json", "claude.stop.json"]);
   });
 
   it("resolves when the state directory cannot be reached at all", async () => {
@@ -240,6 +254,17 @@ describe("readHookFiringObservations", () => {
     const read = await readHookFiringObservations(stateDirectory, "claude");
     expect(read.observations.size).toBe(0);
     expect(read.records).toStrictEqual([]);
+  });
+
+  it("reports the vendor's own failure marker and nothing else as a failed record write", async () => {
+    await createHooksDirectory();
+    expect((await readHookFiringObservations(stateDirectory, "claude")).recordFailed).toBe(false);
+    await writeFile(join(hooks, "codex.record_failed.json"), "");
+    expect((await readHookFiringObservations(stateDirectory, "claude")).recordFailed).toBe(false);
+    await writeFile(join(hooks, "claude.record_failed.json"), "");
+    const read = await readHookFiringObservations(stateDirectory, "claude");
+    expect(read.recordFailed).toBe(true);
+    expect(read.observations.size).toBe(0);
   });
 });
 
@@ -321,6 +346,33 @@ describe("runHookMode and the firing record", () => {
     expect(recordCalls).toBe(1);
   });
 
+  it("hands the pending record write to the caller, which may wait for it before exiting (NEW-139)", async () => {
+    HOOK_HANDLERS.stop = () => Promise.resolve({ kind: "allow" });
+    let release = (): void => undefined;
+    const pending: Promise<void>[] = [];
+    let settled = false;
+    const environment: HookEnvironment = {
+      env: {},
+      userHome: root,
+      processCwd: () => root,
+      nodeExecutable: "/usr/local/bin/node",
+      recordFiring: () => new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+      onRecordPending: (write) => {
+        pending.push(write.then(() => {
+          settled = true;
+        }));
+      },
+    };
+    expect(await runHookMode(["guard", "stop", "--vendor", "claude"], io, factory, environment)).toBe(0);
+    expect(pending).toHaveLength(1);
+    expect(settled).toBe(false);
+    release();
+    await Promise.all(pending);
+    expect(settled).toBe(true);
+  });
+
   it("does not record a firing when the recursion marker short-circuits the hook", async () => {
     HOOK_HANDLERS.stop = () => Promise.resolve({ kind: "allow" });
     let calls = 0;
@@ -336,5 +388,37 @@ describe("runHookMode and the firing record", () => {
     };
     expect(await runHookMode(["guard", "stop", "--vendor", "claude"], io, factory, environment)).toBe(0);
     expect(calls).toBe(0);
+  });
+});
+
+describe("settleFiringRecords (NEW-139)", () => {
+  it("bounds the exit wait well under the vendors' 2 s hook timeout", () => {
+    expect(FIRING_RECORD_EXIT_BOUND_MS).toBeLessThanOrEqual(500);
+  });
+
+  it("returns once every pending write has settled", async () => {
+    let settled = false;
+    const write = Promise.resolve().then(() => {
+      settled = true;
+    });
+    await settleFiringRecords([write]);
+    expect(settled).toBe(true);
+  });
+
+  it("gives up at its bound on a write that never settles", async () => {
+    vi.useFakeTimers();
+    try {
+      let done = false;
+      const settling = settleFiringRecords([new Promise<void>(() => undefined)]).then(() => {
+        done = true;
+      });
+      await vi.advanceTimersByTimeAsync(FIRING_RECORD_EXIT_BOUND_MS - 1);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await settling;
+      expect(done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
