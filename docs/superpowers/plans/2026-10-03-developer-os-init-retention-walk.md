@@ -61,8 +61,8 @@ spends re-walking and re-hashing `state/`, without changing any security or dura
 
 ## Status (2026-10-03)
 
-- Task 1 done: `deaccd0c`.
-- Tasks 2 and 3 done together (same file): `0ff7485f`.
+- Task 1 done: `06049edb`.
+- Tasks 2 and 3 done together (same file): `ec91c69f`.
 - Task 4 done: `init` 453-523 s → 136-147 s; `doctor` 0 fail; numbers in `foundation.md` §9.
 
 **Next action:** CI re-measure of `tests/tools/pack-local-release.test.ts` on `macos-15`, then
