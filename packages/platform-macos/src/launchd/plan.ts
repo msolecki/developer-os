@@ -101,9 +101,9 @@ export type LaunchdPlanV1 = {
 };
 
 /**
- * Everything `planLaunchdTransitions` binds. `bootstrapPlists` names, per job, the plist inode a
- * bootstrap may read: the staged postimage Foundation will publish (`after`) and the staged
- * preimage its paired inverse will restore (`before`), or the retained file for `keep`.
+ * Everything `planLaunchdTransitions` binds. `bootstrapPlists` names, per job, the plist a
+ * bootstrap may read: the postimage Foundation will publish (`after`) and the preimage its paired
+ * inverse will restore (`before`), bound by content with no inode, or the retained inode for `keep`.
  */
 export type LaunchdTransitionRequestV1 = {
   readonly coordinatorId: LifecycleCoordinatorIdV1;
@@ -380,7 +380,9 @@ function assertFileBindings(plan: LaunchdPlanV1, variant: LaunchdPlanVariantV1):
 /**
  * `before` is non-null exactly when compensation may reload the preimage (a loaded replace or
  * remove) and `after` exactly when forward execution may load the postimage; `keep` binds its one
- * retained identity in both arms (spec §5.3).
+ * retained identity in both arms (spec §5.3). Only `keep` binds an inode: every other arm is a
+ * file Foundation writes or restores through a fresh inode, so its `dev`/`ino` are null and the
+ * reader binds the inode it opens (NEW-138).
  */
 function assertBootstrapPlists(entry: LaunchdPlanEntryV1): void {
   const { before, after } = entry.bootstrapPlists;
@@ -392,6 +394,8 @@ function assertBootstrapPlists(entry: LaunchdPlanEntryV1): void {
   for (const identity of [before, after]) {
     if (identity === null) continue;
     if (identity.path !== entry.plistPath || identity.ownerUid !== uid) refuse(`${entry.job}: bootstrap plist path or owner`);
+    const inodeBound = entry.operation === "keep";
+    if ((identity.dev !== null) !== inodeBound || (identity.ino !== null) !== inodeBound) refuse(`${entry.job}: bootstrap plist inode binding`);
   }
   if (before !== null && before.hash !== entry.beforeFileHash) refuse(`${entry.job}: bootstrap preimage hash`);
   if (after !== null) {
@@ -518,8 +522,8 @@ function parseBootstrapIdentity(value: unknown, label: string): LaunchdBootstrap
     nlink: 1,
     size: raw.size,
     hash: parseLowerHexSha256(raw.hash),
-    dev: parseUInt64Decimal(raw.dev),
-    ino: parseUInt64Decimal(raw.ino),
+    dev: raw.dev === null ? null : parseUInt64Decimal(raw.dev),
+    ino: raw.ino === null ? null : parseUInt64Decimal(raw.ino),
   });
 }
 

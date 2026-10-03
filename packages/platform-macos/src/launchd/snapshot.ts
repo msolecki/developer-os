@@ -31,7 +31,13 @@ import {
 import { launchdGuiDomain } from "./registry.js";
 import { LaunchdInputError, type LaunchdGuiDomainV1, type LaunchdPlistDictionaryV1 } from "./types.js";
 
-/** Spec §5.3: the plan-bound real plist a bootstrap reads from, never inherits. */
+/**
+ * Spec §5.3: the plan-bound real plist a bootstrap reads from, never inherits. Only a `keep` arm
+ * binds `dev`/`ino`, because its retained inode persists; an arm Foundation writes (a forward
+ * postimage, or a preimage its inverse restores) is published through a fresh temp inode and a
+ * rename, so it binds content (`hash`, `size`) and metadata only, and its inode is the one the
+ * reader opens (NEW-138).
+ */
 export interface LaunchdBootstrapPlistIdentityV1 {
   readonly path: CanonicalAbsolutePathV1;
   readonly ownerUid: EffectiveUidV1;
@@ -39,6 +45,16 @@ export interface LaunchdBootstrapPlistIdentityV1 {
   readonly nlink: 1;
   readonly size: number;
   readonly hash: LowerHexSha256;
+  readonly dev: UInt64DecimalV1 | null;
+  readonly ino: UInt64DecimalV1 | null;
+}
+
+/**
+ * The identity the plist reader admitted through one no-follow descriptor: the plan-bound fields
+ * plus the `dev`/`ino` it actually opened. The FD-3 snapshot and the post-bootstrap recheck
+ * compare against this captured inode, never a fresh path lookup.
+ */
+export interface LaunchdOpenedPlistIdentityV1 extends LaunchdBootstrapPlistIdentityV1 {
   readonly dev: UInt64DecimalV1;
   readonly ino: UInt64DecimalV1;
 }
@@ -53,7 +69,7 @@ export interface LaunchdBootstrapSnapshotCreationV1 {
   readonly direction: LaunchdSnapshotDirectionV1;
   readonly transitionIndex: number;
   readonly role: LaunchdSnapshotRoleV1;
-  readonly source: LaunchdBootstrapPlistIdentityV1;
+  readonly source: LaunchdOpenedPlistIdentityV1;
   readonly path: CanonicalAbsolutePathV1;
   readonly snapshot: {
     readonly ownerUid: EffectiveUidV1;
@@ -70,7 +86,7 @@ export interface LaunchdBootstrapSnapshotCreationV1 {
 /** Spec §5.3: the already-unlinked snapshot whose open description alone becomes child FD 3. */
 export interface LaunchdBootstrapSnapshotAttemptV1 {
   readonly role: LaunchdSnapshotRoleV1;
-  readonly source: LaunchdBootstrapPlistIdentityV1;
+  readonly source: LaunchdOpenedPlistIdentityV1;
   readonly formerPath: CanonicalAbsolutePathV1;
   readonly snapshot: {
     readonly ownerUid: EffectiveUidV1;
@@ -98,7 +114,7 @@ export interface LaunchdSnapshotRequestV1 {
   readonly direction: LaunchdSnapshotDirectionV1;
   readonly transitionIndex: number;
   readonly role: LaunchdSnapshotRoleV1;
-  readonly source: LaunchdBootstrapPlistIdentityV1;
+  readonly source: LaunchdOpenedPlistIdentityV1;
   readonly plist: LaunchdPlistDictionaryV1;
   readonly phase: SupervisedPhaseV1;
 }
@@ -211,7 +227,7 @@ async function readBounded(handle: LaunchdSnapshotFileHandleV1, limit: number): 
   return buffer.subarray(0, length);
 }
 
-function admitSourceIdentity(source: LaunchdBootstrapPlistIdentityV1, uid: number): LaunchdBootstrapPlistIdentityV1 {
+function admitSourceIdentity(source: LaunchdOpenedPlistIdentityV1, uid: number): LaunchdOpenedPlistIdentityV1 {
   const path = parseCanonicalAbsolutePathText(source.path);
   if (source.ownerUid !== uid) refuse("bootstrap plist: owner");
   if ((source.mode as number) !== 384 || (source.nlink as number) !== 1) refuse("bootstrap plist: mode or link count");
@@ -228,7 +244,7 @@ function admitSourceIdentity(source: LaunchdBootstrapPlistIdentityV1, uid: numbe
   });
 }
 
-function matchesSource(stats: BigIntStats, source: LaunchdBootstrapPlistIdentityV1): boolean {
+function matchesSource(stats: BigIntStats, source: LaunchdOpenedPlistIdentityV1): boolean {
   return (
     stats.isFile() &&
     stats.uid === BigInt(source.ownerUid) &&
@@ -262,7 +278,7 @@ function sameCreation(left: LaunchdBootstrapSnapshotCreationV1, right: LaunchdBo
   );
 }
 
-function sameSource(left: LaunchdBootstrapPlistIdentityV1, right: LaunchdBootstrapPlistIdentityV1): boolean {
+function sameSource(left: LaunchdOpenedPlistIdentityV1, right: LaunchdOpenedPlistIdentityV1): boolean {
   return (
     left.path === right.path &&
     left.ownerUid === right.ownerUid &&
@@ -458,7 +474,7 @@ export class LaunchdSnapshotBootstrapper {
   }
 
   /** Opens the real plist no-follow and proves identity and bytes; the caller closes it. */
-  async #openSource(source: LaunchdBootstrapPlistIdentityV1, bytes: Uint8Array): Promise<LaunchdSnapshotFileHandleV1> {
+  async #openSource(source: LaunchdOpenedPlistIdentityV1, bytes: Uint8Array): Promise<LaunchdSnapshotFileHandleV1> {
     let handle: LaunchdSnapshotFileHandleV1;
     try {
       handle = await this.#fs.open(source.path, READ_FLAGS);

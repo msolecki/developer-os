@@ -27,7 +27,7 @@ import {
 import { generatedLabel, launchdGuiDomain, parseScheduledProductHome, scheduledProgramArguments } from "./registry.js";
 import {
   LaunchdSnapshotBootstrapper,
-  type LaunchdBootstrapPlistIdentityV1,
+  type LaunchdOpenedPlistIdentityV1,
   type LaunchdBootstrapSnapshotCreationV1,
   type LaunchdSnapshotDependenciesV1,
   type LaunchdSnapshotFileHandleV1,
@@ -154,7 +154,7 @@ async function createFixture(): Promise<Fixture> {
   await chmod(plistPath, 0o600);
   const stats = await lstat(plistPath, { bigint: true });
   const expectedPlistHash = hashBytes(bytes) as LowerHexSha256;
-  const source: LaunchdBootstrapPlistIdentityV1 = {
+  const source: LaunchdOpenedPlistIdentityV1 = {
     path: plistPath as CanonicalAbsolutePathV1,
     ownerUid: uid,
     mode: 384,

@@ -119,8 +119,10 @@ function retainedOld(job: ScheduledJobIdV1, live: "loaded" | "unloaded"): Launch
   };
 }
 
+/** Only `keep` binds an inode (NEW-138); every arm Foundation writes is content-bound. */
 function identity(entry: LaunchdPlanPreviewEntryV1, arm: "before" | "after"): LaunchdBootstrapPlistIdentityV1 {
   const bytes = arm === "after" && entry.plistBytes !== null ? encoder.encode(entry.plistBytes) : null;
+  const inodeBound = entry.operation === "keep";
   return {
     path: entry.plistPath,
     ownerUid: uid,
@@ -128,8 +130,8 @@ function identity(entry: LaunchdPlanPreviewEntryV1, arm: "before" | "after"): La
     nlink: 1,
     size: bytes?.byteLength ?? 1024,
     hash: bytes === null ? (entry.beforeFileHash as LowerHexSha256) : launchdPlistBytesHash(entry.plistBytes as string),
-    dev: "16777220" as UInt64DecimalV1,
-    ino: arm === "after" ? ("900001" as UInt64DecimalV1) : ("900002" as UInt64DecimalV1),
+    dev: inodeBound ? ("16777220" as UInt64DecimalV1) : null,
+    ino: inodeBound ? (arm === "after" ? ("900001" as UInt64DecimalV1) : ("900002" as UInt64DecimalV1)) : null,
   };
 }
 
@@ -363,6 +365,26 @@ describe("planLaunchdTransitions", () => {
     expect(() =>
       planLaunchdTransitions({ ...request, bootstrapPlists: { doctor: { ...arms, after: { ...(arms.after as LaunchdBootstrapPlistIdentityV1), hash: OLD_FILE_HASH } } } }),
     ).toThrow(LaunchdInputError);
+  });
+
+  it("binds an inode only on a keep arm: a written arm with one, or a keep arm without, is refused (NEW-138)", () => {
+    const install = preview(automation({ doctor: daily }));
+    const request = transitionRequest("automation_enable", install);
+    const arms = request.bootstrapPlists.doctor as LaunchdBootstrapPlistsV1;
+    const after = arms.after as LaunchdBootstrapPlistIdentityV1;
+    expect(after.dev).toBeNull();
+    const inode = { dev: "16777220" as UInt64DecimalV1, ino: "900001" as UInt64DecimalV1 };
+    expect(() => planLaunchdTransitions({ ...request, bootstrapPlists: { doctor: { ...arms, after: { ...after, ...inode } } } })).toThrow(/inode binding/u);
+    expect(() => planLaunchdTransitions({ ...request, bootstrapPlists: { doctor: { ...arms, after: { ...after, dev: inode.dev } } } })).toThrow(/inode binding/u);
+    const plan = planLaunchdTransitions(request);
+    expect(validateLaunchdPlan(JSON.parse(JSON.stringify(plan)))).toStrictEqual(plan);
+
+    const keep = preview(automation({ doctor: daily }), { doctor: installedAt("doctor", daily, "unloaded") });
+    const keepRequest = transitionRequest("automation_reconcile", keep);
+    const retained = (keepRequest.bootstrapPlists.doctor as LaunchdBootstrapPlistsV1).after as LaunchdBootstrapPlistIdentityV1;
+    expect(retained.ino).not.toBeNull();
+    const unbound = { ...retained, dev: null, ino: null };
+    expect(() => planLaunchdTransitions({ ...keepRequest, bootstrapPlists: { doctor: { before: unbound, after: unbound } } })).toThrow(/inode binding/u);
   });
 
   it("refuses plist file bindings that are unsorted, missing, or not their entry's mutation", () => {

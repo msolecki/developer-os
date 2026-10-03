@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { fstatSync, readSync } from "node:fs";
 
 import {
   SCHEDULED_JOB_IDS,
@@ -40,8 +41,11 @@ import type {
   VaultSegmentV1,
 } from "@developer-os/core";
 import {
+  LaunchdBootoutRunner,
+  LaunchdSnapshotBootstrapper,
   NodeLaunchdPlistReader,
   buildLaunchdPlanPreview,
+  parseCanonicalLaunchdPlist,
   launchdGuiDomain,
   launchdPlistBytesHash,
   parseGeneratedLabel,
@@ -58,7 +62,7 @@ import type {
   LaunchdSnapshotRequestV1,
 } from "@developer-os/platform-macos";
 import { GIT_DISTRIBUTION_POLICY_ID, PERSISTED_GIT_PUSH_PLAN_CODEC } from "@developer-os/security";
-import type { PersistedGitPushPlanV1, SystemPathObservationV1 } from "@developer-os/security";
+import type { PersistedGitPushPlanV1, SupervisedSpawnRequestV1, SystemPathObservationV1 } from "@developer-os/security";
 
 import type { LifecycleEffectPortsV1 } from "./adapters.js";
 import type { LifecycleExecutionPlanV1, LifecyclePlanPreviewV1 } from "./codecs.js";
@@ -414,7 +418,9 @@ function withSyntheticUninstallLaunchd(
           dev: DEV,
           ino: parseUInt64Decimal(String(900_000 + SCHEDULED_JOB_IDS.indexOf(entry.job))),
         };
-        return [entry.job, { before: entry.beforeLiveState.state === "loaded" ? retained : null, after: null }];
+        // NEW-138: a remove's `before` arm is reloaded from the file Foundation's inverse re-creates, so it binds no inode.
+        const before = { ...retained, dev: null, ino: null };
+        return [entry.job, { before: entry.beforeLiveState.state === "loaded" ? before : null, after: null }];
       }),
     ),
   });
@@ -913,21 +919,27 @@ export interface ScriptedLaunchdV1 {
   readonly loaded: Map<ScheduledJobIdV1, GeneratedLaunchdLabelV1>;
   /** `bootout <label>` and `bootstrap <label>`, in the order the executor ran them. */
   readonly events: string[];
+  /** With `launchctl: "scripted"`, a bootstrap of one of these labels exits 1 and loads nothing. */
+  readonly failingBootstraps: Set<GeneratedLaunchdLabelV1>;
   readonly ports: LifecycleEffectPortsV1["launchd"];
 }
 
 /**
  * An injected launchd domain: observation reads `loaded`, `bootout` and bootstrap edit it, and the
  * plan-bound plist checks run against the real files. No process is ever spawned; `host` (an
- * admitted `hostWith()` by default) is what every process table load admits.
+ * admitted `hostWith()` by default) is what every process table load admits. `launchctl:
+ * "scripted"` keeps the real FD-3 snapshot bootstrapper and bootout runner and scripts only the
+ * `/bin/launchctl` process: a bootstrap loads the label it reads from the inherited descriptor.
  */
 export function scriptedLaunchd(options: {
   readonly clock: () => UtcTimestampV1;
   readonly host?: LaunchdHostObserverV1;
   readonly beforeBootout?: (label: GeneratedLaunchdLabelV1) => void | Promise<void>;
+  readonly launchctl?: "scripted";
 }): ScriptedLaunchdV1 {
   const loaded = new Map<ScheduledJobIdV1, GeneratedLaunchdLabelV1>();
   const events: string[] = [];
+  const failingBootstraps = new Set<GeneratedLaunchdLabelV1>();
   const attempts = new Map<object, LaunchdSnapshotRequestV1>();
   const exited = { exitCode: 0, signal: null, termination: "exited" as const, stdoutBytes: 0, stderrBytes: 0, groupReaped: true as const };
   const observe = (request: {
@@ -979,8 +991,38 @@ export function scriptedLaunchd(options: {
     pause: () => Promise.resolve(),
     host: options.host ?? hostWith(),
   } as unknown as LifecycleEffectPortsV1["launchd"];
-  return { loaded, events, ports };
+  if (options.launchctl !== "scripted") return { loaded, events, failingBootstraps, ports };
+  const runner = {
+    run: async (request: SupervisedSpawnRequestV1) => {
+      const [command, target] = request.argv;
+      let label: GeneratedLaunchdLabelV1;
+      if (command === "bootout") {
+        label = String(target).slice(String(target).indexOf("/", "gui/".length) + 1) as GeneratedLaunchdLabelV1;
+        await options.beforeBootout?.(label);
+      } else {
+        const inherited = request.inheritedFds[0];
+        if (command !== "bootstrap" || inherited === undefined) throw new Error(`unscripted launchctl ${request.argv.join(" ")}`);
+        const buffer = new Uint8Array(fstatSync(inherited.parentFd).size);
+        readSync(inherited.parentFd, buffer, 0, buffer.byteLength, 0);
+        label = parseCanonicalLaunchdPlist(buffer).Label;
+      }
+      events.push(`${command} ${label}`);
+      const failed = command === "bootstrap" && failingBootstraps.has(label);
+      if (command === "bootout") loaded.delete(parseGeneratedLabel(label).job);
+      else if (!failed) loaded.set(parseGeneratedLabel(label).job, label);
+      return { ...exited, exitCode: failed ? 1 : 0, stdoutSha256: EMPTY_SHA256, stderrSha256: EMPTY_SHA256 };
+    },
+  };
+  const admission = { runner, effectiveUid: () => process.getuid?.() ?? 0, host: options.host ?? hostWith() };
+  return {
+    loaded,
+    events,
+    failingBootstraps,
+    ports: { ...ports, bootstrapper: new LaunchdSnapshotBootstrapper(admission), launchctl: new LaunchdBootoutRunner(admission) },
+  };
 }
+
+const EMPTY_SHA256 = sha256("");
 
 export interface SyntheticInstalledPlistV1 {
   readonly job: ScheduledJobIdV1;

@@ -3859,6 +3859,13 @@ LaunchdBootstrapPlistIdentityV1 = {
   nlink: 1,
   size: Integer[1..1048576],
   hash: LowerHexSha256,
+  dev: UInt64DecimalV1 | null,   // non-null exactly on a `keep` arm (amended 2026-10-03, NEW-138)
+  ino: UInt64DecimalV1 | null
+}
+
+// What the plist reader admitted through one O_NOFOLLOW descriptor: the bound fields plus the
+// dev/ino it opened. Snapshot creation, attempt and recheck carry this, never the plan arm.
+LaunchdOpenedPlistIdentityV1 = LaunchdBootstrapPlistIdentityV1 + {
   dev: UInt64DecimalV1,
   ino: UInt64DecimalV1
 }
@@ -3869,7 +3876,7 @@ LaunchdBootstrapSnapshotCreationV1 = {
   direction: "forward" | "reverse",
   transitionIndex: Integer[0..7],
   role: "before" | "after",
-  source: LaunchdBootstrapPlistIdentityV1,
+  source: LaunchdOpenedPlistIdentityV1,
   path: exact `staging.tmp.path + "/bootstrap-plist"`,
   snapshot: {
     ownerUid: EffectiveUidV1,
@@ -3884,7 +3891,7 @@ LaunchdBootstrapSnapshotCreationV1 = {
 
 LaunchdBootstrapSnapshotAttemptV1 = {
   role: "before" | "after",
-  source: LaunchdBootstrapPlistIdentityV1,
+  source: LaunchdOpenedPlistIdentityV1,
   formerPath: CanonicalAbsolutePathV1,
   snapshot: {
     ownerUid: EffectiveUidV1,
@@ -4099,7 +4106,23 @@ pre-attempt baseline after every outcome.
 
 `bootstrapPlists.before` is non-null exactly when compensation may reload the preimage, and `after` is
 non-null exactly when forward execution may load the postimage; `keep` binds the same source identity
-in both arms, while install/remove respectively require only after/before. A retry or reverse recovery
+in both arms, while install/remove respectively require only after/before.
+
+**Amended 2026-10-03 (NEW-138).** Only a `keep` arm binds `dev`/`ino`: its retained inode persists.
+Every other arm names a file Foundation writes — the forward `create`/`replace` postimage, or the
+preimage its paired inverse restores when compensating a `replace` or `remove` — and Foundation
+publishes through a fresh temp inode and a rename, so no staged inode is ever the published one.
+Binding the staged inode made every real `automation enable --apply` roll back
+`launchd_plist_changed`. Those arms bind path, owner, mode, link count, size and content hash, with
+`dev`/`ino` null, and the validator refuses an inode on them and a missing inode on `keep`. The
+reader opens the plist `O_NOFOLLOW`, admits that descriptor's `fstat` (plus the bound inode for
+`keep`), hashes the bytes read through the same descriptor, and returns the identity it opened as
+`LaunchdOpenedPlistIdentityV1`. Snapshot creation, its source rechecks, the attempt, and the
+post-observation recheck compare against that captured identity, never a fresh path lookup, so a
+swap between admission and bootstrap — byte-identical content included — refuses
+`launchd_bootstrap_plist_changed`.
+
+A retry or reverse recovery
 never tries to reopen an earlier unlinked snapshot: if live observation is still the transition
 preimage it creates a fresh snapshot from the immutable plan and reverified source; if postimage it
 records the observation without a bootstrap; every other state refuses.

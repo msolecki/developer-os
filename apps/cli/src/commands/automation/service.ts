@@ -184,8 +184,8 @@ export class AutomationCommandRefusal extends Error {
   readonly paths: readonly string[];
   readonly recovery: string | undefined;
 
-  constructor(reason: string, code: ExitCode, paths: readonly string[] = [], recovery?: string) {
-    super(`automation refused: ${reason}`);
+  constructor(reason: string, code: ExitCode, paths: readonly string[] = [], recovery?: string, cause?: string) {
+    super(`automation refused: ${reason}${cause === undefined ? "" : ` (cause: ${cause})`}`);
     this.reason = reason;
     this.code = code;
     this.paths = [...paths];
@@ -212,8 +212,8 @@ function sha256(bytes: Uint8Array | string): LowerHexSha256 {
   return hashBytes(typeof bytes === "string" ? encoder.encode(bytes) : bytes) as LowerHexSha256;
 }
 
-function refuse(reason: string, code: ExitCode, paths: readonly string[] = [], recovery?: string): never {
-  throw new AutomationCommandRefusal(reason, code, paths, recovery);
+function refuse(reason: string, code: ExitCode, paths: readonly string[] = [], recovery?: string, cause?: string): never {
+  throw new AutomationCommandRefusal(reason, code, paths, recovery, cause);
 }
 
 function recoveryRequired(reason: string, ...paths: readonly string[]): never {
@@ -695,7 +695,6 @@ interface StagedAutomationV1 {
   readonly foundation: readonly FoundationParticipantRefV1[];
   readonly payload: { readonly dev: string; readonly ino: string };
   readonly processTableHash: LowerHexSha256;
-  readonly bootstrap: Readonly<Partial<Record<ScheduledJobIdV1, LaunchdBootstrapPlistsV1>>>;
 }
 
 interface AutomationApplyInputsV1 {
@@ -808,12 +807,16 @@ function effectId(id: string | null): string | null {
   return id === null || id.startsWith("le_") ? id : `le${id.slice(2)}`;
 }
 
-function widestIdentity(entry: LaunchdPlanPreviewEntryV1, hash: LowerHexSha256, size: number, uid: number): LaunchdBootstrapPlistIdentityV1 {
-  return { path: entry.plistPath, ownerUid: parseEffectiveUid(uid, uid), mode: 384, nlink: 1, size, hash, dev: WIDEST_UINT64, ino: WIDEST_UINT64 };
+/** A file Foundation writes or restores is published through a fresh inode, so it binds content only (NEW-138). */
+function contentIdentity(entry: LaunchdPlanPreviewEntryV1, hash: LowerHexSha256, size: number, uid: number): LaunchdBootstrapPlistIdentityV1 {
+  return { path: entry.plistPath, ownerUid: parseEffectiveUid(uid, uid), mode: 384, nlink: 1, size, hash, dev: null, ino: null };
 }
 
-/** Before staging, every unknown inode is the widest decimal; `keep` binds its one retained inode in both arms. */
-function placeholderBootstrap(inputs: AutomationApplyInputsV1): Readonly<Partial<Record<ScheduledJobIdV1, LaunchdBootstrapPlistsV1>>> {
+/**
+ * §5.3 `bootstrapPlists`: `after` is the postimage Foundation publishes and `before` the preimage
+ * its paired inverse restores, both bound by content; `keep` binds its one retained inode in both arms.
+ */
+function bootstrapPlists(inputs: AutomationApplyInputsV1): Readonly<Partial<Record<ScheduledJobIdV1, LaunchdBootstrapPlistsV1>>> {
   const launchd = inputs.planned.preview.launchd as LaunchdPlanPreviewV1;
   return Object.fromEntries(
     launchd.entries.map((entry) => {
@@ -821,8 +824,8 @@ function placeholderBootstrap(inputs: AutomationApplyInputsV1): Readonly<Partial
       if (entry.operation === "keep" && kept !== undefined) return [entry.job, { before: kept.identity, after: kept.identity }];
       const uid = Number(entry.domain.slice("gui/".length));
       const loaded = entry.beforeLiveState.state === "loaded";
-      const before = loaded && kept !== undefined ? widestIdentity(entry, kept.identity.hash, kept.identity.size, uid) : null;
-      const after = entry.plistBytes === null ? null : widestIdentity(entry, sha256(entry.plistBytes), encoder.encode(entry.plistBytes).byteLength, uid);
+      const before = loaded && kept !== undefined ? contentIdentity(entry, kept.identity.hash, kept.identity.size, uid) : null;
+      const after = entry.plistBytes === null ? null : contentIdentity(entry, sha256(entry.plistBytes), encoder.encode(entry.plistBytes).byteLength, uid);
       return [entry.job, { before, after }];
     }),
   );
@@ -905,7 +908,7 @@ function automationBuilder(inputs: AutomationApplyInputsV1): LifecycleExecutionB
         },
         beforeFilesEffectId: effectId(beforeId) as LaunchdEffectIdV1 | null,
         afterFilesEffectId: effectId(afterId) as LaunchdEffectIdV1 | null,
-        bootstrapPlists: inputs.staged?.bootstrap ?? placeholderBootstrap(inputs),
+        bootstrapPlists: bootstrapPlists(inputs),
       });
       const beforeRef = launchd.beforeFilesEffect;
       const afterRef = launchd.afterFilesEffect;
@@ -999,34 +1002,6 @@ async function stageFoundation(
   ];
 }
 
-/**
- * §5.3 `bootstrapPlists`: `after` is the staged postimage Foundation publishes, `before` the staged
- * preimage its paired inverse restores, and `keep` the one retained inode in both arms.
- */
-async function stagedBootstrap(
-  lifecycle: CliLifecycleContext,
-  inputs: AutomationApplyInputsV1,
-  foundation: readonly FoundationParticipantRefV1[],
-): Promise<Readonly<Partial<Record<ScheduledJobIdV1, LaunchdBootstrapPlistsV1>>>> {
-  const placeholders = placeholderBootstrap(inputs);
-  const [forward, inverse] = foundation;
-  const stagedIdentity = async (ref: FoundationParticipantRefV1 | undefined, placeholder: LaunchdBootstrapPlistIdentityV1 | null): Promise<LaunchdBootstrapPlistIdentityV1 | null> => {
-    if (placeholder === null || placeholder.dev !== WIDEST_UINT64) return placeholder;
-    const stagedPath = ref?.mutations.find((mutation) => mutation.targetPath === placeholder.path)?.stagedPath ?? null;
-    // identity-free stat: the guarded port already returns an exact decimal identity.
-    const entry = stagedPath === null ? null : await lifecycle.fs.lstat(stagedPath);
-    if (entry?.kind !== "regular_file") return recoveryRequired("automation_bootstrap_plist_unstaged", placeholder.path);
-    return { ...placeholder, dev: entry.dev, ino: entry.ino };
-  };
-  const bound: Partial<Record<ScheduledJobIdV1, LaunchdBootstrapPlistsV1>> = {};
-  for (const job of SCHEDULED_JOB_IDS) {
-    const arms = placeholders[job];
-    if (arms === undefined) continue;
-    bound[job] = { before: await stagedIdentity(inverse, arms.before), after: await stagedIdentity(forward, arms.after) };
-  }
-  return bound;
-}
-
 async function executeCoordinator(
   context: CliContext,
   lifecycle: CliLifecycleContext,
@@ -1044,7 +1019,9 @@ async function executeCoordinator(
   });
   const result = await coordinator.execute(id, global);
   if (result.outcome.kind !== "finalized") {
-    refuse("automation_lifecycle_rolled_back", EXIT_CODES.recoveryRequired, [key.productHome], "developer-os automation status");
+    // NEW-138: the coordinator keeps the participant's safe reason code; name it, or the rollback is silent.
+    const cause = result.outcome.kind === "rolled_back" ? result.outcome.cause : result.outcome.kind;
+    refuse("automation_lifecycle_rolled_back", EXIT_CODES.recoveryRequired, [key.productHome], "developer-os automation status", cause);
   }
 }
 
@@ -1153,7 +1130,7 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
         ? { dev: WIDEST_UINT64, ino: WIDEST_UINT64 }
         : await stageManifestPayload(home.key.productHome, coordinatorId, String(ids.at(-1)), planned.files.manifest);
       const processTableHash = await stageLaunchdProcessTable(lifecycle, home.key.productHome, coordinatorId, planned.template);
-      inputs.staged = { foundation, payload, processTableHash, bootstrap: await stagedBootstrap(lifecycle, inputs, foundation) };
+      inputs.staged = { foundation, payload, processTableHash };
       const { plan } = builder.build(ids);
       const journals = new LaunchdEffectJournalStore({ fs: lifecycle.fs, roots: lifecycle.roots, locks: lifecycle.transactionLocks, uuid: lifecycle.uuid });
       const launchd = plan.participants.launchd;

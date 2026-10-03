@@ -16,8 +16,8 @@ import {
   serializeConfig,
 } from "@developer-os/core";
 import type { InstallationManifestV2, ManagedArtifactV2 } from "@developer-os/core";
-import { launchdGuiDomain, launchdPlistPath, NodeLaunchdPlistReader, parseCanonicalLaunchdPlist } from "@developer-os/platform-macos";
-import type { AgentDiscovery, AgentName, LaunchdBootstrapPlistIdentityV1, LaunchdPlistPortV1 } from "@developer-os/platform-macos";
+import { launchdGuiDomain, launchdPlistPath } from "@developer-os/platform-macos";
+import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
 import { failureFrom } from "../../context.js";
 import type { CliContext } from "../../context.js";
@@ -109,19 +109,10 @@ describe("verifiedAutomationExecutable", () => {
 });
 
 describe("automation enable pins the brain-garden vendor", () => {
-  /** As automation.v2.test.ts: the published plist's inode is never the staged one, so only it is unchecked. */
-  const plists: LaunchdPlistPortV1 = {
-    read: async (identity: LaunchdBootstrapPlistIdentityV1) => {
-      const bytes = await nodeFs.readFile(identity.path);
-      if (hashBytes(bytes) !== identity.hash) throw new Error(`the bootstrap plist changed: ${identity.path}`);
-      return parseCanonicalLaunchdPlist(bytes);
-    },
-    verifyHash: (path, hash) => new NodeLaunchdPlistReader().verifyHash(path, hash),
-  };
   /** One scripted launchd per home: its loaded labels are per job, so a shared one leaks between cases. */
   const effectPorts = (launchd: ReturnType<typeof scriptedLaunchd>) => (context: CliLifecycleContext): LifecycleEffectPortsV1 => ({
     ...scriptedEffectPorts(scriptedGitRuntime(), { on: false })(context),
-    launchd: { ...launchd.ports, plists },
+    launchd: launchd.ports,
   });
   const schedules = ["brain-reindex=daily@02:00", "brain-lint=daily@02:30", "doctor=weekly@mon,03:00", "brain-garden=weekly@sun,17:00"];
 

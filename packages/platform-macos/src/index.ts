@@ -157,6 +157,7 @@ export type {
 export { LaunchdSnapshotBootstrapper } from "./launchd/index.js";
 export type {
   LaunchdBootstrapPlistIdentityV1,
+  LaunchdOpenedPlistIdentityV1,
   LaunchdBootstrapSnapshotAttemptV1,
   LaunchdBootstrapSnapshotCreationV1,
   LaunchdMutationEvidenceV1,
@@ -220,6 +221,7 @@ export type {
   LaunchdPlanEntryV1,
   LaunchdPlanV1,
   LaunchdPlanVariantV1,
+  LaunchdAdmittedPlistV1,
   LaunchdPlistPortV1,
   LaunchdTransitionRequestV1,
   LifecycleFileBindingV1,

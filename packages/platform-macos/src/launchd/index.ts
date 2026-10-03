@@ -106,6 +106,7 @@ export type {
 export { LaunchdSnapshotBootstrapper } from "./snapshot.js";
 export type {
   LaunchdBootstrapPlistIdentityV1,
+  LaunchdOpenedPlistIdentityV1,
   LaunchdBootstrapSnapshotAttemptV1,
   LaunchdBootstrapSnapshotCreationV1,
   LaunchdMutationEvidenceV1,
@@ -174,5 +175,6 @@ export type {
   LaunchdBootoutEvidenceV1,
   LaunchdBootoutPortV1,
   LaunchdEffectDependenciesV1,
+  LaunchdAdmittedPlistV1,
   LaunchdPlistPortV1,
 } from "./effects.js";

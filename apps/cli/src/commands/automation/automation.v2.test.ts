@@ -30,12 +30,8 @@ import type {
   ScheduledJobIdV1,
 } from "@developer-os/core";
 import { DEFAULT_BRAIN_CONFIG } from "@developer-os/brain";
-import {
-  LaunchdDistributionUnsupportedError,
-  NodeLaunchdPlistReader,
-  parseCanonicalLaunchdPlist,
-} from "@developer-os/platform-macos";
-import type { LaunchdBootstrapPlistIdentityV1, LaunchdPlanPreviewV1, LaunchdPlistPortV1 } from "@developer-os/platform-macos";
+import { LaunchdDistributionUnsupportedError, NodeLaunchdPlistReader } from "@developer-os/platform-macos";
+import type { LaunchdPlanPreviewV1, LaunchdPlistPortV1 } from "@developer-os/platform-macos";
 
 import { compareManifestRows } from "../../instructions/attach.js";
 import { gatedState, manifestMutation } from "../../instructions/apply.js";
@@ -67,8 +63,10 @@ const encoder = new TextEncoder();
 
 const host = { drifted: false, thirdState: false, belowFloor: false };
 const [admittedHost, belowFloorHost] = [hostWith(), hostWith({ productVersion: "26.5" })];
+/** Only `/bin/launchctl` is scripted: the plist reader, FD-3 snapshot and bootout runner are real. */
 const launchd = scriptedLaunchd({
   clock: () => CLOCK,
+  launchctl: "scripted",
   host: {
     operatingSystem: () => (host.belowFloor ? belowFloorHost : admittedHost).operatingSystem(),
     inspect: (path) => (host.belowFloor ? belowFloorHost : admittedHost).inspect(path),
@@ -77,19 +75,38 @@ const launchd = scriptedLaunchd({
 const runtime = scriptedGitRuntime();
 
 /**
- * Foundation publishes a plist through a fresh temp inode and a rename, so the staged-postimage
- * inode the plan binds is never the published file's on a real host (reported with plan 1b
- * Task 17). This reader keeps the path, hash and canonical-byte checks and drops only that
- * inode comparison, so the rest of the protocol is exercised.
+ * One-shot tampering around the real reader: `beforeRead` changes the published plist after
+ * Foundation wrote it and returns how to put the bytes back (so the inverse transaction still
+ * finds its postimage); `afterRead` swaps the path once the reader has admitted it.
  */
-const hashBoundPlists: LaunchdPlistPortV1 = {
-  read: async (identity: LaunchdBootstrapPlistIdentityV1) => {
-    const bytes = await nodeFs.readFile(identity.path);
-    if (hashBytes(bytes) !== identity.hash) throw new Error(`the bootstrap plist changed: ${identity.path}`);
-    return parseCanonicalLaunchdPlist(bytes);
+const plistFaults: {
+  beforeRead: ((path: string) => Promise<() => Promise<void>>) | null;
+  afterRead: ((path: string) => Promise<void>) | null;
+} = { beforeRead: null, afterRead: null };
+const realPlists = new NodeLaunchdPlistReader();
+const plists: LaunchdPlistPortV1 = {
+  read: async (identity) => {
+    const tamper = plistFaults.beforeRead;
+    plistFaults.beforeRead = null;
+    const restore = await tamper?.(identity.path);
+    try {
+      const admitted = await realPlists.read(identity);
+      const swap = plistFaults.afterRead;
+      plistFaults.afterRead = null;
+      await swap?.(identity.path);
+      return admitted;
+    } finally {
+      await restore?.();
+    }
   },
-  verifyHash: (path, hash) => new NodeLaunchdPlistReader().verifyHash(path, hash),
+  verifyHash: (path, hash) => realPlists.verifyHash(path, hash),
 };
+
+/** Renames a fresh inode holding `bytes` over `path`, as an attacker (or Foundation) would. */
+async function swapInode(path: string, bytes: Uint8Array | string): Promise<void> {
+  await nodeFs.writeFile(`${path}.swap`, bytes, { mode: 0o600 });
+  await nodeFs.rename(`${path}.swap`, path);
+}
 
 function effectPorts(context: CliLifecycleContext): LifecycleEffectPortsV1 {
   const ports = scriptedEffectPorts(runtime, { on: false })(context);
@@ -97,7 +114,7 @@ function effectPorts(context: CliLifecycleContext): LifecycleEffectPortsV1 {
     ...ports,
     launchd: {
       ...launchd.ports,
-      plists: hashBoundPlists,
+      plists,
       observer: {
         observe: (request) =>
           host.drifted
@@ -329,6 +346,61 @@ describe("automation on a real V2 home", () => {
     REAL_FILESYSTEM_TIMEOUT_MS,
   );
 
+  it.each([
+    {
+      name: "bytes that grew after Foundation published them",
+      cause: "launchd_plist_changed",
+      fault: () => {
+        plistFaults.beforeRead = async (path) => {
+          const original = await nodeFs.readFile(path);
+          await nodeFs.appendFile(path, "\n");
+          return () => nodeFs.writeFile(path, original);
+        };
+      },
+    },
+    {
+      name: "a different file of identical size swapped in after publish",
+      cause: "launchd_bootstrap_plist_changed",
+      fault: () => {
+        plistFaults.beforeRead = async (path) => {
+          const original = await nodeFs.readFile(path);
+          const forged = Uint8Array.from(original);
+          forged[forged.byteLength - 2] = 0x58;
+          await swapInode(path, forged);
+          return () => nodeFs.writeFile(path, original);
+        };
+      },
+    },
+    {
+      name: "a byte-identical fresh inode swapped in after the reader admitted the file",
+      cause: "launchd_bootstrap_plist_changed",
+      fault: () => {
+        plistFaults.afterRead = async (path) => swapInode(path, await nodeFs.readFile(path));
+      },
+    },
+  ])(
+    "refuses to bootstrap $name and rolls enable back naming the cause (NEW-138)",
+    async ({ cause, fault }) => {
+      const home = await sharedHome();
+      const configBefore = await nodeFs.readFile(home.paths.configFile);
+      fault();
+      try {
+        const result = await runAutomation(home.context, { subcommand: "enable", schedules: [...BASE_SCHEDULES], apply: true });
+        expect(result).toMatchObject({ ok: false, code: EXIT_CODES.recoveryRequired, error: { kind: "automation_lifecycle_rolled_back" } });
+        if (result.ok) throw new Error("unreachable");
+        expect(result.error.message).toBe(`automation refused: automation_lifecycle_rolled_back (cause: ${cause})`);
+      } finally {
+        plistFaults.beforeRead = null;
+        plistFaults.afterRead = null;
+      }
+      expect(launchd.events).toStrictEqual([]);
+      expect(launchd.loaded.size).toBe(0);
+      for (const job of ["brain-reindex", "brain-lint", "doctor"] as const) expect(await readOrNull(plistPath(home, job))).toBeNull();
+      expect(await nodeFs.readFile(home.paths.configFile)).toEqual(configBefore);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
   it(
     "enables every eligible job, publishing plists, activation and manifest before loading, and the enabled config last",
     async () => {
@@ -481,6 +553,41 @@ describe("automation on a real V2 home", () => {
       expect(entriesOf(plan).filter((entry) => entry.job !== "doctor").every((entry) => entry.operation === "keep")).toBe(true);
       expect(launchd.events.slice(eventsBefore)).toStrictEqual([`bootout ${String(oldLabel)}`, `bootstrap ${String(doctor?.generatedLabel)}`]);
       expect(await nodeFs.readFile(plistPath(home, "doctor"), "utf8")).toBe(doctor?.plistBytes);
+      expect((await readConfig(home)).automation.lifecycle?.schedules.find((entry) => entry.job === "doctor")?.schedule).toStrictEqual({
+        cadence: "daily",
+        hour: 4,
+        minute: 0,
+      });
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "rolls a failed schedule change back, reloading the restored preimage through its fresh inode (NEW-138)",
+    async () => {
+      const home = await sharedHome();
+      const path = plistPath(home, "doctor");
+      const oldLabel = launchd.loaded.get("doctor");
+      const oldBytes = await nodeFs.readFile(path, "utf8");
+      const oldInode = (await nodeFs.stat(path)).ino;
+      const service = createAutomationService(home.context, home.lifecycle);
+      const preview = await service.previewEnable(["doctor=daily@05:00"]);
+      const newLabel = (preview.launchd as LaunchdPlanPreviewV1).entries.find((entry) => entry.job === "doctor")?.generatedLabel;
+      if (newLabel === undefined || newLabel === null || oldLabel === undefined) throw new Error("doctor must change generation");
+      const eventsBefore = launchd.events.length;
+      launchd.failingBootstraps.add(newLabel);
+      try {
+        const result = await runAutomation(home.context, { subcommand: "enable", schedules: ["doctor=daily@05:00"], apply: true });
+        expect(result).toMatchObject({ ok: false, code: EXIT_CODES.recoveryRequired, error: { kind: "automation_lifecycle_rolled_back" } });
+        if (result.ok) throw new Error("unreachable");
+        expect(result.error.message).toBe("automation refused: automation_lifecycle_rolled_back (cause: launchd_command_failed)");
+      } finally {
+        launchd.failingBootstraps.clear();
+      }
+      expect(launchd.events.slice(eventsBefore)).toStrictEqual([`bootout ${oldLabel}`, `bootstrap ${newLabel}`, `bootstrap ${oldLabel}`]);
+      expect(launchd.loaded.get("doctor")).toBe(oldLabel);
+      expect(await nodeFs.readFile(path, "utf8")).toBe(oldBytes);
+      expect((await nodeFs.stat(path)).ino).not.toBe(oldInode);
       expect((await readConfig(home)).automation.lifecycle?.schedules.find((entry) => entry.job === "doctor")?.schedule).toStrictEqual({
         cadence: "daily",
         hour: 4,

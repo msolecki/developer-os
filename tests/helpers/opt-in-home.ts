@@ -21,12 +21,10 @@ import type {
 } from "@developer-os/core";
 import {
   LaunchdDistributionUnsupportedError,
-  NodeLaunchdPlistReader,
   launchdGuiDomain,
   parseCanonicalLaunchdPlist,
   parseGeneratedLabel,
 } from "@developer-os/platform-macos";
-import type { LaunchdBootstrapPlistIdentityV1, LaunchdPlistPortV1 } from "@developer-os/platform-macos";
 import { createProductionScheduledHandlers } from "@developer-os/cli/dist/commands/automation/handlers.js";
 import { AutomationRunner, createAutomationRunnerDependencies } from "@developer-os/cli/dist/commands/automation/runner.js";
 import type { ScheduledRunOutcomeV1 } from "@developer-os/cli/dist/commands/automation/runner.js";
@@ -96,21 +94,6 @@ export interface OptInHomeV1 extends CommandFixture {
   readonly faults: OptInFaultsV1;
 }
 
-/**
- * Foundation publishes a plist through a fresh temp inode and a rename, so the staged-postimage
- * inode the plan binds is never the published file's on a real host (reported with plan 1b
- * Task 17). This reader keeps the path, hash and canonical-byte checks and drops only that
- * inode comparison, so the rest of the protocol is exercised.
- */
-const hashBoundPlists: LaunchdPlistPortV1 = {
-  read: async (identity: LaunchdBootstrapPlistIdentityV1) => {
-    const bytes = await nodeFs.readFile(identity.path);
-    if (hashBytes(bytes) !== identity.hash) throw new Error(`the bootstrap plist changed: ${identity.path}`);
-    return parseCanonicalLaunchdPlist(bytes);
-  },
-  verifyHash: (path, hash) => new NodeLaunchdPlistReader().verifyHash(path, hash),
-};
-
 function composePorts(
   runtime: ScriptedGitRuntimeV1,
   launchd: ScriptedLaunchdV1,
@@ -132,7 +115,6 @@ function composePorts(
       git: { ...ports.git, fs: { ...ports.git.fs, writeExclusive } },
       launchd: {
         ...base,
-        plists: hashBoundPlists,
         observer: {
           observe: (request) =>
             faults.launchdDrift

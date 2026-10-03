@@ -192,8 +192,8 @@ export class GitCommandRefusal extends Error {
   readonly paths: readonly string[];
   readonly recovery: string | undefined;
 
-  constructor(reason: string, code: ExitCode, paths: readonly string[] = [], recovery?: string) {
-    super(`git refused: ${reason}`);
+  constructor(reason: string, code: ExitCode, paths: readonly string[] = [], recovery?: string, cause?: string) {
+    super(`git refused: ${reason}${cause === undefined ? "" : ` (cause: ${cause})`}`);
     this.reason = reason;
     this.code = code;
     this.paths = [...paths];
@@ -242,8 +242,8 @@ function recoveryRequired(reason: string, ...paths: readonly string[]): never {
   throw new LifecycleRecoveryRequiredError(reason, paths);
 }
 
-function refuse(reason: string, code: ExitCode, paths: readonly string[] = [], recovery?: string): never {
-  throw new GitCommandRefusal(reason, code, paths, recovery);
+function refuse(reason: string, code: ExitCode, paths: readonly string[] = [], recovery?: string, cause?: string): never {
+  throw new GitCommandRefusal(reason, code, paths, recovery, cause);
 }
 
 export function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
@@ -1077,7 +1077,8 @@ async function executeCoordinator(
   });
   const result = await coordinator.execute(id, global);
   if (result.outcome.kind === "rolled_back") {
-    refuse("git_lifecycle_rolled_back", EXIT_CODES.recoveryRequired, [key.productHome], "developer-os git status");
+    // NEW-138: name the participant's safe reason code, or the rollback is silent.
+    refuse("git_lifecycle_rolled_back", EXIT_CODES.recoveryRequired, [key.productHome], "developer-os git status", result.outcome.cause);
   }
   return result.outcome.kind;
 }

@@ -544,12 +544,18 @@ function uninstallLaunchdPlan(
       launchd.preview.entries.map((entry) => [
         entry.job,
         {
-          before: entry.beforeLiveState.state === "loaded" ? (launchd.identities.get(entry.job) ?? null) : null,
+          // NEW-138: a compensating reload reads the file Foundation's inverse re-creates through a
+          // fresh inode, so the arm binds content only and the reader binds the inode it opens.
+          before: entry.beforeLiveState.state === "loaded" ? contentBound(launchd.identities.get(entry.job)) : null,
           after: null,
         },
       ]),
     ),
   });
+}
+
+function contentBound(identity: LaunchdBootstrapPlistIdentityV1 | undefined): LaunchdBootstrapPlistIdentityV1 | null {
+  return identity === undefined ? null : { ...identity, dev: null, ino: null };
 }
 
 /** The builder closes over its inputs so `execute` can bind the staged refs before it rebuilds. */

@@ -71,6 +71,14 @@ describe("GitCommandRefusal", () => {
       expect(result.code).toBe(EXIT_CODES.recoveryRequired);
     }
   });
+
+  it("names a rolled-back coordinator's cause in its message without changing its kind (NEW-138)", async () => {
+    const fixture = await createCommandFixture("git-refusal-cause");
+    const refusal = new GitCommandRefusal("git_lifecycle_rolled_back", EXIT_CODES.recoveryRequired, ["/p"], "developer-os git status", "git_effect_changed");
+    const result = failureFrom(fixture.context, refusal);
+    expect(result).toMatchObject({ ok: false, code: EXIT_CODES.recoveryRequired, error: { kind: "git_lifecycle_rolled_back" } });
+    if (!result.ok) expect(result.error.message).toBe("git refused: git_lifecycle_rolled_back (cause: git_effect_changed)");
+  });
 });
 
 describe("the read-only commit reader", () => {

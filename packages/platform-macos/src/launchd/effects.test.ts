@@ -1,4 +1,4 @@
-import { chmod, lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, mkdtemp, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -124,8 +124,10 @@ function installedUnloaded(job: ScheduledJobIdV1): LaunchdPriorJobStateV1 {
   return { beforeFileHash: launchdPlistBytesHash(entry?.plistBytes as string), beforeGeneration: entry?.generation ?? null, beforeLiveState: { state: "unloaded" } };
 }
 
+/** Only `keep` binds an inode (NEW-138); every arm Foundation writes is content-bound. */
 function identity(entry: LaunchdPlanPreviewEntryV1, arm: "before" | "after"): LaunchdBootstrapPlistIdentityV1 {
   const after = arm === "after" && entry.plistBytes !== null;
+  const inodeBound = entry.operation === "keep";
   return {
     path: entry.plistPath,
     ownerUid: uid,
@@ -133,8 +135,8 @@ function identity(entry: LaunchdPlanPreviewEntryV1, arm: "before" | "after"): La
     nlink: 1,
     size: after ? encoder.encode(entry.plistBytes).byteLength : 1024,
     hash: after ? launchdPlistBytesHash(entry.plistBytes) : (entry.beforeFileHash as LowerHexSha256),
-    dev: "16777220" as UInt64DecimalV1,
-    ino: (after ? "900001" : "900002") as UInt64DecimalV1,
+    dev: inodeBound ? ("16777220" as UInt64DecimalV1) : null,
+    ino: inodeBound ? ((after ? "900001" : "900002") as UInt64DecimalV1) : null,
   };
 }
 
@@ -304,7 +306,8 @@ function fixture(fixturePlan: LaunchdPlanV1, table = processTable(), world = new
       const label = labels.get(`${bound.path}|${bound.hash}`);
       if (label === undefined || world.plists.get(bound.path) !== bound.hash) throw new LifecycleRecoveryRequiredError("launchd_bootstrap_plist_changed", [bound.path]);
       world.events.push(`verify-${kind(fixturePlan, label)}-plist`);
-      return Promise.resolve({ Label: label } as unknown as LaunchdPlistDictionaryV1);
+      const source = { ...bound, dev: (bound.dev ?? "16777220") as UInt64DecimalV1, ino: (bound.ino ?? "900003") as UInt64DecimalV1 };
+      return Promise.resolve({ plist: { Label: label } as unknown as LaunchdPlistDictionaryV1, source });
     },
     verifyHash: (path, hash) => {
       if (world.plists.get(path) !== hash) throw new LifecycleRecoveryRequiredError("launchd_plist_changed", [path]);
@@ -920,8 +923,43 @@ describe("NodeLaunchdPlistReader", () => {
 
   it("reads the exact bound inode and returns its canonical dictionary", async () => {
     const { bound, label } = await plistFile();
-    const dictionary = await new NodeLaunchdPlistReader().read(bound);
-    expect(dictionary.Label).toBe(label);
+    const { plist, source } = await new NodeLaunchdPlistReader().read(bound);
+    expect(plist.Label).toBe(label);
+    expect(source).toStrictEqual(bound);
+  });
+
+  it("admits a content-bound arm through any fresh inode and returns the inode it opened (NEW-138)", async () => {
+    const { path, bytes, bound, label } = await plistFile();
+    const unbound = { ...bound, dev: null, ino: null };
+    // Foundation's publish: a fresh temp inode renamed over the path.
+    await writeFile(`${path}.tmp`, bytes, { mode: 0o600 });
+    await rename(`${path}.tmp`, path);
+    const published = await lstat(path, { bigint: true });
+    expect(published.ino.toString(10)).not.toBe(bound.ino);
+    const { plist, source } = await new NodeLaunchdPlistReader().read(unbound);
+    expect(plist.Label).toBe(label);
+    expect(source).toStrictEqual({ ...bound, dev: published.dev.toString(10), ino: published.ino.toString(10) });
+  });
+
+  it("still refuses a content-bound arm whose bytes, size, mode or link changed (NEW-138)", async () => {
+    const { path, bytes, bound } = await plistFile();
+    const unbound = { ...bound, dev: null, ino: null };
+    const reader = new NodeLaunchdPlistReader();
+    // Same size, different bytes: only the hash of the bytes read through the descriptor catches it.
+    await writeFile(path, `${bytes.slice(0, -2)}X\n`, { mode: 0o600 });
+    await expect(reader.read(unbound)).rejects.toMatchObject({ reason: "launchd_bootstrap_plist_changed" });
+    await writeFile(path, `${bytes}\n`, { mode: 0o600 });
+    await expect(reader.read(unbound)).rejects.toMatchObject({ reason: "launchd_plist_changed" });
+    await writeFile(path, bytes, { mode: 0o644 });
+    await chmod(path, 0o644);
+    await expect(reader.read(unbound)).rejects.toMatchObject({ reason: "launchd_plist_changed" });
+    await chmod(path, 0o600);
+    await link(path, `${path}.second`);
+    await expect(reader.read(unbound)).rejects.toMatchObject({ reason: "launchd_plist_changed" });
+    await rm(`${path}.second`);
+    await rename(path, `${path}.target`);
+    await symlink(`${path}.target`, path);
+    await expect(reader.read(unbound)).rejects.toMatchObject({ reason: "launchd_plist_changed" });
   });
 
   it("refuses a byte-identical replacement inode and drifted bytes", async () => {

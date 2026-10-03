@@ -46,6 +46,7 @@ import {
 import { parseGeneratedLabel } from "./registry.js";
 import type {
   LaunchdBootstrapPlistIdentityV1,
+  LaunchdOpenedPlistIdentityV1,
   LaunchdSnapshotBootstrapper,
   LaunchdSnapshotFileSystemV1,
   LaunchdSnapshotRequestV1,
@@ -97,9 +98,19 @@ export interface LaunchdBootoutPortV1 {
   bootout(table: SupportedLaunchdProcessTableV1, target: LaunchdGeneratedServiceTargetV1, phase: SupervisedPhaseV1): Promise<LaunchdBootoutEvidenceV1>;
 }
 
-/** Plan-bound plist checks: a bootout needs the current bytes, a bootstrap the exact staged inode. */
+/** What one bootstrap read admitted: the parsed bytes and the inode they were read through. */
+export interface LaunchdAdmittedPlistV1 {
+  readonly plist: LaunchdPlistDictionaryV1;
+  readonly source: LaunchdOpenedPlistIdentityV1;
+}
+
+/**
+ * Plan-bound plist checks: a bootout needs the current bytes; a bootstrap needs the plan-bound
+ * bytes and metadata through one no-follow descriptor, plus the bound inode for a `keep` arm.
+ * `read` returns the inode it opened, which every later step compares against.
+ */
 export interface LaunchdPlistPortV1 {
-  read(identity: LaunchdBootstrapPlistIdentityV1): Promise<LaunchdPlistDictionaryV1>;
+  read(identity: LaunchdBootstrapPlistIdentityV1): Promise<LaunchdAdmittedPlistV1>;
   verifyHash(path: CanonicalAbsolutePathV1, hash: LowerHexSha256): Promise<void>;
 }
 
@@ -122,25 +133,35 @@ export class NodeLaunchdPlistReader implements LaunchdPlistPortV1 {
     this.#fs = fs;
   }
 
-  async read(identity: LaunchdBootstrapPlistIdentityV1): Promise<LaunchdPlistDictionaryV1> {
-    const bytes = await this.#bytes(identity.path, (stats) =>
-      stats.isFile() &&
-      stats.uid === BigInt(identity.ownerUid) &&
-      (stats.mode & 0o7777n) === BigInt(PRIVATE_FILE_MODE) &&
-      stats.nlink === 1n &&
-      stats.size === BigInt(identity.size) &&
-      sameIdentity(stats, identity),
+  /**
+   * Opens the plist no-follow, admits the descriptor's own `fstat` (owner, 0600, one link, the
+   * bound size, and the bound inode when the arm binds one), and hashes the bytes read through that
+   * same descriptor. The returned identity carries the inode actually opened (NEW-138).
+   */
+  async read(identity: LaunchdBootstrapPlistIdentityV1): Promise<LaunchdAdmittedPlistV1> {
+    const { bytes, stats } = await this.#bytes(identity.path, (opened) =>
+      opened.isFile() &&
+      opened.uid === BigInt(identity.ownerUid) &&
+      (opened.mode & 0o7777n) === BigInt(PRIVATE_FILE_MODE) &&
+      opened.nlink === 1n &&
+      opened.size === BigInt(identity.size) &&
+      (identity.dev === null || identity.ino === null ? identity.dev === identity.ino : sameIdentity(opened, { dev: identity.dev, ino: identity.ino })),
     );
     if (hashBytes(bytes) !== identity.hash) recovery("launchd_bootstrap_plist_changed", identity.path);
-    return parseCanonicalLaunchdPlist(bytes);
+    const source: LaunchdOpenedPlistIdentityV1 = Object.freeze({
+      ...identity,
+      dev: parseUInt64Decimal(stats.dev.toString(10)),
+      ino: parseUInt64Decimal(stats.ino.toString(10)),
+    });
+    return Object.freeze({ plist: parseCanonicalLaunchdPlist(bytes), source });
   }
 
   async verifyHash(path: CanonicalAbsolutePathV1, hash: LowerHexSha256): Promise<void> {
-    const bytes = await this.#bytes(path, (stats) => stats.isFile() && stats.size <= BigInt(MAX_PLIST_BYTES));
+    const { bytes } = await this.#bytes(path, (stats) => stats.isFile() && stats.size <= BigInt(MAX_PLIST_BYTES));
     if (hashBytes(bytes) !== hash) recovery("launchd_plist_changed", path);
   }
 
-  async #bytes(path: CanonicalAbsolutePathV1, admit: (stats: BigIntStats) => boolean): Promise<Uint8Array> {
+  async #bytes(path: CanonicalAbsolutePathV1, admit: (stats: BigIntStats) => boolean): Promise<{ readonly bytes: Uint8Array; readonly stats: BigIntStats }> {
     let handle: Awaited<ReturnType<LaunchdSnapshotFileSystemV1["open"]>>;
     try {
       handle = await this.#fs.open(path, READ_FLAGS);
@@ -148,10 +169,11 @@ export class NodeLaunchdPlistReader implements LaunchdPlistPortV1 {
       return recovery("launchd_plist_changed", path);
     }
     try {
-      if (!admit(await handle.stat({ bigint: true }))) recovery("launchd_plist_changed", path);
+      const stats = await handle.stat({ bigint: true });
+      if (!admit(stats)) recovery("launchd_plist_changed", path);
       const bytes = await readBounded(handle, MAX_PLIST_BYTES);
       if (bytes.byteLength > MAX_PLIST_BYTES) recovery("launchd_plist_changed", path);
-      return bytes;
+      return { bytes, stats };
     } finally {
       await handle.close();
     }
@@ -532,7 +554,8 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
   /**
    * Unloading is always the transition's own generated label; its plist must still hold the bound
    * bytes, because every unload precedes its plist mutation and every compensating unload precedes
-   * the plist inverse. Loading reads only the plan-bound inode through an unlinked FD-3 snapshot.
+   * the plist inverse. Loading reads only the plan-bound bytes through an unlinked FD-3 snapshot,
+   * bound to the inode the plist reader opened.
    */
   async #command(
     effect: LaunchdEffectPlanV1,
@@ -550,7 +573,8 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
       return null;
     }
     const role = direction === "forward" ? "after" : "before";
-    const source = this.#entry(transition).bootstrapPlists[role] ?? recovery("launchd_bootstrap_plist_unbound", transition.plistPath);
+    const bound = this.#entry(transition).bootstrapPlists[role] ?? recovery("launchd_bootstrap_plist_unbound", transition.plistPath);
+    const { plist, source } = await this.#dependencies.plists.read(bound);
     const request: LaunchdSnapshotRequestV1 = {
       table,
       domain: transition.domain,
@@ -560,7 +584,7 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
       transitionIndex: index,
       role,
       source,
-      plist: await this.#dependencies.plists.read(source),
+      plist,
       phase,
     };
     const { bootstrapper } = this.#dependencies;
