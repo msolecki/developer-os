@@ -332,10 +332,12 @@ even the first unborn sync uses existing-repository object/index/reflog/ref tran
 the validated Git policy or an existing log requires them; compensation restores refs before logs.
 `GitConfigQuotedPathV1` excludes controls/line breaks from generated config paths, and the in-process
 pack/ref reader streams under exact compressed/object/inflation/delta/RAM/temp limits plus the one
-inherited 600-second phase. Launchd bootstrap no longer passes the verified plist's mutable pathname:
-on an admitted `/bin/launchctl` (§10, D71) it inherits only the descriptor of the already-unlinked,
-immutable private snapshot as FD 3 and passes only `/dev/fd/3`; the real source plist descriptor is
-never inherited and there is no fallback. A scheduled runner first authenticates manifest/plist/generation
+inherited 600-second phase. Launchd bootstrap (**amended 2026-10-03, D82**: `/dev/fd/3` fails with
+error 5 on macOS 26.6.2, so the FD-3 snapshot is gone) names the plan-bound plist's absolute path on an
+admitted `/bin/launchctl` (§10, D71) after rechecking that the path is the inode the reader admitted
+and holds the plan bytes, then re-proves both and requires `launchctl print` to report the plan's path,
+program and arguments, booting the label out and refusing `launchd_bootstrap_plist_changed` otherwise
+(`threat-model.md` §5.15 carries the residual). A scheduled runner first authenticates manifest/plist/generation
 installation evidence independently of current active provenance, then under its lease/global lock
 runs an eligible handler, writes only `automation_disabled` for inactive automation, or writes only
 `git_disabled` when active automation's installed sync job alone is Git-ineligible, without resolving
@@ -344,9 +346,8 @@ Any retained or missing install/label derivation evidence remains recovery-requi
 The post-final correction makes the reflog postimage bound exactly 64 MiB plus its separately bounded
 4-KiB append and binds every append bijectively to its effect/ref projection; the private pack header,
 admitted-entry, and closed-OID counts are equal and capped at 200,001 before a child permit. Launchd
-bootstrap copies the verified planned plist into an already-unlinked private snapshot, inherits only
-FD 3, and closes every source/snapshot descriptor on every path, so an in-place write to the real plist
-cannot change loaded bytes. Before the permanent global lock exists, init uses the exact transient
+bootstrap's post-check (D82) detects an in-place write or swap of the real plist after the bootstrap and
+boots the loaded label out. Before the permanent global lock exists, init uses the exact transient
 `LifecycleBootstrapLockV1` protocol with a second complete inventory, and absent-manifest uninstall
 carries no coordinator envelope at all (A3): `key_absent` performs two identical read-only walks and
 creates nothing, while `key_present` acquires only the bootstrap leaf, repeats the inventory under it,
@@ -1238,8 +1239,8 @@ record.
      `LaunchdEffectJournalV1.launchctlIdentityHash` (above) makes a resume on a changed `launchctl`
      refuse with the manual `bootout` list. The production launchd runner spawns `/bin/launchctl`
      and nothing else (`launchctlRunner`, `apps/cli/src/lifecycle/adapters.ts`).
-  5. **What still refuses.** `certification` is removed; the FD-3 contract is enforced on every run by
-     the post-bootstrap observation, whose failure compensates and refuses
+  5. **What still refuses.** `certification` is removed; the bootstrap contract (D82: path plus post-check)
+     is enforced on every run by the post-bootstrap verification and observation, whose failure compensates and refuses
      `unsupported_launchd_distribution`. A host below a floor names the manual
      `launchctl bootout gui/<uid>/<label>` per installed label (Spec 1 residual 10). Only the
      local/file Git transport is traced: `git_remote_https` has no row and an HTTPS or SSH remote

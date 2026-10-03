@@ -83,6 +83,7 @@ function recordingStore(
 async function launchdHome(
   name: string,
   beforeBootout?: (label: string) => void | Promise<void>,
+  launchctl?: "scripted",
 ): Promise<LaunchdHomeV1> {
   const fixture = await createCommandFixture(name, { bootstrapAvailable: true });
   await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
@@ -101,6 +102,7 @@ async function launchdHome(
   const launchd = scriptedLaunchd({
     clock: base.clock,
     ...(beforeBootout === undefined ? {} : { beforeBootout }),
+    ...(launchctl === undefined ? {} : { launchctl }),
   });
   launchd.loaded.set(DOCTOR, plist.label);
   const plans: LifecycleExecutionPlanV1[] = [];
@@ -171,6 +173,20 @@ function dieAfterJournalRewriteAt(
     if (plansOf().at(-1)?.steps[boundary.nextStep - 1]?.kind !== stepKind) return;
     fired = true;
     throw new SyntheticDeath(stepKind);
+  };
+}
+
+/** Dies on the journal rewrite past the first `foundation` step that follows `P`: the plist is already removed. */
+function dieAfterPlistRemoval(plansOf: () => readonly LifecycleExecutionPlanV1[]): (boundary: UninstallBoundaryV1) => void {
+  let fired = false;
+  return (boundary) => {
+    if (fired || boundary.kind !== "journal_rewritten") return;
+    const steps = plansOf().at(-1)?.steps ?? [];
+    const p = steps.findIndex((step) => step.kind === "launchd_before_files");
+    const done = boundary.nextStep - 1;
+    if (p < 0 || done <= p || steps[done]?.kind !== "foundation") return;
+    fired = true;
+    throw new SyntheticDeath("foundation after P");
   };
 }
 
@@ -259,5 +275,21 @@ describe("uninstall/present_manifest with an installed launchd job (plan 1b Task
     expect(await nodeFs.readFile(home.plist.path, "utf8")).toBe(home.plist.bytes);
     expect(await exists(home.fixture.paths.manifestFile)).toBe(true);
     expect(await nodeFs.readdir(join(home.fixture.paths.stateDir, "launchd-effect-journals"))).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("recovers a death after the plist was removed by re-bootstrapping it by path from the re-created inode (NEW-138, D82)", async () => {
+    const home = await launchdHome("uninstall-launchd-after-removal", undefined, "scripted");
+    const before = await nodeFs.stat(home.plist.path);
+    const died = new LifecycleUninstaller({ afterBoundary: dieAfterPlistRemoval(() => home.plans) });
+
+    await expect(died.execute(await home.request())).rejects.toThrow(SyntheticDeath);
+    expect(await exists(home.plist.path)).toBe(false);
+    await recoverUninstall(home);
+
+    expect(home.launchd.events).toStrictEqual([`bootout ${home.plist.label}`, `bootstrap ${home.plist.label}`]);
+    expect(home.launchd.loaded.get(DOCTOR)).toBe(home.plist.label);
+    expect(await nodeFs.readFile(home.plist.path, "utf8")).toBe(home.plist.bytes);
+    expect((await nodeFs.stat(home.plist.path)).ino).not.toBe(before.ino);
+    expect(await exists(home.fixture.paths.manifestFile)).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

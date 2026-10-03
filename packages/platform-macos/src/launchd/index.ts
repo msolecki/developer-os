@@ -103,20 +103,19 @@ export type {
   LaunchdObservedStateV1,
   LaunchdUnobservableReasonV1,
 } from "./observe.js";
-export { LaunchdSnapshotBootstrapper } from "./snapshot.js";
+export { LaunchdPathBootstrapper, parseLaunchctlPrintedService } from "./bootstrap.js";
 export type {
+  LaunchdBootstrapDependenciesV1,
+  LaunchdBootstrapDirectionV1,
   LaunchdBootstrapPlistIdentityV1,
-  LaunchdOpenedPlistIdentityV1,
-  LaunchdBootstrapSnapshotAttemptV1,
-  LaunchdBootstrapSnapshotCreationV1,
+  LaunchdBootstrapRequestV1,
+  LaunchdBootstrapRoleV1,
+  LaunchdFileHandleV1,
+  LaunchdFileSystemV1,
   LaunchdMutationEvidenceV1,
-  LaunchdSnapshotDependenciesV1,
-  LaunchdSnapshotDirectionV1,
-  LaunchdSnapshotFileHandleV1,
-  LaunchdSnapshotFileSystemV1,
-  LaunchdSnapshotRequestV1,
-  LaunchdSnapshotRoleV1,
-} from "./snapshot.js";
+  LaunchdOpenedPlistIdentityV1,
+  LaunchdPrintedServiceV1,
+} from "./bootstrap.js";
 export {
   LAUNCHD_EFFECT_JOURNAL_PHASES,
   LAUNCHD_EFFECT_LEDGER_CODEC,

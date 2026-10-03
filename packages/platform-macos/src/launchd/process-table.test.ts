@@ -34,7 +34,7 @@ const table = expandLaunchdProcessTable(STAGING, LAUNCHCTL_IDENTITY);
 describe("launchctl distribution policy", () => {
   it("names the fixed path, the macOS floor and version-neutral table IDs, and no build or binary", () => {
     expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.id).toBe("launchctl-macos-preview-v2");
-    expect(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE.id).toBe("launchctl-macos-fd3-v2");
+    expect(SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE.id).toBe("launchctl-macos-path-v1");
     expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.executable).toEqual({ path: "/bin/launchctl", ownerUid: 0 });
     expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.operatingSystem).toEqual({ productName: "macOS", minimumProductVersion: "26.6.2" });
     expect(LAUNCHD_PREVIEW_OBSERVATION_TABLE.emptyDirectory).toEqual({ path: "/private/var/empty", ownerUid: 0, mode: 493 });
@@ -130,14 +130,14 @@ describe("launchctl process tables", () => {
     expect(template.argvAlternatives.map((alternative) => alternative.id)).toEqual(["bootout", "bootstrap", "probe_domain", "probe_service"]);
     expect(template.argvAlternatives.map((alternative) => alternative.argv)).toEqual([
       ["/bin/launchctl", "bootout", { slot: "launchd_generated_service_target" }],
-      ["/bin/launchctl", "bootstrap", { slot: "launchd_gui_domain" }, "/dev/fd/3"],
+      ["/bin/launchctl", "bootstrap", { slot: "launchd_gui_domain" }, { slot: "launchd_bootstrap_plist_path" }],
       ["/bin/launchctl", "print", { slot: "launchd_gui_domain" }],
       ["/bin/launchctl", "print", { slot: "launchd_observed_service_target" }],
     ]);
     expect(template.profiles[0]).toEqual({
       id: "mutation", stdinMaxBytes: 0, stdoutMaxBytes: 1048576, stderrMaxBytes: 1048576, wallDeadlineMs: 30000, idleDeadlineMs: 30000,
     });
-    expect(template.bootstrapPlistFd).toBe(3);
+    expect(JSON.stringify(template)).not.toContain("/dev/fd/3");
     expect(template.transitionDeadlineMs).toBe(30000);
     expect(template.terminationGraceMs).toBe(100);
   });

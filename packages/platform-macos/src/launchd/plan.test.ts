@@ -44,7 +44,7 @@ import {
   parseScheduledProductHome,
   scheduledBaseArgv,
 } from "./registry.js";
-import type { LaunchdBootstrapPlistIdentityV1 } from "./snapshot.js";
+import type { LaunchdBootstrapPlistIdentityV1 } from "./bootstrap.js";
 import { LaunchdInputError, type LaunchdPlanPreviewEntryV1, type LaunchdPlanPreviewV1, type LaunchdPriorJobStateV1 } from "./types.js";
 
 const uid = 501 as EffectiveUidV1;
@@ -385,6 +385,8 @@ describe("planLaunchdTransitions", () => {
     expect(retained.ino).not.toBeNull();
     const unbound = { ...retained, dev: null, ino: null };
     expect(() => planLaunchdTransitions({ ...keepRequest, bootstrapPlists: { doctor: { before: unbound, after: unbound } } })).toThrow(/inode binding/u);
+    const halfNull = { ...retained, ino: null };
+    expect(() => planLaunchdTransitions({ ...keepRequest, bootstrapPlists: { doctor: { before: halfNull, after: halfNull } } })).toThrow(/inode binding/u);
   });
 
   it("refuses plist file bindings that are unsorted, missing, or not their entry's mutation", () => {

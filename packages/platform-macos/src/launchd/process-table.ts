@@ -63,7 +63,9 @@ export type LaunchdProcessIoProfileV1 = LaunchdQueryIoProfileV1 | LaunchdMutatio
 export type LaunchdArgvSlotV1 =
   | { readonly slot: "launchd_gui_domain" }
   | { readonly slot: "launchd_observed_service_target" }
-  | { readonly slot: "launchd_generated_service_target" };
+  | { readonly slot: "launchd_generated_service_target" }
+  /** D82: the plan-bound plist's absolute path under `~/Library/LaunchAgents`, never caller text. */
+  | { readonly slot: "launchd_bootstrap_plist_path" };
 
 export type LaunchdProbeDomainArgvV1 = {
   readonly id: "probe_domain";
@@ -80,7 +82,7 @@ export type LaunchdProbeServiceArgvV1 = {
 export type LaunchdBootstrapArgvV1 = {
   readonly id: "bootstrap";
   readonly profileId: "mutation";
-  readonly argv: readonly ["/bin/launchctl", "bootstrap", { readonly slot: "launchd_gui_domain" }, "/dev/fd/3"];
+  readonly argv: readonly ["/bin/launchctl", "bootstrap", { readonly slot: "launchd_gui_domain" }, { readonly slot: "launchd_bootstrap_plist_path" }];
 };
 
 export type LaunchdBootoutArgvV1 = {
@@ -123,7 +125,7 @@ type LaunchdProcessTableArgvV1 = readonly [
 
 export type SupportedLaunchdProcessTableV1 = {
   readonly schemaVersion: 1;
-  readonly id: "launchctl-macos-fd3-v2";
+  readonly id: "launchctl-macos-path-v1";
   readonly operatingSystem: LaunchdOperatingSystemPolicyV1;
   readonly executable: LaunchdExecutablePolicyV1;
   /** Spec §5.3 rule 4 (D71): the admitted launchctl this table binds, rechecked before every process. */
@@ -133,7 +135,6 @@ export type SupportedLaunchdProcessTableV1 = {
     readonly home: LaunchdProcessDirectoryIdentityV1;
     readonly tmp: LaunchdProcessDirectoryIdentityV1;
   };
-  readonly bootstrapPlistFd: 3;
   readonly environment: LaunchdProcessEnvironmentV1;
   readonly profiles: readonly [LaunchdMutationIoProfileV1, LaunchdQueryIoProfileV1];
   readonly argvAlternatives: LaunchdProcessTableArgvV1;
@@ -158,7 +159,6 @@ export type SupportedLaunchdProcessTableTemplateV1 = {
     readonly home: { readonly slot: "launchd_process_home" };
     readonly tmp: { readonly slot: "launchd_process_tmp" };
   };
-  readonly bootstrapPlistFd: 3;
   readonly environment: {
     readonly HOME: { readonly slot: "launchd_process_home" };
     readonly LANG: "C";
@@ -206,7 +206,7 @@ const PROBE_SERVICE: LaunchdProbeServiceArgvV1 = Object.freeze({
 const BOOTSTRAP: LaunchdBootstrapArgvV1 = Object.freeze({
   id: "bootstrap",
   profileId: "mutation",
-  argv: Object.freeze(["/bin/launchctl", "bootstrap", Object.freeze({ slot: "launchd_gui_domain" }), "/dev/fd/3"] as const),
+  argv: Object.freeze(["/bin/launchctl", "bootstrap", Object.freeze({ slot: "launchd_gui_domain" }), Object.freeze({ slot: "launchd_bootstrap_plist_path" })] as const),
 });
 
 const BOOTOUT: LaunchdBootoutArgvV1 = Object.freeze({
@@ -247,7 +247,6 @@ export const SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE: SupportedLaunchdProcessTa
     home: Object.freeze({ slot: "launchd_process_home" }),
     tmp: Object.freeze({ slot: "launchd_process_tmp" }),
   }),
-  bootstrapPlistFd: 3,
   environment: Object.freeze({
     HOME: Object.freeze({ slot: "launchd_process_home" }),
     LANG: "C",
@@ -331,7 +330,6 @@ export function expandLaunchdProcessTable(
     executable: template.executable,
     launchctlIdentity: launchctl,
     staging: Object.freeze({ root, home, tmp }),
-    bootstrapPlistFd: template.bootstrapPlistFd,
     environment: Object.freeze({ HOME: home.path, LANG: "C", LC_ALL: "C", PATH: LAUNCHD_PROCESS_PATH, TMPDIR: tmp.path }),
     profiles: template.profiles,
     argvAlternatives: template.argvAlternatives,
@@ -353,7 +351,6 @@ export function deslotLaunchdProcessTable(table: SupportedLaunchdProcessTableV1)
     executable: table.executable,
     launchctlIdentity: { slot: "launchctl_identity" },
     staging: { root: { slot: "launchd_process_root" }, home: { slot: "launchd_process_home" }, tmp: { slot: "launchd_process_tmp" } },
-    bootstrapPlistFd: table.bootstrapPlistFd,
     environment: {
       HOME: { slot: "launchd_process_home" },
       LANG: table.environment.LANG,

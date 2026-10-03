@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { readdirSync } from "node:fs";
-import { chmod, lstat, mkdir, mkdtemp, open, readdir, realpath, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,7 +14,7 @@ import type {
 import {
   LaunchdDistributionUnsupportedError,
   LaunchdObserver,
-  LaunchdSnapshotBootstrapper,
+  LaunchdPathBootstrapper,
   admitLaunchdHost,
   encodeLaunchdPlist,
   expandLaunchdProcessTable,
@@ -32,7 +31,8 @@ import { SupervisedProcessRunner, nodeSupervisedProcessDependencies } from "@dev
 import { describe, expect, it } from "vitest";
 
 /**
- * Spec §5.3 rule 5's FD-3 contract, proven once on the Phase 9 disposable-account gate (D71). It
+ * Spec §5.3's path bootstrap and post-check (D82), proven once on the Phase 9 disposable-account
+ * gate (D71; this file replaced the FD-3 gate when D82 found `/dev/fd/3` fails on 26.6.2). It
  * loads and unloads one synthetic generated label in the real `gui/<uid>` domain, so it runs only
  * on an admitted host with `DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable`. Everywhere else it is skipped (D76) and the
  * body's guard throws `unsupported_launchd_distribution` if reached. The transcript hash it prints is
@@ -66,11 +66,11 @@ async function directoryIdentity(path: string, ownerUid: EffectiveUidV1): Promis
   };
 }
 
-describe("launchctl FD-3 bootstrap gate", () => {
+describe("launchctl path bootstrap gate", () => {
   // Skipped off a disposable account (D76); the in-body guard still refuses to touch launchd if the skip is bypassed.
-  it.skipIf(!DISPOSABLE_HOST)("loads the generated label from an already-unlinked inherited snapshot and leaves nothing behind (disposable-account gate; set DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable)", async () => {
+  it.skipIf(!DISPOSABLE_HOST)("loads the generated label by its plist path, verifies the loaded program, and leaves nothing behind (disposable-account gate; set DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable)", async () => {
     if (!DISPOSABLE_HOST) {
-      throw new LaunchdDistributionUnsupportedError("the FD-3 gate runs only on a disposable account (DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable)");
+      throw new LaunchdDistributionUnsupportedError("the path-bootstrap gate runs only on a disposable account (DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable)");
     }
     const launchctl = await admitLaunchdHost(host);
 
@@ -109,17 +109,7 @@ describe("launchctl FD-3 bootstrap gate", () => {
       await chmod(plistPath, 0o600);
       const plistStats = await lstat(plistPath, { bigint: true });
 
-      const bootstrapper = new LaunchdSnapshotBootstrapper({
-        runner,
-        effectiveUid,
-        host,
-        fs: {
-          lstat: (path, options) => lstat(path, options),
-          open: (path, flags, mode) => open(path, flags, mode),
-          readdir: (path) => readdir(path),
-          unlink: (path) => unlink(path),
-        },
-      });
+      const bootstrapper = new LaunchdPathBootstrapper({ runner, effectiveUid, host });
       const observer = new LaunchdObserver({
         runner,
         effectiveUid,
@@ -138,21 +128,20 @@ describe("launchctl FD-3 bootstrap gate", () => {
         },
       });
 
-      const baseline = readdirSync("/dev/fd").length;
       const phase = runner.beginPhase("launchd-gate", table.transitionDeadlineMs);
-      const attempt = await bootstrapper.prepare({
+      const request = {
         table,
         domain,
         effectId: `le_${"0".repeat(64)}_2` as LaunchdEffectIdV1,
         planHash: "0".repeat(64) as LowerHexSha256,
-        direction: "forward",
+        direction: "forward" as const,
         transitionIndex: 0,
-        role: "after",
+        role: "after" as const,
         source: {
           path: plistPath as CanonicalAbsolutePathV1,
           ownerUid: uid,
-          mode: 384,
-          nlink: 1,
+          mode: 384 as const,
+          nlink: 1 as const,
           size: bytes.byteLength,
           hash: createHash("sha256").update(bytes).digest("hex") as LowerHexSha256,
           dev: plistStats.dev.toString(10) as UInt64DecimalV1,
@@ -160,27 +149,19 @@ describe("launchctl FD-3 bootstrap gate", () => {
         },
         plist,
         phase,
-      });
-      expect(attempt.snapshot.nlink).toBe(0);
-      expect(await readdir(join(root, "tmp"))).toEqual([]);
-
-      const evidence = await bootstrapper.bootstrap(attempt);
+      };
+      const evidence = await bootstrapper.bootstrap(request);
       loaded = true;
       expect(evidence.process.termination).toBe("exited");
       expect(evidence.process.exitCode).toBe(0);
+      expect(await bootstrapper.verifyLoaded(request)).toBe(true);
       const afterBootstrap = await observer.observe({ domain, jobs: [{ job: "doctor", retained: null, planned: label }] });
       expect(afterBootstrap).toEqual({ kind: "observed", jobs: [{ job: "doctor", state: { kind: "exact_new", label, generation } }] });
       expect(await readdir(join(root, "home"))).toEqual([]);
       expect(await readdir(join(root, "tmp"))).toEqual([]);
-      expect(readdirSync("/dev/fd").length).toBe(baseline);
 
-      const transcript = JSON.stringify({
-        launchctl,
-        attempt,
-        process: evidence.process,
-        observedAfter: afterBootstrap,
-      });
-      process.stdout.write(`launchctl FD-3 gate transcript sha256: ${createHash("sha256").update(transcript).digest("hex")}\n`);
+      const transcript = JSON.stringify({ launchctl, process: evidence.process, observedAfter: afterBootstrap });
+      process.stdout.write(`launchctl path-bootstrap gate transcript sha256: ${createHash("sha256").update(transcript).digest("hex")}\n`);
     } finally {
       if (loaded) {
         await runner.run({

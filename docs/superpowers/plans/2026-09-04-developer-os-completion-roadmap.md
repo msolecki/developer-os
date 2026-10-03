@@ -355,6 +355,19 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D82 (2026-10-03), founder: launchd bootstraps by path, with a post-check.** On macOS 26.6.2,
+  `launchctl bootstrap gui/<uid> /dev/fd/3` fails with error 5 (linked or unlinked descriptor, and
+  `/dev/stdin`), so spec §5.3's FD-3 snapshot cannot load anything (found by NEW-138's disposable-home
+  run). A bootstrap now names the plan-bound plist's absolute path in `~/Library/LaunchAgents`: the
+  reader admits it through its own descriptor (owner, 0600, one link, size, SHA-256) and captures
+  `dev`/`ino`; the path is rechecked against that identity and the plan bytes right before
+  `launchctl bootstrap gui/<uid> <path>`; immediately after a successful bootstrap it is re-proven
+  (no-follow open, `fstat` and `lstat` identity, plan bytes) and `launchctl print gui/<uid>/<label>`
+  must report the plan's path, program and arguments, or the label is booted out and the transition
+  refuses `launchd_bootstrap_plist_changed`. Accepted residual: a same-uid process can swap the file
+  between the recheck and launchd's own open; the post-check detects it and the bootout bounds the
+  swapped job's life to that window. Such a process can already write `~/Library/LaunchAgents`, so the
+  same-uid boundary does not widen. The FD-3 snapshot code is deleted.
 - **D81 (2026-10-03), founder: reinstall `da9575f0` without finishing gate run 4.** The founder stopped
   the gate during `test:suite` and had the reinstall run. `da9575f0` adds to `23b32060` (which passed
   every stage but `test:pinned-host`) only the NEW-135/136/137 fixes, each with its own failing test

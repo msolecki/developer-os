@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { fstatSync, readSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 import {
   SCHEDULED_JOB_IDS,
@@ -42,7 +42,7 @@ import type {
 } from "@developer-os/core";
 import {
   LaunchdBootoutRunner,
-  LaunchdSnapshotBootstrapper,
+  LaunchdPathBootstrapper,
   NodeLaunchdPlistReader,
   buildLaunchdPlanPreview,
   parseCanonicalLaunchdPlist,
@@ -54,12 +54,11 @@ import {
 } from "@developer-os/platform-macos";
 import type {
   GeneratedLaunchdLabelV1,
-  LaunchdBootstrapSnapshotAttemptV1,
+  LaunchdBootstrapRequestV1,
   LaunchdHostObserverV1,
   LaunchdLiveObservationV1,
   LaunchdPlanPreviewV1,
   LaunchdPriorJobStateV1,
-  LaunchdSnapshotRequestV1,
 } from "@developer-os/platform-macos";
 import { GIT_DISTRIBUTION_POLICY_ID, PERSISTED_GIT_PUSH_PLAN_CODEC } from "@developer-os/security";
 import type { PersistedGitPushPlanV1, SupervisedSpawnRequestV1, SystemPathObservationV1 } from "@developer-os/security";
@@ -921,6 +920,11 @@ export interface ScriptedLaunchdV1 {
   readonly events: string[];
   /** With `launchctl: "scripted"`, a bootstrap of one of these labels exits 1 and loads nothing. */
   readonly failingBootstraps: Set<GeneratedLaunchdLabelV1>;
+  /**
+   * One-shot `launchctl: "scripted"` faults: `afterBootstrap` runs once launchd has read the plist,
+   * and `print` makes the next service print report another program or exit 5.
+   */
+  readonly faults: { afterBootstrap: ((path: string) => Promise<void>) | null; print: "other_program" | "exit_5" | null };
   readonly ports: LifecycleEffectPortsV1["launchd"];
 }
 
@@ -940,7 +944,9 @@ export function scriptedLaunchd(options: {
   const loaded = new Map<ScheduledJobIdV1, GeneratedLaunchdLabelV1>();
   const events: string[] = [];
   const failingBootstraps = new Set<GeneratedLaunchdLabelV1>();
-  const attempts = new Map<object, LaunchdSnapshotRequestV1>();
+  const faults: ScriptedLaunchdV1["faults"] = { afterBootstrap: null, print: null };
+  /** What launchd itself read at bootstrap, per loaded label: its path and ProgramArguments. */
+  const services = new Map<GeneratedLaunchdLabelV1, { readonly path: string; readonly args: readonly string[] }>();
   const exited = { exitCode: 0, signal: null, termination: "exited" as const, stdoutBytes: 0, stderrBytes: 0, groupReaped: true as const };
   const observe = (request: {
     readonly jobs: readonly { readonly job: ScheduledJobIdV1; readonly retained: GeneratedLaunchdLabelV1 | null; readonly planned: GeneratedLaunchdLabelV1 | null }[];
@@ -968,22 +974,13 @@ export function scriptedLaunchd(options: {
       },
     },
     bootstrapper: {
-      inspect: () => Promise.resolve(null),
-      recover: (_creation: unknown, request: LaunchdSnapshotRequestV1) => {
-        const attempt = { role: request.role, source: request.source, inheritedFd: 3 };
-        attempts.set(attempt, request);
-        return Promise.resolve(attempt as unknown as LaunchdBootstrapSnapshotAttemptV1);
-      },
-      bootstrap: (attempt: LaunchdBootstrapSnapshotAttemptV1) => {
-        const request = attempts.get(attempt);
-        if (request === undefined) return Promise.reject(new Error("unknown bootstrap attempt"));
-        attempts.delete(attempt);
+      bootstrap: (request: LaunchdBootstrapRequestV1) => {
         const label = request.plist.Label;
         events.push(`bootstrap ${label}`);
         loaded.set(parseGeneratedLabel(label).job, label);
-        return Promise.resolve({ argvId: "bootstrap" as const, attempt, process: exited });
+        return Promise.resolve({ argvId: "bootstrap" as const, source: request.source, process: exited });
       },
-      recheckSource: () => Promise.resolve(),
+      verifyLoaded: () => Promise.resolve(true),
     },
     plists: new NodeLaunchdPlistReader(),
     beginTransition: () => ({ id: "launchd-transition", deadlineAtMs: Number.MAX_SAFE_INTEGER, remainingMilliseconds: () => 30_000 }),
@@ -991,26 +988,45 @@ export function scriptedLaunchd(options: {
     pause: () => Promise.resolve(),
     host: options.host ?? hostWith(),
   } as unknown as LifecycleEffectPortsV1["launchd"];
-  if (options.launchctl !== "scripted") return { loaded, events, failingBootstraps, ports };
+  if (options.launchctl !== "scripted") return { loaded, events, failingBootstraps, faults, ports };
+  const exit = (exitCode: number) => ({ ...exited, exitCode, stdoutSha256: EMPTY_SHA256, stderrSha256: EMPTY_SHA256 });
   const runner = {
-    run: async (request: SupervisedSpawnRequestV1) => {
-      const [command, target] = request.argv;
+    run: async (request: SupervisedSpawnRequestV1, sink?: (chunk: Uint8Array, stream: "stdout" | "stderr") => void) => {
+      const [command, domainOrTarget, path] = request.argv.map(String);
+      if (request.inheritedFds.length !== 0) throw new Error("launchctl inherits no descriptor (D82)");
+      const labelOf = (target: string): GeneratedLaunchdLabelV1 => target.slice(target.indexOf("/", "gui/".length) + 1) as GeneratedLaunchdLabelV1;
+      if (command === "print") {
+        const label = labelOf(String(domainOrTarget));
+        const service = loaded.get(parseGeneratedLabel(label).job) === label ? services.get(label) : undefined;
+        const fault = faults.print;
+        faults.print = null;
+        if (service === undefined) return exit(113);
+        if (fault === "exit_5") return exit(5);
+        const args = fault === "other_program" ? ["/tmp/other-program", ...service.args.slice(1)] : service.args;
+        sink?.(encoder.encode(launchctlPrintDump(String(domainOrTarget), service.path, args)), "stdout");
+        return exit(0);
+      }
       let label: GeneratedLaunchdLabelV1;
       if (command === "bootout") {
-        label = String(target).slice(String(target).indexOf("/", "gui/".length) + 1) as GeneratedLaunchdLabelV1;
+        label = labelOf(String(domainOrTarget));
         await options.beforeBootout?.(label);
       } else {
-        const inherited = request.inheritedFds[0];
-        if (command !== "bootstrap" || inherited === undefined) throw new Error(`unscripted launchctl ${request.argv.join(" ")}`);
-        const buffer = new Uint8Array(fstatSync(inherited.parentFd).size);
-        readSync(inherited.parentFd, buffer, 0, buffer.byteLength, 0);
-        label = parseCanonicalLaunchdPlist(buffer).Label;
+        if (command !== "bootstrap" || path === undefined) throw new Error(`unscripted launchctl ${request.argv.join(" ")}`);
+        // launchd opens the path itself (D82), so it loads whatever the path names right now.
+        const plist = parseCanonicalLaunchdPlist(readFileSync(path));
+        label = plist.Label;
+        services.set(label, { path, args: plist.ProgramArguments });
       }
       events.push(`${command} ${label}`);
       const failed = command === "bootstrap" && failingBootstraps.has(label);
       if (command === "bootout") loaded.delete(parseGeneratedLabel(label).job);
       else if (!failed) loaded.set(parseGeneratedLabel(label).job, label);
-      return { ...exited, exitCode: failed ? 1 : 0, stdoutSha256: EMPTY_SHA256, stderrSha256: EMPTY_SHA256 };
+      if (command === "bootstrap" && path !== undefined) {
+        const after = faults.afterBootstrap;
+        faults.afterBootstrap = null;
+        await after?.(path);
+      }
+      return exit(failed ? 1 : 0);
     },
   };
   const admission = { runner, effectiveUid: () => process.getuid?.() ?? 0, host: options.host ?? hostWith() };
@@ -1018,11 +1034,35 @@ export function scriptedLaunchd(options: {
     loaded,
     events,
     failingBootstraps,
-    ports: { ...ports, bootstrapper: new LaunchdSnapshotBootstrapper(admission), launchctl: new LaunchdBootoutRunner(admission) },
+    faults,
+    ports: { ...ports, bootstrapper: new LaunchdPathBootstrapper(admission), launchctl: new LaunchdBootoutRunner(admission) },
   };
 }
 
 const EMPTY_SHA256 = sha256("");
+const encoder = new TextEncoder();
+
+/** The parts of a macOS 26.6.2 `launchctl print gui/<uid>/<label>` dump the post-check reads (D82). */
+function launchctlPrintDump(target: string, path: string, args: readonly string[]): string {
+  return [
+    `${target} = {`,
+    "\tactive count = 0",
+    `\tpath = ${path}`,
+    "\ttype = LaunchAgent",
+    "\tstate = not running",
+    "",
+    `\tprogram = ${args[0] ?? ""}`,
+    "\targuments = {",
+    ...args.map((argument) => `\t\t${argument}`),
+    "\t}",
+    "",
+    "\tenvironment = {",
+    `\t\tXPC_SERVICE_NAME => ${target.slice(target.indexOf("/", "gui/".length) + 1)}`,
+    "\t}",
+    "}",
+    "",
+  ].join("\n");
+}
 
 export interface SyntheticInstalledPlistV1 {
   readonly job: ScheduledJobIdV1;

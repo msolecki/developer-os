@@ -40,7 +40,7 @@ import {
   scheduledBaseArgv,
 } from "./registry.js";
 import { assertNormalizedSchedule } from "./schedule.js";
-import type { LaunchdBootstrapPlistIdentityV1 } from "./snapshot.js";
+import type { LaunchdBootstrapPlistIdentityV1 } from "./bootstrap.js";
 import {
   LaunchdInputError,
   type LaunchdGuiDomainV1,

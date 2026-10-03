@@ -412,8 +412,8 @@ const GATE_COVERAGE: readonly GateCoverageV1[] = [
     gate: "launchd replace is ordered",
     tests: [
       ["packages/platform-macos/src/launchd/effects.test.ts", "unloads the old generation before the plist mutation and loads the new one after verification"],
-      ["tests/integration/launchd/fd3-bootstrap.pinned-host.test.ts", "loads the generated label from an already-unlinked inherited snapshot and leaves nothing behind"],
-      ["packages/platform-macos/src/launchd/snapshot.test.ts", "keeps FD 3 on the verified bytes after $name, and the recheck reports the drift"],
+      ["tests/integration/launchd/path-bootstrap.pinned-host.test.ts", "loads the generated label by its plist path, verifies the loaded program, and leaves nothing behind (disposable-account gate; set DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable)"],
+      ["packages/platform-macos/src/launchd/bootstrap.test.ts", "fails verification when the plist is swapped after the bootstrap, without printing"],
       ["tests/integration/launchd/lifecycle.test.ts", "replaces one schedule by unloading the old generation before loading the new one"],
     ],
   },

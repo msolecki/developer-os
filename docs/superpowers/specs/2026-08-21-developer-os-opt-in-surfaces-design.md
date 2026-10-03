@@ -36,6 +36,7 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-17 | founder, plan 1a blocking questions | A14 (D24) closed variant `uninstall/present_manifest_without_launchd` for a present-manifest uninstall with no launchd evidence, derived and never chosen; A15 (D25) `M(finalize_tombstones)` removes the preimage manifest's empty directory rows before it deletes the manifest tombstone; A16 (D28) the allocated `mf` manifest participant ID is reserved last in a composite's ID block | §2.1, §2.2, §2.4, §5.3, §6, §7 |
 | 2026-09-22 | founder, A13 Q3-A (D47) | `state/hooks` reserved runtime path for hook firing records: owner, admitted shape, best-effort write exception, uninstall order | §2.1, §6 |
 | 2026-09-23 | founder, plan 1b questions (D59) | Git and launchd rows re-pinned to the measured machine (NEW-84); `certification` field; stale launchd row refuses with the manual `bootout` (residual 10); HTTPS and SSH refuse `unsupported_git_distribution` until their process traces are recorded; pinned-host tests | §4.2, §5.3, §7, §8.3 |
+| 2026-10-03 | founder (D82), after NEW-138 | launchd bootstrap by the plan-bound plist path with a pre-spawn identity/byte recheck and a post-bootstrap identity, byte and `launchctl print` verification that boots out on mismatch; the FD-3 snapshot, its creation/attempt types and `/dev/fd/3` argv are withdrawn; only a `keep` arm binds a plist inode (NEW-138) | §5.3 |
 | 2026-09-24 | founder (D61) | backslash handling settled: `GitConfigQuotedPathV1` refuses a backslash, matching Core's `CanonicalAbsolutePathV1` | §4.2 |
 | 2026-09-25 | founder, after the whole-phase reviews (D62) | `git_commit_not_loose` refuses only when the tip commit read by the fast-forward check is packed; a packed target commit or subtree makes the shadow advertise nothing and the push sends the whole history (residual 11, until A16); §4.2 push argv carries `--no-thin` and pack-objects drops `--thin`; the gateway's pinned Git child-environment reconciliation; the destination shadow's fixed deny booleans (residual 12). Amended 2026-09-25 (D62) | §4.2, §8.3 |
 | 2026-09-26 | A12 design §11, approved 2026-09-22 (D47) | `<product-home>/instructions/` is user data in the absent-manifest walk | §6 |
@@ -1521,7 +1522,8 @@ run; postimage appends the observation without repeating it; every other generat
 refuses. `bootstrap` first descriptor-opens the exact plan-bound plist identity, verifies its hash,
 generated Label, and ProgramArguments, then constructs the exact already-unlinked private snapshot
 below and passes only that snapshot descriptor as inherited FD 3 to the literal `/dev/fd/3` argv. The
-real source-plist descriptor is never inherited. `bootout` verifies the exact generated label/domain and current plan-bound
+real source-plist descriptor is never inherited. (**Superseded 2026-10-03, D82:** `bootstrap` names the
+plan-bound plist path and verifies the load afterwards; see the D82 amendment in the bootstrap section.) `bootout` verifies the exact generated label/domain and current plan-bound
 plist before issuing the command. A death after bootstrap/bootout but before observation is therefore
 classified by an observable generation label, not guessed from command success or a non-observable
 plist hash.
@@ -3743,7 +3745,7 @@ LaunchdProcessArgvV1 =
       argv: readonly ["/bin/launchctl", "print", LaunchdObservedServiceTargetV1] }
   | { id: "bootstrap", profileId: "mutation",
       argv: readonly ["/bin/launchctl", "bootstrap", LaunchdGuiDomainV1,
-        "/dev/fd/3"] }
+        LaunchdBootstrapPlistPathV1] }   // was "/dev/fd/3" until D82 (2026-10-03)
   | { id: "bootout", profileId: "mutation",
       argv: readonly ["/bin/launchctl", "bootout", LaunchdGeneratedServiceTargetV1] }
 
@@ -3870,40 +3872,9 @@ LaunchdOpenedPlistIdentityV1 = LaunchdBootstrapPlistIdentityV1 + {
   ino: UInt64DecimalV1
 }
 
-LaunchdBootstrapSnapshotCreationV1 = {
-  effectId: LaunchdEffectIdV1,
-  planHash: LowerHexSha256,
-  direction: "forward" | "reverse",
-  transitionIndex: Integer[0..7],
-  role: "before" | "after",
-  source: LaunchdOpenedPlistIdentityV1,
-  path: exact `staging.tmp.path + "/bootstrap-plist"`,
-  snapshot: {
-    ownerUid: EffectiveUidV1,
-    mode: 384,
-    nlink: 1,
-    size: Integer[0..1048576],
-    dev: UInt64DecimalV1,
-    ino: UInt64DecimalV1,
-    bytes: BytePrefixOf<the exact plan-bound canonical plist bytes selected by role>
-  }
-}
-
-LaunchdBootstrapSnapshotAttemptV1 = {
-  role: "before" | "after",
-  source: LaunchdOpenedPlistIdentityV1,
-  formerPath: CanonicalAbsolutePathV1,
-  snapshot: {
-    ownerUid: EffectiveUidV1,
-    mode: 384,
-    nlink: 0,
-    size: Integer[1..1048576],
-    hash: LowerHexSha256,
-    dev: UInt64DecimalV1,
-    ino: UInt64DecimalV1
-  },
-  inheritedFd: 3
-}
+// LaunchdBootstrapSnapshotCreationV1 and LaunchdBootstrapSnapshotAttemptV1 are withdrawn by D82
+// (2026-10-03): no snapshot leaf or inherited descriptor exists. A bootstrap request carries the
+// reader's LaunchdOpenedPlistIdentityV1 as its source.
 
 LaunchdPlanEntryV1 = LaunchdPlanPreviewEntryV1 + {
   bootstrapPlists: {
@@ -4060,6 +4031,36 @@ governs.
    `automation enable`, `disable`, `status` and the `uninstall/present_manifest` variant therefore
    gate `launchctl` on rules 1–4 alone.
 
+**Amended 2026-10-03 (D82): bootstrap by path, verified after the fact.** On macOS 26.6.2
+`launchctl bootstrap gui/<uid> /dev/fd/3` fails with error 5 for a linked or unlinked inherited
+descriptor (and `/dev/stdin`), while the same plist loads by pathname; the FD-3 contract below, rule
+5's FD-3 wording, the snapshot types and every "unlinked-snapshot bootstrap" in the transition table
+are superseded. A bootstrap is now:
+
+1. *Pre-check.* The plist reader opens the plan-bound path `O_NOFOLLOW`, admits that descriptor's
+   `fstat` (owner, 0600, one link, the bound size, and the bound inode for `keep`), hashes the bytes
+   read through the same descriptor, and returns the inode it opened.
+2. *Bootstrap.* The adapter re-opens the path no-follow and refuses `launchd_bootstrap_plist_changed`
+   unless the descriptor's `fstat` and the path's `lstat` equal the captured inode and the bytes equal
+   the plan bytes, then runs `/bin/launchctl bootstrap gui/<uid> <absolute plist path>` from the
+   mutation table, with the table's environment and no inherited descriptor. The path comes from the
+   plan, never from caller text.
+3. *Post-check, immediately after a successful bootstrap.* It repeats the identity and byte check,
+   then runs `launchctl print gui/<uid>/<label>` (the table's `probe_service` alternative) and requires
+   the dump — parsed conservatively for its header, top-level `path`, `program` and `arguments` only,
+   each exactly once, in the format of macOS 26.6.2 pinned by a captured fixture, and never retained —
+   to report the plan's path, `ProgramArguments[0]` and `ProgramArguments`. Any mismatch, a failed
+   print, or a missing label boots the label out and refuses `launchd_bootstrap_plist_changed`, which
+   takes the coordinator's compensating path as before.
+4. *Residual (accepted).* A same-uid process can swap the file between step 2's recheck and launchd's
+   own open. Step 3 detects it after the fact and the bootout bounds the swapped job's life to that
+   window. Such a process can already write `~/Library/LaunchAgents`, so the same-uid boundary does
+   not widen.
+
+The mutation table's ID becomes `launchctl-macos-path-v1` and loses `bootstrapPlistFd`. Core's
+`tmp/bootstrap-plist` staging admission is kept only so a leaf left by an older build stays a
+recognized residue.
+
 Before any forward or reverse bootstrap, the adapter guarded-opens the exact plan-bound plist with
 no-follow semantics and verifies its `LaunchdBootstrapPlistIdentityV1`, hash, generated Label, and
 ProgramArguments. The owning effect journal must already durably name the exact current forward
@@ -4117,9 +4118,9 @@ Binding the staged inode made every real `automation enable --apply` roll back
 `dev`/`ino` null, and the validator refuses an inode on them and a missing inode on `keep`. The
 reader opens the plist `O_NOFOLLOW`, admits that descriptor's `fstat` (plus the bound inode for
 `keep`), hashes the bytes read through the same descriptor, and returns the identity it opened as
-`LaunchdOpenedPlistIdentityV1`. Snapshot creation, its source rechecks, the attempt, and the
-post-observation recheck compare against that captured identity, never a fresh path lookup, so a
-swap between admission and bootstrap — byte-identical content included — refuses
+`LaunchdOpenedPlistIdentityV1`. Every later check re-opens the path no-follow and refuses unless the
+opened descriptor's `fstat` and the path's `lstat` both equal that captured inode and the bytes equal
+the plan bytes, so a swap between admission and bootstrap — byte-identical content included — refuses
 `launchd_bootstrap_plist_changed`.
 
 A retry or reverse recovery
@@ -4578,7 +4579,7 @@ only the global mutation-lock file retains the stable never-unlink contract.
 | every stale job is inert | all four jobs first authenticate the supplied generation from exact manifest-owned plist/install evidence without requiring active current provenance, then under the lifetime lease/global lock recheck closure, that evidence, strict config, activation, and eligibility. Unowned/missing/drifted installation evidence grants no status write; a non-clear journal exits silently except that exact active `git-sync` `retry_only` may consume only its persisted push plan, and the post-handler recheck suppresses log/status if that retry remains non-clear. With clear closure, disabled, incomplete, malformed-config, inactive, or mismatched automation writes only `automation_disabled`; active automation with only Git ineligible writes only `git_disabled`. Both branches perform no handler, Brain-root resolution, Git, vendor, or network effect |
 | schedules are complete | first enable refuses every missing eligible job; reconcile preserves old schedules and requires newly eligible Git; stored entries are exactly the three mandatory jobs plus optional fourth `git-sync` in canonical order and use only the normalized tagged schedule union |
 | launchd identity is closed | exact-set tests bind all four job IDs to frozen base labels, canonical plist paths, the guarded canonical product home, exact nine-argument scheduled argv, the exact `gui/<effective-uid>` domain, domain-separated generation projections, generated labels, and the one five-key canonical plist XML: exact ProgramArguments, hourly/daily/weekly calendar dictionaries, weekday mapping, XML escaping/order/LF, and literal `/dev/null` output paths; every product-home change, ambient override, extra key/argument, alternate encoding, alias, domain, filename, and fifth dictionary entry refuses. The pinned 25G83 (amended 2026-09-23, D59) `/bin/launchctl` identity and hash-bound process-table template/expanded table admit only domain/service `print`, exact FD-3 `/dev/fd/3` bootstrap from an already-unlinked private snapshot, and exact `bootout` argv; domain-targeted exit-0/113 fixtures distinguish unloaded, exact old, exact new, unsuffixed/exact-label collision, dual-generation, wrong-domain, truncated, over-limit, and unobservable states without parsing or persisting raw `print` output |
-| launchd replace is ordered | every row of the exhaustive install/replace/keep/remove live/file table has forward/reverse crash injection; affected old generations unload before plist mutation and new generations snapshot-bootstrap only after matching bytes/identity verify, with exact observable states across both command-before-observation windows. A disposable pinned-macOS certification proves launchctl consumes unlinked inherited FD 3; unit races rename, replace, and write the real plist in place after verification while proving the loaded generated label remains attributable to the immutable snapshot. Snapshot-creation fixtures kill after linked create, every partial-prefix write, sync, open, and immediately before/after unlink; only the exact current-frontier `LaunchdBootstrapSnapshotCreationV1` may be completed or guarded-cleaned while live state remains the directional command preimage. Spawn-refusal, timeout, success, reverse, and recovery fixtures prove the parent's source/snapshot descriptors and child's sole FD 3 return to the open-FD baseline; unsupported certification, including a `null` `certification` field (amended 2026-09-23, D59), refuses with no linked or pathname fallback. Query/mutation fixtures enforce at most 13 read-only `print` processes in each preview or revalidation pass, hash-bind the exact root/home/tmp path-owner-mode-dev-ino mutation-staging identities, require the root's two-child set and entry-empty home/tmp before/after every mutation-table spawn, shared 30-second observation/transition deadlines, stream/idle/process-wall bounds, SIGTERM→100-ms→SIGKILL group termination, complete reaping, guarded empty pre-intent cleanup, retained nonempty/unknown children, and post-intent cursor-preserving recovery-required outcome |
+| launchd replace is ordered | every row of the exhaustive install/replace/keep/remove live/file table has forward/reverse crash injection; affected old generations unload before plist mutation and new generations snapshot-bootstrap only after matching bytes/identity verify, with exact observable states across both command-before-observation windows. A disposable pinned-macOS certification proves launchctl consumes unlinked inherited FD 3; unit races rename, replace, and write the real plist in place after verification while proving the loaded generated label remains attributable to the immutable snapshot. Snapshot-creation fixtures kill after linked create, every partial-prefix write, sync, open, and immediately before/after unlink; only the exact current-frontier `LaunchdBootstrapSnapshotCreationV1` may be completed or guarded-cleaned while live state remains the directional command preimage. Spawn-refusal, timeout, success, reverse, and recovery fixtures prove the parent's source/snapshot descriptors and child's sole FD 3 return to the open-FD baseline; unsupported certification, including a `null` `certification` field (amended 2026-09-23, D59), refuses with no linked or pathname fallback. Query/mutation fixtures enforce at most 13 read-only `print` processes in each preview or revalidation pass, hash-bind the exact root/home/tmp path-owner-mode-dev-ino mutation-staging identities, require the root's two-child set and entry-empty home/tmp before/after every mutation-table spawn, shared 30-second observation/transition deadlines, stream/idle/process-wall bounds, SIGTERM→100-ms→SIGKILL group termination, complete reaping, guarded empty pre-intent cleanup, retained nonempty/unknown children, and post-intent cursor-preserving recovery-required outcome. **Amended 2026-10-03 (D82):** the FD-3 certification and snapshot-creation fixtures are replaced by path-bootstrap fixtures — a swap before the bootstrap refuses without a spawn; a swap after it, a printed program/arguments/path other than the plan's, and a failed print each boot the label out and refuse — over a `launchctl print` fixture captured on macOS 26.6.2, plus a disposable-account path-bootstrap gate |
 | lock behavior is serialized | interactive contention refuses; a runner guarded-opens the pre-created lease, acquires it before any global-lock wait, rechecks marker/path identity, and holds it through exit; same-job contention exits silently, global contention waits no more than ten minutes, and a still-busy final nonblocking acquire exits silently, while a successful final acquire rechecks marker/closure/stage-1 evidence/current provenance under the global lock and serializes only `skipped_lock_timeout` for active state or `automation_disabled` for inactive state through the already-held lease, without handler effects. Absent/replaced lease fixtures exit silently only for a present marker, absent manifest, or the exact typed `uninstall_draining` coordinator after its verified lease removal; every still-installed state without that proof is recovery-required |
 | logs are bounded and safe | redaction precedes the Foundation file transaction; each exact slot stays at or below 1 MiB; the eleventh generation and transaction temp files are discarded; each terminal status/log transaction then compacts its exact journal, staging, backup metadata, and stable lock so cadence cannot exhaust the ledger |
 | uninstall drains without deadlock | pause a runner before lease acquisition, after lease acquisition/before global acquisition, and while queued on the global lock; marker publication plus global release makes each exit silently, uninstall acquires all four lifetime leases without the global lock, retains them while reacquiring/revalidating, removes their exact paths while descriptors remain held, and no runner/late opener writes handler status after `uninstalling` exists. Crash fixtures after each lease removal prove `LifecycleJournalClosureV1.uninstall_draining` is returned only for the one exact plan/cursor/manifest binding and cannot be synthesized by path absence |

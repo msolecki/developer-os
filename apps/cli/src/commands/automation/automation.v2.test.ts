@@ -401,10 +401,46 @@ describe("automation on a real V2 home", () => {
     REAL_FILESYSTEM_TIMEOUT_MS,
   );
 
+  it.each([
+    {
+      name: "a byte-identical fresh inode swapped in right after launchd read the path",
+      fault: () => {
+        launchd.faults.afterBootstrap = async (path) => swapInode(path, await nodeFs.readFile(path));
+      },
+    },
+    { name: "a loaded job whose printed program is not the plan's", fault: () => (launchd.faults.print = "other_program") },
+    { name: "a post-bootstrap print that fails", fault: () => (launchd.faults.print = "exit_5") },
+  ])(
+    "boots out $name and rolls enable back with launchd_bootstrap_plist_changed (D82)",
+    async ({ fault }) => {
+      const home = await sharedHome();
+      const configBefore = await nodeFs.readFile(home.paths.configFile);
+      const eventsBefore = launchd.events.length;
+      fault();
+      try {
+        const result = await runAutomation(home.context, { subcommand: "enable", schedules: [...BASE_SCHEDULES], apply: true });
+        expect(result).toMatchObject({ ok: false, code: EXIT_CODES.recoveryRequired, error: { kind: "automation_lifecycle_rolled_back" } });
+        if (result.ok) throw new Error("unreachable");
+        expect(result.error.message).toBe("automation refused: automation_lifecycle_rolled_back (cause: launchd_bootstrap_plist_changed)");
+      } finally {
+        launchd.faults.afterBootstrap = null;
+        launchd.faults.print = null;
+      }
+      const [first] = launchd.events.slice(eventsBefore);
+      expect(first).toMatch(/^bootstrap com\.developer-os\.brain-reindex\.g\./u);
+      expect(launchd.events.slice(eventsBefore)).toStrictEqual([first, first?.replace("bootstrap", "bootout")]);
+      expect(launchd.loaded.size).toBe(0);
+      for (const job of ["brain-reindex", "brain-lint", "doctor"] as const) expect(await readOrNull(plistPath(home, job))).toBeNull();
+      expect(await nodeFs.readFile(home.paths.configFile)).toEqual(configBefore);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
   it(
     "enables every eligible job, publishing plists, activation and manifest before loading, and the enabled config last",
     async () => {
       const home = await sharedHome();
+      const eventsBefore = launchd.events.length;
       const result = await apply(home, "enable", BASE_SCHEDULES);
       expect(result.data).toMatchObject({ kind: "applied", operation: "automation_enable" });
 
@@ -423,7 +459,7 @@ describe("automation on a real V2 home", () => {
       expect(lifecycleReservationOrder(plan).map((slot) => slot.prefix)).toStrictEqual(["lc", "tx", "tx", "tx", "tx", "tx", "le", "mf"]);
 
       const entries = entriesOf(plan);
-      expect(launchd.events).toStrictEqual(entries.map((entry) => `bootstrap ${String(entry.generatedLabel)}`));
+      expect(launchd.events.slice(eventsBefore)).toStrictEqual(entries.map((entry) => `bootstrap ${String(entry.generatedLabel)}`));
       const manifest = await readManifest(home);
       for (const entry of entries) {
         expect(await nodeFs.readFile(entry.plistPath, "utf8")).toBe(entry.plistBytes);

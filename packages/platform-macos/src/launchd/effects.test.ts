@@ -59,7 +59,7 @@ import {
   type SupportedLaunchdProcessTableV1,
 } from "./process-table.js";
 import { generatedLabel, launchdGuiDomain, launchdJob, parseScheduledProductHome } from "./registry.js";
-import type { LaunchdBootstrapPlistIdentityV1, LaunchdBootstrapSnapshotAttemptV1, LaunchdMutationEvidenceV1, LaunchdSnapshotRequestV1 } from "./snapshot.js";
+import type { LaunchdBootstrapPlistIdentityV1, LaunchdBootstrapRequestV1, LaunchdMutationEvidenceV1 } from "./bootstrap.js";
 import { LaunchdInputError, type LaunchdPlanPreviewEntryV1, type LaunchdPlistDictionaryV1, type LaunchdPriorJobStateV1 } from "./types.js";
 
 const uid = (process.getuid?.() ?? 501) as EffectiveUidV1;
@@ -193,6 +193,8 @@ class World {
   domainExit = 0;
   remaining = 30_000;
   phases = 0;
+  /** D82's post-check verdict for the next bootstrap. */
+  loadedMatchesPlan = true;
 
   boundary(): void {
     this.boundaries += 1;
@@ -274,7 +276,7 @@ interface Fixture {
   readonly journals: MemoryJournals;
   readonly plan: LaunchdPlanV1;
   readonly table: SupportedLaunchdProcessTableV1;
-  readonly snapshotRequests: LaunchdSnapshotRequestV1[];
+  readonly bootstrapRequests: LaunchdBootstrapRequestV1[];
   readonly bootouts: { readonly target: string; readonly phase: SupervisedPhaseV1 }[];
   executor(overrides?: Partial<LaunchdEffectDependenciesV1>): LaunchdEffectExecutor;
   ref(position: LaunchdEffectPositionV1): LifecycleEffectRefV1<string>;
@@ -325,32 +327,25 @@ function fixture(fixturePlan: LaunchdPlanV1, table = processTable(), world = new
       return Promise.resolve({ exitCode: 0, signal: null, termination: "exited", stdoutBytes: 0, stderrBytes: 0, groupReaped: true });
     },
   };
-  const snapshotRequests: LaunchdSnapshotRequestV1[] = [];
-  const attempts = new WeakMap<object, LaunchdSnapshotRequestV1>();
+  const bootstrapRequests: LaunchdBootstrapRequestV1[] = [];
   const bootstrapper: LaunchdEffectDependenciesV1["bootstrapper"] = {
-    inspect: (request) => {
-      snapshotRequests.push(request);
-      return Promise.resolve(null);
-    },
-    recover: (creation, request) => {
-      expect(creation).toBeNull();
-      const attempt = { role: request.role, source: request.source, inheritedFd: 3 } as unknown as LaunchdBootstrapSnapshotAttemptV1;
-      attempts.set(attempt, request);
-      return Promise.resolve(attempt);
-    },
-    bootstrap: (attempt) => {
-      const request = attempts.get(attempt);
-      if (request === undefined) throw new Error("unknown attempt");
-      world.events.push(`snapshot-bootstrap-${kind(fixturePlan, request.plist.Label)}`);
+    bootstrap: (request) => {
+      bootstrapRequests.push(request);
+      world.events.push(`path-bootstrap-${kind(fixturePlan, request.plist.Label)}`);
       world.loaded.add(request.plist.Label);
       world.boundary();
       return Promise.resolve({
         argvId: "bootstrap",
-        attempt,
+        source: request.source,
         process: { exitCode: 0, signal: null, termination: "exited", stdoutBytes: 0, stderrBytes: 0, groupReaped: true },
       } as LaunchdMutationEvidenceV1);
     },
-    recheckSource: () => Promise.resolve(),
+    verifyLoaded: () => {
+      const verdict = world.loadedMatchesPlan;
+      world.loadedMatchesPlan = true;
+      world.events.push(verdict ? "verify-loaded" : "verify-loaded-mismatch");
+      return Promise.resolve(verdict);
+    },
   };
   const host: LaunchdObservationDependenciesV1 = {
     runner: runnerFor(world),
@@ -364,7 +359,7 @@ function fixture(fixturePlan: LaunchdPlanV1, table = processTable(), world = new
     journals,
     plan: fixturePlan,
     table,
-    snapshotRequests,
+    bootstrapRequests,
     bootouts,
     executor: (overrides = {}) =>
       new LaunchdEffectExecutor({
@@ -500,7 +495,7 @@ describe("LaunchdEffectExecutor", () => {
 
     await runComposite();
 
-    expect(fx.world.events).toEqual(["bootout-old", "foundation-plist", "verify-new-plist", "snapshot-bootstrap-new"]);
+    expect(fx.world.events).toEqual(["bootout-old", "foundation-plist", "verify-new-plist", "path-bootstrap-new", "verify-loaded"]);
     expect(liveSet(fx)).toStrictEqual([fx.plan.entries[0]?.generatedLabel]);
   });
 
@@ -517,10 +512,24 @@ describe("LaunchdEffectExecutor", () => {
     fx.world.plists.set(fx.plan.entries[0]?.plistPath ?? "", oldPlist ?? "");
     await fx.executor().compensate(fx.ref("before_files"));
 
-    expect(fx.world.events).toEqual(["bootout-new", "foundation-plist-inverse", "verify-old-plist", "snapshot-bootstrap-old"]);
+    expect(fx.world.events).toEqual(["bootout-new", "foundation-plist-inverse", "verify-old-plist", "path-bootstrap-old", "verify-loaded"]);
     expect(liveSet(fx)).toStrictEqual([generatedLabel("doctor", OLD_GENERATION)]);
     expect(await phaseOf(fx, "before_files")).toBe("rolled_back");
     expect(await phaseOf(fx, "after_files")).toBe("rolled_back");
+  });
+
+  it("boots out a label whose post-bootstrap check fails and refuses launchd_bootstrap_plist_changed, leaving it compensable (D82)", async () => {
+    const liveOnlyPlan = plan("automation_reconcile", ["doctor"], { doctor: installedUnloaded("doctor") });
+    const fx = fixture(liveOnlyPlan);
+    fx.world.loadedMatchesPlan = false;
+
+    await expect(fx.executor().apply(fx.ref("after_files"))).rejects.toMatchObject({ reason: "launchd_bootstrap_plist_changed" });
+
+    expect(fx.world.events).toEqual(["verify-new-plist", "path-bootstrap-new", "verify-loaded-mismatch", "bootout-new"]);
+    expect(liveSet(fx)).toStrictEqual([]);
+    expect(await phaseOf(fx, "after_files")).toBe("applied");
+    await fx.executor().compensate(fx.ref("after_files"));
+    expect([await phaseOf(fx, "after_files"), liveSet(fx)]).toStrictEqual(["rolled_back", []]);
   });
 
   it("live-only reconcile performs only Q transitions with no Foundation or manifest arm", async () => {
@@ -531,7 +540,7 @@ describe("LaunchdEffectExecutor", () => {
     await fx.executor().apply(fx.ref("after_files"));
 
     expect(fx.world.foundationCalls).toEqual([]);
-    expect(fx.world.events).toEqual(["verify-new-plist", "snapshot-bootstrap-new"]);
+    expect(fx.world.events).toEqual(["verify-new-plist", "path-bootstrap-new", "verify-loaded"]);
     expect(await phaseOf(fx, "after_files")).toBe("verified");
   });
 
@@ -583,7 +592,7 @@ describe("LaunchdEffectExecutor", () => {
     await fx.executor().compensate(fx.ref("after_files"));
     const effect = launchdEffectPlan(fx.plan, "after_files");
 
-    expect(fx.snapshotRequests.map((request) => [request.effectId, request.planHash, request.direction, request.transitionIndex, request.role])).toStrictEqual([
+    expect(fx.bootstrapRequests.map((request) => [request.effectId, request.planHash, request.direction, request.transitionIndex, request.role])).toStrictEqual([
       [AFTER_EFFECT, effect === null ? null : launchdEffectPlanHash(effect), "forward", 0, "after"],
       [AFTER_EFFECT, effect === null ? null : launchdEffectPlanHash(effect), "forward", 1, "after"],
     ]);
@@ -723,18 +732,16 @@ describe("LaunchdEffectExecutor", () => {
 
   function bootstrapperLoading(fx: Fixture, label: (planned: string) => string | null): LaunchdEffectDependenciesV1["bootstrapper"] {
     return {
-      inspect: () => Promise.resolve(null),
-      recover: (_creation, request) => Promise.resolve({ role: request.role, source: request.source, inheritedFd: 3, label: request.plist.Label } as unknown as LaunchdBootstrapSnapshotAttemptV1),
-      bootstrap: (attempt) => {
-        const loaded = label((attempt as unknown as { readonly label: string }).label);
+      bootstrap: (request) => {
+        const loaded = label(request.plist.Label);
         if (loaded !== null) fx.world.loaded.add(loaded);
         return Promise.resolve({
           argvId: "bootstrap",
-          attempt,
+          source: request.source,
           process: { exitCode: 0, signal: null, termination: "exited", stdoutBytes: 0, stderrBytes: 0, groupReaped: true },
         } as LaunchdMutationEvidenceV1);
       },
-      recheckSource: () => Promise.resolve(),
+      verifyLoaded: () => Promise.resolve(true),
     };
   }
 

@@ -1,5 +1,4 @@
 import { constants, type BigIntStats } from "node:fs";
-import { lstat, open, readdir, unlink } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
 import {
@@ -44,13 +43,15 @@ import {
   type SupportedLaunchdProcessTableV1,
 } from "./process-table.js";
 import { parseGeneratedLabel } from "./registry.js";
-import type {
-  LaunchdBootstrapPlistIdentityV1,
-  LaunchdOpenedPlistIdentityV1,
-  LaunchdSnapshotBootstrapper,
-  LaunchdSnapshotFileSystemV1,
-  LaunchdSnapshotRequestV1,
-} from "./snapshot.js";
+import {
+  NODE_LAUNCHD_FILE_SYSTEM,
+  readBoundedPlist,
+  type LaunchdBootstrapPlistIdentityV1,
+  type LaunchdBootstrapRequestV1,
+  type LaunchdFileSystemV1,
+  type LaunchdOpenedPlistIdentityV1,
+  type LaunchdPathBootstrapper,
+} from "./bootstrap.js";
 import { LaunchdInputError, type LaunchdGeneratedServiceTargetV1, type LaunchdLiveStateV1, type LaunchdPlistDictionaryV1 } from "./types.js";
 
 const MAX_PLIST_BYTES = 1_048_576;
@@ -61,12 +62,7 @@ const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW;
 const UNLOADED: LaunchdLiveStateV1 = Object.freeze({ state: "unloaded" });
 const PRE_APPLY = new Set(["planned", "backed_up", "staged", "validated"]);
 
-const NODE_FILE_SYSTEM: LaunchdSnapshotFileSystemV1 = {
-  lstat: (path, options) => lstat(path, options),
-  open: (path, flags, mode) => open(path, flags, mode),
-  readdir: (path) => readdir(path),
-  unlink: (path) => unlink(path),
-};
+const NODE_FILE_SYSTEM = NODE_LAUNCHD_FILE_SYSTEM;
 
 function recovery(reason: string, ...paths: readonly string[]): never {
   throw new LifecycleRecoveryRequiredError(reason, paths);
@@ -114,22 +110,11 @@ export interface LaunchdPlistPortV1 {
   verifyHash(path: CanonicalAbsolutePathV1, hash: LowerHexSha256): Promise<void>;
 }
 
-async function readBounded(handle: Awaited<ReturnType<LaunchdSnapshotFileSystemV1["open"]>>, limit: number): Promise<Uint8Array> {
-  const buffer = new Uint8Array(limit + 1);
-  let length = 0;
-  while (length < buffer.byteLength) {
-    const { bytesRead } = await handle.read(buffer, length, buffer.byteLength - length, length);
-    if (bytesRead === 0) break;
-    length += bytesRead;
-  }
-  return buffer.subarray(0, length);
-}
-
 /** Every read is `O_NOFOLLOW`, bounded to 1 MiB, and judged by its bytes' SHA-256. */
 export class NodeLaunchdPlistReader implements LaunchdPlistPortV1 {
-  readonly #fs: LaunchdSnapshotFileSystemV1;
+  readonly #fs: LaunchdFileSystemV1;
 
-  constructor(fs: LaunchdSnapshotFileSystemV1 = NODE_FILE_SYSTEM) {
+  constructor(fs: LaunchdFileSystemV1 = NODE_FILE_SYSTEM) {
     this.#fs = fs;
   }
 
@@ -162,7 +147,7 @@ export class NodeLaunchdPlistReader implements LaunchdPlistPortV1 {
   }
 
   async #bytes(path: CanonicalAbsolutePathV1, admit: (stats: BigIntStats) => boolean): Promise<{ readonly bytes: Uint8Array; readonly stats: BigIntStats }> {
-    let handle: Awaited<ReturnType<LaunchdSnapshotFileSystemV1["open"]>>;
+    let handle: Awaited<ReturnType<LaunchdFileSystemV1["open"]>>;
     try {
       handle = await this.#fs.open(path, READ_FLAGS);
     } catch {
@@ -171,7 +156,7 @@ export class NodeLaunchdPlistReader implements LaunchdPlistPortV1 {
     try {
       const stats = await handle.stat({ bigint: true });
       if (!admit(stats)) recovery("launchd_plist_changed", path);
-      const bytes = await readBounded(handle, MAX_PLIST_BYTES);
+      const bytes = await readBoundedPlist(handle, MAX_PLIST_BYTES);
       if (bytes.byteLength > MAX_PLIST_BYTES) recovery("launchd_plist_changed", path);
       return { bytes, stats };
     } finally {
@@ -180,7 +165,7 @@ export class NodeLaunchdPlistReader implements LaunchdPlistPortV1 {
   }
 }
 
-async function directoryIdentity(fs: LaunchdSnapshotFileSystemV1, path: string): Promise<LaunchdProcessDirectoryIdentityV1> {
+async function directoryIdentity(fs: LaunchdFileSystemV1, path: string): Promise<LaunchdProcessDirectoryIdentityV1> {
   let stats: BigIntStats;
   try {
     stats = await fs.lstat(path, { bigint: true });
@@ -206,7 +191,7 @@ export async function loadLaunchdProcessTable(
   productHome: CanonicalAbsolutePathV1,
   coordinatorId: LifecycleCoordinatorIdV1,
   options: {
-    readonly fs?: LaunchdSnapshotFileSystemV1;
+    readonly fs?: LaunchdFileSystemV1;
     readonly template?: SupportedLaunchdProcessTableTemplateV1;
     readonly host: LaunchdHostObserverV1;
   },
@@ -226,7 +211,7 @@ export async function loadLaunchdProcessTable(
 }
 
 /** Before and after every process: the exact two-child root and both children entry-empty. */
-async function admitProcessStaging(fs: LaunchdSnapshotFileSystemV1, table: SupportedLaunchdProcessTableV1): Promise<void> {
+async function admitProcessStaging(fs: LaunchdFileSystemV1, table: SupportedLaunchdProcessTableV1): Promise<void> {
   const { root, home, tmp } = table.staging;
   for (const identity of [root, home, tmp]) {
     const stats = await fs.lstat(identity.path, { bigint: true });
@@ -248,7 +233,7 @@ async function admitProcessStaging(fs: LaunchdSnapshotFileSystemV1, table: Suppo
 
 export interface LaunchdBootoutDependenciesV1 {
   readonly runner: Pick<SupervisedProcessRunner, "run">;
-  readonly fs?: LaunchdSnapshotFileSystemV1;
+  readonly fs?: LaunchdFileSystemV1;
   readonly template?: SupportedLaunchdProcessTableTemplateV1;
   effectiveUid(): number;
   readonly host: LaunchdHostObserverV1;
@@ -261,7 +246,7 @@ export interface LaunchdBootoutDependenciesV1 {
  */
 export class LaunchdBootoutRunner implements LaunchdBootoutPortV1 {
   readonly #dependencies: LaunchdBootoutDependenciesV1;
-  readonly #fs: LaunchdSnapshotFileSystemV1;
+  readonly #fs: LaunchdFileSystemV1;
 
   constructor(dependencies: LaunchdBootoutDependenciesV1) {
     this.#dependencies = dependencies;
@@ -307,7 +292,7 @@ export interface LaunchdEffectDependenciesV1 {
   readonly plan: LaunchdPlanV1;
   readonly journals: LaunchdEffectJournalPortV1;
   readonly observer: Pick<LaunchdObserver, "observe">;
-  readonly bootstrapper: Pick<LaunchdSnapshotBootstrapper, "inspect" | "recover" | "bootstrap" | "recheckSource">;
+  readonly bootstrapper: Pick<LaunchdPathBootstrapper, "bootstrap" | "verifyLoaded">;
   readonly launchctl: LaunchdBootoutPortV1;
   readonly plists: LaunchdPlistPortV1;
   /** Usually `loadLaunchdProcessTable(productHome, plan.coordinatorId)`. */
@@ -543,19 +528,19 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
     try {
       await this.#awaitState(effect, transition, from, to, phase);
     } catch (error) {
-      // Spec §5.3 rule 5 (D71): with no certification, a forward FD-3 bootstrap that does not
-      // produce the planned label is the runtime proof failing; the coordinator compensates.
-      if (bootstrap === null || direction !== "forward" || !(error instanceof LifecycleRecoveryRequiredError)) throw error;
+      // Spec §5.3 rule 5 (D71): a forward bootstrap that does not produce the planned label is
+      // the runtime proof failing; the coordinator compensates.
+      if (!bootstrap || direction !== "forward" || !(error instanceof LifecycleRecoveryRequiredError)) throw error;
       throw new LaunchdDistributionUnsupportedError("bootstrap post-observation is not the planned generated label", { cause: error });
     }
-    if (bootstrap !== null) await this.#dependencies.bootstrapper.recheckSource(bootstrap);
   }
 
   /**
    * Unloading is always the transition's own generated label; its plist must still hold the bound
    * bytes, because every unload precedes its plist mutation and every compensating unload precedes
-   * the plist inverse. Loading reads only the plan-bound bytes through an unlinked FD-3 snapshot,
-   * bound to the inode the plist reader opened.
+   * the plist inverse. Loading (D82) admits the plan-bound plist through the reader, bootstraps it
+   * by its path, and immediately verifies the inode, bytes and the loaded job's program; a mismatch
+   * boots the label out and refuses `launchd_bootstrap_plist_changed`. Returns whether it bootstrapped.
    */
   async #command(
     effect: LaunchdEffectPlanV1,
@@ -565,17 +550,17 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
     to: LaunchdLiveStateV1,
     table: SupportedLaunchdProcessTableV1,
     phase: SupervisedPhaseV1,
-  ): Promise<LaunchdSnapshotRequestV1 | null> {
+  ): Promise<boolean> {
     if (to.state === "unloaded") {
       await this.#dependencies.plists.verifyHash(transition.plistPath, transition.plistHash);
       const evidence = await this.#dependencies.launchctl.bootout(table, `${transition.domain}/${transition.label}`, phase);
       if (!commandSucceeded(evidence)) recovery("launchd_command_failed", transition.plistPath);
-      return null;
+      return false;
     }
     const role = direction === "forward" ? "after" : "before";
     const bound = this.#entry(transition).bootstrapPlists[role] ?? recovery("launchd_bootstrap_plist_unbound", transition.plistPath);
     const { plist, source } = await this.#dependencies.plists.read(bound);
-    const request: LaunchdSnapshotRequestV1 = {
+    const request: LaunchdBootstrapRequestV1 = {
       table,
       domain: transition.domain,
       effectId: effect.id,
@@ -587,11 +572,15 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
       plist,
       phase,
     };
-    const { bootstrapper } = this.#dependencies;
-    const attempt = await bootstrapper.recover(await bootstrapper.inspect(request), request);
-    const evidence = await bootstrapper.bootstrap(attempt);
+    const { bootstrapper, launchctl } = this.#dependencies;
+    const evidence = await bootstrapper.bootstrap(request);
     if (!commandSucceeded(evidence.process)) recovery("launchd_command_failed", transition.plistPath);
-    return request;
+    if (!(await bootstrapper.verifyLoaded(request))) {
+      // D82: bound the life of a job loaded from swapped bytes to this post-check window.
+      await launchctl.bootout(table, `${transition.domain}/${plist.Label}`, phase);
+      recovery("launchd_bootstrap_plist_changed", transition.plistPath);
+    }
+    return true;
   }
 
   async #awaitState(

@@ -31,7 +31,7 @@ export type LaunchdEmptyDirectoryIdentityV1 = {
  */
 export type LaunchdDistributionPolicyV2 = {
   readonly previewTableId: "launchctl-macos-preview-v2";
-  readonly mutationTableId: "launchctl-macos-fd3-v2";
+  readonly mutationTableId: "launchctl-macos-path-v1";
   readonly operatingSystem: LaunchdOperatingSystemPolicyV1;
   readonly executable: LaunchdExecutablePolicyV1;
   readonly emptyDirectory: LaunchdEmptyDirectoryIdentityV1;
@@ -52,7 +52,7 @@ export interface LaunchdHostObserverV1 {
 
 export const LAUNCHD_DISTRIBUTION_POLICY: LaunchdDistributionPolicyV2 = Object.freeze({
   previewTableId: "launchctl-macos-preview-v2",
-  mutationTableId: "launchctl-macos-fd3-v2",
+  mutationTableId: "launchctl-macos-path-v1",
   operatingSystem: Object.freeze({ productName: "macOS", minimumProductVersion: "26.6.2" }),
   executable: Object.freeze({ path: "/bin/launchctl", ownerUid: 0 }),
   emptyDirectory: Object.freeze({ path: "/private/var/empty", ownerUid: 0, mode: 493 }),
