@@ -4,7 +4,13 @@ import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { EXIT_CODES, deriveBootstrapRetentionLocations, lifecycleBookkeepingPaths } from "@developer-os/core";
+import {
+  EXIT_CODES,
+  deriveBootstrapRetentionLocations,
+  encodeCanonicalJson,
+  lifecycleBookkeepingPaths,
+} from "@developer-os/core";
+import type { CanonicalJsonValue } from "@developer-os/core";
 
 import { runInit } from "../commands/init.js";
 import { runUninstall } from "../commands/uninstall.js";
@@ -17,9 +23,11 @@ import {
 import type { CommandFixture } from "../commands/testing.js";
 import { createBootstrapEvidenceInspectionRequest } from "./context.js";
 import {
+  admitBootstrapEvidencePlan,
   assertOrdinaryCommandAdmitted,
   BOOTSTRAP_MANUAL_ARCHIVE,
   inspectBootstrapEvidenceAdmission,
+  selectBootstrapEvidenceJournal,
 } from "./report.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
@@ -306,5 +314,101 @@ describe("bootstrap evidence identity on a real V2 home", () => {
       message: "an interrupted bootstrap must be resumed by init",
       recovery: "developer-os init",
     });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  const sha256 = (bytes: string | Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+  const DECOY_UUID = "00000000-0000-4000-8000-0000000000de";
+  const OTHER_HASH = "e".repeat(64);
+
+  /** The fixture's own plan text and published manifest hash, with the plan's UUID moved to the decoy's. */
+  async function decoySource(fixture: CommandFixture): Promise<{
+    readonly text: string;
+    readonly uuid: string;
+    readonly manifestHash: string;
+  }> {
+    const plan = await onlyPersistedPlan(fixture);
+    const uuid = plan.id.slice("fi_".length);
+    const text = await nodeFs.readFile(join(fixture.paths.stateDir, `fresh-v2-init.${plan.id}.plan.json`), "utf8");
+    return { text, uuid, manifestHash: sha256(await nodeFs.readFile(fixture.paths.manifestFile)) };
+  }
+
+  function decoyPlanPath(fixture: CommandFixture): string {
+    return join(fixture.paths.stateDir, `fresh-v2-init.fi_${DECOY_UUID}.plan.json`);
+  }
+
+  it("admits no plan whose bytes carry the current manifest hash only outside manifest.after (NEW-140)", async () => {
+    const fixture = await createCommandFixture("bootstrap-gate-before-hash-decoy", { bootstrapAvailable: true });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const single = await admissionsOf(fixture);
+    const { text, uuid, manifestHash } = await decoySource(fixture);
+    const decoy = JSON.parse(text.replaceAll(uuid, DECOY_UUID).replaceAll(manifestHash, OTHER_HASH)) as {
+      manifest: { before: unknown; after: Record<string, unknown> };
+    };
+    decoy.manifest.before = { ...decoy.manifest.after, hash: manifestHash };
+    const bytes = encodeCanonicalJson(decoy as unknown as CanonicalJsonValue);
+    expect(bytes).toContain(manifestHash);
+    expect(decoy.manifest.after.hash).toBe(OTHER_HASH);
+    await nodeFs.writeFile(decoyPlanPath(fixture), bytes, { mode: 0o600 });
+
+    expect(single).toStrictEqual({ plans: 1, slots: 1 });
+    expect(await admissionsOf(fixture)).toStrictEqual(single);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * A decoy under a moved ID cannot be made readable: plan-derived payloads bind the init ID through
+   * their hashes. The readable non-terminal envelope here is therefore a real interrupted one whose
+   * plan published an earlier manifest, the shape the threat-model row admits.
+   */
+  it("admits a readable non-terminal envelope whose plan published an earlier manifest (NEW-140)", async () => {
+    const fixture = await createCommandFixture("bootstrap-gate-earlier-non-terminal", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_manifest_publish",
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const { text, uuid, manifestHash } = await decoySource(fixture);
+    const plan = await onlyPersistedPlan(fixture);
+    const slots = await Promise.all(plan.journalSlots.map(async (slot) => {
+      const bytes = await nodeFs.readFile(slot.path);
+      return bytes.byteLength === 0 ? null : JSON.parse(bytes.toString("utf8")) as unknown;
+    }));
+    const admitted = admitBootstrapEvidencePlan(JSON.parse(text), {
+      productHome: fixture.paths.home as never,
+      stateDirectory: fixture.paths.stateDir as never,
+      expectedId: `fi_${uuid}` as never,
+    });
+    expect(admitted.manifest.after).toMatchObject({ hash: manifestHash });
+    expect(selectBootstrapEvidenceJournal(admitted, [slots[0], slots[1]])?.current.terminalOutcome).toBeNull();
+    await expect(assertOrdinaryCommandAdmitted(requestFor(fixture))).rejects.toMatchObject({
+      recovery: "developer-os init",
+    });
+
+    await plantEarlierInstallPlans(fixture, 4);
+    const manifest = JSON.parse(await nodeFs.readFile(fixture.paths.manifestFile, "utf8")) as Record<string, CanonicalJsonValue>;
+    await nodeFs.writeFile(
+      fixture.paths.manifestFile,
+      encodeCanonicalJson({ ...manifest, installedAt: "2026-01-01T00:00:00.000Z" }),
+    );
+    expect(sha256(await nodeFs.readFile(fixture.paths.manifestFile))).not.toBe(manifestHash);
+
+    await expect(assertOrdinaryCommandAdmitted(requestFor(fixture))).resolves.toBeUndefined();
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("admits a completed home beside a truncated plan that carries the current manifest hash (NEW-140)", async () => {
+    const fixture = await createCommandFixture("bootstrap-gate-truncated-decoy", { bootstrapAvailable: true });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const single = await admissionsOf(fixture);
+    const { text, uuid, manifestHash } = await decoySource(fixture);
+    await plantEarlierInstallPlans(fixture, 4);
+    const moved = text.replaceAll(uuid, DECOY_UUID);
+    await nodeFs.writeFile(
+      decoyPlanPath(fixture),
+      moved.slice(0, moved.indexOf(manifestHash) + manifestHash.length),
+      { mode: 0o600 },
+    );
+
+    expect(await admissionsOf(fixture)).toStrictEqual(single);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
