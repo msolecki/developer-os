@@ -1021,6 +1021,20 @@ checks) was rejected. The content cache adds one detection residual: a change ma
 shared mmap without msync(2) may not move ctime before write-back, so it could be missed until
 then; no writer of `state/` uses mmap.
 
+**Added 2026-10-04 (NEW-140): the ordinary-command gate scaled with retained envelopes.** With a
+valid V2 manifest, `assertOrdinaryCommandAdmitted` read, decoded and fully admitted every retained
+`fresh-v2-init.<id>.plan.json` before asking whether that plan published the current manifest. On
+the founder home (nine envelopes, one per reinstall, ~4 MB) a counting profile put ~80% of the
+~700 ms in nine whole-plan admissions (~85 ms each), the rest in nine canonical decodes (~9 ms
+each), slot selection (~55 ms) and one structural manifest validation (~20 ms). The gate now
+skips, before decoding, any plan whose bytes do not contain the current manifest's sha256: only
+such a plan can pass `exactV2Handoff`, because admission keeps `manifest.after.hash` verbatim and
+pins `manifest.manifestPath`, and `decodeCanonicalJson` accepts only byte-exact canonical JSON,
+which never escapes a lowercase hex digit. No admit or refuse decision changes. Measured on that
+home: gate 665-717 ms → 21-36 ms; `status` 0.90 s → 0.23 s. The cost left is one bounded read
+per plan and the constant manifest validation; `evidence-identity.v2.test.ts` pins that added
+earlier-install plans add no plan admission.
+
 ## 10. Lifecycle kernel (Spec 1a)
 
 Plan 1a (Tasks 1–25, `43c6876..082e098`; the plan file was deleted 2026-09-26) shipped
