@@ -925,13 +925,39 @@ type BootstrapEnvelopeReadV1 =
 async function readBootstrapEnvelope(
   request: BootstrapEvidenceInspectionRequestV1,
   planEntry: BootstrapEvidenceGuardedEntryV1,
-): Promise<BootstrapEnvelopeReadV1> {
+): Promise<BootstrapEnvelopeReadV1>;
+async function readBootstrapEnvelope(
+  request: BootstrapEvidenceInspectionRequestV1,
+  planEntry: BootstrapEvidenceGuardedEntryV1,
+  publishedManifestHash: string,
+): Promise<BootstrapEnvelopeReadV1 | null>;
+async function readBootstrapEnvelope(
+  request: BootstrapEvidenceInspectionRequestV1,
+  planEntry: BootstrapEvidenceGuardedEntryV1,
+  publishedManifestHash?: string,
+): Promise<BootstrapEnvelopeReadV1 | null> {
   const id = FRESH_PLAN.exec(basename(planEntry.path))?.[1] as FreshV2InitIdV1 | undefined;
   if (id === undefined) throw new Error("bootstrap evidence plan filename is malformed");
   let plan: FreshV2InitPlanV1;
   let value: unknown = null;
   try {
-    value = decodeCanonicalJson(await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES), MAX_PLAN_BYTES);
+    const bytes = await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES);
+    /**
+     * NEW-140: admission keeps `manifest.after.hash` verbatim and pins `manifest.manifestPath` to the
+     * product manifest, so a plan recording another hash can never pass `exactV2Handoff`. Skipping
+     * its decode (~9 ms) and whole-plan admission (~85 ms) on a reinstalled home changes no decision.
+     * The byte search is sound because decoding demands byte-exact canonical JSON, which never
+     * escapes a lowercase hex digit.
+     */
+    if (
+      publishedManifestHash !== undefined &&
+      Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).indexOf(publishedManifestHash) === -1
+    ) return null;
+    value = decodeCanonicalJson(bytes, MAX_PLAN_BYTES);
+    if (
+      publishedManifestHash !== undefined &&
+      record(record(record(value)?.manifest)?.after)?.hash !== publishedManifestHash
+    ) return null;
     plan = request.validatePlan(value);
     if (plan.id !== id || plan.planPath !== planEntry.path) throw new Error("bootstrap plan identity is unbound");
   } catch {
@@ -1589,6 +1615,7 @@ function resumeWithInit(): BootstrapRecoveryRequiredError {
 
 async function readPlanEnvelopes(
   request: BootstrapEvidenceInspectionRequestV1,
+  publishedManifestHash: string,
 ): Promise<readonly BootstrapEnvelopeReadV1[]> {
   let names: readonly string[];
   try {
@@ -1603,7 +1630,8 @@ async function readPlanEnvelopes(
     if (planEntry.kind === "other") throw nonRegularLeaf(path);
     if (planEntry.kind === "absent") continue;
     try {
-      envelopes.push(await readBootstrapEnvelope(request, planEntry.entry));
+      const envelope = await readBootstrapEnvelope(request, planEntry.entry, publishedManifestHash);
+      if (envelope !== null) envelopes.push(envelope);
     } catch {
       continue;
     }
@@ -1653,7 +1681,7 @@ export async function assertOrdinaryCommandAdmitted(
         [join(request.productHome, "installation-manifest.json")],
       );
     }
-    for (const envelope of await readPlanEnvelopes(request)) {
+    for (const envelope of await readPlanEnvelopes(request, hashBytes(manifestBytes))) {
       if (readableNonTerminal(envelope) && await exactV2Handoff(request, envelope.plan) !== null) {
         throw resumeWithInit();
       }

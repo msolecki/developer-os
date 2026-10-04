@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -234,5 +235,76 @@ describe("bootstrap evidence identity on a real V2 home", () => {
     expect(restored.report.ids[0]).toMatchObject({ status: "verified", terminalOutcome: "finalized" });
     expect(restored.retainedEnvelopes).toHaveLength(1);
     expect(restored.retainedParentAuthorities.length).toBeGreaterThan(0);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-140: a reinstalled home keeps one terminal envelope per earlier install. Each decoy here is
+   * the fixture's own plan under another init ID with another published manifest hash, the shape an
+   * earlier install leaves; the decoy IDs sort on both sides of the real one.
+   */
+  async function plantEarlierInstallPlans(fixture: CommandFixture, count: number): Promise<void> {
+    const plan = await onlyPersistedPlan(fixture);
+    const text = await nodeFs.readFile(join(fixture.paths.stateDir, `fresh-v2-init.${plan.id}.plan.json`), "utf8");
+    const manifestHash = createHash("sha256").update(await nodeFs.readFile(fixture.paths.manifestFile)).digest("hex");
+    expect(text).toContain(manifestHash);
+    const uuid = plan.id.slice("fi_".length);
+    for (let index = 0; index < count; index += 1) {
+      const prefix = index % 2 === 0 ? "00000000" : "ffffffff";
+      const decoy = `${prefix}-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
+      await nodeFs.writeFile(
+        join(fixture.paths.stateDir, `fresh-v2-init.fi_${decoy}.plan.json`),
+        text.replaceAll(uuid, decoy).replaceAll(manifestHash, index.toString(16).padStart(64, "0")),
+        { mode: 0o600 },
+      );
+    }
+  }
+
+  async function admissionsOf(fixture: CommandFixture): Promise<{ readonly plans: number; readonly slots: number }> {
+    const request = requestFor(fixture);
+    const counted = { plans: 0, slots: 0 };
+    await assertOrdinaryCommandAdmitted({
+      ...request,
+      validatePlan: (value) => {
+        counted.plans += 1;
+        return request.validatePlan(value);
+      },
+      validateSlots: (plan, slots) => {
+        counted.slots += 1;
+        return request.validateSlots(plan, slots);
+      },
+    });
+    return counted;
+  }
+
+  /**
+   * NEW-140: with a valid V2 manifest the gate admits only a plan whose recorded manifest hash is the
+   * current manifest's, so each retained envelope of an earlier install costs a read, not a
+   * whole-plan admission. Counted admissions, not elapsed time (NEW-29).
+   */
+  it("admits no more envelope plans as earlier installs retain more envelopes (NEW-140)", async () => {
+    const fixture = await createCommandFixture("bootstrap-gate-reinstalls", { bootstrapAvailable: true });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const single = await admissionsOf(fixture);
+
+    await plantEarlierInstallPlans(fixture, 9);
+
+    expect(single).toStrictEqual({ plans: 1, slots: 1 });
+    expect(await admissionsOf(fixture)).toStrictEqual(single);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses an ordinary command over the non-terminal envelope among earlier installs' envelopes (NEW-140)", async () => {
+    const fixture = await createCommandFixture("bootstrap-gate-interrupted-reinstall", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_manifest_publish",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    await plantEarlierInstallPlans(fixture, 9);
+
+    await expect(assertOrdinaryCommandAdmitted(requestFor(fixture))).rejects.toMatchObject({
+      code: EXIT_CODES.recoveryRequired,
+      message: "an interrupted bootstrap must be resumed by init",
+      recovery: "developer-os init",
+    });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
