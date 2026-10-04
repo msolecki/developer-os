@@ -461,7 +461,7 @@ exit code and never throws. `runHookMode` does not await it; it hands the pendin
 which lets it settle after the outcome drains and before its explicit exit (NEW-115), then exits
 regardless (NEW-139: the unbounded exit killed every write). The wait is
 `min(FIRING_RECORD_EXIT_BOUND_MS, HOOK_EXIT_BUDGET_MS − elapsed)`, floored at 0, where `elapsed`
-runs from process start: 500 ms at most, and Node startup, the handler and the wait together stay
+runs from process start: 1.4 s at most (500 ms dropped every write on the founder home, whose gate took ~640 ms with eight retained init envelopes; the wait is paid only when a record is due, at most once per verb per 24 h), and Node startup, the handler and the wait together stay
 within 1.5 s, leaving 500 ms of the vendors' 2 s timeout as margin (`format` and `stop` have longer
 timeouts and get the same budget). Opens of an existing record or marker use `O_NONBLOCK`, because a
 FIFO there would park a libuv worker and `process.exit()` waits on it. A failure after the gate

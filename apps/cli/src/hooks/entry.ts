@@ -47,8 +47,13 @@ async function recordFiring(environment: HookEnvironment, vendor: HookVendor, ve
   }
 }
 
-/** NEW-139: the longest wait for a pending record write; a write still pending then is abandoned. */
-export const FIRING_RECORD_EXIT_BOUND_MS = 500;
+/**
+ * NEW-139: the longest wait for a pending record write; a write still pending then is abandoned. The
+ * gate alone took ~640 ms on the founder home with eight retained init envelopes (2026-10-04), so
+ * 500 ms dropped every write. The wait is paid only when a record is due (absent or over 24 h old);
+ * a fresh record returns before the gate, so the budget below, not this bound, is the real cap.
+ */
+export const FIRING_RECORD_EXIT_BOUND_MS = 1_400;
 /** NEW-139: process start to exit, leaving 500 ms of the vendors' 2 s hook timeout as margin. */
 export const HOOK_EXIT_BUDGET_MS = 1_500;
 

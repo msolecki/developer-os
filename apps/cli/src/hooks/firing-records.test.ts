@@ -412,7 +412,7 @@ describe("runHookMode and the firing record", () => {
 
 describe("settleFiringRecords (NEW-139)", () => {
   it("bounds the exit wait well under the vendors' 2 s hook timeout", () => {
-    expect(FIRING_RECORD_EXIT_BOUND_MS).toBeLessThanOrEqual(500);
+    expect(FIRING_RECORD_EXIT_BOUND_MS).toBeLessThan(HOOK_EXIT_BUDGET_MS);
   });
 
   it("waits only what is left of the exit budget after the handler ran, never below zero", () => {
