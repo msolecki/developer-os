@@ -420,7 +420,8 @@ where the spec was silent or conflicted with the code; the residuals are the one
    folder, under a private folder or the indexes directory, or reached through a symlink
    (`apps/cli/src/commands/capture.ts`).
 3. **`note_changed_since_capture` is carried in a `reason` field**, typed
-   `"note_changed_since_capture" | null`, on each per-capture refusal (`RefusedCaptureV1` and the
+   `"note_changed_since_capture" | "vault_changed_during_ingest" | null` (the second added by
+   D83 (2), NEW-40, `knowledge-pipeline.md` §5.1), on each per-capture refusal (`RefusedCaptureV1` and the
    `refused[]` entries of `RunReportV1`, `apps/cli/src/commands/ingest.ts`), beside the numeric
    `code`. The change is additive.
 4. **`IngestResultV1.agent` and `RunReportV1.agent` are `AgentName | null`**: `null` when every
