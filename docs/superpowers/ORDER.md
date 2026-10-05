@@ -8,72 +8,41 @@ notes are the archive.
 
 ## NOW
 
-**The D70 lane's full suite is green (2026-10-05).** NEW-113's code (Tasks 1–3), NEW-110 (Tasks 0–13,
-with P9) and the NEW-133/134/138/139/140 work are integrated and reviewed. On `5a7462a9`, `npm run check`
-passed every stage in 288 min (lint; `test:bootstrap` 105; `test:suite` 323 files, 10313 tests;
-`test:lifecycle` 21 files, 231 tests; `test:update-recovery` 14; e2e 12 files, 64 tests;
-`test:vendor-ingest` 9; build), and `npm run test:pinned-host` passed 12 with 1 skipped (the
-disposable-account launchd gate), closing NEW-137. Logs: `~/devos-work/2026-10-05/`. `5a7462a9` is
-installed on the live machine, with launchd automation enabled (D82). PR #19 merged the lane into
-`origin/development` on 2026-10-05.
+**No agent product work is in flight; the next steps are founder- or time-gated.** The full suite is
+green on `5a7462a9` (2026-10-05: `npm run check` rc=0 in 288 min, `npm run test:pinned-host` 12
+passed, 1 skipped). `development` at `17cf02ca` (PR #21, NEW-144, merged; the tree of `7cdd4b97`) is
+installed on the live machine with launchd automation enabled (D82): five jobs, `git-sync` off, Git
+disabled until the founder enables it (D76). A kickstarted scheduled `doctor` exited 0.
 
-**A15, the founder cutover, steps 1–15 done on the live machine (2026-09-28/29).** Steps 8–10 ran on
-2026-09-28 under D69 and D74: the first step-9 `init` was killed mid-bootstrap by a host-session
-restart and left a home `uninstall` refused (NEW-114, now closed); the home was moved aside intact, the
-retried `init` exited 0, `doctor` 0 `[fail]`, `noteCount` equal to step 6. Step 10 observed all eight
-Claude hook verbs firing (A13 Task 18 Step 1 for Claude, D68). Steps 11–15 ran on 2026-09-28/29: eight
-third-party-derived skills are user overrides on both vendors; no live reference to the legacy shared
-directory remains (2026-09-29: two dead `~/.codex` symlinks step 13's grep could not see and three
-inert `~/.codex/config.toml` entries were removed, the grep gap closed in step 13's Verify); three
-reinstalls preserved the Brain, the overrides and the Brain config; 106 inbox files were imported and
-accepted, and the first real Claude ingest ingested 71 after four product fixes, then 75 after NEW-116's fix; the founder rejected the last 31 (`3ebc505d`,
-`588c866d`, `cb19f7c6`, `26807aed`; NEW-116 owns the yield on those 31). Six notes written under
-`content/content/` were moved by hand; the validator landed in `72f0f5bf`. Step 13b (the vault's scheduled
-legacy CI workflow disabled) is done: the workflow reports `disabled_manually` (founder, 2026-10-03);
-its vault-scoped legacy skills and tooling are removed with step 19. **Next:** steps 16–18 after one week
-of use (step 16 checks injection: the hook firing-record fix, NEW-139, is installed since 2026-10-04), Codex hook approval after 2026-10-22, step 19 after one stable cycle. Git stays disabled on the live machine until the founder enables it (D76: NEW-113's Task 5 is skipped);
-launchd automation was enabled on 2026-10-04 after NEW-138 (D82).
-
-**Evidence the closed phases stand on (2026-09-26, run 4).** On `bc17550`, every part green: lint,
-`test:lifecycle` (21/21 files), `test:e2e`, `test:suite` (306/306 files, 9913 tests, 8 todo =
-documented residuals), `test:bootstrap` (94) and build; seven whole-phase fresh-context reviews. PR #15
-merged. The D70 lane's code ran on `23b32060` (above); the full suite on `da9575f0` is owed (D81).
-
-**Lanes.** D44, D47, D56 and D70 each expired with the closes they governed (D70 with D75's plan
-closes). The next code-producing work runs `SESSION.md` §5 as written, except that `development`
-requires a PR (see "Delivery evidence still owed").
+1. **NEW-134's real `brain-garden` run with Claude** — first scheduled slot Sunday 2026-10-11 17:00.
+   Confirm its status record and captures, then close the plan
+   (`plans/2026-09-30-developer-os-brain-gardener-pulse.md`) and the row.
+2. **A15 steps 16–18** (`docs/migration/founder-cutover.md`: per-adapter gate cycle, exercised
+   rollback) after one week of use; step 16 checks injection (NEW-139's fix installed since
+   2026-10-04). **Step 19** after one stable cycle; it also removes the vault's legacy skills and
+   tooling (step 13b's workflow is already disabled).
+3. **Codex hook approval after 2026-10-22** (A15), with NEW-104 and NEW-75's Codex half in the same
+   window.
 
 ## Founder stop points
 
 Each is executable from the document named; none is agent work.
 
-1. The full suite owed by D75 and D81: `npm run check` and `npm run test:pinned-host` on `da9575f0` or
-   later, then the push of `development` (D76: one branch, no PR branch; GH013 needs the founder's bypass).
-2. A15 steps 16–18 (per-adapter gate cycle, exercised rollback) after one week of use, step 19 after
-   one stable cycle (`docs/migration/founder-cutover.md`), and the Codex hook approval after
-   2026-10-22.
-3. A13's real-agent rows (the plan closed 2026-09-29; evidence in `docs/architecture/hooks.md` §4):
-   NEW-127, Claude's unobserved rows and the isolated-`ingest` check, and NEW-104, the Codex
-   real-agent matrix, after 2026-10-22.
+1. NEW-134: confirm the 2026-10-11 `brain-garden` run (above).
+2. A15 steps 16–19 and the Codex hook approval after 2026-10-22 (`docs/migration/founder-cutover.md`).
+3. A13's real-agent rows (evidence in `docs/architecture/hooks.md` §4): NEW-127 (Claude's unobserved
+   rows and the isolated-`ingest` check) and NEW-104 (the Codex real-agent matrix, after 2026-10-22).
 4. NEW-75's Codex half: its credential path supplied separately and one real authenticated
    `ingest --agent codex` (credits, after 2026-10-22).
 5. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
    (percent-encoded links in Obsidian).
 
-Open sequence (D16, daily use before completeness):
+Open sequence (D16, daily use before completeness): A15 on its own clock and the stop points beside
+it; then Task 11b (parked, D46); then A16.
 
-1. Now: D75's full suite and the PR; A15 continues on its own clock.
-2. Beside it: the founder stop points above.
-3. Then Task 11b (parked, D46), then A16.
-
-The parent document is `plans/2026-07-21-developer-os-program.md`, which is live rather than
-superseded: its open items are DOS-P7's remainder (two pointers into the A11b plans), the DOS-P8
-cutover (A15) and DOS-P9's release (A16 with L1, eight steps). It closes with A16 and with nothing
-earlier.
-
-Everything after `NOW` is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (the
-founder decisions D1–D81 and what each phase still owes). `docs/migration/instruction-inventory.md`
-is the scope of A12, A12b, A13 and A14.
+The parent document is `plans/2026-07-21-developer-os-program.md`: its open items are DOS-P7's
+remainder (Task 11b), the DOS-P8 cutover (A15) and DOS-P9's release (A16 with L1). It closes with
+A16. Founder decisions D1–D82 live in `plans/2026-09-04-developer-os-completion-roadmap.md`.
 
 ## Product path
 
@@ -81,13 +50,9 @@ Strict sequence; do not start a blocked row early.
 
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
-| A15 | DOS-P8 Founder migration (shadow mode dropped, D58) — `docs/migration/founder-cutover.md` | A14 (closed) | rollback to the legacy runtime is exercised and one stable cycle completes | steps 1–15 done 2026-09-28/29; steps 16–18 after a week of use, step 19 after one stable cycle |
-| A11b | DOS-P7 remainder (D16): Spec 2 closure Tasks 9–10, Task 26, Task 11b; NEW-113 (D65) | A15 (D56, D70 ran the rest early) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | closure Tasks 9–10 and Task 26 closed with NEW-110 (synthetic arm64 and x64 proof) and NEW-113 closed without its disposable-account gate (D76), both under D75 with the full suite owed; Task 11b parked (D46: `update` reaches a real release only after it) |
+| A15 | DOS-P8 Founder migration (D58) — `docs/migration/founder-cutover.md` | — | rollback to the legacy runtime is exercised and one stable cycle completes | steps 1–15 done 2026-09-28/29; 16–18 after a week of use, 19 after one stable cycle |
+| A11b | DOS-P7 remainder: Task 11b (NEW-111, NEW-112, NEW-118) | founder root-key decision (D46) | `update` reaches a real release on a disposable install, then on the founder machine | parked (D46) |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
-
-A11 (Phase 4b), A13 (Phase 6) and A14 (Phase 7) have nothing left of their own: A11's Task 11b is
-tracked under A11b, A13's real-agent rows (NEW-104, NEW-127) are founder stop points, and A14's
-template scan ran with A12's (0 findings, 2026-09-28).
 
 ## Repository work not owned by the product sequence
 
@@ -95,37 +60,39 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate (one worktree each):
 
-- NEW-116 (ingest yield and head-of-line blocking).
-- NEW-53 (the `init` encoder cost, `encodeString` and the retention postimage left).
-- NEW-131 (instruction-defaults scanner), NEW-132 (update recovery sweeps), NEW-133 (fresh `init` cost).
-- NEW-137: fixed; `npm run test:pinned-host` green on the founder Mac closes it.
-- NEW-134 (scheduled Brain gardener and pulse, D77): implemented and reviewed 2026-10-01; plan close owes the founder's full `check` and one real Claude gardener run (founder stop points).
+- NEW-116 (ingest yield on long multi-decision captures).
+- NEW-141 (a refused capture stays at the head of every `ingest --limit N` window).
+- NEW-53 (the `init` encoder cost: `encodeString` and the retention postimage).
+- NEW-131 (instruction-defaults scanner superlinear on a cap-sized file).
+- NEW-132 (update recovery death-point sweeps).
+- NEW-142 (`founder-cutover.md` step 10 cannot satisfy its own `path` condition; docs only).
 
-Needs a human, a policy decision, or an external application:
+Needs a founder decision:
 
-- NEW-130 — accept or fix NEW-129's redaction residuals.
-- Task 11b (NEW-111, NEW-112, NEW-118) — parked by D46 on the founder's root-key decision.
+- NEW-130 — accept or fix each of NEW-129's redaction residuals.
+- NEW-143 — the `provider-token` `sk-` pattern over-matches kebab-case slugs; the row proposes a
+  left boundary.
 - NEW-120 — redact a partially covered high-entropy tail, or accept it.
-- NEW-121 — design manifest-owned persisted executable identity for `capture`'s probe, or accept the
+- NEW-121 — manifest-owned persisted executable identity for `capture`'s probe, or accept the
   same-uid residual.
 - NEW-40 — refuse-versus-report for a hand edit during the ingest agent call.
-- NEW-33 — whether root-owned, group-writable executable directories are acceptable.
+- NEW-33 — whether root-owned, group-writable executable directories are trusted.
 - NEW-35 — enforceable exec-by-identity, or the check-then-spawn race retained as a platform limit.
-- Foundation watchdog — whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
-- The founder stop points above (NEW-75, NEW-45, NEW-42, NEW-7, NEW-104, NEW-127).
+- NEW-134 — whether `automation status` keeps showing an off optional job as `eligible absent`.
+- Task 11b (NEW-111, NEW-112, NEW-118) — parked by D46 on the root-key decision.
+- Foundation watchdog — whether `SpawnLockfRunner` needs one around non-blocking `lockf`
+  (`BACKLOG.md` §2).
 
 Conditional: NEW-27 when a real write scope is wired, NEW-28 when a production argument reaches the
 retained screening refusal, NEW-100's round trip after A16 (D42).
 
 ## Delivery evidence still owed
 
-- L2 still owes release permissions. The `baseline` ruleset on `development` carries a `pull_request`
-  rule (0 required approvals, PRs mandatory), so a direct `git push origin development` is rejected
-  with `GH013`; plan closes open a PR (D70 (4)) and the founder merges. `gh` works when network calls
-  run unsandboxed.
-- Measured gate and CI costs, and why the CI budgets are what they are, live in
-  `docs/architecture/foundation.md` §9. That a green local `check` is not evidence about CI lives in
-  `BACKLOG.md` §5. Retain the complete log of any full-suite failure.
+- L2 still owes release permissions. The `baseline` ruleset on `development` makes PRs mandatory, so
+  a direct push is rejected with `GH013`; deliver through a PR and the founder merges (PR #21 was
+  rebase-merged on 2026-10-05, rewriting its SHAs). `gh` works when network calls run unsandboxed.
+- Gate and CI costs live in `docs/architecture/foundation.md` §9; why a green local `check` is not
+  evidence about CI lives in `BACKLOG.md` §5. Retain the complete log of any full-suite failure.
 
 ## Long-lead gates
 
@@ -136,14 +103,8 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 ## Count
 
-- Product sequence: 3 open entries — A15 (steps 16–19), A11b (the parked Task 11b), A16. A13 left it
-  on 2026-09-29; its founder rows are stop point 3.
-- Owed now: the full `check` and `test:pinned-host` on `da9575f0` (D75, D81), then the push of
-  `development` (D76).
-- Implementation still to build: Task 11b (parked, D46) and A16's plan and work; the startable rows
-  above.
-- Founder stop points: listed above. Long-lead gates L1 and L2 block A16.
-- Repository backlog: 25 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
-  and the §6 phase-close deferrals. Closed 2026-10-01/02: NEW-115, NEW-119, NEW-122, NEW-123,
-  NEW-124, NEW-126, NEW-135, NEW-136 and NEW-29. Closed on 2026-09-29 under D75: 36 rows including NEW-110 (the list is in
-  `BACKLOG.md` §1), and NEW-54, NEW-82, NEW-87 and NEW-99 removed as already fixed or moot.
+- Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
+- Founder stop points: 5, listed above.
+- Startable rows: 6. Founder decisions: 10, listed above.
+- Repository backlog: 26 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
+  and the §6 phase-close deferrals.

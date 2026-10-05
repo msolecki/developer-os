@@ -842,7 +842,15 @@ This task is done by the orchestrator, not an implementer (it edits `docs/superp
 
 ## Plan close
 
-- [ ] Whole-branch review by a fresh agent (correctness) and a security audit of Tasks 6–10 by a different fresh agent.
-- [ ] Founder: `npm run check` and `npm run test:pinned-host` on the integrated tree (D32); a red run reopens its task.
-- [ ] Founder stop point: one real `brain-garden` run with Claude and one with Codex on a disposable home (credits).
+- [x] Whole-branch review by a fresh agent (correctness) and a security audit of Tasks 6–10 by a different fresh agent.
+- [x] Founder: `npm run check` and `npm run test:pinned-host` on the integrated tree (D32); a red run reopens its task. Green on `5a7462a9` (2026-10-05).
+- [ ] Founder stop point: one real `brain-garden` run with Claude (credits). The plan asked for a disposable home; the founder runs it on the live home through the schedule instead. The live machine runs the job on schedule since 2026-10-04; the first slot is Sunday 2026-10-11 17:00. The Codex run is moot: the gardener refuses Codex until it has a tool-free mode.
 - [ ] Remove NEW-134 from `BACKLOG.md`/`ORDER.md`, move the plan's surviving constraints into the architecture notes, delete this plan.
+
+## Status (2026-10-05)
+
+Tasks 1–11 are integrated on `development` and reviewed (per-task checkboxes were not ticked; the
+evidence is the commit range from `44c2ef63` and the green full gate on `5a7462a9`). Still owed: the
+real Claude run above and the founder decision on `automation status` showing an off optional job as
+`eligible absent` (`BACKLOG.md` NEW-134). **Next action:** after the 2026-10-11 run, confirm its
+status record and captures, then close the plan as its last box says.

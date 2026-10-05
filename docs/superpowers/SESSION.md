@@ -112,8 +112,8 @@ All of these are required:
    the slow suites step 1 defers and the single push of step 7; the plan does not close until it is
    green. Under D36 this is the **only** point at which they run. A plan step that names `npm run check` for an ordinary task commit is
    satisfied by step 1 plus step 7. **Exception, D75 (2026-09-29):** the founder closed the NEW-113
-   and NEW-110 plans before their full `check`; it is owed, and a red run reopens the rows its
-   failures belong to. The exception covers those two plans only.
+   and NEW-110 plans before their full `check`; it ran green on `5a7462a9` (2026-10-05). The
+   exception covered those two plans only and is spent.
 3. **Suspended by D36 for the rest of plan 1a** — one whole-plan review at close replaces it, and
    the deferred fix list under Task 25 collects what is owed. Outside D36: obtain fresh-context
    review from an agent that did not author the code-producing task. For every accepted finding, add
