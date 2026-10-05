@@ -334,7 +334,10 @@ retryable**, and a review refusal writes nothing at all (`decide.ts:125-127`).
 Collapsing the two would make a transient model failure look like data loss: the capture is fine and
 the proposal was not. That distinction is what `ingest`'s four recovery strings are for — `untouched`,
 `staging` with notes, `staging` without them, and `ingested`-under-a-failure-exit — assembled from the
-states a run actually left rather than printed in full every time (`ingest.ts:358-391`).
+states a run actually left rather than printed in full every time (`refusedRecovery` in `ingest.ts`).
+Two more lines key on a refusal's `reason` rather than its state: `note_changed_since_capture`
+(`brain.md` §6.13) and `vault_changed_during_ingest` (§5.1), which replaces the `staging`-without-notes
+line for a capture the user edited during the call.
 
 **Evidence:** `apps/cli/src/commands/ingest.test.ts:441` (the ladder itself), `:466` (rollback to
 `accepted`, never to `failed`), `:560` and `:597` (no rollback once notes landed), `:903` (the status
