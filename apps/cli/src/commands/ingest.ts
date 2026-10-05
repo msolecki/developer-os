@@ -2028,6 +2028,11 @@ function isIndexDocumentShape(
  * `buildIngestPrompt`'s excerpt block, so a secret or a configured client name
  * pasted into a note's title or summary must not survive the round trip
  * through the index any more than a capture body would.
+ *
+ * **`path` is redacted in `path` scope, as is every entry of `takenPaths`** (NEW-130,
+ * D83 (5)). Text scope ran the high-entropy class over vault paths, so a note named by a
+ * long id reached the model as `[REDACTED:high-entropy]` — and a model told to carry
+ * markers through copied one into a new file name. Every other class still applies.
  */
 async function readIndexExcerpt(
   context: CliContext,
@@ -2066,7 +2071,7 @@ async function readIndexExcerpt(
   }
 
   return parsed.notes.filter(isIndexNoteShape).map((note) => ({
-    path: redact(note.path).text,
+    path: redact(note.path, "path").text,
     title: redact(note.title).text,
     summary: redact(note.summary).text,
   }));
@@ -2514,7 +2519,7 @@ export async function runIngest(
       else refused.push(outcome.refusal);
       const written = outcome.ok ? outcome.capture.notes : outcome.refusal.appliedNotes;
       if (written.length > 0) {
-        takenPaths.push(...written.map((note) => redact(note).text));
+        takenPaths.push(...written.map((note) => redact(note, "path").text));
         indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
       }
     }
