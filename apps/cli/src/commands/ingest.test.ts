@@ -2059,24 +2059,26 @@ describe("runIngest, the agent call", () => {
   });
 
   /**
-   * NEW-130 (D83 (5)): a vault path is redacted in path scope, so a note named by a long
-   * random-looking id reaches the model as its real name, not as a marker the model can
-   * copy into a new file name. Title and summary stay in text scope.
+   * NEW-130 audit: a vault path is redacted at least as strictly as text scope did, so a note
+   * named by a random token does not reach the model in the clear. Title and summary too.
    */
-  it("carries an index path verbatim when only the high-entropy class would match it", async () => {
-    const fixture = await installedFixture("ingest-index-excerpt-path-scope");
-    await fixture.seedAccepted("an observation about id-named notes");
-    const idNamed = "DEV/Qm4Zx9Tp2Lk7Wr5Vn8Bc3Hy6Jd1Fs0Ga4Ue7Io9Pz2K.md"; // gitleaks:allow -- synthetic test fixture
+  it("redacts a token-named note's path in the index excerpt", async () => {
+    const fixture = await installedFixture("ingest-index-excerpt-token-path");
+    await fixture.seedAccepted("an observation about token-named notes");
+    const token = "Q7xLp2VnR8tKw4ZmB6yHc1JsF9dGa3Uq0eTiNoXr5vMk"; // gitleaks:allow -- synthetic test fixture
     await writeIndex(fixture, [
-      { path: idNamed, title: "Id-named note", summary: `Also holds ${SECRET}.` },
+      { path: `vault/${token}.md`, title: "Token-named note", summary: `Also holds ${SECRET}.` },
+      { path: "DEV/plain-note.md", title: "Plain note", summary: "Nothing secret." },
     ]);
     fixture.reply(() => nothingProposed());
 
     await fixture.run();
 
     const prompt = fixture.calls[0]?.args.join("\n") ?? "";
-    expect(prompt).toContain(idNamed);
+    expect(prompt).not.toContain(token);
+    expect(prompt).toContain("[REDACTED:high-entropy]");
     expect(prompt).not.toContain(SECRET);
+    expect(prompt).toContain("DEV/plain-note.md");
   });
 
   /**
