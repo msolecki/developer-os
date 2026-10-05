@@ -3694,6 +3694,34 @@ describe("runIngest, a hand edit while the agent runs (D83, NEW-40)", () => {
     await expect(nodeFs.readFile(seeded.path, "utf8")).resolves.toBe("not a capture any more\n");
   });
 
+  it("reports a capture deleted after its notes landed as deleted, never as staging to edit", async () => {
+    const fixture = await installedFixture("ingest-ingested-capture-deleted");
+    const seeded = await fixture.seedAccepted("an observation deleted just before ingested");
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    const inner = fixture.context.executor;
+    const context: CliContext = {
+      ...fixture.context,
+      executor: {
+        execute: async (plan) => {
+          if (plan.kind === "ingest-ingested") await nodeFs.rm(seeded.path, { force: true });
+          return inner.execute(plan);
+        },
+        resume: (transactionId) => inner.resume(transactionId),
+        rollback: (transactionId) => inner.rollback(transactionId),
+      },
+    };
+
+    const code = await run(["ingest"], fixture.io, () => context);
+
+    expect(code).not.toBe(EXIT_CODES.success);
+    const text = fixture.io.err.join("\n");
+    expect(text).toContain(`${seeded.id} partly applied, capture deleted`);
+    expect(text).not.toContain("left at staging");
+    expect(text).not.toContain("a capture reported as partly applied");
+    expect(text).toContain("a capture reported as absent was deleted");
+    expect(await exists(join(fixture.content, TARGET))).toBe(true);
+  });
+
   it("binds the ingested write to the staged bytes, so a later edit is not overwritten", async () => {
     const fixture = await installedFixture("ingest-ingested-bound");
     const seeded = await fixture.seedAccepted("an observation edited just before ingested");
