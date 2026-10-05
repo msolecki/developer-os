@@ -67,19 +67,20 @@ Startable without another product gate (one worktree each):
 - NEW-132 (update recovery death-point sweeps).
 - NEW-142 (`founder-cutover.md` step 10 cannot satisfy its own `path` condition; docs only).
 
+Decided by D83 (2026-10-05), startable:
+
+- NEW-143 — left word boundary before `sk-` in the `provider-token` rule.
+- NEW-40 — a hand edit during the ingest agent call refuses the ingest.
+- NEW-33 — root-owned, group-writable executable directories are not trusted.
+- NEW-134 — `automation status` shows an off optional job as `off`.
+- NEW-130 — fix all three NEW-129 residuals.
+- NEW-120 — redact the uncovered tail of a partly overlapped high-entropy run.
+- NEW-121, NEW-35 — accepted as platform limits (D83 (7)); close the rows with the threat-model note.
+
 Needs a founder decision:
 
-- NEW-130 — accept or fix each of NEW-129's redaction residuals.
-- NEW-143 — the `provider-token` `sk-` pattern over-matches kebab-case slugs; the row proposes a
-  left boundary.
-- NEW-120 — redact a partially covered high-entropy tail, or accept it.
-- NEW-121 — manifest-owned persisted executable identity for `capture`'s probe, or accept the
-  same-uid residual.
-- NEW-40 — refuse-versus-report for a hand edit during the ingest agent call.
-- NEW-33 — whether root-owned, group-writable executable directories are trusted.
-- NEW-35 — enforceable exec-by-identity, or the check-then-spawn race retained as a platform limit.
-- NEW-134 — whether `automation status` keeps showing an off optional job as `eligible absent`.
-- Task 11b (NEW-111, NEW-112, NEW-118) — parked by D46 on the root-key decision.
+- Task 11b (NEW-111, NEW-112, NEW-118) — the root key (D46): offline root key, trust a distribution
+  channel instead (a Spec 2 change), or defer (A16 stays blocked). Asked 2026-10-05 (D83 (8)).
 - Foundation watchdog — whether `SpawnLockfRunner` needs one around non-blocking `lockf`
   (`BACKLOG.md` §2).
 
