@@ -355,6 +355,19 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D84 (2026-10-05), founder: release trust, A16 and five open questions.** (1) Task 11b: the
+  product does not ship its own offline root key; `update` trusts a distribution channel (npm or
+  Homebrew, with their signing and verification) instead. This supersedes D46's root-key design and
+  needs a Spec 2 amendment; NEW-111, NEW-112 and NEW-118 are re-scoped by that amendment. (2) A16 gets
+  its own spec and plan, covering publication through that channel. (3) The Foundation watchdog is
+  not added: `SpawnLockfRunner` calls non-blocking `lockf`, and no hang was observed. (4) The six
+  changed workflows get their versions bumped together. (5) A15: the cutover runbook, ORDER and the
+  roadmap replace the three `founder-*-results/manifest.json` files, which are not created. (6) Spec 2
+  §4.2's "no extra inherited FD" is amended to state that stdio 0–2 are not extra descriptors; the
+  launcher's code is unchanged. (7) The second walk inside each retention observation (NEW-133's
+  remaining metadata cost) is removed; `foundation.md` §9's anti-TOCTOU pair is re-argued from the
+  before/after projections alone, and the weaker detection of a change during one observation is an
+  accepted residual.
 - **D83 (2026-10-05), founder: eight backlog decisions.** (1) NEW-143: the `provider-token` rule
   gets a left word boundary before `sk-`; real `sk-…`/`sk-ant-…` keys stay redacted. (2) NEW-40: a hand
   edit to the vault during the ingest agent call refuses the ingest and writes nothing; the user's

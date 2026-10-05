@@ -77,12 +77,16 @@ Decided by D83 (2026-10-05), startable:
 - NEW-120 — redact the uncovered tail of a partly overlapped high-entropy run.
 - NEW-121, NEW-35 — accepted as platform limits (D83 (7)); close the rows with the threat-model note.
 
-Needs a founder decision:
+Decided by D84 (2026-10-05):
 
-- Task 11b (NEW-111, NEW-112, NEW-118) — the root key (D46): offline root key, trust a distribution
-  channel instead (a Spec 2 change), or defer (A16 stays blocked). Asked 2026-10-05 (D83 (8)).
-- Foundation watchdog — whether `SpawnLockfRunner` needs one around non-blocking `lockf`
-  (`BACKLOG.md` §2).
+- Task 11b (NEW-111, NEW-112, NEW-118) — re-scoped: trust a distribution channel instead of an
+  offline root key; needs a Spec 2 amendment, then the A16 spec and plan (D84 (1), (2)).
+- Workflow versions — bump the six changed workflows together (D84 (4)); startable.
+- Spec 2 §4.2 — amend: stdio 0–2 are not extra inherited descriptors (D84 (6)); docs only.
+- Retention observation — remove the second walk, re-argue `foundation.md` §9 (D84 (7)); startable.
+- Closed without code: the Foundation watchdog (D84 (3)); the A15 results manifests (D84 (5)).
+
+Needs a founder decision: none open (2026-10-05).
 
 Conditional: NEW-27 when a real write scope is wired, NEW-28 when a production argument reaches the
 retained screening refusal, NEW-100's round trip after A16 (D42).
