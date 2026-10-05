@@ -734,7 +734,7 @@ the "every managed mutation is transactional" sentence has a stated exception.
 | An empty `PATH` does not become an unbounded search | a fixed fallback of the four system directories (`packages/platform-macos/src/macos.ts:21,185-186`) | `packages/platform-macos/src/macos.test.ts` |
 | The *platform boundary* never executes what it found | `AgentDiscovery.version` is permanently `null` there, because determining it requires running the binary (`packages/platform-macos/src/types.ts:19-24`, `foundation.md` §7). **A layer above does execute it**: `discoverCli` runs `<exe> --version` (`packages/security/src/cli.ts:54-80`) and `doctor` calls it on every invocation, which retired the Foundation-era invariant — `claude-adapter.md` §9 residual 10 records exactly that | `packages/platform-macos/src/macos.test.ts`; `tests/security/network.test.ts` classifies the version probe rather than forbidding it |
 | A hostile entry for one vendor does not cost the user the other | a discovery that refuses is treated as "not this one" and the next vendor is tried (`apps/cli/src/commands/ingest.ts:482-491`) | `apps/cli/src/commands/ingest.test.ts` |
-| **The executed binary is vouched for by something** | `assertTrustedExecutable` resolves the path one component at a time, refuses anything that is not a regular file, and checks every real directory the resolution enters — including the one holding each intermediate link — refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own (`packages/platform-macos/src/macos.ts:350`) | `packages/platform-macos/src/macos.test.ts`; `tests/helpers/temp-home.ts` runs the real check against every planted binary |
+| **The executed binary is vouched for by something** | `assertTrustedExecutable` resolves the path one component at a time, refuses anything that is not a regular file, and checks every real directory the resolution enters — including the one holding each intermediate link — refusing an owner that is neither the current uid nor root, any other-writable directory, a group-writable one the current uid does not own, and a root-owned group-writable one whoever runs the check (D83 (3), `BACKLOG.md` NEW-33) (`packages/platform-macos/src/macos.ts:350`) | `packages/platform-macos/src/macos.test.ts`; `tests/helpers/temp-home.ts` runs the real check against every planted binary |
 
 **A gap found while writing this document — paid on 2026-08-17, and this section read "absent" for
 a day afterwards.** `packages/platform-macos/src/types.ts:13-20` documented `executablePath` as
@@ -780,7 +780,7 @@ target must be a regular file. The declared path is resolved **one component at 
 `readlink`, as the kernel resolves it, and every real directory that resolution enters — including the
 directory holding each intermediate link, whether the link names a file or a directory component — is
 then refused if its owner is neither the current uid nor root, if it is other-writable with or without
-a sticky bit, or if it is group-writable and not owned by the current uid. `..` climbs from the real
+a sticky bit, or if it is group-writable and either not owned by the current uid or owned by root. `..` climbs from the real
 directory reached so far, and more than 32 hops (macOS `MAXSYMLINKS`) is a refusal.
 
 **The middle-hop bypass is closed (`BACKLOG.md` §1 NEW-32).** The previous version walked three
@@ -797,9 +797,15 @@ them. The stepwise walk enters `<attacker>` and refuses it.
    the rule was decided. **Re-accepted 2026-10-05 (D83 (7)):** a platform limit inside the same-uid
    boundary (§2), consistent with D82; the row closes without code.
 
-**`NEW-33` is not on that list**, and putting it there was the other half of the error: a root-owned
-group-writable directory being *refused* makes a `claude` under some `/usr/local` layouts fail. That
-is a false refusal — a usability cost and the founder's call — not a weakening of the boundary.
+**`NEW-33` is decided, not a residual (D83 (3), 2026-10-05): root-owned, group-writable executable
+directories are not trusted.** A `drwxrwxr-x root:admin` `/usr/local/bin`, found on some Intel and
+legacy installs, lets every admin user plant a binary, so a `claude` under it is refused, and it is
+refused even when the check runs as root. The cost is a refusal on those layouts; the user's remedy
+is `chmod g-w` on the directory or a user-owned install. `posix_root_owned` system executables and
+`admitOwnedExecutable` already refused any group-writable ancestor. On the founder's machine (traced
+2026-10-05) every admitted path — `/bin/launchctl`, `/usr/bin/git`, `/usr/bin/xcrun`, the `claude`,
+`codex` and Node chains — sits under `0755` root or user-owned directories; the one group-writable
+directory, `/opt/homebrew/bin`, is user-owned and stays admitted.
 
 What this does **not** mean: it is not a privilege escalation. The binary runs as the user, from the
 user's own `PATH`, and anyone who can plant it there can already run code as that user. What it costs

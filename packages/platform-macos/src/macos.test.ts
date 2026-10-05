@@ -296,9 +296,10 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
     resolved?: string,
     declared?: string,
     links: Readonly<Record<string, string>> = {},
+    uid = 501,
   ): MacOsPlatformAdapter {
     return createAdapter({
-      currentUid: () => 501,
+      currentUid: () => uid,
       /**
        * **Every symbolic link in the fixture, and nothing else.** The walk asks `readlink`
        * about each component it passes, so an unlisted path answers "not a link", which is
@@ -401,12 +402,10 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
    * is **root-owned**, which the owner rule accepts, and group-writable, which only this
    * clause refuses.
    *
-   * It is also the exact shape `BACKLOG.md` §1 **NEW-33** asks the founder about:
+   * It is also the exact shape `BACKLOG.md` §1 **NEW-33** asked the founder about:
    * `/usr/local` and `/usr/local/bin` are `drwxrwxr-x root:admin` on some Intel and
-   * legacy installs, so a `claude` under one is refused today. Group `admin` means any
-   * admin user can plant a binary there, which is the threat — but it is the same class
-   * of false refusal that got the strict guard withdrawn, so the rule stands until the
-   * founder rules on it and this case records what "stands" means.
+   * legacy installs. Group `admin` means any admin user can plant a binary there, and the
+   * founder ruled on 2026-10-05 (D83 (3)) that such a directory is not trusted.
    */
   it("refuses a root-owned group-writable ancestor, which the owner rule permits", async () => {
     const adapter = adapterSeeing(
@@ -422,7 +421,49 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
 
     await expect(
       adapter.assertTrustedExecutable("/usr/local/bin/claude"),
-    ).rejects.toThrow(MacOsPlatformTrustError);
+    ).rejects.toThrow(/\/usr\/local\/bin is group-writable and owned by root/u);
+  });
+
+  /**
+   * **D83 (3): root-owned, group-writable is never trusted, whoever runs the check.** Run as
+   * root, the current-uid clause would otherwise read a `root:admin 0775` directory as "the
+   * user's own" and admit it, although every member of its group can still plant a binary.
+   */
+  it("refuses a root-owned group-writable ancestor even when the current uid is root", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/usr": ROOT,
+        "/usr/local": { uid: 0, mode: 0o775 },
+        "/usr/local/bin": { uid: 0, mode: 0o775 },
+        "/usr/local/bin/claude": { uid: 0, mode: 0o100755 },
+      },
+      "/usr/local/bin/claude",
+      undefined,
+      {},
+      0,
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/usr/local/bin/claude"),
+    ).rejects.toThrow(/\/usr\/local\/bin is group-writable and owned by root/u);
+  });
+
+  it("accepts a root-owned 0755 ancestor, the shape /usr/local has on a current macOS", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/usr": ROOT,
+        "/usr/local": ROOT,
+        "/usr/local/bin": ROOT,
+        "/usr/local/bin/claude": FILE,
+      },
+      "/usr/local/bin/claude",
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/usr/local/bin/claude"),
+    ).resolves.toBeUndefined();
   });
 
   /**
@@ -567,7 +608,7 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
 
     await expect(
       adapter.assertTrustedExecutable("/opt/trusted/bin/true"),
-    ).rejects.toThrow(/\/srv is group-writable and owned by another user/u);
+    ).rejects.toThrow(/\/srv is group-writable and owned by root/u);
   });
 
   /** A relative link target resolves against the real directory holding the link. */
