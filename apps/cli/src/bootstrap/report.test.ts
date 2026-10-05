@@ -387,7 +387,7 @@ describe("inspectBootstrapEvidence", () => {
     await expect(inspectBootstrapEvidenceAdmission({ ...requestFor(fixture), reader })).rejects.toBeInstanceOf(TypeError);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("projects a retained directory tree exactly twice per inspection", async () => {
+  it("projects a retained directory tree exactly once per inspection (D84)", async () => {
     const fixture = await createCommandFixture("bootstrap-report-projection-count", {
       bootstrapAvailable: true,
     });
@@ -416,7 +416,7 @@ describe("inspectBootstrapEvidence", () => {
 
     await inspectBootstrapEvidenceAdmission(request);
 
-    expect(walks).toBe(2);
+    expect(walks).toBe(1);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("walks a plan's retention roots and row parents in a single inventory call", async () => {

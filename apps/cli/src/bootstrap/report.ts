@@ -271,9 +271,8 @@ function lowerHash(value: Uint8Array | string): LowerHexSha256 {
 
 /**
  * Scoped to one inspection call: a cache that survived past it would hand back
- * a postimage taken before a later change the double read inside
- * `projectPostimage` exists to catch, turning that safety check into a source
- * of stale answers.
+ * a postimage taken before a later change that a fresh `projectPostimage`
+ * exists to catch, turning that safety check into a source of stale answers.
  */
 function memoizePostimageProjector(
   project: BootstrapEvidenceInspectionRequestV1["projectPostimage"],

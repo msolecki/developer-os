@@ -902,7 +902,7 @@ overhead, not of durability.
 | Eight retained-evidence cases timing out under full-suite parallelism | 300 s each (2026-09-05, `npm run test:suite` at load average 47 from several concurrent test runs) | **gone — they do not appear at all** (2026-09-06, `npm run test:suite` on a quiet machine, load average 2.4 at start) |
 | Three uninstall cases previously timing out | 300 s each | 112.11 s, 117.25 s, 119.60 s (measured during Task 6, `npx vitest run apps/cli/src/commands/uninstall.test.ts`) |
 | Evidence inspections per fresh `init` | 6 | **3**, counted by a test rather than estimated |
-| Retention tree projections per inspection | 6 | **2** (the surviving anti-TOCTOU pair) |
+| Retention tree projections per inspection | 6 | **2** (the surviving anti-TOCTOU pair; **1** since D84, 2026-10-05 — see the D84 amendment below) |
 | Retained-row lookups | 314 linear `Array.prototype.find` calls | **2** |
 
 **The `test:bootstrap` whole-script run that produced 127.5 minutes and the 97.89 s proxy figure
@@ -1016,10 +1016,46 @@ not attribute the rest of the wait; the largest known contributor is the retain 
 still walks the parent eight times per row (two `observe`s × before/after × the projection's own
 first/second pair) — now `lstat`/`readdir` only for unchanged files, but still O(rows × tree) in
 metadata calls. Dropping the projection's internal pair inside `observe`
-would halve that; it is a founder decision, not taken here. Option B (metadata-only parent
+would halve that; it is a founder decision, not taken here (taken since by D84, below). Option B (metadata-only parent
 checks) was rejected. The content cache adds one detection residual: a change made through a
 shared mmap without msync(2) may not move ctime before write-back, so it could be missed until
 then; no writer of `state/` uses mmap.
+
+**Amended 2026-10-05 (D84 (7)): one walk per directory projection; the anti-TOCTOU pair is
+the before/after projection pair around each mutation.** `projectBootstrapRetentionPostimage`
+used to walk a directory tree twice and refuse unless both walks agreed, so that each projection
+proved the tree stable during its own observation. It now walks once. The protection against a
+check-then-act race is argued from the projections that bracket each mutation alone:
+
+- **Retain loop.** `BootstrapRetainer.observeAll` projects each distinct parent before and after
+  all its rows' source and tombstone projections and refuses unless the two agree
+  (`sameFreshProjection`: `treeHash`, counts and root identity), and the source or tombstone
+  must equal the table's recorded postimage. `retain` renames only from such a `before`
+  observation, then observes again and requires the `after` state, so the rename sits between
+  two observations that each must match the table.
+- **Evidence inspection.** `inspectBootstrapEvidenceAdmission` projects each path once per
+  inspection (`memoizePostimageProjector`) and compares it with the postimage recorded in the
+  retained table or journal; the Foundation terminal journal keeps its unmemoized before/after
+  pair around its read. Retention tree projections per inspection: 2 → **1**, pinned by
+  `report.test.ts`.
+- **Content.** The NEW-133 content cache and its two-second racy-ctime margin are unchanged, so
+  a changed file still misses the cache and is hashed again in whichever projection follows the
+  change.
+
+A regular-file projection still reads its file twice; that costs two reads of one file, not
+two walks of a tree, and is unchanged. `projectRetainedDirectoryTree`, the test-only
+expected-tree helper, keeps its own pair.
+
+**Accepted residual.** A change that starts and reverts inside one observation — between the
+before and after projections, or within a single walk — and leaves the tree byte- and
+metadata-identical by the after projection is no longer detected; the removed second walk could
+catch one that was still in flight when the first walk ended. Such a change leaves no state the
+retainer acts on: what is renamed and recorded is what both bracketing projections saw. A
+`state/` writer that could exploit it already has the same uid as the retainer.
+
+| Measurement (this laptop, unsandboxed, exit 0 each) | Before (`cfc00068`) | After |
+|---|---|---|
+| `init --yes --local-release <pkg> --adapters none` from `npm run pack:local-release`, `/usr/bin/time -p`, fresh `HOME` | 296.93 s (load average 15-18); 199.55 s (load average 7-10) | **140.57 s** (load average 7-10) |
 
 **Added 2026-10-04 (NEW-140): the ordinary-command gate scaled with retained envelopes.** With a
 valid V2 manifest, `assertOrdinaryCommandAdmitted` read, decoded and fully admitted every retained
