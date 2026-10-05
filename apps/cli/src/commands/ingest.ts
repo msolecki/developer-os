@@ -65,6 +65,7 @@ import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { currentScheduledJob } from "./automation/scheduled-scope.js";
 import { isTopicNotePath } from "./capture.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
+import { boundState, fileState, stateOf } from "./ingest-file-state.js";
 import { outputSchemaPath } from "./output-schemas.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
 
@@ -154,8 +155,12 @@ interface RefusedCaptureV1 {
    * says `staging` while the bytes on disk say `ingested`.
    */
   readonly leftAt: CaptureLeftAt;
-  /** `"note_changed_since_capture"` for a note capture whose destination moved on; `null` otherwise. */
-  readonly reason: NoteChangedReason | null;
+  /**
+   * `"note_changed_since_capture"` for a note capture whose destination moved on,
+   * `"vault_changed_during_ingest"` for a hand edit made while the agent ran (NEW-40); `null`
+   * otherwise.
+   */
+  readonly reason: RefusalReason | null;
 }
 
 type CaptureOutcome =
@@ -295,6 +300,8 @@ const SECURITY_VALIDATORS: readonly ValidatorId[] = ["secret-scan", "write-scope
 
 const NOT_INITIALIZED = "developer-os init";
 
+const RERUN_INGEST = "rerun developer-os ingest";
+
 const RETRY_LATER =
   "run developer-os ingest again; the capture is unchanged and still accepted";
 
@@ -336,6 +343,9 @@ const STRANDED_RECOVERY =
 const INGESTED_RECOVERY =
   "a capture reported as applied and ingested has its notes in the vault and its status at ingested, so there is nothing to redo for it: the failure printed beside its line happened after the work was finished";
 
+const VAULT_CHANGED_RECOVERY =
+  `a capture refused as vault_changed_during_ingest met a hand edit made while the agent ran, and your edit is kept: if that capture's status reads staging, set it back to accepted, then ${RERUN_INGEST}`;
+
 const INCOMPLETE_TRANSACTION_RECOVERY =
   "if developer-os status reports an incomplete transaction, resolve it with developer-os repair first";
 
@@ -363,8 +373,11 @@ function refusedRecovery(refused: readonly RefusedCaptureV1[]): string {
   if (refused.some((refusal) => refusal.leftAt === "untouched" && refusal.reason === null)) {
     lines.push(UNTOUCHED_RECOVERY);
   }
-  if (refused.some((refusal) => refusal.reason !== null)) {
+  if (refused.some((refusal) => refusal.reason === "note_changed_since_capture")) {
     lines.push(NOTE_CHANGED_RECOVERY);
+  }
+  if (refused.some((refusal) => refusal.reason === "vault_changed_during_ingest")) {
+    lines.push(VAULT_CHANGED_RECOVERY);
   }
   /**
    * `leftAt` as well as the notes, because a capture whose notes landed **and**
@@ -381,7 +394,10 @@ function refusedRecovery(refused: readonly RefusedCaptureV1[]): string {
   }
   if (
     refused.some(
-      (refusal) => refusal.leftAt === "staging" && refusal.appliedNotes.length === 0,
+      (refusal) =>
+        refusal.leftAt === "staging" &&
+        refusal.appliedNotes.length === 0 &&
+        refusal.reason !== "vault_changed_during_ingest",
     )
   ) {
     lines.push(STRANDED_RECOVERY);
@@ -463,6 +479,34 @@ class NoteChangedSinceCaptureRefusal extends IngestRefusal {
       `developer-os review --id ${captureId} --decision reject, then run the workflow again against the current note`,
     );
     this.name = "NoteChangedSinceCaptureRefusal";
+  }
+}
+
+type VaultChangedReason = "vault_changed_during_ingest";
+type RefusalReason = NoteChangedReason | VaultChangedReason;
+
+/**
+ * D83 (2), BACKLOG NEW-40: a hand edit made while the agent ran, to a file this ingest would
+ * write or to the index its prompt was built from. **The user's edit wins**: the check runs
+ * before the apply, so no note, index or `ingested` status was written, and the user reruns.
+ *
+ * Not an `IngestPreconditionRefusal`: the compensating write still runs, bound to the staged
+ * bytes, so it puts the capture back to `accepted` when the user left it alone and is refused
+ * by the executor when they edited it.
+ */
+class VaultChangedDuringIngestRefusal extends IngestRefusal {
+  readonly reason: VaultChangedReason = "vault_changed_during_ingest";
+
+  constructor(paths: readonly string[], captureEdited: boolean) {
+    super(
+      EXIT_CODES.decisionRequired,
+      "a file this ingest would write, or the index its prompt was built from, changed while the agent ran, so nothing was applied and your edit is intact",
+      paths,
+      captureEdited
+        ? `your edit to the capture is kept and its status still reads staging: set it back to accepted, then ${RERUN_INGEST}`
+        : `the capture is accepted again: ${RERUN_INGEST}`,
+    );
+    this.name = "VaultChangedDuringIngestRefusal";
   }
 }
 
@@ -724,14 +768,12 @@ async function resolveCapturePath(
  * refused rather than overwritten. It is the first write **per capture**, not per run:
  * `ingestOne` runs once for each, so a three-capture run has three such writes.
  *
- * **The two later writes still overwrite, and the widest window in this command is one of
- * them.** The `ingested` write re-renders the pre-agent envelope over the whole file after
- * the vendor call — the longest read-to-write gap the product has, minutes rather than
- * milliseconds — and a hand edit made during it is discarded silently. An earlier version of
- * this paragraph called that structurally impossible to pin because "there is no caller read"
- * — which is wrong: this run holds the exact bytes it wrote at staging and could pin their
- * digest. Whether to is a decision, and it is registered as **NEW-40** rather than described
- * as closed.
+ * **The two later writes — `ingested` and the compensating rollback — are bound to the exact
+ * bytes this run wrote at staging** (D83 (2), BACKLOG NEW-40). The `ingested` write follows
+ * the vendor call, the longest read-to-write gap the product has, and it used to re-render
+ * the pre-agent envelope over whatever the file then held. A hand edit made during the call is
+ * refused earlier, by `assertVaultUnchanged`, before any note lands; this precondition closes
+ * the milliseconds between that check and each later write.
  */
 async function writeCaptureFile(
   context: CliContext,
@@ -739,10 +781,8 @@ async function writeCaptureFile(
   target: string,
   contents: string,
   /**
-   * The digest of the bytes this run read, when it has one. The first write of a run does —
-   * it reads the capture immediately above — and the later ones do not: they follow a write
-   * this run itself made, so there is no caller read to pin, and the executor's own snapshot
-   * is the right precondition for them.
+   * The digest of the bytes the file must still hold: what this run read, for the staging
+   * write, and what it wrote at staging, for the two later ones.
    */
   expectedBeforeHash?: string,
 ): Promise<void> {
@@ -768,6 +808,18 @@ async function writeCaptureFile(
      * below says nothing about the file's contents.
      */
     if (error instanceof TransactionPreconditionError) {
+      /**
+       * After staging the file is no longer at `accepted`, so "run again" alone would select
+       * nothing; and notes may already be in the vault, which the run-level recovery for the
+       * state `leftAtOf` reads back describes. This write's own refusal claims only itself.
+       */
+      if (kind !== TRANSACTION_KINDS.stage) {
+        throw new IngestPreconditionRefusal(
+          exitCodeOf(error),
+          "the capture changed on disk after this ingest staged it, so its status was not moved and your edit is intact",
+          [target],
+        );
+      }
       throw new IngestPreconditionRefusal(
         exitCodeOf(error),
         "the capture changed on disk before ingest moved it, so nothing was written and your edit is intact",
@@ -1399,6 +1451,69 @@ async function exists(context: CliContext, path: string): Promise<boolean> {
 }
 
 /**
+ * Every path a plain capture's ingest will write, and the index its prompt was built from, as
+ * they stood when the agent call began (D83 (2), BACKLOG NEW-40).
+ *
+ * The proposal's own destinations are unknown until the call returns, so the content root's
+ * names are listed instead: a destination absent from that list and present afterwards was
+ * created during the call. A destination already present is `applyNotes`' create-only
+ * refusal, which predates this and keeps its own message.
+ */
+interface CallSnapshot {
+  readonly capture: string;
+  readonly files: ReadonlyMap<string, string>;
+  readonly listing: ReadonlySet<string>;
+}
+
+async function snapshotBeforeCall(
+  context: CliContext,
+  environment: IngestEnvironment,
+  capturePath: string,
+  stagedHash: string,
+): Promise<CallSnapshot> {
+  /** Identity from disk, bytes from what this run wrote: an edit since staging already differs. */
+  const files = new Map<string, string>([
+    [capturePath, await boundState(context, capturePath, stagedHash)],
+  ]);
+  const artifacts = artifactPaths(environment.brainConfig);
+  for (const artifact of [artifacts.index, artifacts.graph, artifacts.vaultMap, artifacts.catalog]) {
+    const path = join(environment.paths.brain, artifact);
+    /** The index is bound to the bytes the excerpt was parsed from, not to a second read. */
+    files.set(
+      path,
+      artifact === artifacts.index ? environment.indexState : await fileState(context, path),
+    );
+  }
+  const names = await context.fs.readdir(environment.contentRoot, { recursive: true });
+  return {
+    capture: capturePath,
+    files,
+    listing: new Set(names.map((name) => name.normalize("NFC"))),
+  };
+}
+
+async function assertVaultUnchanged(
+  context: CliContext,
+  snapshot: CallSnapshot,
+  contentRoot: string,
+  writes: readonly PlannedNoteWriteV1[],
+): Promise<void> {
+  const changed: string[] = [];
+  for (const [path, state] of snapshot.files) {
+    if ((await fileState(context, path)) !== state) changed.push(path);
+  }
+  for (const write of writes) {
+    const path = join(contentRoot, write.path);
+    if (!snapshot.listing.has(write.path.normalize("NFC")) && (await exists(context, path))) {
+      changed.push(path);
+    }
+  }
+  if (changed.length > 0) {
+    throw new VaultChangedDuringIngestRefusal(changed, changed.includes(snapshot.capture));
+  }
+}
+
+/**
  * Transaction 2: one `create` per proposed note.
  *
  * **`create`, never `replace`.** A proposal names notes the vault would *gain*;
@@ -1677,6 +1792,8 @@ interface IngestEnvironment {
    * capture sees what an earlier one created (BACKLOG NEW-116) — see `readIndexExcerpt`.
    */
   readonly indexExcerpt: readonly IndexExcerptEntryV1[];
+  /** The `fileState` of the index bytes `indexExcerpt` was parsed from (NEW-40). */
+  readonly indexState: string;
   /** Note paths written earlier in this run, in write order (BACKLOG NEW-116). */
   readonly takenPaths: readonly string[];
 }
@@ -1745,6 +1862,8 @@ async function ingestOne(
    * no target bytes could be attributed.
    */
   let applied: readonly string[] | null = null;
+  /** The digest of the bytes the staging write put down; every later capture write is bound to it. */
+  let stagedHash: string | undefined;
 
   try {
     const path = await resolveCapturePath(context, quarantine, fileName);
@@ -1791,20 +1910,18 @@ async function ingestOne(
 
     /** Transaction 1. Durable before the apply, or a crash is indistinguishable
      * from a run that never started. */
-    await writeCaptureFile(
-      context,
-      TRANSACTION_KINDS.stage,
-      path,
-      renderCaptureFile({ ...envelope, status: "staging" }),
-      asRead,
-    );
+    const stagedText = renderCaptureFile({ ...envelope, status: "staging" });
+    stagedHash = createHash("sha256").update(new TextEncoder().encode(stagedText)).digest("hex");
+    await writeCaptureFile(context, TRANSACTION_KINDS.stage, path, stagedText, asRead);
 
     /** A note capture makes no vendor call: its proposal is the reviewed content, verbatim. */
     let payload: unknown;
+    let snapshot: CallSnapshot | null = null;
     if (note === null) {
       if (vendor === null) {
         throw new Error("a plain capture reached the vendor call with no vendor resolved");
       }
+      snapshot = await snapshotBeforeCall(context, environment, path, stagedHash);
       payload = (
         await invokeVendor(
           context,
@@ -1858,6 +1975,11 @@ async function ingestOne(
       );
     }
 
+    /** NEW-40: before anything lands — before `applyNotes` creates even a directory. */
+    if (snapshot !== null) {
+      await assertVaultUnchanged(context, snapshot, environment.contentRoot, plan.writes);
+    }
+
     const written = plan.writes.map((write) => write.path);
     if (plan.writes.length > 0) {
       /**
@@ -1888,6 +2010,7 @@ async function ingestOne(
       TRANSACTION_KINDS.ingested,
       path,
       renderCaptureFile({ ...envelope, status: "ingested" }),
+      stagedHash,
     );
 
     return {
@@ -1927,6 +2050,7 @@ async function ingestOne(
           TRANSACTION_KINDS.rollback,
           capturePath,
           renderCaptureFile(staged),
+          stagedHash,
         );
         rolledBack = true;
       } catch {
@@ -1950,7 +2074,11 @@ async function ingestOne(
         recovery:
           error instanceof IngestRefusal ? (error.recovery ?? null) : null,
         appliedNotes: applied ?? [],
-        reason: error instanceof NoteChangedSinceCaptureRefusal ? error.reason : null,
+        reason:
+          error instanceof NoteChangedSinceCaptureRefusal ||
+          error instanceof VaultChangedDuringIngestRefusal
+            ? error.reason
+            : null,
         leftAt: await leftAtOf(context, redact, fileName, capturePath, {
           /**
        * `untouched` here for the same reason the rollback takes it: a plan-phase refusal
@@ -2042,19 +2170,33 @@ async function readIndexExcerpt(
   paths: RuntimePaths,
   brainConfig: BrainConfigV1,
   redact: Redactor,
-): Promise<readonly IndexExcerptEntryV1[]> {
+): Promise<{ readonly entries: readonly IndexExcerptEntryV1[]; readonly state: string }> {
   const indexPath = join(paths.brain, artifactPaths(brainConfig).index);
-  if (!(await exists(context, indexPath))) return [];
+  if (!(await exists(context, indexPath))) return { entries: [], state: "absent" };
 
   let text: string;
+  let state = "unreadable";
   try {
-    text = await context.guards.readText(indexPath);
+    text = await context.guards.readText(indexPath, async (handle) => {
+      const bytes = await handle.readFile();
+      state = stateOf(await handle.stat({ bigint: true }), bytes);
+      return bytes.toString("utf8");
+    });
   } catch (error) {
     context.io.stderr(
       `the vault index at ${renderPath(indexPath)} could not be read (${String(error)}), so ingest proceeds without an index excerpt`,
     );
-    return [];
+    return { entries: [], state: "unreadable" };
   }
+  return { entries: parseIndexExcerpt(text, indexPath, context, redact), state };
+}
+
+function parseIndexExcerpt(
+  text: string,
+  indexPath: string,
+  context: CliContext,
+  redact: Redactor,
+): readonly IndexExcerptEntryV1[] {
 
   let parsed: unknown;
   try {
@@ -2169,7 +2311,7 @@ export interface RunReportV1 {
     readonly message: string;
     readonly recovery: string | null;
     readonly appliedNotes: readonly string[];
-    readonly reason: NoteChangedReason | null;
+    readonly reason: RefusalReason | null;
   }[];
   readonly unreadable: readonly IngestedCaptureV1[];
 }
@@ -2424,7 +2566,7 @@ export async function runIngest(
     guards = guardsWith(context.guards, redact);
 
     /** Refreshed in the capture loop below — see `readIndexExcerpt`. */
-    let indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
+    let index = await readIndexExcerpt(context, paths, brainConfig, redact);
 
     const selection = await selectCaptures(context, quarantine, redact, limit);
 
@@ -2471,7 +2613,8 @@ export async function runIngest(
       contentRoot,
       redact,
       vendor,
-      indexExcerpt,
+      indexExcerpt: index.entries,
+      indexState: index.state,
       takenPaths: [],
       /**
        * Resolved once per invocation, here, because resolution is per-install:
@@ -2515,7 +2658,7 @@ export async function runIngest(
       order.push(fileName.slice(0, -CAPTURE_FILE_SUFFIX.length));
       const outcome = await ingestOne(
         context,
-        { ...environment, indexExcerpt, takenPaths },
+        { ...environment, indexExcerpt: index.entries, indexState: index.state, takenPaths },
         fileName,
       );
       if (outcome.ok) ingested.push(outcome.capture);
@@ -2523,7 +2666,7 @@ export async function runIngest(
       const written = outcome.ok ? outcome.capture.notes : outcome.refusal.appliedNotes;
       if (written.length > 0) {
         takenPaths.push(...written.map((note) => redact(note, "value").text));
-        indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
+        index = await readIndexExcerpt(context, paths, brainConfig, redact);
       }
     }
 

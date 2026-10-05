@@ -1,6 +1,6 @@
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { getuid } from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -3387,5 +3387,196 @@ describe("invokeAgentOnce, the one door for a single isolated reply", () => {
     );
 
     expect(reply).toEqual({ ok: false, reason: "timeout" });
+  });
+});
+
+/**
+ * **D83 (2), BACKLOG NEW-40: a hand edit made while the agent runs wins.** The agent call is the
+ * widest read-to-write window this command has — minutes, not milliseconds — so every file the
+ * ingest will write, and the index whose excerpt the prompt was built from, is bound to its
+ * exact pre-call identity and bytes. Any difference refuses the capture before a note lands, and
+ * the user reruns the ingest. A note the run will not write is not guarded.
+ */
+describe("runIngest, a hand edit while the agent runs (D83, NEW-40)", () => {
+  const RERUN = "rerun developer-os ingest";
+  const TARGET = "DEV/mid-call.md";
+
+  interface ChangedRefusal {
+    readonly captureId: string;
+    readonly code: number;
+    readonly leftAt: string;
+    readonly recovery: string | null;
+    readonly reason: string | null;
+    readonly appliedNotes: readonly string[];
+  }
+
+  function changedOf(result: IngestOutcome): ChangedRefusal {
+    const [refusal] = refusedOf(result) as readonly ChangedRefusal[];
+    if (refusal === undefined) throw new Error("the run refused no capture");
+    return refusal;
+  }
+
+  /** No note, no index and no `ingested` status: the run left nothing past the staging write. */
+  async function expectNothingApplied(fixture: IngestFixture): Promise<void> {
+    expect(await exists(join(fixture.content, TARGET))).toBe(false);
+    const ladder = await ladderOf(fixture);
+    expect(ladder).not.toContain("ingest-apply");
+    expect(ladder).not.toContain("ingest-reindex");
+    expect(ladder).not.toContain("ingest-ingested");
+  }
+
+  it("refuses, keeping the edit, when the capture itself is edited during the call", async () => {
+    const fixture = await installedFixture("ingest-call-capture-edit");
+    const seeded = await fixture.seedAccepted("an observation edited while the agent runs");
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    let edited = "";
+    fixture.duringCall(async () => {
+      edited = `${await nodeFs.readFile(seeded.path, "utf8")}\nedited while the agent ran\n`;
+      await nodeFs.writeFile(seeded.path, edited, { mode: 0o600 });
+    });
+
+    const result = await fixture.run();
+
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
+    const refusal = changedOf(result);
+    expect(refusal).toMatchObject({ captureId: seeded.id, reason: "vault_changed_during_ingest" });
+    expect(refusal.recovery).toContain(RERUN);
+    /** The capture reads `staging`, so the recovery must say how to make a rerun select it. */
+    expect(refusal.recovery).toContain("accepted");
+    expect(result.ok ? "" : (result.error.recovery ?? "")).toContain(RERUN);
+    expect(result.ok ? "" : (result.error.recovery ?? "")).not.toContain("indeterminate apply");
+    await expect(nodeFs.readFile(seeded.path, "utf8")).resolves.toBe(edited);
+    await expectNothingApplied(fixture);
+  });
+
+  it("refuses when the index the prompt was built from is edited during the call", async () => {
+    const fixture = await installedFixture("ingest-call-index-edit");
+    const seeded = await fixture.seedAccepted("an observation whose index moves on");
+    await writeIndex(fixture, [{ path: "DEV/known.md", title: "Known", summary: "Known." }]);
+    const indexPath = join(fixture.content, "_indexes", "index.json");
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    const edited = '{"edited":"by hand"}\n';
+    fixture.duringCall(async () => {
+      await nodeFs.writeFile(indexPath, edited, { mode: 0o600 });
+    });
+
+    const result = await fixture.run();
+
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
+    const refusal = changedOf(result);
+    expect(refusal).toMatchObject({
+      captureId: seeded.id,
+      reason: "vault_changed_during_ingest",
+      leftAt: "untouched",
+    });
+    expect(refusal.recovery).toContain(RERUN);
+    await expect(nodeFs.readFile(indexPath, "utf8")).resolves.toBe(edited);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    await expectNothingApplied(fixture);
+  });
+
+  it("refuses when the index is deleted during the call", async () => {
+    const fixture = await installedFixture("ingest-call-index-delete");
+    const seeded = await fixture.seedAccepted("an observation whose index disappears");
+    await writeIndex(fixture, [{ path: "DEV/known.md", title: "Known", summary: "Known." }]);
+    const indexPath = join(fixture.content, "_indexes", "index.json");
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    fixture.duringCall(async () => {
+      await nodeFs.rm(indexPath, { force: true });
+    });
+
+    const result = await fixture.run();
+
+    expect(changedOf(result)).toMatchObject({
+      captureId: seeded.id,
+      reason: "vault_changed_during_ingest",
+    });
+    expect(await exists(indexPath)).toBe(false);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    await expectNothingApplied(fixture);
+  });
+
+  it("refuses when a file appears at the proposed destination during the call", async () => {
+    const fixture = await installedFixture("ingest-call-destination-created");
+    const seeded = await fixture.seedAccepted("an observation whose destination is taken");
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    const mine = "the user's own note, written while the agent ran\n";
+    fixture.duringCall(async () => {
+      await nodeFs.mkdir(join(fixture.content, "DEV"), { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(join(fixture.content, TARGET), mine, { mode: 0o600 });
+    });
+
+    const result = await fixture.run();
+
+    const refusal = changedOf(result);
+    expect(refusal).toMatchObject({
+      captureId: seeded.id,
+      reason: "vault_changed_during_ingest",
+      leftAt: "untouched",
+    });
+    expect(refusal.recovery).toContain(RERUN);
+    await expect(nodeFs.readFile(join(fixture.content, TARGET), "utf8")).resolves.toBe(mine);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    const ladder = await ladderOf(fixture);
+    expect(ladder).not.toContain("ingest-apply");
+    expect(ladder).not.toContain("ingest-ingested");
+  });
+
+  it("ingests when a note the run will not write is edited during the call", async () => {
+    const fixture = await installedFixture("ingest-call-unrelated-edit");
+    const seeded = await fixture.seedAccepted("an observation beside an unrelated edit");
+    const unrelated = join(fixture.content, "DEV", "unrelated.md");
+    await nodeFs.mkdir(dirname(unrelated), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(
+      unrelated,
+      proposedNote(seeded.id, "DEV/unrelated.md", "Unrelated", "Before.").contents,
+      { mode: 0o600 },
+    );
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    fixture.duringCall(async () => {
+      await nodeFs.appendFile(unrelated, "edited while the agent ran\n");
+    });
+
+    const result = await fixture.run();
+
+    expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+    expect(await fixture.statusOf(seeded.id)).toBe("ingested");
+    expect(await exists(join(fixture.content, TARGET))).toBe(true);
+    await expect(nodeFs.readFile(unrelated, "utf8")).resolves.toContain("edited while the agent ran");
+  });
+
+  /**
+   * **The later write is bound to the exact staged bytes** (the row's second half): an edit
+   * that lands after the check and before the `ingested` write is refused by the executor's
+   * precondition rather than overwritten by a re-render of the pre-call envelope.
+   */
+  it("binds the ingested write to the staged bytes, so a later edit is not overwritten", async () => {
+    const fixture = await installedFixture("ingest-ingested-bound");
+    const seeded = await fixture.seedAccepted("an observation edited just before ingested");
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    const inner = fixture.context.executor;
+    let edited = "";
+    const context: CliContext = {
+      ...fixture.context,
+      executor: {
+        execute: async (plan) => {
+          if (plan.kind === "ingest-ingested") {
+            edited = `${await nodeFs.readFile(seeded.path, "utf8")}\nedited before ingested\n`;
+            await nodeFs.writeFile(seeded.path, edited, { mode: 0o600 });
+          }
+          return inner.execute(plan);
+        },
+        resume: (transactionId) => inner.resume(transactionId),
+        rollback: (transactionId) => inner.rollback(transactionId),
+      },
+    };
+
+    const result = await runIngest(context, {});
+
+    expect(edited, "the edit must reach the ingested write").not.toBe("");
+    const refusal = changedOf(result);
+    expect(refusal).toMatchObject({ captureId: seeded.id, leftAt: "staging" });
+    expect(refusal.appliedNotes).toStrictEqual([TARGET]);
+    await expect(nodeFs.readFile(seeded.path, "utf8")).resolves.toBe(edited);
   });
 });
