@@ -805,7 +805,10 @@ is `chmod g-w` on the directory or a user-owned install. `posix_root_owned` syst
 `admitOwnedExecutable` already refused any group-writable ancestor. On the founder's machine (traced
 2026-10-05) every admitted path — `/bin/launchctl`, `/usr/bin/git`, `/usr/bin/xcrun`, the `claude`,
 `codex` and Node chains — sits under `0755` root or user-owned directories; the one group-writable
-directory, `/opt/homebrew/bin`, is user-owned and stays admitted.
+directory, `/opt/homebrew/bin`, is user-owned and stays admitted. **That admission is a residual,
+not a safe case:** a user-owned directory with a shared group (Homebrew's `msolecki:admin`, `0775`)
+lets every other member of that group plant a binary, and it is accepted as a usability trade-off
+for Homebrew pending the founder's ruling.
 
 What this does **not** mean: it is not a privilege escalation. The binary runs as the user, from the
 user's own `PATH`, and anyone who can plant it there can already run code as that user. What it costs

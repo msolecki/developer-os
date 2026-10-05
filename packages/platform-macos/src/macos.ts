@@ -318,10 +318,12 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
    *
    * **Group-writable is accepted when the directory's owner is the current uid, and
    * refused otherwise — and always refused when root owns it (D83 (3), NEW-33)**, even run
-   * as root: a `root:admin 0775` `/usr/local/bin` lets every admin plant a binary. `/opt/homebrew/bin` is `drwxrwxr-x` owned by the installing user,
-   * which is how these CLIs ordinarily arrive; a user who owns a directory can write it
-   * whatever its group bit says, so refusing on the bit alone buys nothing and costs every
-   * `brew install`.
+   * as root: a `root:admin 0775` `/usr/local/bin` lets every admin plant a binary.
+   * `/opt/homebrew/bin` is `drwxrwxr-x` owned by the installing user, which is how these
+   * CLIs ordinarily arrive. Admitting it is a usability trade-off accepted for Homebrew,
+   * not a free one: the group bit lets every other member of that group (`admin` on this
+   * Mac) plant a binary there. Refusing it would cost every `brew install`; the residual
+   * awaits the founder's ruling.
    *
    * **Other-writable is refused with or without the sticky bit.** Sticky stops another
    * user deleting or renaming a file they do not own; it does not stop them *creating* one
