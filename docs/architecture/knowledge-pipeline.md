@@ -281,6 +281,37 @@ by `parseIngestProposal` afterwards (`ingest.ts:1084-1093`, `:1683`).
 **A note capture skips the model.** It is applied verbatim, with no vendor call, as one `create` or
 one `replace` bound to its capture-time hash; `brain.md` §6.13 has the contract.
 
+### 5.1 A hand edit while the agent runs refuses the ingest (D83 (2), NEW-40)
+
+The agent call is the widest read-to-write window the product has — minutes, not milliseconds —
+and the user may be editing the vault in Obsidian during it. **The user's edit wins, the ingest
+writes nothing, and the user reruns it.**
+
+- **What is bound, and when.** For a plain capture, after the staging write and before the call,
+  `snapshotBeforeCall` records the identity (`dev`, `ino`) and SHA-256 of every file the ingest
+  will write: the capture, bound to the exact bytes the staging write put down, and the four index
+  artifacts `ingest-reindex` replaces. `index.json` is bound to the bytes the prompt's excerpt was
+  parsed from (`readIndexExcerpt`), not to a second read. A missing file is recorded as absent. The
+  proposal's destinations are unknown until the call returns, so the content root's names are
+  listed instead. Timestamps are never compared.
+- **The check.** `assertVaultUnchanged` runs after validation and before `applyNotes`, so before
+  any note, directory, index or status lands. Any bound file whose identity or bytes differ, that
+  appeared or that disappeared, and any proposed destination absent from the listing and present
+  now, refuses the capture with exit 3 and reason `vault_changed_during_ingest`. A destination
+  that already existed before the call keeps the create-only refusal. **An edit to a note this
+  run will not write is not guarded** and does not refuse.
+- **What is left.** No note and no index is written. If the user left the capture alone, the
+  compensating write puts it back to `accepted` and the recovery reads
+  `the capture is accepted again: rerun developer-os ingest`. If the user edited the capture, the
+  compensating write is refused too, so the edit stays as the user wrote it, at `status: staging`;
+  the recovery tells them to set it back to `accepted`, then `rerun developer-os ingest`. The
+  capture never leaves quarantine.
+- **The two later capture writes** (`ingest-ingested` and `ingest-rollback`) carry the staged
+  bytes' digest as `expectedBeforeHash`, which closes the milliseconds between the check and each
+  write. An edit landing after the apply is refused rather than overwritten, and the capture is
+  reported `staging` with its notes named, under the partly-applied recovery. A note capture makes
+  no vendor call and is guarded by `note_changed_since_capture` instead (`brain.md` §6.13).
+
 ---
 
 ## 6. The status ladder, and why a refusal never produces `failed`
