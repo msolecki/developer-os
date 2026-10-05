@@ -121,6 +121,8 @@ describe("redactText", () => {
     const skAntToken = "sk-ant-api03-Synth3ticKeyMaterial00example"; // gitleaks:allow -- synthetic test fixture
     /** A 32-hex body: too short for high-entropy, so provider-token is the only class that catches it. */
     const shortSk = "sk-3f9a1c7e5b2d4086a9e1f3c5b7d90a2e"; // gitleaks:allow -- synthetic test fixture
+    const sk24 = "sk-3f9a1c7e5b2d4086a9e1f3c5"; // gitleaks:allow -- synthetic test fixture
+    const skH = "sk-H7qP2mN9vR4xK8cT1wH6jL3s"; // gitleaks:allow -- synthetic test fixture
     for (const [name, line, secret] of [
       ["at line start", `${skToken} rest`, skToken],
       ["after a space", `key ${skToken}`, skToken],
@@ -136,6 +138,18 @@ describe("redactText", () => {
       ["after a literal \\t", `col\\t${shortSk}`, shortSk],
       ["after a literal \\r", `line\\r${shortSk}`, shortSk],
       ["after percent-encoded =", `GET /v1?auth%3D${shortSk}`, shortSk],
+      /** Re-audit of NEW-143: no boundary lists every escape form, so these must all redact. */
+      ["after a literal \\f", `x\\f${sk24}`, sk24],
+      ["after a literal \\b", `x\\b${sk24}`, sk24],
+      ["after a literal \\v", `x\\v${sk24}`, sk24],
+      ["after a literal \\0", `x\\0${sk24}`, sk24],
+      ["after a literal \\x0a", `x\\x0a${sk24}`, sk24],
+      ["after a literal \\u000a", `x\\u000a${sk24}`, sk24],
+      ["after a literal \\n, 24-character body", `x\\n${sk24}`, sk24],
+      ["after double percent-encoded =", `GET /v1?auth%253D${sk24}`, sk24],
+      ["after %3D, 24-character body", `GET /v1?auth%3D${sk24}`, sk24],
+      ["after a digit", `0${skH}`, skH],
+      ["after a letter when the body is not a slug", "desk-a8f3k2m9q7x1z5b4c6d7e9", "a8f3k2m9q7x1z5b4c6d7e9"],
     ] as const) {
       it(`redacts an sk- key ${name}`, () => {
         const result = redactText(line, deterministicKey);
@@ -147,6 +161,12 @@ describe("redactText", () => {
 
     it("redacts an sk- key after a literal \\n in path scope too", () => {
       const result = redactText(`notes/x\\n${skAntToken}`, deterministicKey, {}, "path");
+
+      expect(result.text).toBe("notes/x\\n[REDACTED:provider-token]");
+    });
+
+    it("redacts a 24-character-body key after a literal \\n in path scope", () => {
+      const result = redactText(`notes/x\\n${sk24}`, deterministicKey, {}, "path");
 
       expect(result.text).toBe("notes/x\\n[REDACTED:provider-token]");
     });

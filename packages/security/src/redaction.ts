@@ -465,6 +465,12 @@ function isWordLikePart(part: string): boolean {
   return part.length <= 3 || /[aeiouy]/iu.test(part);
 }
 
+/** NEW-143: at least two hyphen-separated parts, every one word-like. */
+function isKebabSlug(body: string): boolean {
+  const parts = body.split("-");
+  return parts.length >= 2 && parts.every((part) => part.length > 0 && isWordLikePart(part));
+}
+
 /** The longest real note path seen (NEW-129) has 11 parts; a longer word chain is not exempt. */
 const MAX_WORD_LIKE_PARTS = 12;
 
@@ -587,17 +593,28 @@ export function redactText(
     1,
     candidates,
   );
-  /**
-   * NEW-143 (D83 (1)): `sk-` not preceded by a letter or digit, so `task-…` or `mask-…` is a
-   * word. A literal `\n`/`\t`/`\r` escape or a `%XX` percent-encoding also ends in a letter or
-   * digit, and a key after one is still a key (`"…\nsk-…"` in JSON, `auth%3Dsk-…` in a URL).
-   */
   addWholeMatches(
     normalizedText,
-    /(?:ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|(?<=^|[^A-Za-z0-9]|\\[nrt]|%[0-9A-Fa-f]{2})sk-[A-Za-z0-9_-]{20,}|xox(?:a|b|p|r|s)-[A-Za-z0-9-]{10,})/gu,
+    /(?:ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|xox(?:a|b|p|r|s)-[A-Za-z0-9-]{10,})/gu,
     "provider-token",
     candidates,
   );
+  /**
+   * NEW-143 (D83 (1)) and its re-audit: `sk-` matches anywhere, as it always did, because a
+   * boundary can never list every escape form a key may follow (`\n`, `\x0a`, `%253D`, …).
+   * The one exemption is a kebab-case word running into it: a letter right before `sk-` and a
+   * body of word-like hyphen parts, so `task-premises-against-commits` is prose. A random key
+   * never has that body.
+   */
+  for (const match of normalizedText.matchAll(/sk-[A-Za-z0-9_-]{20,}/gu)) {
+    const before = normalizedText[match.index - 1] ?? "";
+    if (/[A-Za-z]/u.test(before) && isKebabSlug(match[0].slice(3))) continue;
+    addCandidate(candidates, {
+      start: match.index,
+      end: match.index + match[0].length,
+      class: "provider-token",
+    });
+  }
   /**
    * `[A-Z0-9 ]*` on both sides of the required word "CERTIFICATE", not just
    * a single optional prefix word: PEM labels put qualifiers on either side

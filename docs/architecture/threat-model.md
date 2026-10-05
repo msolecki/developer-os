@@ -520,12 +520,14 @@ redacted whole, exactly as before. This closes the D71 residual. Pinned by `reda
 "redacts the uncovered tail of a partly overlapped high-entropy run as its own range" and the three
 tests after it.
 
-**`provider-token`'s `sk-` alternative has a left word boundary (NEW-143, founder decision D83 (1)).**
-`sk-` matches only when no letter or digit precedes it — or when what precedes it is a literal
-`\n`/`\t`/`\r` escape or a `%XX` percent-encoding, which end in one but still separate a key — so a kebab-case slug such as
-`verify-task-premises-against-commits` or `refetch-mask-values-keep-structure` is a word, not a key,
-and `ingest`'s secret scan no longer refuses a note named that way. A real `sk-…` or `sk-ant-…` key
-still redacts at line start, after whitespace or punctuation, inside quotes and after `=`. Pinned by
+**`provider-token`'s `sk-` rule exempts a kebab-case word, not a boundary (NEW-143, founder decision
+D83 (1), revised after two security audits).** `sk-` matches anywhere, as it always did: a left
+boundary was tried and leaked keys after every escape form it did not list (`\n`, `\f`, `\x0a`,
+`\u000a`, `%3D`, `%253D`) and after a digit. A match is exempt only when a letter sits right before
+`sk-` **and** the body after it is at least two hyphen-separated parts that are each word-like
+(`isKebabSlug`), so `verify-task-premises-against-commits` and `refetch-mask-values-keep-structure`
+are words and `ingest`'s secret scan no longer refuses a note named that way. A random key never
+has that body, so `desk-a8f3k2m9q7x1z5b4c6d7e9` still redacts. Pinned by
 `redaction.test.ts` → "provider-token sk- boundary".
 
 **The NEW-129 residuals are closed (NEW-130, founder decision D83 (5)).** (1) The labelled
