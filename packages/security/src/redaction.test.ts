@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createRedactor,
   REDACTION_CLASSES,
+  REDACTION_MARKER_PATTERN,
   redactText,
   type RedactionResult,
 } from "./redaction.js";
@@ -91,6 +92,27 @@ describe("redactText", () => {
     const result = redactText(`token: ${providerToken}`, deterministicKey);
 
     expectRedacted(result, providerToken);
+  });
+
+  /** NEW-130 (D83 (5)): one marker pattern every consumer shares, matching what redaction emits. */
+  describe("REDACTION_MARKER_PATTERN", () => {
+    it("matches the marker of every class redactText emits", () => {
+      for (const findingClass of REDACTION_CLASSES) {
+        expect(REDACTION_MARKER_PATTERN.test(`DEV/x[REDACTED:${findingClass}].md`)).toBe(true);
+      }
+      expect(REDACTION_MARKER_PATTERN.test(redactText(`opaque ${highEntropySecret}`, deterministicKey).text)).toBe(true);
+    });
+
+    it("matches a marker in any case or spacing, and keeps no state between calls", () => {
+      for (const value of ["[redacted:x]", "[ Redacted :x]", "[REDACTED:x]", "[\tREDACTED\t:x]"]) {
+        expect(REDACTION_MARKER_PATTERN.test(value)).toBe(true);
+      }
+      expect(REDACTION_MARKER_PATTERN.flags).not.toContain("g");
+    });
+
+    it("does not match ordinary text", () => {
+      expect(REDACTION_MARKER_PATTERN.test("redacted: the report [draft]")).toBe(false);
+    });
   });
 
   /** NEW-143 (D83 (1)): `sk-` needs a left word boundary, or kebab-case slugs redact. */

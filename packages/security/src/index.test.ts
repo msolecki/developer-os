@@ -28,6 +28,7 @@ describe("the package's public door", () => {
         "redactText",
         "createRedactor",
         "REDACTION_CLASSES",
+        "REDACTION_MARKER_PATTERN",
         "assertSafeCommand",
         "NodeProcessRunner",
         "normalizeShellCommand",
