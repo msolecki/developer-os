@@ -3,7 +3,7 @@ name: "developer-os-brain-compile"
 description: "Synthesise one compiled note from the notes on a topic and quarantine it as a note capture; nothing reaches the vault until review and ingest."
 ---
 
-<!-- Generated from workflows/brain-compile/workflow.yaml (brain-compile@1.0.0). Do not edit. -->
+<!-- Generated from workflows/brain-compile/workflow.yaml (brain-compile@1.0.1). Do not edit. -->
 
 ## Always
 

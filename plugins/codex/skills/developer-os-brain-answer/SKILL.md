@@ -3,7 +3,7 @@ name: "developer-os-brain-answer"
 description: "Answer a question from the vault alone, naming a note path for every claim, and optionally file the answer back as a capture for review."
 ---
 
-<!-- Generated from workflows/brain-answer/workflow.yaml (brain-answer@1.0.0). Do not edit. -->
+<!-- Generated from workflows/brain-answer/workflow.yaml (brain-answer@1.0.1). Do not edit. -->
 
 ## Always
 

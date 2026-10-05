@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: brain-answer
-version: 1.0.0
+version: 1.0.1
 description: Answer a question from the vault alone, naming a note path for every claim, and optionally file the answer back as a capture for review.
 triggers:
   - manual

@@ -3,7 +3,7 @@ name: "developer-os-brain-garden"
 description: "Turn brain lint findings into proposals - note captures for content fixes, printed dry-run commands for structural ones - and never change the vault directly."
 ---
 
-<!-- Generated from workflows/brain-garden/workflow.yaml (brain-garden@1.0.0). Do not edit. -->
+<!-- Generated from workflows/brain-garden/workflow.yaml (brain-garden@1.1.0). Do not edit. -->
 
 ## Always
 

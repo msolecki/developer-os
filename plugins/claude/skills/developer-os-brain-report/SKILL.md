@@ -3,7 +3,7 @@ name: "developer-os-brain-report"
 description: "Write a report for a person on one subject from the vault and its lint state, citing a note path for every claim, and optionally file it back as a capture."
 ---
 
-<!-- Generated from workflows/brain-report/workflow.yaml (brain-report@1.0.0). Do not edit. -->
+<!-- Generated from workflows/brain-report/workflow.yaml (brain-report@1.0.1). Do not edit. -->
 
 ## Always
 

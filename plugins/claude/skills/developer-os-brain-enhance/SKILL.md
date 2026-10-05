@@ -3,7 +3,7 @@ name: "developer-os-brain-enhance"
 description: "Propose a revision of one existing note as a note capture bound to the note's current bytes; the note changes only after review and ingest, and only if nobody edited it meanwhile."
 ---
 
-<!-- Generated from workflows/brain-enhance/workflow.yaml (brain-enhance@1.0.0). Do not edit. -->
+<!-- Generated from workflows/brain-enhance/workflow.yaml (brain-enhance@1.0.1). Do not edit. -->
 
 ## Always
 

@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: brain-compile
-version: 1.0.0
+version: 1.0.1
 description: Synthesise one compiled note from the notes on a topic and quarantine it as a note capture; nothing reaches the vault until review and ingest.
 triggers:
   - manual

@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: brain-enhance
-version: 1.0.0
+version: 1.0.1
 description: Propose a revision of one existing note as a note capture bound to the note's current bytes; the note changes only after review and ingest, and only if nobody edited it meanwhile.
 triggers:
   - manual
