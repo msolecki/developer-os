@@ -8,17 +8,14 @@ notes are the archive.
 
 ## NOW
 
-**The D70 lane closed on 2026-09-29 under D75, and its full suite is owed.** NEW-113's code (Tasks
-1–3), NEW-110 (Tasks 0–13, with P9) and 35 other backlog rows are integrated and reviewed; both plans are
-closed and deleted, their surviving contracts in `docs/architecture/foundation.md` §10–§11,
-`foundation-constraints.md`, `threat-model.md` §5.15–§5.16, `codex-adapter.md` §14, `brain.md` §6.14
-and `claude-adapter.md` §17. The gate on `23b32060` passed every stage but `test:pinned-host`, whose
-failures became NEW-137 (fixed, proof owed). Gate run 4 on `da9575f0` was stopped during `test:suite`
-and `da9575f0` was installed (D81). **Next, founder:** run `npm run check` and
-`npm run test:pinned-host` on `da9575f0` or later (development Mac, both vendor CLIs installed, because
-`check` includes `test:vendor-ingest`); a red run reopens the rows its failures belong to (D75). Then
-push the branch (`development` is 244 commits ahead of `origin` on 2026-10-03; GH013 needs the
-founder's bypass, D76); the founder merges.
+**The D70 lane's full suite is green (2026-10-05).** NEW-113's code (Tasks 1–3), NEW-110 (Tasks 0–13,
+with P9) and the NEW-133/134/138/139/140 work are integrated and reviewed. On `5a7462a9`, `npm run check`
+passed every stage in 288 min (lint; `test:bootstrap` 105; `test:suite` 323 files, 10313 tests;
+`test:lifecycle` 21 files, 231 tests; `test:update-recovery` 14; e2e 12 files, 64 tests;
+`test:vendor-ingest` 9; build), and `npm run test:pinned-host` passed 12 with 1 skipped (the
+disposable-account launchd gate), closing NEW-137. Logs: `~/devos-work/2026-10-05/`. `5a7462a9` is
+installed on the live machine, with launchd automation enabled (D82). PR #19 merged the lane into
+`origin/development` on 2026-10-05.
 
 **A15, the founder cutover, steps 1–15 done on the live machine (2026-09-28/29).** Steps 8–10 ran on
 2026-09-28 under D69 and D74: the first step-9 `init` was killed mid-bootstrap by a host-session
@@ -34,8 +31,8 @@ accepted, and the first real Claude ingest ingested 71 after four product fixes,
 `content/content/` were moved by hand; the validator landed in `72f0f5bf`. Step 13b (the vault's scheduled
 legacy CI workflow disabled) is done: the workflow reports `disabled_manually` (founder, 2026-10-03);
 its vault-scoped legacy skills and tooling are removed with step 19. **Next:** steps 16–18 after one week
-of use (step 16 checks injection: the hook firing-record fix and a reinstall come first), Codex hook approval after 2026-10-22, step 19 after one stable cycle. Git and launchd stay
-disabled on the live machine until the founder enables them (D76: NEW-113's Task 5 is skipped).
+of use (step 16 checks injection: the hook firing-record fix, NEW-139, is installed since 2026-10-04), Codex hook approval after 2026-10-22, step 19 after one stable cycle. Git stays disabled on the live machine until the founder enables it (D76: NEW-113's Task 5 is skipped);
+launchd automation was enabled on 2026-10-04 after NEW-138 (D82).
 
 **Evidence the closed phases stand on (2026-09-26, run 4).** On `bc17550`, every part green: lint,
 `test:lifecycle` (21/21 files), `test:e2e`, `test:suite` (306/306 files, 9913 tests, 8 todo =
