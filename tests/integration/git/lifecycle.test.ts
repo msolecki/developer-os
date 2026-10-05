@@ -403,7 +403,7 @@ const GATE_COVERAGE: readonly GateCoverageV1[] = [
   {
     gate: "launchd identity is closed",
     tests: [
-      ["packages/platform-macos/src/launchd/registry.test.ts", "builds exactly nine arguments with the guarded product home and the generation last"],
+      ["packages/platform-macos/src/launchd/registry.test.ts", "builds exactly ten arguments: the absolute Node, the entrypoint, the guarded product home and the generation last (NEW-144)"],
       ["packages/platform-macos/src/launchd/plist.test.ts", "serializes the exact five-key plist with one LF and escapes a hostile home"],
       ["packages/platform-macos/src/launchd/registry.test.ts", "encodes the effective uid as the one GUI domain"],
     ],
