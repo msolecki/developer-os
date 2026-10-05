@@ -10,6 +10,7 @@ import {
   EXIT_CODES,
   SCHEDULED_JOB_IDS,
   failure,
+  isOptionalScheduledJob,
   parseCanonicalAbsolutePathText,
   parseEffectiveUid,
   parseLowerHexSha256,
@@ -121,7 +122,9 @@ export function renderAutomation(data: AutomationCommandDataV1): readonly string
         `lifecycle      ${data.closure}`,
         ...data.jobs.map((job) => {
           const last = job.lastRun === null ? "never" : job.lastRun === "invalid" ? "invalid" : `${job.lastRun.outcome} at ${job.lastRun.completedAt}${verdictOf(job)}`;
-          return `${job.job.padEnd(14)} ${job.eligible ? "eligible" : "ineligible"} ${job.installed} ${job.live ?? "-"} last run ${last}`;
+          // D83 (4): an optional job (or git-sync) with nothing installed is simply off, not "eligible absent"
+          const state = job.installed === "absent" && (job.job === "git-sync" || isOptionalScheduledJob(job.job)) ? "off" : `${job.eligible ? "eligible" : "ineligible"} ${job.installed}`;
+          return `${job.job.padEnd(14)} ${state} ${job.live ?? "-"} last run ${last}`;
         }),
       ];
   }
