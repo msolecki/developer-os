@@ -2029,10 +2029,13 @@ function isIndexDocumentShape(
  * pasted into a note's title or summary must not survive the round trip
  * through the index any more than a capture body would.
  *
- * **`path` is redacted in `path` scope, as is every entry of `takenPaths`** (NEW-130,
- * D83 (5)). Text scope ran the high-entropy class over vault paths, so a note named by a
- * long id reached the model as `[REDACTED:high-entropy]` — and a model told to carry
- * markers through copied one into a new file name. Every other class still applies.
+ * **`path`, and every entry of `takenPaths`, is redacted in `value` scope** (NEW-130,
+ * D83 (5), and its security audit). It runs every class text scope runs, high-entropy
+ * included, so a note named by a random token never reaches the model in the clear; and
+ * like `path` scope it hands back the vault's own bytes when nothing matched. `path` scope
+ * was tried and dropped high-entropy, which redacted less than text scope did — the
+ * founder's ruling is that a path is redacted at least as strictly as before. A marker a
+ * model copies into a new file name is refused by ingest's secret scan.
  */
 async function readIndexExcerpt(
   context: CliContext,
@@ -2071,7 +2074,7 @@ async function readIndexExcerpt(
   }
 
   return parsed.notes.filter(isIndexNoteShape).map((note) => ({
-    path: redact(note.path, "path").text,
+    path: redact(note.path, "value").text,
     title: redact(note.title).text,
     summary: redact(note.summary).text,
   }));
@@ -2519,7 +2522,7 @@ export async function runIngest(
       else refused.push(outcome.refusal);
       const written = outcome.ok ? outcome.capture.notes : outcome.refusal.appliedNotes;
       if (written.length > 0) {
-        takenPaths.push(...written.map((note) => redact(note, "path").text));
+        takenPaths.push(...written.map((note) => redact(note, "value").text));
         indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
       }
     }

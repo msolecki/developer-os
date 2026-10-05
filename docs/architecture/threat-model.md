@@ -532,15 +532,18 @@ still redacts at line start, after whitespace or punctuation, inside quotes and 
 passphrase rule (`passphrase`, `mnemonic`, `seed phrase`, `recovery phrase/key`) captures the rest of
 the line, like `env-secret`, so a space-separated mnemonic no longer leaks words 2..n; the cost is
 prose — "the passphrase is stored in the keychain" redacts everything after "is". (2) `ingest`'s index
-excerpt redacts a note's `path`, and every `takenPaths` entry, in `path` scope
-(`readIndexExcerpt`, `apps/cli/src/commands/ingest.ts`), so a vault path reaches the model as its real
-name rather than a `[REDACTED:high-entropy]` marker it could copy into a new file name; title and
-summary stay in text scope. (3) `@developer-os/security` exports `REDACTION_MARKER_PATTERN`
+excerpt redacts a note's `path`, and every `takenPaths` entry, in `value` scope (`readIndexExcerpt`,
+`apps/cli/src/commands/ingest.ts`): every class text scope runs, high-entropy included, with the
+vault's own bytes handed back when nothing matched. `path` scope was tried first and dropped the
+high-entropy class, so a note named by a random token reached the model in the clear; the security
+audit ruled that a path is redacted at least as strictly as text scope did, and `value` meets that
+exactly. A marker the model copies into a new file name is refused by ingest's secret scan.
+(3) `@developer-os/security` exports `REDACTION_MARKER_PATTERN`
 (`[REDACTED:` in any case or spacing), and ingest's secret scan and the macOS discovery boundary both
 test against it. Still open from NEW-129, and not part of D83 (5): an unlabelled all-word passphrase
 joined by `-` is exempt from high-entropy (`isWordLikePath`). Pinned by `redaction.test.ts` →
 "redacts every word of a spaced passphrase" and "REDACTION_MARKER_PATTERN", and `ingest.test.ts` →
-"carries an index path verbatim when only the high-entropy class would match it".
+"redacts a token-named note's path in the index excerpt".
 
 ### 5.8 The redaction key — the product's first secret at rest
 
