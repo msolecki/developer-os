@@ -317,7 +317,8 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
    * product's own vendors while saying nothing about the file that runs.
    *
    * **Group-writable is accepted when the directory's owner is the current uid, and
-   * refused otherwise.** `/opt/homebrew/bin` is `drwxrwxr-x` owned by the installing user,
+   * refused otherwise — and always refused when root owns it (D83 (3), NEW-33)**, even run
+   * as root: a `root:admin 0775` `/usr/local/bin` lets every admin plant a binary. `/opt/homebrew/bin` is `drwxrwxr-x` owned by the installing user,
    * which is how these CLIs ordinarily arrive; a user who owns a directory can write it
    * whatever its group bit says, so refusing on the bit alone buys nothing and costs every
    * `brew install`.
@@ -405,9 +406,9 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
           `The executable is not trusted: ${component} is writable by any user`,
         );
       }
-      if ((entry.mode & 0o020) !== 0 && entry.uid !== uid) {
+      if ((entry.mode & 0o020) !== 0 && (entry.uid === 0 || entry.uid !== uid)) {
         throw new MacOsPlatformTrustError(
-          `The executable is not trusted: ${component} is group-writable and owned by another user`,
+          `The executable is not trusted: ${component} is group-writable and owned by ${entry.uid === 0 ? "root" : "another user"}`,
         );
       }
     }
