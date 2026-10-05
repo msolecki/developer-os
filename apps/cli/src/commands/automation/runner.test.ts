@@ -29,6 +29,7 @@ import type {
 } from "@developer-os/core";
 import {
   encodeLaunchdPlist,
+  encodeRetainedLaunchdPlist,
   launchdGeneration,
   launchdGuiDomain,
   launchdJob,
@@ -36,6 +37,7 @@ import {
   launchdPlistDictionary,
   launchdPlistPath,
   launchdStatusPath,
+  parseCanonicalLaunchdPlist,
   parseScheduledProductHome,
   scheduledBaseArgv,
 } from "@developer-os/platform-macos";
@@ -63,6 +65,7 @@ import { currentScheduledJob } from "./scheduled-scope.js";
 const PRODUCT_HOME = parseCanonicalAbsolutePathText("/synthetic-user/.developer-os");
 const USER_HOME = parseCanonicalAbsolutePathText("/synthetic-user");
 const EXECUTABLE = parseCanonicalAbsolutePathText("/synthetic-user/.developer-os/bin/developer-os");
+const NODE = parseCanonicalAbsolutePathText("/usr/local/bin/node");
 const GLOBAL = parseCanonicalAbsolutePathText(`${PRODUCT_HOME}/state/.lifecycle.lock`);
 const GENERATION = parseLowerHexSha256("a".repeat(64));
 const SECRET = "sk-synthetic-0123456789abcdef";
@@ -469,7 +472,7 @@ describe("authenticateScheduledGeneration", () => {
       productHome,
       plistPath,
       executablePath: EXECUTABLE,
-      baseArgv: scheduledBaseArgv(job, productHome, EXECUTABLE),
+      baseArgv: scheduledBaseArgv(job, productHome, EXECUTABLE, NODE),
       logPath: launchdLogPath(productHome, job),
       statusPath: launchdStatusPath(productHome, job),
     } as const;
@@ -484,6 +487,17 @@ describe("authenticateScheduledGeneration", () => {
       request: { job, generation },
       evidence: { productHome: PRODUCT_HOME, userHome: USER_HOME, domain, executablePath: EXECUTABLE, manifest, plistBytes },
     };
+  }
+
+  /** The installed plist with its argv replaced, its manifest row rehashed to match: only the argv is wrong. */
+  function withArgv(input: ReturnType<typeof installed>, argv: (old: readonly string[]) => readonly string[]): ReturnType<typeof installed> {
+    const plist = parseCanonicalLaunchdPlist(input.evidence.plistBytes);
+    const plistBytes = new TextEncoder().encode(
+      encodeRetainedLaunchdPlist({ ...plist, ProgramArguments: argv(plist.ProgramArguments) as typeof plist.ProgramArguments }),
+    );
+    const [row] = input.evidence.manifest.artifacts;
+    const manifest = { artifacts: [{ ...row, verification: { mode: "content", installedHash: hashBytes(plistBytes) } }] } as unknown as InstallationManifestV2;
+    return { ...input, evidence: { ...input.evidence, plistBytes, manifest } };
   }
 
   it("authenticates every registry job from exact retained evidence alone", () => {
@@ -503,6 +517,10 @@ describe("authenticateScheduledGeneration", () => {
     ["another generation", (input: ReturnType<typeof installed>) => ({ ...input, request: { ...input.request, generation: GENERATION } }), "scheduled_generation_mismatch"],
     ["another executable", (input: ReturnType<typeof installed>) => ({ ...input, evidence: { ...input.evidence, executablePath: parseCanonicalAbsolutePathText("/synthetic-user/other-binary") } }), "scheduled_projection_mismatch"],
     ["another product home", (input: ReturnType<typeof installed>) => ({ ...input, evidence: { ...input.evidence, productHome: parseCanonicalAbsolutePathText("/synthetic-user/other-home") } }), "scheduled_projection_mismatch"],
+    // NEW-144: a manifest-owned pre-NEW-144 nine-argument plist never authenticates.
+    ["a manifest-owned nine-argument plist", (input: ReturnType<typeof installed>) => withArgv(input, (argv) => argv.slice(1)), "scheduled_projection_mismatch"],
+    // NEW-144: argv[0] is bound into the generation, so another Node under the old label and generation refuses.
+    ["a ten-argument plist whose Node changed under the old label and generation", (input: ReturnType<typeof installed>) => withArgv(input, (argv) => ["/opt/other/bin/node", ...argv.slice(1)]), "scheduled_generation_mismatch"],
   ])("refuses %s", (_label, mutate, reason) => {
     const { request, evidence } = mutate(installed());
     let thrown: unknown = null;

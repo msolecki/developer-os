@@ -24,6 +24,7 @@ import {
   parseGeneratedLabel,
   parseScheduledProductHome,
   scheduledBaseArgv,
+  scheduledArgvParts,
   scheduledProgramArguments,
 } from "./registry.js";
 import type { LaunchdGenerationProjectionV1 } from "./types.js";
@@ -31,6 +32,7 @@ import type { LaunchdGenerationProjectionV1 } from "./types.js";
 const userHome = "/Users/fixture" as CanonicalAbsolutePathV1;
 const productHome = parseScheduledProductHome("/Users/fixture/.developer-os");
 const executable = "/usr/local/bin/developer-os" as CanonicalAbsolutePathV1;
+const node = "/opt/homebrew/opt/node@24/bin/node" as CanonicalAbsolutePathV1;
 const domain = launchdGuiDomain(501 as EffectiveUidV1);
 const generation = "a".repeat(64) as LowerHexSha256;
 
@@ -43,7 +45,7 @@ function projection(overrides: Partial<LaunchdGenerationProjectionV1> = {}): Lau
     productHome,
     plistPath: launchdPlistPath(userHome, "brain-reindex"),
     executablePath: executable,
-    baseArgv: scheduledBaseArgv("brain-reindex", productHome, executable),
+    baseArgv: scheduledBaseArgv("brain-reindex", productHome, executable, node),
     logPath: launchdLogPath(productHome, "brain-reindex"),
     statusPath: launchdStatusPath(productHome, "brain-reindex"),
     ...overrides,
@@ -103,9 +105,10 @@ describe("closed job registry", () => {
 });
 
 describe("scheduled argv", () => {
-  it("builds exactly nine arguments with the guarded product home and the generation last", () => {
-    const argv = scheduledProgramArguments("git-sync", productHome, generation, executable);
+  it("builds exactly ten arguments: the absolute Node, the entrypoint, the guarded product home and the generation last (NEW-144)", () => {
+    const argv = scheduledProgramArguments("git-sync", productHome, generation, executable, node);
     expect(argv).toEqual([
+      "/opt/homebrew/opt/node@24/bin/node",
       "/usr/local/bin/developer-os",
       "automation",
       "run",
@@ -116,14 +119,26 @@ describe("scheduled argv", () => {
       "--generation",
       generation,
     ]);
-    expect(argv).toHaveLength(9);
+    expect(argv).toHaveLength(10);
+  });
+
+  it("splits a current argv and a legacy pre-NEW-144 nine-argument argv into node, entrypoint and product home", () => {
+    const current = scheduledProgramArguments("doctor", productHome, generation, executable, node);
+    expect(scheduledArgvParts(current)).toEqual({ node, executable, productHome });
+    const legacy = current.slice(1);
+    expect(scheduledArgvParts(legacy)).toEqual({ node: null, executable, productHome });
+    expect(() => scheduledArgvParts(current.slice(2))).toThrow();
+  });
+
+  it("refuses a relative Node", () => {
+    expect(() => scheduledProgramArguments("doctor", productHome, generation, executable, "node" as CanonicalAbsolutePathV1)).toThrow();
   });
 
   it("keeps a custom product home with spaces and markup characters as one argument", () => {
     const home = parseScheduledProductHome("/Volumes/Data drive/a&b<c>\"d\"/dev os");
-    const argv = scheduledProgramArguments("doctor", home, generation, executable);
-    expect(argv[6]).toBe("/Volumes/Data drive/a&b<c>\"d\"/dev os");
-    expect(argv).toHaveLength(9);
+    const argv = scheduledProgramArguments("doctor", home, generation, executable, node);
+    expect(argv[7]).toBe("/Volumes/Data drive/a&b<c>\"d\"/dev os");
+    expect(argv).toHaveLength(10);
   });
 
   it.each([
@@ -142,7 +157,7 @@ describe("scheduled argv", () => {
   });
 
   it("refuses a malformed generation", () => {
-    expect(() => scheduledProgramArguments("doctor", productHome, "A".repeat(64) as LowerHexSha256, executable)).toThrow();
+    expect(() => scheduledProgramArguments("doctor", productHome, "A".repeat(64) as LowerHexSha256, executable, node)).toThrow();
     expect(() => generatedLabel("doctor", "abc" as LowerHexSha256)).toThrow();
   });
 });
@@ -169,12 +184,14 @@ describe("generation", () => {
   it("changes with the schedule and the product home", () => {
     const base = launchdGeneration(projection());
     expect(launchdGeneration(projection({ schedule: { cadence: "daily", hour: 2, minute: 1 } }))).not.toBe(base);
+    const otherNode = "/usr/local/bin/node" as CanonicalAbsolutePathV1;
+    expect(launchdGeneration(projection({ baseArgv: scheduledBaseArgv("brain-reindex", productHome, executable, otherNode) }))).not.toBe(base);
     const otherHome = parseScheduledProductHome("/Users/fixture/other");
     expect(
       launchdGeneration(
         projection({
           productHome: otherHome,
-          baseArgv: scheduledBaseArgv("brain-reindex", otherHome, executable),
+          baseArgv: scheduledBaseArgv("brain-reindex", otherHome, executable, node),
           logPath: launchdLogPath(otherHome, "brain-reindex"),
           statusPath: launchdStatusPath(otherHome, "brain-reindex"),
         }),
@@ -187,7 +204,7 @@ describe("generation", () => {
     ["domain", { domain: "user/501" as LaunchdGenerationProjectionV1["domain"] }],
     ["schedule", { schedule: { cadence: "hourly" as const, minute: 60 } }],
     ["plist path", { plistPath: "/Users/fixture/Library/LaunchAgents/other.plist" as CanonicalAbsolutePathV1 }],
-    ["base argv", { baseArgv: scheduledBaseArgv("doctor", productHome, executable) }],
+    ["base argv", { baseArgv: scheduledBaseArgv("doctor", productHome, executable, node) }],
     ["log path", { logPath: "/tmp/log.json" as CanonicalAbsolutePathV1 }],
     ["status path", { statusPath: "/tmp/status.json" as CanonicalAbsolutePathV1 }],
   ])("refuses a projection whose %s disagrees with the job", (_label, overrides) => {

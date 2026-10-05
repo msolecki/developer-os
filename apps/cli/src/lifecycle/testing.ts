@@ -45,6 +45,7 @@ import {
   LaunchdPathBootstrapper,
   NodeLaunchdPlistReader,
   buildLaunchdPlanPreview,
+  encodeRetainedLaunchdPlist,
   parseCanonicalLaunchdPlist,
   launchdGuiDomain,
   launchdPlistBytesHash,
@@ -307,6 +308,9 @@ export function syntheticUninstall(
   return withLaunchd ? withSyntheticUninstallLaunchd(synthetic, productHome, allocated(nonce).le(base + 5n)) : synthetic;
 }
 
+/** The absolute Node every synthetic plist names as argv[0] (NEW-144). */
+const SYNTHETIC_NODE = parseCanonicalAbsolutePathText("/usr/local/bin/node");
+
 /** The installed synthetic jobs as uninstall sees them: every retained plist a `remove`. */
 function syntheticUninstallLaunchdPreview(productHome: CanonicalAbsolutePathV1): LaunchdPlanPreviewV1 {
   const installed = syntheticInstalledLaunchdPreview(productHome);
@@ -327,6 +331,7 @@ function syntheticUninstallLaunchdPreview(productHome: CanonicalAbsolutePathV1):
     userHome: SYNTHETIC_USER_HOME,
     productHome: parseScheduledProductHome(productHome),
     executablePath: parseCanonicalAbsolutePathText(`${productHome}/bin/developer-os`),
+    nodePath: SYNTHETIC_NODE,
     automation: null,
     prior,
   });
@@ -724,6 +729,7 @@ function syntheticLaunchdPreview(
     userHome: SYNTHETIC_USER_HOME,
     productHome: parseScheduledProductHome(productHome),
     executablePath: parseCanonicalAbsolutePathText(`${productHome}/bin/developer-os`),
+    nodePath: SYNTHETIC_NODE,
     automation: syntheticAutomation(),
     prior: Object.fromEntries(SCHEDULED_JOB_IDS.map((job) => [job, prior[job] ?? unloaded])) as Record<
       ScheduledJobIdV1,
@@ -1091,6 +1097,8 @@ export function syntheticInstalledPlist(options: {
   readonly productHome: string;
   readonly uid: number;
   readonly job: ScheduledJobIdV1;
+  /** The nine-argument shape builds before NEW-144 wrote: argv[0] the entrypoint, no Node. */
+  readonly legacy?: boolean;
 }): SyntheticInstalledPlistV1 {
   const unloaded: LaunchdPriorJobStateV1 = { beforeFileHash: null, beforeGeneration: null, beforeLiveState: { state: "unloaded" } };
   const preview = buildLaunchdPlanPreview({
@@ -1100,6 +1108,7 @@ export function syntheticInstalledPlist(options: {
     userHome: parseCanonicalAbsolutePathText(options.userHome),
     productHome: parseScheduledProductHome(options.productHome),
     executablePath: parseCanonicalAbsolutePathText(`${options.productHome}/bin/developer-os`),
+    nodePath: SYNTHETIC_NODE,
     automation: { schemaVersion: 1, schedules: [{ job: options.job, schedule: DAILY }] },
     prior: Object.fromEntries(SCHEDULED_JOB_IDS.map((job) => [job, unloaded])) as Record<ScheduledJobIdV1, LaunchdPriorJobStateV1>,
   });
@@ -1107,5 +1116,8 @@ export function syntheticInstalledPlist(options: {
   if (entry === undefined || entry.plistBytes === null || entry.generatedLabel === null) {
     throw new Error("one scheduled job installs one plist");
   }
-  return { job: options.job, path: entry.plistPath, bytes: entry.plistBytes, label: entry.generatedLabel };
+  if (options.legacy !== true) return { job: options.job, path: entry.plistPath, bytes: entry.plistBytes, label: entry.generatedLabel };
+  const plist = parseCanonicalLaunchdPlist(encoder.encode(entry.plistBytes));
+  const bytes = encodeRetainedLaunchdPlist({ ...plist, ProgramArguments: plist.ProgramArguments.slice(1) as unknown as typeof plist.ProgramArguments });
+  return { job: options.job, path: entry.plistPath, bytes, label: entry.generatedLabel };
 }

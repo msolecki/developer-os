@@ -3,7 +3,6 @@ import {
   hashBytes,
   hashCanonicalJson,
   parseLowerHexSha256,
-  type CanonicalAbsolutePathV1,
   type LowerHexSha256,
   type NormalizedScheduleV1,
   type ScheduledJobIdV1,
@@ -17,8 +16,10 @@ import {
   launchdLogPath,
   launchdPlistPath,
   launchdStatusPath,
+  legacyScheduledProgramArguments,
   parseGeneratedLabel,
   parseScheduledProductHome,
+  scheduledArgvParts,
   scheduledBaseArgv,
   scheduledProgramArguments,
 } from "./registry.js";
@@ -101,21 +102,36 @@ export function boundedCanonicalPlistXml(value: string): BoundedCanonicalPlistXm
 /**
  * Spec 1 §5.3's single byte grammar: the fixed header, one root `<dict>` in schema key
  * order, two spaces per nesting level below `<plist>`, LF after every line. Anything other
- * than the approved five keys, the nine-string argv bound to the label's generation, or the
- * literal null sinks refuses rather than being serialized.
+ * than the approved five keys, the ten-string argv bound to the label's generation, or the
+ * literal null sinks refuses rather than being serialized. The writer: a pre-NEW-144
+ * nine-string argv (no Node) refuses here (NEW-144).
  */
 export function encodeLaunchdPlist(value: LaunchdPlistDictionaryV1): BoundedCanonicalPlistXmlV1 {
+  return renderLaunchdPlist(value, false);
+}
+
+/**
+ * The same grammar, also admitting a retained pre-NEW-144 nine-string argv. Only for re-rendering
+ * bytes already on disk to prove they are canonical (`parseCanonicalLaunchdPlist`, the bootstrapper's
+ * byte recheck of a retained plist it restores); never for writing a new plist.
+ */
+export function encodeRetainedLaunchdPlist(value: LaunchdPlistDictionaryV1): BoundedCanonicalPlistXmlV1 {
+  return renderLaunchdPlist(value, true);
+}
+
+function renderLaunchdPlist(value: LaunchdPlistDictionaryV1, retained: boolean): BoundedCanonicalPlistXmlV1 {
   if (!exactKeys(value, PLIST_KEYS)) refuse("plist keys");
   const { job, generation } = parseGeneratedLabel(value.Label);
   const argv = value.ProgramArguments as readonly unknown[];
-  if (!Array.isArray(argv) || argv.length !== 9) refuse("ProgramArguments length");
-  const expected = scheduledProgramArguments(
-    job,
-    parseScheduledProductHome(argv[6]),
-    generation,
-    argv[0] as CanonicalAbsolutePathV1,
-  );
-  if (expected.some((argument, index) => argv[index] !== argument)) refuse("ProgramArguments");
+  if (!Array.isArray(argv)) refuse("ProgramArguments length");
+  const parts = scheduledArgvParts(argv);
+  // A nine-argument argv is the pre-NEW-144 shape: it re-renders only so a retained plist can be read back.
+  if (parts.node === null && !retained) refuse("ProgramArguments: no Node (pre-NEW-144 shape)");
+  const expected: readonly string[] =
+    parts.node === null
+      ? legacyScheduledProgramArguments(job, parts.productHome, generation, parts.executable)
+      : scheduledProgramArguments(job, parts.productHome, generation, parts.executable, parts.node);
+  if (expected.length !== argv.length || expected.some((argument, index) => argv[index] !== argument)) refuse("ProgramArguments");
   const sinks: readonly unknown[] = [value.StandardOutPath, value.StandardErrorPath];
   if (sinks.some((sink) => sink !== "/dev/null")) refuse("output paths");
   const lines: string[] = [
@@ -150,7 +166,7 @@ export function launchdPlistDictionary(
 ): LaunchdPlistDictionaryV1 {
   return {
     Label: generatedLabel(projection.job, generation),
-    ProgramArguments: scheduledProgramArguments(projection.job, projection.productHome, generation, projection.executablePath),
+    ProgramArguments: scheduledProgramArguments(projection.job, projection.productHome, generation, projection.executablePath, projection.baseArgv[0]),
     StartCalendarInterval: launchdCalendarInterval(projection.schedule),
     StandardOutPath: "/dev/null",
     StandardErrorPath: "/dev/null",
@@ -228,7 +244,7 @@ export function buildLaunchdPlanPreview(request: LaunchdPreviewRequestV1): Launc
       productHome,
       plistPath,
       executablePath: request.executablePath,
-      baseArgv: scheduledBaseArgv(job, productHome, request.executablePath),
+      baseArgv: scheduledBaseArgv(job, productHome, request.executablePath, request.nodePath),
       logPath: launchdLogPath(productHome, job),
       statusPath: launchdStatusPath(productHome, job),
       beforeFileHash: prior.beforeFileHash,

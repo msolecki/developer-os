@@ -52,6 +52,7 @@ const domain = launchdGuiDomain(uid);
 const userHome = "/Users/synthetic user" as CanonicalAbsolutePathV1;
 const productHome = parseScheduledProductHome("/Users/synthetic user/.developer-os");
 const executablePath = "/Users/synthetic user/.developer-os/bin/developer-os" as CanonicalAbsolutePathV1;
+const nodePath = "/opt/homebrew/opt/node@24/bin/node" as CanonicalAbsolutePathV1;
 const NONCE = "a".repeat(64);
 const COORDINATOR = `lc_${NONCE}_1` as LifecycleCoordinatorIdV1;
 const TX_PLIST = `tx_${NONCE}_2` as FoundationTransactionIdV1;
@@ -95,6 +96,7 @@ function preview(target: AutomationConfigV1 | null, retained: Partial<Record<Sch
     userHome,
     productHome,
     executablePath,
+    nodePath,
     automation: target,
     prior: prior(retained),
   });
@@ -480,7 +482,7 @@ describe("parseCanonicalLaunchdPlist", () => {
       productHome: hostile,
       plistPath: launchdPlistPath(userHome, "doctor"),
       executablePath,
-      baseArgv: scheduledBaseArgv("doctor", hostile, executablePath),
+      baseArgv: scheduledBaseArgv("doctor", hostile, executablePath, nodePath),
       logPath: launchdLogPath(hostile, "doctor"),
       statusPath: launchdStatusPath(hostile, "doctor"),
     };

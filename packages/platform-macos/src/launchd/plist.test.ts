@@ -13,9 +13,11 @@ import {
   boundedCanonicalPlistXml,
   buildLaunchdPlanPreview,
   encodeLaunchdPlist,
+  encodeRetainedLaunchdPlist,
   launchdPlistDictionary,
   launchdPriorStateFingerprint,
 } from "./plist.js";
+import { parseCanonicalLaunchdPlist } from "./plan.js";
 import {
   generatedLabel,
   launchdGeneration,
@@ -36,6 +38,7 @@ import type {
 const encoder = new TextEncoder();
 const userHome = "/Users/a b" as CanonicalAbsolutePathV1;
 const executable = "/usr/local/bin/developer-os" as CanonicalAbsolutePathV1;
+const node = "/opt/homebrew/opt/node@24/bin/node" as CanonicalAbsolutePathV1;
 const domain = launchdGuiDomain(501 as EffectiveUidV1);
 const hostileHome = "/Users/a b/&<\"é>/.developer-os";
 const observationHash = "1".repeat(64) as LowerHexSha256;
@@ -51,7 +54,7 @@ function projectionFor(home: string, job: ScheduledJobIdV1 = "brain-reindex"): L
     productHome,
     plistPath: launchdPlistPath(userHome, job),
     executablePath: executable,
-    baseArgv: scheduledBaseArgv(job, productHome, executable),
+    baseArgv: scheduledBaseArgv(job, productHome, executable, node),
     logPath: launchdLogPath(productHome, job),
     statusPath: launchdStatusPath(productHome, job),
   };
@@ -74,6 +77,7 @@ const expectedPlistXml = [
   `    <string>com.developer-os.brain-reindex.g.${hostileGeneration}</string>`,
   "    <key>ProgramArguments</key>",
   "    <array>",
+  "      <string>/opt/homebrew/opt/node@24/bin/node</string>",
   "      <string>/usr/local/bin/developer-os</string>",
   "      <string>automation</string>",
   "      <string>run</string>",
@@ -115,7 +119,26 @@ describe("encodeLaunchdPlist", () => {
     expect(rootKeys).toEqual(["Label", "ProgramArguments", "StartCalendarInterval", "StandardOutPath", "StandardErrorPath"]);
     expect(xml).not.toMatch(/\r|\t|<!\[CDATA\[|&#|<!--|\/>|^\uFEFF/);
     expect(xml.match(/<string>\/dev\/null<\/string>/g)).toHaveLength(2);
-    expect(xml.match(/^ {6}<string>/gm)).toHaveLength(9);
+    expect(xml.match(/^ {6}<string>/gm)).toHaveLength(10);
+  });
+
+  it("starts argv with the absolute Node, then the entrypoint, because launchd cannot exec the shebang-less 0600 module (NEW-144)", () => {
+    const value = plistFor("/Users/a b/.developer-os");
+    const argv = value.ProgramArguments;
+    expect(argv.slice(0, 3)).toEqual([node, executable, "automation"]);
+    expect(argv).toHaveLength(10);
+    expect(() => encodeLaunchdPlist({ ...value, ProgramArguments: ["node", ...argv.slice(1)] as unknown as typeof argv })).toThrow();
+  });
+
+  it("still reads back a pre-NEW-144 nine-argument plist, so enable can replace it and disable or uninstall can remove it", () => {
+    const value = plistFor("/Users/a b/.developer-os");
+    const legacyArgv = value.ProgramArguments.slice(1) as unknown as typeof value.ProgramArguments;
+    // The writer refuses the Node-less shape; only the retained re-render admits it.
+    expect(() => encodeLaunchdPlist({ ...value, ProgramArguments: legacyArgv })).toThrow(/no Node/u);
+    const xml = encodeRetainedLaunchdPlist({ ...value, ProgramArguments: legacyArgv });
+    expect(xml).not.toContain(node);
+    expect(parseCanonicalLaunchdPlist(new TextEncoder().encode(xml)).ProgramArguments).toEqual(legacyArgv);
+    expect(() => encodeRetainedLaunchdPlist({ ...value, ProgramArguments: value.ProgramArguments.slice(2) as unknown as typeof value.ProgramArguments })).toThrow();
   });
 
   it("emits hourly and weekly calendar dictionaries in their fixed key order", () => {
@@ -148,9 +171,9 @@ describe("encodeLaunchdPlist", () => {
     const value = plistFor("/Users/a b/.developer-os");
     const argv = [...value.ProgramArguments];
     expect(() => encodeLaunchdPlist({ ...value, ProgramArguments: argv.slice(0, 8) as unknown as typeof value.ProgramArguments })).toThrow();
-    const otherGeneration = [...argv.slice(0, 8), "f".repeat(64)] as unknown as typeof value.ProgramArguments;
+    const otherGeneration = [...argv.slice(0, 9), "f".repeat(64)] as unknown as typeof value.ProgramArguments;
     expect(() => encodeLaunchdPlist({ ...value, ProgramArguments: otherGeneration })).toThrow();
-    const otherJob = [...argv.slice(0, 3), "doctor", ...argv.slice(4)] as unknown as typeof value.ProgramArguments;
+    const otherJob = [...argv.slice(0, 4), "doctor", ...argv.slice(5)] as unknown as typeof value.ProgramArguments;
     expect(() => encodeLaunchdPlist({ ...value, ProgramArguments: otherJob })).toThrow();
     expect(() => encodeLaunchdPlist({ ...value, Label: "com.developer-os.brain-reindex" as typeof value.Label })).toThrow();
     expect(() => encodeLaunchdPlist({ ...value, StartCalendarInterval: { Minute: 60 } })).toThrow();
@@ -201,6 +224,7 @@ function request(overrides: Partial<LaunchdPreviewRequestV1> = {}): LaunchdPrevi
     userHome,
     productHome,
     executablePath: executable,
+    nodePath: node,
     automation: threeJobs,
     prior: { "brain-reindex": unloaded(), "brain-lint": unloaded(), doctor: unloaded(), "git-sync": unloaded(), "brain-garden": unloaded(), "brain-pulse": unloaded() },
     ...overrides,
@@ -224,7 +248,7 @@ describe("buildLaunchdPlanPreview", () => {
       expect(entry.generatedLabel).toBe(`${entry.baseLabel}.g.${String(entry.generation)}`);
       expect(entry.generation).toBe(launchdGeneration(entry.generationProjection as LaunchdGenerationProjectionV1));
       expect(entry.plistBytes).toContain(`<string>${String(entry.generatedLabel)}</string>`);
-      expect(entry.baseArgv).toEqual([executable, "automation", "run", entry.job, "--scheduled", "--product-home", productHome]);
+      expect(entry.baseArgv).toEqual([node, executable, "automation", "run", entry.job, "--scheduled", "--product-home", productHome]);
       expect(entry.plistPath).toBe(`/Users/a b/Library/LaunchAgents/${entry.baseLabel}.plist`);
       expect(entry.priorStateFingerprint).toBe(
         launchdPriorStateFingerprint({

@@ -218,6 +218,11 @@ export interface CliContext {
    * refuses when the composition root did not supply one.
    */
   readonly lifecycle?: CliLifecycleContext | undefined;
+  /**
+   * The Node binary this process runs under, which every generated launchd plist names as argv[0]
+   * (NEW-144). Absent: `process.execPath`; a test injects a missing or non-executable path.
+   */
+  readonly nodeExecutable?: string | undefined;
   /** The plan-only update ports; absent, `update` binds the production ones from this context. */
   readonly update?: CliUpdateContext | undefined;
 }

@@ -172,7 +172,7 @@ async function fixture() {
   );
   const plist: LaunchdPlistDictionaryV1 = {
     Label: generatedLabel("doctor", GENERATION),
-    ProgramArguments: scheduledProgramArguments("doctor", parseScheduledProductHome(productHome), GENERATION, "/usr/local/bin/dos" as CanonicalAbsolutePathV1),
+    ProgramArguments: scheduledProgramArguments("doctor", parseScheduledProductHome(productHome), GENERATION, "/usr/local/bin/dos" as CanonicalAbsolutePathV1, "/usr/local/bin/node" as CanonicalAbsolutePathV1),
     StartCalendarInterval: { Hour: 2, Minute: 30 },
     StandardOutPath: "/dev/null",
     StandardErrorPath: "/dev/null",
