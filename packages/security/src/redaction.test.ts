@@ -211,6 +211,22 @@ describe("redactText", () => {
       });
     }
 
+    /** NEW-130 (D83 (5)): a spaced passphrase was captured only to its first word. */
+    const spaced = "lantern quiver mosaic bramble oyster plinth tundra hollow ember quartz violet anchor"; // gitleaks:allow -- synthetic test fixture
+    for (const line of [
+      `mnemonic: ${spaced}`,
+      `the seed phrase is ${spaced}`,
+      `passphrase = ${spaced}\nnext line stays`,
+    ]) {
+      it(`redacts every word of a spaced passphrase: ${line.replace(spaced, "<words>")}`, () => {
+        const result = redactText(line, deterministicKey);
+
+        for (const word of spaced.split(" ")) expect(result.text).not.toContain(word);
+        expect(result.findings.map((f) => f.class)).toEqual(["credential-store"]);
+        if (line.includes("\n")) expect(result.text).toContain("\nnext line stays");
+      });
+    }
+
     it("leaves the same words in prose without a label", () => {
       const line = `see ${passphrase} for details`;
       expect(redactText(line, deterministicKey).text).toBe(line);

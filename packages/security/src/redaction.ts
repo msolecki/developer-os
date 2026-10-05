@@ -661,11 +661,13 @@ export function redactText(
   /**
    * NEW-129 review: an all-word passphrase is exempt from high-entropy (`isWordLikePath`),
    * so a labelled one is caught here instead. `\bis\b`, not `is`, so "this" is no label.
-   * Captures the first token only: a space-separated mnemonic keeps its later words.
+   * Captures the rest of the line, like `env-secret` (NEW-130, D83 (5)): a space-separated
+   * mnemonic is as secret as a hyphenated one. The cost is prose: "the passphrase is stored
+   * in the keychain" loses everything after "is", not just "stored".
    */
   addCapturedMatches(
     normalizedText,
-    /\b(?:pass ?phrase|mnemonic|seed phrase|recovery (?:phrase|key))\b[^\r\n]{0,20}?(?:\bis\b|[:=])\s*(\S+)/giu,
+    /\b(?:pass ?phrase|mnemonic|seed phrase|recovery (?:phrase|key))\b[^\r\n]{0,20}?(?:\bis\b|[:=])\s*(\S(?:[^\r\n]*\S)?)/giu,
     "credential-store",
     1,
     candidates,
