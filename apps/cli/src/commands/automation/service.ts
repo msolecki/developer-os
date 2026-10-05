@@ -4,6 +4,8 @@
  * under a global lock the caller already holds, recomputes its preview there, proves feasibility,
  * reserves IDs, stages every participant, persists the plan and hands it to the coordinator by ID.
  */
+import { constants } from "node:fs";
+import { access, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import {
@@ -72,6 +74,7 @@ import {
   parseGeneratedLabel,
   parseScheduledProductHome,
   planLaunchdTransitions,
+  scheduledArgvParts,
   reconcileAutomationSchedules,
 } from "@developer-os/platform-macos";
 import type {
@@ -90,6 +93,7 @@ import type {
 
 import type { CliContext } from "../../context.js";
 import { selectVendor } from "../ingest.js";
+import { stableNodePath } from "../../instructions/apply.js";
 import { compareManifestRows } from "../../instructions/attach.js";
 import type { LifecycleExecutionPlanV1, LifecyclePlanPreviewV1 } from "../../lifecycle/codecs.js";
 import { lifecyclePushPlanHash, lifecycleVariantFacts } from "../../lifecycle/codecs.js";
@@ -137,8 +141,12 @@ export interface AutomationJobStatusV1 {
   readonly job: ScheduledJobIdV1;
   readonly schedule: NormalizedScheduleV1 | null;
   readonly eligible: boolean;
-  /** `stale` is an owned plist whose generation is not the current eligible configuration's. */
-  readonly installed: "absent" | "current" | "stale" | "drifted" | "unowned";
+  /**
+   * `stale` is an owned plist whose generation is not the current eligible configuration's (a
+   * pre-NEW-144 plist is always stale); `node_unavailable` is an owned plist whose argv[0] Node is no
+   * longer an executable file, so launchd cannot start it until `automation enable` runs again.
+   */
+  readonly installed: "absent" | "current" | "stale" | "node_unavailable" | "drifted" | "unowned";
   readonly live: "loaded" | "unloaded" | "third_state" | null;
   readonly lastRun: AutomationStatusRecordV1 | "invalid" | null;
 }
@@ -229,6 +237,8 @@ interface RetainedPlistV1 {
   readonly label: GeneratedLaunchdLabelV1;
   readonly generation: LaunchdGenerationV1;
   readonly executablePath: CanonicalAbsolutePathV1;
+  /** The Node the plist's argv[0] names; null for a pre-NEW-144 plist, which launchd cannot start. */
+  readonly node: CanonicalAbsolutePathV1 | null;
   readonly identity: LaunchdBootstrapPlistIdentityV1;
 }
 
@@ -265,8 +275,8 @@ async function inspectPlist(
   try {
     const plist = parseCanonicalLaunchdPlist(bytes);
     const parsed = parseGeneratedLabel(plist.Label);
-    const argv: readonly string[] = plist.ProgramArguments;
-    if (parsed.job !== job || argv[6] !== home.key.productHome) return { kind: "drifted", path };
+    const parts = scheduledArgvParts(plist.ProgramArguments);
+    if (parsed.job !== job || parts.productHome !== home.key.productHome) return { kind: "drifted", path };
     return {
       kind: "retained",
       plist: {
@@ -274,7 +284,8 @@ async function inspectPlist(
         bytes,
         label: plist.Label,
         generation: parsed.generation,
-        executablePath: canonical(String(argv[0])),
+        executablePath: parts.executable,
+        node: parts.node,
         identity: {
           path,
           ownerUid: parseEffectiveUid(entry.ownerUid, lifecycle.effectiveUid),
@@ -336,6 +347,35 @@ export async function verifiedAutomationExecutable(
     refuse("automation_executable_drifted", EXIT_CODES.recoveryRequired, [path], "developer-os doctor");
   }
   return path;
+}
+
+/**
+ * NEW-144: launchd's PATH holds neither mise nor Homebrew, and the entrypoint is a mode-0600 module
+ * with no shebang, so every plist's argv[0] is the absolute Node this command runs under — Homebrew's
+ * version-free `opt` link when it names the same binary (`stableNodePath`). Enable admits it as an
+ * executable regular file. Residual: a Node upgrade or move that deletes this path (a mise version
+ * directory, a Homebrew Cellar path with no `opt` link) stops every job until `automation enable`
+ * runs again; `automation status` reports such a job `node_unavailable`.
+ */
+export async function automationNodePath(context: CliContext): Promise<CanonicalAbsolutePathV1> {
+  const path = await stableNodePath(context.nodeExecutable ?? process.execPath);
+  try {
+    const node = parseCanonicalAbsolutePathText(path);
+    if (await nodeExecutable(node)) return node;
+  } catch {
+    // falls through to the refusal: not a canonical absolute path
+  }
+  return refuse("automation_node_unavailable", EXIT_CODES.capabilityUnavailable, [path], "run developer-os automation enable under an absolute, executable node");
+}
+
+async function nodeExecutable(path: string): Promise<boolean> {
+  try {
+    if (!(await stat(path)).isFile()) return false;
+    await access(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function launchdTemplate(lifecycle: CliLifecycleContext): SupportedLaunchdProcessTableTemplateV1 {
@@ -596,10 +636,13 @@ async function planAutomation(
   const retained = await retainedPlists(context, lifecycle, home);
   const productHome = parseScheduledProductHome(home.key.productHome);
   const userHome = canonical(context.userHome);
+  const first = [...retained.values()][0];
   const executablePath =
     target === null
-      ? ([...retained.values()][0]?.executablePath ?? canonical(entrypointPath(home.key.productHome)))
+      ? (first?.executablePath ?? canonical(entrypointPath(home.key.productHome)))
       : await verifiedAutomationExecutable(lifecycle, home.key.productHome, home.manifest);
+  // A remove-only plan writes no plist, so its Node is informational and never admitted.
+  const nodePath = target === null ? (first?.node ?? executablePath) : await automationNodePath(context);
   if (target !== null) {
     const launchAgents = canonical(dirname(launchdPlistPath(userHome, "doctor")));
     // identity-free stat: presence and kind only; Foundation never creates a target's parent.
@@ -615,6 +658,7 @@ async function planAutomation(
     userHome,
     productHome,
     executablePath,
+    nodePath,
     automation: target,
   };
   const draft = buildLaunchdPlanPreview({
@@ -1049,12 +1093,20 @@ async function lastRunOf(lifecycle: CliLifecycleContext, productHome: CanonicalA
 }
 
 /** What the current eligible configuration would install; null when no executable is verified. */
-async function currentLabels(lifecycle: CliLifecycleContext, context: CliContext, home: GitHomeV1): Promise<ReadonlyMap<ScheduledJobIdV1, GeneratedLaunchdLabelV1> | null> {
+async function currentLabels(
+  lifecycle: CliLifecycleContext,
+  context: CliContext,
+  home: GitHomeV1,
+  installedNode: CanonicalAbsolutePathV1 | null,
+): Promise<ReadonlyMap<ScheduledJobIdV1, GeneratedLaunchdLabelV1> | null> {
   const lifecycleConfig = home.config.automation.lifecycle;
   if (!home.config.automation.enabled || lifecycleConfig === undefined) return new Map();
+  let nodePath = installedNode;
   let executablePath: CanonicalAbsolutePathV1;
   try {
     executablePath = await verifiedAutomationExecutable(lifecycle, home.key.productHome, home.manifest);
+    // The installed plists' Node, so a status run under another Node (a mise per-directory version) is not `stale`.
+    nodePath ??= await automationNodePath(context);
   } catch (error) {
     if (error instanceof AutomationCommandRefusal) return null;
     throw error;
@@ -1067,6 +1119,7 @@ async function currentLabels(lifecycle: CliLifecycleContext, context: CliContext
     userHome: canonical(context.userHome),
     productHome: parseScheduledProductHome(home.key.productHome),
     executablePath,
+    nodePath,
     automation: eligible,
     prior: Object.fromEntries(SCHEDULED_JOB_IDS.map((job) => [job, UNLOADED])) as Record<ScheduledJobIdV1, LaunchdPriorJobStateV1>,
   });
@@ -1159,8 +1212,8 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
     const home = await observeHome(context, lifecycle);
     const states = new Map<ScheduledJobIdV1, PlistStateV1>();
     for (const job of SCHEDULED_JOB_IDS) states.set(job, await inspectPlist(context, lifecycle, home, job));
-    const expected = await currentLabels(lifecycle, context, home);
     const retained = [...states.values()].flatMap((state) => (state.kind === "retained" ? [state.plist] : []));
+    const expected = await currentLabels(lifecycle, context, home, retained.find((plist) => plist.node !== null)?.node ?? null);
     let distribution = await launchdDistribution(lifecycle);
     let live: ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1 | "third_state"> | null = null;
     try {
@@ -1176,7 +1229,11 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
       const eligible = home.config.automation.enabled && activationArm(home) === "active" && (job !== "git-sync" || gitEligible(home));
       const current = expected?.get(job);
       const installed =
-        state.kind !== "retained" ? state.kind : eligible && current !== undefined && current === state.plist.label ? "current" : "stale";
+        state.kind !== "retained"
+          ? state.kind
+          : state.plist.node !== null && !(await nodeExecutable(state.plist.node))
+            ? "node_unavailable"
+            : eligible && current !== undefined && current === state.plist.label ? "current" : "stale";
       const liveState = live?.get(job);
       jobs.push({
         job,

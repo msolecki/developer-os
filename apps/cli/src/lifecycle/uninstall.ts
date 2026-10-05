@@ -96,6 +96,7 @@ import {
   parseGeneratedLabel,
   parseScheduledProductHome,
   planLaunchdTransitions,
+  scheduledArgvParts,
 } from "@developer-os/platform-macos";
 import type {
   GeneratedLaunchdLabelV1,
@@ -1192,6 +1193,8 @@ interface UninstallLaunchdRowV1 {
   readonly label: GeneratedLaunchdLabelV1;
   readonly generation: LaunchdGenerationV1;
   readonly executablePath: CanonicalAbsolutePathV1;
+  /** Null for a pre-NEW-144 nine-argument plist. */
+  readonly node: CanonicalAbsolutePathV1 | null;
   readonly identity: LaunchdBootstrapPlistIdentityV1;
   readonly mutation: ArtifactMutationV1;
 }
@@ -1238,22 +1241,23 @@ async function admitPlistRow(
     );
   }
   let label: GeneratedLaunchdLabelV1;
-  let argv: readonly string[];
+  let argv: ReturnType<typeof scheduledArgvParts>;
   let parsed: ReturnType<typeof parseGeneratedLabel>;
   try {
     const plist = parseCanonicalLaunchdPlist(content);
     label = plist.Label;
-    argv = plist.ProgramArguments;
+    argv = scheduledArgvParts(plist.ProgramArguments);
     parsed = parseGeneratedLabel(label);
   } catch {
     return refuse("uninstall_plist_bytes", path);
   }
-  if (parsed.job !== job || argv[6] !== request.key.productHome) refuse("uninstall_plist_foreign", path);
+  if (parsed.job !== job || argv.productHome !== request.key.productHome) refuse("uninstall_plist_foreign", path);
   return {
     job,
     label,
     generation: parsed.generation,
-    executablePath: canonical(String(argv[0])),
+    executablePath: argv.executable,
+    node: argv.node,
     identity: {
       path,
       ownerUid: parseEffectiveUid(entry.ownerUid, lifecycle.effectiveUid),
@@ -1351,6 +1355,8 @@ async function planUninstallLaunchd(
     userHome,
     productHome: parseScheduledProductHome(productHome),
     executablePath,
+    // Remove-only: no plist is written, so the Node is informational.
+    nodePath: rows.find((row) => row.node !== null)?.node ?? executablePath,
     automation: null,
     prior,
   });

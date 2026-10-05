@@ -11,6 +11,7 @@ export {
   launchdStatusPath,
   parseGeneratedLabel,
   parseScheduledProductHome,
+  scheduledArgvParts,
   scheduledBaseArgv,
   scheduledProgramArguments,
 } from "./registry.js";
@@ -24,6 +25,7 @@ export {
   boundedCanonicalPlistXml,
   buildLaunchdPlanPreview,
   encodeLaunchdPlist,
+  encodeRetainedLaunchdPlist,
   launchdPlistDictionary,
   launchdPriorStateFingerprint,
 } from "./plist.js";
@@ -48,6 +50,7 @@ export type {
   LaunchdPlistDictionaryV1,
   LaunchdPreviewRequestV1,
   LaunchdPriorJobStateV1,
+  LaunchdLegacyProgramArgumentsV1,
   LaunchdProgramArgumentsV1,
   LaunchdScheduledProductHomeV1,
 } from "./types.js";

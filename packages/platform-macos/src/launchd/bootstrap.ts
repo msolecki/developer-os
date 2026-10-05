@@ -18,7 +18,7 @@ import {
 import type { SupervisedPhaseV1, SupervisedProcessRunner, SupervisedTerminationV1 } from "@developer-os/security";
 
 import { recheckLaunchdHost, type LaunchdHostObserverV1 } from "./distribution.js";
-import { encodeLaunchdPlist } from "./plist.js";
+import { encodeRetainedLaunchdPlist } from "./plist.js";
 import {
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   requireLaunchdMutationTable,
@@ -381,7 +381,8 @@ export class LaunchdPathBootstrapper {
       refuse("bootstrap plist path is not the planned label's LaunchAgents leaf");
     }
     if (request.table.staging.root.ownerUid !== uid) refuse("launchd process staging owner");
-    const bytes = new TextEncoder().encode(encodeLaunchdPlist(request.plist));
+    // Retained: a compensation may restore a pre-NEW-144 plist it is undoing the replace of.
+    const bytes = new TextEncoder().encode(encodeRetainedLaunchdPlist(request.plist));
     if (bytes.byteLength !== source.size || hashBytes(bytes) !== source.hash) refuse("bootstrap plist bytes are not the plan-bound identity");
     return bytes;
   }

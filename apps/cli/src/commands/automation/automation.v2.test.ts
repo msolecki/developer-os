@@ -3,8 +3,11 @@
  * the real `launchctl` never runs — while every lifecycle participant (Foundation, manifest, both
  * launchd effects) is real. Cases run in order and each leaves the home in the state the next reads.
  */
+import { spawnSync } from "node:child_process";
+import { constants } from "node:fs";
 import * as nodeFs from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -12,6 +15,7 @@ import {
   EXIT_CODES,
   encodeCanonicalJson,
   hashBytes,
+  hashCanonicalJson,
   lifecycleConfigHash,
   lifecycleReservationOrder,
   loadConfig,
@@ -30,11 +34,17 @@ import type {
   ScheduledJobIdV1,
 } from "@developer-os/core";
 import { DEFAULT_BRAIN_CONFIG } from "@developer-os/brain";
-import { LaunchdDistributionUnsupportedError, NodeLaunchdPlistReader } from "@developer-os/platform-macos";
-import type { LaunchdPlanPreviewV1, LaunchdPlistPortV1 } from "@developer-os/platform-macos";
+import {
+  LaunchdDistributionUnsupportedError,
+  NodeLaunchdPlistReader,
+  encodeRetainedLaunchdPlist,
+  generatedLabel,
+  parseCanonicalLaunchdPlist,
+} from "@developer-os/platform-macos";
+import type { GeneratedLaunchdLabelV1, LaunchdPlanPreviewV1, LaunchdPlistPortV1 } from "@developer-os/platform-macos";
 
 import { compareManifestRows } from "../../instructions/attach.js";
-import { gatedState, manifestMutation } from "../../instructions/apply.js";
+import { gatedState, manifestMutation, stableNodePath } from "../../instructions/apply.js";
 import type { LifecycleEffectPortsV1 } from "../../lifecycle/adapters.js";
 import { lifecycleVariantFacts } from "../../lifecycle/codecs.js";
 import type { LifecycleExecutionPlanV1 } from "../../lifecycle/codecs.js";
@@ -42,6 +52,7 @@ import type { CliLifecycleContext } from "../../lifecycle/context.js";
 import { withLifecycleMutation } from "../../lifecycle/mutation-gate.js";
 import { automationLogSlotPath, automationRunnerLeasePath, automationStatusPath } from "../../lifecycle/runtime-records.js";
 import { hostWith, scriptedLaunchd } from "../../lifecycle/testing.js";
+import { renderEntrypoint } from "../../update/entrypoint.js";
 import { entrypointPath } from "../../update/local-release.js";
 import { runConfig } from "../config.js";
 import { runGit } from "../git/index.js";
@@ -58,7 +69,11 @@ afterAll(removeCommandFixtures);
 const UID = process.getuid?.() ?? 0;
 const CLOCK = parseUtcTimestamp("2026-09-23T00:00:00.000Z");
 const BASE_SCHEDULES = ["brain-reindex=daily@02:00", "brain-lint=daily@02:30", "doctor=weekly@mon,03:00"] as const;
-const ENTRYPOINT = "// synthetic Developer OS entrypoint\n";
+/**
+ * The entrypoint `init` renders, aimed at this checkout's built CLI (`tests/node_modules/@developer-os/cli`)
+ * so a generated plist's argv can really be executed (NEW-144).
+ */
+const ENTRYPOINT = renderEntrypoint(resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..", "tests"));
 const encoder = new TextEncoder();
 
 const host = { drifted: false, thirdState: false, belowFloor: false };
@@ -162,7 +177,7 @@ function lifecycleOf(fixture: CommandFixture): CliLifecycleContext {
 /** The fixture release carries no CLI, so the entrypoint row `init` would write is written here the same way. */
 async function installSyntheticEntrypoint(fixture: CommandFixture, lifecycle: CliLifecycleContext): Promise<void> {
   const path = entrypointPath(fixture.paths.home);
-  const content = encoder.encode(ENTRYPOINT);
+  const content = ENTRYPOINT;
   await withLifecycleMutation(fixture.context, lifecycle, async (authority) => {
     const state = await gatedState(fixture.context, authority);
     const common = {
@@ -191,6 +206,41 @@ async function installSyntheticEntrypoint(fixture: CommandFixture, lifecycle: Cl
   });
 }
 
+/**
+ * Rewrites every installed plist into the nine-argument shape builds before NEW-144 wrote — argv[0]
+ * the entrypoint, the label's generation over that argv — with matching manifest rows and the old
+ * labels loaded, which is the founder's broken home.
+ */
+async function installLegacyPlists(home: AutomationHomeV1, jobs: readonly ScheduledJobIdV1[]): Promise<ReadonlyMap<ScheduledJobIdV1, GeneratedLaunchdLabelV1>> {
+  const labels = new Map<ScheduledJobIdV1, GeneratedLaunchdLabelV1>();
+  await withLifecycleMutation(home.context, home.lifecycle, async (authority) => {
+    const state = await gatedState(home.context, authority);
+    const mutations = [];
+    const rows = [...state.manifest.artifacts];
+    for (const job of jobs) {
+      const path = plistPath(home, job);
+      const current = await nodeFs.readFile(path);
+      const plist = parseCanonicalLaunchdPlist(current);
+      const legacyBase = plist.ProgramArguments.slice(1, 8);
+      const generation = hashCanonicalJson("developer-os:launchd-generation:v1", { job, legacyBase });
+      const label = generatedLabel(job, generation);
+      const content = encoder.encode(
+        encodeRetainedLaunchdPlist({ ...plist, Label: label, ProgramArguments: [...legacyBase, "--generation", generation] as unknown as typeof plist.ProgramArguments }),
+      );
+      mutations.push({ targetPath: path, operation: "replace" as const, content, expectedBeforeHash: hashBytes(current) });
+      const index = rows.findIndex((row) => row.path === path);
+      rows[index] = { ...rows[index], verification: { mode: "content", installedHash: hashBytes(content) } } as ManagedArtifactV2;
+      labels.set(job, label);
+    }
+    await home.context.executor.execute({
+      kind: "legacy-plists",
+      mutations: [...mutations, manifestMutation(home.context, { ...state.manifest, artifacts: rows }, state.manifestHash)],
+    });
+  });
+  for (const [job, label] of labels) launchd.loaded.set(job, label);
+  return labels;
+}
+
 let shared: Promise<AutomationHomeV1> | null = null;
 
 function sharedHome(): Promise<AutomationHomeV1> {
@@ -210,8 +260,13 @@ function sharedHome(): Promise<AutomationHomeV1> {
   return shared;
 }
 
-async function apply(home: AutomationHomeV1, command: "enable" | "disable", schedules: readonly string[] = []): Promise<AutomationCommandResultV1> {
-  const service = createAutomationService(home.context, home.lifecycle);
+async function apply(
+  home: AutomationHomeV1,
+  command: "enable" | "disable",
+  schedules: readonly string[] = [],
+  context: CommandFixture["context"] = home.context,
+): Promise<AutomationCommandResultV1> {
+  const service = createAutomationService(context, home.lifecycle);
   const preview = command === "enable" ? await service.previewEnable(schedules) : await service.previewDisable();
   const global = await home.lifecycle.locks.acquireExisting(parseCanonicalAbsolutePathText(join(home.paths.stateDir, ".lifecycle.lock")));
   try {
@@ -436,6 +491,27 @@ describe("automation on a real V2 home", () => {
     REAL_FILESYSTEM_TIMEOUT_MS,
   );
 
+  it.each([
+    { name: "missing", make: (): Promise<void> => Promise.resolve() },
+    { name: "not executable", make: async (path: string) => nodeFs.writeFile(path, "#!/bin/sh\n", { mode: 0o600 }) },
+    { name: "a directory", make: async (path: string) => nodeFs.mkdir(path, { mode: 0o700 }) },
+  ])(
+    "refuses enable when the Node every plist would name is $name, and writes nothing (NEW-144)",
+    async ({ name, make }) => {
+      const home = await sharedHome();
+      const node = join(home.root, `node-${name.replaceAll(" ", "-")}`);
+      await make(node);
+      const allocatorBefore = await nodeFs.readFile(allocatorPath(home));
+      const eventsBefore = [...launchd.events];
+      const result = await runAutomation({ ...home.context, nodeExecutable: node }, { subcommand: "enable", schedules: [...BASE_SCHEDULES], apply: true });
+      expect(result).toMatchObject({ ok: false, code: EXIT_CODES.capabilityUnavailable, error: { kind: "automation_node_unavailable" } });
+      expect(await nodeFs.readFile(allocatorPath(home))).toEqual(allocatorBefore);
+      expect(launchd.events).toStrictEqual(eventsBefore);
+      expect(await readOrNull(plistPath(home, "doctor"))).toBeNull();
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
   it(
     "enables every eligible job, publishing plists, activation and manifest before loading, and the enabled config last",
     async () => {
@@ -461,8 +537,15 @@ describe("automation on a real V2 home", () => {
       const entries = entriesOf(plan);
       expect(launchd.events.slice(eventsBefore)).toStrictEqual(entries.map((entry) => `bootstrap ${String(entry.generatedLabel)}`));
       const manifest = await readManifest(home);
+      const node = await stableNodePath(process.execPath);
+      expect(isAbsolute(node)).toBe(true);
+      await nodeFs.access(node, constants.X_OK);
       for (const entry of entries) {
         expect(await nodeFs.readFile(entry.plistPath, "utf8")).toBe(entry.plistBytes);
+        // NEW-144: launchd execs argv[0], so it is the absolute Node and the 0600 module is argv[1].
+        const argv = parseCanonicalLaunchdPlist(encoder.encode(String(entry.plistBytes))).ProgramArguments;
+        expect(argv.slice(0, 3)).toStrictEqual([node, entrypointPath(home.paths.home), "automation"]);
+        expect(entry.baseArgv.slice(0, 2)).toStrictEqual([node, entrypointPath(home.paths.home)]);
         expect((await nodeFs.stat(entry.plistPath)).mode & 0o777).toBe(0o600);
         expect(entry.generatedLabel === null ? undefined : launchd.loaded.get(entry.job)).toBe(entry.generatedLabel);
         expect(manifest.artifacts.find((artifact) => artifact.path === entry.plistPath)).toMatchObject({
@@ -479,6 +562,28 @@ describe("automation on a real V2 home", () => {
       if (config.automation.lifecycle === undefined) throw new Error("no automation lifecycle");
       expect(activation.automation).toStrictEqual({ state: "active", configHash: lifecycleConfigHash("automation", config.automation.lifecycle) });
       expect(await nodeFs.readdir(join(home.paths.stateDir, "launchd-effect-journals"))).toStrictEqual([]);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "execs a generated plist's ProgramArguments as launchd does: Node starts the CLI and the runner answers (NEW-144)",
+    async () => {
+      const home = await sharedHome();
+      const argv = parseCanonicalLaunchdPlist(await nodeFs.readFile(plistPath(home, "doctor"))).ProgramArguments;
+      // launchd's environment: HOME and a minimal PATH, no mise or Homebrew, no working directory.
+      const env = { HOME: home.userHome, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
+      // The pre-NEW-144 argv named the 0600, shebang-less module as the program: it cannot be executed.
+      expect(spawnSync(argv[1], argv.slice(2), { cwd: "/", env }).error).toMatchObject({ code: "EACCES" });
+      const run = spawnSync(argv[0], argv.slice(1), { cwd: "/", env, encoding: "utf8", timeout: 120_000 });
+      expect(run.error).toBeUndefined();
+      expect(run.signal).toBeNull();
+      expect(run.stderr).not.toContain("could not be loaded");
+      // Node loaded the entrypoint, the CLI parsed the scheduled invocation and admitted the product
+      // home, and the runner answered with its own code: the production context does not admit this
+      // fixture home's manifest (`manifest_invalid`, exit 6), and §5.3 takes the user home from the
+      // account record, never this HOME. A full run is the NEW-144 real-host `launchctl kickstart`.
+      expect(run.status, `${run.stdout}\n${run.stderr}`).toBe(EXIT_CODES.recoveryRequired);
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );
@@ -501,6 +606,77 @@ describe("automation on a real V2 home", () => {
         ["brain-pulse", true, "absent", null, null],
       ]);
       expect(launchd.events).toStrictEqual(eventsBefore);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "replaces every pre-NEW-144 plist when enable runs again, reporting them stale until then",
+    async () => {
+      const home = await sharedHome();
+      const currentBytes = new Map<ScheduledJobIdV1, string>();
+      const jobs = ["brain-reindex", "brain-lint", "doctor"] as const;
+      for (const job of jobs) currentBytes.set(job, await nodeFs.readFile(plistPath(home, job), "utf8"));
+      const legacy = await installLegacyPlists(home, jobs);
+      const status = dataOf(await runAutomation(home.context, { subcommand: "status" }));
+      if (status.kind !== "status") throw new Error("unreachable");
+      expect(status.jobs.filter((job) => job.installed !== "absent").map((job) => [job.job, job.installed, job.live])).toStrictEqual(
+        jobs.map((job) => [job, "stale", "loaded"]),
+      );
+      const eventsBefore = launchd.events.length;
+      const result = await apply(home, "enable");
+      expect(result.data).toMatchObject({ kind: "applied", operation: "automation_reconcile" });
+      const plan = lastPlan(home);
+      expect(entriesOf(plan).map((entry) => [entry.job, entry.operation])).toStrictEqual(jobs.map((job) => [job, "replace"]));
+      expect(launchd.events.slice(eventsBefore)).toStrictEqual(
+        [
+          ...entriesOf(plan).map((entry) => `bootout ${String(legacy.get(entry.job))}`),
+          ...entriesOf(plan).map((entry) => `bootstrap ${String(entry.generatedLabel)}`),
+        ],
+      );
+      for (const job of jobs) expect(await nodeFs.readFile(plistPath(home, job), "utf8")).toBe(currentBytes.get(job));
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "disables a home holding pre-NEW-144 plists: boots their labels out and removes them",
+    async () => {
+      const home = await sharedHome();
+      const jobs = ["brain-reindex", "brain-lint", "doctor"] as const;
+      const legacy = await installLegacyPlists(home, jobs);
+      const eventsBefore = launchd.events.length;
+      const result = await apply(home, "disable");
+      expect(result.data).toMatchObject({ kind: "applied", operation: "automation_disable" });
+      expect(entriesOf(lastPlan(home)).map((entry) => [entry.job, entry.operation])).toStrictEqual(jobs.map((job) => [job, "remove"]));
+      expect(launchd.events.slice(eventsBefore)).toStrictEqual(jobs.map((job) => `bootout ${String(legacy.get(job))}`));
+      for (const job of jobs) expect(await readOrNull(plistPath(home, job))).toBeNull();
+      expect(launchd.loaded.size).toBe(0);
+      // Back to the state the later cases read.
+      expect((await apply(home, "enable", BASE_SCHEDULES)).data).toMatchObject({ kind: "applied", operation: "automation_enable" });
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "reports node_unavailable once the Node the plists name is gone, and enable under a present Node replaces them",
+    async () => {
+      const home = await sharedHome();
+      const link = join(home.root, "moved-node");
+      await nodeFs.symlink(process.execPath, link);
+      const moved = await apply(home, "enable", [], { ...home.context, nodeExecutable: link });
+      expect(moved.data).toMatchObject({ kind: "applied", operation: "automation_reconcile" });
+      expect(parseCanonicalLaunchdPlist(await nodeFs.readFile(plistPath(home, "doctor"))).ProgramArguments[0]).toBe(link);
+      await nodeFs.unlink(link);
+      const status = dataOf(await runAutomation(home.context, { subcommand: "status" }));
+      if (status.kind !== "status") throw new Error("unreachable");
+      expect(status.jobs.filter((job) => job.installed !== "absent").map((job) => job.installed)).toStrictEqual(["node_unavailable", "node_unavailable", "node_unavailable"]);
+      const restored = await apply(home, "enable");
+      expect(restored.data).toMatchObject({ kind: "applied", operation: "automation_reconcile" });
+      expect(entriesOf(lastPlan(home)).map((entry) => entry.operation)).toStrictEqual(["replace", "replace", "replace"]);
+      const after = dataOf(await runAutomation(home.context, { subcommand: "status" }));
+      if (after.kind !== "status") throw new Error("unreachable");
+      expect(after.jobs.filter((job) => job.installed !== "absent").map((job) => job.installed)).toStrictEqual(["current", "current", "current"]);
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );

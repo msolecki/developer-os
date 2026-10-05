@@ -46,7 +46,12 @@ export type LaunchdObservedServiceTargetV1 = `${LaunchdGuiDomainV1}/${LaunchdObs
 
 export type LaunchdGeneratedServiceTargetV1 = `${LaunchdGuiDomainV1}/${GeneratedLaunchdLabelV1}`;
 
+/**
+ * NEW-144: `[<absolute Node>, <entrypoint>, automation, …]`. The entrypoint is a mode-0600 ES module
+ * with no shebang, so launchd cannot exec it (EX_CONFIG, 78); argv[0] must be the Node binary.
+ */
 export type LaunchdBaseArgvV1 = readonly [
+  CanonicalAbsolutePathV1,
   CanonicalAbsolutePathV1,
   "automation",
   "run",
@@ -61,6 +66,13 @@ export type LaunchdProgramArgumentsV1 = readonly [
   "--generation",
   LaunchdGenerationV1,
 ];
+
+/**
+ * The nine-argument shape every plist written before NEW-144 carries (argv[0] the entrypoint).
+ * Read-only: it still parses so `automation enable --apply` can replace it and disable or
+ * uninstall can remove it; nothing emits it.
+ */
+export type LaunchdLegacyProgramArgumentsV1 = LaunchdProgramArgumentsV1 extends readonly [CanonicalAbsolutePathV1, ...infer Rest] ? readonly [...Rest] : never;
 
 export interface LaunchdGenerationProjectionV1 {
   readonly job: ScheduledJobIdV1;
@@ -90,7 +102,7 @@ export type LaunchdCalendarIntervalV1 =
 
 export interface LaunchdPlistDictionaryV1 {
   readonly Label: GeneratedLaunchdLabelV1;
-  readonly ProgramArguments: LaunchdProgramArgumentsV1;
+  readonly ProgramArguments: LaunchdProgramArgumentsV1 | LaunchdLegacyProgramArgumentsV1;
   readonly StartCalendarInterval: LaunchdCalendarIntervalV1;
   readonly StandardOutPath: "/dev/null";
   readonly StandardErrorPath: "/dev/null";
@@ -158,6 +170,8 @@ export interface LaunchdPreviewRequestV1 {
   readonly userHome: CanonicalAbsolutePathV1;
   readonly productHome: LaunchdScheduledProductHomeV1;
   readonly executablePath: CanonicalAbsolutePathV1;
+  /** The absolute Node binary every planned plist's argv[0] names (NEW-144). */
+  readonly nodePath: CanonicalAbsolutePathV1;
   readonly automation: AutomationConfigV1 | null;
   readonly prior: Readonly<Record<ScheduledJobIdV1, LaunchdPriorJobStateV1>>;
 }

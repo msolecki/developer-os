@@ -98,7 +98,7 @@ describe("launchctl path bootstrap gate", () => {
 
       const plist: LaunchdPlistDictionaryV1 = {
         Label: label,
-        ProgramArguments: scheduledProgramArguments("doctor", parseScheduledProductHome(productHome), generation, "/usr/bin/true" as CanonicalAbsolutePathV1),
+        ProgramArguments: scheduledProgramArguments("doctor", parseScheduledProductHome(productHome), generation, "/usr/bin/true" as CanonicalAbsolutePathV1, "/usr/bin/true" as CanonicalAbsolutePathV1),
         StartCalendarInterval: { Weekday: 0, Hour: 3, Minute: 17 },
         StandardOutPath: "/dev/null",
         StandardErrorPath: "/dev/null",

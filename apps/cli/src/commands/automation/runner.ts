@@ -405,8 +405,11 @@ export function authenticateScheduledGeneration(
     throw new ScheduledAuthenticationError("scheduled_generation_mismatch");
   }
   const productHome = parseScheduledProductHome(evidence.productHome);
-  const expected = scheduledProgramArguments(job, productHome, request.generation, evidence.executablePath);
   const actual: readonly string[] = dictionary.ProgramArguments;
+  // NEW-144: argv[0] is the Node launchd ran, read from the manifest-hash-bound plist bytes above and
+  // bound below by the generation it reproduces. A pre-NEW-144 nine-argument plist never matches.
+  const node = actual.length === 10 ? (actual[0] as CanonicalAbsolutePathV1) : evidence.executablePath;
+  const expected = scheduledProgramArguments(job, productHome, request.generation, evidence.executablePath, node);
   if (actual.length !== expected.length || expected.some((argument, index) => actual[index] !== argument)) {
     throw new ScheduledAuthenticationError("scheduled_projection_mismatch");
   }
@@ -420,7 +423,7 @@ export function authenticateScheduledGeneration(
       productHome,
       plistPath,
       executablePath: evidence.executablePath,
-      baseArgv: scheduledBaseArgv(job, productHome, evidence.executablePath),
+      baseArgv: scheduledBaseArgv(job, productHome, evidence.executablePath, node),
       logPath: launchdLogPath(productHome, job),
       statusPath: launchdStatusPath(productHome, job),
     });

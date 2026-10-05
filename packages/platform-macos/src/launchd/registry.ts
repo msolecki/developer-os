@@ -21,6 +21,7 @@ import {
   type LaunchdGenerationV1,
   type LaunchdGuiDomainV1,
   type LaunchdJobDefinitionV1,
+  type LaunchdLegacyProgramArgumentsV1,
   type LaunchdProgramArgumentsV1,
   type LaunchdScheduledProductHomeV1,
 } from "./types.js";
@@ -154,8 +155,10 @@ export function scheduledBaseArgv(
   id: ScheduledJobIdV1,
   home: LaunchdScheduledProductHomeV1,
   executable: CanonicalAbsolutePathV1,
+  node: CanonicalAbsolutePathV1,
 ): LaunchdBaseArgvV1 {
   return [
+    boundedPath(node, "node path"),
     boundedPath(executable, "executable path"),
     "automation",
     "run",
@@ -171,8 +174,38 @@ export function scheduledProgramArguments(
   home: LaunchdScheduledProductHomeV1,
   generation: LaunchdGenerationV1,
   executable: CanonicalAbsolutePathV1,
+  node: CanonicalAbsolutePathV1,
 ): LaunchdProgramArgumentsV1 {
-  return [...scheduledBaseArgv(id, home, executable), "--generation", parseLowerHexSha256(generation)];
+  return [...scheduledBaseArgv(id, home, executable, node), "--generation", parseLowerHexSha256(generation)];
+}
+
+/**
+ * Where the Node, entrypoint and product home sit in a plist's argv: ten arguments since NEW-144,
+ * or the nine-argument pre-NEW-144 shape (no Node, `node` null). Positions only — the caller
+ * still compares the whole argv against its reconstruction.
+ */
+export function scheduledArgvParts(argv: readonly unknown[]): {
+  readonly node: CanonicalAbsolutePathV1 | null;
+  readonly executable: CanonicalAbsolutePathV1;
+  readonly productHome: LaunchdScheduledProductHomeV1;
+} {
+  if (argv.length === 10) {
+    return { node: boundedPath(argv[0], "node path"), executable: boundedPath(argv[1], "executable path"), productHome: parseScheduledProductHome(argv[7]) };
+  }
+  if (argv.length === 9) {
+    return { node: null, executable: boundedPath(argv[0], "executable path"), productHome: parseScheduledProductHome(argv[6]) };
+  }
+  return refuse("ProgramArguments length");
+}
+
+/** The pre-NEW-144 nine-argument argv, rebuilt only to re-read a plist an older build wrote. */
+export function legacyScheduledProgramArguments(
+  id: ScheduledJobIdV1,
+  home: LaunchdScheduledProductHomeV1,
+  generation: LaunchdGenerationV1,
+  executable: CanonicalAbsolutePathV1,
+): LaunchdLegacyProgramArgumentsV1 {
+  return scheduledProgramArguments(id, home, generation, executable, executable).slice(1) as unknown as LaunchdLegacyProgramArgumentsV1;
 }
 
 function assertProjection(projection: LaunchdGenerationProjectionV1): void {
@@ -185,7 +218,7 @@ function assertProjection(projection: LaunchdGenerationProjectionV1): void {
     refuse("generation projection: plist path");
   }
   boundedPath(projection.plistPath, "plist path");
-  const expectedArgv = scheduledBaseArgv(definition.id, productHome, projection.executablePath);
+  const expectedArgv = scheduledBaseArgv(definition.id, productHome, projection.executablePath, projection.baseArgv[0]);
   const baseArgv: readonly unknown[] = projection.baseArgv;
   if (baseArgv.length !== expectedArgv.length || expectedArgv.some((argument, index) => baseArgv[index] !== argument)) {
     refuse("generation projection: base argv");

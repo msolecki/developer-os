@@ -67,6 +67,7 @@ const domain = launchdGuiDomain(uid);
 const userHome = "/Users/synthetic" as CanonicalAbsolutePathV1;
 const productHome = parseScheduledProductHome("/Users/synthetic/.developer-os");
 const executablePath = "/Users/synthetic/.developer-os/bin/developer-os" as CanonicalAbsolutePathV1;
+const nodePath = "/opt/homebrew/opt/node@24/bin/node" as CanonicalAbsolutePathV1;
 const NONCE = "a".repeat(64);
 const COORDINATOR = `lc_${NONCE}_1` as LifecycleCoordinatorIdV1;
 const TX = `tx_${NONCE}_2` as FoundationTransactionIdV1;
@@ -114,6 +115,7 @@ function preview(target: readonly ScheduledJobIdV1[] | null, retained: Partial<R
     userHome,
     productHome,
     executablePath,
+    nodePath,
     automation: target === null ? null : automation(target),
     prior: Object.fromEntries(SCHEDULED_JOB_IDS.map((job) => [job, retained[job] ?? absent])) as Record<ScheduledJobIdV1, LaunchdPriorJobStateV1>,
   });

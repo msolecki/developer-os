@@ -84,6 +84,7 @@ async function launchdHome(
   name: string,
   beforeBootout?: (label: string) => void | Promise<void>,
   launchctl?: "scripted",
+  legacy = false,
 ): Promise<LaunchdHomeV1> {
   const fixture = await createCommandFixture(name, { bootstrapAvailable: true });
   await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
@@ -93,7 +94,7 @@ async function launchdHome(
   await nodeFs.mkdir(join(fixture.paths.brain, ".git"), { recursive: true, mode: 0o700 });
   await nodeFs.writeFile(gitHead, "ref: refs/heads/main\n", { mode: 0o600 });
 
-  const plist = syntheticInstalledPlist({ userHome: fixture.userHome, productHome: fixture.paths.home, uid: UID, job: DOCTOR });
+  const plist = syntheticInstalledPlist({ userHome: fixture.userHome, productHome: fixture.paths.home, uid: UID, job: DOCTOR, legacy });
   await nodeFs.mkdir(join(plist.path, ".."), { recursive: true, mode: 0o700 });
   await nodeFs.writeFile(plist.path, plist.bytes, { mode: 0o600 });
 
@@ -247,6 +248,18 @@ describe("uninstall/present_manifest with an installed launchd job (plan 1b Task
     expect(await nodeFs.readdir(join(home.fixture.paths.stateDir, "launchd-effect-journals"))).toStrictEqual([]);
     expect(await nodeFs.readdir(join(home.fixture.paths.stagingDir, "lifecycle"))).toStrictEqual([]);
     expect(await exists(join(home.fixture.paths.stateDir, ".lifecycle.lock"))).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("removes a pre-NEW-144 nine-argument plist and unloads its label", async () => {
+    const home = await launchdHome("uninstall-launchd-legacy", undefined, "scripted", true);
+    expect(home.plist.bytes).not.toContain("<string>/usr/local/bin/node</string>");
+
+    await new LifecycleUninstaller().execute(await home.request());
+
+    expect(home.launchd.events).toStrictEqual([`bootout ${home.plist.label}`]);
+    expect(home.launchd.loaded.size).toBe(0);
+    expect(await exists(home.plist.path)).toBe(false);
+    expect(await exists(home.fixture.paths.manifestFile)).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("compensates a death before P without touching the loaded label", async () => {

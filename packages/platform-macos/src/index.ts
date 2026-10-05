@@ -66,6 +66,7 @@ export {
   buildLaunchdPlanPreview,
   eligibleLaunchdJobs,
   encodeLaunchdPlist,
+  encodeRetainedLaunchdPlist,
   generatedLabel,
   gitSyncEligible,
   launchdCalendarInterval,
@@ -81,6 +82,7 @@ export {
   parseScheduleFlag,
   parseScheduledProductHome,
   reconcileAutomationSchedules,
+  scheduledArgvParts,
   scheduledBaseArgv,
   scheduledProgramArguments,
 } from "./launchd/index.js";
@@ -104,6 +106,7 @@ export type {
   LaunchdPlistDictionaryV1,
   LaunchdPreviewRequestV1,
   LaunchdPriorJobStateV1,
+  LaunchdLegacyProgramArgumentsV1,
   LaunchdProgramArgumentsV1,
   LaunchdScheduledProductHomeV1,
 } from "./launchd/index.js";

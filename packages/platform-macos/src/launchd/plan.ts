@@ -29,7 +29,7 @@ import {
   type LaunchdEffectPositionV1,
   type LaunchdEffectTransitionV1,
 } from "./effect-journal.js";
-import { encodeLaunchdPlist, launchdPlistDictionary, launchdPriorStateFingerprint } from "./plist.js";
+import { encodeLaunchdPlist, encodeRetainedLaunchdPlist, launchdPlistDictionary, launchdPriorStateFingerprint } from "./plist.js";
 import {
   generatedLabel,
   launchdGeneration,
@@ -555,7 +555,8 @@ function parseEntry(value: unknown, index: number): LaunchdPlanEntryV1 {
     productHome,
     plistPath,
     executablePath,
-    baseArgv: scheduledBaseArgv(job, productHome, executablePath),
+    // NEW-144: the Node is argv[0]; the canonical reconstruction below still binds it.
+    baseArgv: scheduledBaseArgv(job, productHome, executablePath, (Array.isArray(raw.baseArgv) ? raw.baseArgv[0] : undefined) as CanonicalAbsolutePathV1),
     logPath: launchdLogPath(productHome, job),
     statusPath: launchdStatusPath(productHome, job),
     beforeFileHash,
@@ -756,6 +757,6 @@ export function parseCanonicalLaunchdPlist(bytes: Uint8Array): LaunchdPlistDicti
     StandardErrorPath: top[2],
   };
   const parsed = dictionary as LaunchdPlistDictionaryV1;
-  if (encodeLaunchdPlist(parsed) !== text) refuse("retained plist is not canonical");
+  if (encodeRetainedLaunchdPlist(parsed) !== text) refuse("retained plist is not canonical");
   return parsed;
 }
