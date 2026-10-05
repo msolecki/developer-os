@@ -513,6 +513,13 @@ of a token, say — the run is dropped and the token's tail stays in the clear.*
 `redaction.test.ts` → "drops a high-entropy run that partially overlaps an earlier candidate,
 leaving its tail".
 
+**`provider-token`'s `sk-` alternative has a left word boundary (NEW-143, founder decision D83 (1)).**
+`sk-` matches only when no letter or digit precedes it, so a kebab-case slug such as
+`verify-task-premises-against-commits` or `refetch-mask-values-keep-structure` is a word, not a key,
+and `ingest`'s secret scan no longer refuses a note named that way. A real `sk-…` or `sk-ant-…` key
+still redacts at line start, after whitespace or punctuation, inside quotes and after `=`. Pinned by
+`redaction.test.ts` → "provider-token sk- boundary".
+
 ### 5.8 The redaction key — the product's first secret at rest
 
 | Boundary | Mechanism | Evidence |
