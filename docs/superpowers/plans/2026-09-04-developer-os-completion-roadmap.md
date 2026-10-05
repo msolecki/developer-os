@@ -355,6 +355,19 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D83 (2026-10-05), founder: eight backlog decisions.** (1) NEW-143: the `provider-token` rule
+  gets a left word boundary before `sk-`; real `sk-…`/`sk-ant-…` keys stay redacted. (2) NEW-40: a hand
+  edit to the vault during the ingest agent call refuses the ingest and writes nothing; the user's
+  edit wins and the ingest is rerun. (3) NEW-33: root-owned, group-writable executable directories
+  are not trusted. (4) NEW-134: `automation status` shows an off optional job as `off`. (5) NEW-130:
+  all three NEW-129 residuals are fixed (multi-word passphrase capture, path-scoped redaction in
+  `readIndexExcerpt`/`takenPaths`, one shared marker pattern in `@developer-os/security`). (6) NEW-120:
+  the uncovered tail of a partly overlapped high-entropy run is redacted as its own range. (7) NEW-121
+  and NEW-35: the same-uid PATH and check-then-spawn races are accepted as platform limits, consistent
+  with D82 and the threat model's same-uid boundary; both rows close without code. (8) Task 11b's root
+  key is not yet decided: the founder asked why it is needed; the options put to the founder are an
+  offline root key (the D46 design), trusting a distribution channel instead (a Spec 2 change), or
+  deferring (A16 stays blocked).
 - **D82 (2026-10-03), founder: launchd bootstraps by path, with a post-check.** On macOS 26.6.2,
   `launchctl bootstrap gui/<uid> /dev/fd/3` fails with error 5 (linked or unlinked descriptor, and
   `/dev/stdin`), so spec §5.3's FD-3 snapshot cannot load anything (found by NEW-138's disposable-home
