@@ -618,14 +618,59 @@ describe("redactText", () => {
       ]);
     });
 
-    /** D71 residual, pinned so it is not mistaken for coverage. */
-    it("drops a high-entropy run that partially overlaps an earlier candidate, leaving its tail", () => {
-      const { text, findings } = redactText(`opaque ${highEntropySecret}`, deterministicKey, {
-        userPatterns: [highEntropySecret.slice(0, 6)],
+    /**
+     * NEW-120 (D83 (6)) replaces the D71 residual this test used to pin ("drops a high-entropy
+     * run that partially overlaps an earlier candidate, leaving its tail"): the uncovered tail
+     * is now redacted as its own high-entropy range.
+     */
+    it("redacts the uncovered tail of a partly overlapped high-entropy run as its own range", () => {
+      const head = highEntropySecret.slice(0, 6);
+      const tail = highEntropySecret.slice(6);
+      const { text, findings } = redactText(`opaque ${highEntropySecret} end`, deterministicKey, {
+        userPatterns: [head],
       });
 
-      expect(text).toBe(`opaque [REDACTED:user-pattern]${highEntropySecret.slice(6)}`);
-      expect(findings.map((f) => f.class)).toEqual(["user-pattern"]);
+      expect(text).toBe("opaque [REDACTED:user-pattern][REDACTED:high-entropy] end");
+      expect(findings).toEqual([
+        { class: "user-pattern", fingerprint: fingerprintOf(head), patternIndex: 0 },
+        { class: "high-entropy", fingerprint: fingerprintOf(tail) },
+      ]);
+    });
+
+    it("redacts the head and the tail around a user pattern in the middle of a token", () => {
+      const middle = highEntropySecret.slice(10, 16);
+      const { text, findings } = redactText(`opaque ${highEntropySecret} end`, deterministicKey, {
+        userPatterns: [middle],
+      });
+
+      expect(text).toBe(
+        "opaque [REDACTED:high-entropy][REDACTED:user-pattern][REDACTED:high-entropy] end",
+      );
+      expect(findings.map((f) => f.fingerprint)).toEqual([
+        fingerprintOf(highEntropySecret.slice(0, 10)),
+        fingerprintOf(middle),
+        fingerprintOf(highEntropySecret.slice(16)),
+      ]);
+    });
+
+    it("redacts every gap between two user patterns inside one token", () => {
+      const { text } = redactText(`opaque ${highEntropySecret} end`, deterministicKey, {
+        userPatterns: [highEntropySecret.slice(0, 4), highEntropySecret.slice(20, 24)],
+      });
+
+      expect(text).toBe(
+        "opaque [REDACTED:user-pattern][REDACTED:high-entropy][REDACTED:user-pattern][REDACTED:high-entropy] end",
+      );
+    });
+
+    /** D71 still holds for a key=value line whose whole run is high-entropy: the key is no token. */
+    it("leaves the key of an env line whose run is high-entropy, with one finding", () => {
+      const { text, findings } = redactText(`API_TOKEN=${highEntropySecret}`, deterministicKey);
+
+      expect(text).toBe("API_TOKEN=[REDACTED:env-secret]");
+      expect(findings).toEqual([
+        { class: "env-secret", fingerprint: fingerprintOf(highEntropySecret) },
+      ]);
     });
 
     it("keeps touching but non-overlapping ranges as separate findings", () => {
