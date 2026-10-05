@@ -91,10 +91,14 @@ describe("renderAutomation", () => {
         { job: "doctor", schedule: { cadence: "weekly", day: "mon", hour: 3, minute: 0 }, eligible: true, installed: "current", live: "loaded", lastRun: null },
         { job: "git-sync", schedule: null, eligible: false, installed: "stale", live: null, lastRun: "invalid" },
         { job: "brain-garden", schedule: null, eligible: true, installed: "absent", live: null, lastRun: null },
+        { job: "brain-pulse", schedule: { cadence: "weekly", day: "mon", hour: 3, minute: 0 }, eligible: true, installed: "absent", live: null, lastRun: null },
+        { job: "git-sync", schedule: { cadence: "weekly", day: "mon", hour: 3, minute: 0 }, eligible: false, installed: "absent", live: null, lastRun: null },
         { job: "brain-reindex", schedule: null, eligible: true, installed: "absent", live: null, lastRun: null },
       ],
     });
     expect(lines).toContain("brain-garden   off - last run never");
+    expect(lines.some((line) => line.startsWith("brain-pulse") && line.includes("eligible absent - last run never"))).toBe(true);
+    expect(lines.some((line) => line.startsWith("git-sync") && line.includes("off - last run never"))).toBe(true);
     expect(lines.some((line) => line.startsWith("brain-reindex") && line.includes("eligible absent - last run never"))).toBe(true);
     expect(lines).toContain("distribution   unsupported_launchd_distribution");
     expect(lines.some((line) => line.startsWith("doctor") && line.includes("current loaded last run never"))).toBe(true);
