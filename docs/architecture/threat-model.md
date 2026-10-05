@@ -489,7 +489,7 @@ reads configuration redact the user's patterns; a test context without the membe
 runner. Pinned by `apps/cli/src/context.test.ts` → "redacts vendor stdout and stderr with the
 configured patterns once they are bound" and `apps/cli/src/commands/ingest.test.ts` → "binds the
 configured patterns to the runner before any vendor process runs". **Record: `BACKLOG.md` §1 NEW-16, closed;
-NEW-24 closed 2026-09-28 as described next, NEW-26's fix is described above, and NEW-25 is fixed with the residual below.**
+NEW-24 closed 2026-09-28 as described next, NEW-26's fix is described above, and NEW-25 is fixed and its residual closed by NEW-120, both below.**
 
 **A user pattern is named by index and flagged by match density (NEW-24, founder decision D73).**
 A `user-pattern` finding carries `patternIndex`, the zero-based `[redaction]` row that produced it
@@ -506,12 +506,16 @@ Pinned by `redaction.test.ts` → "user pattern index and match density (NEW-24,
 `addCandidate` (`packages/security/src/redaction.ts`) merges a candidate with every one it
 partially overlaps; the merged range keeps the class of the earliest-scanned contributor and
 fingerprints the whole merged span, so `["Acme Corp", "Corp Holdings"]` over `Acme Corp Holdings`
-no longer leaves `Acme` in the clear. `high-entropy` stays first-wins: its run spans a `KEY=` prefix,
-and merging it would change the persisted fingerprint of an ordinary `API_TOKEN=…` line. **Residual:
-when an earlier candidate covers only part of a high-entropy run — a user pattern matching the start
-of a token, say — the run is dropped and the token's tail stays in the clear.** Pinned by
-`redaction.test.ts` → "drops a high-entropy run that partially overlaps an earlier candidate,
-leaving its tail".
+no longer leaves `Acme` in the clear. `high-entropy` is never merged: its run spans a `KEY=` prefix, and merging it would change the
+persisted fingerprint of an ordinary `API_TOKEN=…` line. **Instead every part of the run no earlier
+candidate covers is redacted as its own `high-entropy` range (NEW-120, founder decision D83 (6))** —
+the tail after a user pattern matching the start of a token, the gap between two, and the head before
+one in its middle — so nothing of the token stays in the clear (`addHighEntropyRun`). The one part
+kept is a head shaped `KEY=`, which names the value rather than being part of it: `API_TOKEN=` and
+`key=` stay readable and the line keeps its single fingerprint. A run no candidate overlaps is
+redacted whole, exactly as before. This closes the D71 residual. Pinned by `redaction.test.ts` →
+"redacts the uncovered tail of a partly overlapped high-entropy run as its own range" and the three
+tests after it.
 
 **`provider-token`'s `sk-` alternative has a left word boundary (NEW-143, founder decision D83 (1)).**
 `sk-` matches only when no letter or digit precedes it, so a kebab-case slug such as

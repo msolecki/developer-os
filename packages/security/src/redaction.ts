@@ -89,11 +89,7 @@ function overlaps(
  * instead left its non-overlapping part in the clear. The merged range keeps the
  * class of the earliest-scanned contributor, so the class order in `redactText`
  * still decides classification. Touching ranges are not overlaps and stay apart.
- *
- * `high-entropy` is the exception and stays first-wins (founder decision D71): its
- * run spans a `KEY=` prefix, so merging it would change the persisted fingerprint of
- * an ordinary env or credential line. The known residual is a token tail left in the
- * clear when an earlier candidate covers only part of a high-entropy run.
+ * `high-entropy` never comes through here; see `addHighEntropyRun`.
  */
 function addCandidate(
   candidates: RedactionCandidate[],
@@ -106,7 +102,6 @@ function addCandidate(
     candidates.push(candidate);
     return;
   }
-  if (candidate.class === "high-entropy") return;
   const merged: RedactionCandidate = {
     class: owner.class,
     start: overlapping.reduce((start, e) => Math.min(start, e.start), candidate.start),
@@ -117,6 +112,38 @@ function addCandidate(
   for (const absorbed of overlapping.slice(1)) {
     candidates.splice(candidates.indexOf(absorbed), 1);
   }
+}
+
+/** The head of a high-entropy run that is a `KEY=` name, not token material (D71). */
+const ASSIGNMENT_KEY = /^[A-Za-z_][A-Za-z0-9_-]*=$/u;
+
+/**
+ * `high-entropy` is never merged (founder decision D71): its run spans a `KEY=` prefix,
+ * so merging it would change the persisted fingerprint of an ordinary env or credential
+ * line. Instead each part of the run no earlier candidate covers is redacted as its own
+ * `high-entropy` range (NEW-120, D83 (6)), so a user pattern matching part of a token
+ * leaves none of it in the clear. The one part kept is a head shaped `KEY=`: it names
+ * the value, as in `API_TOKEN=…` or `key=AIza…`. Runs run last and never overlap each
+ * other, so the pushed parts overlap nothing.
+ */
+function addHighEntropyRun(
+  text: string,
+  start: number,
+  end: number,
+  candidates: RedactionCandidate[],
+): void {
+  const covering = candidates
+    .filter((existing) => existing.start < end && start < existing.end)
+    .sort((left, right) => left.start - right.start);
+  const head = text.slice(start, covering[0]?.start ?? start);
+  let cursor = ASSIGNMENT_KEY.test(head) ? start + head.length : start;
+  for (const existing of covering) {
+    if (existing.start > cursor) {
+      candidates.push({ start: cursor, end: existing.start, class: "high-entropy" });
+    }
+    cursor = Math.max(cursor, existing.end);
+  }
+  if (cursor < end) candidates.push({ start: cursor, end, class: "high-entropy" });
 }
 
 function addWholeMatches(
@@ -654,11 +681,7 @@ export function redactText(
     if (isWordLikePath(match[0]) || !looksHighEntropy(match[0])) {
       continue;
     }
-    addCandidate(candidates, {
-      start: match.index,
-      end: match.index + match[0].length,
-      class: "high-entropy",
-    });
+    addHighEntropyRun(normalizedText, match.index, match.index + match[0].length, candidates);
   }
 
   /**
