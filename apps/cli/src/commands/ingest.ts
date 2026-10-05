@@ -97,14 +97,20 @@ export interface IngestedCaptureV1 {
  * case; the name means "not left at staging and not left ingested", which is what the
  * run-level recovery in `refusedRecovery` is written against.
  *
+ * **`"absent"` is a capture file that no longer exists** — the user deleted it while the run
+ * held it (NEW-40). It was added as a fourth member rather than folded into `"untouched"`,
+ * which would claim the file still holds what it held before, or into `"staging"`, whose
+ * recovery sends the user to a file that is gone.
+ *
  * Published on `CliError.data`, so it is a contract. The array is exported and pinned by
- * `ingest.test.ts` rather than left as a bare union, so a fourth member cannot be added to
+ * `ingest.test.ts` rather than left as a bare union, so a fifth member cannot be added to
  * the type without something failing.
  */
 export const CAPTURE_LEFT_AT = Object.freeze([
   "untouched",
   "staging",
   "ingested",
+  "absent",
 ] as const);
 
 export type CaptureLeftAt = (typeof CAPTURE_LEFT_AT)[number];
@@ -346,6 +352,9 @@ const INGESTED_RECOVERY =
 const VAULT_CHANGED_RECOVERY =
   `a capture refused as vault_changed_during_ingest met a hand edit made while the agent ran, and your edit is kept: if that capture's status reads staging, set it back to accepted, then ${RERUN_INGEST}`;
 
+const CAPTURE_DELETED_RECOVERY =
+  "a capture reported as absent was deleted while ingest held it, so there is nothing to rerun for it and nothing was applied unless its line names notes";
+
 const INCOMPLETE_TRANSACTION_RECOVERY =
   "if developer-os status reports an incomplete transaction, resolve it with developer-os repair first";
 
@@ -376,8 +385,15 @@ function refusedRecovery(refused: readonly RefusedCaptureV1[]): string {
   if (refused.some((refusal) => refusal.reason === "note_changed_since_capture")) {
     lines.push(NOTE_CHANGED_RECOVERY);
   }
-  if (refused.some((refusal) => refusal.reason === "vault_changed_during_ingest")) {
+  if (
+    refused.some(
+      (refusal) => refusal.reason === "vault_changed_during_ingest" && refusal.leftAt !== "absent",
+    )
+  ) {
     lines.push(VAULT_CHANGED_RECOVERY);
+  }
+  if (refused.some((refusal) => refusal.leftAt === "absent")) {
+    lines.push(CAPTURE_DELETED_RECOVERY);
   }
   /**
    * `leftAt` as well as the notes, because a capture whose notes landed **and**
@@ -497,14 +513,16 @@ type RefusalReason = NoteChangedReason | VaultChangedReason;
 class VaultChangedDuringIngestRefusal extends IngestRefusal {
   readonly reason: VaultChangedReason = "vault_changed_during_ingest";
 
-  constructor(paths: readonly string[], captureEdited: boolean) {
+  constructor(paths: readonly string[], capture: "kept" | "edited" | "deleted") {
     super(
       EXIT_CODES.decisionRequired,
       "a file this ingest would write, or the index its prompt was built from, changed while the agent ran, so nothing was applied and your edit is intact",
       paths,
-      captureEdited
-        ? `your edit to the capture is kept and its status still reads staging: set it back to accepted, then ${RERUN_INGEST}`
-        : `the capture is accepted again: ${RERUN_INGEST}`,
+      capture === "deleted"
+        ? "the capture was deleted while the agent ran, so there is nothing to rerun for it"
+        : capture === "edited"
+          ? `your edit to the capture is kept and its status still reads staging: set it back to accepted, then ${RERUN_INGEST}`
+          : `the capture is accepted again: ${RERUN_INGEST}`,
     );
     this.name = "VaultChangedDuringIngestRefusal";
   }
@@ -772,8 +790,9 @@ async function resolveCapturePath(
  * bytes this run wrote at staging** (D83 (2), BACKLOG NEW-40). The `ingested` write follows
  * the vendor call, the longest read-to-write gap the product has, and it used to re-render
  * the pre-agent envelope over whatever the file then held. A hand edit made during the call is
- * refused earlier, by `assertVaultUnchanged`, before any note lands; this precondition closes
- * the milliseconds between that check and each later write.
+ * refused earlier, by `assertVaultUnchanged`, before any note lands; this precondition narrows
+ * the milliseconds between that check and each later write to the executor's own gap between
+ * its plan-phase comparison and the rename, a pre-existing residual of every bound write.
  */
 async function writeCaptureFile(
   context: CliContext,
@@ -812,9 +831,13 @@ async function writeCaptureFile(
        * After staging the file is no longer at `accepted`, so "run again" alone would select
        * nothing; and notes may already be in the vault, which the run-level recovery for the
        * state `leftAtOf` reads back describes. This write's own refusal claims only itself.
+       *
+       * **A plain `IngestRefusal`, not the precondition class**: only the stage write's
+       * refusal means this run wrote nothing. This one follows the staging write and maybe the
+       * apply, so it must not read as "untouched" when the edit left no status to read back.
        */
       if (kind !== TRANSACTION_KINDS.stage) {
-        throw new IngestPreconditionRefusal(
+        throw new IngestRefusal(
           exitCodeOf(error),
           "the capture changed on disk after this ingest staged it, so its status was not moved and your edit is intact",
           [target],
@@ -1499,18 +1522,25 @@ async function assertVaultUnchanged(
   writes: readonly PlannedNoteWriteV1[],
 ): Promise<void> {
   const changed: string[] = [];
+  let capture: "kept" | "edited" | "deleted" = "kept";
   for (const [path, state] of snapshot.files) {
-    if ((await fileState(context, path)) !== state) changed.push(path);
+    const now = await fileState(context, path);
+    if (now === state) continue;
+    changed.push(path);
+    if (path === snapshot.capture) capture = now === "absent" ? "deleted" : "edited";
   }
+  /**
+   * A destination that appeared is the user's new file; one that disappeared is a note the
+   * user deleted, which a `create` would silently bring back. Both refuse. One present on both
+   * sides is `applyNotes`' create-only refusal.
+   */
   for (const write of writes) {
     const path = join(contentRoot, write.path);
-    if (!snapshot.listing.has(write.path.normalize("NFC")) && (await exists(context, path))) {
+    if (snapshot.listing.has(write.path.normalize("NFC")) !== (await exists(context, path))) {
       changed.push(path);
     }
   }
-  if (changed.length > 0) {
-    throw new VaultChangedDuringIngestRefusal(changed, changed.includes(snapshot.capture));
-  }
+  if (changed.length > 0) throw new VaultChangedDuringIngestRefusal(changed, capture);
 }
 
 /**
@@ -1737,6 +1767,7 @@ async function leftAtOf(
   if (status === "ingested") return "ingested";
   if (status === "staging") return "staging";
   if (status !== null) return "untouched";
+  if (capturePath !== null && !(await exists(context, capturePath))) return "absent";
   return progress.movedToStaging && !progress.rolledBack ? "staging" : "untouched";
 }
 
@@ -1788,7 +1819,7 @@ interface IngestEnvironment {
   readonly vendor: Vendor | null;
   readonly ingestContract: readonly string[];
   /**
-   * Read at run setup and re-read after each capture that wrote notes, so a later
+   * Read at run setup and re-read before each capture whose index bytes moved, so a later
    * capture sees what an earlier one created (BACKLOG NEW-116) — see `readIndexExcerpt`.
    */
   readonly indexExcerpt: readonly IndexExcerptEntryV1[];
@@ -2136,10 +2167,10 @@ function isIndexDocumentShape(
 /**
  * The vault's own index, as the bounded excerpt `buildIngestPrompt` carries in
  * place of a read scope over the vault. Read at run setup and handed down on
- * `IngestEnvironment`, then re-read only after a capture that wrote notes — the
- * reindex that capture triggered has already paid the vault-sized cost, and a
- * read-once excerpt hid every note the run created from every later capture
- * (BACKLOG NEW-116: 35 of 106 refused, mostly on a path that already holds a file).
+ * `IngestEnvironment`, then re-read before a capture only when the file's identity or
+ * bytes moved — this run's own reindex, or a hand edit (NEW-40). A read-once excerpt hid
+ * every note the run created from every later capture (BACKLOG NEW-116: 35 of 106
+ * refused, mostly on a path that already holds a file).
  *
  * **A fresh vault has no index until the first `brain reindex`, and that is
  * not this run's problem to solve.** Absent, unreadable or unparsable, the
@@ -2654,8 +2685,18 @@ export async function runIngest(
      * capture that keeps refusing stays at the head of every `--limit N` window; no
      * per-capture field records a refused attempt, and ordering on one needs a state file.
      */
+    const indexPath = join(paths.brain, artifactPaths(brainConfig).index);
     for (const { fileName } of selection.accepted) {
       order.push(fileName.slice(0, -CAPTURE_FILE_SUFFIX.length));
+      /**
+       * Re-read whenever the index moved since the excerpt was parsed — after this run's own
+       * reindex, after a hand edit that refused an earlier capture, or after one made before
+       * this capture began — so each prompt and each NEW-40 snapshot see the index as it is,
+       * and one edit refuses one capture rather than every later one.
+       */
+      if ((await fileState(context, indexPath)) !== index.state) {
+        index = await readIndexExcerpt(context, paths, brainConfig, redact);
+      }
       const outcome = await ingestOne(
         context,
         { ...environment, indexExcerpt: index.entries, indexState: index.state, takenPaths },
@@ -2666,7 +2707,6 @@ export async function runIngest(
       const written = outcome.ok ? outcome.capture.notes : outcome.refusal.appliedNotes;
       if (written.length > 0) {
         takenPaths.push(...written.map((note) => redact(note, "value").text));
-        index = await readIndexExcerpt(context, paths, brainConfig, redact);
       }
     }
 

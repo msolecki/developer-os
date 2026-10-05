@@ -1047,13 +1047,13 @@ describe("runIngest, the status ladder", () => {
 
 describe("the published vocabularies", () => {
   /**
-   * **`leftAt` is on `CliError.data`, so its members are a contract**, and two of the three
+   * **`leftAt` is on `CliError.data`, so its members are a contract**, and two of the four
    * collide by name with `CaptureStatus` while meaning something different — where the
-   * capture's *file* was left, not what status it holds. Pinned here so a fourth member
+   * capture's *file* was left, not what status it holds. Pinned here so a fifth member
    * cannot join the type silently, and so the collision stays a deliberate one.
    */
-  it("pins the three places a refused capture can be left", () => {
-    expect([...CAPTURE_LEFT_AT]).toStrictEqual(["untouched", "staging", "ingested"]);
+  it("pins the four places a refused capture can be left", () => {
+    expect([...CAPTURE_LEFT_AT]).toStrictEqual(["untouched", "staging", "ingested", "absent"]);
     /**
      * **And frozen, which the spread above cannot see.** The docblock said "named and
      * frozen"; `as const` is a type-level claim and compiles to a mutable array, so an
@@ -3545,11 +3545,155 @@ describe("runIngest, a hand edit while the agent runs (D83, NEW-40)", () => {
     await expect(nodeFs.readFile(unrelated, "utf8")).resolves.toContain("edited while the agent ran");
   });
 
+  it("refuses only the capture whose call saw the index edit; the rest of the run ingests", async () => {
+    const fixture = await installedFixture("ingest-call-index-edit-batch");
+    const seeded = [
+      await fixture.seedAccepted("the first observation of three"),
+      await fixture.seedAccepted("the second observation of three"),
+      await fixture.seedAccepted("the third observation of three"),
+    ].sort(byId);
+    await writeIndex(fixture, [{ path: "DEV/known.md", title: "Known", summary: "Known." }]);
+    fixture.reply(() => nothingProposed());
+    let edits = 0;
+    fixture.duringCall(async () => {
+      if (edits > 0) return;
+      edits += 1;
+      await writeIndex(fixture, [{ path: "DEV/other.md", title: "Other", summary: "Other." }]);
+    });
+
+    const result = await fixture.run();
+
+    expect(edits).toBe(1);
+    expect(refusedOf(result).map((refusal) => [refusal.captureId, refusal.reason])).toStrictEqual([
+      [seeded[0]?.id, "vault_changed_during_ingest"],
+    ]);
+    expect(await fixture.statusOf(seeded[1]?.id ?? "")).toBe("ingested");
+    expect(await fixture.statusOf(seeded[2]?.id ?? "")).toBe("ingested");
+  });
+
+  it("ingests when the index changes between run start and the capture's snapshot", async () => {
+    const fixture = await installedFixture("ingest-index-edit-before-call");
+    const seeded = await fixture.seedAccepted("an observation after an early index edit");
+    await writeIndex(fixture, [{ path: "DEV/known.md", title: "Known", summary: "Known." }]);
+    const indexPath = join(fixture.content, "_indexes", "index.json");
+    fixture.reply(() => nothingProposed());
+    let raced = false;
+    const guards = fixture.context.guards;
+    const context: CliContext = {
+      ...fixture.context,
+      guards: {
+        ...guards,
+        readText: async (
+          path: string,
+          reader?: Parameters<typeof guards.readText>[1],
+        ): Promise<string> => {
+          const text = await guards.readText(path, reader);
+          /** The run-setup read of the index; the edit lands before any capture is staged. */
+          if (path === indexPath && !raced) {
+            raced = true;
+            await writeIndex(fixture, [{ path: "DEV/other.md", title: "Other", summary: "Other." }]);
+          }
+          return text;
+        },
+      },
+    };
+
+    const result = await runIngest(context, {});
+
+    expect(raced, "the edit must land after the run-setup read").toBe(true);
+    expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+    expect(await fixture.statusOf(seeded.id)).toBe("ingested");
+  });
+
+  it("refuses with nothing to rerun when the capture is deleted during the call", async () => {
+    const fixture = await installedFixture("ingest-call-capture-deleted");
+    const seeded = await fixture.seedAccepted("an observation deleted while the agent runs");
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    fixture.duringCall(async () => {
+      await nodeFs.rm(seeded.path, { force: true });
+    });
+
+    const result = await fixture.run();
+
+    const refusal = changedOf(result);
+    expect(refusal).toMatchObject({
+      captureId: seeded.id,
+      reason: "vault_changed_during_ingest",
+      leftAt: "absent",
+    });
+    expect(refusal.recovery).toContain("deleted");
+    expect(refusal.recovery).not.toContain(RERUN);
+    const recovery = result.ok ? "" : (result.error.recovery ?? "");
+    expect(recovery).not.toContain(RERUN);
+    expect(recovery).not.toContain("indeterminate apply");
+    expect(await exists(seeded.path)).toBe(false);
+    await expectNothingApplied(fixture);
+  });
+
+  it("refuses rather than recreating a note the user deleted at the proposed path during the call", async () => {
+    const fixture = await installedFixture("ingest-call-destination-deleted");
+    const seeded = await fixture.seedAccepted("an observation whose destination is deleted");
+    const destination = join(fixture.content, TARGET);
+    await nodeFs.mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(destination, "a note the user is about to delete\n", { mode: 0o600 });
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    fixture.duringCall(async () => {
+      await nodeFs.rm(destination, { force: true });
+    });
+
+    const result = await fixture.run();
+
+    expect(changedOf(result)).toMatchObject({
+      captureId: seeded.id,
+      reason: "vault_changed_during_ingest",
+      leftAt: "untouched",
+    });
+    expect(await exists(destination)).toBe(false);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    expect(await ladderOf(fixture)).not.toContain("ingest-apply");
+  });
+
   /**
    * **The later write is bound to the exact staged bytes** (the row's second half): an edit
    * that lands after the check and before the `ingested` write is refused by the executor's
    * precondition rather than overwritten by a re-render of the pre-call envelope.
    */
+  /**
+   * **A refused `ingested` write is not a plan-phase "untouched".** Only the stage write's
+   * refusal means this run wrote nothing; here the capture was staged and the notes landed, so
+   * an edit that also breaks the frontmatter (no status to read back) must still report
+   * `staging` with its notes, under the partly-applied recovery.
+   */
+  it("reports a refused ingested write as partly applied even when the edit breaks the capture", async () => {
+    const fixture = await installedFixture("ingest-ingested-unparseable");
+    const seeded = await fixture.seedAccepted("an observation broken just before ingested");
+    fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
+    const inner = fixture.context.executor;
+    const context: CliContext = {
+      ...fixture.context,
+      executor: {
+        execute: async (plan) => {
+          if (plan.kind === "ingest-ingested") {
+            await nodeFs.writeFile(seeded.path, "not a capture any more\n", { mode: 0o600 });
+          }
+          return inner.execute(plan);
+        },
+        resume: (transactionId) => inner.resume(transactionId),
+        rollback: (transactionId) => inner.rollback(transactionId),
+      },
+    };
+
+    const result = await runIngest(context, {});
+
+    const refusal = changedOf(result);
+    expect(refusal).toMatchObject({ captureId: seeded.id, leftAt: "staging" });
+    expect(refusal.appliedNotes).toStrictEqual([TARGET]);
+    expect(result.ok ? "" : (result.error.recovery ?? "")).toContain(
+      "a capture reported as partly applied",
+    );
+    await expect(nodeFs.readFile(seeded.path, "utf8")).resolves.toBe("not a capture any more\n");
+  });
+
   it("binds the ingested write to the staged bytes, so a later edit is not overwritten", async () => {
     const fixture = await installedFixture("ingest-ingested-bound");
     const seeded = await fixture.seedAccepted("an observation edited just before ingested");
@@ -3577,6 +3721,11 @@ describe("runIngest, a hand edit while the agent runs (D83, NEW-40)", () => {
     const refusal = changedOf(result);
     expect(refusal).toMatchObject({ captureId: seeded.id, leftAt: "staging" });
     expect(refusal.appliedNotes).toStrictEqual([TARGET]);
+    /** Partly applied, never "untouched": the notes are in the vault and the status did not move. */
+    expect(refusal.recovery ?? "").not.toContain("run developer-os ingest again");
+    const recovery = result.ok ? "" : (result.error.recovery ?? "");
+    expect(recovery).toContain("a capture reported as partly applied");
+    expect(recovery).not.toContain("wrote nothing and its status is unchanged");
     await expect(nodeFs.readFile(seeded.path, "utf8")).resolves.toBe(edited);
   });
 });
