@@ -403,7 +403,10 @@ function refusedRecovery(refused: readonly RefusedCaptureV1[]): string {
    */
   if (
     refused.some(
-      (refusal) => refusal.appliedNotes.length > 0 && refusal.leftAt !== "ingested",
+      (refusal) =>
+        refusal.appliedNotes.length > 0 &&
+        refusal.leftAt !== "ingested" &&
+        refusal.leftAt !== "absent",
     )
   ) {
     lines.push(PARTLY_APPLIED_RECOVERY);
@@ -2479,7 +2482,11 @@ function reportLines(report: RunReport): readonly string[] {
     const label =
       refusal.leftAt === "ingested"
         ? "applied and ingested"
-        : partly
+        : refusal.leftAt === "absent"
+          ? partly
+            ? "partly applied, capture deleted"
+            : "refused, capture deleted"
+          : partly
           ? "partly applied, left at staging"
           : refusal.leftAt === "staging"
             ? "refused, left at staging"
