@@ -768,10 +768,11 @@ still passes: it is user-owned, `0755`, and stable between resolve and spawn. An
 `CODEX_THREAD_ID` into a session can usually export `PATH` into the same one, and such an attacker
 already runs code as the user. What NEW-46 closed is a binary in a group-writable directory and a
 swap between check and spawn; the probe still passes `--version` and nothing else. The residual is
-`BACKLOG.md` NEW-121.
+`BACKLOG.md` NEW-121. **Accepted 2026-10-05 (D83 (7)):** this same-uid `PATH` race is a platform limit, not
+open work; it sits inside the same-uid boundary (§2) that D82 also leaves unwidened, and the row closes without code.
 
 **`assertTrustedExecutable` is the check the other two executors pay** before spawning:
-`apps/cli/src/commands/doctor.ts:479` and `apps/cli/src/commands/ingest.ts:579` — `doctor` was a
+`apps/cli/src/commands/doctor.ts:479` and `apps/cli/src/commands/ingest.ts:585` — `doctor` was a
 third executor paying nothing while the first
 version of this fix claimed a third could not arrive. The rule, decided by the founder rather than
 chosen here (BACKLOG NEW-15): **resolve, then check.** The binary is canonicalized and the resolved
@@ -793,7 +794,8 @@ them. The stepwise walk enters `<attacker>` and refuses it.
    user through an ACL entry, so the mode check is a floor rather than a proof.
 2. **Check-then-use (`BACKLOG.md` §1 NEW-35).** The target is stat'd and then executed by path;
    closing it needs an exec-by-descriptor this runtime does not offer. Accepted by the founder when
-   the rule was decided.
+   the rule was decided. **Re-accepted 2026-10-05 (D83 (7)):** a platform limit inside the same-uid
+   boundary (§2), consistent with D82; the row closes without code.
 
 **`NEW-33` is not on that list**, and putting it there was the other half of the error: a root-owned
 group-writable directory being *refused* makes a `claude` under some `/usr/local` layouts fail. That

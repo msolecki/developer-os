@@ -657,7 +657,10 @@ rows are sorted current then prior, and the two locators have different fixed as
 launcher renders canonical JSON plus LF, at most 64 KiB, into a fresh pipe, passes only read end FD 3,
 closes its write end, and never exposes the root through argv/environment/product files. The CLI
 accepts update transport only with that exact inherited descriptor: guarded pipe type, EOF within
-64 KiB, strict canonical parse, no extra inherited FD, and launcher-admitted parent executable. A
+64 KiB, strict canonical parse, no extra inherited FD, and launcher-admitted parent executable.
+**Amended 2026-10-05 (D84 (6)):** "no extra inherited FD" means no descriptor beyond FD 3 and stdio 0–2. The
+launcher passes stdio 0–2 as an array (`stdio: [...]`), and these are not extra inherited descriptors; the
+launcher's code is unchanged. A
 direct bundle invocation has no online update authority. The CLI reads and closes FD 3 before
 context construction; transport/planner/verifier/vendor descendants inherit no trust descriptor.
 
