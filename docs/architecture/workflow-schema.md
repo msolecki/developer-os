@@ -53,6 +53,7 @@ The compiler unions those footprints and requires the result to *equal* the decl
    no leading zeros. An overlay pins `id@version` exactly, and comparing `1.2.3-rc.1` against
    `1.2.3` there would mean nothing. This deliberately narrows the original design's bare word
    "semver".
+   A prose-only change to a workflow bumps PATCH; a contract change (inputs, steps, triggers) bumps MINOR.
 
 ## 3. The equality rule, and why over-declaring is an error
 

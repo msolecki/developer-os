@@ -15,7 +15,7 @@ installed on the live machine with launchd automation enabled (D82): five jobs, 
 disabled until the founder enables it (D76). A kickstarted scheduled `doctor` exited 0.
 
 1. **NEW-134's real `brain-garden` run with Claude** — first scheduled slot Sunday 2026-10-11 17:00.
-   Confirm its status record and captures, then close the plan
+   Confirm its status record and captures (the `off` wording is done), then close the plan
    (`plans/2026-09-30-developer-os-brain-gardener-pulse.md`) and the row.
 2. **A15 steps 16–18** (`docs/migration/founder-cutover.md`: per-adapter gate cycle, exercised
    rollback) after one week of use; step 16 checks injection (NEW-139's fix installed since
@@ -66,27 +66,19 @@ Startable without another product gate (one worktree each):
 - NEW-131 (instruction-defaults scanner superlinear on a cap-sized file).
 - NEW-132 (update recovery death-point sweeps).
 - NEW-142 (`founder-cutover.md` step 10 cannot satisfy its own `path` condition; docs only).
+- NEW-146 (two shapes still exempt from high-entropy redaction; fix or accept).
 
-Decided by D83 (2026-10-05), startable:
-
-- NEW-143 — left word boundary before `sk-` in the `provider-token` rule.
-- NEW-40 — a hand edit during the ingest agent call refuses the ingest.
-- NEW-33 — root-owned, group-writable executable directories are not trusted.
-- NEW-134 — `automation status` shows an off optional job as `off`.
-- NEW-130 — fix all three NEW-129 residuals.
-- NEW-120 — redact the uncovered tail of a partly overlapped high-entropy run.
-- NEW-121, NEW-35 — accepted as platform limits (D83 (7)); close the rows with the threat-model note.
-
-Decided by D84 (2026-10-05):
+Decided by D84 (2026-10-05), next design work:
 
 - Task 11b (NEW-111, NEW-112, NEW-118) — re-scoped: trust a distribution channel instead of an
   offline root key; needs a Spec 2 amendment, then the A16 spec and plan (D84 (1), (2)).
-- Workflow versions — bump the six changed workflows together (D84 (4)); startable.
-- Spec 2 §4.2 — amend: stdio 0–2 are not extra inherited descriptors (D84 (6)); docs only.
-- Retention observation — remove the second walk, re-argue `foundation.md` §9 (D84 (7)); startable.
-- Closed without code: the Foundation watchdog (D84 (3)); the A15 results manifests (D84 (5)).
 
-Needs a founder decision: none open (2026-10-05).
+Wave 1 of D83/D84 is integrated (2026-10-06): NEW-143, NEW-120, NEW-130, NEW-40, NEW-33, NEW-121,
+NEW-35, workflow versions, the Spec 2 §4.2 amendment, one retention walk and status `off`
+(the wording half of NEW-134; its real garden run stays owed).
+
+Needs a founder decision: NEW-145 (a user-owned group-writable executable directory with a shared
+group, such as Homebrew's `/opt/homebrew/bin`, is still admitted: accept it or refuse it).
 
 Conditional: NEW-27 when a real write scope is wired, NEW-28 when a production argument reaches the
 retained screening refusal, NEW-100's round trip after A16 (D42).
@@ -110,6 +102,6 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
 - Founder stop points: 5, listed above.
-- Startable rows: 6. Founder decisions: 10, listed above.
-- Repository backlog: 26 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
+- Startable rows: 7. Founder decisions: 1 open (NEW-145).
+- Repository backlog: 21 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
   and the §6 phase-close deferrals.
