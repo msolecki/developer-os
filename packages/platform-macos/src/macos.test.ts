@@ -1123,6 +1123,17 @@ describe("MacOsPlatformAdapter.discoverExecutable", () => {
     expect(error).toBeInstanceOf(MacOsPlatformDiscoveryError);
   });
 
+  /** NEW-130 (D83 (5)): the shared marker pattern, not an exact-case literal. */
+  it("never reports a path carrying a marker in another case as an installed executable", async () => {
+    const adapter = createAdapter({
+      runner: runnerReturning({ exitCode: 0, stdout: "/Users/u/[redacted:high-entropy]/bin/claude\n" }),
+    });
+
+    const error = await captureRejection(adapter.discoverExecutable("claude"));
+
+    expect(error).toBeInstanceOf(MacOsPlatformDiscoveryError);
+  });
+
   it("fails operationally when discovery times out", async () => {
     const adapter = createAdapter({
       runner: runnerReturning({ exitCode: null, timedOut: true }),

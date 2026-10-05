@@ -67,6 +67,14 @@ export const REDACTION_CLASSES = Object.freeze([
 ] as const);
 
 /**
+ * **The one test for "this text carries a redaction marker"** (NEW-130, D83 (5)): a value
+ * built from redacted text — a file name, a discovered path — names nothing real. Any case
+ * or spacing, because a model rewriting the text may not keep ours. No `g` flag, so `test`
+ * keeps no `lastIndex` state between calls.
+ */
+export const REDACTION_MARKER_PATTERN = /\[\s*redacted\s*:/iu;
+
+/**
  * A span of the normalized text; the secret is sliced from it at output, so a
  * merged range fingerprints exactly the text it redacts.
  */

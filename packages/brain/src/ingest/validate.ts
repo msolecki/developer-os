@@ -4,6 +4,7 @@ import { containsPath, containsPathLoosely } from "@developer-os/core";
 import type { BrainConfigV1 } from "@developer-os/core";
 import {
   canonicalizePlannedPath,
+  REDACTION_MARKER_PATTERN,
   screenControlCharacters,
 } from "@developer-os/security";
 import type { RedactionResult } from "@developer-os/security";
@@ -501,9 +502,6 @@ function confidenceAndLifecycle(
   }
   return findings;
 }
-
-/** `[REDACTED:<class>]` in any case or spacing; no `g` flag, so `test` keeps no state. */
-const REDACTION_MARKER_PATTERN = /\[\s*redacted\s*:/iu;
 
 function secretScan(
   notes: readonly ProposedNote[],

@@ -289,12 +289,12 @@ readers here for the surviving question and the disposition.
 > wires `MacOsPlatformAdapter` to `NodeProcessRunner` yet; Task 8 is what makes
 > it reachable.
 >
-> **One duplication accepted knowingly.** `REDACTION_MARKER` restates a literal
-> that `packages/security/src/redaction.ts` owns and does not export. The test
-> that drives the real `redactText` is the drift guard. The clean version is for
-> the security package to export the marker, or a `containsRedaction` predicate,
-> so the platform boundary asks the redactor what its own output looks like
-> instead of guessing — that is a security-package change, not a Task 7 one.
+> **One duplication accepted knowingly — removed 2026-10-06 (NEW-130, D83 (5)).** `REDACTION_MARKER`
+> restated a literal that `packages/security/src/redaction.ts` owned and did not export, in exact case.
+> `@developer-os/security` now exports `REDACTION_MARKER_PATTERN` (`[REDACTED:` in any case or
+> spacing), and both the platform boundary (`assertUsableDiscoveredPath`) and ingest's secret scan
+> (`packages/brain/src/ingest/validate.ts`) test against it, so the platform asks the redactor what its
+> own output looks like instead of guessing.
 >
 > **Environment note.** `packages/platform-macos/node_modules/@developer-os/security`
 > was created by hand, exactly as Task 5 recorded for `core`; any working

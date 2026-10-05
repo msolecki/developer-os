@@ -16,7 +16,12 @@ export type {
   ProtectedPathRuleId,
   ProtectedPathRuleV1,
 } from "./protected-paths.js";
-export { createRedactor, REDACTION_CLASSES, redactText } from "./redaction.js";
+export {
+  createRedactor,
+  REDACTION_CLASSES,
+  REDACTION_MARKER_PATTERN,
+  redactText,
+} from "./redaction.js";
 export type {
   RedactionFinding,
   RedactionOptions,

@@ -3,7 +3,11 @@ import { homedir, release } from "node:os";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
-import { canonicalizePlannedPath, type ProcessRunner } from "@developer-os/security";
+import {
+  canonicalizePlannedPath,
+  type ProcessRunner,
+  REDACTION_MARKER_PATTERN,
+} from "@developer-os/security";
 
 import type {
   AgentDiscovery,
@@ -20,7 +24,6 @@ const PRODUCT_STATE_DIRECTORY = ".developer-os";
 const PROPOSED_BRAIN_DIRECTORY = "DeveloperBrain";
 const AGENT_NAMES: readonly string[] = ["claude", "codex"];
 const UNUSABLE_PATH_CHARACTERS = /\p{Cc}/u;
-const REDACTION_MARKER = "[REDACTED:";
 /** macOS `MAXSYMLINKS`: the kernel's own limit before `ELOOP`. */
 const MAX_SYMLINK_HOPS = 32;
 
@@ -129,7 +132,7 @@ function missingAgent(name: AgentName): AgentDiscovery {
 function assertUsableDiscoveredPath(candidate: string): void {
   if (
     UNUSABLE_PATH_CHARACTERS.test(candidate) ||
-    candidate.includes(REDACTION_MARKER) ||
+    REDACTION_MARKER_PATTERN.test(candidate) ||
     !isAbsolute(candidate)
   ) {
     throw new MacOsPlatformDiscoveryError(
