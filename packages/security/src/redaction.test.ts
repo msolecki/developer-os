@@ -93,6 +93,46 @@ describe("redactText", () => {
     expectRedacted(result, providerToken);
   });
 
+  /** NEW-143 (D83 (1)): `sk-` needs a left word boundary, or kebab-case slugs redact. */
+  describe("provider-token sk- boundary", () => {
+    const skToken = "sk-Synth3ticKeyMaterial00example"; // gitleaks:allow -- synthetic test fixture
+    const skAntToken = "sk-ant-api03-Synth3ticKeyMaterial00example"; // gitleaks:allow -- synthetic test fixture
+    for (const [name, line, secret] of [
+      ["at line start", `${skToken} rest`, skToken],
+      ["after a space", `key ${skToken}`, skToken],
+      ["after a newline", `first\n${skToken}`, skToken],
+      ["inside double quotes", `"${skToken}"`, skToken],
+      ["inside single quotes", `'${skToken}'`, skToken],
+      ["after =", `key=${skToken}`, skToken],
+      ["after punctuation", `(${skToken})`, skToken],
+      ["an sk-ant- key after a space", `use ${skAntToken} here`, skAntToken],
+      ["an sk-ant- key at line start", skAntToken, skAntToken],
+    ] as const) {
+      it(`redacts an sk- key ${name}`, () => {
+        const result = redactText(line, deterministicKey);
+
+        expect(result.text).not.toContain(secret);
+        expect(result.findings.map((f) => f.class)).toContain("provider-token");
+      });
+    }
+
+    for (const slug of [
+      "mask-values-keep-structure-x",
+      "task-premises-against-commits",
+      "content/DEV/refetch-mask-values-keep-structure.md",
+      "content/DEV/verify-task-premises-against-commits.md",
+      "desk-lamp-wiring-notes-for-office",
+      "risk-register-review-quarterly-update",
+    ]) {
+      it(`leaves the kebab-case word ${slug} in the clear`, () => {
+        const result = redactText(`see ${slug} for details`, deterministicKey);
+
+        expect(result.text).toBe(`see ${slug} for details`);
+        expect(result.findings).toEqual([]);
+      });
+    }
+  });
+
   it("redacts an Authorization bearer value", () => {
     const result = redactText(
       `Authorization: Bearer ${bearerSecret}`,

@@ -538,9 +538,10 @@ export function redactText(
     1,
     candidates,
   );
+  /** NEW-143 (D83 (1)): `sk-` not preceded by a letter or digit, so `task-…` or `mask-…` is a word. */
   addWholeMatches(
     normalizedText,
-    /(?:ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|xox(?:a|b|p|r|s)-[A-Za-z0-9-]{10,})/gu,
+    /(?:ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}|xox(?:a|b|p|r|s)-[A-Za-z0-9-]{10,})/gu,
     "provider-token",
     candidates,
   );
