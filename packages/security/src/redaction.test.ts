@@ -119,6 +119,8 @@ describe("redactText", () => {
   describe("provider-token sk- boundary", () => {
     const skToken = "sk-Synth3ticKeyMaterial00example"; // gitleaks:allow -- synthetic test fixture
     const skAntToken = "sk-ant-api03-Synth3ticKeyMaterial00example"; // gitleaks:allow -- synthetic test fixture
+    /** A 32-hex body: too short for high-entropy, so provider-token is the only class that catches it. */
+    const shortSk = "sk-3f9a1c7e5b2d4086a9e1f3c5b7d90a2e"; // gitleaks:allow -- synthetic test fixture
     for (const [name, line, secret] of [
       ["at line start", `${skToken} rest`, skToken],
       ["after a space", `key ${skToken}`, skToken],
@@ -129,6 +131,11 @@ describe("redactText", () => {
       ["after punctuation", `(${skToken})`, skToken],
       ["an sk-ant- key after a space", `use ${skAntToken} here`, skAntToken],
       ["an sk-ant- key at line start", skAntToken, skAntToken],
+      /** Audit of NEW-143: an escape or percent-encoding ends in a letter or digit too. */
+      ["after a literal \\n in JSON", `{"stderr":"export OK\\n${shortSk}"}`, shortSk],
+      ["after a literal \\t", `col\\t${shortSk}`, shortSk],
+      ["after a literal \\r", `line\\r${shortSk}`, shortSk],
+      ["after percent-encoded =", `GET /v1?auth%3D${shortSk}`, shortSk],
     ] as const) {
       it(`redacts an sk- key ${name}`, () => {
         const result = redactText(line, deterministicKey);
@@ -137,6 +144,12 @@ describe("redactText", () => {
         expect(result.findings.map((f) => f.class)).toContain("provider-token");
       });
     }
+
+    it("redacts an sk- key after a literal \\n in path scope too", () => {
+      const result = redactText(`notes/x\\n${skAntToken}`, deterministicKey, {}, "path");
+
+      expect(result.text).toBe("notes/x\\n[REDACTED:provider-token]");
+    });
 
     for (const slug of [
       "mask-values-keep-structure-x",
@@ -699,6 +712,15 @@ describe("redactText", () => {
       expect(text).toBe(
         "opaque [REDACTED:user-pattern][REDACTED:high-entropy][REDACTED:user-pattern][REDACTED:high-entropy] end",
       );
+    });
+
+    /** Audit of NEW-120: a padded base64 head before a covered token is token material, not a key. */
+    it("redacts a base64 head shaped like KEY= before a covered token", () => {
+      const head = "c2VjcmV0dmFsdWVoZXJlMTIzNDU2Nzg5=";
+      const { text } = redactText(`opaque ${head}${awsAccessKeyId} end`, deterministicKey);
+
+      expect(text).not.toContain(head.slice(0, -1));
+      expect(text).toBe("opaque [REDACTED:high-entropy][REDACTED:service-credential] end");
     });
 
     /** D71 still holds for a key=value line whose whole run is high-entropy: the key is no token. */

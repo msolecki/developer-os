@@ -512,13 +512,17 @@ candidate covers is redacted as its own `high-entropy` range (NEW-120, founder d
 the tail after a user pattern matching the start of a token, the gap between two, and the head before
 one in its middle — so nothing of the token stays in the clear (`addHighEntropyRun`). The one part
 kept is a head shaped `KEY=`, which names the value rather than being part of it: `API_TOKEN=` and
-`key=` stay readable and the line keeps its single fingerprint. A run no candidate overlaps is
+`key=` stay readable and the line keeps its single fingerprint. The exemption is narrow
+(`isAssignmentKey`): an identifier of at most 64 characters, made of word-like parts, that does not
+itself look high-entropy — so a padded base64 head such as `c2VjcmV0…=` before a covered token is
+redacted with it. A run no candidate overlaps is
 redacted whole, exactly as before. This closes the D71 residual. Pinned by `redaction.test.ts` →
 "redacts the uncovered tail of a partly overlapped high-entropy run as its own range" and the three
 tests after it.
 
 **`provider-token`'s `sk-` alternative has a left word boundary (NEW-143, founder decision D83 (1)).**
-`sk-` matches only when no letter or digit precedes it, so a kebab-case slug such as
+`sk-` matches only when no letter or digit precedes it — or when what precedes it is a literal
+`\n`/`\t`/`\r` escape or a `%XX` percent-encoding, which end in one but still separate a key — so a kebab-case slug such as
 `verify-task-premises-against-commits` or `refetch-mask-values-keep-structure` is a word, not a key,
 and `ingest`'s secret scan no longer refuses a note named that way. A real `sk-…` or `sk-ant-…` key
 still redacts at line start, after whitespace or punctuation, inside quotes and after `=`. Pinned by

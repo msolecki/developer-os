@@ -122,8 +122,22 @@ function addCandidate(
   }
 }
 
-/** The head of a high-entropy run that is a `KEY=` name, not token material (D71). */
-const ASSIGNMENT_KEY = /^[A-Za-z_][A-Za-z0-9_-]*=$/u;
+/**
+ * The head of a high-entropy run that is a `KEY=` name, not token material (D71): an
+ * identifier of word-like parts (`API_TOKEN`, `key`, `authToken`). A padded base64 run
+ * such as `c2VjcmV0…=` is shaped like one and is not exempt.
+ */
+function isAssignmentKey(head: string): boolean {
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}=$/u.test(head)) return false;
+  const key = head.slice(0, -1);
+  return (
+    !looksHighEntropy(key) &&
+    key
+      .split(/_|(?<=[a-z])(?=[A-Z])/u)
+      .filter((part) => part.length > 0)
+      .every(isWordLikePart)
+  );
+}
 
 /**
  * `high-entropy` is never merged (founder decision D71): its run spans a `KEY=` prefix,
@@ -144,7 +158,7 @@ function addHighEntropyRun(
     .filter((existing) => existing.start < end && start < existing.end)
     .sort((left, right) => left.start - right.start);
   const head = text.slice(start, covering[0]?.start ?? start);
-  let cursor = ASSIGNMENT_KEY.test(head) ? start + head.length : start;
+  let cursor = isAssignmentKey(head) ? start + head.length : start;
   for (const existing of covering) {
     if (existing.start > cursor) {
       candidates.push({ start: cursor, end: existing.start, class: "high-entropy" });
@@ -573,10 +587,14 @@ export function redactText(
     1,
     candidates,
   );
-  /** NEW-143 (D83 (1)): `sk-` not preceded by a letter or digit, so `task-…` or `mask-…` is a word. */
+  /**
+   * NEW-143 (D83 (1)): `sk-` not preceded by a letter or digit, so `task-…` or `mask-…` is a
+   * word. A literal `\n`/`\t`/`\r` escape or a `%XX` percent-encoding also ends in a letter or
+   * digit, and a key after one is still a key (`"…\nsk-…"` in JSON, `auth%3Dsk-…` in a URL).
+   */
   addWholeMatches(
     normalizedText,
-    /(?:ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}|xox(?:a|b|p|r|s)-[A-Za-z0-9-]{10,})/gu,
+    /(?:ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|(?<=^|[^A-Za-z0-9]|\\[nrt]|%[0-9A-Fa-f]{2})sk-[A-Za-z0-9_-]{20,}|xox(?:a|b|p|r|s)-[A-Za-z0-9-]{10,})/gu,
     "provider-token",
     candidates,
   );
