@@ -452,10 +452,12 @@ export async function projectBootstrapRetentionPostimage(
     return refuse();
   }
   if (firstStats.isDirectory() && !firstStats.isSymbolicLink()) {
-    const first = await walkDirectoryTreeOnce(path, productHome, cache);
-    const second = await walkDirectoryTreeOnce(path, productHome, cache);
-    if (!sameFreshProjection(first, second)) return refuse();
-    return second;
+    /**
+     * One walk (D84). Stability is argued from the caller's before/after projections around
+     * each mutation (`foundation.md` §9), not from a second walk here; a change that starts and
+     * reverts inside this one walk is an accepted residual.
+     */
+    return walkDirectoryTreeOnce(path, productHome, cache);
   }
   if (!firstStats.isFile() || firstStats.isSymbolicLink() || isRedactionKeyPath(path)) return refuse();
   const firstEntry = await projectRegularEntry(path, "file", firstStats, cache);

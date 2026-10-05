@@ -1384,7 +1384,8 @@ describe("BootstrapRetainer content cache", () => {
     await projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME, undefined, cache);
 
     expect(cache.size).toBe(0);
-    expect(fsRaceControl.opened.filter((candidate) => candidate === file)).toHaveLength(4);
+    // One walk per projection (D84): each of the two projections opens the young file once.
+    expect(fsRaceControl.opened.filter((candidate) => candidate === file)).toHaveLength(2);
   });
 
   it("answers an unchanged tree from the cache without opening a regular file", async () => {
