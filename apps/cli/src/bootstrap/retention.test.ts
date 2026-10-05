@@ -70,7 +70,6 @@ import type { BootstrapJournalStore } from "./journal-store.js";
 import {
   BootstrapRetainer,
   projectBootstrapRetentionPostimage,
-  projectRetainedDirectoryTree,
   retainBootstrapEnvelope,
   type BootstrapRetentionDeathPointV1,
   type BootstrapRetentionObservationV1,
@@ -866,7 +865,54 @@ describe("retainBootstrapEnvelope crash convergence and lock ordering", () => {
   });
 });
 
-describe("projectRetainedDirectoryTree", () => {
+describe("projectBootstrapRetentionPostimage directory races", () => {
+  /**
+   * A retainer whose parent and source both go through the production projection, with the
+   * row's parent identity taken from the real container (D84: the parent before/after pair is
+   * the anti-TOCTOU argument, so it must not be stubbed here).
+   */
+  async function realParentRetainer(
+    container: string,
+    root: string,
+    expected: BootstrapRetentionPostimageV1,
+  ): Promise<{
+    readonly row: BootstrapRetentionEntryV1;
+    readonly retainer: BootstrapRetainer;
+    readonly renameCalls: () => number;
+    readonly sourceProjections: { inSource: boolean; readonly values: (BootstrapRetentionPostimageV1 | null)[] };
+  }> {
+    const containerStats = await nodeFs.lstat(container, { bigint: true });
+    const row = {
+      ...entry(0, "staging_subtree", path(root), expected),
+      parent: {
+        path: path(container),
+        dev: parseUInt64Decimal(containerStats.dev.toString(10)),
+        ino: parseUInt64Decimal(containerStats.ino.toString(10)),
+      },
+    };
+    let renames = 0;
+    const sourceProjections = { inSource: false, values: [] as (BootstrapRetentionPostimageV1 | null)[] };
+    const retainer = new BootstrapRetainer({
+      renameSameParentNoReplace: () => {
+        renames += 1;
+        return Promise.resolve();
+      },
+      projectPostimage: async (candidate) => {
+        if (candidate !== row.sourcePath) return projectBootstrapRetentionPostimage(candidate, UNRELATED_HOME);
+        sourceProjections.inSource = true;
+        try {
+          const projected = await projectBootstrapRetentionPostimage(candidate, UNRELATED_HOME);
+          sourceProjections.values.push(projected);
+          return projected;
+        } finally {
+          sourceProjections.inSource = false;
+        }
+      },
+      syncDirectory: () => Promise.resolve(),
+    });
+    return { row, retainer, renameCalls: () => renames, sourceProjections };
+  }
+
   it("refuses an expected-empty subtree with one actual child before rename", async () => {
     const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-retained-empty-third-state-"));
     roots.add(root);
@@ -898,7 +944,7 @@ describe("projectRetainedDirectoryTree", () => {
       },
       projectPostimage: (candidate) => {
         if (candidate === row.parent.path) return Promise.resolve(parentProjection(row));
-        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME);
+        if (candidate === row.sourcePath) return projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME);
         return Promise.resolve(null);
       },
       syncDirectory: () => Promise.resolve(),
@@ -955,7 +1001,7 @@ describe("projectRetainedDirectoryTree", () => {
       entries,
     };
 
-    await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).resolves.toEqual(expected);
+    await expect(projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME)).resolves.toEqual(expected);
   });
 
   it("refuses a child inserted after the initial directory enumeration", async () => {
@@ -964,36 +1010,15 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.chmod(root, 0o700);
     const known = join(root, "known");
     await nodeFs.writeFile(known, "known", { mode: 0o600 });
-    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(known, { bigint: true })]);
-    const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [{
-      relativePath: "known", kind: "regular_file", ownerUid: Number(knownStats.uid),
-      mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("5"), sha256: hash("known"),
-      dev: parseUInt64Decimal(knownStats.dev.toString(10)), ino: parseUInt64Decimal(knownStats.ino.toString(10)),
-    }];
-    const expected = {
-      kind: "directory_tree" as const,
-      ownerUid: Number(rootStats.uid),
-      mode: 0o700 as const,
-      nlink: Number(rootStats.nlink),
-      treeHash: parseLowerHexSha256(createHash("sha256")
-        .update("developer-os/bootstrap-retained-tree/v1\0")
-        .update(encodeCanonicalJson(entries).slice(0, -1))
-        .digest("hex")),
-      entryCount: 1,
-      regularFileBytes: parseUInt64Decimal("5"),
-      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
-      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
-      entries,
-    };
     let rootStatsSeen = 0;
     fsRaceControl.afterLstat = async (candidate) => {
       if (candidate !== root) return;
       rootStatsSeen += 1;
-      if (rootStatsSeen === 4) await nodeFs.writeFile(join(root, "extra"), "extra", { mode: 0o600 });
+      if (rootStatsSeen === 5) await nodeFs.writeFile(join(root, "extra"), "extra", { mode: 0o600 });
     };
 
     try {
-      await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
+      await expect(projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.afterLstat = undefined;
     }
@@ -1006,31 +1031,10 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.chmod(root, 0o700);
     const known = join(root, "known");
     await nodeFs.writeFile(known, "known", { mode: 0o600 });
-    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(known, { bigint: true })]);
-    const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [{
-      relativePath: "known", kind: "regular_file", ownerUid: Number(knownStats.uid),
-      mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("5"), sha256: hash("known"),
-      dev: parseUInt64Decimal(knownStats.dev.toString(10)), ino: parseUInt64Decimal(knownStats.ino.toString(10)),
-    }];
-    const expected = {
-      kind: "directory_tree" as const,
-      ownerUid: Number(rootStats.uid),
-      mode: 0o700 as const,
-      nlink: Number(rootStats.nlink),
-      treeHash: parseLowerHexSha256(createHash("sha256")
-        .update("developer-os/bootstrap-retained-tree/v1\0")
-        .update(encodeCanonicalJson(entries).slice(0, -1))
-        .digest("hex")),
-      entryCount: 1,
-      regularFileBytes: parseUInt64Decimal("5"),
-      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
-      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
-      entries,
-    };
     fsRaceControl.failClosePath = root;
 
     try {
-      await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
+      await expect(projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.failClosePath = undefined;
     }
@@ -1043,36 +1047,15 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.chmod(root, 0o700);
     const known = join(root, "known");
     await nodeFs.writeFile(known, "known", { mode: 0o600 });
-    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(known, { bigint: true })]);
-    const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [{
-      relativePath: "known", kind: "regular_file", ownerUid: Number(knownStats.uid),
-      mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("5"), sha256: hash("known"),
-      dev: parseUInt64Decimal(knownStats.dev.toString(10)), ino: parseUInt64Decimal(knownStats.ino.toString(10)),
-    }];
-    const expected = {
-      kind: "directory_tree" as const,
-      ownerUid: Number(rootStats.uid),
-      mode: 0o700 as const,
-      nlink: Number(rootStats.nlink),
-      treeHash: parseLowerHexSha256(createHash("sha256")
-        .update("developer-os/bootstrap-retained-tree/v1\0")
-        .update(encodeCanonicalJson(entries).slice(0, -1))
-        .digest("hex")),
-      entryCount: 1,
-      regularFileBytes: parseUInt64Decimal("5"),
-      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
-      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
-      entries,
-    };
     let rootStatsSeen = 0;
     fsRaceControl.afterLstat = async (candidate) => {
       if (candidate !== root) return;
       rootStatsSeen += 1;
-      if (rootStatsSeen === 4) await nodeFs.unlink(known);
+      if (rootStatsSeen === 5) await nodeFs.unlink(known);
     };
 
     try {
-      await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
+      await expect(projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.afterLstat = undefined;
     }
@@ -1092,37 +1075,6 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.writeFile(join(nested, "old"), "old", { mode: 0o600 });
     const replacementFile = join(replacement, "data");
     await nodeFs.writeFile(replacementFile, "data", { mode: 0o600 });
-    const [rootStats, nestedStats, replacementFileStats] = await Promise.all([
-      nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(nested, { bigint: true }), nodeFs.lstat(replacementFile, { bigint: true }),
-    ]);
-    const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [
-      {
-        relativePath: "nested", kind: "directory", ownerUid: Number(nestedStats.uid),
-        mode: 0o700, nlink: Number(nestedStats.nlink), bytes: parseUInt64Decimal("0"), sha256: null,
-        dev: parseUInt64Decimal(nestedStats.dev.toString(10)), ino: parseUInt64Decimal(nestedStats.ino.toString(10)),
-      },
-      {
-        relativePath: "nested/data", kind: "regular_file", ownerUid: Number(replacementFileStats.uid),
-        mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("4"), sha256: hash("data"),
-        dev: parseUInt64Decimal(replacementFileStats.dev.toString(10)),
-        ino: parseUInt64Decimal(replacementFileStats.ino.toString(10)),
-      },
-    ];
-    const expected = {
-      kind: "directory_tree" as const,
-      ownerUid: Number(rootStats.uid),
-      mode: 0o700 as const,
-      nlink: Number(rootStats.nlink),
-      treeHash: parseLowerHexSha256(createHash("sha256")
-        .update("developer-os/bootstrap-retained-tree/v1\0")
-        .update(encodeCanonicalJson(entries).slice(0, -1))
-        .digest("hex")),
-      entryCount: 2,
-      regularFileBytes: parseUInt64Decimal("4"),
-      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
-      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
-      entries,
-    };
     let swapped = false;
     fsRaceControl.afterLstat = async (candidate) => {
       if (candidate !== nested || swapped) return;
@@ -1132,7 +1084,7 @@ describe("projectRetainedDirectoryTree", () => {
     };
 
     try {
-      await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
+      await expect(projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.afterLstat = undefined;
     }
@@ -1170,35 +1122,26 @@ describe("projectRetainedDirectoryTree", () => {
       ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
-    const row = entry(0, "staging_subtree", path(root), expected);
+    const { row, retainer, renameCalls, sourceProjections } = await realParentRetainer(container, root, expected);
     let knownStatsSeen = 0;
-    let renameCalls = 0;
     fsRaceControl.afterLstat = async (candidate) => {
-      if (candidate !== known) return;
+      if (!sourceProjections.inSource || candidate !== known) return;
       knownStatsSeen += 1;
       if (knownStatsSeen !== 2) return;
       await nodeFs.rename(known, displaced);
       await nodeFs.rename(replacement, known);
     };
-    const retainer = new BootstrapRetainer({
-      renameSameParentNoReplace: () => {
-        renameCalls += 1;
-        return Promise.resolve();
-      },
-      projectPostimage: (candidate) => {
-        if (candidate === row.parent.path) return Promise.resolve(parentProjection(row));
-        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME);
-        return Promise.resolve(null);
-      },
-      syncDirectory: () => Promise.resolve(),
-    });
 
     try {
       await expect(retainer.retain(row)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.afterLstat = undefined;
     }
-    expect(renameCalls).toBe(0);
+    // D84: the source's single walk misses the swap and matches the table; the real parent
+    // after-projection in observeAll is what refuses.
+    expect(knownStatsSeen).toBe(2);
+    expect(sourceProjections.values).toEqual([expected]);
+    expect(renameCalls()).toBe(0);
     expect(await nodeFs.readdir(root)).toEqual(["known"]);
     await expect(nodeFs.lstat(row.tombstonePath, { bigint: true })).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -1247,35 +1190,28 @@ describe("projectRetainedDirectoryTree", () => {
       ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
-    const row = entry(0, "staging_subtree", path(root), expected);
+    const { row, retainer, renameCalls, sourceProjections } = await realParentRetainer(container, root, expected);
     let rootStatsSeen = 0;
-    let renameCalls = 0;
     fsRaceControl.afterLstat = async (candidate) => {
-      if (candidate !== root) return;
+      if (!sourceProjections.inSource || candidate !== root) return;
       rootStatsSeen += 1;
-      if (rootStatsSeen !== 3) return;
+      // The projection's own lstat, the walk's root lstat, then the root directory's lstat
+      // before and (4th) after its recursion returns.
+      if (rootStatsSeen !== 4) return;
       await nodeFs.rename(nested, displaced);
       await nodeFs.rename(replacement, nested);
     };
-    const retainer = new BootstrapRetainer({
-      renameSameParentNoReplace: () => {
-        renameCalls += 1;
-        return Promise.resolve();
-      },
-      projectPostimage: (candidate) => {
-        if (candidate === row.parent.path) return Promise.resolve(parentProjection(row));
-        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME);
-        return Promise.resolve(null);
-      },
-      syncDirectory: () => Promise.resolve(),
-    });
 
     try {
       await expect(retainer.retain(row)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.afterLstat = undefined;
     }
-    expect(renameCalls).toBe(0);
+    // D84: the source's single walk misses the swap and matches the table; the real parent
+    // after-projection in observeAll is what refuses.
+    expect(rootStatsSeen).toBeGreaterThanOrEqual(4);
+    expect(sourceProjections.values).toEqual([expected]);
+    expect(renameCalls()).toBe(0);
     expect(await nodeFs.readdir(root)).toEqual(["nested"]);
     expect(await nodeFs.readdir(nested)).toEqual(["data"]);
     await expect(nodeFs.lstat(row.tombstonePath, { bigint: true })).rejects.toMatchObject({ code: "ENOENT" });
@@ -1309,11 +1245,24 @@ describe("projectRetainedDirectoryTree", () => {
       entries,
     };
 
-    await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).resolves.toEqual(expected);
+    await expect(projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME)).resolves.toEqual(expected);
     await nodeFs.writeFile(join(root, "extra"), "extra", { mode: 0o600 });
     const namesBefore = (await nodeFs.readdir(root)).sort();
 
-    await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
+    // The projection itself succeeds; refusing the extra entry is observeAll's comparison with
+    // the table's postimage.
+    await expect(projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME)).resolves.toMatchObject({ entryCount: 2 });
+    const row = entry(0, "staging_subtree", path(root), expected);
+    const retainer = new BootstrapRetainer({
+      renameSameParentNoReplace: () => Promise.reject(new Error("no rename expected")),
+      projectPostimage: (candidate) => {
+        if (candidate === row.parent.path) return Promise.resolve(parentProjection(row));
+        if (candidate === row.sourcePath) return projectBootstrapRetentionPostimage(path(root), UNRELATED_HOME);
+        return Promise.resolve(null);
+      },
+      syncDirectory: () => Promise.resolve(),
+    });
+    await expect(retainer.retain(row)).rejects.toBeInstanceOf(BootstrapStateError);
     expect((await nodeFs.readdir(root)).sort()).toEqual(namesBefore);
   });
 });

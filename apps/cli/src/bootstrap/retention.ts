@@ -480,18 +480,6 @@ export async function projectBootstrapRetentionPostimage(
   };
 }
 
-export async function projectRetainedDirectoryTree(
-  root: CanonicalAbsolutePathV1,
-  expectedRoot: Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>,
-  productHome: CanonicalAbsolutePathV1,
-): Promise<Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>> {
-  if (expectedRoot.entries === undefined) return refuse();
-  const first = await projectRetainedDirectoryTreeOnce(root, productHome);
-  const second = await projectRetainedDirectoryTreeOnce(root, productHome);
-  if (!sameFreshProjection(first, second) || !sameValue(second, expectedRoot)) return refuse();
-  return second;
-}
-
 export class BootstrapRetainer {
   readonly #dependencies: BootstrapRetainerDependenciesV1;
 

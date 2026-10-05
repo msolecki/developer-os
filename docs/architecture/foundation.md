@@ -1033,25 +1033,31 @@ check-then-act race is argued from the projections that bracket each mutation al
   must equal the table's recorded postimage. `retain` renames only from such a `before`
   observation, then observes again and requires the `after` state, so the rename sits between
   two observations that each must match the table.
-- **Evidence inspection.** `inspectBootstrapEvidenceAdmission` projects each path once per
-  inspection (`memoizePostimageProjector`) and compares it with the postimage recorded in the
-  retained table or journal; the Foundation terminal journal keeps its unmemoized before/after
-  pair around its read. Retention tree projections per inspection: 2 → **1**, pinned by
-  `report.test.ts`.
+- **Evidence inspection.** `buildBootstrapRetentionEvidence`'s `retentionRow` (`report.ts`)
+  projects a row's source and its parent once per inspection (`memoizePostimageProjector`),
+  checks the parent's dev and ino against recorded evidence when the plan holds any, and
+  records the source projection as the row's postimage. Nothing is renamed on the strength of
+  that projection: the retain loop's `observeAll` later requires the live source to equal it.
+  The Foundation terminal journal keeps its unmemoized before/after pair around its read.
+  Retention tree projections per inspection: 2 → **1**, pinned by `report.test.ts`.
 - **Content.** The NEW-133 content cache and its two-second racy-ctime margin are unchanged, so
   a changed file still misses the cache and is hashed again in whichever projection follows the
   change.
 
 A regular-file projection still reads its file twice; that costs two reads of one file, not
-two walks of a tree, and is unchanged. `projectRetainedDirectoryTree`, the test-only
-expected-tree helper, keeps its own pair.
+two walks of a tree, and is unchanged. `projectRetainedDirectoryTree`, a test-only helper that
+kept its own pair, is deleted; its race tests now drive the production projection, and the two
+same-name replacement cases pin this argument: a replacement during the source's single walk
+yields a projection equal to the table, and `observeAll`'s real parent after-projection refuses.
 
-**Accepted residual.** A change that starts and reverts inside one observation — between the
+**Accepted residuals.** First, a change that starts and reverts inside one observation — between the
 before and after projections, or within a single walk — and leaves the tree byte- and
 metadata-identical by the after projection is no longer detected; the removed second walk could
 catch one that was still in flight when the first walk ended. Such a change leaves no state the
-retainer acts on: what is renamed and recorded is what both bracketing projections saw. A
-`state/` writer that could exploit it already has the same uid as the retainer.
+retainer acts on: what is renamed is what both bracketing projections saw. A `state/` writer
+that could exploit it already has the same uid as the retainer. Second, a projection taken while
+recording a row (`retentionRow`, `report.ts`) can capture a mid-change tree; retain's
+`observeAll` then refuses (`sameValue(source, entry.postimage)`) rather than acting on it.
 
 | Measurement (this laptop, unsandboxed, exit 0 each) | Before (`cfc00068`) | After |
 |---|---|---|
