@@ -309,6 +309,17 @@ describe("validateChangePlan forged-manifest defense", () => {
     );
   });
 
+  it("refuses a target under an excluded root whose first segment starts with two dots", async () => {
+    const plan = planOf([createOperation({ targetPath: `${BACKUPS_ROOT}/..x/0.bin` })]);
+
+    await expect(validateChangePlan(plan, contextOf())).rejects.toThrow(
+      expect.objectContaining({
+        code: EXIT_CODES.securityRefusal,
+        reason: "excluded_root",
+      }),
+    );
+  });
+
   it("refuses a case-varied path that would evade an excluded root on a case-insensitive volume", async () => {
     const plan = planOf([
       createOperation({
