@@ -202,6 +202,18 @@ export class FoundationParticipantExecutor {
     return this.dependencies.executor.executeLifecycleFoundationParticipant(admitted);
   }
 
+  /**
+   * Spec 1 §2.4: a non-finalized current Foundation journal must itself roll back before the
+   * coordinator compensates. A published journal is an ordinary `state/transactions` journal past
+   * its first-write bridge, so the unchanged executor's rollback owns it, under the same lock.
+   */
+  async rollback(ref: FoundationParticipantRefV1): Promise<TransactionJournalV1> {
+    if ((await this.dependencies.fs.lstat(ref.initialJournal.finalPath)) === null) {
+      refuseLifecycleRecovery("lifecycle_foundation_participant_absent", ref.initialJournal.finalPath);
+    }
+    return this.dependencies.executor.rollback(ref.id);
+  }
+
   async observe(ref: FoundationParticipantRefV1): Promise<FoundationParticipantStateV1> {
     const { fs } = this.dependencies;
     const final = await fs.lstat(ref.initialJournal.finalPath);

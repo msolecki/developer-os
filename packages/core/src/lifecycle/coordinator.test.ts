@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "../result.js";
 import { TransactionExecutor } from "../transactions/executor.js";
-import { TransactionStore } from "../transactions/store.js";
+import { encodeFoundationJournalJsonV1, TransactionStore, validateJournal } from "../transactions/store.js";
+import { compactTerminalCoordinator } from "./coordinator-compaction.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
 import { parseLowerHexSha256, parseUInt64Decimal } from "../update/scalars.js";
 import {
@@ -246,6 +247,8 @@ type CoordinatorDependenciesV1 = LifecycleCoordinatorDependenciesV1<SyntheticPla
 interface WorldOptionsV1 {
   readonly afterBoundary?: (boundary: LifecycleCoordinatorBoundaryV1) => void | Promise<void>;
   readonly failAt?: string;
+  /** A Foundation step label whose real executor throws once at `apply`, its journal `validated`. */
+  readonly failFoundationApplyAt?: string;
   readonly pushOutcome?: "succeeded" | "failed";
   readonly stepHooks?: LifecycleParticipantAdaptersV1<SyntheticPlan>["stepHooks"];
 }
@@ -254,7 +257,12 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 
 async function syntheticWorld(
   variant: LifecycleOperationVariantV1,
-  options: { readonly pushOutcome?: "succeeded" | "failed"; readonly artifactSteps?: number } = {},
+  options: {
+    readonly pushOutcome?: "succeeded" | "failed";
+    readonly artifactSteps?: number;
+    /** Allocates each compensation ID before its forward's, so compaction meets the inverse first. */
+    readonly inverseIdFirst?: boolean;
+  } = {},
 ): Promise<WorldV1> {
   const { created, home } = await createSyntheticLifecycleHome("coordinator");
   const roots = deriveLifecycleLedgerRoots(home);
@@ -289,6 +297,7 @@ async function syntheticWorld(
   const reacquired: HeldLifecycleStableLockV1[] = [];
 
   const lockProvider = new FixtureLockProvider();
+  const applyFailure: { value: FoundationParticipantRefV1 | null } = { value: null };
   const foundationStore = new TransactionStore({
     stateDir: join(created, "state"),
     fs: nodeFs,
@@ -303,7 +312,23 @@ async function syntheticWorld(
     generateId: () => {
       throw new Error("the lifecycle participant bridge must not generate an ID");
     },
-    guards: { assertTarget: () => Promise.resolve(), redactDiagnostic: (text) => text },
+    guards: {
+      /**
+       * The executor asserts a target at backup, validate, apply and restore; only the one taken
+       * while the participant's own journal reads `validated` is the apply.
+       */
+      assertTarget: async (target) => {
+        const failing = applyFailure.value;
+        if (failing === null || target !== failing.mutations[0]?.targetPath) return;
+        const journal = JSON.parse(await nodeFs.readFile(failing.initialJournal.finalPath, "utf8")) as {
+          readonly phase: string;
+        };
+        if (journal.phase !== "validated") return;
+        applyFailure.value = null;
+        throw new SyntheticDeath(`apply ${failing.id}`);
+      },
+      redactDiagnostic: (text) => text,
+    },
     lockProvider,
     publishBootstrapInitialJournalNoReplace: (request) => publisher.publish(request),
   });
@@ -348,9 +373,10 @@ async function syntheticWorld(
   for (const [index, template] of templates.entries()) {
     switch (template.kind) {
       case "F": {
-        const forwardId = nextId("tx");
         const reversible = index < boundaryIndex;
-        const compensationId = reversible ? nextId("tx") : null;
+        const early = reversible && options.inverseIdFirst === true ? nextId("tx") : null;
+        const forwardId = nextId("tx");
+        const compensationId = reversible ? (early ?? nextId("tx")) : null;
         const repeat = steps.filter(
           (step) => step.kind === "foundation" && step.slot === template.slot,
         ).length;
@@ -690,6 +716,12 @@ async function syntheticWorld(
 
   const dependencies = (worldOptions: WorldOptionsV1 = {}): CoordinatorDependenciesV1 => {
     const failing = worldOptions.failAt;
+    const failingApply = worldOptions.failFoundationApplyAt;
+    if (failingApply !== undefined) {
+      const step = steps.find((candidate) => stepLabel(candidate) === failingApply);
+      if (step?.kind !== "foundation") throw new Error(`no Foundation step labelled ${failingApply}`);
+      applyFailure.value = refs.find((ref) => ref.id === step.participantId) ?? null;
+    }
     const wrapped: LifecycleParticipantAdaptersV1<SyntheticPlan> =
       failing === undefined
         ? adapters
@@ -1194,6 +1226,63 @@ describe("the push arms", () => {
       transactionId: journalled.plan.id,
       pushPlanHash: PUSH_PLAN_HASH,
     });
+  }, 120_000);
+});
+
+describe("a Foundation participant that fails mid-apply (NEW-151)", () => {
+  it.each([false, true])("rolls its journal back, compensates the prefix, and compacts to an empty ledger (inverse ID first: %s)", async (inverseIdFirst) => {
+    const world = await syntheticWorld("git_disable", { inverseIdFirst });
+    const failing = world.plan.steps[1];
+    if (failing?.kind !== "foundation") throw new Error("no Foundation step at 1");
+
+    const { outcome } = await world.execute({ failFoundationApplyAt: "F(activation)" });
+
+    expect(outcome.kind).toBe("rolled_back");
+    const journal = await world.journal();
+    expect(journal?.phase).toBe("rolled_back");
+    expect(journal?.nextStep).toBe(1);
+    const participant = world.plan.participants.foundation.find((ref) => ref.id === failing.participantId);
+    if (participant === undefined) throw new Error("no participant ref");
+    const final = JSON.parse(await nodeFs.readFile(participant.initialJournal.finalPath, "utf8")) as {
+      readonly phase: string;
+    };
+    expect(final.phase).toBe("rolled_back");
+    expect(world.compensationOrder()).toStrictEqual(["M(preserve_before)^-1"]);
+    expect(await world.terminalState()).toStrictEqual(await world.expectedAfter(false));
+
+    const snapshot = await world.recover();
+    expect(snapshot.coordinators).toStrictEqual([]);
+    expect(snapshot.coordinatorOrphans).toStrictEqual([]);
+    expect(snapshot.foundation.journals.size).toBe(0);
+    expect(snapshot.findings).toStrictEqual([]);
+    expect(snapshot.closure).toStrictEqual({ kind: "clear" });
+  }, 120_000);
+
+  it("refuses to compact a cursor journal that is not rolled back and leaves it in place", async () => {
+    const world = await syntheticWorld("git_disable");
+    const failing = world.plan.steps[1];
+    if (failing?.kind !== "foundation") throw new Error("no Foundation step at 1");
+    const participant = world.plan.participants.foundation.find((ref) => ref.id === failing.participantId);
+    if (participant === undefined) throw new Error("no participant ref");
+    const { outcome } = await world.execute({ failFoundationApplyAt: "F(activation)" });
+    expect(outcome.kind).toBe("rolled_back");
+    const [record] = (await world.inspect()).coordinators;
+    if (record === undefined) throw new Error("no coordinator record");
+
+    const finalPath = participant.initialJournal.finalPath;
+    const rolledBack = validateJournal(JSON.parse(await nodeFs.readFile(finalPath, "utf8")) as unknown);
+    await nodeFs.writeFile(finalPath, encodeFoundationJournalJsonV1({ ...rolledBack, phase: "validated" }), {
+      mode: 0o600,
+    });
+
+    /** The ledger refuses this state first; compaction is pinned directly as the second line. */
+    await expect(world.recover()).rejects.toThrow(
+      expect.objectContaining({ reason: "lifecycle_standalone_transaction_incomplete" }),
+    );
+    await expect(compactTerminalCoordinator(world.dependencies(), record, world.global)).rejects.toThrow(
+      expect.objectContaining({ reason: "lifecycle_coordinator_participant_state" }),
+    );
+    expect(await world.fs.lstat(finalPath)).not.toBeNull();
   }, 120_000);
 });
 
