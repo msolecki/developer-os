@@ -96,7 +96,7 @@ import type {
   AdmittedPackagedReleaseV1,
   PackagedReleaseSourceV1,
 } from "../update/packaged-release.js";
-import { PULSE_REPORT_SLOTS, pulseReportSlotPath } from "../lifecycle/runtime-records.js";
+import { ingestAttemptsPath, PULSE_REPORT_SLOTS, pulseReportSlotPath } from "../lifecycle/runtime-records.js";
 import { inspectPackagedRelease } from "../update/packaged-release.js";
 
 const encoder = new TextEncoder();
@@ -1772,6 +1772,7 @@ export class BootstrapExecutor {
       join(stateDir, "uninstalling.json"),
       join(stateDir, "update-rollback.json"),
       join(stateDir, "update-executor.json"),
+      ingestAttemptsPath(this.#dependencies.paths),
       ...jobs.flatMap((job) => [
         join(stateDir, `automation-${job}.status.json`),
         join(stateDir, `.automation-${job}.lock`),

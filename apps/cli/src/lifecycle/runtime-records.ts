@@ -315,6 +315,11 @@ export function pulseReportSlotPath(paths: RuntimePaths, slot: number): string {
   return join(paths.stateDir, `pulse.${String(slot)}.md`);
 }
 
+/** NEW-141: the ingest attempt-order record, a reserved runtime file fresh `init` creates empty. */
+export function ingestAttemptsPath(paths: Pick<RuntimePaths, "stateDir">): string {
+  return join(paths.stateDir, "ingest-attempts.json");
+}
+
 export function uninstallingMarkerPath(productHome: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
   return parseCanonicalAbsolutePathText(`${productHome}/state/uninstalling.json`);
 }

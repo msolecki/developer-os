@@ -76,6 +76,8 @@ describe("fresh V2 init layout", () => {
     const expectedState = [
       ".lifecycle.lock", "lifecycle-install-nonce", "lifecycle-id-allocator.json", "git-sync.json",
       "uninstalling.json", "update-rollback.json", "update-executor.json", "transactions",
+      // NEW-141 (2026-10-06): the ingest attempt-order record.
+      "ingest-attempts.json",
       "lifecycle-journals", "git-effect-journals", "launchd-effect-journals", "release-metadata",
       "active-release.json", "release-trust.json",
       // Spec 1 §2.1 amended 2026-09-22 (A13 Q3-A): fresh `init` creates `state/hooks`.
