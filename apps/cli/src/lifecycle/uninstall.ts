@@ -1101,10 +1101,11 @@ export function createUninstallAdapters(input: {
           await releaseLeases();
           return global;
         }
-        let held = global;
+        // `drain_runners` holds every lease or threw, and a resumed run compensates before an artifact step,
+        // so a partial set here is a broken invariant, not a reason to drain again (W2-UNINST-6).
         if (leases.length !== uninstallLeasePaths(productHome).length) {
           await releaseLeases();
-          held = await drain(global);
+          refuse("lifecycle_lease_identity", ...present);
         }
         for (const lease of leases) {
           const entry = await guardedEntry(fs, lease.path);
@@ -1114,7 +1115,7 @@ export function createUninstallAdapters(input: {
             refuse("lifecycle_lease_identity", lease.path);
           }
         }
-        return held;
+        return global;
       },
       after: async (_plan, _index, step) => {
         if (!isArtifactStep(step)) return;
