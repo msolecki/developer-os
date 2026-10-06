@@ -751,6 +751,7 @@ class UpdateComposer {
     const restoreRows = this.#retainedMigrationRows(record.payloadId, rows);
     this.#preimageRows(owners, rows);
     const currentRows = await this.#migrationCurrentRows(rows);
+    this.#registrationRows(owners, rows);
 
     const foundationByOwner = owners.map((owner) => this.#ownerFoundation(owner, rows, OWNER_ROLLBACK_SLOTS));
     const migrations = retainedMigrations.map((migration) => this.#rollbackMigrationPlan(migration, restoreRows, currentRows, rows));
@@ -861,7 +862,8 @@ class UpdateComposer {
       }
       for (const restore of retained.values()) ops.push(this.#restoreOp(projection.owner, null, restore, await this.#deps.observe(restore.path), payloadId, target));
       const draft: OwnerUpdateDraftV1 = { owner: projection.owner, currentArtifacts: [], proposedOperations: [], externalEffects: [] };
-      built.push({ draft, id: projection.id, ops: ops.sort((left, right) => compareUtf8(left.targetPath, right.targetPath)), contentRows: new Map(), preimageRows: new Map(), foundation: [], plan: null, ref: null, effect: null });
+      // NEW-168: the retained inverse never carries the registration record the update rewrote.
+      built.push({ draft, id: projection.id, ops: this.#withRegistration(draft, ops, target.version), contentRows: new Map(), preimageRows: new Map(), foundation: [], plan: null, ref: null, effect: null });
     }
     return built;
   }
@@ -1161,7 +1163,7 @@ class UpdateComposer {
         if ((await this.#deps.observe(targetPath)) !== null) refuse("update_state_changed", EXIT_CODES.operationalFailure, targetPath);
         ops.push({ operation: "create", targetPath, current: null, after: after.get(targetPath) ?? null, before: { state: "absent" }, observed: null, content: this.#contentSpec(operation.content, 384) });
       }
-      built.push({ draft, id: parseSafeReasonCode(`owner_${draft.owner}`), ops: this.#withRegistration(draft, ops), contentRows: new Map(), preimageRows: new Map(), foundation: [], plan: null, ref: null, effect: null });
+      built.push({ draft, id: parseSafeReasonCode(`owner_${draft.owner}`), ops: this.#withRegistration(draft, ops, this.#input.inputs.target.version), contentRows: new Map(), preimageRows: new Map(), foundation: [], plan: null, ref: null, effect: null });
     }
     return built;
   }
@@ -1179,12 +1181,12 @@ class UpdateComposer {
   }
 
   /** P6(d): a changed Codex tree also rewrites `codex/registration.json` from the owner postimage. */
-  #withRegistration(draft: OwnerUpdateDraftV1, ops: OwnerOpV1[]): OwnerOpV1[] {
+  #withRegistration(draft: OwnerUpdateDraftV1, ops: OwnerOpV1[], productVersion: ReleaseIdentityV1["version"]): OwnerOpV1[] {
     const changed = ops.some((op) => op.operation !== "keep");
     if (draft.owner !== "codex" || !changed) return ops.sort((left, right) => compareUtf8(left.targetPath, right.targetPath));
     const homes = this.#deps.codexHomes ?? refuse("update_codex_unavailable", EXIT_CODES.capabilityUnavailable);
     const postimage = ops.flatMap((op) => (op.after === null ? [] : [op.after]));
-    const { artifact, bytes } = codexRegistrationRow({ homes, productVersion: this.#input.inputs.target.version, plannedAt: this.#plannedAt, ownerPostimage: postimage });
+    const { artifact, bytes } = codexRegistrationRow({ homes, productVersion, plannedAt: this.#plannedAt, ownerPostimage: postimage });
     const existing = ops.find((op) => op.targetPath === artifact.path);
     if (existing !== undefined && existing.operation !== "keep") refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal, artifact.path);
     const registration: OwnerOpV1 = existing === undefined

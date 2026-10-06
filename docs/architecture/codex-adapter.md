@@ -570,7 +570,10 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
     is admitted and a replaced binary refuses.
   - **The record.** The owner files step rewrites `codex/registration.json` to the postimage tree
     hash before the effect runs, so a failed refresh compensates the record with the tree and
-    `doctor` reads `registered` after a successful one.
+    `doctor` reads `registered` after a successful one. The retained inverse never holds the
+    record, so `update rollback --apply` rewrites it the same way from the restored tree whenever
+    the Codex leaf restores a file, and the rollback preview counts it as a replace (NEW-168,
+    `apps/cli/src/update/compose.test.ts`).
   - **Planning refuses** an update while the registration is `unregistered` or `stale`
     (`update_codex_registration_<state>`, exit 3) before allocation.
   - **Evidence:** `apps/cli/src/update/codex-refresh.test.ts` and the Codex rows of

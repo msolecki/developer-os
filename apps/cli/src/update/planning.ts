@@ -72,6 +72,7 @@ import type { ReleaseIndexDocumentV1, ReleaseKeyDelegationDocumentV1, TargetPlan
 
 import { compareManifestRows } from "../instructions/attach.js";
 import { requireCodexRegistered } from "./codex-refresh.js";
+import { codexRegistrationFile } from "../instructions/vendor-homes.js";
 import type { CliUpdateContext, UpdateScratchAttemptV1, UpdateTransportV1 } from "./context.js";
 
 /**
@@ -765,8 +766,11 @@ async function codexEffectOf(update: CliUpdateContext, draft: TargetUpdateDraftV
   };
 }
 
-/** Rollback's own direction: an update-created path is removed, an update-removed one created. */
-function ownerRollbackPreview(leaf: RetainedOwnerInverseProjectionV1, manifest: InstallationManifestV2): OwnerUpdatePreviewInputV1 {
+/**
+ * Rollback's own direction: an update-created path is removed, an update-removed one created. A
+ * Codex leaf that restores any file also replaces the registration record (P6(d), NEW-168).
+ */
+function ownerRollbackPreview(leaf: RetainedOwnerInverseProjectionV1, manifest: InstallationManifestV2, productHome: string): OwnerUpdatePreviewInputV1 {
   const paths = { create: [] as CanonicalAbsolutePathV1[], replace: [] as CanonicalAbsolutePathV1[], remove: [] as CanonicalAbsolutePathV1[], unchanged: [] as CanonicalAbsolutePathV1[] };
   const touched = new Set<string>();
   for (const operation of leaf.operations) {
@@ -774,6 +778,11 @@ function ownerRollbackPreview(leaf: RetainedOwnerInverseProjectionV1, manifest: 
     if (operation.restore.state === "absent") paths.remove.push(operation.path);
     else if (operation.expectedCurrent.state === "absent") paths.create.push(operation.path);
     else paths.replace.push(operation.path);
+  }
+  const registration = codexRegistrationFile(productHome);
+  if (leaf.owner === "codex" && leaf.operations.length > 0 && !touched.has(registration) && manifest.artifacts.some((row) => row.owner === "codex" && row.path === registration)) {
+    touched.add(registration);
+    paths.replace.push(registration as CanonicalAbsolutePathV1);
   }
   for (const row of manifest.artifacts) if (row.owner === leaf.owner && !touched.has(row.path)) paths.unchanged.push(row.path);
   return {
@@ -804,7 +813,7 @@ export async function planRollback(update: CliUpdateContext): Promise<UpdateRoll
     return buildRollbackPreview({
       current,
       target: record.previous,
-      owners: evidence.owners.map((leaf) => ownerRollbackPreview(leaf, home.manifest)),
+      owners: evidence.owners.map((leaf) => ownerRollbackPreview(leaf, home.manifest, update.productHome)),
       migrations: evidence.migrations.map((leaf): SchemaMigrationPreviewV1 => ({
         id: leaf.id,
         domain: leaf.domain,

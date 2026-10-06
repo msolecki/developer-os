@@ -25,7 +25,28 @@ import { describe, expect, it } from "vitest";
 import type { UpdateApplyComposeInputV1, UpdateRollbackComposeInputV1 } from "./apply.js";
 import { composeRollback, composeUpdate, updateApplyPrefixes, updateRollbackPrefixes, type ComposeDepsV1, type ObservedPathV1, type RollbackComposeDepsV1 } from "./compose.js";
 import { planRollback, prepareUpdate, UpdatePlanningRefusal } from "./planning.js";
-import { createUpdateFixture, DIRECTORY_PATH, FILE_A_PATH, FILE_B_PATH, NEW_A, NEW_B, OLD_A, OLD_B, PLANNED_AT, rollbackEvidenceFor, sha256, SYNTHETIC_EVIDENCE, SYNTHETIC_HOME } from "./testing.js";
+import {
+  CODEX_PLUGIN_FILE,
+  CODEX_PLUGIN_ROOT,
+  CODEX_REGISTRATION_PATH,
+  codexRegistrationBytes,
+  createUpdateFixture,
+  DIRECTORY_PATH,
+  FILE_A_PATH,
+  FILE_B_PATH,
+  NEW_A,
+  NEW_B,
+  NEW_PLUGIN,
+  OLD_A,
+  OLD_B,
+  OLD_PLUGIN,
+  PLANNED_AT,
+  rollbackEvidenceFor,
+  sha256,
+  SYNTHETIC_CODEX_HOMES,
+  SYNTHETIC_EVIDENCE,
+  SYNTHETIC_HOME,
+} from "./testing.js";
 
 const UID = 501;
 const COORDINATOR = `lc_${"a".repeat(64)}_10` as LifecycleCoordinatorIdV1;
@@ -223,6 +244,66 @@ async function rollbackFixture(): Promise<RollbackComposed> {
   return { input: { coordinatorId: COORDINATOR, home, preview }, world, deps };
 }
 
+/**
+ * NEW-168: the same home with a Codex owner whose update replaced `plugin.json` (and, by P6(d), the
+ * registration record). The retained Codex inverse restores only the plugin file, as `prepareInverse`
+ * builds it from the planner's operations.
+ */
+async function codexRollbackFixture(): Promise<RollbackComposed> {
+  const fixture = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0", codex: { registration: "registered" } });
+  const { rollback } = fixture.home;
+  if (rollback === null) throw new Error("the fixture retains a rollback");
+  const updated = codexRegistrationBytes(NEW_PLUGIN);
+  const manifest = {
+    ...fixture.home.manifest,
+    artifacts: fixture.home.manifest.artifacts.map((row) =>
+      row.path === CODEX_PLUGIN_FILE || row.path === CODEX_REGISTRATION_PATH
+        ? { ...row, verification: { ...row.verification, installedHash: sha256(row.path === CODEX_PLUGIN_FILE ? NEW_PLUGIN : updated) } }
+        : row),
+  } as InstallationManifestV2;
+  const home = { ...fixture.home, manifest };
+  const core = rollbackEvidenceFor(rollback);
+  const codexInverse = {
+    ...core.owners[0],
+    id: "owner_codex",
+    owner: "codex",
+    operations: [{
+      path: CODEX_PLUGIN_FILE,
+      expectedCurrent: { state: "file", mode: 384, bytes: NEW_PLUGIN.byteLength, sha256: sha256(NEW_PLUGIN), payload: null },
+      restore: {
+        state: "file",
+        mode: 384,
+        bytes: OLD_PLUGIN.byteLength,
+        sha256: sha256(OLD_PLUGIN),
+        payload: { chunks: [{ path: "blobs/0000000002.bin", bytes: OLD_PLUGIN.byteLength, sha256: sha256(OLD_PLUGIN) }], aggregateBytes: OLD_PLUGIN.byteLength, sha256: sha256(OLD_PLUGIN) },
+      },
+    }],
+  } as unknown as (typeof core.owners)[number];
+  const evidence = { ...core, owners: [...core.owners, codexInverse], payload: { ...core.payload, entryCount: 4, aggregateBytes: core.payload.aggregateBytes + OLD_PLUGIN.byteLength } };
+  const preview = await planRollback({ ...fixture.update, readHome: () => Promise.resolve(home), readRollbackEvidence: () => Promise.resolve(evidence) });
+  const base = await rollbackFixture();
+  const world = new Map(base.world);
+  const previous = rollback.previous;
+  world.set(`${SYNTHETIC_HOME}/state/update-rollback.json`, observed(`${SYNTHETIC_HOME}/state/update-rollback.json`, "regular_file", encoder.encode(encodeCanonicalJson(rollback as never))));
+  world.set(`${SYNTHETIC_HOME}/state/active-release.json`, observed(`${SYNTHETIC_HOME}/state/active-release.json`, "regular_file", encoder.encode(encodeCanonicalJson(home.active as never))));
+  world.set(previous.bundleRoot, observed(previous.bundleRoot, "directory", null));
+  [previous.delegationHash, previous.releaseIndexHash, previous.bundleManifestHash].forEach((hash, ordinal) => world.set(bundleMetadataPath(previous, ordinal), observedHash(bundleMetadataPath(previous, ordinal), hash, 64)));
+  const previousRelease = fixture.releases.get("1.0.0");
+  if (previousRelease === undefined) throw new Error("the fixture has 1.0.0");
+  world.set(`${SYNTHETIC_HOME}/installation-manifest.json`, observed(`${SYNTHETIC_HOME}/installation-manifest.json`, "regular_file", encoder.encode(encodeCanonicalJson(manifest as never))));
+  world.set(CODEX_PLUGIN_ROOT, observed(CODEX_PLUGIN_ROOT, "directory", null));
+  world.set(CODEX_PLUGIN_FILE, observed(CODEX_PLUGIN_FILE, "regular_file", NEW_PLUGIN));
+  world.set(CODEX_REGISTRATION_PATH, observed(CODEX_REGISTRATION_PATH, "regular_file", updated));
+  const deps: RollbackComposeDepsV1 = {
+    ...base.deps,
+    observe: (path) => Promise.resolve(world.get(path) ?? null),
+    codexHomes: SYNTHETIC_CODEX_HOMES,
+    previousBundle: previousRelease.manifest,
+    retained: { owners: evidence.owners, migrations: evidence.migrations, entryCount: evidence.payload.entryCount, aggregateBytes: evidence.payload.aggregateBytes },
+  };
+  return { input: { coordinatorId: COORDINATOR, home, preview }, world, deps };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- a typed view over one hash-checked plan row
 function leafOf<T>(composed: Awaited<ReturnType<typeof composeRollback>>, planKind: string): T {
   const row = composed.construction.files.find((file) => file.role.kind === "immutable_plan" && file.role.planKind === planKind);
@@ -338,6 +419,34 @@ describe("composeRollback (Spec 2 §10.2, D72 P9)", () => {
     const { input, deps } = await rollbackFixture();
     const composed = await composeRollback(input, deps);
     expect(composed.capacity).toMatchObject({ operation: "rollback", availableBytes: "0", availableEntries: "0" });
+  });
+
+  /**
+   * NEW-168: the update rewrote `codex/registration.json` (P6(d)) outside the retained inverse, so a
+   * rollback that restored only the plugin tree kept the update's `treeHash` and left Codex `stale`.
+   */
+  it("rewrites the Codex registration record from the restored plugin tree", async () => {
+    const { input, deps } = await codexRollbackFixture();
+    expect(input.preview.owners.find((owner) => owner.owner === "codex")?.paths.replace).toEqual([CODEX_PLUGIN_FILE, CODEX_REGISTRATION_PATH]);
+    const composed = await composeRollback(input, deps);
+    expect(validateConstructionBijections(composed.construction)).toBe(true);
+    const codex = composed.construction.files.flatMap((file) => {
+      if (file.role.kind !== "immutable_plan" || file.role.planKind !== "owner_update") return [];
+      const bytes = composed.sources.rowBytes.get(file.ordinal);
+      const plan = bytes === undefined ? null : (decodeCanonicalJson(bytes, bytes.byteLength) as unknown as OwnerUpdatePlanV1);
+      return plan?.owner === "codex" ? [plan] : [];
+    })[0];
+    const restored = sha256(codexRegistrationBytes(OLD_PLUGIN));
+    expect(Object.fromEntries(codex?.operations.map((operation) => [operation.targetPath, operation.operation]) ?? [])).toEqual({
+      [CODEX_PLUGIN_ROOT]: "keep",
+      [CODEX_PLUGIN_FILE]: "replace",
+      [CODEX_REGISTRATION_PATH]: "replace",
+    });
+    const registration = codex?.operations.find((operation) => operation.targetPath === CODEX_REGISTRATION_PATH);
+    expect(registration?.content?.sha256).toBe(restored);
+    expect(registration?.afterArtifact?.verification).toMatchObject({ mode: "schema", installedHash: restored });
+    const [transitional] = manifestsOf(composed);
+    expect(transitional?.artifacts.find((row) => row.path === CODEX_REGISTRATION_PATH)?.verification).toMatchObject({ installedHash: restored });
   });
 
   it("refuses an owner file edited after the preview, before any row is derived", async () => {

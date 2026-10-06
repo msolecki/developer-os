@@ -76,10 +76,13 @@ export const claudeInstructionPaths = (homes: VendorHomesV1) => {
   } as const;
 };
 
+/** The record `init` writes for the installed Codex plugin tree; it lives under the product home. */
+export const codexRegistrationFile = (productHome: string): string => join(productHome, "codex", "registration.json");
+
 export const codexInstructionPaths = (homes: VendorHomesV1) =>
   ({
     agentsDir: join(homes.codexHome, "agents"),
     instructionFile: join(homes.codexHome, "AGENTS.md"),
     pluginRoot: join(homes.productHome, "codex", "plugins", "developer-os"),
-    registrationFile: join(homes.productHome, "codex", "registration.json"),
+    registrationFile: codexRegistrationFile(homes.productHome),
   }) as const;
