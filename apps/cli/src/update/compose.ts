@@ -164,7 +164,7 @@ import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import type { UpdateApplyComposeInputV1, UpdateApplyCompositionV1, UpdateRollbackComposeInputV1 } from "./apply.js";
 import { codexRegistrationRow } from "./codex-refresh.js";
 import { deriveTerminalManifest } from "./manifest-handler.js";
-import { UpdatePlanningRefusal } from "./planning.js";
+import { rollbackCapacityComponents, UpdatePlanningRefusal } from "./planning.js";
 import type { MaterializedUpdateV1 } from "./planning.js";
 
 /** A no-follow observation of one path; `sha256` is present exactly for a regular file. */
@@ -482,7 +482,6 @@ const OWNER_APPLY_SLOTS: FoundationSlotsV1 = { forward: "owner_forward_files", c
 const OWNER_ROLLBACK_SLOTS: FoundationSlotsV1 = { forward: "owner_inverse_files", compensation: "owner_inverse_files" };
 const SCHEMA_ROLLBACK_SLOTS: FoundationSlotsV1 = { forward: "schema_inverse", compensation: "schema_inverse" };
 const RETAINED_BLOB_PATH = /^blobs\/([0-9]{10})\.bin$/u;
-const MiB = 1_048_576;
 
 class UpdateComposer {
   readonly #source: ComposerSourceV1;
@@ -1121,16 +1120,9 @@ class UpdateComposer {
    */
   #rollbackCapacity(): UpdateCapacityInputV1 {
     const { retained } = this.#rollback.deps;
-    const leaves = retained.owners.length + retained.migrations.length;
-    const component = (kind: UpdateCapacityInputV1["components"][number]["kind"], bytes: number, entries: number): UpdateCapacityInputV1["components"][number] => ({ kind, bytes: parseUInt64Decimal(String(bytes)), entries: parseUInt64Decimal(String(entries)) });
     return {
       operation: "rollback",
-      components: [
-        component("transaction_staging", retained.aggregateBytes, retained.entryCount),
-        component("backups", retained.aggregateBytes, retained.entryCount),
-        component("journals", 64 * MiB + (leaves + 4) * MiB, leaves + 5),
-        component("terminal_compaction_headroom", 64 * MiB, 1),
-      ],
+      components: rollbackCapacityComponents(retained.aggregateBytes, retained.entryCount, retained.owners.length + retained.migrations.length),
       reservationGranularityBytes: parseUInt64Decimal("1"),
       availableBytes: parseUInt64Decimal("0"),
       availableEntries: parseUInt64Decimal("0"),

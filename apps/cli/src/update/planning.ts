@@ -528,6 +528,16 @@ function component(kind: UpdateCapacityComponentV1["kind"], bytes: bigint | numb
   return { kind, bytes: parseUInt64Decimal(BigInt(bytes).toString(10)), entries: parseUInt64Decimal(BigInt(entries).toString(10)) };
 }
 
+/** Rollback's capacity components (§10.2): the retained restore set twice, one journal per leaf plus four, and compaction headroom. */
+export function rollbackCapacityComponents(restoreBytes: number, restoreEntries: number, leaves: number): readonly UpdateCapacityComponentV1[] {
+  return [
+    component("transaction_staging", restoreBytes, restoreEntries),
+    component("backups", restoreBytes, restoreEntries),
+    component("journals", COORDINATOR_JOURNAL_BYTES + (leaves + 4) * PARTICIPANT_JOURNAL_BYTES, leaves + 5),
+    component("terminal_compaction_headroom", COORDINATOR_JOURNAL_BYTES, 1),
+  ];
+}
+
 function manifestTotals(manifest: ReleaseBundleManifestV1): { readonly bytes: bigint; readonly entries: number } {
   let bytes = 0n;
   for (const entry of manifest.entries) if (entry.kind === "file") bytes += BigInt(entry.bytes);
@@ -811,8 +821,6 @@ export async function planRollback(update: CliUpdateContext): Promise<UpdateRoll
   });
   const evidence = await update.readRollbackEvidence(home, record);
   const observation = await update.capacity();
-  const leaves = evidence.owners.length + evidence.migrations.length;
-  const restoreBytes = evidence.payload.aggregateBytes;
   try {
     return buildRollbackPreview({
       current,
@@ -828,12 +836,7 @@ export async function planRollback(update: CliUpdateContext): Promise<UpdateRoll
       payload: evidence.payload,
       capacity: {
         operation: "rollback",
-        components: [
-          component("transaction_staging", restoreBytes, evidence.payload.entryCount),
-          component("backups", restoreBytes, evidence.payload.entryCount),
-          component("journals", COORDINATOR_JOURNAL_BYTES + (leaves + 4) * PARTICIPANT_JOURNAL_BYTES, leaves + 5),
-          component("terminal_compaction_headroom", COORDINATOR_JOURNAL_BYTES, 1),
-        ],
+        components: rollbackCapacityComponents(evidence.payload.aggregateBytes, evidence.payload.entryCount, evidence.owners.length + evidence.migrations.length),
         reservationGranularityBytes: observation.reservationGranularityBytes,
         availableBytes: observation.availableBytes,
         availableEntries: observation.availableEntries,
