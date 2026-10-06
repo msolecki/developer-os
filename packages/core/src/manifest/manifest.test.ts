@@ -293,14 +293,20 @@ describe("ManifestStore", () => {
     }
   });
 
-  it("writes canonical V2 bytes only through an admission context", async () => {
-    const fixture = await createFixture("write-v2");
+  it("lets a code defect in the admission callback escape instead of reporting a malformed manifest (NEW-92)", async () => {
+    const fixture = await createFixture("defect-escapes");
     const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs, guards: storeGuards });
-    const manifest = v2Manifest(fixture.manifestFile);
     try {
-      await store.writeV2(manifest, storeAdmission());
-      expect(await nodeFs.readFile(fixture.manifestFile, "utf8")).toBe(encodeCanonicalJson(manifest as never));
-      expect(await store.read(storeAdmission())).toStrictEqual(manifest);
+      await nodeFs.writeFile(fixture.manifestFile, encodeCanonicalJson(v2Manifest(fixture.manifestFile) as never), { mode: 0o600 });
+      const defective: ManifestAdmissionContextV1 = {
+        ...storeAdmission(),
+        admitOwnerPath: () => { throw new TypeError("defect in the owner-path callback"); },
+      };
+      const error: unknown = await store.readOptional(defective).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(TypeError);
+      expect(error).not.toBeInstanceOf(ManifestStateError);
+      await nodeFs.writeFile(fixture.manifestFile, "{not json", { mode: 0o600 });
+      await expect(store.readOptional(storeAdmission())).rejects.toBeInstanceOf(ManifestStateError);
     } finally {
       await removeFixture(fixture);
     }
