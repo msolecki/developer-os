@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { EXIT_CODES } from "@developer-os/core";
 
 import { runJson } from "../../helpers/run-cli.js";
+import { assistantToolUses, drivesCli } from "../../helpers/stream-json.js";
 import {
   addedPaths,
   createTempHome,
@@ -172,6 +173,9 @@ describe("the five brain workflows on a real Claude Code", () => {
       // Kept beside the rows file so a failed billed run can be diagnosed without paying again.
       await writeFile(join(tmpdir(), `brain-vendor-${id}.jsonl`), stdout, "utf8");
       expect(stdout).toMatch(/(DEV|INFRA|PROJECTS|TOOLS)\/example-[a-z-]+\.md/u);
+      // The path alone proves nothing: the brain-enhance prompt contains one, and `Read` is allowed.
+      // The skill must have been invoked and the product CLI driven through Bash (TEST-4).
+      expect(drivesCli(assistantToolUses(stdout), `developer-os-${id}`)).toStrictEqual({ skill: true, cli: true });
 
       // The vendor's own home state, the child's TMPDIR, and the product's
       // transaction bookkeeping are not the workflow's writes; the same
