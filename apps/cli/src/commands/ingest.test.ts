@@ -997,7 +997,7 @@ describe("runIngest, the status ladder", () => {
     expect(index).toContain("DEV/findable.md");
   });
 
-  it("processes captures in captureId order, so two runs do the same work in the same sequence", async () => {
+  it("processes captures in captureId order when no refusal is on record, so two runs do the same work in the same sequence", async () => {
     const fixture = await installedFixture("ingest-order");
     const seeded = [
       await fixture.seedAccepted("the first observation"),
