@@ -446,6 +446,60 @@ describe("runDoctor", () => {
     expect(codex?.message).not.toContain("/hooks");
   });
 
+  /**
+   * NEW-158 (`hooks.md` §3.6): `plugin_hooks` resolves from any firing record of the vendor and
+   * `session_start_injection` from its `inject` record, in the unprobed run too. Doctor read the
+   * records for `hooks` but never handed them to the capability reports, so both stayed `unknown`.
+   */
+  it("resolves plugin_hooks and session_start_injection from each vendor's firing records", async () => {
+    const runner: ProcessRunner = {
+      run(request): Promise<ProcessResult> {
+        const version = request.executable === "/opt/synthetic/bin/codex" ? "codex-cli 0.155.1" : "2.1.280 (Claude Code)";
+        return Promise.resolve({
+          stdout: request.args[0] === "--version" ? version : "",
+          stderr: "",
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+        });
+      },
+    };
+    const fixture = await createCommandFixture("doctor-firing-capabilities", {
+      runner,
+      agents: {
+        claude: { name: "claude", installed: true, executablePath: "/opt/synthetic/bin/claude", version: null },
+        codex: { name: "codex", installed: true, executablePath: "/opt/synthetic/bin/codex", version: null },
+      },
+    });
+    await runInit(fixture.context, ACCEPTED);
+    const before = await runDoctorReport(fixture.context);
+    for (const id of ["claude-capabilities", "codex-capabilities"]) {
+      const message = before.checks.find((check) => check.id === id)?.message;
+      expect(message).toContain("plugin_hooks=unknown");
+      expect(message).toContain("session_start_injection=unknown");
+    }
+    const directory = join(fixture.paths.stateDir, "hooks");
+    await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
+    for (const [vendor, rows] of [["claude", CLAUDE_HOOK_ROWS], ["codex", CODEX_HOOK_ROWS]] as const) {
+      const event = rows.find((row) => row.verb === "inject")?.event;
+      if (event === undefined) throw new Error(`no inject row for ${vendor}`);
+      const lastSeen = "2026-10-06T09:00:00.000Z";
+      await nodeFs.writeFile(
+        join(directory, hookFiringRecordName(vendor, "inject")),
+        encodeHookFiringRecord({ schemaVersion: 1, vendor, event, productVersion: "0.0.0-test", firstSeen: lastSeen, lastSeen }),
+        { mode: 0o600 },
+      );
+    }
+
+    const report = await runDoctorReport(fixture.context);
+
+    for (const id of ["claude-capabilities", "codex-capabilities"]) {
+      const message = report.checks.find((check) => check.id === id)?.message;
+      expect(message, id).toContain("plugin_hooks=yes");
+      expect(message, id).toContain("session_start_injection=yes");
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("reports an uninitialized machine as an operational failure", async () => {
     const fixture = await createCommandFixture("doctor-fresh");
 
