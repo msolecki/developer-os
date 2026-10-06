@@ -11,6 +11,13 @@ import type { PreparedUpdateCandidateV1, RollbackPayloadEntryV1, RollbackPayload
 import { parseRollbackPayloadId } from "./preview.js";
 import { parseBundleRelativePath, type BundleRelativePathV1, type ReleaseIdentityV1 } from "./release.js";
 import {
+  exact,
+  fail,
+  integer,
+  list,
+  nullableInteger,
+  oneOf,
+  record,
   encodeTenDigitOrdinal,
   parseLowerHexSha256,
   parseSafeReasonCode,
@@ -420,42 +427,6 @@ const JOURNAL_KEYS = ["schemaVersion", "coordinatorId", "constructionPlanHash", 
 const EVIDENCE_KEYS = ["schemaVersion", "coordinatorId", "constructionPlanHash", "ordinal", "pathHash", "bytes", "sha256", "mode", "dev", "ino"];
 const GUARDED_PREIMAGE_KEYS = ["kind", "authority", "path", "ownerUid", "mode", "nlink", "bytes", "sha256", "dev", "ino"];
 const PLAN_REF_KEYS = ["kind", "id", "path", "hash", "bytes"];
-
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
-function record(value: unknown, label: string): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
-  return value as Readonly<Record<string, unknown>>;
-}
-
-/** Exact key set: no unknown, missing, or duplicate key survives canonical decoding either. */
-function exact(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
-  const input = record(value, label);
-  const present = Object.keys(input);
-  if (present.length !== keys.length || present.some((key) => !keys.includes(key))) fail(`${label}: keys`);
-  return input;
-}
-
-function list(value: unknown, minimum: number, maximum: number, label: string): readonly unknown[] {
-  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) fail(label);
-  return value as readonly unknown[];
-}
-
-function integer(value: unknown, minimum: number, maximum: number, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) fail(label);
-  return value;
-}
-
-function nullableInteger(value: unknown, minimum: number, maximum: number, label: string): number | null {
-  return value === null ? null : integer(value, minimum, maximum, label);
-}
-
-function oneOf<T>(value: unknown, allowed: readonly T[], label: string): T {
-  if (!allowed.includes(value as T)) fail(label);
-  return value as T;
-}
 
 function sha256Hex(bytes: Uint8Array | string): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;

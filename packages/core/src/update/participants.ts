@@ -21,6 +21,11 @@ import {
 } from "./paths.js";
 import { parseBundleRelativePath, type BundleRelativePathV1, type ReleaseIdentityV1 } from "./release.js";
 import {
+  exact,
+  fail,
+  integer,
+  nullableInteger,
+  record,
   parseLowerHexSha256,
   parsePositiveUInt32,
   parseSafeReasonCode,
@@ -176,10 +181,6 @@ const OWNER_SLOTS = {
 } as const;
 const OWNER_JOURNAL_PHASES: readonly OwnerUpdateJournalV1["phase"][] = ["planned", "files_applying", "effects_applying", "verified", "compensating", "finalized", "rolled_back", "compacting"];
 
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
 function canonical(value: unknown): string {
   return encodeCanonicalJson(value as CanonicalJsonValue);
 }
@@ -197,27 +198,6 @@ export function updateParticipantDocumentBytes(value: unknown): Uint8Array {
 /** The immutable plan ref hash (D72 P7(a)): §9.2's `developer-os/update-leaf/<kind>/v1\0` domain over the exact persisted bytes. */
 export function updateParticipantDocumentHash(kind: UpdateLeafPlanKindV1, value: unknown): LowerHexSha256 {
   return updateLeafPlanHash(kind, updateParticipantDocumentBytes(value));
-}
-
-function record(value: unknown, label: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
-  return value as Record<string, unknown>;
-}
-
-function exactKeys(value: unknown, keys: readonly string[], label: string): Record<string, unknown> {
-  const input = record(value, label);
-  const actual = Object.keys(input);
-  if (actual.length !== keys.length || actual.some((key) => !keys.includes(key))) fail(`${label}: keys`);
-  return input;
-}
-
-function integer(value: unknown, minimum: number, maximum: number, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) fail(label);
-  return value;
-}
-
-function nullableInteger(value: unknown, minimum: number, maximum: number, label: string): number | null {
-  return value === null ? null : integer(value, minimum, maximum, label);
 }
 
 function parentOf(path: string): string {
@@ -243,33 +223,33 @@ export function ownerInverseOperationHash(projection: { readonly owner: Artifact
 function pathState(value: unknown, label: string): PersistedManagedPathStateV1 {
   const state = record(value, label).state;
   if (state === "absent") {
-    exactKeys(value, ["state"], label);
+    exact(value, ["state"], label);
     return { state: "absent" };
   }
   if (state === "ephemeral_present") {
-    const input = exactKeys(value, ["state", "mode", "dev", "ino"], label);
+    const input = exact(value, ["state", "mode", "dev", "ino"], label);
     if (input.mode !== 384) fail(`${label}.mode`);
     return { state: "ephemeral_present", mode: 384, dev: parseUInt64Decimal(input.dev), ino: parseUInt64Decimal(input.ino) };
   }
   if (state === "file") {
-    const input = exactKeys(value, ["state", "mode", "hash", "bytes", "dev", "ino"], label);
+    const input = exact(value, ["state", "mode", "hash", "bytes", "dev", "ino"], label);
     if (input.mode !== 384 && input.mode !== 448) fail(`${label}.mode`);
     return { state: "file", mode: input.mode, hash: parseLowerHexSha256(input.hash), bytes: integer(input.bytes, 0, 536_870_912, `${label}.bytes`), dev: parseUInt64Decimal(input.dev), ino: parseUInt64Decimal(input.ino) };
   }
   if (state === "directory") {
-    const input = exactKeys(value, ["state", "mode", "dev", "ino"], label);
+    const input = exact(value, ["state", "mode", "dev", "ino"], label);
     if (input.mode !== 448) fail(`${label}.mode`);
     return { state: "directory", mode: 448, dev: parseUInt64Decimal(input.dev), ino: parseUInt64Decimal(input.ino) };
   }
   if (state === "symlink") {
-    const input = exactKeys(value, ["state", "targetBytes", "targetHash", "dev", "ino"], label);
+    const input = exact(value, ["state", "targetBytes", "targetHash", "dev", "ino"], label);
     return { state: "symlink", targetBytes: integer(input.targetBytes, 0, 4_096, `${label}.targetBytes`), targetHash: parseLowerHexSha256(input.targetHash), dev: parseUInt64Decimal(input.dev), ino: parseUInt64Decimal(input.ino) };
   }
   return fail(`${label}.state`);
 }
 
 function payloadRef(value: unknown, plan: Pick<OwnerUpdatePlanV1, "coordinatorId">, context: OwnerUpdatePlanContextV1, label: string): UpdatePayloadRefV1 {
-  const input = exactKeys(value, ["kind", "coordinatorId", "ordinal", "path", "bytes", "sha256", "mode"], label);
+  const input = exact(value, ["kind", "coordinatorId", "ordinal", "path", "bytes", "sha256", "mode"], label);
   if (input.kind !== "update_expected" || input.coordinatorId !== plan.coordinatorId) fail(`${label}: not this coordinator's payload`);
   const ordinal = integer(input.ordinal, 0, 1_099_999, `${label}.ordinal`);
   if (input.path !== deriveUpdatePayloadPath(context.productHome, plan.coordinatorId as string as SafeReasonCodeV1, ordinal)) fail(`${label}.path`);
@@ -305,7 +285,7 @@ function checkEphemeralOperation(operation: PersistedOwnerChangeOperationV1, bef
  * parent chain is kept directory rows of the same owner.
  */
 function checkOperation(operation: PersistedOwnerChangeOperationV1, plan: OwnerUpdatePlanV1, context: OwnerUpdatePlanContextV1, label: string): void {
-  exactKeys(operation, ["operation", "owner", "targetPath", "expectedBefore", "afterArtifact", "content"], label);
+  exact(operation, ["operation", "owner", "targetPath", "expectedBefore", "afterArtifact", "content"], label);
   if (operation.owner !== plan.owner) fail(`${label}.owner`);
   parseCanonicalAbsolutePathText(operation.targetPath);
   const before = pathState(operation.expectedBefore, `${label}.expectedBefore`);
@@ -387,7 +367,7 @@ function checkOwnerFoundation(plan: OwnerUpdatePlanV1, context: OwnerUpdatePlanC
  */
 export function validateOwnerUpdatePlan(value: unknown, context: OwnerUpdatePlanContextV1): OwnerUpdatePlanV1 {
   const label = "OwnerUpdatePlanV1";
-  const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "owner", "currentPartitionHash", "operations", "foundation", "externalEffects", "inverseOperationHash", "maximumPlanBytes"], label);
+  const input = exact(value, ["schemaVersion", "id", "coordinatorId", "owner", "currentPartitionHash", "operations", "foundation", "externalEffects", "inverseOperationHash", "maximumPlanBytes"], label);
   const plan = value as OwnerUpdatePlanV1;
   if (input.schemaVersion !== 1) fail(`${label}.schemaVersion`);
   parseSafeReasonCode(plan.id);
@@ -452,7 +432,7 @@ function journalHeader(input: Record<string, unknown>, plan: { readonly id: stri
  */
 export function validateOwnerUpdateJournal(value: unknown, plan: OwnerUpdatePlanV1): OwnerUpdateJournalV1 {
   const label = "OwnerUpdateJournalV1";
-  const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "nextForwardFoundation", "nextExternalEffect", "compensationNext", "compactionNext", "createdAt", "updatedAt"], label);
+  const input = exact(value, ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "nextForwardFoundation", "nextExternalEffect", "compensationNext", "compactionNext", "createdAt", "updatedAt"], label);
   const { createdAt, updatedAt } = journalHeader(input, plan, updateParticipantDocumentHash("owner_update", plan), label);
   if (!OWNER_JOURNAL_PHASES.includes(input.phase as OwnerUpdateJournalV1["phase"])) fail(`${label}.phase`);
   const phase = input.phase as OwnerUpdateJournalV1["phase"];
@@ -585,7 +565,7 @@ export function parseOwnerExternalEffectLiteral(value: unknown): OwnerExternalEf
 
 /** Spec 2 §9.2: `developer-os/codex-registration-projection/v1\0` plus the no-LF projection. */
 export function codexRegistrationProjectionHash(projection: CodexRegistrationProjectionV1): LowerHexSha256 {
-  const input = exactKeys(projection, ["pluginId", "enabled", "protocol", "version", "source"], "CodexRegistrationProjectionV1");
+  const input = exact(projection, ["pluginId", "enabled", "protocol", "version", "source"], "CodexRegistrationProjectionV1");
   parseSafeReasonCode(input.pluginId);
   if (typeof input.enabled !== "boolean") fail("CodexRegistrationProjectionV1.enabled");
   parsePositiveUInt32(input.protocol);
@@ -596,10 +576,10 @@ export function codexRegistrationProjectionHash(projection: CodexRegistrationPro
 
 function validateProcessPolicy(value: unknown): OwnerExternalEffectProcessPolicyV1 {
   const label = "OwnerExternalEffectProcessPolicyV1";
-  const input = exactKeys(value, ["kind", "providerProtocol", "executable", "executableIdentity", "argv", "cwd", "environment", "stdin", "network", "model", "stdoutBytes", "stderrBytes", "wallMilliseconds", "idleMilliseconds", "processCount"], label);
+  const input = exact(value, ["kind", "providerProtocol", "executable", "executableIdentity", "argv", "cwd", "environment", "stdin", "network", "model", "stdoutBytes", "stderrBytes", "wallMilliseconds", "idleMilliseconds", "processCount"], label);
   if (input.kind !== "codex_registration_refresh" || input.executable !== "pinned_codex_cli" || input.cwd !== "managed_plugin_root") fail(`${label}: not the closed Codex refresh`);
   parsePositiveUInt32(input.providerProtocol);
-  const identity = exactKeys(input.executableIdentity, ["dev", "ino", "mode", "sha256"], `${label}.executableIdentity`);
+  const identity = exact(input.executableIdentity, ["dev", "ino", "mode", "sha256"], `${label}.executableIdentity`);
   const mode = integer(identity.mode, 0, 0o777, `${label}.executableIdentity.mode`);
   if ((mode & 0o022) !== 0 || (mode & 0o100) === 0) fail(`${label}.executableIdentity.mode: writable by others or not executable`);
   parseLowerHexSha256(identity.sha256);
@@ -607,7 +587,7 @@ function validateProcessPolicy(value: unknown): OwnerExternalEffectProcessPolicy
   parseUInt64Decimal(identity.ino);
   if (!Array.isArray(input.argv) || input.argv.length < 1 || input.argv.length > 64) fail(`${label}.argv: count`);
   for (const [index, arg] of (input.argv as unknown[]).entries()) {
-    const row = exactKeys(arg, ["kind", "value"], `${label}.argv[${String(index)}]`);
+    const row = exact(arg, ["kind", "value"], `${label}.argv[${String(index)}]`);
     if (row.kind === "literal") parseOwnerExternalEffectLiteral(row.value);
     else if (row.kind !== "token" || !ARG_TOKENS.includes(row.value as string)) fail(`${label}.argv[${String(index)}]`);
   }
@@ -632,7 +612,7 @@ export function ownerExternalEffectProcessPolicyHash(policy: OwnerExternalEffect
  */
 export function validateOwnerExternalEffectPlan(value: unknown, owner: OwnerUpdatePlanV1): OwnerExternalEffectPlanV1 {
   const label = "OwnerExternalEffectPlanV1";
-  const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "kind", "owner", "providerProtocol", "fileParticipantIds", "expectedStateHash", "proposedStateHash", "processPolicy", "processPolicyHash", "forwardPayloads", "compensationPayloads", "maximumPlanBytes", "maximumJournalBytes", "maximumEvidenceBytes"], label);
+  const input = exact(value, ["schemaVersion", "id", "coordinatorId", "kind", "owner", "providerProtocol", "fileParticipantIds", "expectedStateHash", "proposedStateHash", "processPolicy", "processPolicyHash", "forwardPayloads", "compensationPayloads", "maximumPlanBytes", "maximumJournalBytes", "maximumEvidenceBytes"], label);
   const plan = value as OwnerExternalEffectPlanV1;
   if (input.schemaVersion !== 1 || input.kind !== "codex_registration_refresh" || input.owner !== "codex" || owner.owner !== "codex") fail(`${label}: not the closed Codex refresh`);
   parseLeafPlanId("owner_external_effect", plan.id);
@@ -660,7 +640,7 @@ export function validateOwnerExternalEffectPlan(value: unknown, owner: OwnerUpda
  */
 export function validateOwnerExternalEffectJournal(value: unknown, plan: OwnerExternalEffectPlanV1): OwnerExternalEffectJournalV1 {
   const label = "OwnerExternalEffectJournalV1";
-  const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "direction", "nextTransition", "evidenceHash", "createdAt", "updatedAt"], label);
+  const input = exact(value, ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "direction", "nextTransition", "evidenceHash", "createdAt", "updatedAt"], label);
   const { createdAt, updatedAt } = journalHeader(input, plan, updateParticipantDocumentHash("owner_external_effect", plan), label);
   if (!EFFECT_JOURNAL_PHASES.includes(input.phase as OwnerExternalEffectJournalV1["phase"])) fail(`${label}.phase`);
   const phase = input.phase as OwnerExternalEffectJournalV1["phase"];
@@ -686,7 +666,7 @@ export function ownerExternalEffectEvidenceHash(evidence: OwnerExternalEffectEvi
 
 export function validateOwnerExternalEffectEvidence(value: unknown, plan: OwnerExternalEffectPlanV1, direction: "forward" | "compensating", observedStateHash: LowerHexSha256): OwnerExternalEffectEvidenceV1 {
   const label = "OwnerExternalEffectEvidenceV1";
-  const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "planHash", "direction", "observedStateHash", "processPolicyHash", "exitCode", "redactedStdoutHash", "redactedStderrHash", "completedAt"], label);
+  const input = exact(value, ["schemaVersion", "id", "coordinatorId", "planHash", "direction", "observedStateHash", "processPolicyHash", "exitCode", "redactedStdoutHash", "redactedStderrHash", "completedAt"], label);
   if (input.schemaVersion !== 1 || input.id !== plan.id || input.coordinatorId !== plan.coordinatorId || input.planHash !== updateParticipantDocumentHash("owner_external_effect", plan)) fail(`${label}: not this plan's evidence`);
   if (input.direction !== direction || input.observedStateHash !== observedStateHash || input.processPolicyHash !== plan.processPolicyHash || input.exitCode !== 0) fail(`${label}: not the expected observation`);
   parseLowerHexSha256(input.redactedStdoutHash);
@@ -803,10 +783,10 @@ export function canonicalStatePhaseAfter(nextTransition: number): UpdateStatePar
 
 function stateFileState(value: unknown, plan: Pick<CanonicalStateFilePlanV1, "coordinatorId" | "role" | "id">, productHome: CanonicalAbsolutePathV1, side: "before" | "after", label: string): CanonicalStateFileStateV1 {
   if (record(value, label).state === "absent") {
-    exactKeys(value, ["state"], label);
+    exact(value, ["state"], label);
     return { state: "absent" };
   }
-  const input = exactKeys(value, side === "before" ? ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size", "dev", "ino"] : ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size"], label);
+  const input = exact(value, side === "before" ? ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size", "dev", "ino"] : ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size"], label);
   if (input.state !== "present" || input.mode !== 384 || input.nlink !== 1) fail(label);
   const hash = parseLowerHexSha256(input.hash);
   const size = integer(input.size, 1, MAX_STATE_BYTES, `${label}.size`);
@@ -816,7 +796,7 @@ function stateFileState(value: unknown, plan: Pick<CanonicalStateFilePlanV1, "co
     parseUInt64Decimal(input.ino);
     if (input.payload !== null) fail(`${label}.payload: a preimage carries no payload`);
   } else {
-    const payload = exactKeys(input.payload, ["kind", "coordinatorId", "ordinal", "path", "hash", "bytes", "mode"], `${label}.payload`);
+    const payload = exact(input.payload, ["kind", "coordinatorId", "ordinal", "path", "hash", "bytes", "mode"], `${label}.payload`);
     if (payload.kind !== "update_expected" || payload.coordinatorId !== plan.coordinatorId || payload.mode !== 384) fail(`${label}.payload`);
     integer(payload.ordinal, 0, 1_099_999, `${label}.payload.ordinal`);
     if (payload.path !== deriveCanonicalStatePayloadPath(productHome, plan.coordinatorId as string as SafeReasonCodeV1, plan.role, plan.id)) fail(`${label}.payload.path`);
@@ -832,7 +812,7 @@ function stateFileState(value: unknown, plan: Pick<CanonicalStateFilePlanV1, "co
  */
 export function validateCanonicalStateFilePlan(value: unknown, productHome: CanonicalAbsolutePathV1): CanonicalStateFilePlanV1 {
   const label = "CanonicalStateFilePlanV1";
-  const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "role", "path", "tombstonePath", "before", "after", "reversal", "maximumPlanBytes", "maximumJournalBytes"], label);
+  const input = exact(value, ["schemaVersion", "id", "coordinatorId", "role", "path", "tombstonePath", "before", "after", "reversal", "maximumPlanBytes", "maximumJournalBytes"], label);
   const plan = value as CanonicalStateFilePlanV1;
   if (input.schemaVersion !== 1) fail(`${label}.schemaVersion`);
   parseSafeReasonCode(plan.id);
@@ -867,7 +847,7 @@ export function isRetainedRecordVerification(plan: CanonicalStateFilePlanV1): bo
  */
 export function validateStateParticipantJournal<TKind extends UpdateStateLeafKindV1>(value: unknown, kind: TKind, plan: { readonly id: string; readonly coordinatorId: LifecycleCoordinatorIdV1; readonly retainedVerification?: boolean }, planHash: LowerHexSha256): UpdateStateParticipantJournalV1<TKind> {
   const label = "UpdateStateParticipantJournalV1";
-  const input = exactKeys(value, ["schemaVersion", "kind", "id", "coordinatorId", "planHash", "phase", "nextTransition", "compensationNext", "createdAt", "updatedAt"], label);
+  const input = exact(value, ["schemaVersion", "kind", "id", "coordinatorId", "planHash", "phase", "nextTransition", "compensationNext", "createdAt", "updatedAt"], label);
   if (input.kind !== kind) fail(`${label}.kind`);
   const id = parseLeafPlanId(kind, input.id);
   const { createdAt, updatedAt } = journalHeader(input, plan, planHash, label);
@@ -965,7 +945,7 @@ export interface TargetVerificationContextV1 {
 /** Admits only the signed bundle verifier, the recomputed postimage digests, and the fixed caps. */
 export function validateTargetVerificationPlan(value: unknown, context: TargetVerificationContextV1): TargetVerificationPlanV1 {
   const label = "TargetVerificationPlanV1";
-  const input = exactKeys(value, ["schemaVersion", "id", "coordinatorId", "release", "verifierEntrypoint", "manifestHash", "ownerPostimagesHash", "migrationPostimagesHash", "inputBytes", "stdoutBytes", "stderrBytes", "idleMilliseconds", "wallMilliseconds", "processCount", "readOnly"], label);
+  const input = exact(value, ["schemaVersion", "id", "coordinatorId", "release", "verifierEntrypoint", "manifestHash", "ownerPostimagesHash", "migrationPostimagesHash", "inputBytes", "stdoutBytes", "stderrBytes", "idleMilliseconds", "wallMilliseconds", "processCount", "readOnly"], label);
   const plan = value as TargetVerificationPlanV1;
   if (input.schemaVersion !== 1 || input.processCount !== 1 || input.readOnly !== true) fail(`${label}: not the read-only verifier`);
   parseSafeReasonCode(plan.id);

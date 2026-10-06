@@ -1,4 +1,5 @@
 import {
+  fail,
   decodeTenDigitOrdinal,
   parseSafeReasonCode,
   parseSchemaMigrationId,
@@ -51,10 +52,6 @@ export type CanonicalStatePayloadRoleV1 =
 export type BootstrapPayloadOperationV1 = "fresh_v2_init";
 
 const encoder = new TextEncoder();
-
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
 
 function byteLength(value: string): number {
   return encoder.encode(value).byteLength;

@@ -9,7 +9,6 @@ import { encodeFoundationJournalJsonV1 } from "../transactions/store.js";
 import {
   canonical,
   checkRow,
-  fail,
   MAX_MUTATIONS,
   orderMigrationChain,
   same,
@@ -37,6 +36,7 @@ import type {
   UpdatePlannerRequestV1,
 } from "./planner.js";
 import {
+  fail,
   parseLowerHexSha256,
   parseUtcTimestamp,
   type LowerHexSha256,

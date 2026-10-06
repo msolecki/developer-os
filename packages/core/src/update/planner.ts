@@ -22,6 +22,12 @@ import {
 import { orderMigrationChain } from "./migration-planning.js";
 import { parseBundleRelativePath, validateReleaseIdentity, type BundleRelativePathV1, type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
 import {
+  exact,
+  fail,
+  integer,
+  list,
+  oneOf,
+  record,
   decodeTenDigitOrdinal,
   encodeTenDigitOrdinal,
   parseLowerHexSha256,
@@ -293,39 +299,6 @@ const GRAMMAR_ONLY_EVIDENCE: CanonicalPathEvidenceV1 = {
 
 type UnknownRecord = Record<string, unknown>;
 
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
-function record(value: unknown, label: string): UnknownRecord {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
-  const prototype = Object.getPrototypeOf(value) as object | null;
-  if (prototype !== Object.prototype && prototype !== null) fail(label);
-  return value as UnknownRecord;
-}
-
-function exact(value: unknown, label: string, keys: readonly string[]): UnknownRecord {
-  const input = record(value, label);
-  const actual = Object.keys(input);
-  if (actual.length !== keys.length || actual.some((key) => !keys.includes(key))) fail(`${label}: keys`);
-  return input;
-}
-
-function array(value: unknown, label: string, minimum: number, maximum: number): readonly unknown[] {
-  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) fail(`${label}: count`);
-  return value;
-}
-
-function integer(value: unknown, minimum: number, maximum: number, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) fail(label);
-  return value;
-}
-
-function oneOf<T>(value: unknown, allowed: readonly T[], label: string): T {
-  if (!allowed.includes(value as T)) fail(label);
-  return value as T;
-}
-
 function canonical(value: unknown): string {
   return encodeCanonicalJson(value as CanonicalJsonValue);
 }
@@ -356,7 +329,7 @@ function parseOwnerRelativePath(value: unknown): OwnerRelativePathV1 {
 }
 
 function parseInputBlobRef(value: unknown, label: string): PlannerInputBlobRefV1 {
-  const input = exact(value, label, ["stream", "ordinal", "bytes", "sha256"]);
+  const input = exact(value, ["stream", "ordinal", "bytes", "sha256"], label);
   if (input.stream !== "input") fail(`${label}.stream`);
   return {
     stream: "input",
@@ -367,7 +340,7 @@ function parseInputBlobRef(value: unknown, label: string): PlannerInputBlobRefV1
 }
 
 function parseOutputBlobRef(value: unknown, label: string): PlannerOutputBlobRefV1 {
-  const input = exact(value, label, ["stream", "ordinal", "bytes"]);
+  const input = exact(value, ["stream", "ordinal", "bytes"], label);
   if (input.stream !== "output") fail(`${label}.stream`);
   return {
     stream: "output",
@@ -395,12 +368,12 @@ function parseArtifactColumns(input: UnknownRecord, label: string): Omit<Planner
 }
 
 function parseManifestSnapshot(value: unknown): PlannerManifestSnapshotV1 {
-  const input = exact(value, "PlannerManifestSnapshotV1", ["schemaVersion", "productVersion", "installedAt", "artifacts"]);
+  const input = exact(value, ["schemaVersion", "productVersion", "installedAt", "artifacts"], "PlannerManifestSnapshotV1");
   if (input.schemaVersion !== 1) fail("PlannerManifestSnapshotV1.schemaVersion");
-  const rows = array(input.artifacts, "PlannerManifestSnapshotV1.artifacts", 1, MAX_ARTIFACTS);
+  const rows = list(input.artifacts, 1, MAX_ARTIFACTS, "PlannerManifestSnapshotV1.artifacts");
   const artifacts = rows.map((row, index): PlannerManifestArtifactV1 => {
     const label = "PlannerManifestArtifactV1";
-    const artifact = exact(row, label, ["token", "owner", "kind", "verification", "productVersion", "source", "mergeStrategy", "currentHash"]);
+    const artifact = exact(row, ["token", "owner", "kind", "verification", "productVersion", "source", "mergeStrategy", "currentHash"], label);
     if (parsePlannerPathToken(artifact.token, rows.length).ordinal !== index) fail(`${label}.token: not in token order`);
     return {
       token: artifact.token as PlannerPathTokenV1,
@@ -418,23 +391,23 @@ function parseObserved(value: unknown, row: PlannerManifestArtifactV1): PlannerO
   const mode = row.verification.mode;
   switch (input.state) {
     case "absent":
-      exact(input, label, ["state"]);
+      exact(input, ["state"], label);
       if (row.kind !== "file" || mode !== "ephemeral") fail(`${label}: absent is only a clean ephemeral reservation`);
       return { state: "absent" };
     case "directory":
-      exact(input, label, ["state", "mode"]);
+      exact(input, ["state", "mode"], label);
       if (row.kind !== "directory" || mode !== "content" || input.mode !== 448) fail(`${label}: directory`);
       return { state: "directory", mode: 448 };
     case "ephemeral_present":
-      exact(input, label, ["state", "mode"]);
+      exact(input, ["state", "mode"], label);
       if (row.kind !== "file" || mode !== "ephemeral" || input.mode !== 384) fail(`${label}: ephemeral`);
       return { state: "ephemeral_present", mode: 384 };
     case "symlink":
-      exact(input, label, ["state", "targetBytes", "targetHash"]);
+      exact(input, ["state", "targetBytes", "targetHash"], label);
       if (row.kind !== "symlink" || mode !== "content") fail(`${label}: symlink`);
       return { state: "symlink", targetBytes: integer(input.targetBytes, 0, 4_096, `${label}.targetBytes`), targetHash: parseLowerHexSha256(input.targetHash) };
     case "content": {
-      exact(input, label, ["state", "mode", "bytes", "sha256", "blob"]);
+      exact(input, ["state", "mode", "bytes", "sha256", "blob"], label);
       const regular = (row.kind === "file" && (mode === "content" || mode === "schema")) || (row.kind === "instruction" && (mode === "content" || mode === "block"));
       if (!regular) fail(`${label}: content`);
       const fileMode = oneOf(input.mode, [384, 448] as const, `${label}.mode`);
@@ -454,9 +427,9 @@ function parseObserved(value: unknown, row: PlannerManifestArtifactV1): PlannerO
 
 function parseConfigProjection(value: unknown): PlannerConfigProjectionV1 {
   const label = "PlannerConfigProjectionV1";
-  const input = exact(value, label, ["schemaVersion", "brainRoot", "adapters", "git", "automation", "brain", "redactionPatternsCount", "telemetry"]);
+  const input = exact(value, ["schemaVersion", "brainRoot", "adapters", "git", "automation", "brain", "redactionPatternsCount", "telemetry"], label);
   if (input.schemaVersion !== 1 || input.brainRoot !== "brain_root" || input.telemetry !== false) fail(label);
-  const adapters = exact(input.adapters, `${label}.adapters`, ["claude", "codex"]);
+  const adapters = exact(input.adapters, ["claude", "codex"], `${label}.adapters`);
   if (typeof adapters.claude !== "boolean" || typeof adapters.codex !== "boolean") fail(`${label}.adapters`);
   for (const section of ["git", "automation"] as const) {
     const sectionValue = record(input[section], `${label}.${section}`);
@@ -465,7 +438,7 @@ function parseConfigProjection(value: unknown): PlannerConfigProjectionV1 {
     if ("lifecycle" in sectionValue) record(sectionValue.lifecycle, `${label}.${section}.lifecycle`);
   }
   if (input.brain !== null) {
-    exact(input.brain, `${label}.brain`, ["schemaVersion", "contentRoot", "topicFolders", "topicAliases", "indexesDir", "retrieval", "staleness"]);
+    exact(input.brain, ["schemaVersion", "contentRoot", "topicFolders", "topicAliases", "indexesDir", "retrieval", "staleness"], `${label}.brain`);
   }
   integer(input.redactionPatternsCount, 0, 64, `${label}.redactionPatternsCount`);
   // Canonical-encodable end to end, so no non-JSON value reaches the wire.
@@ -475,12 +448,12 @@ function parseConfigProjection(value: unknown): PlannerConfigProjectionV1 {
 
 function parseBrainSnapshot(value: unknown): PlannerBrainSnapshotV1 {
   const label = "PlannerBrainSnapshotV1";
-  const input = exact(value, label, ["schemaVersion", "root", "folderPolicyVersion", "entries", "aggregateBytes"]);
+  const input = exact(value, ["schemaVersion", "root", "folderPolicyVersion", "entries", "aggregateBytes"], label);
   if (input.schemaVersion !== 1 || input.root !== "brain_root") fail(label);
   let aggregateBytes = 0;
   let prior: string | undefined;
-  const entries = array(input.entries, `${label}.entries`, 0, MAX_ARTIFACTS).map((row): PlannerBrainEntryV1 => {
-    const entry = exact(row, "PlannerBrainEntryV1", ["path", "mode", "bytes", "sha256", "blob"]);
+  const entries = list(input.entries, 0, MAX_ARTIFACTS, `${label}.entries`).map((row): PlannerBrainEntryV1 => {
+    const entry = exact(row, ["path", "mode", "bytes", "sha256", "blob"], "PlannerBrainEntryV1");
     const path = parseVaultRelativePathText(entry.path);
     if (prior !== undefined && compareUtf8(prior, path) >= 0) fail("PlannerBrainEntryV1.path: not unique and sorted");
     prior = path;
@@ -511,7 +484,7 @@ export function plannerInputBlobRefs(request: UpdatePlannerRequestV1): readonly 
 /** Validates a complete request with exact keys, token order, legality, and contiguous input blob references. */
 export function validateUpdatePlannerRequest(value: unknown): UpdatePlannerRequestV1 {
   const label = "UpdatePlannerRequestV1";
-  const input = exact(value, label, ["schemaVersion", "protocol", "plannedAt", "platform", "architecture", "currentRelease", "targetRelease", "manifest", "config", "installedOwners", "artifactInputs", "brain"]);
+  const input = exact(value, ["schemaVersion", "protocol", "plannedAt", "platform", "architecture", "currentRelease", "targetRelease", "manifest", "config", "installedOwners", "artifactInputs", "brain"], label);
   if (input.schemaVersion !== 1 || input.platform !== "darwin") fail(label);
   const architecture = oneOf(input.architecture, ["arm64", "x64"] as const, `${label}.architecture`);
   const currentRelease = parseReleaseIdentity(input.currentRelease);
@@ -520,17 +493,17 @@ export function validateUpdatePlannerRequest(value: unknown): UpdatePlannerReque
   if (currentRelease.releaseIdentityHash === targetRelease.releaseIdentityHash) fail(`${label}: current and target are the same release`);
   const manifest = parseManifestSnapshot(input.manifest);
 
-  const owners = array(input.installedOwners, `${label}.installedOwners`, 1, 16).map((owner) => oneOf(owner, OWNER_ORDER, `${label}.installedOwners`));
+  const owners = list(input.installedOwners, 1, 16, `${label}.installedOwners`).map((owner) => oneOf(owner, OWNER_ORDER, `${label}.installedOwners`));
   for (let index = 1; index < owners.length; index += 1) {
     if (OWNER_ORDER.indexOf(owners[index - 1] as ArtifactOwner) >= OWNER_ORDER.indexOf(owners[index] as ArtifactOwner)) fail(`${label}.installedOwners: not unique and ordered`);
   }
   const manifestOwners = new Set(manifest.artifacts.map((row) => row.owner));
   if (manifestOwners.size !== owners.length || owners.some((owner) => !manifestOwners.has(owner))) fail(`${label}.installedOwners: not the manifest's owner set`);
 
-  const rows = array(input.artifactInputs, `${label}.artifactInputs`, 1, MAX_ARTIFACTS);
+  const rows = list(input.artifactInputs, 1, MAX_ARTIFACTS, `${label}.artifactInputs`);
   if (rows.length !== manifest.artifacts.length) fail(`${label}.artifactInputs: not the complete manifest projection`);
   const artifactInputs = rows.map((row, index): PlannerArtifactInputV1 => {
-    const artifact = exact(row, "PlannerArtifactInputV1", ["token", "owner", "kind", "verification", "productVersion", "source", "mergeStrategy", "observed"]);
+    const artifact = exact(row, ["token", "owner", "kind", "verification", "productVersion", "source", "mergeStrategy", "observed"], "PlannerArtifactInputV1");
     const manifestRow = manifest.artifacts[index] as PlannerManifestArtifactV1;
     if (artifact.token !== manifestRow.token) fail("PlannerArtifactInputV1.token: not in token order");
     const columns = parseArtifactColumns(artifact, "PlannerArtifactInputV1");
@@ -568,11 +541,11 @@ export function validateUpdatePlannerRequest(value: unknown): UpdatePlannerReque
 function parseContentRef(value: unknown, label: string, outputs: Map<number, number>): PlannerContentRefV1 {
   const input = record(value, label);
   if (input.kind === "target_bundle") {
-    exact(input, label, ["kind", "path", "bytes", "sha256"]);
+    exact(input, ["kind", "path", "bytes", "sha256"], label);
     return { kind: "target_bundle", path: parseBundleRelativePath(input.path), bytes: integer(input.bytes, 0, MAX_OBSERVED_BYTES, `${label}.bytes`), sha256: parseLowerHexSha256(input.sha256) };
   }
   if (input.kind === "output_blob") {
-    exact(input, label, ["kind", "blob"]);
+    exact(input, ["kind", "blob"], label);
     return { kind: "output_blob", blob: useOutput(parseOutputBlobRef(input.blob, `${label}.blob`), outputs) };
   }
   return fail(`${label}.kind`);
@@ -592,7 +565,7 @@ interface DraftContext {
 }
 
 function installedToken(value: unknown, label: string, context: DraftContext): PlannerArtifactInputV1 {
-  const input = exact(value, label, ["kind", "token"]);
+  const input = exact(value, ["kind", "token"], label);
   if (input.kind !== "installed") fail(`${label}.kind`);
   return context.request.artifactInputs[parsePlannerPathToken(input.token, context.count).ordinal] as PlannerArtifactInputV1;
 }
@@ -604,19 +577,19 @@ function isNullBlob(artifact: PlannerArtifactInputV1): boolean {
 
 function parseOwnerPlan(value: unknown, owner: ArtifactOwner, context: DraftContext, keptOrUntouched: Set<string>): OwnerUpdateDraftV1 {
   const label = "OwnerUpdateDraftV1";
-  const input = exact(value, label, ["owner", "currentArtifacts", "proposedOperations", "externalEffects"]);
+  const input = exact(value, ["owner", "currentArtifacts", "proposedOperations", "externalEffects"], label);
   if (input.owner !== owner) fail(`${label}.owner: not the installed owner order`);
   const partition = context.request.artifactInputs.filter((artifact) => artifact.owner === owner).map((artifact) => artifact.token);
   if (!same(input.currentArtifacts, partition)) fail(`${label}.currentArtifacts: not the owner's complete partition`);
 
   const touched = new Set<string>();
   const created = new Set<string>();
-  const operations = array(input.proposedOperations, `${label}.proposedOperations`, 0, MAX_ARTIFACTS).map((row): PlannerChangePlanOperationV1 => {
+  const operations = list(input.proposedOperations, 0, MAX_ARTIFACTS, `${label}.proposedOperations`).map((row): PlannerChangePlanOperationV1 => {
     const opLabel = "PlannerChangePlanOperationV1";
     const operation = record(row, opLabel);
     if (operation.operation === "create") {
-      exact(operation, opLabel, ["operation", "target", "content"]);
-      const target = exact(operation.target, `${opLabel}.target`, ["kind", "owner", "path"]);
+      exact(operation, ["operation", "target", "content"], opLabel);
+      const target = exact(operation.target, ["kind", "owner", "path"], `${opLabel}.target`);
       if (target.kind !== "owner_relative" || target.owner !== owner) fail(`${opLabel}.target: create names another owner or an installed token`);
       const path = parseOwnerRelativePath(target.path);
       const folded = path.normalize("NFC").toLowerCase();
@@ -625,7 +598,7 @@ function parseOwnerPlan(value: unknown, owner: ArtifactOwner, context: DraftCont
       return { operation: "create", target: { kind: "owner_relative", owner, path }, content: parseContentRef(operation.content, `${opLabel}.content`, context.outputs) };
     }
     const kind = oneOf(operation.operation, ["keep", "remove", "replace"] as const, `${opLabel}.operation`);
-    exact(operation, opLabel, kind === "replace" ? ["operation", "target", "expectedHash", "content"] : ["operation", "target", "expectedHash"]);
+    exact(operation, kind === "replace" ? ["operation", "target", "expectedHash", "content"] : ["operation", "target", "expectedHash"], opLabel);
     const artifact = installedToken(operation.target, `${opLabel}.target`, context);
     if (artifact.owner !== owner) fail(`${opLabel}.target: another owner's token`);
     if (touched.has(artifact.token)) fail(`${opLabel}.target: repeated token`);
@@ -645,10 +618,10 @@ function parseOwnerPlan(value: unknown, owner: ArtifactOwner, context: DraftCont
   });
   for (const token of partition) if (!touched.has(token)) keptOrUntouched.add(token);
 
-  const effects = array(input.externalEffects, `${label}.externalEffects`, 0, 1).map((row): OwnerExternalEffectDraftV1 => {
-    const effect = exact(row, "OwnerExternalEffectDraftV1", ["kind", "owner", "artifactTokens"]);
+  const effects = list(input.externalEffects, 0, 1, `${label}.externalEffects`).map((row): OwnerExternalEffectDraftV1 => {
+    const effect = exact(row, ["kind", "owner", "artifactTokens"], "OwnerExternalEffectDraftV1");
     if (effect.kind !== "codex_registration_refresh" || effect.owner !== "codex" || owner !== "codex") fail("OwnerExternalEffectDraftV1: not the closed Codex refresh");
-    const tokens = array(effect.artifactTokens, "OwnerExternalEffectDraftV1.artifactTokens", 1, MAX_ARTIFACTS).map((token) => parsePlannerPathToken(token, context.count));
+    const tokens = list(effect.artifactTokens, 1, MAX_ARTIFACTS, "OwnerExternalEffectDraftV1.artifactTokens").map((token) => parsePlannerPathToken(token, context.count));
     for (let index = 0; index < tokens.length; index += 1) {
       const current = tokens[index] as { readonly token: PlannerPathTokenV1; readonly ordinal: number };
       if (index > 0 && (tokens[index - 1] as { readonly ordinal: number }).ordinal >= current.ordinal) fail("OwnerExternalEffectDraftV1.artifactTokens: not unique and ordered");
@@ -666,8 +639,8 @@ function parseMigrations(value: unknown, context: DraftContext, keptOrUntouched:
   const brain = new Map(context.request.brain.entries.map((entry) => [entry.path as string, entry]));
   const firstSeen = new Set<string>();
   const domains = new Map<string, string>();
-  const migrations = array(value, "TargetUpdateDraftV1.migrations", 0, 10_000).map((row): SchemaMigrationDraftV1 => {
-    const input = exact(row, label, ["id", "domain", "fromVersion", "toVersion", "mutations"]);
+  const migrations = list(value, 0, 10_000, "TargetUpdateDraftV1.migrations").map((row): SchemaMigrationDraftV1 => {
+    const input = exact(row, ["id", "domain", "fromVersion", "toVersion", "mutations"], label);
     const id = parseSchemaMigrationId(input.id);
     if (ids.has(id)) fail(`${label}.id: duplicate`);
     ids.add(id);
@@ -679,8 +652,8 @@ function parseMigrations(value: unknown, context: DraftContext, keptOrUntouched:
     if (chainEnd !== undefined && chainEnd !== fromVersion) fail(`${label}: chain is not contiguous`);
     chains.set(domain, toVersion);
     const paths = new Set<string>();
-    const mutations = array(input.mutations, `${label}.mutations`, 1, 100_000).map((mutationRow): SchemaMigrationMutationDraftV1 => {
-      const mutation = exact(mutationRow, "SchemaMigrationMutationDraftV1", ["path", "beforeHash", "afterBlob", "inverseBlob"]);
+    const mutations = list(input.mutations, 1, 100_000, `${label}.mutations`).map((mutationRow): SchemaMigrationMutationDraftV1 => {
+      const mutation = exact(mutationRow, ["path", "beforeHash", "afterBlob", "inverseBlob"], "SchemaMigrationMutationDraftV1");
       const pathInput = record(mutation.path, "SchemaMigrationMutationDraftV1.path");
       if (pathInput.domain !== domain) fail("SchemaMigrationMutationDraftV1.path: domain differs from its migration");
       const beforeHash = parseLowerHexSha256(mutation.beforeHash);
@@ -688,14 +661,14 @@ function parseMigrations(value: unknown, context: DraftContext, keptOrUntouched:
       let path: SchemaMigrationMutationDraftV1["path"];
       let snapshotHash: LowerHexSha256 | null;
       if (domain === "brain") {
-        exact(pathInput, "SchemaMigrationMutationDraftV1.path", ["domain", "path"]);
+        exact(pathInput, ["domain", "path"], "SchemaMigrationMutationDraftV1.path");
         const entry = brain.get(parseVaultRelativePathText(pathInput.path));
         if (entry === undefined) fail("SchemaMigrationMutationDraftV1.path: not in the admitted Brain snapshot");
         path = { domain: "brain", path: entry.path };
         key = `brain:${entry.path}`;
         snapshotHash = entry.sha256;
       } else {
-        exact(pathInput, "SchemaMigrationMutationDraftV1.path", ["domain", "token"]);
+        exact(pathInput, ["domain", "token"], "SchemaMigrationMutationDraftV1.path");
         const { token, ordinal } = parsePlannerPathToken(pathInput.token, context.count);
         const artifact = context.request.artifactInputs[ordinal] as PlannerArtifactInputV1;
         if (artifact.kind !== "file" || artifact.verification.mode !== "schema" || artifact.observed.state !== "content" || artifact.observed.blob === null) {
@@ -748,14 +721,14 @@ function compareDraftArtifacts(left: PlannerManagedArtifactDraftV2, right: Plann
 
 function parseExpectedManifest(value: unknown, context: DraftContext): PlannerInstallationManifestDraftV2 {
   const label = "PlannerInstallationManifestDraftV2";
-  const input = exact(value, label, ["schemaVersion", "productVersion", "artifacts"]);
+  const input = exact(value, ["schemaVersion", "productVersion", "artifacts"], label);
   if (input.schemaVersion !== 2) fail(`${label}.schemaVersion`);
   const productVersion = parseStableSemver(input.productVersion);
   if (productVersion !== context.request.targetRelease.version) fail(`${label}.productVersion: not the target release`);
-  const artifacts = array(input.artifacts, `${label}.artifacts`, 1, MAX_ARTIFACTS).map((row): PlannerManagedArtifactDraftV2 => {
+  const artifacts = list(input.artifacts, 1, MAX_ARTIFACTS, `${label}.artifacts`).map((row): PlannerManagedArtifactDraftV2 => {
     const rowLabel = "PlannerManagedArtifactDraftV2";
     // The four installation-history keys are illegal: the target cannot invent or erase history.
-    const artifact = exact(row, rowLabel, ["owner", "path", "productVersion", "source", "mergeStrategy", "kind", "verification"]);
+    const artifact = exact(row, ["owner", "path", "productVersion", "source", "mergeStrategy", "kind", "verification"], rowLabel);
     const owner = oneOf(artifact.owner, OWNER_ORDER, `${rowLabel}.owner`);
     const pathInput = record(artifact.path, `${rowLabel}.path`);
     let path: PlannerPathRefV1;
@@ -765,10 +738,10 @@ function parseExpectedManifest(value: unknown, context: DraftContext): PlannerIn
       if (installedPath.owner !== owner) fail(`${rowLabel}.path: another owner's token`);
       path = { kind: "installed", token: installedPath.token };
     } else if (pathInput.kind === "target_bundle") {
-      exact(pathInput, `${rowLabel}.path`, ["kind", "path"]);
+      exact(pathInput, ["kind", "path"], `${rowLabel}.path`);
       path = { kind: "target_bundle", path: parseBundleRelativePath(pathInput.path) };
     } else {
-      exact(pathInput, `${rowLabel}.path`, ["kind", "owner", "path"]);
+      exact(pathInput, ["kind", "owner", "path"], `${rowLabel}.path`);
       if (pathInput.kind !== "owner_relative" || pathInput.owner !== owner) fail(`${rowLabel}.path`);
       path = { kind: "owner_relative", owner, path: parseOwnerRelativePath(pathInput.path) };
     }
@@ -788,23 +761,23 @@ function parseExpectedManifest(value: unknown, context: DraftContext): PlannerIn
     };
     const verification = record(artifact.verification, `${rowLabel}.verification`);
     if (artifact.kind === "file" && verification.mode === "content") {
-      exact(verification, `${rowLabel}.verification`, ["mode", "installed"]);
+      exact(verification, ["mode", "installed"], `${rowLabel}.verification`);
       return { ...common, kind: "file", verification: { mode: "content", installed: installedContent(verification.installed) } };
     }
     if (artifact.kind === "file" && verification.mode === "schema") {
-      exact(verification, `${rowLabel}.verification`, ["mode", "schemaId", "installed"]);
+      exact(verification, ["mode", "schemaId", "installed"], `${rowLabel}.verification`);
       return { ...common, kind: "file", verification: { mode: "schema", schemaId: oneOf(verification.schemaId, SCHEMA_IDS, `${rowLabel}.verification.schemaId`), installed: installedContent(verification.installed) } };
     }
     if (artifact.kind === "file" && verification.mode === "ephemeral") {
-      exact(verification, `${rowLabel}.verification`, ["mode"]);
+      exact(verification, ["mode"], `${rowLabel}.verification`);
       return { ...common, kind: "file", verification: { mode: "ephemeral" } };
     }
     if (artifact.kind === "directory" && verification.mode === "content") {
-      exact(verification, `${rowLabel}.verification`, ["mode"]);
+      exact(verification, ["mode"], `${rowLabel}.verification`);
       return { ...common, kind: "directory", verification: { mode: "content" } };
     }
     if (artifact.kind === "symlink" && verification.mode === "content") {
-      exact(verification, `${rowLabel}.verification`, ["mode", "installed"]);
+      exact(verification, ["mode", "installed"], `${rowLabel}.verification`);
       const source = installedToken(verification.installed, `${rowLabel}.verification.installed`, context);
       if (source.observed.state !== "symlink") fail(`${rowLabel}.verification.installed: not an installed symlink`);
       return { ...common, kind: "symlink", verification: { mode: "content", installed: { kind: "installed", token: source.token } } };
@@ -826,12 +799,12 @@ function parseExpectedManifest(value: unknown, context: DraftContext): PlannerIn
  */
 export function admitTargetUpdateDraft(value: unknown, request: UpdatePlannerRequestV1): AdmittedTargetUpdateDraftV1 {
   const label = "TargetUpdateDraftV1";
-  const input = exact(value, label, ["schemaVersion", "protocol", "currentRelease", "targetRelease", "ownerPlans", "migrations", "expectedManifest"]);
+  const input = exact(value, ["schemaVersion", "protocol", "currentRelease", "targetRelease", "ownerPlans", "migrations", "expectedManifest"], label);
   if (input.schemaVersion !== 1) fail(`${label}.schemaVersion`);
   if (parsePositiveUInt32(input.protocol) !== request.protocol) fail(`${label}.protocol: differs from the request`);
   if (!same(input.currentRelease, request.currentRelease) || !same(input.targetRelease, request.targetRelease)) fail(`${label}: release identity differs from the request`);
   const context: DraftContext = { request, count: request.artifactInputs.length, outputs: new Map() };
-  const plans = array(input.ownerPlans, `${label}.ownerPlans`, 1, 16);
+  const plans = list(input.ownerPlans, 1, 16, `${label}.ownerPlans`);
   if (plans.length !== request.installedOwners.length) fail(`${label}.ownerPlans: not one per installed owner`);
   const kept = new Set<string>();
   const ownerPlans = plans.map((plan, index) => parseOwnerPlan(plan, request.installedOwners[index] as ArtifactOwner, context, kept));

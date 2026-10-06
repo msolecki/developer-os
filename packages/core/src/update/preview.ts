@@ -16,6 +16,8 @@ import {
 } from "./paths.js";
 import { type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
 import {
+  fail,
+  integer,
   encodeTenDigitOrdinal,
   parseLowerHexSha256,
   parsePositiveUInt32,
@@ -243,15 +245,6 @@ const MAX_EXPANDED_BYTES = 8n * 1024n ** 3n;
 
 const PREVIEW_DOMAIN = "developer-os/update-preview/v1";
 const encoder = new TextEncoder();
-
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
-function integer(value: unknown, minimum: number, maximum: number, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) fail(label);
-  return value;
-}
 
 function canonicalBytes(value: CanonicalJsonValue): number {
   return encoder.encode(encodeCanonicalJson(value)).byteLength;
