@@ -1,11 +1,11 @@
 import { EXIT_CODES, UpdateLifecycleCoordinator } from "@developer-os/core";
 import type { ReleaseIdentityV1, SafeReasonCodeV1, UpdateLifecycleOutcomeV1, UpdateRollbackPreviewV1 } from "@developer-os/core";
 
-import { construct, refuse, requireCapacity, sameJson, updateApplyPorts } from "./apply.js";
+import { construct, refuse, requireCapacity, updateApplyPorts } from "./apply.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
 import { updateRollbackPrefixes } from "./compose.js";
 import type { CliUpdateContext } from "./context.js";
-import { planRollback } from "./planning.js";
+import { planRollback, sameJson } from "./planning.js";
 import type { UpdateCommandResultV1, UpdateHomeV1 } from "./planning.js";
 
 /** A failure before the previous verifier's durable success: the rejected current release stays active. */

@@ -18,6 +18,7 @@ import {
   type UpdateRecoveryExecutorPortV1,
   type UpdateRecoveryExecutorRecordV1,
   type UpdateRecoveryExecutorStagedFileV1,
+  MAXIMUM_RECOVERY_EXECUTOR_BYTES,
 } from "@developer-os/core";
 
 /** Every durable boundary of the executor-record protocol a death test may stop at. */
@@ -200,10 +201,10 @@ export async function readUpdateExecutorRecord(
   const path = deriveUpdateExecutorRecordPath(productHome);
   const entry = await fs.lstat(path);
   if (entry === null) return null;
-  if (entry.kind !== "regular_file" || entry.ownerUid !== effectiveUid || entry.mode !== RECORD_MODE || entry.nlink !== 1 || BigInt(entry.size) > 16_384n) refuse("update_executor_record_shape", path);
+  if (entry.kind !== "regular_file" || entry.ownerUid !== effectiveUid || entry.mode !== RECORD_MODE || entry.nlink !== 1 || BigInt(entry.size) > BigInt(MAXIMUM_RECOVERY_EXECUTOR_BYTES)) refuse("update_executor_record_shape", path);
   let record: ReturnType<typeof decodeUpdateExecutorRecordSlot>;
   try {
-    record = decodeUpdateExecutorRecordSlot(await fs.readRegular(entry, 16_384), evidence);
+    record = decodeUpdateExecutorRecordSlot(await fs.readRegular(entry, MAXIMUM_RECOVERY_EXECUTOR_BYTES), evidence);
   } catch {
     return refuse("update_executor_record_malformed", path);
   }

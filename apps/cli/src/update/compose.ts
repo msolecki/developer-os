@@ -155,6 +155,7 @@ import {
   type UpdateTargetJournalKindV1,
   type UpdateTerminalRetirementPlanV1,
   type UtcTimestampV1,
+  MAXIMUM_RECOVERY_EXECUTOR_BYTES,
 } from "@developer-os/core";
 
 import { compareManifestRows } from "../instructions/attach.js";
@@ -1937,7 +1938,7 @@ class UpdateComposer {
     const [initial, terminal] = records as [UpdateRecoveryExecutorRecordV1, UpdateRecoveryExecutorRecordV1];
     const [initialStaged, terminalStaged] = staged as [UpdateExecutionPlanV1["recoveryExecutor"]["initialStaged"], UpdateExecutionPlanV1["recoveryExecutor"]["initialStaged"]];
     return {
-      descriptor: { finalPath: deriveUpdateExecutorRecordPath(this.#deps.productHome), initial, initialStaged, terminal, terminalStaged, maximumRecordBytes: 16_384 },
+      descriptor: { finalPath: deriveUpdateExecutorRecordPath(this.#deps.productHome), initial, initialStaged, terminal, terminalStaged, maximumRecordBytes: MAXIMUM_RECOVERY_EXECUTOR_BYTES },
       files: records.map((record, index) => ({ role: { kind: "recovery_executor", state: record.state }, path: (staged[index] as { readonly path: CanonicalAbsolutePathV1 }).path, bytes: (staged[index] as { readonly bytes: number }).bytes, sha256: (staged[index] as { readonly hash: LowerHexSha256 }).hash, mode: 384 })),
       bytes: recordBytes,
     };

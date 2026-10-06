@@ -1,5 +1,4 @@
 import {
-  encodeCanonicalJson,
   EXIT_CODES,
   LifecycleRecoveryRequiredError,
   projectUpdateCapacity,
@@ -7,9 +6,7 @@ import {
   UpdateLifecycleCoordinator,
 } from "@developer-os/core";
 import type {
-  CanonicalJsonValue,
   ExitCode,
-  LifecycleBookkeepingResidueV1,
   LifecycleCoordinatorIdV1,
   LifecycleIdPrefixV1,
   LifecycleJournalClosureV2,
@@ -24,11 +21,10 @@ import type {
   UpdateRollbackPreviewV1,
 } from "@developer-os/core";
 
-import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "../lifecycle/context.js";
 import { updateApplyPrefixes } from "./compose.js";
 import type { UpdateConstructionOuterBytesV1, UpdateConstructionStore } from "./construction.js";
 import type { CliUpdateContext } from "./context.js";
-import { materializeUpdate, UpdatePlanningRefusal } from "./planning.js";
+import { materializeUpdate, sameJson, UpdatePlanningRefusal } from "./planning.js";
 import type { MaterializedUpdateV1, PreparedUpdateApplyV1, UpdateCommandResultV1, UpdateHomeV1, UpdateTargetInputsV1 } from "./planning.js";
 import { routeUpdateRecovery } from "./recovery.js";
 import type { UpdateRecoveryRouteOutcomeV1, UpdateRecoveryRoutesV1 } from "./recovery.js";
@@ -103,19 +99,6 @@ export function refuse(reason: string, code: Exclude<ExitCode, 0>, recovery?: st
 }
 
 const RERUN = "run `developer-os update --apply` again";
-
-export function sameJson(left: unknown, right: unknown): boolean {
-  return encodeCanonicalJson(left as CanonicalJsonValue) === encodeCanonicalJson(right as CanonicalJsonValue);
-}
-
-/** The production `closure` port: Spec 2 §9.2's V2 closure, re-inspected on every call. */
-export function updateClosurePort(
-  lifecycle: CliLifecycleContext,
-  key: LifecycleHomeKeyV1,
-  residue: LifecycleBookkeepingResidueV1,
-): UpdateApplyPortsV1["closure"] {
-  return async () => (await lifecycle.inspectClosureV2(key, residue)).closure;
-}
 
 export function updateApplyPorts(update: CliUpdateContext): UpdateApplyPortsV1 {
   return update.apply ?? refuse("update_apply_unavailable", EXIT_CODES.capabilityUnavailable);
