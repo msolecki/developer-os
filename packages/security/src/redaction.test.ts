@@ -150,6 +150,8 @@ describe("redactText", () => {
       ["after %3D, 24-character body", `GET /v1?auth%3D${sk24}`, sk24],
       ["after a digit", `0${skH}`, skH],
       ["after a letter when the body is not a slug", "desk-a8f3k2m9q7x1z5b4c6d7e9", "a8f3k2m9q7x1z5b4c6d7e9"],
+      /** NEW-146 (b2): a body of parts no longer than three letters is no kebab-case word. */
+      ["after a letter when every body part is three letters or fewer", "xsk-bak-tor-vil-mun-pek-zud", "sk-bak-tor-vil-mun-pek-zud"],
     ] as const) {
       it(`redacts an sk- key ${name}`, () => {
         const result = redactText(line, deterministicKey);
