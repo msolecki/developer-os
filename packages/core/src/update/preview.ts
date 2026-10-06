@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
 
-import { encodeCanonicalJson, hashCanonicalJson, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { encodeCanonicalJson, hashCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { parseAllocatedLifecycleId, type AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
 import type { ArtifactOwner } from "../manifest/types.js";
 import { projectUpdateCapacity, type UpdateCapacityInputV1, type UpdateCapacityProjectionV1 } from "./capacity.js";
@@ -270,13 +269,6 @@ function canonicalBytes(value: CanonicalJsonValue): number {
   return encoder.encode(encodeCanonicalJson(value)).byteLength;
 }
 
-/** Spec 2 §7.2's prepared-* and planner hashes: the domain, NUL, then the no-LF canonical bytes. */
-function hashNoLineFeed(domain: string, value: CanonicalJsonValue): LowerHexSha256 {
-  return createHash("sha256")
-    .update(`${domain}\0`, "ascii")
-    .update(encodeCanonicalJson(value).slice(0, -1), "utf8")
-    .digest("hex") as LowerHexSha256;
-}
 
 function sortedUnique<T extends string>(values: readonly T[], label: string): T[] {
   const sorted = [...values].sort(compareUtf8);
@@ -507,7 +499,7 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
       const step = leaf.kind === "owner_inverse" ? 0 : fields?.fromVersion;
       if (rank < 0 || typeof step !== "number") fail("PreparedInverseProjectionV1.projection: no order key");
       ranks.set(`${leaf.kind}/${id}`, [rank, step]);
-      return { kind: leaf.kind, id, projection, projectionHash: hashNoLineFeed("developer-os/prepared-inverse-leaf/v1", leaf.projection), bytes };
+      return { kind: leaf.kind, id, projection, projectionHash: hashCanonicalJsonNoLf("developer-os/prepared-inverse-leaf/v1", leaf.projection), bytes };
     })
     /**
      * Owner leaves in canonical owner order and migrations in chain order — the order the planner
@@ -552,16 +544,16 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
   const inversePlanProjection = encodeCanonicalJson(input.inversePlan);
   integer(maximumCanonicalBytes, 1, MAX_CANONICAL_BYTES, "PreparedUpdateMaterializationV1.maximumCanonicalBytes");
   return {
-    targetDraftHash: hashNoLineFeed("developer-os/prepared-target-draft/v1", input.targetDraft),
-    concreteManifestHash: hashNoLineFeed("developer-os/prepared-concrete-manifest/v1", input.concreteManifest),
+    targetDraftHash: hashCanonicalJsonNoLf("developer-os/prepared-target-draft/v1", input.targetDraft),
+    concreteManifestHash: hashCanonicalJsonNoLf("developer-os/prepared-concrete-manifest/v1", input.concreteManifest),
     outputBlobs,
     inversePlanProjections,
     rollbackInventoryEntries,
     inversePlanProjection,
-    inversePlanProjectionHash: hashNoLineFeed("developer-os/prepared-update-inverse/v1", input.inversePlan),
-    inventoryEntriesHash: hashNoLineFeed(
+    inversePlanProjectionHash: hashCanonicalJsonNoLf("developer-os/prepared-update-inverse/v1", input.inversePlan),
+    inventoryEntriesHash: hashCanonicalJsonNoLf(
       "developer-os/prepared-rollback-inventory-entries/v1",
-      rollbackInventoryEntries as unknown as CanonicalJsonValue,
+      rollbackInventoryEntries,
     ),
     aggregateBytes,
     maximumCanonicalBytes,

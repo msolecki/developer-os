@@ -3,6 +3,7 @@ export {
   decodeCanonicalJson,
   encodeCanonicalJson,
   hashCanonicalJson,
+  hashCanonicalJsonNoLf,
   sortUtf8,
 } from "./lifecycle/canonical-json.js";
 export type { CanonicalJsonV1, CanonicalJsonValue } from "./lifecycle/canonical-json.js";

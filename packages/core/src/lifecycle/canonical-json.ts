@@ -181,10 +181,24 @@ export function encodeCanonicalJson(value: CanonicalJsonValue): CanonicalJsonV1 
  * printable ASCII here rather than at each of the nine call sites.
  */
 export function hashCanonicalJson(domain: string, value: CanonicalJsonValue): LowerHexSha256 {
+  return domainHash(domain, encodeCanonicalJson(value));
+}
+
+/**
+ * Spec 2 §9.2's variant: the same domain and NUL, then the canonical encoding without
+ * its trailing LF. The update plans, previews and journals bind these digests across
+ * processes, so every no-LF digest goes through this one function. It takes `unknown`
+ * because its callers hash typed records; the encoder refuses anything not canonical JSON.
+ */
+export function hashCanonicalJsonNoLf(domain: string, value: unknown): LowerHexSha256 {
+  return domainHash(domain, encodeCanonicalJson(value as CanonicalJsonValue).slice(0, -1));
+}
+
+function domainHash(domain: string, bytes: string): LowerHexSha256 {
   if (!/^[\x21-\x7e]+$/.test(domain)) fail("hash domain is not printable ASCII");
   return createHash("sha256")
     .update(`${domain}\0`, "ascii")
-    .update(encodeCanonicalJson(value), "utf8")
+    .update(bytes, "utf8")
     .digest("hex") as LowerHexSha256;
 }
 

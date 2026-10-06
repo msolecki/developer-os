@@ -6,7 +6,7 @@
  */
 import { createHash } from "node:crypto";
 
-import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { LifecycleRecoveryRequiredError, refuseLifecycleRecovery } from "../lifecycle/guarded-fs.js";
 import { parseLifecycleCoordinatorId } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
@@ -294,10 +294,6 @@ function same(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(left as CanonicalJsonValue) === encodeCanonicalJson(right as CanonicalJsonValue);
 }
 
-function noLfHash(domain: string, value: unknown): LowerHexSha256 {
-  return createHash("sha256").update(`${domain}\0`, "ascii").update(encodeCanonicalJson(value as CanonicalJsonValue).slice(0, -1), "utf8").digest("hex") as LowerHexSha256;
-}
-
 /** `<home>/staging/lifecycle/<coordinator-id>`, the coordinator-owned root every leaf path hangs from. */
 export function updateCoordinatorStagingRoot(productHome: CanonicalAbsolutePathV1, id: LifecycleCoordinatorIdV1): CanonicalAbsolutePathV1 {
   return parseCanonicalAbsolutePathText(`${productHome}/staging/lifecycle/${id}`);
@@ -314,7 +310,7 @@ export function updateExecutionBindingHash(input: {
   readonly current: Pick<ReleaseIdentityV1, "releaseIdentityHash">;
   readonly target: Pick<ReleaseIdentityV1, "releaseIdentityHash">;
 }): LowerHexSha256 {
-  return noLfHash("developer-os/update-execution-binding/v1", {
+  return hashCanonicalJsonNoLf("developer-os/update-execution-binding/v1", {
     coordinatorId: input.coordinatorId,
     operation: oneOf(input.operation, OPERATIONS, "UpdateOperationV1"),
     previewHash: parseLowerHexSha256(input.previewHash),

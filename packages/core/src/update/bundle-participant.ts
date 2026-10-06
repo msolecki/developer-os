@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { decodeCanonicalJson, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { MAXIMUM_LEAF_PLAN_BYTES, MAXIMUM_PARTICIPANT_JOURNAL_BYTES, updateLeafPlanPath, type ImmutableUpdatePlanRefV1, type UpdateLeafPlanKindV1 } from "./construction.js";
@@ -385,10 +385,6 @@ export function sha256Hex(bytes: Uint8Array | string): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
 
-/** SHA-256 over an ASCII domain, NUL, and the canonical bytes without their LF. */
-export function noLfHash(domain: string, value: unknown): LowerHexSha256 {
-  return createHash("sha256").update(`${domain}\0`, "ascii").update(canonical(value).slice(0, -1), "utf8").digest("hex") as LowerHexSha256;
-}
 
 export function identity(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
   const input = exact(value, keys, label);
@@ -448,7 +444,7 @@ export function bundlePublicationEvidencePath(stagingRoot: CanonicalAbsolutePath
 
 /** No spec formula exists for the bundle inventory hash; this is the one domain every side recomputes. */
 export function bundleInventoryHash(entries: readonly ReleaseBundleEntryV1[]): LowerHexSha256 {
-  return noLfHash("developer-os/update-bundle-inventory/v1", entries);
+  return hashCanonicalJsonNoLf("developer-os/update-bundle-inventory/v1", entries);
 }
 
 export function bundleAggregateBytes(entries: readonly ReleaseBundleEntryV1[]): number {
@@ -459,13 +455,13 @@ export function bundleAggregateBytes(entries: readonly ReleaseBundleEntryV1[]): 
 
 /** `developer-os/update-source-structures/v1\0` plus the canonical complete identity array. */
 export function updateSourceStructuresHash(identities: readonly UpdateDirectoryIdentityV1[]): LowerHexSha256 {
-  return noLfHash("developer-os/update-source-structures/v1", identities);
+  return hashCanonicalJsonNoLf("developer-os/update-source-structures/v1", identities);
 }
 
 /** `developer-os/update-source-evidence-set/v1\0` plus the ordered SHA-256s of the exact evidence-file bytes. */
 export function updateSourceEvidenceSetHash(evidenceFileHashes: readonly LowerHexSha256[]): LowerHexSha256 {
   if (evidenceFileHashes.length < 1) fail("evidence set: empty");
-  return noLfHash("developer-os/update-source-evidence-set/v1", evidenceFileHashes);
+  return hashCanonicalJsonNoLf("developer-os/update-source-evidence-set/v1", evidenceFileHashes);
 }
 
 /** Sorted, unique (exact and folded), parent-before-child, bounded per file and in aggregate. */
