@@ -331,6 +331,12 @@ describe("retained rollback codecs", () => {
     expect(validateRollbackRecord(JSON.parse(JSON.stringify(fixture.home.rollback)), SYNTHETIC_EVIDENCE)).toStrictEqual(fixture.home.rollback);
   });
 
+  it("refuses a rollback record whose binding is not the one its fields derive (W2-ROLLBACK-2)", () => {
+    const fixture = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+    const forged = { ...fixture.home.rollback, rollbackBindingHash: createHash("sha256").update("forged binding").digest("hex") };
+    expect(() => validateRollbackRecord(forged, SYNTHETIC_EVIDENCE)).toThrow("rollbackBindingHash");
+  });
+
   it("refuses an owner leaf whose restore blob does not carry its restore hash", () => {
     const restoredBytes = { state: "file", mode: 384, bytes: 1, sha256: "a".repeat(64) };
     const evidence = {

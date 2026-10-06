@@ -44,6 +44,7 @@ import {
   validateReleaseTrustState,
   validateUpdatePlannerRequest,
   MAXIMUM_RECOVERY_EXECUTOR_BYTES,
+  rollbackBindingHash,
 } from "@developer-os/core";
 import type {
   ActiveReleaseRecordV1,
@@ -604,15 +605,17 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
   const activeRelease = release(options.active ?? specs[0]?.version ?? "1.0.0");
   const current = identityOf(activeRelease, options.rollbackPrevious === undefined ? previousMetadata : { sequence: "2", delegationHash: sha256(delegationBytes), indexHash: sha256(indexBytes) });
   const active: ActiveReleaseRecordV1 = { schemaVersion: 1, ...current, activatedAt: INSTALLED_AT };
-  const rollback: RollbackRecordV1 | null = options.rollbackPrevious === undefined
+  const rollbackPrevious = options.rollbackPrevious === undefined ? null : identityOf(release(options.rollbackPrevious), previousMetadata);
+  const rollbackPayloadId = `rb_${sha256("synthetic nonce")}_7` as RollbackPayloadIdV1;
+  const rollback: RollbackRecordV1 | null = rollbackPrevious === null
     ? null
     : {
         schemaVersion: 1,
         installed: current,
-        previous: identityOf(release(options.rollbackPrevious), previousMetadata),
+        previous: rollbackPrevious,
         executionBindingHash: sha256("synthetic execution binding"),
-        rollbackBindingHash: sha256("synthetic rollback binding"),
-        payloadId: `rb_${sha256("synthetic nonce")}_7` as RollbackPayloadIdV1,
+        rollbackBindingHash: rollbackBindingHash({ executionBindingHash: sha256("synthetic execution binding"), payloadId: rollbackPayloadId, installedReleaseIdentityHash: current.releaseIdentityHash, previousReleaseIdentityHash: rollbackPrevious.releaseIdentityHash }),
+        payloadId: rollbackPayloadId,
         payloadInventoryHash: sha256("synthetic inventory"),
         inversePlanHash: sha256("synthetic inverse plan"),
         createdAt: INSTALLED_AT,

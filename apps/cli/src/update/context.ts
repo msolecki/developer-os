@@ -7,7 +7,6 @@ import { join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 
 import {
-  bindRetainedInversePlan,
   createOwnerUpdateRegistry,
   decodeCanonicalJson,
   decodeRetainedInverseLeaf,
@@ -20,11 +19,12 @@ import {
   parsePositiveUInt32,
   parseUInt64Decimal,
   plannerPathToken,
-  retainedInversePlanHash,
+  rollbackDocumentBytes,
   validateActiveReleaseRecord,
   validateBoundedUpdateInversePlan,
   validateManifestV2,
   validateReleaseTrustState,
+  validateRollbackBindingGraph,
   validateRollbackPayloadInventory,
   validateUpdatePlannerRequest,
 } from "@developer-os/core";
@@ -49,6 +49,7 @@ import type {
   PlannerPathTokenV1,
   ReleaseBundleReferenceV1,
   ReleaseIdentityV1,
+  RetainedInversePlanRefV1,
   RetainedOwnerInverseProjectionV1,
   RetainedSchemaMigrationInverseProjectionV1,
   UtcTimestampV1,
@@ -450,41 +451,35 @@ async function readRollbackEvidence(context: CliContext, record: RollbackRecordV
   const inventoryBytes = await read(inventoryPath, record.payloadInventoryHash);
   const inversePath = join(root, "inverse-plan.json");
   const inverseBytes = await read(inversePath, record.inversePlanHash);
-  const inversePlan = parse(inversePath, () => {
-    const plan = validateBoundedUpdateInversePlan(decodeCanonicalJson(inverseBytes, MAXIMUM_ROLLBACK_RECORD_BYTES));
-    if (plan.payloadId !== record.payloadId || plan.rollbackBindingHash !== record.rollbackBindingHash
-      || plan.installedReleaseIdentityHash !== record.installed.releaseIdentityHash || plan.previousReleaseIdentityHash !== record.previous.releaseIdentityHash) {
-      throw new Error("invalid BoundedUpdateInversePlanV1: not this record's");
-    }
-    return plan;
-  });
-  const inventory = parse(inventoryPath, () => {
-    const found = validateRollbackPayloadInventory(decodeCanonicalJson(inventoryBytes, MAXIMUM_ROLLBACK_RECORD_BYTES));
-    if (found.payloadId !== record.payloadId || found.rollbackBindingHash !== record.rollbackBindingHash || found.inversePlanHash !== record.inversePlanHash) {
-      throw new Error("invalid RollbackPayloadInventoryV1: not this record's");
-    }
-    return found;
-  });
+  const inversePlan = parse(inversePath, () => validateBoundedUpdateInversePlan(decodeCanonicalJson(inverseBytes, MAXIMUM_ROLLBACK_RECORD_BYTES)));
+  const inventory = parse(inventoryPath, () => validateRollbackPayloadInventory(decodeCanonicalJson(inventoryBytes, MAXIMUM_ROLLBACK_RECORD_BYTES)));
   for (const entry of inventory.entries) {
     const path = join(root, entry.path);
     if ((await read(path, entry.sha256)).byteLength !== entry.bytes) missing(path);
   }
 
-  // Each retained leaf is its prepared projection; the inverse plan's ref binds it to this record.
+  // Each retained leaf is its prepared projection; the full binding graph (W2-ROLLBACK-2) binds the
+  // record, inverse plan, inventory, every leaf and every blob to one recomputed rollback binding.
   const owners: RetainedOwnerInverseProjectionV1[] = [];
   const migrations: RetainedSchemaMigrationInverseProjectionV1[] = [];
+  const leaves: { readonly ref: RetainedInversePlanRefV1; readonly bytes: Uint8Array }[] = [];
   for (const ref of [...inversePlan.ownerPlans, ...inversePlan.migrationPlans]) {
-    const path = join(root, ref.path);
-    const bytes = await read(path, null);
-    parse(path, () => {
-      const projection = decodeRetainedInverseLeaf(ref.kind, bytes);
-      if (bytes.byteLength !== ref.bytes || projection.id !== ref.id || retainedInversePlanHash(bindRetainedInversePlan(projection, record.rollbackBindingHash, ref.sourcePlanHash)) !== ref.retainedHash) {
-        throw new Error("invalid retained leaf: not its ref");
-      }
-      if (projection.kind === "owner_inverse") owners.push(projection);
-      else migrations.push(projection);
-    });
+    const bytes = await read(join(root, ref.path), null);
+    leaves.push({ ref, bytes });
+    const projection = parse(join(root, ref.path), () => decodeRetainedInverseLeaf(ref.kind, bytes));
+    if (projection.kind === "owner_inverse") owners.push(projection);
+    else migrations.push(projection);
   }
+  parse(root, () => validateRollbackBindingGraph({
+    identity: { payloadId: record.payloadId, root: parseCanonicalAbsolutePathText(root), rollbackBindingHash: record.rollbackBindingHash, inversePlanHash: record.inversePlanHash, inventoryHash: record.payloadInventoryHash, entryCount: inventory.entries.length, aggregateBytes: inventory.aggregateBytes },
+    record,
+    recordBytes: rollbackDocumentBytes(record),
+    inversePlan,
+    inversePlanBytes: inverseBytes,
+    inventory,
+    inventoryBytes,
+    leaves,
+  }));
   if (owners.length < 1) missing(root);
   if ((await lstatOrNull(record.previous.bundleRoot))?.isDirectory() !== true) missing(record.previous.bundleRoot);
 
