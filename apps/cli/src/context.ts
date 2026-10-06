@@ -67,6 +67,7 @@ import { createProductionLaunchdHost } from "./lifecycle/adapters.js";
 import { createLifecycleContext } from "./lifecycle/context.js";
 import type { CliLifecycleContext } from "./lifecycle/context.js";
 import type { CliUpdateContext } from "./update/context.js";
+import { protectedCodexHomes } from "./instructions/vendor-homes.js";
 import { createGatedTransactionExecutor } from "./lifecycle/mutation-gate.js";
 import type { CliTransactionExecutor } from "./lifecycle/mutation-gate.js";
 import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
@@ -779,7 +780,7 @@ export interface ProductionContextOptions {
 export function createProductionContext(
   options: ProductionContextOptions,
 ): CliContext {
-  const policy = new ProtectedPathPolicy(options.userHome);
+  const policy = new ProtectedPathPolicy(options.userHome, { codexHomes: protectedCodexHomes(options.env, options.userHome) });
   const paths = resolveRuntimePaths(pathEnvironmentFor(options));
   const durable = readRedactionKey(paths.stateDir);
   if (durable === null) options.io.stderr(EPHEMERAL_KEY_WARNING);

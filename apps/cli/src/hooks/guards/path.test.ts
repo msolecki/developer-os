@@ -183,6 +183,19 @@ describe("guard path", () => {
     expect(await run("npmrc-link", "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
   });
 
+  // CRITIC-2: `CODEX_HOME` and the home a Codex attach recorded both hold the Codex credential.
+  it("blocks auth.json under CODEX_HOME and under the recorded Codex home", async () => {
+    await mkdir(join(home, ".developer-os", "codex"), { recursive: true });
+    await writeFile(join(home, ".developer-os", "codex", "codex-home"), `${join(home, "recorded")}\n`);
+    const withCodexHome = { ...runtime(home), env: { CODEX_HOME: join(home, "ch") } };
+    const guard = (filePath: string) =>
+      guardPath({ cwd: project, toolName: "Write", command: null, filePath, prompt: null, stopHookActive: null }, withCodexHome);
+    expect(await guard(join(home, "ch", "auth.json"))).toMatchObject({ kind: "block", ruleId: "protected-path" });
+    expect(await guard(join(home, "recorded", "auth.json"))).toMatchObject({ kind: "block", ruleId: "protected-path" });
+    expect(await guard(join(home, ".codex", "auth.json"))).toMatchObject({ kind: "block", ruleId: "protected-path" });
+    expect(await guard(join(home, "ch", "config.toml"))).toStrictEqual({ kind: "allow" });
+  });
+
   it("ignores a tool that is not a file matcher", async () => {
     expect(await run(".env", "Read")).toStrictEqual({ kind: "allow" });
   });

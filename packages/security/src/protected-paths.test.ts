@@ -118,6 +118,27 @@ describe("ProtectedPathPolicy", () => {
     );
   });
 
+  // CRITIC-2: the Codex credential lives under `CODEX_HOME`, which need not be `~/.codex`.
+  it("refuses <codexHome>/auth.json, through a symlink too, and still refuses ~/.codex/auth.json", async () => {
+    const root = await makeTemporaryDirectory();
+    const home = join(root, "home");
+    const codexHome = join(root, "ch");
+    await mkdir(join(home, ".codex"), { recursive: true });
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(join(codexHome, "auth.json"), "{}");
+    await writeFile(join(home, ".codex", "auth.json"), "{}");
+    await symlink(join(codexHome, "auth.json"), join(home, "link.json"));
+    const policy = new ProtectedPathPolicy(home, { codexHomes: [codexHome] });
+
+    for (const path of [join(codexHome, "auth.json"), join(codexHome, "Auth.JSON"), join(home, "link.json"), join(home, ".codex", "auth.json")]) {
+      await expect(policy.assertReadable(path)).rejects.toBeInstanceOf(SecurityRefusalError);
+      await expect(policy.assertWritable(path)).rejects.toBeInstanceOf(SecurityRefusalError);
+    }
+    await expect(policy.readText(join(codexHome, "auth.json"))).rejects.toBeInstanceOf(SecurityRefusalError);
+    await expect(policy.assertReadable(join(codexHome, "config.toml"))).resolves.toBeUndefined();
+    expect(() => new ProtectedPathPolicy(home, { codexHomes: ["relative"] })).toThrow(SecurityRefusalError);
+  });
+
   it.each([".env.example", ".Env.Example"])(
     "still allows the case variant template %s on an empty home",
     async (name) => {

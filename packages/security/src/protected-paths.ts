@@ -96,12 +96,19 @@ async function defaultUtf8Reader(handle: FileHandle): Promise<string> {
 
 export class ProtectedPathPolicy {
   readonly #home: string;
+  readonly #codexHomes: readonly string[];
 
-  constructor(home: string) {
-    if (home.includes("\0") || !isAbsolute(home)) {
+  /**
+   * `codexHomes`: every Codex home besides `~/.codex` whose `auth.json` is refused under the
+   * `read-codex-auth` rule (CRITIC-2: `CODEX_HOME` and the home a Codex attach recorded).
+   */
+  constructor(home: string, options: { readonly codexHomes?: readonly string[] } = {}) {
+    const homes = [home, ...(options.codexHomes ?? [])];
+    if (homes.some((path) => path.includes("\0") || !isAbsolute(path))) {
       throw new SecurityRefusalError("Home path must be an absolute safe path");
     }
     this.#home = resolve(home);
+    this.#codexHomes = (options.codexHomes ?? []).map((path) => resolve(path));
   }
 
   async assertReadable(path: string): Promise<void> {
@@ -164,15 +171,16 @@ export class ProtectedPathPolicy {
       : resolve(this.#home, path);
 
     this.#assertAllowed(absolutePath);
-    const [canonicalHome, canonicalPath] = await Promise.all([
+    const [canonicalHome, canonicalPath, ...canonicalCodexHomes] = await Promise.all([
       canonicalizePlannedPath(this.#home),
       canonicalizePlannedPath(absolutePath),
+      ...this.#codexHomes.map((codexHome) => canonicalizePlannedPath(codexHome)),
     ]);
-    this.#assertAllowed(canonicalPath, canonicalHome);
+    this.#assertAllowed(canonicalPath, canonicalHome, canonicalCodexHomes);
     return canonicalPath;
   }
 
-  #assertAllowed(path: string, policyHome = this.#home): void {
+  #assertAllowed(path: string, policyHome = this.#home, codexHomes = this.#codexHomes): void {
     if (path.includes("\0")) {
       throw new SecurityRefusalError("Path contains a NUL byte");
     }
@@ -186,13 +194,13 @@ export class ProtectedPathPolicy {
       throw new SecurityRefusalError("Path is protected");
     }
 
-    // An exact match implies the path is within home, so no separate within-home test is needed.
+    // An exact match implies the path is within its home (or a Codex home), so no separate containment test is needed.
     const absolutePath = foldPathName(resolve(path));
     const isProtectedExactPath = PROTECTED_PATH_RULES.some(
       (rule) =>
         rule.match.kind === "home-exact" &&
         foldPathName(resolve(policyHome, rule.match.relativePath)) === absolutePath,
-    );
+    ) || codexHomes.some((codexHome) => foldPathName(resolve(codexHome, "auth.json")) === absolutePath);
     if (isProtectedExactPath) {
       throw new SecurityRefusalError("Path is protected");
     }

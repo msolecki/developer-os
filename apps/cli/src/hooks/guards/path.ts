@@ -2,6 +2,7 @@ import { isAbsolute, resolve } from "node:path";
 
 import { canonicalizePlannedPath, foldPathName, ProtectedPathPolicy, SecurityRefusalError } from "@developer-os/security";
 
+import { protectedCodexHomes } from "../../instructions/vendor-homes.js";
 import { excerpt } from "../outcome.js";
 import { editedPaths, HOOK_TOOL_MATCHERS } from "../payload.js";
 import { relativePathBase, resolveEditedPath, resolveProjectRoot } from "../project-root.js";
@@ -68,7 +69,7 @@ export const guardPath: HookVerbHandler = async (payload, runtime) => {
   }
   if (runtime.userHome === null) return { kind: "block", ruleId: "hook-failed-closed", detail: "user home unavailable" };
   const base = await relativePathBase(runtime.vendor, runtime.cwd, await resolveProjectRoot(runtime.cwd));
-  const policy = new ProtectedPathPolicy(runtime.userHome);
+  const policy = new ProtectedPathPolicy(runtime.userHome, { codexHomes: protectedCodexHomes(runtime.env, runtime.userHome) });
   const homes = [runtime.userHome, await canonicalizePlannedPath(runtime.userHome)];
   for (const path of paths) {
     const canonical = await resolveEditedPath(base, path);
