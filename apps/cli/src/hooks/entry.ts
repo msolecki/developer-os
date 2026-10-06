@@ -22,7 +22,16 @@ export interface HookEnvironment {
   readonly recordFiring?: (vendor: HookVendor, verb: HookVerb) => Promise<void>;
   /** NEW-139: receives the pending record write (it never rejects), so `bin.ts` can let it settle before exiting. */
   readonly onRecordPending?: (pending: Promise<void>) => void;
+  /** Test seam; milliseconds since process start, defaults to `performance.now()`. */
+  readonly elapsedMs?: () => number;
 }
+
+/**
+ * D86 (FLOW-INIT-2): verbs whose handler outlasts `HOOK_EXIT_BUDGET_MS` (`stop` runs tsc for up to
+ * 120 s, `format` up to 30 s). A record started after them got no wait at exit and was abandoned, so
+ * they write it before the handler, bounded by the same budget.
+ */
+const RECORD_FIRST: ReadonlySet<HookVerb> = new Set(["stop", "format"]);
 
 async function recordFiring(environment: HookEnvironment, vendor: HookVendor, verb: HookVerb): Promise<void> {
   try {
@@ -120,7 +129,13 @@ export async function runHookMode(
       io,
       createContext,
     };
-    fired = parsed.verb;
+    if (RECORD_FIRST.has(parsed.verb)) {
+      const pending = recordFiring(environment, parsed.vendor, parsed.verb);
+      environment.onRecordPending?.(pending);
+      await settleFiringRecords([pending], firingRecordWaitMs((environment.elapsedMs ?? (() => performance.now()))()));
+    } else {
+      fired = parsed.verb;
+    }
     const outcome = await handler(decoded.payload, runtime);
     return writeHookOutcome(outcome, parsed.vendor, io, redactText);
   } catch {

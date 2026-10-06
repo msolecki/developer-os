@@ -456,7 +456,8 @@ modified `path`. A per-event record left by an earlier build is admitted by shap
 reader and removed by uninstall. Each is at most 512 bytes, written by a
 same-directory temp file and rename. `init` creates the directory with mode 0700. It is never a
 manifest row, and it is admitted by shape (`inspectHookFiringRecordsShape`) by fresh `init` and the
-absent-manifest walks. `recordHookFiring` runs after the outcome is written. It writes only when the
+absent-manifest walks. `recordHookFiring` runs after the outcome is written, except for `stop` and
+`format` (below). It writes only when the
 directory exists, belongs to the user and has mode 0700, when the record is absent or older than
 24 h, and when `assertOrdinaryCommandAdmitted` admits. It never creates a directory, never changes the
 exit code and never throws. `runHookMode` does not await it; it hands the pending write to `bin.ts`,
@@ -464,8 +465,11 @@ which lets it settle after the outcome drains and before its explicit exit (NEW-
 regardless (NEW-139: the unbounded exit killed every write). The wait is
 `min(FIRING_RECORD_EXIT_BOUND_MS, HOOK_EXIT_BUDGET_MS − elapsed)`, floored at 0, where `elapsed`
 runs from process start: 1.4 s at most (500 ms dropped every write on the founder home, whose gate took ~640 ms with eight retained init envelopes; the wait is paid only when a record is due, at most once per verb per 24 h), and Node startup, the handler and the wait together stay
-within 1.5 s, leaving 500 ms of the vendors' 2 s timeout as margin (`format` and `stop` have longer
-timeouts and get the same budget). Opens of an existing record or marker use `O_NONBLOCK`, because a
+within 1.5 s, leaving 500 ms of the vendors' 2 s timeout as margin. `stop` (tsc, up to 120 s) and
+`format` (up to 30 s) outlast that budget, so a record started after them got a 0 ms wait and was
+abandoned. D86 (FLOW-INIT-2): they start the write before the handler and wait for it there, bounded
+by the same `firingRecordWaitMs` from process start; the write never changes their outcome, and a
+write still pending at the bound continues beside the handler until the exit. Opens of an existing record or marker use `O_NONBLOCK`, because a
 FIFO there would park a libuv worker and `process.exit()` waits on it. A failure after the gate
 admits (temp open, write or rename) leaves an empty `<vendor>.record_failed.json`, inside the record
 grammar and one per vendor, and the next written record of that vendor removes it. A gate refusal
@@ -483,7 +487,8 @@ released.
 
 This is a product-home write outside any transaction: `state/hooks` is a reserved runtime path in
 Spec 1's owner table (§2.1), bounded like Spec 1's other runtime records. The gate runs after the
-outcome is written, so a guard never depends on it. **Uninstall order is normative:** uninstall
+outcome is written for every fail-closed guard, so a guard never depends on it; only the fail-open
+`stop` and `format` run it first. **Uninstall order is normative:** uninstall
 removes both plugin trees first, so the hooks stop firing, and `state/hooks/` last, so a hook that
 fires mid-uninstall cannot leave residue that refuses at exit 6.
 

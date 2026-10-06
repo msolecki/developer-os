@@ -392,6 +392,52 @@ describe("runHookMode and the firing record", () => {
     expect(settled).toBe(true);
   });
 
+  /**
+   * D86 (FLOW-INIT-2): `stop` (tsc, up to 120 s) and `format` (up to 30 s) outlast the 1.5 s exit
+   * budget, so a record started after them got no wait and was abandoned. They write it first, inside
+   * the same budget; every other verb still records after its outcome.
+   */
+  it.each([
+    ["stop", { cwd: "/Users/synthetic/p", stop_hook_active: false }, ["record", "recorded", "handler"]],
+    ["format", { cwd: "/Users/synthetic/p", tool_name: "Edit", tool_input: { file_path: "a.ts" } }, ["record", "recorded", "handler"]],
+    ["command", { cwd: "/Users/synthetic/p", tool_name: "Bash", tool_input: { command: "echo synthetic" } }, ["handler", "record", "recorded"]],
+  ] as const)("orders the %s record against its handler, outcome unchanged", async (verb, payload, expected) => {
+    const original = HOOK_HANDLERS[verb];
+    const order: string[] = [];
+    let pendings = 0;
+    try {
+      HOOK_HANDLERS[verb] = () => {
+        order.push("handler");
+        return Promise.resolve({ kind: "block", ruleId: "synthetic", detail: "synthetic" });
+      };
+      const environment: HookEnvironment = {
+        env: {},
+        userHome: root,
+        processCwd: () => root,
+        nodeExecutable: "/usr/local/bin/node",
+        recordFiring: async () => {
+          order.push("record");
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          order.push("recorded");
+        },
+        onRecordPending: () => {
+          pendings += 1;
+        },
+        elapsedMs: () => 200,
+      };
+      const verbIo: CliIo = { ...io, readStdinBytes: () => Promise.resolve(new TextEncoder().encode(JSON.stringify(payload))) };
+      const code = await runHookMode(["guard", verb, "--vendor", "claude"], verbIo, factory, environment);
+      // Let a record started after the outcome settle before reading the order.
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(code).toBe(2);
+      expect(order).toStrictEqual(expected);
+      expect(pendings).toBe(1);
+    } finally {
+      if (original === undefined) Reflect.deleteProperty(HOOK_HANDLERS, verb);
+      else HOOK_HANDLERS[verb] = original;
+    }
+  });
+
   it("does not record a firing when the recursion marker short-circuits the hook", async () => {
     HOOK_HANDLERS.stop = () => Promise.resolve({ kind: "allow" });
     let calls = 0;
