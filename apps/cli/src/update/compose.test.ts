@@ -42,6 +42,7 @@ import {
   OLD_PLUGIN,
   PLANNED_AT,
   rollbackEvidenceFor,
+  rollbackTemplateHash,
   sha256,
   SYNTHETIC_CODEX_HOMES,
   SYNTHETIC_EVIDENCE,
@@ -238,7 +239,7 @@ async function rollbackFixture(): Promise<RollbackComposed> {
     admitManifest: (value) => value as never,
     codexHomes: null,
     plannedAt: PLANNED_AT,
-    retained: { owners: retained.owners, migrations: retained.migrations, entryCount: retained.payload.entryCount, aggregateBytes: retained.payload.aggregateBytes },
+    retained: { owners: retained.owners, migrations: retained.migrations, entryCount: retained.payload.entryCount, aggregateBytes: retained.payload.aggregateBytes, exactStepListHash: rollbackTemplateHash(retained) },
     previousBundle: previousRelease.manifest,
   };
   return { input: { coordinatorId: COORDINATOR, home, preview }, world, deps };
@@ -453,6 +454,15 @@ describe("composeRollback (Spec 2 §10.2, D72 P9)", () => {
     const { input, deps, world } = await rollbackFixture();
     world.set(FILE_A_PATH, observed(FILE_A_PATH, "regular_file", encoder.encode("edited\n")));
     expect(await refusal(composeRollback(input, deps))).toMatchObject({ reason: "update_state_changed", code: EXIT_CODES.operationalFailure });
+  });
+
+  it.each([
+    ["a mutated", () => sha256("synthetic rollback step list")],
+    ["a reordered", (retained: RollbackComposeDepsV1["retained"]) => rollbackTemplateHash(retained, true)],
+  ] as const)("refuses %s retained exactStepListHash before construction (NEW-172, Spec 2 §10.2)", async (_label, hash) => {
+    const { input, deps } = await rollbackFixture();
+    const retained = { ...deps.retained, exactStepListHash: hash(deps.retained) };
+    expect(await refusal(composeRollback(input, { ...deps, retained }))).toMatchObject({ reason: "update_rollback_evidence_invalid", code: EXIT_CODES.recoveryRequired });
   });
 
   it("refuses a retained record that changed since the preview", async () => {

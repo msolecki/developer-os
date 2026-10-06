@@ -10,6 +10,7 @@ import {
   admitTargetUpdateDraft,
   buildUpdateCoordinatorPlan,
   deriveUpdateExecutorRecordPath,
+  deriveUpdateSteps,
   parseLowerHexSha256,
   parsePositiveUInt32,
   parseRollbackPayloadId,
@@ -34,6 +35,7 @@ import {
   plannerJsonHash,
   plannerPathToken,
   releaseIdentityHash,
+  rollbackStepListHash,
   signedReleaseDocumentSigningBytes,
   validateBundleManifest,
   validateOfficialReleaseOrigin,
@@ -532,6 +534,24 @@ const AMPLE: UpdateCapacityObservationV1 = {
   availableEntries: "10000000" as UpdateCapacityObservationV1["availableEntries"],
   reservationGranularityBytes: "4096" as UpdateCapacityObservationV1["reservationGranularityBytes"],
 };
+
+/**
+ * §10.2's rollback step template over these retained leaves, derived exactly as `update --apply`
+ * derives the `exactStepListHash` it retains; `reorder` swaps two steps for a refusal vector.
+ */
+export function rollbackTemplateHash(
+  retained: Pick<RetainedRollbackEvidenceV1, "owners" | "migrations">,
+  reorder = false,
+): LowerHexSha256 {
+  const owners = retained.owners.map((owner) => ({ id: owner.id, owner: owner.owner, externalEffects: owner.externalEffects.length > 0 ? [{ id: owner.id }] : [] }));
+  const steps = [...deriveUpdateSteps({
+    operation: "update_rollback",
+    owners: owners.map((owner) => ({ id: owner.id })),
+    migrations: retained.migrations.map((migration) => ({ id: migration.id })),
+  } as unknown as UpdateExecutionPlanV1, owners as never)];
+  if (reorder) steps.splice(0, 2, steps[1] as never, steps[0] as never);
+  return rollbackStepListHash(steps);
+}
 
 export function rollbackEvidenceFor(record: RollbackRecordV1): RetainedRollbackEvidenceV1 {
   const written = (bytes: Uint8Array) => ({ state: "file", mode: 384, bytes: bytes.byteLength, sha256: sha256(bytes), payload: null }) as const;
