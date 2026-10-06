@@ -62,7 +62,9 @@ Two boundaries carry more weight than the rest:
 - **Every file the product *manages* is written transactionally — and the manifest is not one
   of them.** Creating, replacing, or removing a managed artifact is always a validated change
   plan handed to the executor, so it is journalled, backed up, and recoverable. Four direct
-  filesystem writes sit outside that, and it is worth knowing all four:
+  filesystem writes sit outside that, and it is worth knowing all four **of Foundation's** (**amended
+  2026-10-06:** the hook firing records, `apps/cli/src/hooks/firing-records.ts`, are a later
+  product-home write outside any transaction; `hooks.md` §3.6):
 
   | Site | Operation | Why it is outside a transaction |
   |---|---|---|
@@ -711,9 +713,18 @@ behaviour described here.
 - **Every `doctor` check has its own error boundary.** Doctor is the command run on exactly the
   machines where reads fail, and an escaping rejection there became an unhandled top-level
   rejection with a stack trace and no report at all.
-- **The full check set is `platform`, `product-home`, `configuration`, `manifest`, `transactions`,
-  `drift`, `brain`, `redaction-key`, `agents`, `claude-capabilities`, `codex-capabilities`, and one
-  `bootstrap-evidence:<id>` row per retained bootstrap envelope** (`apps/cli/src/commands/doctor.ts`).
+- **The check set is whatever `collectFindings` in `apps/cli/src/commands/doctor.ts` emits; it is
+  the source of truth, and this list was re-read against it on 2026-10-06.** In emission order:
+  `platform`, `product-home`, `configuration`, `manifest`, `transactions`, `drift`, `brain`,
+  `redaction-key`, `release-trust`, `entrypoint`, `agents`, `claude-capabilities`,
+  `codex-capabilities`, `hooks`, `external-hooks`, `vendor-config`, `instructions`,
+  `codex-registration`, one `bootstrap-evidence:<id>` row per retained bootstrap envelope, and
+  `manifest-anchor` (a row only when the anchor cannot do its job). `lifecycle` (below) is added
+  ahead of them when coordinator residue exists. **Never `fail`:** `entrypoint` (informational),
+  `hooks`, `external-hooks` and `vendor-config` (each catches everything; `hooks.md` §3.7,
+  `claude-adapter.md` §15), `redaction-key`, both `*-capabilities` rows and `manifest-anchor`
+  (warnings at most). `transactions` also covers the V2 coordinator participant journals, through
+  the `lifecycle` survey.
   `redaction-key` reports the key's presence, symlink/regular-file/size shape, and octal mode from
   `lstat` alone — never its bytes — and is a `warn` in every state but exactly `0600`, never a
   `fail`: nothing is encrypted with the key, so a lost or loose one degrades a diagnostic, not the
@@ -812,7 +823,11 @@ not exist here" look identical from outside and are not the same thing.
   `.aws`, `.gnupg`, `.env` and `.env.*` — but *not* `.envrc` or `.environment` — and three
   exact files (`.config/gh/hosts.yml`, `.codex/auth.json`, `.claude/.credentials.json`), on
   both the declared and the canonical path.
-- **No scheduler, no Git mutation, no telemetry.**
+- **No scheduler, no Git mutation, no telemetry.** **Amended 2026-10-06 (FLOW-DOCS-5): this describes
+  Foundation only.** Plan 1b shipped both absences away: a scheduler (`launchd` automation) and
+  Git mutation (`git sync`) now exist as opt-in authority behind an activation record, as
+  `threat-model.md` §7 ("Plan 1b removed two absences", amended 2026-09-26) records.
+  Telemetry is still absent.
 - **No `--verbose`.** Design spec §8 lists it for every mutating command; dispatch is strict,
   so it exits 2. It belongs to the first subsystem with diagnostics worth printing.
 - **macOS only.** `PlatformAdapter.inspect()` refuses any other platform with code 4.
@@ -867,7 +882,7 @@ three are the ones a user can hit.
    relocation of the default paths and of `config.brainPath` only. Through the CLI's default
    paths it is unreachable in practice: a product home that is a symlink is refused earlier, by
    the `lstat` check in `init`, with code 2.
-9. **Configuration cannot be changed after `init`.** `config.toml` is a managed artifact and
+9. **Configuration cannot be changed after `init`.** **Superseded 2026-09-21 by `config set`** (`2a95c94`; see `foundation-constraints.md`, Residual 9): a supported edit path now exists, and the text below is Foundation's original statement, kept as history. `config.toml` is a managed artifact and
    Foundation ships no command that edits it, so changing any setting means hand-editing a
    hash-tracked file — which drifts the manifest and makes `init`, `doctor` and `uninstall`
    all refuse, including the recovery `doctor` itself prints. Affects `git.enabled` and
