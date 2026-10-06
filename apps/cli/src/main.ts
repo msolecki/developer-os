@@ -281,7 +281,8 @@ function suppliedOptions(values: OptionValues): readonly OptionName[] {
   return OPTION_NAMES.filter((name) => values[name] !== undefined);
 }
 
-function parse(argv: readonly string[]): Invocation | null {
+/** Exported for the workflow argv-template contract test (NEW-191); `null` is invalid input. */
+export function parse(argv: readonly string[]): Invocation | null {
   let positionals: readonly string[];
   let values: OptionValues;
   try {

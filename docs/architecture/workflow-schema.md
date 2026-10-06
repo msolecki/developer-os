@@ -201,6 +201,9 @@ moved to `2.0.0`. `docs/architecture/knowledge-pipeline.md` §2 records the deci
    declares an empty footprint while its `with` decides what it actually touches. Whichever
    adapter first executes a verb owns validating that verb's arguments; **this package cannot**,
    because it does not know what any handler does with them.
+   The key *names* are pinned outside this package (NEW-191): `tests/contracts/workflows/
+   canonical.test.ts` maps every step's `with` key to a flag or positional of the verb's
+   `command` and runs the result through the CLI's own parser, so a renamed key or flag fails.
 7. **Contract fields are never screened; only findings are.** `screenAndCap` guards every field
    of a `WorkflowFinding` — including `file`, on both the validation path and the parse-refusal
    path, which is a distinction worth stating because `load.ts` shipped without it for a day and
