@@ -989,7 +989,12 @@ export function scriptedLaunchd(options: {
         const label = request.plist.Label;
         events.push(`bootstrap ${label}`);
         loaded.set(parseGeneratedLabel(label).job, label);
-        return Promise.resolve({ argvId: "bootstrap" as const, source: request.source, process: exited });
+        return Promise.resolve({
+          argvId: "bootstrap" as const,
+          source: request.source,
+          transition: { effectId: request.effectId, planHash: request.planHash, direction: request.direction, transitionIndex: request.transitionIndex, role: request.role },
+          process: exited,
+        });
       },
       verifyLoaded: () => Promise.resolve(true),
     },
