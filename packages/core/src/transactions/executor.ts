@@ -12,7 +12,7 @@ import { EXIT_CODES } from "../result.js";
 import { hasExactKeys, isRecord } from "../shape.js";
 import { parseUtcTimestamp } from "../update/scalars.js";
 import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
-import type { UInt64DecimalV1 } from "../update/scalars.js";
+import type { LowerHexSha256, UInt64DecimalV1 } from "../update/scalars.js";
 import {
   encodeFoundationJournalJsonV1,
   TransactionStateError,
@@ -1664,44 +1664,16 @@ export class TransactionExecutor {
         if (finalBefore !== null) {
           throw new TransactionStateError();
         }
-        const publish =
-          this.dependencies.publishBootstrapInitialJournalNoReplace;
-        if (publish === undefined) throw new TransactionStateError();
-        const [sourceParent, destinationParent] = await Promise.all([
-          exactPublicationParent(this.dependencies.fs, dirname(stagedPath) as CanonicalAbsolutePathV1, admittedSourceParent),
-          exactPublicationParent(this.dependencies.fs, dirname(finalPath) as CanonicalAbsolutePathV1, admittedDestinationParent),
-        ]);
-        try {
-          await publish({
-            sourcePath: stagedPath,
-            destinationPath: finalPath,
-            sourceParent,
-            destinationParent,
-            postimage: {
-              kind: "regular_file",
-              ownerUid,
-              mode: 0o600,
-              nlink: 1,
-              bytes: String(evidence.bytes) as UInt64DecimalV1,
-              sha256: evidence.sha256,
-              dev: observed.identity.dev,
-              ino: observed.identity.ino,
-            },
-          });
-        } catch {
-          throw new TransactionStateError();
-        }
+        await this.publishInitialJournal(stagedPath, finalPath, admittedSourceParent, admittedDestinationParent, {
+          ownerUid,
+          bytes: evidence.bytes,
+          sha256: evidence.sha256,
+          identity: observed.identity,
+        });
       }
 
-      await syncReopenDirectory(this.dependencies.fs, dirname(stagedPath));
-      await syncReopenDirectory(this.dependencies.fs, dirname(finalPath));
-      const [stagedAfter, finalAfter] = await Promise.all([
-        optionalLstat(this.dependencies.fs, stagedPath),
-        optionalLstat(this.dependencies.fs, finalPath),
-      ]);
-      if (stagedAfter !== null || finalAfter === null) {
-        throw new TransactionStateError();
-      }
+      // Unconditional: this arm also re-enters after a publish that already happened.
+      const finalAfter = await this.requirePublishedInitialJournal(stagedPath, finalPath);
       const finalJournal = await restoreBootstrapFoundationInitialJournalByIdentity(
         this.dependencies.fs,
         finalPath,
@@ -1761,49 +1733,13 @@ export class TransactionExecutor {
           ownerUid,
           plannedBytes,
         );
-        const publish = this.dependencies.publishBootstrapInitialJournalNoReplace;
-        if (publish === undefined) throw new TransactionStateError();
-        const [sourceParent, destinationParent] = await Promise.all([
-          exactPublicationParent(
-            this.dependencies.fs,
-            dirname(stagedPath) as CanonicalAbsolutePathV1,
-            retained.sourceParent,
-          ),
-          exactPublicationParent(
-            this.dependencies.fs,
-            dirname(finalPath) as CanonicalAbsolutePathV1,
-            retained.destinationParent,
-          ),
-        ]);
-        try {
-          await publish({
-            sourcePath: stagedPath,
-            destinationPath: finalPath,
-            sourceParent,
-            destinationParent,
-            postimage: {
-              kind: "regular_file",
-              ownerUid,
-              mode: 0o600,
-              nlink: 1,
-              bytes: String(plannedBytes.byteLength) as UInt64DecimalV1,
-              sha256: ref.initialJournal.plannedBytesHash,
-              dev: identity.dev,
-              ino: identity.ino,
-            },
-          });
-        } catch {
-          throw new TransactionStateError();
-        }
-        await syncReopenDirectory(this.dependencies.fs, dirname(stagedPath));
-        await syncReopenDirectory(this.dependencies.fs, dirname(finalPath));
-        const [stagedAfter, finalAfter] = await Promise.all([
-          optionalLstat(this.dependencies.fs, stagedPath),
-          optionalLstat(this.dependencies.fs, finalPath),
-        ]);
-        if (stagedAfter !== null || finalAfter === null) {
-          throw new TransactionStateError();
-        }
+        await this.publishInitialJournal(stagedPath, finalPath, retained.sourceParent, retained.destinationParent, {
+          ownerUid,
+          bytes: plannedBytes.byteLength,
+          sha256: ref.initialJournal.plannedBytesHash,
+          identity,
+        });
+        await this.requirePublishedInitialJournal(stagedPath, finalPath);
         await readExactBootstrapJournalByIdentity(
           this.dependencies.fs,
           finalPath,
@@ -1910,49 +1846,13 @@ export class TransactionExecutor {
             });
           }
         }
-        const publish = this.dependencies.publishBootstrapInitialJournalNoReplace;
-        if (publish === undefined) throw new TransactionStateError();
-        const [sourceParent, destinationParent] = await Promise.all([
-          exactPublicationParent(
-            this.dependencies.fs,
-            dirname(stagedPath) as CanonicalAbsolutePathV1,
-            retained.sourceParent,
-          ),
-          exactPublicationParent(
-            this.dependencies.fs,
-            dirname(finalPath) as CanonicalAbsolutePathV1,
-            retained.destinationParent,
-          ),
-        ]);
-        try {
-          await publish({
-            sourcePath: stagedPath,
-            destinationPath: finalPath,
-            sourceParent,
-            destinationParent,
-            postimage: {
-              kind: "regular_file",
-              ownerUid,
-              mode: 0o600,
-              nlink: 1,
-              bytes: String(plannedBytes.byteLength) as UInt64DecimalV1,
-              sha256: ref.initialJournal.plannedBytesHash,
-              dev: journalIdentity.dev,
-              ino: journalIdentity.ino,
-            },
-          });
-        } catch {
-          throw new TransactionStateError();
-        }
-        await syncReopenDirectory(this.dependencies.fs, dirname(stagedPath));
-        await syncReopenDirectory(this.dependencies.fs, dirname(finalPath));
-        const [stagedAfter, finalAfter] = await Promise.all([
-          optionalLstat(this.dependencies.fs, stagedPath),
-          optionalLstat(this.dependencies.fs, finalPath),
-        ]);
-        if (stagedAfter !== null || finalAfter === null) {
-          throw new TransactionStateError();
-        }
+        await this.publishInitialJournal(stagedPath, finalPath, retained.sourceParent, retained.destinationParent, {
+          ownerUid,
+          bytes: plannedBytes.byteLength,
+          sha256: ref.initialJournal.plannedBytesHash,
+          identity: journalIdentity,
+        });
+        await this.requirePublishedInitialJournal(stagedPath, finalPath);
         await readExactBootstrapJournalByIdentity(
           this.dependencies.fs,
           finalPath,
@@ -1979,6 +1879,62 @@ export class TransactionExecutor {
 
       return this.resume(ref.id);
     });
+  }
+
+  /** No-replace-publishes a staged initial journal at its admitted inode under admitted parents. */
+  private async publishInitialJournal(
+    stagedPath: CanonicalAbsolutePathV1,
+    finalPath: CanonicalAbsolutePathV1,
+    admittedSourceParent: BootstrapInitialJournalPublicationV1["sourceParent"],
+    admittedDestinationParent: BootstrapInitialJournalPublicationV1["destinationParent"],
+    postimage: {
+      readonly ownerUid: number;
+      readonly bytes: number;
+      readonly sha256: LowerHexSha256;
+      readonly identity: { readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 };
+    },
+  ): Promise<void> {
+    const publish = this.dependencies.publishBootstrapInitialJournalNoReplace;
+    if (publish === undefined) throw new TransactionStateError();
+    const [sourceParent, destinationParent] = await Promise.all([
+      exactPublicationParent(this.dependencies.fs, dirname(stagedPath) as CanonicalAbsolutePathV1, admittedSourceParent),
+      exactPublicationParent(this.dependencies.fs, dirname(finalPath) as CanonicalAbsolutePathV1, admittedDestinationParent),
+    ]);
+    try {
+      await publish({
+        sourcePath: stagedPath,
+        destinationPath: finalPath,
+        sourceParent,
+        destinationParent,
+        postimage: {
+          kind: "regular_file",
+          ownerUid: postimage.ownerUid,
+          mode: 0o600,
+          nlink: 1,
+          bytes: String(postimage.bytes) as UInt64DecimalV1,
+          sha256: postimage.sha256,
+          dev: postimage.identity.dev,
+          ino: postimage.identity.ino,
+        },
+      });
+    } catch {
+      throw new TransactionStateError();
+    }
+  }
+
+  /** Syncs both parents and proves the staged name is gone and the final name present. */
+  private async requirePublishedInitialJournal(
+    stagedPath: CanonicalAbsolutePathV1,
+    finalPath: CanonicalAbsolutePathV1,
+  ): Promise<BigIntStats> {
+    await syncReopenDirectory(this.dependencies.fs, dirname(stagedPath));
+    await syncReopenDirectory(this.dependencies.fs, dirname(finalPath));
+    const [stagedAfter, finalAfter] = await Promise.all([
+      optionalLstat(this.dependencies.fs, stagedPath),
+      optionalLstat(this.dependencies.fs, finalPath),
+    ]);
+    if (stagedAfter !== null || finalAfter === null) throw new TransactionStateError();
+    return finalAfter;
   }
 
   private async assertExactBootstrapPublicationPostimage(
@@ -2107,13 +2063,8 @@ export class TransactionExecutor {
     return this.store.withTransactionLock(id, () => this.resumeLocked(id));
   }
 
-  private async resumeLocked(
-    id: string,
-    transition: JournalTransition = (journal, nextPhase) => this.transition(journal, nextPhase),
-    admittedJournal?: TransactionJournalV1,
-    bootstrapBound = false,
-  ): Promise<TransactionJournalV1> {
-    let journal = admittedJournal ?? await this.store.read(id);
+  private async resumeLocked(id: string): Promise<TransactionJournalV1> {
+    let journal = await this.store.read(id);
     if (journal.phase === "finalized") {
       /**
        * **The crash window, swept on the next resume.** The prune runs after the
@@ -2129,7 +2080,6 @@ export class TransactionExecutor {
        * reverse would destroy the only copy while a rollback might need it — but it is
        * only *safe* because of this line.
        */
-      if (bootstrapBound) await this.verifyDesired(journal);
       await this.pruneBackups(journal, { raiseOnFailure: true });
       return journal;
     }
@@ -2138,23 +2088,23 @@ export class TransactionExecutor {
     while (journal.phase !== "finalized") {
       switch (journal.phase) {
         case "planned":
-          journal = await this.backUp(journal, transition);
+          journal = await this.backUp(journal);
           break;
         case "backed_up":
-          journal = await this.stage(journal, transition);
+          journal = await this.stage(journal);
           break;
         case "staged":
-          journal = await this.validate(journal, transition);
+          journal = await this.validate(journal);
           break;
         case "validated":
-          journal = await this.apply(journal, transition);
+          journal = await this.apply(journal);
           break;
         case "applied":
-          journal = await this.verifyAndTransition(journal, transition);
+          journal = await this.verifyAndTransition(journal);
           break;
         case "verified":
           await this.verifyDesired(journal);
-          journal = await transition(journal, "finalized");
+          journal = await this.transition(journal, "finalized");
           /**
            * **The one prune site a command can reach, so the one that must not raise.**
            * `execute` funnels through here, and its seven call sites — six commands, `ingest`
@@ -2508,7 +2458,6 @@ export class TransactionExecutor {
 
   private async backUp(
     journal: TransactionJournalV1,
-    transition: JournalTransition = (current, phase) => this.transition(current, phase),
   ): Promise<TransactionJournalV1> {
     await this.ensureTransactionDirectories(journal.id);
     for (const [index, mutation] of journal.mutations.entries()) {
@@ -2557,38 +2506,35 @@ export class TransactionExecutor {
         0o600,
       );
     }
-    return transition(journal, "backed_up");
+    return this.transition(journal, "backed_up");
   }
 
   private async stage(
     journal: TransactionJournalV1,
-    transition: JournalTransition = (current, phase) => this.transition(current, phase),
   ): Promise<TransactionJournalV1> {
     for (const mutation of journal.mutations) {
       await this.stagedBytes(journal, mutation);
     }
-    return transition(journal, "staged");
+    return this.transition(journal, "staged");
   }
 
   private async validate(
     journal: TransactionJournalV1,
-    transition: JournalTransition = (current, phase) => this.transition(current, phase),
   ): Promise<TransactionJournalV1> {
     for (const mutation of journal.mutations) {
       await this.assertTarget(mutation.targetPath);
       await this.stagedBytes(journal, mutation);
     }
-    return transition(journal, "validated");
+    return this.transition(journal, "validated");
   }
 
   private async apply(
     journal: TransactionJournalV1,
-    transition: JournalTransition = (current, phase) => this.transition(current, phase),
   ): Promise<TransactionJournalV1> {
     for (const [index, mutation] of journal.mutations.entries()) {
       await this.applyMutation(journal, index, mutation);
     }
-    return transition(journal, "applied");
+    return this.transition(journal, "applied");
   }
 
   private async applyMutation(
@@ -2653,10 +2599,9 @@ export class TransactionExecutor {
 
   private async verifyAndTransition(
     journal: TransactionJournalV1,
-    transition: JournalTransition = (current, phase) => this.transition(current, phase),
   ): Promise<TransactionJournalV1> {
     await this.verifyDesired(journal);
-    return transition(journal, "verified");
+    return this.transition(journal, "verified");
   }
 
   private async verifyDesired(journal: TransactionJournalV1): Promise<void> {
