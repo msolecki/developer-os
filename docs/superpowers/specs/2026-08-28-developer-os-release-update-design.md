@@ -1809,8 +1809,10 @@ through the exact reverse order; `rolled_back` requires the V1 manifest and ever
 (Amended 2026-10-06, NEW-149/166/167.) Before `compensating` is entered, a forward step whose effect
 is already on disk but whose cursor has not advanced — a created or launchability file renamed to its
 planned path, or a published forward Foundation journal — is finished through the same recovery branch
-a resumed `init` takes, so the cursors name where each consumed payload really is; a step that refuses
-again is left unadvanced. A resumed compensation continues from the recorded `payloadRetentionPart`,
+a resumed `init` takes, so the cursors name where each consumed payload really is (a created global
+lock the attempt already holds counts as such a step). Known limitation: a step that refuses again is
+left unadvanced, compensation then keeps refusing on that payload, and the install stays in
+`compensating` until the cause is fixed and `init` is rerun. A resumed compensation continues from the recorded `payloadRetentionPart`,
 and a cursor whose `payloadWriteState` is `create_intent` compensates through that state's own branch:
 an empty created inode becomes `writing` and is retained by identity, and with none the intent goes idle.
 Successful manifest publication is the point of no return: once `manifestCursor == 2` is durable,

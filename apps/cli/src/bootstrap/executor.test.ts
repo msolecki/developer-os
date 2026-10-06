@@ -8,6 +8,7 @@ import { deriveBootstrapRetentionLocations, encodeCanonicalJson, EXIT_CODES } fr
 import type { CanonicalJsonValue } from "@developer-os/core";
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
+import { runDoctorReport } from "../commands/doctor.js";
 import { runInit } from "../commands/init.js";
 import { runUninstall } from "../commands/uninstall.js";
 import { redactionKeyPath } from "../context.js";
@@ -785,6 +786,86 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect(fixture.bootstrapTrace).toContain(`foundation:compensation:apply:${String(participant(persisted.value, "compensation").id)}`);
     expect(fixture.transactionUnlinkRequests).toStrictEqual([]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-167's known limitation: when the forward Foundation participant fails
+   * again while compensation finishes it, compensation keeps refusing and the
+   * install stays in `compensating` until the cause is fixed and `init` reruns.
+   * The retry republishes nothing, and `doctor` routes the user to `init`.
+   */
+  it("keeps refusing, republishing nothing, when the forward Foundation participant fails again", async () => {
+    const fixture = await createCommandFixture("bootstrap-foundation-forward-failure-recurs", {
+      bootstrapAvailable: true,
+      interruptAfter: "applied",
+      interruptKind: "fresh_init_artifacts",
+    });
+
+    const failed = await runInit(fixture.context, ACCEPTED);
+
+    if (failed.ok) throw new Error("init succeeded through a recurring Foundation failure");
+    expect(failed.code).toBe(EXIT_CODES.securityRefusal);
+    const persisted = await persistedPlan(fixture);
+    const forward = participant(persisted.value, "forward");
+    const published = [
+      String((forward.initialJournal as JsonRecord).finalPath),
+      ...(forward.mutations as JsonRecord[]).map((mutation) => String(mutation.targetPath)),
+    ];
+    const identities = async (): Promise<readonly string[]> => Promise.all(published.map(async (path) => {
+      const stats = await nodeFs.lstat(path, { bigint: true });
+      return `${path}:${stats.dev.toString(10)}:${stats.ino.toString(10)}`;
+    }));
+    const before = await identities();
+    await closeBootstrapProcess(fixture);
+
+    const retried = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(retried.ok ? 0 : retried.code).toBe(EXIT_CODES.securityRefusal);
+    expect(await currentJournal(persisted.value)).toMatchObject({
+      phase: "compensating",
+      terminalOutcome: null,
+      nextFoundationParticipant: 0,
+    });
+    expect(await identities()).toStrictEqual(before);
+    for (const mutation of forward.mutations as JsonRecord[]) {
+      expect(await exists(String(mutation.stagedPath))).toBe(false);
+    }
+    expect(fixture.transactionUnlinkRequests).toStrictEqual([]);
+    await closeBootstrapProcess(fixture);
+    const report = await runDoctorReport(fixture.rebuildContext());
+    expect(report.checks.find((check) => check.id === "transactions")).toMatchObject({
+      status: "fail",
+      recovery: "developer-os init",
+    });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-148 follow-up: a failure after the global lock was created and
+   * acquired but before its cursor advanced. Compensation finishes that row
+   * first, so the held lock and the journal agree at retention.
+   */
+  it.each(["after_global_lock_create", "after_global_lock_parent_sync", "after_creation_evidence"] as const)(
+    "retains a rollback that failed at %s before the global-lock cursor advanced",
+    async (point) => {
+      let fired = false;
+      const fixture = await createCommandFixture(`bootstrap-global-lock-window-${point}`, {
+        bootstrapAvailable: true,
+        // One-shot: finishing the row passes `after_creation_evidence` again.
+        bootstrapFailureHook: (candidate) => {
+          if (candidate !== point || fired) return;
+          fired = true;
+          throw new Error(`synthetic bootstrap failure at ${point}`);
+        },
+      });
+
+      const failed = await runInit(fixture.context, ACCEPTED);
+
+      if (failed.ok) throw new Error("init succeeded through an injected failure");
+      expect(failed.error.message).toContain(`synthetic bootstrap failure at ${point}`);
+      expect(await currentJournal((await persistedPlan(fixture)).value), JSON.stringify({ failed, trace: fixture.bootstrapTrace.slice(-20) }))
+        .toMatchObject({ phase: "retained", terminalOutcome: "rolled_back", nextCreatedPath: 1 });
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
 
   it("retains post-Foundation rollback targets and artifacts without invoking deletion authority", async () => {
     const fixture = await createCommandFixture("bootstrap-foundation-retained-rollback", {

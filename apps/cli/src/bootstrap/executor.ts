@@ -3820,10 +3820,12 @@ export class BootstrapExecutor {
         const scope = journal.phase === "creating" ? "ordinary" : "launchability";
         const ordinal = scope === "ordinary" ? journal.nextCreatedPath : journal.nextLaunchabilityPath;
         const planned = (scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths)[ordinal];
+        if (planned === undefined || await lstatOptional(planned.path) === null) return journal;
+        // A created global lock this process already holds: finishing its row keeps lock and cursor in step (NEW-148).
+        const heldGlobal = planned.kind === "global_lock" && (this.#heldLocks.get(plan.id)?.global ?? null) !== null;
         if (
-          planned?.kind !== "file" ||
-          await lstatOptional(planned.payload.path) !== null ||
-          await lstatOptional(planned.path) === null
+          !heldGlobal &&
+          (planned.kind !== "file" || await lstatOptional(planned.payload.path) !== null)
         ) return journal;
         await this.createPlannedPath(plan, planned, scope, ordinal);
         journal = await this.writeJournal(plan, journal, scope === "ordinary"
