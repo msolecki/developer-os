@@ -465,10 +465,18 @@ function isWordLikePart(part: string): boolean {
   return part.length <= 3 || /[aeiouy]/iu.test(part);
 }
 
-/** NEW-143: at least two hyphen-separated parts, every one word-like. */
+/**
+ * NEW-143: at least two hyphen-separated parts, every one word-like. NEW-146 (b2): and at
+ * least one of four or more letters, so a body of short chunks (`bak-tor-vil-mun-pek`) is no
+ * kebab-case word. ponytail: moves the line, not closes it; `bake-tor-vil-…` stays exempt.
+ */
 function isKebabSlug(body: string): boolean {
   const parts = body.split("-");
-  return parts.length >= 2 && parts.every((part) => part.length > 0 && isWordLikePart(part));
+  return (
+    parts.length >= 2 &&
+    parts.every((part) => part.length > 0 && isWordLikePart(part)) &&
+    parts.some((part) => /^[A-Za-z]{4,}$/u.test(part))
+  );
 }
 
 /** The longest real note path seen (NEW-129) has 11 parts; a longer word chain is not exempt. */

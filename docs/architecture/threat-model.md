@@ -527,7 +527,8 @@ boundary was tried and leaked keys after every escape form it did not list (`\n`
 `sk-` **and** the body after it is at least two hyphen-separated parts that are each word-like
 (`isKebabSlug`), so `verify-task-premises-against-commits` and `refetch-mask-values-keep-structure`
 are words and `ingest`'s secret scan no longer refuses a note named that way. A random key never
-has that body, so `desk-a8f3k2m9q7x1z5b4c6d7e9` still redacts. Pinned by
+has that body, so `desk-a8f3k2m9q7x1z5b4c6d7e9` still redacts. Since NEW-146 (b2) at least one
+body part must also have four or more letters, so `xsk-bak-tor-vil-mun-pek-zud` redacts. Pinned by
 `redaction.test.ts` → "provider-token sk- boundary".
 
 **The NEW-129 residuals are closed (NEW-130, founder decision D83 (5)).** (1) The labelled
@@ -542,10 +543,21 @@ audit ruled that a path is redacted at least as strictly as text scope did, and 
 exactly. A marker the model copies into a new file name is refused by ingest's secret scan.
 (3) `@developer-os/security` exports `REDACTION_MARKER_PATTERN`
 (`[REDACTED:` in any case or spacing), and ingest's secret scan and the macOS discovery boundary both
-test against it. Still open from NEW-129, and not part of D83 (5): an unlabelled all-word passphrase
-joined by `-` is exempt from high-entropy (`isWordLikePath`). Pinned by `redaction.test.ts` →
+test against it. Pinned by `redaction.test.ts` →
 "redacts every word of a spaced passphrase" and "REDACTION_MARKER_PATTERN", and `ingest.test.ts` →
 "redacts a token-named note's path in the index excerpt".
+
+**Accepted residuals (NEW-146, founder decision 2026-10-06).** (1) An unlabelled all-word
+passphrase joined by `-` is not redacted. Below 40 characters (`correct-horse-battery-staple` is
+28) it is under the high-entropy class's run floor; from 40 up `isWordLikePath` exempts it, and
+`redaction.test.ts` → "leaves the same words in prose without a label" pins that, because the
+shape is the shape of a note slug. The narrowest rule tried (five or more lowercase parts of 3–9
+letters, no stopwords) still hit about 0.3% of the 300 exempt hyphenated runs in this repository,
+and vault slugs are likelier prose. A labelled passphrase is `credential-store`. (2) An `sk-` body
+of one-case word parts after a letter, with at least one part of four or more letters
+(`xsk-bake-tor-vil-mun-pek`), stays exempt as a kebab-case word. No real key shape takes that
+path: 0 of 600,000 random `sk-proj-`, `sk-ant-api03-` and legacy base62 bodies pass `isKebabSlug`,
+so only a hand-built string does.
 
 ### 5.8 The redaction key — the product's first secret at rest
 
