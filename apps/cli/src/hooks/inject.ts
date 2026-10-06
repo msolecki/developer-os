@@ -1,13 +1,15 @@
+import { randomBytes } from "node:crypto";
 import { basename } from "node:path";
 
 import { BrainService } from "@developer-os/brain";
 import type { BrainSessionContextV1 } from "@developer-os/brain";
+import { createRedactor } from "@developer-os/security";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { assertOrdinaryCommandAdmitted } from "../bootstrap/report.js";
 import { dependenciesFor } from "../commands/brain-dependencies.js";
 import { readConfigFile } from "../config-file.js";
-import { runtimePathsFor } from "../context.js";
+import { readRedactionKey, REDACTION_KEY_BYTES, runtimePathsFor } from "../context.js";
 import { slugify } from "../project-slug.js";
 import { capUtf8Bytes } from "./outcome.js";
 import type { HookOutcome } from "./outcome.js";
@@ -47,9 +49,12 @@ async function inject(runtime: HookRuntime): Promise<HookOutcome> {
   const service = new BrainService(dependenciesFor(context, runtimePathsFor(context, config).brain, config));
   const root = await resolveProjectRoot(runtime.cwd);
   const text = composeInjection(await service.sessionContext(slugify(basename(root))));
-  return text === null
-    ? { kind: "allow", note: "brain status --inject: nothing to inject" }
-    : { kind: "context", text, redact: context.guards.redactDiagnostic };
+  if (text === null) return { kind: "allow", note: "brain status --inject: nothing to inject" };
+  // NEW-159: the user's `[redaction] patterns`, as capture and ingest apply; read, never create, the key.
+  const redact = createRedactor(readRedactionKey(context.paths.stateDir) ?? randomBytes(REDACTION_KEY_BYTES), {
+    userPatterns: config.redaction?.patterns ?? [],
+  });
+  return { kind: "context", text, redact: (value) => redact(value).text };
 }
 
 /** A session never fails to start because of injection: every failure is `allow` with one note. */

@@ -81,7 +81,7 @@ function projectNote(title: string): string {
     "reviewed: 2026-07-01",
     "---",
     "",
-    "Synthetic project body.",
+    "Synthetic project body. Customer ACME-1234 owns it.",
     "",
   ].join("\n");
 }
@@ -94,6 +94,7 @@ function configFor(fixture: CommandFixture): DeveloperOsConfigV1 {
     git: { enabled: false },
     automation: { enabled: false },
     telemetry: false,
+    redaction: { patterns: ["ACME-1234"] },
   };
 }
 
@@ -162,14 +163,17 @@ function runtimeFor(fixture: CommandFixture, cwd: string, createContext?: HookCo
 }
 
 describe("injectBrainContext", () => {
-  it("returns context carrying the project note, with the context's redactor", async () => {
+  it("returns context carrying the project note, with a redactor bound to the user's patterns", async () => {
     const { fixture, deepCwd } = await installed("inject-context", { vault: true, index: true });
     const outcome = await injectBrainContext(PAYLOAD, runtimeFor(fixture, deepCwd));
     expect(outcome.kind).toBe("context");
     if (outcome.kind !== "context") return;
     expect(outcome.text).toContain("# developer-os");
     expect(outcome.text).toContain("Synthetic project body.");
-    expect(outcome.redact).toBe(fixture.context.guards.redactDiagnostic);
+    // NEW-159: `[redaction] patterns` reach the vendor session's context, not only the built-ins.
+    const redacted = outcome.redact?.(outcome.text) ?? "";
+    expect(redacted).toContain("Synthetic project body.");
+    expect(redacted).not.toContain("ACME-1234");
   });
 
   it("derives the slug from the git root's basename, not from the deeper cwd", async () => {
