@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 
-import { compareUtf8, decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { MAXIMUM_LEAF_PLAN_BYTES, MAXIMUM_PARTICIPANT_JOURNAL_BYTES, updateLeafPlanPath, type ImmutableUpdatePlanRefV1, type UpdateLeafPlanKindV1 } from "./construction.js";
 import { deriveCanonicalStatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type CanonicalStatePayloadPathV1 } from "./paths.js";
-import { parseBundleRelativePath, type BundleRelativePathV1, type ReleaseBundleEntryV1, type ReleaseIdentityV1 } from "./release.js";
+import { MAXIMUM_BUNDLE_AGGREGATE_BYTES, validateBundleEntries, type ReleaseBundleEntryV1, type ReleaseIdentityV1 } from "./release.js";
 import {
   encodeTenDigitOrdinal,
   parseLowerHexSha256,
@@ -318,11 +318,8 @@ export type BundleSourceCompactionTargetV1 =
   | { readonly kind: "entry" | "evidence"; readonly ordinal: number }
   | { readonly kind: "structure"; readonly ordinal: number };
 
-export const MAXIMUM_BUNDLE_ENTRIES = 200_000;
 export const MAXIMUM_SOURCE_READY_EVIDENCE_BYTES = 16_384;
 export const MAXIMUM_DURABLE_ENTRY_EVIDENCE_BYTES = 1024;
-export const MAXIMUM_BUNDLE_FILE_BYTES = 536_870_912;
-const MAXIMUM_AGGREGATE_BYTES = 8_589_934_592;
 const MAXIMUM_METADATA_BYTES = 67_108_864;
 const SOURCE_STRUCTURES: readonly UpdateDirectoryRoleV1[] = ["source_envelope", "source_payload_root", "source_evidence_root"];
 const METADATA_STORES = ["delegations", "indexes", "bundles"] as const;
@@ -464,44 +461,6 @@ export function updateSourceEvidenceSetHash(evidenceFileHashes: readonly LowerHe
   return hashCanonicalJsonNoLf("developer-os/update-source-evidence-set/v1", evidenceFileHashes);
 }
 
-/** Sorted, unique (exact and folded), parent-before-child, bounded per file and in aggregate. */
-function validateBundleEntries(value: unknown, label: string): readonly ReleaseBundleEntryV1[] {
-  const rows = list(value, 1, MAXIMUM_BUNDLE_ENTRIES, label);
-  const seen = new Set<string>();
-  const directories = new Set<string>();
-  let total = 0;
-  let prior: string | null = null;
-  return rows.map((row, index) => {
-    const rowLabel = `${label}[${index.toString(10)}]`;
-    const input = record(row, rowLabel);
-    const path: BundleRelativePathV1 = parseBundleRelativePath(input.path);
-    let entry: ReleaseBundleEntryV1;
-    if (input.kind === "directory") {
-      exact(input, ["path", "kind", "mode"], rowLabel);
-      if (input.mode !== 448) fail(`${rowLabel}.mode`);
-      entry = { path, kind: "directory", mode: 448 };
-      directories.add(path);
-    } else {
-      exact(input, ["path", "kind", "mode", "bytes", "sha256"], rowLabel);
-      if (input.kind !== "file") fail(`${rowLabel}.kind`);
-      const mode = oneOf(input.mode, [384, 448] as const, `${rowLabel}.mode`);
-      const bytes = parseUInt64Decimal(input.bytes);
-      if (BigInt(bytes) > BigInt(MAXIMUM_BUNDLE_FILE_BYTES)) fail(`${rowLabel}.bytes`);
-      total += Number(bytes);
-      if (total > MAXIMUM_AGGREGATE_BYTES) fail(`${label}: aggregate bytes`);
-      entry = { path, kind: "file", mode, bytes, sha256: parseLowerHexSha256(input.sha256) };
-    }
-    const folded = path.normalize("NFC").toLocaleLowerCase("en-US");
-    if (seen.has(path) || seen.has(folded) || (prior !== null && compareUtf8(prior, path) >= 0)) fail(`${rowLabel}: order`);
-    seen.add(path);
-    seen.add(folded);
-    const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : null;
-    if (parent !== null && !(directories.has(parent) && parent !== path)) fail(`${rowLabel}: parent`);
-    prior = path;
-    return entry;
-  });
-}
-
 /** The inventory ordinal of an entry's parent directory, or `null` for a root child. */
 export function bundleEntryParentOrdinal(entries: readonly ReleaseBundleEntryV1[], ordinal: number): number | null {
   const path = (entries[ordinal] as ReleaseBundleEntryV1).path;
@@ -532,7 +491,7 @@ export function validateBundleSourceStagingPlan(value: unknown, stagingRoot: Can
   if (exact(input.sourceRootBefore, ["state"], `${label}.sourceRootBefore`).state !== "absent") fail(`${label}.sourceRootBefore`);
   const entries = validateBundleEntries(input.entries, `${label}.entries`);
   if (input.inventoryHash !== bundleInventoryHash(entries)) fail(`${label}.inventoryHash`);
-  if (integer(input.aggregateBytes, 1, MAXIMUM_AGGREGATE_BYTES, `${label}.aggregateBytes`) !== bundleAggregateBytes(entries)) fail(`${label}.aggregateBytes`);
+  if (integer(input.aggregateBytes, 1, MAXIMUM_BUNDLE_AGGREGATE_BYTES, `${label}.aggregateBytes`) !== bundleAggregateBytes(entries)) fail(`${label}.aggregateBytes`);
   checkPlanBounds(input, label);
   return input as unknown as BundleSourceStagingPlanV1;
 }
