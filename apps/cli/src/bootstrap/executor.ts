@@ -13,6 +13,7 @@ import {
   deriveBootstrapEnvelopePaths,
   deriveBootstrapPayloadEvidencePaths,
   deriveBootstrapRetentionLocations,
+  reachedReversibleSteps,
   deriveBootstrapRetentionTable,
   encodeCanonicalJson,
   EXIT_CODES,
@@ -160,6 +161,7 @@ export const freshInitFineGrainedDeathPoints = [
   { name: "after_journal_advance" },
   { name: "before_lock_release" },
   { name: "after_lock_release" },
+  { name: "before_compensation" },
   { name: "after_compensation_staged_file" },
   { name: "after_compensation_evidence" },
   { name: "after_rolled_back" },
@@ -3663,19 +3665,13 @@ export class BootstrapExecutor {
     let journal = starting;
     const ordinaryBase = plan.payloads.length;
     const foundationBase = ordinaryBase + plan.createdPaths.length;
-    const reached =
-      journal.nextPayload +
-      (journal.payloadWriteState.state === "idle" ? 0 : 1) +
-      journal.nextCreatedPath +
-      journal.nextFoundationParticipant +
-      journal.nextLaunchabilityPath +
-      Math.min(journal.manifestCursor, 1);
-
     if (journal.phase !== "compensating") {
+      this.checkpoint("before_compensation");
+      journal = await this.settleInFlightStep(plan, journal);
       journal = await this.writeJournal(plan, journal, {
         phase: "compensating",
         direction: "compensating",
-        compensationNext: reached - 1,
+        compensationNext: reachedReversibleSteps(journal) - 1,
       });
     }
     while ((journal.compensationNext ?? -1) >= 0) {
@@ -3802,6 +3798,51 @@ export class BootstrapExecutor {
       terminalOutcome: "rolled_back",
     });
     this.checkpoint("after_rolled_back");
+  }
+
+  /**
+   * NEW-167: compensation and retention locate a consumed payload from the
+   * journal cursors alone, and each cursor advances only after its effect. A
+   * failure after a publication rename (a created or launchability file, or a
+   * published forward Foundation journal) but before its cursor advance left
+   * the payload where no cursor points. Before compensating, that one step is
+   * finished through the same recovery branch a resumed `init` would take, so
+   * the cursors are truthful again. A step that refuses again is left as it
+   * was, and compensation reports the refusal as before.
+   */
+  private async settleInFlightStep(
+    plan: FreshV2InitPlanV1,
+    starting: FreshV2InitJournalV1,
+  ): Promise<FreshV2InitJournalV1> {
+    let journal = starting;
+    try {
+      if (journal.phase === "creating" || journal.phase === "launchability_publishing") {
+        const scope = journal.phase === "creating" ? "ordinary" : "launchability";
+        const ordinal = scope === "ordinary" ? journal.nextCreatedPath : journal.nextLaunchabilityPath;
+        const planned = (scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths)[ordinal];
+        if (
+          planned?.kind !== "file" ||
+          await lstatOptional(planned.payload.path) !== null ||
+          await lstatOptional(planned.path) === null
+        ) return journal;
+        await this.createPlannedPath(plan, planned, scope, ordinal);
+        journal = await this.writeJournal(plan, journal, scope === "ordinary"
+          ? { nextCreatedPath: ordinal + 1 }
+          : { nextLaunchabilityPath: ordinal + 1 });
+      } else if (journal.phase === "foundation_applying" && journal.nextFoundationParticipant === 0) {
+        const forward = plan.foundationParticipants.find((participant) => participant.role.kind === "forward");
+        if (forward === undefined || await lstatOptional(forward.initialJournal.finalPath) === null) return journal;
+        const admitted = await this.admittedFoundation(forward, plan);
+        await this.#dependencies.transactionExecutor.executeBootstrapFoundationParticipant(admitted);
+        this.trace(`foundation:forward:${forward.id}`);
+        journal = await this.writeJournal(plan, journal, { nextFoundationParticipant: 1 });
+      }
+    } catch (error) {
+      if (error instanceof FreshBootstrapInterruption) throw error;
+      // ponytail: the settle error is dropped; the forward failure is what init reports (NEW-179 A-4 owns chaining).
+      return this.#journalStores.get(plan.id)?.current() ?? journal;
+    }
+    return journal;
   }
 
   private async buildRetentionEvidence(

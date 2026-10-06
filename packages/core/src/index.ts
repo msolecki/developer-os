@@ -282,6 +282,7 @@ export {
   deriveBootstrapPayloadEvidencePaths,
   deriveBootstrapRetentionAuthorities,
   deriveBootstrapRetentionLocations,
+  reachedReversibleSteps,
   deriveBootstrapRetentionTable,
   inspectDrift,
   selectBootstrapJournal,
