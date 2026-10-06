@@ -49,6 +49,7 @@ import {
 import type {
   CanonicalAbsolutePathV1,
   CanonicalJsonValue,
+  DeveloperOsConfigV1,
   FoundationParticipantRefV1,
   HeldLifecycleStableLockV1,
   InstallationManifestV2,
@@ -943,6 +944,8 @@ export function createUninstallAdapters(input: {
   readonly holds?: UninstallHoldsV1 | undefined;
   /** D25: directory rows `finalize_tombstones` found non-empty, so the run can report them. */
   readonly preserved?: string[] | undefined;
+  /** W2-UNINST-3: directory rows `finalize_tombstones` removed, so the run reports only what it removed. */
+  readonly removedDirectories?: string[] | undefined;
 }): LifecycleParticipantAdaptersV1<LifecycleExecutionPlanV1> {
   const { request, foundation, manifest } = input;
   const fs = request.lifecycle.fs;
@@ -1030,6 +1033,7 @@ export function createUninstallAdapters(input: {
           manifestPlanOf(plan),
           boundary,
           input.preserved,
+          input.removedDirectories,
         );
         await manifest(plan).compact(manifestPlanOf(plan));
       },
@@ -1147,6 +1151,7 @@ async function finalizeUninstallTombstones(
   leaf: ManifestStatePlanV1,
   boundary: (reached: UninstallBoundaryV1) => Promise<void>,
   preserved: string[] | undefined,
+  removed: string[] | undefined,
 ): Promise<void> {
   const { context, lifecycle } = request;
   const tombstone = await guardedEntry(lifecycle.fs, leaf.tombstonePath);
@@ -1169,6 +1174,7 @@ async function finalizeUninstallTombstones(
     const artifact = { path, kind: "directory" } as unknown as ManagedArtifactV1;
     const outcome = await removeDirectories(context, [{ artifact, canonicalPath }]);
     if (outcome.removed.length === 1) {
+      removed?.push(...outcome.removed);
       await boundary({ kind: "empty_directory_removed", path: canonical(path) });
     }
     preserved?.push(...outcome.preserved);
@@ -1508,6 +1514,19 @@ export class LifecycleUninstaller {
       });
     }
     artifacts.push(...(launchd?.plists ?? []));
+    /**
+     * W2-UNINST-5: the launchd plan binds `config.toml`'s removal (platform `planLaunchdTransitions`), so a
+     * configuration that is gone or not a regular file refuses here, before any ID is reserved, rather
+     * than as a recovery-required `uninstall_launchd_file_unbound` with nothing to recover.
+     */
+    if (launchd !== null && !artifacts.some((artifact) => artifact.targetPath === paths.configFile)) {
+      throw new UninstallRefusal(
+        EXIT_CODES.decisionRequired,
+        "config.toml is missing or is not a regular file, and removing the scheduled launchd jobs binds its removal; nothing was removed",
+        [paths.configFile],
+        `restore ${paths.configFile} with its installed bytes, then run developer-os uninstall again`,
+      );
+    }
     artifacts.sort((left, right) => removalOrder(left.targetPath, right.targetPath));
     const chunks = chunkUninstallArtifacts(artifacts, productHome);
     const markerEntry = await guardedEntry(lifecycle.fs, markerPath);
@@ -1543,6 +1562,22 @@ export class LifecycleUninstaller {
       refs: null,
     };
 
+    /**
+     * W2-UNINST-2: `drain_runners` locks every lease and never creates one, so a missing lease would
+     * throw only after the marker and the launchd bootout and roll back. Refused here, before any ID
+     * is reserved, naming the file the user can re-create.
+     */
+    for (const lease of leases) {
+      const entry = await guardedEntry(lifecycle.fs, lease);
+      if (entry === null || entry.kind !== "regular_file") {
+        throw new UninstallRefusal(
+          EXIT_CODES.recoveryRequired,
+          "a runner lease file is missing or is not a regular file, so uninstall cannot drain the scheduled jobs; nothing was removed",
+          [lease],
+          `re-create it as an empty owner-only file (install -m 600 /dev/null ${lease}), then run developer-os uninstall again`,
+        );
+      }
+    }
     /** Refused here, before any ID is reserved, rather than only at compaction after the commit. */
     const hooks = await admitHookFiringRecords(lifecycle.fs, productHome, lifecycle.effectiveUid);
     const codexIngestHome = await admitCodexIngestHome(lifecycle.fs, productHome, lifecycle.effectiveUid);
@@ -1577,12 +1612,14 @@ export class LifecycleUninstaller {
       await cleanAllocatorTemp(context, lifecycle, request.key, uninstallResidueFrom(request.evidence), current());
       const participants = createUninstallParticipants(request);
       const preservedDirectories: string[] = [];
+      const removedDirectories: string[] = [];
       const adapters = createUninstallAdapters({
         request,
         ...participants,
         afterBoundary: this.afterBoundary,
         holds,
         preserved: preservedDirectories,
+        removedDirectories,
       });
       const residue = uninstallResidueFrom(evidence);
       const recovered = await lifecycle
@@ -1705,9 +1742,27 @@ export class LifecycleUninstaller {
         context.io.stderr(MANIFEST_ANCHOR_WARNING);
       }
 
+      /**
+       * W2-UNINST-3: what this run removed, not what the preview listed: the files its artifact steps
+       * removed, the leaves terminal compaction collects, and the directories `finalize_tombstones`
+       * emptied. A row already missing, a skipped non-regular entry and a kept directory are not in it.
+       */
+      const collected = new Set<string>([
+        inputs.markerPreimage.targetPath,
+        inputs.manifestPath,
+        stateLeaf(productHome, ALLOCATOR_LEAF),
+        stateLeaf(productHome, NONCE_LEAF),
+        hookFiringRecordsPath(productHome),
+        codexIngestHomePath(productHome),
+      ]);
+      const removed = [
+        ...inputs.chunks.flat().map((mutation) => mutation.targetPath as string),
+        ...preview.removable.filter((path) => collected.has(path)),
+        ...removedDirectories,
+      ];
       return {
         schemaVersion: 1,
-        removed: preview.removable,
+        removed: [...new Set(removed)].sort(),
         restored: [],
         preserved: [...new Set([...preview.preserved, ...preservedDirectories])],
         retainedBootstrapEvidence: evidence.report.ids,
@@ -1868,18 +1923,31 @@ export async function planUninstallDetach(context: CliContext, lifecycle: CliLif
   const manifest = validateManifestV2(decodeCanonicalJson(observed.bytes, MAX_MANIFEST_BYTES), manifestAdmissionFor(paths, [], homes));
   if (!manifest.artifacts.some((artifact) => artifact.owner === "claude" || artifact.owner === "codex")) return null;
 
+  /**
+   * FLOW-UNINST-4: the drained uninstall removes `config.toml` a moment later, so an absent one has no
+   * `adapters` to flip and an invalid one is left for `planUninstall` to report as drift (exit 3). Any
+   * other read refusal, such as a symlink, still refuses.
+   */
   let configHash = "";
-  const text = await context.guards.readText(context.paths.configFile, async (handle) => {
-    const bytes = await handle.readFile();
-    configHash = hashBytes(bytes);
-    return bytes.toString("utf8");
-  });
+  let config: DeveloperOsConfigV1 | null = null;
+  if (await nodeInstructionFs.lstat(context.paths.configFile) !== null) {
+    const text = await context.guards.readText(context.paths.configFile, async (handle) => {
+      const bytes = await handle.readFile();
+      configHash = hashBytes(bytes);
+      return bytes.toString("utf8");
+    });
+    try {
+      config = loadConfig(text);
+    } catch {
+      config = null;
+    }
+  }
   const input: InstructionDetachInputV1 = {
     vendors: ["claude", "codex"],
     homes,
     manifest,
     manifestHash: hashBytes(observed.bytes) as LowerHexSha256,
-    config: loadConfig(text),
+    config,
     configHash: configHash as LowerHexSha256,
     fs: nodeInstructionFs,
   };

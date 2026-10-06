@@ -46,7 +46,8 @@ export interface InstructionDetachInputV1 {
   readonly homes: VendorHomesV1;
   readonly manifest: InstallationManifestV2;
   readonly manifestHash: LowerHexSha256;
-  readonly config: DeveloperOsConfigV1;
+  /** `null` when there is no configuration to rewrite: `uninstall` over an absent or invalid `config.toml`. */
+  readonly config: DeveloperOsConfigV1 | null;
   readonly configHash: LowerHexSha256;
   readonly fs: InstructionFileSystemV1;
 }
@@ -234,16 +235,17 @@ export async function planInstructionDetach(input: InstructionDetachInputV1): Pr
     }
   }
 
-  const adaptersChanged = input.vendors.some((vendor) => input.config.adapters[vendor]);
+  const config = input.config;
+  const adaptersChanged = config !== null && input.vendors.some((vendor) => config.adapters[vendor]);
   if (rows.length === 0 && !adaptersChanged) return { kind: "noop" };
 
   if (adaptersChanged) {
-    const adapters = { ...input.config.adapters };
+    const adapters = { ...config.adapters };
     for (const vendor of input.vendors) adapters[vendor] = false;
     mutations.push({
       targetPath: join(homes.productHome, "config.toml"),
       operation: "replace",
-      content: encoder.encode(serializeConfig({ ...input.config, adapters })),
+      content: encoder.encode(serializeConfig({ ...config, adapters })),
       expectedBeforeHash: input.configHash,
     });
   }

@@ -431,6 +431,31 @@ describe("uninstall detaches vendor instruction artifacts before draining", () =
     expect(installed.codex.calls).toStrictEqual([]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("detaches and uninstalls a home whose config.toml was deleted (FLOW-UNINST-4)", async () => {
+    const installed = await install("uninstall-detach-no-config", { vendors: ["claude", "codex"] });
+    await nodeFs.rm(installed.fixture.paths.configFile);
+
+    const result = await runUninstall(installed.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(`${String(result.code)} ${result.error.kind}: ${result.error.message}`);
+    expect(result.data.removed).toEqual(expect.arrayContaining([...installed.vendorPaths]));
+    expect(await exists(installed.fixture.paths.manifestFile)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses an invalid configuration on an attached home as drift (exit 3) before any write (FLOW-UNINST-4)", async () => {
+    const installed = await install("uninstall-detach-bad-config-attached", { vendors: ["claude"] });
+    await nodeFs.writeFile(installed.fixture.paths.configFile, "not = [valid\n");
+    const before = await snapshot(installed);
+
+    const result = await runUninstall(installed.context, ACCEPTED);
+
+    expect(result).toMatchObject({ ok: false, code: EXIT_CODES.decisionRequired });
+    if (result.ok) throw new Error("uninstall removed an invalid configuration");
+    expect(result.error.paths).toContain(installed.fixture.paths.configFile);
+    expect(await snapshot(installed)).toStrictEqual(before);
+    expect(installed.plans).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("still refuses a configuration that no longer validates", async () => {
     const installed = await install("uninstall-detach-bad-config", { vendors: [] });
     await nodeFs.writeFile(installed.fixture.paths.configFile, "not = [valid\n");
