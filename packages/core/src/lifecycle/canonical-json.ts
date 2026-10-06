@@ -48,9 +48,15 @@ const escapes: Readonly<Record<number, string>> = {
  * string with nothing to escape (almost every path, hash and timestamp) is one
  * template concatenation instead of one append per character (NEW-53). An
  * earlier revision of this comment rejected the slice form on 2026-09-08 because
- * it doubled young-generation scavenges in the bootstrap test (2,782 to 6,226);
- * NEW-53 was reopened for exactly this change; re-measure the scavenge count
- * on the bootstrap test before reverting it again.
+ * it doubled young-generation scavenges in the bootstrap test (2,782 to 6,226).
+ * Re-measured end to end on 2026-10-06, packed releases at 4c4150ab (per-char)
+ * against this form, unsandboxed, load average 9-15, runs interleaved:
+ * `init --yes --adapters none` took 163.7 s and 150.7 s before, 121.7 s and
+ * 118.2 s after; user+sys 135.8 s and 137.0 s before, 127.3 s and 123.8 s after;
+ * max RSS about 328 MB before, 356 MB after. `evidence-identity.v2.test.ts`
+ * (8 cases) was within noise: 376 s and 397 s before, 443 s and 407 s after, so
+ * no win is claimed there. Scavenge counts were not obtainable: `--trace-gc` is
+ * refused in NODE_OPTIONS and vitest workers swallow it from `--execArgv`.
  */
 function encodeString(value: string): string {
   assertString(value);
