@@ -137,8 +137,8 @@ describe("the generated plugin against a real Claude Code installation", () => {
   /**
    * NEW-65: `validate` is not loading (claude-adapter.md §14). `plugin details` is the unbilled
    * loading proof: it lists every component the skills-directory plugin actually loaded, and a
-   * command is listed under `Skills` (a thin command beside its same-id skill appears twice), so
-   * the `Skills (N)` count is what pins commands.
+   * command is listed under `Skills` (a command beside a same-id skill would appear twice; D86
+   * removed the five thin commands), so the `Skills (N)` count is what pins commands.
    */
   it.skipIf(claude === null)(
     "lists every rendered skill, agent and command in claude plugin details",
