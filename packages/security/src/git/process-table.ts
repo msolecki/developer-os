@@ -5,6 +5,7 @@
  */
 import {
   encodeCanonicalJson,
+  GIT_OBJECT_COUNT_MAX,
   hashCanonicalJson,
   parseCanonicalAbsolutePathText,
   parseLowerHexSha1,
@@ -52,7 +53,7 @@ import {
 
 export const GIT_DISTRIBUTION_POLICY_ID = "apple-git-arm64-v2";
 export const SUPPORTED_GIT_PROCESS_TABLE_ID = "apple-git-process-v2";
-export const GIT_PACK_OBJECT_COUNT_MAX = 200001;
+export const GIT_PACK_OBJECT_COUNT_MAX = GIT_OBJECT_COUNT_MAX;
 
 const GIT_PROCESS_TABLE_DOMAIN = "developer-os:git-process-table:v1";
 const encoder = new TextEncoder();
@@ -267,7 +268,8 @@ const PHASE_BUDGET_MS: Readonly<Record<GitProcessPhaseBudgetIdV1, GitProcessPhas
   source_build: 1800000,
 };
 
-const EDGE_PHASE_BUDGET: Readonly<Record<GitProcessEdgePhaseV1, GitProcessPhaseBudgetIdV1>> = {
+/** Spec §4.2: `push` begins at `direct_source_push` and covers its pack, transport and receive descendants. */
+export const EDGE_PHASE_BUDGET: Readonly<Record<GitProcessEdgePhaseV1, GitProcessPhaseBudgetIdV1>> = {
   distribution_probe: "distribution_probe",
   config_candidate: "config_candidate",
   source_build: "source_build",
