@@ -541,6 +541,10 @@ export class LaunchdEffectExecutor implements LifecycleEffectAdapterV1 {
     }
     const request = await this.#bootstrapRequest(effect, direction, index, transition, table, phase);
     const evidence = await this.#dependencies.bootstrapper.bootstrap(request);
+    const { effectId, planHash, direction: requested, transitionIndex, role } = request;
+    if (!sameCanonical(evidence.transition, { effectId, planHash, direction: requested, transitionIndex, role })) {
+      recovery("launchd_bootstrap_evidence_unbound", transition.plistPath);
+    }
     if (!commandSucceeded(evidence.process)) recovery("launchd_command_failed", transition.plistPath);
     await this.#requireVerifiedLoad(effect, direction, index, transition, table, phase, request);
     return true;

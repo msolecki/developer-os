@@ -287,6 +287,14 @@ describe("LaunchdPathBootstrapper (D82)", () => {
     const evidence = await bootstrapper.bootstrap(request);
     expect(evidence.process).toMatchObject({ exitCode: 0, termination: "exited" });
     expect(evidence.source).toStrictEqual(request.source);
+    // MACOS-6: the evidence names the journaled transition it was run for.
+    expect(evidence.transition).toStrictEqual({
+      effectId: request.effectId,
+      planHash: request.planHash,
+      direction: request.direction,
+      transitionIndex: request.transitionIndex,
+      role: request.role,
+    });
     expect(runner.requests).toHaveLength(1);
     expect(runner.requests[0]).toMatchObject({
       executable: "/bin/launchctl",

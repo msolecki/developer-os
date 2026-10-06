@@ -81,6 +81,8 @@ export interface LaunchdBootstrapRequestV1 {
 export interface LaunchdMutationEvidenceV1 {
   readonly argvId: "bootstrap";
   readonly source: LaunchdOpenedPlistIdentityV1;
+  /** MACOS-6: the journaled transition this bootstrap ran for; the effect executor checks it is its own. */
+  readonly transition: Pick<LaunchdBootstrapRequestV1, "effectId" | "planHash" | "direction" | "transitionIndex" | "role">;
   readonly process: {
     readonly exitCode: number | null;
     readonly signal: string | null;
@@ -322,6 +324,13 @@ export class LaunchdPathBootstrapper {
     return Object.freeze({
       argvId: "bootstrap",
       source: request.source,
+      transition: Object.freeze({
+        effectId: request.effectId,
+        planHash: request.planHash,
+        direction: request.direction,
+        transitionIndex: request.transitionIndex,
+        role: request.role,
+      }),
       process: Object.freeze({
         exitCode: evidence.exitCode,
         signal: evidence.signal,

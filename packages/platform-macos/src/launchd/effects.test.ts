@@ -339,6 +339,7 @@ function fixture(fixturePlan: LaunchdPlanV1, table = processTable(), world = new
       return Promise.resolve({
         argvId: "bootstrap",
         source: request.source,
+        transition: transitionOf(request),
         process: { exitCode: 0, signal: null, termination: "exited", stdoutBytes: 0, stderrBytes: 0, groupReaped: true },
       } as LaunchdMutationEvidenceV1);
     },
@@ -791,6 +792,21 @@ describe("LaunchdEffectExecutor", () => {
     expect([await phaseOf(fx, "after_files"), fx.world.probes, fx.world.events]).toStrictEqual([null, [], []]);
   });
 
+  it("refuses bootstrap evidence that names another transition (MACOS-6)", async () => {
+    const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    publishPlists(fx);
+    const base = bootstrapperLoading(fx, (planned) => planned);
+    const foreign: LaunchdEffectDependenciesV1["bootstrapper"] = {
+      bootstrap: async (request) => {
+        const evidence = await base.bootstrap(request);
+        return { ...evidence, transition: { ...evidence.transition, transitionIndex: request.transitionIndex + 1 } };
+      },
+      verifyLoaded: base.verifyLoaded,
+    };
+
+    await expect(fx.executor({ bootstrapper: foreign }).apply(fx.ref("after_files"))).rejects.toMatchObject({ reason: "launchd_bootstrap_evidence_unbound" });
+  });
+
   function bootstrapperLoading(fx: Fixture, label: (planned: string) => string | null): LaunchdEffectDependenciesV1["bootstrapper"] {
     return {
       bootstrap: (request) => {
@@ -799,6 +815,7 @@ describe("LaunchdEffectExecutor", () => {
         return Promise.resolve({
           argvId: "bootstrap",
           source: request.source,
+          transition: transitionOf(request),
           process: { exitCode: 0, signal: null, termination: "exited", stdoutBytes: 0, stderrBytes: 0, groupReaped: true },
         } as LaunchdMutationEvidenceV1);
       },
@@ -838,6 +855,10 @@ describe("LaunchdEffectExecutor", () => {
     await expect(fx.executor().apply(fx.ref("after_files"))).rejects.toThrow(LifecycleRecoveryRequiredError);
   });
 });
+
+function transitionOf(request: LaunchdBootstrapRequestV1): LaunchdMutationEvidenceV1["transition"] {
+  return { effectId: request.effectId, planHash: request.planHash, direction: request.direction, transitionIndex: request.transitionIndex, role: request.role };
+}
 
 describe("LaunchdBootoutRunner", () => {
   const bases: string[] = [];
