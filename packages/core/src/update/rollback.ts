@@ -1152,7 +1152,8 @@ export function validateRollbackPayloadSourceJournal(value: unknown, plan: Rollb
       break;
     }
     case "rolled_back":
-      legal = compaction === null && compMetadata === -1 && compensation === -1 && part === null && compStructure === -1 && noReady;
+      // W2-ROLLBACK-5: a rolled-back source has cleared every write state.
+      legal = compaction === null && compMetadata === -1 && compensation === -1 && part === null && compStructure === -1 && noReady && structureState === null && entryState === null && metadataState === null;
       break;
     case "compacting":
       legal = noCompensation && entriesDone && readyComplete && compaction !== null;
@@ -1590,7 +1591,8 @@ export function validateRollbackPayloadPublicationJournal(value: unknown, plan: 
       legal = publish !== null && compaction === null && compMetadata === -1 && compensation === -1 && part === null && compStructure !== null && compStructure <= structureReached;
       break;
     case "rolled_back":
-      legal = compaction === null && (publish !== null ? compMetadata === -1 && compensation === -1 && part === null && compStructure === -1 : noCompensation);
+      // W2-ROLLBACK-5: as in the source journal, rolled back clears every write state.
+      legal = compaction === null && !writing && (publish !== null ? compMetadata === -1 && compensation === -1 && part === null && compStructure === -1 : noCompensation);
       break;
     case "compacting":
       legal = noCompensation && complete && compaction !== null;
@@ -1624,7 +1626,7 @@ export function advanceRollbackPayloadPublicationJournal(plan: RollbackPayloadSt
       next = { ...base, phase: "structure_publishing", structureWriteState: { ordinal: current.nextStructure, state: "create_intent" } };
       break;
     case "structure_created":
-      need(current.structureWriteState?.state === "create_intent");
+      need(current.phase === "structure_publishing" && current.structureWriteState?.state === "create_intent");
       next = { ...base, structureWriteState: { ordinal: current.nextStructure, state: "created", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
       break;
     case "structure_complete": {
@@ -1641,7 +1643,7 @@ export function advanceRollbackPayloadPublicationJournal(plan: RollbackPayloadSt
       next = { ...base, metadataWriteState: { ordinal: current.nextMetadata, state: "publish_intent" } };
       break;
     case "metadata_published":
-      need(current.metadataWriteState?.state === "publish_intent");
+      need(current.phase === "metadata_publishing" && current.metadataWriteState?.state === "publish_intent");
       next = { ...base, metadataWriteState: { ordinal: current.nextMetadata, state: "published", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
       break;
     case "metadata_complete": {
@@ -1679,7 +1681,7 @@ export function advanceRollbackPayloadPublicationJournal(plan: RollbackPayloadSt
       } else {
         need(current.phase === "compensating_structure");
         const at = current.compensationStructureNext as number;
-        next = at >= 0 ? { ...base, compensationStructureNext: at - 1 } : { ...base, phase: "rolled_back" };
+        next = at >= 0 ? { ...base, compensationStructureNext: at - 1 } : { ...base, phase: "rolled_back", entryWriteState: null, structureWriteState: null, metadataWriteState: null };
       }
       break;
     }
