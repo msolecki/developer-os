@@ -35,7 +35,7 @@ const HOSTS_FILE = join("tests", "repository", "instruction-hosts.json");
 export const INSTRUCTION_SCAN_ROOTS: readonly string[] = ["instructions", "templates/project"];
 const SOURCE_PREFIX = ["DEVELOPER", "OS", "SOURCE", ""].join("_");
 
-const LINE_RULES: readonly { readonly rule: string; readonly expression: RegExp }[] = [
+export const LINE_RULES: readonly { readonly rule: string; readonly expression: RegExp }[] = [
   { rule: "home-path", expression: /(?<![\w.:/-])\/(?:Users|home)\//u },
   {
     rule: "home-relative-path",
@@ -43,7 +43,9 @@ const LINE_RULES: readonly { readonly rule: string; readonly expression: RegExp 
   },
   {
     rule: "email",
-    expression: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/u,
+    // The lookbehind starts the attempt only at the head of a local-part run: an unanchored `+`
+    // rescans the whole run from every start, which is quadratic on one long line (NEW-131).
+    expression: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/u,
   },
   { rule: "source-variable", expression: new RegExp(SOURCE_PREFIX, "u") },
   {
@@ -52,7 +54,33 @@ const LINE_RULES: readonly { readonly rule: string; readonly expression: RegExp 
   },
 ];
 
-const URL_EXPRESSION = /\b[a-z][a-z0-9+.-]*:\/\/([^/\s?#)>\]"'`]+)/giu;
+const URL_AT = /\b[a-z][a-z0-9+.-]*:\/\/([^/\s?#)>\]"'`]+)/iuy;
+const SCHEME_CHAR = /[a-z0-9+.-]/iu;
+
+/**
+ * The authority of every `scheme://authority` in `content`, as the global form of `URL_AT` reports
+ * them. Starting the pattern at every offset rescans a long scheme-like run each time (`a.a.a.…`),
+ * which is quadratic; here each `://` tries only the starts inside the run before it (NEW-131).
+ */
+export function urlAuthorities(content: string): readonly string[] {
+  const out: string[] = [];
+  let from = 0;
+  for (let at = content.indexOf("://", from); at >= 0; at = content.indexOf("://", from)) {
+    let start = at;
+    while (start > from && SCHEME_CHAR.test(content[start - 1] ?? "")) start -= 1;
+    from = at + 3;
+    for (let offset = start; offset < at; offset += 1) {
+      URL_AT.lastIndex = offset;
+      const match = URL_AT.exec(content);
+      if (match !== null) {
+        out.push(match[1] ?? "");
+        from = URL_AT.lastIndex;
+        break;
+      }
+    }
+  }
+  return out;
+}
 
 function urlHost(authority: string): string {
   const afterUser = authority.slice(authority.lastIndexOf("@") + 1);
@@ -161,8 +189,8 @@ export function scanInstructionDefaults(
       for (const { rule, expression } of LINE_RULES) {
         if (expression.test(content)) add(line, rule);
       }
-      for (const match of content.matchAll(URL_EXPRESSION)) {
-        if (!allowedHosts.has(urlHost(match[1] ?? ""))) add(line, "url");
+      for (const authority of urlAuthorities(content)) {
+        if (!allowedHosts.has(urlHost(authority))) add(line, "url");
       }
       extra.forEach((expression, patternIndex) => {
         if (expression.test(content)) add(line, `extra:${String(patternIndex + 1)}`);
