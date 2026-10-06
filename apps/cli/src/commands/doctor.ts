@@ -84,6 +84,8 @@ import { claudeInstructionPaths, codexInstructionPaths, resolveVendorHomes } fro
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import { isCodeDefect, manifestAnchorPath, readManifestAnchor } from "../lifecycle/manifest-anchor.js";
 import type { ScheduledHandlerResultV1 } from "../lifecycle/runtime-records.js";
+import { surveyLifecycleResidue } from "../lifecycle/survey.js";
+import type { LifecycleResidueSurveyV1 } from "../lifecycle/survey.js";
 import { entrypointPath } from "../update/local-release.js";
 import {
   createManagedArtifactEphemeralRegistry,
@@ -1058,11 +1060,15 @@ async function checkManifest(
   }
 }
 
-async function checkTransactions(context: CliContext): Promise<Finding> {
+/**
+ * `owned` holds the journals a V2 coordinator owns (NEW-160): the gate refuses `repair` on them,
+ * so they are reported by `lifecycle`, whose recovery resumes the coordinator.
+ */
+async function checkTransactions(context: CliContext, owned: ReadonlySet<string>): Promise<Finding> {
   const { incomplete, retained } = await surveyTransactions(context, {
     retained: true,
   });
-  const first = incomplete[0];
+  const first = incomplete.find((entry) => !owned.has(entry.id));
   if (first !== undefined) {
     return fail(
       "transactions",
@@ -1719,6 +1725,37 @@ async function guarded(
   }
 }
 
+/**
+ * NEW-160: an interrupted V2 coordinator, a non-empty uninstall marker or an update executor
+ * record. Silent on a home with none, like `manifest-anchor`, so a healthy report's check list is
+ * unchanged; placed ahead of every other exit-6 check so its recovery is the one printed.
+ */
+async function lifecycleFindings(
+  context: CliContext,
+): Promise<{ readonly findings: readonly Finding[]; readonly owned: ReadonlySet<string> }> {
+  let survey: LifecycleResidueSurveyV1;
+  try {
+    survey = await surveyLifecycleResidue(context);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "lifecycle could not be checked";
+    return {
+      findings: [fail("lifecycle", context.guards.redactDiagnostic(message), [], exitCodeOf(error))],
+      owned: new Set(),
+    };
+  }
+  if (survey.findings.length === 0) return { findings: [], owned: survey.ownedTransactionIds };
+  return {
+    findings: [fail(
+      "lifecycle",
+      context.guards.redactDiagnostic(survey.findings.map((finding) => finding.message).join("; ")),
+      survey.findings.map((finding) => finding.path),
+      EXIT_CODES.recoveryRequired,
+      survey.findings.find((finding) => finding.recovery !== undefined)?.recovery,
+    )],
+    owned: survey.ownedTransactionIds,
+  };
+}
+
 async function collectFindings(
   context: CliContext,
   options: DoctorOptions,
@@ -1806,9 +1843,11 @@ async function collectFindings(
 
   // Read once: `hooks` and both capability checks share one verdict (NEW-158); every read in it catches.
   const hooks = await hookReports(context, paths.stateDir);
+  const lifecycle = await lifecycleFindings(context);
 
   return { findings: [
     platform,
+    ...lifecycle.findings,
     await guarded(context, "product-home", [paths.home], () =>
       checkProductHome(context, paths),
     ),
@@ -1817,7 +1856,7 @@ async function collectFindings(
     ),
     manifest,
     await guarded(context, "transactions", [], () =>
-      checkTransactions(context),
+      checkTransactions(context, lifecycle.owned),
     ),
     await guarded(context, "drift", [], async () => {
       const current = inspected;

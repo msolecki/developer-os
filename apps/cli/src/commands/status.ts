@@ -5,6 +5,7 @@ import type { AgentDiscovery } from "@developer-os/platform-macos";
 import { failureFrom, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
+import { surveyLifecycleResidue } from "../lifecycle/survey.js";
 import {
   discoverAgents,
   inspectManagedDrift,
@@ -87,6 +88,23 @@ export async function runStatus(
     }
 
     const incomplete = await listIncompleteTransactions(context);
+
+    /** NEW-170: V2 coordinator state lives outside `state/transactions`, so it is surveyed separately. */
+    try {
+      for (const finding of (await surveyLifecycleResidue(context)).findings) {
+        const redact = context.guards.redactDiagnostic;
+        const recovery = finding.recovery === undefined ? "" : `; recovery: ${finding.recovery}`;
+        warnings.push(`${redact(finding.message)}: ${redact(finding.path, "path")}${recovery}`);
+      }
+    } catch (error) {
+      warnings.push(
+        context.guards.redactDiagnostic(
+          error instanceof Error
+            ? `the lifecycle ledger could not be surveyed: ${error.message}`
+            : "the lifecycle ledger could not be surveyed",
+        ),
+      );
+    }
 
     return success(
       {

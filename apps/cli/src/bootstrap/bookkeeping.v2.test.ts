@@ -276,6 +276,23 @@ describe("the lifecycle bookkeeping set on a real V2 home", () => {
     expect(result.error.message).toContain(CODEX_INGEST_HOME_REPAIR);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  /** NEW-160: an uninstall coordinator journal with no manifest is resumed by `uninstall`, never by `init`. */
+  it("names uninstall as the recovery when the residue is a lifecycle coordinator journal", async () => {
+    const fixture = await createCommandFixture("bootstrap-coordinator-residue", { bootstrapAvailable: true });
+    await plantProductHome(fixture);
+    const journals = join(fixture.paths.stateDir, "lifecycle-journals");
+    await nodeFs.mkdir(journals, { recursive: true, mode: 0o700 });
+    await nodeFs.chmod(fixture.paths.stateDir, 0o700);
+    await nodeFs.writeFile(join(journals, `lc_${"1".repeat(64)}_0.json`), "{}\n", { mode: 0o600 });
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    if (result.ok) throw new Error("init admitted a home it must refuse");
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.message).toContain("bookkeeping residue of an unadmitted shape");
+    expect(result.error.recovery).toBe("developer-os uninstall");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("refuses a planted logs directory, which is not bookkeeping and holds no retained evidence", async () => {
     const fixture = await createCommandFixture("bootstrap-planted-logs", { bootstrapAvailable: true });
     await plantProductHome(fixture);
