@@ -1211,7 +1211,11 @@ record.
   inode, and `TransactionExecutor.resume`/`rollback` refuse its id (`TransactionStateError`, exit 6),
   because their temp-and-rename write would re-inode it and strand the bootstrap's identity-bound
   resume (NEW-174). `doctor` names `developer-os init` for it, and `init`'s incomplete-transaction
-  gate skips it so the bootstrap resume path reaches it. The `retry_only` closure kind
+  gate skips it so the bootstrap resume path reaches it. When the forward `_f` participant fails again while a
+  rollback tries to finish it, the bootstrap journal's resolved `publishIntent` (NEW-189, D87) has
+  bootstrap retention move that non-terminal journal, at its admitted inode, out of the live
+  `state/transactions` namespace with the rest of the rolled-back envelope; no transaction verb ever
+  resumes or rolls it back, and `doctor`'s transactions check then has nothing incomplete to name. The `retry_only` closure kind
   (`packages/core/src/lifecycle/ledger.ts`, `classify`) is the healthy, retryable state of a
   coordinator stuck on a failed `network_push`/`destination_git_effect` step. Since plan 1b it is
   reachable in production: a `git sync` whose push fails leaves the persisted push plan and a

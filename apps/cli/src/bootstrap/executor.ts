@@ -147,6 +147,7 @@ export const freshInitFineGrainedDeathPoints = [
   { name: "after_payload_evidence" },
   { name: "before_payload_evidence_open" },
   { name: "before_creation_evidence_open" },
+  { name: "before_creation_evidence" },
   { name: "after_global_lock_create" },
   { name: "before_global_lock_parent_sync" },
   { name: "after_global_lock_parent_sync" },
@@ -229,8 +230,11 @@ function errorText(error: unknown): string {
  * as the cause, so the forward failure is never replaced.
  */
 function chainedFailure(forward: unknown, what: string, later: unknown): FreshBootstrapError {
+  const refused = [forward, later].some((error) =>
+    error instanceof FreshBootstrapError && error.code === EXIT_CODES.securityRefusal);
   return new FreshBootstrapError(
-    EXIT_CODES.recoveryRequired,
+    // A security refusal on either side stays one; the chain only adds the forward failure's context.
+    refused ? EXIT_CODES.securityRefusal : EXIT_CODES.recoveryRequired,
     `${errorText(forward)}; ${what}: ${errorText(later)}`,
     forward instanceof FreshBootstrapError ? forward.paths : [],
     forward instanceof FreshBootstrapError ? forward.recovery : undefined,
@@ -2721,17 +2725,35 @@ export class BootstrapExecutor {
     ordinal: number,
   ): Promise<void> {
     const current = (await this.storeFor(plan)).current();
-    if (current.publishIntent !== undefined) return;
+    if (current.publishIntent !== undefined) {
+      // A resumed step may only find its own intent.
+      if (current.publishIntent.scope !== scope || current.publishIntent.ordinal !== ordinal || current.publishIntent.published !== null) {
+        throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "a recorded publish intent names another step");
+      }
+      return;
+    }
     await this.writeJournal(plan, current, { publishIntent: { scope, ordinal, published: null } });
     this.checkpoint(scope === "foundation" ? "after_foundation_publish_intent" : "after_publish_intent");
   }
 
-  /** Advances a forward cursor from the store's current record, closing any publish intent with it. */
+  /**
+   * Advances a forward cursor, closing any publish intent with it. The caller's
+   * record may lag only by that intent, which `openPublishIntent` wrote.
+   */
   private async advanceCursor(
     plan: FreshV2InitPlanV1,
+    journal: FreshV2InitJournalV1,
     patch: { readonly nextCreatedPath: number } | { readonly nextFoundationParticipant: number } | { readonly nextLaunchabilityPath: number },
   ): Promise<FreshV2InitJournalV1> {
     const current = (await this.storeFor(plan)).current();
+    const chainFields = new Set(["publishIntent", "sequence", "slot", "previousJournalHash", "updatedAt"]);
+    const withoutIntent = (record: FreshV2InitJournalV1): unknown =>
+      Object.fromEntries(Object.entries(record).filter(([key]) => !chainFields.has(key)));
+    const lagsByIntent = journal.publishIntent === undefined && current.publishIntent !== undefined &&
+      BigInt(current.sequence) === BigInt(journal.sequence) + 1n;
+    if (!sameValue(withoutIntent(current), withoutIntent(journal)) || (current.sequence !== journal.sequence && !lagsByIntent)) {
+      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap journal cursor changed before advance");
+    }
     return this.writeJournal(plan, current, current.publishIntent === undefined ? patch : { ...patch, publishIntent: null });
   }
 
@@ -3253,6 +3275,7 @@ export class BootstrapExecutor {
     ).evidence;
     const existingEvidence = await lstatOptional(evidencePath);
     if (existingEvidence === null) {
+      this.checkpoint("before_creation_evidence");
       await durableWriteNoReplace(evidencePath, encoder.encode(encodeCanonicalJson(evidence as unknown as CanonicalJsonValue)));
     } else {
       const observed = await this.readCreationEvidence(plan, scope, ordinal);
@@ -3276,7 +3299,7 @@ export class BootstrapExecutor {
       if (planned === undefined) throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "creation cursor escaped plan");
       await this.createPlannedPath(plan, planned, "ordinary", ordinal);
       this.trace(planned.kind === "global_lock" ? "create:global_lock" : `create:ordinary:${String(ordinal)}`);
-      journal = await this.advanceCursor(plan, { nextCreatedPath: ordinal + 1 });
+      journal = await this.advanceCursor(plan, journal, { nextCreatedPath: ordinal + 1 });
       if (ordinal === 0) this.checkpoint("after_global_lock");
     }
     this.checkpoint("after_created_paths");
@@ -3509,7 +3532,7 @@ export class BootstrapExecutor {
       await this.openPublishIntent(plan, "foundation", 0);
       await this.#dependencies.transactionExecutor.executeBootstrapFoundationParticipant(admitted);
       this.trace(`foundation:forward:${forward.id}`);
-      journal = await this.advanceCursor(plan, { nextFoundationParticipant: 1 });
+      journal = await this.advanceCursor(plan, journal, { nextFoundationParticipant: 1 });
       this.checkpoint("after_foundation");
     }
     return this.writeJournal(plan, journal, { phase: "launchability_publishing" });
@@ -3536,7 +3559,7 @@ export class BootstrapExecutor {
       } else {
         this.trace(`create:launchability:${String(ordinal)}`);
       }
-      journal = await this.advanceCursor(plan, { nextLaunchabilityPath: ordinal + 1 });
+      journal = await this.advanceCursor(plan, journal, { nextLaunchabilityPath: ordinal + 1 });
       if (deathPoint !== null) this.checkpoint(deathPoint);
     }
     return this.writeJournal(plan, journal, { phase: "manifest_publishing" });
@@ -3893,13 +3916,17 @@ export class BootstrapExecutor {
     plan: FreshV2InitPlanV1,
     intent: BootstrapPublishIntentV1,
   ): Promise<number | null> {
-    const at = async (path: string, payload: BootstrapExpectedPayloadRefV1): Promise<boolean> => {
+    /** `rewritten`: the Foundation journal is rewritten in place on its inode, so its size is not the payload's. */
+    const at = async (path: string, payload: BootstrapExpectedPayloadRefV1, rewritten = false): Promise<boolean> => {
       const row = plan.payloads.find((candidate) => sameValue(candidate.ref, payload));
       if (row === undefined) throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "publish intent payload is unbound");
       const evidence = await this.readPayloadEvidence(row);
       const stats = await lstatOptional(path);
+      // The full postimage, not only the inode: a hardlinked, re-moded or resized file is refused, never retained.
       return stats !== null && stats.isFile() && !stats.isSymbolicLink() &&
-        stats.dev.toString(10) === evidence.dev && stats.ino.toString(10) === evidence.ino;
+        Number(stats.uid) === uid() && Number(stats.nlink) === 1 && mode(stats) === payload.mode &&
+        stats.dev.toString(10) === evidence.dev && stats.ino.toString(10) === evidence.ino &&
+        (rewritten || stats.size === BigInt(payload.bytes));
     };
     const refuse = (): never => {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "a publish intent found its payload in neither place");
@@ -3932,7 +3959,7 @@ export class BootstrapExecutor {
     if (forward === undefined) return refuse();
     const staged = forward.initialJournal.staged;
     const [journalPublished, journalStaged] = await Promise.all([
-      at(forward.initialJournal.finalPath, staged),
+      at(forward.initialJournal.finalPath, staged, true),
       at(staged.path, staged),
     ]);
     if (journalStaged && !journalPublished) return null;
@@ -3978,7 +4005,7 @@ export class BootstrapExecutor {
           (planned.kind !== "file" || await lstatOptional(planned.payload.path) !== null)
         ) return { journal, settleError: undefined };
         await this.createPlannedPath(plan, planned, scope, ordinal);
-        journal = await this.advanceCursor(plan, scope === "ordinary"
+        journal = await this.advanceCursor(plan, journal, scope === "ordinary"
           ? { nextCreatedPath: ordinal + 1 }
           : { nextLaunchabilityPath: ordinal + 1 });
       } else if (journal.phase === "foundation_applying" && journal.nextFoundationParticipant === 0) {
@@ -3987,7 +4014,7 @@ export class BootstrapExecutor {
         const admitted = await this.admittedFoundation(forward, plan);
         await this.#dependencies.transactionExecutor.executeBootstrapFoundationParticipant(admitted);
         this.trace(`foundation:forward:${forward.id}`);
-        journal = await this.advanceCursor(plan, { nextFoundationParticipant: 1 });
+        journal = await this.advanceCursor(plan, journal, { nextFoundationParticipant: 1 });
       }
     } catch (error) {
       if (error instanceof FreshBootstrapInterruption) throw error;

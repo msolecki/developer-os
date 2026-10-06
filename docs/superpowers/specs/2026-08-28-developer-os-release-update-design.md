@@ -1564,7 +1564,6 @@ interface ManifestMigrationJournalV1 {
   readonly payloadRetentionPart: "staged_file" | "evidence" | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   readonly retentionNext: Integer[0..2_200_526] | null;
-  readonly publishIntent?: { scope: "ordinary" | "launchability" | "foundation"; ordinal: Integer; published: Integer | null }; // amended 2026-10-06, NEW-189
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
