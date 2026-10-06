@@ -56,17 +56,6 @@ export type LaunchdMutationIoProfileV1 = {
 
 export type LaunchdProcessIoProfileV1 = LaunchdQueryIoProfileV1 | LaunchdMutationIoProfileV1;
 
-/**
- * The argv slots a table can carry: the domain and targets are fixed per call from the
- * validated console user and the plan-bound labels, never from caller text.
- */
-export type LaunchdArgvSlotV1 =
-  | { readonly slot: "launchd_gui_domain" }
-  | { readonly slot: "launchd_observed_service_target" }
-  | { readonly slot: "launchd_generated_service_target" }
-  /** D82: the plan-bound plist's absolute path under `~/Library/LaunchAgents`, never caller text. */
-  | { readonly slot: "launchd_bootstrap_plist_path" };
-
 export type LaunchdProbeDomainArgvV1 = {
   readonly id: "probe_domain";
   readonly profileId: "query";

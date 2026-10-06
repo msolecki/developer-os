@@ -15,11 +15,9 @@ export {
   WORKFLOW_TRIGGERS,
 } from "./contract.js";
 export type {
-  RefusalCondition,
   WorkflowCapability,
   WorkflowContractV1,
   WorkflowInputSchema,
-  WorkflowOutputSchema,
   WorkflowRefusal,
   WorkflowStep,
   WorkflowTrigger,

@@ -136,7 +136,6 @@ export type { GitPackClosureEvidenceV1, GitPackReaderLimitsV1, GitPackReadReques
 export { prepareLocalReceive } from "./local-receive.js";
 export type {
   GitLocalReceivePreparationV1,
-  GitLocalReceiveProcessNodeV1,
   GitLocalReceiveRequestV1,
   GitLocalReceiveRunV1,
 } from "./local-receive.js";

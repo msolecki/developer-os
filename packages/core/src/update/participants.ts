@@ -764,7 +764,6 @@ export interface UpdateStateParticipantJournalV1<TKind extends UpdateStateLeafKi
  * finalization — remove the tombstone. A transition whose side is absent is a recorded no-op.
  */
 export const CANONICAL_STATE_TRANSITIONS = ["preserve_before", "publish_after", "verify", "finalize_tombstone"] as const;
-export type CanonicalStateTransitionV1 = (typeof CANONICAL_STATE_TRANSITIONS)[number];
 
 const STATE_JOURNAL_PHASES: readonly UpdateStateParticipantJournalV1["phase"][] = ["planned", "preimage_preserved", "published", "verified", "compensating", "finalized", "rolled_back"];
 const STATE_PHASE_AFTER: readonly UpdateStateParticipantJournalV1["phase"][] = ["planned", "preimage_preserved", "published", "verified", "finalized"];
