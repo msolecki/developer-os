@@ -59,7 +59,7 @@ import {
   type SupportedLaunchdProcessTableV1,
 } from "./process-table.js";
 import { generatedLabel, launchdGuiDomain, launchdJob, parseScheduledProductHome } from "./registry.js";
-import type { LaunchdBootstrapPlistIdentityV1, LaunchdBootstrapRequestV1, LaunchdMutationEvidenceV1 } from "./bootstrap.js";
+import { NODE_LAUNCHD_FILE_SYSTEM, type LaunchdBootstrapPlistIdentityV1, type LaunchdBootstrapRequestV1, type LaunchdFileSystemV1, type LaunchdMutationEvidenceV1 } from "./bootstrap.js";
 import { LaunchdInputError, type LaunchdPlanPreviewEntryV1, type LaunchdPlistDictionaryV1, type LaunchdPriorJobStateV1 } from "./types.js";
 
 const uid = (process.getuid?.() ?? 501) as EffectiveUidV1;
@@ -846,7 +846,7 @@ describe("LaunchdBootoutRunner", () => {
     for (const base of bases.splice(0)) await rm(base, { recursive: true, force: true });
   });
 
-  async function staging(host: LaunchdHostObserverV1 = hostWith()) {
+  async function staging(host: LaunchdHostObserverV1 = hostWith(), fs?: LaunchdFileSystemV1) {
     const base = await realpath(await mkdtemp(join(tmpdir(), "dos-launchd-bootout-")));
     bases.push(base);
     const root = `${base}/staging/lifecycle/${COORDINATOR}/launchd-process`;
@@ -881,6 +881,7 @@ describe("LaunchdBootoutRunner", () => {
       },
       effectiveUid: () => uid,
       host,
+      ...(fs === undefined ? {} : { fs }),
     });
     return { base, root, table, runner, requests };
   }
@@ -921,6 +922,28 @@ describe("LaunchdBootoutRunner", () => {
     await rm(`${root}/tmp-old`, { recursive: true });
 
     await expect(runner.bootout(table, target, phase)).rejects.toThrow(LifecycleRecoveryRequiredError);
+    expect(requests).toStrictEqual([]);
+  });
+
+  // MACOS-4: the bootout path rechecks each staging directory after listing it, as the bootstrap does.
+  it("refuses a staging directory replaced between its lstat and its readdir", async () => {
+    let swapped = false;
+    const fs: LaunchdFileSystemV1 = {
+      ...NODE_LAUNCHD_FILE_SYSTEM,
+      readdir: async (path) => {
+        if (!swapped && path.endsWith("/launchd-process/home")) {
+          swapped = true;
+          await rename(path, `${path}-old`);
+          await mkdir(path, { mode: 0o700 });
+          await rm(`${path}-old`, { recursive: true });
+        }
+        return NODE_LAUNCHD_FILE_SYSTEM.readdir(path);
+      },
+    };
+    const { table, runner, requests } = await staging(hostWith(), fs);
+
+    await expect(runner.bootout(table, target, phase)).rejects.toMatchObject({ reason: "launchd_process_staging_changed" });
+    expect(swapped).toBe(true);
     expect(requests).toStrictEqual([]);
   });
 

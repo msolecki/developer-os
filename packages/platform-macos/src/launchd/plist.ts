@@ -23,6 +23,7 @@ import {
   scheduledBaseArgv,
   scheduledProgramArguments,
 } from "./registry.js";
+import { LAUNCHD_GUI_DOMAIN_PATTERN } from "./fs-identity.js";
 import { assertNormalizedSchedule, launchdCalendarInterval } from "./schedule.js";
 import {
   LaunchdInputError,
@@ -229,7 +230,7 @@ function targetSchedules(request: LaunchdPreviewRequestV1): ReadonlyMap<Schedule
  */
 export function buildLaunchdPlanPreview(request: LaunchdPreviewRequestV1): LaunchdPlanPreviewV1 {
   const productHome = parseScheduledProductHome(request.productHome);
-  if (!/^gui\/(0|[1-9][0-9]*)$/.test(request.domain)) refuse("LaunchdGuiDomainV1");
+  if (!LAUNCHD_GUI_DOMAIN_PATTERN.test(request.domain)) refuse("LaunchdGuiDomainV1");
   if (!exactKeys(request.prior, SCHEDULED_JOB_IDS)) refuse("prior state must name every registry job");
   const schedules = targetSchedules(request);
   const entries: LaunchdPlanPreviewEntryV1[] = [];

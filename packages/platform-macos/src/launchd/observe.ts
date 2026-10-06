@@ -1,4 +1,4 @@
-import { SCHEDULED_JOB_IDS, type ScheduledJobIdV1 } from "@developer-os/core";
+import { SCHEDULED_JOB_IDS, sortUtf8, type ScheduledJobIdV1 } from "@developer-os/core";
 import type { SupervisedPhaseV1, SupervisedProcessRunner } from "@developer-os/security";
 
 import {
@@ -9,6 +9,7 @@ import {
   type LaunchdHostObserverV1,
 } from "./distribution.js";
 import { parseLaunchctlLastExitCode } from "./bootstrap.js";
+import { LAUNCHD_GUI_DOMAIN_PATTERN } from "./fs-identity.js";
 import { LAUNCHD_PREVIEW_OBSERVATION_TABLE } from "./process-table.js";
 import { launchdJob, parseGeneratedLabel } from "./registry.js";
 import {
@@ -72,22 +73,11 @@ type Pass = { launchctl: LaunchctlIdentityV1 | null; readonly baseline: LaunchdE
 
 type ProbeResultV1 ={ readonly kind: "exited"; readonly exitCode: number } | { readonly kind: "unobservable"; readonly reason: LaunchdUnobservableReasonV1 };
 
-const encoder = new TextEncoder();
 const table = LAUNCHD_PREVIEW_OBSERVATION_TABLE;
 const [queryProfile] = table.profiles;
 
 function refuse(message: string): never {
   throw new LaunchdInputError(message);
-}
-
-function byUtf8(left: string, right: string): number {
-  const a = encoder.encode(left);
-  const b = encoder.encode(right);
-  for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
-    const difference = (a[index] as number) - (b[index] as number);
-    if (difference !== 0) return difference;
-  }
-  return a.length - b.length;
 }
 
 function candidateLabel(job: ScheduledJobIdV1, label: GeneratedLaunchdLabelV1 | null, field: string): GeneratedLaunchdLabelV1 | null {
@@ -154,10 +144,10 @@ export class LaunchdObserver {
     const observed: { job: ScheduledJobIdV1; state: LaunchdObservedStateV1 }[] = [];
     for (const entry of jobs) {
       const labels = [...new Set<LaunchdObservedLabelV1>([launchdJob(entry.job).baseLabel, ...[entry.retained, entry.planned].filter((label) => label !== null)])];
-      const targets = labels.map((label) => {
+      const targets = sortUtf8(labels.map((label) => {
         const target: LaunchdObservedServiceTargetV1 = `${domain}/${label}`;
         return { label, target };
-      }).sort((left, right) => byUtf8(left.target, right.target));
+      }), (entry) => entry.target);
       const present = new Map<LaunchdObservedLabelV1, number | null>();
       for (const { label, target } of targets) {
         // NEW-169: only a generated candidate's dump is read, never the base label's, which may be foreign.
@@ -173,7 +163,7 @@ export class LaunchdObserver {
   }
 
   async #admitDomain(domain: LaunchdGuiDomainV1): Promise<LaunchdGuiDomainV1> {
-    const match = /^gui\/(0|[1-9][0-9]{0,9})$/.exec(domain);
+    const match = LAUNCHD_GUI_DOMAIN_PATTERN.exec(domain);
     if (match === null) refuse("launchd observation accepts only the gui/<uid> domain");
     const effectiveUid = this.#dependencies.effectiveUid();
     if (effectiveUid !== (await this.#dependencies.consoleUserUid())) refuse("effective uid is not the validated console user");

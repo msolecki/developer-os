@@ -11,6 +11,7 @@ import {
   type ScheduledJobIdV1,
 } from "@developer-os/core";
 
+import { LAUNCHD_GUI_DOMAIN_PATTERN } from "./fs-identity.js";
 import { assertNormalizedSchedule } from "./schedule.js";
 import {
   LaunchdInputError,
@@ -211,7 +212,7 @@ export function legacyScheduledProgramArguments(
 function assertProjection(projection: LaunchdGenerationProjectionV1): void {
   const definition = launchdJob(projection.job);
   if (projection.baseLabel !== definition.baseLabel) refuse("generation projection: base label");
-  if (!/^gui\/(0|[1-9][0-9]*)$/.test(projection.domain)) refuse("generation projection: domain");
+  if (!LAUNCHD_GUI_DOMAIN_PATTERN.test(projection.domain)) refuse("generation projection: domain");
   assertNormalizedSchedule(projection.schedule);
   const productHome = parseScheduledProductHome(projection.productHome);
   if (!projection.plistPath.endsWith(`/Library/LaunchAgents/${definition.plistFileName}`)) {

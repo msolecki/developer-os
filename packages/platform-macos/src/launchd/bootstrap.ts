@@ -2,7 +2,6 @@ import { constants, type BigIntStats } from "node:fs";
 import { lstat, open, readdir, unlink } from "node:fs/promises";
 
 import {
-  LAUNCHD_PROCESS_STAGING_CHILDREN,
   LifecycleRecoveryRequiredError,
   hashBytes,
   parseCanonicalAbsolutePathText,
@@ -18,11 +17,11 @@ import {
 import type { SupervisedPhaseV1, SupervisedProcessRunner, SupervisedTerminationV1 } from "@developer-os/security";
 
 import { recheckLaunchdHost, type LaunchdHostObserverV1 } from "./distribution.js";
-import { encodeRetainedLaunchdPlist } from "./plist.js";
+import { admitProcessStaging, sameIdentity } from "./fs-identity.js";
+import { encodeRetainedLaunchdPlist, MAX_LAUNCHD_PLIST_BYTES } from "./plist.js";
 import {
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   requireLaunchdMutationTable,
-  type LaunchdProcessDirectoryIdentityV1,
   type SupportedLaunchdProcessTableTemplateV1,
   type SupportedLaunchdProcessTableV1,
 } from "./process-table.js";
@@ -122,9 +121,7 @@ export const NODE_LAUNCHD_FILE_SYSTEM: LaunchdFileSystemV1 = {
   unlink: (path) => unlink(path),
 };
 
-const MAX_PLIST_BYTES = 1_048_576;
 const PRIVATE_FILE_MODE = 0o600;
-const PRIVATE_DIRECTORY_MODE = 0o700;
 const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW;
 
 function refuse(message: string): never {
@@ -135,16 +132,12 @@ function recovery(reason: string, ...paths: readonly string[]): never {
   throw new LifecycleRecoveryRequiredError(reason, paths);
 }
 
-function sameIdentity(stats: BigIntStats, identity: { readonly dev: string; readonly ino: string }): boolean {
-  return stats.dev.toString(10) === identity.dev && stats.ino.toString(10) === identity.ino;
-}
-
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
 /** Positional reads from byte zero; reads one byte past `limit` so growth is observed, not truncated. */
-export async function readBoundedPlist(handle: LaunchdFileHandleV1, limit = MAX_PLIST_BYTES): Promise<Uint8Array> {
+export async function readBoundedPlist(handle: LaunchdFileHandleV1, limit = MAX_LAUNCHD_PLIST_BYTES): Promise<Uint8Array> {
   const buffer = new Uint8Array(limit + 1);
   let length = 0;
   while (length < buffer.byteLength) {
@@ -159,7 +152,7 @@ function admitSourceIdentity(source: LaunchdOpenedPlistIdentityV1, uid: number):
   const path = parseCanonicalAbsolutePathText(source.path);
   if (source.ownerUid !== uid) refuse("bootstrap plist: owner");
   if ((source.mode as number) !== 384 || (source.nlink as number) !== 1) refuse("bootstrap plist: mode or link count");
-  if (!Number.isSafeInteger(source.size) || source.size < 1 || source.size > MAX_PLIST_BYTES) refuse("bootstrap plist: size");
+  if (!Number.isSafeInteger(source.size) || source.size < 1 || source.size > MAX_LAUNCHD_PLIST_BYTES) refuse("bootstrap plist: size");
   return Object.freeze({
     path,
     ownerUid: source.ownerUid,
@@ -321,11 +314,11 @@ export class LaunchdPathBootstrapper {
     const bytes = this.#admitRequest(request);
     const { table } = request;
     await recheckLaunchdHost(this.#dependencies.host, table.launchctlIdentity);
-    await this.#admitStaging(table);
+    await admitProcessStaging(this.#fs, table);
     if (!(await this.#sourceMatches(request.source, bytes))) recovery("launchd_bootstrap_plist_changed", request.source.path);
     const [mutationProfile] = table.profiles;
     const evidence = await this.#run(table, ["bootstrap", request.domain, request.source.path], mutationProfile, request.phase);
-    await this.#admitStaging(table);
+    await admitProcessStaging(this.#fs, table);
     return Object.freeze({
       argvId: "bootstrap",
       source: request.source,
@@ -346,14 +339,14 @@ export class LaunchdPathBootstrapper {
     if (!(await this.#sourceMatches(request.source, bytes))) return false;
     const { table } = request;
     await recheckLaunchdHost(this.#dependencies.host, table.launchctlIdentity);
-    await this.#admitStaging(table);
+    await admitProcessStaging(this.#fs, table);
     const target = `${request.domain}/${request.plist.Label}`;
     const chunks: Uint8Array[] = [];
     const [, queryProfile] = table.profiles;
     const evidence = await this.#run(table, ["print", target], queryProfile, request.phase, (chunk, stream) => {
       if (stream === "stdout") chunks.push(Uint8Array.from(chunk));
     });
-    await this.#admitStaging(table);
+    await admitProcessStaging(this.#fs, table);
     if (evidence.termination !== "exited" || evidence.exitCode !== 0 || evidence.signal !== null) return false;
     const printed = parseLaunchctlPrintedService(new TextDecoder().decode(Buffer.concat(chunks)), target);
     const planned = request.plist.ProgramArguments;
@@ -412,29 +405,6 @@ export class LaunchdPathBootstrapper {
     const bytes = new TextEncoder().encode(encodeRetainedLaunchdPlist(request.plist));
     if (bytes.byteLength !== source.size || hashBytes(bytes) !== source.hash) refuse("bootstrap plist bytes are not the plan-bound identity");
     return bytes;
-  }
-
-  async #admitDirectory(identity: LaunchdProcessDirectoryIdentityV1): Promise<readonly string[]> {
-    const matches = (stats: BigIntStats): boolean =>
-      stats.isDirectory() &&
-      stats.uid === BigInt(identity.ownerUid) &&
-      (stats.mode & 0o7777n) === BigInt(PRIVATE_DIRECTORY_MODE) &&
-      sameIdentity(stats, identity);
-    if (!matches(await this.#fs.lstat(identity.path, { bigint: true }))) recovery("launchd_process_staging_changed", identity.path);
-    const entries = [...(await this.#fs.readdir(identity.path))].sort();
-    if (!matches(await this.#fs.lstat(identity.path, { bigint: true }))) recovery("launchd_process_staging_changed", identity.path);
-    return entries;
-  }
-
-  /** Before and after every process: the exact two-child root and both children entry-empty. */
-  async #admitStaging(table: SupportedLaunchdProcessTableV1): Promise<void> {
-    const { root, home, tmp } = table.staging;
-    const children = await this.#admitDirectory(root);
-    if (children.length !== LAUNCHD_PROCESS_STAGING_CHILDREN.length || LAUNCHD_PROCESS_STAGING_CHILDREN.some((child, index) => children[index] !== child)) {
-      recovery("launchd_process_staging_changed", root.path);
-    }
-    if ((await this.#admitDirectory(home)).length !== 0) recovery("launchd_process_staging_not_empty", home.path);
-    if ((await this.#admitDirectory(tmp)).length !== 0) recovery("launchd_process_staging_not_empty", tmp.path);
   }
 
   /**

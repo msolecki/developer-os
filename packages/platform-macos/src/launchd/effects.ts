@@ -2,7 +2,6 @@ import { constants, type BigIntStats } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 
 import {
-  LAUNCHD_PROCESS_STAGING_CHILDREN,
   LifecycleRecoveryRequiredError,
   encodeCanonicalJson,
   hashBytes,
@@ -30,6 +29,7 @@ import {
   type LaunchdEffectPositionV1,
   type LaunchdEffectTransitionV1,
 } from "./effect-journal.js";
+import { admitProcessStaging, sameIdentity } from "./fs-identity.js";
 import type { LaunchdObservationJobV1, LaunchdObserver } from "./observe.js";
 import { assertLaunchdPlan, launchdEffectPlan, parseCanonicalLaunchdPlist, type LaunchdPlanEntryV1, type LaunchdPlanV1 } from "./plan.js";
 import {
@@ -42,6 +42,7 @@ import {
   type SupportedLaunchdProcessTableTemplateV1,
   type SupportedLaunchdProcessTableV1,
 } from "./process-table.js";
+import { MAX_LAUNCHD_PLIST_BYTES } from "./plist.js";
 import { parseGeneratedLabel } from "./registry.js";
 import {
   NODE_LAUNCHD_FILE_SYSTEM,
@@ -54,7 +55,6 @@ import {
 } from "./bootstrap.js";
 import { LaunchdInputError, type LaunchdGeneratedServiceTargetV1, type LaunchdLiveStateV1, type LaunchdPlistDictionaryV1 } from "./types.js";
 
-const MAX_PLIST_BYTES = 1_048_576;
 const POLL_MS = 100;
 const PRIVATE_FILE_MODE = 0o600;
 const PRIVATE_DIRECTORY_MODE = 0o700;
@@ -74,10 +74,6 @@ function refuse(message: string): never {
 
 function sameCanonical(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(left as CanonicalJsonValue) === encodeCanonicalJson(right as CanonicalJsonValue);
-}
-
-function sameIdentity(stats: BigIntStats, identity: { readonly dev: string; readonly ino: string }): boolean {
-  return stats.dev.toString(10) === identity.dev && stats.ino.toString(10) === identity.ino;
 }
 
 /** Raw launchctl output is counted and discarded: no digest of it is kept (spec §5.3). */
@@ -142,7 +138,7 @@ export class NodeLaunchdPlistReader implements LaunchdPlistPortV1 {
   }
 
   async verifyHash(path: CanonicalAbsolutePathV1, hash: LowerHexSha256): Promise<void> {
-    const { bytes } = await this.#bytes(path, (stats) => stats.isFile() && stats.size <= BigInt(MAX_PLIST_BYTES));
+    const { bytes } = await this.#bytes(path, (stats) => stats.isFile() && stats.size <= BigInt(MAX_LAUNCHD_PLIST_BYTES));
     if (hashBytes(bytes) !== hash) recovery("launchd_plist_changed", path);
   }
 
@@ -156,8 +152,8 @@ export class NodeLaunchdPlistReader implements LaunchdPlistPortV1 {
     try {
       const stats = await handle.stat({ bigint: true });
       if (!admit(stats)) recovery("launchd_plist_changed", path);
-      const bytes = await readBoundedPlist(handle, MAX_PLIST_BYTES);
-      if (bytes.byteLength > MAX_PLIST_BYTES) recovery("launchd_plist_changed", path);
+      const bytes = await readBoundedPlist(handle, MAX_LAUNCHD_PLIST_BYTES);
+      if (bytes.byteLength > MAX_LAUNCHD_PLIST_BYTES) recovery("launchd_plist_changed", path);
       return { bytes, stats };
     } finally {
       await handle.close();
@@ -208,27 +204,6 @@ export async function loadLaunchdProcessTable(
     launchctl,
     options.template ?? SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   );
-}
-
-/** Before and after every process: the exact two-child root and both children entry-empty. */
-async function admitProcessStaging(fs: LaunchdFileSystemV1, table: SupportedLaunchdProcessTableV1): Promise<void> {
-  const { root, home, tmp } = table.staging;
-  for (const identity of [root, home, tmp]) {
-    const stats = await fs.lstat(identity.path, { bigint: true });
-    if (
-      !stats.isDirectory() ||
-      stats.uid !== BigInt(identity.ownerUid) ||
-      (stats.mode & 0o7777n) !== BigInt(PRIVATE_DIRECTORY_MODE) ||
-      !sameIdentity(stats, identity)
-    ) {
-      recovery("launchd_process_staging_changed", identity.path);
-    }
-  }
-  const children = [...(await fs.readdir(root.path))].sort();
-  if (!sameCanonical(children, [...LAUNCHD_PROCESS_STAGING_CHILDREN])) recovery("launchd_process_staging_changed", root.path);
-  for (const identity of [home, tmp]) {
-    if ((await fs.readdir(identity.path)).length !== 0) recovery("launchd_process_staging_not_empty", identity.path);
-  }
 }
 
 export interface LaunchdBootoutDependenciesV1 {
