@@ -25,6 +25,8 @@ export type { InstructionBlockExtractionV1, InstructionBlockMergeV1 } from "./in
 export { ManifestV1NotMigratableError, validateManifestBytes, validateManifestV1, validateManifestV2 } from "./v2.js";
 export { foundationBindingsHash, ManifestStateParticipant, ManifestStateParticipantError, validateManifestStatePlan } from "./manifest-state.js";
 export {
+  BOOTSTRAP_MAX_JOURNAL_BYTES,
+  BOOTSTRAP_MAX_PLAN_BYTES,
   BootstrapStateError,
   bootstrapExternalShapeHash,
   bootstrapPayloadSourceIdentityHash,
@@ -46,6 +48,7 @@ export {
   classifyBootstrapEvidence,
   deriveBootstrapRetentionAuthorities,
   deriveBootstrapRetentionLocations,
+  deriveBootstrapTerminalJournal,
   reachedReversibleSteps,
   deriveBootstrapRetentionTable,
   isRedactionKeyPath,

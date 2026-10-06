@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type * as core from "@developer-os/core";
-import { EXIT_CODES } from "@developer-os/core";
+import { EXIT_CODES, encodeCanonicalJson, hashBytes } from "@developer-os/core";
 import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
 
 import { createBootstrapEvidenceInspectionRequest } from "./context.js";
 import type { BootstrapEvidenceGuardedEntryV1 } from "./report.js";
 import { assertOrdinaryCommandAdmitted, isStructurallyValidV2Manifest } from "./report.js";
 
-const defect = vi.hoisted(() => ({ active: false }));
+const defect = vi.hoisted(() => ({ active: false, valid: false }));
 
 vi.mock("@developer-os/core", async (importOriginal) => {
   const actual = await importOriginal<typeof core>();
@@ -16,12 +16,13 @@ vi.mock("@developer-os/core", async (importOriginal) => {
     ...actual,
     validateManifestBytes: (...args: Parameters<typeof actual.validateManifestBytes>) => {
       if (defect.active) throw new TypeError("synthetic");
+      if (defect.valid) return { schemaVersion: 2 } as ReturnType<typeof actual.validateManifestBytes>;
       return actual.validateManifestBytes(...args);
     },
   };
 });
 
-afterEach(() => { defect.active = false; });
+afterEach(() => { defect.active = false; defect.valid = false; });
 
 const HOME = "/developer-os-synthetic-defect";
 const MANIFEST = `${HOME}/installation-manifest.json`;
@@ -70,5 +71,87 @@ describe("V2 manifest routing lets a validator defect escape (NEW-92)", () => {
   it("assertOrdinaryCommandAdmitted lets a validator defect escape rather than telling a healthy home to recover", async () => {
     defect.active = true;
     await expect(assertOrdinaryCommandAdmitted(requestWithManifest(schemaTwoBytes))).rejects.toBeInstanceOf(TypeError);
+  });
+});
+
+describe("the ordinary-command gate lets a code defect escape (NEW-179 C-5)", () => {
+  const ID = "fi_00000000-0000-4000-8000-000000000000";
+  const PLAN = `${HOME}/state/fresh-v2-init.${ID}.plan.json`;
+  const SLOTS = [0, 1].map((slot) => `${HOME}/state/fresh-v2-init.${ID}.journal.${String(slot)}.json`);
+  const manifestBytes = new TextEncoder().encode(`${JSON.stringify({ schemaVersion: 2, synthetic: true })}\n`);
+  const planBytes = new TextEncoder().encode(encodeCanonicalJson({ manifest: { after: { hash: hashBytes(manifestBytes) } } }));
+
+  function entry(path: string, bytes: number, ino: string): BootstrapEvidenceGuardedEntryV1 {
+    return {
+      path: path as CanonicalAbsolutePathV1,
+      kind: "regular_file",
+      ownerUid: 501,
+      mode: 0o600,
+      nlink: 1,
+      bytes: String(bytes) as UInt64DecimalV1,
+      dev: "1" as UInt64DecimalV1,
+      ino: ino as UInt64DecimalV1,
+    };
+  }
+
+  function gateRequest(listNames: () => Promise<readonly string[]>, slotRead: () => Promise<Uint8Array>) {
+    const entries = [
+      entry(MANIFEST, manifestBytes.byteLength, "2"),
+      entry(PLAN, planBytes.byteLength, "3"),
+      entry(SLOTS[0] as string, 10, "4"),
+      entry(SLOTS[1] as string, 0, "5"),
+    ];
+    const request = createBootstrapEvidenceInspectionRequest({
+      productHome: HOME,
+      stateDirectory: `${HOME}/state`,
+      initialRoots: [],
+      reader: {
+        inventoryExactNamespaces: (roots) => Promise.resolve(entries.filter((candidate) => roots.includes(candidate.path))),
+        readRegularFile: (file) => file.path === MANIFEST
+          ? Promise.resolve(manifestBytes)
+          : file.path === PLAN ? Promise.resolve(planBytes) : slotRead(),
+      },
+      listNames,
+    });
+    return {
+      ...request,
+      validatePlan: () => ({
+        id: ID,
+        planPath: PLAN,
+        journalSlots: SLOTS.map((path, slot) => ({ slot, path, ownerUid: 501, mode: 0o600, nlink: 1, dev: "1", ino: String(4 + slot) })),
+      }) as unknown as ReturnType<typeof request.validatePlan>,
+    };
+  }
+
+  it("rethrows a defect from listing the state directory", async () => {
+    defect.valid = true;
+    await expect(assertOrdinaryCommandAdmitted(gateRequest(
+      () => Promise.reject(new TypeError("synthetic listing defect")),
+      () => Promise.resolve(new Uint8Array()),
+    ))).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("still admits an unreadable state directory, as declared policy", async () => {
+    defect.valid = true;
+    await expect(assertOrdinaryCommandAdmitted(gateRequest(
+      () => Promise.reject(Object.assign(new Error("EACCES"), { code: "EACCES" })),
+      () => Promise.resolve(new Uint8Array()),
+    ))).resolves.toBeUndefined();
+  });
+
+  it("rethrows a defect from reading one envelope's slot instead of skipping the envelope", async () => {
+    defect.valid = true;
+    await expect(assertOrdinaryCommandAdmitted(gateRequest(
+      () => Promise.resolve([`fresh-v2-init.${ID}.plan.json`]),
+      () => Promise.reject(new TypeError("synthetic slot defect")),
+    ))).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("still skips an envelope whose slot read fails operationally", async () => {
+    defect.valid = true;
+    await expect(assertOrdinaryCommandAdmitted(gateRequest(
+      () => Promise.resolve([`fresh-v2-init.${ID}.plan.json`]),
+      () => Promise.reject(new Error("EIO")),
+    ))).resolves.toBeUndefined();
   });
 });

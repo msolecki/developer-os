@@ -5,6 +5,8 @@ import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import {
+  BOOTSTRAP_MAX_JOURNAL_BYTES,
+  BOOTSTRAP_MAX_PLAN_BYTES,
   admitBootstrapFoundationInitialJournal,
   bootstrapExternalShapeHash,
   bootstrapPayloadSourceIdentityHash,
@@ -13,6 +15,7 @@ import {
   deriveBootstrapEnvelopePaths,
   deriveBootstrapPayloadEvidencePaths,
   deriveBootstrapRetentionLocations,
+  deriveBootstrapTerminalJournal,
   reachedReversibleSteps,
   deriveBootstrapRetentionTable,
   encodeCanonicalJson,
@@ -68,7 +71,7 @@ import type {
   TransactionLockProvider,
   UInt64DecimalV1,
 } from "@developer-os/core";
-import type { RenameNoReplace, RenameSameParentNoReplace } from "@developer-os/platform-macos";
+import { MacOsTransactionLockUnavailableError, type RenameNoReplace, type RenameSameParentNoReplace } from "@developer-os/platform-macos";
 
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
 import { BootstrapJournalStore } from "./journal-store.js";
@@ -102,8 +105,8 @@ import { inspectPackagedRelease } from "../update/packaged-release.js";
 
 const encoder = new TextEncoder();
 const EMPTY_HASH = hashBytes(new Uint8Array()) as LowerHexSha256;
-const MAX_PLAN_BYTES = 268_435_456;
-const MAX_JOURNAL_BYTES = 1_048_576;
+const MAX_PLAN_BYTES = BOOTSTRAP_MAX_PLAN_BYTES;
+const MAX_JOURNAL_BYTES = BOOTSTRAP_MAX_JOURNAL_BYTES;
 
 export const freshInitDeathPoints = [
   { name: "after_plan" },
@@ -213,6 +216,24 @@ function globalLockReached(plan: FreshV2InitPlanV1, journal: FreshV2InitJournalV
   return journal.nextCreatedPath > 0 || plan.createdPaths[0]?.kind !== "global_lock";
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * NEW-179 A-4: a second failure while rolling back names both and keeps both
+ * as the cause, so the forward failure is never replaced.
+ */
+function chainedFailure(forward: unknown, what: string, later: unknown): FreshBootstrapError {
+  return new FreshBootstrapError(
+    EXIT_CODES.recoveryRequired,
+    `${errorText(forward)}; ${what}: ${errorText(later)}`,
+    forward instanceof FreshBootstrapError ? forward.paths : [],
+    forward instanceof FreshBootstrapError ? forward.recovery : undefined,
+    { cause: new AggregateError([forward, later], "bootstrap failure chain") },
+  );
+}
+
 /** `paths` reach `failureFrom`'s `path` scope; a path quoted in `message` may redact as high-entropy (NEW-39). */
 export class FreshBootstrapError extends Error {
   constructor(
@@ -220,8 +241,9 @@ export class FreshBootstrapError extends Error {
     message: string,
     readonly paths: readonly string[] = [],
     readonly recovery?: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "FreshBootstrapError";
   }
 }
@@ -533,8 +555,6 @@ export class BootstrapExecutor {
   readonly #heldLocks = new Map<string, HeldLifecycleLocks>();
   readonly #journalStores = new Map<string, BootstrapJournalStore>();
   readonly #retentionEvidence = new Map<string, BootstrapRetentionEvidenceProjectionV1>();
-  readonly #preflightEvidence = new Map<string, BootstrapEvidenceAdmissionV1>();
-  readonly #preflightReusableDirectories = new Map<string, readonly string[]>();
 
   constructor(dependencies: BootstrapExecutorDependencies) {
     this.#dependencies = dependencies;
@@ -584,8 +604,18 @@ export class BootstrapExecutor {
         throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "a lifecycle lock handle is invalid");
       }
       handle = candidate as TransactionLockHandle;
-    } catch {
-      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "a lifecycle bootstrap lock is unavailable");
+    } catch (error) {
+      if (error instanceof FreshBootstrapError) throw error;
+      // NEW-179 A-7: only contention is "unavailable"; any other provider failure keeps its cause.
+      throw new FreshBootstrapError(
+        EXIT_CODES.recoveryRequired,
+        error instanceof MacOsTransactionLockUnavailableError
+          ? "a lifecycle bootstrap lock is unavailable"
+          : "a lifecycle bootstrap lock could not be acquired",
+        [],
+        undefined,
+        { cause: error },
+      );
     }
     try {
       const stats = await nodeFs.lstat(path, { bigint: true });
@@ -648,7 +678,7 @@ export class BootstrapExecutor {
     let lockPath = plan.bootstrapIdentity.path;
     let existed = await lstatOptional(lockPath);
     if (existed === null && journal?.phase === "retaining") {
-      const terminal = this.terminalJournal(journal);
+      const terminal = deriveBootstrapTerminalJournal(journal);
       const location = terminal === null
         ? undefined
         : deriveBootstrapRetentionLocations(plan, terminal).find((candidate) =>
@@ -705,6 +735,8 @@ export class BootstrapExecutor {
       return;
     }
     const global = await this.acquireLifecycleLock(planned.path);
+    // NEW-179 A-3: held from here, so every refusal below releases it through `releaseLifecycleLocks`.
+    this.#heldLocks.set(plan.id, { bootstrap: retained?.bootstrap ?? null, global });
     const retainedEvidence = this.#retentionEvidence.get(plan.id)?.createdPathEvidence.find((candidate) =>
       candidate.value.scope === "ordinary" && candidate.value.ordinal === 0,
     )?.value;
@@ -713,14 +745,11 @@ export class BootstrapExecutor {
       return null;
     });
     if (evidence === null) {
-      await global.handle.release().catch(() => undefined);
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "global lock creation evidence disappeared");
     }
     if (!matchesGlobalLockCreationEvidence(planned.path, evidence, global)) {
-      await global.handle.release().catch(() => undefined);
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "global lock no longer matches creation evidence");
     }
-    this.#heldLocks.set(plan.id, { bootstrap: retained?.bootstrap ?? null, global });
     this.trace("lock:global");
   }
 
@@ -768,12 +797,13 @@ export class BootstrapExecutor {
         }
         const manifest = source.value as unknown as InstallationManifestV2;
         const retainedRequest = this.requestFromPlan(existing);
+        const brainCreated = manifest.artifacts.some((artifact) => artifact.path === retainedRequest.brainPath);
         return {
           schemaVersion: 2,
           productHome: this.#dependencies.paths.home,
           brainPath: retainedRequest.brainPath,
           created: manifest.artifacts.map((artifact) => artifact.path),
-          unchanged: [],
+          unchanged: brainCreated ? [] : [retainedRequest.brainPath],
         };
     }
     const packaged = await inspectPackagedRelease(this.#dependencies.packagedRelease);
@@ -851,31 +881,6 @@ export class BootstrapExecutor {
     };
   }
 
-  private terminalJournal(
-    current: FreshV2InitJournalV1,
-  ): FreshV2InitJournalV1 | null {
-    if (current.phase === "finalized" || current.phase === "rolled_back") return current;
-    if (
-      (current.phase !== "retaining" && current.phase !== "retained") ||
-      current.retentionNext === null ||
-      current.terminalOutcome === null ||
-      current.retentionTerminalPreimage === undefined
-    ) return null;
-    const terminalSequence = BigInt(current.sequence) - BigInt(current.retentionNext) - 1n;
-    if (terminalSequence < 1n) {
-      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "retention lost its terminal journal sequence");
-    }
-    const { retentionTerminalPreimage, ...terminalPrefix } = current;
-    return {
-      ...terminalPrefix,
-      slot: Number(terminalSequence % 2n) as 0 | 1,
-      sequence: terminalSequence.toString() as UInt64DecimalV1,
-      previousJournalHash: retentionTerminalPreimage.previousJournalHash,
-      phase: current.terminalOutcome === "finalized" ? "finalized" : "rolled_back",
-      retentionNext: null,
-      updatedAt: retentionTerminalPreimage.updatedAt,
-    };
-  }
 
   private async preliminaryJournal(
     plan: FreshV2InitPlanV1,
@@ -923,7 +928,7 @@ export class BootstrapExecutor {
     if (preliminary === null) {
       await this.ensureBootstrapLock(plan, null);
     } else {
-      const terminal = this.terminalJournal(preliminary.current);
+      const terminal = deriveBootstrapTerminalJournal(preliminary.current);
       if (terminal !== null) {
         this.#retentionEvidence.set(plan.id, await this.buildRetentionEvidence(plan, terminal));
       }
@@ -1468,8 +1473,6 @@ export class BootstrapExecutor {
     }
     const uuid = (this.#dependencies.uuid ?? randomUUID)();
     const id = `fi_${uuid}` as FreshV2InitIdV1;
-    this.#preflightEvidence.set(id, evidenceBefore);
-    this.#preflightReusableDirectories.set(id, [...reusableBefore.keys()]);
     const homeBefore = await lstatOptional(paths.home);
     if (homeBefore !== null) {
       if (!homeBefore.isDirectory() || homeBefore.isSymbolicLink()) {
@@ -1651,14 +1654,10 @@ export class BootstrapExecutor {
       });
       const admitted = store.plan;
       this.#journalStores.set(id, store);
-      this.#preflightEvidence.delete(id);
-      this.#preflightReusableDirectories.delete(id);
       this.trace("intent:plan");
       this.trace("intent:journal");
       return admitted;
     } catch (error) {
-      this.#preflightEvidence.delete(id);
-      this.#preflightReusableDirectories.delete(id);
       await this.releaseLifecycleLocks(id).catch(() => undefined);
       throw error;
     }
@@ -1683,7 +1682,8 @@ export class BootstrapExecutor {
         }
         return await this.completedOutcome(plan);
       }
-      const packaged = journal.nextPayload < plan.payloads.length
+      // NEW-179 B-4: compensation never reads package bytes, so only a forward run inspects the release.
+      const packaged = journal.direction === "forward" && journal.nextPayload < plan.payloads.length
         ? await inspectPackagedRelease(this.#dependencies.packagedRelease)
         : null;
       try {
@@ -1699,12 +1699,16 @@ export class BootstrapExecutor {
         if (error instanceof FreshBootstrapInterruption) throw error;
         const latest = store.current();
         if (latest.manifestCursor < 2 && latest.terminalOutcome === null) {
-          await this.compensate(plan, latest);
-          await this.retainTerminal(
-            plan,
-            store,
-            store.current(),
-          );
+          // NEW-179 A-4: a later failure names the forward failure and keeps it as the cause.
+          let settleError: unknown;
+          try {
+            settleError = await this.compensate(plan, latest);
+            await this.retainTerminal(plan, store, store.current());
+          } catch (rollbackError) {
+            if (rollbackError instanceof FreshBootstrapInterruption) throw rollbackError;
+            throw chainedFailure(error, "rolling it back also failed", rollbackError);
+          }
+          if (settleError !== undefined) throw chainedFailure(error, "finishing the interrupted step also failed", settleError);
         }
         throw error;
       }
@@ -1727,8 +1731,6 @@ export class BootstrapExecutor {
     const stores = [...this.#journalStores.values()];
     this.#journalStores.clear();
     this.#retentionEvidence.clear();
-    this.#preflightEvidence.clear();
-    this.#preflightReusableDirectories.clear();
     for (const store of stores) await store.close();
   }
 
@@ -1768,8 +1770,7 @@ export class BootstrapExecutor {
       paths.backupsDir,
       paths.logsDir,
       join(paths.home, "schemas"),
-      request.config.brainPath,
-      request.config.brainPath === request.brainPath ? request.brainPath : request.config.brainPath,
+      request.brainPath,
       paths.configFile,
       ...OUTPUT_SCHEMAS.map((schema) => join(paths.home, "schemas", outputSchemaFileName(schema.verb))),
       ...brainFiles,
@@ -2659,8 +2660,14 @@ export class BootstrapExecutor {
         stateDirectory: this.#dependencies.paths.stateDir as CanonicalAbsolutePathV1,
         expectedId: id,
       });
-    } catch {
-      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "persisted bootstrap plan failed structural grammar admission");
+    } catch (error) {
+      throw new FreshBootstrapError(
+        EXIT_CODES.securityRefusal,
+        "persisted bootstrap plan failed structural grammar admission",
+        [],
+        undefined,
+        { cause: error },
+      );
     }
   }
 
@@ -3460,7 +3467,7 @@ export class BootstrapExecutor {
       if (compensation === undefined || forward === undefined) {
         throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation pair is incomplete");
       }
-      this.trace(`foundation:compensation:${compensation.id}`);
+      // NEW-179 B-6: the compensation participant stays an unpublished payload; only compensate() runs it.
       const admitted = await this.admittedFoundation(forward, plan);
       await this.#dependencies.transactionExecutor.executeBootstrapFoundationParticipant(admitted);
       this.trace(`foundation:forward:${forward.id}`);
@@ -3667,17 +3674,19 @@ export class BootstrapExecutor {
     });
   }
 
+  /** Returns the error of a failed settle (NEW-167), which the rollback survived, for the caller to chain. */
   private async compensate(
     plan: FreshV2InitPlanV1,
     starting: FreshV2InitJournalV1,
-  ): Promise<void> {
-    if (starting.manifestCursor >= 2) return;
+  ): Promise<unknown> {
+    if (starting.manifestCursor >= 2) return undefined;
     let journal = starting;
+    let settleError: unknown;
     const ordinaryBase = plan.payloads.length;
     const foundationBase = ordinaryBase + plan.createdPaths.length;
     if (journal.phase !== "compensating") {
       this.checkpoint("before_compensation");
-      journal = await this.settleInFlightStep(plan, journal);
+      ({ journal, settleError } = await this.settleInFlightStep(plan, journal));
       journal = await this.writeJournal(plan, journal, {
         phase: "compensating",
         direction: "compensating",
@@ -3808,6 +3817,7 @@ export class BootstrapExecutor {
       terminalOutcome: "rolled_back",
     });
     this.checkpoint("after_rolled_back");
+    return settleError;
   }
 
   /**
@@ -3823,27 +3833,27 @@ export class BootstrapExecutor {
   private async settleInFlightStep(
     plan: FreshV2InitPlanV1,
     starting: FreshV2InitJournalV1,
-  ): Promise<FreshV2InitJournalV1> {
+  ): Promise<{ readonly journal: FreshV2InitJournalV1; readonly settleError: unknown }> {
     let journal = starting;
     try {
       if (journal.phase === "creating" || journal.phase === "launchability_publishing") {
         const scope = journal.phase === "creating" ? "ordinary" : "launchability";
         const ordinal = scope === "ordinary" ? journal.nextCreatedPath : journal.nextLaunchabilityPath;
         const planned = (scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths)[ordinal];
-        if (planned === undefined || await lstatOptional(planned.path) === null) return journal;
+        if (planned === undefined || await lstatOptional(planned.path) === null) return { journal, settleError: undefined };
         // A created global lock this process already holds: finishing its row keeps lock and cursor in step (NEW-148).
         const heldGlobal = planned.kind === "global_lock" && (this.#heldLocks.get(plan.id)?.global ?? null) !== null;
         if (
           !heldGlobal &&
           (planned.kind !== "file" || await lstatOptional(planned.payload.path) !== null)
-        ) return journal;
+        ) return { journal, settleError: undefined };
         await this.createPlannedPath(plan, planned, scope, ordinal);
         journal = await this.writeJournal(plan, journal, scope === "ordinary"
           ? { nextCreatedPath: ordinal + 1 }
           : { nextLaunchabilityPath: ordinal + 1 });
       } else if (journal.phase === "foundation_applying" && journal.nextFoundationParticipant === 0) {
         const forward = plan.foundationParticipants.find((participant) => participant.role.kind === "forward");
-        if (forward === undefined || await lstatOptional(forward.initialJournal.finalPath) === null) return journal;
+        if (forward === undefined || await lstatOptional(forward.initialJournal.finalPath) === null) return { journal, settleError: undefined };
         const admitted = await this.admittedFoundation(forward, plan);
         await this.#dependencies.transactionExecutor.executeBootstrapFoundationParticipant(admitted);
         this.trace(`foundation:forward:${forward.id}`);
@@ -3851,10 +3861,9 @@ export class BootstrapExecutor {
       }
     } catch (error) {
       if (error instanceof FreshBootstrapInterruption) throw error;
-      // ponytail: the settle error is dropped; the forward failure is what init reports (NEW-179 A-4 owns chaining).
-      return this.#journalStores.get(plan.id)?.current() ?? journal;
+      return { journal: this.#journalStores.get(plan.id)?.current() ?? journal, settleError: error };
     }
-    return journal;
+    return { journal, settleError: undefined };
   }
 
   private async buildRetentionEvidence(
@@ -3880,7 +3889,7 @@ export class BootstrapExecutor {
     store: BootstrapJournalStore,
     current: FreshV2InitJournalV1,
   ): Promise<void> {
-    const terminal = this.terminalJournal(current);
+    const terminal = deriveBootstrapTerminalJournal(current);
     if (terminal === null) {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap retention has no terminal state");
     }
@@ -3892,10 +3901,13 @@ export class BootstrapExecutor {
         await this.buildRetentionEvidence(plan, terminal);
       stage = "table derivation";
       table = deriveBootstrapRetentionTable(plan, evidence);
-    } catch {
+    } catch (error) {
       throw new FreshBootstrapError(
         EXIT_CODES.recoveryRequired,
         `retention ${stage} failed`,
+        [],
+        undefined,
+        { cause: error },
       );
     }
     this.#retentionEvidence.set(plan.id, evidence);

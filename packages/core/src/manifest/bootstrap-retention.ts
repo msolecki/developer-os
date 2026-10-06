@@ -1344,21 +1344,23 @@ function terminalRetentionJournal(
   return journal;
 }
 
-function reconstructRetentionTerminal(
-  plan: BootstrapRetainedExecutionPlanV1,
-  journal: BootstrapJournalRecordV1,
-): BootstrapJournalRecordV1 {
+/**
+ * NEW-179 C-2: the one reconstruction of the terminal record a `retaining` or
+ * `retained` journal binds; a terminal record returns itself. Sequence 0 is
+ * always `planned`, so a derived terminal sequence below 1 has none (null).
+ */
+export function deriveBootstrapTerminalJournal<Journal extends BootstrapJournalRecordV1>(journal: Journal): Journal | null {
+  if (journal.phase === "finalized" || journal.phase === "rolled_back") return journal;
   if (
     (journal.phase !== "retaining" && journal.phase !== "retained") ||
     journal.retentionNext === null ||
     journal.terminalOutcome === null ||
     journal.retentionTerminalPreimage === undefined
-  ) return refuse();
-  const sequenceOffset = BigInt(journal.retentionNext) + 1n;
-  const terminalSequence = BigInt(journal.sequence) - sequenceOffset;
-  if (terminalSequence < 0n) return refuse();
+  ) return null;
+  const terminalSequence = BigInt(journal.sequence) - BigInt(journal.retentionNext) - 1n;
+  if (terminalSequence < 1n) return null;
   const { retentionTerminalPreimage, ...terminalPrefix } = journal;
-  return terminalRetentionJournal(plan, {
+  return {
     ...terminalPrefix,
     slot: Number(terminalSequence % 2n) as 0 | 1,
     sequence: parseUInt64Decimal(terminalSequence.toString()),
@@ -1366,7 +1368,16 @@ function reconstructRetentionTerminal(
     phase: journal.terminalOutcome === "finalized" ? "finalized" : "rolled_back",
     retentionNext: null,
     updatedAt: retentionTerminalPreimage.updatedAt,
-  });
+  } as unknown as Journal;
+}
+
+function reconstructRetentionTerminal(
+  plan: BootstrapRetainedExecutionPlanV1,
+  journal: BootstrapJournalRecordV1,
+): BootstrapJournalRecordV1 {
+  if (journal.phase !== "retaining" && journal.phase !== "retained") return refuse();
+  const terminal = deriveBootstrapTerminalJournal(journal);
+  return terminal === null ? refuse() : terminalRetentionJournal(plan, terminal);
 }
 
 const RETENTION_TERMINAL_PREFIX_KEYS = [
