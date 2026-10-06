@@ -10,6 +10,7 @@ import { chmod, lstat, mkdir, open, readdir, realpath, rmdir, unlink } from "nod
 import { dirname, join } from "node:path";
 
 import {
+  foundationBindingsHash,
   EXIT_CODES,
   FoundationParticipantExecutor,
   GitPlanner,
@@ -213,7 +214,6 @@ const MAX_PLAN_BYTES = 16_777_216;
 const MAX_JOURNAL_BYTES = 1_048_576;
 const MAX_GIT_CONTROL_BYTES = 67_108_864;
 const MAX_FAST_FORWARD_WALK = 100_000;
-const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1\0";
 const WIDEST_UINT64 = parseUInt64Decimal("18446744073709551615");
 const WIDEST_HASH = "f".repeat(64) as LowerHexSha256;
 const ZERO_OID = "0000000000000000000000000000000000000000";
@@ -243,10 +243,6 @@ function recoveryRequired(reason: string, ...paths: readonly string[]): never {
 
 function refuse(reason: string, code: ExitCode, paths: readonly string[] = [], recovery?: string, cause?: string): never {
   throw new GitCommandRefusal(reason, code, paths, recovery, cause);
-}
-
-export function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
-  return createHash("sha256").update(FOUNDATION_BINDINGS_DOMAIN).update(JSON.stringify(ids)).digest("hex") as LowerHexSha256;
 }
 
 // ---------------------------------------------------------------------------------------------

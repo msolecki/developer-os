@@ -444,7 +444,8 @@ function validateManifestBytesState(
   return state;
 }
 
-function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
+/** `developer-os/manifest-foundation-bindings/v1\0` plus the JSON ID array: the manifest's ordered Foundation-ID binding. */
+export function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
   return createHash("sha256")
     .update("developer-os/manifest-foundation-bindings/v1\0")
     .update(JSON.stringify(ids))

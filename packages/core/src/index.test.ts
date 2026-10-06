@@ -127,6 +127,7 @@ describe("the package's public door", () => {
         "encodeLifecycleIdAllocator",
         "encodeUninstallingMarker",
         "formatAllocatedLifecycleId",
+        "foundationBindingsHash",
         "FoundationParticipantExecutor",
         "foundationParticipantPlanHash",
         "inspectFoundationLedger",

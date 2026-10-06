@@ -9,6 +9,7 @@ import { access, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import {
+  foundationBindingsHash,
   EXIT_CODES,
   LifecycleCoordinator,
   LifecycleRecoveryRequiredError,
@@ -107,7 +108,6 @@ import {
   admitManifestAfter,
   abandonUnpublishedIntent,
   fileChange,
-  foundationBindingsHash,
   gitAdapters,
   observeHome,
   prefixesOf,
