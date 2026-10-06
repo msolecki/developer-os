@@ -963,6 +963,10 @@ describe("V2 uninstall planning refusals", () => {
     await nodeFs.mkdir(fixture.paths.stateDir, { recursive: true, mode: 0o700 });
     await nodeFs.chmod(fixture.paths.home, 0o700);
     await nodeFs.chmod(fixture.paths.stateDir, 0o700);
+    // Every installed home holds the runner leases `drain_runners` locks; planning refuses one that is gone (W2-UNINST-2).
+    for (const job of SCHEDULED_JOB_IDS) {
+      await nodeFs.writeFile(join(fixture.paths.stateDir, `.automation-${job}.lock`), "", { mode: 0o600 });
+    }
     return {
       fixture,
       global: {
