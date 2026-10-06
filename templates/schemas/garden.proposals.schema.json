@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "GardenProposals",
-  "description": "What the scheduled Brain gardener returns: up to eight proposed notes or fixes, and nothing else. Each proposal is read as data, validated, and only then quarantined as a capture for review.",
+  "description": "What the scheduled Brain gardener returns: up to eight proposed hub notes or related sections, and nothing else. Each proposal is read as data, validated, and only then quarantined as a capture for review.",
   "type": "object",
   "additionalProperties": false,
   "required": ["proposals"],
@@ -17,8 +17,8 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["hub", "related", "fix"],
-            "description": "hub proposes a new hub note, related adds related links to an existing note, fix repairs an existing note."
+            "enum": ["hub", "related"],
+            "description": "hub proposes a new hub note, related adds related links to an existing note."
           },
           "target": {
             "type": "string",
