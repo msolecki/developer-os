@@ -28,7 +28,7 @@ import {
 } from "@developer-os/core";
 
 import { SecurityRefusalError } from "../paths.js";
-import { destroyGitQuarantine, gitPackReaderBudget, GuardedSha1PackReader, type GitPackClosureEvidenceV1 } from "./pack-reader.js";
+import { destroyGitQuarantineAfter, gitPackReaderBudget, GuardedSha1PackReader, type GitPackClosureEvidenceV1 } from "./pack-reader.js";
 import { verifySanitizedGitShadow, type SanitizedBareDestinationShadowV1 } from "./shadow.js";
 import type { GitProcessPhaseV1 } from "./supervisor.js";
 import type { ClosedGitProcessNodeIdV1 } from "./types.js";
@@ -345,7 +345,6 @@ export async function prepareLocalReceive(
   try {
     return await prepare(request, reader);
   } catch (error) {
-    await destroyGitQuarantine(request.quarantineRoot, request.effectiveUid);
-    throw error;
+    return destroyGitQuarantineAfter(error, request.quarantineRoot, request.effectiveUid);
   }
 }

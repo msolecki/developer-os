@@ -254,6 +254,20 @@ export async function destroyGitQuarantine(root: CanonicalAbsolutePathV1, effect
   await nodeFs.rm(root, { recursive: true, force: false });
 }
 
+/**
+ * W2-SEC-GIT-2: destroys the quarantine after `refusal` and rethrows it; a destroy failure is
+ * thrown instead, with `refusal` as its `cause`, so the original reason is never lost.
+ */
+export async function destroyGitQuarantineAfter(refusal: unknown, root: CanonicalAbsolutePathV1, effectiveUid: number): Promise<never> {
+  try {
+    await destroyGitQuarantine(root, effectiveUid);
+  } catch (destroyFailure) {
+    const reason = destroyFailure instanceof SecurityRefusalError ? destroyFailure.message : "git_quarantine_destroy_failed";
+    throw new SecurityRefusalError(reason, { cause: refusal });
+  }
+  throw refusal;
+}
+
 type PackObjectTypeV1 = "commit" | "tree" | "blob";
 const TYPE_CODES: Readonly<Record<number, PackObjectTypeV1>> = { 1: "commit", 2: "tree", 3: "blob" };
 
@@ -972,8 +986,7 @@ export class GuardedSha1PackReader {
     try {
       return await this.#validate(request, budget);
     } catch (error) {
-      await destroyGitQuarantine(request.quarantineRoot, request.effectiveUid);
-      throw error;
+      return destroyGitQuarantineAfter(error, request.quarantineRoot, request.effectiveUid);
     }
   }
 

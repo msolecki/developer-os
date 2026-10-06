@@ -357,6 +357,19 @@ describe("GuardedSha1PackReader counts", () => {
     expect(await fixture.quarantineExists()).toBe(false);
   });
 
+  // W2-SEC-GIT-2: a quarantine that cannot be destroyed must not erase why the read was refused.
+  it("keeps the original refusal as the cause when the quarantine cannot be destroyed", async () => {
+    const fixture = await smallFixture({ budget: { ...gitPackReaderBudget(4), admittedObjectCount: 3 } });
+    const error: unknown = await fixture.reader
+      .validate({ ...fixture.request, effectiveUid: UID + 1 }, fixture.budget)
+      .then(() => null, (refusal: unknown) => refusal);
+    expect(error).toBeInstanceOf(SecurityRefusalError);
+    expect((error as Error).message).toBe("git_quarantine_changed");
+    expect((error as Error).cause).toBeInstanceOf(SecurityRefusalError);
+    expect(((error as Error).cause as Error).message).toBe("git_pack_budget_invalid");
+    expect(await fixture.quarantineExists()).toBe(true);
+  });
+
   it("refuses a header count that differs from the permit's count", async () => {
     const fixture = await smallFixture({ budget: gitPackReaderBudget(3) });
     await expect(fixture.reader.validate(fixture.request, fixture.budget)).rejects.toThrow("git_pack_count_mismatch");

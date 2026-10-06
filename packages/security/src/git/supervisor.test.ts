@@ -472,6 +472,14 @@ describe("GitProcessSupervisor deadlines and termination", () => {
     drifted.swapAfterIssue();
     const refused = new GitProcessSupervisor(table, runner, drifted.probe);
     expect(() => refused.beginPushPhase()).toThrow("unsupported_git_distribution");
+    // W2-SEC-GIT-2: the recheck's own failure stays reachable as the cause.
+    let drift: unknown = null;
+    try {
+      refused.beginPushPhase();
+    } catch (error) {
+      drift = error;
+    }
+    expect((drift as Error).cause).toBeInstanceOf(Error);
 
     const later = new GitProcessSupervisor(table, runner, identity.probe);
     const phase = later.beginPushPhase();
