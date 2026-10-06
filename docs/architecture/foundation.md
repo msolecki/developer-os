@@ -1354,7 +1354,9 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
   finalize tombstones). **Rollback order** (§10.2): verify the previous bundle, the retained payload
   and the record in place, owner files inverse, the transitional manifest, the previous active
   record, the previous verifier, the executor switch, retirement of the consumed set and the
-  rejected release, the terminal manifest.
+  rejected release, the terminal manifest. The applying release retains that list's hash
+  (`exactStepListHash`); a rollback whose composed outer steps hash differently refuses
+  `update_rollback_evidence_invalid`, exit 6, before construction (NEW-172).
 - **The point of no return** is the target verifier's durable success. A failure before it
   compensates to the old release (trust stays advanced); after it every step force-forwards. A
   resumed run reports the exit class of the persisted `compensationCause` (D72 P7(b)): a verifier

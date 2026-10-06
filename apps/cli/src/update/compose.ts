@@ -191,6 +191,8 @@ export interface RetainedRollbackSetV1 {
   readonly migrations: readonly RetainedSchemaMigrationInverseProjectionV1[];
   readonly entryCount: number;
   readonly aggregateBytes: number;
+  /** The retained inverse plan's hash of the §10.2 step list `update --apply` derived; rollback's own steps must equal it. */
+  readonly exactStepListHash: LowerHexSha256;
 }
 
 /** `update rollback --apply`'s reads beyond `ComposeDepsV1`; nothing here comes from a network or planner. */
@@ -469,6 +471,8 @@ interface AssemblyV1 {
   readonly stepOwners: readonly UpdateStepOwnerV1[];
   readonly retainPayloadId: RollbackPayloadIdV1 | null;
   readonly capacityBase: UpdateCapacityInputV1;
+  /** Rollback only: the retained `exactStepListHash` the outer steps must reproduce byte-for-byte (NEW-172). */
+  readonly exactStepListHash: LowerHexSha256 | null;
 }
 
 const OWNER_APPLY_SLOTS: FoundationSlotsV1 = { forward: "owner_forward_files", compensation: "owner_inverse_files" };
@@ -652,6 +656,7 @@ class UpdateComposer {
       stepOwners,
       retainPayloadId: payloadId,
       capacityBase: materialized.capacity,
+      exactStepListHash: null,
     });
     return { ...assembled, sources: { bundleSource, rollbackSource, documents: { inversePlan: payload.inversePlanBytes, inventory: payload.inventoryBytes }, rowBytes: assembled.rowBytes } };
   }
@@ -718,6 +723,8 @@ class UpdateComposer {
       outerJournalPath: outerPaths.journal,
     }));
     const outerPlan = composed("update_composition_outer", () => buildUpdateCoordinatorPlan({ execution, executionRef, construction: constructionPlanRef(construction), owners: a.stepOwners, retainPayloadId: a.retainPayloadId }));
+    // Spec 2 §10.2: a rollback runs only the step list the applying release retained for it.
+    if (a.exactStepListHash !== null && rollbackStepListHash(outerPlan.steps) !== a.exactStepListHash) refuse("update_rollback_evidence_invalid", EXIT_CODES.recoveryRequired);
     const outer = updateCoordinatorOuterBytes(outerPlan, this.#plannedAt);
     return {
       construction,
@@ -840,6 +847,7 @@ class UpdateComposer {
       stepOwners,
       retainPayloadId: null,
       capacityBase: this.#rollbackCapacity(),
+      exactStepListHash: deps.retained.exactStepListHash,
     });
     return { ...assembled, sources: { bundleSource: null, rollbackSource: null, documents: null, rowBytes: assembled.rowBytes } };
   }

@@ -980,7 +980,7 @@ async function retainedRollbackSet(lifecycle: CliLifecycleContext, productHome: 
     if (leaf.kind === "owner_inverse") owners.push(leaf);
     else migrations.push(leaf);
   }
-  return { owners, migrations, entryCount: inventory.entries.length, aggregateBytes: inventory.aggregateBytes };
+  return { owners, migrations, entryCount: inventory.entries.length, aggregateBytes: inventory.aggregateBytes, exactStepListHash: plan.exactStepListHash };
 }
 
 /** A release's retained signed bundle manifest, by its content hash. */
