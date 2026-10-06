@@ -145,8 +145,8 @@ interface BoundPermit {
   consumed: boolean;
 }
 
-function refuse(reason: string): never {
-  throw new SecurityRefusalError(reason);
+function refuse(reason: string, cause?: unknown): never {
+  throw new SecurityRefusalError(reason, cause === undefined ? undefined : { cause });
 }
 
 /** Literal array/map equality; a value that is not canonical JSON is simply unequal. */
@@ -169,8 +169,8 @@ function recheckAll(files: readonly AdmittedSystemExecutableV1[], rows: readonly
       if (row === undefined) refuse("unsupported_git_distribution");
       recheckSystemExecutableSync(row, inspect, file);
     }
-  } catch {
-    refuse("unsupported_git_distribution");
+  } catch (error) {
+    refuse("unsupported_git_distribution", error);
   }
 }
 
