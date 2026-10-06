@@ -121,7 +121,7 @@ export function projectUpdateCapacity(input: UpdateCapacityInputV1): UpdateCapac
     requiredEntries = checkedAdd(requiredEntries, component.entries, "UpdateCapacityProjectionV1.requiredEntries");
     components.push({ kind, bytes: decimal(component.bytes), entries: decimal(component.entries) });
   }
-  if (components.length < 1 || components.length > 12) fail("UpdateCapacityProjectionV1.components");
+  if (components.length < 1) fail("UpdateCapacityProjectionV1.components");
   requiredBytes = checkedAdd(
     requiredBytes,
     BigInt(parseUInt64Decimal(input.reservationGranularityBytes)),

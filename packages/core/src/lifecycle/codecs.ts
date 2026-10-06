@@ -3,7 +3,6 @@ import { Buffer } from "node:buffer";
 import type { FoundationMutationRefV1, LifecycleInstallNonceV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
-import { compareUtf8 } from "../update/release.js";
 import {
   parseLowerHexSha256,
   parseUInt64Decimal,
@@ -11,6 +10,7 @@ import {
   type LowerHexSha256,
 } from "../update/scalars.js";
 import {
+  compareUtf8,
   decodeCanonicalJson,
   encodeCanonicalJson,
   hashCanonicalJson,

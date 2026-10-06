@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 
 import { serializeConfig, type DeveloperOsConfigV1 } from "../config/index.js";
 import {
+  compareUtf8,
   encodeCanonicalJson,
   type CanonicalJsonValue,
 } from "../lifecycle/canonical-json.js";
@@ -17,7 +18,6 @@ import {
   type ExactProductStatePathV1,
   type VaultFreeRelativePathV1,
 } from "../update/paths.js";
-import { compareUtf8 } from "../update/release.js";
 import {
   parseLowerHexSha256,
   parseUInt64Decimal,

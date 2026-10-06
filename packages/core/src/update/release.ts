@@ -224,7 +224,6 @@ function array(value: unknown, label: string, minimum: number, maximum: number):
 }
 function string(value: unknown, label: string): string { if (typeof value !== "string") invalid(label); return value; }
 function bytes(value: string): number { return textEncoder.encode(value).byteLength; }
-export { compareUtf8 };
 function compareUInt64(left: UInt64DecimalV1, right: UInt64DecimalV1): number { return BigInt(left) === BigInt(right) ? 0 : BigInt(left) < BigInt(right) ? -1 : 1; }
 function compareSemver(left: StableSemverV1, right: StableSemverV1): number {
   const a = left.split(".").map(Number); const b = right.split(".").map(Number);

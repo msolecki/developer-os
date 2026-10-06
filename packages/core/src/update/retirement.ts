@@ -3,12 +3,12 @@
  * the pure flattener that turns its referenced inventories into the ordered leaf list
  * `retirementNext` walks. Nothing here opens a file; the CLI resolves each inventory's leaves.
  */
+import { compareUtf8 } from "../lifecycle/canonical-json.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { cachedPlanHash, canonical, coordinatorOf, exact, fail, integer, list, oneOf } from "./bundle-participant.js";
 import { MAXIMUM_LEAF_PLAN_BYTES, updateLeafPlanPath, type ImmutableUpdatePlanRefV1 } from "./construction.js";
 import { MAXIMUM_UPDATE_RETIREMENT_LEAVES } from "./coordinator.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "./paths.js";
-import { compareUtf8 } from "./release.js";
 import type { RetirementInventoryRefV1, RollbackPayloadLeafV1 } from "./rollback.js";
 import { parseLowerHexSha256, parseSafeReasonCode, type LowerHexSha256, type SafeReasonCodeV1 } from "./scalars.js";
 

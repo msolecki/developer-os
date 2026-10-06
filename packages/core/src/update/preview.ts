@@ -1,5 +1,5 @@
 
-import { encodeCanonicalJson, hashCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, encodeCanonicalJson, hashCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { parseAllocatedLifecycleId, type AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
 import type { ArtifactOwner } from "../manifest/types.js";
 import { projectUpdateCapacity, type UpdateCapacityInputV1, type UpdateCapacityProjectionV1 } from "./capacity.js";
@@ -13,7 +13,7 @@ import {
   type RollbackPayloadRelativePathV1,
   type VaultRelativePathV1,
 } from "./paths.js";
-import { compareUtf8, type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
+import { type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
 import {
   encodeTenDigitOrdinal,
   parseLowerHexSha256,

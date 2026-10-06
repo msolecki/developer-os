@@ -1,4 +1,4 @@
-import { decodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, decodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ArtifactOwner } from "../manifest/types.js";
 import {
@@ -53,7 +53,7 @@ import {
   type RollbackPayloadRelativePathV1,
 } from "./paths.js";
 import { parseRollbackPayloadId, type PreparedUpdateCandidateV1, type RollbackPayloadEntryV1, type RollbackPayloadIdV1 } from "./preview.js";
-import { compareUtf8, validateReleaseIdentity, type ReleaseIdentityV1 } from "./release.js";
+import { validateReleaseIdentity, type ReleaseIdentityV1 } from "./release.js";
 import {
   encodeTenDigitOrdinal,
   parseLowerHexSha256,

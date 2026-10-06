@@ -1,4 +1,4 @@
-import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { ArtifactOwner } from "../manifest/types.js";
 import { admitOwnerRelativePath, parseCanonicalAbsolutePathText, parseVaultRelativePathText, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1, type OwnerRelativePathV1 } from "./paths.js";
 import type {
@@ -12,7 +12,7 @@ import type {
   PlannerPathTokenV1,
   UpdatePlannerRequestV1,
 } from "./planner.js";
-import { compareUtf8, parseBundleRelativePath } from "./release.js";
+import { parseBundleRelativePath } from "./release.js";
 import { parseLowerHexSha256 } from "./scalars.js";
 
 /** Spec 2 §8.3: the closed owner enum, in the canonical order every registry and plan list follows. */

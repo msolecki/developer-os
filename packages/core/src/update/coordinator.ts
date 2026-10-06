@@ -6,7 +6,7 @@
  */
 import { createHash } from "node:crypto";
 
-import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { LifecycleRecoveryRequiredError, refuseLifecycleRecovery } from "../lifecycle/guarded-fs.js";
 import { parseLifecycleCoordinatorId } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
@@ -43,7 +43,6 @@ import {
 } from "./paths.js";
 import { parseRollbackPayloadId, validatePlannerWireBounds, type PlannerTranscriptIdentityV1, type PlannerWireBoundsV1, type RollbackPayloadIdV1 } from "./preview.js";
 import {
-  compareUtf8,
   validateReleaseIdentity,
   validateReleaseMetadataIdentity,
   type ReleaseIdentityV1,
