@@ -170,7 +170,7 @@ describe("UpdateCoordinatorJournalStore", () => {
     await expect(killer.removeEnvelope(plan, compacting)).rejects.toBeInstanceOf(Killed);
     expect(await exists(paths.journal)).toBe(false);
     expect(await store().isEnvelopeSuffix(plan.id)).toBe(true);
-    await store().completeEnvelopeSuffix(plan.id);
+    expect(await store().completeEnvelopeSuffix(plan.id)).toBe(plan.executionBindingHash);
     expect(await exists(lock)).toBe(false);
     expect(await exists(paths.plan)).toBe(false);
     expect(UPDATE_COORDINATOR_STORE_DEATH_POINTS).toContain("envelope_plan_removed");

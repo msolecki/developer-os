@@ -465,6 +465,21 @@ describe("composeRollback (Spec 2 §10.2, D72 P9)", () => {
     expect(await refusal(composeRollback(input, { ...deps, retained }))).toMatchObject({ reason: "update_rollback_evidence_invalid", code: EXIT_CODES.recoveryRequired });
   });
 
+  it("accepts the exactStepListHash a real composeUpdate retained, derived on its own side (NEW-172)", async () => {
+    const forward = await composeFixture();
+    const applied = await composeUpdate(forward.input, forward.deps);
+    const inversePlan = applied.sources.documents?.inversePlan;
+    if (inversePlan === undefined) throw new Error("composeUpdate retains an inverse plan");
+    const retained = decodeCanonicalJson(inversePlan, inversePlan.byteLength) as unknown as { readonly exactStepListHash: LowerHexSha256; readonly ownerPlans: readonly { readonly id: string }[]; readonly migrationPlans: readonly unknown[] };
+    const { input, deps } = await rollbackFixture();
+    // The same leaf set on both sides: one core owner, no effect, no migration.
+    expect(retained.ownerPlans.map((plan) => plan.id)).toEqual(deps.retained.owners.map((owner) => owner.id));
+    expect(retained.migrationPlans).toEqual(deps.retained.migrations);
+
+    const composed = await composeRollback(input, { ...deps, retained: { ...deps.retained, exactStepListHash: retained.exactStepListHash } });
+    expect(composed.construction.operation).toBe("update_rollback");
+  });
+
   it("refuses a retained record that changed since the preview", async () => {
     const { input, deps, world } = await rollbackFixture();
     const at = `${SYNTHETIC_HOME}/state/update-rollback.json`;

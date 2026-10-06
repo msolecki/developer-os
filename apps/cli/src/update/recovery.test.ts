@@ -199,7 +199,7 @@ describe("routeUpdateRecovery", () => {
         isEnvelopeSuffix: () => Promise.resolve(false),
         completeEnvelopeSuffix: (id) => {
           calls.push(`suffix:${id}`);
-          return Promise.resolve();
+          return Promise.resolve(parseLowerHexSha256("e".repeat(64)));
         },
       },
       construction: {
@@ -231,7 +231,7 @@ describe("routeUpdateRecovery", () => {
     const calls: string[] = [];
     const suffix = { ...routes(calls), envelope: { ...routes(calls).envelope, isEnvelopeSuffix: () => Promise.resolve(true) } };
     const outcome = await routeUpdateRecovery({ kind: "update_recovery", coordinatorId: SYNTHETIC_COORDINATOR_ID, operation: "update_apply", direction: "forward" }, suffix);
-    expect(outcome.kind).toBe("envelope_suffix");
+    expect(outcome).toStrictEqual({ kind: "envelope_suffix", coordinatorId: SYNTHETIC_COORDINATOR_ID, executionBindingHash: "e".repeat(64) });
     expect(calls).toEqual([`suffix:${SYNTHETIC_COORDINATOR_ID}`, `executor:${SYNTHETIC_COORDINATOR_ID}`]);
   });
 });

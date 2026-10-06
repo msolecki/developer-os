@@ -12,6 +12,7 @@ import {
   type LifecycleCoordinatorIdV1,
   type LifecycleGuardedEntryV1,
   type LifecycleGuardedFileSystemV1,
+  type LowerHexSha256,
   type UpdateCompactionEntryV1,
   type UpdateCoordinatorParticipantsV1,
   type UpdateLifecycleCoordinatorJournalV2,
@@ -76,17 +77,7 @@ export class UpdateCoordinatorJournalStore implements UpdateLifecycleCoordinator
   async read(id: LifecycleCoordinatorIdV1): Promise<{ readonly plan: UpdateLifecycleCoordinatorPlanV2; readonly journal: UpdateLifecycleCoordinatorJournalV2 }> {
     const { fs, productHome } = this.#dependencies;
     const paths = updateCoordinatorEnvelopePaths(productHome, id);
-    const planEntry = await this.#guardedLeaf(paths.plan, MAXIMUM_LIFECYCLE_EXECUTION_PLAN_BYTES, "update_coordinator_plan_shape");
-    let plan: UpdateLifecycleCoordinatorPlanV2;
-    try {
-      const dispatched = readLifecycleExecutionPlanV2(await fs.readRegular(planEntry, MAXIMUM_LIFECYCLE_EXECUTION_PLAN_BYTES), { v1: refuseSchemaV1, productHome });
-      if (dispatched.schemaVersion !== 2) return refuse("update_coordinator_schema_v1", paths.plan);
-      plan = dispatched.plan;
-    } catch (error) {
-      if (error instanceof LifecycleRecoveryRequiredError) throw error;
-      return refuse("update_coordinator_plan_bytes", paths.plan);
-    }
-    if (plan.id !== id) refuse("update_coordinator_plan_identity", paths.plan);
+    const plan = await this.#readPlan(id);
     const journalEntry = await this.#guardedLeaf(paths.journal, plan.maximumJournalBytes, "update_coordinator_journal_shape");
     const bytes = await fs.readRegular(journalEntry, plan.maximumJournalBytes);
     let journal: UpdateLifecycleCoordinatorJournalV2;
@@ -161,10 +152,16 @@ export class UpdateCoordinatorJournalStore implements UpdateLifecycleCoordinator
     return (await this.#dependencies.fs.lstat(paths.journal)) === null && (await this.#dependencies.fs.lstat(paths.plan)) !== null;
   }
 
-  async completeEnvelopeSuffix(id: LifecycleCoordinatorIdV1): Promise<void> {
+  /**
+   * Finishes the suffix and returns the removed plan's `executionBindingHash`: with the journal gone
+   * it is the only record of which execution this was, and the caller compares it with the home's
+   * rollback record to tell a finalized run from a compensated one.
+   */
+  async completeEnvelopeSuffix(id: LifecycleCoordinatorIdV1): Promise<LowerHexSha256> {
     const { fs, productHome } = this.#dependencies;
     const paths = updateCoordinatorEnvelopePaths(productHome, id);
     if (!(await this.isEnvelopeSuffix(id))) refuse("update_coordinator_not_envelope_suffix", paths.plan);
+    const { executionBindingHash } = await this.#readPlan(id);
     const root = await this.#root(paths.plan);
     const lock = await fs.lstat(parseCanonicalAbsolutePathText(`${root.path}/.${id}.lock`));
     if (lock !== null) {
@@ -176,6 +173,24 @@ export class UpdateCoordinatorJournalStore implements UpdateLifecycleCoordinator
     await fs.unlinkExact(await this.#guardedLeaf(paths.plan, MAXIMUM_LIFECYCLE_EXECUTION_PLAN_BYTES, "update_coordinator_plan_shape"));
     await fs.syncDirectory(root);
     this.#dependencies.interrupt?.("envelope_plan_removed");
+    return executionBindingHash;
+  }
+
+  async #readPlan(id: LifecycleCoordinatorIdV1): Promise<UpdateLifecycleCoordinatorPlanV2> {
+    const { fs, productHome } = this.#dependencies;
+    const paths = updateCoordinatorEnvelopePaths(productHome, id);
+    const planEntry = await this.#guardedLeaf(paths.plan, MAXIMUM_LIFECYCLE_EXECUTION_PLAN_BYTES, "update_coordinator_plan_shape");
+    let plan: UpdateLifecycleCoordinatorPlanV2;
+    try {
+      const dispatched = readLifecycleExecutionPlanV2(await fs.readRegular(planEntry, MAXIMUM_LIFECYCLE_EXECUTION_PLAN_BYTES), { v1: refuseSchemaV1, productHome });
+      if (dispatched.schemaVersion !== 2) return refuse("update_coordinator_schema_v1", paths.plan);
+      plan = dispatched.plan;
+    } catch (error) {
+      if (error instanceof LifecycleRecoveryRequiredError) throw error;
+      return refuse("update_coordinator_plan_bytes", paths.plan);
+    }
+    if (plan.id !== id) refuse("update_coordinator_plan_identity", paths.plan);
+    return plan;
   }
 
   async #root(leaf: CanonicalAbsolutePathV1): Promise<LifecycleGuardedEntryV1> {
