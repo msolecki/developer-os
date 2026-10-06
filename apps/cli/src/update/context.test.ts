@@ -1,4 +1,5 @@
 import * as nodeFs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -23,6 +24,7 @@ import {
 } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
 import { createCliUpdateContext, readOfflineTrust } from "./context.js";
+import { tryLockScratchAttempt } from "./scratch-lock.js";
 import { releaseIdentityOf, UpdatePlanningRefusal } from "./planning.js";
 import type { RollbackRecordV1 } from "./planning.js";
 import type { UpdateRollbackComposeInputV1 } from "./apply.js";
@@ -145,6 +147,35 @@ describe("readOfflineTrust", () => {
       reason: "update_launcher_handoff_absent",
       code: EXIT_CODES.capabilityUnavailable,
     });
+  });
+});
+
+describe("tryLockScratchAttempt", () => {
+  it("holds one flock per attempt, skips while it is held, and treats a dropped lock as gone (NEW-173)", async () => {
+    const directory = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-scratch-lock-"));
+    try {
+      const path = join(directory, "attempt.lock");
+      const first = await tryLockScratchAttempt(path);
+      expect(first).not.toBeNull();
+      expect(await tryLockScratchAttempt(path)).toBeNull();
+
+      await first?.release();
+      await first?.release();
+      const second = await tryLockScratchAttempt(path);
+      expect(second).not.toBeNull();
+      await second?.release();
+
+      // A waiter whose lock lands on an inode the finishing holder already unlinked holds nothing.
+      const dropped = await tryLockScratchAttempt(path, {
+        acquire: async () => {
+          await nodeFs.unlink(path);
+          return { exitCode: 0, signal: null };
+        },
+      });
+      expect(dropped).toBeNull();
+    } finally {
+      await nodeFs.rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

@@ -2379,6 +2379,16 @@ enumerates-and-deletes. At most 32 candidate triples and the plan's 200,000 entr
 inspected per invocation; any unknown child, unrecorded identity, over-limit, or malformed candidate
 is preserved with a content-free recovery reason.
 
+**Amended 2026-10-06 (NEW-173).** "After process death" is proven, not assumed. Each attempt has a
+fourth sibling name, `.<stem>.lock` beside its journal (outside the plan, whose keys stay exact). The
+creating process takes a non-blocking exclusive flock on it right after the plan publishes and before
+the journal exists, holds it for the attempt's lifetime, and after the journal is removed unlinks it
+while still held, then releases it. Recovery try-locks it first: a lock held by a live process skips
+that attempt untouched (no refusal); a lock that no longer names its inode means a holder finished,
+and is skipped too; otherwise recovery owns the attempt and removes the lock last as above. The lock
+dies with its process, so a crashed attempt is always recoverable, and plan-only `update` stays
+outside the global lock.
+
 Plan-only update may create one guarded system-temporary `ReleasePlanningScratchV1`; it makes no
 product, Brain, vendor, manifest, trust, active, or launcher mutation. Scratch contains only the
 public release archive/extraction; no planner request, result, path, config, stderr, or blob frame is

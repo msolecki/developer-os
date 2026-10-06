@@ -94,6 +94,7 @@ import { gateManifestAdmission } from "../lifecycle/mutation-gate.js";
 import type { CodexRegistrationStateV1 } from "../instructions/codex-registration.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
+import { tryLockScratchAttempt } from "./scratch-lock.js";
 import { productionUpdateApplyPorts, updateCodexPort } from "./apply-ports.js";
 import {
   MAXIMUM_ROLLBACK_RECORD_BYTES,
@@ -570,6 +571,7 @@ function scratchPort(context: CliContext): UpdateScratchV1 {
         effectiveUid: lifecycle.effectiveUid,
         uuid: randomUUID,
         clock: () => lifecycle.clock(),
+        tryLock: (path) => tryLockScratchAttempt(path),
       });
     })();
     return store;

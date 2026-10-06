@@ -1334,7 +1334,9 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
 ### 11.2 `update` and `update rollback`
 
 - **Plan-only by default.** `update` reads the home, the FD 3 trust, the signed metadata and the
-  bundle, runs the target planner over one attempt-owned scratch and prints a preview; it writes
+  bundle, runs the target planner over one attempt-owned scratch (held under a per-attempt flock for
+  its lifetime, so a concurrent `update`'s residue sweep cleans only attempts whose process died,
+  NEW-173) and prints a preview; it writes
   nothing durable. An unsigned-local home refuses `release_unsigned_local` (exit 4) right after the
   home read, and an invocation the launcher did not mark with `--offline-release-trust-fd=3` refuses
   `update_launcher_handoff_absent` (exit 4) before any fstat, read or close of FD 3, which outside

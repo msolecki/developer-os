@@ -26,6 +26,7 @@ import {
   releasePlanningScratchPaths,
   validateReleasePlanningScratchJournal,
   type ReleasePlanningScratchAttempt,
+  type ReleasePlanningScratchStoreDependencies,
   type ReleaseScratchBoundaryV1,
 } from "./scratch.js";
 import type { BoundedReleaseResponseV1, ReleaseBodySink } from "./transport.js";
@@ -121,7 +122,31 @@ const BUNDLE = {
 
 interface ScratchHomeV1 {
   readonly systemTemp: CanonicalAbsolutePathV1;
-  readonly store: (options?: { readonly afterBoundary?: (boundary: ReleaseScratchBoundaryV1) => void; readonly uuid?: () => string }) => ReleasePlanningScratchStore;
+  /**
+   * Each store is one process: by default it gets its own lock table, so a store that "died"
+   * holds nothing another sees. `locks` shares one table, as one flock namespace does for two
+   * live processes on the same temp.
+   */
+  readonly store: (options?: {
+    readonly afterBoundary?: (boundary: ReleaseScratchBoundaryV1) => void | Promise<void>;
+    readonly uuid?: () => string;
+    readonly locks?: Set<string>;
+  }) => ReleasePlanningScratchStore;
+}
+
+/** An in-memory stand-in for the production try-flock: creates the lock file, never waits. */
+function lockTable(held: Set<string>): ReleasePlanningScratchStoreDependencies["tryLock"] {
+  return async (path) => {
+    if (held.has(path)) return null;
+    held.add(path);
+    await nodeFs.writeFile(path, "", { flag: "a", mode: 0o600 });
+    return {
+      release: () => {
+        held.delete(path);
+        return Promise.resolve();
+      },
+    };
+  };
 }
 
 async function scratchHome(): Promise<ScratchHomeV1> {
@@ -145,6 +170,7 @@ async function scratchHome(): Promise<ScratchHomeV1> {
         effectiveUid: UID,
         uuid: options.uuid ?? randomUUID,
         clock: () => new Date().toISOString(),
+        tryLock: lockTable(options.locks ?? new Set()),
         ...(options.afterBoundary === undefined ? {} : { afterBoundary: options.afterBoundary }),
       }),
   };
@@ -368,6 +394,44 @@ describe("ReleasePlanningScratchStore", () => {
     expect(await store.listRecoverableAttempts()).toEqual([]);
     await store.recoverCleanup(id);
     expect(await listing(home.systemTemp)).toEqual([paths.planPath.slice(home.systemTemp.length + 1)]);
+  });
+
+  it("leaves a live attempt of a concurrent process untouched, which then completes and cleans up (NEW-173)", async () => {
+    const home = await scratchHome();
+    const locks = new Set<string>();
+    let paused: () => void = () => undefined;
+    let reached: () => void = () => undefined;
+    const atEntry = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let seen = 0;
+    const live = completeAttempt(home.store({
+      locks,
+      afterBoundary: (boundary) => {
+        if (boundary !== "entry_recorded" || (seen += 1) !== 1) return undefined;
+        reached();
+        return new Promise<void>((resolve) => {
+          paused = resolve;
+        });
+      },
+    }));
+    await atEntry;
+    const before = await listing(home.systemTemp);
+    const [journal] = before.filter((name) => name.endsWith(".journal.json"));
+    const journalBytes = await nodeFs.readFile(join(home.systemTemp, journal as string));
+
+    const sweeper = home.store({ locks });
+    const ids = await sweeper.listRecoverableAttempts();
+    expect(ids).toHaveLength(1);
+    for (const id of ids) await sweeper.recoverCleanup(id);
+
+    expect(await listing(home.systemTemp)).toEqual(before);
+    expect(await nodeFs.readFile(join(home.systemTemp, journal as string))).toEqual(journalBytes);
+    paused();
+    const attempt = await live;
+    expect(attempt.journal.phase).toBe("verified");
+    await attempt.cleanup();
+    expect(await listing(home.systemTemp)).toEqual([]);
   });
 
   it("grants no authority over a plan temp that was never published", async () => {

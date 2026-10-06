@@ -167,6 +167,35 @@ export interface ReleasePlanningScratchStoreDependencies {
   /** Wall-clock `UtcTimestampV1` text for journal timestamps only. */
   readonly clock: () => string;
   readonly afterBoundary?: (boundary: ReleaseScratchBoundaryV1) => void | Promise<void>;
+  /**
+   * Non-blocking exclusive lock on the attempt's sibling `.lock` file, created if absent; null
+   * when another live process holds it. The attempt holds it for its whole lifetime, so recovery
+   * cleans only an attempt whose owner is gone (§7.2 "after process death", NEW-173).
+   */
+  readonly tryLock: (path: CanonicalAbsolutePathV1) => Promise<ReleaseScratchLockV1 | null>;
+}
+
+/** A held attempt lock; released by closing it, and with the process on death. Idempotent. */
+export interface ReleaseScratchLockV1 {
+  release(): Promise<void>;
+}
+
+/** The attempt's lock file beside its journal; never in the plan, whose keys are exact. */
+export function releasePlanningScratchLockPath(journalPath: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
+  return parseCanonicalAbsolutePathText(journalPath.replace(/\.journal\.json$/u, ".lock"));
+}
+
+/** Removes a held attempt's lock file, then releases it; a held lock is never left behind unnamed for another holder. */
+async function dropLock(fs: LifecycleGuardedFileSystemV1, parent: LifecycleGuardedEntryV1, path: CanonicalAbsolutePathV1, lock: ReleaseScratchLockV1): Promise<void> {
+  try {
+    const entry = await fs.lstat(path);
+    if (entry !== null) {
+      await fs.unlinkExact(entry);
+      await fs.syncDirectory(parent);
+    }
+  } finally {
+    await lock.release();
+  }
 }
 
 const MAXIMUM_PLAN_BYTES = 20_971_520;
@@ -543,6 +572,7 @@ export class ReleasePlanningScratchAttempt {
     readonly parent: LifecycleGuardedEntryV1,
     journal: ReleasePlanningScratchJournalV1,
     journalEntry: LifecycleGuardedEntryV1,
+    readonly lock: ReleaseScratchLockV1,
   ) {
     this.#journal = journal;
     this.#journalEntry = journalEntry;
@@ -884,6 +914,17 @@ export class ReleasePlanningScratchAttempt {
    * exact-empty removal refuse and everything from there on is preserved.
    */
   async cleanup(): Promise<void> {
+    try {
+      await this.#cleanup();
+    } catch (error) {
+      // Preserved residue is a dead attempt now: let the next sweep retry it.
+      await this.lock.release();
+      throw error;
+    }
+    await dropLock(this.dependencies.fs, this.parent, releasePlanningScratchLockPath(this.plan.journalPath), this.lock);
+  }
+
+  async #cleanup(): Promise<void> {
     const { fs, effectiveUid } = this.dependencies;
     if (this.#journal.phase !== "cleaning" && this.#journal.phase !== "cleaned") {
       await this.#update({ phase: "cleaning", cleanupNext: 0 });
@@ -975,13 +1016,15 @@ export class ReleasePlanningScratchStore {
         archiveBytes + expanded + BigInt(manifest.entries.length * MAXIMUM_EVIDENCE_BYTES) + BigInt(planBytes.byteLength) + 2n * BigInt(MAXIMUM_JOURNAL_BYTES);
       if (required > BigInt(maximumScratchBytes)) throw new SecurityRefusalError("Release planning scratch exceeds its byte bound");
 
-      const present = await Promise.all([fs.lstat(paths.planPath), fs.lstat(paths.journalPath), fs.lstat(paths.root)]);
+      const lockPath = releasePlanningScratchLockPath(paths.journalPath);
+      const present = await Promise.all([fs.lstat(paths.planPath), fs.lstat(paths.journalPath), fs.lstat(paths.root), fs.lstat(lockPath)]);
       if (present.some((entry) => entry !== null)) continue;
       const planHash = sha256(planBytes);
       const now = parseUtcTimestamp(clock());
       let planEntry: LifecycleGuardedEntryV1;
       let journalEntry: LifecycleGuardedEntryV1;
       let journal: ReleasePlanningScratchJournalV1;
+      let lock: ReleaseScratchLockV1 | null = null;
       try {
         const planTemp = await fs.writeExclusive(parseCanonicalAbsolutePathText(`${paths.planPath}.${this.#fresh()}.tmp`), planBytes);
         await boundary("plan_temp_written");
@@ -991,6 +1034,9 @@ export class ReleasePlanningScratchStore {
         planEntry = reopened;
         await fs.syncDirectory(parent);
         await boundary("plan_published");
+        // Held before the journal exists, so no listed attempt is ever unlocked while it lives.
+        lock = await this.dependencies.tryLock(lockPath);
+        if (lock === null) continue;
         journal = validateReleasePlanningScratchJournal(
           {
             schemaVersion: 1,
@@ -1021,11 +1067,20 @@ export class ReleasePlanningScratchStore {
         await fs.syncDirectory(parent);
         await boundary("journal_published");
       } catch (error) {
-        if ((error instanceof LifecycleRecoveryRequiredError && error.reason === "lifecycle_guarded_path_exists") || errorCode(error) === "EEXIST") continue;
+        if ((error instanceof LifecycleRecoveryRequiredError && error.reason === "lifecycle_guarded_path_exists") || errorCode(error) === "EEXIST") {
+          if (lock !== null) await dropLock(fs, parent, lockPath, lock);
+          continue;
+        }
+        await lock?.release();
         throw error;
       }
-      const attempt = new ReleasePlanningScratchAttempt(this.dependencies, plan, planHash, parent, journal, journalEntry);
-      await attempt.createStructure();
+      const attempt = new ReleasePlanningScratchAttempt(this.dependencies, plan, planHash, parent, journal, journalEntry, lock);
+      try {
+        await attempt.createStructure();
+      } catch (error) {
+        await lock.release();
+        throw error;
+      }
       return attempt;
     }
     return recovery("release_scratch_candidates_exhausted");
@@ -1053,8 +1108,31 @@ export class ReleasePlanningScratchStore {
     const { fs, systemTemp, effectiveUid } = this.dependencies;
     const parent = await this.#parent();
     const paths = releasePlanningScratchPaths(systemTemp, effectiveUid, parseReleasePlanningAttemptId(id));
+    const lockPath = releasePlanningScratchLockPath(paths.journalPath);
+    // A live owner holds its lock: that attempt is not residue, so it is skipped, not refused.
+    const lock = await this.dependencies.tryLock(lockPath);
+    if (lock === null) return;
+    let attempt: ReleasePlanningScratchAttempt | null;
+    try {
+      attempt = await this.#recoverable(id, paths, parent, lock);
+    } catch (error) {
+      await lock.release();
+      throw error;
+    }
+    if (attempt === null) await dropLock(fs, parent, lockPath, lock);
+    else await attempt.cleanup();
+  }
+
+  /** The dead attempt to clean, or null once nothing but the journal (or nothing at all) is left. */
+  async #recoverable(
+    id: ReleasePlanningAttemptIdV1,
+    paths: ReturnType<typeof releasePlanningScratchPaths>,
+    parent: LifecycleGuardedEntryV1,
+    lock: ReleaseScratchLockV1,
+  ): Promise<ReleasePlanningScratchAttempt | null> {
+    const { fs, effectiveUid } = this.dependencies;
     const [planEntry, journalEntry] = await Promise.all([fs.lstat(paths.planPath), fs.lstat(paths.journalPath)]);
-    if (journalEntry === null) return;
+    if (journalEntry === null) return null;
     if (journalEntry.kind !== "regular_file" || journalEntry.ownerUid !== effectiveUid || journalEntry.mode !== 0o600 || journalEntry.nlink !== 1) {
       recovery("release_scratch_journal_identity");
     }
@@ -1072,7 +1150,7 @@ export class ReleasePlanningScratchStore {
       if (terminal === null || typeof terminal !== "object" || terminal.id !== id || terminal.phase !== "cleaned") recovery("release_scratch_plan_missing");
       await fs.unlinkExact(journalEntry);
       await fs.syncDirectory(parent);
-      return;
+      return null;
     }
     if (planEntry.kind !== "regular_file" || planEntry.ownerUid !== effectiveUid || planEntry.mode !== 0o600 || planEntry.nlink !== 1) recovery("release_scratch_plan_identity");
     const planBytes = await fs.readRegular(planEntry, MAXIMUM_PLAN_BYTES);
@@ -1087,6 +1165,6 @@ export class ReleasePlanningScratchStore {
     if (plan.id !== id || plan.root !== paths.root || plan.ownerUid !== effectiveUid || plan.parentDev !== parent.dev || plan.parentIno !== parent.ino || !sameIdentity(planEntry, journal.planIdentity)) {
       recovery("release_scratch_plan_identity");
     }
-    await new ReleasePlanningScratchAttempt(this.dependencies, plan, sha256(planBytes), parent, journal, journalEntry).cleanup();
+    return new ReleasePlanningScratchAttempt(this.dependencies, plan, sha256(planBytes), parent, journal, journalEntry, lock);
   }
 }
