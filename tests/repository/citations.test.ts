@@ -1062,4 +1062,11 @@ describe("the extractor and the predicate this gate is built on", () => {
     expect(lineCount("a\nb")).toBe(2);
     expect(outOfRange({ start: 3, end: 3 }, lineCount("a\nb\n"))).toBe(true);
   });
+
+  it("takes code-looking backticked words as the identifiers a citation must contain", () => {
+    expect(lineIdentifiers("`mkdir` with `0o700` and `redactText()` in `quarantine.ts` (`x.ts:1`), `ingest`")).toStrictEqual([
+      "redactText",
+    ]);
+    expect(rangeText("a\nb\nc\nd", 2, 3)).toBe("b\nc");
+  });
 });
