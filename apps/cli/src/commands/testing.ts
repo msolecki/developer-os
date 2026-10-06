@@ -154,9 +154,7 @@ class InProcessRenameAtxRunner implements RenameAtxRunner {
 
   async run(request: RenameAtxRunRequestV1): Promise<{ readonly exitCode: number; readonly signal: null }> {
     this.requests.push(structuredClone(request));
-    const sourceDescriptor = request.sourceParentDescriptor ?? request.parentDescriptor;
-    const destinationDescriptor = request.destinationParentDescriptor ?? request.parentDescriptor;
-    const destinationName = request.destinationName ?? request.tombstoneName;
+    const { sourceParentDescriptor: sourceDescriptor, destinationParentDescriptor: destinationDescriptor, destinationName } = request;
     const sourceParent = this.#parents.get(sourceDescriptor);
     const destinationParent = this.#parents.get(destinationDescriptor);
     if (sourceParent === undefined || destinationParent === undefined) {

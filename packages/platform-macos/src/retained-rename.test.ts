@@ -31,6 +31,7 @@ import {
   type ExactNoReplaceRenameRequestV1,
   type MacOsRetainedRenameDependencies,
   type RenameAtxRunner,
+  type RenameAtxRunRequestV1,
 } from "./retained-rename.js";
 
 const BOOTSTRAP_ID = "fi_00000000-0000-4000-8000-000000000000" as FreshV2InitIdV1;
@@ -242,12 +243,7 @@ describe("MacOsRetainedRename cross-parent exact publication", () => {
     const rename = new MacOsRetainedRename(dependencies({
       run: async (request) => {
         calls.push(request);
-        const mapped = request as unknown as {
-          readonly sourceParentDescriptor: number;
-          readonly destinationParentDescriptor: number;
-          readonly sourceName: string;
-          readonly destinationName: string;
-        };
+        const mapped = request;
         expect(fstatSync(mapped.sourceParentDescriptor, { bigint: true }).ino).toBe(
           BigInt(value.request.sourceParent.ino),
         );
@@ -314,7 +310,6 @@ describe("MacOsRetainedRename cross-parent exact publication", () => {
             const descriptor = side === "source"
               ? request.sourceParentDescriptor
               : request.destinationParentDescriptor;
-            if (descriptor === undefined) throw new Error("exact parent descriptor is absent");
             descriptorIno = fstatSync(descriptor, { bigint: true }).ino;
             await nodeFs.rename(selectedParent, displaced);
             await nodeFs.mkdir(selectedParent, { mode: 0o700 });
@@ -387,11 +382,11 @@ describe("MacOsRetainedRename cross-parent exact publication", () => {
 describe("MacOsRetainedRename guarded port", () => {
   it("passes only two derived basenames and retained parent FD 3", async () => {
     const fixture = await createFileFixture("arguments");
-    const calls: { readonly parentDescriptor: number; readonly sourceName: string; readonly tombstoneName: string }[] = [];
+    const calls: RenameAtxRunRequestV1[] = [];
     const runner: RenameAtxRunner = {
       run: async (request) => {
         calls.push(request);
-        expect(fstatSync(request.parentDescriptor, { bigint: true }).ino).toBe(
+        expect(fstatSync(request.sourceParentDescriptor, { bigint: true }).ino).toBe(
           BigInt(fixture.request.entry.parent.ino),
         );
         await nodeFs.rename(fixture.sourcePath, fixture.tombstonePath);
@@ -402,10 +397,10 @@ describe("MacOsRetainedRename guarded port", () => {
     try {
       await new MacOsRetainedRename(dependencies(runner)).rename(fixture.request);
       expect(calls).toHaveLength(1);
-      expect(typeof calls[0]?.parentDescriptor).toBe("number");
+      expect(typeof calls[0]?.sourceParentDescriptor).toBe("number");
       expect(calls[0]).toMatchObject({
         sourceName: SOURCE_NAME,
-        tombstoneName: TOMBSTONE_NAME,
+        destinationName: TOMBSTONE_NAME,
       });
     } finally {
       await removeFixture(fixture);
@@ -693,7 +688,7 @@ describe("MacOsRetainedRename guarded port", () => {
     const movedParent = join(fixture.root, "moved-parent");
     let descriptorIdentity: bigint | null = null;
     const runner: RenameAtxRunner = {
-      run: async ({ parentDescriptor }) => {
+      run: async ({ sourceParentDescriptor: parentDescriptor }) => {
         await nodeFs.rename(fixture.parentPath, movedParent);
         await nodeFs.mkdir(fixture.parentPath, { mode: 0o700 });
         descriptorIdentity = fstatSync(parentDescriptor, { bigint: true }).ino;
@@ -1047,9 +1042,10 @@ describe.runIf(process.platform === "darwin")("SpawnRenameAtxRunner real kernel 
         constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
       );
       const result = await new SpawnRenameAtxRunner().run({
-        parentDescriptor: parent.fd,
+        sourceParentDescriptor: parent.fd,
+        destinationParentDescriptor: parent.fd,
         sourceName: SOURCE_NAME,
-        tombstoneName: TOMBSTONE_NAME,
+        destinationName: TOMBSTONE_NAME,
       });
       expect(result.exitCode).not.toBe(0);
       expect(result.signal).toBeNull();
