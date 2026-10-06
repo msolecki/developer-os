@@ -8,7 +8,6 @@ import type {
   ArtifactOwner,
   InstallationManifest,
   InstallationManifestV1,
-  InstallationManifestV2,
   ManifestAdmissionContextV1,
   ManagedArtifactV1,
   ManifestGuards,
@@ -306,7 +305,11 @@ export class ManifestStore {
     try {
       const { validateManifestBytes } = await import("./v2.js");
       return validateManifestBytes(bytes, context);
-    } catch { throw new ManifestStateError(); }
+    } catch (error) {
+      // NEW-92: a defect in the validator or an injected callback is not a malformed manifest.
+      if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) throw error;
+      throw new ManifestStateError();
+    }
   }
 
   async read(): Promise<InstallationManifestV1>;
@@ -331,20 +334,6 @@ export class ManifestStore {
 
   /** Compatibility alias for the installed V1 callers. */
   async write(manifest: InstallationManifestV1): Promise<void> { await this.writeV1(manifest); }
-
-  async writeV2(manifest: InstallationManifestV2, context: ManifestAdmissionContextV1): Promise<void> {
-    try {
-      const [{ validateManifestV2 }, { encodeCanonicalJson }] = await Promise.all([
-        import("./v2.js"),
-        import("../lifecycle/canonical-json.js"),
-      ]);
-      const validated = validateManifestV2(manifest, context);
-      await this.writeBytes(new TextEncoder().encode(encodeCanonicalJson(validated as never)));
-    } catch (error) {
-      if (error instanceof ManifestStateError) throw error;
-      throw new ManifestStateError();
-    }
-  }
 
   private async writeBytes(bytes: Uint8Array): Promise<void> {
     let temporary: string | null = null;

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { EXIT_CODES } from "@developer-os/core";
+import { encodeCanonicalJson, EXIT_CODES, validateManifestV2 } from "@developer-os/core";
 import type {
   CanonicalAbsolutePathV1,
   InstallationManifestV2,
@@ -909,7 +909,11 @@ describe("runUninstall", () => {
         },
       ],
     } as unknown as InstallationManifestV2;
-    await fixture.context.manifests.writeV2(relocatedBrainManifest, testAdmission);
+    await nodeFs.writeFile(
+      fixture.paths.manifestFile,
+      encodeCanonicalJson(validateManifestV2(relocatedBrainManifest, testAdmission) as never),
+      { mode: 0o600 },
+    );
 
     const result = await runUninstall(fixture.context, ACCEPTED);
 
