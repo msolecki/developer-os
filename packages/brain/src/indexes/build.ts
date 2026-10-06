@@ -531,7 +531,7 @@ function toEntry(discovered: DiscoveredNote, source: string): EntryResult {
     stage: front.stage,
     author: front.author,
     reviewed: front.reviewed,
-    occurrences: front.occurrences ?? 0,
+    occurrences: front.occurrences ?? 1,
     created: front.created,
     updated: front.updated ?? null,
     sources: front.sources === undefined ? [] : [...new Set(front.sources)],

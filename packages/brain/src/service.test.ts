@@ -433,6 +433,29 @@ describe("BrainService.sessionContext", () => {
     expect(context.projectNote).toBeNull();
   });
 
+  it.each([
+    "content/../../outside.md",
+    "/etc/outside.md",
+    "content/./PROJECTS/os.md",
+    "content//PROJECTS/os.md",
+    "elsewhere/PROJECTS/os.md",
+    "content/PROJECTS/os.txt",
+  ])("injects no note whose index path %s is not a note under the content root", async (hostile) => {
+    const fresh = await new BrainService(harness(PROJECT_VAULT).deps).reindex();
+    const index = JSON.parse(fresh.files[PATHS.index] ?? "") as {
+      notes: { path: string; title: string }[];
+    };
+    for (const entry of index.notes) if (entry.title === "developer-os") entry.path = hostile;
+    const { deps, reads } = harness({
+      ...PROJECT_VAULT,
+      ...fresh.files,
+      [PATHS.index]: JSON.stringify(index),
+    });
+    const context = await new BrainService(deps).sessionContext("developer-os");
+    expect(context.projectNote).toBeNull();
+    expect(reads.filter((path) => path.includes(hostile.slice(1)))).toStrictEqual([]);
+  });
+
   it("returns a null vault map and no note when the index is missing", async () => {
     const fresh = await new BrainService(harness(PROJECT_VAULT).deps).reindex();
     const mapOnly = fresh.files[PATHS.vaultMap];
