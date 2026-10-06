@@ -14,6 +14,7 @@ import {
   removeCommandFixtures,
 } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
+import type { FreshInitDeathPointV1 } from "./executor.js";
 import { createBootstrapEvidenceInspectionRequest } from "./context.js";
 import { inspectBootstrapEvidenceAdmission } from "./report.js";
 
@@ -151,6 +152,76 @@ describe("the lifecycle bookkeeping set on a real V2 home", () => {
       expect(admittedPaths(second), path).toContain(path);
       expect(second.createdPaths.map((row) => row.path), path).not.toContain(path);
     }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-148: a plan that admitted the global lock holds it from before
+   * publication, so a rollback before its first created path must still
+   * retain with that lock held instead of refusing on every later `init`.
+   */
+  it("retains a rollback before the first created path of a plan that admitted the global lock", async () => {
+    let failAt: FreshInitDeathPointV1 | null = "after_global_lock";
+    const fixture = await createCommandFixture("bootstrap-admitted-lock-early-rollback", {
+      bootstrapAvailable: true,
+      bootstrapFailureHook: (point) => {
+        if (point === failAt) throw new Error(`synthetic bootstrap failure at ${point}`);
+      },
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const first = await readPlan(fixture, (await planNames(fixture))[0] as string);
+
+    failAt = "after_first_payload";
+    const failed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    if (failed.ok) throw new Error("init succeeded through an injected failure");
+    expect(failed.error.message).toContain("synthetic bootstrap failure at after_first_payload");
+    const second = await newestPlanOf(fixture, await planNames(fixture), first.id);
+    expect(second.createdPaths.some((row) => row.kind === "global_lock")).toBe(false);
+    const admission = await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+      productHome: fixture.paths.home,
+      stateDirectory: fixture.paths.stateDir,
+      initialRoots: [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
+    }));
+    expect(admission.retainedEnvelopes.map((envelope) => envelope.terminalJournal.terminalOutcome))
+      .toStrictEqual(["rolled_back", "rolled_back"]);
+
+    failAt = null;
+    const third = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    if (!third.ok) throw new Error(third.error.message);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("resumes a death after that rollback into a retained envelope with the admitted lock held", async () => {
+    let failAt: FreshInitDeathPointV1 | null = "after_global_lock";
+    const fixture = await createCommandFixture("bootstrap-admitted-lock-early-rollback-death", {
+      bootstrapAvailable: true,
+      bootstrapFailureHook: (point) => {
+        if (point === failAt) throw new Error(`synthetic bootstrap failure at ${point}`);
+      },
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const first = await readPlan(fixture, (await planNames(fixture))[0] as string);
+    failAt = "after_first_payload";
+    fixture.setBootstrapInterrupt("after_rolled_back");
+    expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok).toBe(false);
+    const second = await newestPlanOf(fixture, await planNames(fixture), first.id);
+    failAt = null;
+    fixture.disableBootstrapInterrupt();
+
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    if (resumed.ok) throw new Error("a rolled-back envelope resumed as finalized");
+    expect(resumed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(resumed.error.message).toContain("the retained bootstrap rolled back");
+    const admission = await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+      productHome: fixture.paths.home,
+      stateDirectory: fixture.paths.stateDir,
+      initialRoots: [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
+    }));
+    expect(admission.retainedEnvelopes.map((envelope) => envelope.plan.id).toSorted())
+      .toStrictEqual([first.id, second.id].toSorted());
+    expect(admission.retainedEnvelopes.every((envelope) => envelope.terminalJournal.terminalOutcome === "rolled_back"))
+      .toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("admits an empty planted backups directory by shape instead of creating or claiming it", async () => {
