@@ -311,8 +311,8 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
    * three executors existed and the review of this change found the third — `doctor`,
    * whose `--probe` hands the path to capability probes that spawn it, one of them running
    * a subcommand that *mutates state* under the user's home. `discoverEachAgent` pays it
-   * now. A fourth would arrive just as quietly, so the enumeration is the thing to keep
-   * current, not the interface.
+   * now. A fourth would arrive just as quietly, so the rule — every spawn of a discovered
+   * path is preceded by this call — is what to check, not an enumeration of callers.
    *
    * **Resolve first, then check what the kernel will actually execute.** The founder
    * decided this on 2026-08-17 against refusing a symbolic link outright: `claude` and
