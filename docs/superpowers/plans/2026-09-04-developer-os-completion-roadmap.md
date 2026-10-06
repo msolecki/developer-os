@@ -355,6 +355,11 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D86 (2026-10-06), founder: audit waves 2-3 decisions.** (1) NEW-146: both residuals are accepted, and an `sk-` body whose
+  parts are no longer than three letters is no kebab slug (the 4+ letter part rule). (2) NEW-164: the thin commands are dropped, so the
+  five skills' own descriptions reach the agent's listing. (3) FLOW-INIT-2: `stop` and `format` write their firing record before their
+  long work. (4) NEW-163 and NEW-171 are deferred to the distribution design (D84 (1)). (5) NEW-116: the founder re-runs `ingest` on the
+  31 refused captures after the next reinstall and decides on the counts.
 - **D85 (2026-10-06), founder: Homebrew's group-writable bin is accepted.** NEW-145: a user-owned,
   group-writable executable directory with a shared group (Homebrew's `/opt/homebrew/bin`,
   `msolecki:admin 0775`) stays admitted. Another member of that group could plant a binary there;

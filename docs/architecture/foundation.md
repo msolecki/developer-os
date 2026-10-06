@@ -909,7 +909,7 @@ overhead, not of durability.
 
 | Measurement | Before | After |
 |---|---|---|
-| The plan's e2e target — `fresh V2 retained bootstrap lifecycle` in `tests/e2e/fresh-v2-retained-bootstrap.test.ts`, run with `npx vitest run tests/e2e/fresh-v2-retained-bootstrap.test.ts` | 299.5 s against its 600000 ms timeout (2026-09-04, recorded in `BACKLOG.md` NEW-53) | **141.00 s** (2026-09-06, 03:55:12→03:57:34, quiet machine, load average 2.5) |
+| The plan's e2e target — `fresh V2 retained bootstrap lifecycle` in `tests/e2e/fresh-v2-retained-bootstrap.test.ts`, run with `npx vitest run tests/e2e/fresh-v2-retained-bootstrap.test.ts` | 299.5 s against its 600000 ms timeout (2026-09-04, recorded in `BACKLOG.md` NEW-53, closed 2026-10-06) | **141.00 s** (2026-09-06, 03:55:12→03:57:34, quiet machine, load average 2.5) |
 | `npm run test:bootstrap`, whole script | ~169 minutes (2026-09-05; phase 2 alone measured 10010 s) | **127.5 minutes** (2026-09-06, 00:08:48→02:16:19) |
 | `test:bootstrap` phase 1 — an internal proxy, **not** the plan's e2e target above; it is the single named case "publishes a complete V2 handoff and permanently retains its exact plan and two slots" inside `executor.test.ts`, run separately so its evidence is on record before phase 2 starts | ~118-127 s (2026-09-05) | 97.89 s (2026-09-06) |
 | `npm run test:suite` | 54 minutes, 135 files, 4570 cases (2026-09-05); 41 minutes recorded at the prior program checkpoint | **35.4 minutes** (2026-09-06, 03:07:29→03:42:51), 133 files and 4583 tests passed |
