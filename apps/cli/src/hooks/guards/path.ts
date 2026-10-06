@@ -37,16 +37,19 @@ export const HOOK_PROTECTED_PATH_RULES: readonly { readonly id: string; readonly
   ),
 ];
 
+// NEW-154: the same case and NFC fold `ProtectedPathPolicy` applies, since APFS is case-insensitive.
+const fold = (value: string): string => value.normalize("NFC").toLowerCase();
+
 function hookProtected(path: string, home: string): boolean {
-  const segments = path.split(/[\\/]/u).filter((segment) => segment.length > 0);
+  const segments = fold(path).split(/[\\/]/u).filter((segment) => segment.length > 0);
   return HOOK_PROTECTED_PATH_RULES.some(({ match }) => {
     switch (match.kind) {
       case "segment":
-        return segments.includes(match.name);
+        return segments.includes(fold(match.name));
       case "segment-suffix":
-        return segments.some((segment) => segment.endsWith(match.suffix));
+        return segments.some((segment) => segment.endsWith(fold(match.suffix)));
       case "home-exact":
-        return resolve(home, match.relativePath) === resolve(path);
+        return fold(resolve(home, match.relativePath)) === fold(resolve(path));
     }
   });
 }
