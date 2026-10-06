@@ -318,6 +318,31 @@ writes nothing, and the user reruns it.**
   plan-phase refusal can mean. A note capture makes
   no vendor call and is guarded by `note_changed_since_capture` instead (`brain.md` §6.13).
 
+### 5.2 Selection order across runs (NEW-141, 2026-10-06)
+
+Inside one run every selected capture is attempted once, so a refusal blocks nothing behind it
+(NEW-116). Across runs, `state/ingest-attempts.json` counts, per accepted capture, the runs that
+selected it and saw it refused. `selectCaptures` orders the accepted set by that count, fewest
+first, then by `captureId`, and only then applies `--limit`. A capture that keeps refusing
+therefore moves behind every untried one, and comes back to the head once nothing untried is left;
+with no refusal on record the order is `captureId`, as before.
+
+- **What it holds.** `{"attempts":{"<captureId>":n},"schemaVersion":1}` in canonical JSON: ids
+  and counts, never a path, message or model output. An ingested capture leaves the record, and
+  so does an id no longer accepted, so it is bounded by the quarantine. Zero bytes is the empty
+  record.
+- **Where it lives.** Fresh `init` reserves it as an empty regular-file `ephemeral` artifact, like
+  `state/update-executor.json` (`runtimeReservationPaths` in `apps/cli/src/bootstrap/executor.ts`).
+  It is not in admission's required set (`LIFECYCLE_RESERVATION_ROWS`), so an installation made
+  before it is still admitted; ingest there finds no file, **never creates one** (an unmanifested
+  file under `state/` would block uninstall's empty-directory removal), and keeps `captureId`
+  order.
+- **How it is written.** Once per run, after the capture loop, as one `ingest-attempts`
+  transaction bound to the bytes read before selection, and only when they change. A concurrent
+  run's record is refused rather than overwritten. An unreadable record, or a write that fails,
+  prints a `warning:` line on stderr and changes neither the run's outcome nor its exit code: the
+  order is advisory.
+
 ---
 
 ## 6. The status ladder, and why a refusal never produces `failed`

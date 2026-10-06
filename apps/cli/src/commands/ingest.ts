@@ -17,6 +17,7 @@ import {
   TransactionPreconditionError,
 } from "@developer-os/core";
 import type {
+  CanonicalAbsolutePathV1,
   CliResult,
   DeveloperOsConfigV1,
   ExitCode,
@@ -62,9 +63,17 @@ import {
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
+import { currentBytes, ingestAttemptsPath, writeMutation } from "../lifecycle/runtime-records.js";
 import { currentScheduledJob } from "./automation/scheduled-scope.js";
 import { isTopicNotePath } from "./capture.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
+import {
+  encodeIngestAttempts,
+  MAX_INGEST_ATTEMPTS_BYTES,
+  nextIngestAttempts,
+  orderByAttempts,
+  parseIngestAttempts,
+} from "./ingest-attempts.js";
 import { boundState, fileState, stateOf } from "./ingest-file-state.js";
 import { outputSchemaPath } from "./output-schemas.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
@@ -182,7 +191,7 @@ export interface IngestResultV1 {
    * verbatim, so no vendor was resolved.
    */
   readonly agent: AgentName | null;
-  /** The captures this invocation selected, in `captureId` order. */
+  /** The captures this invocation selected, in the order attempted: fewest recorded refusals first, then `captureId` (NEW-141). */
   readonly order: readonly string[];
   /**
    * One entry per capture this invocation reported on: the selected ones, plus
@@ -291,6 +300,8 @@ const TRANSACTION_KINDS = {
   reindex: "ingest-reindex",
   ingested: "ingest-ingested",
   rollback: "ingest-rollback",
+  /** NEW-141: the attempt-order record, once per run and never per capture. */
+  attempts: "ingest-attempts",
 } as const;
 
 /**
@@ -663,8 +674,9 @@ export async function selectVendor(
 
 /**
  * The capture files in quarantine, by name, sorted — which is `captureId` order,
- * because the id **is** the file name. Two runs over the same set therefore do
- * the same work in the same sequence.
+ * because the id **is** the file name. `selectCaptures` then moves a capture that
+ * earlier runs saw refused behind the untried ones (NEW-141); with no refusal on
+ * record, two runs over the same set do the same work in the same sequence.
  */
 async function captureFileNames(
   context: CliContext,
@@ -689,8 +701,12 @@ interface SelectedCapture {
 }
 
 interface Selection {
-  /** In `captureId` order, bounded by `--limit`. */
+  /**
+   * Fewest recorded refusals first, then `captureId` order, bounded by `--limit` (NEW-141).
+   */
   readonly accepted: readonly SelectedCapture[];
+  /** Every accepted capture's id, before the limit: what the attempt-order record is pruned to. */
+  readonly acceptedIds: readonly string[];
   /** Captures whose own envelope could not be read, reported and not processed. */
   readonly unreadable: readonly IngestedCaptureV1[];
   readonly warnings: readonly string[];
@@ -709,12 +725,16 @@ interface Selection {
  * **`--limit` bounds the accepted set only.** An unreadable capture costs no
  * agent call and no transaction, so hiding one behind a limit would mean a user
  * with three broken files and `--limit 1` is told about one of them per run.
+ *
+ * **The limit applies after the attempt order**, so a capture that keeps refusing
+ * does not hold the head of every `--limit N` window (NEW-141).
  */
 async function selectCaptures(
   context: CliContext,
   quarantine: string,
   redact: Redactor,
   limit: number | null,
+  attempts: ReadonlyMap<string, number>,
 ): Promise<Selection> {
   const accepted: SelectedCapture[] = [];
   const unreadable: IngestedCaptureV1[] = [];
@@ -733,11 +753,85 @@ async function selectCaptures(
       continue;
     }
     if (outcome.envelope.status !== "accepted") continue;
-    if (limit !== null && accepted.length >= limit) continue;
     accepted.push({ fileName, plain: outcome.envelope.note === null });
   }
 
-  return { accepted, unreadable, warnings };
+  const ordered = orderByAttempts(accepted, (capture) => captureIdOf(capture.fileName), attempts);
+  return {
+    accepted: limit === null ? ordered : ordered.slice(0, limit),
+    acceptedIds: accepted.map((capture) => captureIdOf(capture.fileName)),
+    unreadable,
+    warnings,
+  };
+}
+
+function captureIdOf(fileName: string): string {
+  return fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
+}
+
+const ATTEMPTS_UNREADABLE =
+  "the ingest attempt-order record could not be read, so this run selected captures in captureId order";
+const ATTEMPTS_UNWRITTEN =
+  "the ingest attempt-order record was not updated, so the next run may select the same captures first";
+
+/**
+ * NEW-141: the record and the bytes it was read from, which the write after the run is bound
+ * to. `bytes` is `null` when there is nothing this run may write: no lifecycle port, an
+ * installation made before the reservation (no file), or an entry that is not this user's own
+ * regular file. An unparseable record is replaced, never repaired: it holds counts only.
+ */
+async function readAttempts(
+  context: CliContext,
+  paths: RuntimePaths,
+): Promise<{
+  readonly bytes: Uint8Array | null;
+  readonly attempts: ReadonlyMap<string, number>;
+  readonly warning: string | null;
+}> {
+  const lifecycle = context.lifecycle;
+  if (lifecycle === undefined) return { bytes: null, attempts: new Map(), warning: null };
+  let bytes: Uint8Array | null;
+  try {
+    bytes = await currentBytes(
+      lifecycle.fs,
+      ingestAttemptsPath(paths) as CanonicalAbsolutePathV1,
+      lifecycle.effectiveUid,
+      MAX_INGEST_ATTEMPTS_BYTES,
+    );
+  } catch {
+    return { bytes: null, attempts: new Map(), warning: ATTEMPTS_UNREADABLE };
+  }
+  if (bytes === null) return { bytes: null, attempts: new Map(), warning: null };
+  try {
+    return { bytes, attempts: parseIngestAttempts(bytes), warning: null };
+  } catch {
+    return { bytes, attempts: new Map(), warning: ATTEMPTS_UNREADABLE };
+  }
+}
+
+/**
+ * One write after the run, bound to the bytes read before it, so a concurrent run's record is
+ * refused rather than overwritten; the loser keeps its warning and its order is only advisory.
+ * A failure here never changes the run's outcome or exit code.
+ */
+async function writeAttempts(
+  context: CliContext,
+  paths: RuntimePaths,
+  before: Uint8Array | null,
+  next: ReadonlyMap<string, number>,
+): Promise<string | null> {
+  if (before === null) return null;
+  const content = encodeIngestAttempts(next);
+  if (Buffer.from(content).equals(Buffer.from(before))) return null;
+  try {
+    await context.executor.execute({
+      kind: TRANSACTION_KINDS.attempts,
+      mutations: [writeMutation(ingestAttemptsPath(paths), before, content)],
+    });
+    return null;
+  } catch {
+    return ATTEMPTS_UNWRITTEN;
+  }
 }
 
 /* ------------------------------------------------------- reading and writing */
@@ -2519,8 +2613,8 @@ function reportLines(report: RunReport): readonly string[] {
  * `developer-os ingest`, spec §6.
  *
  * ```text
- * developer-os ingest                      every accepted capture, in captureId order
- * developer-os ingest --limit 1            the first one only
+ * developer-os ingest                      every accepted capture, fewest refused runs first, then captureId
+ * developer-os ingest --limit 1            the first one in that order only
  * developer-os ingest --agent codex        through a named vendor
  * ```
  *
@@ -2606,7 +2700,8 @@ export async function runIngest(
     /** Refreshed in the capture loop below — see `readIndexExcerpt`. */
     let index = await readIndexExcerpt(context, paths, brainConfig, redact);
 
-    const selection = await selectCaptures(context, quarantine, redact, limit);
+    const recorded = await readAttempts(context, paths);
+    const selection = await selectCaptures(context, quarantine, redact, limit, recorded.attempts);
 
     /**
      * After selection, because only a plain capture needs a vendor (`brain.md` §6.13): a batch of
@@ -2688,9 +2783,8 @@ export async function runIngest(
 
     /**
      * Each selected capture is attempted exactly once per run, so a refused one is never
-     * retried inside it (BACKLOG NEW-116). Across runs the order is still `captureId`, so a
-     * capture that keeps refusing stays at the head of every `--limit N` window; no
-     * per-capture field records a refused attempt, and ordering on one needs a state file.
+     * retried inside it (BACKLOG NEW-116). Across runs, `state/ingest-attempts.json` counts
+     * each capture's refused runs and selection puts the fewest first (NEW-141).
      */
     const indexPath = join(paths.brain, artifactPaths(brainConfig).index);
     for (const { fileName } of selection.accepted) {
@@ -2715,6 +2809,22 @@ export async function runIngest(
       if (written.length > 0) {
         takenPaths.push(...written.map((note) => redact(note, "value").text));
       }
+    }
+
+    const unwritten = await writeAttempts(
+      context,
+      paths,
+      recorded.bytes,
+      nextIngestAttempts(
+        recorded.attempts,
+        selection.acceptedIds,
+        new Set(refused.map((refusal) => refusal.captureId)),
+        new Set(ingested.map((capture) => capture.captureId)),
+      ),
+    );
+    /** On stderr directly: the report's own warnings are the unreadable captures, listed as such. */
+    for (const warning of [recorded.warning, unwritten]) {
+      if (warning !== null) context.io.stderr(`warning: ${warning}`);
     }
 
     const captures = [...ingested, ...selection.unreadable].sort(compareIds);
