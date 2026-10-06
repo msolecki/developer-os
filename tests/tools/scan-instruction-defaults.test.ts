@@ -4,10 +4,12 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  LINE_RULES,
   listInstructionFiles,
   loadInstructionHosts,
   parsePatternFile,
   runInstructionScan,
+  urlAuthorities,
   scanInstructionDefaults,
 } from "./scan-instruction-defaults.js";
 
@@ -127,8 +129,55 @@ describe("scanInstructionDefaults", () => {
 
   it("admits a file of exactly the cap", () => {
     expect(scanFixture({ "cap.md": "a".repeat(256 * 1024) })).toStrictEqual([]);
-    // ~55 s locally and over 120 s on a hosted runner, before and after the D70 lane (NEW-131).
-  }, 300_000);
+  });
+
+  it("scans a cap-sized file of adversarial lines in linear time (NEW-131)", () => {
+    // The quadratic scan took ~55 s on the first shape; the linear one takes milliseconds. The 30 s
+    // test timeout is a generous hang bound, not an elapsed-time assertion.
+    const cap = 256 * 1024;
+    for (const unit of ["a", "a.", "a@", "a-", "a_"]) {
+      const text = unit.repeat(Math.ceil(cap / unit.length)).slice(0, cap);
+      scanFixture({ "cap.md": text });
+    }
+  }, 30_000);
+
+  it("matches the pre-NEW-131 URL scan on varied inputs", () => {
+    const old = /\b[a-z][a-z0-9+.-]*:\/\/([^/\s?#)>\]"'`]+)/giu;
+    const alphabet = ["a", "B", "7", ".", "-", "+", ":", "/", "//", "://", " ", "ſ", "K", "é", "http://", "@", "x.io", "?"];
+    let seed = 987;
+    const next = (): number => {
+      seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+      return seed;
+    };
+    let matched = 0;
+    for (let round = 0; round < 20_000; round += 1) {
+      let line = "";
+      for (let n = next() % 14; n > 0; n -= 1) line += alphabet[next() % alphabet.length] ?? "";
+      const expected = [...line.matchAll(old)].map((match) => match[1]);
+      expect(urlAuthorities(line), line).toStrictEqual(expected);
+      matched += expected.length;
+    }
+    expect(matched).toBeGreaterThan(500);
+  });
+
+  it("matches the pre-NEW-131 e-mail expression on varied inputs", () => {
+    const old = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/u;
+    const email = LINE_RULES.find((rule) => rule.rule === "email")?.expression;
+    const alphabet = ["a", "B", "7", ".", "-", "_", "%", "+", "@", " ", "é", "x.io", "@a.", ".com"];
+    let seed = 12345;
+    const next = (): number => {
+      seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+      return seed;
+    };
+    let matched = 0;
+    for (let round = 0; round < 20_000; round += 1) {
+      let line = "";
+      for (let n = next() % 14; n > 0; n -= 1) line += alphabet[next() % alphabet.length] ?? "";
+      expect(email?.test(line), line).toBe(old.test(line));
+      if (old.test(line)) matched += 1;
+    }
+    expect(matched).toBeGreaterThan(500);
+  });
 
   it("reports a symlink instead of following it", () => {
     const outside = fixture({ "secret.md": "someone@example.org\n" });
