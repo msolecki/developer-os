@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
 import { EXIT_CODES } from "../result.js";
 import {
   buildConflictEvidence,
+  containsPath,
+  containsPathLoosely,
   detectDrift,
   ManifestMissingError,
   ManifestStateError,
@@ -966,5 +968,20 @@ describe("buildConflictEvidence", () => {
     } finally {
       await removeFixture(fixture);
     }
+  });
+});
+
+describe("containsPath and containsPathLoosely", () => {
+  it.each([containsPath, containsPathLoosely])("%o reads a child whose name starts with two dots as inside", (contains) => {
+    expect(contains("/h", "/h/..x")).toBe(true);
+    expect(contains("/h", "/h/...")).toBe(true);
+    expect(contains("/h/backups", "/h/backups/..x/y")).toBe(true);
+    expect(contains("/h", "/h")).toBe(true);
+  });
+
+  it.each([containsPath, containsPathLoosely])("%o reads the parent and a sibling as outside", (contains) => {
+    expect(contains("/h", "/h/..")).toBe(false);
+    expect(contains("/h", "/h/../x")).toBe(false);
+    expect(contains("/h", "/hx")).toBe(false);
   });
 });

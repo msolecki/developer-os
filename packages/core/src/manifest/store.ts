@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { EXIT_CODES } from "../result.js";
 import type {
@@ -116,8 +116,7 @@ export function foldPath(value: string): string {
  * the caller wrote.
  */
 export function containsPath(root: string, candidate: string): boolean {
-  const fromRoot = relative(resolve(root), resolve(candidate));
-  return fromRoot === "" || (!fromRoot.startsWith("..") && !isAbsolute(fromRoot));
+  return isDescendantOrSelf(relative(resolve(root), resolve(candidate)));
 }
 
 /**
@@ -126,8 +125,12 @@ export function containsPath(root: string, candidate: string): boolean {
  * exclusion compared exactly would not cover both.
  */
 export function containsPathLoosely(root: string, candidate: string): boolean {
-  const fromRoot = relative(foldPath(root), foldPath(candidate));
-  return fromRoot === "" || (!fromRoot.startsWith("..") && !isAbsolute(fromRoot));
+  return isDescendantOrSelf(relative(foldPath(root), foldPath(candidate)));
+}
+
+/** `..` is a whole segment: a child named `..x` or `...` is still inside. */
+function isDescendantOrSelf(fromRoot: string): boolean {
+  return fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
