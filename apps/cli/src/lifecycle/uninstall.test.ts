@@ -27,7 +27,7 @@ import { createCommandFixture, inventoryDigest, removeCommandFixtures } from "..
 import type { CommandFixture } from "../commands/testing.js";
 import type { LifecycleEffectPortsV1 } from "./adapters.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
-import { createLifecycleExecutionPlanCodec, lifecycleVariantFacts } from "./codecs.js";
+import { createLifecycleExecutionPlanCodec, lifecycleVariantFacts, uninstallLeasePaths } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import type { CliLifecycleContext } from "./context.js";
 import { hostWith, scriptedLaunchd, syntheticInstalledPlist, syntheticUninstall } from "./testing.js";
@@ -92,6 +92,8 @@ async function syntheticUninstallHome(options: { readonly withLaunchd: boolean }
   await plant(fixture.paths.configFile, config);
   await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
   await plant(fixture.paths.manifestFile, "{}\n");
+  // Every installed home holds the runner leases `drain_runners` locks; planning refuses one that is gone (W2-UNINST-2).
+  for (const lease of uninstallLeasePaths(parseCanonicalAbsolutePathText(fixture.paths.home))) await plant(lease, "");
   const plist = options.withLaunchd
     ? syntheticInstalledPlist({ userHome: fixture.userHome, productHome: fixture.paths.home, uid: UID, job: DOCTOR })
     : null;
