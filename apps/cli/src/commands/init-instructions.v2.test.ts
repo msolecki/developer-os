@@ -500,6 +500,32 @@ describe("init --adapters codex records CODEX_HOME for every later command (one 
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
+describe("uninstall --yes refuses before it detaches anything (NEW-161)", () => {
+  it("leaves the vendor files and the Codex registration when an edited Foundation artifact refuses", async () => {
+    const planted = await home("uninstall-yes-drift");
+    const { fixture } = planted;
+    expect((await runInit(fixture.context, options(["claude", "codex"]))).ok).toBe(true);
+    const edited = (await manifestOf(fixture)).artifacts.find(
+      (row) => row.kind === "file" && row.owner === "core" && row.verification.mode === "content" && row.path.startsWith(`${fixture.paths.home}/`)
+        && !row.path.startsWith(`${fixture.paths.stateDir}/`) && row.path !== fixture.paths.configFile,
+    );
+    if (edited === undefined) throw new Error("the install recorded no core content artifact");
+    await nodeFs.chmod(edited.path, 0o600);
+    await nodeFs.appendFile(edited.path, "edited by hand\n");
+    const before = await inventoryDigest(fixture.userHome);
+    const callsBefore = planted.codex.calls.length;
+
+    const result = await runUninstall(fixture.context, { dryRun: false, assumeYes: true });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code, JSON.stringify(result.error)).toBe(EXIT_CODES.decisionRequired);
+    expect(planted.codex.calls.slice(callsBefore).filter((call) => call.startsWith("plugin remove"))).toStrictEqual([]);
+    expect(planted.codex.registered).toBe(true);
+    expect(await inventoryDigest(fixture.userHome)).toStrictEqual(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
 describe("init --adapters: deselecting a vendor reports a directory it could not remove (one chained home)", () => {
   it("names the kept directory when an entry appears in it after the detach was planned", async () => {
     const planted = await home("init-detach-kept");
