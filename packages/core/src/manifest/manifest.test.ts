@@ -443,6 +443,28 @@ describe("ManifestStore", () => {
 });
 
 describe("detectDrift", () => {
+  it("refuses a file whose size changed between lstat and open, in both the store and V1 drift reads (CORE-REST-3)", async () => {
+    const fixture = await createFixture("drift-size-race");
+    const filePath = join(fixture.homeDir, "settings.json");
+    const growing = (path: string): typeof nodeFs => ({
+      ...nodeFs,
+      open: (async (target: string, ...rest: unknown[]) => {
+        if (target === path) await nodeFs.appendFile(path, "x");
+        return (nodeFs.open as (...args: unknown[]) => unknown)(target, ...rest);
+      }) as typeof nodeFs.open,
+    });
+    try {
+      await nodeFs.writeFile(filePath, INSTALLED_TEXT, { mode: 0o600 });
+      await expect(detectDrift({ manifest: manifestOf([artifact({ path: filePath })]), fs: growing(filePath), guards: allowAll }))
+        .rejects.toBeInstanceOf(ManifestStateError);
+      await nodeFs.writeFile(fixture.manifestFile, `${JSON.stringify(manifestOf([]))}\n`, { mode: 0o600 });
+      const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: growing(fixture.manifestFile), guards: storeGuards });
+      await expect(store.readOptional()).rejects.toBeInstanceOf(ManifestStateError);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it("reports nothing when every managed artifact still matches its record", async () => {
     const fixture = await createFixture("drift-clean");
     const filePath = join(fixture.homeDir, "settings.json");

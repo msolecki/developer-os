@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { EXIT_CODES } from "../result.js";
+import { readStableRegularFile } from "./fs-read.js";
 import type {
   ArtifactKind,
   ArtifactOwner,
@@ -238,20 +238,6 @@ async function syncDirectory(
   }
 }
 
-async function readBounded(handle: Awaited<ReturnType<ManifestStoreDependencies["fs"]["open"]>>, size: number): Promise<Uint8Array> {
-  if (!Number.isSafeInteger(size) || size < 0 || size > MAX_MANIFEST_BYTES) throw new ManifestStateError();
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  while (offset < bytes.byteLength) {
-    const result = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
-    if (result.bytesRead < 1) throw new ManifestStateError();
-    offset += result.bytesRead;
-  }
-  const extra = new Uint8Array(1);
-  if ((await handle.read(extra, 0, 1, bytes.byteLength)).bytesRead !== 0) throw new ManifestStateError();
-  return bytes;
-}
-
 export class ManifestStore {
   private readonly manifestFile: string;
   private readonly fs: ManifestStoreDependencies["fs"];
@@ -288,16 +274,7 @@ export class ManifestStore {
 
     let bytes: Uint8Array;
     try {
-      const handle = await this.fs.open(canonical, constants.O_RDONLY | constants.O_NOFOLLOW);
-      try {
-        const opened = await handle.stat({ bigint: true });
-        if (!opened.isFile() || opened.size < 0n || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size > BigInt(MAX_MANIFEST_BYTES)) throw new ManifestStateError();
-        bytes = await readBounded(handle, Number(opened.size));
-        const after = await handle.stat({ bigint: true });
-        if (bytes.byteLength > MAX_MANIFEST_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || Number(after.size) !== bytes.byteLength) throw new ManifestStateError();
-      } finally {
-        await handle.close();
-      }
+      bytes = await readStableRegularFile(this.fs, canonical, before, MAX_MANIFEST_BYTES);
     } catch (error) {
       if (error instanceof ManifestStateError) throw error;
       throw new ManifestStateError();
