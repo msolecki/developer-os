@@ -4268,7 +4268,10 @@ current effect preimage/postimage. Each probe is literal
 `/bin/launchctl print <LaunchdGuiDomainV1>/<candidate-label>`. After the domain probe succeeds, exit 0
 means that exact service target is present and exit 113 means absent; every other status is
 unobservable/refused. Output is byte-counted and discarded without parsing, hashing, logging, or
-persistence because `launchctl print` may expose unrelated service environment. A base-label presence,
+persistence because `launchctl print` may expose unrelated service environment. One exception
+(NEW-169, 2026-10-06): a present generated candidate's dump is read for its top-level `last exit
+code` alone, through the post-check's structural parser, and only the integer is kept; `automation
+status` shows a non-zero one, which no recording or silent run leaves, as a run with no record. A base-label presence,
 both old and new candidate generations present, or any candidate inconsistent with the selected
 transition is a foreign third state. Exactly the expected generated candidate present is `loaded {
 label, generation }`; none of the owned candidates present is `unloaded`.

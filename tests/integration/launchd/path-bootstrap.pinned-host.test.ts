@@ -66,6 +66,20 @@ async function directoryIdentity(path: string, ownerUid: EffectiveUidV1): Promis
   };
 }
 
+/** A direct `/bin/launchctl` call outside the product's process table, for the gate's own kickstart and cleanup. */
+const LAUNCHCTL_RAW = {
+  executable: "/bin/launchctl",
+  env: { HOME: "/private/var/empty", LANG: "C", LC_ALL: "C", PATH: "/usr/bin:/bin:/usr/sbin:/sbin", TMPDIR: "/private/var/empty" },
+  cwd: "/private/var/empty",
+  stdin: "ignore",
+  inheritedFds: [],
+  stdoutCap: 1048576,
+  stderrCap: 1048576,
+  idleMs: 30000,
+  wallMs: 30000,
+  terminationGraceMs: 100,
+} as const;
+
 describe("launchctl path bootstrap gate", () => {
   // Skipped off a disposable account (D76); the in-body guard still refuses to touch launchd if the skip is bypassed.
   it.skipIf(!DISPOSABLE_HOST)("loads the generated label by its plist path, verifies the loaded program, and leaves nothing behind (disposable-account gate; set DEVELOPER_OS_LAUNCHD_GATE_HOST=disposable)", async () => {
@@ -159,6 +173,14 @@ describe("launchctl path bootstrap gate", () => {
       expect(await bootstrapper.verifyLoaded(request)).toBe(true);
       const afterBootstrap = await observer.observe({ domain, jobs: [{ job: "doctor", retained: null, planned: label }] });
       expect(afterBootstrap).toEqual({ kind: "observed", jobs: [{ job: "doctor", state: { kind: "exact_new", label, generation } }] });
+      // NEW-169: after one real run, the observer reads launchd's `last exit code` from the live dump.
+      await runner.run({ ...LAUNCHCTL_RAW, argv: ["kickstart", `${domain}/${label}`], phase: runner.beginPhase("launchd-gate-kickstart", 30000) });
+      let afterRun = afterBootstrap;
+      for (let attempt = 0; attempt < 50 && afterRun.kind === "observed" && afterRun.jobs[0]?.state.kind === "exact_new" && afterRun.jobs[0].state.lastExitCode === undefined; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        afterRun = await observer.observe({ domain, jobs: [{ job: "doctor", retained: null, planned: label }] });
+      }
+      expect(afterRun).toEqual({ kind: "observed", jobs: [{ job: "doctor", state: { kind: "exact_new", label, generation, lastExitCode: 0 } }] });
       expect(await readdir(join(root, "home"))).toEqual([]);
       expect(await readdir(join(root, "tmp"))).toEqual([]);
 
@@ -166,20 +188,7 @@ describe("launchctl path bootstrap gate", () => {
       process.stdout.write(`launchctl path-bootstrap gate transcript sha256: ${createHash("sha256").update(transcript).digest("hex")}\n`);
     } finally {
       if (loaded) {
-        await runner.run({
-          executable: "/bin/launchctl",
-          argv: ["bootout", `${domain}/${label}`],
-          env: { HOME: "/private/var/empty", LANG: "C", LC_ALL: "C", PATH: "/usr/bin:/bin:/usr/sbin:/sbin", TMPDIR: "/private/var/empty" },
-          cwd: "/private/var/empty",
-          stdin: "ignore",
-          inheritedFds: [],
-          stdoutCap: 1048576,
-          stderrCap: 1048576,
-          idleMs: 30000,
-          wallMs: 30000,
-          terminationGraceMs: 100,
-          phase: runner.beginPhase("launchd-gate-bootout", 30000),
-        });
+        await runner.run({ ...LAUNCHCTL_RAW, argv: ["bootout", `${domain}/${label}`], phase: runner.beginPhase("launchd-gate-bootout", 30000) });
       }
       await rm(base, { recursive: true, force: true });
     }

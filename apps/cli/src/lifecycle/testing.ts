@@ -938,6 +938,8 @@ export interface ScriptedLaunchdV1 {
   };
   /** With `launchctl: "scripted"`, every service target the post-check printed, in order. */
   readonly prints: string[];
+  /** NEW-169: the `last exit code` observation reports for a loaded job; unset means never exited. */
+  readonly exits: Map<ScheduledJobIdV1, number>;
   readonly ports: LifecycleEffectPortsV1["launchd"];
 }
 
@@ -959,6 +961,7 @@ export function scriptedLaunchd(options: {
   const failingBootstraps = new Set<GeneratedLaunchdLabelV1>();
   const faults: ScriptedLaunchdV1["faults"] = { afterBootstrap: null, dieAfterBootstrap: false, print: null };
   const prints: string[] = [];
+  const exits = new Map<ScheduledJobIdV1, number>();
   /** What launchd itself read at bootstrap, per loaded label: its path and ProgramArguments. */
   const services = new Map<GeneratedLaunchdLabelV1, { readonly path: string; readonly args: readonly string[] }>();
   const exited = { exitCode: 0, signal: null, termination: "exited" as const, stdoutBytes: 0, stderrBytes: 0, groupReaped: true as const };
@@ -973,7 +976,7 @@ export function scriptedLaunchd(options: {
         const kind = label === planned ? ("exact_new" as const) : label === retained ? ("exact_old" as const) : null;
         return kind === null
           ? { job, state: { kind: "third_state" as const, reason: "dual_generation" as const } }
-          : { job, state: { kind, label, generation: parseGeneratedLabel(label).generation } };
+          : { job, state: { kind, label, generation: parseGeneratedLabel(label).generation, ...(exits.get(job) === undefined ? {} : { lastExitCode: exits.get(job) as number }) } };
       }),
     });
   const ports = {
@@ -1002,7 +1005,7 @@ export function scriptedLaunchd(options: {
     pause: () => Promise.resolve(),
     host: options.host ?? hostWith(),
   } as unknown as LifecycleEffectPortsV1["launchd"];
-  if (options.launchctl !== "scripted") return { loaded, events, failingBootstraps, faults, prints, ports };
+  if (options.launchctl !== "scripted") return { loaded, events, failingBootstraps, faults, prints, exits, ports };
   const exit = (exitCode: number) => ({ ...exited, exitCode, stdoutSha256: EMPTY_SHA256, stderrSha256: EMPTY_SHA256 });
   const runner = {
     run: async (request: SupervisedSpawnRequestV1, sink?: (chunk: Uint8Array, stream: "stdout" | "stderr") => void) => {
@@ -1055,6 +1058,7 @@ export function scriptedLaunchd(options: {
     failingBootstraps,
     faults,
     prints,
+    exits,
     ports: { ...ports, bootstrapper: new LaunchdPathBootstrapper(admission), launchctl: new LaunchdBootoutRunner(admission) },
   };
 }

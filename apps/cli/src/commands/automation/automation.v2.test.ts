@@ -60,7 +60,7 @@ import { createBareRemote, scriptedEffectPorts, scriptedGitRuntime } from "../gi
 import { runInit } from "../init.js";
 import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../testing.js";
 import type { CommandFixture } from "../testing.js";
-import { runAutomation } from "./index.js";
+import { renderAutomation, runAutomation } from "./index.js";
 import type { AutomationCommandDataV1, AutomationCommandResultV1 } from "./index.js";
 import { createAutomationService } from "./service.js";
 
@@ -677,6 +677,28 @@ describe("automation on a real V2 home", () => {
       const after = dataOf(await runAutomation(home.context, { subcommand: "status" }));
       if (after.kind !== "status") throw new Error("unreachable");
       expect(after.jobs.filter((job) => job.installed !== "absent").map((job) => job.installed)).toStrictEqual(["current", "current", "current"]);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "reports launchd's non-zero last exit for a loaded job with no status record (NEW-169)",
+    async () => {
+      const home = await sharedHome();
+      // Run alone (`-t`), the shared home is not enabled yet; in file order an earlier case enabled it.
+      if (!launchd.loaded.has("doctor")) await apply(home, "enable", BASE_SCHEDULES);
+      launchd.exits.set("doctor", 78);
+      try {
+        const result = await runAutomation(home.context, { subcommand: "status" });
+        const status = dataOf(result);
+        if (status.kind !== "status") throw new Error("unreachable");
+        const doctor = status.jobs.find((job) => job.job === "doctor");
+        expect(doctor).toMatchObject({ live: "loaded", lastRun: null, launchdExit: 78 });
+        expect(status.jobs.filter((job) => job.job !== "doctor").every((job) => job.launchdExit === undefined)).toBe(true);
+        expect(renderAutomation(status).some((line) => line.startsWith("doctor") && line.endsWith("last run never; launchd exit 78, no run recorded since"))).toBe(true);
+      } finally {
+        launchd.exits.clear();
+      }
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );

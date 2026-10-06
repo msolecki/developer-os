@@ -605,7 +605,8 @@ literal; this is the index from bound to symbol. Cite symbols, not lines.
   `packages/security/src/git/process-table.ts`). Scope: 16 MiB per file,
   1 GiB aggregate (`packages/core/src/git/scope.ts`).
 - **launchctl calls.** 4 MiB stdout and 1 MiB stderr per call, byte-counted and discarded, never
-  parsed, hashed or stored; 30-second observation and transition deadlines; 100 ms termination grace
+  parsed, hashed or stored, except the post-check's service fields (D82) and a loaded generated
+  label's `last exit code` integer (NEW-169); 30-second observation and transition deadlines; 100 ms termination grace
   (the `stdoutMaxBytes`, `stderrMaxBytes` and `terminationGraceMs` of each profile in
   `packages/platform-macos/src/launchd/process-table.ts`, applied by `observe.ts` and `effects.ts`).
 - **Runtime records.** 1 MiB per log slot, `AUTOMATION_LOG_SLOTS` (10) slots, 64 KiB per status —

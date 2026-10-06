@@ -105,6 +105,23 @@ describe("renderAutomation", () => {
     expect(lines.some((line) => line.startsWith("git-sync") && line.includes("ineligible stale - last run invalid"))).toBe(true);
   });
 
+  /** NEW-169: a run that wrote no record (launchd could not spawn it, or it died first) shows launchd's exit. */
+  it("names a non-zero launchd exit beside the last run, and nothing for exit 0", () => {
+    const lines = renderAutomation({
+      kind: "status",
+      enabled: true,
+      activation: "active",
+      distribution: "supported",
+      closure: "clear",
+      jobs: [
+        { job: "doctor", schedule: null, eligible: true, installed: "current", live: "loaded", lastRun: null, launchdExit: 78 },
+        { job: "brain-pulse", schedule: null, eligible: true, installed: "current", live: "loaded", lastRun: null, launchdExit: 0 },
+      ],
+    });
+    expect(lines).toContain("doctor         eligible current loaded last run never; launchd exit 78, no run recorded since");
+    expect(lines).toContain("brain-pulse    eligible current loaded last run never");
+  });
+
   it("appends the brain-pulse verdict from its last run's reason code, and no other job's", () => {
     const at = parseUtcTimestamp("2026-10-01T07:00:01.000Z");
     const run = (job: "brain-pulse" | "doctor", reasonCode: string) =>
