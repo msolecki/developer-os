@@ -723,8 +723,8 @@ behaviour described here.
   ahead of them when coordinator residue exists. **Never `fail`:** `entrypoint` (informational),
   `hooks`, `external-hooks` and `vendor-config` (each catches everything; `hooks.md` §3.7,
   `claude-adapter.md` §15), `redaction-key`, both `*-capabilities` rows and `manifest-anchor`
-  (warnings at most). `transactions` also covers the V2 coordinator participant journals, through
-  the `lifecycle` survey.
+  (warnings at most). `transactions` skips the Foundation journals a V2 coordinator owns; the
+  `lifecycle` row reports those.
   `redaction-key` reports the key's presence, symlink/regular-file/size shape, and octal mode from
   `lstat` alone — never its bytes — and is a `warn` in every state but exactly `0600`, never a
   `fail`: nothing is encrypted with the key, so a lost or loose one degrades a diagnostic, not the

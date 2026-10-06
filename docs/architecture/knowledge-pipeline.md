@@ -123,7 +123,7 @@ command consumes them.
 text → redact → normalize → deduplicationHash → captureId → envelope + body
 ```
 
-`buildCapture` (`packages/brain/src/capture/build.ts:216`) runs that order and no other, over
+`buildCapture` (`packages/brain/src/capture/build.ts:216-249`) runs that order and no other, over
 `redactAndNormalize` (`:179`). **The raw text exists only in memory**: it is never written, never
 logged, never hashed and never reaches a model. The hash is taken over the *redacted, normalized*
 content, so two texts differing only by a secret produce one capture — a consequence rather than an
@@ -459,7 +459,7 @@ nothing is encrypted with it.
 §7's DOS-P7 gate reads "uninstall removes only manifest-owned artifacts", and `uninstall` removes the
 key (`apps/cli/src/commands/uninstall.ts:536-544`) — by the exact path `redactionKeyPath` computes,
 never by pattern and never by walking the state directory, so the exception cannot widen. It runs
-**before** `revertArtifacts` (`apps/cli/src/commands/uninstall.ts:448`, called at `:941`), so the state directory can be removed when it is otherwise
+**before** `revertArtifacts` (`apps/cli/src/commands/uninstall.ts` — `revertArtifacts`), so the state directory can be removed when it is otherwise
 empty. An absent manifest no longer returns early past it: that branch hands off to
 `runAbsentManifestUninstall`, which deletes an orphaned key on its own guarded path
 (`deleteOrphanedKey`, `apps/cli/src/lifecycle/absent-manifest-uninstall.ts:178-181`), so an install
@@ -521,7 +521,7 @@ difference — a case-insensitive volume, on which `_RAW/quarantine/x.md` canoni
 puts a model-written note into `content/_raw/quarantine/`.
 
 The second: that directory is where the next `ingest` looks for captures. `parseNote` grades an
-unknown frontmatter key at `info` (`packages/brain/src/schema/note.ts:394-403`) and `parseCaptureFile` (`packages/brain/src/capture/parse.ts:174`)
+unknown frontmatter key at `info` (`packages/brain/src/schema/note.ts:394-403`) and `parseCaptureFile` (`packages/brain/src/capture/parse.ts` — `parseCaptureFile`)
 never recomputes the id, so **one document can satisfy both the note parser and the capture parser** —
 and the model's own output re-enters the pipeline as an `accepted` capture, with the human review step
 skipped.

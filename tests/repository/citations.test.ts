@@ -605,6 +605,7 @@ describe("every documented citation resolves", () => {
     for (const doc of IDENTIFIER_CHECKED) {
       const text = await read(doc);
       const lines = text.split("\n");
+      const anchoredSymbols = extractAnchors(text);
       const byLine = new Map<number, Citation[]>();
       for (const citation of extractCitations(text, knownBasenames)) {
         byLine.set(citation.line, [...(byLine.get(citation.line) ?? []), citation]);
@@ -612,6 +613,8 @@ describe("every documented citation resolves", () => {
       for (const [number, group] of byLine) {
         const identifiers = lineIdentifiers(lines[number - 1] ?? "");
         if (identifiers.length === 0) continue;
+        /** An anchor is content-checked by the sweep above, so its symbol satisfies the line. */
+        if (anchoredSymbols.some((anchor) => anchor.line === number && identifiers.includes(anchor.symbol))) continue;
         let excerpt = "";
         for (const citation of group) {
           const resolution = resolveSource(citation, files);
