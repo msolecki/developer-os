@@ -37,9 +37,8 @@ implementation plan was deleted when its last step closed; git history is the ar
    `hooks/hooks.json`, so the checked-in `plugins/claude/` tree stays hook-free and machine-path-free.
    `withClaudeHooks` adds the file to the tree the local-build install writes, one entry per
    `CLAUDE_HOOK_ROWS` row, each command naming that install's absolute entrypoint. The hooks never
-   capture: the session-end and pre-compact hooks stay declined (§5). Binding the render into A12's
-   install is plan Task 14 and has not landed, and Claude firing from a skills-directory plugin is
-   not yet observed (`hooks.md` §1).
+   capture: the session-end and pre-compact hooks stay declined (§5). `init` binds the render into
+   the install, and Claude firing from a skills-directory plugin is observed (`hooks.md` §1, §4.1).
 2. **It writes to exactly one directory** — `~/.claude/skills/developer-os/`. Both the renderer
    and the install proposal refuse a path that would escape it, at both ends, and the integration
    test asserts no byte lands outside a temporary `HOME`.
@@ -157,10 +156,10 @@ never writes `~/.claude/settings.json` (Q4-A).
 - **`doctor`.** `hooks` reports the installed verbs and each one's last firing age. `external-hooks`
   reports the user's own Claude hook entries as `event → count`, never as a command string.
 
-**Not yet true.** The render has no production caller until plan Task 14 binds it into A12's
-local-build install. Nobody has observed a skills-directory plugin's `hooks/hooks.json` firing (plan
-Task 1). If Task 1 does not observe it, Q4-A applies: Claude hooks become `unsupported` and the
-founder decides. The full contract, the residuals and the pending items are in `hooks.md` §3.
+**Shipped.** `init` binds the render into the install through `withClaudeHooks`
+(`apps/cli/src/instructions/attach.ts`), and all eight verbs were observed firing from an installed
+release on the founder machine. The contract is `hooks.md` §3.1 and §4.1; what is still unobserved
+is `hooks.md` §4.2.
 
 **What stays declined, and why.** The tree once declared three hooks whose commands pointed at
 missing scripts. Removing those dangling claims was ratified on 2026-08-11, and DOS-P6 declined

@@ -422,7 +422,7 @@ does not use, which turned one `sudo developer-os ingest` leftover, or any
 pre-created leaf on a shared `/tmp`, into a permanent block on ingest. Found by
 fresh-context review before the change shipped.
 
-## The Codex half of the hook harness was not built, and why
+## The Codex half of the hook harness was not built, and why (superseded by `hooks.md` §1 question 9)
 
 Task 8 proved for Claude that a planted user hook does not fire under the shipped argv. The
 equivalent for Codex was investigated through `codex exec --help` and `strings` only, with no
@@ -431,6 +431,9 @@ equivalent for Codex was investigated through `codex exec --help` and `strings` 
 Claude's spelled-out example, and hooks additionally require a persisted trust step with no
 recorded mechanism. That is more than a test's worth of unknowns. Owner: roadmap Phase 6 (A13),
 which specifies hook installation for both vendors and is where the trust step belongs.
+
+**Superseded.** A13 built the Codex half, and `hooks.md` §1 question 9 holds the observation that
+replaces this investigation; the trust step is `CODEX_HOOK_TRUST_STEP`.
 
 ## Probes not run, and why
 
