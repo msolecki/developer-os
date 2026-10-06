@@ -1496,6 +1496,11 @@ async function removeOwnedTemp(
   }
 }
 
+/** The temp `applyMutation` renames onto a target; it sits in the user's own directory. */
+function applyTempPath(id: string, index: number, targetPath: string): string {
+  return join(dirname(targetPath), `.${basename(targetPath)}.${id}-${String(index)}.tmp`);
+}
+
 async function writeDurableFile(
   fs: TransactionFileSystem,
   destination: string,
@@ -1505,14 +1510,15 @@ async function writeDurableFile(
 ): Promise<void> {
   await removeOwnedTemp(fs, temporaryPath);
   const handle = await fs.open(temporaryPath, "wx", mode);
+  // One cleanup for every failure after the temp exists: it may hold a secret's pre-edit bytes.
   try {
-    await handle.writeFile(bytes);
-    await handle.chmod(mode);
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  try {
+    try {
+      await handle.writeFile(bytes);
+      await handle.chmod(mode);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     await fs.rename(temporaryPath, destination);
     await syncDirectory(fs, dirname(destination));
   } catch {
@@ -2680,14 +2686,10 @@ export class TransactionExecutor {
 
     if (desired === null) throw new TransactionStateError();
     if (desiredMode === null) throw new TransactionStateError();
-    const temporary = join(
-      dirname(mutation.targetPath),
-      `.${basename(mutation.targetPath)}.${journal.id}-${String(index)}.tmp`,
-    );
     await writeDurableFile(
       this.dependencies.fs,
       mutation.targetPath,
-      temporary,
+      applyTempPath(journal.id, index, mutation.targetPath),
       desired,
       desiredMode,
     );
@@ -2770,6 +2772,8 @@ export class TransactionExecutor {
     const mutation = journal.mutations[index];
     if (mutation === undefined) throw new TransactionStateError();
     await this.assertTarget(mutation.targetPath);
+    // A death between applyMutation's temp write and its rename leaves the temp beside the target.
+    await removeOwnedTemp(this.dependencies.fs, applyTempPath(journal.id, index, mutation.targetPath));
     const desired = await this.stagedBytes(journal, mutation);
     const desiredHash = desired === null ? null : hash(desired);
     const metadata = await this.readMetadata(journal.id, index);
