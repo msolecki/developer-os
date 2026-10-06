@@ -225,6 +225,11 @@ export interface CliContext {
   readonly nodeExecutable?: string | undefined;
   /** The plan-only update ports; absent, `update` binds the production ones from this context. */
   readonly update?: CliUpdateContext | undefined;
+  /**
+   * True only when the launcher's `--offline-release-trust-fd=3` marker led the argv: FD 3 is then
+   * its trust pipe. Absent or false, `update` refuses before touching FD 3 (NEW-147).
+   */
+  readonly launcherTrustHandoff?: boolean | undefined;
 }
 
 export const NODE_FILE_SYSTEM: CliFileSystem = {
@@ -726,6 +731,8 @@ export interface ProductionContextOptions {
   readonly userHome: string;
   /** Admitted by `init --local-release <dir>` only; the one way `bootstrap` becomes available (D47). */
   readonly localRelease?: PackagedReleaseSourceV1 | null;
+  /** Whether the launcher passed its FD 3 trust pipe; see {@link CliContext.launcherTrustHandoff}. */
+  readonly launcherTrustHandoff?: boolean;
 }
 
 /**
@@ -815,6 +822,7 @@ export function createProductionContext(
     },
     bootstrap: localBootstrap(options, paths, transactionExecutor, lockProvider, now),
     lifecycle,
+    launcherTrustHandoff: options.launcherTrustHandoff === true,
   };
   composed.current = context;
   return context;

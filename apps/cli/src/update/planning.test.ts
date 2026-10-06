@@ -38,6 +38,24 @@ async function refusal(work: Promise<unknown>): Promise<{ readonly reason: strin
 }
 
 describe("planUpdate", () => {
+  it("refuses an unsigned-local home right after the home gate, before FD 3, scratch or the network (NEW-147)", async () => {
+    const fixture = createUpdateFixture();
+    const update = {
+      ...fixture.update,
+      readHome: async () => {
+        const home = await fixture.update.readHome();
+        return { ...home, trust: { ...home.trust, trust: "unsigned-local" as const } };
+      },
+    };
+
+    await expect(planUpdate(update, { version: null })).rejects.toMatchObject({
+      reason: "release_unsigned_local",
+      code: EXIT_CODES.capabilityUnavailable,
+    });
+    expect(fixture.events).toStrictEqual(["home"]);
+    expect(fixture.requests).toStrictEqual([]);
+  });
+
   it("previews the selected signed release without returning private evidence", async () => {
     const fixture = createUpdateFixture();
     const planned = await planUpdate(fixture.update, { version: null });

@@ -68,6 +68,7 @@ import {
 } from "@developer-os/security";
 import type {
   BoundedReleaseResponseV1,
+  OfflineTrustReaderDependencies,
   ReleaseBodySink,
   ReleasePlanningAttemptIdV1,
   ReleasePlanningScratchRequestV1,
@@ -519,31 +520,43 @@ const fstatAsync = promisify(fstat);
 const readAsync = promisify(read);
 const closeAsync = promisify(close);
 
-/** The CLI side of the launcher's FD 3 pipe; every admission rule lives in Security. */
-export function readOfflineTrust(): Promise<OfflineReleaseTrustV1> {
-  return readOfflineReleaseTrustFd(TRUST_DESCRIPTOR, {
-    parentProcessId: () => process.ppid,
-    // `readdir` lists the descriptor it scanned with; it is closed by now, so only live ones survive.
-    openDescriptors: async () => (await nodeFs.readdir("/dev/fd")).map(Number).filter((descriptor) => {
-      if (!Number.isSafeInteger(descriptor)) return false;
-      try {
-        fstatSync(descriptor);
-        return true;
-      } catch {
-        return false;
-      }
-    }),
-    fstat: async (descriptor) => {
-      const stats = await fstatAsync(descriptor);
-      return { isFIFO: stats.isFIFO(), isSocket: stats.isSocket() };
-    },
-    read: async (descriptor, maximumBytes) => {
-      const buffer = Buffer.alloc(maximumBytes);
-      const { bytesRead } = await readAsync(descriptor, buffer, 0, maximumBytes, null);
-      return new Uint8Array(buffer.subarray(0, bytesRead));
-    },
-    close: (descriptor) => closeAsync(descriptor),
-  });
+const NODE_TRUST_READER: OfflineTrustReaderDependencies = {
+  parentProcessId: () => process.ppid,
+  // `readdir` lists the descriptor it scanned with; it is closed by now, so only live ones survive.
+  openDescriptors: async () => (await nodeFs.readdir("/dev/fd")).map(Number).filter((descriptor) => {
+    if (!Number.isSafeInteger(descriptor)) return false;
+    try {
+      fstatSync(descriptor);
+      return true;
+    } catch {
+      return false;
+    }
+  }),
+  fstat: async (descriptor) => {
+    const stats = await fstatAsync(descriptor);
+    return { isFIFO: stats.isFIFO(), isSocket: stats.isSocket() };
+  },
+  read: async (descriptor, maximumBytes) => {
+    const buffer = Buffer.alloc(maximumBytes);
+    const { bytesRead } = await readAsync(descriptor, buffer, 0, maximumBytes, null);
+    return new Uint8Array(buffer.subarray(0, bytesRead));
+  },
+  close: (descriptor) => closeAsync(descriptor),
+};
+
+/**
+ * The CLI side of the launcher's FD 3 pipe; every admission rule lives in Security. Without the
+ * launcher's marker FD 3 is not ours (NEW-147): in a plain `node` it is libuv's kqueue, and the
+ * reader's `close` aborted the process (exit 134). So it refuses before any fstat, read or close.
+ */
+export async function readOfflineTrust(
+  launcherTrustHandoff = false,
+  dependencies: OfflineTrustReaderDependencies = NODE_TRUST_READER,
+): Promise<OfflineReleaseTrustV1> {
+  if (!launcherTrustHandoff) {
+    refuse("update_launcher_handoff_absent", EXIT_CODES.capabilityUnavailable, [], "run developer-os update through the Developer OS launcher");
+  }
+  return readOfflineReleaseTrustFd(TRUST_DESCRIPTOR, dependencies);
 }
 
 function scratchPort(context: CliContext): UpdateScratchV1 {
@@ -598,7 +611,7 @@ export function createCliUpdateContext(context: CliContext): CliUpdateContext {
     pathEvidence: createCanonicalPathEvidence(),
     clock: () => lifecycleOf(context).clock(),
     readHome: () => readHome(context),
-    readOfflineTrust,
+    readOfflineTrust: () => readOfflineTrust(context.launcherTrustHandoff === true),
     createTransport: (trust) => new FixedReleaseTransport({ trust, exchange: nodeReleaseExchange, now: () => performance.now(), setTimer }),
     scratch: scratchPort(context),
     snapshot: (home, releases) => snapshot(context, home, releases),

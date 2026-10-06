@@ -1335,8 +1335,11 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
 
 - **Plan-only by default.** `update` reads the home, the FD 3 trust, the signed metadata and the
   bundle, runs the target planner over one attempt-owned scratch and prints a preview; it writes
-  nothing durable. `update rollback` reads only retained local evidence: no FD 3, transport,
-  scratch or planner.
+  nothing durable. An unsigned-local home refuses `release_unsigned_local` (exit 4) right after the
+  home read, and an invocation the launcher did not mark with `--offline-release-trust-fd=3` refuses
+  `update_launcher_handoff_absent` (exit 4) before any fstat, read or close of FD 3, which outside
+  the launcher is not the trust pipe (NEW-147). `update rollback` reads only retained local
+  evidence: no FD 3, transport, scratch or planner.
 - **Apply.** `--apply` heals any update residue first, then revalidates under the global lock: a
   clear V2 closure, the same home, the same retained evidence, and a planner rerun whose
   transcript and candidate equal the preview's. It reserves one allocator block for every prefix
@@ -1381,7 +1384,8 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
 Spec 2 §11's mapping on top of §6: 1 for a bounded transport interruption or a failure after a prior
 capacity check; 2 for a malformed request, a nonexistent release or a downgrade; 3 for managed
 drift, a post-update edit blocking rollback, or a Codex registration that is not `registered`; 4
-for an unsupported architecture, a launcher or protocol too old, or no fallback handoff; 5 for any
+for an unsupported architecture, a launcher or protocol too old, no launcher trust handoff, an
+unsigned-local home, or no fallback handoff; 5 for any
 signature, checksum, origin, archive, process or verifier refusal; 6 for an incomplete or
 contradictory journal, a third state, missing rollback evidence, or malformed trust, active or
 manifest state. Messages carry fixed reason codes only.

@@ -118,7 +118,9 @@ const io: CliIo = {
 const home = process.env.HOME;
 const launchedArgv = process.argv.slice(2);
 // `update` reads FD 3 itself; the marker is not a public option, so no parser ever sees it.
-const argv = launchedArgv[0] === LAUNCHER_TRUST_ARGUMENT ? launchedArgv.slice(1) : launchedArgv;
+// Its presence is kept: without it FD 3 is not a trust pipe, and `update` must not touch it (NEW-147).
+const launcherTrustHandoff = launchedArgv[0] === LAUNCHER_TRUST_ARGUMENT;
+const argv = launcherTrustHandoff ? launchedArgv.slice(1) : launchedArgv;
 const hookMode = isHookInvocation(argv);
 const scheduledMode = parseScheduledInvocation(argv) !== null;
 const pendingRecords: Promise<void>[] = [];
@@ -166,6 +168,7 @@ if ((home === undefined || home.length === 0) && !scheduledMode) {
         localRelease: request.localRelease === null
           ? null
           : await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION),
+        launcherTrustHandoff,
       });
     },
     hookMode && home !== undefined ? hookEnvironment(home) : undefined);
