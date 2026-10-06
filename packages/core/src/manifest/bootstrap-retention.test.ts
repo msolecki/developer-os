@@ -30,6 +30,7 @@ import {
   isRedactionKeyPath,
   selectBootstrapJournal as selectRetentionJournal,
   validateBootstrapJournalSuccessor as validateRetentionJournalSuccessor,
+  publishedForwardPhaseAdmits,
   type BootstrapJournalRecordV1,
   type BootstrapJournalSelectionV1,
   type BootstrapRetainedExecutionPlanV1,
@@ -1515,6 +1516,17 @@ describe("publish intent grammar (NEW-189)", () => {
     expect(validateBootstrapJournalSuccessor(plan, compensating, clearedRecord)).toEqual(clearedRecord);
     expect(() => validateBootstrapJournalSuccessor(plan, compensating, successor(compensating, { compensationNext: step - 1 }))).toThrow();
     expect(() => validateBootstrapJournalSuccessor(plan, published, successor(published, { publishIntent: intent }))).toThrow();
+  });
+
+  it("binds a published forward journal's phase to its published mutation prefix", () => {
+    expect(publishedForwardPhaseAdmits("staged", 0, 2)).toBe(true);
+    expect(publishedForwardPhaseAdmits("validated", 1, 2)).toBe(true);
+    expect(publishedForwardPhaseAdmits("applied", 2, 2)).toBe(true);
+    expect(publishedForwardPhaseAdmits("finalized", 2, 2)).toBe(true);
+    expect(publishedForwardPhaseAdmits("staged", 1, 2)).toBe(false);
+    expect(publishedForwardPhaseAdmits("applied", 1, 2)).toBe(false);
+    expect(publishedForwardPhaseAdmits("applied", 0, 2)).toBe(false);
+    expect(publishedForwardPhaseAdmits("rolled_back", 0, 2)).toBe(false);
   });
 
   it("keeps only a resolved intent through a terminal rollback", () => {

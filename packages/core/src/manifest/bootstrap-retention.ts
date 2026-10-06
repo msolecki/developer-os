@@ -1636,9 +1636,23 @@ function payloadRetentionEvidence(
   return admitted;
 }
 
-const PUBLISHED_FORWARD_PHASES: ReadonlySet<string> = new Set([
+const FORWARD_TRANSACTION_PHASES: readonly string[] = [
   "planned", "backed_up", "staged", "validated", "applied", "verified", "finalized",
-]);
+];
+
+/**
+ * NEW-189: the phases a forward journal published only through its intent may
+ * stand in, given how many mutations the resolution found at their targets.
+ * Mutations move only in `validated`, before `applied`; any other pairing is
+ * a contradiction and refused.
+ */
+export function publishedForwardPhaseAdmits(phase: unknown, published: number, mutations: number): boolean {
+  const index = typeof phase === "string" ? FORWARD_TRANSACTION_PHASES.indexOf(phase) : -1;
+  if (index < 0) return false;
+  if (published > 0 && index < FORWARD_TRANSACTION_PHASES.indexOf("validated")) return false;
+  if (published < mutations && index >= FORWARD_TRANSACTION_PHASES.indexOf("applied")) return false;
+  return true;
+}
 
 function validateFoundationTerminalEvidence(
   plan: BootstrapRetainedExecutionPlanV1,
@@ -1664,6 +1678,10 @@ function validateFoundationTerminalEvidence(
     const ordinal = foundationOrdinal(participant, forwardFoundationOrdinals(plan));
     const key = `${participant.role.kind}:${String(ordinal)}`;
     if (!expected.has(key) || result.has(key)) return refuse();
+    // NEW-189: only a forward participant not reached by its cursor is retained through its intent.
+    const publishedPrefix = participant.role.kind === "forward" && ordinal >= journal.nextFoundationParticipant
+      ? publishedForwardMutations(journal, ordinal)
+      : null;
     const initialPayload = plan.payloads[participant.initialJournal.staged.ordinal];
     if (
       initialPayload?.source.kind !== "plan_derived" ||
@@ -1682,10 +1700,9 @@ function validateFoundationTerminalEvidence(
       initial.kind !== participant.slot ||
       terminal.kind !== participant.slot ||
       initial.phase !== "planned" ||
-      (terminal.phase !== "finalized" &&
-        // NEW-189: a forward participant published only through its intent may stop in any phase short of rollback.
-        !(participant.role.kind === "forward" && publishedForwardMutations(journal, ordinal) !== null &&
-          typeof terminal.phase === "string" && PUBLISHED_FORWARD_PHASES.has(terminal.phase))) ||
+      (publishedPrefix === null
+        ? terminal.phase !== "finalized"
+        : !publishedForwardPhaseAdmits(terminal.phase, publishedPrefix, participant.mutations.length)) ||
       typeof initial.createdAt !== "string" ||
       terminal.createdAt !== initial.createdAt ||
       typeof terminal.updatedAt !== "string" ||

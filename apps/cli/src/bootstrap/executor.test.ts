@@ -1,10 +1,10 @@
-import { lstatSync, readdirSync, readFileSync } from "node:fs";
+import { linkSync, lstatSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { deriveBootstrapRetentionLocations, encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
+import { deriveBootstrapRetentionAuthorities, deriveBootstrapRetentionLocations, deriveBootstrapTerminalJournal, encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
 import type { CanonicalJsonValue } from "@developer-os/core";
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
@@ -849,6 +849,20 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     const report = await runDoctorReport(fixture.rebuildContext());
     // The non-terminal forward journal was retained with its directory, so no transaction is left for repair or init.
     expect(report.checks.find((check) => check.id === "transactions")).toMatchObject({ status: "pass" });
+
+    // Nothing wedges: uninstall and a fresh init beside the retained ID each finish or refuse cleanly.
+    await closeBootstrapProcess(fixture);
+    const removed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+    await closeBootstrapProcess(fixture);
+    const reinstalled = await runInit(fixture.rebuildContext(), ACCEPTED);
+    // Both refuse with the manual-archive route a post-Foundation rollback already takes, and change no journal.
+    if (removed.ok || reinstalled.ok) throw new Error(JSON.stringify({ removed, reinstalled }));
+    expect(removed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(removed.error.recovery).toContain("archive the product home manually");
+    expect(reinstalled.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(reinstalled.error.message).toContain("retained bootstrap evidence requires manual archive before a new bootstrap intent");
+    expect(await currentJournal(persisted.value)).toStrictEqual(terminal);
+    expect(readdirSync(fixture.paths.stateDir).filter((name) => name.endsWith(".plan.json"))).toHaveLength(1);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
@@ -908,6 +922,93 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     }));
     expect(admission.report.ids.map((summary) => summary.status)).toStrictEqual(["verified"]);
     expect(admission.blocksNewIntent).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-189 review: a recurring failure before the creation evidence is
+   * written resolves to `published: 1` with no creation-evidence row; a file
+   * swapped or hardlinked before the resolution is a security refusal (exit 5).
+   */
+  it.each(["published_one", "swap", "hardlink"] as const)("resolves a created file failing again before its evidence (%s)", async (mode) => {
+    let renamed: string | null = null;
+    const fixture: CommandFixture = await createCommandFixture(`bootstrap-created-file-before-evidence-${mode}`, {
+      bootstrapAvailable: true,
+      bootstrapFailureHook: (point) => {
+        if (point === "after_forward_rename" && renamed === null) {
+          const planName = readdirSync(fixture.paths.stateDir).find((name) => name.endsWith(".plan.json"));
+          const plan = JSON.parse(readFileSync(join(fixture.paths.stateDir, String(planName)), "utf8")) as {
+            readonly createdPaths: readonly { readonly kind: string; readonly path: string }[];
+          };
+          renamed = String(plan.createdPaths.find((row) => row.kind === "file")?.path);
+          throw new Error("synthetic bootstrap failure at after_forward_rename");
+        }
+        if (point === "before_creation_evidence" && renamed !== null) {
+          if (mode === "swap") {
+            const bytes = readFileSync(renamed);
+            renameSync(renamed, `${renamed}.swapped`);
+            writeFileSync(renamed, bytes, { mode: lstatSync(`${renamed}.swapped`).mode & 0o777 });
+          } else if (mode === "hardlink") {
+            linkSync(renamed, `${renamed}.hardlink`);
+          }
+          throw new Error("synthetic recurring failure before creation evidence");
+        }
+      },
+    });
+
+    const failed = await runInit(fixture.context, ACCEPTED);
+
+    if (failed.ok) throw new Error("init succeeded through a recurring publication failure");
+    const persisted = await persistedPlan(fixture);
+    const journal = await currentJournal(persisted.value);
+    if (mode !== "published_one") {
+      expect(failed.code).toBe(EXIT_CODES.securityRefusal);
+      expect(failed.error.message).toContain("a publish intent found its payload in neither place");
+      expect(journal).toMatchObject({ phase: "compensating", publishIntent: { scope: "ordinary", published: null } });
+      return;
+    }
+    expect(journal, JSON.stringify({ failed, trace: fixture.bootstrapTrace.slice(-30) })).toMatchObject({
+      phase: "retained",
+      terminalOutcome: "rolled_back",
+      publishIntent: { scope: "ordinary", published: 1 },
+    });
+    const intent = journal.publishIntent as JsonRecord;
+    expect(deriveBootstrapRetentionAuthorities(
+      persisted.value as never,
+      deriveBootstrapTerminalJournal(journal as never),
+    ).some((row) => row.role === "creation_evidence" &&
+      row.sourcePath.endsWith(`.ordinary.${String(intent.ordinal).padStart(10, "0")}.creation.json`))).toBe(false);
+    expect(readdirSync(fixture.paths.stateDir).some((name) => name.endsWith(".creation.json") &&
+      name.includes(`.ordinary.${String(intent.ordinal).padStart(10, "0")}.`))).toBe(false);
+    const admission = await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+      productHome: fixture.paths.home,
+      stateDirectory: fixture.paths.stateDir,
+      initialRoots: [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
+    }));
+    expect(admission.report.ids.map((summary) => summary.status)).toStrictEqual(["verified"]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** NEW-189 review: a forward Foundation journal published before any mutation moved resolves to `published: 0`. */
+  it("rolls back a forward Foundation participant failing again before its mutations move", async () => {
+    const fixture = await createCommandFixture("bootstrap-foundation-published-zero", {
+      bootstrapAvailable: true,
+      interruptAfter: "staged",
+      interruptKind: "fresh_init_artifacts",
+    });
+
+    const failed = await runInit(fixture.context, ACCEPTED);
+
+    if (failed.ok) throw new Error("init succeeded through a recurring Foundation failure");
+    const persisted = await persistedPlan(fixture);
+    expect(await currentJournal(persisted.value), JSON.stringify({ failed, trace: fixture.bootstrapTrace.slice(-30) })).toMatchObject({
+      phase: "retained",
+      terminalOutcome: "rolled_back",
+      nextFoundationParticipant: 0,
+      publishIntent: { scope: "foundation", ordinal: 0, published: 0 },
+    });
+    for (const mutation of participant(persisted.value, "forward").mutations as JsonRecord[]) {
+      expect(await exists(String(mutation.targetPath))).toBe(false);
+    }
+    expect(fixture.transactionUnlinkRequests).toStrictEqual([]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
