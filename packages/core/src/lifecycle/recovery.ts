@@ -37,6 +37,7 @@ import type {
   LifecycleJournalClosureV1,
   LifecycleJournalClosureV2,
 } from "./types.js";
+import { childOf, namesOf, syncDirectoryAt } from "./fs-helpers.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
 
@@ -270,23 +271,23 @@ async function removePlanlessCoordinatorStaging(
   const children = await namesOf(fs, root);
   for (const name of children) {
     if (DERIVED_STAGING_CHILDREN.includes(name)) {
-      const derived = await fs.lstat(childPath(path, name));
+      const derived = await fs.lstat(childOf(path, name));
       if (derived !== null) await removeAdmittedTree(fs, derived);
       continue;
     }
     if (name !== FOUNDATION_STAGING_LEAF) {
-      refuseLifecycleRecovery("lifecycle_staging_shape", childPath(path, name));
+      refuseLifecycleRecovery("lifecycle_staging_shape", childOf(path, name));
     }
-    const foundation = await fs.lstat(childPath(path, name));
+    const foundation = await fs.lstat(childOf(path, name));
     if (foundation === null) continue;
     for (const participant of await namesOf(fs, foundation)) {
-      const directory = await fs.lstat(childPath(foundation.path, participant));
+      const directory = await fs.lstat(childOf(foundation.path, participant));
       if (directory === null) continue;
       for (const leaf of await namesOf(fs, directory)) {
         if (leaf !== STAGED_JOURNAL_LEAF) {
-          refuseLifecycleRecovery("lifecycle_staging_shape", childPath(directory.path, leaf));
+          refuseLifecycleRecovery("lifecycle_staging_shape", childOf(directory.path, leaf));
         }
-        const entry = await fs.lstat(childPath(directory.path, leaf));
+        const entry = await fs.lstat(childOf(directory.path, leaf));
         if (entry === null) continue;
         await fs.unlinkExact(entry);
       }
@@ -313,33 +314,11 @@ async function removeAdmittedTree(fs: LifecycleGuardedFileSystemV1, entry: Lifec
   }
   if (entry.kind !== "directory") refuseLifecycleRecovery("lifecycle_staging_shape", entry.path);
   for (const name of await namesOf(fs, entry)) {
-    const child = await fs.lstat(childPath(entry.path, name));
+    const child = await fs.lstat(childOf(entry.path, name));
     if (child !== null) await removeAdmittedTree(fs, child);
   }
   await fs.syncDirectory(entry);
   await fs.rmdirExactEmpty(entry);
-}
-
-async function namesOf(
-  fs: LifecycleGuardedFileSystemV1,
-  directory: LifecycleGuardedEntryV1,
-): Promise<readonly string[]> {
-  const names: string[] = [];
-  for await (const name of fs.names(directory)) names.push(name);
-  return names.sort();
-}
-
-function childPath(directory: CanonicalAbsolutePathV1, name: string): CanonicalAbsolutePathV1 {
-  return `${directory}/${name}` as CanonicalAbsolutePathV1;
-}
-
-async function syncDirectoryAt(
-  fs: LifecycleGuardedFileSystemV1,
-  path: CanonicalAbsolutePathV1,
-): Promise<void> {
-  const entry = await fs.lstat(path);
-  if (entry === null) refuseLifecycleRecovery("lifecycle_guarded_parent", path);
-  await fs.syncDirectory(entry);
 }
 
 /** What the V2 scan observed beside the V1 ledger; the V1 closure is computed without V2 envelopes. */

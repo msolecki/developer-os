@@ -4,10 +4,10 @@
  * ledger's admitted orphan leaves — never from walking a directory and removing what is
  * found: an unknown child, a wrong type and a non-empty directory are all preserved.
  */
-import { encodeFoundationJournalJsonV1, validateJournal } from "../transactions/store.js";
+import { validateJournal } from "../transactions/store.js";
 import type { TransactionStore } from "../transactions/store.js";
 import type { TransactionJournalV1 } from "../transactions/types.js";
-import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
+import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
 import type { FoundationLedgerOrphanV1, LifecycleLedgerRootsV1 } from "./foundation-ledger.js";
 import {
   lifecycleParentPath,
@@ -17,11 +17,13 @@ import {
 } from "./guarded-fs.js";
 import { parseFoundationTransactionId } from "./ids.js";
 import type { HeldLifecycleStableLockV1 } from "./locks.js";
+import { requireHeldGlobalLock } from "./coordinator.js";
 import {
   LIFECYCLE_PLAN_BOUNDS,
   type FoundationTerminalCompactionV1,
   type LifecycleTerminalOutcomeV1,
 } from "./types.js";
+import { childOf, LOWERCASE_V4_UUID, readStrictFoundationJournal, syncDirectoryAt } from "./fs-helpers.js";
 
 export interface FoundationCompactionDependenciesV1 {
   readonly fs: LifecycleGuardedFileSystemV1;
@@ -35,12 +37,6 @@ const TERMINAL_PHASES: readonly LifecycleTerminalOutcomeV1[] = ["finalized", "ro
 const STAGING_LEAF = /^(0|[1-9][0-9]*)\.bin(?:\.sha256)?(?:\.tmp)?$/u;
 const BACKUP_LEAF = /^(0|[1-9][0-9]*)\.(?:bin(?:\.tmp)?|json(?:\.sha256)?(?:\.tmp)?)$/u;
 const STORE_TEMP_SUFFIX = ".json.tmp";
-const LOWERCASE_V4_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
-
-function child(directory: CanonicalAbsolutePathV1, name: string): CanonicalAbsolutePathV1 {
-  return parseCanonicalAbsolutePathText(`${directory}/${name}`);
-}
 
 /** §2.4's `.<id>.<lowercase-v4-uuid>.json.tmp`, bound to the one ID whose orphan named it. */
 function storeRewriteTempOf(id: string, name: string): boolean {
@@ -77,31 +73,31 @@ export async function compactTerminalFoundationTransaction(
   compaction: FoundationTerminalCompactionV1,
 ): Promise<void> {
   const { fs, roots, store } = dependencies;
-  await requireHeldGlobalLock(dependencies);
+  await requireHeldGlobalLock(dependencies.fs, dependencies.global);
   const id = compaction.transactionId;
 
   await store.withTransactionLock(id, async () => {
-    const journal = await fs.lstat(child(roots.foundationJournals, `${id}.json`));
+    const journal = await fs.lstat(childOf(roots.foundationJournals, `${id}.json`));
     if (journal !== null) await requireTerminalJournal(dependencies, journal, compaction);
 
-    await collectIdDirectory(dependencies, child(roots.foundationStaging, id), STAGING_LEAF, {
+    await collectIdDirectory(dependencies, childOf(roots.foundationStaging, id), STAGING_LEAF, {
       leaf: "staging_leaf_unlinked",
       directory: "staging_directory_removed",
     }, compaction.mutationCount);
-    await collectIdDirectory(dependencies, child(roots.foundationBackups, id), BACKUP_LEAF, {
+    await collectIdDirectory(dependencies, childOf(roots.foundationBackups, id), BACKUP_LEAF, {
       leaf: "backup_leaf_unlinked",
       directory: "backup_directory_removed",
     }, compaction.mutationCount);
 
     if (journal !== null) {
       await fs.unlinkExact(journal);
-      await syncDirectoryAt(dependencies, roots.foundationJournals);
+      await syncDirectoryAt(dependencies.fs, roots.foundationJournals);
       await dependencies.afterBoundary?.("journal_unlinked");
     }
-    const lock = await fs.lstat(child(roots.foundationJournals, `.${id}.lock`));
+    const lock = await fs.lstat(childOf(roots.foundationJournals, `.${id}.lock`));
     if (lock !== null) {
       await fs.unlinkExact(lock);
-      await syncDirectoryAt(dependencies, roots.foundationJournals);
+      await syncDirectoryAt(dependencies.fs, roots.foundationJournals);
       await dependencies.afterBoundary?.("lock_unlinked");
     }
   });
@@ -112,9 +108,9 @@ export async function removeFoundationOrphan(
   orphan: FoundationLedgerOrphanV1,
 ): Promise<void> {
   const { fs, roots, store } = dependencies;
-  await requireHeldGlobalLock(dependencies);
+  await requireHeldGlobalLock(dependencies.fs, dependencies.global);
   const id = orphan.id;
-  const journalPath = child(roots.foundationJournals, `${id}.json`);
+  const journalPath = childOf(roots.foundationJournals, `${id}.json`);
 
   await store.withTransactionLock(id, async () => {
     const journal = await fs.lstat(journalPath);
@@ -122,9 +118,9 @@ export async function removeFoundationOrphan(
       if (journal === null) {
         refuseLifecycleRecovery("lifecycle_foundation_orphan_journal", journalPath);
       }
-      await readStrictJournal(dependencies, journal, id);
+      await readStrictFoundationJournal(dependencies.fs, journal, id);
       await fs.unlinkExact(orphan.temp);
-      await syncDirectoryAt(dependencies, roots.foundationJournals);
+      await syncDirectoryAt(dependencies.fs, roots.foundationJournals);
       await dependencies.afterBoundary?.("rewrite_temp_unlinked");
       return;
     }
@@ -133,13 +129,13 @@ export async function removeFoundationOrphan(
     }
     if (orphan.kind === "lock_only") {
       for (const directory of [roots.foundationStaging, roots.foundationBackups]) {
-        const present = await fs.lstat(child(directory, id));
+        const present = await fs.lstat(childOf(directory, id));
         if (present !== null) {
           refuseLifecycleRecovery("lifecycle_foundation_orphan_leaf", present.path);
         }
       }
       await fs.unlinkExact(orphan.lock);
-      await syncDirectoryAt(dependencies, roots.foundationJournals);
+      await syncDirectoryAt(dependencies.fs, roots.foundationJournals);
       await dependencies.afterBoundary?.("lock_unlinked");
       return;
     }
@@ -153,9 +149,9 @@ async function removePlanlessLeaves(
   leaves: readonly LifecycleGuardedEntryV1[],
 ): Promise<void> {
   const { fs, roots } = dependencies;
-  const stagingRoot = child(roots.foundationStaging, id);
-  const backupRoot = child(roots.foundationBackups, id);
-  const lockPath = child(roots.foundationJournals, `.${id}.lock`);
+  const stagingRoot = childOf(roots.foundationStaging, id);
+  const backupRoot = childOf(roots.foundationBackups, id);
+  const lockPath = childOf(roots.foundationJournals, `.${id}.lock`);
   const files: LifecycleGuardedEntryV1[] = [];
   const directories: LifecycleGuardedEntryV1[] = [];
   const locks: LifecycleGuardedEntryV1[] = [];
@@ -177,11 +173,11 @@ async function removePlanlessLeaves(
     left.path < right.path ? 1 : -1,
   )) {
     await fs.rmdirExactEmpty(directory);
-    await syncDirectoryAt(dependencies, lifecycleParentPath(directory.path));
+    await syncDirectoryAt(dependencies.fs, lifecycleParentPath(directory.path));
   }
   for (const lock of locks) {
     await fs.unlinkExact(lock);
-    await syncDirectoryAt(dependencies, roots.foundationJournals);
+    await syncDirectoryAt(dependencies.fs, roots.foundationJournals);
   }
   await dependencies.afterBoundary?.("orphan_removed");
 }
@@ -202,13 +198,13 @@ async function collectIdDirectory(
   for await (const name of fs.names(directory)) {
     const matched = grammar.exec(name);
     if (matched === null || Number(matched[1]) >= mutationCount) {
-      refuseLifecycleRecovery("lifecycle_foundation_compaction_child", child(path, name));
+      refuseLifecycleRecovery("lifecycle_foundation_compaction_child", childOf(path, name));
     }
     names.push(name);
   }
 
   for (const name of names.sort()) {
-    const leaf = await fs.lstat(child(path, name));
+    const leaf = await fs.lstat(childOf(path, name));
     if (leaf === null) continue;
     if (leaf.kind !== "regular_file") {
       refuseLifecycleRecovery("lifecycle_guarded_kind", leaf.path);
@@ -218,36 +214,8 @@ async function collectIdDirectory(
   }
   await fs.syncDirectory(directory);
   await fs.rmdirExactEmpty(directory);
-  await syncDirectoryAt(dependencies, lifecycleParentPath(path));
+  await syncDirectoryAt(dependencies.fs, lifecycleParentPath(path));
   await dependencies.afterBoundary?.(boundaries.directory);
-}
-
-/**
- * §2.4's "strict matching final journal": complete, canonical `FoundationJournalJsonV1`
- * bytes for exactly this ID, read under the stable lock rather than trusted from the
- * enumeration that chose the leaf.
- */
-async function readStrictJournal(
-  dependencies: FoundationCompactionDependenciesV1,
-  entry: LifecycleGuardedEntryV1,
-  id: string,
-): Promise<TransactionJournalV1> {
-  const bytes = await dependencies.fs.readRegular(
-    entry,
-    LIFECYCLE_PLAN_BOUNDS.journalBytes.maximum,
-  );
-  let text: string;
-  let journal: TransactionJournalV1;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    journal = validateJournal(JSON.parse(text) as unknown);
-  } catch {
-    return refuseLifecycleRecovery("lifecycle_foundation_journal_bytes", entry.path);
-  }
-  if (journal.id !== id || encodeFoundationJournalJsonV1(journal) !== text) {
-    refuseLifecycleRecovery("lifecycle_foundation_journal_bytes", entry.path);
-  }
-  return journal;
 }
 
 async function requireTerminalJournal(
@@ -255,7 +223,7 @@ async function requireTerminalJournal(
   entry: LifecycleGuardedEntryV1,
   compaction: FoundationTerminalCompactionV1,
 ): Promise<void> {
-  const journal = await readStrictJournal(dependencies, entry, compaction.transactionId);
+  const journal = await readStrictFoundationJournal(dependencies.fs, entry, compaction.transactionId);
   if (
     journal.phase !== compaction.terminalPhase ||
     journal.mutations.length !== compaction.mutationCount
@@ -264,25 +232,3 @@ async function requireTerminalJournal(
   }
 }
 
-async function requireHeldGlobalLock(
-  dependencies: FoundationCompactionDependenciesV1,
-): Promise<void> {
-  const observed = await dependencies.fs.lstat(dependencies.global.path);
-  if (
-    observed === null ||
-    observed.kind !== "regular_file" ||
-    observed.dev !== dependencies.global.dev ||
-    observed.ino !== dependencies.global.ino
-  ) {
-    refuseLifecycleRecovery("lifecycle_global_lock_identity", dependencies.global.path);
-  }
-}
-
-async function syncDirectoryAt(
-  dependencies: FoundationCompactionDependenciesV1,
-  path: CanonicalAbsolutePathV1,
-): Promise<void> {
-  const entry = await dependencies.fs.lstat(path);
-  if (entry === null) refuseLifecycleRecovery("lifecycle_guarded_parent", path);
-  await dependencies.fs.syncDirectory(entry);
-}

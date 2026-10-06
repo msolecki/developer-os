@@ -69,6 +69,7 @@ import {
   type LifecycleCoordinatorPlanCoreV1,
   type LifecycleJournalClosureV1,
 } from "./types.js";
+import { LOWERCASE_V4_UUID } from "./fs-helpers.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
 
@@ -172,8 +173,6 @@ const EFFECT_PLAN_DOMAINS = {
   launchd: LIFECYCLE_HASH_DOMAINS.launchdEffectPlan,
 } as const;
 
-const LOWERCASE_V4_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 type EffectKindV1 = "git" | "launchd";
 

@@ -51,6 +51,7 @@ import {
 } from "./ledger.js";
 import { classifyLifecycleJournalClosureV2, type LifecycleClosureV2ObservationV1 } from "./recovery.js";
 import type { LifecycleCoordinatorPlanCoreV1, LifecycleJournalClosureV2 } from "./types.js";
+import { namesOf } from "./fs-helpers.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
 
@@ -125,12 +126,6 @@ function coordinatorIdOf(value: string): LifecycleCoordinatorIdV1 | null {
   }
 }
 
-async function namesOf(scan: ScanV1, directory: LifecycleGuardedEntryV1): Promise<readonly string[]> {
-  const names: string[] = [];
-  for await (const name of scan.fs.names(directory)) names.push(name);
-  return names.sort();
-}
-
 async function ownedDirectory(scan: ScanV1, path: CanonicalAbsolutePathV1 | null): Promise<LifecycleGuardedEntryV1 | null> {
   if (path === null) return null;
   const entry = await scan.fs.lstat(path);
@@ -176,7 +171,7 @@ async function scanEnvelopes(scan: ScanV1): Promise<{
   const envelopes = new Map<LifecycleCoordinatorIdV1, EnvelopeFactsV1>();
   const root = await ownedDirectory(scan, scan.roots.coordinatorJournals);
   if (root === null) return { envelopes, leafIds: new Set() };
-  const names = await namesOf(scan, root);
+  const names = await namesOf(scan.fs, root);
   const leafIds = new Set(names.map(coordinatorLeafStem));
   for (const name of names) {
     const id = coordinatorIdOf(coordinatorLeafStem(name));
@@ -233,11 +228,11 @@ async function scanStagingRoots(
   const stagings = new Map<LifecycleCoordinatorIdV1, StagingFactsV1>();
   const root = await ownedDirectory(scan, scan.roots.lifecycleStaging);
   if (root === null) return stagings;
-  for (const name of await namesOf(scan, root)) {
+  for (const name of await namesOf(scan.fs, root)) {
     const id = coordinatorIdOf(name);
     const entry = id === null ? null : await ownedDirectory(scan, at(root.path, name));
     if (id === null || entry === null) continue;
-    const children = await namesOf(scan, entry);
+    const children = await namesOf(scan.fs, entry);
     const claimed = envelopes.has(id) || children.some((child) => child === "update" || child.startsWith(CONSTRUCTION_PREFIX));
     if (claimed) stagings.set(id, await inspectStaging(scan, id, entry, children));
   }
@@ -262,14 +257,14 @@ async function inspectStaging(
       malformed = true;
       continue;
     }
-    for (const child of await namesOf(scan, directory)) {
+    for (const child of await namesOf(scan.fs, directory)) {
       const nested = legal.includes(child) ? await ownedDirectory(scan, at(directory.path, child)) : null;
       if (nested === null) {
         malformed = true;
         continue;
       }
       if (subtree !== "participants" || child !== "foundation") continue;
-      for (const transaction of await namesOf(scan, nested)) {
+      for (const transaction of await namesOf(scan.fs, nested)) {
         try {
           foundationTransactionIds.push(parseAllocatedLifecycleId("tx", transaction, null));
         } catch {

@@ -53,6 +53,7 @@ import {
   type LifecycleCoordinatorJournalV1,
   type LifecycleCoordinatorPlanCoreV1,
 } from "./types.js";
+import { LOWERCASE_V4_UUID } from "./fs-helpers.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
 
@@ -64,8 +65,6 @@ const JOURNAL_SUFFIX = ".json";
 /** One coordinator, every Foundation ref, both Git and both launchd effects, and the manifest. */
 const MAX_RESERVATION_SLOTS = 1 + LIFECYCLE_PLAN_BOUNDS.foundationRefs.maximum + 4 + 1;
 
-const LOWERCASE_V4_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 /** A placeholder of the exact width `LowerHexSha256` fixes, for the conservative arms. */
 const WIDEST_HASH = "f".repeat(64) as LowerHexSha256;

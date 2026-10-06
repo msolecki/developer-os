@@ -25,6 +25,7 @@ import {
   parseLifecycleIdAllocator,
   parseLifecycleInstallNonce,
 } from "./records.js";
+import { LOWERCASE_V4_UUID } from "./fs-helpers.js";
 
 export interface LifecycleAllocatorStateV1 {
   readonly nonce: LifecycleInstallNonceV1;
@@ -63,8 +64,6 @@ const TEMP_PREFIX = ".lifecycle-id-allocator.";
 const TEMP_SUFFIX = ".json.tmp";
 const NONCE_FILE_BYTES = 65;
 const MAX_ALLOCATOR_BYTES = 1_024;
-const LOWERCASE_V4_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 const encoder = new TextEncoder();
 

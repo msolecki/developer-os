@@ -17,7 +17,7 @@ import type {
   TransactionJournalV1,
   TransactionPhase,
 } from "../transactions/types.js";
-import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
+import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
 import {
   parseLowerHexSha256,
   type LowerHexSha256,
@@ -39,6 +39,7 @@ import {
   type FoundationParticipantRefV1,
   type FoundationParticipantSlotV1,
 } from "./types.js";
+import { childOf, syncDirectoryAt, unlinkStagedBlob } from "./fs-helpers.js";
 
 export interface FoundationParticipantMutationInputV1 {
   readonly targetPath: CanonicalAbsolutePathV1;
@@ -68,10 +69,6 @@ export interface FoundationParticipantDependenciesV1 {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
-
-function child(directory: CanonicalAbsolutePathV1, name: string): CanonicalAbsolutePathV1 {
-  return parseCanonicalAbsolutePathText(`${directory}/${name}`);
-}
 
 function journalKindOf(
   slot: FoundationParticipantSlotV1,
@@ -125,13 +122,13 @@ export class FoundationParticipantExecutor {
       await this.requireInverseOfStagedForward(input, mutations, input.role.forwardId);
     }
 
-    const blobDirectory = await this.ensureDirectory(child(roots.foundationStaging, id));
+    const blobDirectory = await this.ensureDirectory(childOf(roots.foundationStaging, id));
     for (const [index, mutation] of input.mutations.entries()) {
       const content = mutation.content;
       if (content === null) continue;
-      await fs.writeExclusive(child(blobDirectory.path, `${String(index)}.bin`), content);
+      await fs.writeExclusive(childOf(blobDirectory.path, `${String(index)}.bin`), content);
       await fs.writeExclusive(
-        child(blobDirectory.path, `${String(index)}.bin.sha256`),
+        childOf(blobDirectory.path, `${String(index)}.bin.sha256`),
         encoder.encode(`${digestOf(content)}\n`),
       );
     }
@@ -149,13 +146,13 @@ export class FoundationParticipantExecutor {
     }
 
     const coordinatorDirectory = await this.ensureDirectory(
-      child(roots.lifecycleStaging, input.coordinatorId),
+      childOf(roots.lifecycleStaging, input.coordinatorId),
     );
     const foundationDirectory = await this.ensureDirectory(
-      child(coordinatorDirectory.path, "foundation"),
+      childOf(coordinatorDirectory.path, "foundation"),
     );
-    const journalDirectory = await this.ensureDirectory(child(foundationDirectory.path, id));
-    const staged = await fs.writeExclusive(child(journalDirectory.path, "journal.json"), plannedBytes);
+    const journalDirectory = await this.ensureDirectory(childOf(foundationDirectory.path, id));
+    const staged = await fs.writeExclusive(childOf(journalDirectory.path, "journal.json"), plannedBytes);
     await fs.syncDirectory(journalDirectory);
     await this.dependencies.afterBoundary?.("participant_staged");
 
@@ -165,7 +162,7 @@ export class FoundationParticipantExecutor {
       mutations,
       maximumJournalBytes,
       initialJournal: {
-        finalPath: child(roots.foundationJournals, `${id}.json`),
+        finalPath: childOf(roots.foundationJournals, `${id}.json`),
         plannedBytesHash: digestOf(plannedBytes),
         stagedPath: staged.path,
         stagedIdentity: {
@@ -245,18 +242,14 @@ export class FoundationParticipantExecutor {
     const staged = await fs.lstat(ref.initialJournal.stagedPath);
     if (staged !== null) {
       await fs.unlinkExact(staged);
-      await this.syncDirectoryAt(lifecycleParentPath(staged.path));
+      await syncDirectoryAt(this.dependencies.fs, lifecycleParentPath(staged.path));
       await this.dependencies.afterBoundary?.("staged_journal_unlinked");
     }
     for (const mutation of ref.mutations) {
       const stagedPath = mutation.stagedPath;
       if (stagedPath === null) continue;
-      for (const path of [stagedPath, parseCanonicalAbsolutePathText(`${stagedPath}.sha256`)]) {
-        const leaf = await fs.lstat(path);
-        if (leaf === null) continue;
-        await fs.unlinkExact(leaf);
-      }
-      await this.syncDirectoryAt(lifecycleParentPath(stagedPath));
+      await unlinkStagedBlob(fs, stagedPath);
+      await syncDirectoryAt(this.dependencies.fs, lifecycleParentPath(stagedPath));
       await this.dependencies.afterBoundary?.("staged_blob_unlinked");
     }
   }
@@ -303,8 +296,8 @@ export class FoundationParticipantExecutor {
         expectedBeforeHash: input.expectedBeforeHash,
         contentHash: digestOf(content),
         contentSize: content.byteLength,
-        stagedPath: child(
-          child(this.dependencies.roots.foundationStaging, id),
+        stagedPath: childOf(
+          childOf(this.dependencies.roots.foundationStaging, id),
           `${String(index)}.bin`,
         ),
       };
@@ -322,9 +315,9 @@ export class FoundationParticipantExecutor {
     forwardId: string,
   ): Promise<void> {
     const { fs, roots } = this.dependencies;
-    const forwardJournalPath = child(
-      child(
-        child(child(roots.lifecycleStaging, input.coordinatorId), "foundation"),
+    const forwardJournalPath = childOf(
+      childOf(
+        childOf(childOf(roots.lifecycleStaging, input.coordinatorId), "foundation"),
         forwardId,
       ),
       "journal.json",
@@ -356,7 +349,7 @@ export class FoundationParticipantExecutor {
         source.stagedRelativePath === null
           ? null
           : await this.stagedBlobHash(
-              child(child(roots.foundationStaging, forwardId), source.stagedRelativePath),
+              childOf(childOf(roots.foundationStaging, forwardId), source.stagedRelativePath),
             );
       const inverted =
         source.operation === "create"
@@ -456,12 +449,6 @@ export class FoundationParticipantExecutor {
       refuseLifecycleRecovery("lifecycle_guarded_kind", path);
     }
     return observed;
-  }
-
-  private async syncDirectoryAt(path: CanonicalAbsolutePathV1): Promise<void> {
-    const entry = await this.dependencies.fs.lstat(path);
-    if (entry === null) refuseLifecycleRecovery("lifecycle_guarded_parent", path);
-    await this.dependencies.fs.syncDirectory(entry);
   }
 }
 
