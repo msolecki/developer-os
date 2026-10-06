@@ -515,7 +515,13 @@ This holds in both the probed and the unprobed `doctor` run. Without such a reco
   `~/.claude/skills/developer-os/`, Codex under `<product-home>/codex/plugins/developer-os/`) and
   reports each verb with the age of its own last firing, plus any missing verb and an inconsistent
   executable. A Codex verb with no firing record of its own, or only one older than the installed
-  `hooks.json`, adds `CODEX_UNTRUSTED_HOOK_MESSAGE` and the fixed trust step as `recovery`. A shared
+  `hooks.json`, adds `CODEX_UNTRUSTED_HOOK_MESSAGE` and the fixed trust step as `recovery`.
+  Trade-off (FLOW-INIT-3): a record older than the installed `hooks.json` is rewritten on the next
+  fire (§3.6), and a Codex session started before a reinstall can still fire the old, trusted
+  commands. Its fire moves the record past the `hooks.json` mtime and hides the warning while new
+  sessions still face the re-gated commands. A `hooks.json` mtime in the future is ignored by the
+  writer, since no record written then can pass it and honouring it would rewrite on every fire;
+  `doctor` keeps comparing against it. A shared
   executable whose Node or entrypoint no longer exists (a Node upgrade removed the rendered path, so
   every hook exits 127, which both vendors ignore) adds `executable=missing` with `recovery`
   `developer-os init`, which takes precedence over the trust step. A vendor's

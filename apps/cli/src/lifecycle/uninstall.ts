@@ -1744,20 +1744,24 @@ export class LifecycleUninstaller {
 
       /**
        * W2-UNINST-3: what this run removed, not what the preview listed: the files its artifact steps
-       * removed, the leaves terminal compaction collects, and the directories `finalize_tombstones`
-       * emptied. A row already missing, a skipped non-regular entry and a kept directory are not in it.
+       * removed, the bookkeeping leaves observed absent after the settle, and the directories
+       * `finalize_tombstones` emptied. A row already missing, a skipped non-regular entry and a kept
+       * directory are not in it.
        */
-      const collected = new Set<string>([
+      const collected: string[] = [];
+      for (const leaf of [
         inputs.markerPreimage.targetPath,
         inputs.manifestPath,
         stateLeaf(productHome, ALLOCATOR_LEAF),
         stateLeaf(productHome, NONCE_LEAF),
         hookFiringRecordsPath(productHome),
         codexIngestHomePath(productHome),
-      ]);
+      ]) {
+        if (preview.removable.includes(leaf) && (await guardedEntry(lifecycle.fs, leaf)) === null) collected.push(leaf);
+      }
       const removed = [
         ...inputs.chunks.flat().map((mutation) => mutation.targetPath as string),
-        ...preview.removable.filter((path) => collected.has(path)),
+        ...collected,
         ...removedDirectories,
       ];
       return {
@@ -1925,19 +1929,24 @@ export async function planUninstallDetach(context: CliContext, lifecycle: CliLif
 
   /**
    * FLOW-UNINST-4: the drained uninstall removes `config.toml` a moment later, so an absent one has no
-   * `adapters` to flip and an invalid one is left for `planUninstall` to report as drift (exit 3). Any
-   * other read refusal, such as a symlink, still refuses.
+   * `adapters` to flip and an invalid one is left for `planUninstall` to report as drift (exit 3). A
+   * symlink or any other non-regular entry refuses here, exit 3, before the detach writes anything.
    */
   let configHash = "";
   let config: DeveloperOsConfigV1 | null = null;
-  const configPresent = await lstat(context.paths.configFile, { bigint: true }).then(
-    () => true,
-    (error: unknown) => {
-      if (isMissingEntry(error)) return false;
-      throw error;
-    },
-  );
-  if (configPresent) {
+  const configEntry = await lstat(context.paths.configFile, { bigint: true }).catch((error: unknown) => {
+    if (isMissingEntry(error)) return null;
+    throw error;
+  });
+  if (configEntry !== null && !configEntry.isFile()) {
+    throw new UninstallRefusal(
+      EXIT_CODES.decisionRequired,
+      "config.toml is a symlink or not a regular file; nothing was removed",
+      [context.paths.configFile],
+      `replace ${context.paths.configFile} with a regular file, then run developer-os uninstall again`,
+    );
+  }
+  if (configEntry !== null) {
     const text = await context.guards.readText(context.paths.configFile, async (handle) => {
       const bytes = await handle.readFile();
       configHash = hashBytes(bytes);

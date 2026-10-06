@@ -119,7 +119,11 @@ export async function recordHookFiring(request: HookFiringRequest): Promise<void
     // left by the previous command bytes (hooks.md §3.7) and would warn for up to 24 h about a firing hook.
     if (valid) {
       const seen = Date.parse(existing.lastSeen);
-      if (request.now.getTime() - seen < FIRING_RECORD_REFRESH_MS && seen >= (await hooksFileWrittenAt(request))) return;
+      // A hooks.json mtime in the future is ignored: no record written now can pass it, so honouring it
+      // would rewrite the record (through the gate) on every fire until the clock caught up.
+      const mtime = await hooksFileWrittenAt(request);
+      const writtenAt = mtime > request.now.getTime() ? -Infinity : mtime;
+      if (request.now.getTime() - seen < FIRING_RECORD_REFRESH_MS && seen >= writtenAt) return;
     }
 
     await (request.admit ?? (() =>

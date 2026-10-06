@@ -185,6 +185,19 @@ describe("recordHookFiring", () => {
     expect(await readFile(join(hooks, "codex.stop.json"), "utf8")).toBe(bytes);
   });
 
+  it("leaves a fresh record byte-identical when the installed hooks.json mtime is in the future (FLOW-INIT-3)", async () => {
+    await createHooksDirectory();
+    const bytes = record("Stop", new Date(NOW.getTime() - 100 * HOUR), new Date(NOW.getTime() - 60_000), "codex");
+    await writeFile(join(hooks, "codex.stop.json"), bytes, { mode: 0o600 });
+    const hooksFile = join(productHome, "codex", "plugins", "developer-os", "hooks", "hooks.json");
+    await mkdir(dirname(hooksFile), { recursive: true });
+    await writeFile(hooksFile, "{}\n");
+    const future = new Date(NOW.getTime() + HOUR);
+    await utimes(hooksFile, future, future);
+    await recordHookFiring(request({ vendor: "codex" }));
+    expect(await readFile(join(hooks, "codex.stop.json"), "utf8")).toBe(bytes);
+  });
+
   it("replaces a malformed record with a fresh one", async () => {
     await createHooksDirectory();
     await writeFile(join(hooks, "claude.stop.json"), "{not json", { mode: 0o600 });
