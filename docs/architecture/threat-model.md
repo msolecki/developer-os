@@ -1037,7 +1037,9 @@ run would refuse the capture permanently.
 
 **It holds with one stated residual, accepted rather than closed.** `ingest` runs as four transactions
 per capture plus a compensating rollback — `ingest-stage`, `ingest-apply`, `ingest-reindex`,
-`ingest-ingested`, `ingest-rollback` (`apps/cli/src/commands/ingest.ts:274-280`) — because
+`ingest-ingested`, `ingest-rollback` (`apps/cli/src/commands/ingest.ts:274-280`), plus one
+per-run `ingest-attempts` write of the reserved `state/ingest-attempts.json` after the capture loop,
+which records order only and touches neither a capture nor the vault (NEW-141) — because
 `BrainService.reindex()` reads the vault and cannot run until the apply has finalized, and because
 `validateChangePlan` grants ownership from a manifest a capture is deliberately absent from. **A crash
 after the apply has written its mutations leaves a capture at `staging` with its notes already

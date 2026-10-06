@@ -40,12 +40,31 @@ export function parseIngestAttempts(bytes: Uint8Array): ReadonlyMap<string, numb
   return parsed;
 }
 
-/** The empty record encodes to zero bytes, the same shape fresh `init` reserved. */
-export function encodeIngestAttempts(attempts: ReadonlyMap<string, number>): Uint8Array {
-  if (attempts.size === 0) return new Uint8Array();
+function encode(entries: readonly (readonly [string, number])[]): Uint8Array {
+  if (entries.length === 0) return new Uint8Array();
   return ENCODER.encode(
-    encodeCanonicalJson({ attempts: Object.fromEntries(attempts), schemaVersion: 1 }),
+    encodeCanonicalJson({ attempts: Object.fromEntries(entries), schemaVersion: 1 }),
   );
+}
+
+/**
+ * The empty record encodes to zero bytes, the same shape fresh `init` reserved. A record over
+ * `maximumBytes` keeps the captures with the most refusals — the ones the order must keep
+ * behind — and drops the rest, which then sort as untried.
+ */
+export function encodeIngestAttempts(
+  attempts: ReadonlyMap<string, number>,
+  maximumBytes = MAX_INGEST_ATTEMPTS_BYTES,
+): Uint8Array {
+  let entries = [...attempts];
+  let bytes = encode(entries);
+  if (bytes.byteLength <= maximumBytes) return bytes;
+  entries = entries.sort((left, right) => right[1] - left[1]);
+  while (bytes.byteLength > maximumBytes) {
+    entries = entries.slice(0, Math.floor(entries.length * 0.9));
+    bytes = encode(entries);
+  }
+  return bytes;
 }
 
 /**

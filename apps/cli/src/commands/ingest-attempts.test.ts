@@ -34,6 +34,25 @@ describe("the ingest attempt-order record (NEW-141)", () => {
     }
   });
 
+  it("round-trips a __proto__ capture id as an own entry, never as a prototype", () => {
+    const attempts = new Map([["__proto__", 3]]);
+    const parsed = parseIngestAttempts(encodeIngestAttempts(attempts));
+    expect(parsed).toStrictEqual(attempts);
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+  });
+
+  it("keeps the most-refused captures when the record would pass its byte cap", () => {
+    const attempts = new Map(Array.from({ length: 40 }, (_unused, n) => [`id-${String(n).padStart(2, "0")}`, n + 1] as const));
+    const full = encodeIngestAttempts(attempts);
+    const capped = encodeIngestAttempts(attempts, Math.floor(full.byteLength / 2));
+    expect(capped.byteLength).toBeLessThanOrEqual(Math.floor(full.byteLength / 2));
+    const kept = parseIngestAttempts(capped);
+    expect(kept.size).toBeGreaterThan(0);
+    expect(kept.size).toBeLessThan(40);
+    expect(Math.min(...kept.values())).toBeGreaterThan(40 - kept.size);
+    expect(encodeIngestAttempts(attempts, 1).byteLength).toBe(0);
+  });
+
   it("orders fewest refusals first and keeps captureId order among equals", () => {
     const ids = ["a", "b", "c", "d"];
     expect(orderByAttempts(ids, (id) => id, new Map([["a", 2], ["c", 1]]))).toStrictEqual(["b", "d", "c", "a"]);

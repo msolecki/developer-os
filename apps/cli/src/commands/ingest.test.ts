@@ -2442,6 +2442,25 @@ describe("runIngest, the agent call", () => {
     expect(JSON.parse(record)).toStrictEqual({ attempts: { [refusing.id]: 2 }, schemaVersion: 1 });
   });
 
+  it("warns once and leaves a symlinked attempt-order record untouched, with the run's outcome unchanged (NEW-141)", async () => {
+    const fixture = await installedFixture("ingest-attempt-order-symlink");
+    const seeded = await fixture.seedAccepted("the first observation");
+    fixture.reply(() => oneNote(seeded.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`));
+    const target = join(fixture.root, "elsewhere.json");
+    await nodeFs.writeFile(target, "", { mode: 0o600 });
+    const recordPath = join(fixture.paths.stateDir, "ingest-attempts.json");
+    await nodeFs.symlink(target, recordPath);
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    expect(fixture.io.err.filter((line) => line.startsWith("warning:"))).toHaveLength(1);
+    expect(await nodeFs.readlink(recordPath)).toBe(target);
+    expect(await nodeFs.readFile(target, "utf8")).toBe("");
+  });
+
   it("never creates the attempt-order record on an installation that did not reserve it (NEW-141)", async () => {
     const fixture = await installedFixture("ingest-attempt-order-unreserved");
     const seeded = await fixture.seedAccepted("the first observation");
