@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import {
+  foundationBindingsHash,
   SCHEDULED_JOB_IDS,
   deriveManifestPayloadPath,
   foundationParticipantPlanHash,
@@ -70,16 +71,9 @@ import type { RedactionKeyStatePlanV1 } from "./redaction-key.js";
 
 const DEV: UInt64DecimalV1 = parseUInt64Decimal("16777232");
 const INO: UInt64DecimalV1 = parseUInt64Decimal("184467440737095516");
-const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1\0";
 
 /** The synthetic manifest's own bytes: only its hash and length are load-bearing, not its content. */
 export const SYNTHETIC_MANIFEST_BYTES = "{}\n";
-
-export function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
-  return parseLowerHexSha256(
-    createHash("sha256").update(FOUNDATION_BINDINGS_DOMAIN).update(JSON.stringify(ids)).digest("hex"),
-  );
-}
 
 /** One synthetic Foundation participant: a create forward or its paired remove compensation. */
 export function syntheticFoundationRef(options: {

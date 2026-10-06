@@ -296,6 +296,7 @@ export {
   replaceInstructionBlock,
   stripInstructionBlock,
   ManifestMissingError,
+  foundationBindingsHash,
   ManifestStateParticipant,
   ManifestStateParticipantError,
   ManifestStateError,

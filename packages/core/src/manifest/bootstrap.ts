@@ -26,6 +26,7 @@ import {
   type UInt64DecimalV1,
   type UtcTimestampV1,
 } from "../update/scalars.js";
+import { foundationBindingsHash } from "./manifest-state.js";
 import type {
   BootstrapExpectedPayloadRefV1,
   FreshV2InitIdV1,
@@ -1519,10 +1520,6 @@ function validateInitialJournals(
   }
 }
 
-function foundationBindingHash(ids: readonly string[]): LowerHexSha256 {
-  return createHash("sha256").update("developer-os/manifest-foundation-bindings/v1\0").update(JSON.stringify(ids)).digest("hex") as LowerHexSha256;
-}
-
 function validateManifestBinding(
   value: ManifestStatePlanV1,
   operation: "fresh_v2_init",
@@ -1537,7 +1534,7 @@ function validateManifestBinding(
   const expectedKind = "fresh_v2_init";
   if (retainedValue.participantId !== `mf_${id}` || retainedValue.envelope.kind !== expectedKind || retainedValue.envelope.id !== id || retainedValue.bindings.externalEffects.length !== 0 || retainedValue.after.state !== "present" || retainedValue.after.hash !== v2ManifestHash || retainedValue.after.bytes?.kind !== "bootstrap_expected" || retainedValue.after.bytes.bootstrapId !== id || retainedValue.after.bytes.hash !== v2ManifestHash) return refuse();
   const forwardIds = refs.filter((ref) => ref.role.kind === "forward").map((ref) => ref.id);
-  if (retainedValue.bindings.foundationTransactions.count !== forwardIds.length || retainedValue.bindings.foundationTransactions.orderedIdsHash !== foundationBindingHash(forwardIds)) return refuse();
+  if (retainedValue.bindings.foundationTransactions.count !== forwardIds.length || retainedValue.bindings.foundationTransactions.orderedIdsHash !== foundationBindingsHash(forwardIds)) return refuse();
   return retainedValue;
 }
 

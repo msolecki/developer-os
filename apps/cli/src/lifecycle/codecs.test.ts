@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  foundationBindingsHash,
   ManifestStateParticipantError,
   EXIT_CODES,
   LIFECYCLE_STEP_GRAMMAR,
@@ -40,7 +41,6 @@ import {
   redactionKeyTombstonePath,
 } from "./redaction-key.js";
 import {
-  foundationBindingsHash,
   syntheticAutomationLiveOnly,
   syntheticAutomationPreview,
   syntheticGitEnable,

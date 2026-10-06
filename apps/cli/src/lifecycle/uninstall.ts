@@ -13,6 +13,7 @@ import { lstat, open, readdir } from "node:fs/promises";
 import { CODEX_HOOK_TRUST_RESIDUE } from "@developer-os/adapter-codex";
 
 import {
+  foundationBindingsHash,
   EXIT_CODES,
   FoundationParticipantExecutor,
   LifecycleCoordinator,
@@ -168,7 +169,6 @@ const MAX_MUTATION_BYTES = 16_777_216;
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 const MAX_PLAN_BYTES = 16_777_216;
 const MAX_JOURNAL_BYTES = 1_048_576;
-const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1\0";
 const WIDEST_UINT64 = "18446744073709551615";
 const WIDEST_HASH = "f".repeat(64);
 /** No core codec hashes a `ManifestStatePlanV1` yet, and `assertLaunchdPlanBindings` does not recompute this one. */
@@ -296,13 +296,6 @@ function unconfinedManifestAdmission(
       reason: "uninstall manifest bytes are hash-pinned to ManifestStatePlanV1.before.hash",
     }),
   };
-}
-
-function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
-  return createHash("sha256")
-    .update(FOUNDATION_BINDINGS_DOMAIN)
-    .update(JSON.stringify(ids))
-    .digest("hex") as LowerHexSha256;
 }
 
 interface ArtifactMutationV1 {

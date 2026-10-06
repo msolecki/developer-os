@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { basename, dirname } from "node:path";
 
 import {
+  foundationBindingsHash,
   advanceReleaseTrust,
   allocatedCounterOf,
   buildConstructionPlan,
@@ -1687,7 +1688,7 @@ class UpdateComposer {
         schemaVersion: 1,
         participantId,
         envelope: { kind: "lifecycle", id: this.#coordinatorId },
-        bindings: { foundationTransactions: { count: ids2.length, orderedIdsHash: manifestFoundationBindingsHash(ids2) }, externalEffects: refs },
+        bindings: { foundationTransactions: { count: ids2.length, orderedIdsHash: foundationBindingsHash(ids2) }, externalEffects: refs },
         manifestPath,
         tombstonePath: path(`${dirname(manifestPath)}/.installation-manifest.${participantId}.json.tombstone`),
         before: manifestBefore,
@@ -1958,11 +1959,6 @@ class UpdateComposer {
 /** §5.3: the ordered manifest-affecting Foundation IDs, every owner's forward refs in owner order. */
 export function updateManifestFoundationIds(owners: readonly OwnerUpdatePlanV1[]): readonly string[] {
   return owners.flatMap((plan) => plan.foundation.filter((ref) => ref.role.kind === "forward").map((ref) => ref.id as string));
-}
-
-/** `developer-os/manifest-foundation-bindings/v1\0` plus the JSON ID array, as the manifest codec recomputes it. */
-export function manifestFoundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
-  return createHash("sha256").update("developer-os/manifest-foundation-bindings/v1\0").update(JSON.stringify(ids)).digest("hex") as LowerHexSha256;
 }
 
 /** The manifest admission for an update plan (D72 P2: `construction_evidence`); the dispatcher uses the same. */

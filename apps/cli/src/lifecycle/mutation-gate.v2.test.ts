@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import {
+  foundationBindingsHash,
   EXIT_CODES,
   LIFECYCLE_HASH_DOMAINS,
   SCHEDULED_JOB_IDS,
@@ -71,7 +72,6 @@ const UID = process.getuid?.() ?? 0;
 const OWNER_UID = parseEffectiveUid(UID, UID);
 const DEV: UInt64DecimalV1 = parseUInt64Decimal("16777232");
 const INO: UInt64DecimalV1 = parseUInt64Decimal("184467440737095516");
-const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1\0";
 
 afterAll(removeCommandFixtures);
 
@@ -239,12 +239,6 @@ function hash(seed: string): LowerHexSha256 {
 
 function fileHash(text: string): LowerHexSha256 {
   return parseLowerHexSha256(createHash("sha256").update(text).digest("hex"));
-}
-
-function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
-  return parseLowerHexSha256(
-    createHash("sha256").update(FOUNDATION_BINDINGS_DOMAIN).update(JSON.stringify(ids)).digest("hex"),
-  );
 }
 
 /**

@@ -23,7 +23,7 @@ export {
 } from "./instruction-block.js";
 export type { InstructionBlockExtractionV1, InstructionBlockMergeV1 } from "./instruction-block.js";
 export { ManifestV1NotMigratableError, validateManifestBytes, validateManifestV1, validateManifestV2 } from "./v2.js";
-export { ManifestStateParticipant, ManifestStateParticipantError, validateManifestStatePlan } from "./manifest-state.js";
+export { foundationBindingsHash, ManifestStateParticipant, ManifestStateParticipantError, validateManifestStatePlan } from "./manifest-state.js";
 export {
   BootstrapStateError,
   bootstrapExternalShapeHash,
