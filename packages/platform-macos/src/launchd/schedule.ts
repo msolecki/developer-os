@@ -6,6 +6,7 @@ import {
   type ScheduledJobIdV1,
 } from "@developer-os/core";
 
+import { eligibleLaunchdJobs } from "./registry.js";
 import { LaunchdInputError, type LaunchdCalendarIntervalV1 } from "./types.js";
 
 type WeekdayIdV1 = Extract<NormalizedScheduleV1, { readonly cadence: "weekly" }>["day"];
@@ -102,7 +103,8 @@ export function reconcileAutomationSchedules(request: {
   readonly flags: readonly string[];
   readonly gitEligible: boolean;
 }): AutomationConfigV1 {
-  const eligible = SCHEDULED_JOB_IDS.filter((job) => job !== "git-sync" || request.gitEligible);
+  // MACOS-5: the registry's `requiresGitActivation` is the one source of the git-gated rule.
+  const eligible = eligibleLaunchdJobs(request.gitEligible).map((definition) => definition.id);
   const supplied = new Map<ScheduledJobIdV1, NormalizedScheduleV1 | null>();
   for (const flag of request.flags) {
     const parsed = parseScheduleFlag(flag);
