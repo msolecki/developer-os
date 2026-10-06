@@ -160,6 +160,8 @@ export const freshInitFineGrainedDeathPoints = [
   { name: "after_journal_advance" },
   { name: "before_lock_release" },
   { name: "after_lock_release" },
+  { name: "after_compensation_staged_file" },
+  { name: "after_compensation_evidence" },
   { name: "after_rolled_back" },
 ] as const;
 
@@ -3693,9 +3695,13 @@ export class BootstrapExecutor {
         if (row === undefined) {
           throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "payload retention cursor escaped plan");
         }
-        journal = await this.writeJournal(plan, journal, {
-          payloadRetentionPart: "staged_file",
-        });
+        // NEW-149: each part is written once; a resumed compensation continues from the recorded one.
+        if (journal.payloadRetentionPart === null) {
+          journal = await this.writeJournal(plan, journal, {
+            payloadRetentionPart: "staged_file",
+          });
+          this.checkpoint("after_compensation_staged_file");
+        }
         const reachedFoundation = plan.foundationParticipants.find((participant) => {
           const forwardId = participant.role.kind === "forward"
             ? participant.id
@@ -3747,9 +3753,12 @@ export class BootstrapExecutor {
             throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "payload changed persisted evidence identity");
           }
         }
-        journal = await this.writeJournal(plan, journal, {
-          payloadRetentionPart: "evidence",
-        });
+        if (journal.payloadRetentionPart === "staged_file") {
+          journal = await this.writeJournal(plan, journal, {
+            payloadRetentionPart: "evidence",
+          });
+          this.checkpoint("after_compensation_evidence");
+        }
       }
       journal = await this.writeJournal(plan, journal, {
         compensationNext: cursor - 1,
