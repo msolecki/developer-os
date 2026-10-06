@@ -500,6 +500,7 @@ export type {
 } from "./lifecycle/index.js";
 export {
   GIT_METADATA_BOUNDS,
+  GIT_OBJECT_COUNT_MAX,
   GitMetadataRefusalError,
   createNodeGitMetadataStream,
   gitReflogAppendLine,

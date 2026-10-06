@@ -276,6 +276,7 @@ describe("the package's public door", () => {
         "validateReleaseTrustState",
         "validateSignedReleaseDocument",
         "GIT_METADATA_BOUNDS",
+        "GIT_OBJECT_COUNT_MAX",
         "GitMetadataRefusalError",
         "createNodeGitMetadataStream",
         "gitReflogAppendLine",

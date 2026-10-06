@@ -29,14 +29,13 @@ import {
   type SystemPathInspectorSyncV1,
 } from "../system-executables.js";
 import { GIT_DISTRIBUTION_POLICY, type AdmittedGitExecutablesV1 } from "./distribution.js";
-import { expandGitArgv, validateSupportedGitProcessTable, type GitArgSlotValuesV1 } from "./process-table.js";
+import { EDGE_PHASE_BUDGET, expandGitArgv, validateSupportedGitProcessTable, type GitArgSlotValuesV1 } from "./process-table.js";
 import type {
   ClosedGitProcessEdgeIdV1,
   ClosedGitProcessNodeIdV1,
   GitEnvironmentProfileIdV1,
   GitEnvironmentSlotV1,
   GitExecutableIdV1,
-  GitProcessEdgePhaseV1,
   GitProcessEdgeV1,
   GitProcessIoProfileIdV1,
   GitProcessIoProfileV1,
@@ -48,16 +47,6 @@ import type {
 const ARGV_DOMAIN = "developer-os:git-process-argv:v1";
 const ENVIRONMENT_DOMAIN = "developer-os:git-process-environment:v1";
 const TERMINATION_GRACE_MS = 100;
-
-/** Spec §4.2: `push` begins at `direct_source_push` and covers its pack, transport and receive descendants. */
-const EDGE_PHASE_BUDGET: Readonly<Record<GitProcessEdgePhaseV1, GitProcessPhaseBudgetIdV1>> = {
-  distribution_probe: "distribution_probe",
-  config_candidate: "config_candidate",
-  source_build: "source_build",
-  push_pack: "push",
-  push_transport: "push",
-  destination_receive: "push",
-};
 
 export type GitProcessPhaseV1 = SupervisedPhaseV1 & { readonly id: GitProcessPhaseBudgetIdV1 };
 export type GitPushPhaseV1 = GitProcessPhaseV1 & { readonly id: "push" };

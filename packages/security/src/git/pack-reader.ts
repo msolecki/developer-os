@@ -1016,6 +1016,8 @@ export class GuardedSha1PackReader {
       if (count !== budget.packHeaderObjectCount) refuse("git_pack_count_mismatch");
       await validation.frame(count);
       await validation.resolveDeltas();
+      // Defence in depth (W2-SEC-GIT-4): unreachable today, since every framed entry is admitted once or
+      // refused; it restates spec §4.2's three-count proof independently of `#admit`.
       if (validation.admittedCount !== budget.admittedObjectCount) refuse("git_pack_count_mismatch");
 
       const index = await openGuarded(request.indexPath, effectiveUid);
@@ -1038,6 +1040,8 @@ export class GuardedSha1PackReader {
 
       ledger.deadline();
       const closure = validation.closure();
+      // Defence in depth (W2-SEC-GIT-4): unreachable today, since `closure` adds every admitted object or
+      // refuses; it restates spec §4.2's three-count proof independently of the walk.
       if (closure.size !== budget.closedEffectObjectCount) refuse("git_pack_count_mismatch");
       ledger.deadline();
       return {
