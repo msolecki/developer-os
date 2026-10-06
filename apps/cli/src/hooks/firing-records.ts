@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, open, rename, unlink } from "node:fs/promises";
+import { lstat, open, rename, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -34,6 +34,26 @@ export const HOOK_EVENT_OF: Readonly<Record<HookVendor, Readonly<Record<HookVerb
 });
 
 export const FIRING_RECORD_REFRESH_MS = 86_400_000;
+
+/**
+ * FLOW-INIT-3: each vendor's installed `hooks.json`, as `doctor` reads it: Claude's relative to the user home,
+ * Codex's relative to the product home. Spelled out because the hook path imports no adapter
+ * (`isolation.test.ts`); `contract-parity.test.ts` pins them to the adapters' constants.
+ */
+export const INSTALLED_HOOKS_FILE_SEGMENTS: Readonly<Record<HookVendor, readonly string[]>> = Object.freeze({
+  claude: [".claude", "skills", "developer-os", "hooks", "hooks.json"],
+  codex: ["codex", "plugins", "developer-os", "hooks", "hooks.json"],
+});
+
+/** The installed hooks file's mtime, or -Infinity when it cannot be read: `doctor`'s `writtenAt`. */
+async function hooksFileWrittenAt(request: HookFiringRequest): Promise<number> {
+  const base = request.vendor === "claude" ? request.userHome : request.productHome;
+  try {
+    return (await stat(join(base, ...INSTALLED_HOOKS_FILE_SEGMENTS[request.vendor]))).mtimeMs;
+  } catch {
+    return -Infinity;
+  }
+}
 
 /**
  * NEW-139: an empty `<vendor>.record_failed.json`, inside the Spec 1 §2.1 record grammar and one per vendor so
@@ -95,7 +115,12 @@ export async function recordHookFiring(request: HookFiringRequest): Promise<void
     const target = join(directory, name);
     const existing = await readRecord(target);
     const valid = existing !== null && existing.vendor === request.vendor && existing.event === event;
-    if (valid && request.now.getTime() - Date.parse(existing.lastSeen) < FIRING_RECORD_REFRESH_MS) return;
+    // FLOW-INIT-3: a record older than the installed hooks file is due as well, because `doctor` reads it as
+    // left by the previous command bytes (hooks.md §3.7) and would warn for up to 24 h about a firing hook.
+    if (valid) {
+      const seen = Date.parse(existing.lastSeen);
+      if (request.now.getTime() - seen < FIRING_RECORD_REFRESH_MS && seen >= (await hooksFileWrittenAt(request))) return;
+    }
 
     await (request.admit ?? (() =>
       assertOrdinaryCommandAdmitted(createBootstrapEvidenceInspectionRequest({
