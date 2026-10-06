@@ -85,6 +85,8 @@ import {
 import { createBootstrapEvidenceInspectionRequest } from "./context.js";
 import {
   admitBootstrapEvidencePlan,
+  BOOTSTRAP_MANUAL_ARCHIVE,
+  bootstrapArchiveRecovery,
   assertCombinedBootstrapCapacity,
   buildBootstrapRetentionEvidence,
   inspectBootstrapEvidenceAdmission,
@@ -1433,7 +1435,9 @@ export class BootstrapExecutor {
     if (evidenceBefore.blocksNewIntent) {
       throw new FreshBootstrapError(
         EXIT_CODES.recoveryRequired,
-        "retained bootstrap evidence requires manual archive before a new bootstrap intent",
+        BOOTSTRAP_MANUAL_ARCHIVE,
+        evidenceBefore.retainedRoots,
+        bootstrapArchiveRecovery(this.#dependencies.paths.home, evidenceBefore.retainedRoots, this.#dependencies.now()),
       );
     }
     const reusableBefore = await this.inspectReusableFreshDirectories(evidenceBefore);

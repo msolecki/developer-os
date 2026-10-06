@@ -36,9 +36,12 @@ import {
 
 export type AbsentManifestUninstallArmV1 = "key_absent" | "key_present";
 
-/** D20: the one way out of Foundation residue no absent-manifest arm may remove for the user. */
+/**
+ * D20: the one way out of Foundation residue no absent-manifest arm may remove for the user.
+ * `uninstall` is the command refusing, so naming it again would loop.
+ */
 export const ABSENT_MANIFEST_ARCHIVE_RECOVERY =
-  "developer-os uninstall, then archive the product home manually, then developer-os init";
+  "archive the product home manually, then developer-os init";
 
 const BOOTSTRAP_LEAF = ".lifecycle-bootstrap.lock";
 const LEAF_MODE = 0o600;

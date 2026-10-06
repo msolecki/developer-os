@@ -29,6 +29,7 @@ import type { RedactionScope } from "@developer-os/security";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import {
   BOOTSTRAP_MANUAL_ARCHIVE,
+  bootstrapArchiveRecovery,
   inspectBootstrapEvidenceAdmission,
   isStructurallyValidV2Manifest,
   MALFORMED_V2_MANIFEST,
@@ -925,6 +926,7 @@ export async function runInit(
         EXIT_CODES.recoveryRequired,
         BOOTSTRAP_MANUAL_ARCHIVE,
         evidence.retainedRoots,
+        bootstrapArchiveRecovery(context.paths.home, evidence.retainedRoots, context.now()),
       );
     }
     if (resumableBootstrap && !bootstrapAvailable) {

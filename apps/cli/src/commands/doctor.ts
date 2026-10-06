@@ -69,7 +69,7 @@ import {
 import type { CliContext } from "../context.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
-import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import { bootstrapArchiveRecovery, inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { isMissingEntry, readConfigFile } from "../config-file.js";
 import { FIRING_RECORD_REFRESH_MS, readHookFiringObservations } from "../hooks/firing-records.js";
 import {
@@ -1850,6 +1850,7 @@ async function collectFindings(
    */
   let evidenceIds: readonly BootstrapEvidenceSummaryV1[] = [];
   let evidenceFailure: Finding | null = null;
+  let archiveRecovery: string | undefined;
   try {
     const evidence = context.bootstrap?.state === "available"
       ? await context.bootstrap.inspectEvidence()
@@ -1859,6 +1860,10 @@ async function collectFindings(
           initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
         }));
     evidenceIds = evidence.report.ids;
+    // The same exact archive init's refusal names, while this evidence blocks a new init.
+    if (evidence.blocksNewIntent && evidence.active === null) {
+      archiveRecovery = bootstrapArchiveRecovery(context.paths.home, evidence.retainedRoots, context.now());
+    }
   } catch (error) {
     evidenceFailure = fail(
       "bootstrap-evidence",
@@ -1871,11 +1876,14 @@ async function collectFindings(
   }
   let vendorDrift: readonly DriftFinding[] | null = null;
   let instructions: readonly InstructionStatusV1[] = [];
-  const evidenceFindings = evidenceFailure !== null ? [evidenceFailure] : evidenceIds.map((summary) => warn(
-    `bootstrap-evidence:${summary.id}`,
-    `${summary.operation} ${summary.status}; ${String(summary.entryCount)} entries; ${summary.regularFileBytes} regular-file bytes retained at ${summary.vaultPath}`,
-    [summary.vaultPath],
-  ));
+  const evidenceFindings = evidenceFailure !== null ? [evidenceFailure] : evidenceIds.map((summary) => {
+    const finding = warn(
+      `bootstrap-evidence:${summary.id}`,
+      `${summary.operation} ${summary.status}; ${String(summary.entryCount)} entries; ${summary.regularFileBytes} regular-file bytes retained at ${summary.vaultPath}`,
+      [summary.vaultPath],
+    );
+    return archiveRecovery === undefined ? finding : { ...finding, check: { ...finding.check, recovery: archiveRecovery } };
+  });
 
   // Read once: `hooks` and both capability checks share one verdict (NEW-158); every read in it catches.
   const hooks = await hookReports(context, paths.stateDir);

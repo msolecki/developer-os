@@ -858,9 +858,27 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     // Both refuse with the manual-archive route a post-Foundation rollback already takes, and change no journal.
     if (removed.ok || reinstalled.ok) throw new Error(JSON.stringify({ removed, reinstalled }));
     expect(removed.code).toBe(EXIT_CODES.recoveryRequired);
-    expect(removed.error.recovery).toContain("archive the product home manually");
+    expect(removed.error.recovery).toBe("archive the product home manually, then developer-os init");
     expect(reinstalled.code).toBe(EXIT_CODES.recoveryRequired);
     expect(reinstalled.error.message).toContain("retained bootstrap evidence requires manual archive before a new bootstrap intent");
+    // The recovery names the real paths to move: the product home and its retained siblings, dated, then init.
+    const home = fixture.paths.home;
+    const date = fixture.context.now().toISOString().slice(0, 10);
+    const siblings = readdirSync(dirname(home))
+      .filter((name) => name.startsWith(`.developer-os-retained.${String(persisted.value.id)}.`))
+      .map((name) => join(dirname(home), name))
+      .toSorted();
+    expect(siblings.length).toBeGreaterThan(0);
+    const archive = [...[home, ...siblings].map((path) => `mv ${path} ${path}.archived-${date}`), "developer-os init"].join(", then ");
+    // Published through the CLI's diagnostic redaction, which masks this fixture's random temp segment (NEW-39).
+    expect(reinstalled.error.recovery).toBe(fixture.context.guards.redactDiagnostic(archive));
+    await closeBootstrapProcess(fixture);
+    const archivedReport = await runDoctorReport(fixture.rebuildContext());
+    expect(archivedReport.checks.find((check) => check.id === `bootstrap-evidence:${String(persisted.value.id)}`))
+      .toMatchObject({ status: "warn" });
+    expect([archive, fixture.context.guards.redactDiagnostic(archive)]).toContain(
+      archivedReport.checks.find((check) => check.id === `bootstrap-evidence:${String(persisted.value.id)}`)?.recovery,
+    );
     expect(await currentJournal(persisted.value)).toStrictEqual(terminal);
     expect(readdirSync(fixture.paths.stateDir).filter((name) => name.endsWith(".plan.json"))).toHaveLength(1);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
