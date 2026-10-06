@@ -1487,6 +1487,54 @@ function retentionEntryCount(): number {
   return deriveBootstrapRetentionTable(plan, admittedEvidence()).length;
 }
 
+function withoutPublishIntent(record: BootstrapJournalRecordV1): BootstrapJournalRecordV1 {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => key !== "publishIntent")) as unknown as BootstrapJournalRecordV1;
+}
+
+describe("publish intent grammar (NEW-189)", () => {
+  const creating = phaseRecord("creating", { nextCreatedPath: 3 });
+  const intent = { scope: "ordinary" as const, ordinal: 3, published: null };
+  const opened = successor(creating, { publishIntent: intent });
+  const step = plan.payloads.length + 3;
+
+  it("opens an intent alone at the frontier and closes it with its cursor advance", () => {
+    expect(validateBootstrapJournalSuccessor(plan, creating, opened)).toEqual(opened);
+    const withoutIntent = withoutPublishIntent(successor(opened, { nextCreatedPath: 4 }));
+    expect(validateBootstrapJournalSuccessor(plan, opened, withoutIntent)).toEqual(withoutIntent);
+    expect(() => validateBootstrapJournalSuccessor(plan, creating, successor(creating, { publishIntent: { ...intent, ordinal: 4 } }))).toThrow();
+    expect(() => validateBootstrapJournalSuccessor(plan, opened, successor(opened, { nextCreatedPath: 4 }))).toThrow();
+    expect(() => validateBootstrapJournalSuccessor(plan, creating, successor(creating, { publishIntent: { ...intent, published: 1 } }))).toThrow();
+  });
+
+  it("makes an open intent the first compensation step, resolved once by identity", () => {
+    const compensating = successor(opened, { phase: "compensating", direction: "compensating", compensationNext: step });
+    expect(validateBootstrapJournalSuccessor(plan, opened, compensating)).toEqual(compensating);
+    const published = successor(compensating, { compensationNext: step - 1, publishIntent: { ...intent, published: 1 } });
+    expect(validateBootstrapJournalSuccessor(plan, compensating, published)).toEqual(published);
+    const clearedRecord = withoutPublishIntent(successor(compensating, { compensationNext: step - 1 }));
+    expect(validateBootstrapJournalSuccessor(plan, compensating, clearedRecord)).toEqual(clearedRecord);
+    expect(() => validateBootstrapJournalSuccessor(plan, compensating, successor(compensating, { compensationNext: step - 1 }))).toThrow();
+    expect(() => validateBootstrapJournalSuccessor(plan, published, successor(published, { publishIntent: intent }))).toThrow();
+  });
+
+  it("keeps only a resolved intent through a terminal rollback", () => {
+    const resolved = { ...intent, published: 2 };
+    const drained = phaseRecord("compensating", { nextPayload: plan.payloads.length, nextCreatedPath: 3, compensationNext: -1, publishIntent: resolved });
+    const rolledBack = successor(drained, { phase: "rolled_back", terminalOutcome: "rolled_back" });
+    expect(validateBootstrapJournalSuccessor(plan, drained, rolledBack)).toEqual(rolledBack);
+    expect(() => validateBootstrapJournalSuccessor(
+      plan,
+      drained,
+      successor(drained, { phase: "rolled_back", terminalOutcome: "rolled_back", publishIntent: intent }),
+    )).toThrow();
+    expect(() => validateBootstrapJournalSuccessor(
+      plan,
+      phaseRecord("finalized"),
+      successor(phaseRecord("finalized"), { publishIntent: resolved }),
+    )).toThrow();
+  });
+});
+
 describe("retained bootstrap table derivation", () => {
   /**
    * A count, not an elapsed time. Each evidence row was canonically encoded

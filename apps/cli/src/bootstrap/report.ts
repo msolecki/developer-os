@@ -512,7 +512,10 @@ export async function buildBootstrapRetentionEvidence(
   }
   const createdPathEvidence: BootstrapRetentionEvidenceProjectionV1["createdPathEvidence"][number][] = [];
   for (const scope of ["ordinary", "launchability"] as const) {
-    const count = scope === "ordinary" ? terminal.nextCreatedPath : terminal.nextLaunchabilityPath;
+    const intent = terminal.publishIntent;
+    // NEW-189: a resolved file intent with durable creation evidence adds its own ordinal.
+    const count = (scope === "ordinary" ? terminal.nextCreatedPath : terminal.nextLaunchabilityPath) +
+      (intent?.scope === scope && intent.published === 2 ? 1 : 0);
     const plannedPaths = scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths;
     for (let ordinal = 0; ordinal < count; ordinal += 1) {
       const planned = plannedPaths[ordinal];
@@ -540,8 +543,12 @@ export async function buildBootstrapRetentionEvidence(
   if (interrupted !== null && interrupted.postimage?.kind !== "regular_file") throw new Error("interrupted payload postimage is absent");
 
   const foundationEvidence: BootstrapRetentionEvidenceProjectionV1["foundationEvidence"][number][] = [];
-  const participants = plan.foundationParticipants.filter((participant) => terminal.nextFoundationParticipant > 0 &&
-    (terminal.terminalOutcome === "rolled_back" || participant.role.kind === "forward"));
+  // NEW-189: a forward participant published through a resolved intent is retained as reached.
+  const publishedForward = terminal.publishIntent?.scope === "foundation" && terminal.publishIntent.published !== null;
+  const participants = plan.foundationParticipants.filter((participant) =>
+    (terminal.nextFoundationParticipant > 0 &&
+      (terminal.terminalOutcome === "rolled_back" || participant.role.kind === "forward")) ||
+    (publishedForward && participant.role.kind === "forward"));
   for (const participant of participants) {
     const physical = await physicalPath(participant.initialJournal.finalPath);
     /** Deliberately unmemoized: this pair must observe the file, not a cached answer, across the read below. */

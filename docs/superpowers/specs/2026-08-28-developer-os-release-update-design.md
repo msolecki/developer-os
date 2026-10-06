@@ -1282,6 +1282,7 @@ interface FreshV2InitJournalV1 {
   readonly payloadRetentionPart: "staged_file" | "evidence" | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   readonly retentionNext: Integer[0..2_200_526] | null;
+  readonly publishIntent?: { scope: "ordinary" | "launchability" | "foundation"; ordinal: Integer; published: Integer | null }; // amended 2026-10-06, NEW-189
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
@@ -1563,6 +1564,7 @@ interface ManifestMigrationJournalV1 {
   readonly payloadRetentionPart: "staged_file" | "evidence" | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   readonly retentionNext: Integer[0..2_200_526] | null;
+  readonly publishIntent?: { scope: "ordinary" | "launchability" | "foundation"; ordinal: Integer; published: Integer | null }; // amended 2026-10-06, NEW-189
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
@@ -1810,11 +1812,37 @@ through the exact reverse order; `rolled_back` requires the V1 manifest and ever
 is already on disk but whose cursor has not advanced — a created or launchability file renamed to its
 planned path, or a published forward Foundation journal — is finished through the same recovery branch
 a resumed `init` takes, so the cursors name where each consumed payload really is (a created global
-lock the attempt already holds counts as such a step). Known limitation: a step that refuses again is
-left unadvanced, compensation then keeps refusing on that payload, and the install stays in
-`compensating` until the cause is fixed and `init` is rerun. A resumed compensation continues from the recorded `payloadRetentionPart`,
+lock the attempt already holds counts as such a step). A step that refuses again is left unadvanced
+and resolved through its publish intent (amendment NEW-189 below). A resumed compensation continues from the recorded `payloadRetentionPart`,
 and a cursor whose `payloadWriteState` is `create_intent` compensates through that state's own branch:
 an empty created inode becomes `writing` and is retained by identity, and with none the intent goes idle.
+(Amended 2026-10-06, NEW-189, founder decision D87: journal a publish intent before each rename.)
+The journal record gains one optional key, `publishIntent: { scope, ordinal, published }`, with
+`scope` one of `ordinary`, `launchability`, `foundation`. It is absent unless set, so every record
+written before this amendment keeps its exact bytes and the schema version stays 1. A forward step
+writes `{ scope, ordinal, published: null }` alone, at its phase's frontier cursor, immediately before
+a created or launchability file's no-replace rename, and before the forward Foundation participant
+publishes its initial journal and then its mutations in order. The same write that advances that
+cursor removes the key. An open intent counts as one more reached reversible step, so entering
+`compensating` sets `compensationNext` to the intent's own step. That step is resolved once, by
+identity against the durable payload evidence. If the payload is still at its staged path and not at
+the destination, the key is removed. If the payload is at the destination, `published` records 1 for
+a file, or 2 when its creation evidence also became durable with the same identity. For Foundation it records the count of mutations whose target holds its content inode, which
+must be a prefix of the mutation order. Any other observation is a security refusal. A resolved intent
+stays in `compensating`, `rolled_back`, `retaining` and `retained`, and only a terminal rollback may
+keep it, never an unresolved one. Compensation and retention read each consumed payload where the
+resolution says it is. A published file is a `payload` row at its planned path, plus a
+`creation_evidence` row at 2. A published forward
+Foundation participant is retained as if reached, with its mutations limited to the published prefix;
+its journal row accepts any transaction phase except `rolled_back`, at the initial journal's inode, and
+its compensation participant is never run. Unpublished mutations keep their staged files as ordinary
+compensation targets. Thus a forward step that fails again while it is being finished ends in
+`retained`/`rolled_back`, never in `compensating`. New death points: `after_publish_intent` (the first
+file intent), `after_foundation_publish_intent`, and `after_publish_intent_resolved`; a death after an
+intent and before its rename resumes forward through the existing adoption rule. No version bump is
+needed: existing installs hold only terminal journals, which never carry the key, and an older
+non-terminal journal without it recovers exactly as it did before this amendment. Residual: a creation-evidence temp left by a
+write that died mid-way is outside the table, as before this amendment.
 Successful manifest publication is the point of no return: once `manifestCursor == 2` is durable,
 direction is forever forward, verification/retention force-forward, and compensation is illegal.
 `finalized` requires the complete V2 handoff; `retaining` requires a terminal outcome and advances

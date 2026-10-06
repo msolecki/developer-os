@@ -55,6 +55,7 @@ import type {
   FoundationMutationRefV1,
   FoundationParticipantRefV2,
   FreshV2InitIdV1,
+  BootstrapPublishIntentV1,
   FreshV2InitJournalV1,
   FreshV2InitPlanV1,
   InstallationManifestV2,
@@ -153,6 +154,7 @@ export const freshInitFineGrainedDeathPoints = [
   { name: "after_directory_create" },
   { name: "before_directory_parent_sync" },
   { name: "after_directory_parent_sync" },
+  { name: "after_publish_intent" },
   { name: "before_forward_rename" },
   { name: "after_forward_rename" },
   { name: "before_rename" },
@@ -164,7 +166,9 @@ export const freshInitFineGrainedDeathPoints = [
   { name: "after_journal_advance" },
   { name: "before_lock_release" },
   { name: "after_lock_release" },
+  { name: "after_foundation_publish_intent" },
   { name: "before_compensation" },
+  { name: "after_publish_intent_resolved" },
   { name: "after_compensation_staged_file" },
   { name: "after_compensation_evidence" },
   { name: "after_rolled_back" },
@@ -1202,9 +1206,8 @@ export class BootstrapExecutor {
     const retentionEntries = plan.maximumStagingEntries + 3;
     const maximumSequence = (
       3 * plan.payloads.length +
-      plan.createdPaths.length +
-      plan.foundationParticipants.length +
-      plan.launchabilityPaths.length +
+      // NEW-189: each publication may add an intent write before its cursor advance.
+      2 * (plan.createdPaths.length + plan.foundationParticipants.length + plan.launchabilityPaths.length) +
       retentionEntries + 16
     ).toString();
     const timestamp = this.#dependencies.now().toISOString() as FreshV2InitJournalV1["createdAt"];
@@ -1229,6 +1232,8 @@ export class BootstrapExecutor {
         previousJournalHash: "f".repeat(64),
         updatedAt: timestamp,
       },
+      // NEW-189: a rolled-back terminal may keep a resolved publish intent; count its widest shape.
+      publishIntent: { scope: "launchability", ordinal: plan.launchabilityPaths.length, published: plan.launchabilityPaths.length },
     })).byteLength;
     const payloadBytes = plan.payloads.reduce((total, row) => total + BigInt(row.ref.bytes), 0n);
     const regularFileBytes = BigInt(planBytes) + BigInt(2 * journalBytes) + payloadBytes +
@@ -2678,7 +2683,10 @@ export class BootstrapExecutor {
   private async writeJournal(
     plan: FreshV2InitPlanV1,
     journal: FreshV2InitJournalV1,
-    patch: Partial<FreshV2InitJournalV1>,
+    patch: Partial<Omit<FreshV2InitJournalV1, "publishIntent">> & {
+      /** Null removes the key, which a record carries only while an intent stands (NEW-189). */
+      readonly publishIntent?: BootstrapPublishIntentV1 | null;
+    },
   ): Promise<FreshV2InitJournalV1> {
     const store = await this.storeFor(plan);
     const current = store.current();
@@ -2686,9 +2694,13 @@ export class BootstrapExecutor {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap journal cursor changed before advance");
     }
     const sequence = BigInt(current.sequence) + 1n;
+    const { publishIntent: intentPatch, ...rest } = patch;
+    const { publishIntent: currentIntent, ...base } = current;
+    const publishIntent = intentPatch === undefined ? currentIntent : intentPatch ?? undefined;
     const next = validateBootstrapJournal(plan, {
-      ...current,
-      ...patch,
+      ...base,
+      ...rest,
+      ...(publishIntent === undefined ? {} : { publishIntent }),
       slot: current.slot === 0 ? 1 : 0,
       sequence: sequence.toString(),
       previousJournalHash: lowerHash(
@@ -2699,6 +2711,30 @@ export class BootstrapExecutor {
     await store.advance(next);
     return store.current();
   }
+  /**
+   * NEW-189 (D87): journals the publication rename a forward step is about to
+   * make. A resumed step finds its intent already recorded and keeps it.
+   */
+  private async openPublishIntent(
+    plan: FreshV2InitPlanV1,
+    scope: BootstrapPublishIntentV1["scope"],
+    ordinal: number,
+  ): Promise<void> {
+    const current = (await this.storeFor(plan)).current();
+    if (current.publishIntent !== undefined) return;
+    await this.writeJournal(plan, current, { publishIntent: { scope, ordinal, published: null } });
+    this.checkpoint(scope === "foundation" ? "after_foundation_publish_intent" : "after_publish_intent");
+  }
+
+  /** Advances a forward cursor from the store's current record, closing any publish intent with it. */
+  private async advanceCursor(
+    plan: FreshV2InitPlanV1,
+    patch: { readonly nextCreatedPath: number } | { readonly nextFoundationParticipant: number } | { readonly nextLaunchabilityPath: number },
+  ): Promise<FreshV2InitJournalV1> {
+    const current = (await this.storeFor(plan)).current();
+    return this.writeJournal(plan, current, current.publishIntent === undefined ? patch : { ...patch, publishIntent: null });
+  }
+
   private assertPublicPayload(bytes: Uint8Array): void {
     const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
     if (
@@ -3107,6 +3143,7 @@ export class BootstrapExecutor {
         const payloadStats = await this.assertExactFile(planned.payload.path, planned.payload);
         const payloadEvidence = await this.readPayloadEvidence(row);
         this.assertPayloadEvidenceIdentity(plan, row, payloadEvidence, payloadStats);
+        await this.openPublishIntent(plan, scope, ordinal);
         this.checkpoint("before_forward_rename");
         await this.#dependencies.renameNoReplace({
           sourcePath: planned.payload.path,
@@ -3239,7 +3276,7 @@ export class BootstrapExecutor {
       if (planned === undefined) throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "creation cursor escaped plan");
       await this.createPlannedPath(plan, planned, "ordinary", ordinal);
       this.trace(planned.kind === "global_lock" ? "create:global_lock" : `create:ordinary:${String(ordinal)}`);
-      journal = await this.writeJournal(plan, journal, { nextCreatedPath: ordinal + 1 });
+      journal = await this.advanceCursor(plan, { nextCreatedPath: ordinal + 1 });
       if (ordinal === 0) this.checkpoint("after_global_lock");
     }
     this.checkpoint("after_created_paths");
@@ -3469,9 +3506,10 @@ export class BootstrapExecutor {
       }
       // NEW-179 B-6: the compensation participant stays an unpublished payload; only compensate() runs it.
       const admitted = await this.admittedFoundation(forward, plan);
+      await this.openPublishIntent(plan, "foundation", 0);
       await this.#dependencies.transactionExecutor.executeBootstrapFoundationParticipant(admitted);
       this.trace(`foundation:forward:${forward.id}`);
-      journal = await this.writeJournal(plan, journal, { nextFoundationParticipant: 1 });
+      journal = await this.advanceCursor(plan, { nextFoundationParticipant: 1 });
       this.checkpoint("after_foundation");
     }
     return this.writeJournal(plan, journal, { phase: "launchability_publishing" });
@@ -3498,7 +3536,7 @@ export class BootstrapExecutor {
       } else {
         this.trace(`create:launchability:${String(ordinal)}`);
       }
-      journal = await this.writeJournal(plan, journal, { nextLaunchabilityPath: ordinal + 1 });
+      journal = await this.advanceCursor(plan, { nextLaunchabilityPath: ordinal + 1 });
       if (deathPoint !== null) this.checkpoint(deathPoint);
     }
     return this.writeJournal(plan, journal, { phase: "manifest_publishing" });
@@ -3695,6 +3733,17 @@ export class BootstrapExecutor {
     }
     while ((journal.compensationNext ?? -1) >= 0) {
       const cursor = journal.compensationNext as number;
+      const openIntent = journal.publishIntent;
+      if (openIntent?.published === null && cursor === reachedReversibleSteps(journal) - 1) {
+        // NEW-189: the intent's own step. It is resolved by identity, never finished, so a step that fails again still rolls back.
+        const published = await this.resolvePublishIntent(plan, openIntent);
+        journal = await this.writeJournal(plan, journal, {
+          compensationNext: cursor - 1,
+          publishIntent: published === null ? null : { ...openIntent, published },
+        });
+        this.checkpoint("after_publish_intent_resolved");
+        continue;
+      }
       if (cursor === foundationBase) {
         const compensation = plan.foundationParticipants.find(
           (participant) => participant.role.kind === "compensation",
@@ -3749,25 +3798,39 @@ export class BootstrapExecutor {
           });
           this.checkpoint("after_compensation_staged_file");
         }
-        const reachedFoundation = plan.foundationParticipants.find((participant) => {
+        const publish = journal.publishIntent;
+        // NEW-189: how many of a participant's mutations moved, or null when it was never published.
+        const reachedPrefix = (participant: FoundationParticipantRefV2): number | null => {
           const forwardId = participant.role.kind === "forward"
             ? participant.id
             : participant.role.forwardId;
           const ordinal = plan.foundationParticipants
             .filter((candidate) => candidate.role.kind === "forward")
             .findIndex((candidate) => candidate.id === forwardId);
-          return ordinal >= 0 && ordinal < journal.nextFoundationParticipant && (
+          if (ordinal < 0) return null;
+          if (ordinal < journal.nextFoundationParticipant) return participant.mutations.length;
+          return participant.role.kind === "forward" && publish?.scope === "foundation" && publish.ordinal === ordinal
+            ? publish.published
+            : null;
+        };
+        const reachedFoundation = plan.foundationParticipants.find((participant) => {
+          const prefix = reachedPrefix(participant);
+          return prefix !== null && (
             participant.initialJournal.staged.ordinal === cursor ||
-            participant.mutations.some((mutation) =>
+            participant.mutations.slice(0, prefix).some((mutation) =>
               mutation.content?.ordinal === cursor || mutation.digest?.ordinal === cursor)
           );
         });
-        const foundationMutation = reachedFoundation?.mutations.find((mutation) =>
+        const foundationMutation = reachedFoundation?.mutations.slice(0, reachedPrefix(reachedFoundation) ?? 0).find((mutation) =>
           mutation.content?.ordinal === cursor || mutation.digest?.ordinal === cursor,
         );
+        const publishedFile = publish !== undefined && publish.published !== null && publish.scope !== "foundation"
+          ? (publish.scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths)[publish.ordinal]
+          : undefined;
         const reachedConsumer = [
           ...plan.createdPaths.slice(0, journal.nextCreatedPath),
           ...plan.launchabilityPaths.slice(0, journal.nextLaunchabilityPath),
+          ...(publishedFile === undefined ? [] : [publishedFile]),
         ].find((candidate) => candidate.kind === "file" && candidate.payload.ordinal === cursor);
         const retainedPath = reachedFoundation?.initialJournal.staged.ordinal === cursor
           ? reachedFoundation.initialJournal.finalPath
@@ -3821,6 +3884,73 @@ export class BootstrapExecutor {
   }
 
   /**
+   * NEW-189: where an intended publication's payloads really are. Null when
+   * nothing moved; otherwise 1 for a file, or for the forward Foundation
+   * participant the count of its mutations already at their targets, which
+   * must be a prefix. Any other observation is a refusal, never a guess.
+   */
+  private async resolvePublishIntent(
+    plan: FreshV2InitPlanV1,
+    intent: BootstrapPublishIntentV1,
+  ): Promise<number | null> {
+    const at = async (path: string, payload: BootstrapExpectedPayloadRefV1): Promise<boolean> => {
+      const row = plan.payloads.find((candidate) => sameValue(candidate.ref, payload));
+      if (row === undefined) throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "publish intent payload is unbound");
+      const evidence = await this.readPayloadEvidence(row);
+      const stats = await lstatOptional(path);
+      return stats !== null && stats.isFile() && !stats.isSymbolicLink() &&
+        stats.dev.toString(10) === evidence.dev && stats.ino.toString(10) === evidence.ino;
+    };
+    const refuse = (): never => {
+      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "a publish intent found its payload in neither place");
+    };
+    if (intent.scope !== "foundation") {
+      const planned = (intent.scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths)[intent.ordinal];
+      if (planned?.kind !== "file") return refuse();
+      const [published, staged] = await Promise.all([at(planned.path, planned.payload), at(planned.payload.path, planned.payload)]);
+      if (staged && !published) return null;
+      if (!published || staged) return refuse();
+      // Creation evidence written before the second failure is retained with the file (2), never left as residue.
+      const evidencePath = deriveBootstrapCreationEvidencePaths(
+        this.#dependencies.paths.home as CanonicalAbsolutePathV1,
+        "fresh_v2_init",
+        plan.id,
+        intent.scope,
+        intent.ordinal,
+        randomUUID(),
+      ).evidence;
+      if (await lstatOptional(evidencePath) === null) return 1;
+      const evidence = await this.readCreationEvidence(plan, intent.scope, intent.ordinal);
+      const fileStats = await nodeFs.lstat(planned.path, { bigint: true });
+      return evidence.kind === "file" && evidence.pathHash === pathHash(planned.path) &&
+        evidence.postimageHash === planned.payload.hash &&
+        evidence.dev === fileStats.dev.toString(10) && evidence.ino === fileStats.ino.toString(10)
+        ? 2
+        : refuse();
+    }
+    const forward = plan.foundationParticipants.filter((participant) => participant.role.kind === "forward")[intent.ordinal];
+    if (forward === undefined) return refuse();
+    const staged = forward.initialJournal.staged;
+    const [journalPublished, journalStaged] = await Promise.all([
+      at(forward.initialJournal.finalPath, staged),
+      at(staged.path, staged),
+    ]);
+    if (journalStaged && !journalPublished) return null;
+    if (!journalPublished || journalStaged) return refuse();
+    let published = 0;
+    for (const mutation of forward.mutations) {
+      if (mutation.content == null || mutation.stagedPath === null) return refuse();
+      const [atTarget, atStaged] = await Promise.all([
+        at(mutation.targetPath, mutation.content),
+        at(mutation.stagedPath, mutation.content),
+      ]);
+      if (atTarget === atStaged || (atTarget && published < forward.mutations.indexOf(mutation))) return refuse();
+      if (atTarget) published += 1;
+    }
+    return published;
+  }
+
+  /**
    * NEW-167: compensation and retention locate a consumed payload from the
    * journal cursors alone, and each cursor advances only after its effect. A
    * failure after a publication rename (a created or launchability file, or a
@@ -3848,7 +3978,7 @@ export class BootstrapExecutor {
           (planned.kind !== "file" || await lstatOptional(planned.payload.path) !== null)
         ) return { journal, settleError: undefined };
         await this.createPlannedPath(plan, planned, scope, ordinal);
-        journal = await this.writeJournal(plan, journal, scope === "ordinary"
+        journal = await this.advanceCursor(plan, scope === "ordinary"
           ? { nextCreatedPath: ordinal + 1 }
           : { nextLaunchabilityPath: ordinal + 1 });
       } else if (journal.phase === "foundation_applying" && journal.nextFoundationParticipant === 0) {
@@ -3857,7 +3987,7 @@ export class BootstrapExecutor {
         const admitted = await this.admittedFoundation(forward, plan);
         await this.#dependencies.transactionExecutor.executeBootstrapFoundationParticipant(admitted);
         this.trace(`foundation:forward:${forward.id}`);
-        journal = await this.writeJournal(plan, journal, { nextFoundationParticipant: 1 });
+        journal = await this.advanceCursor(plan, { nextFoundationParticipant: 1 });
       }
     } catch (error) {
       if (error instanceof FreshBootstrapInterruption) throw error;

@@ -14,12 +14,19 @@ import {
 import type {
   BootstrapPayloadEvidenceV1,
   BootstrapPayloadWriteStateV1,
+  BootstrapPublishIntentV1,
   BootstrapRetentionTerminalPreimageV1,
   CreatedPathEvidenceV1,
   FreshV2InitPlanV1,
   PlannedCreatedPathV1,
 } from "./bootstrap.js";
-import { BootstrapStateError, validateBootstrapPayloadEvidence } from "./bootstrap.js";
+import {
+  BootstrapStateError,
+  bootstrapPublishIntentStateAdmits,
+  reachedReversibleStepCount,
+  validateBootstrapPayloadEvidence,
+  validateBootstrapPublishIntent,
+} from "./bootstrap.js";
 import type { FreshV2InitIdV1 } from "./manifest-state.js";
 
 export const BOOTSTRAP_RETAINED_MAX_IDS = 256;
@@ -81,6 +88,8 @@ export interface BootstrapJournalRecordV1 {
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   readonly retentionNext: number | null;
   readonly retentionTerminalPreimage?: BootstrapRetentionTerminalPreimageV1;
+  /** NEW-189: see `BootstrapPublishIntentV1`. */
+  readonly publishIntent?: BootstrapPublishIntentV1;
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
@@ -450,7 +459,13 @@ function hasForwardPrefix(journal: BootstrapJournalRecordV1, value: Counts): boo
 }
 
 export function reachedReversibleSteps(journal: BootstrapJournalRecordV1): number {
-  return journal.nextPayload + (journal.payloadWriteState.state === "idle" ? 0 : 1) + journal.nextCreatedPath + journal.nextFoundationParticipant + journal.nextLaunchabilityPath + Math.min(journal.manifestCursor, 1);
+  return reachedReversibleStepCount(journal);
+}
+
+/** NEW-189: the mutation prefix a resolved Foundation intent published, or null when that participant has none. */
+function publishedForwardMutations(journal: BootstrapJournalRecordV1, ordinal: number): number | null {
+  const intent = journal.publishIntent;
+  return intent?.scope === "foundation" && intent.ordinal === ordinal && intent.published !== null ? intent.published : null;
 }
 
 function retentionEligiblePayload(journal: BootstrapJournalRecordV1, cursor: number, value: Counts): boolean {
@@ -549,9 +564,11 @@ function validateJournalRecord(
 ): BootstrapJournalRecordV1 {
   const input = record(value);
   const retentionPhase = input.phase === "retaining" || input.phase === "retained";
-  exact(input, retentionPhase
-    ? [...JOURNAL_KEYS, "retentionTerminalPreimage"]
-    : JOURNAL_KEYS);
+  exact(input, [
+    ...JOURNAL_KEYS,
+    ...(retentionPhase ? ["retentionTerminalPreimage"] : []),
+    ...("publishIntent" in input ? ["publishIntent"] : []),
+  ]);
   if (input.schemaVersion !== 1 || input.id !== plan.id || input.planHash !== retainedPlanHash(plan)) return refuse();
   if (input.slot !== 0 && input.slot !== 1) return refuse();
   if (typeof input.phase !== "string" || !JOURNAL_PHASES.includes(input.phase as BootstrapRetainedJournalPhaseV1)) return refuse();
@@ -599,10 +616,12 @@ function validateJournalRecord(
     terminalOutcome: input.terminalOutcome,
     retentionNext: input.retentionNext === null ? null : integer(input.retentionNext, 0, MAX_RETENTION_NEXT),
     ...(retentionTerminalPreimage === undefined ? {} : { retentionTerminalPreimage }),
+    ...("publishIntent" in input ? { publishIntent: validateBootstrapPublishIntent(input.publishIntent, plan) } : {}),
     createdAt: timestamp(input.createdAt),
     updatedAt: timestamp(input.updatedAt),
   };
   validateJournalState(journal, valueCounts, retentionEntries);
+  if (!bootstrapPublishIntentStateAdmits(journal, valueCounts)) return refuse();
   if (sequence === "0" && journal.phase !== "planned") return refuse();
   if (encoder.encode(encodeCanonicalJson(journal as unknown as CanonicalJsonValue)).byteLength > plan.maximumJournalBytes) return refuse();
   return structuredClone(journal);
@@ -611,7 +630,7 @@ function validateJournalRecord(
 const STATE_KEYS = [
   "phase", "direction", "nextPayload", "payloadWriteState", "nextCreatedPath",
   "nextFoundationParticipant", "nextLaunchabilityPath", "manifestCursor", "compensationNext",
-  "payloadRetentionPart", "terminalOutcome", "retentionNext", "retentionTerminalPreimage",
+  "payloadRetentionPart", "terminalOutcome", "retentionNext", "retentionTerminalPreimage", "publishIntent",
 ] as const;
 
 function sameValue(left: unknown, right: unknown): boolean {
@@ -619,15 +638,7 @@ function sameValue(left: unknown, right: unknown): boolean {
 }
 
 function changedStateKeys(current: BootstrapJournalRecordV1, successor: BootstrapJournalRecordV1): readonly string[] {
-  return STATE_KEYS.filter((key) => {
-    const currentValue = key === "retentionTerminalPreimage"
-      ? current.retentionTerminalPreimage ?? null
-      : current[key];
-    const successorValue = key === "retentionTerminalPreimage"
-      ? successor.retentionTerminalPreimage ?? null
-      : successor[key];
-    return !sameValue(currentValue, successorValue);
-  });
+  return STATE_KEYS.filter((key) => !sameValue(current[key] ?? null, successor[key] ?? null));
 }
 
 const FORWARD_PHASE_TRANSITIONS = new Set([
@@ -670,8 +681,23 @@ function isLegalSamePhaseTransition(
   if (cursor !== undefined && changed.length === 1 && changed[0] === cursor) {
     return typeof current[cursor] === "number" && next[cursor] === current[cursor] + 1;
   }
+  // NEW-189: a publish intent opens alone before its rename and closes with its cursor advance.
+  if (cursor !== undefined && changed.length === 1 && changed[0] === "publishIntent") {
+    return current.publishIntent === undefined && next.publishIntent?.published === null;
+  }
+  if (cursor !== undefined && sameValue(changed, [cursor, "publishIntent"])) {
+    return current.publishIntent !== undefined && next.publishIntent === undefined &&
+      typeof current[cursor] === "number" && next[cursor] === current[cursor] + 1;
+  }
   if (current.phase === "compensating") {
     const cursor = current.compensationNext as number;
+    const intent = current.publishIntent;
+    // NEW-189: an open intent is its own step, resolved once: cleared (nothing moved) or published.
+    if (intent?.published === null && cursor === reachedReversibleSteps(current) - 1) {
+      return sameValue(changed, ["compensationNext", "publishIntent"]) && next.compensationNext === cursor - 1 &&
+        (next.publishIntent === undefined ||
+          (next.publishIntent.scope === intent.scope && next.publishIntent.ordinal === intent.ordinal && next.publishIntent.published !== null));
+    }
     if (
       current.payloadWriteState.state === "create_intent" &&
       current.payloadWriteState.ordinal === current.nextPayload &&
@@ -1084,8 +1110,10 @@ function foundationAuthorities(
   const ordinals = forwardFoundationOrdinals(plan);
   for (const participant of plan.foundationParticipants) {
     const ordinal = foundationOrdinal(participant, ordinals);
+    // NEW-189: a forward participant whose resolved intent published it counts as reached, up to its published prefix.
+    const publishedPrefix = participant.role.kind === "forward" ? publishedForwardMutations(journal, ordinal) : null;
     if (
-      ordinal >= journal.nextFoundationParticipant ||
+      (ordinal >= journal.nextFoundationParticipant && publishedPrefix === null) ||
       (journal.terminalOutcome === "finalized" && participant.role.kind !== "forward")
     ) continue;
     const initial = participant.initialJournal.staged;
@@ -1101,8 +1129,9 @@ function foundationAuthorities(
       mode: initial.mode,
     });
     consumedPaths.add(participant.initialJournal.finalPath);
-    for (const mutation of participant.mutations) {
+    for (const [index, mutation] of participant.mutations.entries()) {
       if (mutation.stagedPath === null || mutation.content == null || mutation.digest == null) continue;
+      if (ordinal >= journal.nextFoundationParticipant && index >= (publishedPrefix ?? 0)) continue;
       consumedPayloadOrdinals.add(mutation.content.ordinal);
       consumedPayloadOrdinals.add(mutation.digest.ordinal);
       if (participant.role.kind === "forward") consumedPaths.add(mutation.targetPath);
@@ -1203,6 +1232,7 @@ function authorities(
   const retainedFoundationPaths = foundation.consumedPaths;
   const retainedFoundationPayloads = foundation.consumedPayloadOrdinals;
   const foundationByPayload = new Map(retainedFoundation.map((authority) => [authority.payloadOrdinal as number, authority]));
+  const intent = journal.publishIntent;
   for (let ordinal = 0; ordinal < journal.nextPayload; ordinal += 1) {
     const payload = plan.payloads[ordinal];
     if (payload === undefined) return refuse();
@@ -1216,9 +1246,13 @@ function authorities(
     const consumer = plannedConsumer(plan, ordinal);
     if (consumer !== null && plannedConsumerReached(consumer, journal)) continue;
     if (manifestPayloadOrdinal(plan) === ordinal && journal.manifestCursor >= 2) continue;
+    // NEW-189: a resolved file intent moved this payload to its planned path without its cursor advance.
+    const publishedAt = consumer !== null && intent !== undefined && intent.published !== null && intent.scope === consumer.scope && intent.ordinal === consumer.ordinal
+      ? consumer.planned.path
+      : null;
     result.push({
       role: "payload",
-      sourcePath: payload.ref.path,
+      sourcePath: publishedAt ?? payload.ref.path,
       payloadOrdinal: ordinal,
       payloadPostimage: true,
       bytes: payload.ref.bytes,
@@ -1236,6 +1270,10 @@ function authorities(
       payloadPostimage: true,
       interruptedPostimage: interruptedPayload.postimage,
     });
+  }
+  // NEW-189: a resolved file intent whose creation evidence also became durable retains that evidence.
+  if (intent !== undefined && intent.scope !== "foundation" && intent.published === 2) {
+    result.push({ role: "creation_evidence", sourcePath: creationEvidencePath(plan, intent.scope, intent.ordinal), scope: intent.scope, ordinal: intent.ordinal, mode: 0o600 });
   }
   for (const [ordinal, planned] of plan.createdPaths.entries()) {
     if (ordinal >= journal.nextCreatedPath) continue;
@@ -1598,6 +1636,10 @@ function payloadRetentionEvidence(
   return admitted;
 }
 
+const PUBLISHED_FORWARD_PHASES: ReadonlySet<string> = new Set([
+  "planned", "backed_up", "staged", "validated", "applied", "verified", "finalized",
+]);
+
 function validateFoundationTerminalEvidence(
   plan: BootstrapRetainedExecutionPlanV1,
   journal: BootstrapJournalRecordV1,
@@ -1640,7 +1682,10 @@ function validateFoundationTerminalEvidence(
       initial.kind !== participant.slot ||
       terminal.kind !== participant.slot ||
       initial.phase !== "planned" ||
-      terminal.phase !== "finalized" ||
+      (terminal.phase !== "finalized" &&
+        // NEW-189: a forward participant published only through its intent may stop in any phase short of rollback.
+        !(participant.role.kind === "forward" && publishedForwardMutations(journal, ordinal) !== null &&
+          typeof terminal.phase === "string" && PUBLISHED_FORWARD_PHASES.has(terminal.phase))) ||
       typeof initial.createdAt !== "string" ||
       terminal.createdAt !== initial.createdAt ||
       typeof terminal.updatedAt !== "string" ||
@@ -1664,7 +1709,7 @@ function validateFoundationTerminalEvidence(
       schemaVersion: 1,
       id: participant.id,
       kind: participant.slot,
-      phase: "finalized",
+      phase: terminal.phase,
       createdAt: initial.createdAt,
       updatedAt: terminal.updatedAt,
       mutations: normalizedMutations,
