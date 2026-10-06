@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute } from "node:path";
 
+import { EXIT_CODES } from "@developer-os/core";
 import type {
   TransactionLockHandle,
   TransactionLockProvider,
@@ -55,7 +56,10 @@ const NODE_FILE_SYSTEM: MacOsTransactionLockFileSystem = {
   open,
 };
 
+/** Held by another holder (lockf 75): recovery required, as core's `LifecycleLockBusyError`. */
 export class MacOsTransactionLockUnavailableError extends Error {
+  readonly code = EXIT_CODES.recoveryRequired;
+
   constructor() {
     super("transaction lock is unavailable");
     this.name = "MacOsTransactionLockUnavailableError";
@@ -63,6 +67,8 @@ export class MacOsTransactionLockUnavailableError extends Error {
 }
 
 export class MacOsTransactionLockOperationalError extends Error {
+  readonly code = EXIT_CODES.operationalFailure;
+
   constructor() {
     super("transaction lock operation failed");
     this.name = "MacOsTransactionLockOperationalError";

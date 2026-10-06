@@ -4,6 +4,7 @@ import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { EXIT_CODES } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -491,21 +492,25 @@ describe.runIf(process.platform === "darwin")(
         result: { exitCode: 75, signal: null },
         errorType: MacOsTransactionLockUnavailableError,
         message: "transaction lock is unavailable",
+        code: EXIT_CODES.recoveryRequired,
       },
       {
         result: { exitCode: 70, signal: null },
         errorType: MacOsTransactionLockOperationalError,
         message: "transaction lock operation failed",
+        code: EXIT_CODES.operationalFailure,
       },
       {
         result: { exitCode: null, signal: "SIGTERM" as const },
         errorType: MacOsTransactionLockOperationalError,
         message: "transaction lock operation failed",
+        code: EXIT_CODES.operationalFailure,
       },
-    ])("maps lockf result $result without diagnostics", async ({
+    ])("maps lockf result $result without diagnostics, with its exit code (MACOS-3)", async ({
       result,
       errorType,
       message,
+      code,
     }) => {
       const fixture = await createLockFixture("result-map");
       const runner: LockfRunner = {
@@ -520,7 +525,7 @@ describe.runIf(process.platform === "darwin")(
             (caught: unknown) => caught,
           );
         expect(error).toBeInstanceOf(errorType);
-        expect(error).toMatchObject({ message });
+        expect(error).toMatchObject({ message, code });
         expect(String(error)).not.toContain(fixture.root);
       } finally {
         await removeLockFixture(fixture);
