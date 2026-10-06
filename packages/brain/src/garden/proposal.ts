@@ -1,4 +1,4 @@
-export type GardenProposalKindV1 = "hub" | "related" | "fix";
+export type GardenProposalKindV1 = "hub" | "related";
 
 export interface GardenProposalV1 {
   readonly kind: GardenProposalKindV1;
@@ -11,7 +11,7 @@ export interface GardenProposalV1 {
 export const GARDEN_MAX_PROPOSALS = 8;
 export const GARDEN_NOTE_MAX_BYTES = 65_536;
 
-const KINDS: ReadonlySet<string> = new Set(["hub", "related", "fix"]);
+const KINDS: ReadonlySet<string> = new Set(["hub", "related"]);
 const RESPONSE_KEYS = ["proposals"];
 const PROPOSAL_KEYS = ["kind", "note", "target"];
 

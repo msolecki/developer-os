@@ -231,7 +231,6 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
     config: brainConfig,
     readNote: (path) => (files.has(path) ? (files.get(path) ?? null) : ""),
     pendingNotePaths,
-    findings: lint.findings,
     redactionFindings,
   });
   if ("invalid" in validated) return result("handler_failed", "agent_output_invalid", { ...base, targets: counts });

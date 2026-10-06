@@ -6,6 +6,7 @@ import {
   MAX_PROPOSED_NOTE_CHARS,
   MAX_PROPOSED_NOTES,
   MAX_PROPOSED_PATH_CHARS,
+  parseGardenResponse,
 } from "@developer-os/brain";
 import { structuredResultVerbs } from "@developer-os/workflow-schema";
 import { describe, expect, it } from "vitest";
@@ -199,6 +200,25 @@ describe("the embedded output schemas", () => {
     expect(parsed.properties.notes.items.properties.path.maxLength).toBe(
       MAX_PROPOSED_PATH_CHARS,
     );
+  });
+
+  it("offers the gardener exactly the proposal kinds its parser accepts", () => {
+    /**
+     * D87 removed the `fix` kind: the prompt never asked for one, so the schema
+     * advertising it invited a proposal that could only be rejected.
+     */
+    const garden = OUTPUT_SCHEMAS.find((schema) => schema.verb === "garden.proposals");
+    if (garden === undefined) throw new Error("no garden.proposals schema");
+    const kinds = (
+      JSON.parse(garden.content) as {
+        properties: { proposals: { items: { properties: { kind: { enum: string[] } } } } };
+      }
+    ).properties.proposals.items.properties.kind.enum;
+    expect(kinds).toStrictEqual(["hub", "related"]);
+    for (const kind of [...kinds, "fix"]) {
+      const parsed = parseGardenResponse({ proposals: [{ kind, target: "DEV/a.md", note: "" }] });
+      expect(parsed !== null, kind).toBe(kinds.includes(kind));
+    }
   });
 
   it("gives every property a type keyword, which the vendor requires and refuses without", async () => {

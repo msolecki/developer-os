@@ -126,7 +126,7 @@ The existing workflow `workflows/brain-garden/workflow.yaml` keeps its manual be
 4. **One isolated agent call** with the pinned executable (§3.1), through the same vendor invocation `ingest` uses
    (`packages/adapter-claude/src/invoke.ts`, `packages/adapter-codex/src/invoke.ts`): no shell, no write
    tools, the product-owned isolated environment. The agent returns one JSON document:
-   `{"proposals":[{"kind":"hub"|"related"|"fix","target":"<content-relative path>","note":"<full note text>"}]}`.
+   `{"proposals":[{"kind":"hub"|"related","target":"<content-relative path>","note":"<full note text>"}]}`.
 5. **Validation** (§4), then each accepted proposal is written through the existing `capture` write
    path (redaction, quarantine), at most 8 per run.
 6. **Run outcome**: targets chosen, proposals accepted and rejected with reason codes, capture ids.
@@ -149,7 +149,7 @@ that makes launchd fire it, as `workflow-schema.md` §2 item 4 requires. Only `b
 **Amended during implementation (2026-10-01; rulings in the plan's ledger, carried into
 `threat-model.md` §5.17):** provenance (`author: agent`, `reviewed: null`, `stage: emerging`) applies
 to hubs only — a `related` proposal keeps the note's header except `updated` and may set `reviewed`
-to null; a `fix` never changes `author`, `reviewed`, `stage` or `created`; the `## Related` section is
+to null; the `## Related` section is
 exactly 2–5 `- [[target]]` lines; hub bodies are plain prose, headings, lists and wikilinks (no code,
 HTML, entities, escapes or URLs); agent links resolve only by vault-relative path or unique file name;
 a hub's file name is unique across indexed notes, pending captures and the run; the prompt offers only
@@ -183,8 +183,12 @@ Per kind:
   existing one) holding 2–5 wikilinks, and the `updated` field (`related_changes_body`). The capture is
   a replacing capture bound to the note's current bytes, as `brain-enhance` captures are, so an edit in
   between makes `ingest` refuse it.
-- `fix`: the target note had a lint finding; only the frontmatter keys that finding names may change,
-  and the body is byte-identical (`fix_out_of_scope`).
+
+**Amended 2026-10-06 (D87, NEW-185):** the `fix` kind is removed. No target selection ever chose a
+`fix` target and the prompt never offered one, so its validator was unreachable code on the security
+path. The parser, the `garden.proposals` schema enum and the validator accept only `hub` and
+`related`; a response naming `fix` is `agent_output_invalid`. A lint finding with a key is repaired by
+the person or by `brain-enhance`.
 
 ## 5. Errors
 

@@ -7,7 +7,6 @@ import { PRIVATE_FOLDERS, topicOfFolder } from "../discovery/index.js";
 import { createLinkResolver, extractLinks, findWikilinks } from "../indexes/index.js";
 import type { IndexedNote } from "../indexes/index.js";
 import { isUnsafeProposedNotePath } from "../ingest/index.js";
-import type { LintFinding } from "../lint/index.js";
 import { FRONTMATTER, FRONTMATTER_PARSE_OPTIONS, parseNote } from "../schema/note.js";
 import type { ParsedNote } from "../schema/note.js";
 import { GARDEN_MAX_PROPOSALS, GARDEN_NOTE_MAX_BYTES, parseGardenResponse } from "./proposal.js";
@@ -27,8 +26,7 @@ export type GardenRejectCodeV1 =
   | "hub_too_thin"
   | "sources_outside_bundle"
   | "target_not_selected"
-  | "related_changes_body"
-  | "fix_out_of_scope";
+  | "related_changes_body";
 
 export interface GardenValidationV1 {
   readonly accepted: readonly GardenProposalV1[];
@@ -50,7 +48,6 @@ export interface GardenValidationInputV1 {
   readonly readNote: (contentRelativePath: string) => string | null;
   /** Content-relative paths a quarantined capture already names. */
   readonly pendingNotePaths: ReadonlySet<string>;
-  readonly findings: readonly LintFinding[];
   /** `findings.length` of the capture redactor over `text`. */
   readonly redactionFindings: (text: string) => number;
 }
@@ -260,38 +257,6 @@ function decoded(value: unknown): string {
   return Object.entries(value).map(([key, inner]) => `${key}\n${decoded(inner)}`).join("");
 }
 
-/** Provenance a `fix` may never touch, whatever a finding names (Ruling 10). */
-const FIX_FORBIDDEN: ReadonlySet<string> = new Set(["author", "reviewed", "stage", "created"]);
-
-/**
- * The current note usually fails `parseNote` — that is why it has a finding —
- * so the changed keys come from comparing raw YAML mappings; then the header
- * must equal the current one byte for byte outside those keys' lines, so an
- * added comment or a reformatted key is out of scope.
- */
-function checkFix(current: string, proposed: string, allowed: ReadonlySet<string>): Code | null {
-  const before = split(current);
-  const after = split(proposed);
-  if (before === null || after === null || before.body !== after.body) return "fix_out_of_scope";
-  const left = frontmatterMapping(before.frontmatter);
-  const right = frontmatterMapping(after.frontmatter);
-  if (left === null || right === null) return "fix_out_of_scope";
-  const changed = new Set(
-    [...new Set([...Object.keys(left), ...Object.keys(right)])].filter(
-      (key) => JSON.stringify(left[key]) !== JSON.stringify(right[key]),
-    ),
-  );
-  if (changed.size === 0) return "fix_out_of_scope";
-  if ([...changed].some((key) => !allowed.has(key) || FIX_FORBIDDEN.has(key))) return "fix_out_of_scope";
-  const currentBlocks = headerBlocks(before.header);
-  const proposedBlocks = headerBlocks(after.header);
-  if (!singleLine(proposedBlocks, changed)) return "fix_out_of_scope";
-  if (without(currentBlocks, changed) !== without(proposedBlocks, changed)) return "fix_out_of_scope";
-  const values = decoded(Object.fromEntries([...changed].map((key) => [key, right[key]])));
-  const unsafe = LINE_BREAKING.test(values) || linksOtherwise(changedBlocks(currentBlocks, proposedBlocks, changed) + values, "");
-  return unsafe ? "fix_out_of_scope" : null;
-}
-
 /**
  * Ruling 14: CR, every C0 control but `\n` and `\t`, DEL, every C1 control and
  * the Unicode line and paragraph separators. Each can end a line for some
@@ -308,7 +273,6 @@ const LINE_BREAKING =
 const CONTROL_CODE: Readonly<Record<GardenProposalV1["kind"], Code>> = {
   hub: "frontmatter_invalid",
   related: "related_changes_body",
-  fix: "fix_out_of_scope",
 };
 
 /**
@@ -392,12 +356,11 @@ interface Checked {
  * missing provenance or a non-`compiled-note` type → `target_not_selected`
  * without a selected gap tag → `duplicate_target` for a gap tag another hub
  * already claimed → `hub_too_thin` → `sources_outside_bundle`; related:
- * `target_not_selected` → `related_changes_body`; fix: `target_occupied` →
- * `fix_out_of_scope`) → `link_unresolved` (a hidden `[[`, or a link that does
+ * `target_not_selected` → `related_changes_body`) → `link_unresolved` (a hidden `[[`, or a link that does
  * not resolve, or a hub linking other than by body wikilink, a `]:` outside a
  * wikilink, a vault query block, an `obsidian:`/`file:` URI, or a hub body
  * that is not plain prose and wikilinks) → `redaction_would_alter`.
- * Related and fix apply Ruling 21 to their own new text as their last kind rule.
+ * Related applies Ruling 21 to its own new text as its last kind rule.
  */
 export function validateGardenResponse(
   input: GardenValidationInputV1,
@@ -457,24 +420,8 @@ export function validateGardenResponse(
       });
       return outside ? "sources_outside_bundle" : null;
     }
-    if (proposal.kind === "related") {
-      const current = selected.has(target) ? input.readNote(target) : null;
-      return current === null ? "target_not_selected" : checkRelated(current, proposal.note);
-    }
-    if (pending.has(fold(target))) return "target_occupied";
-    /**
-     * The findings gate the read: only a target some finding names (an indexed
-     * note) ever reaches `readNote`, so an agent-written path such as
-     * `DEV/../x.md` is never handed to the reader.
-     */
-    const allowed = new Set(
-      input.findings
-        .filter((finding) => finding.path === prefix + target && finding.key !== null)
-        .map((finding) => finding.key as string),
-    );
-    const current = allowed.size === 0 ? null : input.readNote(target);
-    if (current === null) return "fix_out_of_scope";
-    return checkFix(current, proposal.note, allowed);
+    const current = selected.has(target) ? input.readNote(target) : null;
+    return current === null ? "target_not_selected" : checkRelated(current, proposal.note);
   }
 
   const seen = new Set<string>();
@@ -572,10 +519,9 @@ export function validateGardenResponse(
   return { accepted, rejected };
 }
 
-/** Ruling 28 scope: agent-written links; the human text of a related or fix target is not the agent's. */
+/** Ruling 28 scope: agent-written links; the human text of a related target is not the agent's. */
 function agentLinksOf(proposal: GardenProposalV1, parsed: ParsedNote, links: readonly string[]): readonly string[] {
   if (proposal.kind === "hub") return links;
-  if (proposal.kind === "fix") return [];
   const heading = lastRelatedHeading(parsed.body);
   if (heading === -1) return [];
   return findWikilinks(parsed.body.slice(heading))
