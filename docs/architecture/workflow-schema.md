@@ -48,7 +48,11 @@ The compiler unions those footprints and requires the result to *equal* the decl
 4. **`scheduled` fires only through `developer-os automation`** (added 2026-10-01, NEW-134). It
    arrived in the same change that makes launchd fire it, as this rule required: the `brain-garden`
    automation job runs the `brain-garden` workflow's checks in product code. A contract may declare
-   `scheduled` only together with `manual`, so every scheduled workflow can be run by hand.
+   `scheduled` only together with `manual`, so every scheduled workflow can be run by hand. Since
+   D87 (2026-10-06, NEW-186) a workflow declares `scheduled` exactly when its id is in
+   `SCHEDULED_JOB_IDS` (`packages/core/src/config/lifecycle.ts`): today `brain-garden` and `doctor`.
+   `tests/contracts/workflows/canonical.test.ts` asserts it; automation jobs with no workflow
+   (`brain-reindex`, `brain-lint`, `git-sync`, `brain-pulse`) are outside the check.
 5. **Pre-release and build metadata are not valid workflow versions.** `MAJOR.MINOR.PATCH` only,
    no leading zeros. An overlay pins `id@version` exactly, and comparing `1.2.3-rc.1` against
    `1.2.3` there would mean nothing. This deliberately narrows the original design's bare word
@@ -147,13 +151,16 @@ Two genuine gaps remain:
 
 1. **`agent.prompt` has no step executor.** It is the sole item in §5 and is owned by the adapters
    (`packages/workflow-schema/src/vocabulary.ts:125`).
-2. **A declared trigger is not validated against an observable host capability.** DOS-P6 removed
-   the unfireable `session_start` and `session_end` declarations and both shipped contracts are
-   manual-only, so no current workflow exercises this gap. Reintroducing a non-manual trigger must
-   add the host-capability validation and a firing test in the same change.
+2. **A declared trigger is bound to the job registry, not to a host capability.** DOS-P6 removed
+   the unfireable `session_start` and `session_end` declarations. `scheduled` came back with
+   NEW-134 and is the only non-manual trigger: it is fired by `developer-os automation` through
+   launchd, never by a vendor host, and D87 binds it to `SCHEDULED_JOB_IDS` by test (§2 item 4).
+   The compiler itself checks only that `scheduled` comes with `manual`. A trigger a vendor host
+   would fire (a session event) still has no host-capability validation; reintroducing one must
+   add it and a firing test in the same change.
 
-The manual-only change was a contract change, not an amendment: `shared` and `capture` moved to
-`2.0.0`. `docs/architecture/knowledge-pipeline.md` §2 records the decision and its costs.
+The DOS-P6 manual-only change was a contract change, not an amendment: `shared` and `capture`
+moved to `2.0.0`. `docs/architecture/knowledge-pipeline.md` §2 records the decision and its costs.
 
 ## 8. Known residuals
 
@@ -229,7 +236,7 @@ The manual-only change was a contract change, not an amendment: `shared` and `ca
    each adapter's to prove, and `packages/adapter-claude/src/render.test.ts` covers Claude's.
 9. **Over-declaring a capability is not an error, though over-declaring a scope is.**
    `validate.ts` checks only that a required capability is declared, never that a declared one is
-   required — so §6's equality argument has no counterpart for capabilities. None of the six
+   required — so §6's equality argument has no counterpart for capabilities. None of the eleven
    over-declares today. `file_write` is in `WORKFLOW_CAPABILITIES`, is named by no verb footprint,
    and is therefore unreachable by `capability-undeclared`.
 

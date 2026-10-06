@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: brain-search
-version: 2.0.1
+version: 2.1.0
 description: Search the vault index and return ranked matches with their source paths. Use it before a large task to find earlier decisions and notes on the topic. It only reads; a query with no match returns no results, not an answer from general knowledge.
 triggers:
   - manual
@@ -25,6 +25,9 @@ scopes:
     - content/_indexes/**
   write: []
 refusals:
+  - when: vault-missing
+    exit: 1
+    message: No vault was found. Run developer-os init first.
   - when: index-missing
     exit: 2
     message: The vault index has not been built. Run developer-os brain reindex first.

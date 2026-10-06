@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { SCHEDULED_JOB_IDS } from "@developer-os/core";
 import { compareScopes, deriveScopes, loadWorkflow } from "@developer-os/workflow-schema";
 import type { WorkflowContractV1 } from "@developer-os/workflow-schema";
 import { describe, expect, it } from "vitest";
@@ -110,6 +111,27 @@ describe("canonical workflows", () => {
       expect(contract.triggers, contract.id).not.toContain("session_end");
       expect(contract.triggers, contract.id).not.toContain("session_start");
       expect(contract.triggers.length, contract.id).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * D87 (FLOW-DOCS-3): `scheduled` is bound to the automation job registry. A
+   * workflow declares it exactly when an automation job of the same id runs it;
+   * jobs with no workflow (`brain-reindex`, `brain-lint`, ...) are not checked.
+   */
+  it("declares scheduled exactly when its id is a scheduled automation job", () => {
+    const jobs: readonly string[] = SCHEDULED_JOB_IDS;
+    for (const contract of canonicalContracts()) {
+      expect(contract.triggers.includes("scheduled"), contract.id).toBe(jobs.includes(contract.id));
+    }
+  });
+
+  /** SCHEMA-3: a workflow that reads the vault refuses a missing one before anything else. */
+  it("declares vault-missing, exit 1, wherever it reads content/**", () => {
+    const readers = canonicalContracts().filter((c) => c.scopes.read.includes("content/**"));
+    expect(readers.length).toBeGreaterThan(0);
+    for (const contract of readers) {
+      expect(contract.refusals.find((r) => r.when === "vault-missing")?.exit, contract.id).toBe(1);
     }
   });
 
