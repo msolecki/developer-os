@@ -382,6 +382,20 @@ describe("runScheduledGarden", () => {
     expect(await quarantined(home)).toHaveLength(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("groups title duplicates with lint's key, so NFC and NFD titles merge instead of retiring both (W2-GAP-STATE-3)", async () => {
+    const twin = (title: string, created: string): string => note(title, { created }).replace("tags: [twin]", "tags: [twin-a]");
+    const home = await garden({
+      isolated: ["DEV/alpha.md"],
+      reply: "timeout",
+      extra: {
+        "DEV/twin-a.md": twin("Caf\u00e9", "2000-01-04"),
+        "DEV/twin-b.md": twin("Cafe\u0301", "2000-01-05").replace("holds one", "holds another"),
+      },
+    });
+    const result = await run(home);
+    expect(dataOf(result).structural).toEqual(["developer-os brain refactor --merge 'DEV/twin-b.md' 'DEV/twin-a.md' --dry-run"]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("fails agent_error storing the adapter's reason and never its detail", async () => {
     const home = await garden({ isolated: ["DEV/alpha.md"], reply: "vendor-error" });
     const result = await run(home);

@@ -578,6 +578,15 @@ function linkFindings(
 
 /* ----------------------------------------------------------------- duplicates */
 
+/**
+ * The key `duplicates` groups titles by: the topic folder and the perceptual form of the title (the
+ * rationale is at its use below). `brain-garden` regroups lint's findings with this same function,
+ * so the two cannot disagree about which notes form one group.
+ */
+export function duplicateTitleKey(note: { readonly topicFolder: string; readonly title: string }): string {
+  return `${note.topicFolder}\u0000${perceptualKey(screenControlCharacters(note.title)).toLowerCase()}`;
+}
+
 function groupBy(
   notes: readonly IndexedNote[],
   key: (note: IndexedNote) => string,
@@ -687,8 +696,7 @@ function duplicateFindings(build: IndexBuildResult): readonly LintFinding[] {
      * Final_Sigma resolves differently on two titles that are perceptually identical —
      * the same class of bug `redaction.ts` was fixed for on 2026-08-17.
      */
-    (note) =>
-      `${note.topicFolder}\u0000${perceptualKey(screenControlCharacters(note.title)).toLowerCase()}`,
+    duplicateTitleKey,
   )) {
     if (group.length < 2) continue;
     for (const note of group) {
