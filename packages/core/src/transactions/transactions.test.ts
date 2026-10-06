@@ -22,6 +22,7 @@ import {
   TransactionExecutor,
   TransactionPlanError,
   TransactionPreconditionError,
+  TransactionStateError,
   TransactionStore,
   validateJournal,
   type PlannedFileMutation,
@@ -1349,6 +1350,35 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       expect(retriedInitialPublication).toBe(false);
       expect(result.phase).toBe('finalized');
       await expectBytes(bootstrap.targetPath, CREATED_BYTES);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * NEW-174: a bootstrap Foundation journal is rewritten in place on its
+   * admitted inode, so the generic `resume`/`rollback` (temp + rename) would
+   * re-inode it and strand the bootstrap's own identity-bound resume.
+   */
+  it('refuses generic resume and rollback of a bootstrap Foundation journal a death left non-terminal', async () => {
+    const fixture = await createFixture('bootstrap-foundation-generic-repair');
+    try {
+      const bootstrap = await installBootstrapFoundationFixture(fixture);
+      await expect(bootstrapFoundationExecutor(fixture, async (request) => {
+        await nodeFs.rename(request.sourcePath, request.destinationPath);
+        throw new Error('synthetic death after no-replace rename');
+      }).executeBootstrapFoundationParticipant(bootstrap.admission)).rejects.toBeInstanceOf(Error);
+      const before = await nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true });
+      const generic = bootstrapFoundationExecutor(fixture, noReplacePublisher());
+
+      await expect(generic.resume(BOOTSTRAP_FOUNDATION_ID)).rejects.toBeInstanceOf(TransactionStateError);
+      await expect(generic.rollback(BOOTSTRAP_FOUNDATION_ID)).rejects.toBeInstanceOf(TransactionStateError);
+
+      const after = await nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true });
+      expect([after.dev, after.ino]).toStrictEqual([before.dev, before.ino]);
+      const result = await bootstrapFoundationExecutor(fixture, noReplacePublisher())
+        .executeBootstrapFoundationParticipant(bootstrap.admission);
+      expect(result.phase).toBe('finalized');
     } finally {
       await removeFixture(fixture);
     }

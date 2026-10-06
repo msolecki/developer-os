@@ -1166,7 +1166,12 @@ record.
   --resume|--rollback <id>` is the explicit resolution of exactly that standalone journal, dispatched
   from `apps/cli/src/commands/repair.ts`. A non-terminal standalone Foundation journal outside that
   resolution, or a non-terminal uninstall coordinator, refuses exit 6 naming `developer-os repair
-  --resume <id>`/`--rollback <id>` or `developer-os uninstall`. The `retry_only` closure kind
+  --resume <id>`/`--rollback <id>` or `developer-os uninstall`. A fresh-install bootstrap Foundation
+  journal (`tx_fi_<uuid>_<n>_{f,c}`) is the exception: it is rewritten in place on its admitted
+  inode, and `TransactionExecutor.resume`/`rollback` refuse its id (`TransactionStateError`, exit 6),
+  because their temp-and-rename write would re-inode it and strand the bootstrap's identity-bound
+  resume (NEW-174). `doctor` names `developer-os init` for it, and `init`'s incomplete-transaction
+  gate skips it so the bootstrap resume path reaches it. The `retry_only` closure kind
   (`packages/core/src/lifecycle/ledger.ts`, `classify`) is the healthy, retryable state of a
   coordinator stuck on a failed `network_push`/`destination_git_effect` step. Since plan 1b it is
   reachable in production: a `git sync` whose push fails leaves the persisted push plan and a

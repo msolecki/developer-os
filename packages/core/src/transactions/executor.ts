@@ -947,6 +947,24 @@ const BOOTSTRAP_FOUNDATION_ID_RE = new RegExp(
   "u",
 );
 
+/** A bootstrap Foundation participant's id; its journal is rewritten in place on its admitted inode. */
+export function isBootstrapFoundationTransactionId(id: string): boolean {
+  return BOOTSTRAP_FOUNDATION_ID_RE.test(id);
+}
+
+/**
+ * NEW-174: the generic paths rewrite a journal by temp + rename, which gives it
+ * a new inode, and the bootstrap's identity-bound resume then refuses for good.
+ * Only `developer-os init` resumes or compensates these journals.
+ */
+function refuseBootstrapFoundationId(id: string): void {
+  if (isBootstrapFoundationTransactionId(id)) {
+    throw new TransactionStateError(
+      `transaction ${id} belongs to an interrupted fresh install; run developer-os init to resume or roll it back`,
+    );
+  }
+}
+
 async function optionalLstat(
   fs: TransactionFileSystem,
   path: CanonicalAbsolutePathV1,
@@ -2134,6 +2152,7 @@ export class TransactionExecutor {
   }
 
   async resume(id: string): Promise<TransactionJournalV1> {
+    refuseBootstrapFoundationId(id);
     return this.store.withTransactionLock(id, () => this.resumeLocked(id));
   }
 
@@ -2202,6 +2221,7 @@ export class TransactionExecutor {
   }
 
   async rollback(id: string): Promise<TransactionJournalV1> {
+    refuseBootstrapFoundationId(id);
     return this.store.withTransactionLock(id, () => this.rollbackLocked(id));
   }
 

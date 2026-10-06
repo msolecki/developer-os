@@ -5,6 +5,7 @@ import {
   failure,
   foldPath,
   hashBytes,
+  isBootstrapFoundationTransactionId,
   serializeConfig,
   success,
   validateChangePlan,
@@ -576,7 +577,8 @@ async function assertNoIncompleteTransaction(
   context: CliContext,
 ): Promise<void> {
   const incomplete = await listIncompleteTransactions(context);
-  const first = incomplete[0];
+  // NEW-174: a bootstrap Foundation journal is resumed by the bootstrap path below, never by `repair`.
+  const first = incomplete.find((entry) => !isBootstrapFoundationTransactionId(entry.id));
   if (first === undefined) return;
 
   throw new InitRefusal(

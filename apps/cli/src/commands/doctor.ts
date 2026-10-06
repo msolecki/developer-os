@@ -11,6 +11,7 @@ import {
   hashBytes,
   hookCommandTail,
   inspectDrift,
+  isBootstrapFoundationTransactionId,
   isUnsignedLocalTrust,
   ManifestStateError,
   parseCanonicalAbsolutePathText,
@@ -1072,7 +1073,10 @@ async function checkTransactions(context: CliContext): Promise<Finding> {
       `transaction ${first.id} stopped at phase ${first.phase}`,
       [join(context.paths.stateDir, "transactions", `${first.id}.json`)],
       EXIT_CODES.recoveryRequired,
-      `developer-os repair --resume ${first.id} | developer-os repair --rollback ${first.id}`,
+      // NEW-174: `repair` refuses a bootstrap Foundation journal; `init` resumes or compensates it.
+      isBootstrapFoundationTransactionId(first.id)
+        ? "developer-os init"
+        : `developer-os repair --resume ${first.id} | developer-os repair --rollback ${first.id}`,
     );
   }
 

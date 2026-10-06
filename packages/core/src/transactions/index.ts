@@ -1,6 +1,7 @@
 export {
   admitBootstrapFoundationInitialJournal,
   admitLifecycleFoundationInitialJournal,
+  isBootstrapFoundationTransactionId,
   TransactionBackupRetentionError,
   TransactionConflictError,
   TransactionExecutor,

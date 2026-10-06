@@ -431,6 +431,7 @@ export type { CapabilityVersionTable } from "./versions/index.js";
 export {
   admitBootstrapFoundationInitialJournal,
   admitLifecycleFoundationInitialJournal,
+  isBootstrapFoundationTransactionId,
   recoverTransaction,
   TransactionBackupRetentionError,
   TransactionConflictError,
