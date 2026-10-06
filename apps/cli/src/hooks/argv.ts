@@ -1,8 +1,10 @@
-export const HOOK_GUARD_KINDS = ["command", "path", "commit", "stop", "format", "prompt", "edit"] as const;
-export type HookGuardKind = (typeof HOOK_GUARD_KINDS)[number];
-export type HookVerb = HookGuardKind | "inject";
-export type HookVendor = "claude" | "codex";
-const VENDORS: readonly string[] = ["claude", "codex"];
+import { HOOK_GUARD_KINDS, HOOK_VENDORS } from "@developer-os/core";
+import type { HookGuardKind, HookVendor, HookVerb } from "@developer-os/core";
+
+export { HOOK_GUARD_KINDS };
+export type { HookGuardKind, HookVendor, HookVerb };
+
+const VENDORS: readonly string[] = HOOK_VENDORS;
 const SECURITY: readonly string[] = ["command", "path", "commit"];
 
 export const HOOK_FAIL_MODE: Readonly<Record<HookVerb, "closed" | "open">> = Object.freeze({
