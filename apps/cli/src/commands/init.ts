@@ -48,6 +48,7 @@ import {
   BRAIN_TEMPLATE_DIRECTORIES,
 } from "./brain-template.js";
 import type { CliContext } from "../context.js";
+import { isMissingEntry } from "../config-file.js";
 import { FreshBootstrapError } from "../bootstrap/executor.js";
 import type {
   FreshInitOutcomeV1,
@@ -257,13 +258,7 @@ async function isMissingPath(context: CliContext, path: string): Promise<boolean
     await context.fs.lstat(path);
     return false;
   } catch (error) {
-    return (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      ((error as { code?: unknown }).code === "ENOENT" ||
-        (error as { code?: unknown }).code === "ENOTDIR")
-    );
+    return isMissingEntry(error);
   }
 }
 

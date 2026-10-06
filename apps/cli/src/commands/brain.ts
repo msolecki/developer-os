@@ -1,8 +1,8 @@
 import { join } from "node:path";
+import { ConfigurationError, readConfigFile } from "../config-file.js";
 
 import {
   EXIT_CODES,
-  failure,
   parseSafeReasonCode,
   success,
 } from "@developer-os/core";
@@ -19,8 +19,8 @@ import type { LintFinding, RefactorRequestV1, RetrievalMatch } from "@developer-
 import { failureFrom, renderPath, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
 import { LifecycleMutationRefusal, withLifecycleMutation } from "../lifecycle/mutation-gate.js";
+import { isReservedReasonCode } from "../lifecycle/runtime-records.js";
 import type { ScheduledHandlerResultV1 } from "../lifecycle/runtime-records.js";
-import { ConfigurationError, readConfigFile } from "./doctor.js";
 import { runRefactor } from "./refactor.js";
 import type { BrainRefactorResultV1 } from "./refactor.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
@@ -379,32 +379,17 @@ export async function runBrain(
         );
     }
   } catch (error) {
-    if (error instanceof BrainRefusal) {
-      /**
-       * Redacted like every other failure this CLI emits. `init` gets this for
-       * free by routing through `failureFrom`; building the result by hand here
-       * skipped it, and lint findings interpolate note content.
-       */
-      return failure(error.code, {
-        kind: "brain_refusal",
-        message: context.guards.redactDiagnostic(error.message),
-        paths: error.paths,
-        ...(error.recovery === undefined
-          ? {}
-          : { recovery: context.guards.redactDiagnostic(error.recovery) }),
-      });
-    }
+    // `failureFrom` redacts message, paths and recovery; a hand-built `failure()` here skipped the paths (CLI-CMD-5).
+    if (error instanceof BrainRefusal) return failureFrom(context, error, error.paths, error.recovery);
     return failureFrom(context, error);
   }
 }
-
-const INERT_REASON_CODES: ReadonlySet<string> = new Set(["ok", "git_disabled", "automation_disabled", "skipped_lock_timeout"]);
 
 /** A failure's `kind` when it is already a safe reason code no status outcome reserves. */
 function scheduledReasonCode(kind: string, fallback: "handler_refused" | "handler_failed"): ScheduledHandlerResultV1["reasonCode"] {
   try {
     const code = parseSafeReasonCode(kind);
-    return INERT_REASON_CODES.has(code) ? parseSafeReasonCode(fallback) : code;
+    return isReservedReasonCode(code) ? parseSafeReasonCode(fallback) : code;
   } catch {
     return parseSafeReasonCode(fallback);
   }

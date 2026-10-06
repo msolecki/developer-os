@@ -28,6 +28,28 @@ function asBytes(chunk: unknown): Buffer {
   throw new TypeError("stdin yielded a chunk that is neither text nor bytes");
 }
 
+async function readStdinBytes(limit: number): Promise<Uint8Array | null> {
+  if (process.stdin.isTTY) return null;
+
+  const chunks: Buffer[] = [];
+  let size = 0;
+  /**
+   * `unknown`, then narrowed. `@types/node` types a stream chunk as `any`,
+   * and asserting `Buffer` was a trapdoor rather than a shortcut: anything
+   * that set an encoding on `process.stdin` would yield strings, whose
+   * `byteLength` is `undefined`, so `size` became `NaN`, the bound never
+   * tripped, and `Buffer.concat` threw on the way out. Both shapes are now
+   * handled and anything else fails loudly.
+   */
+  for await (const chunk of process.stdin as AsyncIterable<unknown>) {
+    const bytes = asBytes(chunk);
+    chunks.push(bytes);
+    size += bytes.byteLength;
+    if (size > limit) break;
+  }
+  return chunks.length === 0 ? null : Buffer.concat(chunks).subarray(0, limit + 1);
+}
+
 const io: CliIo = {
   stdout: (line: string) => {
     process.stdout.write(`${line}\n`);
@@ -80,39 +102,11 @@ const io: CliIo = {
    * and it is recorded here because the second error surprises people.
    */
   readStdin: async (): Promise<string | null> => {
-    if (process.stdin.isTTY) return null;
-
-    const chunks: Buffer[] = [];
-    let size = 0;
-    /**
-     * `unknown`, then narrowed. `@types/node` types a stream chunk as `any`,
-     * and asserting `Buffer` was a trapdoor rather than a shortcut: anything
-     * that set an encoding on `process.stdin` would yield strings, whose
-     * `byteLength` is `undefined`, so `size` became `NaN`, the bound never
-     * tripped, and `Buffer.concat` threw on the way out. Both shapes are now
-     * handled and anything else fails loudly.
-     */
-    for await (const chunk of process.stdin as AsyncIterable<unknown>) {
-      const bytes = asBytes(chunk);
-      chunks.push(bytes);
-      size += bytes.byteLength;
-      if (size > MAX_CAPTURE_INPUT_BYTES) break;
-    }
-    return chunks.length === 0 ? null : Buffer.concat(chunks).toString("utf8");
+    // The bound is `readStdinBytes`'s: it returns at most one byte over, which is all capture needs to refuse.
+    const bytes = await readStdinBytes(MAX_CAPTURE_INPUT_BYTES);
+    return bytes === null ? null : Buffer.from(bytes).toString("utf8");
   },
-  readStdinBytes: async (limit: number): Promise<Uint8Array | null> => {
-    if (process.stdin.isTTY) return null;
-
-    const chunks: Buffer[] = [];
-    let size = 0;
-    for await (const chunk of process.stdin as AsyncIterable<unknown>) {
-      const bytes = asBytes(chunk);
-      chunks.push(bytes);
-      size += bytes.byteLength;
-      if (size > limit) break;
-    }
-    return chunks.length === 0 ? null : Buffer.concat(chunks).subarray(0, limit + 1);
-  },
+  readStdinBytes,
 };
 
 const home = process.env.HOME;

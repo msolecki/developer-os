@@ -234,6 +234,8 @@ describe("run", () => {
 
     expect(code).toBe(2);
     expect(lines[0]).toContain("Usage: developer-os <command> [options]");
+    // CLI-CMD-11: `brain reindex` takes --dry-run (the subcommand table says so), so the usage lists it.
+    expect(lines.join("\n")).toMatch(/--dry-run[^\n]*brain reindex/u);
   });
 
   it("reports an invalid invocation as one JSON line", async () => {
@@ -459,7 +461,7 @@ const NON_INIT_COMMANDS = [
   ["repair", "--resume", "tx_fixture_001"],
   ["capture", "--text", "synthetic observation"],
   ["review"],
-  ["ingest", "--yes"],
+  ["ingest"],
   ["brain", "status"],
   ["search", "synthetic"],
 ] as const;
@@ -1148,6 +1150,10 @@ describe("ingest dispatch", () => {
     await refuses(["brain", "lint", "--agent", "claude"]);
   });
 
+  it("refuses --yes on ingest: it never asks, and capture and review reject the flag too (CLI-CMD-9)", async () => {
+    await refuses(["ingest", "--yes"]);
+  });
+
   it("refuses a positional, because ingest names no capture", async () => {
     await refuses(["ingest", "0f1e2d3c4b5a6978"]);
   });
@@ -1167,10 +1173,9 @@ describe("ingest dispatch", () => {
     for (const argv of [
       ["ingest"],
       ["ingest", "--json"],
-      ["ingest", "--yes"],
       ["ingest", "--limit", "2"],
       ["ingest", "--agent", "codex"],
-      ["ingest", "--agent", "claude", "--limit", "1", "--json", "--yes"],
+      ["ingest", "--agent", "claude", "--limit", "1", "--json"],
     ]) {
       const fixture = await createCommandFixture(`ok-${argv.join("-")}`);
       const lines: string[] = [];

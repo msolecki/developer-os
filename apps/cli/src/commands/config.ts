@@ -4,7 +4,6 @@
  * derives; `set` runs its one Foundation transaction inside `withLifecycleMutation`, guarded
  * by the hash of the very bytes it read.
  */
-import { join } from "node:path";
 
 import {
   encodeCanonicalJson,
@@ -17,7 +16,6 @@ import {
   success,
 } from "@developer-os/core";
 import type {
-  CanonicalAbsolutePathV1,
   CanonicalJsonValue,
   CliResult,
   ConfigGetResultV1,
@@ -28,17 +26,16 @@ import type {
 import { failureFrom } from "../context.js";
 import type { CliContext } from "../context.js";
 import { V2HomeAdmissionError } from "../lifecycle/admission.js";
-import { LifecycleMutationRefusal, withLifecycleMutation, classifyMutationHome } from "../lifecycle/mutation-gate.js";
+import { admitV2Home } from "../lifecycle/command-home.js";
+import { LifecycleMutationRefusal, withLifecycleMutation } from "../lifecycle/mutation-gate.js";
 import type { CliLifecycleContext } from "../lifecycle/context.js";
-import { ConfigurationError, readConfigFile } from "./doctor.js";
+import { ConfigurationError, readConfigFile } from "../config-file.js";
 
 export type ConfigCommandRequestV1 =
   | { readonly operation: "get"; readonly key: string | null }
   | { readonly operation: "set"; readonly key: string; readonly value: string };
 
 export type ConfigCommandResultV1 = ConfigGetResultV1 | ConfigSetResultV1;
-
-const GLOBAL_LOCK_LEAF = ".lifecycle.lock";
 
 const encoder = new TextEncoder();
 
@@ -51,45 +48,6 @@ function refusalPathsOf(error: unknown): readonly string[] {
   return error instanceof V2HomeAdmissionError || error instanceof LifecycleMutationRefusal
     ? error.paths
     : [];
-}
-
-/**
- * A manifest-absent home that still carries the global lock may be a mutation in flight, so
- * the answer is only stable once that mutation has released it. The lock is taken with
- * `acquireExisting` and never created: `config` on a home with no installation must not
- * leave one behind.
- */
-async function reclassifyUnderGlobalLock(
-  context: CliContext,
-  lifecycle: CliLifecycleContext | undefined,
-): Promise<boolean> {
-  if (lifecycle === undefined) return false;
-  const lockPath = join(context.paths.stateDir, GLOBAL_LOCK_LEAF) as CanonicalAbsolutePathV1;
-  const held = await lifecycle.locks.acquireExisting(lockPath);
-  try {
-    return (await classifyMutationHome(context, lifecycle)).kind === "v2";
-  } finally {
-    await held.release();
-  }
-}
-
-async function admitV2Home(context: CliContext): Promise<CliLifecycleContext> {
-  const lifecycle = context.lifecycle;
-  const home = await classifyMutationHome(context, lifecycle);
-  if (home.kind === "v1") {
-    throw new V2HomeAdmissionError("manifest_v1_not_migratable", [context.paths.manifestFile]);
-  }
-  if (home.kind === "manifest_absent") {
-    throw new V2HomeAdmissionError("manifest_absent", [context.paths.manifestFile]);
-  }
-  if (home.kind === "manifest_absent_with_global_lock" && !(await reclassifyUnderGlobalLock(context, lifecycle))) {
-    throw new V2HomeAdmissionError("manifest_absent", [
-      context.paths.manifestFile,
-      join(context.paths.stateDir, GLOBAL_LOCK_LEAF),
-    ]);
-  }
-  if (lifecycle === undefined) throw new Error("an admitted V2 home has no lifecycle context");
-  return lifecycle;
 }
 
 /**

@@ -805,6 +805,23 @@ describe("runCapture", () => {
     expect(written).not.toContain(fixture.project);
   });
 
+  it("slugs the project root, not the subdirectory it runs in (FLOW-INIT-7)", async () => {
+    const fixture = await installedFixture("capture-subdirectory");
+    await nodeFs.mkdir(join(fixture.project, ".git"));
+    const inner = join(fixture.project, "apps", "cli");
+    await nodeFs.mkdir(inner, { recursive: true, mode: 0o700 });
+
+    const result = await runCapture(
+      fixture.context,
+      { text: OBSERVATION },
+      { cwd: () => inner, detect: detectSourceAgent, executables: syntheticProbeHost() },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(await nodeFs.readFile(result.data.path, "utf8")).toContain("projectSlug: sample-project\n");
+  });
+
   /**
    * A basename longer than the bound: the cut lands inside the separator run
    * between the two words, so trimming before slicing left `…aaa-`, a trailing

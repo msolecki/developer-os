@@ -411,6 +411,13 @@ describe("git on a real V2 home", () => {
         const failed = await runGit(home.context, { subcommand: "sync" });
         expect(failed.ok).toBe(false);
         expect(failed.code).toBe(EXIT_CODES.recoveryRequired);
+        if (failed.ok) throw new Error("the rejected push must fail");
+        // CLI-CMD-8: the pending push names its coordinator and head, so the retry is addressable.
+        expect(failed.error.kind).toBe("push_pending");
+        expect(failed.error.data).toEqual({
+          transactionId: expect.stringMatching(/^lc_/u) as string,
+          headOid: expect.stringMatching(/^[0-9a-f]{40}$/u) as string,
+        });
         expect(await readOrNull(join(home.paths.stateDir, "git-sync.json"))).toBe(previousSuccess);
         expect(await readOrNull(join(home.remote, "refs", "heads", "main"))).toBe(remoteBefore);
         expect(await closureOf(home)).toBe("retry_only");

@@ -7,17 +7,16 @@ import type { SafeReasonCodeV1 } from "@developer-os/core";
 
 import type { CliContext } from "../../context.js";
 import type { CliLifecycleContext } from "../../lifecycle/context.js";
+import { isReservedReasonCode } from "../../lifecycle/runtime-records.js";
 import type { ScheduledHandlerResultV1 } from "../../lifecycle/runtime-records.js";
 import { createGitService } from "../git/service.js";
 import { createScheduledJobHandlers } from "./runner.js";
 import type { ScheduledJobHandlersV1 } from "./runner.js";
 
-const RESERVED_REASON_CODES: ReadonlySet<string> = new Set(["ok", "git_disabled", "automation_disabled", "skipped_lock_timeout"]);
-
 function reasonOf(value: unknown): SafeReasonCodeV1 | null {
   try {
     const code = parseSafeReasonCode(value);
-    return RESERVED_REASON_CODES.has(code) ? parseSafeReasonCode("handler_refused") : code;
+    return isReservedReasonCode(code) ? parseSafeReasonCode("handler_refused") : code;
   } catch {
     return null;
   }

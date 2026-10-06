@@ -2,44 +2,21 @@
  * The `git` command's CLI entry: admits a V2 home, takes the global mutation lock for every
  * apply and sync — so the service never acquires it a second time — and renders the result.
  */
-import { join } from "node:path";
-
 import { EXIT_CODES, GIT_ENABLE_BRANCH_HISTORY_WARNING, failure, success } from "@developer-os/core";
-import type { CanonicalAbsolutePathV1, CliResult, HeldLifecycleStableLockV1 } from "@developer-os/core";
+import type { CliResult } from "@developer-os/core";
 
 import { failureFrom, renderPath } from "../../context.js";
 import type { CliContext } from "../../context.js";
 import { V2HomeAdmissionError } from "../../lifecycle/admission.js";
+import { admitV2Home, withGlobalLock } from "../../lifecycle/command-home.js";
 import type { CliLifecycleContext } from "../../lifecycle/context.js";
-import { classifyMutationHome, LifecycleMutationRefusal } from "../../lifecycle/mutation-gate.js";
+import { LifecycleMutationRefusal } from "../../lifecycle/mutation-gate.js";
 import { createGitService, GitCommandRefusal } from "./service.js";
 import type { GitCommandDataV1, GitCommandRequestV1, GitCommandResultV1 } from "./service.js";
 
 export type { GitCommandDataV1, GitCommandRequestV1, GitCommandResultV1 } from "./service.js";
 export { createGitService } from "./service.js";
 export type { GitService } from "./service.js";
-
-async function admitV2Home(context: CliContext): Promise<CliLifecycleContext> {
-  const lifecycle = context.lifecycle;
-  const home = await classifyMutationHome(context, lifecycle);
-  if (home.kind === "v1") throw new V2HomeAdmissionError("manifest_v1_not_migratable", [context.paths.manifestFile]);
-  if (home.kind !== "v2") throw new V2HomeAdmissionError("manifest_absent", [context.paths.manifestFile]);
-  if (lifecycle === undefined) throw new Error("an admitted V2 home has no lifecycle context");
-  return lifecycle;
-}
-
-async function withGlobalLock<T>(
-  context: CliContext,
-  lifecycle: CliLifecycleContext,
-  work: (global: HeldLifecycleStableLockV1) => Promise<T>,
-): Promise<T> {
-  const held = await lifecycle.locks.acquireExisting(join(context.paths.stateDir, ".lifecycle.lock") as CanonicalAbsolutePathV1);
-  try {
-    return await work(held);
-  } finally {
-    await held.release();
-  }
-}
 
 async function execute(context: CliContext, lifecycle: CliLifecycleContext, request: GitCommandRequestV1): Promise<GitCommandResultV1> {
   const service = createGitService(context, lifecycle);
@@ -78,11 +55,16 @@ export async function runGit(context: CliContext, request: GitCommandRequestV1):
   try {
     const result = await execute(context, await admitV2Home(context), request);
     if (result.exitCode === EXIT_CODES.success) return success(result.data);
+    // Only `sync` returns a non-success exit code: a pending push, whose coordinator and head the retry needs.
+    const { data } = result;
     return failure(result.exitCode, {
       kind: "push_pending",
       message: "the push did not complete; the local commit is kept and the prior sync record is unchanged",
-      paths: [context.paths.home],
+      paths: [context.paths.home].map((path) => context.guards.redactDiagnostic(path, "path")),
       recovery: "developer-os git sync",
+      ...(data.kind === "sync"
+        ? { data: context.guards.redactData({ transactionId: data.transactionId, headOid: data.headOid }) }
+        : {}),
     });
   } catch (error) {
     const recovery = error instanceof GitCommandRefusal || error instanceof LifecycleMutationRefusal ? error.recovery : undefined;

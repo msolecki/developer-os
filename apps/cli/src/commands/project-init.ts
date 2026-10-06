@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import { cwd as processCwd } from "node:process";
 
@@ -11,18 +10,16 @@ import {
   validateChangePlan,
 } from "@developer-os/core";
 import type { CliResult, ExitCode } from "@developer-os/core";
-import { createRedactor } from "@developer-os/security";
 import type { RedactionScope, Redactor } from "@developer-os/security";
 
 import {
-  REDACTION_KEY_BYTES,
   failureFrom,
-  readRedactionKey,
+  redactorWithoutCreatingKey,
   renderPath,
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
-import { readAdmittedManifest, readConfigFile } from "./doctor.js";
+import { readAdmittedManifest } from "./doctor.js";
 import {
   PROJECT_TEMPLATE,
   PROJECT_TEMPLATE_MAX_BYTES,
@@ -30,6 +27,7 @@ import {
 import type { ProjectTemplateFile } from "./project-template.js";
 import { EMPTY_MANIFEST } from "./quarantine.js";
 import { UntrustedFileRefusal, readUntrustedText } from "./untrusted-file.js";
+import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 export interface ProjectInitResultV1 {
   readonly schemaVersion: 1;
@@ -77,15 +75,6 @@ class ProjectInitRefusal extends Error {
     this.paths = paths;
     this.recovery = recovery;
   }
-}
-
-function isMissingEntry(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
 }
 
 async function lstatOrNull(context: CliContext, path: string) {
@@ -192,10 +181,7 @@ export async function runProjectInit(
     }
     const paths = runtimePathsFor(context, config);
     // Never creates a key (plan Global Constraints): redaction here only decides whether a finding exists.
-    const redact = createRedactor(
-      readRedactionKey(paths.stateDir) ?? randomBytes(REDACTION_KEY_BYTES),
-      { userPatterns: config.redaction?.patterns ?? [] },
-    );
+    const redact = redactorWithoutCreatingKey({ paths }, config.redaction?.patterns ?? []);
     guards = guardsWith(context.guards, redact);
 
     const target = resolve(dependencies.cwd(), options.dir ?? ".");
@@ -285,7 +271,7 @@ export async function runProjectInit(
       return failure(error.code, {
         kind: error.kind,
         message: guards.redactDiagnostic(error.message),
-        paths: error.paths,
+        paths: error.paths.map((path) => guards.redactDiagnostic(path, "path")),
         ...(error.recovery === undefined
           ? {}
           : { recovery: guards.redactDiagnostic(error.recovery) }),

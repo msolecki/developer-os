@@ -55,7 +55,7 @@ import { LifecycleMutationRefusal } from "../lifecycle/mutation-gate.js";
 import { detachVendorInstructions, LifecycleUninstaller, planUninstallDetach } from "../lifecycle/uninstall.js";
 import type { LifecycleUninstallRequestV1 } from "../lifecycle/uninstall.js";
 import { dispatchUninstall, recoverUninstall } from "../lifecycle/uninstall-recovery.js";
-import { readConfigFile } from "./doctor.js";
+import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 export interface UninstallResultV1 {
   readonly schemaVersion: 1;
@@ -102,15 +102,6 @@ export class UninstallRefusal extends Error {
     this.paths = paths;
     this.recovery = recovery;
   }
-}
-
-function isMissing(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
 }
 
 function isNotEmpty(error: unknown): boolean {
@@ -386,7 +377,7 @@ export async function removeDirectories(
       await context.fs.rmdir(entry.canonicalPath);
       removed.push(entry.artifact.path);
     } catch (error) {
-      if (isMissing(error)) continue;
+      if (isMissingEntry(error)) continue;
       if (isNotEmpty(error)) {
         preserved.push(entry.artifact.path);
         continue;
@@ -522,7 +513,7 @@ export async function removeManifestFile(context: CliContext): Promise<void> {
   try {
     await context.fs.unlink(context.paths.manifestFile);
   } catch (error) {
-    if (!isMissing(error)) throw error;
+    if (!isMissingEntry(error)) throw error;
   }
 }
 
@@ -542,7 +533,7 @@ export async function removeRedactionKeyFile(
   try {
     await context.fs.unlink(redactionKeyPath(context.paths.stateDir));
   } catch (error) {
-    if (!isMissing(error)) throw error;
+    if (!isMissingEntry(error)) throw error;
   }
 }
 
@@ -715,7 +706,7 @@ async function assertHomeShape(context: CliContext): Promise<void> {
   try {
     stats = await context.fs.lstat(context.paths.home);
   } catch (error) {
-    if (isMissing(error)) return;
+    if (isMissingEntry(error)) return;
     throw error;
   }
   if (stats.isSymbolicLink() || !stats.isDirectory()) {

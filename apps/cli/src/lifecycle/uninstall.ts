@@ -114,7 +114,6 @@ import type {
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
-import { readConfigFile } from "../commands/doctor.js";
 import {
   downcastArtifactV2,
   planUninstall,
@@ -157,6 +156,7 @@ import {
   stageRedactionKey,
 } from "./redaction-key.js";
 import type { RedactionKeyStatePlanV1 } from "./redaction-key.js";
+import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 const GLOBAL_LOCK_LEAF = ".lifecycle.lock";
 const MARKER_LEAF = "uninstalling.json";
@@ -1875,11 +1875,6 @@ async function cleanAllocatorTemp(
     allocatedIds,
   );
   await cleanLifecycleAllocatorTemp(lifecycle.fs, rechecked, held, allocatedIds);
-}
-
-function isMissingEntry(error: unknown): boolean {
-  const code = (error as { readonly code?: unknown } | null)?.code;
-  return code === "ENOENT" || code === "ENOTDIR";
 }
 
 /** The detach planner's no-follow reads over the real filesystem. */

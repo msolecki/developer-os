@@ -96,6 +96,11 @@ export interface ScheduledHandlerResultV1 {
 const HANDLER_OUTCOMES: readonly AutomationHandlerOutcomeV1[] = ["success", "handler_refused", "handler_failed"];
 const INERT_OUTCOMES: readonly AutomationInertOutcomeV1[] = ["git_disabled", "automation_disabled", "skipped_lock_timeout"];
 
+/** A reason code a handler may not publish: the success code and every inert outcome belong to the runner. */
+export function isReservedReasonCode(code: string): boolean {
+  return code === "ok" || (INERT_OUTCOMES as readonly string[]).includes(code);
+}
+
 export class AutomationRuntimeRecordError extends Error {
   constructor(message: string) {
     super(`invalid automation runtime record: ${message}`);

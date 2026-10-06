@@ -28,6 +28,7 @@ import type {
   LowerHexSha256,
   UInt64DecimalV1,
 } from "@developer-os/core";
+import { isMissingEntry } from "../config-file.js";
 
 export const REDACTION_KEY_STATE_PLAN_HASH_DOMAIN = "developer-os:redaction-key-state-plan:v1";
 
@@ -178,11 +179,6 @@ function refuseSecret(reason: string, path: CanonicalAbsolutePathV1): never {
   throw new LifecycleRecoveryRequiredError(reason, [path]);
 }
 
-function isMissing(error: unknown): boolean {
-  if (typeof error !== "object" || error === null || !("code" in error)) return false;
-  return error.code === "ENOENT" || error.code === "ENOTDIR";
-}
-
 function admitSecretShape(
   path: CanonicalAbsolutePathV1,
   stats: BigIntStats,
@@ -205,7 +201,7 @@ export async function observeSecretOpaqueKey(
   try {
     handle = await open(path, SECRET_OPEN_FLAGS);
   } catch (error) {
-    if (isMissing(error)) return { state: "absent" };
+    if (isMissingEntry(error)) return { state: "absent" };
     return refuseSecret("redaction_key_open", path);
   }
   try {
@@ -240,7 +236,7 @@ export async function unlinkSecretOpaqueKey(
   try {
     stats = await lstat(path, { bigint: true });
   } catch (error) {
-    if (isMissing(error)) return refuseSecret("redaction_key_vanished", path);
+    if (isMissingEntry(error)) return refuseSecret("redaction_key_vanished", path);
     throw error;
   }
   admitSecretShape(path, stats, expected.ownerUid);
