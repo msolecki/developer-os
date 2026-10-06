@@ -537,6 +537,18 @@ describe("runDoctor", () => {
     );
   });
 
+  it("names init, not repair, for an incomplete bootstrap Foundation journal (NEW-174)", async () => {
+    const fixture = await createCommandFixture("doctor-incomplete-bootstrap-foundation");
+    await seedIncompleteTransaction(fixture, "tx_fi_123e4567-e89b-42d3-a456-426614174000_0000000000_f");
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.recovery).toBe("developer-os init");
+  });
+
   /**
    * **The channel that lets the executor's forward path retain instead of raise, so it is
    * the assertion that keeps that from being a silent no-op.**
