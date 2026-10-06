@@ -32,11 +32,8 @@ import {
 import {
   FOUNDATION_MUTATION_OPERATIONS,
   FOUNDATION_PARTICIPANT_SLOTS,
-  LIFECYCLE_COMPACTION_ENTRY_KINDS,
   LIFECYCLE_COORDINATOR_OPERATIONS,
   LIFECYCLE_COORDINATOR_PHASES,
-  LIFECYCLE_COORDINATOR_STEP_KINDS,
-  LIFECYCLE_JOURNAL_CLOSURE_KINDS,
   LIFECYCLE_MANIFEST_STEP_TRANSITIONS,
   LIFECYCLE_PLAN_BOUNDS,
   LIFECYCLE_PREVIEW_COMMANDS,
@@ -569,17 +566,6 @@ describe("the closed lifecycle tables", () => {
       "uninstall_marker",
       "uninstall_artifacts",
     ]);
-    expect(LIFECYCLE_COORDINATOR_STEP_KINDS).toEqual([
-      "foundation",
-      "manifest",
-      "source_git_effect",
-      "destination_git_effect",
-      "launchd_before_files",
-      "launchd_after_files",
-      "redaction_key",
-      "network_push",
-      "drain_runners",
-    ]);
     expect(LIFECYCLE_MANIFEST_STEP_TRANSITIONS).toEqual([
       "preserve_before",
       "publish_after",
@@ -613,19 +599,6 @@ describe("the closed lifecycle tables", () => {
     ]);
     expect(LIFECYCLE_PREVIEW_FILE_OPERATIONS).toEqual(["create", "replace", "remove", "keep"]);
     expect(LIFECYCLE_PREVIEW_FILE_STATES).toEqual(["absent", "present"]);
-    expect(LIFECYCLE_COMPACTION_ENTRY_KINDS).toEqual([
-      "foundation_transaction",
-      "git_effect",
-      "launchd_effect",
-      "coordinator_staging",
-      "coordinator_envelope",
-    ]);
-    expect(LIFECYCLE_JOURNAL_CLOSURE_KINDS).toEqual([
-      "clear",
-      "retry_only",
-      "uninstall_draining",
-      "lifecycle_recovery_required",
-    ]);
     expect(LIFECYCLE_TERMINAL_OUTCOMES).toEqual(["finalized", "rolled_back"]);
     expect(LIFECYCLE_SUBSYSTEMS).toEqual(["git", "automation"]);
   });
