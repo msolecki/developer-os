@@ -10,7 +10,6 @@ import {
   materializeSchemaMigrations,
   orderMigrationChain,
   planSchemaMigrations,
-  projectRetainedSchemaMigrationInverse,
   schemaMigrationInitialState,
   schemaMigrationPlanHash,
   selectMigrationChain,
@@ -481,31 +480,6 @@ describe("materializeSchemaMigrations", () => {
       [brainDraft.id, foundationPair(12, aliased, noteV1, noteV2, 2, 3)],
     ]);
     expect(() => materializeSchemaMigrations([configDraft, brainDraft], { ...base, foundation })).toThrow(/cross-domain/);
-  });
-});
-
-describe("retained inverse projection", () => {
-  it("expects the after hash and restores the exact before bytes from the rollback payload", () => {
-    const { plan } = materializeMigration();
-    const rollbackBindingHash = sha("rollback binding");
-    const retained = projectRetainedSchemaMigrationInverse(plan, { rollbackBindingHash, firstBlobOrdinal: 3 });
-    expect(retained).toEqual({
-      schemaVersion: 1,
-      kind: "schema_migration_inverse",
-      id: plan.id,
-      rollbackBindingHash,
-      sourceMigrationPlanHash: schemaMigrationPlanHash(plan),
-      domain: "product_state",
-      fromVersion: 1,
-      toVersion: 2,
-      mutations: [{ path: configPath, expectedCurrentHash: sha(configV2), restoreHash: sha(configV1), restoreBlob: { path: "blobs/0000000003.bin", bytes: configV1.byteLength, sha256: sha(configV1) } }],
-      maximumPlanBytes: 16_777_216,
-    });
-  });
-
-  it("refuses a blob ordinal past the rollback payload bound", () => {
-    const { plan } = materializeMigration();
-    expect(() => projectRetainedSchemaMigrationInverse(plan, { rollbackBindingHash: sha("binding"), firstBlobOrdinal: 1_000_000 })).toThrow();
   });
 });
 

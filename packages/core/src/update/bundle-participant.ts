@@ -659,7 +659,7 @@ export function validateBundleSourceJournal(value: unknown, plan: BundleSourceSt
   const compensation = nullableInteger(input.compensationNext, -1, N - 1, `${label}.compensationNext`);
   const part = input.compensationPart === null ? null : oneOf(input.compensationPart, ["entry", "evidence"] as const, `${label}.compensationPart`);
   const compensationStructure = nullableInteger(input.compensationStructureNext, -1, 2, `${label}.compensationStructureNext`);
-  const compaction = nullableInteger(input.compactionNext, 0, 2 * N + 4, `${label}.compactionNext`);
+  const compaction = nullableInteger(input.compactionNext, 0, bundleSourceCompactionEnd(plan), `${label}.compactionNext`);
   const { createdAt, updatedAt } = checkTimestamps(input, label);
 
   const noCompensation = compensation === null && part === null && compensationStructure === null;
@@ -810,7 +810,7 @@ export function advanceBundleSourceJournal(plan: BundleSourceStagingPlanV1, jour
         next = { ...base, phase: "compacting", compactionNext: 0 };
         break;
       }
-      need(current.phase === "compacting" && (current.compactionNext as number) < 2 * N + 4);
+      need(current.phase === "compacting" && (current.compactionNext as number) < bundleSourceCompactionEnd(plan));
       next = { ...base, compactionNext: (current.compactionNext as number) + 1 };
       break;
     default:
@@ -822,14 +822,15 @@ export function advanceBundleSourceJournal(plan: BundleSourceStagingPlanV1, jour
 /** Flattened source compaction: ready evidence; reverse entries target-then-evidence; reverse structures. */
 export function bundleSourceCompactionTarget(plan: BundleSourceStagingPlanV1, cursor: number): BundleSourceCompactionTargetV1 {
   const N = plan.entries.length;
-  const k = integer(cursor, 0, 2 * N + 3, "compactionNext");
+  const k = integer(cursor, 0, bundleSourceCompactionEnd(plan) - 1, "compactionNext");
   if (k === 0) return { kind: "ready" };
   if (k <= 2 * N) return { kind: (k - 1) % 2 === 0 ? "entry" : "evidence", ordinal: N - 1 - Math.floor((k - 1) / 2) };
   return { kind: "structure", ordinal: 2 - (k - 2 * N - 1) };
 }
 
-export function bundleSourceCompactionComplete(plan: BundleSourceStagingPlanV1, journal: BundleSourceStagingJournalV1): boolean {
-  return journal.phase === "compacting" && journal.compactionNext === 2 * plan.entries.length + 4;
+/** The compaction cursor's end: one past the last target of `bundleSourceCompactionTarget`. */
+export function bundleSourceCompactionEnd(plan: BundleSourceStagingPlanV1): number {
+  return 2 * plan.entries.length + 4;
 }
 
 function entryEvidenceFields(entry: ReleaseBundleEntryV1): Pick<DurableSourceEntryEvidenceV1, "pathHash" | "kind" | "bytes" | "sha256"> {

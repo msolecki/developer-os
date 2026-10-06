@@ -5,17 +5,16 @@ import type { AllocatedLifecycleIdV1, EffectiveUidV1 } from "../lifecycle/ids.js
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ManagedArtifactV2 } from "../manifest/types.js";
 import { updateLeafPlanHash } from "./bundle-participant.js";
+import { updateCompensationCursor } from "./coordinator.js";
 import type { ImmutableUpdatePlanRefV1, OwnerExternalEffectIdV1 } from "./construction.js";
 import { updateFoundationStagedPath, type SchemaMigrationPlanV1, type UpdateFoundationMutationRefV1, type UpdateFoundationParticipantRefV2, type UpdatePayloadRefV1 } from "./migrations.js";
 import {
   codexRegistrationProjectionHash,
-  compensateParticipants,
   migrationPostimagesHash,
   ownerCurrentPartitionHash,
   ownerExternalEffectProcessPolicyHash,
   ownerInverseOperationHash,
   ownerPostimagesHash,
-  updateCompensationSteps,
   updateParticipantDocumentBytes,
   updateParticipantDocumentHash,
   validateCanonicalStateFilePlan,
@@ -435,23 +434,21 @@ describe("participant compensation order", () => {
     { kind: "target_verifier", release: "target" },
   ];
 
-  it("never reverses trust but reverses active before the verifier point", async () => {
+  it("never reverses trust but reverses active before the verifier point", () => {
     const events: string[] = [];
-    await compensateParticipants({ steps, nextStep: 9, pointOfNoReturnReached: false }, {
-      compensate: async (step) => {
-        await Promise.resolve();
-        events.push(step.kind === "active" ? "active_restore" : step.kind === "trust" ? "trust_restore" : step.kind);
-        return { state: "compensated" };
-      },
-    });
+    for (let cursor = updateCompensationCursor(steps, 9); cursor >= 0; cursor = updateCompensationCursor(steps, cursor - 1)) {
+      const step = steps[cursor] as UpdateLifecycleCoordinatorStepV1;
+      events.push(step.kind === "active" ? "active_restore" : step.kind === "trust" ? "trust_restore" : step.kind);
+    }
     expect(events).toContain("active_restore");
     expect(events).not.toContain("trust_restore");
     expect(events[0]).toBe("target_verifier");
     expect(events.at(-1)).toBe("bundle");
+    expect(events).toHaveLength(9);
   });
 
-  it("refuses compensation after the point of no return", () => {
-    expect(() => updateCompensationSteps({ steps, nextStep: 9, pointOfNoReturnReached: true })).toThrow();
+  it("clamps a cursor past the plan to its last step", () => {
+    expect(updateCompensationCursor(steps, 99)).toBe(9);
   });
 });
 

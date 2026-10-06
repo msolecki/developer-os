@@ -10,6 +10,7 @@ import {
   parseCanonicalAbsolutePathText,
   parseUInt64Decimal,
   rollbackEntryParentStructure,
+  rollbackPayloadSourceCompactionEnd,
   rollbackPayloadSourceCompactionTarget,
   rollbackPayloadSourceJournalBytes,
   rollbackPayloadSourcePaths,
@@ -452,7 +453,7 @@ export class RollbackPayloadSourceExecutor {
     const phase = (file.value as RollbackPayloadSourceStagingJournalV1).phase;
     if (phase === "source_ready") await this.#advance(plan, file, { kind: "compaction_step" });
     else if (phase !== "compacting") refuseBundle("rollback_source_not_ready", file.path);
-    const last = 2 * plan.entryCount + 10;
+    const last = rollbackPayloadSourceCompactionEnd(plan);
     let entries: readonly RollbackPayloadEntryV1[] | null = null;
     for (let journal = file.value as RollbackPayloadSourceStagingJournalV1; (journal.compactionNext as number) < last; journal = file.value as RollbackPayloadSourceStagingJournalV1) {
       const target = rollbackPayloadSourceCompactionTarget(plan, journal.compactionNext as number);

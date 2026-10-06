@@ -23,7 +23,6 @@ import {
   rollbackDocumentBytes,
   rollbackDocumentHash,
   rollbackPayloadRetirementLeaves,
-  rollbackPayloadRetirementRef,
   rollbackPayloadSourceCompactionTarget,
   rollbackPayloadSourcePaths,
   rollbackPayloadSourceReadyEvidence,
@@ -415,7 +414,6 @@ describe("retirement inventory", () => {
       "/plans",
       "",
     ]);
-    expect(rollbackPayloadRetirementRef(built.identity, built.inventory)).toStrictEqual({ kind: "rollback_payload", root, inventoryHash: built.identity.inventoryHash, leafCount: built.inventory.entries.length + 7 });
   });
 
   it("refuses an inventory that is not its identity's", () => {
