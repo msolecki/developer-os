@@ -3157,6 +3157,25 @@ describe('transaction persistence', () => {
     }
   });
 
+  it('rolls back when a directory sits at the apply temp name instead of aborting', async () => {
+    const fixture = await createFixture('rollback-apply-temp-directory');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const applyTemp = join(fixture.workspaceDir, `.config.bin.${fixture.transactionId}-0.tmp`);
+    try {
+      await installOriginal(targetPath);
+      await expect(
+        createExecutor(fixture, { afterPhase: interruptAfter(fixture, 'applied') }).execute(replacePlan(targetPath)),
+      ).rejects.toBe(PHASE_INTERRUPTION);
+      await nodeFs.mkdir(applyTemp);
+      const journal = await createExecutor(fixture).rollback(fixture.transactionId);
+      expect(journal.phase).toBe('rolled_back');
+      await expectBytes(targetPath, ORIGINAL_BYTES);
+      expect((await nodeFs.lstat(applyTemp)).isDirectory()).toBe(true);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it('accepts the valid persisted-journal baseline', () => {
     expect(validateJournal(validPersistedJournal())).toStrictEqual(
       validPersistedJournal(),

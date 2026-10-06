@@ -706,6 +706,17 @@ describe("retained bootstrap journal chains", () => {
     expect(validateRetentionJournalSuccessor(plan, evidence, current, next)).toEqual(next);
   });
 
+  it("accepts a successor stamped before its predecessor after a wall-clock step back (W2-TX-A-1)", () => {
+    const forward = phaseRecord("payload_staging", { nextPayload: 1 });
+    const compensating = successor(forward, phaseRecord("compensating", { updatedAt: CREATED_AT }));
+    expect(Date.parse(compensating.updatedAt)).toBeLessThan(Date.parse(forward.updatedAt));
+    expect(validateBootstrapJournalSuccessor(plan, forward, compensating)).toEqual(compensating);
+  });
+
+  it("accepts a Foundation terminal journal stamped before its createdAt during fresh_v2_init (W2-TX-A-1)", () => {
+    expect(() => deriveBootstrapRetentionTable(plan, admittedEvidence(undefined, "2000-01-01T00:00:00.000Z"))).not.toThrow();
+  });
+
   it("accepts compensation entry and terminalization", () => {
     const forward = phaseRecord("payload_staging", { nextPayload: 1 });
     const compensating = successor(forward, phaseRecord("compensating"));
@@ -1132,6 +1143,7 @@ function admittedEvidence(
     manifestCursor: 3,
     terminalOutcome: "finalized",
   }),
+  foundationTerminalUpdatedAt?: string,
 ): BootstrapRetentionEvidenceProjectionV1 {
   const stagingRoot = plan.stagingRoot;
   const stagingOrdinal = plan.createdPaths.findIndex((planned) =>
@@ -1298,7 +1310,7 @@ function admittedEvidence(
       const terminalValue = {
         ...initial,
         phase: "finalized",
-        updatedAt: initial.updatedAt,
+        updatedAt: foundationTerminalUpdatedAt ?? initial.updatedAt,
       };
       const terminalBytes = `${JSON.stringify(terminalValue)}\n`;
       postimage = regular(terminalBytes, origin.ino, {

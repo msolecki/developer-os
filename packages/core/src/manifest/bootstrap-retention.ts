@@ -761,7 +761,8 @@ function validateBootstrapJournalSuccessorPair(
   validateRetentionTerminalBinding(plan, evidence, successor);
   if (current.sequence === MAX_UINT64.toString() || BigInt(successor.sequence) !== BigInt(current.sequence) + 1n) return refuse();
   if (successor.slot === current.slot || successor.previousJournalHash !== rawCanonicalHash(current)) return refuse();
-  if (successor.createdAt !== current.createdAt || Date.parse(successor.updatedAt) < Date.parse(current.updatedAt)) return refuse();
+  // No updatedAt order: writers stamp the raw clock, so a wall-clock step back is legal (W2-TX-A-1).
+  if (successor.createdAt !== current.createdAt) return refuse();
   if (successor.phase === current.phase ? !isLegalSamePhaseTransition(current, successor, counts(plan)) : !isLegalPhaseTransition(current, successor, retentionEntries)) return refuse();
   return successor;
 }
@@ -1401,8 +1402,7 @@ export function validateRetentionTerminalBinding(
     terminalSequence + sequenceOffset > MAX_UINT64 ||
     BigInt(journal.sequence) !== terminalSequence + sequenceOffset ||
     journal.slot !== ((reconstructedTerminal.slot + Number(sequenceOffset % 2n)) % 2) ||
-    journal.createdAt !== reconstructedTerminal.createdAt ||
-    Date.parse(journal.updatedAt) < Date.parse(reconstructedTerminal.updatedAt)
+    journal.createdAt !== reconstructedTerminal.createdAt
   ) return refuse();
   if (
     sequenceOffset === 1n &&
@@ -1633,7 +1633,6 @@ function validateFoundationTerminalEvidence(
       typeof initial.createdAt !== "string" ||
       terminal.createdAt !== initial.createdAt ||
       typeof terminal.updatedAt !== "string" ||
-      Date.parse(terminal.updatedAt) < Date.parse(initial.createdAt) ||
       !Array.isArray(initial.mutations) ||
       !Array.isArray(terminal.mutations) ||
       initial.mutations.length !== participant.mutations.length ||
