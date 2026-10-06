@@ -290,6 +290,13 @@ const retainedBootstrapFoundationInitialJournals = new WeakMap<
   RetainedBootstrapFoundationInitialJournalV1
 >();
 
+/** An admission capability is valid only if this module issued it. */
+function consume<K extends object, V>(issued: WeakMap<K, V>, admitted: K): V {
+  const retained = issued.get(admitted);
+  if (retained === undefined) throw new TransactionStateError();
+  return retained;
+}
+
 function validAdmissionId(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const bytes = new TextEncoder().encode(value).byteLength;
@@ -441,14 +448,6 @@ export function admitBootstrapFoundationInitialJournal(
   }
 }
 
-function consumeBootstrapFoundationInitialJournal(
-  admitted: AdmittedBootstrapFoundationInitialJournalV1,
-): RetainedBootstrapFoundationInitialJournalV1 {
-  const retained = retainedBootstrapFoundationInitialJournals.get(admitted);
-  if (retained === undefined) throw new TransactionStateError();
-  return retained;
-}
-
 const admittedLifecycleFoundationInitialJournal: unique symbol = Symbol(
   "admittedLifecycleFoundationInitialJournal",
 );
@@ -492,13 +491,29 @@ function expectedLifecycleJournalKind(ref: FoundationParticipantRefV1): string {
     : `lifecycle.${ref.slot}.compensation`;
 }
 
-function lifecycleParticipantPlannedShape(
-  ref: FoundationParticipantRefV1,
+interface PlannedRefMutation {
+  readonly targetPath: string;
+  readonly operation: "create" | "replace" | "remove";
+  readonly expectedBeforeHash: string | null;
+  readonly contentHash: string | null;
+  readonly contentSize: number | null;
+  readonly stagedPath: string | null;
+}
+
+/**
+ * A coordinator-bound ref's planned journal: `kind`, one `planned` header, and per mutation the
+ * same target, operation, preimage and `<i>.bin` staging as the ref, whose own create/replace/
+ * remove shape is consistent. `mutationShape` adds an arm's own per-mutation rules.
+ */
+function requirePlannedJournalMatchesRef<M extends PlannedRefMutation>(
+  ref: { readonly id: string; readonly mutations: readonly M[] },
   initialJournal: TransactionJournalV1,
+  kind: string,
+  mutationShape: (mutation: M, index: number) => boolean,
 ): void {
   if (
     initialJournal.id !== ref.id ||
-    initialJournal.kind !== expectedLifecycleJournalKind(ref) ||
+    initialJournal.kind !== kind ||
     initialJournal.phase !== "planned" ||
     initialJournal.createdAt !== initialJournal.updatedAt ||
     ref.mutations.length !== initialJournal.mutations.length ||
@@ -509,30 +524,24 @@ function lifecycleParticipantPlannedShape(
   }
   for (const [index, mutation] of ref.mutations.entries()) {
     const planned = initialJournal.mutations[index];
-    const stagedRelativePath =
-      mutation.operation === "remove" ? null : `${String(index)}.bin`;
-    const validShape =
-      mutation.operation === "create"
-        ? mutation.expectedBeforeHash === null &&
-          mutation.contentHash !== null &&
-          mutation.contentSize !== null &&
-          mutation.stagedPath !== null
-        : mutation.operation === "remove"
-          ? mutation.expectedBeforeHash !== null &&
-            mutation.contentHash === null &&
-            mutation.contentSize === null &&
-            mutation.stagedPath === null
-          : mutation.expectedBeforeHash !== null &&
-            mutation.contentHash !== null &&
-            mutation.contentSize !== null &&
-            mutation.stagedPath !== null;
+    const remove = mutation.operation === "remove";
+    const validShape = remove
+      ? mutation.expectedBeforeHash !== null &&
+        mutation.contentHash === null &&
+        mutation.contentSize === null &&
+        mutation.stagedPath === null
+      : (mutation.operation === "create") === (mutation.expectedBeforeHash === null) &&
+        mutation.contentHash !== null &&
+        mutation.contentSize !== null &&
+        mutation.stagedPath !== null;
     if (
       planned === undefined ||
       !validShape ||
+      !mutationShape(mutation, index) ||
       planned.targetPath !== mutation.targetPath ||
       planned.operation !== mutation.operation ||
       planned.expectedBeforeHash !== mutation.expectedBeforeHash ||
-      planned.stagedRelativePath !== stagedRelativePath ||
+      planned.stagedRelativePath !== (remove ? null : `${String(index)}.bin`) ||
       !isAbsolute(mutation.targetPath) ||
       (mutation.contentSize !== null &&
         (!Number.isSafeInteger(mutation.contentSize) ||
@@ -553,7 +562,7 @@ export function admitLifecycleFoundationInitialJournal(
     }
     const ref = structuredClone(context.ref);
     const initialJournal = validateJournal(structuredClone(context.initialJournal));
-    lifecycleParticipantPlannedShape(ref, initialJournal);
+    requirePlannedJournalMatchesRef(ref, initialJournal, expectedLifecycleJournalKind(ref), () => true);
     const plannedBytes = new TextEncoder().encode(
       encodeFoundationJournalJsonV1(initialJournal),
     );
@@ -597,14 +606,6 @@ export function admitLifecycleFoundationInitialJournal(
     if (error instanceof TransactionStateError) throw error;
     throw new TransactionStateError();
   }
-}
-
-function consumeLifecycleFoundationInitialJournal(
-  admitted: AdmittedLifecycleFoundationInitialJournalV1,
-): RetainedLifecycleFoundationInitialJournalV1 {
-  const retained = retainedLifecycleFoundationInitialJournals.get(admitted);
-  if (retained === undefined) throw new TransactionStateError();
-  return retained;
 }
 
 /** The half of a lifecycle participant's shape the executor's own directories derive. */
@@ -715,63 +716,31 @@ function updateParticipantPlannedShape(
   initialJournal: TransactionJournalV1,
   payloadIdentities: UpdateFoundationInitialJournalAdmissionContextV1["payloadIdentities"],
 ): void {
-  if (
-    initialJournal.id !== ref.id ||
-    initialJournal.kind !== ref.slot ||
-    initialJournal.phase !== "planned" ||
-    initialJournal.createdAt !== initialJournal.updatedAt ||
-    ref.mutations.length !== initialJournal.mutations.length ||
-    ref.mutations.length !== payloadIdentities.length ||
-    ref.mutations.length < 1 ||
-    ref.mutations.length > 256
-  ) {
-    throw new TransactionStateError();
-  }
-  for (const [index, mutation] of ref.mutations.entries()) {
-    const planned = initialJournal.mutations[index];
+  if (ref.mutations.length !== payloadIdentities.length) throw new TransactionStateError();
+  requirePlannedJournalMatchesRef(ref, initialJournal, ref.slot, (mutation, index) => {
     const identities = payloadIdentities[index];
-    const remove = mutation.operation === "remove";
-    const validShape = remove
-      ? mutation.expectedBeforeHash !== null &&
-        mutation.contentHash === null &&
-        mutation.contentSize === null &&
-        mutation.stagedPath === null &&
-        mutation.content === null &&
-        mutation.digest === null &&
-        identities === null
-      : (mutation.operation === "create") === (mutation.expectedBeforeHash === null) &&
-        mutation.contentHash !== null &&
-        mutation.contentSize !== null &&
-        mutation.stagedPath !== null &&
-        mutation.content !== null &&
-        mutation.digest !== null &&
-        identities !== null && identities !== undefined &&
-        mutation.content.sha256 === mutation.contentHash &&
-        mutation.content.bytes === mutation.contentSize &&
-        mutation.content.ordinal !== mutation.digest.ordinal &&
-        mutation.digest.mode === 0o600 &&
-        mutation.digest.bytes === stagedDigestBytes(mutation.contentHash).byteLength &&
-        mutation.digest.sha256 === hash(stagedDigestBytes(mutation.contentHash));
+    if (mutation.operation === "remove") {
+      return mutation.content === null && mutation.digest === null && identities === null;
+    }
     if (
-      planned === undefined ||
-      !validShape ||
-      planned.targetPath !== mutation.targetPath ||
-      planned.operation !== mutation.operation ||
-      planned.expectedBeforeHash !== mutation.expectedBeforeHash ||
-      planned.stagedRelativePath !== (remove ? null : `${String(index)}.bin`) ||
-      !isAbsolute(mutation.targetPath) ||
-      (mutation.contentSize !== null &&
-        (!Number.isSafeInteger(mutation.contentSize) ||
-          mutation.contentSize < 0 ||
-          mutation.contentSize > LIFECYCLE_PAYLOAD_MAXIMUM_BYTES))
+      mutation.content === null ||
+      mutation.digest === null ||
+      mutation.contentHash === null ||
+      identities === null ||
+      identities === undefined ||
+      mutation.content.sha256 !== mutation.contentHash ||
+      mutation.content.bytes !== mutation.contentSize ||
+      mutation.content.ordinal === mutation.digest.ordinal ||
+      mutation.digest.mode !== 0o600 ||
+      mutation.digest.bytes !== stagedDigestBytes(mutation.contentHash).byteLength ||
+      mutation.digest.sha256 !== hash(stagedDigestBytes(mutation.contentHash))
     ) {
-      throw new TransactionStateError();
+      return false;
     }
-    if (identities !== null && identities !== undefined) {
-      retainedIdentity(identities.content);
-      retainedIdentity(identities.digest);
-    }
-  }
+    retainedIdentity(identities.content);
+    retainedIdentity(identities.digest);
+    return true;
+  });
 }
 
 /**
@@ -848,14 +817,6 @@ export function admitUpdateFoundationInitialJournal(
     if (error instanceof TransactionStateError) throw error;
     throw new TransactionStateError();
   }
-}
-
-function consumeUpdateFoundationInitialJournal(
-  admitted: AdmittedUpdateFoundationInitialJournalV1,
-): RetainedUpdateFoundationInitialJournalV1 {
-  const retained = retainedUpdateFoundationInitialJournals.get(admitted);
-  if (retained === undefined) throw new TransactionStateError();
-  return retained;
 }
 
 /**
@@ -1664,7 +1625,7 @@ export class TransactionExecutor {
       mutationPublications,
       initialJournal,
     } =
-      consumeBootstrapFoundationInitialJournal(admitted);
+      consume(retainedBootstrapFoundationInitialJournals, admitted);
     const expectedShape = validateBootstrapFoundationBridgeInput(
       participant,
       evidence,
@@ -1773,7 +1734,7 @@ export class TransactionExecutor {
   async executeLifecycleFoundationParticipant(
     admitted: AdmittedLifecycleFoundationInitialJournalV1,
   ): Promise<TransactionJournalV1> {
-    const retained = consumeLifecycleFoundationInitialJournal(admitted);
+    const retained = consume(retainedLifecycleFoundationInitialJournals, admitted);
     const { ref, ownerUid, initialJournal, plannedBytes } = retained;
     validateLifecycleFoundationBridgeInput(ref, this.dependencies);
     const stagedPath = ref.initialJournal.stagedPath;
@@ -1885,7 +1846,7 @@ export class TransactionExecutor {
   async executeUpdateFoundationParticipant(
     admitted: AdmittedUpdateFoundationInitialJournalV1,
   ): Promise<TransactionJournalV1> {
-    const retained = consumeUpdateFoundationInitialJournal(admitted);
+    const retained = consume(retainedUpdateFoundationInitialJournals, admitted);
     const { ref, ownerUid, initialJournal, plannedBytes, journalIdentity } = retained;
     validateUpdateFoundationBridgeInput(ref, this.dependencies);
     const stagedPath = ref.initialJournal.staged.path;
