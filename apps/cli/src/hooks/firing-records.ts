@@ -44,8 +44,6 @@ const failureMarkerName = (vendor: HookVendor): string => hookFiringRecordName(v
 
 const HOOK_VERBS: readonly HookVerb[] = ["inject", ...HOOK_GUARD_KINDS];
 
-type FiringKey = "plugin_hooks" | "session_start_injection";
-
 export interface HookFiringRequest {
   readonly productHome: string;
   readonly stateDirectory: string;
@@ -148,9 +146,11 @@ export interface HookFiringObservation {
   readonly record: HookFiringRecordV1;
 }
 
-/** Reads the vendor's per-verb records only; a record whose event is not its verb's is ignored. */
+/**
+ * Reads the vendor's per-verb records only; a record whose event is not its verb's is ignored. Which
+ * capability a record proves is doctor's `hooks` verdict (`hooks.md` §3.6), never a bare record.
+ */
 export async function readHookFiringObservations(stateDirectory: string, vendor: HookVendor): Promise<{
-  readonly observations: ReadonlyMap<FiringKey, "observed">;
   readonly records: readonly HookFiringObservation[];
   /** NEW-139: the vendor's failure marker is present. */
   readonly recordFailed: boolean;
@@ -159,7 +159,7 @@ export async function readHookFiringObservations(stateDirectory: string, vendor:
   let recordFailed = false;
   try {
     const directory = join(stateDirectory, "hooks");
-    if (!(await lstat(directory)).isDirectory()) return { observations: new Map(), records: [], recordFailed };
+    if (!(await lstat(directory)).isDirectory()) return { records: [], recordFailed };
     recordFailed = await lstat(join(directory, failureMarkerName(vendor))).then((marker) => marker.isFile(), () => false);
     for (const verb of HOOK_VERBS) {
       const record = await readRecord(join(directory, hookFiringRecordName(vendor, verb)));
@@ -168,12 +168,7 @@ export async function readHookFiringObservations(stateDirectory: string, vendor:
       }
     }
   } catch {
-    return { observations: new Map(), records: [], recordFailed };
+    return { records: [], recordFailed };
   }
-  const observations = new Map<FiringKey, "observed">();
-  if (records.length > 0) observations.set("plugin_hooks", "observed");
-  if (records.some((record) => record.verb === "inject")) {
-    observations.set("session_start_injection", "observed");
-  }
-  return { observations, records, recordFailed };
+  return { records, recordFailed };
 }

@@ -494,9 +494,13 @@ fires mid-uninstall cannot leave residue that refuses at exit 6.
 
 `plugin_hooks` and `session_start_injection` left both `NOT_USED` lists in one commit, with
 `adapter-capability-parity.test.ts` green, and follow the two-gate rule (`claude-adapter.md` §3):
-`yes` needs the version floor (`DOCUMENTED_FLOORS`) and an observation. `plugin_hooks` resolves from
-any firing record for the vendor, and `session_start_injection` from that vendor's `inject` record,
-in both the probed and the unprobed `doctor` run. Without a record, both stay `unknown`, never `no`.
+`yes` needs the version floor (`DOCUMENTED_FLOORS`) and an observation. The observation is the
+`hooks` check's own per-vendor verdict (NEW-158): `plugin_hooks` resolves from a record of any
+installed verb, and `session_start_injection` from the `inject` record, but only a record written
+after the installed `hooks.json` and within the 24 h refresh window (an older one may predate
+commands Codex re-gated). While the vendor's `record_failed` marker is present, both stay `unknown`.
+This holds in both the probed and the unprobed `doctor` run. Without such a record, both stay
+`unknown`, never `no`.
 `session_end_capture` and `pre_compact_backup` stay `not-used`: capture remains declined
 (`knowledge-pipeline.md` §2).
 

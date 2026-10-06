@@ -233,36 +233,33 @@ describe("recordHookFiring", () => {
 });
 
 describe("readHookFiringObservations", () => {
-  it("observes nothing when the directory is absent", async () => {
+  it("reads nothing when the directory is absent", async () => {
     const read = await readHookFiringObservations(stateDirectory, "claude");
-    expect(read.observations.size).toBe(0);
     expect(read.records).toStrictEqual([]);
   });
 
-  it("observes plugin_hooks from any valid Claude record", async () => {
+  it("reads a valid Claude record under its verb", async () => {
     await createHooksDirectory();
     await writeFile(join(hooks, "claude.stop.json"), record("Stop", NOW, NOW));
     const read = await readHookFiringObservations(stateDirectory, "claude");
-    expect([...read.observations]).toStrictEqual([["plugin_hooks", "observed"]]);
     expect(read.records).toHaveLength(1);
     expect(read.records[0]?.verb).toBe("stop");
   });
 
-  it("also observes session_start_injection from the SessionStart record", async () => {
+  it("reads the SessionStart record as the inject verb", async () => {
     await createHooksDirectory();
     await writeFile(join(hooks, "claude.inject.json"), record("SessionStart", NOW, NOW));
     const read = await readHookFiringObservations(stateDirectory, "claude");
-    expect(read.observations.get("plugin_hooks")).toBe("observed");
-    expect(read.observations.get("session_start_injection")).toBe("observed");
+    expect(read.records.map((entry) => entry.verb)).toStrictEqual(["inject"]);
   });
 
-  it("never lets a Codex record observe a Claude key", async () => {
+  it("never reads a Codex record for Claude", async () => {
     await createHooksDirectory();
     await writeFile(join(hooks, "codex.inject.json"), record("SessionStart", NOW, NOW, "codex"));
     const claude = await readHookFiringObservations(stateDirectory, "claude");
-    expect(claude.observations.size).toBe(0);
+    expect(claude.records).toStrictEqual([]);
     const codex = await readHookFiringObservations(stateDirectory, "codex");
-    expect(codex.observations.get("plugin_hooks")).toBe("observed");
+    expect(codex.records).toHaveLength(1);
   });
 
   it("ignores a malformed record, a record filed under another verb's event and a per-event record", async () => {
@@ -271,7 +268,6 @@ describe("readHookFiringObservations", () => {
     await writeFile(join(hooks, "claude.path.json"), record("SessionStart", NOW, NOW));
     await writeFile(join(hooks, "claude.PreToolUse.json"), record("PreToolUse", NOW, NOW));
     const read = await readHookFiringObservations(stateDirectory, "claude");
-    expect(read.observations.size).toBe(0);
     expect(read.records).toStrictEqual([]);
   });
 
@@ -283,7 +279,6 @@ describe("readHookFiringObservations", () => {
     await writeFile(join(hooks, "claude.record_failed.json"), "");
     const read = await readHookFiringObservations(stateDirectory, "claude");
     expect(read.recordFailed).toBe(true);
-    expect(read.observations.size).toBe(0);
   });
 });
 
@@ -436,6 +431,31 @@ describe("runHookMode and the firing record", () => {
       if (original === undefined) Reflect.deleteProperty(HOOK_HANDLERS, verb);
       else HOOK_HANDLERS[verb] = original;
     }
+  });
+
+  it("lands a stop record started at the end of the exit budget while the longer handler runs (D86)", async () => {
+    const events: string[] = [];
+    HOOK_HANDLERS.stop = async () => {
+      events.push("handler");
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      events.push("handler done");
+      return { kind: "block", ruleId: "synthetic", detail: "synthetic" };
+    };
+    const environment: HookEnvironment = {
+      env: {},
+      userHome: root,
+      processCwd: () => root,
+      nodeExecutable: "/usr/local/bin/node",
+      recordFiring: async () => {
+        events.push("record");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        events.push("recorded");
+      },
+      // 0 ms left of the budget: the wait gives up at once and the write continues beside the handler.
+      elapsedMs: () => HOOK_EXIT_BUDGET_MS,
+    };
+    expect(await runHookMode(["guard", "stop", "--vendor", "claude"], io, factory, environment)).toBe(2);
+    expect(events).toStrictEqual(["record", "handler", "recorded", "handler done"]);
   });
 
   it("does not record a firing when the recursion marker short-circuits the hook", async () => {

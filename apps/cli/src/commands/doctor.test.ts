@@ -39,6 +39,7 @@ import {
   codexPluginRoot,
   describeInstructions,
   hasBlockingFailure,
+  hookFiringVerdicts,
   listIncompleteTransactions,
   MAX_CLAUDE_SETTINGS_BYTES,
   runDoctor,
@@ -478,12 +479,23 @@ describe("runDoctor", () => {
       expect(message).toContain("plugin_hooks=unknown");
       expect(message).toContain("session_start_injection=unknown");
     }
+    // The verdict counts a record only beside installed hooks it postdates (`hooks.md` §3.6).
+    const executable = { node: "/opt/synthetic/bin/node", entrypoint: "/opt/synthetic/lib/developer-os" };
+    const hooksWritten = new Date(fixture.context.now().getTime() - 3_600_000);
+    for (const [path, contents] of [
+      [join(fixture.userHome, ...PLUGIN_INSTALL_SEGMENTS, CLAUDE_HOOKS_PATH), renderClaudeHooks(executable).contents],
+      [join(fixture.paths.home, ...PLUGIN_TREE_SEGMENTS, CODEX_HOOKS_PATH), renderCodexHooks(executable).contents],
+    ] as const) {
+      await nodeFs.mkdir(join(path, ".."), { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(path, contents, { mode: 0o600 });
+      await nodeFs.utimes(path, hooksWritten, hooksWritten);
+    }
     const directory = join(fixture.paths.stateDir, "hooks");
     await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
     for (const [vendor, rows] of [["claude", CLAUDE_HOOK_ROWS], ["codex", CODEX_HOOK_ROWS]] as const) {
       const event = rows.find((row) => row.verb === "inject")?.event;
       if (event === undefined) throw new Error(`no inject row for ${vendor}`);
-      const lastSeen = "2026-10-06T09:00:00.000Z";
+      const lastSeen = fixture.context.now().toISOString();
       await nodeFs.writeFile(
         join(directory, hookFiringRecordName(vendor, "inject")),
         encodeHookFiringRecord({ schemaVersion: 1, vendor, event, productVersion: "0.0.0-test", firstSeen: lastSeen, lastSeen }),
@@ -1489,6 +1501,28 @@ describe("hooks and external-hooks", () => {
     for (const row of CLAUDE_HOOK_ROWS) expect(hooks.message).toContain(`${row.verb}=`);
     expect(hooks.message).not.toContain("missing=");
     expect(hooks.message.endsWith("; codex=not-installed")).toBe(true);
+  });
+
+  /**
+   * NEW-158 review: `plugin_hooks` and `session_start_injection` come from the same verdict `hooks`
+   * prints. A record older than the 24 h window, or older than the installed `hooks.json` (Codex
+   * re-gates rewritten commands), observes nothing, and a failed record write leaves both unknown.
+   */
+  it.each([
+    { name: "a fresh record after the hooks file", lastSeen: "2026-09-22T09:00:00.000Z", mtime: "2026-09-20T00:00:00.000Z", failed: false, expected: [["plugin_hooks", "observed"], ["session_start_injection", "observed"]] },
+    { name: "a record older than 24 h", lastSeen: "2026-09-21T11:00:00.000Z", mtime: "2026-09-20T00:00:00.000Z", failed: false, expected: [] },
+    { name: "a record older than the hooks file", lastSeen: "2026-09-22T09:00:00.000Z", mtime: "2026-09-22T10:00:00.000Z", failed: false, expected: [] },
+    { name: "a failed record write", lastSeen: "2026-09-22T09:00:00.000Z", mtime: "2026-09-20T00:00:00.000Z", failed: true, expected: [] },
+  ])("derives the firing capabilities from the hooks verdict: $name", async ({ lastSeen, mtime, failed, expected }) => {
+    const fixture = await hooksFixture(`doctor-hooks-firing-${String(failed)}-${mtime}-${lastSeen}`);
+    await plantCodexHooks(fixture, new Date(mtime));
+    await plantRecord(fixture, "inject", lastSeen, "codex");
+    if (failed) await nodeFs.writeFile(join(fixture.paths.stateDir, "hooks", "codex.record_failed.json"), "", { mode: 0o600 });
+
+    const verdicts = await hookFiringVerdicts(fixture.context, fixture.paths.stateDir);
+
+    expect([...verdicts.codex]).toStrictEqual(expected);
+    expect([...verdicts.claude]).toStrictEqual([]);
   });
 
   it("warns with record=failed while the vendor's failure marker is present, so a failed write never reads as unfired (NEW-139)", async () => {

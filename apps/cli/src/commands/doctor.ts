@@ -70,7 +70,7 @@ import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootst
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { isMissingEntry, readConfigFile } from "../config-file.js";
-import { readHookFiringObservations } from "../hooks/firing-records.js";
+import { FIRING_RECORD_REFRESH_MS, readHookFiringObservations } from "../hooks/firing-records.js";
 import {
   codexPluginTreeHash,
   inspectCodexRegistration,
@@ -578,6 +578,7 @@ function capabilityInput(outcome: AgentOutcome | undefined): {
 async function checkClaudeCapabilities(
   context: CliContext,
   probe: boolean,
+  firing: FiringVerdict,
 ): Promise<Finding> {
   const outcome = (await discoverEachAgent(context)).find(
     (candidate) => candidate.name === "claude",
@@ -587,7 +588,7 @@ async function checkClaudeCapabilities(
     runner: context.runner,
     probe,
     // NEW-158: the only source for `plugin_hooks` and `session_start_injection` (`hooks.md` §3.6).
-    firingObservations: (await readHookFiringObservations(context.paths.stateDir, "claude")).observations,
+    firingObservations: firing,
     /**
      * The **user's** home, not the product's. This was
      * `join(paths.home, "plugins", "claude")` — `~/.developer-os/plugins/claude`,
@@ -632,6 +633,7 @@ export function codexPluginRoot(context: CliContext): string {
 async function checkCodexCapabilities(
   context: CliContext,
   probe: boolean,
+  firing: FiringVerdict,
 ): Promise<Finding> {
   const outcome = (await discoverEachAgent(context)).find(
     (candidate) => candidate.name === "codex",
@@ -640,7 +642,7 @@ async function checkCodexCapabilities(
     ...capabilityInput(outcome),
     runner: context.runner,
     probe,
-    firingObservations: (await readHookFiringObservations(context.paths.stateDir, "codex")).observations,
+    firingObservations: firing,
     pluginRoot: codexPluginRoot(context),
   });
   /**
@@ -749,11 +751,15 @@ async function readInstalledHooks(context: CliContext, vendor: HookVendor): Prom
   }
 }
 
+/** What the firing records prove for the two firing keys; an absent key stays `unknown`. */
+type FiringVerdict = ReadonlyMap<"plugin_hooks" | "session_start_injection", "observed">;
+
 interface VendorHooksReport {
   readonly text: string;
   readonly healthy: boolean;
   readonly unfired: boolean;
   readonly dead: boolean;
+  readonly firing: FiringVerdict;
 }
 
 async function reportVendorHooks(
@@ -763,7 +769,7 @@ async function reportVendorHooks(
   installed: InstalledHooks,
 ): Promise<VendorHooksReport> {
   if (installed.state !== "installed") {
-    return { text: `${vendor}=${installed.state}`, healthy: installed.state === "not-installed", unfired: false, dead: false };
+    return { text: `${vendor}=${installed.state}`, healthy: installed.state === "not-installed", unfired: false, dead: false, firing: new Map() };
   }
   const lastSeen = new Map<string, number>();
   const { records, recordFailed } = await readHookFiringObservations(stateDirectory, vendor);
@@ -793,7 +799,16 @@ async function reportVendorHooks(
     const seen = lastSeen.get(row.verb);
     return seen === undefined || seen < writtenAt;
   });
+  /**
+   * `hooks.md` §3.6: a key is observed only from a record of an installed verb written after the
+   * installed hooks file and within the 24 h refresh window; a failed record write leaves it unknown.
+   */
+  const fresh = (seen: number | undefined): boolean => seen !== undefined && seen >= writtenAt && now - seen < FIRING_RECORD_REFRESH_MS;
+  const firing = new Map<"plugin_hooks" | "session_start_injection", "observed">();
+  if (!recordFailed && rows.some((row) => fresh(lastSeen.get(row.verb)))) firing.set("plugin_hooks", "observed");
+  if (!recordFailed && rows.some((row) => row.verb === "inject") && fresh(lastSeen.get("inject"))) firing.set("session_start_injection", "observed");
   return {
+    firing,
     text: unfired ? `${parts.join(" ")} (${CODEX_UNTRUSTED_HOOK_MESSAGE})` : parts.join(" "),
     healthy: installed.missing.length === 0 && !installed.conflicting && installed.executableLive && !unfired && !recordFailed,
     unfired,
@@ -801,14 +816,33 @@ async function reportVendorHooks(
   };
 }
 
-async function checkProductHooks(
-  context: CliContext,
-  stateDirectory: string,
-  installed: Readonly<Record<HookVendor, InstalledHooks>>,
-): Promise<Finding> {
+interface HookReports {
+  readonly installed: Readonly<Record<HookVendor, InstalledHooks>>;
+  readonly claude: VendorHooksReport;
+  readonly codex: VendorHooksReport;
+}
+
+/** One read of each vendor's hooks file and records, shared by `hooks` and both capability checks. */
+async function hookReports(context: CliContext, stateDirectory: string): Promise<HookReports> {
+  const installed = {
+    claude: await readInstalledHooks(context, "claude"),
+    codex: await readInstalledHooks(context, "codex"),
+  };
+  return {
+    installed,
+    claude: await reportVendorHooks(context, stateDirectory, "claude", installed.claude),
+    codex: await reportVendorHooks(context, stateDirectory, "codex", installed.codex),
+  };
+}
+
+/** NEW-158: the firing keys each vendor's `hooks` verdict proves. */
+export async function hookFiringVerdicts(context: CliContext, stateDirectory: string): Promise<Readonly<Record<HookVendor, FiringVerdict>>> {
+  const { claude, codex } = await hookReports(context, stateDirectory);
+  return { claude: claude.firing, codex: codex.firing };
+}
+
+function checkProductHooks({ installed, claude, codex }: HookReports): Finding {
   const paths = [installed.claude.path, installed.codex.path].filter((path): path is string => path !== null);
-  const claude = await reportVendorHooks(context, stateDirectory, "claude", installed.claude);
-  const codex = await reportVendorHooks(context, stateDirectory, "codex", installed.codex);
   const finding = (claude.healthy && codex.healthy ? pass : warn)("hooks", `${claude.text}; ${codex.text}`, paths);
   // A dead command fires for nobody, so re-rendering it comes before any trust step.
   const recovery = claude.dead || codex.dead ? HOOK_EXECUTABLE_RECOVERY : codex.unfired ? CODEX_HOOK_TRUST_STEP : null;
@@ -853,20 +887,13 @@ async function checkExternalHooks(context: CliContext, installed: InstalledHooks
   }
 }
 
-async function hookFindings(context: CliContext, stateDirectory: string): Promise<readonly Finding[]> {
-  const installed = {
-    claude: await readInstalledHooks(context, "claude"),
-    codex: await readInstalledHooks(context, "codex"),
-  };
-  return [
-    await checkProductHooks(context, stateDirectory, installed),
-    await checkExternalHooks(context, installed.claude),
-  ];
+async function hookFindings(context: CliContext, reports: HookReports): Promise<readonly Finding[]> {
+  return [checkProductHooks(reports), await checkExternalHooks(context, reports.installed.claude)];
 }
 
 /** `hooks` and `external-hooks`, never `fail` and never init-owned (`hooks.md` §3.7). */
 export async function checkHooks(context: CliContext, stateDirectory: string): Promise<readonly DoctorCheck[]> {
-  return (await hookFindings(context, stateDirectory)).map((finding) => finding.check);
+  return (await hookFindings(context, await hookReports(context, stateDirectory))).map((finding) => finding.check);
 }
 
 async function checkPlatform(context: CliContext): Promise<Finding> {
@@ -1777,6 +1804,9 @@ async function collectFindings(
     [summary.vaultPath],
   ));
 
+  // Read once: `hooks` and both capability checks share one verdict (NEW-158); every read in it catches.
+  const hooks = await hookReports(context, paths.stateDir);
+
   return { findings: [
     platform,
     await guarded(context, "product-home", [paths.home], () =>
@@ -1809,13 +1839,13 @@ async function collectFindings(
     await checkEntrypoint(context, paths),
     await guarded(context, "agents", [], () => checkAgents(context)),
     await guarded(context, "claude-capabilities", [], () =>
-      checkClaudeCapabilities(context, options.probe),
+      checkClaudeCapabilities(context, options.probe, hooks.claude.firing),
     ),
     await guarded(context, "codex-capabilities", [], () =>
-      checkCodexCapabilities(context, options.probe),
+      checkCodexCapabilities(context, options.probe, hooks.codex.firing),
     ),
     // Not through `guarded`: both checks catch everything and never return "fail" (`hooks.md` §3.7).
-    ...await hookFindings(context, paths.stateDir),
+    ...await hookFindings(context, hooks),
     // Not through `guarded`: it turns a throw into "fail", which `claude-adapter.md` §15 forbids.
     { check: await checkVendorConfig(context), code: EXIT_CODES.success },
     await guarded(context, "instructions", [], async () => {
