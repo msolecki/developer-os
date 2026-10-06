@@ -60,17 +60,6 @@ export const LIFECYCLE_MANIFEST_STEP_TRANSITIONS = [
   "finalize_tombstones",
 ] as const;
 export const LIFECYCLE_REDACTION_KEY_STEP_TRANSITIONS = ["stage", "delete"] as const;
-export const LIFECYCLE_COORDINATOR_STEP_KINDS = [
-  "foundation",
-  "manifest",
-  "source_git_effect",
-  "destination_git_effect",
-  "launchd_before_files",
-  "launchd_after_files",
-  "redaction_key",
-  "network_push",
-  "drain_runners",
-] as const;
 
 export const LIFECYCLE_PREVIEW_COMMANDS = [
   "git_enable",
@@ -98,19 +87,6 @@ export const LIFECYCLE_PREVIEW_FILE_ROLES = [
 export const LIFECYCLE_PREVIEW_FILE_OPERATIONS = ["create", "replace", "remove", "keep"] as const;
 export const LIFECYCLE_PREVIEW_FILE_STATES = ["absent", "present"] as const;
 
-export const LIFECYCLE_COMPACTION_ENTRY_KINDS = [
-  "foundation_transaction",
-  "git_effect",
-  "launchd_effect",
-  "coordinator_staging",
-  "coordinator_envelope",
-] as const;
-export const LIFECYCLE_JOURNAL_CLOSURE_KINDS = [
-  "clear",
-  "retry_only",
-  "uninstall_draining",
-  "lifecycle_recovery_required",
-] as const;
 
 export const LIFECYCLE_SUBSYSTEMS = ["git", "automation"] as const;
 export type LifecycleSubsystemV1 = (typeof LIFECYCLE_SUBSYSTEMS)[number];
