@@ -1436,10 +1436,23 @@ function decodeExactBootstrapFoundationJournal(
   }
 }
 
+/**
+ * Removes a temp this product wrote: only a regular file the running user owns. Any other entry
+ * at the name — a directory, a symlink, another user's file — is not ours and is left alone, so
+ * it can never block a rollback.
+ */
 async function removeOwnedTemp(
   fs: TransactionFileSystem,
   temporaryPath: string,
 ): Promise<void> {
+  let stats;
+  try {
+    stats = await fs.lstat(temporaryPath, { bigint: true });
+  } catch (error) {
+    if (isMissing(error)) return;
+    throw new TransactionStateError();
+  }
+  if (!stats.isFile() || Number(stats.uid) !== process.getuid?.()) return;
   try {
     await fs.unlink(temporaryPath);
   } catch (error) {
