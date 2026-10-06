@@ -1094,6 +1094,11 @@ async function readExactBootstrapJournalByIdentity(
   return result;
 }
 
+/**
+ * No `updatedAt >= createdAt` term: no writer enforces that order (transitions stamp the raw
+ * clock), so a wall-clock step back between planning and a transition would refuse a legal
+ * journal forever (W2-TX-A-1). The id, kind, createdAt and per-mutation equality bind it.
+ */
 function exactBootstrapFoundationJournalShape(
   journal: TransactionJournalV1,
   expected: TransactionJournalV1,
@@ -1101,7 +1106,6 @@ function exactBootstrapFoundationJournalShape(
   return journal.id === expected.id &&
     journal.kind === expected.kind &&
     journal.createdAt === expected.createdAt &&
-    Date.parse(journal.updatedAt) >= Date.parse(journal.createdAt) &&
     journal.phase !== "rolled_back" &&
     journal.mutations.length === expected.mutations.length &&
     journal.mutations.every((mutation, index) => {

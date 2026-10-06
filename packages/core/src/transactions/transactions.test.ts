@@ -3554,6 +3554,40 @@ describe('coordinator-bound lifecycle Foundation initial-journal publication', (
     }
   });
 
+  it('resumes a journal whose transitions were stamped before its createdAt (W2-TX-A-1)', async () => {
+    const fixture = await createFixture('lifecycle-foundation-clock-step-back');
+    try {
+      const lifecycle = await installLifecycleFoundationFixture(fixture);
+      const admitted = lifecycle.admit();
+      const interrupted = new TransactionExecutor({
+        stateDir: fixture.stateDir,
+        stagingDir: fixture.stagingDir,
+        backupsDir: fixture.backupsDir,
+        fs: nodeFs,
+        // A day before LIFECYCLE_CREATED_AT: the wall clock stepped back after planning.
+        clock: () => '2026-09-19T12:00:00.000Z',
+        generateId: () => { throw new Error('bridge generated a transaction ID'); },
+        guards: defaultGuards(fixture),
+        lockProvider: fixture.lockProvider,
+        publishBootstrapInitialJournalNoReplace: noReplacePublisher(),
+        afterPhase: (phase) => {
+          if (phase === 'backed_up') throw PHASE_INTERRUPTION;
+          return Promise.resolve();
+        },
+      });
+      await expect(interrupted.executeLifecycleFoundationParticipant(admitted)).rejects.toBe(PHASE_INTERRUPTION);
+
+      const journal = await bootstrapFoundationExecutor(
+        fixture,
+        noReplacePublisher(),
+      ).executeLifecycleFoundationParticipant(admitted);
+      expect(journal.phase).toBe('finalized');
+      await expectBytes(lifecycle.targetPath, CREATED_BYTES);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it('refuses a structural capability the lifecycle admission never issued', async () => {
     const fixture = await createFixture('lifecycle-foundation-forged-capability');
     try {
