@@ -201,6 +201,14 @@ export interface BootstrapExecutorDependencies {
   readonly inspectEvidence?: (() => Promise<BootstrapEvidenceAdmissionV1>) | undefined;
 }
 
+/**
+ * NEW-148: a plan that admitted the pre-existing global lock (no ordinal-zero
+ * `global_lock` row) holds it from before publication, not from cursor one.
+ */
+function globalLockReached(plan: FreshV2InitPlanV1, journal: FreshV2InitJournalV1): boolean {
+  return journal.nextCreatedPath > 0 || plan.createdPaths[0]?.kind !== "global_lock";
+}
+
 /** `paths` reach `failureFrom`'s `path` scope; a path quoted in `message` may redact as high-entropy (NEW-39). */
 export class FreshBootstrapError extends Error {
   constructor(
@@ -1653,9 +1661,7 @@ export class BootstrapExecutor {
         return await this.completedOutcome(plan);
       }
       await this.ensureBootstrapLock(plan, journal);
-      if (journal.nextCreatedPath > 0 || plan.createdPaths[0]?.kind !== "global_lock") {
-        await this.ensureGlobalLock(plan);
-      }
+      if (globalLockReached(plan, journal)) await this.ensureGlobalLock(plan);
       if (journal.phase === "rolled_back" || journal.phase === "retaining") {
         await this.retainTerminal(plan, store, journal);
         if (journal.terminalOutcome === "rolled_back") {
@@ -3800,11 +3806,10 @@ export class BootstrapExecutor {
     }
     this.#retentionEvidence.set(plan.id, evidence);
     const held = this.#heldLocks.get(plan.id);
-    const globalReached = terminal.nextCreatedPath > 0;
     if (
       held?.bootstrap === null ||
       held?.bootstrap === undefined ||
-      globalReached !== (held.global !== null)
+      globalLockReached(plan, terminal) !== (held.global !== null)
     ) {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "terminal retention lock reachability is unbound");
     }
