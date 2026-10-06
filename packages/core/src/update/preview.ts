@@ -4,6 +4,7 @@ import { parseAllocatedLifecycleId, type AllocatedLifecycleIdV1 } from "../lifec
 import type { ArtifactOwner } from "../manifest/types.js";
 import { projectUpdateCapacity, type UpdateCapacityInputV1, type UpdateCapacityProjectionV1 } from "./capacity.js";
 import { SCHEMA_MIGRATION_DOMAIN_ORDER } from "./migration-planning.js";
+import { OWNER_UPDATE_ORDER } from "./owner.js";
 import type { SchemaMigrationDomainV1 } from "./migrations.js";
 import {
   parseCanonicalAbsolutePathText,
@@ -27,15 +28,6 @@ import {
   type SchemaMigrationIdV1,
   type UInt64DecimalV1,
 } from "./scalars.js";
-
-declare const safeRenderedPathV1: unique symbol;
-
-/**
- * The lossy `renderPath` projection the CLI applies at the human output boundary only. Core
- * never produces one: it is never persisted, hashed, returned in JSON, or accepted back as
- * mutation authority (Spec 2 §7.2), so nothing here takes it as input.
- */
-export type SafeRenderedPathV1 = string & { readonly [safeRenderedPathV1]: true };
 
 /**
  * Spec 2 §10.1's payload ID, reserved from the lifecycle allocator. rollback.ts, which owns every
@@ -195,8 +187,6 @@ export interface PreparedUpdateCandidateV1 {
 /** One owner's provider output. Counts are derived from the paths, never accepted. */
 export interface OwnerUpdatePreviewInputV1 {
   readonly owner: ArtifactOwner;
-  /** The owner's complete current-plus-created path set; the four path arrays must partition it. */
-  readonly partition: readonly CanonicalAbsolutePathV1[];
   readonly paths: OwnerPreviewPathsV1;
   readonly externalEffects: 0 | 1;
 }
@@ -239,8 +229,6 @@ export interface PreparedUpdateMaterializationInputV1 {
   readonly rollbackInventoryEntries: readonly RollbackPayloadEntryV1[];
 }
 
-const OWNER_ORDER: readonly ArtifactOwner[] = ["core", "claude", "codex", "macos"];
-const MIGRATION_DOMAIN_ORDER: readonly SchemaMigrationPreviewV1["domain"][] = ["brain", "product_state"];
 const INVERSE_KIND_ORDER: readonly PreparedInverseProjectionV1["kind"][] = ["owner_inverse", "schema_migration_inverse"];
 const PATH_CLASSES = ["create", "replace", "remove", "unchanged"] as const;
 const ROLLBACK_ENTRY_ROLES: readonly RollbackPayloadEntryV1["role"][] = ["owner_preimage", "migration_preimage", "external_effect_preimage", "inverse_plan_leaf"];
@@ -279,9 +267,8 @@ function sortedUnique<T extends string>(values: readonly T[], label: string): T[
 }
 
 function buildOwnerPreview(input: OwnerUpdatePreviewInputV1): OwnerUpdatePreviewV1 {
-  if (!OWNER_ORDER.includes(input.owner)) fail("OwnerUpdatePreviewV1.owner");
+  if (!OWNER_UPDATE_ORDER.includes(input.owner)) fail("OwnerUpdatePreviewV1.owner");
   if (!([0, 1] as const).includes(input.externalEffects)) fail("OwnerUpdatePreviewV1.externalEffects");
-  const partition = new Set(sortedUnique(input.partition.map(parseCanonicalAbsolutePathText), "OwnerUpdatePreviewV1.partition"));
   const seen = new Set<string>();
   const paths = {} as Record<(typeof PATH_CLASSES)[number], CanonicalAbsolutePathV1[]>;
   for (const pathClass of PATH_CLASSES) {
@@ -289,12 +276,10 @@ function buildOwnerPreview(input: OwnerUpdatePreviewInputV1): OwnerUpdatePreview
     if (sorted.length > 1_000_000) fail(`OwnerUpdatePreviewV1.paths.${pathClass}: count`);
     for (const path of sorted) {
       if (seen.has(path)) fail("OwnerUpdatePreviewV1.paths: not disjoint");
-      if (!partition.has(path)) fail("OwnerUpdatePreviewV1.paths: outside the owner partition");
       seen.add(path);
     }
     paths[pathClass] = sorted;
   }
-  if (seen.size !== partition.size) fail("OwnerUpdatePreviewV1.paths: partition not covered");
   return {
     owner: input.owner,
     counts: {
@@ -310,7 +295,7 @@ function buildOwnerPreview(input: OwnerUpdatePreviewInputV1): OwnerUpdatePreview
 
 function buildOwnerPreviews(owners: readonly OwnerUpdatePreviewInputV1[]): OwnerUpdatePreviewV1[] {
   if (owners.length < 1 || owners.length > 16) fail("OwnerUpdatePreviewV1[]: count");
-  const built = owners.map(buildOwnerPreview).sort((left, right) => OWNER_ORDER.indexOf(left.owner) - OWNER_ORDER.indexOf(right.owner));
+  const built = owners.map(buildOwnerPreview).sort((left, right) => OWNER_UPDATE_ORDER.indexOf(left.owner) - OWNER_UPDATE_ORDER.indexOf(right.owner));
   for (let index = 1; index < built.length; index += 1) {
     if (built[index - 1]?.owner === built[index]?.owner) fail("OwnerUpdatePreviewV1[]: duplicate owner");
   }
@@ -318,7 +303,7 @@ function buildOwnerPreviews(owners: readonly OwnerUpdatePreviewInputV1[]): Owner
 }
 
 function buildMigrationPreview(input: SchemaMigrationPreviewV1): SchemaMigrationPreviewV1 {
-  if (!MIGRATION_DOMAIN_ORDER.includes(input.domain)) fail("SchemaMigrationPreviewV1.domain");
+  if (!SCHEMA_MIGRATION_DOMAIN_ORDER.includes(input.domain)) fail("SchemaMigrationPreviewV1.domain");
   const fromVersion = parsePositiveUInt32(input.fromVersion);
   const toVersion = parsePositiveUInt32(input.toVersion);
   if (fromVersion >= toVersion) fail("SchemaMigrationPreviewV1: version order");
@@ -339,7 +324,7 @@ function buildMigrationPreview(input: SchemaMigrationPreviewV1): SchemaMigration
 function buildMigrationPreviews(migrations: readonly SchemaMigrationPreviewV1[]): SchemaMigrationPreviewV1[] {
   if (migrations.length > 10_000) fail("SchemaMigrationPreviewV1[]: count");
   const built = migrations.map(buildMigrationPreview).sort((left, right) =>
-    MIGRATION_DOMAIN_ORDER.indexOf(left.domain) - MIGRATION_DOMAIN_ORDER.indexOf(right.domain) || left.fromVersion - right.fromVersion);
+    SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(left.domain) - SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(right.domain) || left.fromVersion - right.fromVersion);
   const ids = new Set<string>();
   for (let index = 0; index < built.length; index += 1) {
     const current = built[index] as SchemaMigrationPreviewV1;
@@ -481,7 +466,7 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
   if (input.inverseLeaves.length < 1 || input.inverseLeaves.length > 10_016) fail("PreparedUpdateMaterializationV1.inversePlanProjections: count");
   let maximumCanonicalBytes = Math.max(canonicalBytes(input.targetDraft), canonicalBytes(input.concreteManifest), canonicalBytes(input.inversePlan));
   /**
-   * A leaf's position within its kind: an owner's in OWNER_ORDER (OWNER_UPDATE_ORDER), a migration's
+   * A leaf's position within its kind: an owner's in OWNER_UPDATE_ORDER, a migration's
    * chain position (domain in SCHEMA_MIGRATION_DOMAIN_ORDER, then fromVersion), read once from its projection.
    */
   const ranks = new Map<string, readonly [number, number]>();
@@ -495,7 +480,7 @@ export function buildPreparedUpdateMaterialization(input: PreparedUpdateMaterial
       maximumCanonicalBytes = Math.max(maximumCanonicalBytes, bytes);
       const fields = leaf.projection as { readonly owner?: unknown; readonly domain?: unknown; readonly fromVersion?: unknown } | null;
       // The order key is part of the projection; a leaf without one is refused, never ranked by a default.
-      const rank = leaf.kind === "owner_inverse" ? OWNER_ORDER.indexOf(fields?.owner as ArtifactOwner) : SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(fields?.domain as SchemaMigrationDomainV1);
+      const rank = leaf.kind === "owner_inverse" ? OWNER_UPDATE_ORDER.indexOf(fields?.owner as ArtifactOwner) : SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(fields?.domain as SchemaMigrationDomainV1);
       const step = leaf.kind === "owner_inverse" ? 0 : fields?.fromVersion;
       if (rank < 0 || typeof step !== "number") fail("PreparedInverseProjectionV1.projection: no order key");
       ranks.set(`${leaf.kind}/${id}`, [rank, step]);

@@ -66,7 +66,7 @@ function owner(name: OwnerUpdatePreviewInputV1["owner"], root: string): OwnerUpd
   const replace = [p(`${root}/é-accent`), p(`${root}/B-upper`)];
   const remove = [p(`${root}/old`)];
   const unchanged = [p(`${root}/keep-2`), p(`${root}/keep-1`)];
-  return { owner: name, partition: [...unchanged, ...remove, ...create, ...replace], paths: { create, replace, remove, unchanged }, externalEffects: 0 };
+  return { owner: name, paths: { create, replace, remove, unchanged }, externalEffects: 0 };
 }
 
 function migration(id: string, domain: SchemaMigrationPreviewV1["domain"], from: number, to: number, paths: readonly string[]): SchemaMigrationPreviewV1 {
@@ -112,7 +112,6 @@ function updateInput(): UpdatePreviewInputV1 {
 function reverseOwner(input: OwnerUpdatePreviewInputV1): OwnerUpdatePreviewInputV1 {
   return {
     ...input,
-    partition: [...input.partition].reverse(),
     paths: {
       create: [...input.paths.create].reverse(),
       replace: [...input.paths.replace].reverse(),
@@ -185,23 +184,21 @@ describe("update preview", () => {
     expect(core?.counts).toEqual({ create: 2, replace: 2, remove: 1, unchanged: 2, externalEffects: 0 });
   });
 
-  it("refuses overlapping, uncovered, foreign, duplicate, or repeated owner paths", () => {
+  it("refuses overlapping (W2-BUNDLE-3), duplicate, or repeated owner paths", () => {
     const base = owner("core", "/product/core");
     const overlapping = { ...base, paths: { ...base.paths, unchanged: [...base.paths.unchanged, p("/product/core/old")] } };
-    const uncovered = { ...base, partition: [...base.partition, p("/product/core/missing")] };
-    const foreign = { ...base, paths: { ...base.paths, remove: [p("/product/other")] } };
     const repeated = { ...base, paths: { ...base.paths, remove: [p("/product/core/old"), p("/product/core/old")] } };
-    for (const bad of [overlapping, uncovered, foreign, repeated]) {
+    for (const bad of [overlapping, repeated]) {
       expect(() => buildUpdatePreview({ ...updateInput(), owners: [bad] })).toThrow();
     }
     expect(() => buildUpdatePreview({ ...updateInput(), owners: [base, base] })).toThrow("duplicate owner");
     expect(() => buildUpdatePreview({ ...updateInput(), owners: [] })).toThrow();
   });
 
-  it("orders migrations by domain and contiguous chain, with domain-appropriate affected paths", () => {
+  it("orders migrations product_state first, as execution does (W2-BUNDLE-1), then by contiguous chain, with domain-appropriate affected paths", () => {
     const preview = buildUpdatePreview(updateInput());
-    expect(preview.migrations.map((entry) => entry.id)).toEqual(["migration_brain-v2", "migration_brain-v3", "migration_state-v3"]);
-    expect(preview.migrations[0]?.affectedPaths).toEqual(["notes/a.md", "notes/b.md"]);
+    expect(preview.migrations.map((entry) => entry.id)).toEqual(["migration_state-v3", "migration_brain-v2", "migration_brain-v3"]);
+    expect(preview.migrations[1]?.affectedPaths).toEqual(["notes/a.md", "notes/b.md"]);
     const bad = (entry: SchemaMigrationPreviewV1) => () => buildUpdatePreview({ ...updateInput(), migrations: [entry] });
     expect(bad({ ...migration("migration_brain-v2", "brain", 1, 2, ["notes/a.md"]), affectedPaths: [p("/vault/notes/a.md") as never] })).toThrow();
     expect(bad({ ...migration("migration_state-v3", "product_state", 2, 3, ["/product/state/x"]), affectedPaths: [parseVaultRelativePathText("state/x") as never] })).toThrow();
@@ -267,7 +264,7 @@ describe("rollback preview", () => {
     ]);
     expect(preview.operation).toBe("rollback");
     expect(preview.consumesRollbackRecord).toBe(true);
-    expect(preview.migrations.map((entry) => entry.id)).toEqual(["migration_brain-v2", "migration_brain-v3", "migration_state-v3"]);
+    expect(preview.migrations.map((entry) => entry.id)).toEqual(["migration_state-v3", "migration_brain-v2", "migration_brain-v3"]);
     expect(preview.previewHash).toBe(previewHash(preview));
   });
 

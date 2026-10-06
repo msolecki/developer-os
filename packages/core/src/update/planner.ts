@@ -1215,7 +1215,7 @@ export function materializePlannerDraft(
       else paths[operation.operation].push(path);
     }
     for (const token of plan.currentArtifacts) if (!changed.has(token)) paths.unchanged.push(tokenPath(context, token));
-    return { owner: plan.owner, partition: [...paths.create, ...paths.replace, ...paths.remove, ...paths.unchanged], paths, externalEffects: plan.externalEffects.length as 0 | 1 };
+    return { owner: plan.owner, paths, externalEffects: plan.externalEffects.length as 0 | 1 };
   });
   const migrations = admitted.draft.migrations.map((migration): SchemaMigrationPreviewV1 => ({
     id: migration.id,
