@@ -20,6 +20,7 @@ import {
   type UpdatePlanPreviewV1,
 } from "./preview.js";
 import { orderMigrationChain } from "./migration-planning.js";
+import { validateOwnerDraft } from "./owner.js";
 import { parseBundleRelativePath, validateReleaseIdentity, type BundleRelativePathV1, type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
 import {
   exact,
@@ -580,10 +581,8 @@ function parseOwnerPlan(value: unknown, owner: ArtifactOwner, context: DraftCont
   const input = exact(value, ["owner", "currentArtifacts", "proposedOperations", "externalEffects"], label);
   if (input.owner !== owner) fail(`${label}.owner: not the installed owner order`);
   const partition = context.request.artifactInputs.filter((artifact) => artifact.owner === owner).map((artifact) => artifact.token);
-  if (!same(input.currentArtifacts, partition)) fail(`${label}.currentArtifacts: not the owner's complete partition`);
 
   const touched = new Set<string>();
-  const created = new Set<string>();
   const operations = list(input.proposedOperations, 0, MAX_ARTIFACTS, `${label}.proposedOperations`).map((row): PlannerChangePlanOperationV1 => {
     const opLabel = "PlannerChangePlanOperationV1";
     const operation = record(row, opLabel);
@@ -592,20 +591,14 @@ function parseOwnerPlan(value: unknown, owner: ArtifactOwner, context: DraftCont
       const target = exact(operation.target, ["kind", "owner", "path"], `${opLabel}.target`);
       if (target.kind !== "owner_relative" || target.owner !== owner) fail(`${opLabel}.target: create names another owner or an installed token`);
       const path = parseOwnerRelativePath(target.path);
-      const folded = path.normalize("NFC").toLowerCase();
-      if (created.has(folded)) fail(`${opLabel}.target: duplicate create`);
-      created.add(folded);
       return { operation: "create", target: { kind: "owner_relative", owner, path }, content: parseContentRef(operation.content, `${opLabel}.content`, context.outputs) };
     }
     const kind = oneOf(operation.operation, ["keep", "remove", "replace"] as const, `${opLabel}.operation`);
     exact(operation, kind === "replace" ? ["operation", "target", "expectedHash", "content"] : ["operation", "target", "expectedHash"], opLabel);
     const artifact = installedToken(operation.target, `${opLabel}.target`, context);
     if (artifact.owner !== owner) fail(`${opLabel}.target: another owner's token`);
-    if (touched.has(artifact.token)) fail(`${opLabel}.target: repeated token`);
     touched.add(artifact.token);
-    const current = context.request.manifest.artifacts[decodeTenDigitOrdinal(artifact.token.slice("artifact_".length))] as PlannerManifestArtifactV1;
     const expectedHash = operation.expectedHash === null ? null : parseLowerHexSha256(operation.expectedHash);
-    if (expectedHash !== current.currentHash) fail(`${opLabel}.expectedHash: differs from the manifest`);
     const target: InstalledTargetV1 = { kind: "installed", token: artifact.token };
     if (kind === "keep") {
       keptOrUntouched.add(artifact.token);
@@ -620,7 +613,7 @@ function parseOwnerPlan(value: unknown, owner: ArtifactOwner, context: DraftCont
 
   const effects = list(input.externalEffects, 0, 1, `${label}.externalEffects`).map((row): OwnerExternalEffectDraftV1 => {
     const effect = exact(row, ["kind", "owner", "artifactTokens"], "OwnerExternalEffectDraftV1");
-    if (effect.kind !== "codex_registration_refresh" || effect.owner !== "codex" || owner !== "codex") fail("OwnerExternalEffectDraftV1: not the closed Codex refresh");
+    if (effect.kind !== "codex_registration_refresh" || effect.owner !== "codex") fail("OwnerExternalEffectDraftV1: not the closed Codex refresh");
     const tokens = list(effect.artifactTokens, 1, MAX_ARTIFACTS, "OwnerExternalEffectDraftV1.artifactTokens").map((token) => parsePlannerPathToken(token, context.count));
     for (let index = 0; index < tokens.length; index += 1) {
       const current = tokens[index] as { readonly token: PlannerPathTokenV1; readonly ordinal: number };
@@ -629,7 +622,9 @@ function parseOwnerPlan(value: unknown, owner: ArtifactOwner, context: DraftCont
     }
     return { kind: "codex_registration_refresh", owner: "codex", artifactTokens: tokens.map((token) => token.token) };
   });
-  return { owner, currentArtifacts: partition, proposedOperations: operations, externalEffects: effects };
+  // Every root-free owner rule (keep-only rows, create collisions, repeated tokens, expected hashes,
+  // the one Codex effect over a real file change) runs here, at the trust boundary (W2-PLANNER-2).
+  return validateOwnerDraft({ owner, currentArtifacts: input.currentArtifacts as PlannerPathTokenV1[], proposedOperations: operations, externalEffects: effects }, context.request.manifest);
 }
 
 function parseMigrations(value: unknown, context: DraftContext, keptOrUntouched: ReadonlySet<string>): SchemaMigrationDraftV1[] {
