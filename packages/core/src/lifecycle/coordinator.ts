@@ -641,10 +641,14 @@ export class LifecycleCoordinator<TPlan extends CoordinatorPlan> {
           return "hold";
         }
         if (phase !== "rolled_back") {
-          refuseLifecycleRecovery(
-            "lifecycle_foundation_participant_not_terminal",
-            ref.initialJournal.finalPath,
-          );
+          await requireHeldGlobalLock(this.dependencies.fs, session.global);
+          await adapters.foundation.rollback(ref);
+          if ((await this.foundationJournalPhase(ref)) !== "rolled_back") {
+            refuseLifecycleRecovery(
+              "lifecycle_foundation_participant_not_terminal",
+              ref.initialJournal.finalPath,
+            );
+          }
         }
         return "hold";
       }

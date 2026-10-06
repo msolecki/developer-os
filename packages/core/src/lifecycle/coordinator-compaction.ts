@@ -38,7 +38,11 @@ import {
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
 
-type ParticipantCompactionPositionV1 = "executed" | "unstarted" | "counterfactual_inverse";
+type ParticipantCompactionPositionV1 =
+  | "executed"
+  | "current"
+  | "unstarted"
+  | "counterfactual_inverse";
 
 export type LifecycleCoordinatorCompactionDependenciesV1<TPlan> =
   LifecycleCoordinatorDependenciesV1<TPlan> & {
@@ -133,9 +137,16 @@ async function removeFoundationEntry<TPlan extends CoordinatorPlan>(
   const { fs, roots } = dependencies;
   const journalPath = child(roots.foundationJournals, `${participantId}.json`);
   const journalEntry = await fs.lstat(journalPath);
-  if (position === "executed") {
+  /**
+   * The forward a rolled-back coordinator stopped on: `resolveCurrentStep` either discarded it
+   * unstarted or rolled its published journal back, so a journal here is terminal `rolled_back`.
+   */
+  if (position === "executed" || (position === "current" && journalEntry !== null)) {
     if (journalEntry === null) return;
     const journal = await readTerminalFoundationJournal(fs, journalEntry, participantId);
+    if (position === "current" && journal.phase !== "rolled_back") {
+      refuseLifecycleRecovery("lifecycle_coordinator_participant_state", journalPath);
+    }
     await compactTerminalFoundationTransaction(
       { fs, roots, store: dependencies.foundationStore, global },
       deriveFoundationTerminalCompaction(journal),
@@ -157,7 +168,16 @@ async function removeFoundationEntry<TPlan extends CoordinatorPlan>(
     if (forwardId === null) {
       refuseLifecycleRecovery("lifecycle_coordinator_participant_state", journalPath);
     }
-    if ((await fs.lstat(child(roots.foundationJournals, `${forwardId}.json`))) !== null) {
+    /**
+     * Entries run in ID order, so the forward a rolled-back coordinator stopped on may still hold
+     * its own journal here. A terminal `rolled_back` forward left its targets at their preimage,
+     * which keeps this inverse counterfactual; any other forward journal does not.
+     */
+    const forwardJournal = await fs.lstat(child(roots.foundationJournals, `${forwardId}.json`));
+    if (
+      forwardJournal !== null &&
+      (await readTerminalFoundationJournal(fs, forwardJournal, forwardId)).phase !== "rolled_back"
+    ) {
       refuseLifecycleRecovery("lifecycle_coordinator_participant_state", journalPath);
     }
     await discardCounterfactualInverse(fs, ref);
@@ -276,7 +296,14 @@ function participantPositions(
   for (const [index, step] of plan.steps.entries()) {
     if (step.kind !== "foundation") continue;
     const consumed = index < nextStep;
-    positions.set(step.participantId, consumed ? "executed" : "unstarted");
+    positions.set(
+      step.participantId,
+      consumed
+        ? "executed"
+        : index === nextStep && outcome === "rolled_back"
+          ? "current"
+          : "unstarted",
+    );
     const ref = foundationRefById(plan, step.participantId);
     const compensationId = ref.role.kind === "forward" ? ref.role.compensationId : null;
     if (compensationId === null) continue;
