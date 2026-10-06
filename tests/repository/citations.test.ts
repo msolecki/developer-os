@@ -481,6 +481,29 @@ export function statedSuiteCounts(
   });
 }
 
+/**
+ * **A cited range must hold a code identifier its own line names** (FLOW-DOCS-4). Bounds-checking
+ * cannot see a citation that drifted onto a comment: 73 of 112 identifier-bearing citations in
+ * `threat-model.md` and `knowledge-pipeline.md` had. A doc line's backticked single-word tokens that
+ * look like code (a capital or an underscore) are its identifiers; the line passes when any one occurs in any range it cites. A line naming none
+ * (prose, test-title cells) is out of scope, so this narrows the gap and does not close it.
+ */
+export function lineIdentifiers(line: string): readonly string[] {
+  return [...line.matchAll(/`([A-Za-z_$][\w$]*)(?:\(\))?`/gu)]
+    .map((match) => match[1] ?? "")
+    .filter((token) => token.length >= 4 && /[A-Z_]/u.test(token) && !/\.(?:ts|md|yaml)$/u.test(token));
+}
+
+export function rangeText(contents: string, start: number, end: number): string {
+  return contents.split("\n").slice(start - 1, end).join("\n");
+}
+
+/** Documents whose evidence column is held to the identifier-in-range rule. */
+const IDENTIFIER_CHECKED = [
+  "docs/architecture/threat-model.md",
+  "docs/architecture/knowledge-pipeline.md",
+] as const;
+
 async function repository(): Promise<{
   readonly root: string;
   readonly files: readonly string[];
@@ -575,6 +598,28 @@ describe("every documented citation resolves", () => {
           broken.push(
             `${where} is out of range: ${resolution.path} has ${String(length)} lines`,
           );
+        }
+      }
+    }
+
+    for (const doc of IDENTIFIER_CHECKED) {
+      const text = await read(doc);
+      const lines = text.split("\n");
+      const byLine = new Map<number, Citation[]>();
+      for (const citation of extractCitations(text, knownBasenames)) {
+        byLine.set(citation.line, [...(byLine.get(citation.line) ?? []), citation]);
+      }
+      for (const [number, group] of byLine) {
+        const identifiers = lineIdentifiers(lines[number - 1] ?? "");
+        if (identifiers.length === 0) continue;
+        let excerpt = "";
+        for (const citation of group) {
+          const resolution = resolveSource(citation, files);
+          if (resolution.kind !== "resolved") continue;
+          excerpt += `\n${rangeText(await read(resolution.path), citation.start, citation.end)}`;
+        }
+        if (!identifiers.some((identifier) => containsIdentifier(excerpt, identifier))) {
+          broken.push(`${doc}:${String(number)} cites no range containing ${identifiers.map((i) => `\`${i}\``).join(" or ")}`);
         }
       }
     }

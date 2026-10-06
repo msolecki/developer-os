@@ -123,8 +123,8 @@ command consumes them.
 text → redact → normalize → deduplicationHash → captureId → envelope + body
 ```
 
-`buildCapture` (`packages/brain/src/capture/build.ts:209`) runs that order and no other, over
-`redactAndNormalize` (`:174`). **The raw text exists only in memory**: it is never written, never
+`buildCapture` (`packages/brain/src/capture/build.ts:216`) runs that order and no other, over
+`redactAndNormalize` (`:179`). **The raw text exists only in memory**: it is never written, never
 logged, never hashed and never reaches a model. The hash is taken over the *redacted, normalized*
 content, so two texts differing only by a secret produce one capture — a consequence rather than an
 accident, since the observation is the same observation and nothing of the second secret survives the
@@ -260,9 +260,9 @@ crash cannot be told from a run that never started.
 leaves a capture at `staging` with its notes already in the vault. It is **inert**: `selectCaptures`
 selects only captures whose status is `accepted` (`ingest.ts:663`), so the next run cannot
 double-apply. It is visible, and a hand edit of the status is what moves it — which is what
-`PARTLY_APPLIED_RECOVERY` (`ingest.ts:314-315`) tells the user, in those words and no others: **the
+`PARTLY_APPLIED_RECOVERY` (`ingest.ts:341-342`) tells the user, in those words and no others: **the
 `repair` half of that advice is a different constant.** `INCOMPLETE_TRANSACTION_RECOVERY`
-(`:336-337`) is appended unconditionally by `refusedRecovery` (`:389`), so the two arrive together in
+(`:369-370`) is appended unconditionally by `refusedRecovery` (`:391`), so the two arrive together in
 the output while neither line alone says both. **No arrangement of these transactions removes that
 window**, because no two of them can share one.
 
@@ -278,7 +278,7 @@ model ran**.
 
 **One asymmetry a reader will otherwise assume away.** `--output-schema` reaches Codex only;
 `invokeClaude` has no such flag, so on that vendor the schema is described in the prompt and enforced
-by `parseIngestProposal` afterwards (`ingest.ts:1084-1093`, `:1683`).
+by `parseIngestProposal` afterwards (`ingest.ts:1305-1312`, `:2081`).
 
 **A note capture skips the model.** It is applied verbatim, with no vendor call, as one `create` or
 one `replace` bound to its capture-time hash; `brain.md` §6.13 has the contract.
@@ -394,7 +394,7 @@ still pass the exhaustiveness test because the typo went into the expectation to
 | Validator | Enforced at | What it refuses |
 |---|---|---|
 | `schema-and-frontmatter` | `packages/brain/src/ingest/validate.ts:339` | a note the canonical schema does not accept |
-| `source-and-provenance` | `:402` | a note whose `sourceCaptureId` is not the capture being ingested |
+| `source-and-provenance` | `:412` | a note whose `sourceCaptureId` is not the capture being ingested |
 | `link-and-graph` | `:989` | links the lint build grades as broken |
 | `duplicate-detection` | `:1011` | a proposal colliding with a note already in the vault |
 | `confidence-and-lifecycle` | `:446` | `established` without a `reviewed` date, `deprecated` without `updated` |
@@ -403,7 +403,7 @@ still pass the exhaustiveness test because the typo went into the expectation to
 | `generated-output-consistency` | `:760` | a write into the generated indexes directory |
 | `write-scope` | `:619` | a path outside the declared, resolved write scopes, or whose first segment is not a configured topic folder or an alias resolving to one (`content/DEV/x.md` is refused) |
 
-`validateProposal` (`:892`) runs them, is total and side-effect-free, and a finding names the class and
+`validateProposal` (`:940`) runs them, is total and side-effect-free, and a finding names the class and
 the file **never the value** (`:67-72`) — the report is written and logged, and the proposal is model
 output that has just read material an attacker may have written.
 
@@ -433,12 +433,12 @@ differently on every invocation: the field would populate, look correct, and mea
 
 **The key is durable, and the load has two doors, not one:**
 
-- `readRedactionKey` (`apps/cli/src/context.ts:680`) is the **composition root's** door. It never
+- `readRedactionKey` (`apps/cli/src/context.ts:705`) is the **composition root's** door. It never
   creates, never throws and never repairs, returning `null` for absent, unreadable, symlinked,
   wrong-typed or too-short — every state `doctor` must be able to *report*, which it cannot do if
   building the context already threw. The root warns and falls back to an ephemeral key
   (`:743-745`), so diagnostics are still redacted on a machine that has never been initialized.
-- `loadOrCreateRedactionKey` (`:659`) is the **point-of-use** door, called by `init` (`init.ts:350`,
+- `loadOrCreateRedactionKey` (`:684`) is the **point-of-use** door, called by `init` (`init.ts:350`,
   `:975`, `:1026`, `:1061`) and by `capture`, `review` and `ingest` at their own points of use, and
   by `import` except under `--dry-run`. `import --dry-run`, `project init` and `project check` never
   create it: they read it with `readRedactionKey` and fall back to an ephemeral key. It creates
@@ -459,10 +459,10 @@ nothing is encrypted with it.
 §7's DOS-P7 gate reads "uninstall removes only manifest-owned artifacts", and `uninstall` removes the
 key (`apps/cli/src/commands/uninstall.ts:536-544`) — by the exact path `redactionKeyPath` computes,
 never by pattern and never by walking the state directory, so the exception cannot widen. It runs
-**before** `revertArtifacts` (`:931`), so the state directory can be removed when it is otherwise
+**before** `revertArtifacts` (`apps/cli/src/commands/uninstall.ts:448`, called at `:941`), so the state directory can be removed when it is otherwise
 empty. An absent manifest no longer returns early past it: that branch hands off to
 `runAbsentManifestUninstall`, which deletes an orphaned key on its own guarded path
-(`deleteOrphanedKey`, `apps/cli/src/lifecycle/absent-manifest-uninstall.ts:176-179`), so an install
+(`deleteOrphanedKey`, `apps/cli/src/lifecycle/absent-manifest-uninstall.ts:178-181`), so an install
 that failed and reverted still leaves no secret nothing would ever clean up. **Leaving a secret behind
 after the product is gone is worse than losing fingerprint comparability.** DOS-P7 inherits this as a
 known exception rather than reading its own gate as violated; the row is §8 of
@@ -485,7 +485,7 @@ substitutions are **pinned to a position** — `content` at index 0 only, `_inde
 only when index 0 was `content` — so a vault folder literally named `content` nested under `staging/`
 cannot be corrupted, and every root is glob-escaped and NFC-normalized before it is spliced in.
 `ingest` resolves its declared scopes through it once per invocation (`ingest.ts:2330-2331`), against
-`INGEST_DECLARED_WRITE_SCOPES` (`:215-218`), which `ingest.test.ts` pins against
+`INGEST_DECLARED_WRITE_SCOPES` (`:238-241`), which `ingest.test.ts` pins against
 `workflows/ingest/workflow.yaml` so a contract edit that does not update the constant goes red. The
 compiler's declared-versus-derived arithmetic is untouched, so the equality rule stays the checked
 arithmetic it was designed to be.
@@ -521,7 +521,7 @@ difference — a case-insensitive volume, on which `_RAW/quarantine/x.md` canoni
 puts a model-written note into `content/_raw/quarantine/`.
 
 The second: that directory is where the next `ingest` looks for captures. `parseNote` grades an
-unknown frontmatter key at `info` (`packages/brain/src/schema/note.ts:362-371`) and `parseCaptureFile`
+unknown frontmatter key at `info` (`packages/brain/src/schema/note.ts:394-403`) and `parseCaptureFile` (`packages/brain/src/capture/parse.ts:174`)
 never recomputes the id, so **one document can satisfy both the note parser and the capture parser** —
 and the model's own output re-enters the pipeline as an `accepted` capture, with the human review step
 skipped.
@@ -568,11 +568,11 @@ in §10 below with their owners.
 | **NEW-36** — a redacted payload's paths are renormalized and its keys rewritten | **closed 2026-09-28** for paths and key names | M. `createRedactor`'s redactor takes a `RedactionScope` per call (`text`, `value`, `path`, `name`); every scope but `text` returns the caller's bytes when nothing matched, so a clean NFD path in `data` stays NFD. `redactPayload` redacts a key in the `name` scope, which drops `user-pattern` and keeps every provider, credential and `high-entropy` class, so `patterns = ["captureId"]` no longer rewrites the schema. **Residual:** a product-owned *enum value* (`leftAt`, `reason`, `agent`) is a string leaf the walk cannot tell from caller text, so a pattern equal to one still redacts it; closing that needs a schema-aware walk. No payload today has data-derived keys, so every key is treated as product-owned |
 | **NEW-37** — a numeric leaf of that payload is outside the redactor's reach | **closed 2026-09-28** by contract | S. A `number` leaf is published as the number it is, always: the JSON type must not depend on `[redaction] patterns`, and no built-in class can match a finite number's decimal text. A caller-derived identifier goes into a payload as a string, where every class applies |
 | **NEW-20** — `capture` proves its quarantine root, then follows the declared path again | **closed 2026-09-28** | XS, security. `capture` reads and writes through the canonical quarantine `resolveQuarantine` now returns, and keeps the declared path for `CaptureResultV1.path` and `validateChangePlan`'s owned root, so a retarget after the proof is refused at exit 5. `import` still re-follows its declared quarantine. `threat-model.md` §5.2 describes it |
-| **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | **closed 2026-08-15** by Track R entry R1 | XS, security. `reindex` calls `resolveContainedRoot` (`apps/cli/src/commands/reindex.ts:429`) rather than joining the path textually, so a `content/_indexes` replaced by a link out of the vault is refused instead of written through. Regression tests: `tests/security/symlink-escape.test.ts:369,410` |
-| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. All three executors call it — `apps/cli/src/commands/capture.ts:263`, `apps/cli/src/commands/doctor.ts:439`, `apps/cli/src/commands/ingest.ts:544`. **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33 is a false refusal awaiting the founder |
-| **NEW-16** — user-configured redaction patterns are unreachable | **closed 2026-08-17** by Track R entry R2 | S. `configSchema` carries an optional `[redaction]` table (`packages/core/src/config/loader.ts:208`) and the three redacting commands bind the user's patterns through `createRedactor` at their composition roots. `tests/repository/redactor-entry.test.ts` refuses a new call site that reaches for `redactText` directly. Residuals NEW-25 and NEW-26 are fixed, and NEW-24 closed 2026-09-28 under D73: a `user-pattern` finding persists its row index and an over-broad row is flagged by match density (`threat-model.md` §5.7) |
+| **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | **closed 2026-08-15** by Track R entry R1 | XS, security. `reindex` calls `resolveContainedRoot` (`apps/cli/src/commands/reindex.ts:444`) rather than joining the path textually, so a `content/_indexes` replaced by a link out of the vault is refused instead of written through. Regression tests: `tests/security/symlink-escape.test.ts:369,410` |
+| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. It is called from `apps/cli/src/commands/doctor.ts:482`, `apps/cli/src/commands/ingest.ts:661` and `apps/cli/src/commands/automation/garden.ts:131,189` (re-measured 2026-10-06). **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33, a false refusal, was closed 2026-10-06 (D83 (3)) |
+| **NEW-16** — user-configured redaction patterns are unreachable | **closed 2026-08-17** by Track R entry R2 | S. `configSchema` carries an optional `[redaction]` table (`packages/core/src/config/loader.ts:418`) and the three redacting commands bind the user's patterns through `createRedactor` at their composition roots. `tests/repository/redactor-entry.test.ts` refuses a new call site that reaches for `redactText` directly. Residuals NEW-25 and NEW-26 are fixed, and NEW-24 closed 2026-09-28 under D73: a `user-pattern` finding persists its row index and an over-broad row is flagged by match density (`threat-model.md` §5.7) |
 | **NEW-17** — `brain` is the one command whose config parse failure is not content-free | **closed**, removed from `BACKLOG.md` §1 | XS, security. `readConfig` now routes through `readConfigFile` (`apps/cli/src/commands/brain.ts:117`) and rethrows `ConfigurationError` unmodified, so no command parses configuration outside the wrapper |
-| **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | **closed 2026-08-15** by Track R entry R1 | XS. One case per `containsNul` site — executable, working directory, any argument, stdin (`packages/security/src/process.test.ts:101,111,119,127`) |
+| **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | **closed 2026-08-15** by Track R entry R1 | XS. One case per `containsNul` site — executable, working directory, any argument, stdin (`packages/security/src/process.test.ts:107,117,125,133`; `containsNul` at `packages/security/src/process.ts:35`) |
 | **NEW-12** — the argv screen's word list also screens a value nobody chose | **closed 2026-08-17** by Track R entry R2 | XS, security-adjacent. Closed in two halves and **not** by narrowing the pattern, which the row forbade: the prose half on 2026-08-15 (`screenProseArgument` for the prompt), the path half on 2026-08-17 (`screenDerivedPathArgument` for `workingRoot` and `outputSchemaPath`, which this product assembles). The word list is byte-identical and each of its three alternatives is now guarded by a sample that isolates it. **Two residuals:** `ingest` can no longer produce a screening refusal at all, so `invokeVendor`'s refusal-detail interpolation is unreachable in production and uncovered end-to-end; and the first caller to pass a real write scope will hand a derived path to the screen that still carries the word list, re-creating the defect one field over |
 | **NEW-11** — the invisible-title rule stops at `title` | **closed 2026-08-17** by Track R entry R2 | S. `tags` and `summary` now carry NEW-10's predicate as a **lint warning** — the note still indexes — and `duplicates` keys on a perceptual grouping key rather than on that boolean. `isBlank` moved to `packages/security/src/text.ts` rather than being copied. **Two residual rows, plus accepted consequences** — **NEW-30 closed 2026-08-21**, leaving one: NEW-30 (`aliases` was the fourth field with the same gap; the rule now lives beside the other two in `lint.ts`) and NEW-31 (a stray U+200D still hides a duplicate, because the joiner is deliberately exempt; closed 2026-09-28 under D73 as a `frontmatter` warning on the title). The accepted consequences — an emoji grouping with its text presentation, and two others — are enumerated in `text.ts` rather than carried as rows |
 | **NEW-13** — two artifact roots share one type | DOS-P6 Task 4's nominal brands | **closed 2026-08-21.** The brands shipped with Task 4 and the `@ts-expect-error` case pins them (`packages/adapter-codex/src/install.test.ts:193`); the row went on reading `Status: open` for nine days, and this note recorded the discrepancy rather than letting it pass. Task 19 Step 5 closed it. If a row and the tree ever disagree again, the tree is the answer |
