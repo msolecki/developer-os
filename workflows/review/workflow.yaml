@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: review
-version: 2.1.0
+version: 2.2.0
 description: List captures at one status, quarantined by default, and accept, edit, or reject one; reject also withdraws an accepted capture. Never deletes a source.
 triggers:
   - manual
@@ -9,10 +9,14 @@ inputs:
     type: string
     required: false
     description: Which status to list - quarantined (default), accepted, rejected, staging, ingested, or failed. Lists only; never combined with a decision.
+  id:
+    type: string
+    required: false
+    description: The capture to decide on, 16 lowercase hexadecimal characters (the name of its file). Required with a decision; absent means list.
   decision:
     type: string
     required: false
-    description: accept, edit, or reject. Absent means list.
+    description: accept, edit, or reject. Absent means list. Requires id.
 output:
   reviewed:
     type: integer
@@ -42,9 +46,12 @@ steps:
   - id: decide
     do: capture.setStatus
     with:
+      id: $input.id
       decision: $input.decision
   - id: edit
     do: capture.edit
+    with:
+      id: $input.id
 validators:
   - no source file is removed by any decision
 recovery:
