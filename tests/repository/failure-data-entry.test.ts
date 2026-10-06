@@ -69,10 +69,15 @@ const ALLOWED = [
 ] as const;
 
 /**
- * **The one consumer of the bound data redactor**, which may call `guards.redactData` and
+ * **The consumers of the bound data redactor**, which may call `guards.redactData` and
  * nothing else: `redactPayload`, every cast and every annotation are still swept here.
+ * `git/index.ts` publishes the pending push's coordinator and head as `push_pending` data
+ * (CLI-CMD-3..12), which `failureFrom` cannot carry because its kind is the error's.
  */
-const BOUND_DATA_CONSUMERS = ["apps/cli/src/commands/automation/runner.ts"] as const;
+const BOUND_DATA_CONSUMERS = [
+  "apps/cli/src/commands/automation/runner.ts",
+  "apps/cli/src/commands/git/index.ts",
+] as const;
 
 const PRODUCERS = ["redactPayload", "redactData"] as const;
 
