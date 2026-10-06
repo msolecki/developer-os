@@ -48,6 +48,7 @@ export type {
 } from "./indexes/index.js";
 export {
   canonicalizeArtifact,
+  duplicateTitleKey,
   firstDifferingLine,
   GENERATED_AT_SENTINEL,
   lintVault,

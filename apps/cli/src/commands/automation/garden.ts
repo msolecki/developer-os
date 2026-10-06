@@ -12,6 +12,7 @@ import {
   artifactPaths,
   BrainService,
   buildGardenPrompt,
+  duplicateTitleKey,
   GARDEN_MAX_PROPOSALS,
   isUnsafeProposedNotePath,
   parseGardenResponse,
@@ -23,7 +24,7 @@ import {
 import type { IndexedNote, LintFinding } from "@developer-os/brain";
 import { createRedactor } from "@developer-os/security";
 
-import { readConfigFile } from "../../config-file.js";
+import { isMissingEntry, readConfigFile } from "../../config-file.js";
 import { loadOrCreateRedactionKey, runtimePathsFor } from "../../context.js";
 import type { CliContext } from "../../context.js";
 import { LifecycleMutationRefusal, withLifecycleMutation } from "../../lifecycle/mutation-gate.js";
@@ -78,7 +79,7 @@ function structuralCommands(findings: readonly LintFinding[], notes: readonly In
   for (const finding of findings) {
     const note = byPath.get(finding.path);
     if (finding.class !== "duplicates" || note === undefined) continue;
-    const key = finding.key === "title" ? `title\0${note.topicFolder}\0${note.title.toLowerCase()}` : `content\0${note.contentHash}`;
+    const key = finding.key === "title" ? `title\0${duplicateTitleKey(note)}` : `content\0${note.contentHash}`;
     const path = note.path.slice(contentRoot.length + 1);
     if (path.includes("'")) continue;
     groups.set(key, [...(groups.get(key) ?? []), path]);
@@ -90,10 +91,6 @@ function structuralCommands(findings: readonly LintFinding[], notes: readonly In
       ? [`developer-os brain retire '${target}' --dry-run`]
       : sources.map((source) => `developer-os brain refactor --merge '${source}' '${target}' --dry-run`);
   });
-}
-
-function isMissingEntry(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR");
 }
 
 async function exists(context: CliContext, path: string): Promise<boolean> {
