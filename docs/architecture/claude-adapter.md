@@ -8,7 +8,8 @@ This note absorbed the surviving design record on 2026-08-24, when the completed
 was deleted. It also carries the DOS-P6 correction: capture is agent-authored, and automatic
 capture and the `developer-os run claude` wrapper are declined. A13 (2026-09-22) reversed one part
 of that correction: the eleven non-capture hooks ship as calls to the installed `developer-os`
-entrypoint (§5, `hooks.md` §3), and four capability keys, not six, resolve to `not-used`. The
+entrypoint (§5, `hooks.md` §3), and four capability keys, not six, resolve to `not-used` (three since D87 took `subagents` off
+the list, NEW-186). The
 implementation plan was deleted when its last step closed; git history is the archive for both.
 
 ## 1. What it is
@@ -21,7 +22,7 @@ implementation plan was deleted when its last step closed; git history is the ar
 | `src/capabilities.ts` | table plus observation into the three-value model |
 | `src/render.ts` | `ClaudeRenderer`: contract → `SKILL.md` frontmatter (`name`, `description`) and artifact path. The body — the `shared` preamble and the screen seam — moved to `packages/workflow-schema/src/skill.ts` on 2026-08-12; see §6 |
 | `src/plugin.ts` | the plugin tree and its minimal manifest |
-| `src/compose.ts` | `renderClaudePlugin` — find `shared`, render all six, order the tree |
+| `src/compose.ts` | `renderClaudePlugin` — find `shared`, render every workflow under `workflows/`, order the tree |
 | `src/install.ts` | tree → an install *proposal* Foundation validates into a `ChangePlanV1` |
 | `src/invoke.ts` | argv arrays, bounded stdin, timeout, structured result |
 | `src/index.ts` | the only public door |
@@ -76,8 +77,9 @@ A probe that could not run yields `unknown`. A probe that asked and reports `abs
 whatever the version — the table gates `yes`, not `no` — and a key no probe mentioned stays
 `unknown` (NEW-62). `doctor --probe` therefore prints `skills=no` for a plugin tree that is
 verifiably missing its skills and `skills=unknown` when the probe could not run. DOS-P6 removed `wrapper-required`:
-`session_end_capture`, `pre_compact_backup`, `subagents` and `durable_project_guidance` are unused
+`session_end_capture`, `pre_compact_backup` and `durable_project_guidance` are unused
 by this product and resolve to `not-used` before either gate (`CLAUDE_NOT_USED_KEYS`).
+`subagents` left that list with D87 (NEW-186): the catalog agents ship as `agents/*.md`.
 
 **`plugin_hooks` and `session_start_injection` left that list with A13, and a firing record is
 their only observation.** `plugin_hooks` is observed by any Claude record under
@@ -87,13 +89,16 @@ Neither `claude plugin validate` nor a listing counts: those prove the hooks wer
 they fired (NEW-65). Without a record both keys stay `unknown`, never `no`. Their documented floors
 stay `null` until Task 1 observes a version (`hooks.md` §3.6).
 
-**The probe settles exactly one key, and that is the second correction the model needed.**
-`claude plugin validate` used to settle `skills`, `plugin_hooks` and `subagents` on the strength
-of one exit code, so a clean run reported `plugin_hooks=yes` and `subagents=yes` over a tree that
-contains **no `hooks/` and no `agents/` directory at all**. It is the same defect as the one §5
-describes, one layer up: a verified-present claim about something that is not there. Restoring a
-key to that list means shipping the artifact it describes in the same change, and a test now
-enumerates every key and names the single one that may be `yes`.
+**The probe settles `skills` and `subagents`, each from a listed file, and that is the second
+correction the model needed.** `claude plugin validate` used to settle `skills`, `plugin_hooks` and
+`subagents` on the strength of one exit code, so on 2026-08-11 a clean run reported
+`plugin_hooks=yes` and `subagents=yes` over a tree that then contained **no `hooks/` and no
+`agents/` directory at all**. It is the same defect as the one §5 describes, one layer up: a
+verified-present claim about something that is not there. Restoring a key to that list means
+shipping the artifact it describes in the same change. `subagents` came back that way (D87,
+NEW-186): the catalog agents ship as `agents/*.md`, validate checks their frontmatter, and the
+probe requires a listed `agents/*.md` beside the clean exit. A test enumerates every key and names
+the two that may be `yes`.
 
 **Present-but-unreadable is not absent.** A binary that exists and does not answer — non-zero
 exit, timeout, unparseable `--version` — reported `claude=absent`, so one `doctor` run could print
@@ -221,8 +226,8 @@ or `description`, an invariant that schema's own docblock and `overlay.test.ts` 
 `OverlayOutcome.lifecycle` is deliberately unused: no hook artifact ships, so there is nothing for
 a lifecycle binding to bind to.
 
-**Determinism.** `buildPluginTree` sorts by code point, so the six workflows produce the same
-bytes in any directory order. This is the byte-identity debt `workflow-schema.md` §6 assigned to
+**Determinism.** `buildPluginTree` sorts by code point, so every workflow under `workflows/`
+produces the same bytes in any directory order. This is the byte-identity debt `workflow-schema.md` §6 assigned to
 DOS-P4 and DOS-P5, and DOS-P4's half is paid over the six real workflows and the real renderer.
 
 **Two artifacts may not claim one path.** A skill's path is built from the workflow's `id`, which
@@ -332,7 +337,7 @@ writing a second one. The code-point sort came due early and is closed (§9.5); 
 (§9.6) still comes due when there are two adapters.
 
 **DOS-P6 closed the larger inheritance:** capture is agent-authored; hooks and the wrapper are
-declined; the capture and ingest commands ship; and the six unused keys resolve to `not-used`.
+declined; the capture and ingest commands ship; and the unused keys resolve to `not-used`.
 `docs/architecture/knowledge-pipeline.md` is the current cross-subsystem record.
 
 ## 11. Invocation and security contract

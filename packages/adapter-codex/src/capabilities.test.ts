@@ -115,11 +115,22 @@ describe("resolveCapabilities", () => {
  * identical. Two adapters that disagree about which surfaces the product uses
  * is one report that means two things.
  */
+/**
+ * D87 (NEW-186): the catalog agents ship as `agents/developer-os-<id>.toml`, so
+ * `subagents` is not `not-used`. `codex plugin list --json` does not list them,
+ * so the probe never settles the key and it stays `unknown` unless observed.
+ */
+describe("subagents", () => {
+  it("is unknown without an observation and yes only when observed", () => {
+    expect(resolveCapabilities("0.155.1", new Map()).subagents).toBe("unknown");
+    expect(resolveCapabilities("0.155.1", new Map([["subagents", "observed"]])).subagents).toBe("yes");
+  });
+});
+
 describe("the surfaces this product does not use", () => {
   const NOT_USED_KEYS = [
     "session_end_capture",
     "pre_compact_backup",
-    "subagents",
     "durable_project_guidance",
   ] as const satisfies readonly CodexCapabilityKey[];
 

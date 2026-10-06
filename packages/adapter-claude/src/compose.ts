@@ -16,7 +16,7 @@ import { ClaudeRenderer, SHARED_WORKFLOW_ID } from "./render.js";
  * with nothing installed and nothing on disk.
  *
  * Ordering is not taken from the caller. `buildPluginTree` sorts by code point,
- * so a directory reader that yields the six workflows in any order produces the
+ * so a directory reader that yields the workflows in any order produces the
  * same bytes — which is the byte-identity property Claude architecture former §7.3 owes DOS-P3.
  */
 export function renderClaudePlugin(

@@ -21,9 +21,11 @@ export type ClaudeCapabilities = Readonly<
  * Claude firing record, `session_start_injection` by the `SessionStart` one.
  * The two capture keys stay because knowledge-pipeline architecture note §2
  * declines both automatic capture paths: no capture hook fires, and no
- * `developer-os run claude` wrapper is built. `subagents` and
- * `durable_project_guidance` are reported for `doctor`'s matrix and depended on
- * by nothing (see `versions.ts`).
+ * `developer-os run claude` wrapper is built. `durable_project_guidance`
+ * is reported for `doctor`'s matrix and depended on by nothing (see
+ * `versions.ts`). `subagents` left this list with D87 (NEW-186): the catalog
+ * agents ship as `agents/*.md`, and the probe witnesses one under a clean
+ * `claude plugin validate`.
  *
  * **Removing a key from this list requires, in the same change, the artifact it
  * describes and a test that observed it working.** That rule is why
@@ -32,7 +34,6 @@ export type ClaudeCapabilities = Readonly<
 export const CLAUDE_NOT_USED_KEYS: readonly ClaudeCapabilityKey[] = [
   "session_end_capture",
   "pre_compact_backup",
-  "subagents",
   "durable_project_guidance",
 ];
 

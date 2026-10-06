@@ -30,6 +30,7 @@ const skillsPresent = (): Promise<readonly string[]> =>
   Promise.resolve([
     ".claude-plugin/plugin.json",
     "skills/developer-os-shared/SKILL.md",
+    "agents/code-reviewer.md",
   ]);
 
 const version = (stdout: string) =>
@@ -160,7 +161,7 @@ describe("reportClaudeCapabilities", () => {
    * really there — a list that has to be edited to add a `yes` is the point.
    * Found by fresh-context review, 2026-08-11.
    */
-  it("reports yes for exactly the one capability the tree ships", async () => {
+  it("reports yes for exactly the capabilities the tree ships", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
       runner: version("2.1.216"),
@@ -171,7 +172,7 @@ describe("reportClaudeCapabilities", () => {
     const granted = Object.entries(report.capabilities)
       .filter(([, state]) => state === "yes")
       .map(([key]) => key);
-    expect(granted).toEqual(["skills"]);
+    expect(granted).toEqual(["skills", "subagents"]);
   });
 
   /**

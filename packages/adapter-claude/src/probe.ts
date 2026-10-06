@@ -19,7 +19,7 @@ const PROBE_TIMEOUT_MS = 30_000;
 
 /**
  * The capabilities `claude plugin validate` can settle **for the tree this
- * adapter actually ships**. Claude architecture former §14.1: validate checks the manifest, skill,
+ * adapter actually ships**: the skills and the catalog agents under `agents/`. Claude architecture former §14.1: validate checks the manifest, skill,
  * agent and command frontmatter, and `hooks/hooks.json`, for syntax and schema
  * errors.
  *
@@ -30,17 +30,19 @@ const PROBE_TIMEOUT_MS = 30_000;
  * that function reports as `not-used`, since no hook ships to fire (DOS-P6
  * Task 3).
  *
- * **`plugin_hooks` and `subagents` were on this list and are not any more.** The
- * tree contains `.claude-plugin/plugin.json` and six `SKILL.md` files: no
- * `hooks/` and no `agents/` directory exist in it, so a clean exit code cannot
- * have observed either one — and both resolved to `yes` on the strength of that
- * exit code. It is the same defect the removal of `hooks/hooks.json` was meant
- * to close, one layer up: a verified-present claim about something that is not
- * there. Restoring a key here means shipping the artifact it describes in the
- * same change. Found by fresh-context review, 2026-08-11.
+ * **`plugin_hooks` and `subagents` were on this list and are not any more.** On
+ * 2026-08-11 the tree held only `.claude-plugin/plugin.json` and `SKILL.md`
+ * files, so a clean exit code could not have observed either one — and both
+ * resolved to `yes` on the strength of that exit code. Found by fresh-context
+ * review, 2026-08-11. `subagents` came back with the artifact it describes:
+ * the catalog agents ship as `agents/*.md` (A12), validate checks their
+ * frontmatter, and the witness below requires one to be listed (D87, NEW-186).
+ * `plugin_hooks` stays off: hooks are observed only through firing records
+ * (`hooks.md` §3.6).
  */
 const VALIDATE_SETTLES = [
   { key: "skills", evidence: (file: string) => file.endsWith("SKILL.md") },
+  { key: "subagents", evidence: (file: string) => /(?:^|\/)agents\/[^/]+\.md$/u.test(file) },
 ] as const;
 
 /**
@@ -92,7 +94,7 @@ export async function probeClaude(
  * schema-valid `.claude-plugin/plugin.json` — a partial install, or a user who
  * deleted `skills/` — and `skills` then resolved to `yes` over a plugin that
  * ships no skills. It is the narrower survivor of the defect that took
- * `plugin_hooks` and `subagents` off the list above, and the fix is this
+ * `plugin_hooks` and `subagents` off the list above in 2026-08, and the fix is this
  * repository's own rule applied to the one scan that did not follow it: every
  * scan asserts a non-empty set. A directory that cannot be listed is
  * `unavailable` — we could not ask — never `absent`. Found by fresh-context
