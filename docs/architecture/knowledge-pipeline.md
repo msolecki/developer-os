@@ -182,11 +182,14 @@ All in `apps/cli/src/commands/import.ts` — `runImport` unless named.
   (16) levels or `IMPORT_MAX_MEMORY_PROJECTS` (1,000) memory project directories refuses
   `import_enumeration_limit` (2).
 - **Batches.** `IMPORT_MAX_FILES_PER_RUN` (1,000), narrowed by `--limit`, counts only new captures.
-  Duplicates are counted in `duplicateCount` and not listed; accepted non-duplicate files beyond the
-  cap are `remaining`, exit 0. A rerun over the inbox therefore advances.
+  Duplicates met before the cap is reached are counted in `duplicateCount` and not listed. Every
+  candidate past the cap is counted in `remaining`, exit 0, and is not read: it is not redacted,
+  its read errors cannot fail the run and its patterns raise no over-broad warning, so `remaining`
+  may include duplicates a later run will skip. A rerun over the inbox therefore advances.
 - **Per file** (`processCandidates`). Read through `readUntrustedText` at `MAX_CAPTURE_INPUT_BYTES`
   (64 KiB). A refusal (`import_source_protected` and `_symlink` 5, `_not_found` 2, `_too_large`,
-  `_not_text` and `_empty` 1; a non-regular file reads as `_not_text`) leaves the file untouched and
+  `_not_text`, `_empty` and `_unreadable` 1; a non-regular file reads as `_not_text`, and a file
+  the user may not open, `EACCES` or `EPERM`, is `_unreadable`) leaves the file untouched and
   the run continues. Rows name the redacted source-relative path, never content. The run exits with
   the most severe per-file code (`foundation.md` §6), the whole `ImportResultV1` riding on
   `CliError.data` (§10.2 item 4).

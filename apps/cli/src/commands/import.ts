@@ -21,7 +21,7 @@ import {
 } from "../context.js";
 import type { CliContext } from "../context.js";
 import { MAX_CAPTURE_INPUT_BYTES, overBroadWarnings } from "./capture.js";
-import { isDirectory, readConfigFile } from "./doctor.js";
+import { isDirectory } from "./doctor.js";
 import {
   fingerprintDirectory,
   INBOX_SEGMENTS,
@@ -31,6 +31,7 @@ import {
   writeQuarantineCapture,
 } from "./quarantine.js";
 import { readUntrustedText, UntrustedFileRefusal } from "./untrusted-file.js";
+import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 export const IMPORT_MAX_ENTRIES_WALKED = 10_000;
 /** Path segments below the root: `a/b.md` is depth 2. */
@@ -91,6 +92,7 @@ const FILE_REFUSAL_CODES: Readonly<Record<string, FailureExitCode>> = {
   import_source_too_large: EXIT_CODES.operationalFailure,
   import_source_not_text: EXIT_CODES.operationalFailure,
   import_source_empty: EXIT_CODES.operationalFailure,
+  import_source_unreadable: EXIT_CODES.operationalFailure,
 };
 
 const NOT_INITIALIZED = "developer-os init";
@@ -120,13 +122,10 @@ class ImportRefusal extends Error {
   }
 }
 
-function isMissingEntry(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
+/** `guards.readText` wraps the `open` failure in a `SecurityRefusalError` whose `cause` is the errno error. */
+function isPermissionDenied(error: unknown): boolean {
+  const code = (error instanceof SecurityRefusalError ? error.cause : error) as { readonly code?: unknown } | null;
+  return code?.code === "EACCES" || code?.code === "EPERM";
 }
 
 function compareRelative(left: string, right: string): number {
@@ -346,6 +345,8 @@ export async function processCandidates(input: {
     try {
       text = await readUntrustedText(context, candidate.absolute, MAX_CAPTURE_INPUT_BYTES);
     } catch (error) {
+      // A file the user may not read (a chmod-000 file, a TCC folder) is that file's refusal, not the run's.
+      if (isPermissionDenied(error)) return { refused: "import_source_unreadable" };
       if (!(error instanceof UntrustedFileRefusal)) throw error;
       return {
         refused:
@@ -394,14 +395,9 @@ export async function processCandidates(input: {
       if (candidate === undefined) break;
 
       if (newCount >= input.cap) {
-        // Probe only: a file whose read would refuse still counts, because it is not a duplicate.
-        if (!input.keyDurable) {
-          remaining += 1;
-          continue;
-        }
-        const probed = await prepare(candidate);
-        if ("refused" in probed || !(await isDuplicate(probed.built))) remaining += 1;
-        else duplicateCount += 1;
+        // Past the cap a file is counted, never read: a probe would read, redact and build it for a tally,
+        // surface its over-broad hits and let its read errors fail a run that imports none of it (W2-GAP-HOST-3).
+        remaining += 1;
         continue;
       }
 

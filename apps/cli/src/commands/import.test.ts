@@ -913,3 +913,37 @@ describe("import --claude-memory", () => {
     expect(kindOf(result)).toBe("import_source_not_found");
   });
 });
+
+describe("import past the cap and over unreadable files (W2-GAP-HOST-3, -4)", () => {
+  it("counts files past the cap without reading them: an unreadable one and an over-broad hit change nothing", async () => {
+    const fixture = await installed("import-over-cap-unread");
+    await nodeFs.appendFile(fixture.paths.configFile, '\n[redaction]\npatterns = ["Northwind Traders", "see"]\n', "utf8");
+    await plant(inboxOf(fixture), { "a.md": "first", "b.md": "see ".repeat(80), "c.md": "third" });
+    await nodeFs.chmod(join(inboxOf(fixture), "c.md"), 0o000);
+
+    const result = await importWith(fixture, { limit: 1 });
+
+    expect(dataOf(result)).toMatchObject({ remaining: 2, duplicateCount: 0 });
+    if (!result.ok) return;
+    expect(result.warnings.join("\n")).not.toContain("over-broad");
+  });
+
+  it("refuses an unreadable file on its own and imports the files around it", async () => {
+    const fixture = await installed("import-unreadable");
+    await plant(inboxOf(fixture), { "a.md": "first", "b.md": "second", "c.md": "third" });
+    await nodeFs.chmod(join(inboxOf(fixture), "b.md"), 0o000);
+
+    const result = await importWith(fixture);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.operationalFailure);
+    const data = failureDataOf(result);
+    expect(data.files.map((file) => [file.path, file.outcome, file.reason])).toEqual([
+      ["a.md", "imported", null],
+      ["b.md", "refused", "import_source_unreadable"],
+      ["c.md", "imported", null],
+    ]);
+    expect(data.remaining).toBe(0);
+  });
+});

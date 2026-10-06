@@ -132,8 +132,9 @@ export class ProtectedPathPolicy {
         // before any caller could see that the entry is not a regular file.
         constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
       );
-    } catch {
-      throw new SecurityRefusalError("Unable to open verified readable file");
+    } catch (cause) {
+      // The errno rides on `cause` (never published) so a caller can tell a permission denial from a race.
+      throw new SecurityRefusalError("Unable to open verified readable file", { cause });
     }
 
     try {
