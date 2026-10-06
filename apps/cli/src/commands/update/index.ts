@@ -4,6 +4,7 @@ import type {
   OwnerUpdatePreviewV1,
   SchemaMigrationPreviewV1,
   StableSemverV1,
+  UpdateOperationV1,
   UpdateCapacityProjectionV1,
 } from "@developer-os/core";
 
@@ -13,7 +14,7 @@ import { applyUpdate, recoverUpdate } from "../../update/apply.js";
 import { createCliUpdateContext } from "../../update/context.js";
 import { applyRollback } from "../../update/rollback-apply.js";
 import type { CliUpdateContext } from "../../update/context.js";
-import { planRollback, planUpdate, prepareUpdate, UpdatePlanningRefusal } from "../../update/planning.js";
+import { planRollback, planUpdate, prepareUpdate, releaseIdentityOf, UpdatePlanningRefusal } from "../../update/planning.js";
 import type { UpdateCommandResultV1 } from "../../update/planning.js";
 
 export type { UpdateCommandResultV1 } from "../../update/planning.js";
@@ -72,14 +73,20 @@ function compensatedExitCode(cause: string): typeof EXIT_CODES.securityRefusal |
 }
 
 /**
- * Heals update residue; a resumed coordinator that compensated is this invocation's failure,
- * reported with the cause its journal persisted (P7(b)) rather than a fresh preview.
+ * Heals update residue the invoking operation recorded (another operation's refuses, NEW-162). A
+ * resumed coordinator ends this invocation: a compensated one is its failure, reported with the
+ * cause its journal persisted (P7(b)); a finalized one is its success. Nothing is planned again.
  */
-async function resumedRollback(update: CliUpdateContext, kind: string, preview: string): Promise<CliResult<never> | null> {
-  const recovered = await recoverUpdate(update);
-  if (recovered.kind !== "coordinator" || recovered.outcome.kind !== "rolled_back") return null;
+async function resumed(update: CliUpdateContext, operation: UpdateOperationV1, kind: string, preview: string): Promise<CliResult<UpdateCommandResultV1> | null> {
+  const recovered = await recoverUpdate(update, operation);
+  if (recovered.kind !== "coordinator") return null;
+  const active = releaseIdentityOf((await update.readHome()).active);
+  if (recovered.outcome.kind === "finalized") {
+    return success(operation === "update_apply"
+      ? { schemaVersion: 1, outcome: "applied", active, rollbackAvailable: true }
+      : { schemaVersion: 1, outcome: "rolled_back", active, rollbackAvailable: false });
+  }
   const { cause } = recovered.outcome;
-  const { active } = await update.readHome();
   return failure(compensatedExitCode(cause), {
     kind,
     message: cause,
@@ -93,8 +100,8 @@ async function resumedRollback(update: CliUpdateContext, kind: string, preview: 
  * applies that same in-memory candidate. An automatic rollback is a failure: nothing changed.
  */
 async function runApply(update: CliUpdateContext, version: StableSemverV1 | null): Promise<CliResult<UpdateCommandResultV1>> {
-  const resumed = await resumedRollback(update, "update_rolled_back_automatically", "developer-os update");
-  if (resumed !== null) return resumed;
+  const recovered = await resumed(update, "update_apply", "update_rolled_back_automatically", "developer-os update");
+  if (recovered !== null) return recovered;
   const prepared = await prepareUpdate(update, { version });
   if (prepared.apply === null) return success(prepared.result);
   const applied = await applyUpdate(update, prepared.apply);
@@ -112,8 +119,8 @@ async function runApply(update: CliUpdateContext, version: StableSemverV1 | null
  * applies that preview. A compensated rollback is a failure: the rejected release stays active.
  */
 async function runRollbackApply(update: CliUpdateContext): Promise<CliResult<UpdateCommandResultV1>> {
-  const resumed = await resumedRollback(update, "update_rollback_compensated", "developer-os update rollback");
-  if (resumed !== null) return resumed;
+  const recovered = await resumed(update, "update_rollback", "update_rollback_compensated", "developer-os update rollback");
+  if (recovered !== null) return recovered;
   const rolledBack = await applyRollback(update, await planRollback(update));
   if (rolledBack.outcome === "rolled_back") return success(rolledBack);
   return failure(compensatedExitCode(rolledBack.cause), {
