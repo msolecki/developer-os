@@ -168,11 +168,6 @@ describe("orderMigrationChain", () => {
   ])("refuses %s", (_name, rows) => {
     expect(() => orderMigrationChain(rows)).toThrow();
   });
-
-  it("anchors each domain's chain at its current version", () => {
-    expect(orderMigrationChain([row("notes-v3", "brain", 2, 3)], { brain: v(2) })).toHaveLength(1);
-    expect(() => orderMigrationChain([row("notes-v3", "brain", 2, 3)], { brain: v(1) })).toThrow(/current version/);
-  });
 });
 
 describe("migration registry", () => {
@@ -497,7 +492,8 @@ describe("validateSchemaMigrationExecutionJournal", () => {
     ["verified", { phase: "verified", nextForwardFoundation: 1 }],
     ["compensating", { phase: "compensating", nextForwardFoundation: 1, compensationNext: 0 }],
     ["rolled back", { phase: "rolled_back", nextForwardFoundation: 1, compensationNext: -1 }],
-    ["compacting", { phase: "compacting", nextForwardFoundation: 1, compactionNext: 2 }],
+    ["compacting after finalized", { phase: "compacting", nextForwardFoundation: 1, compactionNext: 2 }],
+    ["compacting after rolled back", { phase: "compacting", nextForwardFoundation: 0, compensationNext: -1, compactionNext: 0 }],
   ])("admits a %s journal", (_name, overrides) => {
     expect(validateSchemaMigrationExecutionJournal(journal(overrides), plan()).phase).toBe(journal(overrides).phase);
   });
@@ -516,7 +512,9 @@ describe("validateSchemaMigrationExecutionJournal", () => {
     ["a planned journal with an advanced cursor", { nextForwardFoundation: 1 }],
     ["verified before every forward ref", { phase: "verified" }],
     ["a compensation cursor outside compensation", { phase: "applying", compensationNext: 0 }],
-    ["a compaction cursor past both halves", { phase: "compacting", compactionNext: 3 }],
+    ["a compaction cursor past both halves", { phase: "compacting", nextForwardFoundation: 1, compactionNext: 3 }],
+    ["compacting from an incomplete forward walk (W2-CONSTR-1)", { phase: "compacting", nextForwardFoundation: 0, compactionNext: 0 }],
+    ["compacting with a live compensation cursor (W2-CONSTR-1)", { phase: "compacting", nextForwardFoundation: 1, compensationNext: 0, compactionNext: 0 }],
     ["an update before creation", { updatedAt: "2026-09-22T08:00:00.000Z" }],
   ])("refuses %s", (_name, overrides) => {
     expect(() => validateSchemaMigrationExecutionJournal(journal(overrides), plan())).toThrow();

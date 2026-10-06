@@ -7,7 +7,6 @@ import { createHash } from "node:crypto";
 import { compareUtf8, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type {
   PlannedSchemaMigrationsV1,
-  SchemaMigrationChainAnchorsV1,
   SchemaMigrationChainRowV1,
   SchemaMigrationDomainV1,
   SchemaMigrationPlanningRequestV1,
@@ -56,8 +55,10 @@ export function checkRow(row: SchemaMigrationChainRowV1): void {
 /**
  * Spec 2 §8.4: returns the rows in execution order — every product-state step, then every Brain
  * step, each domain by version — after proving unique IDs and one contiguous chain per domain.
+ * No chain is anchored at an installed schema version: no such record exists yet (W2-CONSTR-2,
+ * `docs/architecture/foundation.md` §11.5).
  */
-export function orderMigrationChain<T extends SchemaMigrationChainRowV1>(rows: readonly T[], anchors: SchemaMigrationChainAnchorsV1 = {}): readonly T[] {
+export function orderMigrationChain<T extends SchemaMigrationChainRowV1>(rows: readonly T[]): readonly T[] {
   if (rows.length > MAX_MIGRATIONS) fail("SchemaMigrationChainRowV1: count");
   const ids = new Set<string>();
   for (const row of rows) {
@@ -69,12 +70,7 @@ export function orderMigrationChain<T extends SchemaMigrationChainRowV1>(rows: r
     SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(left.domain) - SCHEMA_MIGRATION_DOMAIN_ORDER.indexOf(right.domain) || left.fromVersion - right.fromVersion);
   let prior: T | undefined;
   for (const row of ordered) {
-    if (prior?.domain === row.domain) {
-      if (prior.toVersion !== row.fromVersion) fail("SchemaMigrationChainRowV1: chain is not contiguous");
-    } else {
-      const anchor = anchors[row.domain];
-      if (anchor !== undefined && anchor !== row.fromVersion) fail("SchemaMigrationChainRowV1: chain does not start at the current version");
-    }
+    if (prior?.domain === row.domain && prior.toVersion !== row.fromVersion) fail("SchemaMigrationChainRowV1: chain is not contiguous");
     prior = row;
   }
   return ordered;

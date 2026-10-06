@@ -257,7 +257,6 @@ export type {
   RollbackMigrationMaterializationContextV1,
   RetainedSchemaMigrationInverseMutationV1,
   RetainedSchemaMigrationInversePlanV1,
-  SchemaMigrationChainAnchorsV1,
   SchemaMigrationChainRowV1,
   SchemaMigrationDomainV1,
   SchemaMigrationExecutionJournalV1,

@@ -1447,7 +1447,9 @@ No first-observation freeze resistance; one root and one active release key; one
 only; rollback never merges; one fixed online source; the signed target planner is not OS-sandboxed;
 protocol growth refuses until the launcher upgrades; publication is A16's; the `symlink` artifact
 arm is validated but unreachable (held as an exact set by `tests/security/symlink-escape.test.ts`);
-two V2 Foundation ref types.
+two V2 Foundation ref types. No migration chain is checked to start at the installed schema version:
+the product records no per-domain schema version yet, so `orderMigrationChain` proves only a
+contiguous chain per domain (W2-CONSTR-2); the anchor check joins with the first real migration.
 
 ### 11.6 Proof scope (D72 P7(f))
 
