@@ -10,6 +10,7 @@ import {
   encodeCanonicalJson,
   encodeTenDigitOrdinal,
   EXIT_CODES,
+  isUnsignedLocalTrust,
   materializePlannerDraft,
   MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
   ownerExternalEffectProcessPolicyHash,
@@ -17,6 +18,7 @@ import {
   parseCanonicalAbsolutePathText,
   parseUInt64Decimal,
   PLANNER_PROTOCOL_V1,
+  ReleaseUnsignedLocalError,
   selectRelease,
   UpdateCapacityInsufficientError,
   validateBundleManifest,
@@ -594,6 +596,8 @@ async function planUpdateAttempt(
   options: { readonly retainScratch: boolean },
 ): Promise<PlannedUpdateV1 & { readonly apply: PreparedUpdateApplyV1 | null }> {
   const home = await update.readHome();
+  // An unsigned-local home can never update (D47); it refuses before FD 3 or the network (NEW-147).
+  if (isUnsignedLocalTrust(home.trust)) throw new ReleaseUnsignedLocalError();
   const current = releaseIdentityOf(home.active);
   const offline: OfflineReleaseTrustV1 = await update.readOfflineTrust();
   await cleanScratchResidue(update);

@@ -22,7 +22,7 @@ import {
   removeCommandFixtures,
 } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
-import { createCliUpdateContext } from "./context.js";
+import { createCliUpdateContext, readOfflineTrust } from "./context.js";
 import { releaseIdentityOf, UpdatePlanningRefusal } from "./planning.js";
 import type { RollbackRecordV1 } from "./planning.js";
 import type { UpdateRollbackComposeInputV1 } from "./apply.js";
@@ -95,6 +95,56 @@ describe("readHome", () => {
     const context = createCliUpdateContext({ ...fixture.context, lifecycle: undefined });
 
     expect(await refusal(context.readHome())).toMatchObject({ reason: "update_lifecycle_unavailable", code: EXIT_CODES.capabilityUnavailable });
+  });
+});
+
+describe("readOfflineTrust", () => {
+  const untouched = () => {
+    const calls: string[] = [];
+    const record = (name: string) => () => {
+      calls.push(name);
+      return Promise.reject(new Error(`${name} reached`));
+    };
+    return {
+      calls,
+      dependencies: {
+        parentProcessId: () => {
+          calls.push("parentProcessId");
+          return 4242;
+        },
+        openDescriptors: record("openDescriptors"),
+        fstat: record("fstat"),
+        read: record("read"),
+        close: record("close"),
+      },
+    };
+  };
+
+  it("refuses without the launcher's marker before any fstat, read or close of FD 3 (NEW-147)", async () => {
+    const { calls, dependencies } = untouched();
+
+    expect(await refusal(readOfflineTrust(false, dependencies))).toMatchObject({
+      reason: "update_launcher_handoff_absent",
+      code: EXIT_CODES.capabilityUnavailable,
+    });
+    expect(await refusal(readOfflineTrust(undefined, dependencies))).toMatchObject({ reason: "update_launcher_handoff_absent" });
+    expect(calls).toStrictEqual([]);
+  });
+
+  it("reads FD 3 only when the launcher's marker led the argv", async () => {
+    const { calls, dependencies } = untouched();
+
+    await expect(readOfflineTrust(true, dependencies)).rejects.toThrow();
+    expect(calls).toContain("close");
+  });
+
+  it("binds the marker from the CLI context; a context without it refuses (NEW-147)", async () => {
+    const fixture = await createCommandFixture("update-trust-absent");
+
+    expect(await refusal(createCliUpdateContext(fixture.context).readOfflineTrust())).toMatchObject({
+      reason: "update_launcher_handoff_absent",
+      code: EXIT_CODES.capabilityUnavailable,
+    });
   });
 });
 
