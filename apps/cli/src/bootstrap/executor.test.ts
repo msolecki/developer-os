@@ -28,6 +28,12 @@ afterEach(removeCommandFixtures);
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 const REAL_FILESYSTEM_DEATH_MATRIX_TIMEOUT_MS = 600_000;
+/** Reached only by compensation, so the sweep injects a forward failure first and expects a rollback. */
+const COMPENSATION_DEATH_POINTS = new Set([
+  "after_compensation_staged_file",
+  "after_compensation_evidence",
+  "after_rolled_back",
+]);
 const PRE_PLAN_DEATH_POINTS = new Set([
   "after_slot_0_create",
   "after_slot_0_sync",
@@ -446,7 +452,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       const fixture = await createCommandFixture(`bootstrap-fine-${name}`, {
         bootstrapAvailable: true,
         bootstrapInterruptAfter: name,
-        ...(name === "after_rolled_back"
+        ...(COMPENSATION_DEATH_POINTS.has(name)
           ? { bootstrapFailureAfter: "during_payload_write" as const }
           : {}),
       });
@@ -504,7 +510,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       const persisted = await persistedPlan(fixture);
       const terminal = await currentJournal(persisted.value);
 
-      if (name === "after_rolled_back") {
+      if (COMPENSATION_DEATH_POINTS.has(name)) {
         expect(resumed.ok).toBe(false);
         expect(resumed.ok ? 0 : resumed.code).toBe(EXIT_CODES.recoveryRequired);
         expect(terminal).toMatchObject({ phase: "retained", terminalOutcome: "rolled_back" });
