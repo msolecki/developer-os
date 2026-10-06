@@ -68,6 +68,32 @@ Startable without another product gate (one worktree each):
 - NEW-142 (`founder-cutover.md` step 10 cannot satisfy its own `path` condition; docs only).
 - NEW-146 (two shapes still exempt from high-entropy redaction; fix or accept).
 
+From the 2026-10-05 audit (folded 2026-10-06, `BACKLOG.md` §1), P1 first:
+
+- NEW-147 (P1: `update` aborts with exit 134 when no FD 3 trust pipe was passed).
+- NEW-148 (P1: an admitted-lock bootstrap plan wedges after an early failure).
+- NEW-149 (P1: `compensate()` cannot resume a recorded `payloadRetentionPart`).
+- NEW-150 (P2: a failing `doctor` drops its report), with NEW-155 (instruction lines never rendered).
+- NEW-151 (P2: a Foundation participant failing mid-apply strands the coordinator).
+- NEW-152 (P2: containment misreads a child named `..x`).
+- NEW-153 (P2: the no-LF domain hash is copied in six files).
+- NEW-154 (P2: protected names match case-sensitively on APFS; reproduce first).
+- NEW-156, NEW-157 (P2: adapter notes and `knowledge-pipeline.md` still say hooks are unshipped; docs only).
+- NEW-158 (P2: firing records never reach the capability matrix; land before NEW-104 and NEW-127).
+- NEW-159 (P2: SessionStart injection skips the user's redaction patterns).
+- NEW-160, NEW-170 (P2: doctor and `status` are blind to interrupted V2 coordinators; one shared survey).
+- NEW-161 (P2: `uninstall --yes` detaches before the refusals).
+- NEW-162 (P2: update recovery resumes the other operation's coordinator).
+- NEW-165 (P2: the review contract has no `id` input).
+- NEW-166, NEW-167 (P2: bootstrap compensation from `create_intent` and after a rename).
+- NEW-168 (P2: rollback leaves the Codex registration `stale`).
+- NEW-169 (P2: launchd's exit status is never read; carries the P0's host check).
+- NEW-172 (P2: `exactStepListHash` is never compared at rollback).
+- NEW-173 (P2: scratch recovery cleans a concurrent process's live attempt).
+- NEW-174 (P2: `repair` re-inodes a bootstrap Foundation journal).
+- NEW-175 (P2: uninstall partitions a stale admitted manifest).
+- NEW-176..NEW-188 (P3 cleanup, one row per area; each lists its own items).
+
 Decided by D84 (2026-10-05), next design work:
 
 - Task 11b (NEW-111, NEW-112, NEW-118) — re-scoped: trust a distribution channel instead of an
@@ -77,7 +103,17 @@ Wave 1 of D83/D84 is integrated (2026-10-06): NEW-143, NEW-120, NEW-130, NEW-40,
 NEW-35, workflow versions, the Spec 2 §4.2 amendment, one retention walk and status `off`
 (the wording half of NEW-134; its real garden run stays owed).
 
-Needs a founder decision: none open (2026-10-06; NEW-145 accepted, D85).
+Needs a founder decision (2026-10-06, from the audit; NEW-145 was accepted by D85):
+
+- NEW-163 (P2: the version-free entrypoint never follows an update; choose re-render per plan or
+  read `active-release.json` at run time; with the D84 re-scope of Task 11b).
+- NEW-164 (P2: thin commands shadow five skills' descriptions; reverses the recorded thin-command
+  decision).
+- NEW-171 (P2: no planner arm for instruction rows; Spec 2 planner protocol, latent until Task 11b).
+- Items inside P3 rows: FLOW-INIT-2 in NEW-177 (reopens NEW-139's deliberate bound), W2-BUNDLE-1 in
+  NEW-181 (changes `previewHash`), BRAIN-3 in NEW-185 (garden `fix`: finish or remove), RENDER-3 and
+  FLOW-DOCS-3 in NEW-186 (`subagents` not-used; the `scheduled` trigger model), and DEAD-8 in NEW-188
+  (a dependency install). The rest of those rows is startable.
 
 Conditional: NEW-27 when a real write scope is wired, NEW-28 when a production argument reaches the
 retained screening refusal, NEW-100's round trip after A16 (D42).
@@ -101,5 +137,6 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
 - Founder stop points: 5, listed above.
-- Startable rows: 7. Founder decisions: none open.
-- Repository backlog: 20 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
+- Startable rows: 46 (7 earlier, 39 from the audit: 3 P1, 23 P2, 13 P3 area rows). Founder
+  decisions: 3 rows (NEW-163, NEW-164, NEW-171) and 6 items inside P3 rows.
+- Repository backlog: 62 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
