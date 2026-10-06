@@ -8,6 +8,7 @@ export {
   SecurityRefusalError,
 } from "./paths.js";
 export {
+  foldPathName,
   PROTECTED_PATH_RULES,
   ProtectedPathPolicy,
 } from "./protected-paths.js";

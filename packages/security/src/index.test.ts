@@ -25,6 +25,7 @@ describe("the package's public door", () => {
         "SecurityRefusalError",
         "ProtectedPathPolicy",
         "PROTECTED_PATH_RULES",
+        "foldPathName",
         "redactText",
         "createRedactor",
         "REDACTION_CLASSES",

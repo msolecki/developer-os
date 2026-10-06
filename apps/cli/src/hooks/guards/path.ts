@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from "node:path";
 
-import { canonicalizePlannedPath, ProtectedPathPolicy, SecurityRefusalError } from "@developer-os/security";
+import { canonicalizePlannedPath, foldPathName, ProtectedPathPolicy, SecurityRefusalError } from "@developer-os/security";
 
 import { excerpt } from "../outcome.js";
 import { editedPaths, HOOK_TOOL_MATCHERS } from "../payload.js";
@@ -37,19 +37,17 @@ export const HOOK_PROTECTED_PATH_RULES: readonly { readonly id: string; readonly
   ),
 ];
 
-// NEW-154: the same case and NFC fold `ProtectedPathPolicy` applies, since APFS is case-insensitive.
-const fold = (value: string): string => value.normalize("NFC").toLowerCase();
-
+// NEW-154: matching runs on `foldPathName`, the one fold `ProtectedPathPolicy` uses, so the two cannot drift.
 function hookProtected(path: string, home: string): boolean {
-  const segments = fold(path).split(/[\\/]/u).filter((segment) => segment.length > 0);
+  const segments = foldPathName(path).split(/[\\/]/u).filter((segment) => segment.length > 0);
   return HOOK_PROTECTED_PATH_RULES.some(({ match }) => {
     switch (match.kind) {
       case "segment":
-        return segments.includes(fold(match.name));
+        return segments.includes(foldPathName(match.name));
       case "segment-suffix":
-        return segments.some((segment) => segment.endsWith(fold(match.suffix)));
+        return segments.some((segment) => segment.endsWith(foldPathName(match.suffix)));
       case "home-exact":
-        return fold(resolve(home, match.relativePath)) === fold(resolve(path));
+        return foldPathName(resolve(home, match.relativePath)) === foldPathName(resolve(path));
     }
   });
 }
