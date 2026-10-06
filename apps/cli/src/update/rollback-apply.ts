@@ -1,7 +1,7 @@
 import { EXIT_CODES, UpdateLifecycleCoordinator } from "@developer-os/core";
 import type { ReleaseIdentityV1, SafeReasonCodeV1, UpdateLifecycleOutcomeV1, UpdateRollbackPreviewV1 } from "@developer-os/core";
 
-import { construct, refuse, requireCapacity, updateApplyPorts } from "./apply.js";
+import { beforeConstruction, construct, refuse, requireCapacity, updateApplyPorts } from "./apply.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
 import { updateRollbackPrefixes } from "./compose.js";
 import type { CliUpdateContext } from "./context.js";
@@ -61,13 +61,16 @@ export async function applyRollback(update: CliUpdateContext, preview: UpdateRol
   return ports.withGlobalLock(async () => {
     const home = await revalidate(update, ports, preview);
     const coordinatorId = await ports.allocate(updateRollbackPrefixes(preview));
-    const composition = await ports.composeRollback({ coordinatorId, home, preview });
-    const plan = composition.construction;
-    if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_rollback" || plan.rollbackSource !== null || plan.outputFrames.length !== 0) {
-      refuse("update_composition_identity", EXIT_CODES.recoveryRequired);
-    }
-    // The composer derives the exact components; availability is this lock's fresh observation.
-    requireCapacity({ ...composition.capacity, ...(await update.capacity()) });
+    const composition = await beforeConstruction(ports, async () => {
+      const composed = await ports.composeRollback({ coordinatorId, home, preview });
+      const plan = composed.construction;
+      if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_rollback" || plan.rollbackSource !== null || plan.outputFrames.length !== 0) {
+        refuse("update_composition_identity", EXIT_CODES.recoveryRequired);
+      }
+      // The composer derives the exact components; availability is this lock's fresh observation.
+      requireCapacity({ ...composed.capacity, ...(await update.capacity()) });
+      return composed;
+    });
     await construct(ports, composition, [], () => Promise.resolve());
     return resultOf(await new UpdateLifecycleCoordinator(ports.coordinator(coordinatorId)).execute(coordinatorId), preview);
   });

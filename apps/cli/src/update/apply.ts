@@ -181,6 +181,20 @@ async function revalidate(update: CliUpdateContext, ports: UpdateApplyPortsV1, p
  * would take; once the outer journal exists only the coordinator may choose a direction, so the
  * residue is left for the next recovery. A third state met while compensating outranks the failure.
  */
+/**
+ * Runs the post-allocation, pre-construction work. A refusal there (a composer refusal such as an
+ * absent redaction key, an identity mismatch, or exact capacity) leaves only the empty allocated
+ * staging root, which is released before the refusal surfaces; a cleanup failure never masks it.
+ */
+export async function beforeConstruction<T>(ports: UpdateApplyPortsV1, work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    await ports.removeEmptyStagingRoots?.().catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function construct(ports: UpdateApplyPortsV1, composition: UpdateApplyCompositionV1, outputs: readonly SecretScreenedBlobV1[], cleanupScratch: () => Promise<void>): Promise<void> {
   const plan = composition.construction;
   const store = ports.construction(plan.coordinatorId);
@@ -226,10 +240,13 @@ export async function applyUpdate(update: CliUpdateContext, prepared: PreparedUp
     return await ports.withGlobalLock(async () => {
       const { home, materialized } = await revalidate(update, ports, prepared);
       const coordinatorId = await ports.allocate(updateApplyPrefixes(materialized));
-      const composition = await ports.compose({ coordinatorId, home, inputs: prepared.inputs, materialized });
-      const plan = composition.construction;
-      if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_apply") refuse("update_composition_identity", EXIT_CODES.recoveryRequired);
-      requireCapacity(composition.capacity);
+      const composition = await beforeConstruction(ports, async () => {
+        const composed = await ports.compose({ coordinatorId, home, inputs: prepared.inputs, materialized });
+        const plan = composed.construction;
+        if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_apply") refuse("update_composition_identity", EXIT_CODES.recoveryRequired);
+        requireCapacity(composed.capacity);
+        return composed;
+      });
       await construct(ports, composition, materialized.run.outputBlobs, cleanupScratch);
       return resultOf(await new UpdateLifecycleCoordinator(ports.coordinator(coordinatorId)).execute(coordinatorId), prepared.inputs);
     });

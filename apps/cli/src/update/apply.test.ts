@@ -46,6 +46,8 @@ interface ApplyWorldV1 {
   executor: "absent" | "executing" | "terminal_cleanup";
   allocatorReservations: number;
   allocatedPrefixes: readonly LifecycleIdPrefixV1[] | null;
+  /** The allocator-reserved `staging/lifecycle/<lc>` root: created by allocation, removed only while empty. */
+  stagingRoot: "absent" | "present";
   frames: number;
   retired: number;
   applied: UpdateLifecycleCoordinatorStepV1[];
@@ -65,6 +67,8 @@ interface ApplyFixtureOptions {
   readonly thirdStateClosure?: boolean;
   /** Production's allocation with no launcher fallback handoff (D72 P7(d)). */
   readonly fallbackUnavailable?: boolean;
+  /** The composer refuses after allocation, as production does without a redaction key (W2-PORTS-1). */
+  readonly composeRefusal?: UpdatePlanningRefusal;
 }
 
 interface ApplyFixture {
@@ -108,6 +112,7 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
     executor: "absent",
     allocatorReservations: 0,
     allocatedPrefixes: null,
+    stagingRoot: "absent",
     frames: 0,
     retired: 0,
     applied: [],
@@ -274,12 +279,14 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
       alive();
       if (options.fallbackUnavailable === true) return Promise.reject(new UpdatePlanningRefusal("update_fallback_unavailable", EXIT_CODES.capabilityUnavailable));
       world.allocatorReservations += 1;
+      world.stagingRoot = "present";
       world.allocatedPrefixes = prefixes;
       base.events.push("allocate");
       return Promise.resolve(COORDINATOR);
     },
     compose: ({ coordinatorId }) => {
       base.events.push("compose");
+      if (options.composeRefusal !== undefined) return Promise.reject(options.composeRefusal);
       return Promise.resolve({
         construction: { coordinatorId, operation: "update_apply" } as UpdateConstructionPlanV1,
         outer: updateCoordinatorOuterBytes(synthetic.plan, PLANNED_AT),
@@ -289,6 +296,10 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
     construction,
     coordinator,
     envelope: { isEnvelopeSuffix: () => Promise.resolve(false), completeEnvelopeSuffix: () => Promise.reject(new Error("unreachable")) },
+    removeEmptyStagingRoots: () => {
+      if (world.construction === "absent" && world.coordinator === null) world.stagingRoot = "absent";
+      return Promise.resolve();
+    },
     executorCleanup: () => {
       alive();
       world.executor = "absent";
@@ -409,6 +420,15 @@ describe("applyUpdate revalidation", () => {
     expect(refusal.reason).toBe("update_ledger_not_clear");
     expect(refusal.code).toBe(EXIT_CODES.recoveryRequired);
     expect(fixture.allocatorReservations).toBe(0);
+    expect(fixture.world.construction).toBe("absent");
+  });
+
+  it("leaves no staging residue when composition refuses after allocation, e.g. without a redaction key (W2-PORTS-1)", async () => {
+    const fixture = await applyFixture({ composeRefusal: new UpdatePlanningRefusal("update_redaction_key_absent", EXIT_CODES.recoveryRequired) });
+    const refusal = await refusalOf(applyUpdate(fixture.update, fixture.prepared));
+    expect(refusal).toMatchObject({ reason: "update_redaction_key_absent", code: EXIT_CODES.recoveryRequired });
+    expect(fixture.allocatorReservations).toBe(1);
+    expect(fixture.world.stagingRoot).toBe("absent");
     expect(fixture.world.construction).toBe("absent");
   });
 
