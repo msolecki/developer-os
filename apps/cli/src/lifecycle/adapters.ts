@@ -342,12 +342,10 @@ async function renameGitNoReplace(
     const destinationParent = await open(dirname(destinationPath), flags);
     try {
       const result = await new SpawnRenameAtxRunner().run({
-        parentDescriptor: sourceParent.fd,
         sourceParentDescriptor: sourceParent.fd,
         destinationParentDescriptor: destinationParent.fd,
         sourceName: basename(source.path),
         destinationName: basename(destinationPath),
-        tombstoneName: basename(destinationPath),
       });
       if (result.exitCode === 0) return "renamed";
     } finally {

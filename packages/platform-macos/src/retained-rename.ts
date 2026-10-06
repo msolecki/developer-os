@@ -90,13 +90,10 @@ export type RenameNoReplace = (
 ) => Promise<void>;
 
 export interface RenameAtxRunRequestV1 {
-  readonly sourceParentDescriptor?: number;
-  readonly destinationParentDescriptor?: number;
-  /** Compatibility aliases retained for the row-bound Task 4 adapter tests. */
-  readonly parentDescriptor: number;
+  readonly sourceParentDescriptor: number;
+  readonly destinationParentDescriptor: number;
   readonly sourceName: string;
-  readonly destinationName?: string;
-  readonly tombstoneName: string;
+  readonly destinationName: string;
 }
 
 export interface RenameAtxRunResultV1 {
@@ -166,9 +163,7 @@ function hasExactParentMode(value: unknown): boolean {
 }
 
 function assertRunnerRequest(request: RenameAtxRunRequestV1): void {
-  const sourceParentDescriptor = request.sourceParentDescriptor ?? request.parentDescriptor;
-  const destinationParentDescriptor = request.destinationParentDescriptor ?? request.parentDescriptor;
-  const destinationName = request.destinationName ?? request.tombstoneName;
+  const { sourceParentDescriptor, destinationParentDescriptor, destinationName } = request;
   if (
     !Number.isSafeInteger(sourceParentDescriptor) ||
     sourceParentDescriptor < 0 ||
@@ -185,9 +180,7 @@ function assertRunnerRequest(request: RenameAtxRunRequestV1): void {
 export class SpawnRenameAtxRunner implements RenameAtxRunner {
   run(request: RenameAtxRunRequestV1): Promise<RenameAtxRunResultV1> {
     assertRunnerRequest(request);
-    const sourceParentDescriptor = request.sourceParentDescriptor ?? request.parentDescriptor;
-    const destinationParentDescriptor = request.destinationParentDescriptor ?? request.parentDescriptor;
-    const destinationName = request.destinationName ?? request.tombstoneName;
+    const { sourceParentDescriptor, destinationParentDescriptor, destinationName } = request;
     const child = spawn(
       OSASCRIPT,
       ["-l", "JavaScript", "-e", RENAME_PROGRAM, request.sourceName, destinationName],
@@ -374,10 +367,8 @@ export class MacOsRetainedRename {
         childSettlement = this.dependencies.runner.run({
           sourceParentDescriptor: sourceParentHandle.fd,
           destinationParentDescriptor: destinationParentHandle.fd,
-          parentDescriptor: sourceParentHandle.fd,
           sourceName: names.source,
           destinationName: names.destination,
-          tombstoneName: names.destination,
         }).then(
           (result): RenameAtxSettlement => ({ status: "fulfilled", result }),
           (): RenameAtxSettlement => ({ status: "rejected" }),
