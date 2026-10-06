@@ -450,7 +450,7 @@ function hasForwardPrefix(journal: BootstrapJournalRecordV1, value: Counts): boo
   return journal.nextPayload <= value.payloads && journal.nextFoundationParticipant === 0 && journal.nextLaunchabilityPath === 0;
 }
 
-function reachedReversibleSteps(journal: BootstrapJournalRecordV1): number {
+export function reachedReversibleSteps(journal: BootstrapJournalRecordV1): number {
   return journal.nextPayload + (journal.payloadWriteState.state === "idle" ? 0 : 1) + journal.nextCreatedPath + journal.nextFoundationParticipant + journal.nextLaunchabilityPath + Math.min(journal.manifestCursor, 1);
 }
 

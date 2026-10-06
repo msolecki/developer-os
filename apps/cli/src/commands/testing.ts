@@ -427,6 +427,12 @@ export interface FixtureOptions {
    * exercise. Absent means every kind, which is what `repair`'s suite wants.
    */
   readonly interruptKind?: string;
+  /**
+   * Fires `interruptAfter` only once per fixture. A bootstrap Foundation
+   * participant replays its phases from the planned journal on every attempt,
+   * so without this the injected failure would recur on each retry.
+   */
+  readonly interruptOnce?: boolean;
   /** Interrupts the fresh V2 coordinator at one of its durable boundaries. */
   readonly bootstrapInterruptAfter?: FreshInitDeathPointV1;
   /** Fails the fresh V2 coordinator so tests can exercise reverse compensation. */
@@ -579,6 +585,7 @@ export async function createCommandFixture(
   const stableLockEvents: string[] = [];
   const vendorProcesses: string[] = [];
   const transactionUnlinkRequests: string[] = [];
+  let transactionInterrupted = false;
   let bootstrapInterruptEnabled = true;
   let bootstrapInterruptPoint = options.bootstrapInterruptAfter;
   let bootstrapInterruptOccurrence = 1;
@@ -680,6 +687,8 @@ export async function createCommandFixture(
           ) {
             return;
           }
+          if (options.interruptOnce === true && transactionInterrupted) return;
+          transactionInterrupted = true;
           throw new Error(`synthetic interruption after ${phase}`);
         },
       });

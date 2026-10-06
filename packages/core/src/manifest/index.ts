@@ -46,6 +46,7 @@ export {
   classifyBootstrapEvidence,
   deriveBootstrapRetentionAuthorities,
   deriveBootstrapRetentionLocations,
+  reachedReversibleSteps,
   deriveBootstrapRetentionTable,
   isRedactionKeyPath,
   selectBootstrapJournal,

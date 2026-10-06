@@ -1,3 +1,4 @@
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
@@ -34,6 +35,8 @@ const COMPENSATION_DEATH_POINTS = new Set([
   "after_compensation_evidence",
   "after_rolled_back",
 ]);
+/** Reached only after a forward failure, and before compensation writes anything, so forward resumes. */
+const FAILED_FORWARD_DEATH_POINTS = new Set(["before_compensation", ...COMPENSATION_DEATH_POINTS]);
 const PRE_PLAN_DEATH_POINTS = new Set([
   "after_slot_0_create",
   "after_slot_0_sync",
@@ -452,7 +455,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       const fixture = await createCommandFixture(`bootstrap-fine-${name}`, {
         bootstrapAvailable: true,
         bootstrapInterruptAfter: name,
-        ...(COMPENSATION_DEATH_POINTS.has(name)
+        ...(FAILED_FORWARD_DEATH_POINTS.has(name)
           ? { bootstrapFailureAfter: "during_payload_write" as const }
           : {}),
       });
@@ -691,6 +694,96 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       const retainedPath = await findIdentity(fixture.root, decimalText(writing.dev), decimalText(writing.ino));
       expect(retainedPath).toContain(`.developer-os-retained.${String(plan.id)}.`);
     }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-167: a failure after a created file's publication rename but before its
+   * cursor advance. Compensation first finishes that step, so the payload is
+   * retained where it really is; a death during that finish resumes forward.
+   */
+  it.each([false, true])("rolls back a failure after a forward rename (death during settle: %s)", async (die) => {
+    let renamed: { readonly dev: string; readonly ino: string } | null = null;
+    const fixture: CommandFixture = await createCommandFixture(`bootstrap-after-forward-rename-${String(die)}`, {
+      bootstrapAvailable: true,
+      bootstrapFailureHook: (point) => {
+        if (point !== "after_forward_rename" || renamed !== null) return;
+        const planName = readdirSync(fixture.paths.stateDir).find((name) => name.endsWith(".plan.json"));
+        const plan = JSON.parse(readFileSync(join(fixture.paths.stateDir, String(planName)), "utf8")) as {
+          readonly createdPaths: readonly { readonly kind: string; readonly path: string }[];
+        };
+        const published = plan.createdPaths.find((row) => row.kind === "file");
+        const stats = lstatSync(String(published?.path), { bigint: true });
+        renamed = { dev: stats.dev.toString(10), ino: stats.ino.toString(10) };
+        if (die) fixture.setBootstrapInterrupt("after_creation_evidence");
+        throw new Error("synthetic bootstrap failure at after_forward_rename");
+      },
+    });
+
+    const failed = await runInit(fixture.context, ACCEPTED);
+
+    if (failed.ok) throw new Error("init succeeded through an injected failure");
+    const persisted = await persistedPlan(fixture);
+    if (die) {
+      fixture.disableBootstrapFailure();
+      fixture.disableBootstrapInterrupt();
+      await closeBootstrapProcess(fixture);
+      const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+      if (!resumed.ok) throw new Error(JSON.stringify({ resumed, trace: fixture.bootstrapTrace.slice(-30) }));
+      expect(await currentJournal(persisted.value)).toMatchObject({ phase: "retained", terminalOutcome: "finalized" });
+      return;
+    }
+    expect(failed.error.message).toContain("synthetic bootstrap failure at after_forward_rename");
+    expect(await currentJournal(persisted.value), JSON.stringify({ failed, trace: fixture.bootstrapTrace.slice(-30) }))
+      .toMatchObject({ phase: "retained", terminalOutcome: "rolled_back", compensationNext: -1 });
+    const identity = renamed as { readonly dev: string; readonly ino: string } | null;
+    if (identity === null) throw new Error("no forward rename was observed");
+    expect(await findIdentity(fixture.root, identity.dev, identity.ino))
+      .toContain(`.developer-os-retained.${String(persisted.value.id)}.`);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-167 (Foundation half) and NEW-174: a failure inside the forward
+   * Foundation participant after its journal was published. Compensation
+   * finishes that participant and then runs its compensation participant; a
+   * death before compensation leaves a non-terminal `tx_fi_` journal that
+   * `init`, not `repair`, resumes on its original inode.
+   */
+  it.each([false, true])("recovers a failure inside the forward Foundation participant (death before compensation: %s)", async (die) => {
+    const fixture = await createCommandFixture(`bootstrap-foundation-forward-failure-${String(die)}`, {
+      bootstrapAvailable: true,
+      interruptAfter: "applied",
+      interruptKind: "fresh_init_artifacts",
+      interruptOnce: true,
+      ...(die ? { bootstrapInterruptAfter: "before_compensation" as const } : {}),
+    });
+
+    const failed = await runInit(fixture.context, ACCEPTED);
+
+    expect(failed.ok).toBe(false);
+    const persisted = await persistedPlan(fixture);
+    const forward = participant(persisted.value, "forward");
+    const forwardJournal = String((forward.initialJournal as JsonRecord).finalPath);
+    if (die) {
+      const before = await nodeFs.lstat(forwardJournal, { bigint: true });
+      expect(JSON.parse(await nodeFs.readFile(forwardJournal, "utf8"))).toMatchObject({ phase: "applied" });
+      fixture.disableBootstrapInterrupt();
+      await closeBootstrapProcess(fixture);
+      const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+      if (!resumed.ok) throw new Error(JSON.stringify({ resumed, trace: fixture.bootstrapTrace.slice(-30) }));
+      expect(await currentJournal(persisted.value)).toMatchObject({ phase: "retained", terminalOutcome: "finalized" });
+      const after = await findIdentity(fixture.root, before.dev.toString(10), before.ino.toString(10));
+      expect(after).not.toBeNull();
+      return;
+    }
+    expect(await currentJournal(persisted.value), JSON.stringify({ failed, trace: fixture.bootstrapTrace.slice(-30) }))
+      .toMatchObject({
+        phase: "retained",
+        terminalOutcome: "rolled_back",
+        nextFoundationParticipant: 1,
+        compensationNext: -1,
+      });
+    expect(fixture.bootstrapTrace).toContain(`foundation:compensation:apply:${String(participant(persisted.value, "compensation").id)}`);
+    expect(fixture.transactionUnlinkRequests).toStrictEqual([]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("retains post-Foundation rollback targets and artifacts without invoking deletion authority", async () => {
