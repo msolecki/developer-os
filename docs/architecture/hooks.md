@@ -436,8 +436,12 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   enforces this.
 - **Child marker.** `tsc` and the formatters run under `process.execPath`, with the child script's
   real path as the first argument and `HOOK_CHILD_ENV` (`DEVELOPER_OS_HOOK_ACTIVE=1`) as the whole
-  environment. Every verb that finds the marker returns `allow`. The caps are `TSC_TIMEOUT_MS`
-  (120 s) and `FORMATTER_TIMEOUT_MS` (30 s).
+  environment. Every open verb (`stop`, `format`, `prompt`, `edit`, `inject`) that finds the marker
+  returns `allow` before reading stdin. The closed verbs `command`, `commit` and `path` ignore it
+  and evaluate as usual: no child fires them, so an ambient marker in the vendor's environment must
+  not switch them off (CLI-LIFE-2). Residual: whoever sets `DEVELOPER_OS_HOOK_ACTIVE=1` for the
+  vendor process still silences the open verbs, which fail open anyway. The caps are
+  `TSC_TIMEOUT_MS` (120 s) and `FORMATTER_TIMEOUT_MS` (30 s).
 - **Stop-loop flag.** A `Stop` payload with `stop_hook_active` set is `allow`, on both vendors,
   which spell it the same way. A payload without the boolean is malformed, and `stop` fails open
   (spec G8).
