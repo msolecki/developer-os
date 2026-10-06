@@ -52,6 +52,9 @@ export class TransactionPlanError extends Error {
   }
 }
 
+/** What a completed transaction did: its change landed, or it was undone. */
+export type TransactionOutcome = "applied" | "rolled back";
+
 /**
  * **The transaction completed and a backup payload could not be removed.** Distinct from
  * `TransactionStateError`, whose message — "transaction state is malformed or incomplete" —
@@ -67,9 +70,8 @@ export class TransactionPlanError extends Error {
  * removed (found by fresh-context review, 2026-08-17).
  *
  * **It escapes only from `repair`, and that restriction is the point.** Every caller of
- * `execute` — `reindex`, `uninstall`, `ingest`, `review`, `capture`, `init` — is written
- * against "a throw means the transaction did not happen", and `ingest`'s own docblock says
- * so in as many words. This error means the opposite, so raising it out of `execute` made
+ * `execute` is written against "a throw means the transaction did not happen" — a new caller
+ * must be too — and `ingest`'s own docblock says so in as many words. This error means the opposite, so raising it out of `execute` made
  * `reindex` skip `recordArtifacts`, `uninstall` skip its manifest removal, and `ingest`
  * report `ok: false` for captures that had all landed — a successful operation reported as
  * a failure, with the command's own bookkeeping half done.
@@ -95,8 +97,6 @@ export class TransactionPlanError extends Error {
  * directory writable" is confidently wrong with nothing to tell the user why. Discarding
  * the code left the message unable to distinguish them at all.
  */
-export type TransactionOutcome = "applied" | "rolled back";
-
 export class TransactionBackupRetentionError extends Error {
   readonly code = EXIT_CODES.recoveryRequired;
 
@@ -2107,8 +2107,7 @@ export class TransactionExecutor {
           journal = await this.transition(journal, "finalized");
           /**
            * **The one prune site a command can reach, so the one that must not raise.**
-           * `execute` funnels through here, and its seven call sites — six commands, `ingest`
-           * twice — all read a throw as
+           * `execute` funnels through here, and every caller of `execute` reads a throw as
            * "nothing happened" — which this failure is not. A retained payload is left
            * for `doctor` to report and `repair --resume <id>` to sweep.
            */
@@ -2375,7 +2374,7 @@ export class TransactionExecutor {
            * **`ENOENT` only** — already pruned, or never written because the target did
            * not exist. Everything else is a retained payload: raised where `repair` is the
            * sole caller, and left standing where a command is, because a throw there means
-           * "nothing happened" to seven call sites and this failure means the opposite.
+           * "nothing happened" to every caller of `execute` and this failure means the opposite.
            *
            * **The loop does not stop, and it did before.** Throwing on the first failure
            * left payloads 4 and 5 on disk because payload 3 could not be removed — a
