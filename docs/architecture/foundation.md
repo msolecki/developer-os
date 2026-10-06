@@ -1547,7 +1547,10 @@ the other adapter nor the CLI.
   first; any others are kept and reported. Codex is unregistered before any file changes.
 - `uninstall` detaches both vendors before the drained uninstall
   (`apps/cli/src/lifecycle/uninstall.ts` — `detachVendorInstructions`), which then sees only
-  product-home rows; its dry run and prompt preview do not detach. A vendor's product-home rows
+  product-home rows; its dry run and prompt preview do not detach. Every run that detaches,
+  `--yes` included, first previews the drained uninstall over the manifest the detach would leave,
+  so its refusals (drift, capacity, launchd host, hook records) fire before Codex is unregistered
+  or a vendor row is removed (NEW-161). A vendor's product-home rows
   (`<product-home>/claude/instructions/`, the Codex marketplace tree, `codex/registration.json`)
   stay after a deselection and leave with the drained uninstall.
 

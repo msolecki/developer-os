@@ -749,8 +749,9 @@ export async function uninstallRuntimePaths(context: CliContext): Promise<Runtim
  * coordinator's own manifest arm is deliberately unconfined (I2).
  *
  * `foundation.md` §12.4: vendor rows leave first, through the instruction detach, and the drained
- * uninstall then runs unchanged over a home re-admitted after it. The dry run and the prompt
- * preview the coordinator over the manifest the detach would leave, so neither detaches.
+ * uninstall then runs unchanged over a home re-admitted after it. The dry run, the prompt and a
+ * `--yes` run that detaches preview the coordinator over the manifest the detach would leave, so
+ * a refusal leaves the vendor rows attached.
  */
 export async function runCoordinatorUninstall(
   context: CliContext,
@@ -772,10 +773,12 @@ export async function runCoordinatorUninstall(
   const uninstaller = new LifecycleUninstaller();
 
   /**
-   * `execute` plans again under its own lock, so the preview here is only what the two paths
-   * that never reach it need: the dry run's report and the confirmation prompt's list.
+   * `execute` plans again under its own lock, so the preview here serves the dry run's report,
+   * the confirmation prompt's list and, whatever `--yes` says, every refusal `preview` can make
+   * before the detach unregisters Codex and deletes the vendor rows (NEW-161). Without a detach
+   * `--yes` reaches `execute` first, which refuses before it touches anything.
    */
-  if (options.dryRun || !options.assumeYes) {
+  if (options.dryRun || !options.assumeYes || detach !== null) {
     const detached = detach?.plan.kind === "transaction" ? detach.plan : null;
     const lockPath = join(paths.stateDir, ".lifecycle.lock") as CanonicalAbsolutePathV1;
     const held = await lifecycle.locks.acquireExisting(lockPath);
@@ -799,7 +802,7 @@ export async function runCoordinatorUninstall(
         transactionId: null,
       });
     }
-    if (!(await context.io.confirm(describePlan(removable)))) {
+    if (!options.assumeYes && !(await context.io.confirm(describePlan(removable)))) {
       return failure(EXIT_CODES.decisionRequired, {
         kind: "declined",
         message: "uninstall was declined",
