@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { hashBytes, lifecycleReservationOrder, parseCanonicalAbsolutePathText, validateLifecyclePlanGrammar } from "@developer-os/core";
+import { EXIT_CODES, hashBytes, lifecycleReservationOrder, parseCanonicalAbsolutePathText, validateLifecyclePlanGrammar } from "@developer-os/core";
 import type {
   HeldLifecycleStableLockV1,
   InstallationManifestV2,
@@ -14,6 +14,7 @@ import type {
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { runInit } from "../commands/init.js";
+import { UninstallRefusal } from "../commands/uninstall.js";
 import { createCommandFixture, exists, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
 import { manifestAdmissionFor } from "./manifest-admission.js";
@@ -219,6 +220,52 @@ async function recoverUninstall(home: LaunchdHomeV1): Promise<void> {
     await releaseUninstallHolds(holds);
   }
 }
+
+async function allocatorCounter(fixture: CommandFixture): Promise<string> {
+  const value = JSON.parse(
+    await nodeFs.readFile(join(fixture.paths.stateDir, "lifecycle-id-allocator.json"), "utf8"),
+  ) as { readonly nextCounter: string };
+  return value.nextCounter;
+}
+
+describe("uninstall/present_manifest planning refusals before any ID is reserved", () => {
+  async function refusalOf(home: LaunchdHomeV1): Promise<unknown> {
+    return new LifecycleUninstaller().execute(await home.request()).then(() => null, (error: unknown) => error);
+  }
+
+  it("refuses a missing config.toml as decision-required, naming it (W2-UNINST-5)", async () => {
+    const home = await launchdHome("uninstall-launchd-no-config");
+    await nodeFs.rm(home.fixture.paths.configFile);
+    const counter = await allocatorCounter(home.fixture);
+
+    const refusal = await refusalOf(home);
+
+    expect(refusal).toBeInstanceOf(UninstallRefusal);
+    expect(refusal).toMatchObject({ code: EXIT_CODES.decisionRequired, paths: [home.fixture.paths.configFile] });
+    expect(home.plans).toStrictEqual([]);
+    expect(home.launchd.events).toStrictEqual([]);
+    expect(await allocatorCounter(home.fixture)).toBe(counter);
+    expect(await exists(home.plist.path)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses a missing runner lease with its re-create step, before the marker and the bootout (W2-UNINST-2)", async () => {
+    const home = await launchdHome("uninstall-launchd-no-lease");
+    const lease = join(home.fixture.paths.stateDir, ".automation-doctor.lock");
+    await nodeFs.rm(lease);
+    const counter = await allocatorCounter(home.fixture);
+
+    const refusal = await refusalOf(home);
+
+    expect(refusal).toBeInstanceOf(UninstallRefusal);
+    expect(refusal).toMatchObject({ code: EXIT_CODES.recoveryRequired, paths: [lease] });
+    expect((refusal as UninstallRefusal).recovery).toContain(lease);
+    expect(home.plans).toStrictEqual([]);
+    expect(home.launchd.events).toStrictEqual([]);
+    expect(home.launchd.loaded.size).toBe(1);
+    expect(await allocatorCounter(home.fixture)).toBe(counter);
+    expect(await nodeFs.readdir(join(home.fixture.paths.stagingDir, "lifecycle"))).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
 
 describe("uninstall/present_manifest with an installed launchd job (plan 1b Task 18)", () => {
   it("unloads the installed label before its plist is removed and preserves the Brain and its .git", async () => {

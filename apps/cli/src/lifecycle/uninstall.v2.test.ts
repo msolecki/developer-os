@@ -503,6 +503,27 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     for (const path of [...written, ...leases]) expect(await exists(path), path).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("reports as removed only what the run removed: not a kept directory nor a row already gone (W2-UNINST-3)", async () => {
+    const fixture = await initializedV2Fixture("uninstall-removed-report");
+    const logs = join(fixture.paths.home, "logs");
+    await nodeFs.writeFile(join(logs, "mine.txt"), "the user's own file\n", { mode: 0o600 });
+    const gone = join(fixture.paths.stateDir, "automation-brain-pulse.status.json");
+    expect(await exists(gone)).toBe(true);
+    await nodeFs.rm(gone);
+    const status = join(fixture.paths.stateDir, "automation-brain-garden.status.json");
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(`${String(result.code)} ${result.error.kind}: ${result.error.message}`);
+    expect(result.data.preserved).toContain(logs);
+    expect(result.data.removed).not.toContain(logs);
+    expect(result.data.removed).not.toContain(gone);
+    expect(result.data.removed).toContain(status);
+    expect(result.data.removed).toContain(fixture.paths.manifestFile);
+    expect(result.data.removed).toContain(join(fixture.paths.stateDir, ".automation-doctor.lock"));
+    for (const path of result.data.removed) expect(await exists(path), path).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it.each([
     ["an automation lifecycle record in the configuration", plantAutomationLifecycleRecord],
     ["an active automation arm in the activation record", plantActiveAutomationActivation],
