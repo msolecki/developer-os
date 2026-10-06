@@ -1474,7 +1474,6 @@ function validateFoundationParticipant(
 
 function validateFoundationPairs(
   refs: readonly FoundationParticipantRefV2[],
-  operation: "fresh_v2_init",
   id: FreshV2InitIdV1,
 ): void {
   if (refs.length < 2 || refs.length > MAX_FOUNDATION_PARTICIPANTS || refs.length % 2 !== 0) return refuse();
@@ -1522,7 +1521,6 @@ function validateInitialJournals(
 
 function validateManifestBinding(
   value: ManifestStatePlanV1,
-  operation: "fresh_v2_init",
   id: FreshV2InitIdV1,
   v2ManifestHash: LowerHexSha256,
   refs: readonly FoundationParticipantRefV2[],
@@ -1696,11 +1694,11 @@ export function validateBootstrapPlan(
     validateParentOrder(createdPaths, launchabilityPaths);
     if (!Array.isArray(input.foundationParticipants)) return refuse();
     const foundationParticipants = input.foundationParticipants.map((candidate) => validateFoundationParticipant(candidate, operation, id, context));
-    validateFoundationPairs(foundationParticipants, operation, id);
+    validateFoundationPairs(foundationParticipants, id);
     validateRequiredPlanDerivedSources(payloads, foundationParticipants, context.productHome);
     validateInitialJournals(foundationParticipants, payloads);
     validateFoundationStaging(foundationParticipants, createdPaths, payloads, context.productHome);
-    const manifest = validateManifestBinding(input.manifest as ManifestStatePlanV1, operation, id, v2ManifestHash, foundationParticipants, context);
+    const manifest = validateManifestBinding(input.manifest as ManifestStatePlanV1, id, v2ManifestHash, foundationParticipants, context);
     validateRefUseBijection(payloads, createdPaths, launchabilityPaths, foundationParticipants, manifest);
     const aggregate = stagingAggregate(payloads.length, createdPaths.length, launchabilityPaths.length, foundationParticipants.length);
     if (aggregate > MAX_STAGING_ENTRIES || input.maximumStagingEntries !== aggregate) return refuse();
