@@ -4,6 +4,7 @@ import type { BrainConfigV1 } from "@developer-os/core";
 
 import type { DirectoryReader } from "./discovery/index.js";
 import { artifactPaths, buildIndex, renderArtifacts } from "./indexes/index.js";
+import { isUnsafeProposedNotePath } from "./ingest/index.js";
 import type {
   IndexBuildRequest,
   IndexBuildResult,
@@ -293,6 +294,17 @@ export class BrainService {
     );
     const match = matches.length === 1 ? matches[0] : undefined;
     if (match === undefined) return { vaultMap, projectNote: null };
+    /**
+     * `index.json` is a vault file a sync or a clone can poison, and this text
+     * goes into the agent's session: only a note under the content root is
+     * opened, never a traversal, an absolute path or a non-note.
+     */
+    if (
+      isUnsafeProposedNotePath(match.path) ||
+      !match.path.startsWith(`${this.deps.config.contentRoot}/`)
+    ) {
+      return { vaultMap, projectNote: null };
+    }
 
     const path = join(this.deps.vaultRoot, match.path);
     await this.deps.assertReadable(path);

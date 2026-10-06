@@ -203,7 +203,8 @@ describe("buildIndex content", () => {
     );
     const indexed = result.index.notes[0];
     expect(indexed?.updated).toBeNull();
-    expect(indexed?.occurrences).toBe(0);
+    // brain.md §6.1 and the note schema: an absent key means 1, and 0 is invalid.
+    expect(indexed?.occurrences).toBe(1);
     expect(indexed?.aliases).toEqual([]);
     expect(serializeIndex(result.index)).not.toContain("undefined");
   });
