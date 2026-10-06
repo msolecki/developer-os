@@ -2409,6 +2409,48 @@ describe("runIngest, the agent call", () => {
     expect(await fixture.statusOf(ingestedOne.id)).toBe("ingested");
   });
 
+  it("moves a refused capture behind untried ones across runs, so --limit 1 reaches the second (NEW-141)", async () => {
+    const fixture = await installedFixture("ingest-attempt-order");
+    const [refusing, waiting] = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+    ].sort(byId);
+    if (refusing === undefined || waiting === undefined) throw new Error("two captures seeded");
+    fixture.reply((call) =>
+      call.args.join("\n").includes(`Capture ${refusing.id}`)
+        ? oneNote(refusing.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`)
+        : oneNote(waiting.id, "DEV/reached.md"),
+    );
+
+    /** Fresh V2 `init` reserves the record empty; this legacy fixture's `init` does not. */
+    const recordPath = join(fixture.paths.stateDir, "ingest-attempts.json");
+    await nodeFs.writeFile(recordPath, "", { mode: 0o600 });
+
+    const first = await fixture.run({ limit: 1 });
+    expect(first.ok).toBe(false);
+    expect(await fixture.statusOf(refusing.id)).toBe("accepted");
+    expect(await fixture.statusOf(waiting.id)).toBe("accepted");
+
+    const second = dataOf(await fixture.run({ limit: 1 }));
+    expect(second.order).toStrictEqual([waiting.id]);
+    expect(await fixture.statusOf(waiting.id)).toBe("ingested");
+
+    /** Once nothing untried is left, the refused capture is selected again. */
+    const third = await fixture.run({ limit: 1 });
+    expect(third.ok).toBe(false);
+    const record = await nodeFs.readFile(recordPath, "utf8");
+    expect(JSON.parse(record)).toStrictEqual({ attempts: { [refusing.id]: 2 }, schemaVersion: 1 });
+  });
+
+  it("never creates the attempt-order record on an installation that did not reserve it (NEW-141)", async () => {
+    const fixture = await installedFixture("ingest-attempt-order-unreserved");
+    const seeded = await fixture.seedAccepted("the first observation");
+    fixture.reply(() => oneNote(seeded.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`));
+
+    expect((await fixture.run()).ok).toBe(false);
+    expect(await exists(join(fixture.paths.stateDir, "ingest-attempts.json"))).toBe(false);
+  });
+
   it("accepts --yes and changes nothing by it, because ingest never asks", async () => {
     const fixture = await installedFixture("ingest-yes");
     const seeded = await fixture.seedAccepted("an observation for --yes");
