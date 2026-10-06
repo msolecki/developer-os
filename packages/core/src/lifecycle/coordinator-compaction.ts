@@ -111,12 +111,15 @@ async function discardCounterfactualInverse(
   for (const mutation of ref.mutations) {
     const stagedPath = mutation.stagedPath;
     if (stagedPath === null) continue;
+    let removed = false;
     for (const path of [stagedPath, parseCanonicalAbsolutePathText(`${stagedPath}.sha256`)]) {
       const leaf = await fs.lstat(path);
       if (leaf === null) continue;
       await fs.unlinkExact(leaf);
+      removed = true;
     }
-    await syncDirectoryAt(fs, lifecycleParentPath(stagedPath));
+    // A repeat after a death may find the staging directory itself already collected.
+    if (removed) await syncDirectoryAt(fs, lifecycleParentPath(stagedPath));
   }
 }
 
@@ -163,7 +166,14 @@ async function removeFoundationEntry<TPlan extends CoordinatorPlan>(
     refuseLifecycleRecovery("lifecycle_foundation_orphan_leaf", backups.path);
   }
   await requireHeldGlobalLock(fs, global);
-  if (position === "counterfactual_inverse") {
+  /**
+   * A `current` forward with no journal is either one `resolveCurrentStep` discarded unstarted or
+   * one whose rolled-back journal this compaction already unlinked before a death. Its targets are
+   * the user's again, so no preimage proof applies; only its staged leaves are removed.
+   */
+  if (position === "current") {
+    await discardCounterfactualInverse(fs, ref);
+  } else if (position === "counterfactual_inverse") {
     const forwardId = ref.role.kind === "compensation" ? ref.role.forwardId : null;
     if (forwardId === null) {
       refuseLifecycleRecovery("lifecycle_coordinator_participant_state", journalPath);

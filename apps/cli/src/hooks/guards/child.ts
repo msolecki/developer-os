@@ -1,5 +1,7 @@
 import { readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, join, relative } from "node:path";
+import { join, resolve } from "node:path";
+
+import { containsPath } from "@developer-os/core";
 
 export const TSC_TIMEOUT_MS = 120_000;
 export const FORMATTER_TIMEOUT_MS = 30_000;
@@ -8,8 +10,7 @@ export const HOOK_CHILD_ENV: Readonly<Record<string, string>> = Object.freeze({ 
 const TOOL_PACKAGES = { tsc: "typescript", biome: "@biomejs/biome", prettier: "prettier" } as const;
 
 function strictlyInside(parent: string, child: string): boolean {
-  const rel = relative(parent, child);
-  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  return resolve(parent) !== resolve(child) && containsPath(parent, child);
 }
 
 /**

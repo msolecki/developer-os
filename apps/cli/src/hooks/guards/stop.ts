@@ -1,6 +1,7 @@
 import { lstat, readFile, realpath, rm } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
+import { containsPath } from "@developer-os/core";
 import type { ProcessResult } from "@developer-os/security";
 
 import { capUtf8Bytes } from "../outcome.js";
@@ -33,8 +34,7 @@ async function readConfig(config: string): Promise<TsConfigShape> {
 }
 
 function inside(root: string, path: string): boolean {
-  const rel = relative(root, path);
-  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  return resolve(root) !== resolve(path) && containsPath(root, path);
 }
 
 /**
