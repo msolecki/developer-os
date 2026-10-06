@@ -637,7 +637,8 @@ byte-deterministic; `foundation.md` §12 has the lifecycle.
 - `output-style`: `H/.claude/output-styles/developer-os-<id>.md`, never selected.
 - `agent`, `skill`: the plugin's `agents/<id>.md` and `skills/<id>/`.
 - A `thinCommand` skill also gets a generated `commands/<id>.md` whose body only invokes
-  `developer-os:<id>`.
+  `developer-os:<id>`. No default catalog row sets it (D86, NEW-164): a same-id command replaces
+  the skill's description in the session listing, so the model cannot auto-select the skill.
 - Instruction ids carry no prefix; an instruction and a workflow claiming one plugin path refuse.
 - **Proof scope.** The planner-level rules are held by the core owner tests; the synthetic on-disk
   lifecycle (`tests/e2e/release-update.test.ts`) installs no Claude owner. The draft grammar

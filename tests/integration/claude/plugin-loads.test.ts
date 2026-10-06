@@ -150,7 +150,6 @@ describe("the generated plugin against a real Claude Code installation", () => {
       const commands = ids(/^commands\/([^/]+)\.md$/u);
       expect(skills.length).toBeGreaterThan(0);
       expect(agents.length).toBeGreaterThan(0);
-      expect(commands.length).toBeGreaterThan(0);
 
       const { stdout } = await run(claude ?? "", ["plugin", "details", "developer-os"], {
         env: isolatedEnv(temporary()),

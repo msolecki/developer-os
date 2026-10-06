@@ -77,6 +77,18 @@ describe("plugins/claude is a clean regeneration", () => {
     expect(onDisk.sort()).toEqual(rendered.sort());
   });
 
+  /**
+   * D86 (NEW-164): a command beside its same-id skill replaces the skill's "Use when ..."
+   * description in the session listing with "Invoke the developer-os:<id> skill", so the model
+   * cannot auto-select the skill. No skill ships a thin command.
+   */
+  it("renders no command under the id of a skill", async () => {
+    const paths = (await renderAllForClaude()).map((artifact) => artifact.path);
+    const skills = new Set(paths.flatMap((path) => /^skills\/([^/]+)\/SKILL\.md$/u.exec(path)?.[1] ?? []));
+    const shadowing = paths.flatMap((path) => /^commands\/([^/]+)\.md$/u.exec(path)?.[1] ?? []).filter((id) => skills.has(id));
+    expect(shadowing).toEqual([]);
+  });
+
   it("is byte-identical under a reversed workflow and instruction reader", async () => {
     expect(JSON.stringify(await renderAllForClaude({ reverseDirectoryOrder: true }))).toBe(
       JSON.stringify(await renderAllForClaude()),
