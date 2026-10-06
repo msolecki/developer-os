@@ -3021,6 +3021,15 @@ zero runtime permits; if true, its declared `minUses..maxUses` applies. `direct_
 two to 200,001 literal one-shot permits for a new commit (at least one `mktree` plus one
 `commit-tree`).
 
+**Amended 2026-10-06 (D88, W2-SEC-GIT-1).** `when` and `minUses` are enforced by the runtime, not by
+the process supervisor: the Git runtime issues a gateway permit only for a process on its
+plan-built pending list (an unplanned basename refuses `git_gateway_unplanned_process`),
+`prepareLocalReceive` runs its exact node list, and the coordinator's own root edges run in a fixed
+order (build, then push). The process table carries `when` and `minUses` as hash-bound metadata
+only. The supervisor enforces `maxUses`, phase budgets and `orderAfter`, the latter satisfied by
+any one consumed predecessor, which is what makes `direct_source_push`'s vacuous second
+predecessor admissible.
+
 | Edge ID(s), in order | From → to / transition | Phase / `when` | Uses | `orderAfter` |
 |---|---|---|---|---|
 | `direct_distribution_probe` | coordinator → distribution-probe Git / spawn | distribution probe / `distribution_probe` | 1 | `[]` |

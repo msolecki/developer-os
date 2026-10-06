@@ -196,6 +196,20 @@ describe("guard path", () => {
     expect(await guard(join(home, "ch", "config.toml"))).toStrictEqual({ kind: "allow" });
   });
 
+  // Audit follow-up to CRITIC-2: an agent that rewrites the Codex-home record could redirect C.
+  it("blocks writes to the product home's codex/ and state/ records, under DEVELOPER_OS_HOME too", async () => {
+    expect(await run(join(home, ".developer-os", "codex", "codex-home"), "Write")).toMatchObject({ kind: "block", ruleId: "product-state" });
+    expect(await run(join(home, ".Developer-OS", "State", "journal.json"), "Write")).toMatchObject({ kind: "block", ruleId: "product-state" });
+    await mkdir(join(home, ".developer-os", "codex"), { recursive: true });
+    await symlink(join(home, ".developer-os", "codex"), join(project, "codex-link"));
+    expect(await run("codex-link/codex-home", "Write")).toMatchObject({ kind: "block", ruleId: "product-state" });
+    const custom = { ...runtime(home), env: { DEVELOPER_OS_HOME: join(home, "dos") } };
+    const guard = (filePath: string) =>
+      guardPath({ cwd: project, toolName: "Write", command: null, filePath, prompt: null, stopHookActive: null }, custom);
+    expect(await guard(join(home, "dos", "codex", "codex-home"))).toMatchObject({ kind: "block", ruleId: "product-state" });
+    expect(await run(join(home, ".developer-os", "notes.md"), "Write")).toStrictEqual({ kind: "allow" });
+  });
+
   it("ignores a tool that is not a file matcher", async () => {
     expect(await run(".env", "Read")).toStrictEqual({ kind: "allow" });
   });
