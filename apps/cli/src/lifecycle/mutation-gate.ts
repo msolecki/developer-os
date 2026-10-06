@@ -207,7 +207,7 @@ function refuseNonV2(home: MutationHomeV1, paths: RuntimePaths): never {
  * Every ID the allocator's counter must already cover. A legacy `tx_<uuid>` journal carries
  * no counter and cannot constrain the allocator, so it is left out rather than refused here.
  */
-function allocatedIdsFrom(snapshot: LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>): readonly string[] {
+export function allocatedIdsFrom(snapshot: LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>): readonly string[] {
   const candidates = [
     ...snapshot.coordinators.map((record) => record.id as string),
     ...[...snapshot.foundation.journals.keys()].map((id) => id as string),

@@ -22,9 +22,7 @@ import {
   ManifestStateParticipant,
   SCHEDULED_JOB_IDS,
   TransactionExecutor,
-  allocatedCounterOf,
   assertLifecycleExecutionFeasible,
-  cleanLifecycleAllocatorTemp,
   decodeCanonicalJson,
   deriveUninstallLaunchdEvidence,
   encodeUninstallingMarker,
@@ -38,7 +36,6 @@ import {
   HOOK_FIRING_RECORDS_RELATIVE_PATH,
   inspectCodexIngestHomeShape,
   inspectHookFiringRecordsShape,
-  inspectLifecycleAllocator,
   lifecycleBookkeepingPaths,
   MAX_HOOK_FIRING_RECORD_CHILDREN,
   maximumCoordinatorJournalBytes,
@@ -63,7 +60,6 @@ import type {
   LifecycleGuardedEntryV1,
   LifecycleGuardedFileSystemV1,
   LifecycleLeafReservationV1,
-  LifecycleLedgerSnapshotV1,
   LifecycleParticipantAdaptersV1,
   LowerHexSha256,
   ManagedArtifactV1,
@@ -143,7 +139,7 @@ import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { uninstallResidueFrom } from "./context.js";
 import { manifestAdmissionFor } from "./manifest-admission.js";
 import { isCodeDefect, MANIFEST_ANCHOR_WARNING, removeManifestAnchor } from "./manifest-anchor.js";
-import { withLifecycleMutation } from "./mutation-gate.js";
+import { allocatedIdsFrom, cleanAllocatorTemp, requireLifecycleStagingRoot, withLifecycleMutation } from "./mutation-gate.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
 import {
   assertNoRedactionKeyTombstone,
@@ -1577,7 +1573,7 @@ export class LifecycleUninstaller {
     };
     try {
       await requireLifecycleStagingRoot(lifecycle, context.paths);
-      await cleanAllocatorTemp(request, current());
+      await cleanAllocatorTemp(context, lifecycle, request.key, uninstallResidueFrom(request.evidence), current());
       const participants = createUninstallParticipants(request);
       const preservedDirectories: string[] = [];
       const adapters = createUninstallAdapters({
@@ -1810,71 +1806,6 @@ async function stageUninstallParticipants(
     );
   }
   return refs;
-}
-
-function allocatedIdsFrom(
-  snapshot: LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>,
-): readonly string[] {
-  const candidates = [
-    ...snapshot.coordinators.map((record) => record.id as string),
-    ...[...snapshot.foundation.journals.keys()].map((id) => id as string),
-  ];
-  return candidates.filter((id) => {
-    try {
-      allocatedCounterOf(id);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-}
-
-/**
- * D37: a fresh V2 `init` does not create `staging/lifecycle`, and `inspectLifecycleLedger`
- * refuses its absence, so every V2 mutator materialises it under the held global lock. The same
- * interim as `lifecycle/mutation-gate.ts`; the durable fix belongs in the fresh layout.
- */
-async function requireLifecycleStagingRoot(
-  lifecycle: CliLifecycleContext,
-  paths: RuntimePaths,
-): Promise<void> {
-  const root = lifecycle.roots.lifecycleStaging;
-  if ((await guardedEntry(lifecycle.fs, root)) !== null) return;
-  try {
-    await lifecycle.fs.mkdirExclusive(root);
-  } catch (error) {
-    if ((await guardedEntry(lifecycle.fs, root))?.kind !== "directory") throw error;
-  }
-  await syncDirectoryAt(lifecycle.fs, canonical(paths.stagingDir));
-}
-
-/**
- * §2.4 admits exactly one pre-rename allocator temp and the ledger reports it as a finding,
- * which `assertRecoverable` would refuse — so a mutator cleans it before the recovery pass.
- */
-async function cleanAllocatorTemp(
-  request: LifecycleUninstallRequestV1,
-  held: HeldLifecycleStableLockV1,
-): Promise<void> {
-  const { context, lifecycle } = request;
-  const stateDirectory = canonical(context.paths.stateDir);
-  const observed = await inspectLifecycleAllocator(
-    lifecycle.fs,
-    stateDirectory,
-    lifecycle.effectiveUid,
-    [],
-  );
-  if (observed.temp === null) return;
-  const allocatedIds = allocatedIdsFrom(
-    await lifecycle.inspectLedger(request.key, uninstallResidueFrom(request.evidence)),
-  );
-  const rechecked = await inspectLifecycleAllocator(
-    lifecycle.fs,
-    stateDirectory,
-    lifecycle.effectiveUid,
-    allocatedIds,
-  );
-  await cleanLifecycleAllocatorTemp(lifecycle.fs, rechecked, held, allocatedIds);
 }
 
 /** The detach planner's no-follow reads over the real filesystem. */

@@ -16,7 +16,6 @@ import {
   LifecycleCoordinator,
   LifecycleRecoveryRequiredError,
   TransactionExecutor,
-  allocatedCounterOf,
   appendGitRemoteSection,
   assertLifecycleExecutionFeasible,
   createGitEffectLedgerCodec,
@@ -118,7 +117,7 @@ import type { LifecycleExecutionPlanV1, LifecyclePlanPreviewV1 } from "../../lif
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../../lifecycle/context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "../../lifecycle/context.js";
 import { isCodeDefect, MANIFEST_ANCHOR_WARNING, readManifestAnchor, writeManifestAnchor } from "../../lifecycle/manifest-anchor.js";
-import { gateManifestAdmission } from "../../lifecycle/mutation-gate.js";
+import { allocatedIdsFrom, gateManifestAdmission, requireLifecycleStagingRoot } from "../../lifecycle/mutation-gate.js";
 import { GIT_SHADOW_TEMPLATE_HASHES } from "./runtime.js";
 import type { GitCandidateObjectsV1, GitRuntimeV1 } from "./runtime.js";
 import { encodeSyncRecord, nextSyncRecord, readSyncRecord, syncRecordPath } from "./sync-record.js";
@@ -884,17 +883,6 @@ async function stageEmptyDirectory(root: EffectRootV1, index: number, branch: st
 // ---------------------------------------------------------------------------------------------
 // Coordinator plumbing
 
-function allocatedIdsFrom(snapshot: LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>): readonly string[] {
-  return [...snapshot.coordinators.map((record) => record.id as string), ...[...snapshot.foundation.journals.keys()].map(String)].filter((id) => {
-    try {
-      allocatedCounterOf(id);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-}
-
 export type NetworkPushV1 = NonNullable<LifecycleParticipantAdaptersV1<LifecycleExecutionPlanV1>["networkPush"]>;
 
 /** Recovery never pushes: a bound network push is consumed only by `git sync`'s retry. */
@@ -944,16 +932,6 @@ export interface PreparedV1 {
   readonly snapshot: LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>;
 }
 
-async function requireLifecycleStagingRoot(lifecycle: CliLifecycleContext, context: CliContext): Promise<void> {
-  const root = lifecycle.roots.lifecycleStaging;
-  // identity-free stat: the guarded port already returns an exact decimal identity.
-  if ((await lifecycle.fs.lstat(root)) !== null) return;
-  await lifecycle.fs.mkdirExclusive(root);
-  const parent = await lifecycle.fs.lstat(canonical(context.paths.stagingDir));
-  if (parent === null) recoveryRequired("lifecycle_guarded_parent", context.paths.stagingDir);
-  await lifecycle.fs.syncDirectory(parent);
-}
-
 function requireGlobal(context: CliContext, global: HeldLifecycleStableLockV1): void {
   if (global.path !== join(context.paths.stateDir, GLOBAL_LOCK_LEAF)) {
     refuse("lifecycle_lock_identity", EXIT_CODES.recoveryRequired, [global.path]);
@@ -967,7 +945,7 @@ export async function prepareUnderLock(context: CliContext, lifecycle: CliLifecy
   if (home.admitted.globalLock.dev !== global.dev || home.admitted.globalLock.ino !== global.ino) {
     refuse("lifecycle_lock_identity", EXIT_CODES.recoveryRequired, [global.path], "developer-os doctor");
   }
-  await requireLifecycleStagingRoot(lifecycle, context);
+  await requireLifecycleStagingRoot(lifecycle, context.paths);
   const residue = await residueOf(context);
   const recovered = await lifecycle.recovery(home.key, gitAdapters(context, lifecycle, NO_PUSH), residue).recover(global, { resumeUninstall: false });
   if (recovered.global !== global) recoveryRequired("lifecycle_lock_identity", global.path);
