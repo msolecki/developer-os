@@ -1,4 +1,4 @@
-import { parseUInt64Decimal, type UInt64DecimalV1 } from "./scalars.js";
+import { fail, parseUInt64Decimal, type UInt64DecimalV1 } from "./scalars.js";
 
 export type UpdateCapacityComponentKindV1 =
   | "active"
@@ -76,10 +76,6 @@ export class UpdateCapacityInsufficientError extends Error {
     super(`insufficient update capacity: ${dimension}`);
     this.name = "UpdateCapacityInsufficientError";
   }
-}
-
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
 }
 
 function checkedAdd(left: bigint, right: bigint, label: string): bigint {

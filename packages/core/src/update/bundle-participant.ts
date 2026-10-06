@@ -8,11 +8,18 @@ import { deriveCanonicalStatePayloadPath, parseCanonicalAbsolutePathText, type C
 import { MAXIMUM_BUNDLE_AGGREGATE_BYTES, validateBundleEntries, type ReleaseBundleEntryV1, type ReleaseIdentityV1 } from "./release.js";
 import {
   encodeTenDigitOrdinal,
+  exact,
+  fail,
+  integer,
+  list,
+  nullableInteger,
+  oneOf,
   parseLowerHexSha256,
   parseSafeReasonCode,
   parseStableSemver,
   parseUInt64Decimal,
   parseUtcTimestamp,
+  record,
   type LowerHexSha256,
   type SafeReasonCodeV1,
   type UInt64DecimalV1,
@@ -339,40 +346,7 @@ const PLAN_HASHES = new WeakMap<object, LowerHexSha256>();
 
 // The codec helpers and journal microstate checks below are shared with rollback.ts, whose source
 // and publication journals reuse the same structure/entry protocol. index.ts does not re-export them.
-export function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
-export function record(value: unknown, label: string): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
-  return value as Readonly<Record<string, unknown>>;
-}
-
-export function exact(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
-  const input = record(value, label);
-  const present = Object.keys(input);
-  if (present.length !== keys.length || present.some((key) => !keys.includes(key))) fail(`${label}: keys`);
-  return input;
-}
-
-export function list(value: unknown, minimum: number, maximum: number, label: string): readonly unknown[] {
-  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) fail(label);
-  return value as readonly unknown[];
-}
-
-export function integer(value: unknown, minimum: number, maximum: number, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) fail(label);
-  return value;
-}
-
-export function nullableInteger(value: unknown, minimum: number, maximum: number, label: string): number | null {
-  return value === null ? null : integer(value, minimum, maximum, label);
-}
-
-export function oneOf<T>(value: unknown, allowed: readonly T[], label: string): T {
-  if (!allowed.includes(value as T)) fail(label);
-  return value as T;
-}
+export { exact, fail, integer, list, nullableInteger, oneOf, record };
 
 export function canonical(value: unknown): string {
   return encodeCanonicalJson(value as CanonicalJsonValue);

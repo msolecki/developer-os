@@ -98,3 +98,46 @@ export function encodeTenDigitOrdinal(value: number): TenDigitZeroPaddedOrdinalV
   if (!Number.isSafeInteger(value) || value < 0 || value > maximumOrdinal) throw new Error("invalid ordinal");
   return value.toString(10).padStart(10, "0") as TenDigitZeroPaddedOrdinalV1;
 }
+
+// ---------------------------------------------------------------------------------------------
+// The one strict codec helper set every update validator imports (CORE-UPD-4).
+// ---------------------------------------------------------------------------------------------
+
+export function fail(label: string): never {
+  throw new Error(`invalid ${label}`);
+}
+
+/** A plain JSON object: not null, not an array, and no prototype other than Object's or none. */
+export function record(value: unknown, label: string): Readonly<Record<string, unknown>> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
+  const prototype = Object.getPrototypeOf(value) as object | null;
+  if (prototype !== Object.prototype && prototype !== null) fail(label);
+  return value as Readonly<Record<string, unknown>>;
+}
+
+/** Exact key set: no unknown, missing, or duplicate key survives canonical decoding either. */
+export function exact(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
+  const input = record(value, label);
+  const present = Object.keys(input);
+  if (present.length !== keys.length || present.some((key) => !keys.includes(key))) fail(`${label}: keys`);
+  return input;
+}
+
+export function list(value: unknown, minimum: number, maximum: number, label: string): readonly unknown[] {
+  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) fail(label);
+  return value as readonly unknown[];
+}
+
+export function integer(value: unknown, minimum: number, maximum: number, label: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) fail(label);
+  return value;
+}
+
+export function nullableInteger(value: unknown, minimum: number, maximum: number, label: string): number | null {
+  return value === null ? null : integer(value, minimum, maximum, label);
+}
+
+export function oneOf<T>(value: unknown, allowed: readonly T[], label: string): T {
+  if (!allowed.includes(value as T)) fail(label);
+  return value as T;
+}

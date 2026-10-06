@@ -49,6 +49,13 @@ import {
   type ReleaseMetadataIdentityV1,
 } from "./release.js";
 import {
+  exact,
+  fail,
+  integer,
+  list,
+  nullableInteger,
+  oneOf,
+  record,
   parseLowerHexSha256,
   parsePositiveUInt32,
   parseSafeReasonCode,
@@ -245,41 +252,6 @@ const EXECUTION_KEYS = ["schemaVersion", "coordinatorId", "operation", "previewH
 const PLAN_KEYS = ["schemaVersion", "id", "operation", "previewHash", "executionBindingHash", "maximumPlanBytes", "maximumJournalBytes", "recoveryExecutorInitialHash", "recoveryExecutorTerminalHash", "construction", "update", "steps", "compaction"];
 const JOURNAL_KEYS = ["schemaVersion", "id", "operation", "phase", "direction", "planHash", "nextStep", "compensationNext", "pointOfNoReturnReached", "terminalOutcome", "compensationCause", "retirementNext", "compactionNext", "createdAt", "updatedAt"];
 const encoder = new TextEncoder();
-
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
-function record(value: unknown, label: string): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
-  return value as Readonly<Record<string, unknown>>;
-}
-
-function exact(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
-  const input = record(value, label);
-  const present = Object.keys(input);
-  if (present.length !== keys.length || present.some((key) => !keys.includes(key))) fail(`${label}: keys`);
-  return input;
-}
-
-function integer(value: unknown, minimum: number, maximum: number, label: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) fail(label);
-  return value;
-}
-
-function nullableInteger(value: unknown, minimum: number, maximum: number, label: string): number | null {
-  return value === null ? null : integer(value, minimum, maximum, label);
-}
-
-function array(value: unknown, minimum: number, maximum: number, label: string): readonly unknown[] {
-  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) fail(label);
-  return value as readonly unknown[];
-}
-
-function oneOf<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
-  if (typeof value !== "string" || !allowed.includes(value as T)) fail(label);
-  return value as T;
-}
 
 function canonicalBytes(value: unknown): Uint8Array {
   return encoder.encode(encodeCanonicalJson(value as CanonicalJsonValue));
@@ -520,8 +492,8 @@ export function validateUpdateExecutionPlan(value: unknown, context: UpdateExecu
     metadata: validateReleaseMetadataIdentity(input.metadata),
     planner,
     bundle: parseRef(input.bundle, "bundle_publication", stagingRoot, `${label}.bundle`),
-    owners: array(input.owners, 1, MAX_OWNERS, `${label}.owners`).map((row, index) => parseRef(row, "owner_update", stagingRoot, `${label}.owners[${index.toString(10)}]`)),
-    migrations: array(input.migrations, 0, MAX_MIGRATIONS, `${label}.migrations`).map((row, index) => parseRef(row, "schema_migration", stagingRoot, `${label}.migrations[${index.toString(10)}]`)),
+    owners: list(input.owners, 1, MAX_OWNERS, `${label}.owners`).map((row, index) => parseRef(row, "owner_update", stagingRoot, `${label}.owners[${index.toString(10)}]`)),
+    migrations: list(input.migrations, 0, MAX_MIGRATIONS, `${label}.migrations`).map((row, index) => parseRef(row, "schema_migration", stagingRoot, `${label}.migrations[${index.toString(10)}]`)),
     manifest: {
       transitional: parseRef(manifest.transitional, "manifest_state", stagingRoot, `${label}.manifest.transitional`),
       terminal: parseRef(manifest.terminal, "manifest_state", stagingRoot, `${label}.manifest.terminal`),
@@ -530,7 +502,7 @@ export function validateUpdateExecutionPlan(value: unknown, context: UpdateExecu
     active: parseRef(input.active, "active_release_state", stagingRoot, `${label}.active`),
     rollback: parseRef(input.rollback, "rollback_record_state", stagingRoot, `${label}.rollback`),
     rollbackPayload: parseRef(input.rollbackPayload, "rollback_payload_state", stagingRoot, `${label}.rollbackPayload`),
-    initialParticipantJournals: array(input.initialParticipantJournals, 1, MAX_INITIAL_JOURNALS, `${label}.initialParticipantJournals`).map((row, index) => parseInitialJournal(row, `${label}.initialParticipantJournals[${index.toString(10)}]`)),
+    initialParticipantJournals: list(input.initialParticipantJournals, 1, MAX_INITIAL_JOURNALS, `${label}.initialParticipantJournals`).map((row, index) => parseInitialJournal(row, `${label}.initialParticipantJournals[${index.toString(10)}]`)),
     recoveryExecutor: validateRecoveryExecutor(input.recoveryExecutor, { coordinatorId, operation, executionBindingHash, current }, context),
     verification: parseRef(input.verification, "target_verification", stagingRoot, `${label}.verification`),
     retirement: parseRef(input.retirement, "terminal_retirement", stagingRoot, `${label}.retirement`),
@@ -865,12 +837,12 @@ export function validateUpdateCoordinatorPlan(value: unknown, productHome: Canon
     recoveryExecutorTerminalHash: parseLowerHexSha256(input.recoveryExecutorTerminalHash),
     construction: { path: updateConstructionEnvelopePaths(stagingRoot).plan, hash: parseLowerHexSha256(construction.hash), bytes: integer(construction.bytes, 1, MAX_CONSTRUCTION_BYTES, `${label}.construction.bytes`) },
     update: parseRef(input.update, "update_execution", stagingRoot, `${label}.update`),
-    steps: array(input.steps, 1, MAXIMUM_UPDATE_COORDINATOR_STEPS, `${label}.steps`).map((step, index) => parseStep(step, `${label}.steps[${index.toString(10)}]`)),
+    steps: list(input.steps, 1, MAXIMUM_UPDATE_COORDINATOR_STEPS, `${label}.steps`).map((step, index) => parseStep(step, `${label}.steps[${index.toString(10)}]`)),
     compaction: {
       coordinatorId: id,
       terminalOutcome: "finalized",
       retainPayloadId,
-      entries: array(compaction.entries, 3, MAXIMUM_UPDATE_COMPACTION_ENTRIES, `${label}.compaction.entries`).map((entry, index) => parseCompactionEntry(entry, stagingRoot, `${label}.compaction.entries[${index.toString(10)}]`)),
+      entries: list(compaction.entries, 3, MAXIMUM_UPDATE_COMPACTION_ENTRIES, `${label}.compaction.entries`).map((entry, index) => parseCompactionEntry(entry, stagingRoot, `${label}.compaction.entries[${index.toString(10)}]`)),
     },
   };
   if ((operation === "update_apply") !== (retainPayloadId !== null)) fail(`${label}.compaction.retainPayloadId`);

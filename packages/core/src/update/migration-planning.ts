@@ -18,7 +18,7 @@ import type {
   SchemaMigrationVersionRangeV1,
 } from "./migrations.js";
 import type { PlannerOutputBlobRefV1, SchemaMigrationDraftV1, SchemaMigrationMutationDraftV1 } from "./planner.js";
-import { parsePositiveUInt32, parseSchemaMigrationId, type LowerHexSha256 } from "./scalars.js";
+import { fail, parsePositiveUInt32, parseSchemaMigrationId, type LowerHexSha256 } from "./scalars.js";
 
 export const SCHEMA_MIGRATION_DOMAIN_ORDER: readonly SchemaMigrationDomainV1[] = Object.freeze(["product_state", "brain"]);
 
@@ -26,10 +26,6 @@ const MAX_MIGRATIONS = 10_000;
 export const MAX_MUTATIONS = 100_000;
 const MAX_BLOB_BYTES = 16_777_216;
 export const MAX_RETAINED_BLOB_ORDINAL = 999_999;
-
-export function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
 
 export function sha256Hex(bytes: Uint8Array | string): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;

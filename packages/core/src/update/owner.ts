@@ -13,7 +13,7 @@ import type {
   UpdatePlannerRequestV1,
 } from "./planner.js";
 import { parseBundleRelativePath } from "./release.js";
-import { parseLowerHexSha256 } from "./scalars.js";
+import { fail, parseLowerHexSha256 } from "./scalars.js";
 
 /** Spec 2 §8.3: the closed owner enum, in the canonical order every registry and plan list follows. */
 export const OWNER_UPDATE_ORDER: readonly ArtifactOwner[] = Object.freeze(["core", "claude", "codex", "macos"]);
@@ -62,10 +62,6 @@ export interface OwnerRehydrationContextV1 {
   readonly ownerRoot: CanonicalAbsolutePathV1;
   readonly tokenPaths: ReadonlyMap<PlannerPathTokenV1, CanonicalAbsolutePathV1>;
   readonly evidence: CanonicalPathEvidenceV1;
-}
-
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
 }
 
 function same(left: unknown, right: unknown): boolean {
