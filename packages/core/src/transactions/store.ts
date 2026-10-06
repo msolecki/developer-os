@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { isAbsolute, join } from "node:path";
 
 import { EXIT_CODES } from "../result.js";
+import { hasExactKeys, isLowerHexSha256, isRecord, isUtcTimestamp } from "../shape.js";
 import type {
   FileMutation,
   TransactionJournalV1,
@@ -66,25 +67,15 @@ export class TransactionStateError extends Error {
   }
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
-function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  return actual.length === keys.length && actual.every((key, index) => key === keys[index]);
-}
 
-function isIsoDate(value: unknown): value is string {
-  return typeof value === "string" && !Number.isNaN(Date.parse(value));
-}
 
 function isHash(value: unknown): value is string | null {
-  return value === null || (typeof value === "string" && /^[a-f0-9]{64}$/.test(value));
+  return value === null || isLowerHexSha256(value);
 }
 
 function isMutation(value: unknown): value is FileMutation {
-  if (!isObject(value) || !hasExactKeys(value, MUTATION_KEYS)) return false;
+  if (!isRecord(value) || !hasExactKeys(value, MUTATION_KEYS)) return false;
   return (
     typeof value.targetPath === "string" &&
     value.targetPath.length > 0 &&
@@ -123,7 +114,7 @@ function hasValidMutations(
 
 export function validateJournal(value: unknown): TransactionJournalV1 {
   if (
-    !isObject(value) ||
+    !isRecord(value) ||
     !hasExactKeys(value, JOURNAL_KEYS) ||
     value.schemaVersion !== 1 ||
     typeof value.id !== "string" ||
@@ -132,8 +123,8 @@ export function validateJournal(value: unknown): TransactionJournalV1 {
     value.kind.length === 0 ||
     typeof value.phase !== "string" ||
     !PHASES.has(value.phase as TransactionPhase) ||
-    !isIsoDate(value.createdAt) ||
-    !isIsoDate(value.updatedAt) ||
+    !isUtcTimestamp(value.createdAt) ||
+    !isUtcTimestamp(value.updatedAt) ||
     !Array.isArray(value.mutations) ||
     !hasValidMutations(value.mutations)
   ) {
@@ -162,7 +153,7 @@ export function encodeFoundationJournalJsonV1(
 }
 
 function isMissing(error: unknown): boolean {
-  return isObject(error) && error.code === "ENOENT";
+  return isRecord(error) && error.code === "ENOENT";
 }
 
 function isTransactionLockHandle(
@@ -289,7 +280,7 @@ export class TransactionStore {
   ): Promise<TransactionJournalV1> {
     return this.withTransactionLock(id, async () => {
       const current = await this.read(id);
-      if (current.phase !== expectedPhase || !isIsoDate(updatedAt)) {
+      if (current.phase !== expectedPhase || !isUtcTimestamp(updatedAt)) {
         throw new TransactionStateError("transaction transition is stale");
       }
       const terminal =

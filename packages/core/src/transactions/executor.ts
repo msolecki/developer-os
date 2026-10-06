@@ -9,6 +9,7 @@ import type {
 import type { FoundationParticipantRefV1 } from "../lifecycle/types.js";
 import type { UpdateFoundationParticipantRefV2, UpdatePayloadRefV1 } from "../update/migrations.js";
 import { EXIT_CODES } from "../result.js";
+import { hasExactKeys, isRecord } from "../shape.js";
 import { parseUtcTimestamp } from "../update/scalars.js";
 import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
 import type { UInt64DecimalV1 } from "../update/scalars.js";
@@ -191,21 +192,11 @@ function errnoOf(error: unknown): string {
   return "unknown error";
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isUnknownArray(value: unknown): value is readonly unknown[] {
   return Array.isArray(value);
 }
 
-function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  return (
-    actual.length === expected.length &&
-    actual.every((key, index) => key === expected[index])
-  );
-}
 
 /**
  * The required keys, plus any of `optional` that are present. An unknown key is still a plan

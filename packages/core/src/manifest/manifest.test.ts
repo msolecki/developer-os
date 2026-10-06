@@ -155,6 +155,7 @@ describe("validateManifest", () => {
     { name: "a NUL byte in the artifact path", value: manifestOf([artifact({ path: "/synthetic/a\0b" })]) },
     { name: "a malformed installed hash", value: manifestOf([artifact({ installedHash: "nope" })]) },
     { name: "a malformed verification timestamp", value: manifestOf([artifact({ verifiedAt: "yesterday" })]) },
+    { name: "a bare-year verification timestamp (CORE-REST-4)", value: manifestOf([artifact({ verifiedAt: "2026" })]) },
     { name: "two artifacts on one path", value: manifestOf([artifact(), artifact()]) },
     {
       name: "a pre-existing artifact without a prior hash",
