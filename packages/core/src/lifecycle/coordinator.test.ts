@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "../result.js";
-import { TransactionExecutor } from "../transactions/executor.js";
+import { TransactionConflictError, TransactionExecutor } from "../transactions/executor.js";
 import { encodeFoundationJournalJsonV1, TransactionStore, validateJournal } from "../transactions/store.js";
 import { compactTerminalCoordinator } from "./coordinator-compaction.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
@@ -249,6 +249,8 @@ interface WorldOptionsV1 {
   readonly failAt?: string;
   /** A Foundation step label whose real executor throws once at `apply`, its journal `validated`. */
   readonly failFoundationApplyAt?: string;
+  /** With `failFoundationApplyAt`, the executor's rollback of that participant then conflicts. */
+  readonly failFoundationRollback?: boolean;
   readonly pushOutcome?: "succeeded" | "failed";
   readonly stepHooks?: LifecycleParticipantAdaptersV1<SyntheticPlan>["stepHooks"];
 }
@@ -297,7 +299,11 @@ async function syntheticWorld(
   const reacquired: HeldLifecycleStableLockV1[] = [];
 
   const lockProvider = new FixtureLockProvider();
-  const applyFailure: { value: FoundationParticipantRefV1 | null } = { value: null };
+  const applyFailure: { value: FoundationParticipantRefV1 | null; applied: boolean; rollback: boolean } = {
+    value: null,
+    applied: false,
+    rollback: false,
+  };
   const foundationStore = new TransactionStore({
     stateDir: join(created, "state"),
     fs: nodeFs,
@@ -324,7 +330,13 @@ async function syntheticWorld(
           readonly phase: string;
         };
         if (journal.phase !== "validated") return;
-        applyFailure.value = null;
+        if (applyFailure.applied) {
+          applyFailure.value = null;
+          if (applyFailure.rollback) throw new TransactionConflictError();
+          return;
+        }
+        applyFailure.applied = true;
+        if (!applyFailure.rollback) applyFailure.value = null;
         throw new SyntheticDeath(`apply ${failing.id}`);
       },
       redactDiagnostic: (text) => text,
@@ -721,6 +733,8 @@ async function syntheticWorld(
       const step = steps.find((candidate) => stepLabel(candidate) === failingApply);
       if (step?.kind !== "foundation") throw new Error(`no Foundation step labelled ${failingApply}`);
       applyFailure.value = refs.find((ref) => ref.id === step.participantId) ?? null;
+      applyFailure.applied = false;
+      applyFailure.rollback = worldOptions.failFoundationRollback === true;
     }
     const wrapped: LifecycleParticipantAdaptersV1<SyntheticPlan> =
       failing === undefined
@@ -1283,6 +1297,53 @@ describe("a Foundation participant that fails mid-apply (NEW-151)", () => {
       expect.objectContaining({ reason: "lifecycle_coordinator_participant_state" }),
     );
     expect(await world.fs.lstat(finalPath)).not.toBeNull();
+  }, 120_000);
+
+  it("refuses with a reason code when the participant's own rollback conflicts", async () => {
+    const world = await syntheticWorld("git_disable");
+    await expect(
+      world.execute({ failFoundationApplyAt: "F(activation)", failFoundationRollback: true }),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        reason: "lifecycle_foundation_participant_not_terminal",
+        code: EXIT_CODES.recoveryRequired,
+      }),
+    );
+  }, 120_000);
+
+  it("finishes compaction clear after a death between the cursor journal's unlink and its lock's", async () => {
+    const world = await syntheticWorld("git_disable");
+    const failing = world.plan.steps[1];
+    if (failing?.kind !== "foundation") throw new Error("no Foundation step at 1");
+    const participant = world.plan.participants.foundation.find((ref) => ref.id === failing.participantId);
+    if (participant === undefined) throw new Error("no participant ref");
+    const target = participant.mutations[0]?.targetPath;
+    if (target === undefined) throw new Error("no participant target");
+    const { outcome } = await world.execute({ failFoundationApplyAt: "F(activation)" });
+    expect(outcome.kind).toBe("rolled_back");
+    const [record] = (await world.inspect()).coordinators;
+    if (record === undefined) throw new Error("no coordinator record");
+
+    const dependencies = world.dependencies();
+    const fs: LifecycleGuardedFileSystemV1 = Object.assign(Object.create(dependencies.fs) as LifecycleGuardedFileSystemV1, {
+      unlinkExact: async (entry: Parameters<LifecycleGuardedFileSystemV1["unlinkExact"]>[0]) => {
+        await dependencies.fs.unlinkExact(entry);
+        if (entry.path === participant.initialJournal.finalPath) throw new SyntheticDeath("journal_unlinked");
+      },
+    });
+    await expect(compactTerminalCoordinator({ ...dependencies, fs }, record, world.global)).rejects.toThrow(
+      SyntheticDeath,
+    );
+    expect(await world.fs.lstat(participant.initialJournal.finalPath)).toBeNull();
+    /** Rolled back, the target is the user's again: a file they create there must not wedge recovery. */
+    await nodeFs.writeFile(target, "user\n", { mode: 0o600 });
+
+    const snapshot = await world.recover();
+    expect(snapshot.coordinators).toStrictEqual([]);
+    expect(snapshot.foundation.journals.size).toBe(0);
+    expect(snapshot.findings).toStrictEqual([]);
+    expect(snapshot.closure).toStrictEqual({ kind: "clear" });
+    expect(await nodeFs.readFile(target, "utf8")).toBe("user\n");
   }, 120_000);
 });
 

@@ -26,6 +26,7 @@ import {
   type LifecycleVariantFactsV1,
 } from "./grammar.js";
 import {
+  LifecycleRecoveryRequiredError,
   refuseLifecycleRecovery,
   type LifecycleGuardedFileSystemV1,
 } from "./guarded-fs.js";
@@ -642,7 +643,16 @@ export class LifecycleCoordinator<TPlan extends CoordinatorPlan> {
         }
         if (phase !== "rolled_back") {
           await requireHeldGlobalLock(this.dependencies.fs, session.global);
-          await adapters.foundation.rollback(ref);
+          try {
+            await adapters.foundation.rollback(ref);
+          } catch (error) {
+            // A conflict or lock failure inside the executor carries no reason code of its own.
+            if (error instanceof LifecycleRecoveryRequiredError) throw error;
+            refuseLifecycleRecovery(
+              "lifecycle_foundation_participant_not_terminal",
+              ref.initialJournal.finalPath,
+            );
+          }
           if ((await this.foundationJournalPhase(ref)) !== "rolled_back") {
             refuseLifecycleRecovery(
               "lifecycle_foundation_participant_not_terminal",

@@ -1,8 +1,9 @@
 import type { BigIntStats } from "node:fs";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 
 import {
   buildConflictEvidence,
+  containsPath,
   encodeCanonicalJson,
   EXIT_CODES,
   extractInstructionBlock,
@@ -101,10 +102,9 @@ function vendorRoot(homes: VendorHomesV1, vendor: Vendor): string {
 
 /** `foundation.md` §12.5: a symlink at any component from the vendor root down refuses, exit 5. */
 async function refuseSymlinkedComponents(fs: InstructionFileSystemV1, root: string, path: string): Promise<void> {
-  const rel = relative(root, path);
-  const components = rel.startsWith("..") || isAbsolute(rel)
+  const components = !containsPath(root, path)
     ? [path]
-    : rel.split(sep).filter((segment) => segment !== "").reduce((all, segment) => [...all, join(all.at(-1) ?? root, segment)], [root]);
+    : relative(root, path).split(sep).filter((segment) => segment !== "").reduce((all, segment) => [...all, join(all.at(-1) ?? root, segment)], [root]);
   for (const component of components) {
     const stats = await fs.lstat(component);
     if (stats === null) return;

@@ -331,6 +331,21 @@ describe("planInstructionDetach", () => {
     expect(linkedParent.paths).toEqual([`${C}/agents`]);
   });
 
+  /** NEW-152: `..x` is a child of the vendor root, not its parent, so its symlink is still walked. */
+  it("refuses a symlink at a vendor-root child named `..x` with exit 5", async () => {
+    const dotted = `${C}/..x/developer-os-r.toml`;
+    const base = installed();
+    const manifest = {
+      ...base.manifest,
+      artifacts: [...base.manifest.artifacts.filter((row) => row.path !== agentToml), contentRow("codex", dotted, "toml", "agent", "r")],
+    } as unknown as InstallationManifestV2;
+    const files = { ...without(base.files, agentToml), [`${C}/..x`]: "<link>" };
+    const error = await refusal(planInstructionDetach({ ...input({ files }), manifest }));
+    expect(error.reason).toBe("instruction_target_symlinked");
+    expect(error.code).toBe(EXIT_CODES.securityRefusal);
+    expect(error.paths).toEqual([`${C}/..x`]);
+  });
+
   it("removes product-created directories the plan empties, deepest first, and preserves a non-empty one", async () => {
     const files = { ...installed().files, [`${C}/config.toml`]: "user" };
     const plan = transaction(await planInstructionDetach(input({ files })));
