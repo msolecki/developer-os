@@ -300,7 +300,7 @@ async function codexRollbackFixture(): Promise<RollbackComposed> {
     observe: (path) => Promise.resolve(world.get(path) ?? null),
     codexHomes: SYNTHETIC_CODEX_HOMES,
     previousBundle: previousRelease.manifest,
-    retained: { owners: evidence.owners, migrations: evidence.migrations, entryCount: evidence.payload.entryCount, aggregateBytes: evidence.payload.aggregateBytes },
+    retained: { owners: evidence.owners, migrations: evidence.migrations, entryCount: evidence.payload.entryCount, aggregateBytes: evidence.payload.aggregateBytes, exactStepListHash: rollbackTemplateHash(evidence) },
   };
   return { input: { coordinatorId: COORDINATOR, home, preview }, world, deps };
 }
