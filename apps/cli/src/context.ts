@@ -137,6 +137,7 @@ export interface CliGuards {
   readonly readText: (
     path: string,
     reader?: (handle: FileHandle) => Promise<string>,
+    options?: { readonly requireCanonical?: boolean },
   ) => Promise<string>;
   /**
    * Full canonicalization, final component included — the shape
@@ -452,7 +453,8 @@ export function createGuards(
     readText: (
       path: string,
       reader?: (handle: FileHandle) => Promise<string>,
-    ): Promise<string> => policy.readText(path, reader),
+      options?: { readonly requireCanonical?: boolean },
+    ): Promise<string> => policy.readText(path, reader, options),
     canonicalize: canonicalizePlannedPath,
     redactDiagnostic,
     redactData: (data: unknown) => redactPayload(redactDiagnostic, data),

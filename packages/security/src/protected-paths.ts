@@ -119,11 +119,21 @@ export class ProtectedPathPolicy {
     await this.#resolveAllowed(path);
   }
 
+  /**
+   * `requireCanonical`: refuse unless `path` already is its own canonical path,
+   * for a caller that checked containment on a canonical path and must read
+   * exactly that file — a symlink planted between its check and this read
+   * would otherwise be followed here. Off by default.
+   */
   async readText(
     path: string,
     reader: (handle: FileHandle) => Promise<string> = defaultUtf8Reader,
+    options: { readonly requireCanonical?: boolean } = {},
   ): Promise<string> {
     const canonicalPath = await this.#resolveAllowed(path);
+    if (options.requireCanonical === true && canonicalPath !== resolve(path)) {
+      throw new SecurityRefusalError("Readable path is not canonical");
+    }
     let expectedIdentity: Awaited<ReturnType<typeof stat>>;
     try {
       expectedIdentity = await stat(canonicalPath, { bigint: true });

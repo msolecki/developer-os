@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import type { DirectoryEntry, DirectoryReader } from "./discovery/index.js";
@@ -117,6 +121,7 @@ describe("BrainService.reindex", () => {
       readFile: true,
       assertReadable: true,
       canonicalize: true,
+      readCanonicalFile: true,
       now: true,
     };
     expect(Object.keys(keys)).not.toContain("writeFile");
@@ -473,6 +478,33 @@ describe("BrainService.sessionContext", () => {
     const context = await new BrainService(deps).sessionContext("developer-os");
     expect(context.projectNote).toBeNull();
     expect(reads.filter((path) => path.includes("os.md") || path.includes("/home/u/"))).toStrictEqual([]);
+  });
+
+  it("refuses a real symlinked note through the default canonicalization, and reads a real one", async () => {
+    const fresh = await new BrainService(harness(PROJECT_VAULT).deps).reindex();
+    const root = await mkdtemp(join(tmpdir(), "developer-os-brain-session-"));
+    try {
+      const outside = join(root, "outside.md");
+      await writeFile(outside, "OUTSIDE SECRET\n", "utf8");
+      async function vault(name: string, linked: boolean): Promise<BrainService> {
+        const vaultRoot = join(root, name);
+        for (const [path, text] of Object.entries({ ...PROJECT_VAULT, ...fresh.files })) {
+          const target = join(vaultRoot, path);
+          await mkdir(dirname(target), { recursive: true });
+          if (linked && path === "content/PROJECTS/os.md") await symlink(outside, target);
+          else await writeFile(target, text, "utf8");
+        }
+        // No `canonicalize`: the default `canonicalizePlannedPath` resolves the real symlink.
+        const { reader, config, assertReadable, now } = harness({}).deps;
+        return new BrainService({ reader, config, assertReadable, now, vaultRoot, readFile: (path) => readFile(path, "utf8") });
+      }
+      expect((await (await vault("linked", true)).sessionContext("developer-os")).projectNote).toBeNull();
+      expect((await (await vault("plain", false)).sessionContext("developer-os")).projectNote?.text).toBe(
+        PROJECT_VAULT["content/PROJECTS/os.md"],
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("returns a null vault map and no note when the index is missing", async () => {

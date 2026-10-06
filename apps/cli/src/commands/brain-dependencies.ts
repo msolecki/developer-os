@@ -33,6 +33,7 @@ export function dependenciesFor(
       },
     },
     readFile: (path: string) => context.guards.readText(path),
+    readCanonicalFile: (path: string) => context.guards.readText(path, undefined, { requireCanonical: true }),
     assertReadable: async (path: string): Promise<void> => {
       await context.guards.manifest.assertReadable(path);
     },

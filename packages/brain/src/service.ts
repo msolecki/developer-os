@@ -40,6 +40,12 @@ export interface BrainServiceDependencies {
   readonly readFile: (path: string) => Promise<string>;
   readonly assertReadable: (path: string) => Promise<void>;
   readonly canonicalize?: (path: string) => Promise<string>;
+  /**
+   * Reads a path only if it already is canonical, refusing otherwise. The
+   * session-context note uses it, when present, so a symlink planted between
+   * the containment check and the read is refused rather than followed.
+   */
+  readonly readCanonicalFile?: (path: string) => Promise<string>;
   readonly now: () => Date;
 }
 
@@ -319,7 +325,7 @@ export class BrainService {
     await this.deps.assertReadable(path);
     return {
       vaultMap,
-      projectNote: { title: match.title, text: await this.deps.readFile(path) },
+      projectNote: { title: match.title, text: await (this.deps.readCanonicalFile ?? this.deps.readFile)(path) },
     };
   }
 
