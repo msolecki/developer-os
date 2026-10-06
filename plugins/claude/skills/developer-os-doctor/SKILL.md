@@ -3,7 +3,7 @@ name: "developer-os-doctor"
 description: "Report the installation's health and the agent capability matrix."
 ---
 
-<!-- Generated from workflows/doctor/workflow.yaml (doctor@1.0.0). Do not edit. -->
+<!-- Generated from workflows/doctor/workflow.yaml (doctor@1.1.0). Do not edit. -->
 
 ## Always
 
