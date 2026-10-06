@@ -428,4 +428,22 @@ describe("the production planner child", () => {
     expect(outcome).toBeInstanceOf(SecurityRefusalError);
     expect((outcome as Error).cause).toMatchObject({ code: "EAGAIN" });
   });
+
+  it("retries a failed ps once before failing", async () => {
+    let calls = 0;
+    const flakyPs = (_file: string, _args: readonly string[], _options: object, callback: (error: Error | null, stdout: string) => void): void => {
+      calls += 1;
+      if (calls === 1) callback(new Error("spawn EAGAIN"), "");
+      else callback(null, `${String(process.pid)} 1 2048\n${String(process.pid + 1)} ${String(process.pid)} 10\n`);
+    };
+    expect(await sampleNodePlannerProcess(process.pid, flakyPs)).toEqual({ residentBytes: 2048 * 1024, descendants: 1 });
+    expect(calls).toBe(2);
+    let failures = 0;
+    const deadPs = (_file: string, _args: readonly string[], _options: object, callback: (error: Error | null, stdout: string) => void): void => {
+      failures += 1;
+      callback(new Error("spawn EAGAIN"), "");
+    };
+    await expect(sampleNodePlannerProcess(process.pid, deadPs)).rejects.toBeInstanceOf(SecurityRefusalError);
+    expect(failures).toBe(2);
+  });
 });

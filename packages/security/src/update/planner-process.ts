@@ -386,30 +386,36 @@ export type PsRunner = (
  */
 export function sampleNodePlannerProcess(pid: number, runPs: PsRunner = execFile): Promise<PlannerProcessSampleV1 | null> {
   return new Promise((resolveSample, rejectSample) => {
-    runPs("/bin/ps", ["-A", "-o", "pid=,ppid=,rss="], { env: {}, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
-      // W2-SEC-UPD-2: a failed snapshot (EAGAIN at the process limit, maxBuffer) is not "gone".
-      if (error !== null) {
-        rejectSample(new SecurityRefusalError("Unable to sample the supervised process", { cause: error }));
-        return;
-      }
-      const rows = stdout.split("\n").map((line) => line.trim().split(/\s+/u).map(Number)).filter((row) => row.length === 3 && row.every(Number.isSafeInteger));
-      const own = rows.find((row) => row[0] === pid);
-      if (own === undefined) {
-        resolveSample(null);
-        return;
-      }
-      const tree = new Set([pid]);
-      let grew = true;
-      while (grew) {
-        grew = false;
-        for (const [child, parent] of rows) {
-          if (parent !== undefined && child !== undefined && tree.has(parent) && !tree.has(child)) {
-            tree.add(child);
-            grew = true;
-          }
+    // W2-SEC-UPD-2: a failed snapshot (EAGAIN at the process limit, maxBuffer) is not "gone"; it is
+    // retried once, then rejected so the supervisor kills and refuses. It never reads as `null`.
+    const attempt = (retriesLeft: number): void => {
+      runPs("/bin/ps", ["-A", "-o", "pid=,ppid=,rss="], { env: {}, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+        if (error !== null) {
+          if (retriesLeft > 0) attempt(retriesLeft - 1);
+          else rejectSample(new SecurityRefusalError("Unable to sample the supervised process", { cause: error }));
+          return;
         }
-      }
-      resolveSample({ residentBytes: (own[2] ?? 0) * 1024, descendants: tree.size - 1 });
-    });
+        resolveSample(sampleFrom(stdout, pid));
+      });
+    };
+    attempt(1);
   });
+}
+
+function sampleFrom(stdout: string, pid: number): PlannerProcessSampleV1 | null {
+  const rows = stdout.split("\n").map((line) => line.trim().split(/\s+/u).map(Number)).filter((row) => row.length === 3 && row.every(Number.isSafeInteger));
+  const own = rows.find((row) => row[0] === pid);
+  if (own === undefined) return null;
+  const tree = new Set([pid]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [child, parent] of rows) {
+      if (parent !== undefined && child !== undefined && tree.has(parent) && !tree.has(child)) {
+        tree.add(child);
+        grew = true;
+      }
+    }
+  }
+  return { residentBytes: (own[2] ?? 0) * 1024, descendants: tree.size - 1 };
 }
