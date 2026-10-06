@@ -145,6 +145,25 @@ describe("planUpdate", () => {
     expect(fixture.events).not.toContain("scratch.create");
   });
 
+  it("returns up_to_date after a rollback, when the trust watermark is above the active release (W2-PLANNING-2)", async () => {
+    const fixture = createUpdateFixture({ releases: [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }] });
+    const update = {
+      ...fixture.update,
+      readHome: async () => {
+        const home = await fixture.update.readHome();
+        return { ...home, trust: { ...home.trust, highestAcceptedReleaseSequence: "2", releaseIdentityHash: createHash("sha256").update("rolled-back-from").digest("hex") } as typeof home.trust };
+      },
+    };
+    const planned = await planUpdate(update, { version: "1.0.0" as never });
+
+    expect(planned.result).toStrictEqual({ schemaVersion: 1, outcome: "up_to_date", active: fixture.current });
+  });
+
+  it("refuses up_to_date over metadata older than the trust watermark", async () => {
+    const fixture = createUpdateFixture({ releases: [{ version: "1.0.0", sequence: "1" }], trustSequence: "3" });
+    expect(await refusal(planUpdate(fixture.update, { version: null }))).toStrictEqual({ reason: "update_trust_replay", code: EXIT_CODES.securityRefusal });
+  });
+
   it.each([
     ["a version the index does not carry", { }, "9.9.9", "update_release_not_found", EXIT_CODES.invalidInput],
     ["a downgrade", { active: "1.1.0" }, "1.0.0", "update_downgrade_refused", EXIT_CODES.invalidInput],
@@ -183,6 +202,26 @@ describe("planUpdate", () => {
     const fixture = createUpdateFixture({ plannerFailure: new SecurityRefusalError("Planner frame failed the secret screen") });
     expect((await refusal(planUpdate(fixture.update, { version: null }))).code).toBe(EXIT_CODES.securityRefusal);
     expect(fixture.events.at(-1)).toBe("scratch.cleanup");
+  });
+
+  it("keeps the planning refusal and its exit code when scratch cleanup also fails (W2-PLANNING-4)", async () => {
+    const fixture = createUpdateFixture({ plannerFailure: new SecurityRefusalError("Planner frame failed the secret screen") });
+    const cleanupFailure = new Error("scratch cleanup failed");
+    const update = {
+      ...fixture.update,
+      scratch: {
+        ...fixture.update.scratch,
+        create: async (input: Parameters<typeof fixture.update.scratch.create>[0]) => ({
+          ...(await fixture.update.scratch.create(input)),
+          cleanup: () => Promise.reject(cleanupFailure),
+        }),
+      },
+    };
+    const error: unknown = await planUpdate(update, { version: null }).then(() => null, (caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(SecurityRefusalError);
+    expect((error as SecurityRefusalError).code).toBe(EXIT_CODES.securityRefusal);
+    expect((error as Error).cause).toBe(cleanupFailure);
   });
 
   it("refuses insufficient capacity without a preview and still removes scratch", async () => {

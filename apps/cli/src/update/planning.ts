@@ -634,8 +634,12 @@ async function planUpdateAttempt(
     // Equal version is not enough: the signed bundle must be the one this home runs.
     const bundle = chain.index.releases.find((entry) => entry.version === current.version)?.bundles[current.architecture === "arm64" ? 0 : 1];
     if (bundle?.manifestSha256 !== current.bundleManifestHash) refuse("update_release_identity_rebound", EXIT_CODES.securityRefusal);
-    await classified("update_trust_replay", EXIT_CODES.securityRefusal, () =>
-      advanceReleaseTrust(home.trust, { ...metadata, releaseSequence: current.releaseSequence, releaseIdentityHash: current.releaseIdentityHash }));
+    // Only metadata freshness: a rollback keeps the release high watermark above the active
+    // release, so the release half is checked as guarded-active, never advanced (W2-PLANNING-2).
+    await classified("update_trust_replay", EXIT_CODES.securityRefusal, () => {
+      admitReleaseAgainstTrust(home.trust, current, "guarded_active");
+      advanceReleaseTrust(home.trust, { ...metadata, releaseSequence: home.trust.highestAcceptedReleaseSequence, releaseIdentityHash: home.trust.releaseIdentityHash });
+    });
     return { result: { schemaVersion: 1, outcome: "up_to_date", active: current }, candidate: null, apply: null };
   }
 
@@ -685,7 +689,7 @@ async function planUpdateAttempt(
     manifest: bundleManifest,
     maximumScratchBytes: MAXIMUM_SCRATCH_BYTES,
   });
-  let retainedScratch = false;
+  let cleanupOwed = true;
   try {
     await attempt.download((sink) => transport.get({ kind: "archive", delegation: delegationV1, bundle: selected.bundle, sink }));
     const verified = await attempt.extract(selected.bundle);
@@ -694,11 +698,20 @@ async function planUpdateAttempt(
     const inputs: UpdateTargetInputsV1 = { current, target, metadata, signedMetadata, bundle: selected.bundle, bundleManifest, verified, transport, plannedAt, retained, observation: null };
     const materialized = await materializeUpdate(update, home, inputs);
     const result = { schemaVersion: 1, outcome: "preview", plan: materialized.candidate.preview } as const;
-    if (!options.retainScratch) return { result, candidate: materialized.candidate, apply: null };
-    retainedScratch = true;
+    cleanupOwed = false;
+    if (!options.retainScratch) {
+      await attempt.cleanup();
+      return { result, candidate: materialized.candidate, apply: null };
+    }
     return { result, candidate: materialized.candidate, apply: { home, inputs: { ...inputs, observation: materialized.observation }, materialized, scratch: attempt } };
-  } finally {
-    if (!retainedScratch) await attempt.cleanup();
+  } catch (error) {
+    // A cleanup failure never masks the planning refusal and its exit code (W2-PLANNING-4).
+    if (cleanupOwed) {
+      await attempt.cleanup().catch((cleanupFailure: unknown) => {
+        if (error instanceof Error && error.cause === undefined) error.cause = cleanupFailure;
+      });
+    }
+    throw error;
   }
 }
 
