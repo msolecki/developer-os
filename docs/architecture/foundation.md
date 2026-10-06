@@ -745,7 +745,10 @@ behaviour described here.
 ## 6. Exit codes
 
 Stable, and part of the contract. `doctor` picks the most severe code among failing checks, in
-this order, and the recovery text it prints comes from the check that decided the code.
+this order, and the recovery text it prints comes from the check that decided the code. A failing
+`doctor` is still a complete report: the failure (`kind: doctor_failed`) carries the whole
+`DoctorReportV1` as its redacted `error.data`, and human output prints the same per-check lines as
+a passing run (NEW-150).
 
 | Code | Name | Means |
 |---:|---|---|
@@ -1564,8 +1567,9 @@ the other adapter nor the CLI.
   by `(owner, category, id)`, each `installed`, `drifted`, `missing`, `emulated` (a Codex scoped
   rule), `unsupported-vendor` (a Codex output style) or `held-back`. Any drifted row makes its
   artifact `drifted`. It fails, exit 3, on `drifted`, `missing` or `block_malformed`, and warns on
-  `unsupported-vendor`, `held-back` and a set `CLAUDE_CONFIG_DIR`. Human output is one
-  `<owner> <category>/<id>: <source>, <state>` line per artifact.
+  `unsupported-vendor`, `held-back` and a set `CLAUDE_CONFIG_DIR`. Human output follows a
+  non-passing `instructions` check with one `<owner> <category>/<id>: <source>, <state>` line per
+  artifact (`apps/cli/src/main.ts` — `renderDoctor`), on success and on failure alike.
 - `held-back` is a Claude category in
   `apps/cli/src/instructions/attach.ts` — `UNPROVEN_CLAUDE_CATEGORIES`: not installed until a real
   session proves it loads. The set has been empty since the billed row passed

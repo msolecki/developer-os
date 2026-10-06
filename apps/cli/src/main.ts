@@ -26,7 +26,7 @@ import { runCapture } from "./commands/capture.js";
 import type { CaptureResultV1 } from "./commands/capture.js";
 import { renderConfigResult, runConfig } from "./commands/config.js";
 import type { ConfigCommandRequestV1 } from "./commands/config.js";
-import { runDoctor } from "./commands/doctor.js";
+import { describeInstructions, runDoctor } from "./commands/doctor.js";
 import type { DoctorReportV1 } from "./commands/doctor.js";
 import { renderGit, runGit } from "./commands/git/index.js";
 import type { GitCommandRequestV1 } from "./commands/git/index.js";
@@ -513,10 +513,21 @@ function renderStatus(report: StatusReportV1): readonly string[] {
   ];
 }
 
+/** `foundation.md` §12.6: a non-passing `instructions` check is followed by one line per artifact (NEW-155). */
 function renderDoctor(report: DoctorReportV1): readonly string[] {
-  return report.checks.map(
-    (check) => `[${check.status}] ${check.id}: ${renderPath(check.message)}`,
-  );
+  const instructionsPass = report.checks.some((check) => check.id === "instructions" && check.status === "pass");
+  return [
+    ...report.checks.map((check) => `[${check.status}] ${check.id}: ${renderPath(check.message)}`),
+    ...(instructionsPass ? [] : describeInstructions(report).map((line) => `  ${renderPath(line)}`)),
+  ];
+}
+
+/** A failing doctor carries its whole report as `error.data` (NEW-150); anything else renders nothing. */
+function renderDoctorFailure(data: unknown): readonly string[] {
+  const report = data as Partial<DoctorReportV1> | null;
+  return typeof report === "object" && report !== null && Array.isArray(report.checks) && Array.isArray(report.instructions)
+    ? renderDoctor(report as DoctorReportV1)
+    : [];
 }
 
 function renderRepair(result: RepairResultV1): readonly string[] {
@@ -563,6 +574,7 @@ function emit<T>(
   result: CliResult<T>,
   json: boolean,
   render: (data: T) => readonly string[],
+  renderFailureData?: (data: unknown) => readonly string[],
 ): ExitCode {
   if (json) {
     // Not sanitized: `JSON.stringify` escapes `\p{Cc}`, and a machine consumer
@@ -604,7 +616,10 @@ function emit<T>(
    * block, the CLI's primary help surface, into a single line of replacement
    * characters.
    */
-  writeLines(io.stderr, result.error.message);
+  /** A failure that carries its report prints the report in place of the summary message. */
+  const reportLines = result.error.data === undefined ? [] : (renderFailureData?.(result.error.data) ?? []);
+  for (const line of reportLines) io.stdout(line);
+  if (reportLines.length === 0) writeLines(io.stderr, result.error.message);
   for (const path of result.error.paths) io.stderr(`  ${renderPath(path)}`);
   if (result.error.recovery !== undefined) {
     writeLines(io.stderr, `Recovery: ${result.error.recovery}`);
@@ -870,6 +885,7 @@ async function dispatch(
         }),
         json,
         renderDoctor,
+        renderDoctorFailure,
       );
     case "repair":
       return emit(

@@ -19,6 +19,7 @@ import type { ProcessRequest, ProcessResult, ProcessRunner } from "@developer-os
 
 import { codexPluginTreeHash } from "../instructions/codex-registration.js";
 import { withLifecycleMutation } from "../lifecycle/mutation-gate.js";
+import { run } from "../main.js";
 import type { ReleaseFileV1 } from "../update/local-release.js";
 import { describeInstructions, hasBlockingFailure, runDoctor, runDoctorReport } from "./doctor.js";
 import type { DoctorReportV1, InstructionStatusV1 } from "./doctor.js";
@@ -357,6 +358,14 @@ describe("doctor names every instruction artifact", () => {
     expect(check(report, "drift").status).toBe("pass");
     expect(hasBlockingFailure(report)).toBe(false);
     expect(JSON.stringify(report)).not.toContain("Be reckless.");
+
+    /** NEW-150/NEW-155: the human failure names each drifted artifact, not only a count. */
+    fixture.io.out.length = 0;
+    expect(await run(["doctor"], fixture.io, () => fixture.context)).toBe(EXIT_CODES.decisionRequired);
+    const human = fixture.io.out.join("\n");
+    expect(human).toMatch(/^\[fail\] instructions: /mu);
+    expect(human).toContain("claude skill/triage: default, drifted");
+    expect(human).toContain("claude output-style/terse: default, missing");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("reports malformed block markers as block_malformed and the block's members as drifted", async () => {
