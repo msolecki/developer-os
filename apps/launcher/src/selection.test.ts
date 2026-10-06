@@ -4,6 +4,7 @@ import type { KeyObject } from "node:crypto";
 import {
   encodeCanonicalJson,
   releaseIdentityHash,
+  rollbackBindingHash,
   signedReleaseDocumentSigningBytes,
   validateBundleManifest,
   validateOfficialReleaseOrigin,
@@ -16,6 +17,7 @@ import type {
   LowerHexSha256,
   OfflineRootKeyV1,
   ReleaseBundleManifestV1,
+  RollbackPayloadIdV1,
   UInt64DecimalV1,
 } from "@developer-os/core";
 import type { LauncherGuardedReaderV1 } from "@developer-os/platform-macos";
@@ -374,7 +376,13 @@ describe("selectLauncherCandidate", () => {
       installed,
       previous,
       executionBindingHash: sha256(Buffer.from("execution-binding")),
-      rollbackBindingHash: sha256(Buffer.from("rollback-binding")),
+      // The binding the record's own fields derive, as `buildRollbackPayload` writes it (W2-ROLLBACK-2).
+      rollbackBindingHash: rollbackBindingHash({
+        executionBindingHash: sha256(Buffer.from("execution-binding")),
+        payloadId: `rb_${"d".repeat(64)}_1` as RollbackPayloadIdV1,
+        installedReleaseIdentityHash: installed.releaseIdentityHash as LowerHexSha256,
+        previousReleaseIdentityHash: previous.releaseIdentityHash,
+      }),
       payloadId: `rb_${"d".repeat(64)}_1`,
       payloadInventoryHash: sha256(Buffer.from("inventory")),
       inversePlanHash: sha256(Buffer.from("inverse-plan")),
