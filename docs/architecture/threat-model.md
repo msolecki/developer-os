@@ -842,7 +842,7 @@ is `chmod g-w` on the directory or a user-owned install. `posix_root_owned` syst
 directory, `/opt/homebrew/bin`, is user-owned and stays admitted. **That admission is a residual,
 not a safe case:** a user-owned directory with a shared group (Homebrew's `msolecki:admin`, `0775`)
 lets every other member of that group plant a binary, and it is accepted as a usability trade-off
-for Homebrew pending the founder's ruling.
+for Homebrew, accepted by the founder (D85, 2026-10-06; NEW-145 closed).
 
 What this does **not** mean: it is not a privilege escalation. The binary runs as the user, from the
 user's own `PATH`, and anyone who can plant it there can already run code as that user. What it costs

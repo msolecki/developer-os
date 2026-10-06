@@ -355,6 +355,11 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D85 (2026-10-06), founder: Homebrew's group-writable bin is accepted.** NEW-145: a user-owned,
+  group-writable executable directory with a shared group (Homebrew's `/opt/homebrew/bin`,
+  `msolecki:admin 0775`) stays admitted. Another member of that group could plant a binary there;
+  on a single-admin Mac that is no wider than the same-uid boundary, and refusing it would break
+  ordinary Homebrew installs. Root-owned group-writable directories stay refused (D83 (3)).
 - **D84 (2026-10-05), founder: release trust, A16 and five open questions.** (1) Task 11b: the
   product does not ship its own offline root key; `update` trusts a distribution channel (npm or
   Homebrew, with their signing and verification) instead. This supersedes D46's root-key design and

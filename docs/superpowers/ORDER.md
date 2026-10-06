@@ -77,8 +77,7 @@ Wave 1 of D83/D84 is integrated (2026-10-06): NEW-143, NEW-120, NEW-130, NEW-40,
 NEW-35, workflow versions, the Spec 2 §4.2 amendment, one retention walk and status `off`
 (the wording half of NEW-134; its real garden run stays owed).
 
-Needs a founder decision: NEW-145 (a user-owned group-writable executable directory with a shared
-group, such as Homebrew's `/opt/homebrew/bin`, is still admitted: accept it or refuse it).
+Needs a founder decision: none open (2026-10-06; NEW-145 accepted, D85).
 
 Conditional: NEW-27 when a real write scope is wired, NEW-28 when a production argument reaches the
 retained screening refusal, NEW-100's round trip after A16 (D42).
@@ -102,6 +101,5 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
 - Founder stop points: 5, listed above.
-- Startable rows: 7. Founder decisions: 1 open (NEW-145).
-- Repository backlog: 21 open numbered rows (`BACKLOG.md` §1), plus the Foundation watchdog decision
-  and the §6 phase-close deferrals.
+- Startable rows: 7. Founder decisions: none open.
+- Repository backlog: 20 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
