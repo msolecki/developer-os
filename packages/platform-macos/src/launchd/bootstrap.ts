@@ -244,14 +244,16 @@ function scanPrintedService(text: string, target: string): ScannedPrintedService
 
 /**
  * NEW-169: the service's top-level `last exit code`, read through the same structural pass, exactly
- * once and a plain decimal; `(never exited)` and anything else are null. Both plist output paths are
+ * once and a decimal, optionally followed by `: <NAME>`; `(never exited)` and anything else are null. Both plist output paths are
  * the null sink, so for a job that died before the runner wrote its status record this is the only
  * trace. Nothing else in the dump is read or retained.
  */
 export function parseLaunchctlLastExitCode(text: string, target: string): number | null {
   const values = scanPrintedService(text, target)?.scalars.get("last exit code");
   const value = values?.length === 1 ? values[0] : undefined;
-  return value !== undefined && /^(0|[1-9][0-9]{0,9})$/u.test(value) ? Number(value) : null;
+  // macOS 26.6.2 names a known code: `last exit code = 78: EX_CONFIG` (NEW-144). Only the integer is kept.
+  const code = value === undefined ? undefined : /^(0|[1-9][0-9]{0,9})(?:: [A-Za-z_][A-Za-z0-9_ ]*)?$/u.exec(value)?.[1];
+  return code === undefined ? null : Number(code);
 }
 
 /**

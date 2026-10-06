@@ -266,6 +266,8 @@ describe("parseLaunchctlLastExitCode (NEW-169)", () => {
     expect(parseLaunchctlLastExitCode(CAPTURED_PRINT_26_6_2, target)).toBeNull();
     expect(parseLaunchctlLastExitCode(exited("78"), target)).toBe(78);
     expect(parseLaunchctlLastExitCode(exited("0"), target)).toBe(0);
+    // Seen on macOS 26.6.2 (2026-10-05, NEW-144) for a job whose program could not be exec'd.
+    expect(parseLaunchctlLastExitCode(exited("78: EX_CONFIG"), target)).toBe(78);
   });
 
   it("is null for another target, a duplicated or nested line, or a value that is not a decimal", () => {
@@ -274,6 +276,8 @@ describe("parseLaunchctlLastExitCode (NEW-169)", () => {
     expect(parseLaunchctlLastExitCode(exited("78").replace("\t\tSSH_AUTH_SOCK", "\tlast exit code = 0\n\t\tSSH_AUTH_SOCK"), target)).toBeNull();
     expect(parseLaunchctlLastExitCode(exited("-1"), target)).toBeNull();
     expect(parseLaunchctlLastExitCode(exited("78x"), target)).toBeNull();
+    expect(parseLaunchctlLastExitCode(exited("78: "), target)).toBeNull();
+    expect(parseLaunchctlLastExitCode(exited("78:EX_CONFIG"), target)).toBeNull();
   });
 });
 
