@@ -24,8 +24,10 @@ export interface StatusReportV1 {
   readonly configPresent: boolean;
   readonly brainPresent: boolean;
   readonly managedArtifacts: number;
-  readonly driftCount: number;
-  readonly incompleteTransactions: readonly string[];
+  /** `null`: the inspection failed (a warning says why), which is not the same as a clean zero. */
+  readonly driftCount: number | null;
+  /** `null`: the journals could not be read. */
+  readonly incompleteTransactions: readonly string[] | null;
   readonly agents: readonly AgentDiscovery[];
 }
 
@@ -72,10 +74,11 @@ export async function runStatus(
     }
 
     // Like config and the manifest, an unreadable artifact degrades to a warning (W2-GAP-STATE-2).
-    let drift: Awaited<ReturnType<typeof inspectManagedDrift>> = [];
+    let drift: Awaited<ReturnType<typeof inspectManagedDrift>> | null = [];
     try {
       if (manifest !== null) drift = await inspectManagedDrift(context, manifest, paths);
     } catch (error) {
+      drift = null;
       warnings.push(
         context.guards.redactDiagnostic(
           error instanceof Error
@@ -98,10 +101,11 @@ export async function runStatus(
       );
     }
 
-    let incomplete: Awaited<ReturnType<typeof listIncompleteTransactions>> = [];
+    let incomplete: Awaited<ReturnType<typeof listIncompleteTransactions>> | null = [];
     try {
       incomplete = await listIncompleteTransactions(context);
     } catch (error) {
+      incomplete = null;
       warnings.push(
         context.guards.redactDiagnostic(
           error instanceof Error
@@ -138,8 +142,8 @@ export async function runStatus(
         configPresent: config !== null,
         brainPresent: (await isDirectory(context, paths.brain)) === true,
         managedArtifacts: manifest?.artifacts.length ?? 0,
-        driftCount: drift.length,
-        incompleteTransactions: incomplete.map((entry) => entry.id),
+        driftCount: drift?.length ?? null,
+        incompleteTransactions: incomplete?.map((entry) => entry.id) ?? null,
         agents,
       },
       warnings,
