@@ -23,8 +23,10 @@ disabled until the founder enables it (D76). A kickstarted scheduled `doctor` ex
    tooling (step 13b's workflow is already disabled).
 3. **Codex hook approval after 2026-10-22** (A15), with NEW-104 and NEW-75's Codex half in the same
    window.
-4. **Reinstall, then the NEW-116 re-run** (D86 (5)): `ingest` on the 31 refused captures, and report
-   the counts.
+4. **Reinstall, then `brain reindex`** (BRAIN-5 changed the `occurrences` default), **then the NEW-116
+   re-run** (D86 (5)): `ingest` on the 31 refused captures, and report the counts.
+5. **Add a permission rule for NEW-183** to the founder's settings (the auto-mode classifier blocked the
+   items the founder approved on 2026-10-06; see below).
 
 ## Founder stop points
 
@@ -36,8 +38,9 @@ Each is executable from the document named; none is agent work.
    rows and the isolated-`ingest` check) and NEW-104 (the Codex real-agent matrix, after 2026-10-22).
 4. NEW-75's Codex half: its credential path supplied separately and one real authenticated
    `ingest --agent codex` (credits, after 2026-10-22).
-5. Reinstall, then the NEW-116 re-run of `ingest` on the 31 refused captures (D86 (5)).
-6. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
+5. Reinstall, `brain reindex`, then the NEW-116 re-run of `ingest` on the 31 refused captures (D86 (5)).
+6. NEW-183: add the permission rule (founder action) so an agent can do the approved items.
+7. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
    (percent-encoded links in Obsidian).
 
 Open sequence (D16, daily use before completeness): A15 on its own clock and the stop points beside
@@ -45,7 +48,7 @@ it; then Task 11b (parked, D46); then A16.
 
 The parent document is `plans/2026-07-21-developer-os-program.md`: its open items are DOS-P7's
 remainder (Task 11b), the DOS-P8 cutover (A15) and DOS-P9's release (A16 with L1). It closes with
-A16. Founder decisions D1–D86 live in `plans/2026-09-04-developer-os-completion-roadmap.md`.
+A16. Founder decisions D1–D88 live in `plans/2026-09-04-developer-os-completion-roadmap.md`.
 
 ## Product path
 
@@ -65,11 +68,21 @@ Startable without another product gate (one worktree each):
 
 - NEW-132 (update recovery death-point sweeps).
 - NEW-169 (remaining half: a doctor check for a failed scheduled run, and the host kickstart check).
-- NEW-176..NEW-188 (P3 cleanup, one row per area; each lists its own items; NEW-177 no longer holds
-  FLOW-INIT-2).
-- NEW-190 (an e2e check that `update rollback --apply` leaves the Codex registration `registered`).
-- NEW-191 (an argv-template contract test mapping every workflow step's `with` keys to CLI flags).
-- NEW-192 (the compose round-trip fixture gains a migration and a Codex effect).
+- NEW-182 (leftovers: DEAD-7 `readOrCreateJournal` and the unused `operation` parameters in
+  `apps/cli/src/bootstrap`, the two `noUnused*` compiler flags, the `syncDirectoryAt` and `prompt.ts`
+  copies that would widen the core public export list).
+- NEW-193 (small follow-ups: a `git.v2` "manifest absent with the lock held" test, three citations-gate
+  weaknesses, two stale `knowledge-pipeline.md` citations, a Codex `subagents` probe witness).
+
+Wave 4 (P3, 2026-10-07) is integrated: NEW-176..NEW-181, NEW-184..NEW-192 and the done items of NEW-183
+(D87, D88). The full fake-codex e2e of NEW-190 is deferred to Task 11b/A16 with no row.
+
+Blocked on a founder action:
+
+- NEW-183 (remainder: SEC-1 `inheritedFds` and its stale FD-3 comment, DEAD-6/SEC-2/SEC-6 unused
+  exports, SEC-5 the `resolveOwnedPath` docstring, FLOW-UPD-6). The founder approved them on 2026-10-06;
+  the auto-mode permission classifier blocks them until a permission rule is added to the founder's
+  settings.
 
 Waves 2-3 of the 2026-10-05 audit are integrated (2026-10-06, D86): NEW-131, NEW-141, NEW-142, NEW-146,
 NEW-53 and NEW-147..NEW-175 except NEW-163, NEW-169 (half), NEW-171.
@@ -77,25 +90,16 @@ NEW-53 and NEW-147..NEW-175 except NEW-163, NEW-169 (half), NEW-171.
 Decided by D84 (2026-10-05), next design work:
 
 - Task 11b (NEW-111, NEW-112, NEW-118) — re-scoped: trust a distribution channel instead of an
-  offline root key; needs a Spec 2 amendment, then the A16 spec and plan (D84 (1), (2)).
+  offline root key; needs a Spec 2 amendment, then the A16 spec and plan (D84 (1), (2)). NEW-163 (the
+  version-free entrypoint never follows an update) and NEW-171 (no planner arm for instruction rows) are
+  deferred to it (D86 (4)), with A16.
 
 Wave 1 of D83/D84 is integrated (2026-10-06): NEW-143, NEW-120, NEW-130, NEW-40, NEW-33, NEW-121,
 NEW-35, workflow versions, the Spec 2 §4.2 amendment, one retention walk and status `off`
 (the wording half of NEW-134; its real garden run stays owed).
 
-Needs a founder decision:
-
-- NEW-189 (P2: a forward step that fails again during compensation leaves `init` stuck in
-  `compensating`; compensate a partly applied forward participant, or journal a publish intent before
-  each rename).
-- The distribution design (D84 (1)): NEW-163 (the version-free entrypoint never follows an update)
-  and NEW-171 (no planner arm for instruction rows) are deferred to it (D86 (4)), with Task 11b and A16.
-- Items inside P3 rows: W2-BUNDLE-1 in NEW-181 (changes `previewHash`), BRAIN-3 in NEW-185 (garden
-  `fix`: finish or remove), RENDER-3 and FLOW-DOCS-3 in NEW-186 (`subagents` not-used; the `scheduled`
-  trigger model), and DEAD-8 in NEW-188 (a dependency install). The rest of those rows is startable.
-
 Awaiting founder numbers: NEW-116 (D86 (5): re-run `ingest` on the 31 refused captures after the next
-reinstall and report the counts; the row closes or narrows on them).
+reinstall and `brain reindex`, and report the counts; the row closes or narrows on them).
 
 Conditional: NEW-27 when a real write scope is wired, NEW-28 when a production argument reaches the
 retained screening refusal, NEW-100's round trip after A16 (D42).
@@ -118,8 +122,7 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 ## Count
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
-- Founder stop points: 6, listed above.
-- Startable rows: 18 (NEW-132, NEW-169's remainder, 13 P3 area rows, NEW-190..192). Founder decisions:
-  NEW-189, the distribution design (NEW-163, NEW-171), and 5 items inside P3 rows. Awaiting founder
-  numbers: NEW-116.
-- Repository backlog: 35 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
+- Founder stop points: 7, listed above.
+- Startable rows: 4 (NEW-132, NEW-169's remainder, NEW-182, NEW-193). Founder action: NEW-183 (permission
+  rule). Founder design: the distribution design (NEW-163, NEW-171). Awaiting founder numbers: NEW-116.
+- Repository backlog: 21 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
