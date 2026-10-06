@@ -255,8 +255,10 @@ describe("the FD 3 handoff end to end", () => {
       const output = join(directory, "trust.json");
       await writeFile(script, [
         `import { writeFileSync } from "node:fs";`,
-        `const { readOfflineTrust } = await import(${JSON.stringify(join(cliDist, "update", "context.js"))});`,
-        `try { writeFileSync(${JSON.stringify(output)}, JSON.stringify(await readOfflineTrust())); }`,
+        `const { LAUNCHER_TRUST_ARGUMENT, readOfflineTrust } = await import(${JSON.stringify(join(cliDist, "update", "context.js"))});`,
+        // As bin.ts does: FD 3 is the trust pipe only when the launcher's marker leads the argv (NEW-147).
+        `const handoff = process.argv[2] === LAUNCHER_TRUST_ARGUMENT;`,
+        `try { writeFileSync(${JSON.stringify(output)}, JSON.stringify(await readOfflineTrust(handoff))); }`,
         `catch (error) { process.stderr.write(String(error?.message ?? error) + "\\n"); process.exitCode = 9; }`,
       ].join("\n"));
 
