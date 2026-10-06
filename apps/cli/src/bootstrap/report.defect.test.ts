@@ -6,7 +6,7 @@ import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/cor
 
 import { createBootstrapEvidenceInspectionRequest } from "./context.js";
 import type { BootstrapEvidenceGuardedEntryV1 } from "./report.js";
-import { assertOrdinaryCommandAdmitted, isStructurallyValidV2Manifest } from "./report.js";
+import { assertOrdinaryCommandAdmitted, bootstrapArchiveRecovery, isStructurallyValidV2Manifest } from "./report.js";
 
 const defect = vi.hoisted(() => ({ active: false, valid: false }));
 
@@ -153,5 +153,25 @@ describe("the ordinary-command gate lets a code defect escape (NEW-179 C-5)", ()
       () => Promise.resolve([`fresh-v2-init.${ID}.plan.json`]),
       () => Promise.reject(new Error("EIO")),
     ))).resolves.toBeUndefined();
+  });
+});
+
+describe("the bootstrap archive recovery (NEW-189 review)", () => {
+  it("names the product home and its retained siblings, dated, quoting only what needs it", () => {
+    expect(bootstrapArchiveRecovery(
+      "/Users/a/.developer-os",
+      [
+        "/Users/a/.developer-os/logs",
+        "/Users/a/.developer-os-retained.fi_x.0000000002.tombstone",
+        "/Users/a b/.developer-os-retained.fi_x.0000000001.tombstone",
+        "/Users/a/notes",
+      ],
+      new Date("2026-10-06T12:00:00.000Z"),
+    )).toBe(
+      "mv /Users/a/.developer-os /Users/a/.developer-os.archived-2026-10-06, then " +
+      "mv '/Users/a b/.developer-os-retained.fi_x.0000000001.tombstone' '/Users/a b/.developer-os-retained.fi_x.0000000001.tombstone.archived-2026-10-06', then " +
+      "mv /Users/a/.developer-os-retained.fi_x.0000000002.tombstone /Users/a/.developer-os-retained.fi_x.0000000002.tombstone.archived-2026-10-06, then " +
+      "developer-os init",
+    );
   });
 });

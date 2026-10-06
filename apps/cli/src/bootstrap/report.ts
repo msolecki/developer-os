@@ -191,6 +191,25 @@ export interface BootstrapEvidenceAdmissionV1 {
 }
 
 export const BOOTSTRAP_MANUAL_ARCHIVE = "retained bootstrap evidence requires manual archive before a new bootstrap intent";
+
+function shellWord(path: string): string {
+  return /^[A-Za-z0-9_./@%+=:,-]+$/u.test(path) ? path : `'${path.replaceAll("'", "'\\''")}'`;
+}
+
+/**
+ * The exact archive that clears a blocking retained envelope: the product home
+ * and every `.developer-os-retained.<id>.*` root outside it, each moved aside
+ * under a dated name, then `init`. Built from the refused state's own roots.
+ */
+export function bootstrapArchiveRecovery(productHome: string, retainedRoots: readonly string[], now: Date): string {
+  const date = now.toISOString().slice(0, 10);
+  const siblings = retainedRoots
+    .filter((root) => root !== productHome && !root.startsWith(`${productHome}/`) &&
+      basename(root).startsWith(".developer-os-retained."))
+    .toSorted();
+  return [...[productHome, ...siblings].map((path) => `mv ${shellWord(path)} ${shellWord(`${path}.archived-${date}`)}`), "developer-os init"]
+    .join(", then ");
+}
 export const MALFORMED_V2_MANIFEST =
   "the V2 installation manifest failed validation; restore it or archive the product home manually before running init again";
 export const NON_REGULAR_BOOTSTRAP_LEAF = "a bootstrap evidence leaf could not be admitted as a regular file";
