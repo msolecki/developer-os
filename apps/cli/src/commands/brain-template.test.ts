@@ -167,4 +167,14 @@ describe("the embedded Brain template", () => {
     expect(text).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}/u);
     expect(text).not.toMatch(/https?:\/\//u);
   });
+
+  it("does not claim reindex is the only command that writes to the vault", () => {
+    /**
+     * The seeded note is indexed and searchable, so an agent reads it as
+     * authoritative: ingest, refactor, retire, capture and review all write too.
+     */
+    const reference = BRAIN_TEMPLATE.find((file) => file.path.endsWith("example-reference-note.md"));
+    expect(reference?.content).not.toContain("only command that writes");
+    expect(reference?.content).toContain("only `brain` subcommand that regenerates `content/_indexes/`");
+  });
 });
