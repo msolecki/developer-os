@@ -769,6 +769,11 @@ function captureIdOf(fileName: string): string {
   return fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
 }
 
+/** NEW-82, as in `lifecycle/admission.ts`: a refusal becomes a warning; a defect is not swallowed. */
+function rethrowDefect(error: unknown): void {
+  if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) throw error;
+}
+
 const ATTEMPTS_UNREADABLE =
   "the ingest attempt-order record could not be read, so this run selected captures in captureId order";
 const ATTEMPTS_UNWRITTEN =
@@ -798,13 +803,15 @@ async function readAttempts(
       lifecycle.effectiveUid,
       MAX_INGEST_ATTEMPTS_BYTES,
     );
-  } catch {
+  } catch (error) {
+    rethrowDefect(error);
     return { bytes: null, attempts: new Map(), warning: ATTEMPTS_UNREADABLE };
   }
   if (bytes === null) return { bytes: null, attempts: new Map(), warning: null };
   try {
     return { bytes, attempts: parseIngestAttempts(bytes), warning: null };
-  } catch {
+  } catch (error) {
+    rethrowDefect(error);
     return { bytes, attempts: new Map(), warning: ATTEMPTS_UNREADABLE };
   }
 }
@@ -829,7 +836,8 @@ async function writeAttempts(
       mutations: [writeMutation(ingestAttemptsPath(paths), before, content)],
     });
     return null;
-  } catch {
+  } catch (error) {
+    rethrowDefect(error);
     return ATTEMPTS_UNWRITTEN;
   }
 }

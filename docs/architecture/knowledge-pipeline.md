@@ -336,7 +336,13 @@ with no refusal on record the order is `captureId`, as before.
   It is not in admission's required set (`LIFECYCLE_RESERVATION_ROWS`), so an installation made
   before it is still admitted; ingest there finds no file, **never creates one** (an unmanifested
   file under `state/` would block uninstall's empty-directory removal), and keeps `captureId`
-  order.
+  order. **The attempt order therefore reaches only a home `init`ed after this change.** An older
+  installation keeps `captureId` order until it is reinstalled; `update` does not add the file, so
+  the fix is not delivered there.
+- **What `--json` shows.** `data.order` is the attempt order this run used; `data.captures` stays
+  sorted by `captureId`.
+- **Its size.** The encoded record is capped at `MAX_INGEST_ATTEMPTS_BYTES` (1 MiB); past it, the
+  captures with the most refusals are kept and the rest sort as untried.
 - **How it is written.** Once per run, after the capture loop, as one `ingest-attempts`
   transaction bound to the bytes read before selection, and only when they change. A concurrent
   run's record is refused rather than overwritten. An unreadable record, or a write that fails,
