@@ -3,8 +3,9 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parse as parseCliArgv } from "@developer-os/cli/dist/main.js";
 import { SCHEDULED_JOB_IDS } from "@developer-os/core";
-import { compareScopes, deriveScopes, loadWorkflow } from "@developer-os/workflow-schema";
+import { compareScopes, deriveScopes, EFFECT_VOCABULARY, loadWorkflow } from "@developer-os/workflow-schema";
 import type { WorkflowContractV1 } from "@developer-os/workflow-schema";
 import { describe, expect, it } from "vitest";
 
@@ -158,5 +159,54 @@ describe("review contract maps to the review CLI flags", () => {
       const step = review.steps.find((candidate) => candidate.id === stepId);
       expect(step?.with).toMatchObject({ id: "$input.id" });
     }
+  });
+});
+
+/**
+ * NEW-191: the argv template of every step that passes arguments. A rendered
+ * skill names the verb's `command` and prints the step's `with` object; this
+ * table is how each `with` key reaches that command — a flag, or the one
+ * positional. A `with` key missing here, or a flag the CLI's parser no longer
+ * accepts, fails below, so a renamed key or flag cannot drift silently.
+ */
+const POSITIONAL = Symbol("positional");
+const WITH_ARGV: Readonly<Record<string, Readonly<Record<string, string | typeof POSITIONAL>>>> = {
+  "brain.search": { query: POSITIONAL, limit: "--limit" },
+  "capture.write": { text: "--text" },
+  "capture.list": { status: "--status" },
+  "capture.setStatus": { id: "--id", decision: "--decision" },
+  "capture.edit": { id: "--id" },
+};
+
+/** A value each flag's parser accepts: `--limit` is a positive integer at parse time. */
+const SAMPLE: Readonly<Record<string, string>> = { limit: "1" };
+
+describe("every step's with keys map to flags the CLI accepts", () => {
+  const steps = canonicalContracts().flatMap((contract) =>
+    contract.steps
+      .filter((step) => step.do !== undefined && step.with !== undefined && Object.keys(step.with).length > 0)
+      .map((step) => ({ name: `${contract.id}.${step.id}`, verb: step.do as string, keys: Object.keys(step.with ?? {}) })),
+  );
+
+  it("walks a non-empty set, and the parser refuses an unknown flag", () => {
+    expect(steps.length).toBeGreaterThan(0);
+    expect(parseCliArgv(["review", "--decison", "accept"])).toBeNull();
+  });
+
+  it.each(steps.map((step) => [step.name, step] as const))("%s", (_name, step) => {
+    const template = WITH_ARGV[step.verb];
+    const command = EFFECT_VOCABULARY[step.verb]?.command;
+    expect(template, `${step.verb} has no argv template`).toBeDefined();
+    expect(command, `${step.verb} names no command`).toEqual(expect.stringMatching(/^developer-os /u));
+    const argv = (command ?? "").split(" ").slice(1);
+    const positionals: string[] = [];
+    for (const key of step.keys) {
+      const target = template?.[key];
+      expect(target, `${step.verb} has no argv slot for with.${key}`).toBeDefined();
+      const value = SAMPLE[key] ?? "x";
+      if (target === POSITIONAL) positionals.push(value);
+      else if (target !== undefined) argv.push(target, value);
+    }
+    expect(parseCliArgv([...argv, ...positionals]), [...argv, ...positionals].join(" ")).not.toBeNull();
   });
 });
