@@ -335,6 +335,17 @@ describe("UpdateConstructionStore", () => {
     expect(await exists(pending)).toBe(true);
   });
 
+  it("refuses a torn construction journal as update_construction_not_canonical, exit 6 (W2-PORTS-2)", async () => {
+    const value = await fixture();
+    await expect(construct(value, store(value, { interrupt: killAt("evidence_written", 2) }))).rejects.toBeInstanceOf(Killed);
+    const journal = updateConstructionEnvelopePaths(value.root).journal;
+    const bytes = await nodeFs.readFile(journal);
+    await nodeFs.writeFile(journal, bytes.subarray(0, bytes.byteLength - 7));
+    const error: unknown = await store(value).recover(await closureFor(value)).then(() => null, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((error as LifecycleRecoveryRequiredError).reason).toBe("update_construction_not_canonical");
+  });
+
   it("refuses a closure whose plan hash differs from the reopened plan", async () => {
     const value = await fixture();
     await expect(construct(value, store(value, { interrupt: killAt("directory_made") }))).rejects.toBeInstanceOf(Killed);

@@ -249,6 +249,18 @@ describe("BundleSourceExecutor", () => {
     expect(await exists(`${bundleSourcePaths(squatted.root, sourceId).envelope}/foreign`)).toBe(true);
   });
 
+  it.each([
+    ["torn", (bytes: Buffer) => bytes.subarray(0, bytes.byteLength - 7)],
+    ["non-canonical", (bytes: Buffer) => Buffer.from(` ${bytes.toString("utf8")}`)],
+  ] as const)("refuses a %s participant journal as bundle_not_canonical, exit 6 (W2-PORTS-2)", async (_name, mangle) => {
+    const value = await fixture();
+    await stageSource(value);
+    await nodeFs.writeFile(value.journalPath, mangle(await nodeFs.readFile(value.journalPath)));
+    const error: unknown = await compensateOf(value).then(() => null, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((error as LifecycleRecoveryRequiredError).reason).toBe("bundle_not_canonical");
+  });
+
   it("refuses a partial file whose recorded identity was swapped", async () => {
     const value = await fixture();
     await expect(stageOf(value, dieAt("entry_written"))).rejects.toBeInstanceOf(Killed);
