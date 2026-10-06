@@ -7,8 +7,9 @@ export interface ProbeDependencies {
   readonly runner: ProcessRunner;
   readonly pluginDirectory: string;
   /**
-   * Every path under `pluginDirectory`, relative or absolute — only the
-   * suffixes are read. Injected rather than read here, because this package
+   * Every path under `pluginDirectory`, relative to it (`readdir` with
+   * `recursive`): `subagents` is anchored to the root, so a nested
+   * `skills/x/agents/y.md` is not a shipped agent. Injected rather than read here, because this package
    * touches no filesystem and a probe that did would need a real directory to
    * be testable at all.
    */
@@ -42,7 +43,7 @@ const PROBE_TIMEOUT_MS = 30_000;
  */
 const VALIDATE_SETTLES = [
   { key: "skills", evidence: (file: string) => file.endsWith("SKILL.md") },
-  { key: "subagents", evidence: (file: string) => /(?:^|\/)agents\/[^/]+\.md$/u.test(file) },
+  { key: "subagents", evidence: (file: string) => /^agents\/[^/]+\.md$/u.test(file) },
 ] as const;
 
 /**

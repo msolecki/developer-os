@@ -999,7 +999,9 @@ spawn. The pin is Claude only, invoked as `ingest` invokes it — `--tools ""`, 
 environment and closed stdin. Codex is refused for this job:
 `automation enable --garden-agent codex`, or a resolution that finds only Codex, refuses
 `capability_unavailable`, and a Codex pin met at run time is `handler_refused`
-`garden_agent_unsupported` with no spawn, because Codex has no tool-free mode yet (Ruling 38).
+`garden_agent_unsupported` with no spawn, because Codex has no tool-free mode yet (Ruling 38). Since
+D87 (NEW-185) the response schema offers only `hub` and `related`: a single `fix` proposal makes the
+whole response `agent_output_invalid`, so no capture is written that run.
 The pin is bound to the activation: `lifecycleConfigHash("automation", …)` covers
 `automation.brainGarden` when present (absent, the hashed bytes are unchanged, so earlier
 activations stay valid), so a `config.toml` edited after enable to point the pin elsewhere makes

@@ -480,6 +480,10 @@ Added 2026-09-28 by NEW-110 Task 12 (D72); `foundation.md` §11 has the update c
   so `update rollback` restores a migrated note from its retained blob.
 - **Preview and rollback write nothing to the Brain**, and uninstall after any update, rollback or
   reapply leaves every Brain note byte-identical (`tests/e2e/release-update.test.ts`).
+- **An update never reindexes, so an index-format change needs one manual `developer-os brain
+  reindex`.** Neither `update` nor `init` regenerates `content/_indexes/`. Since NEW-185 (BRAIN-5,
+  2026-10-06) a note without `occurrences` is indexed as `1`, not `0`, so every vault indexed before
+  it reports `index-drift` until its owner runs `developer-os brain reindex` once.
 
 ### 6.15 The scheduled gardener writes only captures (NEW-134)
 

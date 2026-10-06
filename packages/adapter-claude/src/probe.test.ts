@@ -60,7 +60,7 @@ describe("probeClaude", () => {
     const agentless = await probeClaude(installation, {
       runner: runner(() => ({ exitCode: 0, stdout: "OK" })),
       pluginDirectory,
-      listPluginFiles: () => Promise.resolve([".claude-plugin/plugin.json", "skills/x/SKILL.md"]),
+      listPluginFiles: () => Promise.resolve([".claude-plugin/plugin.json", "skills/x/SKILL.md", "skills/x/agents/y.md"]),
     });
     expect(agentless.get("subagents")).toBe("absent");
   });

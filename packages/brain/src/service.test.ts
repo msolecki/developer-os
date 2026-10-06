@@ -456,6 +456,25 @@ describe("BrainService.sessionContext", () => {
     expect(reads.filter((path) => path.includes(hostile.slice(1)))).toStrictEqual([]);
   });
 
+  it.each([
+    ["a symlinked leaf", (path: string) => (path.endsWith("/PROJECTS/os.md") ? "/home/u/work/secrets.md" : path)],
+    ["a symlinked directory", (path: string) => path.replace("/vault/content/PROJECTS", "/home/u/work")],
+  ])("injects no note that %s resolves outside the content root", async (_name, resolveLink) => {
+    const vault = await seeded(PROJECT_VAULT);
+    const reads: string[] = [];
+    const deps = {
+      ...vault.deps,
+      canonicalize: (path: string) => Promise.resolve(resolveLink(path)),
+      readFile: (path: string) => {
+        reads.push(path);
+        return vault.deps.readFile(path);
+      },
+    };
+    const context = await new BrainService(deps).sessionContext("developer-os");
+    expect(context.projectNote).toBeNull();
+    expect(reads.filter((path) => path.includes("os.md") || path.includes("/home/u/"))).toStrictEqual([]);
+  });
+
   it("returns a null vault map and no note when the index is missing", async () => {
     const fresh = await new BrainService(harness(PROJECT_VAULT).deps).reindex();
     const mapOnly = fresh.files[PATHS.vaultMap];

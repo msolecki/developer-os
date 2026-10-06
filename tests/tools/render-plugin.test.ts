@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { renderAllForClaude } from "../contracts/adapters/claude/render-all.js";
 import { renderAllForCodex } from "../contracts/adapters/codex/render-all.js";
-import { assertRepositoryRoot, regenerate } from "./render-plugin.js";
+import { assertRepositoryRoot, isEntryPoint, regenerate } from "./render-plugin.js";
 
 /**
  * The regenerator is the one place in this repository that deletes a directory
@@ -110,5 +110,17 @@ describe.each([
       name.startsWith("developer-os-"),
     );
     expect(workflowSkills).toHaveLength(11);
+  });
+});
+
+describe("the render entry points", () => {
+  it("do nothing when imported, so a test can never rewrite plugins/", async () => {
+    const manifests = [resolve("plugins/claude/.claude-plugin/plugin.json"), resolve("plugins/codex/.codex-plugin/plugin.json")];
+    const before = await Promise.all(manifests.map(async (path) => (await stat(path)).mtimeMs));
+    await import("./render-claude.js");
+    await import("./render-codex.js");
+    expect(await Promise.all(manifests.map(async (path) => (await stat(path)).mtimeMs))).toStrictEqual(before);
+    expect(isEntryPoint(undefined, import.meta.url)).toBe(false);
+    expect(isEntryPoint("/no/such/entry.js", import.meta.url)).toBe(false);
   });
 });
