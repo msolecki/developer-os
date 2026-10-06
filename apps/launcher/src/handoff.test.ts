@@ -121,6 +121,11 @@ describe("compileLauncherOfflineReleaseTrust", () => {
     ).toBeNull();
   });
 
+  it("throws, never returns null, when an online root is set but the document is invalid (FLOW-UPD-4)", () => {
+    const current = generateRoot("online_current");
+    expect(() => compileLauncherOfflineReleaseTrust({ acceptedRoots: [current.root], metadataRedirectOrigins: [] })).toThrow();
+  });
+
   it("compiles a valid offline release trust document from injected roots", () => {
     const current = generateRoot("online_current");
     const trust = compileLauncherOfflineReleaseTrust({ acceptedRoots: [current.root], metadataRedirectOrigins: [origin] });

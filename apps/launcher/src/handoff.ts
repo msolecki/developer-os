@@ -45,9 +45,9 @@ export interface LauncherOfflineTrustInputV1 {
 /**
  * Compiles the launcher's offline-trust document from its genuinely fixed
  * parts (schema, both locators) plus the caller-supplied roots and redirect
- * origins. Returns `null` -- "no trust configured yet" -- when no root key
- * has been decided, or none of the supplied roots is the current online
- * root `validateOfflineReleaseTrust` requires; callers must not open the
+ * origins. Returns `null` -- "no trust configured yet" -- only when none of
+ * the supplied roots is the current online root; any other invalid document
+ * throws, so a misconfigured build fails instead. On `null`, callers must not open the
  * FD 3 pipe in that case, which is exactly today's `unavailable_until_packaged_handoff`
  * fallback and not a regression.
  */
@@ -56,19 +56,17 @@ export function compileLauncherOfflineReleaseTrust(
 ): OfflineReleaseTrustV1 | null {
   const onlineRoot = input.acceptedRoots.find((root) => root.role === "online_current");
   if (onlineRoot === undefined) return null;
-  try {
-    return validateOfflineReleaseTrust({
-      schemaVersion: 1,
-      handoffProtocol: 1,
-      onlineRootKeyId: onlineRoot.keyId,
-      acceptedRoots: input.acceptedRoots,
-      delegationLocator: DELEGATION_LOCATOR,
-      indexLocator: INDEX_LOCATOR,
-      metadataRedirectOrigins: input.metadataRedirectOrigins,
-    });
-  } catch {
-    return null;
-  }
+  // Roots are set but the document is invalid (e.g. no redirect origins): a build defect that must
+  // fail loudly, never silently disable the FD 3 handoff (FLOW-UPD-4).
+  return validateOfflineReleaseTrust({
+    schemaVersion: 1,
+    handoffProtocol: 1,
+    onlineRootKeyId: onlineRoot.keyId,
+    acceptedRoots: input.acceptedRoots,
+    delegationLocator: DELEGATION_LOCATOR,
+    indexLocator: INDEX_LOCATOR,
+    metadataRedirectOrigins: input.metadataRedirectOrigins,
+  });
 }
 
 /**
