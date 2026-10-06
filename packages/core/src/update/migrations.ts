@@ -181,8 +181,6 @@ export interface SchemaMigrationChainRowV1 {
   readonly toVersion: PositiveUInt32V1;
 }
 
-/** The version each domain's chain must start from, when the caller knows it. */
-export type SchemaMigrationChainAnchorsV1 = Readonly<Partial<Record<SchemaMigrationDomainV1, PositiveUInt32V1>>>;
 
 export interface SchemaMigrationVersionRangeV1 {
   readonly from: PositiveUInt32V1;
@@ -659,7 +657,8 @@ export function validateSchemaMigrationExecutionJournal(value: unknown, plan: Sc
     ((phase === "verified" || phase === "finalized") && complete && compensation === null && compaction === null) ||
     (phase === "compensating" && compensation !== null && compensation < next && compaction === null) ||
     (phase === "rolled_back" && compensation === -1 && compaction === null) ||
-    (phase === "compacting" && compaction !== null);
+    // Compaction starts only from `finalized` (complete, no compensation) or `rolled_back` (-1) and keeps their cursors.
+    (phase === "compacting" && compaction !== null && ((complete && compensation === null) || compensation === -1));
   if (!legal) fail(`${label}: cursors do not match the phase`);
   return { schemaVersion: 1, id: plan.id, coordinatorId: plan.coordinatorId, planHash: input.planHash as LowerHexSha256, phase, nextForwardFoundation: next, compensationNext: compensation, compactionNext: compaction, createdAt, updatedAt };
 }
