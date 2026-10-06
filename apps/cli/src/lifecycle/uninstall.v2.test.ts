@@ -524,6 +524,21 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     for (const path of result.data.removed) expect(await exists(path), path).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("refuses over a symlinked codex/codex-home record with the remove-the-record recovery (FLOW-UNINST-3)", async () => {
+    const fixture = await initializedV2Fixture("uninstall-codex-home-record");
+    const record = join(fixture.paths.home, "codex", "codex-home");
+    await nodeFs.mkdir(join(fixture.paths.home, "codex"), { recursive: true, mode: 0o700 });
+    await nodeFs.symlink(join(fixture.paths.home, "elsewhere"), record);
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    expect(result).toMatchObject({ ok: false, code: EXIT_CODES.recoveryRequired });
+    if (result.ok) throw new Error("uninstall ran over a bad codex-home record");
+    expect(result.error.paths).toContain(record);
+    expect(result.error.recovery).toMatch(/^remove .*codex-home, which must be an owned regular file/u);
+    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it.each([
     ["an automation lifecycle record in the configuration", plantAutomationLifecycleRecord],
     ["an active automation arm in the activation record", plantActiveAutomationActivation],

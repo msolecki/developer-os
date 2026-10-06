@@ -1,7 +1,7 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { parseCanonicalAbsolutePathText } from "@developer-os/core";
+import { LifecycleRecoveryRequiredError, parseCanonicalAbsolutePathText } from "@developer-os/core";
 import type { CanonicalAbsolutePathV1 } from "@developer-os/core";
 
 /** `foundation.md` §12.5: `H`, `P` and `C`, resolved once per command. */
@@ -16,6 +16,10 @@ const MAX_CODEX_HOME_RECORD_BYTES = 4096;
 /** Where the Codex attach records `C`, in the same transaction as its rows. */
 export const codexHomeRecordPath = (productHome: string): string => join(resolve(productHome), "codex", "codex-home");
 
+/** FLOW-UNINST-3: the way out of a `codex_home_record_shape` refusal. */
+export const codexHomeRecordRepair = (path: string): string =>
+  `remove ${path}, which must be an owned regular file holding one absolute path and a newline, then run the command again`;
+
 /** `CODEX_HOME` when absolute, else `H/.codex`. */
 export function codexHomeFromEnv(env: Readonly<Record<string, string | undefined>>, userHome: string): CanonicalAbsolutePathV1 {
   const codexHome = env.CODEX_HOME;
@@ -28,21 +32,27 @@ export function codexHomeFromEnv(env: Readonly<Record<string, string | undefined
  */
 export function readRecordedCodexHome(productHome: string): CanonicalAbsolutePathV1 | null {
   const path = codexHomeRecordPath(productHome);
+  // FLOW-UNINST-3: typed, so doctor reports it as a check and uninstall names the repair.
+  const refuse = (): never => {
+    throw new LifecycleRecoveryRequiredError("codex_home_record_shape", [path]);
+  };
   let fd: number;
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw new Error(`the recorded Codex home ${path} is unreadable`, { cause: error });
+    return refuse();
   }
   try {
     const stats = fstatSync(fd);
-    if (!stats.isFile() || stats.uid !== process.getuid?.() || stats.size > MAX_CODEX_HOME_RECORD_BYTES) {
-      throw new Error(`the recorded Codex home ${path} is not an owned regular file`);
-    }
+    if (!stats.isFile() || stats.uid !== process.getuid?.() || stats.size > MAX_CODEX_HOME_RECORD_BYTES) refuse();
     const text = readFileSync(fd, "utf8");
-    if (!text.endsWith("\n")) throw new Error(`the recorded Codex home ${path} is malformed`);
-    return parseCanonicalAbsolutePathText(text.slice(0, -1));
+    if (!text.endsWith("\n")) refuse();
+    try {
+      return parseCanonicalAbsolutePathText(text.slice(0, -1));
+    } catch {
+      return refuse();
+    }
   } finally {
     closeSync(fd);
   }
