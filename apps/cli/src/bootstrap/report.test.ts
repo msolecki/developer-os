@@ -444,15 +444,15 @@ describe("inspectBootstrapEvidence", () => {
      * through the total above: one call carries every retention root and row
      * parent, and no second call carries a subset of them.
      */
-    expect(arities.filter((arity) => arity > 2)).toStrictEqual([4, 466]);
+    expect(arities.filter((arity) => arity > 2)).toStrictEqual([4, 470]);
 
     /**
-     * Measured against this fixture's 231-location plan: the outer
+     * Measured against this fixture's 233-location plan: the outer
      * `initialRoots` walk (1), the plan's journal-slot walk (1), one walk per
-     * payload/created-path/foundation-participant evidence read (225),
+     * payload/created-path/foundation-participant evidence read (227),
      * the manifest-handoff check (1) — and, until the roots/row-parents walks are
-     * grouped into one call, two more instead of one. 229 is that total with
-     * the group, whose one call carries 466 roots (231 sources, 231 tombstones,
+     * grouped into one call, two more instead of one. 231 is that total with
+     * the group, whose one call carries 470 roots (233 sources, 233 tombstones,
      * 4 row parents); it moves in lockstep with the fixture's shape, not a fixed
      * constant, so a future change to the fixture is expected to move it too.
      * It was 155 against a 156-location plan until plan 1a Task 1 (2026-09-17)
@@ -471,8 +471,12 @@ describe("inspectBootstrapEvidence", () => {
      * staged-digest payload, the staged `2.bin` and `2.bin.sha256` created
      * paths, and that retained `2.bin.sha256` (5). The last is a source but
      * no evidence read, so the walks grew by 68.
+     * It was 229 against 231 (466 roots) until NEW-141 (84364651, 2026-10-06)
+     * reserved `state/ingest-attempts.json`: one more created path and its
+     * empty-reservation payload, so 2 more locations (233; 470 roots = 233
+     * sources + 233 tombstones + 4 row parents) and 2 more evidence reads.
      */
-    expect(walks).toBe(229);
+    expect(walks).toBe(231);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("looks up retained rows by key instead of scanning them per location", async () => {
