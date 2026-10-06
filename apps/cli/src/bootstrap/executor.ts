@@ -3695,6 +3695,38 @@ export class BootstrapExecutor {
         if (row === undefined) {
           throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "payload retention cursor escaped plan");
         }
+        const intent = journal.payloadWriteState;
+        if (intent.state === "create_intent" && intent.ordinal === cursor && cursor === journal.nextPayload) {
+          // NEW-166: the grammar's create_intent branch. An inode the intent
+          // created is retained as `writing`; with none, nothing was reached.
+          const stats = await lstatOptional(row.ref.path);
+          if (stats === null) {
+            journal = await this.writeJournal(plan, journal, {
+              payloadWriteState: { state: "idle" },
+              compensationNext: cursor - 1,
+            });
+            continue;
+          }
+          if (
+            !stats.isFile() ||
+            stats.isSymbolicLink() ||
+            Number(stats.uid) !== uid() ||
+            Number(stats.nlink) !== 1 ||
+            Number(stats.size) !== 0 ||
+            mode(stats) !== row.ref.mode
+          ) {
+            throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "payload create intent found a nonempty or changed inode");
+          }
+          journal = await this.writeJournal(plan, journal, {
+            payloadWriteState: {
+              state: "writing",
+              ordinal: row.ref.ordinal,
+              dev: stats.dev.toString(10) as Extract<FreshV2InitJournalV1["payloadWriteState"], { state: "writing" }>["dev"],
+              ino: stats.ino.toString(10) as Extract<FreshV2InitJournalV1["payloadWriteState"], { state: "writing" }>["ino"],
+            },
+          });
+          continue;
+        }
         // NEW-149: each part is written once; a resumed compensation continues from the recorded one.
         if (journal.payloadRetentionPart === null) {
           journal = await this.writeJournal(plan, journal, {

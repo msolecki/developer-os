@@ -653,6 +653,46 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect(retainedPath).toContain(`.developer-os-retained.${String(plan.id)}.`);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  /**
+   * NEW-166: a failure after the payload create intent, before the writing
+   * intent, compensates through the grammar's `create_intent` branch: an
+   * absent inode goes idle, an empty created inode becomes `writing` and is
+   * retained by its identity, also after a death inside that compensation.
+   */
+  it.each([
+    { failure: "after_payload_create_intent", death: null, retainsInode: false },
+    { failure: "after_payload_empty_create", death: null, retainsInode: true },
+    { failure: "after_payload_empty_create", death: "after_compensation_staged_file", retainsInode: true },
+  ] as const)("rolls back a payload create intent failing $failure (death $death)", async ({ failure, death, retainsInode }) => {
+    const fixture = await createCommandFixture(`bootstrap-create-intent-${failure}-${String(death)}`, {
+      bootstrapAvailable: true,
+      bootstrapFailureAfter: failure,
+      ...(death === null ? {} : { bootstrapInterruptAfter: death }),
+    });
+
+    const failed = await runInit(fixture.context, ACCEPTED);
+    expect(failed.ok).toBe(false);
+    if (death !== null) {
+      fixture.disableBootstrapFailure();
+      fixture.disableBootstrapInterrupt();
+      await closeBootstrapProcess(fixture);
+      const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+      expect(resumed.ok ? 0 : resumed.code).toBe(EXIT_CODES.recoveryRequired);
+    } else if (!failed.ok) {
+      expect(failed.error.message).toContain(`synthetic bootstrap failure at ${failure}`);
+    }
+    const plan = (await persistedPlan(fixture)).value;
+    const journal = await currentJournal(plan);
+    expect(journal, JSON.stringify({ failed, trace: fixture.bootstrapTrace.slice(-30) }))
+      .toMatchObject({ phase: "retained", terminalOutcome: "rolled_back", compensationNext: -1 });
+    const writing = journal.payloadWriteState as JsonRecord;
+    expect(writing.state).toBe(retainsInode ? "writing" : "idle");
+    if (retainsInode) {
+      const retainedPath = await findIdentity(fixture.root, decimalText(writing.dev), decimalText(writing.ino));
+      expect(retainedPath).toContain(`.developer-os-retained.${String(plan.id)}.`);
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("retains post-Foundation rollback targets and artifacts without invoking deletion authority", async () => {
     const fixture = await createCommandFixture("bootstrap-foundation-retained-rollback", {
       bootstrapAvailable: true,
