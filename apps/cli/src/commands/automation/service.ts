@@ -422,7 +422,8 @@ async function observeLive(
   const live = new Map<ScheduledJobIdV1, LaunchdLiveStateV1>();
   for (const [job, state] of await observeLiveStates(lifecycle, jobs, productHome)) {
     if (state === "third_state") recoveryRequired("launchd_live_state_third_state", productHome);
-    live.set(job, state);
+    // `lastExitCode` is status-only: the prior live state a plan binds has exactly these keys (`assertPrior`).
+    live.set(job, state.state === "loaded" ? { state: "loaded", label: state.label, generation: state.generation } : { state: "unloaded" });
   }
   return live;
 }

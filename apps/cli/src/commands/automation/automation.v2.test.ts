@@ -696,6 +696,10 @@ describe("automation on a real V2 home", () => {
         expect(doctor).toMatchObject({ live: "loaded", lastRun: null, launchdExit: 78 });
         expect(status.jobs.filter((job) => job.job !== "doctor").every((job) => job.launchdExit === undefined)).toBe(true);
         expect(renderAutomation(status).some((line) => line.startsWith("doctor") && line.endsWith("last run never; launchd exit 78, no run recorded since"))).toBe(true);
+        // A recorded exit is status-only: it never reaches the prior live state a mutation binds.
+        for (const job of ["brain-reindex", "brain-lint"] as const) launchd.exits.set(job, 0);
+        expect((await apply(home, "disable")).data).toMatchObject({ kind: "applied", operation: "automation_disable" });
+        expect((await apply(home, "enable", BASE_SCHEDULES)).data).toMatchObject({ kind: "applied", operation: "automation_enable" });
       } finally {
         launchd.exits.clear();
       }
