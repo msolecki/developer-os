@@ -408,7 +408,9 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   entry must stay inside the root (`localBin`). `node_modules/.bin` is never used, because under
   pnpm it is a shell wrapper Node cannot run. There is no global tool and no install.
 - **`inject`.** The slug is `slugify(basename(<project root>))`. `BrainService.sessionContext`
-  returns `vault-map.md` and the one `project-note` whose title or alias equals the slug. The output
+  returns `vault-map.md` and the one `project-note` whose title or alias equals the slug, opened
+  only when its `index.json` path is a `.md` under the content root with no empty, `.` or `..`
+  segment (NEW-185; a poisoned index injects no outside file). The output
   is the vault map, then the note, capped at 16,384 bytes; the vault map is truncated first, at a
   line boundary, with `VAULT_MAP_TRUNCATED_MARKER`. The text is redacted with the built-in classes and
   the configuration's `[redaction] patterns`, under the durable key when one exists (NEW-159), as
