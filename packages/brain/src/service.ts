@@ -1,6 +1,8 @@
 import { join } from "node:path";
 
+import { containsPath } from "@developer-os/core";
 import type { BrainConfigV1 } from "@developer-os/core";
+import { canonicalizePlannedPath } from "@developer-os/security";
 
 import type { DirectoryReader } from "./discovery/index.js";
 import { artifactPaths, buildIndex, renderArtifacts } from "./indexes/index.js";
@@ -305,8 +307,15 @@ export class BrainService {
     ) {
       return { vaultMap, projectNote: null };
     }
-
-    const path = join(this.deps.vaultRoot, match.path);
+    /**
+     * The string check above is not containment: a symlinked note or folder
+     * resolves elsewhere. Both sides are canonicalized, and the note is read
+     * at its canonical path, so what is checked is what is opened.
+     */
+    const canonicalize = this.deps.canonicalize ?? canonicalizePlannedPath;
+    const contentRoot = await canonicalize(join(this.deps.vaultRoot, this.deps.config.contentRoot));
+    const path = await canonicalize(join(this.deps.vaultRoot, match.path));
+    if (path === contentRoot || !containsPath(contentRoot, path)) return { vaultMap, projectNote: null };
     await this.deps.assertReadable(path);
     return {
       vaultMap,

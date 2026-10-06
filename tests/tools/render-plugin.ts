@@ -20,6 +20,7 @@
  * tree is `renderCodexPlugin`'s plugin-root-relative composition; the marketplace
  * descriptor lives at the marketplace root, outside `plugins/codex/`.
  */
+import { realpathSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { cwd } from "node:process";
@@ -81,4 +82,22 @@ export async function regenerate(options: RegenerateOptions): Promise<number> {
     await writeFile(destination, artifact.contents, "utf8");
   }
   return artifacts.length;
+}
+
+/**
+ * True only when `entry` (`argv[1]`) is the module at `moduleUrl`, so importing
+ * an entry point — from a test, say — can never rewrite `plugins/`.
+ *
+ * Through `realpath`, because Node resolves `import.meta.url` to the real path
+ * while `argv[1]` keeps whatever symlink was invoked. Comparing them raw made a
+ * symlinked entry point exit 0 having done nothing at all, which is a worse
+ * failure than refusing: the maintainer reads success and gets a stale tree.
+ */
+export function isEntryPoint(entry: string | undefined, moduleUrl: string): boolean {
+  if (entry === undefined) return false;
+  try {
+    return realpathSync(entry) === fileURLToPath(moduleUrl);
+  } catch {
+    return false;
+  }
 }
