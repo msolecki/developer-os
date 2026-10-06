@@ -3110,6 +3110,53 @@ describe('transaction persistence', () => {
     },
   ];
 
+  it('removes the backup temp when its sync fails, as it does when its rename fails (W2-TX-A-2)', async () => {
+    const fixture = await createFixture('backup-sync-fails');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const enospc = Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
+    const fs: TransactionFileSystem = {
+      ...nodeFs,
+      open: (async (path: string, ...rest: unknown[]) => {
+        const handle = await (nodeFs.open as (...args: unknown[]) => Promise<Awaited<ReturnType<typeof nodeFs.open>>>)(path, ...rest);
+        if (!path.endsWith('.bin.tmp')) return handle;
+        handle.sync = () => Promise.reject(enospc);
+        return handle;
+      }) as typeof nodeFs.open,
+    };
+    try {
+      await installOriginal(targetPath);
+      await expect(createExecutor(fixture, { fs }).execute(replacePlan(targetPath))).rejects.toBeInstanceOf(TransactionStateError);
+      await expectMissing(join(fixture.backupsDir, 'transactions', fixture.transactionId, '0.bin.tmp'));
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it('removes the apply temp a crash left beside the target when the transaction is rolled back (W2-TX-B-3)', async () => {
+    const fixture = await createFixture('rollback-apply-temp');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const applyTemp = join(fixture.workspaceDir, `.config.bin.${fixture.transactionId}-0.tmp`);
+    const crash = new Error('process died between the temp write and the rename');
+    const fs: TransactionFileSystem = {
+      ...nodeFs,
+      rename: (from: Parameters<typeof nodeFs.rename>[0], to: Parameters<typeof nodeFs.rename>[1]) =>
+        String(from) === applyTemp ? Promise.reject(crash) : nodeFs.rename(from, to),
+      unlink: (path: Parameters<typeof nodeFs.unlink>[0]) =>
+        String(path) === applyTemp ? Promise.reject(crash) : nodeFs.unlink(path),
+    };
+    try {
+      await installOriginal(targetPath);
+      await expect(createExecutor(fixture, { fs }).execute(replacePlan(targetPath))).rejects.toThrow();
+      await nodeFs.writeFile(applyTemp, NEW_BYTES);
+      const journal = await createExecutor(fixture).rollback(fixture.transactionId);
+      expect(journal.phase).toBe('rolled_back');
+      await expectBytes(targetPath, ORIGINAL_BYTES);
+      await expectMissing(applyTemp);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it('accepts the valid persisted-journal baseline', () => {
     expect(validateJournal(validPersistedJournal())).toStrictEqual(
       validPersistedJournal(),
