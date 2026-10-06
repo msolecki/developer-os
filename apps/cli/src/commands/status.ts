@@ -71,8 +71,19 @@ export async function runStatus(
       );
     }
 
-    const drift =
-      manifest === null ? [] : await inspectManagedDrift(context, manifest, paths);
+    // Like config and the manifest, an unreadable artifact degrades to a warning (W2-GAP-STATE-2).
+    let drift: Awaited<ReturnType<typeof inspectManagedDrift>> = [];
+    try {
+      if (manifest !== null) drift = await inspectManagedDrift(context, manifest, paths);
+    } catch (error) {
+      warnings.push(
+        context.guards.redactDiagnostic(
+          error instanceof Error
+            ? `managed drift could not be inspected: ${error.message}`
+            : "managed drift could not be inspected",
+        ),
+      );
+    }
 
     let agents: readonly AgentDiscovery[] = [];
     try {
@@ -87,7 +98,18 @@ export async function runStatus(
       );
     }
 
-    const incomplete = await listIncompleteTransactions(context);
+    let incomplete: Awaited<ReturnType<typeof listIncompleteTransactions>> = [];
+    try {
+      incomplete = await listIncompleteTransactions(context);
+    } catch (error) {
+      warnings.push(
+        context.guards.redactDiagnostic(
+          error instanceof Error
+            ? `transaction journals are unreadable: ${error.message}`
+            : "transaction journals are unreadable",
+        ),
+      );
+    }
 
     /** NEW-170: V2 coordinator state lives outside `state/transactions`, so it is surveyed separately. */
     try {

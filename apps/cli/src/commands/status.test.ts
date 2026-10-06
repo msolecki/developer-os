@@ -203,6 +203,20 @@ describe("runStatus", () => {
     expect(result.data.incompleteTransactions).toEqual(["tx_fixture_001"]);
   });
 
+  it("warns rather than fails when a transaction journal is corrupt (W2-GAP-STATE-2)", async () => {
+    const fixture = await createCommandFixture("status-corrupt-journal");
+    await runInit(fixture.context, ACCEPTED);
+    await nodeFs.writeFile(join(fixture.paths.stateDir, "transactions", "tx_fixture_002.json"), '{"schemaVersion":1,', { mode: 0o600 });
+
+    const result = await runStatus(fixture.context);
+
+    expect(result.ok, result.ok ? "" : JSON.stringify(result.error)).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings.join("\n")).toContain("transaction journals are unreadable");
+    expect(result.data.installed).toBe(true);
+    expect(result.data.incompleteTransactions).toEqual([]);
+  });
+
   it("warns rather than fails when the configuration is unreadable", async () => {
     const fixture = await createCommandFixture("status-bad-config");
     await runInit(fixture.context, ACCEPTED);
