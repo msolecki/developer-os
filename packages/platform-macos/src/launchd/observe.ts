@@ -10,7 +10,7 @@ import {
 } from "./distribution.js";
 import { parseLaunchctlLastExitCode } from "./bootstrap.js";
 import { LAUNCHD_GUI_DOMAIN_PATTERN } from "./fs-identity.js";
-import { LAUNCHD_PREVIEW_OBSERVATION_TABLE } from "./process-table.js";
+import { LAUNCHD_PREVIEW_OBSERVATION_TABLE, expandLaunchdArgv } from "./process-table.js";
 import { launchdJob, parseGeneratedLabel } from "./registry.js";
 import {
   LaunchdInputError,
@@ -137,7 +137,7 @@ export class LaunchdObserver {
     const baseline = await this.#admitEmptyDirectory(null);
     const pass: Pass = { launchctl: null, baseline };
 
-    const domainProbe = await this.#probe(domain, phase, pass);
+    const domainProbe = await this.#probe(expandLaunchdArgv(table, "probe_domain", { launchd_gui_domain: domain }), phase, pass);
     if (domainProbe.kind === "unobservable") return domainProbe;
     if (domainProbe.exitCode !== 0) return { kind: "unobservable", reason: "exit" };
 
@@ -152,7 +152,7 @@ export class LaunchdObserver {
       for (const { label, target } of targets) {
         // NEW-169: only a generated candidate's dump is read, never the base label's, which may be foreign.
         const chunks: Uint8Array[] | null = label === launchdJob(entry.job).baseLabel ? null : [];
-        const probe = await this.#probe(target, phase, pass, chunks);
+        const probe = await this.#probe(expandLaunchdArgv(table, "probe_service", { launchd_observed_service_target: target }), phase, pass, chunks);
         if (probe.kind === "unobservable") return probe;
         if (probe.exitCode === 0) present.set(label, chunks === null ? null : parseLaunchctlLastExitCode(Buffer.concat(chunks).toString("utf8"), target));
         else if (probe.exitCode !== LAUNCHD_SERVICE_ABSENT_EXIT) return { kind: "unobservable", reason: "exit" };
@@ -189,14 +189,14 @@ export class LaunchdObserver {
     return directory;
   }
 
-  async #probe(target: string, phase: SupervisedPhaseV1, pass: Pass, stdout: Uint8Array[] | null = null): Promise<ProbeResultV1> {
+  async #probe(argv: readonly string[], phase: SupervisedPhaseV1, pass: Pass, stdout: Uint8Array[] | null = null): Promise<ProbeResultV1> {
     const { baseline } = pass;
     await this.#admitHost(pass);
     await this.#admitEmptyDirectory(baseline);
     if (phase.remainingMilliseconds() <= 0) return { kind: "unobservable", reason: "truncated" };
     const evidence = await this.#dependencies.runner.run({
       executable: table.executable.path,
-      argv: ["print", target],
+      argv: [...argv],
       env: { ...table.environment },
       cwd: table.emptyDirectory.path,
       stdin: "ignore",

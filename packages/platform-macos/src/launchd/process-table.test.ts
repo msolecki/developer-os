@@ -7,6 +7,7 @@ import {
   LAUNCHD_PREVIEW_OBSERVATION_TABLE,
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   deslotLaunchdProcessTable,
+  expandLaunchdArgv,
   expandLaunchdProcessTable,
   launchdObservationProcessTableHash,
   launchdProcessTableHash,
@@ -176,6 +177,36 @@ describe("launchctl process tables", () => {
     { name: "home and tmp one directory", change: { tmp: directory(`${root}/tmp`, "101") } },
   ])("refuses a staging identity with $name", ({ change }) => {
     expect(() => expandLaunchdProcessTable({ ...STAGING, ...change }, LAUNCHCTL_IDENTITY)).toThrow(LaunchdInputError);
+  });
+});
+
+// MACOS-2: executors spawn the hash-bound grammar, not their own literals.
+describe("expandLaunchdArgv", () => {
+  it("fills each alternative's slots and drops the executable", () => {
+    expect(expandLaunchdArgv(table, "bootstrap", { launchd_gui_domain: "gui/501", launchd_bootstrap_plist_path: "/Users/u/Library/LaunchAgents/x.plist" })).toStrictEqual([
+      "bootstrap",
+      "gui/501",
+      "/Users/u/Library/LaunchAgents/x.plist",
+    ]);
+    expect(expandLaunchdArgv(table, "bootout", { launchd_generated_service_target: "gui/501/label" })).toStrictEqual(["bootout", "gui/501/label"]);
+    expect(expandLaunchdArgv(LAUNCHD_PREVIEW_OBSERVATION_TABLE, "probe_domain", { launchd_gui_domain: "gui/501" })).toStrictEqual(["print", "gui/501"]);
+  });
+
+  it("follows the table, so an edited grammar changes what is spawned", () => {
+    const edited = {
+      ...table,
+      argvAlternatives: table.argvAlternatives.map((alternative) =>
+        alternative.id === "bootstrap" ? { ...alternative, argv: ["/bin/launchctl", "kickstart", { slot: "launchd_gui_domain" }] } : alternative,
+      ),
+    } as unknown as typeof table;
+    expect(expandLaunchdArgv(edited, "bootstrap", { launchd_gui_domain: "gui/501" })).toStrictEqual(["kickstart", "gui/501"]);
+  });
+
+  it("refuses a missing slot, an absent alternative and another executable", () => {
+    expect(() => expandLaunchdArgv(table, "bootout", {})).toThrow(LaunchdInputError);
+    expect(() => expandLaunchdArgv(LAUNCHD_PREVIEW_OBSERVATION_TABLE, "bootout", { launchd_generated_service_target: "gui/501/label" })).toThrow(LaunchdInputError);
+    const foreign = { ...table, executable: { ...table.executable, path: "/usr/bin/false" } } as unknown as typeof table;
+    expect(() => expandLaunchdArgv(foreign, "bootout", { launchd_generated_service_target: "gui/501/label" })).toThrow(LaunchdInputError);
   });
 });
 

@@ -290,6 +290,22 @@ function refuse(message: string): never {
   throw new LaunchdInputError(message);
 }
 
+/**
+ * MACOS-2: the argv one executor spawns, expanded from the table's hash-bound grammar rather than
+ * written beside it. The grammar's first element must be the table's executable; it is dropped,
+ * since the runner takes the executable separately. Every slot the alternative names must be given.
+ */
+export function expandLaunchdArgv(
+  table: { readonly executable: { readonly path: string }; readonly argvAlternatives: readonly LaunchdProcessArgvV1[] },
+  id: LaunchdProcessArgvV1["id"],
+  slots: Readonly<Partial<Record<LaunchdArgvSlotV1["slot"], string>>>,
+): readonly string[] {
+  const alternative = table.argvAlternatives.find((candidate) => candidate.id === id) ?? refuse(`launchd argv ${id} is not in the table`);
+  const [executable, ...parts] = alternative.argv;
+  if (executable !== table.executable.path) refuse(`launchd argv ${id} names another executable`);
+  return parts.map((part) => (typeof part === "string" ? part : (slots[part.slot] ?? refuse(`launchd argv ${id}: ${part.slot} is unfilled`))));
+}
+
 function stagingIdentity(
   identity: LaunchdProcessDirectoryIdentityV1,
   path: string,

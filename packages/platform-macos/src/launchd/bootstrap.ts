@@ -21,6 +21,7 @@ import { admitProcessStaging, sameIdentity } from "./fs-identity.js";
 import { encodeRetainedLaunchdPlist, MAX_LAUNCHD_PLIST_BYTES } from "./plist.js";
 import {
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+  expandLaunchdArgv,
   requireLaunchdMutationTable,
   type SupportedLaunchdProcessTableTemplateV1,
   type SupportedLaunchdProcessTableV1,
@@ -319,7 +320,8 @@ export class LaunchdPathBootstrapper {
     await admitProcessStaging(this.#fs, table);
     if (!(await this.#sourceMatches(request.source, bytes))) recovery("launchd_bootstrap_plist_changed", request.source.path);
     const [mutationProfile] = table.profiles;
-    const evidence = await this.#run(table, ["bootstrap", request.domain, request.source.path], mutationProfile, request.phase);
+    const argv = expandLaunchdArgv(table, "bootstrap", { launchd_gui_domain: request.domain, launchd_bootstrap_plist_path: request.source.path });
+    const evidence = await this.#run(table, argv, mutationProfile, request.phase);
     await admitProcessStaging(this.#fs, table);
     return Object.freeze({
       argvId: "bootstrap",
@@ -352,7 +354,8 @@ export class LaunchdPathBootstrapper {
     const target = `${request.domain}/${request.plist.Label}`;
     const chunks: Uint8Array[] = [];
     const [, queryProfile] = table.profiles;
-    const evidence = await this.#run(table, ["print", target], queryProfile, request.phase, (chunk, stream) => {
+    const argv = expandLaunchdArgv(table, "probe_service", { launchd_observed_service_target: target });
+    const evidence = await this.#run(table, argv, queryProfile, request.phase, (chunk, stream) => {
       if (stream === "stdout") chunks.push(Uint8Array.from(chunk));
     });
     await admitProcessStaging(this.#fs, table);
