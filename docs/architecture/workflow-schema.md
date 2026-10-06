@@ -127,6 +127,12 @@ carries both the staging flag and a real vault write — different axes, not an 
   adapter first surfaces it must treat it as data to display, never as a command to run.
 - **The first `.claude/` question.** DOS-P4 settles whether small conveniences under `.claude/`
   are publication artifacts needing an approval-and-hash cycle.
+  **Amended 2026-10-06: settled, and the cycle is gone.** This repository creates no `.claude/`
+  directory in version 1; conveniences it would run on itself are declined rather than deferred
+  (`docs/migration/exclusion-policy.md`, "Paths this repository does not create"). Adapter output
+  ships from `plugins/claude/` and every installed artifact is recorded in the installation
+  manifest (`foundation.md` §4), so no per-convenience approval-and-hash cycle remains. Reopening
+  the question is an amendment to that policy.
 
 ## 7. Workflow gaps after DOS-P6
 
