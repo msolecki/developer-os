@@ -321,13 +321,17 @@ export function validateRollbackRecord(value: unknown, evidence: CanonicalPathEv
   const installed = validateReleaseIdentity(input.installed, evidence);
   const previous = validateReleaseIdentity(input.previous, evidence);
   if (installed.architecture !== previous.architecture || installed.releaseIdentityHash === previous.releaseIdentityHash) fail(`${label}: releases`);
+  const executionBindingHash = parseLowerHexSha256(input.executionBindingHash);
+  const payloadId = parseRollbackPayloadId(input.payloadId);
+  const binding = rollbackBindingHash({ executionBindingHash, payloadId, installedReleaseIdentityHash: installed.releaseIdentityHash, previousReleaseIdentityHash: previous.releaseIdentityHash });
+  if (parseLowerHexSha256(input.rollbackBindingHash) !== binding) fail(`${label}.rollbackBindingHash: not the binding its fields derive`);
   return {
     schemaVersion: 1,
     installed,
     previous,
-    executionBindingHash: parseLowerHexSha256(input.executionBindingHash),
-    rollbackBindingHash: parseLowerHexSha256(input.rollbackBindingHash),
-    payloadId: parseRollbackPayloadId(input.payloadId),
+    executionBindingHash,
+    rollbackBindingHash: binding,
+    payloadId,
     payloadInventoryHash: parseLowerHexSha256(input.payloadInventoryHash),
     inversePlanHash: parseLowerHexSha256(input.inversePlanHash),
     createdAt: parseUtcTimestamp(input.createdAt),

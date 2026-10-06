@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   bindRetainedInversePlan,
+  rollbackBindingHash,
   encodeCanonicalJson,
   EXIT_CODES,
   parseCanonicalAbsolutePathText,
@@ -235,12 +236,13 @@ describe("snapshot", () => {
 
 describe("readRollbackEvidence", () => {
   const payloadId = `rb_${sha256("synthetic nonce")}_3` as RollbackPayloadIdV1;
-  const binding = sha256("synthetic rollback binding");
+  const executionBindingHash = sha256("synthetic execution binding");
   const installedHash = sha256("synthetic installed release");
   const previousHash = sha256("synthetic previous release");
+  const binding = rollbackBindingHash({ executionBindingHash, payloadId, installedReleaseIdentityHash: installedHash, previousReleaseIdentityHash: previousHash });
 
   /** A retained payload restoring one file whose current bytes are the update's postimage. */
-  async function retained(fixture: CommandFixture): Promise<{ readonly record: RollbackRecordV1; readonly current: string; readonly root: string }> {
+  async function retained(fixture: CommandFixture, extraBlob = false): Promise<{ readonly record: RollbackRecordV1; readonly current: string; readonly root: string }> {
     const work = join(fixture.root, "work");
     await nodeFs.mkdir(work, { recursive: true, mode: 0o700 });
     const current = parseCanonicalAbsolutePathText(join(work, "a.json"));
@@ -250,6 +252,7 @@ describe("readRollbackEvidence", () => {
     await nodeFs.mkdir(join(root, "blobs"), { recursive: true, mode: 0o700 });
     await nodeFs.mkdir(join(root, "plans", "owner_inverse"), { recursive: true, mode: 0o700 });
     await nodeFs.writeFile(join(root, "blobs", "0000000000.bin"), OLD_A, { mode: 0o600 });
+    if (extraBlob) await nodeFs.writeFile(join(root, "blobs", "0000000001.bin"), OLD_A, { mode: 0o600 });
     const blob = { path: "blobs/0000000000.bin", bytes: OLD_A.byteLength, sha256: sha256(OLD_A) };
     const projection = validateRetainedOwnerInverseProjection({
       schemaVersion: 1,
@@ -293,15 +296,17 @@ describe("readRollbackEvidence", () => {
       inversePlanHash: sha256(inversePlan),
       entries: [
         { ordinal: 0, path: "blobs/0000000000.bin", role: "owner_preimage", bytes: OLD_A.byteLength, sha256: sha256(OLD_A) },
-        { ordinal: 1, path: "plans/owner_inverse/owner_core.plan.json", role: "inverse_plan_leaf", bytes: leaf.byteLength, sha256: sha256(leaf) },
+        ...(extraBlob ? [{ ordinal: 1, path: "blobs/0000000001.bin", role: "owner_preimage", bytes: OLD_A.byteLength, sha256: sha256(OLD_A) }] : []),
+        { ordinal: extraBlob ? 2 : 1, path: "plans/owner_inverse/owner_core.plan.json", role: "inverse_plan_leaf", bytes: leaf.byteLength, sha256: sha256(leaf) },
       ],
-      aggregateBytes: OLD_A.byteLength + leaf.byteLength,
+      aggregateBytes: OLD_A.byteLength * (extraBlob ? 2 : 1) + leaf.byteLength,
     });
     await nodeFs.writeFile(join(root, "inventory.json"), inventory, { mode: 0o600 });
 
     const record = {
       schemaVersion: 1,
       payloadId,
+      executionBindingHash,
       rollbackBindingHash: binding,
       payloadInventoryHash: sha256(inventory),
       inversePlanHash: sha256(inversePlan),
@@ -332,6 +337,16 @@ describe("readRollbackEvidence", () => {
       reason: "update_rollback_post_update_edit",
       code: EXIT_CODES.decisionRequired,
       paths: [current],
+    });
+  });
+
+  it("runs the full binding graph: an inventory entry no retained plan references is recovery-required (W2-ROLLBACK-2)", async () => {
+    const fixture = await createCommandFixture("update-rollback-unreferenced");
+    const { record } = await retained(fixture, true);
+
+    expect(await refusal(createCliUpdateContext(fixture.context).readRollbackEvidence(null as never, record))).toMatchObject({
+      reason: "update_rollback_evidence_invalid",
+      code: EXIT_CODES.recoveryRequired,
     });
   });
 
