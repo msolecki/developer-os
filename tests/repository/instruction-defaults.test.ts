@@ -35,3 +35,14 @@ describe("default instructions are redacted (foundation.md §12.1)", () => {
     expect(scanInstructionDefaults(join(ROOT, root), [])).toStrictEqual([]);
   });
 });
+
+describe("one line budget for a project instruction file", () => {
+  it("the review skill and the project templates name the same target", () => {
+    const budgets = [
+      "instructions/skills/przeglad-claudemd/SKILL.md",
+      "templates/project/AGENTS.md",
+      "templates/project/CLAUDE.md",
+    ].map((path) => /(?:under|fewer than) (?:about )?(\d+) lines/u.exec(readFileSync(join(ROOT, path), "utf8"))?.[1]);
+    expect(budgets).toStrictEqual(["100", "100", "100"]);
+  });
+});

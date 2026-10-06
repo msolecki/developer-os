@@ -39,7 +39,7 @@ describe("detectWorkflowDrift", () => {
         path: "plugins/claude/sample.md",
         line: null,
         message:
-          "this artifact has never been generated; run developer-os workflow render",
+          "this artifact has never been generated; run npm run render:claude or npm run render:codex",
       },
     ]);
   });
@@ -50,6 +50,10 @@ describe("detectWorkflowDrift", () => {
       new Map([["plugins/claude/sample.md", "a\nSECRET\n"]]),
     );
     expect(findings[0]?.line).toBe(2);
+    // The repository regenerators; `developer-os workflow render` was declined and does not exist.
+    expect(findings[0]?.message).toBe(
+      "differs from a fresh render; run npm run render:claude or npm run render:codex",
+    );
     expect(JSON.stringify(findings)).not.toContain("SECRET");
   });
 
