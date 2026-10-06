@@ -1930,7 +1930,14 @@ export async function planUninstallDetach(context: CliContext, lifecycle: CliLif
    */
   let configHash = "";
   let config: DeveloperOsConfigV1 | null = null;
-  if (await nodeInstructionFs.lstat(context.paths.configFile) !== null) {
+  const configPresent = await lstat(context.paths.configFile, { bigint: true }).then(
+    () => true,
+    (error: unknown) => {
+      if (isMissingEntry(error)) return false;
+      throw error;
+    },
+  );
+  if (configPresent) {
     const text = await context.guards.readText(context.paths.configFile, async (handle) => {
       const bytes = await handle.readFile();
       configHash = hashBytes(bytes);
