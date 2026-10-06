@@ -1,4 +1,4 @@
-import { decodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { decodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ArtifactOwner } from "../manifest/types.js";
 import {
@@ -22,7 +22,6 @@ import {
   MAXIMUM_DURABLE_ENTRY_EVIDENCE_BYTES,
   MAXIMUM_SOURCE_READY_EVIDENCE_BYTES,
   nextEntryCompensation,
-  noLfHash,
   nullableInteger,
   oneOf,
   record,
@@ -276,7 +275,7 @@ export function rollbackBindingHash(input: {
   readonly installedReleaseIdentityHash: LowerHexSha256;
   readonly previousReleaseIdentityHash: LowerHexSha256;
 }): LowerHexSha256 {
-  return noLfHash("developer-os/update-rollback-binding/v1", {
+  return hashCanonicalJsonNoLf("developer-os/update-rollback-binding/v1", {
     executionBindingHash: hash(input.executionBindingHash, "rollbackBindingHash.executionBindingHash"),
     payloadId: parseRollbackPayloadId(input.payloadId),
     installedReleaseIdentityHash: hash(input.installedReleaseIdentityHash, "rollbackBindingHash.installed"),
@@ -287,12 +286,12 @@ export function rollbackBindingHash(input: {
 /** `developer-os/update-rollback-step-list/v1\0` plus the exact §10.2 step template. */
 export function rollbackStepListHash(steps: readonly unknown[]): LowerHexSha256 {
   if (steps.length < 1) fail("rollback step list: empty");
-  return noLfHash("developer-os/update-rollback-step-list/v1", steps);
+  return hashCanonicalJsonNoLf("developer-os/update-rollback-step-list/v1", steps);
 }
 
 /** `developer-os/retained-inverse/<kind>/v1\0` over the complete bound retained schema. */
 export function retainedInversePlanHash(plan: RetainedOwnerInversePlanV1 | RetainedSchemaMigrationInversePlanV1): LowerHexSha256 {
-  return noLfHash(`developer-os/retained-inverse/${plan.kind}/v1`, plan);
+  return hashCanonicalJsonNoLf(`developer-os/retained-inverse/${plan.kind}/v1`, plan);
 }
 
 /** The owner plan's `inverseOperationHash`, recomputed from the retained operations and effects. */

@@ -6,6 +6,7 @@ import {
   decodeCanonicalJson,
   encodeCanonicalJson,
   hashCanonicalJson,
+  hashCanonicalJsonNoLf,
   sortUtf8,
 } from "./canonical-json.js";
 
@@ -501,5 +502,23 @@ describe("hashCanonicalJson", () => {
         }
       }
     });
+  });
+});
+
+describe("hashCanonicalJsonNoLf", () => {
+  it("hashes the ASCII domain, its trailing NUL, then the canonical bytes without their LF", () => {
+    const value = { b: ["x", 2], a: null };
+    const expected = createHash("sha256")
+      .update("developer-os/d/v1\0", "ascii")
+      .update(encodeCanonicalJson(value).slice(0, -1), "utf8")
+      .digest("hex");
+    expect(hashCanonicalJsonNoLf("developer-os/d/v1", value)).toBe(expected);
+    expect(hashCanonicalJsonNoLf("d", { a: 1 })).toBe(
+      createHash("sha256").update(Uint8Array.from([0x64, 0x00])).update('{"a":1}').digest("hex"),
+    );
+  });
+
+  it.each(["", "d\u0000e", "d\u00e9", "d e", "d\n"])("refuses the domain %j", (domain) => {
+    expect(() => hashCanonicalJsonNoLf(domain, { a: 1 })).toThrow();
   });
 });

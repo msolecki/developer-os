@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { decodeCanonicalJson, encodeCanonicalJson, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { parseAllocatedLifecycleId, parseManifestParticipantId, type AllocatedLifecycleIdV1, type EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1, ManifestParticipantIdV1 } from "../manifest/manifest-state.js";
 import { encodeFoundationJournalJsonV1, validateJournal } from "../transactions/store.js";
@@ -465,10 +465,6 @@ function canonical(value: unknown): CanonicalJsonV1 {
   return encodeCanonicalJson(value as CanonicalJsonValue);
 }
 
-/** SHA-256 over an ASCII domain, NUL, and the canonical bytes without their LF. */
-function noLfHash(domain: string, value: unknown): LowerHexSha256 {
-  return createHash("sha256").update(`${domain}\0`, "ascii").update(canonical(value).slice(0, -1), "utf8").digest("hex") as LowerHexSha256;
-}
 
 function utf8Bytes(text: string): number {
   return encoder.encode(text).byteLength;
@@ -518,7 +514,7 @@ export function parseLeafPlanId(kind: UpdateLeafPlanKindV1, value: unknown): Lea
 }
 
 export function payloadSourceProjectionHash(source: UpdateConstructionPayloadSourceV1): LowerHexSha256 {
-  return noLfHash(`developer-os/update-construction-payload-source/${source.kind}/v1`, source);
+  return hashCanonicalJsonNoLf(`developer-os/update-construction-payload-source/${source.kind}/v1`, source);
 }
 
 /** `<product-home>/rollback/<payload-id>/blobs/<ten-digit-ordinal>.bin`, the blob a retained source reopens. */
@@ -543,11 +539,11 @@ export function checkRetainedRollbackBlobSource(source: UpdateConstructionRetain
 }
 
 export function rollbackEntrySourceProjectionHash(source: UpdateConstructionRollbackEntrySourceV1): LowerHexSha256 {
-  return noLfHash(`developer-os/update-rollback-entry-source/${source.kind}/v1`, source);
+  return hashCanonicalJsonNoLf(`developer-os/update-rollback-entry-source/${source.kind}/v1`, source);
 }
 
 export function rollbackSourceEntriesProjectionHash(source: Pick<UpdateConstructionRollbackSourceV1, "payloadId" | "rollbackBindingHash" | "inventoryHash" | "entries">): LowerHexSha256 {
-  return noLfHash("developer-os/update-rollback-source-entries/v1", {
+  return hashCanonicalJsonNoLf("developer-os/update-rollback-source-entries/v1", {
     payloadId: source.payloadId,
     rollbackBindingHash: source.rollbackBindingHash,
     inventoryHash: source.inventoryHash,

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { hashCanonicalJsonNoLf } from "../lifecycle/canonical-json.js";
 
 import type { AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
 import { updateLeafPlanHash } from "./bundle-participant.js";
@@ -439,7 +439,7 @@ export function updateFoundationParticipantPlanHash(ref: Omit<UpdateFoundationPa
       staged: { kind: staged.kind, coordinatorId: staged.coordinatorId, ordinal: staged.ordinal, path: staged.path, bytes: staged.bytes, mode: staged.mode },
     },
   };
-  return createHash("sha256").update("developer-os/foundation-participant-plan/v2\0", "ascii").update(canonical(projection).slice(0, -1), "utf8").digest("hex") as LowerHexSha256;
+  return hashCanonicalJsonNoLf("developer-os/foundation-participant-plan/v2", projection);
 }
 
 function checkFoundationRef(ref: UpdateFoundationParticipantRefV2, slot: UpdateFoundationParticipantRefV2["slot"], context: Pick<MigrationMaterializationContextV1, "coordinatorId" | "productHome">): void {

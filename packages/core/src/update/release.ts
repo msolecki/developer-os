@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { compareUtf8, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { EXIT_CODES } from "../result.js";
 import { admitCanonicalAbsolutePath, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1 } from "./paths.js";
 import {
@@ -395,8 +395,7 @@ export function releaseIdentityHash(entry: unknown, architecture: "arm64" | "x64
       manifestSha256: bundle.manifestSha256,
     },
   };
-  const canonical = encodeCanonicalJson(projection);
-  return createHash("sha256").update("developer-os/release-identity/v1\0", "ascii").update(canonical.slice(0, -1), "utf8").digest("hex") as LowerHexSha256;
+  return hashCanonicalJsonNoLf("developer-os/release-identity/v1", projection);
 }
 
 function hasControlOrFormat(value: string): boolean {

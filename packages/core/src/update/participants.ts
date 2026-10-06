@@ -3,9 +3,8 @@
  * target-verifier plans plus the journal phase/cursor tables the CLI executors drive. Pure: every
  * function validates or hashes; nothing here opens a file, spawns a process, or reads a clock.
  */
-import { createHash } from "node:crypto";
 
-import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { AllocatedLifecycleIdV1, EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ArtifactOwner, ManagedArtifactV2 } from "../manifest/types.js";
@@ -214,10 +213,6 @@ function same(left: unknown, right: unknown): boolean {
   return canonical(left) === canonical(right);
 }
 
-/** Domain-separated SHA-256 over no-LF canonical projection bytes. */
-function domainHash(domain: string, projection: unknown): LowerHexSha256 {
-  return createHash("sha256").update(domain, "ascii").update(canonical(projection).slice(0, -1), "utf8").digest("hex") as LowerHexSha256;
-}
 
 /** An immutable plan's persisted bytes: canonical JSON plus one LF. */
 export function updateParticipantDocumentBytes(value: unknown): Uint8Array {
@@ -258,7 +253,7 @@ function parentOf(path: string): string {
 export function ownerCurrentPartitionHash(owner: ArtifactOwner, rows: readonly ManagedArtifactV2[]): LowerHexSha256 {
   if (rows.length < 1) fail("OwnerUpdatePlanV1.currentPartitionHash: an empty partition");
   if (rows.some((row) => row.owner !== owner)) fail("OwnerUpdatePlanV1.currentPartitionHash: a row of another owner");
-  return domainHash("developer-os/owner-current-partition/v1\0", rows);
+  return hashCanonicalJsonNoLf("developer-os/owner-current-partition/v1", rows);
 }
 
 /**
@@ -267,7 +262,7 @@ export function ownerCurrentPartitionHash(owner: ArtifactOwner, rows: readonly M
  * fields, so no binding, source-plan, byte-limit, or containing hash can enter the projection.
  */
 export function ownerInverseOperationHash(projection: { readonly owner: ArtifactOwner; readonly operations: readonly CanonicalJsonValue[]; readonly externalEffects: readonly CanonicalJsonValue[] }): LowerHexSha256 {
-  return domainHash("developer-os/owner-inverse-operations/v1\0", { owner: projection.owner, operations: projection.operations, externalEffects: projection.externalEffects });
+  return hashCanonicalJsonNoLf("developer-os/owner-inverse-operations/v1", { owner: projection.owner, operations: projection.operations, externalEffects: projection.externalEffects });
 }
 
 function pathState(value: unknown, label: string): PersistedManagedPathStateV1 {
@@ -621,7 +616,7 @@ export function codexRegistrationProjectionHash(projection: CodexRegistrationPro
   parsePositiveUInt32(input.protocol);
   if (input.version !== null) parseSafeReasonCode(input.version);
   if (!["managed_plugin_root", "other", "absent"].includes(input.source as string)) fail("CodexRegistrationProjectionV1.source");
-  return domainHash("developer-os/codex-registration-projection/v1\0", { pluginId: projection.pluginId, enabled: projection.enabled, protocol: projection.protocol, version: projection.version, source: projection.source });
+  return hashCanonicalJsonNoLf("developer-os/codex-registration-projection/v1", { pluginId: projection.pluginId, enabled: projection.enabled, protocol: projection.protocol, version: projection.version, source: projection.source });
 }
 
 function validateProcessPolicy(value: unknown): OwnerExternalEffectProcessPolicyV1 {
@@ -652,7 +647,7 @@ function validateProcessPolicy(value: unknown): OwnerExternalEffectProcessPolicy
 
 /** Spec 2 §9.2: `developer-os/owner-external-effect-process-policy/v1\0` plus the complete no-LF policy. */
 export function ownerExternalEffectProcessPolicyHash(policy: OwnerExternalEffectProcessPolicyV1): LowerHexSha256 {
-  return domainHash("developer-os/owner-external-effect-process-policy/v1\0", validateProcessPolicy(policy));
+  return hashCanonicalJsonNoLf("developer-os/owner-external-effect-process-policy/v1", validateProcessPolicy(policy));
 }
 
 /**
@@ -711,7 +706,7 @@ export function validateOwnerExternalEffectJournal(value: unknown, plan: OwnerEx
 
 /** Spec 2 §9.2: `developer-os/owner-external-effect-evidence/v1\0` over the redacted evidence. */
 export function ownerExternalEffectEvidenceHash(evidence: OwnerExternalEffectEvidenceV1): LowerHexSha256 {
-  return domainHash("developer-os/owner-external-effect-evidence/v1\0", evidence);
+  return hashCanonicalJsonNoLf("developer-os/owner-external-effect-evidence/v1", evidence);
 }
 
 export function validateOwnerExternalEffectEvidence(value: unknown, plan: OwnerExternalEffectPlanV1, direction: "forward" | "compensating", observedStateHash: LowerHexSha256): OwnerExternalEffectEvidenceV1 {
@@ -954,8 +949,8 @@ export interface OwnerPostimageRowInputV1 {
 export function ownerPostimagesHash(rows: readonly OwnerPostimageRowInputV1[]): LowerHexSha256 {
   const owners = rows.map((row) => row.plan.owner);
   if (!same(owners, OWNER_UPDATE_ORDER.filter((owner) => owners.includes(owner)))) fail("ownerPostimagesHash: rows not in canonical owner order");
-  return domainHash(
-    "developer-os/update-owner-postimages/v1\0",
+  return hashCanonicalJsonNoLf(
+    "developer-os/update-owner-postimages/v1",
     rows.map((row) => {
       if (row.ref.hash !== updateParticipantDocumentHash("owner_update", row.plan) || row.ref.id !== row.plan.id) fail("ownerPostimagesHash: a ref that is not its plan");
       if (!same(row.effects.map((effect) => effect.ref), row.plan.externalEffects)) fail("ownerPostimagesHash: effects are not the owner plan's refs");
@@ -976,8 +971,8 @@ export function ownerPostimagesHash(rows: readonly OwnerPostimageRowInputV1[]): 
  * order; the empty migration set hashes the canonical empty array.
  */
 export function migrationPostimagesHash(rows: readonly { readonly ref: ImmutableUpdatePlanRefV1<"schema_migration">; readonly plan: SchemaMigrationPlanV1 }[]): LowerHexSha256 {
-  return domainHash(
-    "developer-os/update-migration-postimages/v1\0",
+  return hashCanonicalJsonNoLf(
+    "developer-os/update-migration-postimages/v1",
     rows.map(({ ref, plan }) => {
       if (ref.id !== plan.id || ref.hash !== updateParticipantDocumentHash("schema_migration", plan)) fail("migrationPostimagesHash: a ref that is not its plan");
       return { ref, id: plan.id, domain: plan.domain, fromVersion: plan.fromVersion, toVersion: plan.toVersion, mutations: plan.mutations.map((mutation) => ({ path: mutation.path, afterHash: mutation.afterHash })) };
