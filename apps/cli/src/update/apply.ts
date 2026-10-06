@@ -20,6 +20,7 @@ import type {
   UpdateConstructionPlanV1,
   UpdateLifecycleCoordinatorDependenciesV1,
   UpdateLifecycleOutcomeV1,
+  UpdateOperationV1,
   UpdateRollbackPreviewV1,
 } from "@developer-os/core";
 
@@ -143,16 +144,29 @@ async function recoverLocked(ports: UpdateApplyPortsV1, closure: LifecycleJourna
   });
 }
 
+/** The operation an update closure arm records; null when none is known (a lone pending construction plan, an executor record). */
+function recordedOperation(closure: LifecycleJournalClosureV2): UpdateOperationV1 | null {
+  if (closure.kind === "update_recovery") return closure.operation;
+  if (closure.kind === "update_construction_cleanup" && closure.construction.frontier !== "plan_pending") return closure.construction.operation;
+  return null;
+}
+
 /**
  * Resumes or compensates whatever update residue the closure names, in its persisted direction.
- * `update --apply` runs it first, so a killed apply heals on the next attempt.
+ * `update --apply` runs it first, so a killed apply heals on the next attempt. With `operation`,
+ * residue another operation recorded refuses with that operation's command (Spec 2 §9.2, NEW-162).
  */
-export function recoverUpdate(update: CliUpdateContext): Promise<UpdateRecoveryRouteOutcomeV1> {
+export function recoverUpdate(update: CliUpdateContext, operation?: UpdateOperationV1): Promise<UpdateRecoveryRouteOutcomeV1> {
   const ports = updateApplyPorts(update);
   return ports.withGlobalLock(async () => {
     await ports.cleanAllocatorTemp?.();
     await ports.removeEmptyStagingRoots?.();
-    const recovered = await recoverLocked(ports, await ports.closure());
+    const closure = await ports.closure();
+    const recorded = recordedOperation(closure);
+    if (operation !== undefined && recorded !== null && recorded !== operation) {
+      refuse("update_recovery_other_operation", EXIT_CODES.recoveryRequired, recorded === "update_rollback" ? "developer-os update rollback --apply" : "developer-os update --apply");
+    }
+    const recovered = await recoverLocked(ports, closure);
     await ports.removeEmptyStagingRoots?.();
     return recovered;
   });

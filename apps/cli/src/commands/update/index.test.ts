@@ -207,6 +207,61 @@ describe("runUpdate", () => {
   });
 
   it.each([
+    [{ kind: "update", version: null, apply: true, json: false }, "update_rollback", "developer-os update rollback --apply"],
+    [{ kind: "rollback", apply: true, json: false }, "update_apply", "developer-os update --apply"],
+  ] as const)("refuses to resume another operation's coordinator: %j over %s (NEW-162, Spec 2 §9.2)", async (invocation, operation, recovery) => {
+    const commandFixture = await createCommandFixture(`update-other-operation-${invocation.kind}`);
+    const update = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+    const closures = [
+      { kind: "update_recovery", coordinatorId: SYNTHETIC_COORDINATOR_ID, operation, direction: "forward" },
+      {
+        kind: "update_construction_cleanup",
+        coordinatorId: SYNTHETIC_COORDINATOR_ID,
+        direction: "compensating",
+        construction: { frontier: "journal", operation, constructionPlanHash: "a".repeat(64) },
+      },
+    ];
+    for (const closure of closures) {
+      const apply: UpdateApplyPortsV1 = {
+        ...unreachableApplyPorts(),
+        withGlobalLock: (work) => work(),
+        closure: () => Promise.resolve(closure as never),
+        composeRollback: () => Promise.reject(new Error("unreachable")),
+      };
+      const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply } }, invocation);
+
+      expect(result.ok, closure.kind).toBe(false);
+      expect(result.code, closure.kind).toBe(EXIT_CODES.recoveryRequired);
+      if (!result.ok) expect(result.error).toMatchObject({ message: "update_recovery_other_operation", recovery });
+    }
+    expect(update.events).not.toContain("trust");
+    expect(update.events).not.toContain("planner");
+    expect(update.requests).toStrictEqual([]);
+  });
+
+  it.each([
+    [{ kind: "update", version: null, apply: true, json: false }, "applied"],
+    [{ kind: "rollback", apply: true, json: false }, "rolled_back"],
+  ] as const)("stops after a resumed %j coordinator finalizes instead of planning again (NEW-162)", async (invocation, outcome) => {
+    const commandFixture = await createCommandFixture(`update-resumed-finalized-${invocation.kind}`);
+    const update = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+    const apply: UpdateApplyPortsV1 = {
+      ...unreachableApplyPorts(),
+      withGlobalLock: (work) => work(),
+      composeRollback: () => Promise.reject(new Error("unreachable")),
+    };
+    vi.mocked(recoverUpdate).mockImplementationOnce(() =>
+      Promise.resolve({ kind: "coordinator", outcome: { kind: "finalized", id: SYNTHETIC_COORDINATOR_ID } }));
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply } }, invocation);
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.data).toMatchObject({ outcome, active: { version: "1.1.0" } });
+    expect(update.events).not.toContain("trust");
+    expect(update.events).not.toContain("rollback.evidence");
+    expect(update.requests).toStrictEqual([]);
+  });
+
+  it.each([
     [{ kind: "update", version: null, apply: true, json: false }, "update_rolled_back_automatically", "update_verifier_rejected", EXIT_CODES.securityRefusal],
     [{ kind: "update", version: null, apply: true, json: false }, "update_rolled_back_automatically", "update_step_not_applied", EXIT_CODES.operationalFailure],
     [{ kind: "rollback", apply: true, json: false }, "update_rollback_compensated", "update_verifier_rejected", EXIT_CODES.securityRefusal],

@@ -1340,7 +1340,10 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
   `update_launcher_handoff_absent` (exit 4) before any fstat, read or close of FD 3, which outside
   the launcher is not the trust pipe (NEW-147). `update rollback` reads only retained local
   evidence: no FD 3, transport, scratch or planner.
-- **Apply.** `--apply` heals any update residue first, then revalidates under the global lock: a
+- **Apply.** `--apply` heals the update residue its own operation recorded first; residue the other
+  operation recorded refuses exit 6 naming that operation's `--apply` command (Spec 2 §9.2), and a
+  resumed coordinator ends the invocation, finalized or compensated, without planning again
+  (NEW-162). It then revalidates under the global lock: a
   clear V2 closure, the same home, the same retained evidence, and a planner rerun whose
   transcript and candidate equal the preview's. It reserves one allocator block for every prefix
   (D72 P7(e)), composes every leaf plan and the construction plan (`apps/cli/src/update/compose.ts`),
