@@ -557,6 +557,23 @@ function publicationSteps(plan: RollbackPayloadStatePlanV1): RollbackPayloadPubl
   return steps;
 }
 
+describe("rollback payload source forward steps after compensation began (W2-ROLLBACK-4 follow-up)", () => {
+  const compensated = (plan: RollbackPayloadSourceStagingPlanV1, steps: readonly RollbackPayloadSourceStepV1[]): RollbackPayloadSourceStagingJournalV1 => walkSource(plan, [...steps, { kind: "compensate" }]);
+
+  it("refuses structure_created, metadata_created and ready_created over a leftover create_intent", () => {
+    const plan = sourcePlan();
+    const all = sourceStepsThroughEntries(plan);
+    const structure = compensated(plan, [{ kind: "structure_intent" }]);
+    expect(() => advanceRollbackPayloadSourceJournal(plan, structure, { kind: "structure_created", ...identity(990) }, later)).toThrow();
+    const metadata = compensated(plan, [...all.slice(0, 21), { kind: "metadata_intent" }]);
+    expect(metadata.metadataWriteState?.state).toBe("create_intent");
+    expect(() => advanceRollbackPayloadSourceJournal(plan, metadata, { kind: "metadata_created", ...identity(991) }, later)).toThrow();
+    const ready = compensated(plan, [...all, { kind: "ready_intent" }]);
+    expect(ready.readyWriteState?.state).toBe("create_intent");
+    expect(() => advanceRollbackPayloadSourceJournal(plan, ready, { kind: "ready_created", ...identity(992) }, later)).toThrow();
+  });
+});
+
 describe("rollback payload publication", () => {
   it("publishes the five fixed structures, every entry, then the inverse plan and inventory", () => {
     const plan = statePlan();

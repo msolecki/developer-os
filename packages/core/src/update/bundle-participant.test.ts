@@ -442,3 +442,45 @@ describe("BundlePublicationJournalV1", () => {
     expect(() => validateDurablePublicationEntryEvidence(bytes, plan, 1)).toThrow();
   });
 });
+
+describe("forward created/published steps after compensation began, and rolled_back write states (W2-ROLLBACK-4/-5 follow-up)", () => {
+  const compensateSource = (plan: BundleSourceStagingPlanV1, steps: readonly BundleSourceStepV1[]): BundleSourceStagingJournalV1 => runSource(plan, [...steps, { kind: "compensate" }]);
+  const compensatePublication = (plan: BundlePublicationPlanV1, steps: readonly BundlePublicationStepV1[]): BundlePublicationJournalV1 => runPublication(plan, [...steps, { kind: "compensate" }]);
+
+  it("refuses structure_created and ready_created on a compensating source journal with a leftover create_intent", () => {
+    const plan = sourcePlan();
+    const structure = compensateSource(plan, [{ kind: "structure_intent" }]);
+    expect(structure.structureWriteState?.state).toBe("create_intent");
+    expect(() => advanceBundleSourceJournal(plan, structure, { kind: "structure_created", dev: u64("5"), ino: u64("99") }, later)).toThrow();
+    const ready = compensateSource(plan, [...structures, ...entries.flatMap((_, ordinal) => entryCopy((30 + ordinal).toString(10))), { kind: "ready_intent" }]);
+    expect(ready.readyWriteState?.state).toBe("create_intent");
+    expect(() => advanceBundleSourceJournal(plan, ready, { kind: "ready_created", dev: u64("5"), ino: u64("98") }, later)).toThrow();
+  });
+
+  it("refuses root_created and metadata_published on a compensating publication journal with a leftover intent", () => {
+    const plan = publishPlan();
+    const root = compensatePublication(plan, [{ kind: "root_intent" }]);
+    expect(root.rootWriteState?.state).toBe("create_intent");
+    expect(() => advanceBundlePublicationJournal(plan, root, { kind: "root_created", dev: u64("5"), ino: u64("97") }, later)).toThrow();
+    const metadata = compensatePublication(plan, [...rootSteps, ...entries.flatMap((_, ordinal) => entryCopy((60 + ordinal).toString(10))), { kind: "metadata_intent" }]);
+    expect(metadata.metadataWriteState?.state).toBe("publish_intent");
+    expect(() => advanceBundlePublicationJournal(plan, metadata, { kind: "metadata_published", dev: u64("9"), ino: u64("96") }, later)).toThrow();
+  });
+
+  it("reaches rolled_back with every publication write state cleared, and refuses a rolled_back journal that kept one", () => {
+    const plan = publishPlan();
+    let journal = compensatePublication(plan, [...rootSteps, ...entries.flatMap((_, ordinal) => entryCopy((60 + ordinal).toString(10))), { kind: "metadata_intent" }]);
+    while (journal.phase !== "rolled_back") journal = advanceBundlePublicationJournal(plan, journal, { kind: "compensation_step" }, later);
+    expect([journal.rootWriteState, journal.entryWriteState, journal.metadataWriteState]).toStrictEqual([null, null, null]);
+    expect(journal.nextMetadata).toBeLessThan(3);
+    expect(() => validateBundlePublicationJournal({ ...journal, metadataWriteState: { ordinal: journal.nextMetadata, state: "publish_intent" } }, plan)).toThrow();
+  });
+
+  it("refuses a rolled_back source journal that kept an entry write state", () => {
+    const plan = sourcePlan();
+    let journal = compensateSource(plan, [...structures, ...entryCopy("30"), { kind: "entry_intent" }]);
+    while (journal.phase !== "rolled_back") journal = advanceBundleSourceJournal(plan, journal, { kind: "compensation_step" }, later);
+    expect(journal.nextEntry).toBeLessThan(entries.length);
+    expect(() => validateBundleSourceJournal({ ...journal, entryWriteState: { ordinal: journal.nextEntry, state: "entry_intent" } }, plan)).toThrow();
+  });
+});
