@@ -77,7 +77,7 @@ const BASELINES: ReadonlyMap<string, number> = new Map([
   ["docs/architecture/foundation-constraints.md", 3],
   ["docs/architecture/workflow-schema.md", 3],
   /** Lowered from 8 to 6 on 2026-09-29: the closed NEW-113 (D76) and NEW-117 rows took one each. */
-  ["docs/superpowers/BACKLOG.md", 6],
+  ["docs/superpowers/BACKLOG.md", 5],
   ["docs/superpowers/plans/2026-07-21-developer-os-program.md", 8],
 ]);
 

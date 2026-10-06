@@ -768,7 +768,7 @@ the "every managed mutation is transactional" sentence has a stated exception.
 | An empty `PATH` does not become an unbounded search | a fixed fallback of the four system directories (`packages/platform-macos/src/macos.ts:21,185-186`) | `packages/platform-macos/src/macos.test.ts` |
 | The *platform boundary* never executes what it found | `AgentDiscovery.version` is permanently `null` there, because determining it requires running the binary (`packages/platform-macos/src/types.ts:19-24`, `foundation.md` §7). **A layer above does execute it**: `discoverCli` runs `<exe> --version` (`packages/security/src/cli.ts:54-80`) and `doctor` calls it on every invocation, which retired the Foundation-era invariant — `claude-adapter.md` §9 residual 10 records exactly that | `packages/platform-macos/src/macos.test.ts`; `tests/security/network.test.ts` classifies the version probe rather than forbidding it |
 | A hostile entry for one vendor does not cost the user the other | a discovery that refuses is treated as "not this one" and the next vendor is tried (`apps/cli/src/commands/ingest.ts:482-491`) | `apps/cli/src/commands/ingest.test.ts` |
-| **The executed binary is vouched for by something** | `assertTrustedExecutable` resolves the path one component at a time, refuses anything that is not a regular file, and checks every real directory the resolution enters — including the one holding each intermediate link — refusing an owner that is neither the current uid nor root, any other-writable directory, a group-writable one the current uid does not own, and a root-owned group-writable one whoever runs the check (D83 (3), `BACKLOG.md` NEW-33) (`packages/platform-macos/src/macos.ts:350`) | `packages/platform-macos/src/macos.test.ts`; `tests/helpers/temp-home.ts` runs the real check against every planted binary |
+| **The executed binary is vouched for by something** | `assertTrustedExecutable` resolves the path one component at a time, refuses anything that is not a regular file, and checks every real directory the resolution enters — including the one holding each intermediate link — refusing an owner that is neither the current uid nor root, any other-writable directory, a group-writable one the current uid does not own, and a root-owned group-writable one whoever runs the check (D83 (3), `BACKLOG.md` NEW-33, closed 2026-10-06) (`packages/platform-macos/src/macos.ts:350`) | `packages/platform-macos/src/macos.test.ts`; `tests/helpers/temp-home.ts` runs the real check against every planted binary |
 
 **A gap found while writing this document — paid on 2026-08-17, and this section read "absent" for
 a day afterwards.** `packages/platform-macos/src/types.ts:13-20` documented `executablePath` as
@@ -802,7 +802,7 @@ still passes: it is user-owned, `0755`, and stable between resolve and spawn. An
 `CODEX_THREAD_ID` into a session can usually export `PATH` into the same one, and such an attacker
 already runs code as the user. What NEW-46 closed is a binary in a group-writable directory and a
 swap between check and spawn; the probe still passes `--version` and nothing else. The residual is
-`BACKLOG.md` NEW-121. **Accepted 2026-10-05 (D83 (7)):** this same-uid `PATH` race is a platform limit, not
+`BACKLOG.md` NEW-121 (closed 2026-10-06). **Accepted 2026-10-05 (D83 (7)):** this same-uid `PATH` race is a platform limit, not
 open work; it sits inside the same-uid boundary (§2) that D82 also leaves unwidened, and the row closes without code.
 
 **`assertTrustedExecutable` is the check the other two executors pay** before spawning:
@@ -826,7 +826,7 @@ them. The stepwise walk enters `<attacker>` and refuses it.
 
 1. **macOS ACLs are invisible to `stat().mode`.** A directory can be `0755` and writable by another
    user through an ACL entry, so the mode check is a floor rather than a proof.
-2. **Check-then-use (`BACKLOG.md` §1 NEW-35).** The target is stat'd and then executed by path;
+2. **Check-then-use (`BACKLOG.md` §1 NEW-35, closed 2026-10-06).** The target is stat'd and then executed by path;
    closing it needs an exec-by-descriptor this runtime does not offer. Accepted by the founder when
    the rule was decided. **Re-accepted 2026-10-05 (D83 (7)):** a platform limit inside the same-uid
    boundary (§2), consistent with D82; the row closes without code.
