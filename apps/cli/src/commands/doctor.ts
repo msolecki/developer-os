@@ -7,7 +7,6 @@ import {
   decodeCanonicalJson,
   detectDrift,
   EXIT_CODES,
-  failure,
   hashBytes,
   hookCommandTail,
   inspectDrift,
@@ -62,6 +61,7 @@ import { readUntrustedText, UntrustedFileRefusal } from "./untrusted-file.js";
 import { checkVendorConfig } from "./vendor-config.js";
 import {
   exitCodeOf,
+  failureFrom,
   REDACTION_KEY_BYTES,
   redactionKeyPath,
   runtimePathsFor,
@@ -178,7 +178,7 @@ const PROBE_MUTATION_WARNING =
  * `DoctorCheck` because that shape is fixed by the Foundation plan and is what
  * `--json` publishes; the code only decides this process's exit status.
  */
-interface Finding {
+export interface Finding {
   readonly check: DoctorCheck;
   readonly code: ExitCode;
 }
@@ -817,14 +817,14 @@ async function reportVendorHooks(
   };
 }
 
-interface HookReports {
+export interface HookReports {
   readonly installed: Readonly<Record<HookVendor, InstalledHooks>>;
   readonly claude: VendorHooksReport;
   readonly codex: VendorHooksReport;
 }
 
 /** One read of each vendor's hooks file and records, shared by `hooks` and both capability checks. */
-async function hookReports(context: CliContext, stateDirectory: string): Promise<HookReports> {
+export async function hookReports(context: CliContext, stateDirectory: string): Promise<HookReports> {
   const installed = {
     claude: await readInstalledHooks(context, "claude"),
     codex: await readInstalledHooks(context, "codex"),
@@ -888,13 +888,9 @@ async function checkExternalHooks(context: CliContext, installed: InstalledHooks
   }
 }
 
-async function hookFindings(context: CliContext, reports: HookReports): Promise<readonly Finding[]> {
-  return [checkProductHooks(reports), await checkExternalHooks(context, reports.installed.claude)];
-}
-
 /** `hooks` and `external-hooks`, never `fail` and never init-owned (`hooks.md` §3.7). */
-export async function checkHooks(context: CliContext, stateDirectory: string): Promise<readonly DoctorCheck[]> {
-  return (await hookFindings(context, await hookReports(context, stateDirectory))).map((finding) => finding.check);
+export async function hookFindings(context: CliContext, reports: HookReports): Promise<readonly Finding[]> {
+  return [checkProductHooks(reports), await checkExternalHooks(context, reports.installed.claude)];
 }
 
 async function checkPlatform(context: CliContext): Promise<Finding> {
@@ -2051,10 +2047,19 @@ export async function runDoctor(
   const recovery = failing.find((finding) => finding.code === code)?.check
     .recovery;
 
-  return failure(code, {
-    kind: "doctor_failed",
-    message: failed.map((check) => `${check.id}: ${check.message}`).join("; "),
-    paths: failed.flatMap((check) => check.paths),
-    ...(recovery === undefined ? {} : { recovery }),
-  });
+  return failureFrom(
+    context,
+    new DoctorFailedError(code, failed.map((check) => `${check.id}: ${check.message}`).join("; ")),
+    failed.flatMap((check) => check.paths),
+    recovery,
+    report,
+  );
+}
+
+/** `kind: doctor_failed`; the whole report travels as the failure's redacted `data` (NEW-150). */
+class DoctorFailedError extends Error {
+  constructor(readonly code: ExitCode, message: string) {
+    super(message);
+    this.name = "DoctorFailedError";
+  }
 }

@@ -34,12 +34,13 @@ import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import {
   advisoryWarnings,
-  checkHooks,
   CODEX_UNTRUSTED_HOOK_MESSAGE,
   codexPluginRoot,
   describeInstructions,
   hasBlockingFailure,
+  hookFindings,
   hookFiringVerdicts,
+  hookReports,
   listIncompleteTransactions,
   MAX_CLAUDE_SETTINGS_BYTES,
   runDoctor,
@@ -1477,7 +1478,7 @@ describe("hooks and external-hooks", () => {
     readonly hooks: DoctorReportV1["checks"][number];
     readonly external: DoctorReportV1["checks"][number];
   }> {
-    const checks = await checkHooks(fixture.context, fixture.paths.stateDir);
+    const checks = (await hookFindings(fixture.context, await hookReports(fixture.context, fixture.paths.stateDir))).map((finding) => finding.check);
     const hooks = checks.find((check) => check.id === "hooks");
     const external = checks.find((check) => check.id === "external-hooks");
     if (hooks === undefined || external === undefined) throw new Error("hook checks are missing");

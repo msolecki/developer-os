@@ -360,6 +360,28 @@ describe("run", () => {
     expect(harness.out.join("\n")).toContain("\uFFFD");
   });
 
+  it("publishes a failing doctor's whole report as data and prints every check in human mode (NEW-150)", async () => {
+    const json = await createHarness("main-doctor-failing-json");
+    expect(await json.invoke(["doctor", "--json"])).toBe(1);
+    const body = JSON.parse(json.out.join("\n")) as {
+      readonly error: {
+        readonly kind: string;
+        readonly data?: { readonly checks: readonly { readonly id: string; readonly status: string }[] };
+      };
+    };
+    expect(body.error.kind).toBe("doctor_failed");
+    const statuses = new Set(body.error.data?.checks.map((check) => check.status));
+    expect(statuses).toContain("fail");
+    expect(statuses).toContain("warn");
+
+    const human = await createHarness("main-doctor-failing-human");
+    expect(await human.invoke(["doctor"])).toBe(1);
+    const out = human.out.join("\n");
+    expect(out).toMatch(/^\[fail\] manifest: /mu);
+    expect(out).toMatch(/^\[warn\] /mu);
+    expect(human.err.join("\n")).toContain("Recovery: developer-os init");
+  });
+
   it("sends human failures and their recovery command to stderr", async () => {
     const harness = await createHarness("main-human");
 
