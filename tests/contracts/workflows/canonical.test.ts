@@ -126,3 +126,15 @@ describe("canonical workflows", () => {
     expect(review?.steps.map((s) => s.do)).toContain("capture.edit");
   });
 });
+
+describe("review contract maps to the review CLI flags", () => {
+  // The CLI refuses --decision without --id, so the contract must collect and pass the id.
+  it("declares an id input and passes it on the decide and edit steps", () => {
+    const review = mustLoad("workflows/review/workflow.yaml");
+    expect(Object.keys(review.inputs)).toEqual(["status", "id", "decision"]);
+    for (const stepId of ["decide", "edit"]) {
+      const step = review.steps.find((candidate) => candidate.id === stepId);
+      expect(step?.with).toMatchObject({ id: "$input.id" });
+    }
+  });
+});

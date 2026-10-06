@@ -3,7 +3,7 @@ name: "developer-os-review"
 description: "List captures at one status, quarantined by default, and accept, edit, or reject one; reject also withdraws an accepted capture. Never deletes a source."
 ---
 
-<!-- Generated from workflows/review/workflow.yaml (review@2.1.0). Do not edit. -->
+<!-- Generated from workflows/review/workflow.yaml (review@2.2.0). Do not edit. -->
 
 ## Always
 
@@ -48,7 +48,7 @@ developer-os review
 A value written `$input.<name>` stands for the workflow input `<name>`: replace it with what the user supplied for that input.
 
 ```json
-{"decision":"$input.decision"}
+{"id":"$input.id","decision":"$input.decision"}
 ```
 
 ### edit
@@ -57,6 +57,12 @@ Effect: `capture.edit`
 
 ```text
 developer-os review
+```
+
+A value written `$input.<name>` stands for the workflow input `<name>`: replace it with what the user supplied for that input.
+
+```json
+{"id":"$input.id"}
 ```
 
 
