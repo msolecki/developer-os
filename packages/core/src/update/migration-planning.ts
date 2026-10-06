@@ -4,7 +4,7 @@
  */
 import { createHash } from "node:crypto";
 
-import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type {
   PlannedSchemaMigrationsV1,
   SchemaMigrationChainAnchorsV1,
@@ -18,7 +18,6 @@ import type {
   SchemaMigrationVersionRangeV1,
 } from "./migrations.js";
 import type { PlannerOutputBlobRefV1, SchemaMigrationDraftV1, SchemaMigrationMutationDraftV1 } from "./planner.js";
-import { compareUtf8 } from "./release.js";
 import { parsePositiveUInt32, parseSchemaMigrationId, type LowerHexSha256 } from "./scalars.js";
 
 export const SCHEMA_MIGRATION_DOMAIN_ORDER: readonly SchemaMigrationDomainV1[] = Object.freeze(["product_state", "brain"]);

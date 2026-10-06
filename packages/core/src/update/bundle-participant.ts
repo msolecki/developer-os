@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 
-import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { MAXIMUM_LEAF_PLAN_BYTES, MAXIMUM_PARTICIPANT_JOURNAL_BYTES, updateLeafPlanPath, type ImmutableUpdatePlanRefV1, type UpdateLeafPlanKindV1 } from "./construction.js";
 import { deriveCanonicalStatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type CanonicalStatePayloadPathV1 } from "./paths.js";
-import { compareUtf8, parseBundleRelativePath, type BundleRelativePathV1, type ReleaseBundleEntryV1, type ReleaseIdentityV1 } from "./release.js";
+import { parseBundleRelativePath, type BundleRelativePathV1, type ReleaseBundleEntryV1, type ReleaseIdentityV1 } from "./release.js";
 import {
   encodeTenDigitOrdinal,
   parseLowerHexSha256,

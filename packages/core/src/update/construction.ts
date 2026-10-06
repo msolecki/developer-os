@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { parseAllocatedLifecycleId, parseManifestParticipantId, type AllocatedLifecycleIdV1, type EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1, ManifestParticipantIdV1 } from "../manifest/manifest-state.js";
 import { encodeFoundationJournalJsonV1, validateJournal } from "../transactions/store.js";
@@ -9,7 +9,7 @@ import type { UpdateFoundationParticipantRefV2 } from "./migrations.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
 import type { PreparedUpdateCandidateV1, RollbackPayloadEntryV1, RollbackPayloadIdV1 } from "./preview.js";
 import { parseRollbackPayloadId } from "./preview.js";
-import { compareUtf8, parseBundleRelativePath, type BundleRelativePathV1, type ReleaseIdentityV1 } from "./release.js";
+import { parseBundleRelativePath, type BundleRelativePathV1, type ReleaseIdentityV1 } from "./release.js";
 import {
   encodeTenDigitOrdinal,
   parseLowerHexSha256,

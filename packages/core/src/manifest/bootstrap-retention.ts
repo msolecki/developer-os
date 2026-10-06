@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import { basename, dirname } from "node:path";
 
-import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { CanonicalAbsolutePathV1, ExactProductStatePathV1 } from "../update/paths.js";
-import { compareUtf8 } from "../update/release.js";
 import {
   parseLowerHexSha256,
   parseUInt64Decimal,

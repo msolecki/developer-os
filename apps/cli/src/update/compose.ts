@@ -158,6 +158,7 @@ import {
   type UtcTimestampV1,
   MAXIMUM_RECOVERY_EXECUTOR_BYTES,
 } from "@developer-os/core";
+import { compareUtf8 } from "@developer-os/core/planner-protocol";
 
 import { compareManifestRows } from "../instructions/attach.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
@@ -229,10 +230,6 @@ function refuse(reason: string, code: Exclude<ExitCode, 0>, ...paths: readonly s
 
 function sha256(bytes: Uint8Array | string): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
-}
-
-function compareUtf8(left: string, right: string): number {
-  return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
 }
 
 function canonical(value: unknown): CanonicalJsonV1 {

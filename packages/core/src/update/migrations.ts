@@ -1,4 +1,4 @@
-import { hashCanonicalJsonNoLf } from "../lifecycle/canonical-json.js";
+import { compareUtf8, hashCanonicalJsonNoLf } from "../lifecycle/canonical-json.js";
 
 import type { AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
 import { updateLeafPlanHash } from "./bundle-participant.js";
@@ -36,7 +36,6 @@ import type {
   SecretScreenedBlobV1,
   UpdatePlannerRequestV1,
 } from "./planner.js";
-import { compareUtf8 } from "./release.js";
 import {
   parseLowerHexSha256,
   parseUtcTimestamp,

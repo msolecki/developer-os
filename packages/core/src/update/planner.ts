@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { decodeCanonicalJson, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, decodeCanonicalJson, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { BrainConfigV1, DeveloperOsConfigV1 } from "../config/types.js";
 import type { ArtifactOwner, ManagedArtifactSchemaIdV1, ManagedArtifactV2, MergeStrategy } from "../manifest/types.js";
 import type { UpdateCapacityInputV1 } from "./capacity.js";
@@ -20,7 +20,7 @@ import {
   type UpdatePlanPreviewV1,
 } from "./preview.js";
 import { orderMigrationChain } from "./migration-planning.js";
-import { compareUtf8, parseBundleRelativePath, validateReleaseIdentity, type BundleRelativePathV1, type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
+import { parseBundleRelativePath, validateReleaseIdentity, type BundleRelativePathV1, type ReleaseIdentityV1, type ReleaseMetadataIdentityV1 } from "./release.js";
 import {
   decodeTenDigitOrdinal,
   encodeTenDigitOrdinal,

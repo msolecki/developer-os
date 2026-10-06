@@ -4,7 +4,7 @@
  * function validates or hashes; nothing here opens a file, spawns a process, or reads a clock.
  */
 
-import { encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { compareUtf8, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { AllocatedLifecycleIdV1, EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ArtifactOwner, ManagedArtifactV2 } from "../manifest/types.js";
@@ -19,7 +19,7 @@ import {
   type CanonicalAbsolutePathV1,
   type CanonicalStatePayloadPathV1,
 } from "./paths.js";
-import { compareUtf8, parseBundleRelativePath, type BundleRelativePathV1, type ReleaseIdentityV1 } from "./release.js";
+import { parseBundleRelativePath, type BundleRelativePathV1, type ReleaseIdentityV1 } from "./release.js";
 import {
   parseLowerHexSha256,
   parsePositiveUInt32,

@@ -6,5 +6,6 @@
 export { planSchemaMigrations } from "./update/migration-planning.js";
 export { isChangeableOwnerArtifact, planOwnedFileTree } from "./update/owner.js";
 export { parseVaultRelativePathText } from "./update/paths.js";
-export { compareUtf8, parseBundleRelativePath } from "./update/release.js";
+export { compareUtf8 } from "./lifecycle/canonical-json.js";
+export { parseBundleRelativePath } from "./update/release.js";
 export { parseLowerHexSha256 } from "./update/scalars.js";
