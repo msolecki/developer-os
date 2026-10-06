@@ -13,7 +13,6 @@ import {
   constructionPlanBytes,
   constructionPlanHash,
   decodeCanonicalJson,
-  encodeCanonicalJson,
   initialConstructionJournal,
   isPreHandoffConstructionPhase,
   LifecycleRecoveryRequiredError,
@@ -182,11 +181,13 @@ function timestamp(now: () => Date, floor: UtcTimestampV1): UtcTimestampV1 {
   return stamp > floor ? stamp : floor;
 }
 
-/** Exact bytes only: a canonical decode that re-encodes to anything else is not this file. */
+/** Exact canonical bytes only: a torn or non-canonical file is not this file (exit 6). */
 function decodeExact(bytes: Uint8Array, maximumBytes: number, path: string): unknown {
-  const value = decodeCanonicalJson(bytes, maximumBytes);
-  if (Buffer.compare(encoder.encode(encodeCanonicalJson(value)), bytes) !== 0) refuse("update_construction_not_canonical", path);
-  return value;
+  try {
+    return decodeCanonicalJson(bytes, maximumBytes);
+  } catch {
+    return refuse("update_construction_not_canonical", path);
+  }
 }
 
 function sourceJournal(row: UpdateConstructionFilePlanV1): boolean {
@@ -553,10 +554,11 @@ export class UpdateConstructionStore {
   async recover(closure: UpdateConstructionClosureV1): Promise<void> {
     if (this.#root.slice(this.#root.lastIndexOf("/") + 1) !== closure.coordinatorId) refuse("update_construction_closure", this.#root);
     const construction = closure.construction;
+    const name = (path: CanonicalAbsolutePathV1): string => path.slice(path.lastIndexOf("/") + 1);
     if (construction.frontier === "plan_pending") {
       const root = await this.#rootEntry(null);
       const names = await this.#children(root);
-      if (names.length !== 1 || names[0] !== "update-construction.plan.pending") refuse("update_construction_closure", this.#root);
+      if (names.length !== 1 || names[0] !== name(this.#paths.planPending)) refuse("update_construction_closure", this.#root);
       await this.#removeFile(this.#paths.planPending, 0o600, MAXIMUM_CONSTRUCTION_PLAN_BYTES + 1, null);
       return;
     }
@@ -564,14 +566,14 @@ export class UpdateConstructionStore {
     if (plan.operation !== construction.operation) refuse("update_construction_closure", this.#root);
     const names = await this.#children(await this.#rootEntry(plan));
     if (construction.frontier === "journal_bootstrap") {
-      const pending = construction.journal === "pending" ? ["update-construction.journal.pending"] : [];
-      if (names.join("/") !== [...pending, "update-construction.plan.json"].sort().join("/")) refuse("update_construction_closure", this.#root);
+      const pending = construction.journal === "pending" ? [name(this.#paths.journalPending)] : [];
+      if (names.join("/") !== [...pending, name(this.#paths.plan)].sort().join("/")) refuse("update_construction_closure", this.#root);
       if (construction.journal === "pending") await this.#removeJournalPrefix(plan);
       await this.removeEnvelope(plan);
       return;
     }
     if (construction.frontier === "plan_only_suffix") {
-      if (names.join("/") !== "update-construction.plan.json") refuse("update_construction_closure", this.#root);
+      if (names.join("/") !== name(this.#paths.plan)) refuse("update_construction_closure", this.#root);
       await this.removeEnvelope(plan);
       return;
     }

@@ -17,7 +17,6 @@ import {
   decodeCanonicalJson,
   durableEntryEvidenceBytes,
   durableSourceEntryEvidence,
-  encodeCanonicalJson,
   LifecycleRecoveryRequiredError,
   MAXIMUM_DURABLE_ENTRY_EVIDENCE_BYTES,
   MAXIMUM_SOURCE_READY_EVIDENCE_BYTES,
@@ -79,7 +78,6 @@ type Identity = { readonly dev: string; readonly ino: string };
 
 const CREATE_FLAGS = constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_NOFOLLOW;
 const COPY_CHUNK_BYTES = 1_048_576;
-const encoder = new TextEncoder();
 
 /** A third state: preserved as found and surfaced as recovery-required (exit 6). */
 export function refuseBundle(reason: string, ...paths: readonly string[]): never {
@@ -208,11 +206,13 @@ export class BundleGuardedIo {
     await this.fs.syncDirectory(parent);
   }
 
-  /** Exact canonical bytes only: a decode that re-encodes to anything else is not this file. */
+  /** Exact canonical bytes only: a torn or non-canonical file is not this file (exit 6). */
   decodeExact(bytes: Uint8Array, maximumBytes: number, path: string): unknown {
-    const value = decodeCanonicalJson(bytes, maximumBytes);
-    if (Buffer.compare(encoder.encode(encodeCanonicalJson(value)), bytes) !== 0) refuseBundle("bundle_not_canonical", path);
-    return value;
+    try {
+      return decodeCanonicalJson(bytes, maximumBytes);
+    } catch {
+      return refuseBundle("bundle_not_canonical", path);
+    }
   }
 
   /**
