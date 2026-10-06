@@ -71,7 +71,7 @@ unbounded agentic loop under a 120-second wall clock and nothing else.
 **Three further gaps were found while writing this document**, all registered as `BACKLOG.md` §1
 rows, and **two of the three closed on 2026-08-17**. **NEW-15** — a discovered vendor binary executed
 without the owner and mode check its own type says its executor owes — is closed by
-`assertTrustedExecutable`, called by all three executors (§5.11); two residuals of it stay open, one
+`assertTrustedExecutable`, called before every spawn of a discovered path (§5.11); two residuals of it stay open, one
 of them a known bypass. **NEW-16** — the `user-pattern` redaction class having no production caller
 and no configuration key — is closed by the `[redaction]` table and `createRedactor` (§5.7); three
 usability residuals stay open. **NEW-17** — a TOML parse failure on a `brain` run reaching the user
@@ -819,9 +819,9 @@ swap between check and spawn; the probe still passes `--version` and nothing els
 `BACKLOG.md` NEW-121 (closed 2026-10-06). **Accepted 2026-10-05 (D83 (7)):** this same-uid `PATH` race is a platform limit, not
 open work; it sits inside the same-uid boundary (§2) that D82 also leaves unwidened, and the row closes without code.
 
-**`assertTrustedExecutable` is the check the other two executors pay** before spawning:
-`apps/cli/src/commands/doctor.ts:479` and `apps/cli/src/commands/ingest.ts:585` — `doctor` was a
-third executor paying nothing while the first
+**`assertTrustedExecutable` is the check every executor of a discovered path pays** before
+spawning (today `doctor`, `ingest`, `garden` and `uninstall`; `capture` pins its probe with
+`pinProbeExecutable` instead) — `doctor` was a third executor paying nothing while the first
 version of this fix claimed a third could not arrive. The rule, decided by the founder rather than
 chosen here (BACKLOG NEW-15): **resolve, then check.** The binary is canonicalized and the resolved
 target must be a regular file. The declared path is resolved **one component at a time** with

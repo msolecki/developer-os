@@ -41,7 +41,8 @@ export interface PlatformAdapter {
    *
    * **It does not make the obligation unmissable.** Three call sites owed it when it was
    * written and only two were found; the third — `doctor`'s capability probe — was caught
-   * by review. There are three today: `ingest`, `capture` and `discoverEachAgent`.
+   * by review. The rule, not a list (MACOS-8): every code path that spawns a path
+   * `discoverExecutable` returned calls this immediately before it, and a new one owes the same.
    */
   assertTrustedExecutable(path: string): Promise<void>;
   productStateRoot(userHome: string): string;
