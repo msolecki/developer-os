@@ -202,8 +202,10 @@ export function isUnsignedLocalTrust(state: ReleaseTrustStateV1): state is Unsig
 
 type UnknownRecord = Record<string, unknown>;
 const textEncoder = new TextEncoder();
-const maximumBundleFileBytes = 536_870_912n;
-const maximumBundleBytes = 8_589_934_592n;
+/** A signed bundle's bounds: entries, bytes per file, and aggregate file bytes (Spec 2 §3). */
+export const MAXIMUM_BUNDLE_ENTRIES = 200_000;
+export const MAXIMUM_BUNDLE_FILE_BYTES = 536_870_912;
+export const MAXIMUM_BUNDLE_AGGREGATE_BYTES = 8_589_934_592;
 
 function invalid(label: string): never { throw new Error(`invalid ${label}`); }
 function record(value: unknown, label: string): UnknownRecord {
@@ -414,23 +416,28 @@ export function parseBundleRelativePath(value: unknown): BundleRelativePathV1 {
 function validateBundleEntry(value: unknown): ReleaseBundleEntryV1 {
   const input = record(value, "ReleaseBundleEntryV1");
   if (input.kind === "directory") { const directory = exact(input, "ReleaseBundleEntryV1.directory", ["path", "kind", "mode"]); if (directory.mode !== 448) invalid("ReleaseBundleEntryV1.directory"); return { path: parseBundleRelativePath(directory.path), kind: "directory", mode: 448 }; }
-  if (input.kind === "file") { const file = exact(input, "ReleaseBundleEntryV1.file", ["path", "kind", "mode", "bytes", "sha256"]); if (file.mode !== 384 && file.mode !== 448) invalid("ReleaseBundleEntryV1.file"); const size = parseUInt64Decimal(file.bytes); if (BigInt(size) > maximumBundleFileBytes) invalid("ReleaseBundleEntryV1.file bytes"); return { path: parseBundleRelativePath(file.path), kind: "file", mode: file.mode, bytes: size, sha256: parseLowerHexSha256(file.sha256) }; }
+  if (input.kind === "file") { const file = exact(input, "ReleaseBundleEntryV1.file", ["path", "kind", "mode", "bytes", "sha256"]); if (file.mode !== 384 && file.mode !== 448) invalid("ReleaseBundleEntryV1.file"); const size = parseUInt64Decimal(file.bytes); if (BigInt(size) > BigInt(MAXIMUM_BUNDLE_FILE_BYTES)) invalid("ReleaseBundleEntryV1.file bytes"); return { path: parseBundleRelativePath(file.path), kind: "file", mode: file.mode, bytes: size, sha256: parseLowerHexSha256(file.sha256) }; }
   invalid("ReleaseBundleEntryV1.kind");
+}
+/** The one bundle-entry validator: sorted, unique (exact and folded), parent-before-child, bounded per file and in aggregate. */
+export function validateBundleEntries(value: unknown, label = "ReleaseBundleManifestV1.entries"): readonly ReleaseBundleEntryV1[] {
+  const entries = array(value, label, 1, MAXIMUM_BUNDLE_ENTRIES).map(validateBundleEntry); let total = 0n; const seen = new Set<string>(); const directories = new Set<string>();
+  for (let index = 0; index < entries.length; index += 1) {
+    const current = entries[index] as ReleaseBundleEntryV1; const prior = entries[index - 1];
+    if (seen.has(current.path) || seen.has(current.path.normalize("NFC").toLocaleLowerCase("en-US")) || (prior !== undefined && compareUtf8(prior.path, current.path) >= 0)) invalid(`${label} order`);
+    seen.add(current.path); seen.add(current.path.normalize("NFC").toLocaleLowerCase("en-US"));
+    const parent = current.path.includes("/") ? current.path.slice(0, current.path.lastIndexOf("/")) : null;
+    if (parent !== null && !directories.has(parent)) invalid(`${label} parents`);
+    if (current.kind === "directory") directories.add(current.path);
+    if (current.kind === "file") { total += BigInt(current.bytes); if (total > BigInt(MAXIMUM_BUNDLE_AGGREGATE_BYTES)) invalid(`${label} aggregate bytes`); }
+  }
+  return entries;
 }
 export function validateBundleManifest(value: unknown): ReleaseBundleManifestV1 {
   const input = exact(value, "ReleaseBundleManifestV1", ["schemaVersion", "version", "releaseSequence", "platform", "architecture", "launcherProtocol", "updateProtocol", "entrypoint", "runtimeEntrypoint", "plannerEntrypoint", "verifierEntrypoint", "entries"]);
   if (input.schemaVersion !== 1 || input.platform !== "darwin" || (input.architecture !== "arm64" && input.architecture !== "x64")) invalid("ReleaseBundleManifestV1");
   const architecture: "arm64" | "x64" = input.architecture === "arm64" ? "arm64" : "x64";
-  const entries = array(input.entries, "ReleaseBundleManifestV1.entries", 1, 200_000).map(validateBundleEntry); let total = 0n; const seen = new Set<string>(); const directories = new Set<string>();
-  for (let index = 0; index < entries.length; index += 1) {
-    const current = entries[index] as ReleaseBundleEntryV1; const prior = entries[index - 1];
-    if (seen.has(current.path) || seen.has(current.path.normalize("NFC").toLocaleLowerCase("en-US")) || (prior !== undefined && compareUtf8(prior.path, current.path) >= 0)) invalid("ReleaseBundleManifestV1.entries order");
-    seen.add(current.path); seen.add(current.path.normalize("NFC").toLocaleLowerCase("en-US"));
-    const parent = current.path.includes("/") ? current.path.slice(0, current.path.lastIndexOf("/")) : null;
-    if (parent !== null && !directories.has(parent)) invalid("ReleaseBundleManifestV1.entries parents");
-    if (current.kind === "directory") directories.add(current.path);
-    if (current.kind === "file") { total += BigInt(current.bytes); if (total > maximumBundleBytes) invalid("ReleaseBundleManifestV1 aggregate bytes"); }
-  }
+  const entries = validateBundleEntries(input.entries);
   const entrypoint = parseBundleRelativePath(input.entrypoint); const runtimeEntrypoint = parseBundleRelativePath(input.runtimeEntrypoint); const plannerEntrypoint = parseBundleRelativePath(input.plannerEntrypoint); const verifierEntrypoint = parseBundleRelativePath(input.verifierEntrypoint);
   for (const path of [entrypoint, runtimeEntrypoint, plannerEntrypoint, verifierEntrypoint]) if (!entries.some((entry) => entry.path === path && entry.kind === "file" && entry.mode === 448)) invalid("ReleaseBundleManifestV1.entrypoint");
   const manifest = { schemaVersion: 1 as const, version: parseStableSemver(input.version), releaseSequence: parseUInt64Decimal(input.releaseSequence), platform: "darwin" as const, architecture, launcherProtocol: parsePositiveUInt32(input.launcherProtocol), updateProtocol: parsePositiveUInt32(input.updateProtocol), entrypoint, runtimeEntrypoint, plannerEntrypoint, verifierEntrypoint, entries };
