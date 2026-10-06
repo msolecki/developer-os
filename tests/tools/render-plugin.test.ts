@@ -2,14 +2,17 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { assertRepositoryRoot, regenerate } from "./render-codex.js";
+import { renderAllForClaude } from "../contracts/adapters/claude/render-all.js";
+import { renderAllForCodex } from "../contracts/adapters/codex/render-all.js";
+import { assertRepositoryRoot, regenerate } from "./render-plugin.js";
 
 /**
- * The regenerator is one of two places in this repository that deletes a
- * directory recursively, and — mirroring the Claude adapter's own tool — the
- * guard on that delete has to be worth something. See `render-claude.test.ts`
- * for the fresh-context review that found the version of this guard which
- * could never throw for any working directory.
+ * The regenerator is the one place in this repository that deletes a directory
+ * recursively, and it shipped with no test at all. The guard it shipped with
+ * checked that the target path ended with `plugins/claude`, which the
+ * expression building that path already guaranteed — so it could not throw for
+ * any working directory, and a decoy directory entered directly with `node`
+ * lost files. Found by fresh-context review, 2026-08-11.
  */
 describe("assertRepositoryRoot", () => {
   const root = resolve("/synthetic/checkout");
@@ -50,17 +53,23 @@ describe("assertRepositoryRoot", () => {
 });
 
 /**
- * The guard as a pure function proves nothing about the tool. These two drive
- * the real function, against a temporary tree, and pin the order: refuse
- * *before* the delete.
+ * The guard as a pure function proves nothing about the tool. Deleting the
+ * `assertRepositoryRoot` call from `regenerate` left the four cases above
+ * green while restoring exactly the behaviour that lost a decoy directory's
+ * files — so these two drive the real function, against a temporary tree, and
+ * pin the order: refuse *before* the delete. Found by fresh-context review,
+ * 2026-08-11.
  */
-describe("regenerate", () => {
+describe.each([
+  { vendor: "claude", render: () => renderAllForClaude() },
+  { vendor: "codex", render: () => renderAllForCodex() },
+])("regenerate for $vendor", ({ vendor, render }) => {
   const temporaries: string[] = [];
 
   async function decoy(): Promise<{ root: string; generated: string; kept: string }> {
     const root = await mkdtemp(join(tmpdir(), "developer-os-render-"));
     temporaries.push(root);
-    const generated = join(root, "plugins", "codex");
+    const generated = join(root, "plugins", vendor);
     await mkdir(generated, { recursive: true });
     const kept = join(generated, "important.txt");
     await writeFile(kept, "PRECIOUS", "utf8");
@@ -77,6 +86,7 @@ describe("regenerate", () => {
     const { root, generated, kept } = await decoy();
     await expect(
       regenerate({
+        render,
         workingDirectory: root,
         repositoryRoot: resolve("/synthetic/checkout"),
         generatedRoot: generated,
@@ -88,6 +98,7 @@ describe("regenerate", () => {
   it("replaces the tree once the working directory is the checkout", async () => {
     const { root, generated, kept } = await decoy();
     const written = await regenerate({
+      render,
       workingDirectory: root,
       repositoryRoot: root,
       generatedRoot: generated,

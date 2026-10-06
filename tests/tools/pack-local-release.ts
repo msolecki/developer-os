@@ -29,7 +29,7 @@ import type { ReleaseFileV1 } from "@developer-os/cli/dist/update/local-release.
 /** `tests/dist/tools/pack-local-release.js` → the checkout that contains it. */
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
-/** Copied from `render-claude.ts`: every source path below is relative to the working directory. */
+/** Copied from `render-plugin.ts`: every source path below is relative to the working directory. */
 export function assertRepositoryRoot(workingDirectory: string, repositoryRoot: string): void {
   if (resolve(workingDirectory) !== resolve(repositoryRoot)) {
     throw new Error(
