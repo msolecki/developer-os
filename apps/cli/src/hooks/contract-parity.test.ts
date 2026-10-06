@@ -1,8 +1,8 @@
-import { CLAUDE_HOOK_ROWS } from "@developer-os/adapter-claude";
-import { CODEX_HOOK_ROWS } from "@developer-os/adapter-codex";
+import { CLAUDE_HOOK_ROWS, CLAUDE_HOOKS_PATH, PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
+import { CODEX_HOOK_ROWS, CODEX_HOOKS_PATH, PLUGIN_TREE_SEGMENTS } from "@developer-os/adapter-codex";
 import { expect, it } from "vitest";
 
-import { HOOK_EVENT_OF } from "./firing-records.js";
+import { HOOK_EVENT_OF, INSTALLED_HOOKS_FILE_SEGMENTS } from "./firing-records.js";
 import { HOOK_TOOL_MATCHERS } from "./payload.js";
 
 it.each([
@@ -16,4 +16,9 @@ it.each([
     const tools = row.verb === "command" || row.verb === "commit" ? HOOK_TOOL_MATCHERS[vendor].shell : HOOK_TOOL_MATCHERS[vendor].file;
     expect(row.matcher.split("|"), row.verb).toStrictEqual([...tools]);
   }
+});
+
+it("finds each vendor's installed hooks.json where the adapters install it (FLOW-INIT-3)", () => {
+  expect(INSTALLED_HOOKS_FILE_SEGMENTS.claude).toStrictEqual([...PLUGIN_INSTALL_SEGMENTS, ...CLAUDE_HOOKS_PATH.split("/")]);
+  expect(INSTALLED_HOOKS_FILE_SEGMENTS.codex).toStrictEqual([...PLUGIN_TREE_SEGMENTS, ...CODEX_HOOKS_PATH.split("/")]);
 });

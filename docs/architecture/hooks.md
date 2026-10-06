@@ -462,8 +462,9 @@ same-directory temp file and rename. `init` creates the directory with mode 0700
 manifest row, and it is admitted by shape (`inspectHookFiringRecordsShape`) by fresh `init` and the
 absent-manifest walks. `recordHookFiring` runs after the outcome is written, except for `stop` and
 `format` (below). It writes only when the
-directory exists, belongs to the user and has mode 0700, when the record is absent or older than
-24 h, and when `assertOrdinaryCommandAdmitted` admits. It never creates a directory, never changes the
+directory exists, belongs to the user and has mode 0700, when the record is absent, older than
+24 h or older than the vendor's installed `hooks.json` (its mtime, the `writtenAt` `doctor` compares
+in §3.7, FLOW-INIT-3), and when `assertOrdinaryCommandAdmitted` admits. It never creates a directory, never changes the
 exit code and never throws. `runHookMode` does not await it; it hands the pending write to `bin.ts`,
 which lets it settle after the outcome drains and before its explicit exit (NEW-115), then exits
 regardless (NEW-139: the unbounded exit killed every write). The wait is

@@ -1,6 +1,6 @@
-import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { encodeHookFiringRecord } from "@developer-os/core";
 import type { HookFiringRecordV1 } from "@developer-os/core";
@@ -153,6 +153,36 @@ describe("recordHookFiring", () => {
     await writeFile(join(hooks, "claude.stop.json"), record("Stop", first, stale), { mode: 0o600 });
     await recordHookFiring(request());
     expect(await readFile(join(hooks, "claude.stop.json"), "utf8")).toBe(record("Stop", first, NOW));
+  });
+
+  it.each([
+    ["codex", () => join(productHome, "codex", "plugins", "developer-os", "hooks", "hooks.json")],
+    ["claude", () => join(root, ".claude", "skills", "developer-os", "hooks", "hooks.json")],
+  ] as const)("rewrites a %s record younger than 24 h but older than the installed hooks.json (FLOW-INIT-3)", async (vendor, hooksFile) => {
+    await createHooksDirectory();
+    const first = new Date(NOW.getTime() - 100 * HOUR);
+    const seen = new Date(NOW.getTime() - 2 * 60_000);
+    await writeFile(join(hooks, `${vendor}.stop.json`), record("Stop", first, seen, vendor), { mode: 0o600 });
+    await mkdir(dirname(hooksFile()), { recursive: true });
+    await writeFile(hooksFile(), "{}\n");
+    const rewritten = new Date(NOW.getTime() - 60_000);
+    await utimes(hooksFile(), rewritten, rewritten);
+    await recordHookFiring(request({ vendor }));
+    expect(await readFile(join(hooks, `${vendor}.stop.json`), "utf8")).toBe(record("Stop", first, NOW, vendor));
+  });
+
+  it("leaves a fresh Codex record written after the installed hooks.json byte-identical (FLOW-INIT-3)", async () => {
+    await createHooksDirectory();
+    const seen = new Date(NOW.getTime() - 60_000);
+    const bytes = record("Stop", new Date(NOW.getTime() - 100 * HOUR), seen, "codex");
+    await writeFile(join(hooks, "codex.stop.json"), bytes, { mode: 0o600 });
+    const hooksFile = join(productHome, "codex", "plugins", "developer-os", "hooks", "hooks.json");
+    await mkdir(dirname(hooksFile), { recursive: true });
+    await writeFile(hooksFile, "{}\n");
+    const written = new Date(NOW.getTime() - 2 * 60_000);
+    await utimes(hooksFile, written, written);
+    await recordHookFiring(request({ vendor: "codex" }));
+    expect(await readFile(join(hooks, "codex.stop.json"), "utf8")).toBe(bytes);
   });
 
   it("replaces a malformed record with a fresh one", async () => {
