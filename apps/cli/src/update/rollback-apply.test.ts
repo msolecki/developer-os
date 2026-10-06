@@ -48,6 +48,8 @@ interface RollbackWorldV1 {
   coordinator: { readonly plan: UpdateLifecycleCoordinatorPlanV2; readonly journal: UpdateLifecycleCoordinatorJournalV2 } | null;
   executor: "absent" | "executing" | "terminal_cleanup";
   allocatorReservations: number;
+  /** The allocator-reserved `staging/lifecycle/<lc>` root: created by allocation, removed only while empty. */
+  stagingRoot: "absent" | "present";
   frames: number;
   consumed: number[];
   applied: UpdateLifecycleCoordinatorStepV1[];
@@ -66,6 +68,8 @@ interface RollbackFixtureOptions {
   readonly home?: (home: UpdateHomeV1) => UpdateHomeV1;
   /** A post-preview edit or drift the under-lock evidence read reports. */
   readonly edit?: UpdatePlanningRefusal;
+  /** The composer refuses after allocation, as production does without a redaction key (W2-PORTS-1). */
+  readonly composeRefusal?: UpdatePlanningRefusal;
 }
 
 interface RollbackFixture {
@@ -107,6 +111,7 @@ async function rollbackFixture(options: RollbackFixtureOptions = {}): Promise<Ro
     coordinator: null,
     executor: "absent",
     allocatorReservations: 0,
+    stagingRoot: "absent",
     frames: 0,
     consumed: [],
     applied: [],
@@ -273,12 +278,14 @@ async function rollbackFixture(options: RollbackFixtureOptions = {}): Promise<Ro
     allocate: () => {
       alive();
       world.allocatorReservations += 1;
+      world.stagingRoot = "present";
       base.events.push("allocate");
       return Promise.resolve(COORDINATOR);
     },
     compose: () => Promise.reject(new Error("rollback reached the update derivation")),
     composeRollback: ({ coordinatorId }) => {
       base.events.push("compose");
+      if (options.composeRefusal !== undefined) return Promise.reject(options.composeRefusal);
       return Promise.resolve({
         construction: { coordinatorId, operation: options.composedOperation ?? "update_rollback", rollbackSource: null, outputFrames: [] } as unknown as UpdateConstructionPlanV1,
         outer: updateCoordinatorOuterBytes(synthetic.plan, PLANNED_AT),
@@ -288,6 +295,10 @@ async function rollbackFixture(options: RollbackFixtureOptions = {}): Promise<Ro
     construction,
     coordinator,
     envelope: { isEnvelopeSuffix: () => Promise.resolve(false), completeEnvelopeSuffix: () => Promise.reject(new Error("unreachable")) },
+    removeEmptyStagingRoots: () => {
+      if (world.construction === "absent" && world.coordinator === null) world.stagingRoot = "absent";
+      return Promise.resolve();
+    },
     executorCleanup: () => {
       alive();
       world.executor = "absent";
@@ -401,6 +412,15 @@ describe("applyRollback revalidation", () => {
     expect(fixture.requests).toStrictEqual([]);
     expect(fixture.events.filter((event) => event === "planner" || event === "trust" || event === "transport" || event.startsWith("scratch."))).toStrictEqual([]);
     expect(fixture.world.frames).toBe(0);
+  });
+
+  it("leaves no staging residue when composition refuses after allocation, e.g. without a redaction key (W2-PORTS-1)", async () => {
+    const fixture = await rollbackFixture({ composeRefusal: new UpdatePlanningRefusal("update_redaction_key_absent", EXIT_CODES.recoveryRequired) });
+    const refusal = await refusalOf(applyRollback(fixture.update, fixture.preview));
+    expect(refusal).toMatchObject({ reason: "update_redaction_key_absent", code: EXIT_CODES.recoveryRequired });
+    expect(fixture.allocatorReservations).toBe(1);
+    expect(fixture.world.stagingRoot).toBe("absent");
+    expect(fixture.world.construction).toBe("absent");
   });
 
   it("consumes only an allocator gap when the exact post-allocation projection overflows", async () => {

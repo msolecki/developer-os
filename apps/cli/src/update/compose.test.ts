@@ -17,6 +17,8 @@ import {
   type LifecycleCoordinatorIdV1,
   type OwnerUpdatePlanV1,
   type RollbackPayloadStatePlanV1,
+  type UpdateLifecycleCoordinatorJournalV2,
+  type UpdateLifecycleCoordinatorPlanV2,
   type UpdateTerminalRetirementPlanV1,
   type LifecycleGuardedEntryV1,
   type LowerHexSha256,
@@ -24,9 +26,15 @@ import {
 } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
-import type { UpdateApplyComposeInputV1, UpdateRollbackComposeInputV1 } from "./apply.js";
+import { PLUGIN_NAME } from "@developer-os/adapter-codex";
+import type { ProcessRunner } from "@developer-os/security";
+
+import { codexPluginTreeHash, inspectCodexRegistration, validateCodexRegistrationRecord } from "../instructions/codex-registration.js";
+import type { UpdateApplyComposeInputV1, UpdateApplyPortsV1, UpdateRollbackComposeInputV1 } from "./apply.js";
 import { composeRollback, composeUpdate, updateApplyPrefixes, updateRollbackPrefixes, type ComposeDepsV1, type ObservedPathV1, type RollbackComposeDepsV1 } from "./compose.js";
+import type { CliUpdateContext } from "./context.js";
 import { planRollback, prepareUpdate, UpdatePlanningRefusal } from "./planning.js";
+import { applyRollback } from "./rollback-apply.js";
 import {
   CODEX_PLUGIN_FILE,
   CODEX_PLUGIN_ROOT,
@@ -265,7 +273,7 @@ async function rollbackFixture(): Promise<RollbackComposed> {
  * registration record). The retained Codex inverse restores only the plugin file, as `prepareInverse`
  * builds it from the planner's operations.
  */
-async function codexRollbackFixture(): Promise<RollbackComposed> {
+async function codexRollbackFixture(): Promise<RollbackComposed & { readonly update: CliUpdateContext }> {
   const fixture = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0", codex: { registration: "registered" } });
   const { rollback } = fixture.home;
   if (rollback === null) throw new Error("the fixture retains a rollback");
@@ -296,7 +304,8 @@ async function codexRollbackFixture(): Promise<RollbackComposed> {
     }],
   } as unknown as (typeof core.owners)[number];
   const evidence = { ...core, owners: [...core.owners, codexInverse], payload: { ...core.payload, entryCount: 4, aggregateBytes: core.payload.aggregateBytes + OLD_PLUGIN.byteLength } };
-  const preview = await planRollback({ ...fixture.update, readHome: () => Promise.resolve(home), readRollbackEvidence: () => Promise.resolve(evidence) });
+  const update: CliUpdateContext = { ...fixture.update, readHome: () => Promise.resolve(home), readRollbackEvidence: () => Promise.resolve(evidence) };
+  const preview = await planRollback(update);
   const base = await rollbackFixture();
   const world = new Map(base.world);
   const previous = rollback.previous;
@@ -317,7 +326,7 @@ async function codexRollbackFixture(): Promise<RollbackComposed> {
     previousBundle: previousRelease.manifest,
     retained: { owners: evidence.owners, migrations: evidence.migrations, entryCount: evidence.payload.entryCount, aggregateBytes: evidence.payload.aggregateBytes, exactStepListHash: rollbackTemplateHash(evidence) },
   };
-  return { input: { coordinatorId: COORDINATOR, home, preview }, world, deps };
+  return { input: { coordinatorId: COORDINATOR, home, preview }, world, deps, update };
 }
 
 /**
@@ -559,5 +568,137 @@ describe("composeRollback (Spec 2 §10.2, D72 P9)", () => {
     if (owner === undefined) throw new Error("the fixture retains one owner");
     const blobless = { ...owner, operations: owner.operations.map((operation) => (operation.restore.state === "file" ? { ...operation, restore: { ...operation.restore, payload: null } } : operation)) };
     expect(await refusal(composeRollback(input, { ...deps, retained: { ...deps.retained, owners: [blobless] } }))).toMatchObject({ reason: "update_rollback_restore_unavailable", code: EXIT_CODES.capabilityUnavailable });
+  });
+});
+
+/**
+ * NEW-190 (option B; the e2e case moves to Task 11b/A16): `update rollback --apply` end to end at the
+ * `applyRollback` boundary. The real `composeRollback` derives the construction; synthetic ports run
+ * the real coordinator over its outer plan and apply each owner plan's operations to an in-memory
+ * tree from the construction's own payload rows. Codex then reads `registered` through a fake runner.
+ */
+describe("applyRollback restores a registered Codex registration (NEW-190)", () => {
+  it("rewrites the exact registration record for the restored plugin tree, and Codex reads it as registered", async () => {
+    const { input, deps, update } = await codexRollbackFixture();
+    const files = new Map<string, Uint8Array>([
+      [CODEX_PLUGIN_FILE, NEW_PLUGIN],
+      [CODEX_REGISTRATION_PATH, codexRegistrationBytes(NEW_PLUGIN)],
+    ]);
+    let composition: Awaited<ReturnType<typeof composeRollback>> | null = null;
+    let stored: { plan: UpdateLifecycleCoordinatorPlanV2; journal: UpdateLifecycleCoordinatorJournalV2 } | null = null;
+    let locked = false;
+
+    const ownerPlan = (owner: string): OwnerUpdatePlanV1 => {
+      const plans = (composition?.construction.files ?? []).flatMap((file) => {
+        if (file.role.kind !== "immutable_plan" || file.role.planKind !== "owner_update") return [];
+        const bytes = composition?.sources.rowBytes.get(file.ordinal);
+        return bytes === undefined ? [] : [decodeCanonicalJson(bytes, bytes.byteLength) as unknown as OwnerUpdatePlanV1];
+      });
+      const found = plans.find((plan) => plan.owner === owner);
+      if (found === undefined) throw new Error(`no ${owner} owner plan`);
+      return found;
+    };
+    /** A payload's bytes: plan-derived rows carry them; a retained blob is the preimage the payload kept. */
+    const payloadBytes = (path: string, sha: LowerHexSha256): Uint8Array => {
+      const row = composition?.construction.files.find((file) => file.path === path);
+      const derived = row?.role.kind === "payload" && row.role.source.kind === "plan_derived" ? encoder.encode(row.role.source.value) : null;
+      const bytes = derived ?? [OLD_A, OLD_B, OLD_PLUGIN].find((candidate) => sha256(candidate) === sha);
+      if (bytes === undefined || sha256(bytes) !== sha) throw new Error(`no payload bytes for ${path}`);
+      return bytes;
+    };
+
+    const ports: UpdateApplyPortsV1 = {
+      withGlobalLock: async (work) => {
+        locked = true;
+        try {
+          return await work();
+        } finally {
+          locked = false;
+        }
+      },
+      closure: () => Promise.resolve(stored === null ? { kind: "clear" } : { kind: "update_recovery", coordinatorId: COORDINATOR, operation: "update_rollback", direction: stored.journal.direction }),
+      allocate: () => Promise.resolve(COORDINATOR),
+      compose: () => Promise.reject(new Error("rollback reached the update derivation")),
+      composeRollback: async (composeInput) => {
+        composition = await composeRollback(composeInput, deps);
+        return composition;
+      },
+      construction: () => ({
+        publish: () => Promise.resolve({} as never),
+        stageDirectories: () => Promise.resolve(),
+        stageFiles: async (_plan, frames) => {
+          for await (const frame of frames) void frame;
+        },
+        publishOuter: (_plan, outer) => {
+          stored = {
+            plan: validateUpdateCoordinatorPlan(decodeCanonicalJson(outer.plan, outer.plan.byteLength), SYNTHETIC_HOME),
+            journal: decodeCanonicalJson(outer.journal, outer.journal.byteLength) as unknown as UpdateLifecycleCoordinatorJournalV2,
+          };
+          return Promise.resolve();
+        },
+        recover: () => Promise.resolve(),
+      }),
+      coordinator: () => ({
+        store: {
+          read: () => (stored === null ? Promise.reject(new Error("no coordinator")) : Promise.resolve(stored)),
+          rewrite: (plan, _current, next) => {
+            stored = { plan, journal: next };
+            return Promise.resolve();
+          },
+          removeEnvelope: () => {
+            stored = null;
+            return Promise.resolve();
+          },
+          removeRewriteTemps: () => Promise.resolve(),
+        },
+        participants: {
+          apply: (step) => {
+            if (step.kind === "owner_files") {
+              for (const operation of ownerPlan(step.owner).operations) {
+                if (operation.operation === "replace" && operation.content !== null) files.set(operation.targetPath, payloadBytes(operation.content.path, operation.content.sha256));
+              }
+            }
+            return Promise.resolve(step.kind === "target_verifier" ? { state: "verified" as const } : { state: "applied" as const });
+          },
+          observe: () => Promise.resolve({ state: "applied" }),
+          compensate: () => Promise.resolve({ state: "compensated" }),
+          compact: () => Promise.resolve(),
+          retirementLeaves: () => Promise.resolve(1),
+          retireLeaf: () => Promise.resolve(),
+        },
+        executor: { publishInitial: () => Promise.resolve(), switchToFallback: () => Promise.resolve(), removeRecord: () => Promise.resolve() },
+        verifyPlan: () => Promise.resolve(),
+        requireLock: () => (locked ? Promise.resolve() : Promise.reject(new Error("lock not held"))),
+        clock: () => PLANNED_AT,
+      }),
+      envelope: { isEnvelopeSuffix: () => Promise.resolve(false), completeEnvelopeSuffix: () => Promise.reject(new Error("unreachable")) },
+      executorCleanup: () => Promise.resolve(),
+    };
+
+    const result = await applyRollback({ ...update, apply: ports }, input.preview);
+    expect(result).toMatchObject({ outcome: "rolled_back", rollbackAvailable: false, active: { version: "1.0.0" } });
+    expect(files.get(CODEX_PLUGIN_FILE)).toEqual(OLD_PLUGIN);
+    const registration = files.get(CODEX_REGISTRATION_PATH);
+    // The exact bytes `init` wrote for the 1.0.0 tree, not the update's stale record.
+    expect(registration).toEqual(codexRegistrationBytes(OLD_PLUGIN));
+
+    const runner: ProcessRunner = {
+      run: (request) => Promise.resolve({
+        stdout: request.args.join(" ") === "plugin list --json" ? JSON.stringify({ installed: [{ name: PLUGIN_NAME, enabled: true, source: { path: CODEX_PLUGIN_ROOT } }] }) : "",
+        stderr: "",
+        exitCode: 0,
+        signal: null,
+        timedOut: false,
+      }),
+    };
+    const state = await inspectCodexRegistration({
+      runner,
+      codexExecutable: "/synthetic/opt/codex/bin/codex",
+      codexHome: SYNTHETIC_CODEX_HOMES.codexHome,
+      pluginRoot: CODEX_PLUGIN_ROOT,
+      record: validateCodexRegistrationRecord(registration ?? new Uint8Array()),
+      treeHash: codexPluginTreeHash([{ path: "plugin.json", sha256: sha256(files.get(CODEX_PLUGIN_FILE) ?? new Uint8Array()) }]),
+    });
+    expect(state).toBe("registered");
   });
 });
