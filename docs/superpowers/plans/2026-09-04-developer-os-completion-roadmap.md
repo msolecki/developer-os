@@ -355,6 +355,11 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D88 (2026-10-06), founder: W2-SEC-GIT-1 amends spec §4.2.** The planned list and the node list enforce `when` and `minUses`; the process table
+  only carries them as hash-bound metadata. The supervisor is not changed to enforce predicates there.
+- **D87 (2026-10-06), founder: wave-4 decisions.** (1) NEW-189: journal a publish intent before each rename. (2) BRAIN-3: remove garden `fix`.
+  (3) RENDER-3: `subagents` is not "not-used". (4) FLOW-DOCS-3: test `scheduled` against `SCHEDULED_JOB_IDS`. (5) W2-BUNDLE-1: unify the preview's
+  migration order (`previewHash` changes; no releases exist). (6) DEAD-8: `@types/node` 24 and an exact `esbuild` pin are approved.
 - **D86 (2026-10-06), founder: audit waves 2-3 decisions.** (1) NEW-146: both residuals are accepted, and an `sk-` body whose
   parts are no longer than three letters is no kebab slug (the 4+ letter part rule). (2) NEW-164: the thin commands are dropped, so the
   five skills' own descriptions reach the agent's listing. (3) FLOW-INIT-2: `stop` and `format` write their firing record before their
