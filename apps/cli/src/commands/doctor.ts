@@ -586,6 +586,8 @@ async function checkClaudeCapabilities(
     ...capabilityInput(outcome),
     runner: context.runner,
     probe,
+    // NEW-158: the only source for `plugin_hooks` and `session_start_injection` (`hooks.md` §3.6).
+    firingObservations: (await readHookFiringObservations(context.paths.stateDir, "claude")).observations,
     /**
      * The **user's** home, not the product's. This was
      * `join(paths.home, "plugins", "claude")` — `~/.developer-os/plugins/claude`,
@@ -638,6 +640,7 @@ async function checkCodexCapabilities(
     ...capabilityInput(outcome),
     runner: context.runner,
     probe,
+    firingObservations: (await readHookFiringObservations(context.paths.stateDir, "codex")).observations,
     pluginRoot: codexPluginRoot(context),
   });
   /**
