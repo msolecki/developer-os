@@ -3100,6 +3100,14 @@ describe('transaction persistence', () => {
         validPersistedMutation({ stagedRelativePath: '1.bin' }),
       ]),
     },
+    {
+      name: 'a createdAt that is a bare year (CORE-REST-4)',
+      journal: { ...validPersistedJournal(), createdAt: '2026' },
+    },
+    {
+      name: 'an updatedAt that is not Date.toISOString output (CORE-REST-4)',
+      journal: { ...validPersistedJournal(), updatedAt: '2026-07-22 12:00:00' },
+    },
   ];
 
   it('accepts the valid persisted-journal baseline', () => {

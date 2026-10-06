@@ -1,6 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
 
 import { EXIT_CODES } from "../result.js";
+import { hasExactKeys, isLowerHexSha256, isNonEmptyString, isRecord } from "../shape.js";
 import {
   containsPath,
   containsPathLoosely,
@@ -85,27 +86,9 @@ function refuse(reason: ChangePlanRefusalReason): never {
   throw new ChangePlanError(EXIT_CODES.securityRefusal, reason);
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
-function hasExactKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-): boolean {
-  const actual = Object.keys(value).sort();
-  return (
-    actual.length === keys.length && actual.every((key, index) => key === keys[index])
-  );
-}
 
-function isHash(value: unknown): value is string {
-  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-}
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 
 /**
  * Ownership is granted on exact containment and denied on case-folded
@@ -126,7 +109,7 @@ function isWithinAnyLoosely(
 }
 
 function validateOperation(value: unknown): ChangePlanOperationV1 {
-  if (!isObject(value) || !hasExactKeys(value, OPERATION_KEYS)) invalid();
+  if (!isRecord(value) || !hasExactKeys(value, OPERATION_KEYS)) invalid();
   if (
     value.kind === "config-entry" ||
     !OPERATIONS.has(value.operation as ChangeOperationKind) ||
@@ -146,12 +129,12 @@ function validateOperation(value: unknown): ChangePlanOperationV1 {
   if (operation === "create" && value.expectedBeforeHash !== null) {
     invalid("hash_expectation");
   }
-  if (operation !== "create" && !isHash(value.expectedBeforeHash)) {
+  if (operation !== "create" && !isLowerHexSha256(value.expectedBeforeHash)) {
     invalid("hash_expectation");
   }
   if (operation === "remove") {
     if (value.source !== "" || value.proposedHash !== null) invalid();
-  } else if (!isNonEmptyString(value.source) || !isHash(value.proposedHash)) {
+  } else if (!isNonEmptyString(value.source) || !isLowerHexSha256(value.proposedHash)) {
     invalid();
   }
 
@@ -270,7 +253,7 @@ export async function validateChangePlan(
   context: ChangePlanContext,
 ): Promise<ChangePlanV1> {
   if (
-    !isObject(value) ||
+    !isRecord(value) ||
     !hasExactKeys(value, PLAN_KEYS) ||
     value.schemaVersion !== 1 ||
     !isNonEmptyString(value.productVersion) ||

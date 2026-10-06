@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { EXIT_CODES } from "../result.js";
 import { readStableRegularFile } from "./fs-read.js";
+import { hasExactKeys, isLowerHexSha256, isNonEmptyString, isRecord, isUtcTimestamp } from "../shape.js";
 import type {
   ArtifactKind,
   ArtifactOwner,
@@ -132,31 +133,10 @@ function isDescendantOrSelf(fromRoot: string): boolean {
   return fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot);
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
-function hasExactKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-): boolean {
-  const actual = Object.keys(value).sort();
-  return (
-    actual.length === keys.length && actual.every((key, index) => key === keys[index])
-  );
-}
 
-function isIsoDate(value: unknown): value is string {
-  return typeof value === "string" && !Number.isNaN(Date.parse(value));
-}
 
-function isHash(value: unknown): value is string {
-  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-}
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 
 function isManagedPath(value: unknown): value is string {
   return (
@@ -165,7 +145,7 @@ function isManagedPath(value: unknown): value is string {
 }
 
 function isArtifact(value: unknown): value is ManagedArtifactV1 {
-  if (!isObject(value) || !hasExactKeys(value, ARTIFACT_KEYS)) return false;
+  if (!isRecord(value) || !hasExactKeys(value, ARTIFACT_KEYS)) return false;
   if (
     !OWNERS.has(value.owner as ArtifactOwner) ||
     !KINDS.has(value.kind as ArtifactKind) ||
@@ -173,15 +153,15 @@ function isArtifact(value: unknown): value is ManagedArtifactV1 {
     !isManagedPath(value.path) ||
     !isNonEmptyString(value.productVersion) ||
     !isNonEmptyString(value.source) ||
-    !isHash(value.installedHash) ||
-    !isIsoDate(value.verifiedAt) ||
+    !isLowerHexSha256(value.installedHash) ||
+    !isUtcTimestamp(value.verifiedAt) ||
     typeof value.existedBefore !== "boolean"
   ) {
     return false;
   }
 
   return value.existedBefore
-    ? isHash(value.beforeHash) && isNonEmptyString(value.backupRelativePath)
+    ? isLowerHexSha256(value.beforeHash) && isNonEmptyString(value.backupRelativePath)
     : value.beforeHash === null && value.backupRelativePath === null;
 }
 
@@ -202,11 +182,11 @@ function cloneManifest(
 
 export function validateManifest(value: unknown): InstallationManifestV1 {
   if (
-    !isObject(value) ||
+    !isRecord(value) ||
     !hasExactKeys(value, MANIFEST_KEYS) ||
     value.schemaVersion !== 1 ||
     !isNonEmptyString(value.productVersion) ||
-    !isIsoDate(value.installedAt) ||
+    !isUtcTimestamp(value.installedAt) ||
     !Array.isArray(value.artifacts)
   ) {
     throw new ManifestStateError();

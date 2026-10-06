@@ -1,4 +1,5 @@
 import { EXIT_CODES } from "../result.js";
+import { hasExactKeys, isRecord } from "../shape.js";
 import { assertNotWorkflowId, parseInstructionId } from "./bounds.js";
 import type { InstructionCategoryV1, InstructionIdV1 } from "./bounds.js";
 
@@ -33,17 +34,12 @@ function invalid(): never {
   throw new InstructionCatalogInvalidError();
 }
 
-function isRecord(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.keys(value).sort().join("\0") === keys.join("\0")
-  );
+function isExactRecord(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  return isRecord(value) && hasExactKeys(value, keys);
 }
 
 function row(value: unknown, workflowIds: ReadonlySet<string>): InstructionCatalogRowV1 {
-  if (!isRecord(value, ROW_KEYS)) invalid();
+  if (!isExactRecord(value, ROW_KEYS)) invalid();
   const { category, id, legacyName, thinCommand, vendors } = value;
   if (typeof category !== "string" || !CATEGORIES.has(category)) invalid();
   if (typeof id !== "string") invalid();
@@ -76,7 +72,7 @@ function row(value: unknown, workflowIds: ReadonlySet<string>): InstructionCatal
 
 /** Strict keys; rows strictly ascending by `(category, id)`, so sorted and unique. */
 export function validateInstructionCatalog(value: unknown, workflowIds: ReadonlySet<string>): InstructionCatalogV1 {
-  if (!isRecord(value, ["artifacts", "schemaVersion"]) || value.schemaVersion !== 1 || !Array.isArray(value.artifacts)) {
+  if (!isExactRecord(value, ["artifacts", "schemaVersion"]) || value.schemaVersion !== 1 || !Array.isArray(value.artifacts)) {
     invalid();
   }
   const artifacts = value.artifacts.map((item) => row(item, workflowIds));
