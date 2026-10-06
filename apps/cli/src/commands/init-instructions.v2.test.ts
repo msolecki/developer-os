@@ -526,6 +526,38 @@ describe("uninstall --yes refuses before it detaches anything (NEW-161)", () => 
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
+describe("uninstall --yes refuses an infeasible plan before it detaches anything (NEW-161)", () => {
+  it("leaves the vendor files and the Codex registration when the ledger is at capacity", async () => {
+    const planted = await home("uninstall-yes-capacity");
+    const { fixture } = planted;
+    expect((await runInit(fixture.context, options(["claude", "codex"]))).ok).toBe(true);
+    const lifecycle = fixture.context.lifecycle;
+    if (lifecycle === undefined) throw new Error("the fixture composed no lifecycle context");
+    /** The coordinator-journal root reported full: only the preview's own ledger read sees it. */
+    const full = {
+      ...fixture.context,
+      lifecycle: {
+        ...lifecycle,
+        inspectLedger: async (...args: Parameters<typeof lifecycle.inspectLedger>) => {
+          const snapshot = await lifecycle.inspectLedger(...args);
+          return { ...snapshot, counts: { ...snapshot.counts, coordinatorJournals: 10_000 } };
+        },
+      },
+    };
+    const before = await inventoryDigest(fixture.userHome);
+    const callsBefore = planted.codex.calls.length;
+
+    const result = await runUninstall(full, { dryRun: false, assumeYes: true });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("ledger_capacity_exceeded");
+    expect(planted.codex.calls.slice(callsBefore).filter((call) => call.startsWith("plugin remove"))).toStrictEqual([]);
+    expect(planted.codex.registered).toBe(true);
+    expect(await inventoryDigest(fixture.userHome)).toStrictEqual(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
 describe("init --adapters: deselecting a vendor reports a directory it could not remove (one chained home)", () => {
   it("names the kept directory when an entry appears in it after the detach was planned", async () => {
     const planted = await home("init-detach-kept");

@@ -366,10 +366,16 @@ describe("run", () => {
     const body = JSON.parse(json.out.join("\n")) as {
       readonly error: {
         readonly kind: string;
-        readonly data?: { readonly checks: readonly { readonly id: string; readonly status: string }[] };
+        readonly paths: readonly string[];
+        readonly data?: {
+          readonly checks: readonly { readonly id: string; readonly status: string; readonly paths: readonly string[] }[];
+        };
       };
     };
     expect(body.error.kind).toBe("doctor_failed");
+    /** NEW-39: the report's paths carry the same `path`-scope redaction as `error.paths`. */
+    expect(body.error.data?.checks.filter((check) => check.status === "fail").flatMap((check) => check.paths))
+      .toStrictEqual(body.error.paths);
     const statuses = new Set(body.error.data?.checks.map((check) => check.status));
     expect(statuses).toContain("fail");
     expect(statuses).toContain("warn");
@@ -380,6 +386,7 @@ describe("run", () => {
     expect(out).toMatch(/^\[fail\] manifest: /mu);
     expect(out).toMatch(/^\[warn\] /mu);
     expect(human.err.join("\n")).toContain("Recovery: developer-os init");
+    expect(human.err.join("\n")).toMatch(/^product-home: .*; manifest: no installation manifest exists/mu);
   });
 
   it("sends human failures and their recovery command to stderr", async () => {

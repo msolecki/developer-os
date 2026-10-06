@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
@@ -54,6 +55,7 @@ import { runInit } from "./init.js";
 import { runRepair } from "./repair.js";
 import { createCommandFixture, firstRegularFile, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures, retainedTombstones } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
+import { runStatus } from "./status.js";
 import type { CliContext } from "../context.js";
 
 /**
@@ -145,6 +147,23 @@ async function plantBackupFile(
   });
   return path;
 }
+
+describe("doctor's lifecycle survey over hostile coordinator journal entries (NEW-160)", () => {
+  it.each(["fifo", "symlink"] as const)("fails the lifecycle check, without hanging, on a %s journal leaf", async (kind) => {
+    const fixture = await createCommandFixture(`doctor-lifecycle-${kind}`);
+    const journals = join(fixture.paths.stateDir, "lifecycle-journals");
+    await nodeFs.mkdir(journals, { recursive: true, mode: 0o700 });
+    const leaf = join(journals, `lc_${"2".repeat(64)}_0.json`);
+    if (kind === "fifo") execFileSync("/usr/bin/mkfifo", ["-m", "600", leaf]);
+    else await nodeFs.symlink(join(fixture.paths.stateDir, "elsewhere.json"), leaf);
+
+    const report = await runDoctorReport(fixture.context);
+    const status = await runStatus(fixture.context);
+
+    expect(report.checks.find((check) => check.id === "lifecycle")?.status).toBe("fail");
+    expect(status.ok).toBe(true);
+  });
+});
 
 describe("runDoctor", () => {
   it("publishes one content-free warning check per retained bootstrap ID without writing or disclosing", async () => {

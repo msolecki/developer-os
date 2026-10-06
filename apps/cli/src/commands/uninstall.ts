@@ -1,6 +1,7 @@
 import { isAbsolute, join } from "node:path";
 
 import {
+  assertLifecycleExecutionFeasible,
   CODEX_INGEST_HOME_REPAIR,
   containsPath,
   containsPathLoosely,
@@ -44,7 +45,7 @@ import {
   runAbsentManifestUninstall,
 } from "../lifecycle/absent-manifest-uninstall.js";
 import type { AdmittedV2HomeV1 } from "../lifecycle/admission.js";
-import { lifecycleHomeKeyFromAdmission } from "../lifecycle/context.js";
+import { lifecycleHomeKeyFromAdmission, uninstallResidueFrom } from "../lifecycle/context.js";
 import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { createManagedArtifactSchemaRegistry } from "../lifecycle/schema-registry.js";
 import { CodexRegistrationFailedError } from "../instructions/codex-registration.js";
@@ -784,9 +785,13 @@ export async function runCoordinatorUninstall(
     const held = await lifecycle.locks.acquireExisting(lockPath);
     let preview;
     try {
-      preview = await uninstaller.preview(
-        request(detached === null ? admitted : { ...admitted, manifest: detached.manifest }),
-        held,
+      const previewed = request(detached === null ? admitted : { ...admitted, manifest: detached.manifest });
+      preview = await uninstaller.preview(previewed, held);
+      /** `execute`'s capacity verdict too, over the ledger under this hold, before anything detaches. */
+      assertLifecycleExecutionFeasible(
+        preview.builder,
+        await lifecycle.inspectLedger(previewed.key, uninstallResidueFrom(evidence)),
+        lifecycle.codecs(previewed.key).executionPlan,
       );
     } finally {
       await held.release();

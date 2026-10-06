@@ -616,10 +616,10 @@ function emit<T>(
    * block, the CLI's primary help surface, into a single line of replacement
    * characters.
    */
-  /** A failure that carries its report prints the report in place of the summary message. */
+  /** A failure that carries its report prints it on stdout; stderr keeps the summary for stderr-only scripts. */
   const reportLines = result.error.data === undefined ? [] : (renderFailureData?.(result.error.data) ?? []);
   for (const line of reportLines) io.stdout(line);
-  if (reportLines.length === 0) writeLines(io.stderr, result.error.message);
+  writeLines(io.stderr, result.error.message);
   for (const path of result.error.paths) io.stderr(`  ${renderPath(path)}`);
   if (result.error.recovery !== undefined) {
     writeLines(io.stderr, `Recovery: ${result.error.recovery}`);

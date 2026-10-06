@@ -67,7 +67,7 @@ export async function surveyLifecycleResidue(context: CliContext): Promise<Lifec
     for (const record of snapshot.coordinators) {
       const operation = record.plan.operation;
       findings.push({
-        message: `${operation} coordinator ${record.id} is unfinished (${record.state})`,
+        message: `${operation} coordinator ${record.id} is unfinished or still running (${record.state})`,
         path: journal(record.id),
         ...(operation === "uninstall" ? { recovery: UNINSTALL_RECOVERY } : {}),
       });
@@ -76,14 +76,14 @@ export async function surveyLifecycleResidue(context: CliContext): Promise<Lifec
       const recovery = coordinator.operation === "update_rollback" ? ROLLBACK_RECOVERY : UPDATE_RECOVERY;
       if (observation.executorRecord?.coordinatorId === coordinator.id) updateRecovery = recovery;
       findings.push({
-        message: `${coordinator.operation} coordinator ${coordinator.id} is unfinished (${coordinator.direction})`,
+        message: `${coordinator.operation} coordinator ${coordinator.id} is unfinished or still running (${coordinator.direction})`,
         path: journal(coordinator.id),
         recovery,
       });
     }
     for (const construction of observation.constructions) {
       findings.push({
-        message: `update construction ${construction.coordinatorId} is unfinished`,
+        message: `update construction ${construction.coordinatorId} is unfinished or still running`,
         path: journal(construction.coordinatorId),
         recovery: UPDATE_RECOVERY,
       });

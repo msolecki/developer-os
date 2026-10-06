@@ -68,39 +68,17 @@ function errorOf(result: CliResult<unknown>): CliError {
   return result.error;
 }
 
-/** Every check `doctor` can report, in the order `collectFindings` produces them. */
-const DOCTOR_CHECKS = [
-  "platform",
-  "product-home",
-  "configuration",
-  "manifest",
-  "transactions",
-  "drift",
-  "brain",
-  "agents",
-  "claude-capabilities",
-  "codex-capabilities",
-  "vendor-config",
-  "instructions",
-  "codex-registration",
-] as const;
-
 /**
- * A failing `doctor` publishes no checks: `runDoctor` returns the report only on
- * success, and on failure collapses the failing checks into one `id: message`
- * list joined by `"; "`.
- *
- * Recovering the ids by splitting on `"; "` and cutting at the first `":"` is
- * not safe — several check messages are a redacted filesystem error, which can
- * contain both separators, and a mangled id would silently satisfy a
- * `not.toContain` assertion. Matching each *known* id against an anchored
- * pattern instead means stray punctuation inside a message can neither invent a
- * check nor hide one.
+ * A failing `doctor` still publishes its whole report, as the failure's redacted
+ * `error.data` (NEW-150), so the failing ids are read from its checks rather than
+ * parsed out of the `"; "`-joined message, where a redacted filesystem error can
+ * carry both separators. Every failing id is returned, `lifecycle` and the
+ * `bootstrap-evidence` rows included, not only the ones this file names.
  */
 function failedChecks(error: CliError): readonly string[] {
-  return DOCTOR_CHECKS.filter((id) =>
-    new RegExp(`(?:^|; )${id}:`, "u").test(error.message),
-  );
+  const report = error.data as unknown as Partial<DoctorReportV1> | undefined;
+  if (report?.checks === undefined) throw new Error(`a failing doctor published no report: ${error.message}`);
+  return report.checks.filter((check) => check.status === "fail").map((check) => check.id);
 }
 
 /**
