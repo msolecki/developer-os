@@ -166,6 +166,8 @@ export class TransactionGuardError extends Error {
   }
 }
 
+const DECIMAL_IDENTITY = /^(?:0|[1-9][0-9]*)$/u;
+
 function isMissing(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -302,8 +304,8 @@ function retainedPublicationParent(
   if (
     value.path !== expectedPath ||
     value.ownerUid !== ownerUid ||
-    !/^(?:0|[1-9][0-9]*)$/u.test(value.dev) ||
-    !/^(?:0|[1-9][0-9]*)$/u.test(value.ino)
+    !DECIMAL_IDENTITY.test(value.dev) ||
+    !DECIMAL_IDENTITY.test(value.ino)
   ) {
     throw new TransactionStateError();
   }
@@ -337,8 +339,8 @@ function retainedMutationPublications(
       observedNlink !== 1 ||
       request.postimage.bytes !== String(mutation.contentSize) ||
       request.postimage.sha256 !== mutation.contentHash ||
-      !/^(?:0|[1-9][0-9]*)$/u.test(request.postimage.dev) ||
-      !/^(?:0|[1-9][0-9]*)$/u.test(request.postimage.ino)
+      !DECIMAL_IDENTITY.test(request.postimage.dev) ||
+      !DECIMAL_IDENTITY.test(request.postimage.ino)
     ) throw new TransactionStateError();
     return {
       sourcePath: request.sourcePath,
@@ -566,8 +568,8 @@ export function admitLifecycleFoundationInitialJournal(
       staged.size !== plannedBytes.byteLength ||
       staged.hash !== hash(plannedBytes) ||
       ref.initialJournal.plannedBytesHash !== hash(plannedBytes) ||
-      !/^(?:0|[1-9][0-9]*)$/u.test(staged.dev) ||
-      !/^(?:0|[1-9][0-9]*)$/u.test(staged.ino)
+      !DECIMAL_IDENTITY.test(staged.dev) ||
+      !DECIMAL_IDENTITY.test(staged.ino)
     ) {
       throw new TransactionStateError();
     }
@@ -690,8 +692,6 @@ const retainedUpdateFoundationInitialJournals = new WeakMap<
   AdmittedUpdateFoundationInitialJournalV1,
   RetainedUpdateFoundationInitialJournalV1
 >();
-
-const DECIMAL_IDENTITY = /^(?:0|[1-9][0-9]*)$/u;
 
 function retainedIdentity(value: UpdateFoundationPayloadIdentityV1): UpdateFoundationPayloadIdentityV1 {
   if (!DECIMAL_IDENTITY.test(value.dev) || !DECIMAL_IDENTITY.test(value.ino)) {
@@ -968,24 +968,52 @@ async function optionalLstat(
   }
 }
 
-function assertBootstrapJournalStats(
+const JOURNAL_MAXIMUM_BYTES = 1_048_576;
+
+/** An owner-only (0600), single-link regular file at exactly this inode, its size in range. */
+function assertOwnedJournalInode(
   stats: BigIntStats,
-  evidence: BootstrapPayloadEvidenceV1,
   ownerUid: number,
-  expectedNlink = 1,
+  identity: { readonly dev: string; readonly ino: string },
+  minimumBytes = 0,
+  maximumBytes = JOURNAL_MAXIMUM_BYTES,
 ): void {
   if (
     stats.isSymbolicLink() ||
     !stats.isFile() ||
     Number(stats.uid) !== ownerUid ||
     (Number(stats.mode) & 0o7777) !== 0o600 ||
-    Number(stats.nlink) !== expectedNlink ||
-    Number(stats.size) !== evidence.bytes ||
-    stats.dev.toString(10) !== evidence.dev ||
-    stats.ino.toString(10) !== evidence.ino
+    Number(stats.nlink) !== 1 ||
+    Number(stats.size) < minimumBytes ||
+    Number(stats.size) > maximumBytes ||
+    stats.dev.toString(10) !== identity.dev ||
+    stats.ino.toString(10) !== identity.ino
   ) {
     throw new TransactionStateError();
   }
+}
+
+/** Rewrites an open journal to exactly `bytes` on the same inode and syncs it. */
+async function rewriteInPlace(
+  handle: Awaited<ReturnType<TransactionFileSystem["open"]>>,
+  bytes: Uint8Array,
+  identity: { readonly dev: string; readonly ino: string },
+): Promise<void> {
+  await handle.truncate(0);
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const write = await handle.write(bytes, offset, bytes.byteLength - offset, offset);
+    if (write.bytesWritten < 1) throw new TransactionStateError();
+    offset += write.bytesWritten;
+  }
+  await handle.truncate(bytes.byteLength);
+  await handle.sync();
+  const after = await handle.stat({ bigint: true });
+  if (
+    after.dev.toString(10) !== identity.dev ||
+    after.ino.toString(10) !== identity.ino ||
+    Number(after.size) !== bytes.byteLength
+  ) throw new TransactionStateError();
 }
 
 async function readExactBootstrapJournal(
@@ -993,22 +1021,21 @@ async function readExactBootstrapJournal(
   path: string,
   evidence: BootstrapPayloadEvidenceV1,
   ownerUid: number,
-  expectedNlink = 1,
 ): Promise<{ readonly bytes: Uint8Array; readonly identity: BootstrapJournalIdentity }> {
   try {
     const before = await fs.lstat(path, { bigint: true });
-    assertBootstrapJournalStats(before, evidence, ownerUid, expectedNlink);
+    assertOwnedJournalInode(before, ownerUid, evidence, evidence.bytes, evidence.bytes);
     const handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     let bytes: Uint8Array;
     try {
       const opened = await handle.stat({ bigint: true });
-      assertBootstrapJournalStats(opened, evidence, ownerUid, expectedNlink);
+      assertOwnedJournalInode(opened, ownerUid, evidence, evidence.bytes, evidence.bytes);
       if (opened.dev !== before.dev || opened.ino !== before.ino) {
         throw new TransactionStateError();
       }
       bytes = await handle.readFile();
       const afterRead = await handle.stat({ bigint: true });
-      assertBootstrapJournalStats(afterRead, evidence, ownerUid, expectedNlink);
+      assertOwnedJournalInode(afterRead, ownerUid, evidence, evidence.bytes, evidence.bytes);
       if (afterRead.dev !== opened.dev || afterRead.ino !== opened.ino) {
         throw new TransactionStateError();
       }
@@ -1016,7 +1043,7 @@ async function readExactBootstrapJournal(
       await handle.close();
     }
     const after = await fs.lstat(path, { bigint: true });
-    assertBootstrapJournalStats(after, evidence, ownerUid, expectedNlink);
+    assertOwnedJournalInode(after, ownerUid, evidence, evidence.bytes, evidence.bytes);
     if (after.dev !== before.dev || after.ino !== before.ino) {
       throw new TransactionStateError();
     }
@@ -1051,16 +1078,7 @@ async function readExactBootstrapJournalByIdentity(
   let failure: TransactionStateError | undefined;
   try {
     const before = await fs.lstat(path, { bigint: true });
-    if (
-      before.isSymbolicLink() ||
-      !before.isFile() ||
-      Number(before.uid) !== ownerUid ||
-      (Number(before.mode) & 0o7777) !== 0o600 ||
-      Number(before.nlink) !== 1 ||
-      Number(before.size) !== expectedBytes.byteLength ||
-      before.dev.toString(10) !== identity.dev ||
-      before.ino.toString(10) !== identity.ino
-    ) throw new TransactionStateError();
+    assertOwnedJournalInode(before, ownerUid, identity, expectedBytes.byteLength, expectedBytes.byteLength);
     handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const opened = await handle.stat({ bigint: true });
     if (
@@ -1131,17 +1149,7 @@ async function restoreBootstrapFoundationInitialJournalByIdentity(
   const expectedBytes = new TextEncoder().encode(encodeFoundationJournalJsonV1(expected));
   try {
     const before = await fs.lstat(path, { bigint: true });
-    if (
-      before.isSymbolicLink() ||
-      !before.isFile() ||
-      Number(before.uid) !== ownerUid ||
-      (Number(before.mode) & 0o7777) !== 0o600 ||
-      Number(before.nlink) !== 1 ||
-      before.size < 0 ||
-      before.size > 1_048_576 ||
-      before.dev.toString(10) !== identity.dev ||
-      before.ino.toString(10) !== identity.ino
-    ) throw new TransactionStateError();
+    assertOwnedJournalInode(before, ownerUid, identity);
     handle = await fs.open(path, constants.O_RDWR | constants.O_NOFOLLOW);
     const opened = await handle.stat({ bigint: true });
     if (opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size) {
@@ -1155,7 +1163,6 @@ async function restoreBootstrapFoundationInitialJournalByIdentity(
       linkedAfter.dev !== opened.dev || linkedAfter.ino !== opened.ino ||
       Number(afterRead.size) !== bytes.byteLength || Number(linkedAfter.size) !== bytes.byteLength
     ) throw new TransactionStateError();
-    let exactLegalBody = false;
     let crashResidue = bytes.byteLength === 0;
     if (!crashResidue) {
       let serialized: string;
@@ -1186,37 +1193,20 @@ async function restoreBootstrapFoundationInitialJournalByIdentity(
             throw new TransactionStateError();
           }
           const canonical = encodeFoundationJournalJsonV1(journal);
-          if (serialized === canonical) {
-            exactLegalBody = true;
-          } else if (`${serialized}\n` === canonical) {
-            crashResidue = true;
-          } else {
+          if (serialized !== canonical && `${serialized}\n` !== canonical) {
             throw new TransactionStateError();
           }
         }
       }
     }
-    if (!exactLegalBody || bytes.byteLength !== expectedBytes.byteLength || hash(bytes) !== hash(expectedBytes)) {
-      await handle.truncate(0);
-      let offset = 0;
-      while (offset < expectedBytes.byteLength) {
-        const write = await handle.write(
-          expectedBytes,
-          offset,
-          expectedBytes.byteLength - offset,
-          offset,
-        );
-        if (write.bytesWritten < 1) throw new TransactionStateError();
-        offset += write.bytesWritten;
-      }
-      await handle.truncate(expectedBytes.byteLength);
-      await handle.sync();
-      const restored = await handle.stat({ bigint: true });
-      if (
-        restored.dev.toString(10) !== identity.dev ||
-        restored.ino.toString(10) !== identity.ino ||
-        Number(restored.size) !== expectedBytes.byteLength
-      ) throw new TransactionStateError();
+    /**
+     * Any body but the planned bytes is rewritten to them — crash residue, and also a legal
+     * progressed journal (`validated` … `finalized`) on this admitted inode, which is rewound to
+     * `planned` on purpose: the caller replays only transitions plus the idempotent
+     * `publishBootstrapMutationNoReplace` and its verification, so the replay is safe.
+     */
+    if (Buffer.compare(bytes, expectedBytes) !== 0) {
+      await rewriteInPlace(handle, expectedBytes, identity);
       rewritten = true;
     }
   } catch {
@@ -1391,8 +1381,8 @@ function validateBootstrapFoundationBridgeInput(
     participant.initialJournal.plannedBytesHash !== staged.hash ||
     evidence.stagedPathHash !== hash(new TextEncoder().encode(staged.path)) ||
     !/^[a-f0-9]{64}$/u.test(evidence.sourceIdentityHash) ||
-    !/^(?:0|[1-9][0-9]*)$/u.test(evidence.dev) ||
-    !/^(?:0|[1-9][0-9]*)$/u.test(evidence.ino) ||
+    !DECIMAL_IDENTITY.test(evidence.dev) ||
+    !DECIMAL_IDENTITY.test(evidence.ino) ||
     participant.mutations.length < 1 ||
     participant.mutations.length > 256
   ) {
@@ -1708,7 +1698,6 @@ export class TransactionExecutor {
           stagedPath,
           evidence,
           ownerUid,
-          1,
         );
         decodeExactBootstrapFoundationJournal(observed.bytes, expected);
         if (finalBefore !== null) {
@@ -3014,54 +3003,18 @@ export class TransactionExecutor {
     let writeFailure: TransactionStateError | undefined;
     try {
       const linkedBefore = await this.dependencies.fs.lstat(path, { bigint: true });
-      if (
-        linkedBefore.isSymbolicLink() ||
-        !linkedBefore.isFile() ||
-        Number(linkedBefore.uid) !== ownerUid ||
-        (Number(linkedBefore.mode) & 0o7777) !== 0o600 ||
-        Number(linkedBefore.nlink) !== 1 ||
-        linkedBefore.dev.toString(10) !== identity.dev ||
-        linkedBefore.ino.toString(10) !== identity.ino
-      ) throw new TransactionStateError();
+      assertOwnedJournalInode(linkedBefore, ownerUid, identity, 1);
       handle = await this.dependencies.fs.open(
         path,
         constants.O_RDWR | constants.O_NOFOLLOW,
       );
       const opened = await handle.stat({ bigint: true });
-      if (
-        !opened.isFile() ||
-        Number(opened.uid) !== ownerUid ||
-        (Number(opened.mode) & 0o7777) !== 0o600 ||
-        Number(opened.nlink) !== 1 ||
-        opened.dev.toString(10) !== identity.dev ||
-        opened.ino.toString(10) !== identity.ino ||
-        opened.size < 1 ||
-        opened.size > 1_048_576
-      ) throw new TransactionStateError();
+      assertOwnedJournalInode(opened, ownerUid, identity, 1);
       const currentBytes = await handle.readFile();
       if (new TextDecoder().decode(currentBytes) !== expectedCurrent) {
         throw new TransactionStateError();
       }
-      await handle.truncate(0);
-      let offset = 0;
-      while (offset < nextBytes.byteLength) {
-        const result = await handle.write(
-          nextBytes,
-          offset,
-          nextBytes.byteLength - offset,
-          offset,
-        );
-        if (result.bytesWritten < 1) throw new TransactionStateError();
-        offset += result.bytesWritten;
-      }
-      await handle.truncate(nextBytes.byteLength);
-      await handle.sync();
-      const descriptorAfter = await handle.stat({ bigint: true });
-      if (
-        descriptorAfter.dev.toString(10) !== identity.dev ||
-        descriptorAfter.ino.toString(10) !== identity.ino ||
-        Number(descriptorAfter.size) !== nextBytes.byteLength
-      ) throw new TransactionStateError();
+      await rewriteInPlace(handle, nextBytes, identity);
     } catch {
       writeFailure = new TransactionStateError();
     }
