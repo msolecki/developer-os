@@ -8,6 +8,7 @@ import {
   type LaunchctlIdentityV1,
   type LaunchdHostObserverV1,
 } from "./distribution.js";
+import { parseLaunchctlLastExitCode } from "./bootstrap.js";
 import { LAUNCHD_PREVIEW_OBSERVATION_TABLE } from "./process-table.js";
 import { launchdJob, parseGeneratedLabel } from "./registry.js";
 import {
@@ -57,8 +58,7 @@ export interface LaunchdObservationRequestV1 {
 
 export type LaunchdObservedStateV1 =
   | { readonly kind: "unloaded" }
-  | { readonly kind: "exact_old"; readonly label: GeneratedLaunchdLabelV1; readonly generation: LaunchdGenerationV1 }
-  | { readonly kind: "exact_new"; readonly label: GeneratedLaunchdLabelV1; readonly generation: LaunchdGenerationV1 }
+  | { readonly kind: "exact_old" | "exact_new"; readonly label: GeneratedLaunchdLabelV1; readonly generation: LaunchdGenerationV1; readonly lastExitCode?: number }
   | { readonly kind: "third_state"; readonly reason: "unsuffixed_collision" | "dual_generation" };
 
 export type LaunchdUnobservableReasonV1 = "truncated" | "over_limit" | "timeout" | "exit";
@@ -107,22 +107,28 @@ function validateJobs(jobs: readonly LaunchdObservationJobV1[]): readonly Launch
   });
 }
 
-function classify(entry: LaunchdObservationJobV1, present: ReadonlySet<LaunchdObservedLabelV1>): LaunchdObservedStateV1 {
+function classify(entry: LaunchdObservationJobV1, present: ReadonlyMap<LaunchdObservedLabelV1, number | null>): LaunchdObservedStateV1 {
   if (present.has(launchdJob(entry.job).baseLabel)) return { kind: "third_state", reason: "unsuffixed_collision" };
   const { retained, planned } = entry;
   const oldPresent = retained !== null && present.has(retained);
   const newPresent = planned !== null && present.has(planned);
   if (oldPresent && newPresent && retained !== planned) return { kind: "third_state", reason: "dual_generation" };
-  if (newPresent) return { kind: "exact_new", label: planned, generation: parseGeneratedLabel(planned).generation };
-  if (oldPresent) return { kind: "exact_old", label: retained, generation: parseGeneratedLabel(retained).generation };
+  const exact = (kind: "exact_old" | "exact_new", label: GeneratedLaunchdLabelV1): LaunchdObservedStateV1 => {
+    const lastExitCode = present.get(label) ?? null;
+    return { kind, label, generation: parseGeneratedLabel(label).generation, ...(lastExitCode === null ? {} : { lastExitCode }) };
+  };
+  if (newPresent) return exact("exact_new", planned);
+  if (oldPresent) return exact("exact_old", retained);
   return { kind: "unloaded" };
 }
 
 /**
  * Spec §5.3's bounded read-only observation through the preview row: one `print <domain>` that must
  * exit 0, then `print <domain>/<candidate>` per closed candidate, where exit 0 is present and 113 is
- * absent. Output is byte-counted and discarded, never parsed, hashed into a result, logged or
- * persisted, because `launchctl print` may expose unrelated service environment. Every probe shares
+ * absent. Output is byte-counted and discarded, never hashed into a result, logged or persisted,
+ * because `launchctl print` may expose unrelated service environment; the one exception (NEW-169)
+ * is a present generated candidate's top-level `last exit code`, read by
+ * `parseLaunchctlLastExitCode` and kept as an integer only. Every probe shares
  * one absolute 30,000-ms deadline. The first probe admits the host (spec §5.3 rules 1–3, D71); each
  * later one rechecks that admission, and the empty `HOME`/`TMPDIR` directory is re-verified before
  * every process and after it, so only drift within one pass counts.
@@ -152,11 +158,13 @@ export class LaunchdObserver {
         const target: LaunchdObservedServiceTargetV1 = `${domain}/${label}`;
         return { label, target };
       }).sort((left, right) => byUtf8(left.target, right.target));
-      const present = new Set<LaunchdObservedLabelV1>();
+      const present = new Map<LaunchdObservedLabelV1, number | null>();
       for (const { label, target } of targets) {
-        const probe = await this.#probe(target, phase, pass);
+        // NEW-169: only a generated candidate's dump is read, never the base label's, which may be foreign.
+        const chunks: Uint8Array[] | null = label === launchdJob(entry.job).baseLabel ? null : [];
+        const probe = await this.#probe(target, phase, pass, chunks);
         if (probe.kind === "unobservable") return probe;
-        if (probe.exitCode === 0) present.add(label);
+        if (probe.exitCode === 0) present.set(label, chunks === null ? null : parseLaunchctlLastExitCode(Buffer.concat(chunks).toString("utf8"), target));
         else if (probe.exitCode !== LAUNCHD_SERVICE_ABSENT_EXIT) return { kind: "unobservable", reason: "exit" };
       }
       observed.push({ job: entry.job, state: classify(entry, present) });
@@ -191,7 +199,7 @@ export class LaunchdObserver {
     return directory;
   }
 
-  async #probe(target: string, phase: SupervisedPhaseV1, pass: Pass): Promise<ProbeResultV1> {
+  async #probe(target: string, phase: SupervisedPhaseV1, pass: Pass, stdout: Uint8Array[] | null = null): Promise<ProbeResultV1> {
     const { baseline } = pass;
     await this.#admitHost(pass);
     await this.#admitEmptyDirectory(baseline);
@@ -209,6 +217,8 @@ export class LaunchdObserver {
       wallMs: queryProfile.wallDeadlineMs,
       terminationGraceMs: table.terminationGraceMs,
       phase,
+    }, stdout === null ? undefined : (chunk, stream) => {
+      if (stream === "stdout") stdout.push(Uint8Array.from(chunk));
     });
     await this.#admitEmptyDirectory(baseline);
     switch (evidence.termination) {

@@ -212,18 +212,13 @@ function parseBlock(lines: readonly string[], start: number): { readonly entries
   return index >= lines.length ? null : { entries, end: index };
 }
 
-/**
- * Conservative parser for the `launchctl print gui/<uid>/<label>` service dump, pinned to the
- * format of macOS 26.6.2 (25G83) by `bootstrap.test.ts`. The first line must be exactly
- * `<target> = {`. Every one-tab block is skipped to its matching `\t}`, and a two-tab line or a
- * `\t}` outside a block refuses the dump. `path`, `program`, the `arguments` block and the
- * `environment` block are read only at top-level indentation (one tab); each must occur exactly once, every block line is two
- * tabs plus its value, and every environment line is `KEY => value` with a unique key, so a nested
- * or injected duplicate (an inherited environment value with a newline, say) yields `null`. The
- * `inherited environment` and `default environment` blocks, and everything else, are ignored and
- * never retained.
- */
-export function parseLaunchctlPrintedService(text: string, target: string): LaunchdPrintedServiceV1 | null {
+interface ScannedPrintedServiceV1 {
+  readonly scalars: ReadonlyMap<string, readonly string[]>;
+  readonly blocks: ReadonlyMap<string, readonly (readonly string[])[]>;
+}
+
+/** The structural pass `parseLaunchctlPrintedService` documents; null refuses the whole dump. */
+function scanPrintedService(text: string, target: string): ScannedPrintedServiceV1 | null {
   const lines = text.split("\n");
   if (lines[0] !== `${target} = {`) return null;
   const scalars = new Map<string, string[]>();
@@ -241,9 +236,39 @@ export function parseLaunchctlPrintedService(text: string, target: string): Laun
       continue;
     }
     if (line.startsWith("\t\t") || line === "\t}") return null;
-    const scalar = /^\t(path|program) = (.*)$/u.exec(line);
+    const scalar = /^\t(path|program|last exit code) = (.*)$/u.exec(line);
     if (scalar?.[1] !== undefined) scalars.set(scalar[1], [...(scalars.get(scalar[1]) ?? []), scalar[2] ?? ""]);
   }
+  return { scalars, blocks };
+}
+
+/**
+ * NEW-169: the service's top-level `last exit code`, read through the same structural pass, exactly
+ * once and a plain decimal; `(never exited)` and anything else are null. Both plist output paths are
+ * the null sink, so for a job that died before the runner wrote its status record this is the only
+ * trace. Nothing else in the dump is read or retained.
+ */
+export function parseLaunchctlLastExitCode(text: string, target: string): number | null {
+  const values = scanPrintedService(text, target)?.scalars.get("last exit code");
+  const value = values?.length === 1 ? values[0] : undefined;
+  return value !== undefined && /^(0|[1-9][0-9]{0,9})$/u.test(value) ? Number(value) : null;
+}
+
+/**
+ * Conservative parser for the `launchctl print gui/<uid>/<label>` service dump, pinned to the
+ * format of macOS 26.6.2 (25G83) by `bootstrap.test.ts`. The first line must be exactly
+ * `<target> = {`. Every one-tab block is skipped to its matching `\t}`, and a two-tab line or a
+ * `\t}` outside a block refuses the dump. `path`, `program`, the `arguments` block and the
+ * `environment` block are read only at top-level indentation (one tab); each must occur exactly once, every block line is two
+ * tabs plus its value, and every environment line is `KEY => value` with a unique key, so a nested
+ * or injected duplicate (an inherited environment value with a newline, say) yields `null`. The
+ * `inherited environment` and `default environment` blocks, and everything else, are ignored and
+ * never retained.
+ */
+export function parseLaunchctlPrintedService(text: string, target: string): LaunchdPrintedServiceV1 | null {
+  const scanned = scanPrintedService(text, target);
+  if (scanned === null) return null;
+  const { scalars, blocks } = scanned;
   const once = <T>(values: readonly T[] | undefined): T | undefined => (values?.length === 1 ? values[0] : undefined);
   const path = once(scalars.get("path"));
   const program = once(scalars.get("program"));

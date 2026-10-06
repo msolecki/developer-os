@@ -149,6 +149,12 @@ export interface AutomationJobStatusV1 {
   readonly installed: "absent" | "current" | "stale" | "node_unavailable" | "drifted" | "unowned";
   readonly live: "loaded" | "unloaded" | "third_state" | null;
   readonly lastRun: AutomationStatusRecordV1 | "invalid" | null;
+  /**
+   * NEW-169: launchd's `last exit code` for the loaded generation, absent when it never exited or was
+   * not observed. A run that records or exits silently exits 0, so a non-zero code means the latest
+   * run wrote no status record: launchd could not spawn it, it died first, or the runner refused.
+   */
+  readonly launchdExit?: number;
 }
 
 export type AutomationCommandDataV1 =
@@ -421,13 +427,15 @@ async function observeLive(
   return live;
 }
 
+type ObservedLiveStateV1 = (LaunchdLiveStateV1 & { readonly lastExitCode?: number }) | "third_state";
+
 /** `status` reports a third state or a foreign loaded generation; every mutation refuses on it. */
 async function observeLiveStates(
   lifecycle: CliLifecycleContext,
   jobs: readonly ObservedJobV1[],
   productHome: CanonicalAbsolutePathV1,
-): Promise<ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1 | "third_state">> {
-  const live = new Map<ScheduledJobIdV1, LaunchdLiveStateV1 | "third_state">();
+): Promise<ReadonlyMap<ScheduledJobIdV1, ObservedLiveStateV1>> {
+  const live = new Map<ScheduledJobIdV1, ObservedLiveStateV1>();
   if (jobs.length === 0) return live;
   const retainedLabels = jobs.flatMap((job) => (job.retained === null ? [] : [job.retained]));
   let observed: LaunchdLiveObservationV1;
@@ -443,7 +451,7 @@ async function observeLiveStates(
     if (state?.kind === "unloaded") {
       live.set(job.job, { state: "unloaded" });
     } else if ((state?.kind === "exact_old" || state?.kind === "exact_new") && state.label === job.retained) {
-      live.set(job.job, { state: "loaded", label: state.label, generation: state.generation });
+      live.set(job.job, { state: "loaded", label: state.label, generation: state.generation, ...(state.lastExitCode === undefined ? {} : { lastExitCode: state.lastExitCode }) });
     } else {
       live.set(job.job, "third_state");
     }
@@ -1215,7 +1223,7 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
     const retained = [...states.values()].flatMap((state) => (state.kind === "retained" ? [state.plist] : []));
     const expected = await currentLabels(lifecycle, context, home, retained.find((plist) => plist.node !== null)?.node ?? null);
     let distribution = await launchdDistribution(lifecycle);
-    let live: ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1 | "third_state"> | null = null;
+    let live: ReadonlyMap<ScheduledJobIdV1, ObservedLiveStateV1> | null = null;
     try {
       live = await observeLiveStates(lifecycle, retained.map((plist) => ({ job: plist.job, retained: plist.label, planned: null })), home.key.productHome);
     } catch (error) {
@@ -1242,6 +1250,9 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
         installed,
         live: liveState === undefined ? null : liveState === "third_state" ? liveState : liveState.state,
         lastRun: await lastRunOf(lifecycle, home.key.productHome, job),
+        ...(liveState === undefined || liveState === "third_state" || liveState.state !== "loaded" || liveState.lastExitCode === undefined
+          ? {}
+          : { launchdExit: liveState.lastExitCode }),
       });
     }
     const snapshot = await lifecycle.inspectLedger(home.key, await residueOf(context));

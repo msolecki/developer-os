@@ -124,7 +124,9 @@ export function renderAutomation(data: AutomationCommandDataV1): readonly string
           const last = job.lastRun === null ? "never" : job.lastRun === "invalid" ? "invalid" : `${job.lastRun.outcome} at ${job.lastRun.completedAt}${verdictOf(job)}`;
           // D83 (4): an optional job (or git-sync) with nothing installed and no schedule or no eligibility is off; scheduled+eligible+absent is drift and keeps its words, not "eligible absent"
           const state = job.installed === "absent" && (job.schedule === null || !job.eligible) && (job.job === "git-sync" || isOptionalScheduledJob(job.job)) ? "off" : `${job.eligible ? "eligible" : "ineligible"} ${job.installed}`;
-          return `${job.job.padEnd(14)} ${state} ${job.live ?? "-"} last run ${last}`;
+          // NEW-169: recorded and silent runs exit 0, so a non-zero launchd exit is newer than any record.
+          const exit = job.launchdExit === undefined || job.launchdExit === 0 ? "" : `; launchd exit ${String(job.launchdExit)}, no run recorded since`;
+          return `${job.job.padEnd(14)} ${state} ${job.live ?? "-"} last run ${last}${exit}`;
         }),
       ];
   }

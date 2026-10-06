@@ -33,21 +33,29 @@ type Outcome = Partial<SupervisedProcessEvidenceV1>;
 /** Scripted launchctl: every target not named exits 113 (absent); the domain exits 0 unless scripted. */
 class ScriptedRunner {
   readonly requests: SupervisedSpawnRequestV1[] = [];
-  outputParserCalls = 0;
+  /** Every target probed with an output sink; only a present generated candidate may be. */
+  readonly parsedTargets: string[] = [];
   remaining = 30000;
   phaseWallMs: number | null = null;
 
-  constructor(readonly outcomes: Readonly<Record<string, Outcome>> = {}) {}
+  constructor(
+    readonly outcomes: Readonly<Record<string, Outcome>> = {},
+    readonly printed: Readonly<Record<string, string>> = {},
+  ) {}
 
   beginPhase(id: string, wallMs: number): SupervisedPhaseV1 {
     this.phaseWallMs = wallMs;
     return { id, deadlineAtMs: wallMs, remainingMilliseconds: () => this.remaining };
   }
 
-  run(request: SupervisedSpawnRequestV1, sink?: unknown): Promise<SupervisedProcessEvidenceV1> {
+  run(request: SupervisedSpawnRequestV1, sink?: (chunk: Uint8Array, stream: "stdout" | "stderr") => void): Promise<SupervisedProcessEvidenceV1> {
     this.requests.push(request);
-    if (sink !== undefined) this.outputParserCalls += 1;
     const target = request.argv[1] ?? "";
+    if (sink !== undefined) {
+      this.parsedTargets.push(target);
+      const dump = this.printed[target];
+      if (dump !== undefined) sink(new TextEncoder().encode(dump), "stdout");
+    }
     const outcome = this.outcomes[target] ?? { exitCode: target === domain ? 0 : 113 };
     return Promise.resolve({
       exitCode: 0,
@@ -136,8 +144,27 @@ describe("LaunchdObserver", () => {
     const runner = new ScriptedRunner(Object.fromEntries(present.map((label) => [target(label), { exitCode: 0 }])));
     const result = await new LaunchdObserver(host(runner)).observe({ domain, jobs: [job] });
     expect(result).toEqual(expected);
-    expect(runner.outputParserCalls).toBe(0);
+    expect(runner.parsedTargets).not.toContain(domain);
+    expect(runner.parsedTargets).not.toContain(target(doctor.base));
     expect(JSON.stringify(result)).not.toContain(OUTPUT_HASH);
+  });
+
+  /**
+   * NEW-169: a job launchd could not spawn (or that died before the runner wrote its status record)
+   * leaves only launchd's `last exit code`. It is read from a present generated candidate's dump,
+   * never from the domain or the unsuffixed base label, which may be foreign.
+   */
+  it("carries a loaded generation's last exit code, and nothing for one that never exited", async () => {
+    const dump = (label: string, code: string): string =>
+      [`${target(label)} = {`, `\tpath = /p.plist`, "\truns = 1", `\tlast exit code = ${code}`, "}", ""].join("\n");
+    const runner = new ScriptedRunner({ [target(doctor.old)]: { exitCode: 0 } }, { [target(doctor.old)]: dump(doctor.old, "78") });
+    const result = await new LaunchdObserver(host(runner)).observe({ domain, jobs: [replaceDoctor] });
+    expect(result).toStrictEqual(observed({ kind: "exact_old", label: doctor.old, generation: OLD, lastExitCode: 78 }));
+    const never = new ScriptedRunner({ [target(doctor.new)]: { exitCode: 0 } }, { [target(doctor.new)]: dump(doctor.new, "(never exited)") });
+    expect(await new LaunchdObserver(host(never)).observe({ domain, jobs: [replaceDoctor] })).toStrictEqual(
+      observed({ kind: "exact_new", label: doctor.new, generation: NEW }),
+    );
+    expect([...runner.parsedTargets, ...never.parsedTargets].every((parsed) => parsed !== domain && parsed !== target(doctor.base))).toBe(true);
   });
 
   it.each(unobservableFixtures)("reports $name as unobservable", async ({ outcomes, reason }) => {

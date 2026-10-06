@@ -14,7 +14,7 @@ import {
 import type { SupervisedPhaseV1, SupervisedProcessEvidenceV1, SupervisedSpawnRequestV1 } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { LaunchdPathBootstrapper, parseLaunchctlPrintedService, type LaunchdBootstrapRequestV1, type LaunchdOpenedPlistIdentityV1 } from "./bootstrap.js";
+import { LaunchdPathBootstrapper, parseLaunchctlLastExitCode, parseLaunchctlPrintedService, type LaunchdBootstrapRequestV1, type LaunchdOpenedPlistIdentityV1 } from "./bootstrap.js";
 import { LAUNCHCTL_IDENTITY, hostWith } from "./distribution.test-fixtures.js";
 import { encodeLaunchdPlist } from "./plist.js";
 import { expandLaunchdProcessTable, type LaunchdProcessDirectoryIdentityV1 } from "./process-table.js";
@@ -255,6 +255,25 @@ describe("parseLaunchctlPrintedService (macOS 26.6.2 format)", () => {
         target,
       ),
     ).toBeNull();
+  });
+});
+
+describe("parseLaunchctlLastExitCode (NEW-169)", () => {
+  const target = "gui/501/com.n138probe.print";
+  const exited = (code: string): string => CAPTURED_PRINT_26_6_2.replace("\tlast exit code = (never exited)", `\tlast exit code = ${code}`);
+
+  it("reads the top-level last exit code, and null for a job that never exited", () => {
+    expect(parseLaunchctlLastExitCode(CAPTURED_PRINT_26_6_2, target)).toBeNull();
+    expect(parseLaunchctlLastExitCode(exited("78"), target)).toBe(78);
+    expect(parseLaunchctlLastExitCode(exited("0"), target)).toBe(0);
+  });
+
+  it("is null for another target, a duplicated or nested line, or a value that is not a decimal", () => {
+    expect(parseLaunchctlLastExitCode(exited("78"), "gui/501/com.n138probe.other")).toBeNull();
+    expect(parseLaunchctlLastExitCode(exited("78").replace("\truns = 0", "\tlast exit code = 0"), target)).toBeNull();
+    expect(parseLaunchctlLastExitCode(exited("78").replace("\t\tSSH_AUTH_SOCK", "\tlast exit code = 0\n\t\tSSH_AUTH_SOCK"), target)).toBeNull();
+    expect(parseLaunchctlLastExitCode(exited("-1"), target)).toBeNull();
+    expect(parseLaunchctlLastExitCode(exited("78x"), target)).toBeNull();
   });
 });
 
