@@ -456,6 +456,26 @@ describe("uninstall detaches vendor instruction artifacts before draining", () =
     expect(installed.plans).toStrictEqual([]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("refuses a symlinked config.toml with exit 3 before any vendor write or unregistration (FLOW-UNINST-4)", async () => {
+    const installed = await install("uninstall-detach-linked-config", { vendors: ["claude", "codex"] });
+    const config = installed.fixture.paths.configFile;
+    const target = join(installed.fixture.paths.home, "elsewhere.toml");
+    await nodeFs.copyFile(config, target);
+    await nodeFs.rm(config);
+    await nodeFs.symlink(target, config);
+    const before = await snapshot(installed);
+
+    const result = await runUninstall(installed.context, ACCEPTED);
+
+    expect(result).toMatchObject({ ok: false, code: EXIT_CODES.decisionRequired });
+    if (result.ok) throw new Error("uninstall detached over a symlinked configuration");
+    expect(result.error.paths).toContain(config);
+    expect((await nodeFs.lstat(config)).isSymbolicLink()).toBe(true);
+    expect(await snapshot(installed)).toStrictEqual(before);
+    expect(installed.codex.calls.some((call) => call.argv.includes("remove"))).toBe(false);
+    expect(installed.plans).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("still refuses a configuration that no longer validates", async () => {
     const installed = await install("uninstall-detach-bad-config", { vendors: [] });
     await nodeFs.writeFile(installed.fixture.paths.configFile, "not = [valid\n");
