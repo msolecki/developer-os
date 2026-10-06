@@ -56,6 +56,7 @@ import {
   PRODUCT_VERSION,
 } from "../context.js";
 import type { CliContext } from "../context.js";
+import { protectedCodexHomes } from "../instructions/vendor-homes.js";
 import type { CliIo } from "../io.js";
 import type { LifecycleEffectPortsV1 } from "../lifecycle/adapters.js";
 import { createLifecycleContext } from "../lifecycle/context.js";
@@ -572,7 +573,7 @@ export async function createCommandFixture(
 
   const env = options.env ?? {};
   const io = new RecordingIo(options.answers ?? []);
-  const policy = new ProtectedPathPolicy(userHome);
+  const policy = new ProtectedPathPolicy(userHome, { codexHomes: protectedCodexHomes(env, userHome) });
   const guards = createGuards(policy, REDACTION_KEY);
   const paths = resolveRuntimePaths(pathEnvironmentFor({ userHome, env }));
   const packagedRelease = options.bootstrapAvailable === true
