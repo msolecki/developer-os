@@ -34,6 +34,7 @@ import type { LaunchdObservationJobV1, LaunchdObserver } from "./observe.js";
 import { assertLaunchdPlan, launchdEffectPlan, parseCanonicalLaunchdPlist, type LaunchdPlanEntryV1, type LaunchdPlanV1 } from "./plan.js";
 import {
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+  expandLaunchdArgv,
   expandLaunchdProcessTable,
   launchctlIdentityHash,
   launchdProcessTableHash,
@@ -238,7 +239,7 @@ export class LaunchdBootoutRunner implements LaunchdBootoutPortV1 {
     const [mutationProfile] = table.profiles;
     const evidence = await this.#dependencies.runner.run({
       executable: table.executable.path,
-      argv: ["bootout", target],
+      argv: [...expandLaunchdArgv(table, "bootout", { launchd_generated_service_target: target })],
       env: { ...table.environment },
       cwd: table.staging.home.path,
       stdin: "ignore",
