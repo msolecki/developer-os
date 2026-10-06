@@ -108,9 +108,11 @@ export async function runHookMode(
     );
   let fired: HookVerb | null = null;
   try {
-    if (environment?.env.DEVELOPER_OS_HOOK_ACTIVE === "1") return 0;
+    // CLI-LIFE-2: the recursion marker silences only the open verbs; tsc and formatter children never fire
+    // `command`, `commit` or `path`, so an ambient marker must not switch those fail-closed guards off.
+    const mode = parsed.ok ? HOOK_FAIL_MODE[parsed.verb] : parsed.failMode;
+    if (mode === "open" && environment?.env.DEVELOPER_OS_HOOK_ACTIVE === "1") return 0;
     if (!parsed.ok) return failed(parsed.failMode, parsed.vendor, "hook argv refused");
-    const mode = HOOK_FAIL_MODE[parsed.verb];
     if (environment === undefined) return failed(mode, parsed.vendor, "hook environment unavailable");
     const handler = Object.hasOwn(HOOK_HANDLERS, parsed.verb) ? HOOK_HANDLERS[parsed.verb] : undefined;
     if (handler === undefined) return failed(mode, parsed.vendor, `hook verb ${parsed.verb} is not installed`);
