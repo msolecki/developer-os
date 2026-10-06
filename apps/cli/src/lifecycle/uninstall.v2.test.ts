@@ -563,13 +563,13 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     if (doctor.ok) return;
     expect(doctor.code).toBe(EXIT_CODES.recoveryRequired);
     expect(doctor.error.recovery).toBe("developer-os uninstall");
-    expect(doctor.error.message).toMatch(/lifecycle: an interrupted uninstall left its marker behind; uninstall coordinator lc_[0-9a-f]{64}_[0-9]+ is unfinished/u);
+    expect(doctor.error.message).toMatch(/lifecycle: an interrupted uninstall left its marker behind; uninstall coordinator lc_[0-9a-f]{64}_[0-9]+ is unfinished or still running/u);
     expect(doctor.error.message).not.toContain("transactions:");
 
     const status = await runStatus(fixture.context);
     if (!status.ok) throw new Error(`${String(status.code)} ${status.error.kind}: ${status.error.message}`);
     expect(status.warnings.join("\n")).toContain(`${join(fixture.paths.stateDir, "uninstalling.json")}; recovery: developer-os uninstall`);
-    expect(status.warnings.join("\n")).toMatch(/uninstall coordinator lc_[0-9a-f]{64}_[0-9]+ is unfinished \(active\): .*lifecycle-journals.*; recovery: developer-os uninstall/u);
+    expect(status.warnings.join("\n")).toMatch(/uninstall coordinator lc_[0-9a-f]{64}_[0-9]+ is unfinished or still running \(active\): .*lifecycle-journals.*; recovery: developer-os uninstall/u);
 
     const resumed = await runUninstall(fixture.context, ACCEPTED);
     if (!resumed.ok) throw new Error(`${String(resumed.code)} ${resumed.error.kind}: ${resumed.error.message}`);

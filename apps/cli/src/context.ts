@@ -523,13 +523,22 @@ export function failureFrom(
   );
 
   const redact = context.guards.redactDiagnostic;
+  const publishedPaths = paths.map((path) => redact(path, "path"));
+  /**
+   * A `data` leaf equal to a published `error.paths` entry keeps that entry's `path`-scope
+   * redaction (NEW-39), so a report naming the same paths agrees with them. It publishes nothing
+   * `error.paths` does not already publish; every other leaf takes the full walk.
+   */
+  const published = new Set(publishedPaths);
+  const redactLeaf = (text: string, scope?: RedactionScope): string =>
+    published.has(text) ? text : redact(text, scope);
 
   return failure(exitCodeOf(error), {
     kind: kindOf(error),
     message,
-    paths: paths.map((path) => redact(path, "path")),
+    paths: publishedPaths,
     ...(recovery === undefined ? {} : { recovery: redact(recovery) }),
-    ...(data === undefined ? {} : { data: redactPayload(redact, data) }),
+    ...(data === undefined ? {} : { data: redactPayload(redactLeaf, data) }),
   });
 }
 

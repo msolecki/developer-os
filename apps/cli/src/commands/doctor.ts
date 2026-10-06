@@ -2086,12 +2086,17 @@ export async function runDoctor(
   const recovery = failing.find((finding) => finding.code === code)?.check
     .recovery;
 
+  /** NEW-39's `path` scope for every check's paths, as `failureFrom` gives `error.paths`. */
+  const redactPaths = (check: DoctorCheck): DoctorCheck => ({
+    ...check,
+    paths: check.paths.map((path) => context.guards.redactDiagnostic(path, "path")),
+  });
   return failureFrom(
     context,
     new DoctorFailedError(code, failed.map((check) => `${check.id}: ${check.message}`).join("; ")),
     failed.flatMap((check) => check.paths),
     recovery,
-    report,
+    { ...report, checks: report.checks.map(redactPaths) },
   );
 }
 
