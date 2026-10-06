@@ -25,7 +25,9 @@ import type {
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import { runDoctor } from "../commands/doctor.js";
 import { runInit } from "../commands/init.js";
+import { runStatus } from "../commands/status.js";
 import {
   createCommandFixture,
   exists,
@@ -541,6 +543,39 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     expect(await exists(join(fixture.paths.home, "rollback"))).toBe(false);
     expect(await exists(fixture.paths.logsDir)).toBe(true);
     expect(await exists(join(fixture.paths.stateDir, "lifecycle-install-nonce"))).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-160/NEW-170: past `M(commit_absence)` the manifest is gone, so `doctor` used to say `init`
+   * (which refuses the coordinator journal) or `repair` (which the gate refuses), and `status`
+   * said nothing. Both now name the coordinator and the marker, and their recovery works.
+   */
+  it("names an uninstall killed past commit_absence in doctor and status, and their recovery reaches a clean home (NEW-160, NEW-170)", async () => {
+    const fixture = await initializedV2Fixture("uninstall-surveyed-after-commit-absence");
+    const expectedResidue = await bookkeepingSetAndRetainedEvidence(fixture);
+    const uninstaller = new LifecycleUninstaller({ afterBoundary: dieAtFirst("empty_directory_removed") });
+    await expect(uninstaller.execute(await requestFor(fixture))).rejects.toThrow(SyntheticDeath);
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+
+    const doctor = await runDoctor(fixture.context);
+    expect(doctor.ok).toBe(false);
+    if (doctor.ok) return;
+    expect(doctor.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(doctor.error.recovery).toBe("developer-os uninstall");
+    expect(doctor.error.message).toMatch(/lifecycle: an interrupted uninstall left its marker behind; uninstall coordinator lc_[0-9a-f]{64}_[0-9]+ is unfinished/u);
+    expect(doctor.error.message).not.toContain("transactions:");
+
+    const status = await runStatus(fixture.context);
+    if (!status.ok) throw new Error(`${String(status.code)} ${status.error.kind}: ${status.error.message}`);
+    expect(status.warnings.join("\n")).toContain(`${join(fixture.paths.stateDir, "uninstalling.json")}; recovery: developer-os uninstall`);
+    expect(status.warnings.join("\n")).toMatch(/uninstall coordinator lc_[0-9a-f]{64}_[0-9]+ is unfinished \(active\): .*lifecycle-journals.*; recovery: developer-os uninstall/u);
+
+    const resumed = await runUninstall(fixture.context, ACCEPTED);
+    if (!resumed.ok) throw new Error(`${String(resumed.code)} ${resumed.error.kind}: ${resumed.error.message}`);
+    expect(await productHomeResidue(fixture)).toStrictEqual(expectedResidue);
+    const after = await runStatus(fixture.context);
+    if (!after.ok) throw new Error(after.error.message);
+    expect(after.warnings.join("\n")).not.toContain("recovery: developer-os uninstall");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**

@@ -1130,7 +1130,7 @@ export async function runInit(
       { guards },
       error,
       error instanceof InitRefusal || error instanceof FreshBootstrapError ? error.paths : [],
-      error instanceof InitRefusal ? error.recovery : undefined,
+      error instanceof InitRefusal || error instanceof FreshBootstrapError ? error.recovery : undefined,
     );
   }
 }

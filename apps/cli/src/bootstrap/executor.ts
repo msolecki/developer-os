@@ -219,6 +219,7 @@ export class FreshBootstrapError extends Error {
     readonly code: typeof EXIT_CODES.recoveryRequired | typeof EXIT_CODES.securityRefusal | typeof EXIT_CODES.invalidInput,
     message: string,
     readonly paths: readonly string[] = [],
+    readonly recovery?: string,
   ) {
     super(message);
     this.name = "FreshBootstrapError";
@@ -1379,9 +1380,18 @@ export class BootstrapExecutor {
         residue,
       );
       if (!result.admitted) {
+        /**
+         * NEW-160: with no manifest, a coordinator journal is an interrupted uninstall past its
+         * point of no return, which only `uninstall` resumes; its staging may be what refused first.
+         */
+        const journals = observations.get(join(paths.stateDir, "lifecycle-journals"));
+        const coordinator = journals?.kind === "directory" &&
+          journals.childNames.some((name) => /^\.?lc_/u.test(name));
         throw new FreshBootstrapError(
           EXIT_CODES.recoveryRequired,
           `product home contains bookkeeping residue of an unadmitted shape: ${result.offendingPath}`,
+          [],
+          coordinator ? "developer-os uninstall" : undefined,
         );
       }
     }

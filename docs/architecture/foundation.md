@@ -724,6 +724,17 @@ behaviour described here.
   count, and retained regular-file bytes at its vault path, as a `warn`; if inspecting bootstrap
   evidence itself throws, an unsuffixed `bootstrap-evidence` row reports the failure as a `fail`
   instead.
+- **`lifecycle` reports V2 coordinator state `state/transactions` cannot show** (NEW-160,
+  `apps/cli/src/lifecycle/survey.ts` — `surveyLifecycleResidue`): every unfinished coordinator in
+  `state/lifecycle-journals` (read-only, through closure V2), a non-empty `state/uninstalling.json`
+  and a non-empty `state/update-executor.json`. It fails exit 6 with the command that resumes them —
+  `developer-os uninstall` for an uninstall coordinator or the marker, `developer-os update --apply`
+  or `developer-os update rollback --apply` for update residue — and sits ahead of every other
+  exit-6 check so that recovery is the one printed. It is absent from a home with none, so a
+  healthy report's check list is unchanged. `transactions` skips the Foundation journals a
+  coordinator owns, since the mutation gate refuses `repair` on them. `status` publishes the same
+  survey as warnings (NEW-170), and a fresh `init` refused by a coordinator journal names
+  `developer-os uninstall` as its recovery.
 - **`init`'s post-install gate is scoped to the checks it is answerable for**, listed in
   `INIT_OWNED_CHECKS`: `product-home`, `configuration`, `manifest`, `drift`, `brain`. It used to
   gate on the whole `doctor` report, which meant any check failing for a reason the install did
