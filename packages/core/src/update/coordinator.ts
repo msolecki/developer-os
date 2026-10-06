@@ -12,6 +12,7 @@ import { parseLifecycleCoordinatorId } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ArtifactOwner } from "../manifest/types.js";
 import {
+  MAXIMUM_RECOVERY_EXECUTOR_BYTES,
   parseLeafPlanId,
   updateConstructionEnvelopePaths,
   updateLeafPlanPath,
@@ -231,7 +232,6 @@ export const UPDATE_COORDINATOR_PLAN_HASH_DOMAIN = "developer-os:lifecycle-coord
 
 const MAX_LEAF_BYTES = 16_777_216;
 const MAX_CONSTRUCTION_BYTES = 536_870_912;
-const MAX_RECORD_BYTES = 16_384;
 const MAX_OWNERS = 16;
 const MAX_MIGRATIONS = 10_000;
 const MAX_INITIAL_JOURNALS = 20_100;
@@ -356,7 +356,7 @@ export function validateUpdateRecoveryExecutorRecord(value: unknown, evidence: C
 
 export function updateRecoveryExecutorRecordBytes(value: UpdateRecoveryExecutorRecordV1): Uint8Array {
   const bytes = canonicalBytes(value);
-  if (bytes.byteLength > MAX_RECORD_BYTES) fail("UpdateRecoveryExecutorRecordV1: over 16 KiB");
+  if (bytes.byteLength > MAXIMUM_RECOVERY_EXECUTOR_BYTES) fail("UpdateRecoveryExecutorRecordV1: over 16 KiB");
   return bytes;
 }
 
@@ -379,8 +379,8 @@ export function decodeUpdateExecutorRecordSlot(
 
 /** Reads a guarded record's exact bytes: canonical, at most 16 KiB, and its own re-encoding. */
 export function decodeUpdateRecoveryExecutorRecord(bytes: Uint8Array, evidence: CanonicalPathEvidenceV1): UpdateRecoveryExecutorRecordV1 {
-  if (bytes.byteLength > MAX_RECORD_BYTES) fail("UpdateRecoveryExecutorRecordV1: over 16 KiB");
-  const parsed = validateUpdateRecoveryExecutorRecord(decodeCanonicalJson(bytes, MAX_RECORD_BYTES), evidence);
+  if (bytes.byteLength > MAXIMUM_RECOVERY_EXECUTOR_BYTES) fail("UpdateRecoveryExecutorRecordV1: over 16 KiB");
+  const parsed = validateUpdateRecoveryExecutorRecord(decodeCanonicalJson(bytes, MAXIMUM_RECOVERY_EXECUTOR_BYTES), evidence);
   if (Buffer.compare(Buffer.from(updateRecoveryExecutorRecordBytes(parsed)), Buffer.from(bytes)) !== 0) fail("UpdateRecoveryExecutorRecordV1: not canonical");
   return parsed;
 }
@@ -391,7 +391,7 @@ function parseStaged(value: unknown, expectedPath: CanonicalAbsolutePathV1, reco
   const staged: UpdateRecoveryExecutorStagedFileV1 = {
     constructionOrdinal: integer(input.constructionOrdinal, 0, 1_099_999, `${label}.constructionOrdinal`),
     path: parseCanonicalAbsolutePathText(input.path) as UpdateRecoveryExecutorStagedPathV1,
-    bytes: integer(input.bytes, 1, MAX_RECORD_BYTES, `${label}.bytes`),
+    bytes: integer(input.bytes, 1, MAXIMUM_RECOVERY_EXECUTOR_BYTES, `${label}.bytes`),
     hash: parseLowerHexSha256(input.hash),
     mode: input.mode === 384 ? 384 : fail(`${label}.mode`),
   };
@@ -421,8 +421,8 @@ function validateRecoveryExecutor(value: unknown, execution: Pick<UpdateExecutio
   const initialStaged = parseStaged(input.initialStaged, updateRecoveryExecutorStagedPath(stagingRoot, "executing"), initial, `${label}.initialStaged`);
   const terminalStaged = parseStaged(input.terminalStaged, updateRecoveryExecutorStagedPath(stagingRoot, "terminal_cleanup"), terminal, `${label}.terminalStaged`);
   if (terminalStaged.constructionOrdinal !== initialStaged.constructionOrdinal + 1) fail(`${label}: executing-then-terminal order`);
-  if (input.maximumRecordBytes !== MAX_RECORD_BYTES) fail(`${label}.maximumRecordBytes`);
-  return { finalPath, initial, initialStaged, terminal, terminalStaged, maximumRecordBytes: MAX_RECORD_BYTES };
+  if (input.maximumRecordBytes !== MAXIMUM_RECOVERY_EXECUTOR_BYTES) fail(`${label}.maximumRecordBytes`);
+  return { finalPath, initial, initialStaged, terminal, terminalStaged, maximumRecordBytes: MAXIMUM_RECOVERY_EXECUTOR_BYTES };
 }
 
 // ---------------------------------------------------------------------------------------------

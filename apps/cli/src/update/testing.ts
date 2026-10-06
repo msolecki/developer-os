@@ -43,6 +43,7 @@ import {
   validateReleaseKeyDelegation,
   validateReleaseTrustState,
   validateUpdatePlannerRequest,
+  MAXIMUM_RECOVERY_EXECUTOR_BYTES,
 } from "@developer-os/core";
 import type {
   ActiveReleaseRecordV1,
@@ -1120,7 +1121,7 @@ export function syntheticUpdateCoordinator(
       stagedPath: parseCanonicalAbsolutePathText(`${root}/update/initial-journals/bundle_publication/bundle.json`),
       stagedExpected: { constructionOrdinal: 9, hash: sha256("initial-journal"), bytes: 256, mode: 384 },
     }],
-    recoveryExecutor: { finalPath: deriveUpdateExecutorRecordPath(home), initial, initialStaged: staged(initial, 10), terminal, terminalStaged: staged(terminal, 11), maximumRecordBytes: 16_384 },
+    recoveryExecutor: { finalPath: deriveUpdateExecutorRecordPath(home), initial, initialStaged: staged(initial, 10), terminal, terminalStaged: staged(terminal, 11), maximumRecordBytes: MAXIMUM_RECOVERY_EXECUTOR_BYTES },
     verification: ref("target_verification", "verification"),
     retirement: ref("terminal_retirement", "retirement"),
   };

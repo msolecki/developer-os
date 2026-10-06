@@ -1105,6 +1105,7 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
         }
       }
     },
+    // The production `closure` port: Spec 2 §9.2's V2 closure, re-inspected on every call.
     closure: async () => {
       const { key, residue } = await ledger();
       return (await lifecycle().inspectClosureV2(key, residue)).closure;

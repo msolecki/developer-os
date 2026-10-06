@@ -232,7 +232,7 @@ export function releaseIdentityOf(active: ActiveReleaseRecordV1): ReleaseIdentit
   };
 }
 
-function sameJson(left: unknown, right: unknown): boolean {
+export function sameJson(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(left as CanonicalJsonValue) === encodeCanonicalJson(right as CanonicalJsonValue);
 }
 
