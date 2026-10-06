@@ -18,6 +18,7 @@ import {
   type LifecycleCoordinatorPlanCoreV1,
   type LifecycleValueCodec,
   type LowerHexSha256,
+  sortUtf8,
   type NormalizedScheduleV1,
 } from "@developer-os/core";
 
@@ -29,7 +30,8 @@ import {
   type LaunchdEffectPositionV1,
   type LaunchdEffectTransitionV1,
 } from "./effect-journal.js";
-import { encodeLaunchdPlist, encodeRetainedLaunchdPlist, launchdPlistDictionary, launchdPriorStateFingerprint } from "./plist.js";
+import { LAUNCHD_GUI_DOMAIN_PATTERN } from "./fs-identity.js";
+import { encodeLaunchdPlist, encodeRetainedLaunchdPlist, launchdPlistDictionary, launchdPriorStateFingerprint, MAX_LAUNCHD_PLIST_BYTES } from "./plist.js";
 import {
   generatedLabel,
   launchdGeneration,
@@ -127,7 +129,6 @@ export type LaunchdEntryTransitionsV1 = {
 };
 
 const PLAN_DOMAIN = "developer-os:launchd-plan:v1";
-const MAX_BOOTSTRAP_PLIST_BYTES = 1_048_576;
 const UNLOADED = Object.freeze({ state: "unloaded" as const });
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -186,22 +187,12 @@ function nullableHash(value: unknown): LowerHexSha256 | null {
   return value === null ? null : parseLowerHexSha256(value);
 }
 
-function byUtf8(left: string, right: string): number {
-  const a = encoder.encode(left);
-  const b = encoder.encode(right);
-  for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
-    const difference = (a[index] as number) - (b[index] as number);
-    if (difference !== 0) return difference;
-  }
-  return a.length - b.length;
-}
-
 export function launchdPlistBytesHash(bytes: string): LowerHexSha256 {
   return parseLowerHexSha256(hashBytes(encoder.encode(bytes)));
 }
 
 function domainUid(domain: LaunchdGuiDomainV1): number {
-  const match = /^gui\/(0|[1-9][0-9]{0,9})$/.exec(domain);
+  const match = LAUNCHD_GUI_DOMAIN_PATTERN.exec(domain);
   if (match === null) refuse("LaunchdGuiDomainV1");
   return Number(match[1]);
 }
@@ -344,7 +335,7 @@ function assertPlistFiles(plan: LaunchdPlanV1, liveOnly: boolean): void {
     return binding === null ? [] : [binding];
   });
   if (plan.plistFiles.length !== expected.length) refuse("plistFiles: not one binding per mutated plist");
-  const sorted = [...plan.plistFiles].sort((left, right) => byUtf8(left.targetPath, right.targetPath));
+  const sorted = sortUtf8(plan.plistFiles, (file) => file.targetPath);
   plan.plistFiles.forEach((binding, index) => {
     if (binding !== sorted[index]) refuse("plistFiles: not sorted by target path");
     const match = expected.find((candidate) => candidate.targetPath === binding.targetPath);
@@ -514,7 +505,7 @@ function parseBootstrapIdentity(value: unknown, label: string): LaunchdBootstrap
   const raw = exactKeys(value, ["path", "ownerUid", "mode", "nlink", "size", "hash", "dev", "ino"], label);
   if (typeof raw.ownerUid !== "number" || !Number.isSafeInteger(raw.ownerUid) || raw.ownerUid < 0) refuse(`${label}: ownerUid`);
   if (raw.mode !== 384 || raw.nlink !== 1) refuse(`${label}: mode or link count`);
-  if (typeof raw.size !== "number" || !Number.isSafeInteger(raw.size) || raw.size < 1 || raw.size > MAX_BOOTSTRAP_PLIST_BYTES) refuse(`${label}: size`);
+  if (typeof raw.size !== "number" || !Number.isSafeInteger(raw.size) || raw.size < 1 || raw.size > MAX_LAUNCHD_PLIST_BYTES) refuse(`${label}: size`);
   return Object.freeze({
     path: parseCanonicalAbsolutePathText(raw.path),
     ownerUid: raw.ownerUid as EffectiveUidV1,

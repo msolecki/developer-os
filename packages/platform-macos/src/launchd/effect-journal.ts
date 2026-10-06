@@ -32,6 +32,7 @@ import {
   type UtcTimestampV1,
 } from "@developer-os/core";
 
+import { LAUNCHD_GUI_DOMAIN_PATTERN } from "./fs-identity.js";
 import { generatedLabel, launchdJob, parseGeneratedLabel } from "./registry.js";
 import { LaunchdInputError, type GeneratedLaunchdLabelV1, type LaunchdGenerationV1, type LaunchdGuiDomainV1, type LaunchdLiveStateV1 } from "./types.js";
 
@@ -166,7 +167,7 @@ function parseTransition(value: unknown, position: LaunchdEffectPositionV1, inde
   const job = launchdJob(raw.job).id;
   const parsed = parseGeneratedLabel(raw.label);
   if (parsed.job !== job || parsed.generation !== raw.generation) refuse(`${label}: label`);
-  if (typeof raw.domain !== "string" || !/^gui\/(0|[1-9][0-9]{0,9})$/.test(raw.domain)) refuse(`${label}: domain`);
+  if (typeof raw.domain !== "string" || !LAUNCHD_GUI_DOMAIN_PATTERN.test(raw.domain)) refuse(`${label}: domain`);
   const before = parseLaunchdLiveState(raw.before, job, `${label}.before`);
   const after = parseLaunchdLiveState(raw.after, job, `${label}.after`);
   const loaded = position === "before_files" ? before : after;
