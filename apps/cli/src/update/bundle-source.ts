@@ -6,6 +6,7 @@ import type { FileHandle } from "node:fs/promises";
 import {
   advanceBundleSourceJournal,
   bundleEntryParentOrdinal,
+  bundleSourceCompactionEnd,
   bundleSourceCompactionTarget,
   bundleSourceEvidencePath,
   bundleSourceJournalBytes,
@@ -621,7 +622,7 @@ export class BundleSourceExecutor {
     const phase = (file.value as BundleSourceStagingJournalV1).phase;
     if (phase === "source_ready") await this.#advance(plan, file, { kind: "compaction_step" });
     else if (phase !== "compacting") refuseBundle("bundle_source_not_ready", file.path);
-    const last = 2 * plan.entries.length + 4;
+    const last = bundleSourceCompactionEnd(plan);
     for (let journal = file.value as BundleSourceStagingJournalV1; (journal.compactionNext as number) < last; journal = file.value as BundleSourceStagingJournalV1) {
       const target = bundleSourceCompactionTarget(plan, journal.compactionNext as number);
       if (target.kind === "ready") {

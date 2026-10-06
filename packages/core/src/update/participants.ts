@@ -107,31 +107,6 @@ export function isReversibleUpdateStep(step: UpdateLifecycleCoordinatorStepV1): 
   return step.kind !== "trust" && step.kind !== "terminal_retire" && step.kind !== "recovery_executor";
 }
 
-export interface ReachedUpdateStepsV1 {
-  readonly steps: readonly UpdateLifecycleCoordinatorStepV1[];
-  /** The first step not yet completed; the step at this index may be partially applied. */
-  readonly nextStep: number;
-  readonly pointOfNoReturnReached: boolean;
-}
-
-/** The exact plan-derived reverse list: every reached reversible step, greatest first. */
-export function updateCompensationSteps(reached: ReachedUpdateStepsV1): readonly UpdateLifecycleCoordinatorStepV1[] {
-  if (reached.pointOfNoReturnReached) fail("ReachedUpdateStepsV1: compensation after the point of no return");
-  if (!Number.isSafeInteger(reached.nextStep) || reached.nextStep < 0 || reached.nextStep >= reached.steps.length) fail("ReachedUpdateStepsV1.nextStep");
-  return reached.steps.slice(0, reached.nextStep + 1).filter(isReversibleUpdateStep).reverse();
-}
-
-/**
- * Walks the reached reverse list in order. A trust step is omitted, so an accepted high watermark
- * stays; active publication before the verifier is reversed like any other reached step.
- */
-export async function compensateParticipants(reached: ReachedUpdateStepsV1, adapter: Pick<UpdateParticipantAdapterV1, "compensate">): Promise<void> {
-  for (const step of updateCompensationSteps(reached)) {
-    const observation = await adapter.compensate(step);
-    if (observation.state !== "compensated" && observation.state !== "before") fail("UpdateParticipantObservationV1: a step did not compensate");
-  }
-}
-
 // ---------------------------------------------------------------------------------------------
 // Owner update plans (spec §9.2 `OwnerUpdatePlanV1`).
 // ---------------------------------------------------------------------------------------------

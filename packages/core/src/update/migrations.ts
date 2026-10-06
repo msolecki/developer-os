@@ -11,7 +11,6 @@ import {
   checkRow,
   fail,
   MAX_MUTATIONS,
-  MAX_RETAINED_BLOB_ORDINAL,
   orderMigrationChain,
   same,
   sha256Hex,
@@ -39,7 +38,6 @@ import type {
 } from "./planner.js";
 import { compareUtf8 } from "./release.js";
 import {
-  encodeTenDigitOrdinal,
   parseLowerHexSha256,
   parseUtcTimestamp,
   type LowerHexSha256,
@@ -623,42 +621,6 @@ export function schemaMigrationPlanBytes(plan: SchemaMigrationPlanV1): Uint8Arra
  */
 export function schemaMigrationPlanHash(plan: SchemaMigrationPlanV1): LowerHexSha256 {
   return updateLeafPlanHash("schema_migration", schemaMigrationPlanBytes(plan));
-}
-
-export interface RetainedSchemaMigrationInverseContextV1 {
-  readonly rollbackBindingHash: LowerHexSha256;
-  /** The rollback payload's next free `blobs/<ordinal>.bin`; one blob per mutation follows it. */
-  readonly firstBlobOrdinal: number;
-}
-
-/**
- * The retained inverse a later rollback replays: each mutation expects the after hash and restores
- * the exact before bytes from its inverse blob, copied into the rollback payload's blob set.
- */
-export function projectRetainedSchemaMigrationInverse(plan: SchemaMigrationPlanV1, context: RetainedSchemaMigrationInverseContextV1): RetainedSchemaMigrationInversePlanV1 {
-  const first = context.firstBlobOrdinal;
-  if (!Number.isSafeInteger(first) || first < 0 || first + plan.mutations.length - 1 > MAX_RETAINED_BLOB_ORDINAL) fail("RetainedSchemaMigrationInverseContextV1.firstBlobOrdinal");
-  const mutations = plan.mutations.map((mutation, index): RetainedSchemaMigrationInverseMutationV1 => {
-    if (mutation.inverseBlob.sha256 !== mutation.beforeHash) fail("SchemaMigrationPlanV1: the inverse does not restore the exact before bytes");
-    return {
-      path: mutation.path,
-      expectedCurrentHash: mutation.afterHash,
-      restoreHash: mutation.beforeHash,
-      restoreBlob: { path: `blobs/${encodeTenDigitOrdinal(first + index)}.bin` as RollbackPayloadRelativePathV1, bytes: mutation.inverseBlob.bytes, sha256: mutation.inverseBlob.sha256 },
-    };
-  });
-  return {
-    schemaVersion: 1,
-    kind: "schema_migration_inverse",
-    id: plan.id,
-    rollbackBindingHash: parseLowerHexSha256(context.rollbackBindingHash),
-    sourceMigrationPlanHash: schemaMigrationPlanHash(plan),
-    domain: plan.domain,
-    fromVersion: plan.fromVersion,
-    toVersion: plan.toVersion,
-    mutations,
-    maximumPlanBytes: MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
-  };
 }
 
 function cursor(value: unknown, minimum: number, maximum: number, label: string): number {

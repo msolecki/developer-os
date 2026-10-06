@@ -94,12 +94,6 @@ export function decodeTenDigitOrdinal(value: unknown): number {
   return decoded;
 }
 
-export function parseTenDigitZeroPaddedOrdinal(value: unknown): TenDigitZeroPaddedOrdinalV1 {
-  const text = requireString(value, "TenDigitZeroPaddedOrdinalV1");
-  decodeTenDigitOrdinal(text);
-  return text as TenDigitZeroPaddedOrdinalV1;
-}
-
 export function encodeTenDigitOrdinal(value: number): TenDigitZeroPaddedOrdinalV1 {
   if (!Number.isSafeInteger(value) || value < 0 || value > maximumOrdinal) throw new Error("invalid ordinal");
   return value.toString(10).padStart(10, "0") as TenDigitZeroPaddedOrdinalV1;

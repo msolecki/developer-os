@@ -805,10 +805,6 @@ export function rollbackPayloadRetirementLeaves(payloadIdentity: RollbackPayload
   return leaves;
 }
 
-export function rollbackPayloadRetirementRef(payloadIdentity: RollbackPayloadIdentityV1, inventory: RollbackPayloadInventoryV1): RetirementInventoryRefV1 {
-  return { kind: "rollback_payload", root: payloadIdentity.root, inventoryHash: payloadIdentity.inventoryHash, leafCount: rollbackPayloadRetirementLeaves(payloadIdentity, inventory).length };
-}
-
 // ---------------------------------------------------------------------------------------------
 // Rollback-payload source staging (Spec 2 §9.2)
 // ---------------------------------------------------------------------------------------------
@@ -1113,7 +1109,7 @@ export function validateRollbackPayloadSourceJournal(value: unknown, plan: Rollb
   const compensation = nullableInteger(input.compensationNext, -1, N - 1, `${label}.compensationNext`);
   const part = input.compensationPart === null ? null : oneOf(input.compensationPart, ["entry", "evidence"] as const, `${label}.compensationPart`);
   const compStructure = nullableInteger(input.compensationStructureNext, -1, SOURCE_STRUCTURE_COUNT - 1, `${label}.compensationStructureNext`);
-  const compaction = nullableInteger(input.compactionNext, 0, 2 * N + 10, `${label}.compactionNext`);
+  const compaction = nullableInteger(input.compactionNext, 0, rollbackPayloadSourceCompactionEnd(plan), `${label}.compactionNext`);
   const { createdAt, updatedAt } = checkTimestamps(input, label);
 
   const noCompensation = compMetadata === null && compensation === null && part === null && compStructure === null;
@@ -1275,7 +1271,7 @@ export function advanceRollbackPayloadSourceJournal(plan: RollbackPayloadSourceS
         next = { ...base, phase: "compacting", compactionNext: 0 };
         break;
       }
-      need(current.phase === "compacting" && (current.compactionNext as number) < 2 * N + 10);
+      need(current.phase === "compacting" && (current.compactionNext as number) < rollbackPayloadSourceCompactionEnd(plan));
       next = { ...base, compactionNext: (current.compactionNext as number) + 1 };
       break;
     default:
@@ -1287,15 +1283,16 @@ export function advanceRollbackPayloadSourceJournal(plan: RollbackPayloadSourceS
 /** Flattened source compaction: ready; reverse entries target-then-evidence; metadata in reverse; structures in reverse. */
 export function rollbackPayloadSourceCompactionTarget(plan: RollbackPayloadSourceStagingPlanV1, cursor: number): RollbackPayloadSourceCompactionTargetV1 {
   const N = plan.entryCount;
-  const k = integer(cursor, 0, 2 * N + 9, "compactionNext");
+  const k = integer(cursor, 0, rollbackPayloadSourceCompactionEnd(plan) - 1, "compactionNext");
   if (k === 0) return { kind: "ready" };
   if (k <= 2 * N) return { kind: (k - 1) % 2 === 0 ? "entry" : "evidence", ordinal: N - 1 - Math.floor((k - 1) / 2) };
   if (k <= 2 * N + 2) return { kind: "metadata", ordinal: 1 - (k - 2 * N - 1) };
   return { kind: "structure", ordinal: SOURCE_STRUCTURE_COUNT - 1 - (k - 2 * N - 3) };
 }
 
-export function rollbackPayloadSourceCompactionComplete(plan: RollbackPayloadSourceStagingPlanV1, journal: RollbackPayloadSourceStagingJournalV1): boolean {
-  return journal.phase === "compacting" && journal.compactionNext === 2 * plan.entryCount + 10;
+/** The compaction cursor's end: one past the last target of `rollbackPayloadSourceCompactionTarget`. */
+export function rollbackPayloadSourceCompactionEnd(plan: RollbackPayloadSourceStagingPlanV1): number {
+  return 2 * plan.entryCount + 10;
 }
 
 export function durableRollbackSourceEntryEvidence(plan: RollbackPayloadSourceStagingPlanV1, entry: RollbackPayloadEntryV1, dev: UInt64DecimalV1, ino: UInt64DecimalV1): DurableSourceEntryEvidenceV1 {
