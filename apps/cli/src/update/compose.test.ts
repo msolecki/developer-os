@@ -1,12 +1,14 @@
 import {
   bundleMetadataPath,
   decodeCanonicalJson,
+  decodeRetainedInverseLeaf,
   encodeCanonicalJson,
   EXIT_CODES,
   parseCanonicalAbsolutePathText,
   parseLowerHexSha256,
   parsePositiveUInt32,
   parseUInt64Decimal,
+  rollbackStepListHash,
   validateConstructionBijections,
   validateUpdateCoordinatorPlan,
   type BundlePublicationPlanV1,
@@ -36,9 +38,12 @@ import {
   FILE_B_PATH,
   NEW_A,
   NEW_B,
+  NEW_NOTE,
   NEW_PLUGIN,
+  NOTE_PATH,
   OLD_A,
   OLD_B,
+  OLD_NOTE,
   OLD_PLUGIN,
   PLANNED_AT,
   rollbackEvidenceFor,
@@ -54,6 +59,7 @@ const COORDINATOR = `lc_${"a".repeat(64)}_10` as LifecycleCoordinatorIdV1;
 const STAGING_ROOT = `${SYNTHETIC_HOME}/staging/lifecycle/${COORDINATOR}`;
 const FALLBACK: UpdateFallbackHandoffV1 = { bundleManifestHash: sha256("fallback manifest"), launcherProtocol: parsePositiveUInt32(1), updateProtocol: parsePositiveUInt32(1) };
 const encoder = new TextEncoder();
+const BRAIN_ROOT = parseCanonicalAbsolutePathText("/synthetic/user/brain");
 
 let inode = 100;
 
@@ -72,8 +78,8 @@ interface Composed {
 }
 
 /** The synthetic home after a preview, observed under the lock exactly as the planner saw it. */
-async function composeFixture(options: { readonly fallback?: UpdateFallbackHandoffV1 } = {}): Promise<Composed> {
-  const fixture = createUpdateFixture();
+async function composeFixture(options: { readonly fallback?: UpdateFallbackHandoffV1; readonly codex?: boolean; readonly migration?: boolean } = {}): Promise<Composed> {
+  const fixture = createUpdateFixture({ ...(options.codex === true ? { codex: { registration: "registered" as const } } : {}), migration: options.migration === true });
   const planned = await prepareUpdate(fixture.update, { version: null });
   const prepared = planned.apply;
   if (prepared === null) throw new Error("the fixture previews an update");
@@ -86,16 +92,24 @@ async function composeFixture(options: { readonly fallback?: UpdateFallbackHando
     [FILE_B_PATH, observed(FILE_B_PATH, "regular_file", OLD_B)],
     [`${SYNTHETIC_HOME}/state/release-trust.json`, observed(`${SYNTHETIC_HOME}/state/release-trust.json`, "regular_file", canonical(prepared.home.trust))],
     [`${SYNTHETIC_HOME}/state/active-release.json`, observed(`${SYNTHETIC_HOME}/state/active-release.json`, "regular_file", canonical(prepared.home.active))],
+    ...(options.codex === true
+      ? [
+          [CODEX_PLUGIN_ROOT, observed(CODEX_PLUGIN_ROOT, "directory", null)],
+          [CODEX_PLUGIN_FILE, observed(CODEX_PLUGIN_FILE, "regular_file", OLD_PLUGIN)],
+          [CODEX_REGISTRATION_PATH, observed(CODEX_REGISTRATION_PATH, "regular_file", codexRegistrationBytes(OLD_PLUGIN))],
+        ] as const
+      : []),
+    ...(options.migration === true ? [[`${BRAIN_ROOT}/${NOTE_PATH}`, observed(`${BRAIN_ROOT}/${NOTE_PATH}`, "regular_file", OLD_NOTE)]] as const : []),
   ]);
   const deps: ComposeDepsV1 = {
     productHome: SYNTHETIC_HOME,
     effectiveUid: UID,
     evidence: SYNTHETIC_EVIDENCE,
     fallback: options.fallback ?? FALLBACK,
-    brainRoot: parseCanonicalAbsolutePathText("/synthetic/user/brain"),
+    brainRoot: BRAIN_ROOT,
     observe: (path) => Promise.resolve(world.get(path) ?? null),
     admitManifest: (value) => value as never,
-    codexHomes: null,
+    codexHomes: options.codex === true ? SYNTHETIC_CODEX_HOMES : null,
   };
   return { input: { coordinatorId: COORDINATOR, home: prepared.home, inputs: prepared.inputs, materialized: prepared.materialized }, world, deps };
 }
@@ -118,6 +132,7 @@ function statePlanOf(composed: Awaited<ReturnType<typeof composeUpdate>>, planKi
 }
 
 describe("composeUpdate", () => {
+
   it("reserves exactly the prefixes it consumes: coordinator, payload, two manifests, one Foundation pair", async () => {
     const { input } = await composeFixture();
     expect(updateApplyPrefixes(input.materialized)).toEqual(["lc", "rb", "mf", "mf", "tx", "tx"]);
@@ -305,6 +320,26 @@ async function codexRollbackFixture(): Promise<RollbackComposed> {
   return { input: { coordinatorId: COORDINATOR, home, preview }, world, deps };
 }
 
+/**
+ * NEW-192: the rollback home after an update that changed both core files, replaced the Codex plugin
+ * (with its registration refresh) and migrated one Brain note. The retained set is the forward
+ * composition's own prepared inverse leaves, so both sides derive their step lists independently.
+ */
+async function roundTripRollbackFixture(retained: Pick<RollbackComposeDepsV1["retained"], "owners" | "migrations" | "entryCount" | "aggregateBytes">): Promise<RollbackComposed> {
+  const base = await codexRollbackFixture();
+  const evidence = { payload: { payloadId: base.input.home.rollback?.payloadId as never, entryCount: retained.entryCount, aggregateBytes: retained.aggregateBytes }, owners: retained.owners, migrations: retained.migrations };
+  const fixture = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0", codex: { registration: "registered" }, migration: true });
+  const preview = await planRollback({ ...fixture.update, readHome: () => Promise.resolve(base.input.home), readRollbackEvidence: () => Promise.resolve(evidence) });
+  const world = new Map(base.world);
+  world.set(`${BRAIN_ROOT}/${NOTE_PATH}`, observed(`${BRAIN_ROOT}/${NOTE_PATH}`, "regular_file", NEW_NOTE));
+  const deps: RollbackComposeDepsV1 = {
+    ...base.deps,
+    observe: (path) => Promise.resolve(world.get(path) ?? null),
+    retained: { ...retained, exactStepListHash: rollbackTemplateHash(retained) },
+  };
+  return { input: { ...base.input, preview }, world, deps };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- a typed view over one hash-checked plan row
 function leafOf<T>(composed: Awaited<ReturnType<typeof composeRollback>>, planKind: string): T {
   const row = composed.construction.files.find((file) => file.role.kind === "immutable_plan" && file.role.planKind === planKind);
@@ -478,6 +513,30 @@ describe("composeRollback (Spec 2 §10.2, D72 P9)", () => {
 
     const composed = await composeRollback(input, { ...deps, retained: { ...deps.retained, exactStepListHash: retained.exactStepListHash } });
     expect(composed.construction.operation).toBe("update_rollback");
+  });
+
+  it("round-trips a real composeUpdate exactStepListHash across two owners, a Codex effect and a Brain migration (NEW-192)", async () => {
+    const forward = await composeFixture({ codex: true, migration: true });
+    const applied = await composeUpdate(forward.input, forward.deps);
+    const documents = applied.sources.documents;
+    if (documents === null) throw new Error("composeUpdate retains an inverse plan and inventory");
+    const retainedPlan = decodeCanonicalJson(documents.inversePlan, documents.inversePlan.byteLength) as unknown as { readonly exactStepListHash: LowerHexSha256 };
+    const inventory = decodeCanonicalJson(documents.inventory, documents.inventory.byteLength) as unknown as { readonly entries: readonly unknown[]; readonly aggregateBytes: number };
+    const leaves = forward.input.materialized.candidate.materialization.inversePlanProjections.map((leaf) => decodeRetainedInverseLeaf(leaf.kind, encoder.encode(leaf.projection.endsWith("\n") ? leaf.projection : `${leaf.projection}\n`)));
+    const owners = leaves.flatMap((leaf) => (leaf.kind === "owner_inverse" ? [leaf] : []));
+    const migrations = leaves.flatMap((leaf) => (leaf.kind === "schema_migration_inverse" ? [leaf] : []));
+    // Every owner, effect kind and migration domain the step template distinguishes is present.
+    expect(owners.map((owner) => [owner.owner, owner.externalEffects.length])).toEqual([["core", 0], ["codex", 1]]);
+    expect(migrations.map((migration) => [migration.id, migration.domain])).toEqual([["migration_notes-v2", "brain"]]);
+
+    const { input, deps } = await roundTripRollbackFixture({ owners, migrations, entryCount: inventory.entries.length, aggregateBytes: inventory.aggregateBytes });
+    // The rollback side derives its own hash from the same leaves; it must equal what composeUpdate retained.
+    expect(deps.retained.exactStepListHash).toBe(retainedPlan.exactStepListHash);
+    const composed = await composeRollback(input, { ...deps, retained: { ...deps.retained, exactStepListHash: retainedPlan.exactStepListHash } });
+    expect(composed.construction.operation).toBe("update_rollback");
+    const outer = validateUpdateCoordinatorPlan(decodeCanonicalJson(composed.outer.plan, composed.outer.plan.byteLength), SYNTHETIC_HOME);
+    expect(rollbackStepListHash(outer.steps)).toBe(retainedPlan.exactStepListHash);
+    expect(outer.steps.map((step) => step.kind)).toEqual(expect.arrayContaining(["owner_external_effect", "schema_migration"]));
   });
 
   it("refuses a retained record that changed since the preview", async () => {
