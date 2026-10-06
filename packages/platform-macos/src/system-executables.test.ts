@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, realpath, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,6 +38,18 @@ describe("the darwin system executable table", () => {
     }
     const bin = join(dir, "bin") as CanonicalAbsolutePathV1;
     await writeFile(bin, "#!/bin/sh\nexit 1\n");
+    expect(inspectSystemPathSync(bin)).toMatchObject({ sha256: createHash("sha256").update("#!/bin/sh\nexit 1\n").digest("hex") });
+  });
+
+  // MACOS-9: a same-length rewrite keeps path, dev, ino and size; only the timestamps move the cache key.
+  it("inspectSystemPathSync rehashes a same-length rewrite", async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), "dos-sysexec-same-")));
+    const bin = join(dir, "bin") as CanonicalAbsolutePathV1;
+    await writeFile(bin, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    expect(inspectSystemPathSync(bin)).toMatchObject({ sha256: createHash("sha256").update("#!/bin/sh\nexit 0\n").digest("hex") });
+    await writeFile(bin, "#!/bin/sh\nexit 1\n");
+    // A distinct mtime (and so ctime) even if the rewrite lands in the same clock tick.
+    await utimes(bin, new Date(2_000_000_000_000), new Date(2_000_000_000_000));
     expect(inspectSystemPathSync(bin)).toMatchObject({ sha256: createHash("sha256").update("#!/bin/sh\nexit 1\n").digest("hex") });
   });
 });
