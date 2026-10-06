@@ -513,6 +513,9 @@ describe("rollback payload source staging", () => {
     expect(journal.phase).toBe("rolled_back");
     expect(walk).toStrictEqual(["entry:1", "evidence:1", "entry:0", "evidence:0", "metadata:1", "metadata:0", ...[6, 5, 4, 3, 2, 1, 0].map((ordinal) => `structure:${String(ordinal)}`)]);
     expect(() => validateRollbackPayloadSourceJournal({ ...journal, compensationMetadataNext: 0 }, plan)).toThrow();
+    // W2-ROLLBACK-5: the source validator, like the publication one, requires every write state cleared.
+    expect(journal.nextEntry).toBeLessThan(plan.entryCount);
+    expect(() => validateRollbackPayloadSourceJournal({ ...journal, entryWriteState: { ordinal: journal.nextEntry, state: "entry_intent" } }, plan)).toThrow();
   });
 });
 
@@ -590,6 +593,24 @@ describe("rollback payload publication", () => {
     expect(journal.phase).toBe("rolled_back");
     const entries = Array.from({ length: plan.publish?.entryCount ?? 0 }, (_, index) => (plan.publish?.entryCount ?? 0) - 1 - index).flatMap((ordinal) => [`entry:${String(ordinal)}`, `evidence:${String(ordinal)}`]);
     expect(walk).toStrictEqual(["metadata:1", "metadata:0", ...entries, "structure:4", "structure:3", "structure:2", "structure:1", "structure:0"]);
+  });
+
+  it("refuses a forward created/published step once compensation began (W2-ROLLBACK-4)", () => {
+    const plan = statePlan();
+    const structureIntent = walkPublication(plan, [{ kind: "structure_intent" }, { kind: "compensate" }]);
+    expect(() => advanceRollbackPayloadPublicationJournal(plan, structureIntent, { kind: "structure_created", ...identity(950) }, later)).toThrow();
+    const steps = publicationSteps(plan);
+    const metadataIntent = walkPublication(plan, [...steps.slice(0, -3), { kind: "metadata_intent" }, { kind: "compensate" }]);
+    expect(() => advanceRollbackPayloadPublicationJournal(plan, metadataIntent, { kind: "metadata_published", ...identity(951) }, later)).toThrow();
+  });
+
+  it("reaches rolled_back with every write state cleared, and refuses one that kept a stale write state (W2-ROLLBACK-5)", () => {
+    const plan = statePlan();
+    const steps = publicationSteps(plan);
+    let journal = walkPublication(plan, [...steps.slice(0, -3), { kind: "metadata_intent" }, { kind: "metadata_published", ...identity(999) }, { kind: "compensate" }]);
+    while (journal.phase !== "rolled_back") journal = advanceRollbackPayloadPublicationJournal(plan, journal, { kind: "compensation_step" }, later);
+    expect([journal.structureWriteState, journal.entryWriteState, journal.metadataWriteState]).toStrictEqual([null, null, null]);
+    expect(() => validateRollbackPayloadPublicationJournal({ ...journal, metadataWriteState: { ordinal: 1, state: "publish_intent" } }, plan)).toThrow();
   });
 
   it("verifies a retained payload only through the explicit verify-only arm, with every forward cursor zero", () => {
