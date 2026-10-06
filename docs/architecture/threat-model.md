@@ -595,8 +595,8 @@ permanent, and `repair` accepts a terminal phase for its own action so a user ca
 bytes, and a `rollback` never re-runs `backUp` to clear it. The `<index>.json` metadata stays — it
 carries `{existed, mode, atimeMs, mtimeMs}` and none of the bytes.
 
-**A prune that fails is reported rather than raised into the caller.** `execute` has seven call sites across six commands and
-all of them read a throw as "the transaction did not happen", which a retention failure is not, so
+**A prune that fails is reported rather than raised into the caller.** Every caller of `execute` reads a
+throw as "the transaction did not happen", which a retention failure is not, so
 the forward path retains and `doctor`'s `transactions` check names the payload and the `repair`
 command that clears it. The two terminal early-returns and the rollback transition still raise. The
 rule is keyed on the prune site rather than the caller: `repair --resume <id>` on an *incomplete*

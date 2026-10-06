@@ -371,7 +371,7 @@ async function readSurveyedJournal(
  *
  * **This check is what makes the second case visible, and it is the reason the executor is
  * allowed not to raise on it.** Raising out of `execute` would be worse than the leftover:
- * every one of its seven call sites reads a throw as "the transaction did not happen", so a
+ * every one of its callers reads a throw as "the transaction did not happen", so a
  * successful apply would be reported as a failure with the command's own bookkeeping
  * skipped (see `TransactionBackupRetentionError`). Reporting it here costs nothing and
  * catches the crash window too, which nothing detected before.
