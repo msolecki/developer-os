@@ -592,8 +592,10 @@ refuses every transition out of either — so from the transition onward the pay
 The early-returns are what make a crash between a transition and its prune recoverable rather than
 permanent, and `repair` accepts a terminal phase for its own action so a user can reach them.
 `<index>.bin.tmp` is swept too: `writeDurableFile` writes there before renaming, so it holds the same
-bytes, and a `rollback` never re-runs `backUp` to clear it. The `<index>.json` metadata stays — it
-carries `{existed, mode, atimeMs, mtimeMs}` and none of the bytes.
+bytes, and a `rollback` never re-runs `backUp` to clear it. `writeDurableFile` itself removes its temp
+on every failure after creating it, the write and sync as well as the rename, and a rollback removes
+the apply temp `.<base>.<id>-<i>.tmp` a death left beside each target before restoring it. The
+`<index>.json` metadata stays — it carries `{existed, mode, atimeMs, mtimeMs}` and none of the bytes.
 
 **A prune that fails is reported rather than raised into the caller.** Every caller of `execute` reads a
 throw as "the transaction did not happen", which a retention failure is not, so
