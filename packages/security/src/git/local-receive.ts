@@ -33,9 +33,6 @@ import { verifySanitizedGitShadow, type SanitizedBareDestinationShadowV1 } from 
 import type { GitProcessPhaseV1 } from "./supervisor.js";
 import type { ClosedGitProcessNodeIdV1 } from "./types.js";
 
-/** The destination-side processes a local receive may have run, as plumbing names. */
-export type GitLocalReceiveProcessNodeV1 = "receive-pack" | "index-pack";
-
 /** What the composition root's run of the fixed helper graph reports back. */
 export interface GitLocalReceiveRunV1 {
   /** Every `destination_receive` node the supervisor admitted, in consumption order. */

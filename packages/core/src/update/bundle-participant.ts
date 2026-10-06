@@ -218,7 +218,6 @@ export type BundleMetadataPostimageV1 =
 
 export type BundleMetadataFileStateV1 = BundleMetadataPreimageV1 | BundleMetadataPostimageV1;
 
-export type PresentBundleMetadataFileStateV1 = Extract<BundleMetadataFileStateV1, { readonly state: "present" }>;
 export type PresentBundleMetadataPreimageV1 = Extract<BundleMetadataPreimageV1, { readonly state: "present" }>;
 export type PresentBundleMetadataPostimageV1 = Extract<BundleMetadataPostimageV1, { readonly state: "present" }>;
 

@@ -80,7 +80,6 @@ export {
   requireLaunchdMutationTable,
 } from "./process-table.js";
 export type {
-  LaunchdArgvSlotV1,
   LaunchdBootoutArgvV1,
   LaunchdBootstrapArgvV1,
   LaunchdMutationIoProfileV1,

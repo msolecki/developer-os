@@ -36,7 +36,6 @@ export const REFUSAL_CONDITIONS = [
   "input-invalid",
   "scope-violation",
 ] as const;
-export type RefusalCondition = (typeof REFUSAL_CONDITIONS)[number];
 
 const SLUG = /^[a-z][a-z0-9-]*$/u;
 
@@ -81,7 +80,6 @@ const fieldSchema = z
   .strict();
 
 export type WorkflowInputSchema = Readonly<Record<string, z.infer<typeof fieldSchema>>>;
-export type WorkflowOutputSchema = WorkflowInputSchema;
 
 /**
  * The **failure** codes, never `success`. `packages/core` already draws this

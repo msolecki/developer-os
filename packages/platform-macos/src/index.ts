@@ -129,7 +129,6 @@ export {
 } from "./launchd/index.js";
 export type {
   LaunchctlIdentityV1,
-  LaunchdArgvSlotV1,
   LaunchdBootoutArgvV1,
   LaunchdBootstrapArgvV1,
   LaunchdDistributionPolicyV2,
