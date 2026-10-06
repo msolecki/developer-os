@@ -153,6 +153,26 @@ describe("guard path", () => {
     expect(await run(filePath(), "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
   });
 
+  // NEW-154 fix round: APFS's full Unicode case folding (ſ→s, ß/ẞ→ss, ﬁ→fi, ﬆ/ﬅ→st), against missing targets.
+  it.each([
+    () => join(home, ".awſ", "credentials"),
+    () => join(home, ".ſsh", "authorized_keys"),
+    () => join(home, ".kube", "conﬁg"),
+    () => join(home, ".config", "gh", "hoﬆs.yml"),
+    () => join(home, ".config", "gh", "hoﬅs.yml"),
+    () => join(home, ".codex", "auth.jſon"),
+    () => ".pgpaß",
+    () => ".pgpaẞ",
+    () => "public/.htpaßwd",
+    () => join(home, ".docker", "conﬁg.json"),
+    () => "keys/id_rſa",
+    () => "ſecrets/db.txt",
+    () => "config/credentialſ.json",
+    () => "infra/prod.tfvarſ",
+  ])("blocks the full-case-fold variant %#", async (filePath) => {
+    expect(await run(filePath(), "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
+  });
+
   it("allows a case-variant .env template", async () => {
     expect(await run(".Env.Example", "Write")).toStrictEqual({ kind: "allow" });
   });

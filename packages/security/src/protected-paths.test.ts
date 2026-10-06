@@ -97,6 +97,27 @@ describe("ProtectedPathPolicy", () => {
     );
   });
 
+  // NEW-154 fix round: APFS applies full Unicode case folding (ſ→s, ß/ẞ→ss, ﬁ→fi, ﬆ/ﬅ→st), which
+  // `toLowerCase` alone does not, so these names reach the protected file when it does not exist yet.
+  it.each([
+    ".awſ/credentials",
+    ".ſsh/authorized_keys",
+    ".config/gh/hoﬆs.yml",
+    ".config/gh/hoﬅs.yml",
+    ".codex/auth.jſon",
+    ".ßh/authorized_keys",
+    ".ẞh/authorized_keys",
+    ".conﬁg/gh/hosts.yml",
+    ".claude/.credentialſ.json",
+  ])("rejects the full-case-fold variant %s on an empty home", async (name) => {
+    const home = await makeTemporaryDirectory();
+    const policy = new ProtectedPathPolicy(home);
+
+    await expect(policy.assertWritable(join(home, name))).rejects.toBeInstanceOf(
+      SecurityRefusalError,
+    );
+  });
+
   it.each([".env.example", ".Env.Example"])(
     "still allows the case variant template %s on an empty home",
     async (name) => {

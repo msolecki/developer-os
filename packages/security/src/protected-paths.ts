@@ -57,12 +57,15 @@ export const PROTECTED_PATH_RULES: readonly ProtectedPathRuleV1[] = Object.freez
 ]);
 
 /**
- * APFS and NTFS are case-insensitive by default, and APFS also folds Unicode normalization, so
- * `.SSH` names the same directory as `.ssh` once it exists (NEW-154). Every comparison below runs
- * on this fold; the fold `core/manifest/store.ts` and `config/loader.ts` use.
+ * The name fold every protected-path comparison runs on (NEW-154). APFS compares names under full
+ * Unicode case folding and normalization, so `.SSH`, `.ſsh`, `.ßh` and `.ssh` are one directory once
+ * any of them exists. `toLowerCase` alone misses the full folds (ſ→s, ß/ẞ→ss, ﬁ→fi, ﬆ/ﬅ→st, Greek
+ * iota-subscripts); the upper-then-lower round trip applies them, and the leading `toLowerCase`
+ * is what folds ẞ. A sweep of every assigned code point on APFS found no name APFS merges that this
+ * fold keeps apart; it over-merges only U+0131 ı with i, which adds refusals and nothing else.
  */
-function fold(value: string): string {
-  return value.normalize("NFC").toLowerCase();
+export function foldPathName(value: string): string {
+  return value.normalize("NFC").toLowerCase().toUpperCase().toLowerCase().normalize("NFC");
 }
 
 function matchesSegmentRule(
@@ -71,12 +74,12 @@ function matchesSegmentRule(
 ): boolean {
   switch (match.kind) {
     case "segment":
-      return segments.includes(fold(match.name));
+      return segments.includes(foldPathName(match.name));
     case "segment-prefix":
       return segments.some(
         (segment) =>
-          segment.startsWith(fold(match.prefix)) &&
-          !(match.except ?? []).some((name) => fold(name) === segment),
+          segment.startsWith(foldPathName(match.prefix)) &&
+          !(match.except ?? []).some((name) => foldPathName(name) === segment),
       );
     case "home-exact":
       return false;
@@ -173,7 +176,7 @@ export class ProtectedPathPolicy {
       throw new SecurityRefusalError("Path contains a NUL byte");
     }
 
-    const rawSegments = splitLexicalSegments(fold(path));
+    const rawSegments = splitLexicalSegments(foldPathName(path));
     if (
       PROTECTED_PATH_RULES.some((rule) =>
         matchesSegmentRule(rule.match, rawSegments),
@@ -183,11 +186,11 @@ export class ProtectedPathPolicy {
     }
 
     // An exact match implies the path is within home, so no separate within-home test is needed.
-    const absolutePath = fold(resolve(path));
+    const absolutePath = foldPathName(resolve(path));
     const isProtectedExactPath = PROTECTED_PATH_RULES.some(
       (rule) =>
         rule.match.kind === "home-exact" &&
-        fold(resolve(policyHome, rule.match.relativePath)) === absolutePath,
+        foldPathName(resolve(policyHome, rule.match.relativePath)) === absolutePath,
     );
     if (isProtectedExactPath) {
       throw new SecurityRefusalError("Path is protected");

@@ -593,8 +593,8 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
   `.tfvars` suffixes live in `HOOK_PROTECTED_PATH_RULES`, not `PROTECTED_PATH_RULES`. So Claude's
   deny list does not cover them: a `Read` of them passes on the vendor side, and `doctor`'s deny-rule
   check, which reads only `PROTECTED_PATH_RULES`, is truthfully unchanged. Product reads do not
-  apply them either (the `.key` suffix would refuse the product's own `redaction.key`). Matching folds
-  case and NFC, as in `ProtectedPathPolicy` (NEW-154), and a user home whose own path holds a `secret` or
+  apply them either (the `.key` suffix would refuse the product's own `redaction.key`). Matching runs on
+  `foldPathName`, the fold `ProtectedPathPolicy` uses (NEW-154), and a user home whose own path holds a `secret` or
   `secrets` segment would block every edit.
 - **`.env` templates are exempt in the product only (D67).** `ProtectedPathPolicy` lets
   `.env.example`, `.env.sample`, `.env.template` and `.env.dist` through. Claude's
@@ -623,12 +623,20 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
   reaches the hook as `Bash` (unobserved), and is then not protected.
 - **A Codex `PreToolUse` timeout is unobserved** (§1 question 6). If Codex does not block on it, a
   slow filesystem lets a patch through `guard path`.
-- **Case-folding filesystems (closed by NEW-154).** On APFS, `Add File: .ENV` with no `.env` present
-  would create a file that later reads as `.env`, because `realpath` restores case only for an entry
-  that exists. `ProtectedPathPolicy` and `HOOK_PROTECTED_PATH_RULES` therefore compare every segment
-  and every home-exact path under `normalize("NFC").toLowerCase()`, so `.ENV`, `.SSH/…`,
-  `.Codex/Auth.json` and `ID_RSA` are refused on every filesystem, and `.Env.Example` stays exempt.
-  On a case-sensitive volume this also refuses a distinct `.ENV`; the stricter side was chosen.
+- **Case-folding filesystems (closed by NEW-154).** APFS compares names under full Unicode case
+  folding and normalization, and `realpath` restores case only for an entry that exists. So with no
+  `.ssh` present, `Add File: .SSH/…`, `.ſsh/…` or `.ßh/…` would create `.ssh/…`. `ProtectedPathPolicy`
+  and `HOOK_PROTECTED_PATH_RULES` therefore compare every segment and every home-exact path under
+  one exported fold, `foldPathName`: NFC, then `toLowerCase().toUpperCase().toLowerCase()`, then NFC.
+  `toLowerCase` alone misses the full folds (ſ→s, ß and ẞ→ss, ﬁ→fi, ﬆ and ﬅ→st, the Greek
+  iota-subscript letters); the round trip applies them, and the leading `toLowerCase` folds ẞ.
+  `.Env.Example` stays exempt. **Verified on APFS, not assumed:** a sweep of all 159,800 assigned,
+  non-private-use code points (2026-10-06) created `x<c>` for each one and compared inodes. It found
+  no pair of names APFS treats as one that `foldPathName` keeps apart, and exactly one over-merge:
+  U+0131 `ı` folds to `i`, which APFS keeps distinct, so a name such as `ıd_rsa` is refused. That
+  only adds refusals. **Residual:** the sweep covers single-code-point names and their folds, not
+  every multi-code-point sequence. On a case-sensitive volume the fold also refuses a distinct
+  `.ENV`; the stricter side was chosen.
 - **Codex external hooks are `unknown`** under Q2-A. A user who never approves Codex trust keeps
   `plugin_hooks` and `session_start_injection` at `unknown` forever, which is correct.
 - **The latency budget is machine-relative** (§2) until the Phase 11 release matrix measures it on
