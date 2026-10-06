@@ -18,11 +18,16 @@ agent adapter present and no network call.
 | `src/schema/` | `NoteFrontmatterV1`, strict parse, reserved vocabulary, byte-identical rewrite; `CaptureEnvelopeV1` as a type only; brain config defaults |
 | `src/discovery/` | deny-by-default enumeration, folder policy, symlink refusal |
 | `src/indexes/` | `index.json`, `graph.json`, and the two Markdown views; one `renderArtifacts` produces all four |
-| `src/lint/` | the six classes below, and canonical-form drift |
+| `src/lint/` | the eight classes below, and canonical-form drift |
 | `src/retrieval/` | the two-stage funnel and its integer scorer |
 | `src/migrations/` | `BrainMigration` and a deliberately empty registry |
 | `src/redact.ts` | a re-export of the screen, which moved to `@developer-os/security` in DOS-P3 Task 1 once a second package needed it. Delete it when the last brain call site imports `security` directly |
-| `src/service.ts` | `BrainService`, the only module the CLI imports |
+| `src/capture/` | build, parse and render a note capture, and the agent-environment signals; pure — the CLI owns every read and write (`knowledge-pipeline.md` §3) |
+| `src/review/` | the review decision over a quarantined capture (`knowledge-pipeline.md` §4) |
+| `src/ingest/` | the ingest prompt, proposal parser and validators, and the pure apply plan (`knowledge-pipeline.md` §5, §7) |
+| `src/refactor/` | `brain refactor` and `brain retire` plans: split, merge, link rewrites (§6.13) |
+| `src/garden/` | the scheduled gardener's target selection, prompt bundle, proposal parser and validator (§6.15) |
+| `src/service.ts` | `BrainService`, the facade for reindex, lint, search, status and session context; the CLI imports the other directories' pure functions from the package root too |
 
 ## 2. What it cannot do, on purpose
 
@@ -47,7 +52,7 @@ The parser contract rejects every explicit YAML tag, including tags from the cor
 **It does not stem.** `cache` does not reach a note titled `caching`; tags and aliases are
 the documented mitigation.
 
-**It writes no capture.** `CaptureEnvelopeV1` is a type and a status list. DOS-P6 owns the
+**`src/schema/capture.ts` writes no capture.** `CaptureEnvelopeV1` is a type and a status list. DOS-P6 owns the
 lifecycle, and a test asserts this module's runtime surface stays one constant.
 
 ## 3. Facts that outlive the plan
