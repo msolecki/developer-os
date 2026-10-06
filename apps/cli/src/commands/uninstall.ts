@@ -36,7 +36,7 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext } from "../context.js";
-import { resolveVendorHomes } from "../instructions/vendor-homes.js";
+import { codexHomeRecordPath, codexHomeRecordRepair, resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission, preservedRetentionRoots } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
@@ -954,6 +954,10 @@ export async function runUninstall(
     const codexIngestHome =
       error instanceof LifecycleRecoveryRequiredError && error.reason === "codex_ingest_home_shape" ? error : null;
     if (codexIngestHome !== null) return failureFrom(context, error, codexIngestHome.paths, CODEX_INGEST_HOME_REPAIR);
+    // FLOW-UNINST-3: a bad `codex/codex-home` record refuses every arm; name the file and its repair.
+    if (error instanceof LifecycleRecoveryRequiredError && error.reason === "codex_home_record_shape") {
+      return failureFrom(context, error, error.paths, codexHomeRecordRepair(error.paths[0] ?? codexHomeRecordPath(context.paths.home)));
+    }
     const paths = refusal?.paths ?? (error instanceof CodexRegistrationFailedError ? error.paths : []);
     const evidence = error instanceof InstructionRefusal && error.evidence !== null ? { evidence: error.evidence } : undefined;
     return failureFrom(context, error, paths, refusal?.recovery, evidence);

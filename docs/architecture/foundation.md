@@ -1163,6 +1163,15 @@ record.
   `LifecycleUninstaller.preview` throws `UninstallCapacityError` (`reason:
   "uninstall_artifact_capacity_exceeded"`, exit 4) before any ID is reserved when the partitioned
   artifact mutations exceed it. D45 replaced the single 256-mutation step; NEW-85 closed 2026-09-26.
+- **Planning refusals the coordinator would otherwise meet only after reserving (NEW-178).**
+  `preview` refuses a runner lease (`state/.automation-<job>.lock`) that is absent or not a regular
+  file as `UninstallRefusal` exit 6 with a re-create step, because `drain_runners` locks every lease
+  and never creates one. On `uninstall/present_manifest` it refuses an absent or non-regular
+  `config.toml` as exit 3, because the launchd plan binds its removal. The vendor detach planned
+  before the drained uninstall skips the `adapters` rewrite when `config.toml` is absent or does not
+  validate (the drained preview then reports an invalid one as drift, exit 3); any other read
+  refusal still refuses. The result's `removed` lists only what the run removed: the artifact-step
+  targets, the leaves compaction collects and the directories `finalize_tombstones` removed.
 - **The non-creating global lock and lock order.** `packages/core/src/lifecycle/locks.ts` states the
   rule its types enforce: the global lock at `state/.lifecycle.lock` is created only by Spec 2's
   fresh `init`, so every other acquirer opens an existing path without `O_CREAT` and refuses
@@ -1575,7 +1584,12 @@ the other adapter nor the CLI.
   (`apps/cli/src/instructions/vendor-homes.ts` — `resolveVendorHomes`). `C` is the Codex home the
   Codex attach recorded in `<product-home>/codex/codex-home`
   (`apps/cli/src/instructions/vendor-homes.ts` — `codexHomeRecordPath`), read no-follow and
-  owner-checked; before any attach it is `CODEX_HOME` when absolute, else `H/.codex`. A set
+  owner-checked; before any attach it is `CODEX_HOME` when absolute, else `H/.codex`. A record that
+  is a symlink, not an owned regular file, over 4096 bytes, unterminated or not one canonical
+  absolute path refuses `LifecycleRecoveryRequiredError("codex_home_record_shape")` naming the file;
+  `uninstall` reports it with the remove-the-record repair, and `doctor` (and the scheduled
+  `doctor`) fails a `codex-home-record` check and runs the other checks against the environment's
+  Codex home (FLOW-UNINST-3). A set
   absolute `CODEX_HOME` that differs refuses `codex_home_mismatch`, exit 3; deselecting Codex
   removes the record. `CLAUDE_CONFIG_DIR` is never followed, and `doctor`'s `instructions` check
   warns while it is set.

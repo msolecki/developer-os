@@ -47,6 +47,7 @@ import {
   runDoctor,
   runDoctorReport,
   runScheduledDoctor,
+  runScheduledDoctorReport,
   UNSIGNED_LOCAL_TRUST_WARNING,
 } from "./doctor.js";
 import type { DoctorReportV1 } from "./doctor.js";
@@ -147,6 +148,27 @@ async function plantBackupFile(
   });
   return path;
 }
+
+describe("doctor over a bad codex/codex-home record (FLOW-UNINST-3)", () => {
+  it("renders every check and fails codex-home-record, naming the file, in both profiles", async () => {
+    const fixture = await createCommandFixture("doctor-codex-home-record");
+    const record = join(fixture.paths.home, "codex", "codex-home");
+    await nodeFs.mkdir(join(fixture.paths.home, "codex"), { recursive: true, mode: 0o700 });
+    await nodeFs.symlink(join(fixture.paths.home, "elsewhere"), record);
+
+    const report = await runDoctorReport(fixture.context);
+    const scheduled = await runScheduledDoctorReport(fixture.context);
+
+    for (const checks of [report.checks, scheduled.checks]) {
+      const finding = checks.find((check) => check.id === "codex-home-record");
+      expect(finding?.status).toBe("fail");
+      expect(finding?.paths).toStrictEqual([record]);
+      expect(finding?.recovery).toContain(record);
+      expect(checks.some((check) => check.id === "configuration")).toBe(true);
+      expect(checks.some((check) => check.id === "manifest")).toBe(true);
+    }
+  });
+});
 
 describe("doctor's lifecycle survey over hostile coordinator journal entries (NEW-160)", () => {
   it.each(["fifo", "symlink"] as const)("fails the lifecycle check, without hanging, on a %s journal leaf", async (kind) => {

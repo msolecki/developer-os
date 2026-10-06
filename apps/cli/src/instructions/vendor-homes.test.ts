@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { LifecycleRecoveryRequiredError } from "@developer-os/core";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { claudeInstructionPaths, codexHomeRecordPath, codexInstructionPaths, resolveVendorHomes } from "./vendor-homes.js";
@@ -80,9 +81,27 @@ describe("resolveVendorHomes: the recorded Codex home", () => {
     const target = join(root, "target");
     writeFileSync(target, "/synthetic/recorded-codex\n", { mode: 0o600 });
     symlinkSync(target, codexHomeRecordPath(linked));
-    expect(() => resolveVendorHomes({}, H, linked)).toThrow(/unreadable/u);
+    expect(() => resolveVendorHomes({}, H, linked)).toThrow(/codex_home_record_shape/u);
     const malformed = product("malformed");
     writeFileSync(codexHomeRecordPath(malformed), "relative/codex\n", { mode: 0o600 });
     expect(() => resolveVendorHomes({}, H, malformed)).toThrow();
+  });
+
+  it.each([
+    ["symlinked", (path: string) => { symlinkSync(join(root, "target"), path); }],
+    ["oversized", (path: string) => { writeFileSync(path, `/${"a".repeat(5000)}\n`, { mode: 0o600 }); }],
+    ["unterminated", (path: string) => { writeFileSync(path, "/synthetic/recorded-codex", { mode: 0o600 }); }],
+    ["non-canonical", (path: string) => { writeFileSync(path, "relative/codex\n", { mode: 0o600 }); }],
+  ])("refuses a %s record as recovery-required codex_home_record_shape naming the file (FLOW-UNINST-3)", (_label, plant) => {
+    const home = product(`typed-${_label}`);
+    plant(codexHomeRecordPath(home));
+    let thrown: unknown = null;
+    try {
+      resolveVendorHomes({}, H, home);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(thrown).toMatchObject({ reason: "codex_home_record_shape", paths: [codexHomeRecordPath(home)] });
   });
 });

@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import * as nodeFs from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   containsPath,
@@ -80,7 +80,14 @@ import {
 import type { CodexRegistrationRecordV1 } from "../instructions/codex-registration.js";
 import { UNPROVEN_CLAUDE_CATEGORIES } from "../instructions/attach.js";
 import { loadInstructionOverrides } from "../instructions/sources.js";
-import { claudeInstructionPaths, codexInstructionPaths, resolveVendorHomes } from "../instructions/vendor-homes.js";
+import {
+  claudeInstructionPaths,
+  codexHomeFromEnv,
+  codexHomeRecordPath,
+  codexHomeRecordRepair,
+  codexInstructionPaths,
+  resolveVendorHomes,
+} from "../instructions/vendor-homes.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import { isCodeDefect, manifestAnchorPath, readManifestAnchor } from "../lifecycle/manifest-anchor.js";
 import type { ScheduledHandlerResultV1 } from "../lifecycle/runtime-records.js";
@@ -1756,6 +1763,35 @@ async function lifecycleFindings(
   };
 }
 
+/**
+ * FLOW-UNINST-3: a bad `codex/codex-home` record is a failing check, never a throw that ends the report.
+ * The other checks run against the environment's Codex home, so they still render.
+ */
+function doctorVendorHomes(
+  context: CliContext,
+  paths: RuntimePaths,
+): { readonly homes: VendorHomesV1; readonly findings: readonly Finding[] } {
+  try {
+    return { homes: resolveVendorHomes(context.env, context.userHome, paths.home), findings: [] };
+  } catch (error) {
+    const record = codexHomeRecordPath(paths.home);
+    return {
+      homes: {
+        userHome: resolve(context.userHome) as CanonicalAbsolutePathV1,
+        productHome: resolve(paths.home) as CanonicalAbsolutePathV1,
+        codexHome: codexHomeFromEnv(context.env, context.userHome),
+      },
+      findings: [fail(
+        "codex-home-record",
+        context.guards.redactDiagnostic(error instanceof Error ? error.message : "the recorded Codex home is unreadable"),
+        [record],
+        exitCodeOf(error),
+        codexHomeRecordRepair(record),
+      )],
+    };
+  }
+}
+
 async function collectFindings(
   context: CliContext,
   options: DoctorOptions,
@@ -1783,7 +1819,7 @@ async function collectFindings(
     config = null;
   }
   const paths = runtimePathsFor(context, config ?? undefined);
-  const homes = resolveVendorHomes(context.env, context.userHome, paths.home);
+  const { homes, findings: homeFindings } = doctorVendorHomes(context, paths);
 
   /**
    * One read, threaded through. Reading the manifest a second time for the drift
@@ -1854,6 +1890,7 @@ async function collectFindings(
     await guarded(context, "configuration", [paths.configFile], () =>
       checkConfiguration(context, paths),
     ),
+    ...homeFindings,
     manifest,
     await guarded(context, "transactions", [], () =>
       checkTransactions(context, lifecycle.owned),
@@ -1979,11 +2016,12 @@ export async function runScheduledDoctorReport(context: CliContext): Promise<Doc
     config = null;
   }
   const paths = runtimePathsFor(context, config ?? undefined);
-  const homes = resolveVendorHomes(context.env, context.userHome, paths.home);
+  const { homes, findings: homeFindings } = doctorVendorHomes(context, paths);
   let inspected: InstallationManifest | null = null;
   const findings = [
     await guarded(context, "product-home", [paths.home], () => checkProductHome(context, paths)),
     await guarded(context, "configuration", [paths.configFile], () => checkConfiguration(context, paths)),
+    ...homeFindings,
     await guarded(context, "manifest", [paths.manifestFile], async () => {
       const checked = await checkManifest(context, paths, homes);
       inspected = checked.manifest;
