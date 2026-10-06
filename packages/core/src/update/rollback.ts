@@ -1201,7 +1201,7 @@ export function advanceRollbackPayloadSourceJournal(plan: RollbackPayloadSourceS
       next = { ...base, phase: "structure_staging", structureWriteState: { ordinal: current.nextStructure, state: "create_intent" } };
       break;
     case "structure_created":
-      need(current.structureWriteState?.state === "create_intent");
+      need(current.phase === "structure_staging" && current.structureWriteState?.state === "create_intent");
       next = { ...base, structureWriteState: { ordinal: current.nextStructure, state: "created", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
       break;
     case "structure_complete": {
@@ -1218,7 +1218,7 @@ export function advanceRollbackPayloadSourceJournal(plan: RollbackPayloadSourceS
       next = { ...base, metadataWriteState: { ordinal: current.nextMetadata, state: "create_intent" } };
       break;
     case "metadata_created":
-      need(current.metadataWriteState?.state === "create_intent");
+      need(current.phase === "metadata_publishing" && current.metadataWriteState?.state === "create_intent");
       next = { ...base, metadataWriteState: { ordinal: current.nextMetadata, state: "created", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
       break;
     case "metadata_complete": {
@@ -1234,7 +1234,7 @@ export function advanceRollbackPayloadSourceJournal(plan: RollbackPayloadSourceS
       next = { ...base, readyWriteState: { state: "create_intent" } };
       break;
     case "ready_created":
-      need(current.readyWriteState?.state === "create_intent");
+      need(current.phase === "payload_staging" && current.readyWriteState?.state === "create_intent");
       next = { ...base, readyWriteState: { state: "created", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
       break;
     case "ready_complete": {

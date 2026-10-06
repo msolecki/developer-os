@@ -622,7 +622,7 @@ export function validateBundleSourceJournal(value: unknown, plan: BundleSourceSt
       break;
     }
     case "rolled_back":
-      legal = compaction === null && compensation === -1 && part === null && compensationStructure === -1 && ready === "absent" && !readyComplete;
+      legal = compaction === null && compensation === -1 && part === null && compensationStructure === -1 && ready === "absent" && !readyComplete && structureState === null && entryState === null;
       break;
     case "compacting":
       legal = noCompensation && entriesDone && readyComplete && compaction !== null;
@@ -689,7 +689,7 @@ export function advanceBundleSourceJournal(plan: BundleSourceStagingPlanV1, jour
       next = { ...base, phase: "structure_staging", structureWriteState: { ordinal: current.nextStructure, state: "create_intent" } };
       break;
     case "structure_created":
-      need(current.structureWriteState?.state === "create_intent");
+      need(current.phase === "structure_staging" && current.structureWriteState?.state === "create_intent");
       next = { ...base, structureWriteState: { ordinal: current.nextStructure, state: "created", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
       break;
     case "structure_complete": {
@@ -706,7 +706,7 @@ export function advanceBundleSourceJournal(plan: BundleSourceStagingPlanV1, jour
       next = { ...base, readyWriteState: { state: "create_intent" } };
       break;
     case "ready_created":
-      need(current.readyWriteState?.state === "create_intent");
+      need(current.phase === "entries_staging" && current.readyWriteState?.state === "create_intent");
       next = { ...base, readyWriteState: { state: "created", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
       break;
     case "ready_complete": {
@@ -1075,7 +1075,8 @@ export function validateBundlePublicationJournal(value: unknown, plan: BundlePub
       legal = publish && compaction === null && compMetadata === -1 && compensation === -1 && part === null && compRoot !== null && compRoot <= rootTop(journal);
       break;
     case "rolled_back":
-      legal = compaction === null && (publish ? compMetadata === -1 && compensation === -1 && part === null && compRoot === -1 : noCompensation);
+      // Rolled back clears every write state, as the rollback journals do.
+      legal = compaction === null && rootState === null && entryState === null && metadataState === null && (publish ? compMetadata === -1 && compensation === -1 && part === null && compRoot === -1 : noCompensation);
       break;
     case "compacting":
       legal = noCompensation && complete && compaction !== null;
@@ -1117,7 +1118,7 @@ export function advanceBundlePublicationJournal(plan: BundlePublicationPlanV1, j
       next = { ...base, phase: "root_publishing", rootWriteState: { ordinal: 0, state: "create_intent" } };
       break;
     case "root_created":
-      need(current.rootWriteState?.state === "create_intent");
+      need(current.phase === "root_publishing" && current.rootWriteState?.state === "create_intent");
       next = { ...base, rootWriteState: { ordinal: 0, state: "created", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
       break;
     case "root_complete": {
@@ -1142,7 +1143,7 @@ export function advanceBundlePublicationJournal(plan: BundlePublicationPlanV1, j
       next = { ...base, metadataWriteState: { ordinal: current.nextMetadata, state: "publish_intent" } };
       break;
     case "metadata_published":
-      need(current.metadataWriteState?.state === "publish_intent");
+      need(current.phase === "metadata_publishing" && current.metadataWriteState?.state === "publish_intent");
       next = { ...base, metadataWriteState: { ordinal: current.nextMetadata, state: "published", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
       break;
     case "metadata_complete": {
@@ -1180,7 +1181,7 @@ export function advanceBundlePublicationJournal(plan: BundlePublicationPlanV1, j
         } else next = { ...base, phase: "compensating_root", compensationRootNext: rootTop(current) };
       } else {
         need(current.phase === "compensating_root");
-        next = current.compensationRootNext === 0 ? { ...base, compensationRootNext: -1 } : { ...base, phase: "rolled_back" };
+        next = current.compensationRootNext === 0 ? { ...base, compensationRootNext: -1 } : { ...base, phase: "rolled_back", rootWriteState: null, entryWriteState: null, metadataWriteState: null };
       }
       break;
     }

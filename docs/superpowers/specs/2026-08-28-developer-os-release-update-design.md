@@ -2084,8 +2084,6 @@ or Brain content.
 ### 7.2 Preview contract
 
 ```ts
-type SafeRenderedPathV1 = string & { readonly __safeRenderedPathV1: unique symbol };
-
 interface OwnerUpdatePreviewV1 {
   readonly owner: ArtifactOwner;
   readonly counts: {
@@ -2214,11 +2212,13 @@ bytes of the complete preview object with the `previewHash` member omitted. It i
 over a projection containing itself.
 
 Canonical preview and JSON path fields remain exact branded values and participate byte-for-byte in
-`previewHash`. At the human output boundary only, each is mapped to `SafeRenderedPathV1`, the
-`1..4096`-byte no-control output of `renderPath`; that lossy projection is never persisted, hashed,
-returned in JSON, or accepted back as mutation authority. Owner path arrays are each unsigned-UTF-8 sorted, disjoint, and their
-lengths equal the matching counts; the four counts sum to that owner's complete
-current-plus-created partition. Capacity component kinds are unique in the shown order and equal the
+`previewHash`. At the human output boundary only, each path is rendered with `renderPath`
+(`1..4096` bytes, no control characters); that lossy rendering is never persisted, hashed,
+returned in JSON, or accepted back as mutation authority. Owner path arrays are each unsigned-UTF-8
+sorted, the four arrays are pairwise disjoint, and their lengths equal the matching counts. The
+preview does not check that they cover the owner's complete current-plus-created partition; that
+coverage is checked only by the owner plan validator (`validateOwnerUpdatePlan`,
+`packages/core/src/update/participants.ts`). Capacity component kinds are unique in the shown order and equal the
 exact nonzero scopes reachable by the operation; totals use checked integer addition and equal the
 component sums plus filesystem reservation granularity. A zero-byte scope is still represented when
 it can consume an inode. `fits: true` is the only publishable preview arm; insufficient capacity
