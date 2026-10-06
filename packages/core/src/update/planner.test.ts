@@ -301,6 +301,42 @@ describe("target draft admission", () => {
     const value = edit(draftValue(), ["ownerPlans", 1, "proposedOperations"], []);
     expect(() => admitTargetUpdateDraft(value, request())).toThrow();
   });
+
+  describe("runs every validateOwnerDraft rule at the trust boundary (W2-PLANNER-2)", () => {
+    it("refuses a remove of a keep-only directory row", () => {
+      const value = edit(draftValue(), ["ownerPlans", 0, "proposedOperations"], [{ operation: "remove", target: { kind: "installed", token: t(1) }, expectedHash: null }]);
+      const manifest = value.expectedManifest as { artifacts: unknown[] };
+      manifest.artifacts = manifest.artifacts.filter((_row, index) => index !== 1);
+      expect(() => admitTargetUpdateDraft(value, request())).toThrow("keep-only");
+    });
+
+    it("refuses a create that collides with an installed source", () => {
+      const value = edit(draftValue(), ["ownerPlans", 1, "proposedOperations", 2, "target", "path"], "codex/skill.md");
+      const manifest = value.expectedManifest as { artifacts: Record<string, unknown>[] };
+      (manifest.artifacts[4] as Record<string, unknown>).path = { kind: "owner_relative", owner: "codex", path: "codex/skill.md" };
+      expect(() => admitTargetUpdateDraft(value, request())).toThrow("collides");
+    });
+
+    it("refuses an external effect over keep-only operations", () => {
+      const value = edit(draftValue(), ["ownerPlans", 1, "proposedOperations"], [
+        { operation: "keep", target: { kind: "installed", token: t(2) }, expectedHash: largeHash },
+        { operation: "keep", target: { kind: "installed", token: t(3) }, expectedHash: sha(codexBytes) },
+      ]);
+      const manifest = value.expectedManifest as { artifacts: Record<string, unknown>[] };
+      manifest.artifacts = manifest.artifacts.slice(0, 4);
+      (manifest.artifacts[3] as Record<string, unknown>).verification = { mode: "content", installed: { kind: "installed", token: t(3) } };
+      // Output 0 is gone with the replace, so every later output ordinal shifts down by one.
+      const shift = (node: unknown): void => {
+        if (typeof node !== "object" || node === null) return;
+        const row = node as Record<string, unknown>;
+        if (row.stream === "output" && typeof row.ordinal === "number") row.ordinal -= 1;
+        Object.values(row).forEach(shift);
+      };
+      shift(value.migrations);
+      shift(value.expectedManifest);
+      expect(() => admitTargetUpdateDraft(value, request())).toThrow("without a file change");
+    });
+  });
 });
 
 describe("planner wire framing", () => {
