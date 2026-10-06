@@ -461,7 +461,7 @@ describe("the bootstrap refusal paths", () => {
       ["doctor", "--probe"],
       ["uninstall", "--yes"],
       ["capture", "--text", "an observation during recovery"],
-      ["ingest", "--yes"],
+      ["ingest"],
       ["brain", "status"],
     ];
     expect(commands.length).toBeGreaterThan(0);

@@ -23,7 +23,8 @@ import {
   parseLifecycleActivationRecord,
   serializeConfig,
 } from "@developer-os/core";
-import type { CanonicalJsonValue } from "@developer-os/core";
+import type { CanonicalAbsolutePathV1, CanonicalJsonValue } from "@developer-os/core";
+import { MacOsStableLockProvider } from "@developer-os/platform-macos";
 
 import { createBootstrapEvidenceInspectionRequest } from "../../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../../bootstrap/report.js";
@@ -144,6 +145,24 @@ describe("git on a real V2 home", () => {
       expect(dataOf(await runGit(home.context, { subcommand: "status" }))).toMatchObject({ kind: "status", enabled: false, activation: "absent" });
       expect(runtime.spawns).toEqual([]);
       expect(runtime.networkCalls).toEqual([]);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses with exit 6 while the global lock is held elsewhere, spawning no Git",
+    async () => {
+      const home = await sharedHome();
+      const held = await new MacOsStableLockProvider().acquireExisting(join(home.paths.stateDir, ".lifecycle.lock") as CanonicalAbsolutePathV1);
+      try {
+        const result = await runGit(home.context, { subcommand: "sync" });
+        expect(result.ok).toBe(false);
+        expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+        expect(kindOf(result)).toBe("lifecycle_lock_busy");
+        expect(runtime.spawns).toEqual([]);
+      } finally {
+        await held.release();
+      }
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );

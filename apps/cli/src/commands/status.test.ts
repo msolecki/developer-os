@@ -214,7 +214,7 @@ describe("runStatus", () => {
     if (!result.ok) return;
     expect(result.warnings.join("\n")).toContain("transaction journals are unreadable");
     expect(result.data.installed).toBe(true);
-    expect(result.data.incompleteTransactions).toEqual([]);
+    expect(result.data.incompleteTransactions).toBeNull();
   });
 
   it("warns rather than fails when the configuration is unreadable", async () => {

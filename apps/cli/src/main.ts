@@ -505,8 +505,8 @@ function renderStatus(report: StatusReportV1): readonly string[] {
     `product version     ${renderPath(report.productVersion ?? "-")}`,
     `configuration       ${report.configPresent ? "present" : "absent"}`,
     `managed artifacts   ${String(report.managedArtifacts)}`,
-    `drift               ${String(report.driftCount)}`,
-    `incomplete          ${report.incompleteTransactions.join(", ") || "none"}`,
+    `drift               ${report.driftCount === null ? "unknown" : String(report.driftCount)}`,
+    `incomplete          ${report.incompleteTransactions === null ? "unknown" : report.incompleteTransactions.join(", ") || "none"}`,
     `agents              ${report.agents
       .map((agent) => `${agent.name}=${agent.installed ? "present" : "absent"}`)
       .join(" ")}`,
