@@ -410,8 +410,10 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
 - **`inject`.** The slug is `slugify(basename(<project root>))`. `BrainService.sessionContext`
   returns `vault-map.md` and the one `project-note` whose title or alias equals the slug. The output
   is the vault map, then the note, capped at 16,384 bytes; the vault map is truncated first, at a
-  line boundary, with `VAULT_MAP_TRUNCATED_MARKER`. A gate refusal, a missing configuration or any
-  error is `allow` with one note. The verb writes nothing but its firing record.
+  line boundary, with `VAULT_MAP_TRUNCATED_MARKER`. The text is redacted with the built-in classes and
+  the configuration's `[redaction] patterns`, under the durable key when one exists (NEW-159), as
+  capture and ingest redact. A gate refusal, a missing configuration or any error is `allow` with one
+  note. The verb writes nothing but its firing record.
 - **`stop`.** Runs only when the root has `tsconfig.json` and a project-local `tsc`. It checks
   `tsconfig.check.json` when present, else `tsconfig.json`. A non-zero exit is `block`
   (`typecheck`) with the first 40 non-empty lines; a timeout or spawn failure is `allow`.
