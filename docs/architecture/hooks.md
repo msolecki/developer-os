@@ -591,8 +591,8 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
   `.tfvars` suffixes live in `HOOK_PROTECTED_PATH_RULES`, not `PROTECTED_PATH_RULES`. So Claude's
   deny list does not cover them: a `Read` of them passes on the vendor side, and `doctor`'s deny-rule
   check, which reads only `PROTECTED_PATH_RULES`, is truthfully unchanged. Product reads do not
-  apply them either (the `.key` suffix would refuse the product's own `redaction.key`). Matching is
-  case-sensitive, as in `ProtectedPathPolicy`, and a user home whose own path holds a `secret` or
+  apply them either (the `.key` suffix would refuse the product's own `redaction.key`). Matching folds
+  case and NFC, as in `ProtectedPathPolicy` (NEW-154), and a user home whose own path holds a `secret` or
   `secrets` segment would block every edit.
 - **`.env` templates are exempt in the product only (D67).** `ProtectedPathPolicy` lets
   `.env.example`, `.env.sample`, `.env.template` and `.env.dist` through. Claude's
@@ -621,9 +621,12 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
   reaches the hook as `Bash` (unobserved), and is then not protected.
 - **A Codex `PreToolUse` timeout is unobserved** (§1 question 6). If Codex does not block on it, a
   slow filesystem lets a patch through `guard path`.
-- **Case-folding filesystems.** On APFS, `Add File: .ENV` with no `.env` present creates a file that
-  later reads as `.env`. An existing `.env` is caught, because `realpath` restores its case. The gap
-  is in `ProtectedPathPolicy`, identical on the Claude path, and is a separate task.
+- **Case-folding filesystems (closed by NEW-154).** On APFS, `Add File: .ENV` with no `.env` present
+  would create a file that later reads as `.env`, because `realpath` restores case only for an entry
+  that exists. `ProtectedPathPolicy` and `HOOK_PROTECTED_PATH_RULES` therefore compare every segment
+  and every home-exact path under `normalize("NFC").toLowerCase()`, so `.ENV`, `.SSH/…`,
+  `.Codex/Auth.json` and `ID_RSA` are refused on every filesystem, and `.Env.Example` stays exempt.
+  On a case-sensitive volume this also refuses a distinct `.ENV`; the stricter side was chosen.
 - **Codex external hooks are `unknown`** under Q2-A. A user who never approves Codex trust keeps
   `plugin_hooks` and `session_start_injection` at `unknown` forever, which is correct.
 - **The latency budget is machine-relative** (§2) until the Phase 11 release matrix measures it on

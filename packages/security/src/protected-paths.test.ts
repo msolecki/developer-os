@@ -80,6 +80,33 @@ describe("ProtectedPathPolicy", () => {
     await expect(policy.assertWritable(allowedPath)).resolves.toBeUndefined();
   });
 
+  // NEW-154: APFS is case-insensitive, so `.SSH/authorized_keys` on an empty home creates `.ssh`.
+  it.each([
+    ".SSH/authorized_keys",
+    ".ENV",
+    ".Env.local",
+    ".AWS/credentials",
+    ".Codex/Auth.json",
+    ".CLAUDE/.Credentials.json",
+  ])("rejects the case variant %s on an empty home", async (name) => {
+    const home = await makeTemporaryDirectory();
+    const policy = new ProtectedPathPolicy(home);
+
+    await expect(policy.assertWritable(join(home, name))).rejects.toBeInstanceOf(
+      SecurityRefusalError,
+    );
+  });
+
+  it.each([".env.example", ".Env.Example"])(
+    "still allows the case variant template %s on an empty home",
+    async (name) => {
+      const home = await makeTemporaryDirectory();
+      const policy = new ProtectedPathPolicy(home);
+
+      await expect(policy.assertWritable(join(home, name))).resolves.toBeUndefined();
+    },
+  );
+
   it("does not treat a protected-name prefix as the protected directory", async () => {
     const policy = new ProtectedPathPolicy(syntheticHome);
     const allowedPath = "/Users/test/.ssh-notes/file";

@@ -138,6 +138,25 @@ describe("guard path", () => {
     expect(await run(filePath(), "Write")).toStrictEqual({ kind: "allow" });
   });
 
+  // NEW-154: APFS is case-insensitive, so a case variant names the same file once it is created.
+  it.each([
+    () => join(home, ".SSH", "authorized_keys"),
+    () => ".Env",
+    () => "sub/.ENV.local",
+    () => join(home, ".Codex", "Auth.json"),
+    () => "sub/.NETRC",
+    () => "keys/ID_RSA",
+    () => "Secrets/db.txt",
+    () => "certs/server.PEM",
+    () => join(home, ".NPMRC"),
+  ])("blocks the case variant %#", async (filePath) => {
+    expect(await run(filePath(), "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
+  });
+
+  it("allows a case-variant .env template", async () => {
+    expect(await run(".Env.Example", "Write")).toStrictEqual({ kind: "allow" });
+  });
+
   it("blocks a project symlink that resolves to a home credential file", async () => {
     await writeFile(join(home, ".npmrc"), "synthetic\n");
     await symlink(join(home, ".npmrc"), join(project, "npmrc-link"));
