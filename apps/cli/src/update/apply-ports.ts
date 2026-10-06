@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { chmod, link, lstat, mkdir, mkdtemp, open, readFile, readlink, realpath, rename, rm, stat, unlink, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -107,15 +106,16 @@ import { readConfigFile } from "../config-file.js";
 import { readRedactionKey } from "../context.js";
 import type { CliContext } from "../context.js";
 import { codexPluginTreeHash, inspectCodexRegistration, validateCodexRegistrationRecord } from "../instructions/codex-registration.js";
+import type { CodexRegistrationRecordV1 } from "../instructions/codex-registration.js";
 import { codexInstructionPaths, resolveVendorHomes } from "../instructions/vendor-homes.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import { admitInstalledV2Home } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../lifecycle/context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "../lifecycle/context.js";
-import { cleanAllocatorTemp, gateManifestAdmission } from "../lifecycle/mutation-gate.js";
+import { allocatedIdsFrom, cleanAllocatorTemp, gateManifestAdmission } from "../lifecycle/mutation-gate.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
 import { BundlePublicationParticipant } from "./bundle-publication.js";
-import { BundleSourceExecutor } from "./bundle-source.js";
+import { BundleSourceExecutor, parentPath as parentOf, sha256Hex } from "./bundle-source.js";
 import { codexExecutableResolver, codexRefreshPolicy, resolveCodexExecutable } from "./codex-refresh.js";
 import type { CodexExecutableFileSystemV1, CodexExecutableIdentityV1 } from "./codex-refresh.js";
 import { codexRegistrationObserver, supervisedOwnerEffectRun } from "./codex-effect-ports.js";
@@ -149,6 +149,8 @@ const LOCK_LEAF = ".lifecycle.lock";
 const PLUGIN_ID = `${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
 const MAX_REGISTRATION_BYTES = 8 * 1024;
 const MAX_MANIFEST_BYTES = 67_108_864;
+/** The signed bundle manifest's bound, as planning fetches it (16 MiB). */
+const MAXIMUM_RETAINED_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024;
 const APPLIED: UpdateParticipantObservationV1 = { state: "applied" };
 const BEFORE: UpdateParticipantObservationV1 = { state: "before" };
 const COMPENSATED: UpdateParticipantObservationV1 = { state: "compensated" };
@@ -165,8 +167,14 @@ function thirdState(reason: string, ...paths: readonly string[]): never {
   throw new LifecycleRecoveryRequiredError(reason, paths);
 }
 
-function sha256(bytes: Uint8Array): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
+async function syncParent(lifecycle: CliLifecycleContext, path: CanonicalAbsolutePathV1): Promise<void> {
+  const parent = await lifecycle.fs.lstat(parentOf(path));
+  if (parent !== null) await lifecycle.fs.syncDirectory(parent);
+}
+
+async function unlinkAndSyncParent(lifecycle: CliLifecycleContext, entry: LifecycleGuardedEntryV1, path: CanonicalAbsolutePathV1): Promise<void> {
+  await lifecycle.fs.unlinkExact(entry);
+  await syncParent(lifecycle, path);
 }
 
 function lifecycleOf(context: CliContext): CliLifecycleContext {
@@ -188,7 +196,7 @@ async function observePath(lifecycle: CliLifecycleContext, path: CanonicalAbsolu
   if (entry.kind === "regular_file") return { entry, sha256: await lifecycle.fs.hashRegular(entry, BigInt(entry.size)) };
   if (entry.kind === "other") {
     const target = await readlink(path, { encoding: "buffer" }).catch(() => null);
-    return { entry: target === null ? entry : { ...entry, size: String(target.byteLength) as LifecycleGuardedEntryV1["size"] }, sha256: target === null ? null : sha256(target) };
+    return { entry: target === null ? entry : { ...entry, size: String(target.byteLength) as LifecycleGuardedEntryV1["size"] }, sha256: target === null ? null : sha256Hex(target) };
   }
   return { entry, sha256: null };
 }
@@ -246,31 +254,44 @@ export function updateCodexPort(context: CliContext): () => Promise<UpdateCodexV
     const runtime = await codexRuntime(context, lifecycle, null);
     if (runtime === null) return null;
     try {
-      return await codexPlanningState(context, runtime);
+      return await codexPlanningState(context, lifecycle, runtime);
     } finally {
       await runCleanups([runtime.dispose]);
     }
   };
 }
 
-async function codexPlanningState(context: CliContext, runtime: CodexRuntimeV1): Promise<UpdateCodexV1> {
+/**
+ * The installed manifest and the Codex registration record planning reads: bounded, never through a
+ * symlink, and the manifest admitted by its validator (W2-PORTS-7).
+ */
+export async function codexPlanningInputs(
+  lifecycle: Pick<CliLifecycleContext, "fs" | "effectiveUid">,
+  manifestFile: CanonicalAbsolutePathV1,
+  registrationFile: CanonicalAbsolutePathV1,
+  admit: (value: unknown) => InstallationManifestV2,
+): Promise<{ readonly manifest: InstallationManifestV2; readonly record: CodexRegistrationRecordV1 | null }> {
+  const manifestBytes = await readBound(lifecycle, manifestFile, MAX_MANIFEST_BYTES) ?? thirdState("update_manifest_absent", manifestFile);
+  const manifest = admit(decodeCanonicalJson(manifestBytes, MAX_MANIFEST_BYTES));
+  // An absent, non-regular, oversized or malformed record is the `unregistered` state `inspectCodexRegistration` reports.
+  const entry = await lifecycle.fs.lstat(registrationFile);
+  if (entry?.kind !== "regular_file" || BigInt(entry.size) > BigInt(MAX_REGISTRATION_BYTES)) return { manifest, record: null };
+  try {
+    return { manifest, record: validateCodexRegistrationRecord(await lifecycle.fs.readRegular(entry, MAX_REGISTRATION_BYTES)) };
+  } catch {
+    return { manifest, record: null };
+  }
+}
+
+async function codexPlanningState(context: CliContext, lifecycle: CliLifecycleContext, runtime: CodexRuntimeV1): Promise<UpdateCodexV1> {
   const homes = codexHomes(context);
   const { pluginRoot, registrationFile } = codexInstructionPaths(homes);
   const policy = codexRefreshPolicy(runtime.executable);
-  const manifestBytes = await readFile(context.paths.manifestFile);
-  const manifest = decodeCanonicalJson(manifestBytes, MAX_MANIFEST_BYTES) as unknown as InstallationManifestV2;
+  const { manifest, record } = await codexPlanningInputs(lifecycle, parseCanonicalAbsolutePathText(context.paths.manifestFile), parseCanonicalAbsolutePathText(registrationFile), (value) => validateManifestV2(value, gateManifestAdmission(context)));
   const tree = manifest.artifacts.flatMap((artifact) =>
     artifact.path.startsWith(`${pluginRoot}/`) && artifact.kind !== "directory" && artifact.verification.mode === "content"
       ? [{ path: artifact.path.slice(pluginRoot.length + 1), sha256: artifact.verification.installedHash }]
       : []);
-  let record = null;
-  try {
-    const bytes = await readFile(registrationFile);
-    record = bytes.byteLength > MAX_REGISTRATION_BYTES ? null : validateCodexRegistrationRecord(bytes);
-  } catch {
-    // An absent or malformed record is the `unregistered` state `inspectCodexRegistration` reports.
-    record = null;
-  }
   const registration = tree.length === 0
     ? "unregistered"
     : await inspectCodexRegistration({ runner: context.runner, codexExecutable: runtime.executable.canonicalPath, codexHome: homes.codexHome, pluginRoot, record, treeHash: codexPluginTreeHash(tree) });
@@ -281,7 +302,7 @@ async function codexPlanningState(context: CliContext, runtime: CodexRuntimeV1):
 // Reopened plans: every leaf is hash-bound by the outer plan, so bytes are rechecked, not trusted.
 // ---------------------------------------------------------------------------------------------
 
-async function readBound(lifecycle: CliLifecycleContext, path: CanonicalAbsolutePathV1, maximumBytes: number): Promise<Uint8Array | null> {
+async function readBound(lifecycle: Pick<CliLifecycleContext, "fs" | "effectiveUid">, path: CanonicalAbsolutePathV1, maximumBytes: number): Promise<Uint8Array | null> {
   const entry = await lifecycle.fs.lstat(path);
   if (entry === null) return null;
   if (entry.kind !== "regular_file" || entry.ownerUid !== lifecycle.effectiveUid || entry.mode !== 0o600 || entry.nlink !== 1 || BigInt(entry.size) > BigInt(maximumBytes)) thirdState("update_leaf_shape", path);
@@ -473,7 +494,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
       participant: manifestParticipant,
       readManifest: async (path, hash) => {
         const bytes = await readBound(lifecycle, path, MAX_MANIFEST_BYTES) ?? thirdState("update_manifest_absent", path);
-        if (sha256(bytes) !== hash) thirdState("update_manifest_hash", path);
+        if (sha256Hex(bytes) !== hash) thirdState("update_manifest_hash", path);
         return decodeCanonicalJson(bytes, MAX_MANIFEST_BYTES) as unknown as InstallationManifestV2;
       },
       removeTombstone: (path, expected) => guardedUnlink(lifecycle, path, expected),
@@ -664,9 +685,7 @@ async function releaseEmptyReservation(lifecycle: CliLifecycleContext, plan: Can
   const entry = await lifecycle.fs.lstat(plan.path);
   if (entry === null) return;
   if (entry.kind !== "regular_file" || entry.size !== "0" || entry.ownerUid !== lifecycle.effectiveUid || entry.nlink !== 1) return;
-  await lifecycle.fs.unlinkExact(entry);
-  const parent = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(plan.path.slice(0, plan.path.lastIndexOf("/"))));
-  if (parent !== null) await lifecycle.fs.syncDirectory(parent);
+  await unlinkAndSyncParent(lifecycle, entry, plan.path);
 }
 
 async function removeUnconsumedPayloads(journals: UpdateParticipantJournalStore, paths: readonly CanonicalAbsolutePathV1[]): Promise<void> {
@@ -690,9 +709,7 @@ async function guardedUnlink(lifecycle: CliLifecycleContext, path: CanonicalAbso
   if (entry === null) return;
   if (!matchesManifestFileIdentity(entry, expected)) thirdState("manifest_bytes_identity", path);
   if ((await lifecycle.fs.hashRegular(entry, BigInt(expected.size))) !== expected.hash) thirdState("manifest_bytes_hash", path);
-  await lifecycle.fs.unlinkExact(entry);
-  const parent = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/"))));
-  if (parent !== null) await lifecycle.fs.syncDirectory(parent);
+  await unlinkAndSyncParent(lifecycle, entry, path);
 }
 
 /** The transitional manifest value is the construction row's own plan-derived bytes. */
@@ -765,10 +782,7 @@ async function verifierPort(context: CliContext, lifecycle: CliLifecycleContext)
   });
   return {
     verify: async (plan) => {
-      const manifestPath = parseCanonicalAbsolutePathText(`${lifecycle.roots.productHome}/state/release-metadata/bundles/${plan.release.bundleManifestHash}.json`);
-      const bytes = await readBound(lifecycle, manifestPath, 16_777_216) ?? thirdState("update_verifier_bundle_manifest", manifestPath);
-      if (sha256(bytes) !== plan.release.bundleManifestHash) thirdState("update_verifier_bundle_manifest", manifestPath);
-      const bundleManifest = validateBundleManifest(decodeCanonicalJson(bytes, 16_777_216));
+      const bundleManifest = await retainedBundleManifest(lifecycle, plan.release, "update_verifier_bundle_manifest");
       const cwd = await mkdtemp(join(tmpdir(), "developer-os-verifier-"));
       try {
         // ponytail: the snapshot is the plan's own digests; the bounded read-only home snapshot joins with the real verifier (A16).
@@ -813,7 +827,7 @@ async function compactStaging(dispatch: Pick<DispatchContextV1, "lifecycle" | "c
     await journals.remove(sources.bundle.row.path, sources.bundle.row.sha256);
   }
   await removeParticipantDirectories(lifecycle, construction);
-  const store = new UpdateConstructionStore({ fs: lifecycle.fs, effectiveUid: lifecycle.effectiveUid, now: () => context.now(), screen: () => undefined, sources: recoverySources(lifecycle, root) }, root);
+  const store = new UpdateConstructionStore({ fs: lifecycle.fs, effectiveUid: lifecycle.effectiveUid, now: () => context.now(), screen: () => undefined, sources: recoverySources(lifecycle, root, () => context.now()) }, root);
   await store.compact(construction);
   await store.removeEnvelope(construction);
   await removeEmptyDirectory(lifecycle, root);
@@ -835,7 +849,7 @@ async function sourcePlansOf(lifecycle: CliLifecycleContext, construction: Updat
     if (row === undefined || row.ordinal >= nextFile) return null;
     const bytes = await readBound(lifecycle, row.path, MAXIMUM_LEAF_PLAN_BYTES);
     if (bytes === null) return null;
-    if (sha256(bytes) !== row.sha256) thirdState("update_source_plan_hash", row.path);
+    if (sha256Hex(bytes) !== row.sha256) thirdState("update_source_plan_hash", row.path);
     return { plan: decodeCanonicalJson(bytes, MAXIMUM_LEAF_PLAN_BYTES) as unknown as T, row };
   };
   return { bundle: await open<BundleSourceStagingPlanV1>("bundle_source_staging"), rollback: await open<RollbackPayloadSourceStagingPlanV1>("rollback_payload_source") };
@@ -846,8 +860,7 @@ async function removeEmptyDirectory(lifecycle: CliLifecycleContext, path: Canoni
   if (entry === null) return;
   for await (const name of lifecycle.fs.names(entry)) thirdState("update_staging_not_empty", `${path}/${name}`);
   await lifecycle.fs.rmdirExactEmpty(entry);
-  const parent = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/"))));
-  if (parent !== null) await lifecycle.fs.syncDirectory(parent);
+  await syncParent(lifecycle, path);
 }
 
 /**
@@ -871,6 +884,7 @@ async function removeParticipantDirectories(lifecycle: CliLifecycleContext, cons
 
 interface LiveSourcesV1 {
   readonly sources: UpdateComposedSourcesV1;
+  readonly screen: ConstructionScreenV1;
   /** The verified scratch extraction; null for a rollback, which reads no scratch. */
   readonly scratch: Parameters<BundleSourceExecutor["stage"]>[1] | null;
 }
@@ -890,13 +904,13 @@ async function readRetainedBlob(lifecycle: CliLifecycleContext, productHome: Can
   }
   const blobPath = retainedRollbackBlobPath(productHome, source);
   const bytes = await readBound(lifecycle, blobPath, source.bytes) ?? thirdState("update_retained_blob_absent", blobPath);
-  if (bytes.byteLength !== source.bytes || sha256(bytes) !== source.sha256) thirdState("update_retained_blob_changed", blobPath);
+  if (bytes.byteLength !== source.bytes || sha256Hex(bytes) !== source.sha256) thirdState("update_retained_blob_changed", blobPath);
   return bytes;
 }
 
 /** Recovery's source port: it never reads a row, and it compensates both nested sources from their plans. */
-function recoverySources(lifecycle: CliLifecycleContext, root: CanonicalAbsolutePathV1, live?: LiveSourcesV1): UpdateConstructionSourcePortV1 {
-  const deps = { fs: lifecycle.fs, effectiveUid: lifecycle.effectiveUid, now: () => new Date() };
+function recoverySources(lifecycle: CliLifecycleContext, root: CanonicalAbsolutePathV1, now: () => Date, live?: LiveSourcesV1): UpdateConstructionSourcePortV1 {
+  const deps = { fs: lifecycle.fs, effectiveUid: lifecycle.effectiveUid, now };
   const liveOnly = (): never => thirdState("update_construction_source_not_live", root);
   return {
     readRow: async (plan, row) => {
@@ -964,7 +978,7 @@ async function retainedRollbackSet(lifecycle: CliLifecycleContext, productHome: 
   const document = async (ordinal: 0 | 1, hash: LowerHexSha256): Promise<unknown> => {
     const at = rollbackPayloadMetadataPath(root, ordinal);
     const bytes = await readBound(lifecycle, at, MAXIMUM_ROLLBACK_DOCUMENT_BYTES) ?? thirdState("update_rollback_evidence_absent", at);
-    if (sha256(bytes) !== hash) thirdState("update_rollback_evidence_changed", at);
+    if (sha256Hex(bytes) !== hash) thirdState("update_rollback_evidence_changed", at);
     return retainedEvidence(at, () => decodeCanonicalJson(bytes, MAXIMUM_ROLLBACK_DOCUMENT_BYTES));
   };
   const plan =await document(0, record.inversePlanHash).then((value) => retainedEvidence(root, () => validateBoundedUpdateInversePlan(value)));
@@ -984,11 +998,12 @@ async function retainedRollbackSet(lifecycle: CliLifecycleContext, productHome: 
 }
 
 /** A release's retained signed bundle manifest, by its content hash. */
-async function retainedBundleManifest(lifecycle: CliLifecycleContext, release: ReleaseIdentityV1): Promise<ReleaseBundleManifestV1> {
+/** `state/release-metadata/bundles/<hash>.json`: the retained signed bundle manifest, hash-checked; exit 6 otherwise. */
+async function retainedBundleManifest(lifecycle: CliLifecycleContext, release: ReleaseIdentityV1, reason = "update_rollback_bundle_manifest"): Promise<ReleaseBundleManifestV1> {
   const at = parseCanonicalAbsolutePathText(`${lifecycle.roots.productHome}/state/release-metadata/bundles/${release.bundleManifestHash}.json`);
-  const bytes = await readBound(lifecycle, at, 16_777_216) ?? thirdState("update_rollback_bundle_manifest", at);
-  if (sha256(bytes) !== release.bundleManifestHash) thirdState("update_rollback_bundle_manifest", at);
-  return retainedEvidence(at, () => validateBundleManifest(decodeCanonicalJson(bytes, 16_777_216)));
+  const bytes = await readBound(lifecycle, at, MAXIMUM_RETAINED_BUNDLE_MANIFEST_BYTES) ?? thirdState(reason, at);
+  if (sha256Hex(bytes) !== release.bundleManifestHash) thirdState(reason, at);
+  return retainedEvidence(at, () => validateBundleManifest(decodeCanonicalJson(bytes, MAXIMUM_RETAINED_BUNDLE_MANIFEST_BYTES)));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1115,36 +1130,39 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
       if (prefixes[0] !== "lc") return thirdState("update_allocation_prefixes");
       const current = lifecycle();
       const { key, residue } = await ledger();
-      const snapshot = await current.inspectLedger(key, residue);
-      const allocatedIds = [...snapshot.coordinators.map((record) => record.id as string), ...[...snapshot.foundation.journals.keys()].map(String)];
-      const block = await reserveLifecycleIdBlock({ fs: current.fs, stateDirectory: parseCanonicalAbsolutePathText(context.paths.stateDir), effectiveUid: current.effectiveUid, uuid: current.uuid, held: global(), allocatedIds: allocatedIds.filter((allocated) => /^[a-z]{2}_[0-9a-f]{64}_[0-9]+$/u.test(allocated)) }, prefixes.length);
+      const allocatedIds = allocatedIdsFrom(await current.inspectLedger(key, residue));
+      const block = await reserveLifecycleIdBlock({ fs: current.fs, stateDirectory: parseCanonicalAbsolutePathText(context.paths.stateDir), effectiveUid: current.effectiveUid, uuid: current.uuid, held: global(), allocatedIds }, prefixes.length);
       const id = formatAllocatedLifecycleId("lc", block.nonce, block.firstCounter) as unknown as LifecycleCoordinatorIdV1;
       await createStagingRoot(current, id);
       return id;
     },
     compose: async (input) => {
+      const screen = await constructionScreen(context);
       const composed = await composeUpdate(input, composeDeps(input.home));
-      composedSources.set(input.coordinatorId, { sources: composed.sources, scratch: input.inputs.verified });
+      composedSources.set(input.coordinatorId, { sources: composed.sources, scratch: input.inputs.verified, screen });
       return composed;
     },
     // Local evidence only: the retained set and previous bundle manifest are reopened here, under the lock.
     composeRollback: async (input) => {
       const deps = composeDeps(input.home);
       const record = input.home.rollback ?? refuse("update_rollback_unavailable", EXIT_CODES.capabilityUnavailable);
+      const screen = await constructionScreen(context);
       const composed = await composeRollback(input, {
         ...deps,
         plannedAt: lifecycle().clock(),
         retained: await retainedRollbackSet(lifecycle(), productHome, record),
         previousBundle: await retainedBundleManifest(lifecycle(), input.preview.target),
       });
-      composedSources.set(input.coordinatorId, { sources: composed.sources, scratch: null });
+      composedSources.set(input.coordinatorId, { sources: composed.sources, scratch: null, screen });
       return composed;
     },
     construction: (id) => {
       const current = lifecycle();
       const root = updateCoordinatorStagingRoot(productHome, id);
-      const screen = screenOf(context);
-      return new UpdateConstructionStore({ fs: current.fs, effectiveUid: current.effectiveUid, now: () => context.now(), screen, sources: recoverySources(current, root, composedSources.get(id)) }, root);
+      const live = composedSources.get(id);
+      // Recovery stages no bytes, so only a live construction has a screen to run.
+      const screen = live?.screen ?? ((): never => thirdState("update_construction_source_not_live", root));
+      return new UpdateConstructionStore({ fs: current.fs, effectiveUid: current.effectiveUid, now: () => context.now(), screen, sources: recoverySources(current, root, () => context.now(), live) }, root);
     },
     coordinator,
     envelope: {
@@ -1197,13 +1215,15 @@ async function removeEmptyStagingRoots(lifecycle: CliLifecycleContext): Promise<
   if (removed) await lifecycle.fs.syncDirectory(parent);
 }
 
-/** The Security secret screen over staged construction bytes: any finding refuses before a byte lands. */
-function screenOf(context: CliContext): (bytes: Uint8Array, scope: RedactionScope) => void {
-  let redactor: ReturnType<typeof createRedactor> | null = null;
-  const key = readRedactionKey(context.paths.stateDir);
-  if (key !== null) redactor = createRedactor(key, { userPatterns: [] });
+type ConstructionScreenV1 = (bytes: Uint8Array, scope: RedactionScope) => void;
+
+/**
+ * The Security secret screen over staged construction bytes: any finding refuses before a byte
+ * lands. Built from `redactorOf`, so it refuses without a key and carries the user's patterns.
+ */
+export async function constructionScreen(context: CliContext, redactorFor: typeof redactorOf = redactorOf): Promise<ConstructionScreenV1> {
+  const redactor = await redactorFor(context);
   return (bytes, scope) => {
-    if (redactor === null) return;
     if (redactor(decoder.decode(bytes), scope).findings.length > 0) refuse("update_construction_secret", EXIT_CODES.securityRefusal);
   };
 }
@@ -1214,8 +1234,7 @@ async function createStagingRoot(lifecycle: CliLifecycleContext, id: LifecycleCo
   let parent = await lifecycle.fs.lstat(parentPath);
   if (parent === null) {
     await lifecycle.fs.mkdirExclusive(parentPath);
-    const staging = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(parentPath.slice(0, parentPath.lastIndexOf("/"))));
-    if (staging !== null) await lifecycle.fs.syncDirectory(staging);
+    await syncParent(lifecycle, parentPath);
     parent = await lifecycle.fs.lstat(parentPath);
   }
   if (parent?.kind !== "directory") return thirdState("lifecycle_guarded_parent", parentPath);
@@ -1230,7 +1249,5 @@ async function createStagingRoot(lifecycle: CliLifecycleContext, id: LifecycleCo
 async function releaseExecutorReservation(lifecycle: CliLifecycleContext, execution: UpdateExecutionPlanV1): Promise<void> {
   const entry = await lifecycle.fs.lstat(execution.recoveryExecutor.finalPath);
   if (entry?.kind !== "regular_file" || entry.size !== "0" || entry.ownerUid !== lifecycle.effectiveUid || entry.nlink !== 1) return;
-  await lifecycle.fs.unlinkExact(entry);
-  const parent = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(execution.recoveryExecutor.finalPath.slice(0, execution.recoveryExecutor.finalPath.lastIndexOf("/"))));
-  if (parent !== null) await lifecycle.fs.syncDirectory(parent);
+  await unlinkAndSyncParent(lifecycle, entry, execution.recoveryExecutor.finalPath);
 }
