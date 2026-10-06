@@ -383,6 +383,7 @@ export type {
   FoundationParticipantSlotV2,
   FoundationTransactionIdV2,
   FreshV2InitIdV1,
+  BootstrapPublishIntentV1,
   FreshV2InitJournalV1,
   FreshV2InitPlanV1,
   LifecycleBootstrapLockV1,

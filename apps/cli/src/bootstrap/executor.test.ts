@@ -8,7 +8,6 @@ import { deriveBootstrapRetentionLocations, encodeCanonicalJson, EXIT_CODES } fr
 import type { CanonicalJsonValue } from "@developer-os/core";
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
-import { runDoctorReport } from "../commands/doctor.js";
 import { runInit } from "../commands/init.js";
 import { runUninstall } from "../commands/uninstall.js";
 import { redactionKeyPath } from "../context.js";
@@ -32,6 +31,7 @@ const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 const REAL_FILESYSTEM_DEATH_MATRIX_TIMEOUT_MS = 600_000;
 /** Reached only by compensation, so the sweep injects a forward failure first and expects a rollback. */
 const COMPENSATION_DEATH_POINTS = new Set([
+  "after_publish_intent_resolved",
   "after_compensation_staged_file",
   "after_compensation_evidence",
   "after_rolled_back",
@@ -460,9 +460,12 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       const fixture = await createCommandFixture(`bootstrap-fine-${name}`, {
         bootstrapAvailable: true,
         bootstrapInterruptAfter: name,
-        ...(FAILED_FORWARD_DEATH_POINTS.has(name)
-          ? { bootstrapFailureAfter: "during_payload_write" as const }
-          : {}),
+        // NEW-189: only a step that fails again while compensation finishes it leaves an intent to resolve.
+        ...(name === "after_publish_intent_resolved"
+          ? { interruptAfter: "applied", interruptKind: "fresh_init_artifacts" }
+          : FAILED_FORWARD_DEATH_POINTS.has(name)
+            ? { bootstrapFailureAfter: "during_payload_write" as const }
+            : {}),
       });
       const interrupted = await runInit(fixture.context, ACCEPTED);
 
@@ -511,6 +514,10 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
         }
       }
 
+      if (authorityPlan !== null && COMPENSATION_DEATH_POINTS.has(name)) {
+        // The death fired inside the rollback, so it is not yet retained.
+        expect(await currentJournal(authorityPlan.value)).not.toMatchObject({ phase: "retained" });
+      }
       fixture.disableBootstrapInterrupt();
       fixture.disableBootstrapFailure();
       await closeBootstrapProcess(fixture);
@@ -792,12 +799,12 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
-   * NEW-167's known limitation: when the forward Foundation participant fails
-   * again while compensation finishes it, compensation keeps refusing and the
-   * install stays in `compensating` until the cause is fixed and `init` reruns.
-   * The retry republishes nothing, and `doctor` routes the user to `init`.
+   * NEW-189 (D87): the forward Foundation participant fails again while
+   * compensation tries to finish it. Its publish intent resolves to
+   * `published` by identity, so the install still reaches a retained
+   * rollback instead of staying in `compensating` (NEW-167's old limitation).
    */
-  it("keeps refusing, republishing nothing, when the forward Foundation participant fails again", async () => {
+  it("rolls back and retains when the forward Foundation participant fails again", async () => {
     const fixture = await createCommandFixture("bootstrap-foundation-forward-failure-recurs", {
       bootstrapAvailable: true,
       interruptAfter: "applied",
@@ -807,41 +814,95 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     const failed = await runInit(fixture.context, ACCEPTED);
 
     if (failed.ok) throw new Error("init succeeded through a recurring Foundation failure");
-    // NEW-179 A-4: the refused rollback no longer replaces the forward failure.
     expect(failed.code).toBe(EXIT_CODES.recoveryRequired);
-    expect(failed.error.message).toContain("synthetic interruption after applied; rolling it back also failed");
+    expect(failed.error.message).toContain("synthetic interruption after applied; finishing the interrupted step also failed");
     const persisted = await persistedPlan(fixture);
     const forward = participant(persisted.value, "forward");
-    const published = [
-      String((forward.initialJournal as JsonRecord).finalPath),
-      ...(forward.mutations as JsonRecord[]).map((mutation) => String(mutation.targetPath)),
-    ];
-    const identities = async (): Promise<readonly string[]> => Promise.all(published.map(async (path) => {
-      const stats = await nodeFs.lstat(path, { bigint: true });
-      return `${path}:${stats.dev.toString(10)}:${stats.ino.toString(10)}`;
+    const mutations = forward.mutations as JsonRecord[];
+    const terminal = await currentJournal(persisted.value);
+    expect(terminal, JSON.stringify({ failed, trace: fixture.bootstrapTrace.slice(-30) })).toMatchObject({
+      phase: "retained",
+      terminalOutcome: "rolled_back",
+      nextFoundationParticipant: 0,
+      compensationNext: -1,
+      publishIntent: { scope: "foundation", ordinal: 0, published: mutations.length },
+    });
+    const finalPath = String((forward.initialJournal as JsonRecord).finalPath);
+    expect(await exists(finalPath)).toBe(false);
+    for (const mutation of mutations) expect(await exists(String(mutation.stagedPath))).toBe(false);
+    expect(fixture.bootstrapTrace.some((row) => row.startsWith("foundation:compensation:apply:"))).toBe(false);
+    expect(fixture.transactionUnlinkRequests).toStrictEqual([]);
+    const admission = await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+      productHome: fixture.paths.home,
+      stateDirectory: fixture.paths.stateDir,
+      initialRoots: [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
     }));
-    const before = await identities();
+    expect(admission.report.ids.map((summary) => summary.status)).toStrictEqual(["verified"]);
     await closeBootstrapProcess(fixture);
 
     const retried = await runInit(fixture.rebuildContext(), ACCEPTED);
 
     expect(retried.ok ? 0 : retried.code).toBe(EXIT_CODES.recoveryRequired);
-    expect(await currentJournal(persisted.value)).toMatchObject({
-      phase: "compensating",
-      terminalOutcome: null,
-      nextFoundationParticipant: 0,
+    expect(await currentJournal(persisted.value)).toStrictEqual(terminal);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-189 (D87): a created file renamed to its planned path whose step fails
+   * again while compensation tries to finish it. The resolved intent retains
+   * the payload where it is, also after a death right after the resolution.
+   */
+  it.each([false, true])("rolls back a created file whose publication fails again (death after resolution: %s)", async (die) => {
+    let renamed: { readonly dev: string; readonly ino: string } | null = null;
+    const fixture: CommandFixture = await createCommandFixture(`bootstrap-created-file-recurs-${String(die)}`, {
+      bootstrapAvailable: true,
+      ...(die ? { bootstrapInterruptAfter: "after_publish_intent_resolved" as const } : {}),
+      bootstrapFailureHook: (point) => {
+        if (point === "after_forward_rename" && renamed === null) {
+          const planName = readdirSync(fixture.paths.stateDir).find((name) => name.endsWith(".plan.json"));
+          const plan = JSON.parse(readFileSync(join(fixture.paths.stateDir, String(planName)), "utf8")) as {
+            readonly createdPaths: readonly { readonly kind: string; readonly path: string }[];
+          };
+          const stats = lstatSync(String(plan.createdPaths.find((row) => row.kind === "file")?.path), { bigint: true });
+          renamed = { dev: stats.dev.toString(10), ino: stats.ino.toString(10) };
+          throw new Error("synthetic bootstrap failure at after_forward_rename");
+        }
+        if (point === "after_creation_evidence" && renamed !== null) throw new Error("synthetic recurring publication failure");
+      },
     });
-    expect(await identities()).toStrictEqual(before);
-    for (const mutation of forward.mutations as JsonRecord[]) {
-      expect(await exists(String(mutation.stagedPath))).toBe(false);
+
+    const failed = await runInit(fixture.context, ACCEPTED);
+
+    if (failed.ok) throw new Error("init succeeded through a recurring publication failure");
+    const persisted = await persistedPlan(fixture);
+    if (die) {
+      expect(await currentJournal(persisted.value)).toMatchObject({ phase: "compensating" });
+      fixture.disableBootstrapFailure();
+      fixture.disableBootstrapInterrupt();
+      await closeBootstrapProcess(fixture);
+      const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+      expect(resumed.ok ? 0 : resumed.code).toBe(EXIT_CODES.recoveryRequired);
+    } else {
+      expect(failed.error.message).toContain("synthetic bootstrap failure at after_forward_rename; finishing the interrupted step also failed");
     }
-    expect(fixture.transactionUnlinkRequests).toStrictEqual([]);
-    await closeBootstrapProcess(fixture);
-    const report = await runDoctorReport(fixture.rebuildContext());
-    expect(report.checks.find((check) => check.id === "transactions")).toMatchObject({
-      status: "fail",
-      recovery: "developer-os init",
-    });
+    expect(await currentJournal(persisted.value), JSON.stringify({ failed, trace: fixture.bootstrapTrace.slice(-30) }))
+      .toMatchObject({
+        phase: "retained",
+        terminalOutcome: "rolled_back",
+        compensationNext: -1,
+        publishIntent: { scope: "ordinary", published: 2 },
+      });
+    const identity = renamed as { readonly dev: string; readonly ino: string } | null;
+    if (identity === null) throw new Error("no forward rename was observed");
+    expect(await findIdentity(fixture.root, identity.dev, identity.ino))
+      .toContain(`.developer-os-retained.${String(persisted.value.id)}.`);
+    // Its durable creation evidence is retained too, so the envelope verifies and a new init may start beside it.
+    const admission = await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+      productHome: fixture.paths.home,
+      stateDirectory: fixture.paths.stateDir,
+      initialRoots: [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
+    }));
+    expect(admission.report.ids.map((summary) => summary.status)).toStrictEqual(["verified"]);
+    expect(admission.blocksNewIntent).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**

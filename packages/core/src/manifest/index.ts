@@ -115,6 +115,7 @@ export type {
   FoundationParticipantRefV2,
   FoundationParticipantSlotV2,
   FoundationTransactionIdV2,
+  BootstrapPublishIntentV1,
   FreshV2InitJournalV1,
   FreshV2InitPlanV1,
   LifecycleBootstrapLockV1,

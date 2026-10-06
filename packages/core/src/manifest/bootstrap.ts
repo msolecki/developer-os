@@ -155,6 +155,23 @@ export interface BootstrapPayloadEvidenceV1 {
   readonly ino: UInt64DecimalV1;
 }
 
+/**
+ * Spec 2 §6.4 (Amended 2026-10-06, NEW-189, D87): the publication rename a
+ * forward step is about to make — a created or launchability file, or the
+ * forward Foundation participant (its journal, then its mutations in order).
+ * It is journaled before the rename and cleared with the cursor advance. A
+ * compensation resolves it once: absent when nothing moved, or `published`
+ * when the rename happened (1 for a file, 2 once its creation evidence is
+ * durable as well; for Foundation the count of its
+ * mutations already at their targets). A resolved intent stays through
+ * `rolled_back` and retention, which read the payload where it really is.
+ */
+export interface BootstrapPublishIntentV1 {
+  readonly scope: "ordinary" | "launchability" | "foundation";
+  readonly ordinal: number;
+  readonly published: number | null;
+}
+
 export type BootstrapPayloadWriteStateV1 =
   | { readonly state: "idle" }
   | { readonly state: "create_intent"; readonly ordinal: number }
@@ -351,6 +368,8 @@ interface BootstrapJournalCommonV1 {
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   readonly retentionNext: number | null;
   readonly retentionTerminalPreimage?: BootstrapRetentionTerminalPreimageV1;
+  /** Present only while a publication rename is intended or resolved (NEW-189); absent keeps older records byte-identical. */
+  readonly publishIntent?: BootstrapPublishIntentV1;
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
@@ -790,8 +809,9 @@ function hasForwardPrefix(
   return journal.nextPayload <= counts.payloads && journal.nextFoundationParticipant === 0 && journal.nextLaunchabilityPath === 0;
 }
 
-function reachedReversibleStepCount(
-  journal: BootstrapJournalCommonV1,
+/** The one definition of the reversible steps a journal reached; an open publish intent is one (NEW-189). */
+export function reachedReversibleStepCount(
+  journal: Pick<BootstrapJournalCommonV1, "nextPayload" | "payloadWriteState" | "nextCreatedPath" | "nextFoundationParticipant" | "nextLaunchabilityPath" | "manifestCursor" | "publishIntent">,
 ): number {
   return (
     journal.nextPayload +
@@ -799,8 +819,60 @@ function reachedReversibleStepCount(
     journal.nextCreatedPath +
     journal.nextFoundationParticipant +
     journal.nextLaunchabilityPath +
-    Math.min(journal.manifestCursor, 1)
+    Math.min(journal.manifestCursor, 1) +
+    (journal.publishIntent === undefined ? 0 : 1)
   );
+}
+
+interface PublishIntentPlanV1 {
+  readonly createdPaths: readonly { readonly kind: string }[];
+  readonly launchabilityPaths: readonly { readonly kind: string }[];
+  readonly foundationParticipants: readonly { readonly role: { readonly kind: string }; readonly mutations: readonly unknown[] }[];
+}
+
+/** NEW-189: the record grammar of `publishIntent`, shared by both journal validators. */
+export function validateBootstrapPublishIntent(value: unknown, plan: PublishIntentPlanV1): BootstrapPublishIntentV1 {
+  const input = record(value);
+  exact(input, ["ordinal", "published", "scope"]);
+  const forwards = plan.foundationParticipants.filter((participant) => participant.role.kind === "forward");
+  const rows = input.scope === "ordinary" ? plan.createdPaths
+    : input.scope === "launchability" ? plan.launchabilityPaths
+      : input.scope === "foundation" ? forwards : refuse();
+  const ordinal = integer(input.ordinal, 0, Math.max(rows.length - 1, 0));
+  const row = rows[ordinal];
+  if (row === undefined) return refuse();
+  // A file publishes 1, or 2 once its creation evidence is durable too.
+  const maximumPublished = "mutations" in row ? row.mutations.length : row.kind === "file" ? 2 : refuse();
+  const published = input.published === null ? null : integer(input.published, input.scope === "foundation" ? 0 : 1, maximumPublished);
+  return { scope: input.scope as BootstrapPublishIntentV1["scope"], ordinal, published };
+}
+
+/**
+ * NEW-189: where an intent may stand. It names the frontier step of its own
+ * forward phase; while compensating it is resolved exactly at its own step;
+ * a terminal rollback keeps only a resolved one.
+ */
+export function bootstrapPublishIntentStateAdmits(
+  journal: BootstrapJournalCommonV1,
+  counts: { readonly payloads: number; readonly created: number; readonly foundation: number; readonly launchability: number },
+): boolean {
+  const intent = journal.publishIntent;
+  if (intent === undefined) return true;
+  if (journal.payloadWriteState.state !== "idle" || journal.manifestCursor !== 0 || journal.nextPayload !== counts.payloads) return false;
+  const frontier = intent.scope === "ordinary"
+    ? intent.ordinal === journal.nextCreatedPath && journal.nextFoundationParticipant === 0 && journal.nextLaunchabilityPath === 0
+    : intent.scope === "foundation"
+      ? journal.nextCreatedPath === counts.created && intent.ordinal === journal.nextFoundationParticipant && journal.nextLaunchabilityPath === 0
+      : journal.nextCreatedPath === counts.created && journal.nextFoundationParticipant === counts.foundation && intent.ordinal === journal.nextLaunchabilityPath;
+  if (!frontier) return false;
+  const forwardPhase = intent.scope === "ordinary" ? "creating" : intent.scope === "foundation" ? "foundation_applying" : "launchability_publishing";
+  if (journal.phase === forwardPhase) return intent.published === null;
+  if (journal.phase === "compensating") {
+    const step = reachedReversibleStepCount(journal) - 1;
+    return intent.published === null ? journal.compensationNext === step : (journal.compensationNext ?? step) < step;
+  }
+  return (journal.phase === "rolled_back" || journal.phase === "retaining" || journal.phase === "retained") &&
+    journal.terminalOutcome === "rolled_back" && intent.published !== null;
 }
 
 function validateJournalTable(
@@ -898,9 +970,11 @@ export function validateBootstrapJournal(
       "terminalOutcome",
       "updatedAt",
     ] as const;
-    exact(input, retentionPhase
-      ? [...journalKeys, "retentionTerminalPreimage"]
-      : journalKeys);
+    exact(input, [
+      ...journalKeys,
+      ...(retentionPhase ? ["retentionTerminalPreimage"] : []),
+      ...("publishIntent" in input ? ["publishIntent"] : []),
+    ]);
     if (input.schemaVersion !== 1 || input.id !== plan.id || input.planHash !== planHash(plan)) return refuse();
     const phases: readonly BootstrapJournalPhaseV1[] = ["planned", "payload_staging", "creating", "foundation_applying", "launchability_publishing", "manifest_publishing", "verifying", "compensating", "finalized", "rolled_back", "retaining", "retained"];
     if (typeof input.phase !== "string" || !phases.includes(input.phase as BootstrapJournalPhaseV1)) return refuse();
@@ -949,10 +1023,13 @@ export function validateBootstrapJournal(
           ? null
           : integer(input.retentionNext, 0, MAX_RETENTION_NEXT),
       ...(retentionTerminalPreimage === undefined ? {} : { retentionTerminalPreimage }),
+      ...("publishIntent" in input ? { publishIntent: validateBootstrapPublishIntent(input.publishIntent, plan) } : {}),
       createdAt: timestamp(input.createdAt),
       updatedAt: timestamp(input.updatedAt),
     };
-    validateJournalTable(journal, { payloads: plan.payloads.length, created: plan.createdPaths.length, foundation: forwardCount, launchability: plan.launchabilityPaths.length });
+    const journalCounts = { payloads: plan.payloads.length, created: plan.createdPaths.length, foundation: forwardCount, launchability: plan.launchabilityPaths.length };
+    validateJournalTable(journal, journalCounts);
+    if (!bootstrapPublishIntentStateAdmits(journal, journalCounts)) return refuse();
     if (sequence === "0" && journal.phase !== "planned") return refuse();
     if (encoder.encode(encodeCanonicalJson(journal as unknown as CanonicalJsonValue)).byteLength > plan.maximumJournalBytes) return refuse();
     return structuredClone(journal);
