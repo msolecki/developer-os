@@ -83,7 +83,7 @@ export function detectWorkflowDrift(
         path: artifact.path,
         line: null,
         message:
-          "this artifact has never been generated; run developer-os workflow render",
+          "this artifact has never been generated; run npm run render:claude or npm run render:codex",
       });
       continue;
     }
@@ -92,7 +92,7 @@ export function detectWorkflowDrift(
     findings.push({
       path: artifact.path,
       line,
-      message: "differs from a fresh render; run developer-os workflow render",
+      message: "differs from a fresh render; run npm run render:claude or npm run render:codex",
     });
   }
   return findings;
