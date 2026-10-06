@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import {
   mkdtemp,
   mkdir,
+  realpath,
   rm,
   symlink,
   unlink,
@@ -201,6 +202,23 @@ describe("ProtectedPathPolicy", () => {
     const policy = new ProtectedPathPolicy(home);
 
     await expect(policy.readText(allowedFile)).resolves.toBe(safeContent);
+  });
+
+  it("refuses a path that is not already canonical only when the caller requires it", async () => {
+    const temporaryDirectory = await realpath(await makeTemporaryDirectory());
+    const home = join(temporaryDirectory, "synthetic-home");
+    const file = join(home, "notes", "real.md");
+    const alias = join(home, "alias.md");
+    await mkdir(join(home, "notes"), { recursive: true });
+    await writeFile(file, "synthetic note", "utf8");
+    await symlink(file, alias);
+    const policy = new ProtectedPathPolicy(home);
+
+    await expect(policy.readText(alias)).resolves.toBe("synthetic note");
+    await expect(policy.readText(file, undefined, { requireCanonical: true })).resolves.toBe("synthetic note");
+    await expect(policy.readText(alias, undefined, { requireCanonical: true })).rejects.toMatchObject({
+      code: EXIT_CODES.securityRefusal,
+    });
   });
 
   it("rejects an innocent alias outside home that resolves to synthetic auth data", async () => {
