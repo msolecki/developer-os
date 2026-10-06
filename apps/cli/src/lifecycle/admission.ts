@@ -10,10 +10,12 @@ import { join } from "node:path";
 import {
   decodeCanonicalJson,
   EXIT_CODES,
+  hashBytes,
   LifecycleRecoveryRequiredError,
   parseLifecycleActivationRecord,
   parseLifecycleIdAllocator,
   parseLifecycleInstallNonce,
+  parseLowerHexSha256,
   SCHEDULED_JOB_IDS,
   validateManifestV2,
 } from "@developer-os/core";
@@ -27,6 +29,7 @@ import type {
   LifecycleGuardedFileSystemV1,
   LifecycleIdAllocatorV1,
   LifecycleInstallNonceV1,
+  LowerHexSha256,
   ManifestAdmissionContextV1,
   RuntimePaths,
 } from "@developer-os/core";
@@ -87,6 +90,8 @@ export class V2HomeAdmissionError extends Error {
 
 export interface AdmittedV2HomeV1 {
   readonly manifest: InstallationManifestV2;
+  /** SHA-256 of the bytes `manifest` was decoded from, so a later locked read can prove it is the same file (NEW-175). */
+  readonly manifestHash: LowerHexSha256;
   readonly nonce: LifecycleInstallNonceV1;
   readonly allocator: LifecycleIdAllocatorV1;
   readonly globalLock: LifecycleGuardedEntryV1;
@@ -279,6 +284,7 @@ export async function admitInstalledV2Home(input: {
 
   return {
     manifest,
+    manifestHash: parseLowerHexSha256(hashBytes(observed.bytes)),
     nonce,
     allocator,
     globalLock,
