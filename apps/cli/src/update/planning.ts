@@ -814,7 +814,6 @@ function ownerRollbackPreview(leaf: RetainedOwnerInverseProjectionV1, manifest: 
   for (const row of manifest.artifacts) if (row.owner === leaf.owner && !touched.has(row.path)) paths.unchanged.push(row.path);
   return {
     owner: leaf.owner,
-    partition: [...paths.create, ...paths.replace, ...paths.remove, ...paths.unchanged],
     paths,
     externalEffects: leaf.externalEffects.length === 0 ? 0 : 1,
   };

@@ -470,7 +470,8 @@ describe("planner draft materialization", () => {
       unchanged: ["/home/.codex/large.bin"],
     });
     expect(codex?.counts.externalEffects).toBe(1);
-    expect(candidate.preview.migrations.map((migration) => migration.affectedPaths)).toEqual([["notes/a.md"], ["/product/state/config.json"]]);
+    // D87 (W2-BUNDLE-1): the preview lists migrations in execution order, product_state first.
+    expect(candidate.preview.migrations.map((migration) => migration.affectedPaths)).toEqual([["/product/state/config.json"], ["notes/a.md"]]);
     expect(candidate.materialization.outputBlobs).toEqual(screened().map(({ ordinal, bytes: size, sha256 }) => ({ ordinal, bytes: size, sha256 })));
     expect(JSON.stringify(candidate.preview)).not.toContain(transcript().requestHash);
   });

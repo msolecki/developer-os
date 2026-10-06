@@ -150,7 +150,6 @@ export type {
   RollbackPayloadIdV1,
   RollbackPayloadPreviewV1,
   RollbackPreviewInputV1,
-  SafeRenderedPathV1,
   SchemaMigrationPreviewV1,
   UpdateDownloadPreviewV1,
   UpdatePlanPreviewV1,
