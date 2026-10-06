@@ -6,6 +6,7 @@ import { ProtectedPathPolicy } from "@developer-os/security";
 import { excerpt } from "../outcome.js";
 import { editedPaths, HOOK_TOOL_MATCHERS } from "../payload.js";
 import { relativePathBase, resolveEditedPath, resolveProjectRoot } from "../project-root.js";
+import { protectedCodexHomes } from "../../instructions/vendor-homes.js";
 import type { HookVerbHandler } from "../registry.js";
 import { FORMATTER_TIMEOUT_MS, HOOK_CHILD_ENV, isRegularFile, localBin } from "./child.js";
 
@@ -42,8 +43,9 @@ async function formattable(
   base: string,
   paths: readonly string[],
   userHome: string,
+  env: Readonly<Record<string, string | undefined>>,
 ): Promise<readonly string[]> {
-  const policy = new ProtectedPathPolicy(userHome);
+  const policy = new ProtectedPathPolicy(userHome, { codexHomes: protectedCodexHomes(env, userHome) });
   const files: string[] = [];
   for (const path of paths) {
     try {
@@ -66,7 +68,7 @@ export const guardFormat: HookVerbHandler = async (payload, runtime) => {
   if (paths === null) return { kind: "allow" };
   if (runtime.userHome === null) return { kind: "allow", note: "format skipped: user home is unknown" };
   const root = await resolveProjectRoot(runtime.cwd);
-  const files = await formattable(root, await relativePathBase(runtime.vendor, runtime.cwd, root), paths, runtime.userHome);
+  const files = await formattable(root, await relativePathBase(runtime.vendor, runtime.cwd, root), paths, runtime.userHome, runtime.env);
   if (files.length === 0) return { kind: "allow" };
   const formatter = await formatterFor(root);
   if (formatter === null) return { kind: "allow" };

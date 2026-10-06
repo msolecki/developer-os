@@ -822,7 +822,9 @@ not exist here" look identical from outside and are not the same thing.
 - **No credentials.** No Keychain, no token store. The protected-path policy refuses `.ssh`,
   `.aws`, `.gnupg`, `.env` and `.env.*` — but *not* `.envrc` or `.environment` — and three
   exact files (`.config/gh/hosts.yml`, `.codex/auth.json`, `.claude/.credentials.json`), on
-  both the declared and the canonical path.
+  both the declared and the canonical path. Under the same `read-codex-auth` rule it also refuses
+  `auth.json` in `CODEX_HOME` and in the Codex home a Codex attach recorded (CRITIC-2); Claude's
+  static `Read(~/.codex/auth.json)` deny row still names only the default home.
 - **No scheduler, no Git mutation, no telemetry.** **Amended 2026-10-06 (FLOW-DOCS-5): this describes
   Foundation only.** Plan 1b shipped both absences away: a scheduler (`launchd` automation) and
   Git mutation (`git sync`) now exist as opt-in authority behind an activation record, as

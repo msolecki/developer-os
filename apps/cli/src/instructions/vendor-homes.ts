@@ -1,7 +1,7 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { LifecycleRecoveryRequiredError, parseCanonicalAbsolutePathText } from "@developer-os/core";
+import { LifecycleRecoveryRequiredError, parseCanonicalAbsolutePathText, resolveRuntimePaths } from "@developer-os/core";
 import type { CanonicalAbsolutePathV1 } from "@developer-os/core";
 
 /** `foundation.md` §12.5: `H`, `P` and `C`, resolved once per command. */
@@ -73,6 +73,24 @@ export function resolveVendorHomes(
     productHome: resolve(productHome) as CanonicalAbsolutePathV1,
     codexHome: readRecordedCodexHome(productHome) ?? codexHomeFromEnv(env, userHome),
   };
+}
+
+/**
+ * CRITIC-2: the Codex homes whose `auth.json` `ProtectedPathPolicy` refuses besides `~/.codex`:
+ * `CODEX_HOME` and the home a Codex attach recorded. Never throws, because a guard or `doctor` must
+ * still run: an unreadable record (which every command that admits it refuses on its own) adds
+ * nothing, and the other two homes stay protected.
+ */
+export function protectedCodexHomes(env: Readonly<Record<string, string | undefined>>, userHome: string): readonly string[] {
+  const homes: string[] = [codexHomeFromEnv(env, userHome)];
+  try {
+    const productHome = env.DEVELOPER_OS_HOME;
+    const recorded = readRecordedCodexHome(resolveRuntimePaths({ HOME: userHome, ...(productHome === undefined ? {} : { DEVELOPER_OS_HOME: productHome }) }).home);
+    if (recorded !== null) homes.push(recorded);
+  } catch {
+    // See above: the record is refused where it is admitted.
+  }
+  return homes;
 }
 
 export const claudeInstructionPaths = (homes: VendorHomesV1) => {
