@@ -10,8 +10,8 @@ import { tablePermits as tablePermitsGeneric } from "@developer-os/core";
  * full.
  *
  * `durable_project_guidance` is reported and used by nothing: Codex architecture former §6.1 writes
- * no `AGENTS.md` at any scope. `subagents` likewise: the hook events exist and
- * no canonical workflow spawns a subagent (§15.4).
+ * no `AGENTS.md` at any scope. `subagents` is in use: the catalog agents ship
+ * as `agents/developer-os-<id>.toml` (D87, NEW-186).
  */
 export const CODEX_CAPABILITY_KEYS = [
   "skills",

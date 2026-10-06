@@ -26,11 +26,12 @@ function runner(
 const installation = { executable: "claude", version: "2.1.216" } as const;
 const pluginDirectory = "/synthetic/plugin";
 
-/** The shipped tree's shape: a manifest and six skills. */
+/** The shipped tree's shape: a manifest, a skill per workflow and the catalog agents. */
 const skillsPresent = (): Promise<readonly string[]> =>
   Promise.resolve([
     ".claude-plugin/plugin.json",
     "skills/developer-os-shared/SKILL.md",
+    "agents/code-reviewer.md",
   ]);
 
 describe("probeClaude", () => {
@@ -44,20 +45,38 @@ describe("probeClaude", () => {
   });
 
   /**
-   * The tree ships a manifest and six skills — no `hooks/`, no `agents/`. A
-   * clean exit code from `claude plugin validate` therefore cannot have
-   * observed either, and both used to be settled by it and resolve to `yes`.
-   * Restoring a key means shipping the artifact it describes in the same
-   * change. Found by fresh-context review, 2026-08-11.
+   * `claude plugin validate` checks agent frontmatter, and the tree ships the
+   * catalog agents under `agents/` (D87, NEW-186): a clean exit over a listed
+   * `agents/*.md` observes `subagents`. A tree without one is `absent`, the
+   * same non-empty-set rule `skills` follows.
    */
-  it("settles nothing about artifacts the tree does not contain", async () => {
+  it("observes subagents only when the validated tree holds an agent file", async () => {
+    const seen = await probeClaude(installation, {
+      runner: runner(() => ({ exitCode: 0, stdout: "OK" })),
+      pluginDirectory,
+      listPluginFiles: skillsPresent,
+    });
+    expect(seen.get("subagents")).toBe("observed");
+    const agentless = await probeClaude(installation, {
+      runner: runner(() => ({ exitCode: 0, stdout: "OK" })),
+      pluginDirectory,
+      listPluginFiles: () => Promise.resolve([".claude-plugin/plugin.json", "skills/x/SKILL.md"]),
+    });
+    expect(agentless.get("subagents")).toBe("absent");
+  });
+
+  /**
+   * Hooks are observed only through firing records (`hooks.md` §3.6): a clean
+   * exit code from `claude plugin validate` never settles `plugin_hooks`.
+   * Found by fresh-context review, 2026-08-11.
+   */
+  it("settles nothing about plugin hooks", async () => {
     const seen = await probeClaude(installation, {
       runner: runner(() => ({ exitCode: 0, stdout: "OK" })),
       pluginDirectory,
       listPluginFiles: skillsPresent,
     });
     expect(seen.has("plugin_hooks")).toBe(false);
-    expect(seen.has("subagents")).toBe(false);
   });
 
   it("marks them absent when validate exits non-zero", async () => {

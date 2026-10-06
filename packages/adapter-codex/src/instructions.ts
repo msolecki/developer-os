@@ -161,8 +161,8 @@ export function renderInstructionTree(
 }
 
 /**
- * The whole marketplace root: `renderCodexInstallTree` (marketplace, plugin manifest, the six
- * workflow skills) plus the instruction skills. `context` is `renderMarketplace`'s, which refuses a
+ * The whole marketplace root: `renderCodexInstallTree` (marketplace, plugin manifest, one skill
+ * per workflow) plus the instruction skills. `context` is `renderMarketplace`'s, which refuses a
  * relative home. A path claimed twice refuses: an instruction skill may not shadow a workflow skill.
  */
 export function renderCodexVendorTree(

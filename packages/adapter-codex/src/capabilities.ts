@@ -19,7 +19,10 @@ export type CodexCapabilities = Readonly<Record<CodexCapabilityKey, CapabilitySt
  * until a trusted hook has fired both stay `unknown`. The two capture keys stay
  * because knowledge-pipeline architecture note §2 declines both automatic
  * capture paths — no capture hook fires, and no `developer-os run codex`
- * wrapper is built.
+ * wrapper is built. `subagents` left this list with D87 (NEW-186), with the
+ * Claude twin: the catalog agents ship as `agents/developer-os-<id>.toml`.
+ * `codex plugin list --json` does not list them, so the probe does not settle
+ * the key and it reports `unknown`.
  *
  * **Removing a key from this list requires, in the same change, the artifact it
  * describes and a test that observed it working.** That rule is why
@@ -28,7 +31,6 @@ export type CodexCapabilities = Readonly<Record<CodexCapabilityKey, CapabilitySt
 export const CODEX_NOT_USED_KEYS: readonly CodexCapabilityKey[] = [
   "session_end_capture",
   "pre_compact_backup",
-  "subagents",
   "durable_project_guidance",
 ];
 

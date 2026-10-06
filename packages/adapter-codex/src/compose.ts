@@ -16,7 +16,7 @@ import { CodexRenderer, SHARED_WORKFLOW_ID } from "./render.js";
  * re-validates it.
  *
  * Ordering is not taken from the caller. `buildPluginTree` sorts by code
- * point, so a directory reader that yields the six workflows in any order
+ * point, so a directory reader that yields the workflows in any order
  * produces the same bytes.
  *
  * Every path this returns is relative to the **plugin root**

@@ -170,11 +170,19 @@ describe("the hook keys", () => {
  * A state that advises a command which will not exist is a value that
  * validates while the property it names is false.
  */
+/** D87 (NEW-186): the catalog agents ship, so `subagents` is settled by the probe like `skills`. */
+describe("subagents", () => {
+  it("is yes when observed, no when the probe saw no agent, unknown when nobody asked", () => {
+    expect(resolveCapabilities("2.1.216", new Map([["subagents", "observed"]])).subagents).toBe("yes");
+    expect(resolveCapabilities("2.1.216", new Map([["subagents", "absent"]])).subagents).toBe("no");
+    expect(resolveCapabilities("2.1.216", new Map()).subagents).toBe("unknown");
+  });
+});
+
 describe("the surfaces this product does not use", () => {
   const NOT_USED_KEYS = [
     "session_end_capture",
     "pre_compact_backup",
-    "subagents",
     "durable_project_guidance",
   ] as const satisfies readonly ClaudeCapabilityKey[];
 

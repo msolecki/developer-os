@@ -73,11 +73,12 @@ content to capture.
 kept beside a new value: it meant "we are not certain, and the wrapper produces the same capture
 anyway", and the decision deletes the second half, leaving advice to run a command that will not
 exist. `CAPABILITY_STATES` is `yes | unknown | not-used`
-(`packages/core/src/capabilities/index.ts`), and, since A13, `session_end_capture`, `pre_compact_backup`, `subagents` and
+(`packages/core/src/capabilities/index.ts`), and, since A13, `session_end_capture`, `pre_compact_backup` and
 `durable_project_guidance` resolve to **`not-used` before the version table or any observation is
 consulted**, in both adapters (`CLAUDE_NOT_USED_KEYS`, `CODEX_NOT_USED_KEYS`). `plugin_hooks` and
 `session_start_injection` left both lists with A13 and are observed through firing records
-(`hooks.md` §3.6); on 2026-08-13 they were in the list with the other four. Removing a
+(`hooks.md` §3.6); on 2026-08-13 they were in the list with the other four. `subagents` left
+both lists with D87 (NEW-186), once the catalog agents shipped to both vendors. Removing a
 key from either adapter's `NOT_USED` list requires, in the same change, the artifact it describes and
 a test that observed it working — the rule that kept `plugin_hooks` from ever resolving to `yes` over
 a file that does not exist. Parity between the two lists is asserted by
