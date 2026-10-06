@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 
 import {
+  BOOTSTRAP_MAX_JOURNAL_BYTES,
+  BOOTSTRAP_MAX_PLAN_BYTES,
   BOOTSTRAP_RETAINED_MAX_ENTRIES,
-  BOOTSTRAP_RETAINED_MAX_IDS,
-  BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES,
+  deriveBootstrapTerminalJournal,
   EXIT_CODES,
   assertBootstrapRetentionCapacity,
   classifyBootstrapEvidence,
@@ -54,10 +55,11 @@ import type {
 
 import { decodeManifestAnchor, isCodeDefect, isOwnedManifestAnchorShape, manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
+import { initialSlotWriteAdmissible } from "./journal-store.js";
 import { projectBootstrapRetentionPostimage } from "./retention.js";
 
-const MAX_PLAN_BYTES = 268_435_456;
-const MAX_JOURNAL_BYTES = 1_048_576;
+const MAX_PLAN_BYTES = BOOTSTRAP_MAX_PLAN_BYTES;
+const MAX_JOURNAL_BYTES = BOOTSTRAP_MAX_JOURNAL_BYTES;
 const MAX_CREATED_PATHS = 1_000_000;
 const MAX_LAUNCHABILITY_PATHS = 200_006;
 const MAX_FOUNDATION_PARTICIPANTS = 512;
@@ -225,15 +227,6 @@ export class BootstrapRootInvalidError extends Error {
   }
 }
 
-export class ManagedDriftError extends Error {
-  readonly code = EXIT_CODES.decisionRequired;
-
-  constructor(readonly paths: readonly string[]) {
-    super("managed artifacts differ from their recorded state");
-    this.name = "ManagedDriftError";
-  }
-}
-
 export class ManifestV1RefusalError extends Error {
   readonly code = EXIT_CODES.capabilityUnavailable;
   readonly reason: ManifestV1NotMigratableError["reason"] = "manifest_v1_not_migratable";
@@ -393,26 +386,6 @@ export function admitBootstrapEvidencePlan(
   );
 }
 
-function terminalJournal(current: BootstrapJournalRecordV1): BootstrapJournalRecordV1 | null {
-  if (current.phase === "finalized" || current.phase === "rolled_back") return current;
-  if (
-    (current.phase !== "retaining" && current.phase !== "retained") ||
-    current.retentionNext === null || current.terminalOutcome === null ||
-    current.retentionTerminalPreimage === undefined
-  ) return null;
-  const sequence = BigInt(current.sequence) - BigInt(current.retentionNext) - 1n;
-  if (sequence < 0n) return null;
-  const { retentionTerminalPreimage, ...prefix } = current;
-  return {
-    ...prefix,
-    slot: Number(sequence % 2n) as 0 | 1,
-    sequence: sequence.toString() as UInt64DecimalV1,
-    previousJournalHash: retentionTerminalPreimage.previousJournalHash,
-    phase: current.terminalOutcome === "finalized" ? "finalized" : "rolled_back",
-    retentionNext: null,
-    updatedAt: retentionTerminalPreimage.updatedAt,
-  };
-}
 
 export function selectBootstrapEvidenceJournal(
   plan: FreshV2InitPlanV1,
@@ -1074,7 +1047,8 @@ async function inspectPlan(
      * plans; blocking on the bytes instead made the first interrupted init
      * permanent, because retention never unlinks what the refusal named.
      */
-    const resumable = slotValues.every((candidate) => candidate === null) &&
+    const slot1 = initial.find((entry) => entry.path === plan.journalSlots[1].path);
+    const resumable = slot1 !== undefined && initialSlotWriteAdmissible(slot1.bytes, slotValues) &&
       bootstrapLeaf !== null && identityMatches(bootstrapLeaf, plan.bootstrapIdentity);
     return {
       summary: {
@@ -1095,7 +1069,7 @@ async function inspectPlan(
       blocksNewIntent: !resumable && !await restoredTargets(request, plan, null),
     };
   }
-  const terminal = terminalJournal(selection.current);
+  const terminal = deriveBootstrapTerminalJournal(selection.current);
   let table: ReturnType<typeof deriveBootstrapRetentionTable> | null = null;
   let exactEvidence: BootstrapRetentionEvidenceProjectionV1 | null = null;
   let exactSelection = false;
@@ -1594,11 +1568,6 @@ export function assertCombinedBootstrapCapacity(
     entries: aggregate.entryCount + projected.entryCount,
     bytes: (BigInt(aggregate.regularFileBytes) + BigInt(projected.regularFileBytes)).toString() as UInt64DecimalV1,
   });
-  if (
-    aggregate.idCount + projected.idCount > BOOTSTRAP_RETAINED_MAX_IDS ||
-    aggregate.entryCount + projected.entryCount > BOOTSTRAP_RETAINED_MAX_ENTRIES ||
-    BigInt(aggregate.regularFileBytes) + BigInt(projected.regularFileBytes) > BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES
-  ) throw new Error("retained bootstrap aggregate capacity exceeded; archive retained bootstrap evidence manually");
 }
 
 function readableNonTerminal(
@@ -1619,7 +1588,9 @@ async function readPlanEnvelopes(
   let names: readonly string[];
   try {
     names = await request.listNames(request.stateDirectory);
-  } catch {
+  } catch (error) {
+    // NEW-179 C-5: an unreadable state directory admits by declared policy (threat-model.md, "No command but `init`"); a code defect does not.
+    if (isCodeDefect(error)) throw error;
     return [];
   }
   const envelopes: BootstrapEnvelopeReadV1[] = [];
@@ -1631,7 +1602,8 @@ async function readPlanEnvelopes(
     try {
       const envelope = await readBootstrapEnvelope(request, planEntry.entry, publishedManifestHash);
       if (envelope !== null) envelopes.push(envelope);
-    } catch {
+    } catch (error) {
+      if (isCodeDefect(error)) throw error;
       continue;
     }
   }

@@ -118,6 +118,24 @@ describe("inspectBootstrapEvidence", () => {
     expect(completed.ok).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("classes an empty-slot envelope resumable only while slot 1 is empty, as the store does (NEW-179 C-1)", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-slot-one-bytes", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "before_initial_slot_write",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const empty = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+    expect(empty.report.ids[0]?.status).toBe("incomplete");
+    const slotOne = (await nodeFs.readdir(fixture.paths.stateDir)).find((name) => name.endsWith(".journal.1.json"));
+    if (slotOne === undefined) throw new Error("slot 1 is absent");
+    await nodeFs.appendFile(join(fixture.paths.stateDir, slotOne), "{");
+
+    const admission = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+
+    expect(admission.report.ids[0]?.status).toBe("unverified");
+    expect(admission.active).toBeNull();
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("reports changed retained bytes as altered without disclosing them", async () => {
     const fixture = await createCommandFixture("bootstrap-report-altered", {
       bootstrapAvailable: true,

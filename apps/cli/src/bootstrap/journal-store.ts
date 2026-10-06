@@ -4,6 +4,8 @@ import * as nodeFs from "node:fs/promises";
 import { dirname } from "node:path";
 
 import {
+  BOOTSTRAP_MAX_JOURNAL_BYTES,
+  BOOTSTRAP_MAX_PLAN_BYTES,
   decodeCanonicalJson,
   encodeCanonicalJson,
   parseUtcTimestamp,
@@ -21,8 +23,20 @@ import {
 
 import type { FileHandle } from "node:fs/promises";
 
-const MAX_PLAN_BYTES = 268_435_456;
-const MAX_JOURNAL_BYTES = 1_048_576;
+const MAX_PLAN_BYTES = BOOTSTRAP_MAX_PLAN_BYTES;
+const MAX_JOURNAL_BYTES = BOOTSTRAP_MAX_JOURNAL_BYTES;
+
+/**
+ * NEW-179 C-1: the store (re)writes the initial journal only while slot 1 is
+ * empty and neither slot decodes; the report classes an envelope resumable by
+ * this same rule, so it never promises a resume the store would refuse.
+ */
+export function initialSlotWriteAdmissible(
+  slot1Bytes: number | bigint | string,
+  observed: readonly [unknown, unknown],
+): boolean {
+  return BigInt(slot1Bytes) === 0n && observed[0] === null && observed[1] === null;
+}
 const MAX_UINT64 = 18_446_744_073_709_551_615n;
 const UINT64 = /^(?:0|[1-9][0-9]*)$/u;
 const encoder = new TextEncoder();
@@ -788,7 +802,7 @@ export class BootstrapJournalStore {
           request.validateSlots,
         );
         const initialBytes = encoded(initial);
-        if (raw[1].byteLength !== 0 || observed[0] !== null || observed[1] !== null) {
+        if (!initialSlotWriteAdmissible(raw[1].byteLength, observed)) {
           throw asError(selectionError);
         }
         await assertBoundRegularFile(request.planPath, planFile.handle, planFile.identity, ownerUid, plan.maximumPlanBytes);

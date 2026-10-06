@@ -208,7 +208,11 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect(index("inventory:second")).toBeLessThan(index("intent:plan"));
     expect(index("intent:journal")).toBeLessThan(index("payload:evidence:"));
     expect(index("payload:evidence:")).toBeLessThan(index("create:global_lock"));
-    expect(index("foundation:compensation:")).toBeLessThan(index("foundation:forward:"));
+    expect(index("payload:evidence:")).toBeLessThan(index("foundation:forward:"));
+    // NEW-179 B-6: a finalized init never runs, traces or publishes the compensation participant.
+    expect(trace.some((row) => row.startsWith("foundation:compensation:"))).toBe(false);
+    const compensationJournal = participant(persisted.value, "compensation").initialJournal as JsonRecord;
+    expect(await exists(String(compensationJournal.finalPath))).toBe(false);
     expect(index("launchability:trust")).toBeLessThan(index("launchability:active"));
     expect(index("launchability:active")).toBeLessThan(index("manifest:publish"));
     expect(index("manifest:publish")).toBeLessThan(index("verify:v2"));
@@ -803,7 +807,9 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     const failed = await runInit(fixture.context, ACCEPTED);
 
     if (failed.ok) throw new Error("init succeeded through a recurring Foundation failure");
-    expect(failed.code).toBe(EXIT_CODES.securityRefusal);
+    // NEW-179 A-4: the refused rollback no longer replaces the forward failure.
+    expect(failed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(failed.error.message).toContain("synthetic interruption after applied; rolling it back also failed");
     const persisted = await persistedPlan(fixture);
     const forward = participant(persisted.value, "forward");
     const published = [
@@ -819,7 +825,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
 
     const retried = await runInit(fixture.rebuildContext(), ACCEPTED);
 
-    expect(retried.ok ? 0 : retried.code).toBe(EXIT_CODES.securityRefusal);
+    expect(retried.ok ? 0 : retried.code).toBe(EXIT_CODES.recoveryRequired);
     expect(await currentJournal(persisted.value)).toMatchObject({
       phase: "compensating",
       terminalOutcome: null,
@@ -1412,5 +1418,88 @@ describe("state/hooks reserved runtime path (A13 Q3-A)", () => {
     expect(result.error.message).toContain("hook_records_shape");
     expect(await nodeFs.readFile(foreign, "utf8")).toBe("{}");
     expect(await exists(fixture.paths.manifestFile)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("bootstrap executor failure reporting and lock release (NEW-179)", () => {
+  /** NEW-179 A-3: a refusal after the global lock is acquired releases it, so the same process can retry. */
+  it("releases the global lock when its creation evidence refuses during recovery", async () => {
+    const fixture = await createCommandFixture("bootstrap-global-evidence-release", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_global_lock",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const evidence = (await nodeFs.readdir(fixture.paths.stateDir))
+      .find((name) => name.endsWith(".ordinary.0000000000.creation.json"));
+    if (evidence === undefined) throw new Error("global-lock creation evidence is absent");
+    await nodeFs.chmod(join(fixture.paths.stateDir, evidence), 0o644);
+    fixture.disableBootstrapInterrupt();
+    await closeBootstrapProcess(fixture);
+    const context = fixture.rebuildContext();
+
+    const first = await runInit(context, ACCEPTED);
+    const second = await runInit(context, ACCEPTED);
+
+    if (first.ok || second.ok) throw new Error("recovery admitted a changed creation evidence");
+    expect(first.code).toBe(EXIT_CODES.securityRefusal);
+    expect(second.code).toBe(first.code);
+    expect(second.error.message).toBe(first.error.message);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** NEW-179 A-7: only lock contention reads as "unavailable"; another provider failure says what failed. */
+  it("does not report a failing lock provider as a held lock", async () => {
+    const fixture = await createCommandFixture("bootstrap-lock-provider-failure", {
+      bootstrapAvailable: true,
+      bootstrapBeforeLockAcquire: (path) => path.endsWith("/.lifecycle-bootstrap.lock")
+        ? Promise.reject(Object.assign(new Error("synthetic EACCES"), { code: "EACCES" }))
+        : Promise.resolve(),
+    });
+
+    const refused = await runInit(fixture.context, ACCEPTED);
+
+    if (refused.ok) throw new Error("init acquired a failing lock");
+    expect(refused.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(refused.error.message).toContain("could not be acquired");
+    expect(refused.error.message).not.toContain("unavailable");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** NEW-179 A-4: a rollback that fails too names the forward failure instead of replacing it. */
+  it("names the forward failure when its rollback fails as well", async () => {
+    const fixture = await createCommandFixture("bootstrap-rollback-failure-chain", {
+      bootstrapAvailable: true,
+      bootstrapFailureAfter: "during_payload_write",
+      bootstrapFailureHook: (point) => {
+        if (point === "after_compensation_staged_file") throw new Error("synthetic rollback failure");
+      },
+    });
+
+    const failed = await runInit(fixture.context, ACCEPTED);
+
+    if (failed.ok) throw new Error("init succeeded through an injected failure");
+    expect(failed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(failed.error.message).toContain("synthetic bootstrap failure at during_payload_write");
+    expect(failed.error.message).toContain("rolling it back also failed: synthetic rollback failure");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** NEW-179 B-4: compensation never reads package bytes, so a missing package does not block a resumed rollback. */
+  it("resumes a rollback after the packaged release disappeared", async () => {
+    const fixture = await createCommandFixture("bootstrap-rollback-without-package", {
+      bootstrapAvailable: true,
+      bootstrapFailureAfter: "during_payload_write",
+      bootstrapInterruptAfter: "after_compensation_staged_file",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const persisted = await persistedPlan(fixture);
+    expect(await currentJournal(persisted.value)).toMatchObject({ phase: "compensating" });
+    await nodeFs.rename(join(fixture.root, "packaged-release"), join(fixture.root, "packaged-release.offline"));
+    fixture.disableBootstrapFailure();
+    fixture.disableBootstrapInterrupt();
+    await closeBootstrapProcess(fixture);
+
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(resumed.ok ? 0 : resumed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(await currentJournal(persisted.value), JSON.stringify({ resumed, trace: fixture.bootstrapTrace.slice(-30) }))
+      .toMatchObject({ phase: "retained", terminalOutcome: "rolled_back" });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

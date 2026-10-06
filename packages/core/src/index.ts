@@ -263,6 +263,8 @@ export type {
   VaultSegmentV1,
 } from "./config/index.js";
 export {
+  BOOTSTRAP_MAX_JOURNAL_BYTES,
+  BOOTSTRAP_MAX_PLAN_BYTES,
   BOOTSTRAP_RETAINED_MAX_ENTRIES,
   BOOTSTRAP_RETAINED_MAX_IDS,
   BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES,
@@ -282,6 +284,7 @@ export {
   deriveBootstrapPayloadEvidencePaths,
   deriveBootstrapRetentionAuthorities,
   deriveBootstrapRetentionLocations,
+  deriveBootstrapTerminalJournal,
   reachedReversibleSteps,
   deriveBootstrapRetentionTable,
   inspectDrift,
