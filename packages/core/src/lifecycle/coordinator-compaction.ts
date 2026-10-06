@@ -4,10 +4,7 @@
  * its absence proved, and only then does `compactionNext` advance, so a death between the two
  * resumes on the same entry.
  */
-import { encodeFoundationJournalJsonV1, validateJournal } from "../transactions/store.js";
 import type { TransactionStore } from "../transactions/store.js";
-import type { TransactionJournalV1 } from "../transactions/types.js";
-import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
 import {
   foundationRefById,
   requireHeldGlobalLock,
@@ -22,19 +19,18 @@ import { deriveTerminalCompaction } from "./grammar.js";
 import {
   lifecycleParentPath,
   refuseLifecycleRecovery,
-  type LifecycleGuardedEntryV1,
   type LifecycleGuardedFileSystemV1,
 } from "./guarded-fs.js";
 import type { HeldLifecycleStableLockV1 } from "./locks.js";
 import type { LifecycleCoordinatorRecordV1 } from "./ledger.js";
 import {
-  LIFECYCLE_PLAN_BOUNDS,
   type FoundationParticipantRefV1,
   type LifecycleCompactionEntryV1,
   type LifecycleCoordinatorJournalV1,
   type LifecycleCoordinatorPlanCoreV1,
   type LifecycleTerminalOutcomeV1,
 } from "./types.js";
+import { childOf, readStrictFoundationJournal, syncDirectoryAt, unlinkStagedBlob } from "./fs-helpers.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
 
@@ -57,39 +53,6 @@ export type LifecycleCoordinatorCompactionDependenciesV1<TPlan> =
 
 const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
 const NONCE_LEAF = "lifecycle-install-nonce";
-const decoder = new TextDecoder("utf-8", { fatal: true });
-
-function child(directory: CanonicalAbsolutePathV1, name: string): CanonicalAbsolutePathV1 {
-  return parseCanonicalAbsolutePathText(`${directory}/${name}`);
-}
-
-async function syncDirectoryAt(
-  fs: LifecycleGuardedFileSystemV1,
-  path: CanonicalAbsolutePathV1,
-): Promise<void> {
-  const entry = await fs.lstat(path);
-  if (entry === null) refuseLifecycleRecovery("lifecycle_guarded_parent", path);
-  await fs.syncDirectory(entry);
-}
-
-async function readTerminalFoundationJournal(
-  fs: LifecycleGuardedFileSystemV1,
-  entry: LifecycleGuardedEntryV1,
-  id: string,
-): Promise<TransactionJournalV1> {
-  let text: string;
-  let journal: TransactionJournalV1;
-  try {
-    text = decoder.decode(await fs.readRegular(entry, LIFECYCLE_PLAN_BOUNDS.journalBytes.maximum));
-    journal = validateJournal(JSON.parse(text) as unknown);
-  } catch {
-    return refuseLifecycleRecovery("lifecycle_foundation_journal_bytes", entry.path);
-  }
-  if (journal.id !== id || encodeFoundationJournalJsonV1(journal) !== text) {
-    refuseLifecycleRecovery("lifecycle_foundation_journal_bytes", entry.path);
-  }
-  return journal;
-}
 
 /**
  * `discardUnstarted` proves every mutation target at the ref's own recorded preimage, which is the
@@ -111,15 +74,8 @@ async function discardCounterfactualInverse(
   for (const mutation of ref.mutations) {
     const stagedPath = mutation.stagedPath;
     if (stagedPath === null) continue;
-    let removed = false;
-    for (const path of [stagedPath, parseCanonicalAbsolutePathText(`${stagedPath}.sha256`)]) {
-      const leaf = await fs.lstat(path);
-      if (leaf === null) continue;
-      await fs.unlinkExact(leaf);
-      removed = true;
-    }
     // A repeat after a death may find the staging directory itself already collected.
-    if (removed) await syncDirectoryAt(fs, lifecycleParentPath(stagedPath));
+    if (await unlinkStagedBlob(fs, stagedPath)) await syncDirectoryAt(fs, lifecycleParentPath(stagedPath));
   }
 }
 
@@ -138,7 +94,7 @@ async function removeFoundationEntry<TPlan extends CoordinatorPlan>(
   global: HeldLifecycleStableLockV1,
 ): Promise<void> {
   const { fs, roots } = dependencies;
-  const journalPath = child(roots.foundationJournals, `${participantId}.json`);
+  const journalPath = childOf(roots.foundationJournals, `${participantId}.json`);
   const journalEntry = await fs.lstat(journalPath);
   /**
    * The forward a rolled-back coordinator stopped on: `resolveCurrentStep` either discarded it
@@ -146,7 +102,7 @@ async function removeFoundationEntry<TPlan extends CoordinatorPlan>(
    */
   if (position === "executed" || (position === "current" && journalEntry !== null)) {
     if (journalEntry === null) return;
-    const journal = await readTerminalFoundationJournal(fs, journalEntry, participantId);
+    const journal = await readStrictFoundationJournal(fs, journalEntry, participantId);
     if (position === "current" && journal.phase !== "rolled_back") {
       refuseLifecycleRecovery("lifecycle_coordinator_participant_state", journalPath);
     }
@@ -161,7 +117,7 @@ async function removeFoundationEntry<TPlan extends CoordinatorPlan>(
   }
 
   const ref = foundationRefById(plan, participantId);
-  const backups = await fs.lstat(child(roots.foundationBackups, participantId));
+  const backups = await fs.lstat(childOf(roots.foundationBackups, participantId));
   if (backups !== null) {
     refuseLifecycleRecovery("lifecycle_foundation_orphan_leaf", backups.path);
   }
@@ -183,10 +139,10 @@ async function removeFoundationEntry<TPlan extends CoordinatorPlan>(
      * its own journal here. A terminal `rolled_back` forward left its targets at their preimage,
      * which keeps this inverse counterfactual; any other forward journal does not.
      */
-    const forwardJournal = await fs.lstat(child(roots.foundationJournals, `${forwardId}.json`));
+    const forwardJournal = await fs.lstat(childOf(roots.foundationJournals, `${forwardId}.json`));
     if (
       forwardJournal !== null &&
-      (await readTerminalFoundationJournal(fs, forwardJournal, forwardId)).phase !== "rolled_back"
+      (await readStrictFoundationJournal(fs, forwardJournal, forwardId)).phase !== "rolled_back"
     ) {
       refuseLifecycleRecovery("lifecycle_coordinator_participant_state", journalPath);
     }
@@ -194,12 +150,12 @@ async function removeFoundationEntry<TPlan extends CoordinatorPlan>(
   } else {
     await dependencies.adapters.foundation.discardUnstarted(ref);
   }
-  const lock = await fs.lstat(child(roots.foundationJournals, `.${participantId}.lock`));
+  const lock = await fs.lstat(childOf(roots.foundationJournals, `.${participantId}.lock`));
   if (lock !== null) {
     await fs.unlinkExact(lock);
     await syncDirectoryAt(fs, roots.foundationJournals);
   }
-  const staging = await fs.lstat(child(roots.foundationStaging, participantId));
+  const staging = await fs.lstat(childOf(roots.foundationStaging, participantId));
   if (staging !== null) {
     await fs.rmdirExactEmpty(staging);
     await syncDirectoryAt(fs, roots.foundationStaging);
@@ -211,20 +167,20 @@ async function removeCoordinatorStaging<TPlan extends CoordinatorPlan>(
   plan: TPlan,
 ): Promise<void> {
   const { fs, roots } = dependencies;
-  const coordinatorStaging = child(roots.lifecycleStaging, plan.id);
-  const foundationStaging = child(coordinatorStaging, "foundation");
+  const coordinatorStaging = childOf(roots.lifecycleStaging, plan.id);
+  const foundationStaging = childOf(coordinatorStaging, "foundation");
   for (const ref of plan.participants.foundation) {
-    const directory = await fs.lstat(child(foundationStaging, ref.id));
+    const directory = await fs.lstat(childOf(foundationStaging, ref.id));
     if (directory === null) continue;
     await fs.rmdirExactEmpty(directory);
     await syncDirectoryAt(fs, foundationStaging);
   }
-  const participants = child(coordinatorStaging, "participants");
-  const manifestStaging = child(participants, "manifest");
+  const participants = childOf(coordinatorStaging, "participants");
+  const manifestStaging = childOf(participants, "manifest");
   const manifestId = (plan.participants.manifest as { readonly participantId?: unknown } | null)?.participantId;
-  const payloadDirectory = typeof manifestId === "string" ? child(manifestStaging, manifestId) : null;
+  const payloadDirectory = typeof manifestId === "string" ? childOf(manifestStaging, manifestId) : null;
   if (payloadDirectory !== null) {
-    const payload = await fs.lstat(child(payloadDirectory, "after.json"));
+    const payload = await fs.lstat(childOf(payloadDirectory, "after.json"));
     if (payload !== null) {
       await fs.unlinkExact(payload);
       await syncDirectoryAt(fs, payloadDirectory);
@@ -254,8 +210,8 @@ async function removeEnvelopeLeaves<TPlan extends CoordinatorPlan>(
   const { fs, roots, adapters } = dependencies;
   await requireHeldGlobalLock(fs, global);
   if (plan.operation === "uninstall") {
-    const allocator = await fs.lstat(child(roots.stateDirectory, ALLOCATOR_LEAF));
-    const nonce = await fs.lstat(child(roots.stateDirectory, NONCE_LEAF));
+    const allocator = await fs.lstat(childOf(roots.stateDirectory, ALLOCATOR_LEAF));
+    const nonce = await fs.lstat(childOf(roots.stateDirectory, NONCE_LEAF));
     if (allocator !== null && nonce === null) {
       refuseLifecycleRecovery("lifecycle_control_file_state", allocator.path);
     }
@@ -278,9 +234,9 @@ async function removeEnvelopeLeaves<TPlan extends CoordinatorPlan>(
   }
 
   const leaves = [
-    ["journal", child(roots.coordinatorJournals, `${plan.id}.json`)],
-    ["lock", child(roots.coordinatorJournals, `.${plan.id}.lock`)],
-    ["plan", child(roots.coordinatorJournals, `${plan.id}.plan.json`)],
+    ["journal", childOf(roots.coordinatorJournals, `${plan.id}.json`)],
+    ["lock", childOf(roots.coordinatorJournals, `.${plan.id}.lock`)],
+    ["plan", childOf(roots.coordinatorJournals, `${plan.id}.plan.json`)],
   ] as const;
   for (const [leaf, path] of leaves) {
     const entry = await fs.lstat(path);
@@ -475,7 +431,7 @@ export async function completeCoordinatorEnvelope<TPlan extends CoordinatorPlan>
       await requireHeldGlobalLock(fs, global);
       if (ref.role.kind === "compensation") await discardCounterfactualInverse(fs, ref);
       else await dependencies.adapters.foundation.discardUnstarted(ref);
-      const staging = await fs.lstat(child(roots.foundationStaging, ref.id));
+      const staging = await fs.lstat(childOf(roots.foundationStaging, ref.id));
       if (staging !== null) {
         await fs.rmdirExactEmpty(staging);
         await syncDirectoryAt(fs, roots.foundationStaging);
@@ -485,8 +441,8 @@ export async function completeCoordinatorEnvelope<TPlan extends CoordinatorPlan>
   }
 
   for (const [leaf, path] of [
-    ["lock", child(roots.coordinatorJournals, `.${plan.id}.lock`)],
-    ["plan", child(roots.coordinatorJournals, `${plan.id}.plan.json`)],
+    ["lock", childOf(roots.coordinatorJournals, `.${plan.id}.lock`)],
+    ["plan", childOf(roots.coordinatorJournals, `${plan.id}.plan.json`)],
   ] as const) {
     const entry = await fs.lstat(path);
     if (entry === null) continue;

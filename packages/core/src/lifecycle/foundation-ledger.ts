@@ -32,6 +32,7 @@ import {
   type FoundationTransactionIdV1,
 } from "./ids.js";
 import { maximumFoundationJournalBytes } from "./store.js";
+import { LOWERCASE_V4_UUID } from "./fs-helpers.js";
 
 export interface LifecycleLedgerRootsV1 {
   readonly productHome: CanonicalAbsolutePathV1;
@@ -87,8 +88,6 @@ const DIGEST_FILE_BYTES = 65;
 const JOURNAL_SUFFIX = ".json";
 const LOCK_SUFFIX = ".lock";
 const TEMP_SUFFIX = ".json.tmp";
-const LOWERCASE_V4_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const LOWERCASE_SHA256_LINE = /^[0-9a-f]{64}\n$/u;
 
 const STAGING_SPELLINGS = [
