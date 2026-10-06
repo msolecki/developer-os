@@ -255,6 +255,36 @@ describe("an allocation that died after its allocator temp landed", () => {
   }, CASE_TIMEOUT_MS);
 });
 
+describe("a run killed after it finalized and before its envelope plan was removed (NEW-162 follow-up)", () => {
+  /** Dies right after the coordinator's own journal is unlinked: the plan-only envelope suffix. */
+  const afterJournalRemoved = (context: DyingCliContext) =>
+    dieWhen(context, (name, args) => name === "unlinkExact" && /\/lc_[0-9a-f]{64}_[0-9]+\.json$/u.test((args[0] as { readonly path: string }).path));
+
+  it("reports the finished rollback from `update rollback --apply` with exit 0", async () => {
+    const home = await baseAt120("recovery-suffix-rollback");
+    const dying = afterJournalRemoved(home.fixture.context);
+    expect(await attempt(rollBack(home.update(dying.context)), dying.died)).toBe("died");
+
+    const result = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "rollback", apply: true, json: true });
+
+    expect(result).toMatchObject({ ok: true, code: EXIT_CODES.success, data: { outcome: "rolled_back", active: { version: "1.1.0" } } });
+    expect((await settled(home)).rollback).toBeNull();
+  }, CASE_TIMEOUT_MS);
+
+  it("reports the finished update from `update --apply` with exit 0 instead of planning again", async () => {
+    const home = await installUpdatableHome("recovery-suffix-apply", "arm64");
+    const dying = afterJournalRemoved(home.fixture.context);
+    expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    const runs = home.world.plannerRuns.length;
+
+    const result = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });
+
+    expect(result).toMatchObject({ ok: true, code: EXIT_CODES.success, data: { outcome: "applied", active: { version: "1.1.0" } } });
+    expect(home.world.plannerRuns).toHaveLength(runs);
+    expect((await settled(home)).rollback?.previous.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
+});
+
 describe("update rollback --apply at every death point (Spec 2 §10.2)", () => {
   it("recovers 1.2.0 -> 1.1.0 either to 1.1.0 with the set consumed or to 1.2.0 with it intact, with no network", async () => {
     const home = await baseAt120("recovery-rollback-sweep");

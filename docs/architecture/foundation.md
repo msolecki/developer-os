@@ -1345,7 +1345,8 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
 - **Apply.** `--apply` heals the update residue its own operation recorded first; residue the other
   operation recorded refuses exit 6 naming that operation's `--apply` command (Spec 2 §9.2), and a
   resumed coordinator ends the invocation, finalized or compensated, without planning again
-  (NEW-162). It then revalidates under the global lock: a
+  (NEW-162); so does one a death left at its plan-only envelope suffix, whose outcome is read from
+  the removed plan's `executionBindingHash` against the home's rollback record. It then revalidates under the global lock: a
   clear V2 closure, the same home, the same retained evidence, and a planner rerun whose
   transcript and candidate equal the preview's. It reserves one allocator block for every prefix
   (D72 P7(e)), composes every leaf plan and the construction plan (`apps/cli/src/update/compose.ts`),

@@ -11,6 +11,7 @@ import {
   type LifecycleGuardedEntryV1,
   type LifecycleGuardedFileSystemV1,
   type LifecycleJournalClosureV2,
+  type LowerHexSha256,
   type UpdateLifecycleCoordinatorPlanV2,
   type UpdateLifecycleOutcomeV1,
   type UpdateRecoveryExecutorDescriptorV1,
@@ -237,7 +238,8 @@ export interface UpdateRecoveryRoutesV1 {
   readonly coordinator: { recover(id: LifecycleCoordinatorIdV1): Promise<UpdateLifecycleOutcomeV1> };
   readonly envelope: {
     isEnvelopeSuffix(id: LifecycleCoordinatorIdV1): Promise<boolean>;
-    completeEnvelopeSuffix(id: LifecycleCoordinatorIdV1): Promise<void>;
+    /** Returns the removed plan's `executionBindingHash`. */
+    completeEnvelopeSuffix(id: LifecycleCoordinatorIdV1): Promise<LowerHexSha256>;
   };
   readonly construction: { compensate(closure: Extract<LifecycleJournalClosureV2, { readonly kind: "update_construction_cleanup" }>): Promise<void> };
   readonly executorCleanup: (id: LifecycleCoordinatorIdV1) => Promise<void>;
@@ -246,7 +248,7 @@ export interface UpdateRecoveryRoutesV1 {
 export type UpdateRecoveryRouteOutcomeV1 =
   | { readonly kind: "not_update" }
   | { readonly kind: "coordinator"; readonly outcome: UpdateLifecycleOutcomeV1 }
-  | { readonly kind: "envelope_suffix"; readonly coordinatorId: LifecycleCoordinatorIdV1 }
+  | { readonly kind: "envelope_suffix"; readonly coordinatorId: LifecycleCoordinatorIdV1; readonly executionBindingHash: LowerHexSha256 }
   | { readonly kind: "construction_cleaned"; readonly coordinatorId: LifecycleCoordinatorIdV1 }
   | { readonly kind: "executor_cleaned"; readonly coordinatorId: LifecycleCoordinatorIdV1 };
 
@@ -255,9 +257,9 @@ export async function routeUpdateRecovery(closure: LifecycleJournalClosureV2, ro
   switch (closure.kind) {
     case "update_recovery": {
       if (await routes.envelope.isEnvelopeSuffix(closure.coordinatorId)) {
-        await routes.envelope.completeEnvelopeSuffix(closure.coordinatorId);
+        const executionBindingHash = await routes.envelope.completeEnvelopeSuffix(closure.coordinatorId);
         await routes.executorCleanup(closure.coordinatorId);
-        return { kind: "envelope_suffix", coordinatorId: closure.coordinatorId };
+        return { kind: "envelope_suffix", coordinatorId: closure.coordinatorId, executionBindingHash };
       }
       return { kind: "coordinator", outcome: await routes.coordinator.recover(closure.coordinatorId) };
     }

@@ -288,7 +288,7 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
     },
     construction,
     coordinator,
-    envelope: { isEnvelopeSuffix: () => Promise.resolve(false), completeEnvelopeSuffix: () => Promise.resolve() },
+    envelope: { isEnvelopeSuffix: () => Promise.resolve(false), completeEnvelopeSuffix: () => Promise.reject(new Error("unreachable")) },
     executorCleanup: () => {
       alive();
       world.executor = "absent";

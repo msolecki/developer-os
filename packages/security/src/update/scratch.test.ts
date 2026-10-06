@@ -23,6 +23,7 @@ import { SecurityRefusalError } from "../paths.js";
 import {
   deriveReleaseScratchCleanupList,
   ReleasePlanningScratchStore,
+  releasePlanningScratchLockPath,
   releasePlanningScratchPaths,
   validateReleasePlanningScratchJournal,
   type ReleasePlanningScratchAttempt,
@@ -321,6 +322,21 @@ describe("ReleasePlanningScratchStore", () => {
 
     expect(attempt.plan.id).not.toBe(`rp_${colliding}`);
     expect((await nodeFs.lstat(collision.root)).isDirectory()).toBe(true);
+  });
+
+  it("removes its own just-published plan when another process holds that candidate's lock, then tries a fresh ID", async () => {
+    const home = await scratchHome();
+    const contested = "0f0e0d0c-0b0a-4908-8706-050403020100";
+    const paths = releasePlanningScratchPaths(home.systemTemp, UID, `rp_${contested}`);
+    const locks = new Set([releasePlanningScratchLockPath(paths.journalPath)]);
+    const ids = [contested, randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+
+    const attempt = await home.store({ locks, uuid: () => ids.shift() ?? randomUUID() }).create(REQUEST);
+
+    expect(attempt.plan.id).not.toBe(`rp_${contested}`);
+    await expect(nodeFs.lstat(paths.planPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await attempt.cleanup();
+    expect(await listing(home.systemTemp)).toEqual([]);
   });
 
   it("refuses after 32 colliding candidates and creates nothing", async () => {

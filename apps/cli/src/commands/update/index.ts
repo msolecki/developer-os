@@ -79,14 +79,20 @@ function compensatedExitCode(cause: string): typeof EXIT_CODES.securityRefusal |
  */
 async function resumed(update: CliUpdateContext, operation: UpdateOperationV1, kind: string, preview: string): Promise<CliResult<UpdateCommandResultV1> | null> {
   const recovered = await recoverUpdate(update, operation);
-  if (recovered.kind !== "coordinator") return null;
-  const active = releaseIdentityOf((await update.readHome()).active);
-  if (recovered.outcome.kind === "finalized") {
+  if (recovered.kind !== "coordinator" && recovered.kind !== "envelope_suffix") return null;
+  const home = await update.readHome();
+  const active = releaseIdentityOf(home.active);
+  // A suffix's journal is gone: a finalized apply left the record it bound; a finalized rollback consumed it.
+  const finalized = recovered.kind === "coordinator"
+    ? recovered.outcome.kind === "finalized"
+    : operation === "update_apply" ? home.rollback?.executionBindingHash === recovered.executionBindingHash : home.rollback === null;
+  if (finalized) {
     return success(operation === "update_apply"
       ? { schemaVersion: 1, outcome: "applied", active, rollbackAvailable: true }
       : { schemaVersion: 1, outcome: "rolled_back", active, rollbackAvailable: false });
   }
-  const { cause } = recovered.outcome;
+  // The suffix's journal, and with it the persisted cause, is already gone.
+  const cause = recovered.kind === "coordinator" && recovered.outcome.kind === "rolled_back" ? recovered.outcome.cause : "update_coordinator_compensated";
   return failure(compensatedExitCode(cause), {
     kind,
     message: cause,

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { updateLeafPlanPath } from "./construction.js";
+import { deriveUpdateSteps, type UpdateExecutionPlanV1, type UpdateStepOwnerV1 } from "./coordinator.js";
 import { ownerExternalEffectProcessPolicyHash, type OwnerExternalEffectProcessPolicyV1 } from "./participants.js";
 import { parseCanonicalAbsolutePathText } from "./paths.js";
 import type { PreparedUpdateCandidateV1, RollbackPayloadEntryV1, RollbackPayloadIdV1 } from "./preview.js";
@@ -205,6 +206,27 @@ const rollbackPayloadMutations: readonly { readonly name: string; readonly value
     },
   },
 ];
+
+describe("rollbackStepListHash pin (NEW-172)", () => {
+  /**
+   * `update --apply` retains this hash and `update rollback --apply` must reproduce it, possibly
+   * from another release. A change to the §10.2 template or its encoding changes it: that is a
+   * protocol change every retained rollback set would then refuse, so it must be deliberate.
+   */
+  it("pins the §10.2 template over two owners, one Codex effect and two migrations", () => {
+    const owners: readonly UpdateStepOwnerV1[] = [
+      { id: "owner_core", owner: "core", externalEffects: [] },
+      { id: "owner_codex", owner: "codex", externalEffects: [{ id: `oe_${"c".repeat(64)}_9` }] },
+    ] as unknown as readonly UpdateStepOwnerV1[];
+    const execution = {
+      operation: "update_rollback",
+      owners: [{ id: "owner_core" }, { id: "owner_codex" }],
+      migrations: [{ id: "migration_product-v2" }, { id: "migration_brain-v2" }],
+    } as unknown as UpdateExecutionPlanV1;
+
+    expect(rollbackStepListHash(deriveUpdateSteps(execution, owners))).toBe("0112c454cb050e0b1aa11ff2e9e8c33a4998f41cf7bcf6afd00990a0b4ab9a48");
+  });
+});
 
 describe("rollback payload binding graph", () => {
   it("binds inverse plan, inventory, record, and manifest without a hash cycle", () => {

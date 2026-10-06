@@ -1036,7 +1036,12 @@ export class ReleasePlanningScratchStore {
         await boundary("plan_published");
         // Held before the journal exists, so no listed attempt is ever unlocked while it lives.
         lock = await this.dependencies.tryLock(lockPath);
-        if (lock === null) continue;
+        if (lock === null) {
+          // Our own plan, published a moment ago with no journal: remove it rather than leave residue.
+          await fs.unlinkExact(planEntry);
+          await fs.syncDirectory(parent);
+          continue;
+        }
         journal = validateReleasePlanningScratchJournal(
           {
             schemaVersion: 1,
