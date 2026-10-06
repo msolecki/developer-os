@@ -2040,9 +2040,10 @@ architecture-approved non-manifest key path. `sourcePath` is exactly
 `<product home>/state/.redaction.key.<coordinator-id>.tombstone`. Both paths must have the same guarded
 parent device. The present arm is exactly one owner-owned 0600, single-link regular file from 32 bytes
 through 1 MiB. Planning and recovery use `O_NOFOLLOW | O_NONBLOCK`, post-open type/owner/mode/size/
-link/device/inode checks, and never read file content. The plan hashes
-`developer-os:redaction-key-state-plan:v1\0` plus its exact `CanonicalJsonV1` bytes; it has no bytes or
-content-hash field and cannot target any second path.
+link/device/inode checks, and never read file content. Its exact `CanonicalJsonV1` bytes are part of
+the coordinator plan's bytes and hash; it has no hash of its own (the separate
+`developer-os:redaction-key-state-plan:v1` hash had no reader and was removed, amended 2026-10-06,
+NEW-177), no bytes or content-hash field, and cannot target any second path.
 
 `K(stage)` and `K(delete)` are bound exhaustively to coordinator position. Before `K(stage)`, source
 equals `before` and the tombstone is absent. For a present arm, the only apply-before-cursor state is

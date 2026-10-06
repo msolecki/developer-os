@@ -10,7 +10,6 @@ import { link, lstat, open, unlink } from "node:fs/promises";
 import {
   LifecycleRecoveryRequiredError,
   encodeCanonicalJson,
-  hashCanonicalJson,
   parseCanonicalAbsolutePathText,
   parseEffectiveUid,
   parseLifecycleCoordinatorId,
@@ -25,12 +24,9 @@ import type {
   LifecycleGuardedEntryV1,
   LifecycleGuardedFileSystemV1,
   LifecycleValueCodec,
-  LowerHexSha256,
   UInt64DecimalV1,
 } from "@developer-os/core";
 import { isMissingEntry } from "../config-file.js";
-
-export const REDACTION_KEY_STATE_PLAN_HASH_DOMAIN = "developer-os:redaction-key-state-plan:v1";
 
 const SOURCE_LEAF = "redaction.key";
 const SECRET_MODE = 0o600;
@@ -161,10 +157,6 @@ export function createRedactionKeyStatePlanCodec(
     },
     encode: (plan) => encodeCanonicalJson(planJson(plan)),
   };
-}
-
-export function redactionKeyStatePlanHash(plan: RedactionKeyStatePlanV1): LowerHexSha256 {
-  return hashCanonicalJson(REDACTION_KEY_STATE_PLAN_HASH_DOMAIN, planJson(plan));
 }
 
 /**

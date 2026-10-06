@@ -5,7 +5,6 @@ import {
   EXIT_CODES,
   LIFECYCLE_STEP_GRAMMAR,
   formatAllocatedLifecycleId,
-  hashCanonicalJson,
   parseAllocatedLifecycleId,
   parseCanonicalAbsolutePathText,
   parseLifecycleCoordinatorId,
@@ -38,7 +37,6 @@ import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import {
   createRedactionKeyStatePlanCodec,
   redactionKeySourcePath,
-  redactionKeyStatePlanHash,
   redactionKeyTombstonePath,
 } from "./redaction-key.js";
 import {
@@ -491,21 +489,6 @@ describe("the redaction-key state-plan codec", () => {
     expect(() =>
       codec.validate({ ...REDACTION_KEY_LEAF, before: { ...REDACTION_KEY_LEAF.before, mode: 420 } }),
     ).toThrow(/identity/u);
-  });
-
-  it("hashes under the redaction-key state-plan domain over the codec's own bytes", () => {
-    expect(redactionKeyStatePlanHash(REDACTION_KEY_LEAF)).toBe(
-      hashCanonicalJson(
-        "developer-os:redaction-key-state-plan:v1",
-        JSON.parse(codec.encode(REDACTION_KEY_LEAF)) as never,
-      ),
-    );
-    expect(redactionKeyStatePlanHash(REDACTION_KEY_LEAF)).not.toBe(
-      hashCanonicalJson(
-        "developer-os:lifecycle-coordinator-plan:v1",
-        JSON.parse(codec.encode(REDACTION_KEY_LEAF)) as never,
-      ),
-    );
   });
 });
 
