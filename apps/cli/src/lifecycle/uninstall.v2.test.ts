@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   CODEX_INGEST_HOME_REPAIR,
+  decodeCanonicalJson,
   EXIT_CODES,
   MANIFEST_ANCHOR_RELATIVE_PATH,
   SCHEDULED_JOB_IDS,
@@ -1119,6 +1120,42 @@ describe("V2 uninstall planning refusals", () => {
       code: EXIT_CODES.decisionRequired,
       paths: [path],
     });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("V2 uninstall and a manifest committed after admission (NEW-175)", () => {
+  it("refuses before it reserves an id when the live manifest is not the admitted one", async () => {
+    const fixture = await initializedV2Fixture("uninstall-stale-admitted-manifest");
+    const request = await requestFor(fixture);
+    const added = join(fixture.paths.home, "added-after-admission.json");
+    await plant(added, "added\n");
+    const manifest = decodeCanonicalJson(await nodeFs.readFile(fixture.paths.manifestFile), 64 * 1024 * 1024) as unknown as {
+      readonly artifacts: readonly {
+        readonly path: string;
+        readonly kind: string;
+        readonly owner: string;
+        readonly verification: { readonly mode: string };
+      }[];
+    };
+    const template = manifest.artifacts.find(
+      (row) => row.kind === "file" && row.owner === "core" && row.verification.mode === "content",
+    );
+    if (template === undefined) throw new Error("the install recorded no core content row");
+    const hash = createHash("sha256").update("added\n").digest("hex");
+    const row = { ...template, path: added, verification: { ...template.verification, installedHash: hash } };
+    const artifacts = [...manifest.artifacts, row].sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+    await nodeFs.writeFile(fixture.paths.manifestFile, encodeCanonicalJson({ ...manifest, artifacts }));
+    expect((await admittedOf(fixture)).manifest.artifacts.some((artifact) => artifact.path === added)).toBe(true);
+    const counter = await allocatorCounter(fixture);
+
+    await expect(new LifecycleUninstaller().execute(request)).rejects.toMatchObject({
+      code: EXIT_CODES.recoveryRequired,
+      recovery: "developer-os uninstall",
+    });
+
+    expect(await allocatorCounter(fixture)).toBe(counter);
+    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+    expect(await exists(added)).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 

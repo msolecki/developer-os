@@ -1603,6 +1603,18 @@ export class LifecycleUninstaller {
 
       const preview = await this.preview(request, current());
       const inputs = builderInputs(preview.builder);
+      /**
+       * NEW-175: the partition came from the manifest admitted before the lock, the `M` arm pins the
+       * live one; a manifest committed in between would be tombstoned with its new rows orphaned.
+       */
+      if (request.admitted !== null && inputs.manifestHash !== request.admitted.manifestHash) {
+        throw new UninstallRefusal(
+          EXIT_CODES.recoveryRequired,
+          "the installation manifest changed after this uninstall admitted it; nothing was removed",
+          [inputs.manifestPath],
+          "developer-os uninstall",
+        );
+      }
       const codec = lifecycle.codecs(request.key).executionPlan;
       assertLifecycleExecutionFeasible(preview.builder, recovered.snapshot, codec);
 
