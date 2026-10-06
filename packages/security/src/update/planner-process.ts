@@ -63,7 +63,7 @@ export interface TargetPlannerSupervisorDependencies {
   readonly now: () => number;
   /** Returns a cancel function. */
   readonly setTimer: (callback: () => void, milliseconds: number) => () => void;
-  /** `null` when the process is already gone. */
+  /** `null` when the process is already gone; rejects when it cannot be observed. */
   readonly sample: (pid: number) => Promise<PlannerProcessSampleV1 | null>;
   /** The user-bound redactor; any finding is a secret-screen refusal. */
   readonly redactor: Redactor;
@@ -349,29 +349,47 @@ export function spawnNodePlannerChild(request: PlannerSpawnRequestV1): PlannerCh
     stderr: child.stderr,
     exited,
     kill: () => {
+      // W2-SEC-UPD-3: a descendant in another session can hold the pipes open past the group kill,
+      // and `close` waits for them; closing our ends bounds the supervisors' EOF and `exited` waits.
+      const closePipes = (): void => {
+        child.stdin.destroy();
+        child.stdout.destroy();
+        child.stderr.destroy();
+      };
       if (child.pid !== undefined) {
         try {
           process.kill(-child.pid, "SIGKILL");
+          closePipes();
           return;
         } catch {
           // The group is already gone; fall through to the direct handle.
         }
       }
       child.kill("SIGKILL");
+      closePipes();
     },
   };
 }
+
+/** The `execFile` shape the sampler uses; injectable so a failing `ps` can be tested. */
+export type PsRunner = (
+  file: string,
+  args: readonly string[],
+  options: { readonly env: Record<string, string>; readonly maxBuffer: number },
+  callback: (error: Error | null, stdout: string) => void,
+) => unknown;
 
 /**
  * The production sampler: one `ps` snapshot, the planner's resident bytes plus its descendant
  * count. ponytail: polled, so a descendant or RSS spike shorter than the interval is missed;
  * the capability graph gate is the primary control, and a kernel-event source would close it.
  */
-export function sampleNodePlannerProcess(pid: number): Promise<PlannerProcessSampleV1 | null> {
-  return new Promise((resolveSample) => {
-    execFile("/bin/ps", ["-A", "-o", "pid=,ppid=,rss="], { env: {}, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+export function sampleNodePlannerProcess(pid: number, runPs: PsRunner = execFile): Promise<PlannerProcessSampleV1 | null> {
+  return new Promise((resolveSample, rejectSample) => {
+    runPs("/bin/ps", ["-A", "-o", "pid=,ppid=,rss="], { env: {}, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+      // W2-SEC-UPD-2: a failed snapshot (EAGAIN at the process limit, maxBuffer) is not "gone".
       if (error !== null) {
-        resolveSample(null);
+        rejectSample(new SecurityRefusalError("Unable to sample the supervised process", { cause: error }));
         return;
       }
       const rows = stdout.split("\n").map((line) => line.trim().split(/\s+/u).map(Number)).filter((row) => row.length === 3 && row.every(Number.isSafeInteger));
