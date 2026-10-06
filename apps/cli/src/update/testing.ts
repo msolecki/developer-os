@@ -262,6 +262,10 @@ export const SYNTHETIC_CODEX_HOMES: VendorHomesV1 = {
 export const CODEX_PLUGIN_ROOT = parseCanonicalAbsolutePathText(codexInstructionPaths(SYNTHETIC_CODEX_HOMES).pluginRoot);
 export const CODEX_PLUGIN_FILE = parseCanonicalAbsolutePathText(`${CODEX_PLUGIN_ROOT}/plugin.json`);
 export const CODEX_REGISTRATION_PATH = parseCanonicalAbsolutePathText(codexInstructionPaths(SYNTHETIC_CODEX_HOMES).registrationFile);
+/** The Brain note the optional schema migration rewrites (NEW-192), relative to the Brain root. */
+export const NOTE_PATH = "notes/a.md";
+export const OLD_NOTE = encoder.encode("---\nschema: 1\n---\nnote\n");
+export const NEW_NOTE = encoder.encode("---\nschema: 2\n---\nnote\n");
 export const OLD_PLUGIN = encoder.encode("{\"name\":\"developer-os\",\"version\":\"1.0.0\"}\n");
 export const NEW_PLUGIN = encoder.encode("{\"name\":\"developer-os\",\"version\":\"1.0.0\",\"skills\":2}\n");
 
@@ -308,7 +312,7 @@ function currentManifest(codex = false): InstallationManifestV2 {
   return { schemaVersion: 2, productVersion: parseStableSemver("1.0.0"), installedAt: INSTALLED_AT, artifacts } as unknown as InstallationManifestV2;
 }
 
-function plannerRequest(releases: { readonly current: ReleaseIdentityV1; readonly target: ReleaseIdentityV1; readonly plannedAt: UtcTimestampV1 }, codex = false): UpdatePlannerRequestV1 {
+function plannerRequest(releases: { readonly current: ReleaseIdentityV1; readonly target: ReleaseIdentityV1; readonly plannedAt: UtcTimestampV1 }, codex = false, migration = false): UpdatePlannerRequestV1 {
   const rows = fixtureRows(codex);
   const artifacts = rows.map(({ artifact: row }, ordinal) => ({
     token: plannerPathToken(ordinal),
@@ -357,7 +361,9 @@ function plannerRequest(releases: { readonly current: ReleaseIdentityV1; readonl
       mergeStrategy: row.mergeStrategy,
       observed: observed[ordinal],
     })),
-    brain: { schemaVersion: 1, root: "brain_root", folderPolicyVersion: 1, entries: [], aggregateBytes: 0 },
+    brain: migration
+      ? { schemaVersion: 1, root: "brain_root", folderPolicyVersion: 1, entries: [{ path: NOTE_PATH, mode: 384, bytes: OLD_NOTE.byteLength, sha256: sha256(OLD_NOTE), blob: { stream: "input", ordinal: blobs, bytes: OLD_NOTE.byteLength, sha256: sha256(OLD_NOTE) } }], aggregateBytes: OLD_NOTE.byteLength }
+      : { schemaVersion: 1, root: "brain_root", folderPolicyVersion: 1, entries: [], aggregateBytes: 0 },
   });
 }
 
@@ -366,6 +372,7 @@ function plannerRequest(releases: { readonly current: ReleaseIdentityV1; readonl
  * a Codex owner it also replaces the plugin file (a third blob) and drafts the one closed refresh.
  */
 function plannerDraft(request: UpdatePlannerRequestV1, reversed: boolean): TargetUpdateDraftV1 {
+  const note = request.brain.entries[0];
   const [directory, fileA, fileB, pluginRoot, plugin, registration] = request.manifest.artifacts;
   if (directory === undefined || fileA === undefined || fileB === undefined) throw new Error("fixture manifest changed shape");
   const replace = (token: typeof fileA.token, expectedHash: LowerHexSha256 | null, ordinal: number, bytes: Uint8Array) => ({
@@ -399,7 +406,21 @@ function plannerDraft(request: UpdatePlannerRequestV1, reversed: boolean): Targe
           }]
         : []),
     ],
-    migrations: [],
+    // The note's new bytes, then its inverse (the exact before bytes), after every owner output.
+    migrations: note === undefined
+      ? []
+      : [{
+          id: "migration_notes-v2",
+          domain: "brain",
+          fromVersion: 1,
+          toVersion: 2,
+          mutations: [{
+            path: { domain: "brain", path: note.path },
+            beforeHash: note.sha256,
+            afterBlob: { stream: "output", ordinal: codex ? 3 : 2, bytes: NEW_NOTE.byteLength },
+            inverseBlob: { stream: "output", ordinal: codex ? 4 : 3, bytes: OLD_NOTE.byteLength },
+          }],
+        }],
     expectedManifest: {
       schemaVersion: 2,
       productVersion: request.targetRelease.version,
@@ -503,6 +524,8 @@ export interface UpdateFixtureOptions {
   readonly architecture?: SyntheticArchitectureV1;
   /** Installs the Codex owner partition in this registration state; the target changes its plugin file. */
   readonly codex?: { readonly registration: CodexRegistrationStateV1 };
+  /** Adds one Brain note to the snapshot and drafts one Brain schema migration over it (NEW-192). */
+  readonly migration?: boolean;
 }
 
 /** A pinned identity for a `codex` no test ever spawns. */
@@ -622,6 +645,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
       };
   const trustSequence = options.trustSequence ?? current.releaseSequence;
   const codex = options.codex !== undefined;
+  const migration = options.migration === true;
   const home: UpdateHomeV1 = {
     manifest: currentManifest(codex),
     active,
@@ -697,9 +721,9 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
     snapshot: (_home, releasesInput) => {
       events.push("snapshot");
       const rows = fixtureRows(codex);
-      const request = plannerRequest(releasesInput, codex);
+      const request = plannerRequest(releasesInput, codex, migration);
       const tokenPaths = new Map(rows.map((row, ordinal) => [plannerPathToken(ordinal), row.artifact.path]));
-      const inputBlobs = rows.flatMap((row) => (row.bytes === null ? [] : [row.bytes]));
+      const inputBlobs = [...rows.flatMap((row) => (row.bytes === null ? [] : [row.bytes])), ...(migration ? [OLD_NOTE] : [])];
       return Promise.resolve({ request, inputBlobs, tokenPaths, ownerRoots: codex ? { core: SYNTHETIC_HOME, codex: SYNTHETIC_CODEX_HOMES.codexHome } : { core: SYNTHETIC_HOME } });
     },
     planner: {
@@ -707,7 +731,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
         events.push("planner");
         if (options.plannerFailure !== undefined) return Promise.reject(options.plannerFailure);
         const draft = plannerDraft(run.request, options.reversedOperations === true);
-        const outputs = codex ? [NEW_A, NEW_B, NEW_PLUGIN] : [NEW_A, NEW_B];
+        const outputs = [NEW_A, NEW_B, ...(codex ? [NEW_PLUGIN] : []), ...(migration ? [NEW_NOTE, OLD_NOTE] : [])];
         return Promise.resolve({
           draft,
           outputBlobs: screened(outputs),
