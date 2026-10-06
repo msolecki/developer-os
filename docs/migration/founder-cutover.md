@@ -466,10 +466,15 @@ recorded (roadmap D57). Nobody has yet seen a skills-directory plugin's `hooks/h
 (`claude-adapter.md`); without that record the legacy guards stay and step 8 does not start.
 
 **Claude, first prove the product hooks fire.** With the legacy entries still in place, open one
-short Claude session: let it start, run one harmless command such as `true`, and read one file; edit
-nothing, because both the legacy and the product format hooks would run. Close it, then run
-`dos doctor`. The `hooks` line keys ages by event: `inject` (SessionStart) and `command`, `commit`
-and `path` (all PreToolUse) must show an age in hours, not `never`. `doctor` reports `hooks` as
+short Claude session: let it start, run one harmless command such as `true`, and have it write one
+throwaway file outside any repository, for example `/tmp/dos-step10-probe.txt` with the text `probe`
+(the `Write` tool is enough). `guard path` matches only `Edit`, `Write` and `MultiEdit`, so a read
+never fires it, and the firing record is written whatever the outcome, an allow included
+(`hooks.md` §3.6). The same edit fires `format` and `edit` (PostToolUse). Both the legacy and the
+product format hooks run on that file, which is why it must be one that does not matter. Edit no
+real file in this session. Close it, then run `dos doctor`. The `hooks` line keys ages by event:
+`inject` (SessionStart), `command`, `commit` and `path` (all PreToolUse) must show an age in hours,
+not `never`; `format` and `edit` (PostToolUse) are expected to as well. `doctor` reports `hooks` as
 passing even when every age is `never`, so the pass alone proves nothing. If an age stays `never`,
 stop: the product hooks do not fire, and the legacy entries stay.
 
