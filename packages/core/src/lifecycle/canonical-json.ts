@@ -33,31 +33,41 @@ function assertString(value: string): void {
   }
 }
 
+const escapes: Readonly<Record<number, string>> = {
+  0x22: '\\"',
+  0x5c: "\\\\",
+  0x08: "\\b",
+  0x09: "\\t",
+  0x0a: "\\n",
+  0x0c: "\\f",
+  0x0d: "\\r",
+};
+
 /**
- * Appending one character at a time looks like the obvious thing to fix here,
- * and copying the run between escapes as one slice does make this function
- * faster: 12.1 s to 8.8 s across the 179,890 encodes of one bootstrap test.
- * It was measured end to end on 2026-09-08 and rejected anyway, because it
- * roughly doubles young-generation scavenges — 2,782 to 6,226 in that test —
- * and cost 22 s of extra process CPU and 3.4% of the test's wall time. The
- * per-character append is what keeps the result a flat string (NEW-53).
+ * Scan, then slice: the run between two escapes is copied as one `slice`, and a
+ * string with nothing to escape (almost every path, hash and timestamp) is one
+ * template concatenation instead of one append per character (NEW-53). An
+ * earlier revision of this comment rejected the slice form on 2026-09-08 because
+ * it doubled young-generation scavenges in the bootstrap test (2,782 to 6,226);
+ * NEW-53 was reopened for exactly this change; re-measure the scavenge count
+ * on the bootstrap test before reverting it again.
  */
 function encodeString(value: string): string {
   assertString(value);
-  let encoded = '"';
+  let encoded = "";
+  let runStart = 0;
   for (let index = 0; index < value.length; index += 1) {
     const codeUnit = value.charCodeAt(index);
-    if (codeUnit === 0x22) encoded += '\\"';
-    else if (codeUnit === 0x5c) encoded += "\\\\";
-    else if (codeUnit === 0x08) encoded += "\\b";
-    else if (codeUnit === 0x09) encoded += "\\t";
-    else if (codeUnit === 0x0a) encoded += "\\n";
-    else if (codeUnit === 0x0c) encoded += "\\f";
-    else if (codeUnit === 0x0d) encoded += "\\r";
-    else if (codeUnit >= 0 && codeUnit <= 0x1f) encoded += `\\u00${codeUnit.toString(16).padStart(2, "0")}`;
-    else encoded += value[index] as string;
+    if (codeUnit > 0x5c || (codeUnit > 0x22 && codeUnit < 0x5c)) continue;
+    let escape = escapes[codeUnit];
+    if (escape === undefined) {
+      if (codeUnit > 0x1f) continue;
+      escape = `\\u00${codeUnit.toString(16).padStart(2, "0")}`;
+    }
+    encoded += value.slice(runStart, index) + escape;
+    runStart = index + 1;
   }
-  return `${encoded}"`;
+  return runStart === 0 ? `"${value}"` : `"${encoded}${value.slice(runStart)}"`;
 }
 
 /**

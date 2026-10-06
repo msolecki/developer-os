@@ -424,4 +424,82 @@ describe("hashCanonicalJson", () => {
   it("refuses a value canonical JSON cannot encode", () => {
     expect(() => hashCanonicalJson("d", { a: 1.5 })).toThrow();
   });
+
+  describe("encodeString against the per-character oracle (NEW-53)", () => {
+    // The pre-NEW-53 encoder, copied verbatim: one append per character.
+    function oracleEncodeString(value: string): string {
+      for (let index = 0; index < value.length; index += 1) {
+        const unit = value.charCodeAt(index);
+        if (unit >= 0xd800 && unit <= 0xdbff) {
+          const next = index + 1 < value.length ? value.charCodeAt(index + 1) : -1;
+          if (next < 0xdc00 || next > 0xdfff) throw new Error("invalid canonical JSON: string has a lone high surrogate");
+          index += 1;
+        } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+          throw new Error("invalid canonical JSON: string has a lone low surrogate");
+        }
+      }
+      let encoded = '"';
+      for (let index = 0; index < value.length; index += 1) {
+        const codeUnit = value.charCodeAt(index);
+        if (codeUnit === 0x22) encoded += '\\"';
+        else if (codeUnit === 0x5c) encoded += "\\\\";
+        else if (codeUnit === 0x08) encoded += "\\b";
+        else if (codeUnit === 0x09) encoded += "\\t";
+        else if (codeUnit === 0x0a) encoded += "\\n";
+        else if (codeUnit === 0x0c) encoded += "\\f";
+        else if (codeUnit === 0x0d) encoded += "\\r";
+        else if (codeUnit >= 0 && codeUnit <= 0x1f) encoded += `\\u00${codeUnit.toString(16).padStart(2, "0")}`;
+        else encoded += value[index] as string;
+      }
+      return `${encoded}"`;
+    }
+
+    // Deterministic xorshift so a failure reproduces.
+    let seed = 0x2545f491;
+    const random = (limit: number): number => {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      return (seed >>> 0) % limit;
+    };
+    const pieces = [
+      "a", "Z", "0", " ", "/", "é", "€", "\u{10000}", "\u{1f600}", "\u2028", "\u2029", "\u007f", "\uffff",
+      '"', "\\", "\b", "\t", "\n", "\f", "\r", "\u0000", "\u001f", "\u0001",
+      "\ud800", "\udbff", "\udc00", "\udfff",
+    ];
+
+    function outcome(encode: () => string): string {
+      try {
+        return `ok:${encode()}`;
+      } catch (error) {
+        return `err:${(error as Error).message}`;
+      }
+    }
+
+    it("matches the oracle byte for byte, including refusals, over random strings", () => {
+      for (let round = 0; round < 20000; round += 1) {
+        let value = "";
+        const length = random(4) === 0 ? random(300) : random(12);
+        for (let i = 0; i < length; i += 1) value += pieces[random(pieces.length)] as string;
+        const expected = outcome(() => oracleEncodeString(value));
+        const actual = outcome(() => encodeCanonicalJson(value).slice(0, -1));
+        expect(actual).toBe(expected);
+      }
+    });
+
+    it("matches the oracle on long strings with sparse escapes and an edge-placed escape", () => {
+      const base = "0123456789abcdef/é€\u{10000}".repeat(5000);
+      for (const value of [base, `"${base}`, `${base}\n`, `${base}\\${base}`, `${base}\u0000${base}\u{1f600}`]) {
+        expect(encodeCanonicalJson(value).slice(0, -1)).toBe(oracleEncodeString(value));
+      }
+    });
+
+    it("refuses a lone surrogate at the start, middle and end of a long string", () => {
+      for (const lone of ["\ud800", "\udc00"]) {
+        for (const value of [`${lone}abc`, `abc${lone}abc`, `abc${lone}`, `${"x".repeat(10000)}${lone}`]) {
+          expect(() => encodeCanonicalJson(value)).toThrow(/lone (high|low) surrogate/);
+        }
+      }
+    });
+  });
 });
