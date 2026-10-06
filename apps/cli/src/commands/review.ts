@@ -22,7 +22,6 @@ import {
   parseCaptureFile,
   parseNote,
   renderCaptureFile,
-  resolveBrainConfig,
   REVIEW_DECISIONS,
 } from "@developer-os/brain";
 import type {
@@ -37,11 +36,12 @@ import {
   exitCodeOf,
   failureFrom,
   loadOrCreateRedactionKey,
-  resolveContainedRoot,
   runtimePathsFor,
 } from "../context.js";
+import { resolveQuarantine } from "./quarantine.js";
 import type { CliContext, CliGuards } from "../context.js";
-import { isDirectory, readConfigFile } from "./doctor.js";
+import { isDirectory } from "./doctor.js";
+import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 /**
  * What `--json` publishes: an id and a status per capture, and nothing of the
@@ -108,9 +108,6 @@ export interface ReviewOptions {
   readonly status?: string;
 }
 
-/** Vault-relative, under the configured content root. Spec §3.4. */
-const QUARANTINE_SEGMENTS = ["_raw", "quarantine"] as const;
-
 const CAPTURE_FILE_SUFFIX = ".md";
 
 /**
@@ -140,15 +137,6 @@ class ReviewRefusal extends Error {
     super(message);
     this.name = "ReviewRefusal";
   }
-}
-
-function isMissingEntry(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
 }
 
 interface ReviewTarget {
@@ -692,14 +680,11 @@ async function openQuarantine(
   const config = await readConfiguration(context);
   const paths = runtimePathsFor(context, config);
   await assertVaultPresent(context, paths);
-  const contentRoot = join(paths.brain, resolveBrainConfig(config).contentRoot);
-  const quarantine = await resolveContainedRoot(
+  const { canonicalQuarantine: quarantine } = await resolveQuarantine(
     context,
-    contentRoot,
-    join(contentRoot, ...QUARANTINE_SEGMENTS),
-    "the quarantine directory resolves outside the content root",
-    (message, paths_) =>
-      new ReviewRefusal(EXIT_CODES.securityRefusal, message, paths_),
+    config,
+    paths,
+    (message, paths_) => new ReviewRefusal(EXIT_CODES.securityRefusal, message, paths_),
   );
 
   const key = loadOrCreateRedactionKey(paths.stateDir);

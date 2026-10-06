@@ -725,6 +725,20 @@ export function readRedactionKey(stateDir: string): Uint8Array | null {
 }
 
 /**
+ * The redactor for a command that must never create the key: the durable key when one exists,
+ * else an ephemeral random one, so redaction still decides whether a finding exists but no secret
+ * is written to disk. `patterns` are the config's `[redaction] patterns`.
+ */
+export function redactorWithoutCreatingKey(
+  context: Pick<CliContext, "paths">,
+  patterns: readonly string[],
+): ReturnType<typeof createRedactor> {
+  return createRedactor(readRedactionKey(context.paths.stateDir) ?? randomBytes(REDACTION_KEY_BYTES), {
+    userPatterns: patterns,
+  });
+}
+
+/**
  * Emitted on `stderr` — never `stdout`, which carries `--json` — every time a
  * run falls back to an ephemeral key. Spec's binding constraint: "a missing key
  * regenerates on next use **with a warning that prior fingerprints are no

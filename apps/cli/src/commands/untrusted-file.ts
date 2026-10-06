@@ -3,6 +3,7 @@ import { isAbsolute } from "node:path";
 import { EXIT_CODES, type ExitCode } from "@developer-os/core";
 import { SecurityRefusalError } from "@developer-os/security";
 import type { CliContext } from "../context.js";
+import { isMissingEntry } from "../config-file.js";
 
 type FailureExitCode = Exclude<ExitCode, typeof EXIT_CODES.success>;
 
@@ -54,15 +55,6 @@ export class UntrustedFileRefusal extends Error {
     this.reason = reason;
     this.code = REFUSALS[reason].code;
   }
-}
-
-function isMissingEntry(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
 }
 
 /**

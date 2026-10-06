@@ -125,7 +125,7 @@ export function isGatedTransactionExecutor(value: unknown): boolean {
   return typeof value === "object" && value !== null && GATED.has(value);
 }
 
-function globalLockPath(paths: RuntimePaths): CanonicalAbsolutePathV1 {
+export function globalLockPath(paths: RuntimePaths): CanonicalAbsolutePathV1 {
   return join(paths.stateDir, GLOBAL_LOCK_LEAF) as CanonicalAbsolutePathV1;
 }
 

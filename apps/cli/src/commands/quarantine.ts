@@ -14,6 +14,7 @@ import type { Redactor } from "@developer-os/security";
 import { resolveContainedRoot } from "../context.js";
 import type { CliContext } from "../context.js";
 import { readAdmittedManifest } from "./doctor.js";
+import { isMissingEntry } from "../config-file.js";
 
 /**
  * The quarantine seam `capture` and `import` share (spec §5.3, §5.4): root
@@ -38,15 +39,6 @@ export const EMPTY_MANIFEST: InstallationManifestV1 = {
   installedAt: "1970-01-01T00:00:00.000Z",
   artifacts: [],
 };
-
-function isMissingEntry(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
-}
 
 /**
  * A fingerprint, never a path. The working directory can name a client, a

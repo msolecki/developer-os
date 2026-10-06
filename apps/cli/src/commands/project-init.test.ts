@@ -195,6 +195,20 @@ describe("runProjectInit", () => {
     expect(await readProjectFiles(fixture.project)).toEqual(TEMPLATES.map((file) => file.content));
   });
 
+  it("redacts the paths a refusal publishes (CLI-CMD-5)", async () => {
+    const token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
+    const fixture = await installedFixture(`project-init-paths-${token}`);
+    await nodeFs.writeFile(join(fixture.project, "AGENTS.md"), "user agents\n");
+
+    const result = await runProjectInit(fixture.context, { dir: "project", dryRun: false }, fixture.dependencies);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe("project_file_exists");
+    expect(join(fixture.project, "AGENTS.md")).toContain(token);
+    expect(JSON.stringify(result)).not.toContain(token);
+  });
+
   it("refuses exit 3 listing every existing target, and writes nothing", async () => {
     const fixture = await installedFixture("project-init-create-only");
     await nodeFs.writeFile(join(fixture.project, "AGENTS.md"), "user agents\n");

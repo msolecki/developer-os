@@ -9,7 +9,6 @@ import { basename, dirname, join } from "node:path";
 import {
   EXIT_CODES,
   SCHEDULED_JOB_IDS,
-  failure,
   isOptionalScheduledJob,
   parseCanonicalAbsolutePathText,
   parseEffectiveUid,
@@ -17,14 +16,15 @@ import {
   parseSafeReasonCode,
   success,
 } from "@developer-os/core";
-import type { CanonicalAbsolutePathV1, CliResult, HeldLifecycleStableLockV1, ScheduledJobIdV1 } from "@developer-os/core";
+import type { CanonicalAbsolutePathV1, CliResult, ScheduledJobIdV1 } from "@developer-os/core";
 import { launchdGuiDomain } from "@developer-os/platform-macos";
 
 import { failureFrom, renderPath } from "../../context.js";
 import type { CliContext } from "../../context.js";
 import { admitInstalledV2Home, V2HomeAdmissionError } from "../../lifecycle/admission.js";
+import { admitV2Home, withGlobalLock } from "../../lifecycle/command-home.js";
 import type { CliLifecycleContext } from "../../lifecycle/context.js";
-import { classifyMutationHome, gateManifestAdmission, LifecycleMutationRefusal } from "../../lifecycle/mutation-gate.js";
+import { gateManifestAdmission, LifecycleMutationRefusal } from "../../lifecycle/mutation-gate.js";
 import { entrypointPath } from "../../update/local-release.js";
 import { createProductionScheduledHandlers } from "./handlers.js";
 import { AutomationRunner, createAutomationRunnerDependencies, ScheduledAuthenticationError } from "./runner.js";
@@ -34,28 +34,6 @@ import type { AutomationCommandDataV1, AutomationCommandRequestV1, AutomationCom
 
 export type { AutomationCommandDataV1, AutomationCommandRequestV1, AutomationCommandResultV1, AutomationService } from "./service.js";
 export { createAutomationService } from "./service.js";
-
-async function admitV2Home(context: CliContext): Promise<CliLifecycleContext> {
-  const lifecycle = context.lifecycle;
-  const home = await classifyMutationHome(context, lifecycle);
-  if (home.kind === "v1") throw new V2HomeAdmissionError("manifest_v1_not_migratable", [context.paths.manifestFile]);
-  if (home.kind !== "v2") throw new V2HomeAdmissionError("manifest_absent", [context.paths.manifestFile]);
-  if (lifecycle === undefined) throw new Error("an admitted V2 home has no lifecycle context");
-  return lifecycle;
-}
-
-async function withGlobalLock<T>(
-  context: CliContext,
-  lifecycle: CliLifecycleContext,
-  work: (global: HeldLifecycleStableLockV1) => Promise<T>,
-): Promise<T> {
-  const held = await lifecycle.locks.acquireExisting(join(context.paths.stateDir, ".lifecycle.lock") as CanonicalAbsolutePathV1);
-  try {
-    return await work(held);
-  } finally {
-    await held.release();
-  }
-}
 
 async function execute(context: CliContext, lifecycle: CliLifecycleContext, request: AutomationCommandRequestV1): Promise<AutomationCommandResultV1> {
   const service = createAutomationService(context, lifecycle);
@@ -85,9 +63,8 @@ function refusalOf(error: unknown): { readonly paths: readonly string[]; readonl
 
 export async function runAutomation(context: CliContext, request: AutomationCommandRequestV1): Promise<CliResult<AutomationCommandDataV1>> {
   try {
-    const result = await execute(context, await admitV2Home(context), request);
-    if (result.exitCode === EXIT_CODES.success) return success(result.data);
-    return failure(result.exitCode, { kind: "automation_failed", message: "the automation command did not complete", paths: [context.paths.home] });
+    // The automation service only ever returns success; a refusal is thrown.
+    return success((await execute(context, await admitV2Home(context), request)).data);
   } catch (error) {
     const { paths, recovery } = refusalOf(error);
     return failureFrom(context, error, paths, recovery);

@@ -29,6 +29,7 @@ import type { CliContext } from "../context.js";
 import { readConfig } from "./brain.js";
 import { isTopicNotePath } from "./capture.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
+import { isMissingEntry } from "../config-file.js";
 
 export interface BrainRefactorResultV1 {
   readonly schemaVersion: 1;
@@ -90,15 +91,6 @@ class BrainRefactorRefusal extends Error {
   }
 }
 
-function isMissing(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
-}
-
 function pathRefused(path: string, why: string): BrainRefactorRefusal {
   return new BrainRefactorRefusal(
     "brain_refactor_path_refused",
@@ -137,7 +129,7 @@ async function containedTarget(
       if (stats.isSymbolicLink()) throw pathRefused(path, "passes through a symbolic link");
       if (i === 1) headIsDirectory = stats.isDirectory();
     } catch (error) {
-      if (!isMissing(error)) throw error;
+      if (!isMissingEntry(error)) throw error;
       exists = false;
     }
   }

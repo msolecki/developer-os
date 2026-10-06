@@ -2470,12 +2470,12 @@ describe("runIngest, the agent call", () => {
     expect(await exists(join(fixture.paths.stateDir, "ingest-attempts.json"))).toBe(false);
   });
 
-  it("accepts --yes and changes nothing by it, because ingest never asks", async () => {
+  it("never asks a question", async () => {
     const fixture = await installedFixture("ingest-yes");
-    const seeded = await fixture.seedAccepted("an observation for --yes");
+    const seeded = await fixture.seedAccepted("an observation for the no-question check");
     fixture.reply(() => oneNote(seeded.id));
 
-    const result = await fixture.run({ assumeYes: true });
+    const result = await fixture.run();
 
     expect(dataOf(result).applied).toHaveLength(1);
     expect(fixture.io.questions).toStrictEqual([]);

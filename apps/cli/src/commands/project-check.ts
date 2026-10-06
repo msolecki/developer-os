@@ -1,14 +1,13 @@
-import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 
 import { EXIT_CODES, failure, success } from "@developer-os/core";
 import type { CliResult, ExitCode } from "@developer-os/core";
-import { createRedactor } from "@developer-os/security";
 import type { Redactor } from "@developer-os/security";
 
-import { failureFrom, readRedactionKey, renderPath } from "../context.js";
+import { failureFrom, redactorWithoutCreatingKey, renderPath } from "../context.js";
 import type { CliContext } from "../context.js";
-import { doctorExitCode, isDirectory, readConfigFile } from "./doctor.js";
+import { doctorExitCode, isDirectory } from "./doctor.js";
+import { readConfigFile } from "../config-file.js";
 import type { DoctorCheck } from "./doctor.js";
 import { PROJECT_TEMPLATE } from "./project-template.js";
 import { readUntrustedText, UntrustedFileRefusal } from "./untrusted-file.js";
@@ -112,9 +111,7 @@ export async function runProjectCheck(
       });
     }
 
-    const redact = createRedactor(readRedactionKey(context.paths.stateDir) ?? randomBytes(32), {
-      userPatterns: await userPatterns(context),
-    });
+    const redact = redactorWithoutCreatingKey(context, await userPatterns(context));
 
     const names = [...new Set([...INSTRUCTION_FILES, ...dependencies.templateNames])];
     const present = new Set<string>();

@@ -4,7 +4,7 @@
  * caller already holds, recomputes its preview there, proves feasibility, reserves IDs, stages
  * every participant, persists the plan and hands it to the coordinator by ID.
  */
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, lstat, mkdir, open, readdir, realpath, rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -102,12 +102,12 @@ import type {
 } from "@developer-os/core";
 import { PRIVATE_FOLDERS, discoverNotes, lintVault, resolveBrainConfig } from "@developer-os/brain";
 import type { DirectoryEntry } from "@developer-os/brain";
-import { GIT_DISTRIBUTION_POLICY_ID, PERSISTED_GIT_PUSH_PLAN_CODEC, createRedactor } from "@developer-os/security";
+import { GIT_DISTRIBUTION_POLICY_ID, PERSISTED_GIT_PUSH_PLAN_CODEC } from "@developer-os/security";
 import type { PersistedGitPushPlanV1 } from "@developer-os/security";
 
 import { createBootstrapEvidenceInspectionRequest } from "../../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../../bootstrap/report.js";
-import { readRedactionKey } from "../../context.js";
+import { redactorWithoutCreatingKey } from "../../context.js";
 import type { CliContext } from "../../context.js";
 import { compareManifestRows } from "../../instructions/attach.js";
 import { createLifecycleEffectAdapters, createLifecycleManifestAdapter } from "../../lifecycle/adapters.js";
@@ -491,9 +491,7 @@ function snapshotLinter(context: CliContext, config: DeveloperOsConfigV1, scope:
 type GitPlannerDependencies = ConstructorParameters<typeof GitPlanner>[0];
 
 function redactorFor(context: CliContext, config: DeveloperOsConfigV1): (text: string) => string {
-  const redactor = createRedactor(readRedactionKey(context.paths.stateDir) ?? randomBytes(32), {
-    userPatterns: config.redaction?.patterns ?? [],
-  });
+  const redactor = redactorWithoutCreatingKey(context, config.redaction?.patterns ?? []);
   return (text) => redactor(text).text;
 }
 

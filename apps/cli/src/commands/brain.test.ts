@@ -808,3 +808,17 @@ describe("the scheduled brain handlers", () => {
     expect(releases).toStrictEqual([]);
   });
 });
+
+describe("brain refusal redaction (CLI-CMD-5)", () => {
+  it("redacts the paths a refusal publishes, as failureFrom does", async () => {
+    const token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
+    const fixture = await installed(`brain-paths-${token}`);
+    await nodeFs.rm(fixture.paths.configFile, { force: true });
+
+    const result = await runBrain(fixture.context, OPTIONS);
+
+    expect(result.ok).toBe(false);
+    expect(fixture.paths.configFile).toContain(token);
+    expect(JSON.stringify(result)).not.toContain(token);
+  });
+});

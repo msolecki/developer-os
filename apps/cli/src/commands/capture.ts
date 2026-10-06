@@ -37,13 +37,14 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
-import { isDirectory, readConfigFile } from "./doctor.js";
+import { isDirectory } from "./doctor.js";
 import {
   PROBE_FILE_SYSTEM,
   pinProbeExecutable,
   recheckProbeExecutable,
 } from "../pinned-executable.js";
 import type { ProbeFileSystemV1 } from "../pinned-executable.js";
+import { resolveProjectRoot } from "../hooks/project-root.js";
 import { slugify } from "../project-slug.js";
 import {
   fingerprintDirectory,
@@ -54,6 +55,7 @@ import {
 } from "./quarantine.js";
 import type { ExistingCapture } from "./quarantine.js";
 import { dependenciesFor } from "./reindex.js";
+import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 /**
  * What `--json` publishes, and it publishes a **count**: a consumer learns that
@@ -401,15 +403,6 @@ function assertWritableContent(content: string): void {
   }
 }
 
-function isMissingEntry(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "ENOENT"
-  );
-}
-
 /**
  * The string half of `--note`'s containment: inside a configured topic folder or a folder
  * `topicAliases` maps to one, resolved as the indexer does (NEW-128), and no segment
@@ -477,6 +470,7 @@ async function resolveNoteTarget(
     try {
       stats = await context.fs.lstat(current);
     } catch (error) {
+      // ENOTDIR counts as absent (CLI-CMD-3): a file where a folder belongs leaves nothing to walk, and the write below refuses it.
       if (isMissingEntry(error)) break;
       throw error;
     }
@@ -650,7 +644,8 @@ export async function runCapture(
        * detection row exists (Task 17) both fields start saying so together.
        */
       captureMethod: source.sourceAgent === UNKNOWN ? "manual" : "agent-authored",
-      projectSlug: slugify(basename(workingDirectory)),
+      // The project root, as `inject` slugs it, so a capture from `repo/apps/cli` files under `repo` (FLOW-INIT-7).
+      projectSlug: slugify(basename(await resolveProjectRoot(workingDirectory))),
       workingDirectoryFingerprint: fingerprintDirectory(workingDirectory, key),
       createdAt: context.now().toISOString(),
       redact,

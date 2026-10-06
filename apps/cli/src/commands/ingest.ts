@@ -58,15 +58,15 @@ import {
   failureFrom,
   loadOrCreateRedactionKey,
   renderPath,
-  resolveContainedRoot,
   runtimePathsFor,
 } from "../context.js";
+import { resolveQuarantine } from "./quarantine.js";
 import type { CliContext, CliGuards } from "../context.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { currentBytes, ingestAttemptsPath, writeMutation } from "../lifecycle/runtime-records.js";
 import { currentScheduledJob } from "./automation/scheduled-scope.js";
 import { isTopicNotePath } from "./capture.js";
-import { isDirectory, readConfigFile } from "./doctor.js";
+import { isDirectory } from "./doctor.js";
 import {
   encodeIngestAttempts,
   MAX_INGEST_ATTEMPTS_BYTES,
@@ -77,6 +77,7 @@ import {
 import { boundState, fileState, stateOf } from "./ingest-file-state.js";
 import { outputSchemaPath } from "./output-schemas.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
+import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 /**
  * What `--json` publishes per capture: an id, the status it now holds, and the
@@ -208,16 +209,6 @@ export interface IngestOptions {
   readonly limit?: number;
   /** `--agent`. Absent means the first installed vendor in `VENDOR_ORDER`. */
   readonly agent?: string;
-  /**
-   * `--yes`. Accepted and inert: **`ingest` never asks a question.** The human
-   * gate for a capture is `review --decision accept`, already taken per capture
-   * before this command can see it, and a second confirmation would re-ask a
-   * question the user has already answered — which is why `capture` and
-   * `review` prompt for nothing either. The flag is accepted so that a script
-   * driving the whole pipeline non-interactively passes one vocabulary to every
-   * verb rather than discovering that one of the three refuses it.
-   */
-  readonly assumeYes?: boolean;
 }
 
 /**
@@ -271,9 +262,6 @@ const INGEST_TIMEOUT_MS = 120_000;
  * nothing reads would be a probe in all but name.
  */
 const UNKNOWN_VERSION = "unknown";
-
-/** Vault-relative, under the configured content root. Spec §3.4. */
-const QUARANTINE_SEGMENTS = ["_raw", "quarantine"] as const;
 
 const CAPTURE_FILE_SUFFIX = ".md";
 
@@ -540,15 +528,6 @@ class VaultChangedDuringIngestRefusal extends IngestRefusal {
     );
     this.name = "VaultChangedDuringIngestRefusal";
   }
-}
-
-function isMissingEntry(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
 }
 
 /* --------------------------------------------------------- what to work on */
@@ -2674,12 +2653,10 @@ export async function runIngest(
     await assertVaultPresent(context, paths);
 
     const brainConfig = resolveBrainConfig(config);
-    const contentRoot = join(paths.brain, brainConfig.contentRoot);
-    const quarantine = await resolveContainedRoot(
+    const { contentRoot, canonicalQuarantine: quarantine } = await resolveQuarantine(
       context,
-      contentRoot,
-      join(contentRoot, ...QUARANTINE_SEGMENTS),
-      "the quarantine directory resolves outside the content root",
+      config,
+      paths,
       (message, paths_) =>
         new IngestRefusal(
           EXIT_CODES.securityRefusal,
