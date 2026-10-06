@@ -156,7 +156,7 @@ interface Timer {
   cancelled: boolean;
 }
 
-function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null = { residentBytes: 1024, descendants: 0 }) {
+function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null | "reject" = { residentBytes: 1024, descendants: 0 }) {
   const timers: Timer[] = [];
   const spawned: PlannerSpawnRequestV1[] = [];
   let child: FakePlannerChild | null = null;
@@ -174,7 +174,7 @@ function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null = { r
         timer.cancelled = true;
       };
     },
-    sample: () => Promise.resolve(sample),
+    sample: () => (sample === "reject" ? Promise.reject(new SecurityRefusalError("Planner sampling failed")) : Promise.resolve(sample)),
     redactor: (text: string): RedactionResult => ({ text, findings: text.includes(SECRET_MARKER) ? [{ class: "provider-token", fingerprint: "synthetic" }] : [] }),
     sampleIntervalMilliseconds: 5,
   });
@@ -310,6 +310,17 @@ describe("target planner supervision", () => {
     expect(child().reaped).toBe(true);
   });
 
+  it("kills, reaps and refuses when the sampler rejects", async () => {
+    const { supervisor, fire, child } = harness(() => undefined, "reject");
+    const outcome = supervisor.run(run()).then(() => null, (error: unknown) => error);
+    await settle();
+    fire(5);
+    await settle();
+    expect(await outcome).toBeInstanceOf(SecurityRefusalError);
+    expect(child().killed).toBe(true);
+    expect(child().reaped).toBe(true);
+  });
+
   it.each<{ name: string; overrides: Partial<TargetPlannerRunRequestV1> }>([
     { name: "a secret in an input blob", overrides: { inputBlobs: [bytes(SECRET_MARKER.padEnd(toolBytes.byteLength, "x").slice(0, toolBytes.byteLength))] } },
     { name: "an input blob that differs from its reference", overrides: { inputBlobs: [nextBytes] } },
@@ -356,6 +367,48 @@ describe("the production planner child", () => {
     }
   });
 
+  // W2-SEC-UPD-3: a descendant in its own session keeps stdout open after the group kill; the kill
+  // must close the pipes so the supervisor's EOF and `exited` waits stay bounded.
+  it("ends stdout and resolves exited after a kill even when an escaped descendant holds the pipe", async () => {
+    const root = await realpath(await mkdtemp(joinPath(tmpdir(), "dos-planner-escape-")));
+    try {
+      const script = joinPath(root, "planner.mjs");
+      await writeFile(script, [
+        "import { spawn } from 'node:child_process';",
+        "const escaped = spawn('/bin/sleep', ['60'], { detached: true, stdio: ['ignore', 'inherit', 'inherit'] });",
+        "process.stdout.write(String(escaped.pid) + '\\n');",
+        "setInterval(() => undefined, 1000);",
+        "",
+      ].join("\n"));
+      const child = spawnNodePlannerChild({ executable: process.execPath, args: [script], cwd: root, env: {} });
+      const iterator = child.stdout[Symbol.asyncIterator]();
+      const first = await iterator.next();
+      const escapedPid = Number(new TextDecoder().decode(first.value as Uint8Array).trim());
+      try {
+        child.kill();
+        const bounded = <T>(promise: Promise<T>): Promise<T | "timeout"> =>
+          Promise.race([promise, new Promise<"timeout">((resolve) => setTimeout(() => { resolve("timeout"); }, 3_000))]);
+        const drained = (async () => {
+          try {
+            for (;;) if ((await iterator.next()).done === true) return "ended";
+          } catch {
+            return "ended";
+          }
+        })();
+        expect(await bounded(drained)).toBe("ended");
+        expect(await bounded(child.exited)).not.toBe("timeout");
+      } finally {
+        try {
+          process.kill(escapedPid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("refuses a relative executable before spawning", () => {
     expect(() => spawnNodePlannerChild({ executable: "node", args: ["planner.mjs"], cwd: "/", env: {} })).toThrow(SecurityRefusalError);
   });
@@ -364,5 +417,15 @@ describe("the production planner child", () => {
     const own = await sampleNodePlannerProcess(process.pid);
     expect(own?.residentBytes).toBeGreaterThan(0);
     expect(await sampleNodePlannerProcess(2_147_483_646)).toBeNull();
+  });
+
+  // W2-SEC-UPD-2: a failed `ps` is not "process gone"; it rejects, so the supervisors kill and refuse.
+  it("rejects when ps fails instead of reporting the process gone", async () => {
+    const failingPs = (_file: string, _args: readonly string[], _options: object, callback: (error: Error | null, stdout: string) => void): void => {
+      callback(Object.assign(new Error("spawn EAGAIN"), { code: "EAGAIN" }), "");
+    };
+    const outcome = await sampleNodePlannerProcess(process.pid, failingPs).then(() => null, (error: unknown) => error);
+    expect(outcome).toBeInstanceOf(SecurityRefusalError);
+    expect((outcome as Error).cause).toMatchObject({ code: "EAGAIN" });
   });
 });
