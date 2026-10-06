@@ -8,6 +8,7 @@ import { deriveBootstrapRetentionLocations, encodeCanonicalJson, EXIT_CODES } fr
 import type { CanonicalJsonValue } from "@developer-os/core";
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
+import { runDoctorReport } from "../commands/doctor.js";
 import { runInit } from "../commands/init.js";
 import { runUninstall } from "../commands/uninstall.js";
 import { redactionKeyPath } from "../context.js";
@@ -844,6 +845,10 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
 
     expect(retried.ok ? 0 : retried.code).toBe(EXIT_CODES.recoveryRequired);
     expect(await currentJournal(persisted.value)).toStrictEqual(terminal);
+    await closeBootstrapProcess(fixture);
+    const report = await runDoctorReport(fixture.rebuildContext());
+    // The non-terminal forward journal was retained with its directory, so no transaction is left for repair or init.
+    expect(report.checks.find((check) => check.id === "transactions")).toMatchObject({ status: "pass" });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
