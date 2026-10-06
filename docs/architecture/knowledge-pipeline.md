@@ -27,7 +27,7 @@ produced it.
 | the envelope, its statuses, and their transitions | `packages/brain/src/schema/capture.ts`, `packages/brain/src/capture/`, `packages/brain/src/review/` |
 | the proposal, the nine validators, and the apply | `packages/brain/src/ingest/` |
 | structured-result schemas | `packages/workflow-schema/src/vocabulary.ts`: every verb declaring `structured_result` gets one product-shipped JSON Schema; today that set is `ingest.stage` |
-| the contracts the vendor trees render | `workflows/{capture,review,ingest,brain-search,shared}/workflow.yaml`, all five at `2.0.0`. That glob matches **six** files: `workflows/doctor/workflow.yaml` is unchanged at `1.0.0` |
+| the contracts the vendor trees render | `workflows/{capture,review,ingest,brain-search,shared}/workflow.yaml`, the `extends` pins and versions are in `workflows/*/workflow.yaml` (`grep -n '^version:' workflows/*/workflow.yaml`). On 2026-10-06: `capture`, `ingest` and `shared` at `2.0.0`, `review` at `2.1.0`, `brain-search` at `2.0.1`; the brain workflows (`brain-answer`, `brain-compile`, `brain-enhance`, `brain-report`) at `1.0.1` and `brain-garden` at `1.1.0`; `doctor` at `1.0.0`. The glob matches eleven files, not five |
 | the closed verb-mapping defect | Before DOS-P6, three shipped skills in each vendor tree named commands with no handler. The effect vocabulary now binds each implemented verb to its command in `packages/workflow-schema/src/vocabulary.ts`; `workflow-schema.md` §§5, 7 records the compiler side |
 | the security suites | `tests/security/`, eleven suites (the count is checked by `tests/repository/citations.test.ts`); 90 cases when last collected, on 2026-08-17 |
 | the end-to-end run against the compiled binary | `tests/e2e/knowledge-lifecycle/lifecycle.test.ts` |
@@ -44,7 +44,7 @@ field on no code path (`tests/repository/transcript-path.test.ts`). So the obser
 from the agent, mid-session, at the point of insight: the rendered skill tells it to run
 `developer-os capture` with its own summary.
 
-**Hooks are therefore declined, not deferred.** Both adapter notes recorded the blocker
+**Hooks are therefore declined, not deferred.** *Amended 2026-09-22 (A13, D47): this holds only for the two capture hooks, `session_end_capture` and `pre_compact_backup`. The eight non-capture hook verbs ship in both vendor trees (`hooks.md` §3.1), and the not-used list is four keys (see "The capability vocabulary" below). The text that follows is the 2026-08-13 record.* Both adapter notes recorded the blocker
 as a missing executable bit; that was wrong and is corrected here, because a
 later reader would otherwise solve the wrong problem. A `"type": "command"` handler names a command
 *string*, so naming the installed binary ships no script and needs no mode bit. What hooks lacked was
@@ -64,7 +64,7 @@ content to capture.
   `decision` input had been advertising. `workflow-schema.md` §7 recorded those two triggers as
   values that validate while the property they name is false; that paragraph's schema point still
   stands and no shipped contract exercises it any more;
-- no hooks ship, in either vendor tree, in v1;
+- no hooks ship, in either vendor tree, in v1 (*reversed by A13 for the eight non-capture verbs; the capture hooks stay declined*);
 - `developer-os run claude|codex` is never built;
 - **nothing automatic captures anything.** If nobody runs the workflow, no knowledge is captured.
   This is the largest product narrowing in the program to date and it is deliberate.
@@ -73,9 +73,11 @@ content to capture.
 kept beside a new value: it meant "we are not certain, and the wrapper produces the same capture
 anyway", and the decision deletes the second half, leaving advice to run a command that will not
 exist. `CAPABILITY_STATES` is `yes | unknown | not-used`
-(`packages/core/src/capabilities/index.ts`), and `plugin_hooks`, `session_start_injection`,
-`session_end_capture`, `pre_compact_backup`, `subagents` and `durable_project_guidance` resolve to
-**`not-used` before the version table or any observation is consulted**, in both adapters. Removing a
+(`packages/core/src/capabilities/index.ts`), and, since A13, `session_end_capture`, `pre_compact_backup`, `subagents` and
+`durable_project_guidance` resolve to **`not-used` before the version table or any observation is
+consulted**, in both adapters (`CLAUDE_NOT_USED_KEYS`, `CODEX_NOT_USED_KEYS`). `plugin_hooks` and
+`session_start_injection` left both lists with A13 and are observed through firing records
+(`hooks.md` §3.6); on 2026-08-13 they were in the list with the other four. Removing a
 key from either adapter's `NOT_USED` list requires, in the same change, the artifact it describes and
 a test that observed it working — the rule that kept `plugin_hooks` from ever resolving to `yes` over
 a file that does not exist. Parity between the two lists is asserted by
