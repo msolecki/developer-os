@@ -264,9 +264,9 @@ crash cannot be told from a run that never started.
 leaves a capture at `staging` with its notes already in the vault. It is **inert**: `selectCaptures`
 selects only captures whose status is `accepted` (`ingest.ts:663`), so the next run cannot
 double-apply. It is visible, and a hand edit of the status is what moves it — which is what
-`PARTLY_APPLIED_RECOVERY` (`ingest.ts:341-342`) tells the user, in those words and no others: **the
+`PARTLY_APPLIED_RECOVERY` (`ingest.ts:329-330`) tells the user, in those words and no others: **the
 `repair` half of that advice is a different constant.** `INCOMPLETE_TRANSACTION_RECOVERY`
-(`:369-370`) is appended unconditionally by `refusedRecovery` (`:391`), so the two arrive together in
+(`:357-358`) is appended unconditionally by `refusedRecovery` (`:379`), so the two arrive together in
 the output while neither line alone says both. **No arrangement of these transactions removes that
 window**, because no two of them can share one.
 
@@ -282,7 +282,7 @@ model ran**.
 
 **One asymmetry a reader will otherwise assume away.** `--output-schema` reaches Codex only;
 `invokeClaude` has no such flag, so on that vendor the schema is described in the prompt and enforced
-by `parseIngestProposal` afterwards (`ingest.ts:1305-1312`, `:2081`).
+by `parseIngestProposal` afterwards (`ingest.ts:1284-1291`, `:2060`).
 
 **A note capture skips the model.** It is applied verbatim, with no vendor call, as one `create` or
 one `replace` bound to its capture-time hash; `brain.md` §6.13 has the contract.
@@ -437,12 +437,12 @@ differently on every invocation: the field would populate, look correct, and mea
 
 **The key is durable, and the load has two doors, not one:**
 
-- `readRedactionKey` (`apps/cli/src/context.ts:705`) is the **composition root's** door. It never
+- `readRedactionKey` (`apps/cli/src/context.ts:708`) is the **composition root's** door. It never
   creates, never throws and never repairs, returning `null` for absent, unreadable, symlinked,
   wrong-typed or too-short — every state `doctor` must be able to *report*, which it cannot do if
   building the context already threw. The root warns and falls back to an ephemeral key
   (`:743-745`), so diagnostics are still redacted on a machine that has never been initialized.
-- `loadOrCreateRedactionKey` (`:684`) is the **point-of-use** door, called by `init` (`init.ts:350`,
+- `loadOrCreateRedactionKey` (`:687`) is the **point-of-use** door, called by `init` (`init.ts:346`,
   `:975`, `:1026`, `:1061`) and by `capture`, `review` and `ingest` at their own points of use, and
   by `import` except under `--dry-run`. `import --dry-run`, `project init` and `project check` never
   create it: they read it with `readRedactionKey` and fall back to an ephemeral key. It creates
@@ -461,12 +461,12 @@ nothing is encrypted with it.
 
 **And that produces one deliberate exception to a gate this subsystem does not own.** `BACKLOG.md`
 §7's DOS-P7 gate reads "uninstall removes only manifest-owned artifacts", and `uninstall` removes the
-key (`apps/cli/src/commands/uninstall.ts:536-544`) — by the exact path `redactionKeyPath` computes,
+key (`apps/cli/src/commands/uninstall.ts:527-535`) — by the exact path `redactionKeyPath` computes,
 never by pattern and never by walking the state directory, so the exception cannot widen. It runs
 **before** `revertArtifacts` (`apps/cli/src/commands/uninstall.ts` — `revertArtifacts`), so the state directory can be removed when it is otherwise
 empty. An absent manifest no longer returns early past it: that branch hands off to
 `runAbsentManifestUninstall`, which deletes an orphaned key on its own guarded path
-(`deleteOrphanedKey`, `apps/cli/src/lifecycle/absent-manifest-uninstall.ts:178-181`), so an install
+(`deleteOrphanedKey`, `apps/cli/src/lifecycle/absent-manifest-uninstall.ts:181-184`), so an install
 that failed and reverted still leaves no secret nothing would ever clean up. **Leaving a secret behind
 after the product is gone is worse than losing fingerprint comparability.** DOS-P7 inherits this as a
 known exception rather than reading its own gate as violated; the row is §8 of
@@ -489,7 +489,7 @@ substitutions are **pinned to a position** — `content` at index 0 only, `_inde
 only when index 0 was `content` — so a vault folder literally named `content` nested under `staging/`
 cannot be corrupted, and every root is glob-escaped and NFC-normalized before it is spliced in.
 `ingest` resolves its declared scopes through it once per invocation (`ingest.ts:2330-2331`), against
-`INGEST_DECLARED_WRITE_SCOPES` (`:238-241`), which `ingest.test.ts` pins against
+`INGEST_DECLARED_WRITE_SCOPES` (`:229-232`), which `ingest.test.ts` pins against
 `workflows/ingest/workflow.yaml` so a contract edit that does not update the constant goes red. The
 compiler's declared-versus-derived arithmetic is untouched, so the equality rule stays the checked
 arithmetic it was designed to be.
@@ -573,7 +573,7 @@ in §10 below with their owners.
 | **NEW-37** — a numeric leaf of that payload is outside the redactor's reach | **closed 2026-09-28** by contract | S. A `number` leaf is published as the number it is, always: the JSON type must not depend on `[redaction] patterns`, and no built-in class can match a finite number's decimal text. A caller-derived identifier goes into a payload as a string, where every class applies |
 | **NEW-20** — `capture` proves its quarantine root, then follows the declared path again | **closed 2026-09-28** | XS, security. `capture` reads and writes through the canonical quarantine `resolveQuarantine` now returns, and keeps the declared path for `CaptureResultV1.path` and `validateChangePlan`'s owned root, so a retarget after the proof is refused at exit 5. `import` still re-follows its declared quarantine. `threat-model.md` §5.2 describes it |
 | **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | **closed 2026-08-15** by Track R entry R1 | XS, security. `reindex` calls `resolveContainedRoot` (`apps/cli/src/commands/reindex.ts:444`) rather than joining the path textually, so a `content/_indexes` replaced by a link out of the vault is refused instead of written through. Regression tests: `tests/security/symlink-escape.test.ts:369,410` |
-| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. It is called from `apps/cli/src/commands/doctor.ts:482`, `apps/cli/src/commands/ingest.ts:661` and `apps/cli/src/commands/automation/garden.ts:131,189` (re-measured 2026-10-06). **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33, a false refusal, was closed 2026-10-06 (D83 (3)) |
+| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. It is called from `apps/cli/src/commands/doctor.ts:489`, `apps/cli/src/commands/ingest.ts:640` and `apps/cli/src/commands/automation/garden.ts:128,186` (re-measured 2026-10-06). **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33, a false refusal, was closed 2026-10-06 (D83 (3)) |
 | **NEW-16** — user-configured redaction patterns are unreachable | **closed 2026-08-17** by Track R entry R2 | S. `configSchema` carries an optional `[redaction]` table (`packages/core/src/config/loader.ts:418`) and the three redacting commands bind the user's patterns through `createRedactor` at their composition roots. `tests/repository/redactor-entry.test.ts` refuses a new call site that reaches for `redactText` directly. Residuals NEW-25 and NEW-26 are fixed, and NEW-24 closed 2026-09-28 under D73: a `user-pattern` finding persists its row index and an over-broad row is flagged by match density (`threat-model.md` §5.7) |
 | **NEW-17** — `brain` is the one command whose config parse failure is not content-free | **closed**, removed from `BACKLOG.md` §1 | XS, security. `readConfig` now routes through `readConfigFile` (`apps/cli/src/commands/brain.ts:117`) and rethrows `ConfigurationError` unmodified, so no command parses configuration outside the wrapper |
 | **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | **closed 2026-08-15** by Track R entry R1 | XS. One case per `containsNul` site — executable, working directory, any argument, stdin (`packages/security/src/process.test.ts:107,117,125,133`; `containsNul` at `packages/security/src/process.ts:35`) |
