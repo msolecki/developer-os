@@ -575,6 +575,18 @@ describe("rollback payload source forward steps after compensation began (W2-ROL
 });
 
 describe("rollback payload publication", () => {
+  it("withdraws a forward create intent with create_refused and refuses it once compensation started", () => {
+    const plan = statePlan();
+    const atStructure = walkPublication(plan, [{ kind: "structure_intent" }]);
+    expect(advanceRollbackPayloadPublicationJournal(plan, atStructure, { kind: "create_refused" }, later).structureWriteState).toBeNull();
+    const steps = publicationSteps(plan);
+    const atMetadata = walkPublication(plan, [...steps.slice(0, steps.length - 6), { kind: "metadata_intent" }]);
+    expect(advanceRollbackPayloadPublicationJournal(plan, atMetadata, { kind: "create_refused" }, later).metadataWriteState).toBeNull();
+    const compensating = advanceRollbackPayloadPublicationJournal(plan, atMetadata, { kind: "compensate" }, later);
+    expect(compensating.metadataWriteState?.state).toBe("publish_intent");
+    expect(() => advanceRollbackPayloadPublicationJournal(plan, compensating, { kind: "create_refused" }, later)).toThrow();
+  });
+
   it("publishes the five fixed structures, every entry, then the inverse plan and inventory", () => {
     const plan = statePlan();
     const journal = walkPublication(plan, publicationSteps(plan));
