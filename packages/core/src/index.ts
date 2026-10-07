@@ -320,6 +320,7 @@ export {
   validateManifestV2,
   validateRetentionTerminalBinding,
 } from "./manifest/index.js";
+export { admitBootstrapEvidencePlan, selectBootstrapEvidenceJournal } from "./manifest/bootstrap-closure.js";
 export type {
   ArtifactKind,
   ArtifactOwner,

@@ -4,6 +4,7 @@ import type { CanonicalAbsolutePathV1, ReleaseBundleEntryV1 } from "@developer-o
 import type {
   AdmittedReleaseBundleV1,
   LauncherBundleAdmissionRequestV1,
+  LauncherBundleModesV1,
   LauncherGuardedReaderV1,
   LauncherPlatformIdentityV1,
 } from "./types.js";
@@ -57,6 +58,18 @@ export function admitLauncherPlatformIdentity(facts: {
   return { platform: "darwin", architecture: facts.architecture };
 }
 
+const HOMEBREW_DIRECTORY_MODE = 0o755;
+
+/** `exact`: the uid only. `homebrew`: the uid or root, as a keg is owned by its installer (D84 K2). */
+function ownerAdmitted(ownerUid: number, effectiveUid: number, modes: LauncherBundleModesV1): boolean {
+  return ownerUid === effectiveUid || (modes === "homebrew" && ownerUid === 0);
+}
+
+/** Homebrew's mode for a manifest entry by permission class: `0755` for directories and executables, `0644` otherwise. */
+function homebrewMode(entry: ReleaseBundleEntryV1): number {
+  return entry.kind === "directory" || (entry.mode & 0o100) !== 0 ? HOMEBREW_DIRECTORY_MODE : 0o644;
+}
+
 function bundleMemberPath(bundleRoot: CanonicalAbsolutePathV1, relative: string): CanonicalAbsolutePathV1 {
   return parseCanonicalAbsolutePathText(`${bundleRoot}/${relative}`);
 }
@@ -69,7 +82,7 @@ function bundleMemberPath(bundleRoot: CanonicalAbsolutePathV1, relative: string)
  */
 export class LauncherBundleAdmission {
   async admit(request: LauncherBundleAdmissionRequestV1): Promise<AdmittedReleaseBundleV1> {
-    const { platform, bundleRoot, manifest, fs, effectiveUid } = request;
+    const { platform, bundleRoot, manifest, fs, effectiveUid, modes } = request;
 
     if (manifest.architecture !== platform.architecture) {
       throw new LauncherPlatformUnsupportedError(
@@ -81,7 +94,12 @@ export class LauncherBundleAdmission {
     }
 
     const rootEntry = await fs.lstat(bundleRoot);
-    if (rootEntry === null || rootEntry.kind !== "directory" || rootEntry.ownerUid !== effectiveUid) {
+    if (
+      rootEntry === null ||
+      rootEntry.kind !== "directory" ||
+      !ownerAdmitted(rootEntry.ownerUid, effectiveUid, modes) ||
+      (modes === "homebrew" && rootEntry.mode !== HOMEBREW_DIRECTORY_MODE)
+    ) {
       refuseBundle(`The release bundle root is missing or untrusted: ${bundleRoot}`);
     }
 
@@ -93,7 +111,7 @@ export class LauncherBundleAdmission {
     }
 
     for (const entryDecl of manifest.entries) {
-      await this.#admitMember(fs, bundleRoot, entryDecl, effectiveUid);
+      await this.#admitMember(fs, bundleRoot, entryDecl, effectiveUid, modes);
     }
 
     return {
@@ -110,19 +128,21 @@ export class LauncherBundleAdmission {
     bundleRoot: CanonicalAbsolutePathV1,
     entryDecl: ReleaseBundleEntryV1,
     effectiveUid: number,
+    modes: LauncherBundleModesV1,
   ): Promise<void> {
     const path = bundleMemberPath(bundleRoot, entryDecl.path);
     const guarded = await fs.lstat(path);
-    if (guarded === null || guarded.ownerUid !== effectiveUid) {
+    if (guarded === null || !ownerAdmitted(guarded.ownerUid, effectiveUid, modes)) {
       refuseBundle(`An untrusted or missing bundle member was found: ${path}`);
     }
+    const expectedMode = modes === "exact" ? entryDecl.mode : homebrewMode(entryDecl);
     if (entryDecl.kind === "directory") {
-      if (guarded.kind !== "directory" || guarded.mode !== entryDecl.mode) {
+      if (guarded.kind !== "directory" || guarded.mode !== expectedMode) {
         refuseBundle(`A bundle directory does not match its manifest entry: ${path}`);
       }
       return;
     }
-    if (guarded.kind !== "regular_file" || guarded.mode !== entryDecl.mode || guarded.nlink !== 1 || guarded.size !== entryDecl.bytes) {
+    if (guarded.kind !== "regular_file" || guarded.mode !== expectedMode || guarded.nlink !== 1 || guarded.size !== entryDecl.bytes) {
       refuseBundle(`A bundle file does not match its manifest entry: ${path}`);
     }
     const sha256 = await fs.hashRegular(guarded, MAX_BUNDLE_FILE_BYTES);

@@ -1,51 +1,21 @@
 #!/usr/bin/env node
 /**
  * The stable launcher's composition root. It resolves platform identity and
- * the product home, admits a launcher candidate, constructs the shell-free
- * process request `selection.ts` produces, writes the FD 3 offline-trust
- * handoff when one is configured, and execs it.
- *
- * `ponytail:` the bootstrap-closure reader is not wired for real here — a
- * real reader (walking the plan/journal/retention envelope) is Task 9's
- * territory, reused rather than reimplemented once its read-only reader is
- * exposed to this package. Until then this always reports `handoff_complete`,
- * which is safe (it only ever *widens* which candidate can route to normal
- * active/fallback selection, never past `LauncherBundleAdmission`'s guarded
- * checks) but not yet the full §6 recovery routing.
+ * the product home, reads the bootstrap closure, resolves the keg's packaged
+ * fallback from the fixed table, admits a launcher candidate, and execs the
+ * shell-free process request `selection.ts` produces with stdio only.
  */
 import { arch, platform as nodePlatform } from "node:os";
 
 import { admitLauncherPlatformIdentity } from "@developer-os/platform-macos";
-import { resolveRuntimePaths } from "@developer-os/core";
-import type {
-  CanonicalAbsolutePathV1,
-  OfflineReleaseTrustV1,
-  OfflineRootKeyV1,
-} from "@developer-os/core";
+import { PACKAGE_CHANNEL_SOURCE_TABLE, resolveRuntimePaths } from "@developer-os/core";
+import type { CanonicalAbsolutePathV1 } from "@developer-os/core";
 
 import { buildLauncherEnvironment } from "./environment.js";
-import {
-  compileLauncherOfflineReleaseTrust,
-  createLauncherRetainedDocumentVerifier,
-  execAdmittedRelease,
-} from "./handoff.js";
+import { execAdmittedRelease } from "./handoff.js";
 import { createNodeLauncherReader } from "./reader.js";
+import { readBootstrapClosure, readUpdateEnvelope, resolvePackagedFallback } from "./readers.js";
 import { buildLauncherProcessRequest, selectLauncherCandidate } from "./selection.js";
-
-/**
- * ponytail: the founder has not yet decided the production offline root key
- * or its permitted metadata-redirect origins (that decision, and wiring
- * real compiled constants here, is Task 11b's territory) — both empty
- * rather than guessed or hardcoded in the meantime. Empty roots alone
- * already makes `compileLauncherOfflineReleaseTrust` return `null`: no FD 3
- * pipe is opened and `verifyRetainedDocument` refuses every retained
- * document it is asked to check, which only ever routes a present active
- * release into recovery (never past `LauncherBundleAdmission`'s guarded
- * checks) — the same safe-widening invariant the bootstrap-closure stub
- * above documents.
- */
-const LAUNCHER_OFFLINE_RELEASE_ROOTS: readonly OfflineRootKeyV1[] = [];
-const LAUNCHER_METADATA_REDIRECT_ORIGINS: OfflineReleaseTrustV1["metadataRedirectOrigins"] = [];
 
 async function main(): Promise<void> {
   const platform = admitLauncherPlatformIdentity({ platform: nodePlatform(), architecture: arch() });
@@ -73,34 +43,17 @@ async function main(): Promise<void> {
   const effectiveUid = process.getuid?.() ?? -1;
   const fs = createNodeLauncherReader(effectiveUid);
 
-  // ponytail: the package-manager-owned fallback location is Homebrew formula
-  // work (Spec 2 §2, A16) and not yet wired; resolved relative to this
-  // launcher's own install directory as a placeholder.
-  const launcherRoot = new URL("../fallback", import.meta.url).pathname as CanonicalAbsolutePathV1;
-
   const selection = await selectLauncherCandidate({
     productHome,
     platform,
     effectiveUid,
     fs,
-    packagedFallback: {
-      bundleRoot: `${launcherRoot}/bundle` as CanonicalAbsolutePathV1,
-      manifestPath: `${launcherRoot}/bundle-manifest.json` as CanonicalAbsolutePathV1,
-    },
-    // ponytail: always reports the terminal state until Task 9's read-only
-    // bootstrap-closure reader is exposed to this package; see the module
-    // docblock above.
-    bootstrapClosure: { kind: "handoff_complete" },
-    verifyRetainedDocument: createLauncherRetainedDocumentVerifier(LAUNCHER_OFFLINE_RELEASE_ROOTS),
+    packagedFallback: await resolvePackagedFallback(PACKAGE_CHANNEL_SOURCE_TABLE[platform.architecture]),
+    bootstrapClosure: await readBootstrapClosure(fs, productHome, effectiveUid),
+    readUpdateEnvelope: (coordinatorId) => readUpdateEnvelope(fs, productHome, coordinatorId, effectiveUid),
   });
 
-  const trust = compileLauncherOfflineReleaseTrust({
-    acceptedRoots: LAUNCHER_OFFLINE_RELEASE_ROOTS,
-    metadataRedirectOrigins: LAUNCHER_METADATA_REDIRECT_ORIGINS,
-  });
-  const request = buildLauncherProcessRequest(selection, env, process.argv.slice(2), trust !== null);
-
-  process.exitCode = await execAdmittedRelease(request, trust);
+  process.exitCode = await execAdmittedRelease(buildLauncherProcessRequest(selection, env, process.argv.slice(2)));
 }
 
 function exitCodeOf(error: unknown): number {
