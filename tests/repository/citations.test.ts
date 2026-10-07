@@ -484,7 +484,10 @@ export function statedSuiteCounts(
  * **A cited range must hold a code identifier its own line names** (FLOW-DOCS-4). Bounds-checking
  * cannot see a citation that drifted onto a comment: 73 of 112 identifier-bearing citations in
  * `threat-model.md` and `knowledge-pipeline.md` had. A doc line's backticked single-word tokens that
- * look like code (a capital or an underscore) are its identifiers; the line passes when any one occurs in any range it cites. A line naming none
+ * look like code (a capital or an underscore) are its identifiers, and **every** range the line cites
+ * must hold at least one of them — a citation into a test included (NEW-193 (2a), founder decision
+ * 2026-10-07). Until then the line passed when any one range held, or when an anchor on it named one
+ * of them, which let 107 citations sit on neighbouring lines behind a sibling that held. A line naming none
  * (prose, test-title cells) has nothing to check its ranges against, so it is counted rather than
  * checked, and that count may only fall (`IDENTIFIER_CHECKED`): this narrows the gap and does not close it.
  */
@@ -492,6 +495,16 @@ export function lineIdentifiers(line: string): readonly string[] {
   return [...line.matchAll(/`([A-Za-z_$][\w$]*)(?:\(\))?`/gu)]
     .map((match) => match[1] ?? "")
     .filter((token) => token.length >= 4 && /[A-Z_]/u.test(token) && !/\.(?:ts|md|yaml)$/u.test(token));
+}
+
+/** The cited ranges that hold none of the line's identifiers; empty when the line holds. */
+export function rangesWithoutIdentifier(
+  identifiers: readonly string[],
+  ranges: readonly { readonly raw: string; readonly text: string }[],
+): readonly string[] {
+  return ranges
+    .filter((range) => !identifiers.some((identifier) => containsIdentifier(range.text, identifier)))
+    .map((range) => range.raw);
 }
 
 export function rangeText(contents: string, start: number, end: number): string {
@@ -613,7 +626,6 @@ describe("every documented citation resolves", () => {
       const text = await read(doc);
       let unidentified = 0;
       const lines = text.split("\n");
-      const anchoredSymbols = extractAnchors(text);
       const byLine = new Map<number, Citation[]>();
       for (const citation of extractCitations(text, knownBasenames)) {
         byLine.set(citation.line, [...(byLine.get(citation.line) ?? []), citation]);
@@ -624,16 +636,15 @@ describe("every documented citation resolves", () => {
           unidentified += 1;
           continue;
         }
-        /** An anchor is content-checked by the sweep above, so its symbol satisfies the line. */
-        if (anchoredSymbols.some((anchor) => anchor.line === number && identifiers.includes(anchor.symbol))) continue;
-        let excerpt = "";
+        const ranges: { raw: string; text: string }[] = [];
         for (const citation of group) {
           const resolution = resolveSource(citation, files);
           if (resolution.kind !== "resolved") continue;
-          excerpt += `\n${rangeText(await read(resolution.path), citation.start, citation.end)}`;
+          const raw = `${resolution.path}:${String(citation.start)}-${String(citation.end)}`;
+          ranges.push({ raw, text: rangeText(await read(resolution.path), citation.start, citation.end) });
         }
-        if (!identifiers.some((identifier) => containsIdentifier(excerpt, identifier))) {
-          broken.push(`${doc}:${String(number)} cites no range containing ${identifiers.map((i) => `\`${i}\``).join(" or ")}`);
+        for (const raw of rangesWithoutIdentifier(identifiers, ranges)) {
+          broken.push(`${doc}:${String(number)} cites ${raw}, which contains none of ${identifiers.map((i) => `\`${i}\``).join(", ")}`);
         }
       }
       if (unidentified > ceiling) {
@@ -1087,5 +1098,19 @@ describe("the extractor and the predicate this gate is built on", () => {
       "redactText",
     ]);
     expect(rangeText("a\nb\nc\nd", 2, 3)).toBe("b\nc");
+  });
+
+  it("fails a multi-citation line when any one cited range holds none of its identifiers", () => {
+    const identifiers = ["redactText", "SCAN_LIMIT"];
+    expect(
+      rangesWithoutIdentifier(identifiers, [
+        { raw: "`a.ts:1`", text: "export function redactText() {}" },
+        { raw: "`:9`", text: "// a comment the citation drifted onto" },
+        { raw: "`b.test.ts:3`", text: "const SCAN_LIMIT = 4;" },
+      ]),
+    ).toStrictEqual(["`:9`"]);
+    expect(
+      rangesWithoutIdentifier(identifiers, [{ raw: "`a.ts:1`", text: "redactText(SCAN_LIMIT)" }]),
+    ).toStrictEqual([]);
   });
 });
