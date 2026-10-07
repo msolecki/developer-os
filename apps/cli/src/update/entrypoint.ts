@@ -20,6 +20,7 @@ import { ENTRYPOINT_DIRECTORY, entrypointPath, LOCAL_BUNDLE_CLI_ENTRY } from "./
 
 const MAX_ACTIVE_RELEASE_BYTES = 16 * 1024;
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
+const MAX_BUNDLE_MANIFEST_BYTES = 4 * 1024 * 1024;
 
 
 /**
@@ -37,7 +38,7 @@ export function renderEntrypoint(): Uint8Array {
       'import { createHash } from "node:crypto";\n' +
       'import { constants } from "node:fs";\n' +
       'import { open } from "node:fs/promises";\n' +
-      'import { isAbsolute, join } from "node:path";\n' +
+      'import { isAbsolute, join, normalize, sep } from "node:path";\n' +
       'import { fileURLToPath, pathToFileURL } from "node:url";\n' +
       "async function read(path, limit) {\n" +
       "  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);\n" +
@@ -50,11 +51,12 @@ export function renderEntrypoint(): Uint8Array {
       "  }\n" +
       "}\n" +
       "try {\n" +
-      '  const state = fileURLToPath(new URL("../state/", import.meta.url));\n' +
+      '  const home = fileURLToPath(new URL("../", import.meta.url));\n' +
+      '  const state = join(home, "state");\n' +
       `  const active = JSON.parse(await read(join(state, "active-release.json"), ${String(MAX_ACTIVE_RELEASE_BYTES)}));\n` +
       "  const hash = active.bundleManifestHash;\n" +
-      '  if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash) || typeof active.bundleRoot !== "string" || !isAbsolute(active.bundleRoot)) throw new Error("refused");\n' +
-      `  const bytes = await read(join(state, "release-metadata", "bundles", hash + ".json"), ${String(MAX_MANIFEST_BYTES)});\n` +
+      '  if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash) || typeof active.bundleRoot !== "string" || !isAbsolute(active.bundleRoot) || normalize(active.bundleRoot) !== active.bundleRoot || !active.bundleRoot.startsWith(join(home, "releases") + sep)) throw new Error("refused");\n' +
+      `  const bytes = await read(join(state, "release-metadata", "bundles", hash + ".json"), ${String(MAX_BUNDLE_MANIFEST_BYTES)});\n` +
       '  if (createHash("sha256").update(bytes).digest("hex") !== hash) throw new Error("refused");\n' +
       `  const entry = JSON.parse(bytes).entrypoint ?? ${JSON.stringify(LOCAL_BUNDLE_CLI_ENTRY)};\n` +
       '  if (typeof entry !== "string" || entry === "" || isAbsolute(entry) || entry.split("/").some((part) => part === ".." || part === "." || part === "")) throw new Error("refused");\n' +

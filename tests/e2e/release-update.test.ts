@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
@@ -84,7 +85,18 @@ async function entrypointTarget(lifecycle: Lifecycle): Promise<string> {
 }
 
 async function expectEntrypointFollowsActive(lifecycle: Lifecycle): Promise<void> {
-  expect(await entrypointTarget(lifecycle)).toBe(`${(await lifecycle.home.update().readHome()).active.bundleRoot}/${ENTRY}`);
+  const target = await entrypointTarget(lifecycle);
+  expect(target).toBe(`${(await lifecycle.home.update().readHome()).active.bundleRoot}/${ENTRY}`);
+  // The real script (owner, mode and hash checks included) loads a stub CLI at that target; the published bytes are restored.
+  const original = await nodeFs.readFile(target);
+  await nodeFs.writeFile(target, `process.stdout.write(${JSON.stringify(`marker:${target}\n`)});\n`);
+  try {
+    const result = spawnSync(process.execPath, [join(lifecycle.home.fixture.paths.home, "bin", "developer-os.mjs"), "--version"], { encoding: "utf8" });
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`marker:${target}\n`);
+  } finally {
+    await nodeFs.writeFile(target, original);
+  }
 }
 
 describe("the synthetic release lifecycle (Spec 2 §12, D72 P7(f))", () => {
