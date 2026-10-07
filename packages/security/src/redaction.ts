@@ -457,7 +457,9 @@ function looksHighEntropy(value: string): boolean {
 
 /**
  * A word: one case throughout, a vowel unless it is at most three letters (`src`, `cli`),
- * and no longer than a real word gets. Short digit runs are dates and ids.
+ * and no longer than a real word gets. Short digit runs are dates and ids. A part mixing
+ * letters and digits is no word here; NEW-199 admits a short one (`d84`, `11b`) only inside
+ * a run, through `areWordLikeParts`, so `isAssignmentKey` is unchanged.
  */
 function isWordLikePart(part: string): boolean {
   if (/^[0-9]{1,8}$/u.test(part)) return true;
@@ -465,16 +467,34 @@ function isWordLikePart(part: string): boolean {
   return part.length <= 3 || /[aeiouy]/iu.test(part);
 }
 
+/** NEW-199: an ID such as `d84`, `11b`, `a15`, `v2` or `ec2` — one case, at most 3 characters. */
+function isShortIdPart(part: string): boolean {
+  return /^(?:[a-z0-9]{2,3}|[A-Z0-9]{2,3})$/u.test(part) && /[0-9]/u.test(part) && /[A-Za-z]/u.test(part);
+}
+
+/** A run's parts are word-like when each is, except at most 2 short IDs (NEW-199, founder decision 2026-10-07). */
+const MAX_SHORT_ID_PARTS = 2;
+function areWordLikeParts(parts: string[]): boolean {
+  let ids = 0;
+  for (const part of parts) {
+    if (isWordLikePart(part)) continue;
+    if (!isShortIdPart(part) || ++ids > MAX_SHORT_ID_PARTS) return false;
+  }
+  return true;
+}
+
 /**
  * NEW-143: at least two hyphen-separated parts, every one word-like. NEW-146 (b2): and at
  * least one of four or more letters, so a body of short chunks (`bak-tor-vil-mun-pek`) is no
  * kebab-case word. ponytail: moves the line, not closes it; `bake-tor-vil-…` stays exempt.
+ * NEW-199: at most 2 parts may be short IDs (`ta`+`sk-11b-homebrew-…`); a third redacts.
  */
 function isKebabSlug(body: string): boolean {
   const parts = body.split("-");
   return (
     parts.length >= 2 &&
-    parts.every((part) => part.length > 0 && isWordLikePart(part)) &&
+    parts.every((part) => part.length > 0) &&
+    areWordLikeParts(parts) &&
     parts.some((part) => /^[A-Za-z]{4,}$/u.test(part))
   );
 }
@@ -489,13 +509,15 @@ const MAX_WORD_LIKE_PARTS = 12;
  * so a token sitting in one segment still redacts the run. Known cost: an unlabelled
  * all-word passphrase joined by `-` is exempt too; a labelled one is credential-store.
  * ponytail: vowel test, not a dictionary; random vowel-bearing letter chunks still pass.
+ * NEW-199: up to 2 parts may be short IDs (`d84`, `11b`); a third, or a longer mixed part,
+ * falls back to the entropy check, so a recovery code (`ab1-cd2-ef3-…`) still redacts.
  */
 function isWordLikePath(run: string): boolean {
   const parts = run
     .split("/")
     .flatMap((segment) => segment.split(/[-_]/u))
     .filter((part) => part.length > 0);
-  return parts.length > 0 && parts.length <= MAX_WORD_LIKE_PARTS && parts.every(isWordLikePart);
+  return parts.length > 0 && parts.length <= MAX_WORD_LIKE_PARTS && areWordLikeParts(parts);
 }
 
 function fingerprint(secret: string, key: Uint8Array): string {

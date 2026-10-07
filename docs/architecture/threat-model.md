@@ -184,7 +184,7 @@ watched-failure demonstration, §8 is what says so.
 | Raw text is never persisted, hashed, logged or sent to a model | `redactAndNormalize` redacts, then normalizes, then hashes, in one function that cannot be reordered from outside (`packages/brain/src/capture/build.ts:179-196`); `buildCapture` calls it before anything else exists (`:216-220`) | `tests/security/sentinel.test.ts` — `keeps the sentinel out of the capture file`, `the model input`, `the staging directory`, `every validator report`, `the canonical note` |
 | The pre-redaction bound measures and nothing else | `resolveText` takes a byte length and refuses; the text is not logged, hashed or echoed into any refusal (`apps/cli/src/commands/capture.ts:348-380`) | the same suite's per-artifact sweep |
 | The capture id derives from redacted content, so two texts differing only by a secret are one capture | `captureId` is the first 16 hex of the hash over the redacted, normalized content (`packages/brain/src/capture/build.ts:221`) | `tests/security/sentinel.test.ts` — `keeps the sentinel out of the deduplication hash` **(§8: no watched failure)** |
-| A fingerprint identifies a secret without carrying it | HMAC-SHA256 under the install's key, truncated to 16 hex (`createHmac`, `packages/security/src/redaction.ts:501-506`); the key must be at least 32 bytes or `redactText` throws (`packages/security/src/redaction.ts:557-565`) | `packages/security/src/redaction.test.ts` |
+| A fingerprint identifies a secret without carrying it | HMAC-SHA256 under the install's key, truncated to 16 hex (`createHmac`, `packages/security/src/redaction.ts:523-528`); the key must be at least 32 bytes or `redactText` throws (`packages/security/src/redaction.ts:579-587`) | `packages/security/src/redaction.test.ts` |
 | A pathological PEM marker cannot make redaction superlinear | the PEM body is bounded at 8,000 characters, chosen by measurement rather than for being finite (`packages/security/src/redaction.ts:356-376`) | `packages/security/src/redaction.test.ts` |
 | Quarantine is created private | `mkdir` with mode `0o700` (`apps/cli/src/commands/quarantine.ts:293`) | — |
 
@@ -465,7 +465,7 @@ failure is content-free on that path too. NEW-17 is closed and removed from `BAC
 | Boundary | Mechanism | Evidence |
 |---|---|---|
 | Nine redaction classes, and a tenth cannot be added unreachably | `REDACTION_CLASSES` is frozen and a test asserts membership against findings **actually produced**, not against the list (`packages/security/src/redaction.ts:57-67`) | `packages/security/src/redaction.test.ts` |
-| A user-supplied pattern cannot backtrack | user patterns are literal, case-insensitive substrings over NFC-normalized text — never regular expressions, because this codebase bounds no expression anywhere and a pathological pattern would hang the one operation that must not fail quietly (`packages/security/src/redaction.ts` — `RedactionOptions`) | `packages/security/src/redaction.test.ts:777-801` — `.*` and `(a+)+$` passed as `userPatterns` and asserted to behave as literals |
+| A user-supplied pattern cannot backtrack | user patterns are literal, case-insensitive substrings over NFC-normalized text — never regular expressions, because this codebase bounds no expression anywhere and a pathological pattern would hang the one operation that must not fail quietly (`packages/security/src/redaction.ts` — `RedactionOptions`) | `packages/security/src/redaction.test.ts:819-843` — `.*` and `(a+)+$` passed as `userPatterns` and asserted to behave as literals |
 | Redaction is a heuristic and is not the only thing standing — **on every command that reads configuration** | the worked example is configuration: a `loadConfig` throw becomes a content-free `ConfigurationError` rather than being handed to the redactor, because `smol-toml` embeds three raw source lines in `TomlError.message` (`apps/cli/src/config-file.ts:15-22,54-58`). `status`, `doctor`, `init`, `capture`, `uninstall`, `review` and `ingest` all reach configuration through that wrapper, `readConfigFile` (`status.ts:47`, `doctor.ts:976,1818,2047`, `init.ts:346,441,947`, `apps/cli/src/commands/capture.ts:310`, `apps/cli/src/commands/uninstall.ts:730`, `review.ts:194`, `ingest.ts:550`) | `tests/e2e/foundation.test.ts:1337-1372` — `never quotes the configuration it failed to parse`, planting a `SENTINEL` |
 | The same, on a `brain` run | **holds since NEW-17 closed.** `readConfig` calls `readConfigFile` (`apps/cli/src/commands/brain.ts:127`) rather than parsing for itself, and rethrows `ConfigurationError` unmodified — its message quotes nothing and it carries the exit code `BrainRefusal` uses, so `failureFrom` renders it with no special handling. This row read **partial** for two days after the fix | `packages/core/src/config/config.test.ts`; `apps/cli/src/commands/brain.test.ts` |
 
@@ -530,6 +530,16 @@ are words and `ingest`'s secret scan no longer refuses a note named that way. A 
 has that body, so `desk-a8f3k2m9q7x1z5b4c6d7e9` still redacts. Since NEW-146 (b2) at least one
 body part must also have four or more letters, so `xsk-bak-tor-vil-mun-pek-zud` redacts. Pinned by
 `redaction.test.ts` → "provider-token sk- boundary".
+
+**Amended 2026-10-07 (NEW-199, founder decision).** Both word-like exemptions, `isKebabSlug`
+(`sk-`) and `isWordLikePath` (NEW-129's `high-entropy` exemption), now accept a part mixing
+letters and digits when it is one case and at most 3 characters (`d84`, `11b`, `a15`, `v2`,
+`ec2`), and at most 2 such parts per run. Before, any mixed part disabled the exemption, so
+`DEV/developer-os-d84-task-11b-homebrew-package-channel-trust.md` redacted and ingest refused it.
+The 12-part cap, the vowel test, the 4+-letter part for a kebab slug, `isAssignmentKey` and the
+`path` scope are unchanged. A recovery-code shape (`ab1-cd2-ef3-gh4-…`), a random `sk-` key and an
+`sk-` body with 3 or more short mixed parts still redact. Pinned by `redaction.test.ts` →
+"ID-bearing slugs (NEW-199)".
 
 **The NEW-129 residuals are closed (NEW-130, founder decision D83 (5)).** (1) The labelled
 passphrase rule (`passphrase`, `mnemonic`, `seed phrase`, `recovery phrase/key`) captures the rest of

@@ -290,6 +290,48 @@ describe("redactText", () => {
     });
   });
 
+  /**
+   * NEW-199 (founder decision 2026-10-07): a slug carrying an ID such as `d84` or `11b` is a
+   * note name. A mixed letter-digit part is word-like at three characters or fewer, two per run.
+   */
+  describe("ID-bearing slugs (NEW-199)", () => {
+    const zeroKey = new Uint8Array(32);
+    for (const value of [
+      "DEV/developer-os-d84-task-11b-homebrew-package-channel-trust.md",
+      "DEV/new-195-forward-recovery-a15-cutover.md",
+      "task-11b-homebrew-package-channel",
+    ]) {
+      for (const scope of ["text", "value"] as const) {
+        it(`leaves ${value} in the clear in ${scope} scope`, () => {
+          const result = redactText(value, zeroKey, {}, scope);
+
+          expect(result.text).toBe(value);
+          expect(result.findings).toEqual([]);
+        });
+      }
+    }
+
+    const recoveryCode = "ab1-cd2-ef3-gh4-ij5-kl6-mn7-op8-qr9-st0-uv1"; // gitleaks:allow -- synthetic test fixture
+    const randomSk = "sk-Q7f2Lm9xKp4Rt8Vw3Zb6Nc1Hd5Jg0Ys2Ae7Ui4Ok"; // gitleaks:allow -- synthetic test fixture
+    const base64Token = "Z7qP2mN9vR4xK8cT1wH6jL3sF0dG5bY2uI7oE9aQ4zX8Wc3V"; // gitleaks:allow -- synthetic test fixture
+    for (const [name, line, secret] of [
+      ["a recovery-code shape", `code ${recoveryCode} end`, recoveryCode],
+      ["a random sk- key after a letter", `x${randomSk}`, randomSk.slice(3)],
+      ["an sk- body of four short mixed parts", "task-ab1-cd2-ef3-gh4-ijkl-mnop-qrst", "sk-ab1-cd2-ef3-gh4-ijkl-mnop-qrst"],
+      ["an sk- body of three short mixed parts", "task-ab1-cd2-ef3-ijkl-mnop-qrst", "sk-ab1-cd2-ef3-ijkl-mnop-qrst"],
+      ["a random 48-character base64 token", `value ${base64Token} end`, base64Token],
+    ] as const) {
+      for (const scope of ["text", "value"] as const) {
+        it(`still redacts ${name} in ${scope} scope`, () => {
+          const result = redactText(line, zeroKey, {}, scope);
+
+          expect(result.text).not.toContain(secret);
+          expect(result.findings.length).toBeGreaterThan(0);
+        });
+      }
+    }
+  });
+
   it("redacts a 64-character lowercase hexadecimal secret", () => {
     const result = redactText(
       `hex material ${lowercaseHexSecret}`,
