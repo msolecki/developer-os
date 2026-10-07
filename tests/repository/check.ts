@@ -231,12 +231,13 @@ function findNumberValuedStats(
  * Spec 2 §2's capability-absence gate. No shipped planner bundle exists yet, so the entry
  * list is the compiled protocol module every target planner imports plus the owner and
  * migration planners a bundle composes, and the release's keep-all target planner module (Task 11b
- * K2); the target verifier entrypoint joins it when Task 11b's release packer produces it. `lint` builds before this runs, so a
+ * K2), and the release verifier module (NEW-118 (4)). `lint` builds before this runs, so a
  * missing entrypoint is a failure, never a skip.
  */
 const PLANNER_ENTRYPOINTS: readonly string[] = [
   "packages/core/dist/update/planner.js",
   "packages/core/dist/update/release-planner.js",
+  "packages/core/dist/update/release-verifier.js",
   "packages/adapter-claude/dist/update/plan.js",
   "packages/adapter-codex/dist/update/plan.js",
   "packages/brain/dist/migrations/update/plan.js",

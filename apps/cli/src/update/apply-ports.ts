@@ -635,7 +635,20 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
         const plan = verification ?? thirdState("update_verification_plan_absent", root);
         const release = execution.operation === "update_apply" ? "target" : "previous";
         if (step.release !== release || plan.release.releaseIdentityHash !== execution.target.releaseIdentityHash) thirdState("update_verification_release", root);
-        return runTargetVerifier(plan, await verifierPort(context, lifecycle));
+        // The bounded read-only snapshot of the home: the installed manifest (no-follow, at most `plan.inputBytes`) and the reopened owner and migration plans with their effects.
+        const manifest = await readBound(lifecycle, parseCanonicalAbsolutePathText(context.paths.manifestFile), plan.inputBytes) ?? thirdState("update_manifest_absent", context.paths.manifestFile);
+        const snapshot = {
+          manifest: Buffer.from(manifest).toString("base64"),
+          owners: execution.owners.flatMap((ref) => {
+            const ownerPlan = leaf<OwnerUpdatePlanV1>(ref);
+            return ownerPlan === null ? [] : [{ ref, plan: ownerPlan, effects: ownerPlan.externalEffects.map((effect) => ({ ref: effect, plan: leaf<OwnerExternalEffectPlanV1>(effect) ?? thirdState("update_owner_effect_plan_absent", effect.id) })) }];
+          }),
+          migrations: execution.migrations.flatMap((ref) => {
+            const migrationPlan = leaf<SchemaMigrationPlanV1>(ref);
+            return migrationPlan === null ? [] : [{ ref, plan: migrationPlan }];
+          }),
+        };
+        return runTargetVerifier(plan, await verifierPort(context, lifecycle, snapshot));
       },
       observe: () => Promise.resolve(BEFORE),
       compensate: () => Promise.resolve(BEFORE),
@@ -823,7 +836,7 @@ async function manifestParticipantOf(dispatch: DispatchContextV1, ownerPlans: re
 }
 
 /** The target verifier over its retained bundle: its runtime entrypoint, an empty cwd, and the manifest digest. */
-async function verifierPort(context: CliContext, lifecycle: CliLifecycleContext): Promise<Parameters<typeof runTargetVerifier>[1]> {
+async function verifierPort(context: CliContext, lifecycle: CliLifecycleContext, snapshot: unknown): Promise<Parameters<typeof runTargetVerifier>[1]> {
   const redactor = await redactorOf(context);
   const supervisor = new TargetVerifierSupervisor({
     spawn: spawnNodePlannerChild,
@@ -842,12 +855,11 @@ async function verifierPort(context: CliContext, lifecycle: CliLifecycleContext)
       const bundleManifest = await retainedBundleManifest(lifecycle, plan.release, "update_verifier_bundle_manifest");
       const cwd = await mkdtemp(join(tmpdir(), "developer-os-verifier-"));
       try {
-        // ponytail: the snapshot is the plan's own digests; the bounded read-only home snapshot joins with the real verifier (A16).
         return await supervisor.run({
           runtime: `${plan.release.bundleRoot}/${bundleManifest.runtimeEntrypoint}`,
           cwd,
           plan,
-          snapshot: { manifestHash: plan.manifestHash, ownerPostimagesHash: plan.ownerPostimagesHash, migrationPostimagesHash: plan.migrationPostimagesHash },
+          snapshot,
           inputBlobs: [],
           remainingMilliseconds: plan.wallMilliseconds,
         });

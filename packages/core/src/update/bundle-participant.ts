@@ -4,6 +4,7 @@ import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type C
 import type { EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { MAXIMUM_LEAF_PLAN_BYTES, MAXIMUM_PARTICIPANT_JOURNAL_BYTES, updateLeafPlanPath, type ImmutableUpdatePlanRefV1, type UpdateLeafPlanKindV1 } from "./construction.js";
+import { updateLeafPlanHash } from "./postimages.js";
 import { deriveCanonicalStatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type CanonicalStatePayloadPathV1 } from "./paths.js";
 import { MAXIMUM_BUNDLE_AGGREGATE_BYTES, validateBundleEntries, type ReleaseBundleEntryV1, type ReleaseIdentityV1 } from "./release.js";
 import {
@@ -25,6 +26,8 @@ import {
   type UInt64DecimalV1,
   type UtcTimestampV1,
 } from "./scalars.js";
+
+export { updateLeafPlanHash };
 
 export type UpdateDirectoryRoleV1 =
   | "source_envelope" | "source_payload_root" | "source_evidence_root"
@@ -367,11 +370,6 @@ export function identity(value: unknown, keys: readonly string[], label: string)
 export function coordinatorOf(stagingRoot: CanonicalAbsolutePathV1, coordinatorId: unknown, label: string): LifecycleCoordinatorIdV1 {
   if (typeof coordinatorId !== "string" || !stagingRoot.endsWith(`/staging/lifecycle/${coordinatorId}`)) fail(`${label}.coordinatorId: not this staging root's coordinator`);
   return coordinatorId as LifecycleCoordinatorIdV1;
-}
-
-/** Spec 2 §9.2: `developer-os/update-leaf/<kind>/v1\0` plus the canonical JSON-plus-LF bytes. */
-export function updateLeafPlanHash(kind: UpdateLeafPlanKindV1, bytes: Uint8Array): LowerHexSha256 {
-  return createHash("sha256").update(`developer-os/update-leaf/${kind}/v1\0`, "ascii").update(bytes).digest("hex") as LowerHexSha256;
 }
 
 export interface BundleSourcePathsV1 {

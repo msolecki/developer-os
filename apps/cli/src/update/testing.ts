@@ -1,10 +1,10 @@
 import { createHash, generateKeyPairSync, randomUUID, sign as signEd25519 } from "node:crypto";
 import type { KeyObject } from "node:crypto";
+import { appendFileSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   admitTargetUpdateDraft,
@@ -822,31 +822,12 @@ function runtimeScript(): Uint8Array {
 }
 
 /**
- * A verifier that reads the counted request and echoes the three snapshot digests: the target
- * verifier protocol with no opinion of its own, so only the current process's checks decide.
+ * The real release verifier: the compiled stdio shim Task 8 bundles as `bin/verifier.mjs`, so the
+ * on-disk world recomputes its digests from the snapshot like a shipped release does.
  */
 function verifierScript(): Uint8Array {
-  const core = pathToFileURL(createRequire(import.meta.url).resolve("@developer-os/core")).href;
-  return encoder.encode([
-    "\"use strict\";",
-    "(async () => {",
-    `  const core = await import(${JSON.stringify(core)});`,
-    "  const decoder = new core.PlannerWireDecoder(\"input\", core.PLANNER_WIRE_BOUNDS_V1);",
-    "  let request = null;",
-    "  for await (const chunk of process.stdin) {",
-    "    for (const frame of decoder.push(new Uint8Array(chunk))) {",
-    "      if (frame.kind === \"json\") request = core.decodePlannerJson(frame.payload, frame.payload.byteLength);",
-    "    }",
-    "  }",
-    "  const { manifestHash, migrationPostimagesHash, ownerPostimagesHash } = request.snapshot;",
-    "  const payload = core.plannerJsonBytes({ manifestHash, migrationPostimagesHash, ownerPostimagesHash });",
-    "  const encoder = new core.PlannerWireEncoder(\"output\", core.PLANNER_WIRE_BOUNDS_V1);",
-    "  process.stdout.write(Buffer.concat([encoder.magic(), encoder.json(payload), payload, encoder.end()]));",
-    "})().catch(() => {",
-    "  process.exitCode = 3;",
-    "});",
-    "",
-  ].join("\n"));
+  const shim = pathToFileURL(fileURLToPath(import.meta.url).replace(/\/(?:src|dist)\/update\/[^/]+$/, "/dist/update/release-verifier-main.js")).href;
+  return encoder.encode(`import(${JSON.stringify(shim)}).catch(() => {\n  process.exitCode = 3;\n});\n`);
 }
 
 /** A verifier that disagrees: a clean non-zero exit, which the coordinator compensates (exit 5). */
@@ -1043,6 +1024,30 @@ export function dieAfterMutations(context: CliContext, count: number): DyingCont
     died: () => landed >= count,
     landed: () => landed,
   };
+}
+
+/**
+ * The same CLI context whose first publication onto the installed manifest is followed by one
+ * appended byte: the manifest the verifier snapshots then differs from the transitional manifest
+ * the plan verifies (NEW-118 (4)). The wrapping pattern is `dieAfterMutations`'.
+ */
+export function tamperManifestBeforeVerifier(context: CliContext): CliContext {
+  const lifecycle = context.lifecycle;
+  if (lifecycle === undefined) throw new Error("the fixture has no lifecycle ports");
+  // After the active record's payload is retained, the journal writes the step's completion and then the point of no return; the verifier runs right after the second, so the byte lands just before it.
+  let journalWrites = -1;
+  const fs: Record<string, unknown> = { ...lifecycle.fs };
+  for (const name of DURABLE_MUTATIONS) {
+    const real = lifecycle.fs[name].bind(lifecycle.fs) as (...args: readonly unknown[]) => Promise<unknown>;
+    fs[name] = async (...args: readonly unknown[]): Promise<unknown> => {
+      if (journalWrites >= 0 && name === "writeExclusive" && (journalWrites += 1) === 1) appendFileSync(context.paths.manifestFile, " ");
+      const result = await real(...args);
+      const source = (args[0] as { readonly path?: string }).path ?? "";
+      if (journalWrites < 0 && name === "renameNoReplace" && source.includes("/update/payloads/state/active_release/")) journalWrites = 0;
+      return result;
+    };
+  }
+  return { ...context, lifecycle: { ...lifecycle, fs: fs as unknown as typeof lifecycle.fs } };
 }
 
 /** The handoff Task 11b's launcher will supply: the packaged release `init` installed, read from its fresh active record. */

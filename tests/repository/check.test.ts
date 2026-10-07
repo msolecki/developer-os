@@ -66,6 +66,7 @@ const PLANNER_ENTRY = "packages/core/dist/update/planner.js";
 /** The owner and migration planners every target planner bundle composes (Spec 2 §2), and the release's keep-all planner. */
 const PROVIDER_PLANNER_ENTRIES: readonly string[] = [
   "packages/core/dist/update/release-planner.js",
+  "packages/core/dist/update/release-verifier.js",
   "packages/adapter-claude/dist/update/plan.js",
   "packages/adapter-codex/dist/update/plan.js",
   "packages/brain/dist/migrations/update/plan.js",
