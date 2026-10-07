@@ -534,12 +534,15 @@ export const SYNTHETIC_CODEX_EXECUTABLE: CodexExecutableIdentityV1 = {
   identity: { dev: parseUInt64Decimal("7"), ino: parseUInt64Decimal("4242"), mode: 493, sha256: sha256("synthetic codex executable") },
 };
 
+/** The registered Codex plugin's current projection, as the synthetic port reports it. */
+export const SYNTHETIC_CODEX_PROJECTION: UpdateCodexV1["projection"] = { pluginId: parseSafeReasonCode("developer_os"), enabled: true, protocol: CODEX_REFRESH_PROVIDER_PROTOCOL, version: null, source: "managed_plugin_root" };
+
 function syntheticCodexPort(registration: CodexRegistrationStateV1): () => Promise<UpdateCodexV1> {
   return () => Promise.resolve({
     homes: SYNTHETIC_CODEX_HOMES,
     registration,
     policy: codexRefreshPolicy(SYNTHETIC_CODEX_EXECUTABLE),
-    projection: { pluginId: parseSafeReasonCode("developer_os"), enabled: true, protocol: CODEX_REFRESH_PROVIDER_PROTOCOL, version: null, source: "managed_plugin_root" },
+    projection: SYNTHETIC_CODEX_PROJECTION,
   });
 }
 
@@ -552,6 +555,8 @@ export interface UpdateFixture {
   readonly requests: string[];
   readonly current: ReleaseIdentityV1;
   readonly releases: ReadonlyMap<string, SyntheticRelease>;
+  /** The Codex projection the synthetic port reports (the current, pre-update state). */
+  readonly codexProjection: UpdateCodexV1["projection"];
 }
 
 const AMPLE: UpdateCapacityObservationV1 = {
@@ -758,7 +763,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
     admitManifest: (value) => value as InstallationManifestV2,
     ...(options.codex === undefined ? {} : { codex: syntheticCodexPort(options.codex.registration) }),
   };
-  return { update, home, events, requests, current, releases };
+  return { update, home, events, requests, current, releases, codexProjection: SYNTHETIC_CODEX_PROJECTION };
 }
 
 /** A context whose every port fails loudly: proves a refusal happened before any of them. */

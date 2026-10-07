@@ -9,3 +9,4 @@ export { parseVaultRelativePathText } from "./update/paths.js";
 export { compareUtf8 } from "./lifecycle/canonical-json.js";
 export { parseBundleRelativePath } from "./update/release.js";
 export { parseLowerHexSha256 } from "./update/scalars.js";
+export { RELEASE_VERSION } from "./version.js";
