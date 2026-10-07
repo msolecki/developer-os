@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { dirname } from "node:path";
 
 import {
   admitReleaseAgainstTrust,
@@ -10,18 +11,24 @@ import {
   encodeCanonicalJson,
   encodeTenDigitOrdinal,
   EXIT_CODES,
+  isPackageChannelTrust,
   isUnsignedLocalTrust,
   materializePlannerDraft,
   MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
   ownerExternalEffectProcessPolicyHash,
   MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
+  PACKAGE_CHANNEL_RELEASE_KEY_ID,
   parseCanonicalAbsolutePathText,
+  parseLowerHexSha256,
   parseUInt64Decimal,
   PLANNER_PROTOCOL_V1,
+  PLANNER_WIRE_BOUNDS_V1,
   ReleaseUnsignedLocalError,
   selectRelease,
   UpdateCapacityInsufficientError,
   validateBundleManifest,
+  validatePackageChannelDelegation,
+  validateReleaseIndex,
 } from "@developer-os/core";
 import type {
   ActiveReleaseRecordV1,
@@ -33,7 +40,6 @@ import type {
   InstallationManifestV2,
   LowerHexSha256,
   ManagedArtifactV2,
-  OfflineReleaseTrustV1,
   OwnerUpdatePreviewInputV1,
   PlannerContentRefV1,
   PlannerPathTokenV1,
@@ -42,7 +48,6 @@ import type {
   ReleaseBundleManifestV1,
   ReleaseBundleReferenceV1,
   ReleaseIdentityV1,
-  ReleaseKeyDelegationV1,
   ReleaseMetadataIdentityV1,
   ReleaseTrustStateV1,
   RetainedExternalEffectInversePlanV1,
@@ -63,20 +68,20 @@ import type {
   UInt64DecimalV1,
   UpdateCapacityComponentV1,
   UpdateCapacityInputV1,
+  UpdatePackageSourcePreviewV1,
   UpdatePlannerRequestV1,
   UpdatePlanPreviewV1,
   UpdateRollbackPreviewV1,
   UtcTimestampV1,
   CanonicalProductStatePathV1,
 } from "@developer-os/core";
-import { verifyReleaseMetadataChain } from "@developer-os/security";
-import type { ReleaseIndexDocumentV1, ReleaseKeyDelegationDocumentV1, TargetPlannerRunResultV1, VerifiedScratchBundleV1 } from "@developer-os/security";
+import type { TargetPlannerRunResultV1, VerifiedScratchBundleV1 } from "@developer-os/security";
 
 import { compareManifestRows } from "../instructions/attach.js";
 import { codexVersionToken } from "./codex-effect-ports.js";
 import { requireCodexRegistered } from "./codex-refresh.js";
 import { codexRegistrationFile } from "../instructions/vendor-homes.js";
-import type { CliUpdateContext, UpdateScratchAttemptV1, UpdateTransportV1 } from "./context.js";
+import type { CliUpdateContext } from "./context.js";
 
 /**
  * Spec 2 §7.3. `applied` and `rolled_back` belong to `--apply` (Task 24/25); the plan-only
@@ -139,14 +144,15 @@ export interface UpdateTargetInputsV1 {
   readonly signedMetadata: SignedReleaseMetadataV1;
   readonly bundle: ReleaseBundleReferenceV1;
   readonly bundleManifest: ReleaseBundleManifestV1;
+  /** The admitted keg's `bundle` directory, the planner's and the bundle source's read-only root. */
   readonly verified: VerifiedScratchBundleV1;
-  readonly transport: UpdateTransportV1;
+  readonly packageSource: UpdatePackageSourcePreviewV1;
   readonly plannedAt: UtcTimestampV1;
   readonly retained: RetainedRollbackEvidenceV1 | null;
   readonly observation: UpdateCapacityObservationV1 | null;
 }
 
-/** P4 (D72): the fetched delegation, release index and bundle manifest, bundle-plan metadata ordinals 0–2. */
+/** P4 (D72): the keg's retained delegation, release index and bundle manifest, bundle-plan metadata ordinals 0–2. */
 export type SignedReleaseMetadataV1 = readonly [CanonicalJsonV1, CanonicalJsonV1, CanonicalJsonV1];
 
 export interface MaterializedUpdateV1 {
@@ -161,12 +167,11 @@ export interface MaterializedUpdateV1 {
   readonly candidate: PreparedUpdateCandidateV1;
 }
 
-/** One previewed update carried in memory to the lock; its scratch attempt is still open. */
+/** One previewed update carried in memory to the lock. */
 export interface PreparedUpdateApplyV1 {
   readonly home: UpdateHomeV1;
   readonly inputs: UpdateTargetInputsV1 & { readonly observation: UpdateCapacityObservationV1 };
   readonly materialized: MaterializedUpdateV1;
-  readonly scratch: UpdateScratchAttemptV1;
 }
 
 /** A content-free refusal: the reason code is the whole message (Spec 2 §11). */
@@ -209,7 +214,6 @@ const MiB = 1_048_576;
 const MAXIMUM_DELEGATION_BYTES = 64 * 1024;
 const MAXIMUM_INDEX_BYTES = 4 * MiB;
 const MAXIMUM_BUNDLE_MANIFEST_BYTES = 16 * MiB;
-const MAXIMUM_SCRATCH_BYTES = 12 * 1024 * MiB;
 const MAXIMUM_LEAF_BYTES = 16 * MiB;
 const PARTICIPANT_JOURNAL_BYTES = 1 * MiB;
 const COORDINATOR_JOURNAL_BYTES = 64 * MiB;
@@ -237,46 +241,9 @@ export function sameJson(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(left as CanonicalJsonValue) === encodeCanonicalJson(right as CanonicalJsonValue);
 }
 
-async function fetchDocument(
-  transport: UpdateTransportV1,
-  kind: "release_key_delegation" | "release_index",
-  maximumBytes: number,
-): Promise<{ readonly value: unknown; readonly hash: LowerHexSha256; readonly text: CanonicalJsonV1 }> {
-  const bytes = await collect(maximumBytes, (sink) => transport.get({ kind, sink }));
-  return { value: await classified("update_metadata_invalid", EXIT_CODES.securityRefusal, () => decodeCanonicalJson(bytes.body, maximumBytes)), hash: bytes.hash, text: canonicalText(bytes.body) };
-}
-
 /** A body `decodeCanonicalJson` admitted is byte-for-byte canonical, so its UTF-8 text is the `CanonicalJsonV1`. */
 function canonicalText(body: Uint8Array): CanonicalJsonV1 {
   return new TextDecoder().decode(body) as CanonicalJsonV1;
-}
-
-/** Collects one bounded body; the transport already enforces the length, this only refuses a lie. */
-async function collect(
-  maximumBytes: number,
-  receive: (sink: (chunk: Uint8Array) => Promise<void>) => Promise<{ readonly bodyHash: LowerHexSha256 }>,
-): Promise<{ readonly body: Uint8Array; readonly hash: LowerHexSha256 }> {
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  const response = await receive((chunk) => {
-    total += chunk.byteLength;
-    if (total > maximumBytes) refuse("update_metadata_oversized", EXIT_CODES.securityRefusal);
-    chunks.push(chunk);
-    return Promise.resolve();
-  });
-  const body = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  if (sha256(body) !== response.bodyHash) refuse("update_metadata_hash_mismatch", EXIT_CODES.securityRefusal);
-  return { body, hash: response.bodyHash };
-}
-
-/** Removes only crash residue whose journal grants authority; anything else is preserved by Security. */
-async function cleanScratchResidue(update: CliUpdateContext): Promise<void> {
-  for (const id of await update.scratch.listRecoverableAttempts()) await update.scratch.recoverCleanup(id);
 }
 
 function selectTarget(
@@ -557,7 +524,6 @@ function manifestTotals(manifest: ReleaseBundleManifestV1): { readonly bytes: bi
 function updateCapacity(
   observation: UpdateCapacityObservationV1,
   manifest: ReleaseBundleManifestV1,
-  archiveBytes: UInt64DecimalV1,
   prepared: PreparedInverseV1,
   inventoryBytes: number,
   participants: number,
@@ -566,9 +532,9 @@ function updateCapacity(
   return {
     operation: "update",
     components: [
-      // Scratch holds the archive, the extraction, and one evidence file per entry.
-      component("verified_scratch", BigInt(archiveBytes) + bundle.bytes, bundle.entries * 2 + 4),
-      component("durable_bundle_source", BigInt(archiveBytes), 1),
+      // The keg is read in place (D84 K2): no scratch; the durable source copies the bundle once.
+      component("verified_scratch", 0, 0),
+      component("durable_bundle_source", bundle.bytes, bundle.entries),
       component("target_bundle", bundle.bytes, bundle.entries),
       component("transaction_staging", prepared.stagedBytes, prepared.stagedEntries),
       component("backups", prepared.preimageBytes, prepared.preimageEntries),
@@ -589,55 +555,54 @@ function capacityRefusal(error: unknown): never {
 }
 
 /**
- * Plan-only `update` (Spec 2 §7.2): the read-only home gates first, then FD 3 trust, then the
- * only network this product makes, then one guarded scratch attempt that is removed on every
- * exit path. Nothing durable is written; the candidate stays in memory.
+ * Plan-only `update` (Spec 2 §7.2, D84 K2): the read-only home gates first, then the keg the
+ * package channel installed is admitted once and is the whole update source. No FD 3, no network
+ * and no scratch; nothing durable is written and the candidate stays in memory.
  */
 export function planUpdate(update: CliUpdateContext, request: { readonly version: StableSemverV1 | null }): Promise<PlannedUpdateV1> {
-  return planUpdateAttempt(update, request, { retainScratch: false });
+  return planUpdateAttempt(update, request, { prepare: false });
 }
 
-/**
- * The same plan, but a preview keeps its verified scratch attempt open for `applyUpdate` in this
- * invocation, which then owns its cleanup. An up-to-date home has nothing to apply.
- */
+/** The same plan, carried in memory for `applyUpdate` in this invocation. An up-to-date home has nothing to apply. */
 export async function prepareUpdate(update: CliUpdateContext, request: { readonly version: StableSemverV1 | null }): Promise<PlannedUpdateV1 & { readonly apply: PreparedUpdateApplyV1 | null }> {
-  return planUpdateAttempt(update, request, { retainScratch: true });
+  return planUpdateAttempt(update, request, { prepare: true });
 }
 
 async function planUpdateAttempt(
   update: CliUpdateContext,
   request: { readonly version: StableSemverV1 | null },
-  options: { readonly retainScratch: boolean },
+  options: { readonly prepare: boolean },
 ): Promise<PlannedUpdateV1 & { readonly apply: PreparedUpdateApplyV1 | null }> {
   const home = await update.readHome();
-  // An unsigned-local home can never update (D47); it refuses before FD 3 or the network (NEW-147).
+  // An unsigned-local home can never update (D47); it refuses before the keg is read (NEW-147).
   if (isUnsignedLocalTrust(home.trust)) throw new ReleaseUnsignedLocalError();
+  if (!isPackageChannelTrust(home.trust)) refuse("update_trust_channel", EXIT_CODES.recoveryRequired, [], "developer-os doctor");
   const current = releaseIdentityOf(home.active);
-  const offline: OfflineReleaseTrustV1 = await update.readOfflineTrust();
-  await cleanScratchResidue(update);
 
-  const transport = update.createTransport(offline);
-  const delegation = await fetchDocument(transport, "release_key_delegation", MAXIMUM_DELEGATION_BYTES);
-  const index = await fetchDocument(transport, "release_index", MAXIMUM_INDEX_BYTES);
-  const chain = verifyReleaseMetadataChain({
-    trust: offline,
-    role: "online_target",
-    delegation: delegation.value as ReleaseKeyDelegationDocumentV1,
-    index: index.value as ReleaseIndexDocumentV1,
+  const source = await update.readPackageSource();
+  const delegationBytes = await source.readFile(source.retainedMetadata.delegation);
+  const indexBytes = await source.readFile(source.retainedMetadata.releaseIndex);
+  const manifestBytes = await source.readFile(source.retainedMetadata.bundleManifest);
+  const { index, bundleManifest } = await classified("update_package_source_invalid", EXIT_CODES.recoveryRequired, () => {
+    validatePackageChannelDelegation(decodeCanonicalJson(delegationBytes, MAXIMUM_DELEGATION_BYTES));
+    return {
+      index: validateReleaseIndex(decodeCanonicalJson(indexBytes, MAXIMUM_INDEX_BYTES)),
+      bundleManifest: validateBundleManifest(decodeCanonicalJson(manifestBytes, MAXIMUM_BUNDLE_MANIFEST_BYTES)),
+    };
   });
+  const bundleManifestHash = sha256(manifestBytes);
   const metadata: ReleaseMetadataIdentityV1 = {
-    delegationSequence: chain.delegation.sequence,
-    delegationHash: delegation.hash,
-    delegatedReleaseKeyId: chain.delegation.releaseKey.keyId,
-    releaseIndexSequence: chain.index.sequence,
-    releaseIndexHash: index.hash,
+    delegationSequence: parseUInt64Decimal("0"),
+    delegationHash: sha256(delegationBytes),
+    delegatedReleaseKeyId: PACKAGE_CHANNEL_RELEASE_KEY_ID,
+    releaseIndexSequence: index.sequence,
+    releaseIndexHash: sha256(indexBytes),
   };
 
-  const selection = selectTarget(chain.index, { version: request.version, active: current });
+  const selection = selectTarget(index, { version: request.version, active: current });
   if (selection.outcome === "up_to_date") {
-    // Equal version is not enough: the signed bundle must be the one this home runs.
-    const bundle = chain.index.releases.find((entry) => entry.version === current.version)?.bundles[current.architecture === "arm64" ? 0 : 1];
+    // Equal version is not enough: the keg's bundle must be the one this home runs.
+    const bundle = index.releases.find((entry) => entry.version === current.version)?.bundles[current.architecture === "arm64" ? 0 : 1];
     if (bundle?.manifestSha256 !== current.bundleManifestHash) refuse("update_release_identity_rebound", EXIT_CODES.securityRefusal);
     // Only metadata freshness: a rollback keeps the release high watermark above the active
     // release, so the release half is checked as guarded-active, never advanced (W2-PLANNING-2).
@@ -649,7 +614,8 @@ async function planUpdateAttempt(
   }
 
   const { selected } = selection;
-  if (selected.entry.minimumLauncherProtocol > offline.handoffProtocol) {
+  // The keg ships its own launcher, so the target's minimum is checked against the keg's protocol.
+  if (selected.entry.minimumLauncherProtocol > bundleManifest.launcherProtocol) {
     refuse("update_launcher_too_old", EXIT_CODES.capabilityUnavailable, [], "upgrade the Developer OS launcher, then run developer-os update again");
   }
   if (selected.entry.updateProtocol > PLANNER_PROTOCOL_V1) {
@@ -661,11 +627,6 @@ async function planUpdateAttempt(
   await classified("update_trust_replay", EXIT_CODES.securityRefusal, () =>
     advanceReleaseTrust(home.trust, { ...metadata, releaseSequence: selected.entry.releaseSequence, releaseIdentityHash: selected.releaseIdentityHash }));
 
-  const delegationV1: ReleaseKeyDelegationV1 = chain.delegation;
-  const manifestBody = await collect(MAXIMUM_BUNDLE_MANIFEST_BYTES, (sink) =>
-    transport.get({ kind: "bundle_manifest", delegation: delegationV1, bundle: selected.bundle, sink }));
-  const bundleManifest = await classified("update_bundle_manifest_invalid", EXIT_CODES.securityRefusal, () =>
-    validateBundleManifest(decodeCanonicalJson(manifestBody.body, MAXIMUM_BUNDLE_MANIFEST_BYTES)));
   const target = await classified("update_release_identity_invalid", EXIT_CODES.securityRefusal, () =>
     admitReleaseIdentity(
       {
@@ -676,7 +637,7 @@ async function planUpdateAttempt(
         delegationHash: metadata.delegationHash,
         releaseIndexSequence: metadata.releaseIndexSequence,
         releaseIndexHash: metadata.releaseIndexHash,
-        bundleManifestHash: manifestBody.hash,
+        bundleManifestHash,
         bundleRoot: `${update.productHome}/releases/${selected.entry.version}/darwin-${selected.bundle.architecture}`,
         platform: "darwin",
         architecture: selected.bundle.architecture,
@@ -684,40 +645,27 @@ async function planUpdateAttempt(
         updateProtocol: selected.entry.updateProtocol,
       },
       update.pathEvidence,
-      { productHome: update.productHome, selected, metadata, bundleManifest, bundleManifestHash: manifestBody.hash },
+      { productHome: update.productHome, selected, metadata, bundleManifest, bundleManifestHash },
     ));
 
   const retained = home.rollback === null ? null : await update.readRollbackEvidence(home, home.rollback);
-  const attempt = await update.scratch.create({
-    archive: { bytes: selected.bundle.archiveBytes, sha256: selected.bundle.archiveSha256 },
-    manifestHash: manifestBody.hash,
-    manifest: bundleManifest,
-    maximumScratchBytes: MAXIMUM_SCRATCH_BYTES,
-  });
-  let cleanupOwed = true;
-  try {
-    await attempt.download((sink) => transport.get({ kind: "archive", delegation: delegationV1, bundle: selected.bundle, sink }));
-    const verified = await attempt.extract(selected.bundle);
-    const plannedAt = update.clock();
-    const signedMetadata: SignedReleaseMetadataV1 = [delegation.text, index.text, canonicalText(manifestBody.body)];
-    const inputs: UpdateTargetInputsV1 = { current, target, metadata, signedMetadata, bundle: selected.bundle, bundleManifest, verified, transport, plannedAt, retained, observation: null };
-    const materialized = await materializeUpdate(update, home, inputs);
-    const result = { schemaVersion: 1, outcome: "preview", plan: materialized.candidate.preview } as const;
-    cleanupOwed = false;
-    if (!options.retainScratch) {
-      await attempt.cleanup();
-      return { result, candidate: materialized.candidate, apply: null };
-    }
-    return { result, candidate: materialized.candidate, apply: { home, inputs: { ...inputs, observation: materialized.observation }, materialized, scratch: attempt } };
-  } catch (error) {
-    // A cleanup failure never masks the planning refusal and its exit code (W2-PLANNING-4).
-    if (cleanupOwed) {
-      await attempt.cleanup().catch((cleanupFailure: unknown) => {
-        if (error instanceof Error && error.cause === undefined) error.cause = cleanupFailure;
-      });
-    }
-    throw error;
-  }
+  // The admitted keg is the read-only source: no scratch attempt exists to create or remove.
+  const verified: VerifiedScratchBundleV1 = {
+    id: "rp_package_source",
+    planHash: parseLowerHexSha256(source.packageInventoryHash),
+    manifestHash: bundleManifestHash,
+    root: parseCanonicalAbsolutePathText(`${source.packageRoot}/${source.bundleRoot}`),
+    entries: bundleManifest.entries.length,
+  };
+  // `packageRoot` is `<keg>/libexec/fallback` by the source table, so the keg is two levels up.
+  const packageSource: UpdatePackageSourcePreviewV1 = { kegPath: parseCanonicalAbsolutePathText(dirname(dirname(source.packageRoot))), bundleManifestHash };
+  const plannedAt = update.clock();
+  const signedMetadata: SignedReleaseMetadataV1 = [canonicalText(delegationBytes), canonicalText(indexBytes), canonicalText(manifestBytes)];
+  const inputs: UpdateTargetInputsV1 = { current, target, metadata, signedMetadata, bundle: selected.bundle, bundleManifest, verified, packageSource, plannedAt, retained, observation: null };
+  const materialized = await materializeUpdate(update, home, inputs);
+  const result = { schemaVersion: 1, outcome: "preview", plan: materialized.candidate.preview } as const;
+  if (!options.prepare) return { result, candidate: materialized.candidate, apply: null };
+  return { result, candidate: materialized.candidate, apply: { home, inputs: { ...inputs, observation: materialized.observation }, materialized } };
 }
 
 /**
@@ -726,16 +674,16 @@ async function planUpdateAttempt(
  * unchanged home reproduces the pre-lock candidate byte for byte (Spec 2 §9.1).
  */
 export async function materializeUpdate(update: CliUpdateContext, home: UpdateHomeV1, inputs: UpdateTargetInputsV1): Promise<MaterializedUpdateV1> {
-  const { current, target, metadata, bundle, bundleManifest, verified, transport, plannedAt, retained } = inputs;
+  const { current, target, metadata, bundleManifest, verified, packageSource, plannedAt, retained } = inputs;
   const snapshot = await update.snapshot(home, { current, target, plannedAt });
   const run = await update.planner.run({
     runtime: `${verified.root}/${bundleManifest.runtimeEntrypoint}`,
     planner: `${verified.root}/${bundleManifest.plannerEntrypoint}`,
-    // ponytail: the verified extraction root, attempt-owned and read-only to the planner; a dedicated empty directory needs a scratch-grammar change.
+    // ponytail: the keg's bundle root, read-only to the planner; a dedicated empty directory needs a scratch-grammar change.
     cwd: verified.root,
     request: snapshot.request,
     inputBlobs: snapshot.inputBlobs,
-    remainingMilliseconds: transport.remainingMilliseconds(),
+    remainingMilliseconds: PLANNER_WIRE_BOUNDS_V1.wallMilliseconds,
   });
 
   const manifest = concreteManifest(update, home, snapshot, run.draft, run.outputBlobs, target);
@@ -744,7 +692,7 @@ export async function materializeUpdate(update: CliUpdateContext, home: UpdateHo
   const inventoryBytes = prepared.entries.reduce((sum, entry) => sum + entry.bytes, 0);
   const participants = run.draft.ownerPlans.length + run.draft.migrations.length + 4;
   const observation = inputs.observation ?? await update.capacity();
-  const capacity = updateCapacity(observation, bundleManifest, bundle.archiveBytes, prepared, inventoryBytes, participants);
+  const capacity = updateCapacity(observation, bundleManifest, prepared, inventoryBytes, participants);
   const candidate = await classified("update_planner_output_invalid", EXIT_CODES.securityRefusal, () => {
     try {
       return materializePlannerDraft(snapshot.request, run.draft, run.outputBlobs, {
@@ -752,12 +700,7 @@ export async function materializeUpdate(update: CliUpdateContext, home: UpdateHo
         ownerRoots: snapshot.ownerRoots,
         transcript: run.transcript,
         metadata,
-        download: {
-          archiveBytes: bundle.archiveBytes,
-          archiveSha256: bundle.archiveSha256,
-          expandedBytes: parseUInt64Decimal(manifestTotals(bundleManifest).bytes.toString(10)),
-          entryCount: bundleManifest.entries.length,
-        },
+        packageSource,
         retainedRollback: home.rollback === null || retained === null ? null : { release: home.rollback.previous, payload: retained.payload },
         capacity,
         concreteManifest: manifest as unknown as CanonicalJsonValue,
@@ -824,8 +767,8 @@ function ownerRollbackPreview(leaf: RetainedOwnerInverseProjectionV1, manifest: 
 }
 
 /**
- * Plan-only `update rollback` (Spec 2 §10.2): retained local evidence only, so no FD 3 read,
- * no transport, and no scratch. A post-update edit is refused inside `readRollbackEvidence`.
+ * Plan-only `update rollback` (Spec 2 §10.2): retained local evidence only, so the keg is never
+ * read. A post-update edit is refused inside `readRollbackEvidence`.
  */
 export async function planRollback(update: CliUpdateContext): Promise<UpdateRollbackPreviewV1> {
   const home = await update.readHome();

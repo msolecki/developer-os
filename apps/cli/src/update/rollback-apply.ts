@@ -71,7 +71,7 @@ export async function applyRollback(update: CliUpdateContext, preview: UpdateRol
       requireCapacity({ ...composed.capacity, ...(await update.capacity()) });
       return composed;
     });
-    await construct(ports, composition, [], () => Promise.resolve());
+    await construct(ports, composition, []);
     return resultOf(await new UpdateLifecycleCoordinator(ports.coordinator(coordinatorId)).execute(coordinatorId), preview);
   });
 }

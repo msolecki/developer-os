@@ -455,7 +455,8 @@ describe("composeRollback (Spec 2 §10.2, D72 P9)", () => {
     expect(active.after.state).toBe("present");
     const retirement = leafOf<UpdateTerminalRetirementPlanV1>(composed, "terminal_retirement");
     expect(retirement.set).toBe("consumed_rollback_and_rejected_release");
-    expect(retirement.entries.map((entry) => entry.kind)).toEqual(["bundle", "metadata", "metadata", "metadata", "rollback_payload"]);
+    // Both package-channel releases retain the one delegation stand-in (D84 K4), so only the rejected index and manifest retire.
+    expect(retirement.entries.map((entry) => entry.kind)).toEqual(["bundle", "metadata", "metadata", "rollback_payload"]);
     expect(retirement.entries[0]?.root).toBe(input.preview.current.bundleRoot);
     expect(retirement.entries.some((entry) => entry.root === input.preview.target.bundleRoot)).toBe(false);
   });

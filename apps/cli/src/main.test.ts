@@ -1686,11 +1686,11 @@ describe("update dispatch", () => {
     expect(await inventoryDigest(harness.fixture.root)).toEqual(before);
   });
 
-  it("makes no release request for rollback", async () => {
+  it("makes no release request and reads no keg for rollback", async () => {
     const harness = await updateHarness("update-rollback-offline");
     await runMain(["update", "rollback"], harness);
     expect(harness.update.requests).toEqual([]);
-    expect(harness.update.events).not.toContain("trust");
+    expect(harness.update.events).not.toContain("package_source");
   });
 
   it("renders the human view from the same typed result --json publishes", async () => {

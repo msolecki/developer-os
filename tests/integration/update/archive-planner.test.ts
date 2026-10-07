@@ -170,7 +170,8 @@ describe("the planner's request and result are bound before allocation (Spec 2 Â
     };
 
     expect(await refusal(prepareUpdate(lying, { version: null }))).toEqual({ code: EXIT_CODES.securityRefusal, reason: "update_planner_output_invalid" });
-    expect(fixture.events).toContain("scratch.cleanup");
+    // D84 K2: the keg is read in place, so there is no scratch to leave behind.
+    expect(fixture.events).not.toContain("scratch.create");
   });
 
   it("refuses a transcript whose request hash is not the request the current process sent", async () => {
@@ -211,7 +212,7 @@ describe("a Codex tree change (D72 P6, NEW-61)", () => {
     expect(await refusal(prepareUpdate(fixture.update, { version: null }))).toEqual({ code: EXIT_CODES.decisionRequired, reason: `update_codex_registration_${registration}` });
     expect(fixture.events).toContain("planner");
     expect(fixture.events).not.toContain("capacity");
-    expect(fixture.events).toContain("scratch.cleanup");
+    expect(fixture.events).not.toContain("scratch.create");
   });
 
   it("previews exactly one registration refresh for the Codex owner", async () => {
@@ -222,7 +223,6 @@ describe("a Codex tree change (D72 P6, NEW-61)", () => {
     const owners = planned.result.plan.owners;
     expect(owners.map((owner) => [owner.owner, owner.counts.externalEffects])).toEqual([["core", 0], ["codex", 1]]);
     expect(owners.find((owner) => owner.owner === "codex")?.paths.replace).toContain(CODEX_PLUGIN_FILE);
-    await planned.apply?.scratch.cleanup();
   });
 
   it("composes one refresh leaf and rewrites the registration record to the postimage tree, so it reads registered after", async () => {

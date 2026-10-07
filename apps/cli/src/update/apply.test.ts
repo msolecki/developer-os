@@ -79,7 +79,7 @@ interface ApplyFixture {
   readonly previous: ReleaseIdentityV1;
   readonly target: ReleaseIdentityV1;
   readonly allocatorReservations: number;
-  /** Transport requests made after the preview; revalidation must make none. */
+  /** Keg reads, transport requests and scratch calls made after the preview; revalidation must make none. */
   requestsAfterPreview(): readonly string[];
   activeIdentity(): Promise<ReleaseIdentityV1>;
   runAnyCommandToRecover(): Promise<void>;
@@ -311,7 +311,7 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
   const planned = await prepareUpdate(planning, { version: null });
   if (planned.apply === null) throw new Error("expected a preview to apply");
   const prepared = planned.apply;
-  const previewRequests = base.requests.length;
+  const previewEvents = base.events.length;
   const underLock: CliUpdateContext = {
     ...planning,
     readHome: () => Promise.resolve(options.home === undefined ? base.home : options.home(base.home)),
@@ -327,7 +327,8 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
     get allocatorReservations() {
       return world.allocatorReservations;
     },
-    requestsAfterPreview: () => base.requests.slice(previewRequests),
+    // The keg read, any transport request, and any scratch port call after the preview: apply makes none.
+    requestsAfterPreview: () => base.events.slice(previewEvents).filter((event) => event === "package_source" || event.startsWith("transport") || event.startsWith("scratch")),
     activeIdentity: () => Promise.resolve(world.active === "target" ? prepared.inputs.target : prepared.inputs.current),
     runAnyCommandToRecover: async () => {
       world.dead = false;
@@ -385,7 +386,7 @@ describe("applyUpdate allocation (D72 P7(d)-(e))", () => {
     expect(fixture.events).not.toContain("compose");
     expect(fixture.world.construction).toBe("absent");
     expect(fixture.world.coordinator).toBeNull();
-    expect(fixture.events).toContain("scratch.cleanup");
+    expect(fixture.requestsAfterPreview()).toStrictEqual([]);
   });
 });
 
@@ -397,7 +398,7 @@ describe("applyUpdate revalidation", () => {
     expect(changedSecondPlannerRun.world.construction).toBe("absent");
   });
 
-  it("reruns the planner exactly once more, under the lock, over the same verified scratch", async () => {
+  it("reruns the planner exactly once more, under the lock, over the same admitted keg", async () => {
     const fixture = await applyFixture();
     const before = fixture.events.filter((event) => event === "planner").length;
     await applyUpdate(fixture.update, fixture.prepared);
@@ -439,7 +440,7 @@ describe("applyUpdate revalidation", () => {
     expect(fixture.allocatorReservations).toBe(1);
     expect(fixture.world.construction).toBe("absent");
     expect(fixture.events).not.toContain("construction_published");
-    expect(fixture.events).toContain("scratch.cleanup");
+    expect(fixture.requestsAfterPreview()).toStrictEqual([]);
   });
 });
 
@@ -456,13 +457,12 @@ describe("applyUpdate forward execution", () => {
     expect(await fixture.activeIdentity()).toEqual(fixture.target);
   });
 
-  it("removes the scratch attempt once, after the sources are durable and before outer intent", async () => {
+  it("stages the sources from the admitted keg with no keg re-read and no scratch, then hands off (D84 K2)", async () => {
     const fixture = await applyFixture();
     await applyUpdate(fixture.update, fixture.prepared);
-    const cleanup = fixture.events.indexOf("scratch.cleanup");
-    expect(fixture.events.filter((event) => event === "scratch.cleanup")).toHaveLength(1);
-    expect(cleanup).toBeGreaterThan(fixture.events.indexOf("construction_files"));
-    expect(cleanup).toBeLessThan(fixture.events.indexOf("construction_handed_off"));
+    expect(fixture.events.indexOf("construction_files")).toBeLessThan(fixture.events.indexOf("construction_handed_off"));
+    expect(fixture.requestsAfterPreview()).toStrictEqual([]);
+    expect(fixture.events.filter((event) => event.startsWith("scratch"))).toStrictEqual([]);
   });
 
   it("crosses the point of no return only at the verifier and then force-forwards retirement", async () => {

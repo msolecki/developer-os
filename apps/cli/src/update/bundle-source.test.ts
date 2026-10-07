@@ -33,7 +33,7 @@ import {
 import type { VerifiedScratchBundleV1 } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BUNDLE_SOURCE_DEATH_POINTS, BundleSourceExecutor, type BundleSourceDeathPointV1 } from "./bundle-source.js";
+import { BUNDLE_SOURCE_DEATH_POINTS, BundleGuardedIo, BundleSourceExecutor, type BundleSourceDeathPointV1 } from "./bundle-source.js";
 import { resolveSourceParent } from "./construction.js";
 import { readConstructionJournal, stageSourceConstruction } from "./rollback-testing.js";
 
@@ -313,5 +313,66 @@ describe("BundleSourceExecutor source parent (P1)", () => {
     const value = await fixture();
     const other = await fixture();
     await expect(executor(value).stage(value.plan, value.scratch, value.construction, other.constructionJournal)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+  });
+});
+
+/** A bare guarded IO over a fresh directory: `copyInto` creates the target with the entry's mode and copies `from` into it. */
+async function guardedIoFixture(): Promise<{
+  readonly root: CanonicalAbsolutePathV1;
+  readonly copyInto: (from: CanonicalAbsolutePathV1, entry: { readonly path: string; readonly kind: "file"; readonly mode: 384 | 448; readonly bytes: string; readonly sha256: LowerHexSha256 }) => Promise<{ readonly mode: number }>;
+}> {
+  const root = parseCanonicalAbsolutePathText(await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "dos-bundle-copy-"))));
+  homes.push(root);
+  await nodeFs.mkdir(`${root}/target`, { mode: 0o700 });
+  const io = new BundleGuardedIo(createNodeLifecycleGuardedFileSystem({ effectiveUid: uid, renameNoReplace: () => Promise.reject(new Error("unused")) }), uid);
+  return {
+    root,
+    copyInto: async (from, value) => {
+      const entry = { ...value, path: value.path as BundleRelativePathV1, bytes: parseUInt64Decimal(value.bytes) };
+      const target = parseCanonicalAbsolutePathText(`${root}/target/${value.path.replaceAll("/", "_")}`);
+      const created = await io.createEmpty(target, entry.mode);
+      try {
+        await io.copyVerified(from, null, created.handle, entry);
+      } finally {
+        await created.handle.close();
+      }
+      return { mode: (await nodeFs.lstat(target)).mode & 0o777 };
+    },
+  };
+}
+
+/** One keg-shaped source file at `relative` under `root`, with Homebrew's (or any) mode. */
+async function sourceFile(root: string, relative: string, content: string, mode: number): Promise<CanonicalAbsolutePathV1> {
+  const path = `${root}/source/${relative}`;
+  await nodeFs.mkdir(join(path, ".."), { recursive: true, mode: 0o755 });
+  await nodeFs.writeFile(path, content, { mode });
+  await nodeFs.chmod(path, mode);
+  return parseCanonicalAbsolutePathText(path);
+}
+
+describe("BundleGuardedIo.copyVerified source permission class (D84 K2, Review Focus 4)", () => {
+  it("(c) copies a 0644/0755 source into 0600/0700 targets and refuses a class mismatch", async () => {
+    const io = await guardedIoFixture();
+    const file = await sourceFile(io.root, "bin/node", "x", 0o755);
+    await expect(io.copyInto(file, { path: "bin/node", kind: "file", mode: 448, bytes: "1", sha256: sha("x") })).resolves.toMatchObject({ mode: 0o700 });
+    const plain = await sourceFile(io.root, "lib/plain.js", "x", 0o644);
+    await expect(io.copyInto(plain, { path: "lib/plain.js", kind: "file", mode: 384, bytes: "1", sha256: sha("x") })).resolves.toMatchObject({ mode: 0o600 });
+    const wrong = await sourceFile(io.root, "bin/other", "x", 0o644);
+    await expect(io.copyInto(wrong, { path: "bin/other", kind: "file", mode: 448, bytes: "1", sha256: sha("x") })).rejects.toThrow(/bundle_source_changed/u);
+  });
+
+  it("keeps admitting the owner-only 0600/0700 sources of a scratch extraction or a retained blob", async () => {
+    const io = await guardedIoFixture();
+    const executable = await sourceFile(io.root, "bin/owned", "x", 0o700);
+    await expect(io.copyInto(executable, { path: "bin/owned", kind: "file", mode: 448, bytes: "1", sha256: sha("x") })).resolves.toMatchObject({ mode: 0o700 });
+    const blob = await sourceFile(io.root, "blobs/owned.bin", "x", 0o600);
+    await expect(io.copyInto(blob, { path: "blobs/owned.bin", kind: "file", mode: 384, bytes: "1", sha256: sha("x") })).resolves.toMatchObject({ mode: 0o600 });
+  });
+
+  it.each([0o666, 0o664, 0o646, 0o775])("refuses a source with a group or other write bit (%o)", async (mode) => {
+    const io = await guardedIoFixture();
+    const writable = await sourceFile(io.root, "lib/writable.js", "x", mode);
+    const executable = (mode & 0o100) !== 0;
+    await expect(io.copyInto(writable, { path: "lib/writable.js", kind: "file", mode: executable ? 448 : 384, bytes: "1", sha256: sha("x") })).rejects.toThrow(/bundle_source_changed/u);
   });
 });

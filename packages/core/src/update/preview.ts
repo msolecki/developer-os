@@ -23,12 +23,10 @@ import {
   parsePositiveUInt32,
   parseSafeReasonCode,
   parseSchemaMigrationId,
-  parseUInt64Decimal,
   type LowerHexSha256,
   type PositiveUInt32V1,
   type SafeReasonCodeV1,
   type SchemaMigrationIdV1,
-  type UInt64DecimalV1,
 } from "./scalars.js";
 
 /**
@@ -114,11 +112,10 @@ export interface RollbackPayloadEntryV1 {
   readonly sha256: LowerHexSha256;
 }
 
-export interface UpdateDownloadPreviewV1 {
-  readonly archiveBytes: UInt64DecimalV1;
-  readonly archiveSha256: LowerHexSha256;
-  readonly expandedBytes: UInt64DecimalV1;
-  readonly entryCount: number;
+/** D84 K4 F7: the admitted keg the update copies from; nothing is downloaded. */
+export interface UpdatePackageSourcePreviewV1 {
+  readonly kegPath: CanonicalAbsolutePathV1;
+  readonly bundleManifestHash: LowerHexSha256;
 }
 
 export interface UpdatePlanPreviewV1 {
@@ -128,7 +125,7 @@ export interface UpdatePlanPreviewV1 {
   readonly current: ReleaseIdentityV1;
   readonly target: ReleaseIdentityV1;
   readonly metadata: ReleaseMetadataIdentityV1;
-  readonly download: UpdateDownloadPreviewV1;
+  readonly packageSource: UpdatePackageSourcePreviewV1;
   readonly owners: readonly OwnerUpdatePreviewV1[];
   readonly migrations: readonly SchemaMigrationPreviewV1[];
   readonly planner: PlannerPublicSummaryV1;
@@ -197,7 +194,7 @@ export interface UpdatePreviewInputV1 {
   readonly current: ReleaseIdentityV1;
   readonly target: ReleaseIdentityV1;
   readonly metadata: ReleaseMetadataIdentityV1;
-  readonly download: UpdateDownloadPreviewV1;
+  readonly packageSource: UpdatePackageSourcePreviewV1;
   readonly owners: readonly OwnerUpdatePreviewInputV1[];
   readonly migrations: readonly SchemaMigrationPreviewV1[];
   readonly planner: PlannerTranscriptIdentityV1;
@@ -240,8 +237,6 @@ const MAX_BLOB_COUNT = 1_000_000;
 const MAX_BLOB_AGGREGATE_BYTES = 1_073_741_824;
 const MAX_ROLLBACK_AGGREGATE_BYTES = 2_147_483_648;
 const MAX_CANONICAL_BYTES = 536_870_912;
-const MAX_ARCHIVE_BYTES = 2n * 1024n ** 3n;
-const MAX_EXPANDED_BYTES = 8n * 1024n ** 3n;
 
 const PREVIEW_DOMAIN = "developer-os/update-preview/v1";
 const encoder = new TextEncoder();
@@ -382,20 +377,15 @@ export function previewHash(
 export function buildUpdatePreview(input: UpdatePreviewInputV1): UpdatePlanPreviewV1 {
   requireDistinctReleases(input.current, input.target);
   if (input.capacity.operation !== "update") fail("UpdatePlanPreviewV1.capacity: operation");
-  const archiveBytes = parseUInt64Decimal(input.download.archiveBytes);
-  const expandedBytes = parseUInt64Decimal(input.download.expandedBytes);
-  if (BigInt(archiveBytes) > MAX_ARCHIVE_BYTES || BigInt(expandedBytes) > MAX_EXPANDED_BYTES) fail("UpdatePlanPreviewV1.download: bytes");
   const unhashed: Omit<UpdatePlanPreviewV1, "previewHash"> = {
     schemaVersion: 1,
     operation: "update",
     current: input.current,
     target: input.target,
     metadata: input.metadata,
-    download: {
-      archiveBytes,
-      archiveSha256: parseLowerHexSha256(input.download.archiveSha256),
-      expandedBytes,
-      entryCount: integer(input.download.entryCount, 1, 200_000, "UpdatePlanPreviewV1.download.entryCount"),
+    packageSource: {
+      kegPath: parseCanonicalAbsolutePathText(input.packageSource.kegPath),
+      bundleManifestHash: parseLowerHexSha256(input.packageSource.bundleManifestHash),
     },
     owners: buildOwnerPreviews(input.owners),
     migrations: buildMigrationPreviews(input.migrations),

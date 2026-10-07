@@ -286,13 +286,15 @@ export class BundleGuardedIo {
 
   /**
    * Streams one verified file into a created target with a running hash; the source must stay the
-   * same bounded single-link inode, and a byte mismatch refuses before the evidence is written.
+   * same bounded single-link inode, and a byte mismatch refuses before the evidence is written. The
+   * source's permission class (executable or not) must equal the entry's, and it carries no group
+   * or other write bit: a keg's `0644`/`0755` and an extraction's `0600`/`0700` both pass (D84 K2).
    */
   async copyVerified(from: CanonicalAbsolutePathV1, fromIdentity: Identity | null, target: FileHandle, entry: Extract<ReleaseBundleEntryV1, { readonly kind: "file" }>): Promise<void> {
     const source = await nodeFs.open(from, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const observed = entryOf(from, await source.stat({ bigint: true }));
-      if (observed.kind !== "regular_file" || observed.mode !== entry.mode || observed.nlink !== 1 || observed.size !== entry.bytes || (fromIdentity !== null && !sameInode(observed, fromIdentity))) refuseBundle("bundle_source_changed", from);
+      if (observed.kind !== "regular_file" || ((observed.mode & 0o100) !== 0) !== (entry.mode === 448) || (observed.mode & 0o022) !== 0 || observed.nlink !== 1 || observed.size !== entry.bytes || (fromIdentity !== null && !sameInode(observed, fromIdentity))) refuseBundle("bundle_source_changed", from);
       const hash = createHash("sha256");
       const buffer = new Uint8Array(COPY_CHUNK_BYTES);
       const total = Number(entry.bytes);

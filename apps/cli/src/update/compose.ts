@@ -531,7 +531,7 @@ class UpdateComposer {
 
     // Plans come first: their count fixes every later ordinal.
     const owners = await this.#ownerOps(draft.ownerPlans);
-    await this.#observeScratch(owners);
+    await this.#observePackageSource(owners);
     const plans = 12 + owners.length + (effectId === null ? 0 : 1) + draft.migrations.length;
     const rows = new RowLedger(plans + 2);
     this.#contentRows(owners, rows);
@@ -1829,17 +1829,21 @@ class UpdateComposer {
     }
   }
 
-  /** A target-bundle file staged from the verified scratch extraction, observed now under the lock. */
+  /**
+   * A target-bundle file staged from the admitted keg's bundle (D84 K2), observed now under the lock.
+   * `sourceMode` is the entry's own mode, which the row must equal (construction's `matches`); the
+   * keg file's `0644`/`0755` is checked by class where the bytes are copied (`copyVerified`).
+   */
   #bundleSource(entry: Extract<ReleaseBundleEntryV1, { readonly kind: "file" }>): UpdateConstructionPayloadSourceV1 {
-    const scratch = this.#scratchIdentity;
-    const file = scratch.files.get(entry.path);
-    if (file === undefined || scratch.root === null) return refuse("update_bundle_source_changed", EXIT_CODES.securityRefusal, entry.path);
+    const source = this.#packageSourceIdentity;
+    const file = source.files.get(entry.path);
+    if (file === undefined || source.root === null) return refuse("update_bundle_source_changed", EXIT_CODES.securityRefusal, entry.path);
     return {
       kind: "signed_bundle_entry",
       release: this.#input.inputs.target,
       root: this.#input.inputs.verified.root,
-      rootDev: scratch.root.dev,
-      rootIno: scratch.root.ino,
+      rootDev: source.root.dev,
+      rootIno: source.root.ino,
       inventoryHash: bundleInventoryHash(this.#input.inputs.bundleManifest.entries),
       relativePath: entry.path,
       sourceBytes: Number(entry.bytes),
@@ -1850,10 +1854,10 @@ class UpdateComposer {
     };
   }
 
-  #scratchIdentity: { readonly root: LifecycleGuardedEntryV1 | null; readonly files: ReadonlyMap<string, LifecycleGuardedEntryV1> } = { root: null, files: new Map() };
+  #packageSourceIdentity: { readonly root: LifecycleGuardedEntryV1 | null; readonly files: ReadonlyMap<string, LifecycleGuardedEntryV1> } = { root: null, files: new Map() };
 
-  /** Observes the verified scratch root and each bundle file an owner row sources, before any row is built. */
-  async #observeScratch(owners: readonly OwnerBuildV1[]): Promise<void> {
+  /** Observes the keg's bundle root and each bundle file an owner row sources, before any row is built. */
+  async #observePackageSource(owners: readonly OwnerBuildV1[]): Promise<void> {
     const wanted = owners.flatMap((owner) => owner.ops.flatMap((op) => (op.content?.kind === "bundle" ? [op.content.entry] : [])));
     if (wanted.length === 0) return;
     const root = this.#input.inputs.verified.root;
@@ -1865,7 +1869,7 @@ class UpdateComposer {
       if (observed?.entry.kind !== "regular_file" || observed.sha256 !== entry.sha256) return refuse("update_bundle_source_changed", EXIT_CODES.securityRefusal, entry.path);
       files.set(entry.path, observed.entry);
     }
-    this.#scratchIdentity = { root: observedRoot.entry, files };
+    this.#packageSourceIdentity = { root: observedRoot.entry, files };
   }
 
   #payloadFile(row: PayloadRowV1): UpdateConstructionFileInputV1 {

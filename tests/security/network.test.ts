@@ -502,10 +502,11 @@ describe("update rollback reaches no network", () => {
 
     expect(result).toMatchObject({ ok: true, data: { outcome: "rollback_preview" } });
     expect(fixture.requests).toStrictEqual([]);
-    expect(fixture.events.filter((event) => event.startsWith("transport") || event === "trust" || event === "planner")).toStrictEqual([]);
-    /** The positive control: the same fixture's update preview does reach its transport. */
+    expect(fixture.events.filter((event) => event.startsWith("transport") || event === "trust" || event === "package_source" || event === "planner")).toStrictEqual([]);
+    /** The positive control: the same fixture's update preview does read its keg, and still makes no request (D84 K1, K2). */
     await runUpdate({ ...(await createCommandFixture("network-update-preview")).context, update: fixture.update }, { kind: "update", version: null, apply: false, json: true });
-    expect(fixture.requests.length).toBeGreaterThan(0);
+    expect(fixture.events).toContain("package_source");
+    expect(fixture.requests).toStrictEqual([]);
   });
 });
 

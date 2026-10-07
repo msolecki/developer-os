@@ -15,7 +15,9 @@ import {
   keepOwnerUpdateProvider,
   OWNER_UPDATE_ORDER,
   ownerContentDependencies,
+  PACKAGE_CHANNEL_SOURCE_TABLE,
   parseCanonicalAbsolutePathText,
+  parseLowerHexSha256,
   parsePositiveUInt32,
   parseUInt64Decimal,
   plannerPathToken,
@@ -52,6 +54,7 @@ import type {
   RetainedInversePlanRefV1,
   RetainedOwnerInverseProjectionV1,
   RetainedSchemaMigrationInverseProjectionV1,
+  UpdateFallbackHandoffV1,
   UtcTimestampV1,
 } from "@developer-os/core";
 import { claudeOwnerUpdateProvider } from "@developer-os/adapter-claude";
@@ -97,6 +100,8 @@ import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
 import { tryLockScratchAttempt } from "./scratch-lock.js";
 import { productionUpdateApplyPorts, updateCodexPort } from "./apply-ports.js";
+import { admitPackageChannelRelease, inspectPackagedRelease, resolvePackageChannelSource } from "./packaged-release.js";
+import type { AdmittedPackagedReleaseV1 } from "./packaged-release.js";
 import {
   MAXIMUM_ROLLBACK_RECORD_BYTES,
   UpdatePlanningRefusal,
@@ -138,8 +143,14 @@ export interface CliUpdateContext {
   readonly clock: () => UtcTimestampV1;
   /** Read-only: admitted V2 manifest, zero drift, clear ledger, active/trust/rollback records. */
   readonly readHome: () => Promise<UpdateHomeV1>;
-  /** The launcher's FD 3 handoff. `update` only; rollback never reads it. */
+  /**
+   * D84 K2: the keg the source table names, resolved once and admitted as the package channel.
+   * `update` only; rollback never reads it, so it survives `brew cleanup` removing the keg.
+   */
+  readonly readPackageSource: () => Promise<AdmittedPackagedReleaseV1>;
+  /** Withdrawn by D84 K3; declared until Task 13 deletes it, and no planning path calls it. */
   readonly readOfflineTrust: () => Promise<OfflineReleaseTrustV1>;
+  /** Withdrawn by D84 K1; declared until Task 13 deletes it, and no planning path calls it. */
   readonly createTransport: (trust: OfflineReleaseTrustV1) => UpdateTransportV1;
   readonly scratch: UpdateScratchV1;
   readonly snapshot: (
@@ -158,9 +169,8 @@ export interface CliUpdateContext {
   readonly codex?: () => Promise<UpdateCodexV1 | null>;
   /**
    * `--apply`'s mutation authority; absent, `update --apply` and `update rollback --apply` refuse
-   * before any port is reached. Production binds it with no fallback handoff: the launcher's FD 3
-   * document gains `UpdateFallbackHandoffV1` only with Task 11b, so until then `--apply` refuses
-   * `update_fallback_unavailable` (exit 4) before allocation (D72 P7(d)).
+   * before any port is reached. Production binds the fallback handoff from the keg planning
+   * admitted (D84 K3); a rollback, which reads no keg, takes the active release's.
    */
   readonly apply?: UpdateApplyPortsV1;
 }
@@ -556,6 +566,47 @@ export async function readOfflineTrust(
   return readOfflineReleaseTrustFd(TRUST_DESCRIPTOR, dependencies);
 }
 
+/**
+ * D84 K2: the table's keg, resolved once and admitted by owner, mode class, inventory and hash.
+ * Carried requirement (Task 2): the prefix is the table's own, never a caller's path; `table` is
+ * the fixed-path seam a fixture prefix replaces (K6).
+ */
+export async function readPackageChannelSource(
+  architecture: string,
+  table: typeof PACKAGE_CHANNEL_SOURCE_TABLE = PACKAGE_CHANNEL_SOURCE_TABLE,
+): Promise<AdmittedPackagedReleaseV1> {
+  if (architecture !== "arm64" && architecture !== "x64") return refuse("update_package_source_absent", EXIT_CODES.capabilityUnavailable);
+  const { packageRoot } = await resolvePackageChannelSource(architecture, table);
+  return inspectPackagedRelease(await admitPackageChannelRelease(packageRoot, { prefix: table[architecture].prefix, requireVersion: null, architecture }));
+}
+
+/** `UpdateFallbackHandoffV1` (D72 (d)) from an admitted keg's bundle manifest (D84 K3). */
+export function packageFallbackOf(source: Pick<AdmittedPackagedReleaseV1, "identity">): UpdateFallbackHandoffV1 {
+  return {
+    bundleManifestHash: parseLowerHexSha256(source.identity.bundleManifestHash),
+    launcherProtocol: parsePositiveUInt32(source.identity.launcherProtocol),
+    updateProtocol: parsePositiveUInt32(source.identity.updateProtocol),
+  };
+}
+
+/**
+ * One process's keg port: every read is remembered, so `--apply` binds the fallback of the keg
+ * this invocation planned from. Null until a read; a rollback never reads one.
+ */
+export function packageSourcePorts(read: () => Promise<AdmittedPackagedReleaseV1>): {
+  readonly readPackageSource: () => Promise<AdmittedPackagedReleaseV1>;
+  readonly fallback: () => UpdateFallbackHandoffV1 | null;
+} {
+  let admitted: AdmittedPackagedReleaseV1 | null = null;
+  return {
+    readPackageSource: async () => {
+      admitted = await read();
+      return admitted;
+    },
+    fallback: () => (admitted === null ? null : packageFallbackOf(admitted)),
+  };
+}
+
 function scratchPort(context: CliContext): UpdateScratchV1 {
   let store: Promise<ReleasePlanningScratchStore> | null = null;
   const bound = (): Promise<ReleasePlanningScratchStore> => {
@@ -604,11 +655,13 @@ async function observeCapacity(context: CliContext): Promise<UpdateCapacityObser
 }
 
 export function createCliUpdateContext(context: CliContext): CliUpdateContext {
+  const source = packageSourcePorts(() => readPackageChannelSource(process.arch));
   return {
     productHome: parseCanonicalAbsolutePathText(context.paths.home),
     pathEvidence: createCanonicalPathEvidence(),
     clock: () => lifecycleOf(context).clock(),
     readHome: () => readHome(context),
+    readPackageSource: source.readPackageSource,
     readOfflineTrust: () => readOfflineTrust(context.launcherTrustHandoff === true),
     createTransport: (trust) => new FixedReleaseTransport({ trust, exchange: nodeReleaseExchange, now: () => performance.now(), setTimer }),
     scratch: scratchPort(context),
@@ -618,6 +671,6 @@ export function createCliUpdateContext(context: CliContext): CliUpdateContext {
     capacity: () => observeCapacity(context),
     admitManifest: (value) => validateManifestV2(value, gateManifestAdmission(context)),
     codex: updateCodexPort(context),
-    apply: productionUpdateApplyPorts(context, () => null),
+    apply: productionUpdateApplyPorts(context, source.fallback),
   };
 }

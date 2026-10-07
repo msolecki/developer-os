@@ -96,7 +96,7 @@ function updateInput(): UpdatePreviewInputV1 {
     current: release("1.0.0", "1"),
     target: release("2.0.0", "2"),
     metadata: { delegationSequence: u("1"), delegationHash: sha("delegation"), delegatedReleaseKeyId: sha("key"), releaseIndexSequence: u("2"), releaseIndexHash: sha("index-2") },
-    download: { archiveBytes: u("1024"), archiveSha256: sha("archive"), expandedBytes: u("4096"), entryCount: 3 },
+    packageSource: { kegPath: parseCanonicalAbsolutePathText("/prefix/Cellar/developer-os/2.0.0"), bundleManifestHash: sha("manifest-2.0.0") },
     owners: [owner("core", "/product/core"), owner("codex", "/home/.codex"), owner("claude", "/home/.claude")],
     migrations: [
       migration("migration_brain-v2", "brain", 1, 2, ["notes/b.md", "notes/a.md"]),
@@ -215,7 +215,7 @@ describe("update preview", () => {
     const canonical = encodeCanonicalJson(preview as never);
     expect(canonical).toContain('"/product/core/é-accent"');
     expect(Object.keys(preview).sort()).toEqual([
-      "capacity", "current", "download", "metadata", "migrations", "operation", "owners", "planner", "previewHash", "retainedRollback", "schemaVersion", "target",
+      "capacity", "current", "metadata", "migrations", "operation", "owners", "packageSource", "planner", "previewHash", "retainedRollback", "schemaVersion", "target",
     ]);
   });
 
@@ -247,12 +247,17 @@ describe("update preview", () => {
     expect(() => buildUpdatePreview({ ...updateInput(), capacity: capacity("rollback") })).toThrow();
   });
 
-  it("refuses a same-release update and out-of-bound download facts", () => {
+  it("refuses a same-release update and a malformed packageSource", () => {
     const input = updateInput();
     expect(() => buildUpdatePreview({ ...input, target: input.current })).toThrow();
-    expect(() => buildUpdatePreview({ ...input, download: { ...input.download, entryCount: 0 } })).toThrow();
-    expect(() => buildUpdatePreview({ ...input, download: { ...input.download, archiveBytes: u("2147483649") } })).toThrow();
-    expect(() => buildUpdatePreview({ ...input, download: { ...input.download, expandedBytes: u("8589934593") } })).toThrow();
+    expect(() => buildUpdatePreview({ ...input, packageSource: { ...input.packageSource, kegPath: "prefix/relative" as never } })).toThrow();
+    expect(() => buildUpdatePreview({ ...input, packageSource: { ...input.packageSource, bundleManifestHash: "A".repeat(64) as never } })).toThrow();
+  });
+
+  it("names the keg as packageSource and has no download block: nothing is downloaded (D84 K4 F7)", () => {
+    const preview = buildUpdatePreview(updateInput());
+    expect(preview.packageSource).toStrictEqual({ kegPath: "/prefix/Cellar/developer-os/2.0.0", bundleManifestHash: sha("manifest-2.0.0") });
+    expect("download" in preview).toBe(false);
   });
 });
 

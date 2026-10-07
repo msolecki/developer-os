@@ -1,8 +1,7 @@
-import { createHash, generateKeyPairSync, randomUUID, sign as signEd25519 } from "node:crypto";
+import { createHash, generateKeyPairSync, sign as signEd25519 } from "node:crypto";
 import type { KeyObject } from "node:crypto";
 import { appendFileSync } from "node:fs";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, realpath, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -25,6 +24,9 @@ import {
   updateRecoveryExecutorStagedPath,
   validateReleaseIdentity,
   encodeCanonicalJson,
+  PACKAGE_CHANNEL_DELEGATION_BYTES,
+  PACKAGE_CHANNEL_LAYOUT,
+  PACKAGE_CHANNEL_RELEASE_KEY_ID,
   PLANNER_PROTOCOL_V1,
   PLANNER_WIRE_BOUNDS_V1,
   parseCanonicalAbsolutePathText,
@@ -87,8 +89,10 @@ import { productionUpdateApplyPorts } from "./apply-ports.js";
 import { applyUpdate } from "./apply.js";
 import type { UpdateApplyResultV1 } from "./apply.js";
 import { prepareUpdate, releaseIdentityOf } from "./planning.js";
-import { createCliUpdateContext } from "./context.js";
+import { createCliUpdateContext, packageSourcePorts, readPackageChannelSource } from "./context.js";
 import type { CliUpdateContext, UpdateCodexV1, UpdateScratchAttemptV1 } from "./context.js";
+import { writePackageChannelRelease } from "./local-release.js";
+import type { AdmittedPackagedReleaseV1 } from "./packaged-release.js";
 import { CODEX_REFRESH_PROVIDER_PROTOCOL, codexRefreshPolicy } from "./codex-refresh.js";
 import type { CodexExecutableIdentityV1 } from "./codex-refresh.js";
 import { codexPluginTreeHash } from "../instructions/codex-registration.js";
@@ -147,6 +151,7 @@ export const SYNTHETIC_ARCHITECTURES: readonly SyntheticArchitectureV1[] = ["arm
 export interface SyntheticBundleV1 {
   readonly manifest: ReleaseBundleManifestV1;
   readonly manifestBytes: Uint8Array;
+  readonly manifestHash: LowerHexSha256;
   readonly archive: Uint8Array;
   /** Every bundle file's exact bytes by bundle-relative path. */
   readonly files: ReadonlyMap<string, Uint8Array>;
@@ -192,7 +197,8 @@ function syntheticBundle(version: string, sequence: string, architecture: Synthe
       ...[...files].map(([path, bytes]) => ({ path, kind: "file", mode: 448, bytes: String(bytes.byteLength), sha256: sha256(bytes) })),
     ],
   });
-  return { manifest, manifestBytes: bytesOf(manifest), archive: encoder.encode(`synthetic ${version} ${architecture} archive bytes\n`), files };
+  const manifestBytes = bytesOf(manifest);
+  return { manifest, manifestBytes, manifestHash: sha256(manifestBytes), archive: encoder.encode(`synthetic ${version} ${architecture} archive bytes\n`), files };
 }
 
 function syntheticRelease(version: string, sequence: string, options: SyntheticReleaseOptionsV1 = {}, architecture: SyntheticArchitectureV1 = "arm64"): SyntheticRelease {
@@ -227,16 +233,25 @@ function servedBundle(releases: Iterable<SyntheticRelease>, archiveSha256: Lower
   throw new Error("fixture served an unknown bundle");
 }
 
-function identityOf(release: SyntheticRelease, metadata: { readonly sequence: string; readonly delegationHash: LowerHexSha256; readonly indexHash: LowerHexSha256 }, home: CanonicalAbsolutePathV1 = SYNTHETIC_HOME): ReleaseIdentityV1 {
+/**
+ * The keg's one-row release index (D84 K2): its sequence is the release's, so `releaseSequence`
+ * and `releaseIndexSequence` both increase across published releases.
+ */
+function kegIndexBytes(release: SyntheticRelease): Uint8Array {
+  return bytesOf(validateReleaseIndex({ sequence: release.sequence, latestVersion: release.version, releases: [release.entry] }));
+}
+
+/** The identity a package-channel install of `release` records: the delegation stand-in at sequence 0, the keg's own index. */
+function identityOf(release: SyntheticRelease, home: CanonicalAbsolutePathV1 = SYNTHETIC_HOME): ReleaseIdentityV1 {
   return {
     version: release.version,
     releaseSequence: release.sequence,
     releaseIdentityHash: releaseIdentityHash(release.entry, release.architecture),
-    delegationSequence: metadata.sequence,
-    delegationHash: metadata.delegationHash,
-    releaseIndexSequence: metadata.sequence,
-    releaseIndexHash: metadata.indexHash,
-    bundleManifestHash: sha256(release.manifestBytes),
+    delegationSequence: "0",
+    delegationHash: sha256(PACKAGE_CHANNEL_DELEGATION_BYTES),
+    releaseIndexSequence: release.sequence,
+    releaseIndexHash: sha256(kegIndexBytes(release)),
+    bundleManifestHash: release.manifestHash,
     bundleRoot: parseCanonicalAbsolutePathText(`${home}/releases/${release.version}/darwin-${release.architecture}`),
     platform: "darwin",
     architecture: release.architecture,
@@ -480,14 +495,16 @@ function signedReleaseMetadata(releases: readonly SyntheticRelease[], latestVers
   };
 }
 
-/** The recording transport: both metadata documents, and either architecture's manifest or archive by its signed hash. */
+/**
+ * The recording transport: both metadata documents, and either architecture's manifest or archive by its signed hash.
+ * Withdrawn by D84 K1 with the ports it serves; only Security's transport tests reach it until Task 13.
+ */
 function syntheticReleaseServer(input: {
   readonly delegationBytes: Uint8Array;
   readonly indexBytes: Uint8Array;
   readonly releases: ReadonlyMap<string, SyntheticRelease>;
   readonly requests: string[];
   readonly events: string[];
-  readonly substitutedManifest?: Uint8Array;
 }): (request: ReleaseTransportRequestV1) => Promise<BoundedReleaseResponseV1> {
   return async (request) => {
     input.requests.push(request.kind);
@@ -497,7 +514,7 @@ function syntheticReleaseServer(input: {
       body = request.kind === "release_key_delegation" ? input.delegationBytes : input.indexBytes;
     } else {
       const selected = servedBundle(input.releases.values(), request.bundle.archiveSha256);
-      body = request.kind === "archive" ? selected.archive : input.substitutedManifest ?? selected.manifestBytes;
+      body = request.kind === "archive" ? selected.archive : selected.manifestBytes;
     }
     await request.sink(body);
     return { kind: request.kind, bodyBytes: String(body.byteLength) as BoundedReleaseResponseV1["bodyBytes"], bodyHash: sha256(body), redirected: false };
@@ -509,10 +526,20 @@ export interface UpdateFixtureOptions {
   readonly releases?: readonly { readonly version: string; readonly sequence: string; readonly minimumLauncherProtocol?: number; readonly updateProtocol?: number }[];
   readonly latestVersion?: string;
   readonly active?: string;
-  /** Signs the index with a key the delegation never named. */
+  /** Signs the transport's index with a key the delegation never named. */
   readonly forgedIndex?: boolean;
-  /** Serves these bytes in place of the selected bundle manifest. */
+  /** The installed keg's version (D84 K2); absent, the latest release. A version the releases lack is synthesized. */
+  readonly kegVersion?: string;
+  /** The synthesized keg's release sequence; absent, `"1"`. */
+  readonly kegSequence?: string;
+  /** The keg is `kegVersion` rebuilt with other bytes: same version, another bundle manifest. */
+  readonly rebuilt?: boolean;
+  /** No keg at the table's path: `readPackageSource` refuses `update_package_source_absent`. */
+  readonly kegAbsent?: boolean;
+  /** The keg retains these bytes in place of its bundle manifest. */
   readonly substitutedManifest?: Uint8Array;
+  /** The keg retains these bytes in place of its delegation stand-in. */
+  readonly substitutedDelegation?: Uint8Array;
   readonly trustSequence?: string;
   readonly reversedOperations?: boolean;
   readonly residue?: readonly string[];
@@ -574,6 +601,8 @@ export interface UpdateFixture {
   readonly events: string[];
   /** Transport request kinds only; empty proves no network was reached. */
   readonly requests: string[];
+  /** The canonical keg path `readPackageSource` admits, as the preview's `packageSource` names it. */
+  readonly kegPath: CanonicalAbsolutePathV1;
   /** Every request the snapshot port produced for the planner. */
   readonly plannerRequests: UpdatePlannerRequestV1[];
   readonly current: ReleaseIdentityV1;
@@ -637,26 +666,84 @@ export function rollbackEvidenceFor(record: RollbackRecordV1): RetainedRollbackE
   };
 }
 
+/** The table a missing keg resolves through: nothing exists under it (D84 K2, exit 4). */
+const ABSENT_PACKAGE_TABLE = {
+  arm64: { prefix: parseCanonicalAbsolutePathText("/synthetic/absent-prefix"), opt: parseCanonicalAbsolutePathText("/synthetic/absent-prefix/opt/developer-os"), fallback: "libexec/fallback" },
+  x64: { prefix: parseCanonicalAbsolutePathText("/synthetic/absent-prefix"), opt: parseCanonicalAbsolutePathText("/synthetic/absent-prefix/opt/developer-os"), fallback: "libexec/fallback" },
+} as const;
+
 /**
- * A complete synthetic update world behind `CliUpdateContext`: signed metadata over a fresh
- * Ed25519 root, a recording transport, a scratch that only records, and a planner answering
- * with a real admitted draft and a transcript that hashes exactly what it returns.
+ * The admitted keg as `inspectPackagedRelease` hands it over, served from memory: the unsigned
+ * delegation stand-in, the one-row index and the bundle manifest, with no Ed25519 anywhere.
+ */
+function syntheticKeg(release: SyntheticRelease, kegPath: CanonicalAbsolutePathV1, substitutes: { readonly delegation?: Uint8Array; readonly manifest?: Uint8Array }): AdmittedPackagedReleaseV1 {
+  const layout = PACKAGE_CHANNEL_LAYOUT;
+  const delegation = substitutes.delegation ?? PACKAGE_CHANNEL_DELEGATION_BYTES;
+  const index = kegIndexBytes(release);
+  const manifest = substitutes.manifest ?? release.manifestBytes;
+  const documents = new Map<string, Uint8Array>([[layout.delegation, delegation], [layout.releaseIndex, index], [layout.bundleManifest, manifest]]);
+  return {
+    trust: "package-channel",
+    packageRoot: `${kegPath}/libexec/fallback`,
+    packageRootDev: "7",
+    packageRootIno: "4243",
+    packageInventoryHash: sha256(`synthetic keg ${release.version} ${release.architecture}`),
+    retainedMetadata: { delegation: layout.delegation, releaseIndex: layout.releaseIndex, bundleManifest: layout.bundleManifest },
+    bundleRoot: layout.bundleRoot,
+    identity: {
+      version: release.version,
+      releaseSequence: release.sequence,
+      releaseIdentityHash: releaseIdentityHash(release.entry, release.architecture),
+      delegationSequence: "0",
+      delegationHash: sha256(delegation),
+      delegatedReleaseKeyId: PACKAGE_CHANNEL_RELEASE_KEY_ID,
+      releaseIndexSequence: release.sequence,
+      releaseIndexHash: sha256(index),
+      bundleManifestHash: sha256(manifest),
+      platform: "darwin",
+      architecture: release.architecture,
+      launcherProtocol: release.manifest.launcherProtocol,
+      updateProtocol: release.manifest.updateProtocol,
+    },
+    files: [],
+    readFile: (relativePath) => {
+      const bytes = documents.get(relativePath);
+      return bytes === undefined ? Promise.reject(new Error("synthetic keg read escaped its documents")) : Promise.resolve(bytes);
+    },
+  };
+}
+
+/**
+ * A complete synthetic update world behind `CliUpdateContext`: a package-channel home, one keg
+ * served from memory, and a planner answering with a real admitted draft and a transcript that
+ * hashes exactly what it returns. The withdrawn FD 3, transport and scratch ports stay wired to
+ * signed metadata over a fresh Ed25519 root until Task 13, so Security's transport tests keep a
+ * world to run against; no planning path reaches them.
  */
 export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateFixture {
   const specs = options.releases ?? [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }];
   const releases = new Map(specs.map((spec) => [spec.version, syntheticRelease(spec.version, spec.sequence, spec, options.architecture)]));
   const release = (version: string): SyntheticRelease => releases.get(version) ?? (() => { throw new Error(`fixture has no ${version}`); })();
-  const { delegationBytes, indexBytes, offline, releaseKey } = signedReleaseMetadata(
+  const { delegationBytes, indexBytes, offline } = signedReleaseMetadata(
     specs.map((spec) => release(spec.version)),
     options.latestVersion ?? specs[specs.length - 1]?.version ?? "1.1.0",
     options.forgedIndex === true,
   );
 
-  const previousMetadata = { sequence: "1", delegationHash: sha256("synthetic delegation 1"), indexHash: sha256("synthetic index 1") };
+  const kegVersion = options.kegVersion ?? options.latestVersion ?? specs[specs.length - 1]?.version ?? "1.1.0";
+  const kegRelease = options.rebuilt === true || !releases.has(kegVersion)
+    ? syntheticRelease(kegVersion, options.kegSequence ?? releases.get(kegVersion)?.sequence ?? "1", options.rebuilt === true ? { files: () => new Map([["bin/cli", encoder.encode(`rebuilt ${kegVersion}\n`)]]) } : {}, options.architecture)
+    : release(kegVersion);
+  const kegPath = parseCanonicalAbsolutePathText(`/synthetic/opt/homebrew/Cellar/developer-os/${kegVersion}`);
+  const keg = syntheticKeg(kegRelease, kegPath, {
+    ...(options.substitutedDelegation === undefined ? {} : { delegation: options.substitutedDelegation }),
+    ...(options.substitutedManifest === undefined ? {} : { manifest: options.substitutedManifest }),
+  });
+
   const activeRelease = release(options.active ?? specs[0]?.version ?? "1.0.0");
-  const current = identityOf(activeRelease, options.rollbackPrevious === undefined ? previousMetadata : { sequence: "2", delegationHash: sha256(delegationBytes), indexHash: sha256(indexBytes) });
+  const current = identityOf(activeRelease);
   const active: ActiveReleaseRecordV1 = { schemaVersion: 1, ...current, activatedAt: INSTALLED_AT };
-  const rollbackPrevious = options.rollbackPrevious === undefined ? null : identityOf(release(options.rollbackPrevious), previousMetadata);
+  const rollbackPrevious = options.rollbackPrevious === undefined ? null : identityOf(release(options.rollbackPrevious));
   const rollbackPayloadId = `rb_${sha256("synthetic nonce")}_7` as RollbackPayloadIdV1;
   const rollback: RollbackRecordV1 | null = rollbackPrevious === null
     ? null
@@ -679,13 +766,14 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
     active,
     trust: validateReleaseTrustState({
       schemaVersion: 1,
-      highestDelegationSequence: options.trustSequence ?? current.delegationSequence,
+      highestDelegationSequence: current.delegationSequence,
       delegationHash: current.delegationHash,
-      delegatedReleaseKeyId: releaseKey.keyId,
+      delegatedReleaseKeyId: PACKAGE_CHANNEL_RELEASE_KEY_ID,
       highestReleaseIndexSequence: options.trustSequence ?? current.releaseIndexSequence,
       releaseIndexHash: current.releaseIndexHash,
       highestAcceptedReleaseSequence: trustSequence,
       releaseIdentityHash: current.releaseIdentityHash,
+      trust: "package-channel",
     }),
     rollback,
   };
@@ -693,7 +781,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
   const events: string[] = [];
   const plannerRequests: UpdatePlannerRequestV1[] = [];
   const requests: string[] = [];
-  const serve = syntheticReleaseServer({ delegationBytes, indexBytes, releases, requests, events, ...(options.substitutedManifest === undefined ? {} : { substitutedManifest: options.substitutedManifest }) });
+  const serve = syntheticReleaseServer({ delegationBytes, indexBytes, releases, requests, events });
 
   const attempt = (manifest: ReleaseBundleManifestV1): UpdateScratchAttemptV1 => ({
     download: async (receive) => {
@@ -724,6 +812,10 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
     readHome: () => {
       events.push("home");
       return Promise.resolve(home);
+    },
+    readPackageSource: () => {
+      events.push("package_source");
+      return options.kegAbsent === true ? readPackageChannelSource("arm64", ABSENT_PACKAGE_TABLE) : Promise.resolve(keg);
     },
     readOfflineTrust: () => {
       events.push("trust");
@@ -788,7 +880,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
     admitManifest: (value) => value as InstallationManifestV2,
     ...(options.codex === undefined ? {} : { codex: syntheticCodexPort(options.codex.registration) }),
   };
-  return { update, home, events, requests, plannerRequests, current, releases, codexProjection: SYNTHETIC_CODEX_PROJECTION };
+  return { update, home, events, requests, kegPath, plannerRequests, current, releases, codexProjection: SYNTHETIC_CODEX_PROJECTION };
 }
 
 /** A context whose every port fails loudly: proves a refusal happened before any of them. */
@@ -801,6 +893,7 @@ export function unreachableUpdateContext(): CliUpdateContext {
     pathEvidence: SYNTHETIC_EVIDENCE,
     clock: never,
     readHome: never,
+    readPackageSource: never,
     readOfflineTrust: never,
     createTransport: never,
     scratch: { create: never, listRecoverableAttempts: never, recoverCleanup: never },
@@ -813,7 +906,7 @@ export function unreachableUpdateContext(): CliUpdateContext {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The on-disk release world: the same signed metadata, served to a real installed home.
+// The on-disk release world: real kegs under a fixture prefix behind the fixed-path seam (K6).
 // ---------------------------------------------------------------------------------------------
 
 /** `bin/runtime` execs this Node binary: the verifier supervisor spawns it with an empty environment. */
@@ -843,80 +936,71 @@ function runnableBundleFiles(rejecting: boolean): ReadonlyMap<string, Uint8Array
 export interface OnDiskReleaseWorldV1 {
   readonly architecture: SyntheticArchitectureV1;
   readonly releases: ReadonlyMap<string, SyntheticRelease>;
-  /** Transport request kinds, in order: the only network this world has. */
+  /** The fixture's Homebrew prefix: `Cellar/developer-os/<version>` kegs and the `opt/developer-os` link. */
+  readonly prefix: string;
+  /** One entry per keg read (`readPackageSource`): the whole update source; rollback and recovery never add one. */
   readonly requests: string[];
   /** Planner runs, in order: rollback and recovery must never add one. */
   readonly plannerRuns: string[];
-  /** Every scratch attempt directory this world ever created, removed or not. */
+  /** Always empty: the keg is read in place and no scratch attempt exists (D84 K2). Removed with Task 13. */
   readonly scratchDirectories: readonly string[];
+  /** `brew upgrade`: repoints `<prefix>/opt/developer-os` at `version`'s keg. */
+  readonly install: (version: string) => Promise<void>;
   /** The ports an installed home's update context replaces; every other port stays production. */
-  readonly ports: Pick<CliUpdateContext, "readOfflineTrust" | "createTransport" | "scratch" | "planner">;
-  /** Removes every scratch extraction this world made. */
-  readonly cleanup: () => Promise<void>;
+  readonly ports: Pick<CliUpdateContext, "readPackageSource" | "planner">;
 }
 
 /**
- * A signed release index over `releases` for an installed home of `architecture`: fresh Ed25519
- * keys, a recording transport, a scratch that extracts the selected bundle's exact files into a
- * private temporary directory, and a planner that keeps every owner's partition.
+ * Real kegs for `releases` under `prefix`, written as a formula installs them and admitted with
+ * the production admission through a fixture table over that prefix: the fixed-path seam of K6.
+ * The `opt` link starts at the first release, as if `brew upgrade` had just landed it; the
+ * planner keeps every owner's partition.
  */
-export function createOnDiskReleaseWorld(options: {
+export async function createOnDiskReleaseWorld(options: {
   readonly architecture: SyntheticArchitectureV1;
+  readonly prefix: string;
   readonly releases: readonly { readonly version: string; readonly sequence: string }[];
-  readonly latestVersion?: string;
   /** Releases whose verifier rejects every update to them. */
   readonly rejectingVersions?: readonly string[];
-}): OnDiskReleaseWorldV1 {
+}): Promise<OnDiskReleaseWorldV1> {
   const files = (version: string) => () => runnableBundleFiles(options.rejectingVersions?.includes(version) === true);
   const releases = new Map(options.releases.map((spec) => [spec.version, syntheticRelease(spec.version, spec.sequence, { files: files(spec.version) }, options.architecture)]));
-  const { delegationBytes, indexBytes, offline } = signedReleaseMetadata([...releases.values()], options.latestVersion ?? options.releases[options.releases.length - 1]?.version ?? "1.1.0", false);
+  const prefix = await realpath(options.prefix);
+  for (const release of releases.values()) {
+    const libexec = join(prefix, "Cellar", "developer-os", release.version, "libexec");
+    await mkdir(libexec, { recursive: true, mode: 0o755 });
+    await writePackageChannelRelease({
+      outDir: join(libexec, "fallback"),
+      index: { sequence: release.sequence, latestVersion: release.version, releases: [release.entry] } as unknown as CanonicalJsonValue,
+      manifest: release.manifest,
+      bundleFiles: [...release.files].map(([relativePath, bytes]) => ({ relativePath, bytes, mode: 0o700 })),
+    });
+  }
+  const link = join(prefix, "opt", "developer-os");
+  await mkdir(join(prefix, "opt"), { recursive: true, mode: 0o755 });
+  const install = async (version: string): Promise<void> => {
+    if (!releases.has(version)) throw new Error(`the world has no ${version} keg`);
+    await rm(link, { force: true });
+    await symlink(`../Cellar/developer-os/${version}`, link);
+  };
+  await install(options.releases[0]?.version ?? "1.1.0");
+  const at = parseCanonicalAbsolutePathText(prefix);
+  const entry = { prefix: at, opt: parseCanonicalAbsolutePathText(link), fallback: "libexec/fallback" } as const;
   const requests: string[] = [];
   const plannerRuns: string[] = [];
-  const directories: string[] = [];
-  const created: string[] = [];
-  const serve = syntheticReleaseServer({ delegationBytes, indexBytes, releases, requests, events: [] });
-
-  const attempt = (): UpdateScratchAttemptV1 => {
-    let directory: string | null = null;
-    return {
-      download: async (receive) => {
-        await receive(() => Promise.resolve());
-      },
-      extract: async (bundle) => {
-        const selected = servedBundle(releases.values(), bundle.archiveSha256);
-        directory = await realpath(await mkdtemp(join(tmpdir(), "developer-os-release-planning-")));
-        directories.push(directory);
-        created.push(directory);
-        const root = join(directory, "extracted");
-        await mkdir(join(root, "bin"), { recursive: true, mode: 0o700 });
-        for (const [path, bytes] of selected.files) await writeFile(join(root, path), bytes, { mode: 0o700 });
-        return {
-          id: `rp_${randomUUID()}`,
-          planHash: sha256("synthetic scratch plan"),
-          manifestHash: bundle.manifestSha256,
-          root: parseCanonicalAbsolutePathText(root),
-          entries: selected.manifest.entries.length,
-        };
-      },
-      cleanup: async () => {
-        if (directory !== null) await rm(directory, { recursive: true, force: true });
-      },
-    };
-  };
 
   return {
     architecture: options.architecture,
     releases,
+    prefix,
     requests,
     plannerRuns,
-    scratchDirectories: created,
+    scratchDirectories: [],
+    install,
     ports: {
-      readOfflineTrust: () => Promise.resolve(offline),
-      createTransport: () => ({ get: serve, remainingMilliseconds: () => 600_000 }),
-      scratch: {
-        create: () => Promise.resolve(attempt()),
-        listRecoverableAttempts: () => Promise.resolve([]),
-        recoverCleanup: () => Promise.resolve(),
+      readPackageSource: () => {
+        requests.push("package_source");
+        return readPackageChannelSource(options.architecture, { arm64: entry, x64: entry });
       },
       planner: {
         run: (run) => {
@@ -937,18 +1021,22 @@ export function createOnDiskReleaseWorld(options: {
         },
       },
     },
-    cleanup: async () => {
-      for (const directory of directories.splice(0)) await rm(directory, { recursive: true, force: true });
-    },
   };
 }
 
+/** Which world an on-disk update context reads its keg from, so `updateTo` can `brew upgrade` first. */
+const WORLD_OF = new WeakMap<CliUpdateContext, OnDiskReleaseWorldV1>();
+
 /**
- * An installed home's production update context with only the release world's ports replaced,
- * and `--apply` bound to the real ports with `fallback` as the launcher's handoff (D72 P7(d)).
+ * An installed home's production update context with only the release world's ports replaced.
+ * `--apply` runs the real ports, with the fallback handoff bound from the keg planning admitted
+ * (D84 K3), exactly as `createCliUpdateContext` binds it.
  */
-export function onDiskUpdateContext(context: CliContext, world: OnDiskReleaseWorldV1, fallback: UpdateFallbackHandoffV1): CliUpdateContext {
-  return { ...createCliUpdateContext(context), ...world.ports, apply: productionUpdateApplyPorts(context, () => fallback) };
+export function onDiskUpdateContext(context: CliContext, world: OnDiskReleaseWorldV1): CliUpdateContext {
+  const source = packageSourcePorts(world.ports.readPackageSource);
+  const update: CliUpdateContext = { ...createCliUpdateContext(context), planner: world.ports.planner, readPackageSource: source.readPackageSource, apply: productionUpdateApplyPorts(context, source.fallback) };
+  WORLD_OF.set(update, world);
+  return update;
 }
 
 export interface UpdatableHomeV1 {
@@ -956,27 +1044,57 @@ export interface UpdatableHomeV1 {
   readonly world: OnDiskReleaseWorldV1;
   /** The packaged release `init` installed. */
   readonly installed: ReleaseIdentityV1;
-  readonly fallback: UpdateFallbackHandoffV1;
   /** A fresh process's update context over this home; `context` swaps the CLI context, e.g. a dying one. */
   readonly update: (context?: CliContext) => CliUpdateContext;
 }
 
 export const ON_DISK_RELEASES = [{ version: "1.1.0", sequence: "2" }, { version: "1.2.0", sequence: "3" }] as const;
 
-/** A real `init` from the packaged release of `architecture`, a Brain, and a signed world above it. */
-export async function installUpdatableHome(label: string, architecture: SyntheticArchitectureV1, options: { readonly rejectingVersions?: readonly string[] } = {}): Promise<UpdatableHomeV1> {
-  const fixture = await createCommandFixture(label, { bootstrapAvailable: true, architecture });
+/** The synthetic `claude` an instruction-attaching home discovers; nothing ever spawns it but `--version`. */
+const SYNTHETIC_CLAUDE = "/synthetic/opt/bin/claude";
+
+/** One Claude skill the first keg carries, so `init --adapters claude` attaches an instruction row (NEW-171). */
+const SYNTHETIC_INSTRUCTIONS = [
+  { relativePath: "catalog.json", bytes: encoder.encode(`${JSON.stringify({ schemaVersion: 1, artifacts: [{ category: "skill", id: "triage", legacyName: "triage", vendors: ["claude"], thinCommand: false }] })}\n`), mode: 0o600 },
+  { relativePath: "skills/triage/SKILL.md", bytes: encoder.encode("---\nname: triage\ndescription: Triage a defect.\n---\nTriage.\n"), mode: 0o600 },
+] as const;
+
+/**
+ * A real `init` from the prefix's first keg (`1.0.0`, Task 3's `<fixture root>/prefix`), a Brain,
+ * and the `ON_DISK_RELEASES` kegs written into that same prefix. With `instructions`, `init
+ * --adapters claude` also attaches the keg's one Claude skill as an instruction row.
+ */
+export async function installUpdatableHome(label: string, architecture: SyntheticArchitectureV1, options: { readonly rejectingVersions?: readonly string[]; readonly instructions?: boolean } = {}): Promise<UpdatableHomeV1> {
+  const instructions = options.instructions === true;
+  const fixture = await createCommandFixture(label, {
+    bootstrapAvailable: true,
+    architecture,
+    ...(instructions
+      ? {
+          instructions: SYNTHETIC_INSTRUCTIONS,
+          agents: {
+            claude: { name: "claude", installed: true, executablePath: SYNTHETIC_CLAUDE, version: null },
+            codex: { name: "codex", installed: false, executablePath: null, version: null },
+          },
+          runner: {
+            run: (request) => request.args.join(" ") === "--version"
+              ? Promise.resolve({ stdout: "2.1.280 (Claude Code)\n", stderr: "", exitCode: 0, signal: null, timedOut: false })
+              : Promise.reject(new Error(`unexpected spawn: ${request.args.join(" ")}`)),
+          },
+        }
+      : {}),
+  });
   await mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
-  const initialized = await runInit(fixture.context, { dryRun: false, assumeYes: true });
+  const initialized = await runInit(fixture.context, { dryRun: false, assumeYes: true, ...(instructions ? { adapters: ["claude"] as const } : {}) });
   if (!initialized.ok) throw new Error(`fixture init failed: ${JSON.stringify(initialized)}`);
-  const world = createOnDiskReleaseWorld({ architecture, releases: ON_DISK_RELEASES, ...options });
+  const world = await createOnDiskReleaseWorld({ architecture, prefix: join(fixture.root, "prefix"), releases: ON_DISK_RELEASES, ...(options.rejectingVersions === undefined ? {} : { rejectingVersions: options.rejectingVersions }) });
   const installed = releaseIdentityOf((await createCliUpdateContext(fixture.context).readHome()).active);
-  const fallback = packagedFallback(installed);
-  return { fixture, world, installed, fallback, update: (context = fixture.context) => onDiskUpdateContext(context, world, fallback) };
+  return { fixture, world, installed, update: (context = fixture.context) => onDiskUpdateContext(context, world) };
 }
 
-/** Preview then apply `version` in one invocation, as `update --apply` does. */
+/** `brew upgrade` to `version` (an on-disk world's context), then preview and apply it in one invocation, as `update --apply` does. */
 export async function updateTo(update: CliUpdateContext, version: string): Promise<UpdateApplyResultV1> {
+  await WORLD_OF.get(update)?.install(version);
   const prepared = await prepareUpdate(update, { version: parseStableSemver(version) });
   if (prepared.apply === null) throw new Error(`no update to ${version} was prepared`);
   return applyUpdate(update, prepared.apply);
@@ -1048,11 +1166,6 @@ export function tamperManifestBeforeVerifier(context: CliContext): CliContext {
     };
   }
   return { ...context, lifecycle: { ...lifecycle, fs: fs as unknown as typeof lifecycle.fs } };
-}
-
-/** The handoff Task 11b's launcher will supply: the packaged release `init` installed, read from its fresh active record. */
-export function packagedFallback(installed: ReleaseIdentityV1): UpdateFallbackHandoffV1 {
-  return { bundleManifestHash: parseLowerHexSha256(installed.bundleManifestHash), launcherProtocol: parsePositiveUInt32(installed.launcherProtocol), updateProtocol: parsePositiveUInt32(installed.updateProtocol) };
 }
 
 export const SYNTHETIC_COORDINATOR_ID =`lc_${"c".repeat(64)}_5` as LifecycleCoordinatorIdV1;
