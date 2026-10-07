@@ -2,7 +2,6 @@ import { spawnSync } from "node:child_process";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +13,7 @@ import type { CliContext } from "../context.js";
 import { run } from "../main.js";
 import type { CliContextFactory } from "../main.js";
 import { withLifecycleMutation } from "../lifecycle/mutation-gate.js";
+import { renderEntrypoint } from "../update/entrypoint.js";
 import { entrypointPath, LOCAL_BUNDLE_CLI_ENTRY, writeUnsignedLocalRelease } from "../update/local-release.js";
 import { admitUnsignedLocalPackagedRelease } from "../update/packaged-release.js";
 import { RecordingIo, REAL_FILESYSTEM_TIMEOUT_MS } from "./testing.js";
@@ -133,13 +133,6 @@ async function readManifest(home: string): Promise<{ readonly bytes: Uint8Array;
   return { bytes, manifest: decodeCanonicalJson(bytes, 64 * 1024 * 1024) as unknown as InstallationManifestV2 };
 }
 
-async function bundleRoot(home: string): Promise<string> {
-  const active = JSON.parse(
-    await nodeFs.readFile(join(home, ".developer-os", "state", "active-release.json"), "utf8"),
-  ) as { readonly bundleRoot: string };
-  return active.bundleRoot;
-}
-
 describe("init --local-release writes the version-free entrypoint (D53)", () => {
   it("writes bin/developer-os.mjs as a 0600 manifest row that loads the active release, and it launches", async () => {
     const { root, home } = await temporaryHome("init-entrypoint");
@@ -151,8 +144,8 @@ describe("init --local-release writes the version-free entrypoint (D53)", () => 
     expect(code, io.err.join("\n")).toBe(EXIT_CODES.success);
     const productHome = join(home, ".developer-os");
     const entrypoint = entrypointPath(productHome);
-    const target = join(await bundleRoot(home), LOCAL_BUNDLE_CLI_ENTRY);
-    expect(await nodeFs.readFile(entrypoint, "utf8")).toContain(`await import(${JSON.stringify(pathToFileURL(target).href)});`);
+    // NEW-163 B: the script is release-independent; the active record, not the script, names the bundle.
+    expect(new Uint8Array(await nodeFs.readFile(entrypoint))).toEqual(renderEntrypoint());
     expect((await nodeFs.stat(entrypoint)).mode & 0o777).toBe(0o600);
     expect((await nodeFs.stat(join(productHome, "bin"))).mode & 0o777).toBe(0o700);
     const { manifest } = await readManifest(home);

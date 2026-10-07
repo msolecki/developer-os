@@ -94,6 +94,7 @@ import { isCodeDefect, manifestAnchorPath, readManifestAnchor } from "../lifecyc
 import type { ScheduledHandlerResultV1 } from "../lifecycle/runtime-records.js";
 import { surveyLifecycleResidue } from "../lifecycle/survey.js";
 import type { LifecycleResidueSurveyV1 } from "../lifecycle/survey.js";
+import { renderEntrypoint } from "../update/entrypoint.js";
 import { entrypointPath } from "../update/local-release.js";
 import {
   createManagedArtifactEphemeralRegistry,
@@ -934,6 +935,11 @@ async function checkEntrypoint(context: CliContext, paths: RuntimePaths): Promis
     present = (await context.fs.lstat(path)).isFile();
   } catch {
     present = false;
+  }
+  // NEW-163 B: every release shares one script, so a different one is stale and `init` rewrites it.
+  const stale = present && hashBytes(await context.fs.readFile(path).catch(() => new Uint8Array())) !== hashBytes(renderEntrypoint());
+  if (stale) {
+    return pass("entrypoint", `the entrypoint at ${path} differs from this release's; re-run init to refresh it`, [path]);
   }
   return present
     ? pass(

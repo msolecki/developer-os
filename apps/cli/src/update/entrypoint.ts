@@ -1,6 +1,5 @@
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 
 import { decodeCanonicalJson, EXIT_CODES, hashBytes, validateActiveReleaseRecord } from "@developer-os/core";
 import type {
@@ -22,17 +21,44 @@ import { ENTRYPOINT_DIRECTORY, entrypointPath, LOCAL_BUNDLE_CLI_ENTRY } from "./
 const MAX_ACTIVE_RELEASE_BYTES = 16 * 1024;
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 
+
 /**
- * A file URL, so a `#`, `%` or space in the home cannot change what the specifier names. A release
- * that cannot load exits 2 for the three security guards: Node's own exit 1 is non-blocking to both
- * vendors, so a missing bundle would silently allow every guarded call.
+ * NEW-163 B: one script for every release. At run time it follows `state/active-release.json` to the
+ * retained bundle manifest and loads that manifest's `entrypoint` (D96 Q4: `LOCAL_BUNDLE_CLI_ENTRY`
+ * when the manifest names none). Every read is no-follow, a regular file owned by the caller with no
+ * group or other write, size-bounded, and the manifest must hash to the record. Nothing is resolved
+ * through PATH. A release that cannot load exits 2 for the three security guards: Node's own exit 1
+ * is non-blocking to both vendors, so a missing bundle would silently allow every guarded call. The
+ * import target is a file URL, so a `#`, `%` or space in the home cannot change what it names.
  */
-export function renderEntrypoint(bundleRoot: string): Uint8Array {
-  const target = pathToFileURL(join(bundleRoot, LOCAL_BUNDLE_CLI_ENTRY)).href;
+export function renderEntrypoint(): Uint8Array {
   return new TextEncoder().encode(
     "// Developer OS entrypoint, written by `developer-os init`: it loads the active release.\n" +
+      'import { createHash } from "node:crypto";\n' +
+      'import { constants } from "node:fs";\n' +
+      'import { open } from "node:fs/promises";\n' +
+      'import { isAbsolute, join } from "node:path";\n' +
+      'import { fileURLToPath, pathToFileURL } from "node:url";\n' +
+      "async function read(path, limit) {\n" +
+      "  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);\n" +
+      "  try {\n" +
+      "    const stat = await handle.stat();\n" +
+      "    if (!stat.isFile() || stat.uid !== process.getuid() || (stat.mode & 0o022) !== 0 || stat.size > limit) throw new Error(\"refused\");\n" +
+      "    return await handle.readFile();\n" +
+      "  } finally {\n" +
+      "    await handle.close();\n" +
+      "  }\n" +
+      "}\n" +
       "try {\n" +
-      `  await import(${JSON.stringify(target)});\n` +
+      '  const state = fileURLToPath(new URL("../state/", import.meta.url));\n' +
+      `  const active = JSON.parse(await read(join(state, "active-release.json"), ${String(MAX_ACTIVE_RELEASE_BYTES)}));\n` +
+      "  const hash = active.bundleManifestHash;\n" +
+      '  if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash) || typeof active.bundleRoot !== "string" || !isAbsolute(active.bundleRoot)) throw new Error("refused");\n' +
+      `  const bytes = await read(join(state, "release-metadata", "bundles", hash + ".json"), ${String(MAX_MANIFEST_BYTES)});\n` +
+      '  if (createHash("sha256").update(bytes).digest("hex") !== hash) throw new Error("refused");\n' +
+      `  const entry = JSON.parse(bytes).entrypoint ?? ${JSON.stringify(LOCAL_BUNDLE_CLI_ENTRY)};\n` +
+      '  if (typeof entry !== "string" || entry === "" || isAbsolute(entry) || entry.split("/").some((part) => part === ".." || part === "." || part === "")) throw new Error("refused");\n' +
+      "  await import(pathToFileURL(join(active.bundleRoot, entry)).href);\n" +
       "} catch {\n" +
       "  const [verb, kind] = process.argv.slice(2);\n" +
       '  process.stderr.write("developer-os: the active release could not be loaded\\n");\n' +
@@ -50,28 +76,17 @@ function occupied(path: string): InstructionRefusal {
   });
 }
 
-/** The entrypoint bytes the active release calls for; `null` when there is none or it carries no CLI. */
-async function desiredEntrypoint(
-  context: CliContext,
-  artifacts: readonly ManagedArtifactV2[],
-): Promise<Uint8Array | null> {
+/** The entrypoint bytes: the one release-independent script, or `null` when the home has no active release. */
+async function desiredEntrypoint(context: CliContext): Promise<Uint8Array | null> {
   const activeBytes = await readNoFollow(join(context.paths.stateDir, "active-release.json"));
   if (activeBytes === null) return null;
-  const active = validateActiveReleaseRecord(
-    decodeCanonicalJson(activeBytes, MAX_ACTIVE_RELEASE_BYTES),
-    createCanonicalPathEvidence(),
-  );
-  // The installed bundle's files are manifest rows, so the CLI's presence is read from the inventory.
-  const cli = join(active.bundleRoot, LOCAL_BUNDLE_CLI_ENTRY);
-  return artifacts.some((artifact) => artifact.path === cli && artifact.kind === "file")
-    ? renderEntrypoint(active.bundleRoot)
-    : null;
+  validateActiveReleaseRecord(decodeCanonicalJson(activeBytes, MAX_ACTIVE_RELEASE_BYTES), createCanonicalPathEvidence());
+  return renderEntrypoint();
 }
 
 /**
- * Writes the entrypoint for the active release (`state/active-release.json`), or rewrites it when
- * the active release moved. `null`, writing nothing, when the home has no active release or the
- * installed bundle carries no CLI (one packed before D53); `doctor` then says none is installed.
+ * Writes the entrypoint once the home has an active release. The bytes are the same for every release,
+ * so a moved active release never rewrites it. `null`, writing nothing, when there is no active release.
  * An entrypoint already current takes no gate entry, which would itself write bookkeeping.
  */
 export async function installEntrypoint(context: CliContext): Promise<string | null> {
@@ -84,7 +99,7 @@ export async function installEntrypoint(context: CliContext): Promise<string | n
   const manifestBytes = await readNoFollow(context.paths.manifestFile);
   if (manifestBytes === null) return null;
   const recordedManifest = decodeCanonicalJson(manifestBytes, MAX_MANIFEST_BYTES) as unknown as InstallationManifestV2;
-  const expected = await desiredEntrypoint(context, recordedManifest.artifacts);
+  const expected = await desiredEntrypoint(context);
   if (expected === null) return null;
   const onDisk = await readNoFollow(path).catch(() => null);
   if (
@@ -97,7 +112,7 @@ export async function installEntrypoint(context: CliContext): Promise<string | n
 
   return withLifecycleMutation(context, lifecycle, async (authority) => {
     const state = await gatedState(context, authority);
-    const content = await desiredEntrypoint(context, state.manifest.artifacts);
+    const content = await desiredEntrypoint(context);
     if (content === null) return null;
     const installedHash = hashBytes(content) as LowerHexSha256;
     const previous = state.manifest.artifacts.find((artifact) => artifact.path === path);

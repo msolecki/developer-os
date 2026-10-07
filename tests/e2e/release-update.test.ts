@@ -73,6 +73,20 @@ async function activeVersion(lifecycle: Lifecycle): Promise<string> {
   return (await lifecycle.home.update().readHome()).active.version;
 }
 
+const ENTRY = "bin/cli";
+
+/** NEW-163 B: the CLI the entrypoint script would load, resolved the way the script does (active record, then its retained manifest). */
+async function entrypointTarget(lifecycle: Lifecycle): Promise<string> {
+  const { stateDir } = lifecycle.home.fixture.paths;
+  const active = JSON.parse(await nodeFs.readFile(join(stateDir, "active-release.json"), "utf8")) as { bundleRoot: string; bundleManifestHash: string };
+  const manifest = JSON.parse(await nodeFs.readFile(join(stateDir, "release-metadata", "bundles", `${active.bundleManifestHash}.json`), "utf8")) as { entrypoint?: string };
+  return join(active.bundleRoot, manifest.entrypoint ?? "node_modules/@developer-os/cli/dist/bin.js");
+}
+
+async function expectEntrypointFollowsActive(lifecycle: Lifecycle): Promise<void> {
+  expect(await entrypointTarget(lifecycle)).toBe(`${(await lifecycle.home.update().readHome()).active.bundleRoot}/${ENTRY}`);
+}
+
 describe("the synthetic release lifecycle (Spec 2 §12, D72 P7(f))", () => {
   it.each(SYNTHETIC_ARCHITECTURES)("installs, previews, applies, rolls back, reapplies and uninstalls on %s", async (architecture) => {
     const lifecycle = await start(architecture);
@@ -96,11 +110,13 @@ describe("the synthetic release lifecycle (Spec 2 §12, D72 P7(f))", () => {
     expect(verifier).toBeDefined();
     expect(new Uint8Array(await nodeFs.readFile(join(bundleRoot(lifecycle, "1.1.0"), "bin", "verifier")))).toEqual(verifier);
     expect((await lifecycle.home.update().readHome()).rollback?.previous.version).toBe("1.0.0");
+    await expectEntrypointFollowsActive(lifecycle);
 
     // A second update retires the first rollback set with the release it retained.
     expect(await run(lifecycle, { kind: "update", version: null, apply: true, json: true })).toMatchObject({ outcome: "applied", active: { version: "1.2.0" } });
     expect(await exists(bundleRoot(lifecycle, "1.0.0"))).toBe(false);
     expect((await lifecycle.home.update().readHome()).rollback?.previous.version).toBe("1.1.0");
+    await expectEntrypointFollowsActive(lifecycle);
 
     // Rollback is local evidence only: no transport request, no planner run, trust unchanged.
     const trustFile = join(fixture.paths.stateDir, "release-trust.json");
@@ -115,9 +131,11 @@ describe("the synthetic release lifecycle (Spec 2 §12, D72 P7(f))", () => {
     expect(await nodeFs.readFile(trustFile)).toEqual(trust);
     expect(await exists(bundleRoot(lifecycle, "1.2.0"))).toBe(false);
     expect((await lifecycle.home.update().readHome()).rollback).toBeNull();
+    await expectEntrypointFollowsActive(lifecycle);
 
     expect(await run(lifecycle, { kind: "update", version: null, apply: true, json: true })).toMatchObject({ outcome: "applied", active: { version: "1.2.0" } });
     expect(await activeVersion(lifecycle)).toBe("1.2.0");
+    await expectEntrypointFollowsActive(lifecycle);
 
     // Spec 2 §13.3 residual 9 (A8): no manifest this lifecycle published holds a symlink artifact.
     expect(lifecycle.manifests.length).toBeGreaterThan(0);
