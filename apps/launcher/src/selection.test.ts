@@ -23,6 +23,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLauncherProcessRequest,
   selectLauncherCandidate,
+  type LauncherBootstrapClosureV1,
   type LauncherSelectionRequestV1,
   type LauncherSelectionV1,
   type LauncherUpdateEnvelopeV1,
@@ -193,6 +194,7 @@ function plainIndex(entry: ReturnType<typeof indexEntry>): Buffer {
   return canonicalBytes({ sequence: "1", latestVersion: entry.version, releases: [entry] });
 }
 
+const closureOf = (kind: LauncherBootstrapClosureV1["kind"]) => (): Promise<LauncherBootstrapClosureV1> => Promise.resolve({ kind });
 const noEnvelope = (): Promise<LauncherUpdateEnvelopeV1> => Promise.resolve({ kind: "absent" });
 const envelopeOf = (envelope: LauncherUpdateEnvelopeV1) => (): Promise<LauncherUpdateEnvelopeV1> => Promise.resolve(envelope);
 
@@ -202,8 +204,8 @@ function baseRequest(fs: FakeFileSystem): LauncherSelectionRequestV1 {
     platform: { platform: "darwin", architecture: "arm64" },
     effectiveUid: EFFECTIVE_UID,
     fs,
-    packagedFallback: { bundleRoot: FALLBACK_ROOT, manifestPath: FALLBACK_MANIFEST },
-    bootstrapClosure: { kind: "handoff_complete" },
+    packagedFallback: { prefix: "/opt/homebrew" as CanonicalAbsolutePathV1, bundleRoot: FALLBACK_ROOT, manifestPath: FALLBACK_MANIFEST },
+    bootstrapClosure: closureOf("handoff_complete"),
     readUpdateEnvelope: noEnvelope,
   };
 }
@@ -212,6 +214,12 @@ function baseRequest(fs: FakeFileSystem): LauncherSelectionRequestV1 {
 function absentActiveFixture(owner = EFFECTIVE_UID): LauncherSelectionRequestV1 {
   const fs = new FakeFileSystem(new Map());
   const manifest = writeBundle(fs, FALLBACK_ROOT, "arm64", "1.0.0", "1", { owner, homebrew: true });
+  // The keg's directories above the bundle, up to the Homebrew prefix, as Homebrew leaves them.
+  const ancestors = ["/opt/homebrew", "/opt/homebrew/Cellar", "/opt/homebrew/Cellar/developer-os", "/opt/homebrew/Cellar/developer-os/1.0.0", "/opt/homebrew/Cellar/developer-os/1.0.0/libexec", KEG_FALLBACK, `${KEG_FALLBACK}/metadata`];
+  for (const [index, path] of ancestors.entries()) {
+    const child = ancestors[index + 1]?.slice(path.length + 1);
+    fs.setDirectory(path, child === undefined ? ["bundle-manifest.json"] : path === KEG_FALLBACK ? ["bundle", "metadata"] : [child], owner, 0o755);
+  }
   fs.setFile(FALLBACK_MANIFEST, canonicalBytes(manifest as unknown as CanonicalJsonValue), owner, 0o644);
   return baseRequest(fs);
 }
@@ -456,7 +464,7 @@ describe("selectLauncherCandidate", () => {
   });
 
   it("routes strictly to init during a non-terminal bootstrap envelope", async () => {
-    const request = { ...absentActiveFixture(), bootstrapClosure: { kind: "non_terminal" as const } };
+    const request = { ...absentActiveFixture(), bootstrapClosure: closureOf("non_terminal") };
     const result = await selectLauncherCandidate(request);
     expect(result.kind).toBe("bootstrap_recovery");
     if (result.kind === "bootstrap_recovery") expect(result.argv).toEqual(["init"]);
@@ -464,12 +472,12 @@ describe("selectLauncherCandidate", () => {
 
   it("refuses an active record published before the launchability suffix completes", async () => {
     const { fs } = activeFixture();
-    const request = { ...baseRequest(fs), bootstrapClosure: { kind: "non_terminal" as const } };
+    const request = { ...baseRequest(fs), bootstrapClosure: closureOf("non_terminal") };
     await expect(selectLauncherCandidate(request)).rejects.toMatchObject({ code: 6 });
   });
 
   it("refuses malformed bootstrap residue", async () => {
-    const request = { ...absentActiveFixture(), bootstrapClosure: { kind: "malformed" as const } };
+    const request = { ...absentActiveFixture(), bootstrapClosure: closureOf("malformed") };
     await expect(selectLauncherCandidate(request)).rejects.toMatchObject({ code: 6 });
   });
 });
@@ -567,7 +575,7 @@ describe("buildLauncherProcessRequest", () => {
   });
 
   it("forces bootstrap recovery argv to exactly init, ignoring the public argv", async () => {
-    const request = { ...absentActiveFixture(), bootstrapClosure: { kind: "non_terminal" as const } };
+    const request = { ...absentActiveFixture(), bootstrapClosure: closureOf("non_terminal") };
     const result = await selectLauncherCandidate(request);
     const processRequest = buildLauncherProcessRequest(result, { HOME: "/Users/test", DEVELOPER_OS_HOME: PRODUCT_HOME }, [
       "update",
@@ -589,7 +597,7 @@ describe("package-channel launcher selection (D84 K3)", () => {
     const { fs, active } = activeFixture();
     const path = `${PRODUCT_HOME}/state/release-metadata/indexes/${active.releaseIndexHash}.json`;
     fs.setFile(path, Buffer.concat([fs.readBytes(path), Buffer.from(" ")]));
-    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6 });
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6, reason: "launcher_retained_document_hash_mismatch" });
   });
 
   it("(c) admits a Homebrew-mode fallback when no active record exists, owned by the user or by root", async () => {
@@ -603,6 +611,29 @@ describe("package-channel launcher selection (D84 K3)", () => {
     const built = buildLauncherProcessRequest(selection, env, ["doctor"]);
     expect(built.argv).toEqual([selection.bundle.entrypoint, "doctor"]);
     expect("extraDescriptors" in built).toBe(false);
+  });
+
+  it("(f) applies the D96 Q1 rule to the keg and every ancestor up to the prefix", async () => {
+    const withAncestor = (path: string, ownerUid: number, mode: number) => {
+      const request = absentActiveFixture();
+      const fs = request.fs as FakeFileSystem;
+      fs.setDirectory(path, fs.directoryChildren(path), ownerUid, mode);
+      return request;
+    };
+    // Homebrew's own Cellar is group-writable and owned by the installing user: admitted.
+    expect((await selectLauncherCandidate(withAncestor("/opt/homebrew/Cellar", EFFECTIVE_UID, 0o775))).kind).toBe("package_fallback");
+    await expect(selectLauncherCandidate(withAncestor("/opt/homebrew/Cellar", EFFECTIVE_UID + 1, 0o775))).rejects.toMatchObject({
+      code: 6,
+      reason: "launcher_packaged_fallback_untrusted",
+    });
+    await expect(selectLauncherCandidate(withAncestor("/opt/homebrew/Cellar/developer-os/1.0.0/libexec", 0, 0o775))).rejects.toMatchObject({
+      code: 6,
+      reason: "launcher_packaged_fallback_untrusted",
+    });
+    await expect(selectLauncherCandidate(withAncestor("/opt/homebrew", EFFECTIVE_UID, 0o757))).rejects.toMatchObject({
+      code: 6,
+      reason: "launcher_packaged_fallback_untrusted",
+    });
   });
 
   it("(e) refuses a terminal-cleanup record whose fallback hash is not the current keg's", async () => {

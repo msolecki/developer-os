@@ -49,7 +49,7 @@ async function main(): Promise<void> {
     effectiveUid,
     fs,
     packagedFallback: await resolvePackagedFallback(PACKAGE_CHANNEL_SOURCE_TABLE[platform.architecture]),
-    bootstrapClosure: await readBootstrapClosure(fs, productHome, effectiveUid),
+    bootstrapClosure: (handoff) => readBootstrapClosure(fs, productHome, effectiveUid, handoff),
     readUpdateEnvelope: (coordinatorId) => readUpdateEnvelope(fs, productHome, coordinatorId, effectiveUid),
   });
 

@@ -65,43 +65,65 @@ async function readStateFile(
   return fs.readRegular(entry, maximumBytes);
 }
 
-async function classifyPlan(
+/**
+ * One envelope's status, as the CLI's evidence report classes it (`apps/cli/src/bootstrap/report.ts`):
+ * `terminal` when its admitted journal reached a terminal phase; `incomplete` when its admitted
+ * journal has not, or when both slots are still empty and the bootstrap leaf its plan persisted is
+ * the live one (NEW-83); `unverified` for anything that does not admit.
+ */
+type EnvelopeStatusV1 = "terminal" | "incomplete" | "unverified";
+
+async function classifyEnvelope(
   fs: LauncherGuardedReaderV1,
   productHome: CanonicalAbsolutePathV1,
   stateDirectory: CanonicalAbsolutePathV1,
   id: FreshV2InitIdV1,
   effectiveUid: number,
-): Promise<LauncherBootstrapClosureV1> {
-  const envelope = deriveBootstrapEnvelopePaths(productHome, id);
-  const planBytes = await readStateFile(fs, envelope.plan, effectiveUid, BOOTSTRAP_MAX_PLAN_BYTES);
-  if (planBytes === null) return { kind: "malformed" };
-  const plan = admitBootstrapEvidencePlan(
-    decodeCanonicalJson(planBytes, BOOTSTRAP_MAX_PLAN_BYTES),
-    { productHome, stateDirectory, expectedId: id },
-    createCanonicalPathEvidence(),
-  );
-  const slots: (unknown)[] = [];
-  for (const path of envelope.journalSlots) {
-    const bytes = await readStateFile(fs, path, effectiveUid, BOOTSTRAP_MAX_JOURNAL_BYTES);
-    if (bytes === null) return { kind: "malformed" };
-    slots.push(bytes.byteLength === 0 ? null : decodeCanonicalJson(bytes, BOOTSTRAP_MAX_JOURNAL_BYTES));
+): Promise<EnvelopeStatusV1> {
+  try {
+    const envelope = deriveBootstrapEnvelopePaths(productHome, id);
+    const planBytes = await readStateFile(fs, envelope.plan, effectiveUid, BOOTSTRAP_MAX_PLAN_BYTES);
+    if (planBytes === null) return "unverified";
+    const plan = admitBootstrapEvidencePlan(
+      decodeCanonicalJson(planBytes, BOOTSTRAP_MAX_PLAN_BYTES),
+      { productHome, stateDirectory, expectedId: id },
+      createCanonicalPathEvidence(),
+    );
+    const slots: unknown[] = [];
+    for (const path of envelope.journalSlots) {
+      const bytes = await readStateFile(fs, path, effectiveUid, BOOTSTRAP_MAX_JOURNAL_BYTES);
+      if (bytes === null) return "unverified";
+      slots.push(bytes.byteLength === 0 ? null : decodeCanonicalJson(bytes, BOOTSTRAP_MAX_JOURNAL_BYTES));
+    }
+    if (slots[0] === null && slots[1] === null) {
+      const leaf = await fs.lstat(plan.bootstrapIdentity.path);
+      const expected = plan.bootstrapIdentity;
+      return leaf !== null && leaf.kind === "regular_file" && leaf.ownerUid === expected.ownerUid && leaf.mode === expected.mode &&
+        leaf.nlink === expected.nlink && leaf.size === "0" && leaf.dev === expected.dev && leaf.ino === expected.ino
+        ? "incomplete"
+        : "unverified";
+    }
+    const selection = selectBootstrapEvidenceJournal(plan, [slots[0], slots[1]]);
+    if (selection === null) return "unverified";
+    return TERMINAL_PHASES.has(selection.current.phase) ? "terminal" : "incomplete";
+  } catch {
+    return "unverified";
   }
-  // A published plan whose slots are both still empty reservations: `init` resumes it (NEW-83).
-  if (slots[0] === null && slots[1] === null) return { kind: "non_terminal" };
-  const selection = selectBootstrapEvidenceJournal(plan, [slots[0], slots[1]]);
-  if (selection === null) return { kind: "malformed" };
-  return TERMINAL_PHASES.has(selection.current.phase) ? { kind: "handoff_complete" } : { kind: "non_terminal" };
 }
 
 /**
- * Spec 2 §6's bootstrap-closure verdict from `state/fresh-v2-init.<id>.*`: no plan is
- * `handoff_complete`; one plan is classified by its admitted journal's phase; more than one plan,
- * or anything that does not admit, is `malformed`.
+ * Spec 2 §6's bootstrap-closure verdict from `state/fresh-v2-init.<id>.*`.
+ *
+ * Before the handoff (`handoff: false`, no active record) it is strict: no plan is
+ * `handoff_complete`, more than one plan or an unverified one is `malformed`, and the one plan's
+ * status decides. After the handoff, terminal, unverified and altered envelopes are inert (Spec 2
+ * §3.1, §6.4, NEW-123): one incomplete envelope is `non_terminal`, two or more are `malformed`.
  */
 export async function readBootstrapClosure(
   fs: LauncherGuardedReaderV1,
   productHome: CanonicalAbsolutePathV1,
   effectiveUid: number,
+  handoff: boolean,
 ): Promise<LauncherBootstrapClosureV1> {
   const stateDirectory = parseCanonicalAbsolutePathText(`${productHome}/state`);
   const directory = await fs.lstat(stateDirectory);
@@ -112,13 +134,12 @@ export async function readBootstrapClosure(
     const match = FRESH_PLAN.exec(name);
     if (match !== null) ids.push(match[1] as FreshV2InitIdV1);
   }
-  if (ids.length === 0) return { kind: "handoff_complete" };
-  if (ids.length > 1) return { kind: "malformed" };
-  try {
-    return await classifyPlan(fs, productHome, stateDirectory, ids[0] as FreshV2InitIdV1, effectiveUid);
-  } catch {
-    return { kind: "malformed" };
-  }
+  if (!handoff && ids.length > 1) return { kind: "malformed" };
+  const statuses: EnvelopeStatusV1[] = [];
+  for (const id of ids) statuses.push(await classifyEnvelope(fs, productHome, stateDirectory, id, effectiveUid));
+  if (!handoff && statuses.includes("unverified")) return { kind: "malformed" };
+  const incomplete = statuses.filter((status) => status === "incomplete").length;
+  return incomplete === 0 ? { kind: "handoff_complete" } : incomplete === 1 ? { kind: "non_terminal" } : { kind: "malformed" };
 }
 
 /**
@@ -137,6 +158,7 @@ export async function resolvePackagedFallback(
     parseStableSemver(keg.slice(cellar.length));
     const fallback = `${keg}/${entry.fallback}`;
     return {
+      prefix: entry.prefix,
       bundleRoot: parseCanonicalAbsolutePathText(`${fallback}/${PACKAGE_CHANNEL_LAYOUT.bundleRoot}`),
       manifestPath: parseCanonicalAbsolutePathText(`${fallback}/${PACKAGE_CHANNEL_LAYOUT.bundleManifest}`),
     };
