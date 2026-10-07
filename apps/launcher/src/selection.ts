@@ -91,8 +91,7 @@ export interface LauncherSelectionRequestV1 {
   readonly fs: LauncherGuardedReaderV1;
   /** The keg's `libexec/fallback`; null when the fixed table's `opt` link does not resolve to a keg. */
   readonly packagedFallback: LauncherPackagedFallbackV1 | null;
-  /** Reads the closure; `handoff` is true when an active record exists (Spec 2 §3.1). */
-  readonly bootstrapClosure: (handoff: boolean) => Promise<LauncherBootstrapClosureV1>;
+  readonly bootstrapClosure: LauncherBootstrapClosureV1;
   /** Reads the coordinator envelope an update-executor record names. */
   readonly readUpdateEnvelope: (coordinatorId: UpdateRecoveryExecutorRecordV1["coordinatorId"]) => Promise<LauncherUpdateEnvelopeV1>;
 }
@@ -564,15 +563,14 @@ export async function selectLauncherCandidate(
   const executor = await readUpdateExecutorRecord(request);
   if (executor !== null) return routeUpdateExecutor(request, executor);
 
-  const activePath = derive(request.productHome, "state/active-release.json");
-  const activeEntry = await request.fs.lstat(activePath);
-
-  const closure = await request.bootstrapClosure(activeEntry !== null);
-  if (closure.kind === "malformed") {
+  if (request.bootstrapClosure.kind === "malformed") {
     recoveryRequired("launcher_bootstrap_residue_malformed", request.productHome);
   }
 
-  if (closure.kind === "non_terminal") {
+  const activePath = derive(request.productHome, "state/active-release.json");
+  const activeEntry = await request.fs.lstat(activePath);
+
+  if (request.bootstrapClosure.kind === "non_terminal") {
     if (activeEntry !== null) {
       recoveryRequired("launcher_active_published_before_launchability_suffix", activePath);
     }

@@ -23,7 +23,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildLauncherProcessRequest,
   selectLauncherCandidate,
-  type LauncherBootstrapClosureV1,
   type LauncherSelectionRequestV1,
   type LauncherSelectionV1,
   type LauncherUpdateEnvelopeV1,
@@ -194,7 +193,6 @@ function plainIndex(entry: ReturnType<typeof indexEntry>): Buffer {
   return canonicalBytes({ sequence: "1", latestVersion: entry.version, releases: [entry] });
 }
 
-const closureOf = (kind: LauncherBootstrapClosureV1["kind"]) => (): Promise<LauncherBootstrapClosureV1> => Promise.resolve({ kind });
 const noEnvelope = (): Promise<LauncherUpdateEnvelopeV1> => Promise.resolve({ kind: "absent" });
 const envelopeOf = (envelope: LauncherUpdateEnvelopeV1) => (): Promise<LauncherUpdateEnvelopeV1> => Promise.resolve(envelope);
 
@@ -205,7 +203,7 @@ function baseRequest(fs: FakeFileSystem): LauncherSelectionRequestV1 {
     effectiveUid: EFFECTIVE_UID,
     fs,
     packagedFallback: { prefix: "/opt/homebrew" as CanonicalAbsolutePathV1, bundleRoot: FALLBACK_ROOT, manifestPath: FALLBACK_MANIFEST },
-    bootstrapClosure: closureOf("handoff_complete"),
+    bootstrapClosure: { kind: "handoff_complete" },
     readUpdateEnvelope: noEnvelope,
   };
 }
@@ -464,7 +462,7 @@ describe("selectLauncherCandidate", () => {
   });
 
   it("routes strictly to init during a non-terminal bootstrap envelope", async () => {
-    const request = { ...absentActiveFixture(), bootstrapClosure: closureOf("non_terminal") };
+    const request = { ...absentActiveFixture(), bootstrapClosure: { kind: "non_terminal" as const } };
     const result = await selectLauncherCandidate(request);
     expect(result.kind).toBe("bootstrap_recovery");
     if (result.kind === "bootstrap_recovery") expect(result.argv).toEqual(["init"]);
@@ -472,12 +470,12 @@ describe("selectLauncherCandidate", () => {
 
   it("refuses an active record published before the launchability suffix completes", async () => {
     const { fs } = activeFixture();
-    const request = { ...baseRequest(fs), bootstrapClosure: closureOf("non_terminal") };
+    const request = { ...baseRequest(fs), bootstrapClosure: { kind: "non_terminal" as const } };
     await expect(selectLauncherCandidate(request)).rejects.toMatchObject({ code: 6 });
   });
 
   it("refuses malformed bootstrap residue", async () => {
-    const request = { ...absentActiveFixture(), bootstrapClosure: closureOf("malformed") };
+    const request = { ...absentActiveFixture(), bootstrapClosure: { kind: "malformed" as const } };
     await expect(selectLauncherCandidate(request)).rejects.toMatchObject({ code: 6 });
   });
 });
@@ -575,7 +573,7 @@ describe("buildLauncherProcessRequest", () => {
   });
 
   it("forces bootstrap recovery argv to exactly init, ignoring the public argv", async () => {
-    const request = { ...absentActiveFixture(), bootstrapClosure: closureOf("non_terminal") };
+    const request = { ...absentActiveFixture(), bootstrapClosure: { kind: "non_terminal" as const } };
     const result = await selectLauncherCandidate(request);
     const processRequest = buildLauncherProcessRequest(result, { HOME: "/Users/test", DEVELOPER_OS_HOME: PRODUCT_HOME }, [
       "update",

@@ -112,18 +112,15 @@ async function classifyEnvelope(
 }
 
 /**
- * Spec 2 §6's bootstrap-closure verdict from `state/fresh-v2-init.<id>.*`.
- *
- * Before the handoff (`handoff: false`, no active record) it is strict: no plan is
- * `handoff_complete`, more than one plan or an unverified one is `malformed`, and the one plan's
- * status decides. After the handoff, terminal, unverified and altered envelopes are inert (Spec 2
- * §3.1, §6.4, NEW-123): one incomplete envelope is `non_terminal`, two or more are `malformed`.
+ * Spec 2 §6's bootstrap-closure verdict from `state/fresh-v2-init.<id>.*`, as the CLI reads it:
+ * terminal, unverified and altered envelopes are inert (Spec 2 §3.1, §6.4; NEW-123 decision B lets
+ * a new `init` start beside an unverified one, with or without an active record). Exactly one
+ * incomplete envelope is `non_terminal`, so recovery runs `init`; two or more are `malformed`.
  */
 export async function readBootstrapClosure(
   fs: LauncherGuardedReaderV1,
   productHome: CanonicalAbsolutePathV1,
   effectiveUid: number,
-  handoff: boolean,
 ): Promise<LauncherBootstrapClosureV1> {
   const stateDirectory = parseCanonicalAbsolutePathText(`${productHome}/state`);
   const directory = await fs.lstat(stateDirectory);
@@ -134,10 +131,8 @@ export async function readBootstrapClosure(
     const match = FRESH_PLAN.exec(name);
     if (match !== null) ids.push(match[1] as FreshV2InitIdV1);
   }
-  if (!handoff && ids.length > 1) return { kind: "malformed" };
   const statuses: EnvelopeStatusV1[] = [];
   for (const id of ids) statuses.push(await classifyEnvelope(fs, productHome, stateDirectory, id, effectiveUid));
-  if (!handoff && statuses.includes("unverified")) return { kind: "malformed" };
   const incomplete = statuses.filter((status) => status === "incomplete").length;
   return incomplete === 0 ? { kind: "handoff_complete" } : incomplete === 1 ? { kind: "non_terminal" } : { kind: "malformed" };
 }
