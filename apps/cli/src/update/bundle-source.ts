@@ -124,6 +124,15 @@ export async function writeAll(handle: FileHandle, bytes: Uint8Array): Promise<v
   await handle.sync();
 }
 
+async function readExactly(handle: FileHandle, buffer: Uint8Array, length: number, position: number, path: string): Promise<Uint8Array> {
+  for (let read = 0; read < length;) {
+    const { bytesRead } = await handle.read(buffer, read, length - read, position + read);
+    if (bytesRead < 1) refuseBundle("bundle_unbound", path);
+    read += bytesRead;
+  }
+  return buffer.subarray(0, length);
+}
+
 /**
  * The guarded filesystem operations both bundle participants share. Every removal rechecks
  * kind/owner/mode/link/size cap and the recorded device/inode, then syncs the owned parent.
@@ -166,6 +175,46 @@ export class BundleGuardedIo {
       await handle.chmod(mode);
       const entry = entryOf(path, await handle.stat({ bigint: true }));
       if (!this.isBoundedRegular(entry, mode, 0)) refuseBundle("bundle_postimage", path);
+      return { handle, entry };
+    } catch (error) {
+      await handle.close();
+      throw error;
+    }
+  }
+
+  /**
+   * Reopens a journal-recorded write target to resume it after process death (Spec 2 §9.2: only
+   * the immutable planned prefix is legal): the exact recorded inode, owner/mode/single link, within
+   * its planned length, whose bytes so far equal the start of `planned` (the bytes, or the source
+   * file holding them). A missing, swapped or foreign-prefixed target is a third state.
+   */
+  async reopenPrefix(path: CanonicalAbsolutePathV1, recorded: Identity, mode: number, planned: Uint8Array | CanonicalAbsolutePathV1, plannedBytes: number): Promise<{ readonly handle: FileHandle; readonly entry: LifecycleGuardedEntryV1 }> {
+    let handle: FileHandle;
+    try {
+      handle = await nodeFs.open(path, constants.O_RDWR | constants.O_NOFOLLOW);
+    } catch (error) {
+      const code = error !== null && typeof error === "object" && "code" in error ? error.code : null;
+      if (code === "ENOENT" || code === "ELOOP") refuseBundle("bundle_unbound", path);
+      throw error;
+    }
+    try {
+      const entry = entryOf(path, await handle.stat({ bigint: true }));
+      if (!this.isBoundedRegular(entry, mode, plannedBytes) || !sameInode(entry, recorded)) refuseBundle("bundle_unbound", path);
+      const source = typeof planned === "string" ? await nodeFs.open(planned, constants.O_RDONLY | constants.O_NOFOLLOW) : null;
+      try {
+        const size = Number(entry.size);
+        const mine = new Uint8Array(Math.min(COPY_CHUNK_BYTES, size));
+        const theirs = new Uint8Array(mine.byteLength);
+        for (let offset = 0; offset < size;) {
+          const length = Math.min(COPY_CHUNK_BYTES, size - offset);
+          const found = await readExactly(handle, mine, length, offset, path);
+          const expected = source === null ? (planned as Uint8Array).subarray(offset, offset + length) : await readExactly(source, theirs, length, offset, path);
+          if (!Buffer.from(found).equals(expected)) refuseBundle("bundle_unbound", path);
+          offset += length;
+        }
+      } finally {
+        await source?.close();
+      }
       return { handle, entry };
     } catch (error) {
       await handle.close();
@@ -307,20 +356,44 @@ export interface BundleEntryCopyV1 {
   readonly interrupt: (point: BundleEntryDeathPointV1) => void;
 }
 
-/** `entry_intent` → exclusive create → recorded inode → bytes → reopen → evidence → advance. */
-export async function copyBundleEntry(copy: BundleEntryCopyV1): Promise<void> {
+/**
+ * `entry_intent` → exclusive create → recorded inode → bytes → reopen → evidence → advance. A
+ * forward resume passes the journal's current `state`: an intent binds its exact empty crash
+ * frontier or creates the absent path, and a recorded inode is reopened and completed.
+ */
+export async function copyBundleEntry(copy: BundleEntryCopyV1, state: UpdateEntryWriteStateV1 | null = null): Promise<void> {
   const { io, entry } = copy;
-  await copy.advance({ kind: "entry_intent" });
+  if (state?.state === "evidence_intent" || state?.state === "evidence_created") {
+    const target = entry.kind === "directory" ? await io.ownedDirectory(copy.target, state) : await io.verifyWritten({ ...state, path: copy.target }, Number(entry.bytes), entry.sha256, entry.mode);
+    if (entry.kind === "directory" && !(await io.emptyDirectory(target))) refuseBundle("bundle_unbound", copy.target);
+    await writeEntryEvidence(copy, target, state);
+    return;
+  }
+  let recorded: Identity | null = state?.state === "entry_created" ? state : null;
+  if (state === null) await copy.advance({ kind: "entry_intent" });
+  else if (state.state === "entry_intent") {
+    const bound = await bindEntryIntent(io, state, entry, copy.target, copy.evidencePath);
+    if (bound !== null) await copy.advance(bound);
+    recorded = bound as Identity | null;
+  }
   let created: LifecycleGuardedEntryV1;
   if (entry.kind === "directory") {
-    created = await io.fs.mkdirExclusive(copy.target);
-    await copy.advance({ kind: "entry_created", dev: created.dev, ino: created.ino });
-    copy.interrupt("entry_created");
-  } else {
-    const target = await io.createEmpty(copy.target, entry.mode);
-    try {
-      await copy.advance({ kind: "entry_created", dev: target.entry.dev, ino: target.entry.ino });
+    if (recorded === null) {
+      created = await io.fs.mkdirExclusive(copy.target);
+      await copy.advance({ kind: "entry_created", dev: created.dev, ino: created.ino });
       copy.interrupt("entry_created");
+    } else {
+      // Descendants are later ordinals, so a recorded directory is still empty.
+      created = await io.ownedDirectory(copy.target, recorded);
+      if (!(await io.emptyDirectory(created))) refuseBundle("bundle_unbound", copy.target);
+    }
+  } else {
+    const target = recorded === null ? await io.createEmpty(copy.target, entry.mode) : await io.reopenPrefix(copy.target, recorded, entry.mode, copy.from, Number(entry.bytes));
+    try {
+      if (recorded === null) {
+        await copy.advance({ kind: "entry_created", dev: target.entry.dev, ino: target.entry.ino });
+        copy.interrupt("entry_created");
+      }
       await io.copyVerified(copy.from, copy.fromIdentity, target.handle, entry);
       copy.interrupt("entry_written");
     } finally {
@@ -332,15 +405,26 @@ export async function copyBundleEntry(copy: BundleEntryCopyV1): Promise<void> {
   await writeEntryEvidence(copy, created);
 }
 
-/** `evidence_intent` → exclusive create → recorded inode → canonical bytes → reopen → `entry_complete`. */
-export async function writeEntryEvidence(copy: Pick<BundleEntryCopyV1, "io" | "evidencePath" | "evidenceParent" | "evidenceBytes" | "advance" | "interrupt">, created: Identity): Promise<void> {
+/**
+ * `evidence_intent` → exclusive create → recorded inode → canonical bytes → reopen → `entry_complete`;
+ * a forward resume passes the current evidence `state` as `copyBundleEntry` does.
+ */
+export async function writeEntryEvidence(copy: Pick<BundleEntryCopyV1, "io" | "evidencePath" | "evidenceParent" | "evidenceBytes" | "advance" | "interrupt">, created: Identity, state: UpdateEntryWriteStateV1 | null = null): Promise<void> {
   const { io } = copy;
   const bytes = copy.evidenceBytes(created.dev as UInt64DecimalV1, created.ino as UInt64DecimalV1);
-  await copy.advance({ kind: "evidence_intent" });
-  const evidence = await io.createEmpty(copy.evidencePath, 0o600);
+  let recorded: Identity | null = state?.state === "evidence_created" ? { dev: state.evidenceDev, ino: state.evidenceIno } : null;
+  if (state === null) await copy.advance({ kind: "evidence_intent" });
+  else if (state.state === "evidence_intent") {
+    const bound = await bindEntryIntent(io, state, undefined, copy.evidencePath, copy.evidencePath);
+    if (bound !== null) await copy.advance(bound);
+    recorded = bound as Identity | null;
+  }
+  const evidence = recorded === null ? await io.createEmpty(copy.evidencePath, 0o600) : await io.reopenPrefix(copy.evidencePath, recorded, 0o600, bytes, bytes.byteLength);
   try {
-    await copy.advance({ kind: "evidence_created", dev: evidence.entry.dev, ino: evidence.entry.ino });
-    copy.interrupt("evidence_created");
+    if (recorded === null) {
+      await copy.advance({ kind: "evidence_created", dev: evidence.entry.dev, ino: evidence.entry.ino });
+      copy.interrupt("evidence_created");
+    }
     await writeAll(evidence.handle, bytes);
     copy.interrupt("evidence_written");
   } finally {

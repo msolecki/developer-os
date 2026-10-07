@@ -270,6 +270,23 @@ describe("a death inside a terminal compaction entry, between two of its removal
   }, CASE_TIMEOUT_MS);
 });
 
+describe("a death inside a publication microstate, before the point of no return (NEW-195)", () => {
+  it.each([
+    ["the bundle's first entry directory was made", (name: string, args: readonly unknown[]) => name === "mkdirExclusive" && String(args[0]).endsWith("/releases/1.2.0/darwin-arm64/bin")],
+    ["a rollback payload entry was written and its parent not yet advanced", (name: string, args: readonly unknown[]) => name === "syncDirectory" && /\/\.developer-os\/rollback\/rb_[^/]+\/plans\/owner_inverse$/u.test((args[0] as { readonly path: string }).path)],
+  ])("resumes forward after %s, since death alone never chooses rollback", async (_label, fatal) => {
+    const home = await baseAt110("recovery-publication-in-flight");
+    const dying = dieWhen(home.fixture.context, fatal);
+    expect(await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)).toBe("died");
+
+    await recoverUpdate(home.update());
+
+    const settledHome = await settled(home);
+    expect(settledHome.active.version).toBe("1.2.0");
+    expect(settledHome.rollback?.previous.version).toBe("1.1.0");
+  }, CASE_TIMEOUT_MS);
+});
+
 describe("a coordinator that died between its journal rewrite temp and the rename", () => {
   it("removes the dead temp before resuming, so the closure clears", async () => {
     const home = await installUpdatableHome("recovery-coordinator-rewrite-temp", "arm64");

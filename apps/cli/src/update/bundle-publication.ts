@@ -134,12 +134,15 @@ export class BundlePublicationParticipant {
     return next;
   }
 
-  /** Forward publication or verification from a clean cursor; an in-flight microstate only compensates. */
+  /**
+   * Forward publication or verification. Process death never chooses rollback (Spec 2 §9.4), so a
+   * forward journal left inside a microstate resumes it: an intent binds its exact empty crash
+   * frontier or retries the absent path, and a recorded inode is reopened and completed.
+   */
   async apply(value: BundlePublicationPlanV1): Promise<BundlePublicationObservationV1> {
     const { plan, file } = await this.#open(value);
     const journal = file.value as BundlePublicationJournalV1;
     if (!isBundlePublicationForward(journal.phase)) refuseBundle("bundle_publication_not_forward", file.path);
-    if (journal.rootWriteState !== null || journal.entryWriteState !== null || journal.metadataWriteState !== null) refuseBundle("bundle_publication_in_flight", file.path);
     if (plan.action === "publish_target") await this.#publish(plan, file);
     else await this.#verify(plan, file);
     return observe(file.value as BundlePublicationJournalV1);
@@ -149,11 +152,20 @@ export class BundlePublicationParticipant {
     const source = await this.#stagedSource(plan);
     if ((file.value as BundlePublicationJournalV1).nextRootTransition === 0) {
       const parent = await this.#versionDirectory(plan);
-      await this.#advance(plan, file, { kind: "root_intent" });
-      const created = await this.#io.fs.mkdirExclusive(plan.target.bundleRoot);
-      this.#interrupt("root_made");
-      await this.#io.fs.syncDirectory(parent);
-      await this.#advance(plan, file, { kind: "root_created", dev: created.dev, ino: created.ino });
+      // Only an intent persisted before this run is a crash frontier; a fresh intent never binds a present path.
+      const resumed = (file.value as BundlePublicationJournalV1).rootWriteState;
+      if (resumed === null) await this.#advance(plan, file, { kind: "root_intent" });
+      if (resumed?.state !== "created") {
+        let created = resumed === null ? null : await this.#boundRoot(plan);
+        if (created === null) {
+          created = await this.#io.fs.mkdirExclusive(plan.target.bundleRoot);
+          this.#interrupt("root_made");
+        }
+        // The parent entry is durable before the journal records the root's identity.
+        await this.#io.fs.syncDirectory(parent);
+        await this.#advance(plan, file, { kind: "root_created", dev: created.dev, ino: created.ino });
+      }
+      await this.#io.ownedDirectory(plan.target.bundleRoot, (file.value as BundlePublicationJournalV1).rootWriteState as Extract<BundlePublicationJournalV1["rootWriteState"], { readonly state: "created" }>);
       await this.#advance(plan, file, { kind: "root_complete" });
     }
     const evidenceParent = await this.#evidenceDirectory(plan);
@@ -178,7 +190,7 @@ export class BundlePublicationParticipant {
         interrupt: (point) => {
           this.#interrupt(point);
         },
-      });
+      }, journal.entryWriteState);
     }
     for (let journal = file.value as BundlePublicationJournalV1; journal.nextMetadata < 3; journal = file.value as BundlePublicationJournalV1) {
       const ordinal = journal.nextMetadata;
@@ -252,26 +264,38 @@ export class BundlePublicationParticipant {
     return this.#io.ownedDirectory(targetEntryPath(plan, parent), validateDurablePublicationEntryEvidence(found.bytes, plan, parent));
   }
 
-  /** `publish_intent`, identity-preserving no-replace rename of the construction payload, reopen. */
+  /**
+   * `publish_intent`, identity-preserving no-replace rename of the construction payload, reopen. A
+   * resumed intent first binds a crash-renamed payload by its construction-evidenced identity.
+   */
   async #publishMetadata(plan: BundlePublicationPlanV1, file: Journal, row: BundleMetadataStatePlanV1): Promise<void> {
     const after = row.after as PresentBundleMetadataPostimageV1;
     const payload = after.payload;
     if (payload === null) return refuseBundle("bundle_metadata_payload", row.path);
-    const planned = await this.#dependencies.payloadIdentity(payload);
-    const found = await this.#io.fs.lstat(payload.path);
-    if (!this.#io.isBoundedRegular(found, 0o600, after.size) || found.size !== after.size.toString(10) || !sameInode(found, planned)) return refuseBundle("bundle_metadata_payload", payload.path);
-    if ((await this.#io.fs.hashRegular(found, BigInt(after.size))) !== after.hash) refuseBundle("bundle_metadata_payload", payload.path);
     const targetParent = await this.#io.ownedDirectory(parentPath(row.path));
     const payloadParent = await this.#io.ownedDirectory(parentPath(payload.path));
-    if ((await this.#io.fs.lstat(row.path)) !== null) refuseBundle("bundle_metadata_exists", row.path);
-    await this.#advance(plan, file, { kind: "metadata_intent" });
-    await this.#io.fs.renameNoReplace(found, row.path);
-    this.#interrupt("metadata_renamed");
-    await this.#io.fs.syncDirectory(targetParent);
-    await this.#io.fs.syncDirectory(payloadParent);
+    let state = (file.value as BundlePublicationJournalV1).metadataWriteState;
+    if (state?.state !== "published") {
+      let moved = state === null ? null : await this.#boundMetadata(plan, file);
+      if (moved === null) {
+        const planned = await this.#dependencies.payloadIdentity(payload);
+        const found = await this.#io.fs.lstat(payload.path);
+        if (!this.#io.isBoundedRegular(found, 0o600, after.size) || found.size !== after.size.toString(10) || !sameInode(found, planned)) return refuseBundle("bundle_metadata_payload", payload.path);
+        if ((await this.#io.fs.hashRegular(found, BigInt(after.size))) !== after.hash) refuseBundle("bundle_metadata_payload", payload.path);
+        if ((await this.#io.fs.lstat(row.path)) !== null) refuseBundle("bundle_metadata_exists", row.path);
+        if (state === null) await this.#advance(plan, file, { kind: "metadata_intent" });
+        await this.#io.fs.renameNoReplace(found, row.path);
+        this.#interrupt("metadata_renamed");
+        moved = found;
+      }
+      // Both directory entries are durable before the journal records the moved inode.
+      await this.#io.fs.syncDirectory(targetParent);
+      await this.#io.fs.syncDirectory(payloadParent);
+      await this.#advance(plan, file, { kind: "metadata_published", dev: moved.dev, ino: moved.ino });
+      state = (file.value as BundlePublicationJournalV1).metadataWriteState;
+    }
     const published = await this.#io.fs.lstat(row.path);
-    if (published === null || !sameInode(published, found)) return refuseBundle("bundle_metadata_identity", row.path);
-    await this.#advance(plan, file, { kind: "metadata_published", dev: published.dev, ino: published.ino });
+    if (published === null || state?.state !== "published" || !sameInode(published, state)) return refuseBundle("bundle_metadata_identity", row.path);
     await this.#io.verifyWritten(published, after.size, after.hash, 0o600);
     await this.#advance(plan, file, { kind: "metadata_complete" });
   }
@@ -309,31 +333,39 @@ export class BundlePublicationParticipant {
     }
   }
 
+  /** A present path under a root `create_intent` binds only the exact empty attempt-created directory; null when absent. */
+  async #boundRoot(plan: BundlePublicationPlanV1): Promise<LifecycleGuardedEntryV1 | null> {
+    const found = await this.#io.fs.lstat(plan.target.bundleRoot);
+    if (found === null) return null;
+    if (found.kind !== "directory" || found.ownerUid !== this.#io.uid || found.mode !== 0o700 || !(await this.#io.emptyDirectory(found))) refuseBundle("bundle_unbound", plan.target.bundleRoot);
+    return found;
+  }
+
   async #bindIntents(plan: BundlePublicationPlanV1, file: Journal): Promise<void> {
-    const journal = file.value as BundlePublicationJournalV1;
-    if (journal.rootWriteState?.state === "create_intent") {
-      const found = await this.#io.fs.lstat(plan.target.bundleRoot);
-      if (found !== null) {
-        if (found.kind !== "directory" || found.ownerUid !== this.#io.uid || found.mode !== 0o700 || !(await this.#io.emptyDirectory(found))) refuseBundle("bundle_unbound", plan.target.bundleRoot);
-        await this.#advance(plan, file, { kind: "root_created", dev: found.dev, ino: found.ino });
-      }
+    if ((file.value as BundlePublicationJournalV1).rootWriteState?.state === "create_intent") {
+      const found = await this.#boundRoot(plan);
+      if (found !== null) await this.#advance(plan, file, { kind: "root_created", dev: found.dev, ino: found.ino });
     }
     const state = (file.value as BundlePublicationJournalV1).entryWriteState;
     if (state !== null) {
       const step = await bindEntryIntent(this.#io, state, plan.entries[state.ordinal], targetEntryPath(plan, state.ordinal), bundlePublicationEvidencePath(this.#root, plan, state.ordinal));
       if (step !== null) await this.#advance(plan, file, step);
     }
-    const metadata = (file.value as BundlePublicationJournalV1).metadataWriteState;
-    if (metadata?.state === "publish_intent") {
-      const row = plan.metadata[metadata.ordinal] as BundleMetadataStatePlanV1;
-      const found = await this.#io.fs.lstat(row.path);
-      if (found !== null) {
-        // The rename moves the payload inode, so only its construction-evidenced identity binds the intent.
-        const payload = (row.after as PresentBundleMetadataPostimageV1).payload;
-        if (payload === null || !sameInode(found, await this.#dependencies.payloadIdentity(payload))) refuseBundle("bundle_unbound", row.path);
-        await this.#advance(plan, file, { kind: "metadata_published", dev: found.dev, ino: found.ino });
-      }
+    if ((file.value as BundlePublicationJournalV1).metadataWriteState?.state === "publish_intent") {
+      const found = await this.#boundMetadata(plan, file);
+      if (found !== null) await this.#advance(plan, file, { kind: "metadata_published", dev: found.dev, ino: found.ino });
     }
+  }
+
+  /** A present target under a metadata `publish_intent` binds only the payload's construction-evidenced inode; null when absent. */
+  async #boundMetadata(plan: BundlePublicationPlanV1, file: Journal): Promise<LifecycleGuardedEntryV1 | null> {
+    const row = plan.metadata[(file.value as BundlePublicationJournalV1).nextMetadata] as BundleMetadataStatePlanV1;
+    const found = await this.#io.fs.lstat(row.path);
+    if (found === null) return null;
+    // The rename moves the payload inode, so only its construction-evidenced identity binds the intent.
+    const payload = (row.after as PresentBundleMetadataPostimageV1).payload;
+    if (payload === null || !sameInode(found, await this.#dependencies.payloadIdentity(payload))) refuseBundle("bundle_unbound", row.path);
+    return found;
   }
 
   /**
