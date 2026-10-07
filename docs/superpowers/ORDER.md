@@ -123,4 +123,4 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 - Founder stop points: 7, listed above.
 - Startable rows: 1 (NEW-132); NEW-193 (4) waits for Codex after 2026-10-22. Founder action: NEW-183 (permission
   rule). Founder design: the distribution design (NEW-163, NEW-171). Awaiting founder numbers: NEW-116.
-- Repository backlog: 20 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
+- Repository backlog: 19 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
