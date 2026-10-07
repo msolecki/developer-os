@@ -65,9 +65,12 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate (one worktree each):
 
-- NEW-132 (update recovery death-point sweeps).
+- NEW-195 (P1: forward recovery stuck on an in-flight bundle or rollback-payload publication).
+- NEW-196 (rejected-verifier resume reports the wrong exit code).
 - NEW-169 (remaining half: a doctor check for a failed scheduled run, and the host kickstart check).
-- NEW-194 (the stop hook's typecheck fallback blocks with TS6310 on stale project references).
+- NEW-197 (`init`'s `lstat` storm in bootstrap retention).
+
+NEW-132 (the full recovery sweeps) is blocked by NEW-195 and NEW-196; its harness is affordable now.
 
 Waiting on a founder decision or observation: NEW-193 (the stricter citations rule for 99 cells, the
 Codex `subagents` witness, the Spec 1 "four leases" amendment). NEW-182 closed 2026-10-07.
@@ -121,6 +124,6 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
 - Founder stop points: 6, listed above.
-- Startable rows: 3 (NEW-132, NEW-169's remainder, NEW-194); NEW-193 waits on the founder. Founder action: NEW-183 (permission
+- Startable rows: 4 (NEW-195, NEW-196, NEW-169's remainder, NEW-197); NEW-132 is blocked by NEW-195/196; NEW-193 waits on the founder. Founder action: NEW-183 (permission
   rule). Founder design: the distribution design (NEW-163, NEW-171). Awaiting founder numbers: NEW-116.
-- Repository backlog: 20 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
+- Repository backlog: 22 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
