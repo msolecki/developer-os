@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
-import { constants as zlibConstants, zstdCompressSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
@@ -17,7 +16,6 @@ import type {
   LifecycleGuardedEntryV1,
   LowerHexSha256,
   OwnerUpdatePlanV1,
-  ReleaseBundleEntryV1,
   ReleaseBundleManifestV1,
   ReleaseBundleReferenceV1,
   UpdateFallbackHandoffV1,
@@ -46,6 +44,8 @@ import {
 } from "@developer-os/cli/dist/update/testing.js";
 import type { SyntheticArchitectureV1, SyntheticBundleV1, UpdateFixture } from "@developer-os/cli/dist/update/testing.js";
 
+import { archiveOf as releaseArchive } from "../../tools/release-archive.js";
+
 /**
  * Spec 2 §12's "archive is bounded" and "target planner is plan-only" rows at the seam between
  * them, for both architectures: a real zstd-ustar archive of each synthetic bundle through the
@@ -55,47 +55,14 @@ import type { SyntheticArchitectureV1, SyntheticBundleV1, UpdateFixture } from "
  */
 
 const encoder = new TextEncoder();
-const BLOCK = 512;
 
 function sha256(bytes: Uint8Array | string): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
 
-function octal(value: number, width: number): string {
-  return `${value.toString(8).padStart(width - 1, "0")}\0`;
-}
-
-function ustarHeader(entry: ReleaseBundleEntryV1, size: number): Uint8Array {
-  const header = new Uint8Array(BLOCK);
-  const put = (offset: number, text: string): void => {
-    header.set(encoder.encode(text), offset);
-  };
-  const boundary = entry.path.lastIndexOf("/");
-  put(0, boundary < 0 ? entry.path : entry.path.slice(boundary + 1));
-  put(100, octal(entry.mode, 8));
-  put(108, octal(0, 8));
-  put(116, octal(0, 8));
-  put(124, octal(size, 12));
-  put(136, octal(0o14_000_000_000, 12));
-  put(156, entry.kind === "directory" ? "5" : "0");
-  put(257, "ustar\0");
-  put(263, "00");
-  put(345, boundary < 0 ? "" : entry.path.slice(0, boundary));
-  let sum = 0;
-  for (let index = 0; index < BLOCK; index += 1) sum += index >= 148 && index < 156 ? 0x20 : (header[index] as number);
-  put(148, `${sum.toString(8).padStart(6, "0")}\0 `);
-  return header;
-}
-
-/** The bundle's exact zstd-ustar archive: manifest order, padded content, two end blocks, one checksummed frame. */
+/** The bundle's exact zstd-ustar archive, written by the release packer's own writer. */
 function archiveOf(bundle: SyntheticBundleV1): Uint8Array {
-  const parts: Uint8Array[] = [];
-  for (const entry of bundle.manifest.entries) {
-    const content = entry.kind === "file" ? (bundle.files.get(entry.path) ?? new Uint8Array()) : new Uint8Array();
-    parts.push(ustarHeader(entry, content.byteLength), content, new Uint8Array((BLOCK - (content.byteLength % BLOCK)) % BLOCK));
-  }
-  parts.push(new Uint8Array(2 * BLOCK));
-  return zstdCompressSync(Buffer.concat(parts), { params: { [zlibConstants.ZSTD_c_checksumFlag]: 1, [zlibConstants.ZSTD_c_contentSizeFlag]: 1 } });
+  return releaseArchive(bundle.manifest.entries, bundle.files);
 }
 
 function referenceFor(fixture: UpdateFixture, architecture: SyntheticArchitectureV1, archive: Uint8Array): ReleaseBundleReferenceV1 {

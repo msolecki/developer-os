@@ -109,15 +109,19 @@ async function license(root: string, directory: string): Promise<string> {
 }
 
 /**
- * The CLI as one ESM module at {@link LOCAL_BUNDLE_CLI_ENTRY} plus {@link THIRD_PARTY_LICENSES}.
- * Only Node builtins stay external (`platform: "node"`); no minification or source map, names
- * kept, and every path esbuild writes is relative to the checkout with store paths cut by
- * {@link checkoutIndependentInput}, so two checkouts of one commit bundle to the same bytes.
+ * One compiled entry as one ESM module. Only Node builtins stay external (`platform: "node"`); no
+ * minification or source map, names kept, and every path esbuild writes is relative to the checkout
+ * with store paths cut by {@link checkoutIndependentInput}, so two checkouts of one commit bundle to
+ * the same bytes. `define` is the release packer's version stamp; the local release passes none.
+ * Returns the module text and the installed directory of every bundled third-party package.
  */
-export async function bundleCli(root: string): Promise<readonly ReleaseFileV1[]> {
+export async function bundleModule(root: string, entry: string, define: Readonly<Record<string, string>> = {}): Promise<{
+  readonly text: string;
+  readonly packages: ReadonlySet<string>;
+}> {
   const result = await build({
     absWorkingDir: root,
-    entryPoints: [CLI_ENTRY],
+    entryPoints: [entry],
     outfile: join(root, "bundle", LOCAL_BUNDLE_CLI_ENTRY),
     bundle: true,
     write: false,
@@ -128,6 +132,7 @@ export async function bundleCli(root: string): Promise<readonly ReleaseFileV1[]>
     keepNames: true,
     minify: false,
     sourcemap: false,
+    define,
     // `yaml` resolves to its CommonJS build under the `node` condition and requires Node builtins;
     // an ESM bundle has no `require` unless one is made.
     banner: { js: 'import { createRequire as __developerOsCreateRequire } from "node:module";\nconst require = __developerOsCreateRequire(import.meta.url);' },
@@ -146,10 +151,21 @@ export async function bundleCli(root: string): Promise<readonly ReleaseFileV1[]>
   let text = output.text;
   // Longest first: a shorter prefix can be the tail of a longer one.
   for (const prefix of [...prefixes].sort((a, b) => b.length - a.length)) text = text.replaceAll(`${prefix}node_modules/`, "node_modules/");
+  return { text, packages };
+}
+
+/** The {@link THIRD_PARTY_LICENSES} text for a set of bundled package directories. */
+export async function licensesOf(root: string, packages: Iterable<string>): Promise<Uint8Array> {
   const licenses = await Promise.all([...packages].map((directory) => license(root, directory)));
+  return new TextEncoder().encode(licenses.sort().join("\n"));
+}
+
+/** The CLI as one ESM module at {@link LOCAL_BUNDLE_CLI_ENTRY} plus {@link THIRD_PARTY_LICENSES}. */
+export async function bundleCli(root: string): Promise<readonly ReleaseFileV1[]> {
+  const { text, packages } = await bundleModule(root, CLI_ENTRY);
   return [
     { relativePath: LOCAL_BUNDLE_CLI_ENTRY, bytes: new TextEncoder().encode(text), mode: 0o600 },
-    { relativePath: THIRD_PARTY_LICENSES, bytes: new TextEncoder().encode(licenses.sort().join("\n")), mode: 0o600 },
+    { relativePath: THIRD_PARTY_LICENSES, bytes: await licensesOf(root, packages), mode: 0o600 },
   ];
 }
 
