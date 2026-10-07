@@ -6,6 +6,8 @@ import { createInterface } from "node:readline/promises";
 
 import { parseScheduledInvocation } from "./commands/automation/index.js";
 import { MAX_CAPTURE_INPUT_BYTES } from "./commands/capture.js";
+import { PACKAGE_CHANNEL_SOURCE_TABLE } from "@developer-os/core";
+
 import { createProductionContext, PRODUCT_VERSION } from "./context.js";
 import { hookLastResortExit, isHookInvocation } from "./hooks/argv.js";
 import { firingRecordWaitMs, settleFiringRecords } from "./hooks/entry.js";
@@ -13,7 +15,31 @@ import type { HookEnvironment } from "./hooks/entry.js";
 import type { CliIo } from "./io.js";
 import { run } from "./main.js";
 import { LAUNCHER_TRUST_ARGUMENT } from "./update/context.js";
-import { admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
+import {
+  admitPackageChannelRelease,
+  admitUnsignedLocalPackagedRelease,
+  resolvePackageChannelSource,
+} from "./update/packaged-release.js";
+import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
+
+/**
+ * D84 K2: `init` admits the keg the fixed table names. An absent keg is not an error: `init` then
+ * reports `unavailable_until_packaged_handoff` as before. Any other refusal propagates (exit 6).
+ */
+async function admitPackageChannelKeg(): Promise<PackagedReleaseSourceV1 | null> {
+  const architecture = process.arch;
+  if (architecture !== "arm64" && architecture !== "x64") return null;
+  try {
+    const { packageRoot } = await resolvePackageChannelSource(architecture);
+    return await admitPackageChannelRelease(packageRoot, {
+      prefix: PACKAGE_CHANNEL_SOURCE_TABLE[architecture].prefix,
+      requireVersion: PRODUCT_VERSION,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "update_package_source_absent") return null;
+    throw error;
+  }
+}
 
 /**
  * One stdin chunk as bytes, whatever shape the stream handed over. A stream
@@ -159,9 +185,11 @@ if ((home === undefined || home.length === 0) && !scheduledMode) {
         io: commandIo,
         env: process.env,
         userHome: home,
-        localRelease: request.localRelease === null
-          ? null
-          : await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION),
+        localRelease: request.localRelease !== null
+          ? await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION)
+          : request.packageChannelInit
+            ? await admitPackageChannelKeg()
+            : null,
         launcherTrustHandoff,
       });
     },

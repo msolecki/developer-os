@@ -882,7 +882,7 @@ describe("the hidden scheduled invocation", () => {
   it("accepts the exact ProgramArguments only in scheduled mode, with the supplied product home as the sole authority", async () => {
     const fixture = await createCommandFixture("scheduled-dispatch");
     await nodeFs.mkdir(fixture.paths.home, { recursive: true, mode: 0o700 });
-    const requests: { readonly localRelease: string | null; readonly scheduledProductHome?: string }[] = [];
+    const requests: { readonly localRelease: string | null; readonly packageChannelInit: boolean; readonly scheduledProductHome?: string }[] = [];
     const factory: CliContextFactory = (_io, request) => {
       requests.push(request);
       return fixture.context;
@@ -891,7 +891,7 @@ describe("the hidden scheduled invocation", () => {
     const code = await run(scheduledArgv(fixture.paths.home), fixture.io, factory);
 
     expect(code).toBe(EXIT_CODES.success);
-    expect(requests).toStrictEqual([{ localRelease: null, scheduledProductHome: fixture.paths.home }]);
+    expect(requests).toStrictEqual([{ localRelease: null, packageChannelInit: false, scheduledProductHome: fixture.paths.home }]);
     expect(fixture.io.out).toStrictEqual([]);
   });
 
@@ -1479,7 +1479,23 @@ describe("init --local-release dispatch", () => {
       EXIT_CODES.capabilityUnavailable,
     );
     expect(await run(["init", "--yes"], collectingIo(lines), recording)).toBe(EXIT_CODES.capabilityUnavailable);
-    expect(requests).toStrictEqual([{ localRelease: "/x" }, { localRelease: null }]);
+    expect(requests).toStrictEqual([{ localRelease: "/x", packageChannelInit: false }, { localRelease: null, packageChannelInit: true }]);
+  });
+
+  it("asks for the package channel only for init without --local-release", async () => {
+    const seen: unknown[] = [];
+    const factory: CliContextFactory = (_io, request) => {
+      seen.push(request);
+      throw CONTEXT_REFUSED;
+    };
+    await run(["init", "--dry-run"], collectingIo([]), factory);
+    await run(["init", "--dry-run", "--local-release", "/x"], collectingIo([]), factory);
+    await run(["doctor"], collectingIo([]), factory);
+    expect(seen).toEqual([
+      { localRelease: null, packageChannelInit: true },
+      { localRelease: "/x", packageChannelInit: false },
+      { localRelease: null, packageChannelInit: false },
+    ]);
   });
 
   it("refuses --local-release on every other command at parse time", async () => {

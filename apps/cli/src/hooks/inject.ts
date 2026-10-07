@@ -34,7 +34,7 @@ export function composeInjection(context: BrainSessionContextV1): string | null 
 }
 
 async function inject(runtime: HookRuntime): Promise<HookOutcome> {
-  const context = await runtime.createContext({ ...runtime.io, stdout: () => undefined }, { localRelease: null });
+  const context = await runtime.createContext({ ...runtime.io, stdout: () => undefined }, { localRelease: null, packageChannelInit: false });
   await assertOrdinaryCommandAdmitted(
     createBootstrapEvidenceInspectionRequest({
       productHome: context.paths.home,
