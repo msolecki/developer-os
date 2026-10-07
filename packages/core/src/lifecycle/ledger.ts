@@ -86,7 +86,7 @@ export interface LifecycleLedgerDependenciesV1<TPlan extends CoordinatorPlan> {
   readonly residue: LifecycleBookkeepingResidueV1;
   /** The plan's manifest before-state hash, or null where the variant binds no manifest preimage. */
   readonly manifestBeforeHash: (plan: TPlan) => LowerHexSha256 | null;
-  /** The four lease paths an uninstall plan binds, for the draining discriminator. */
+  /** The runner-lease paths an uninstall plan binds, one per scheduled job, for the draining discriminator. */
   readonly leasePaths: (plan: TPlan) => readonly CanonicalAbsolutePathV1[];
   /**
    * Spec 2 §9.2: the V2 inspector (`ledger-v2.ts`) owns these update coordinators — their
@@ -1480,8 +1480,8 @@ async function admitsUninstallDraining<TPlan extends CoordinatorPlan>(
   if (journal === null || record.state !== "active") return false;
   if (plan.operation !== "uninstall") return false;
   /**
-   * D45 repeats the step; the first one is the witness because the CLI orders the four runner
-   * leases ahead of every other removal, so they never fall in a later chunk.
+   * D45 repeats the step; the first one is the witness because the CLI orders every runner
+   * lease ahead of every other removal, so they never fall in a later chunk.
    */
   const artifacts = stepIndexOf(
     plan,

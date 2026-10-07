@@ -1002,7 +1002,7 @@ describe("the lifecycle ledger closure", () => {
 
 /**
  * D45: with the step repeated, the cursor can rest on a later artifact step whose participant has
- * not started. §2.2's "at or beyond removal of all four runner-lease paths" still holds there,
+ * not started. §2.2's cursor bound (at or beyond removal of every runner-lease path) still holds there,
  * because the leases lead the removal order and the first step removed them.
  */
 describe("uninstall_draining across repeated artifact steps (D45)", () => {
