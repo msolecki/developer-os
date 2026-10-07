@@ -1121,9 +1121,9 @@ export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_FROM_API=1
 G="/Volumes/My Shared Files/gate"
 git clone "$G/tap" ~/tap && brew tap msolecki/developer-os ~/tap
 brew install msolecki/developer-os/developer-os
-mkdir -p ~/brain
-DEVELOPER_OS_BRAIN=~/brain developer-os init --dry-run --adapters claude,codex
-DEVELOPER_OS_BRAIN=~/brain developer-os init --yes --adapters claude,codex
+mkdir -p ~/gate-brain
+DEVELOPER_OS_BRAIN=~/gate-brain developer-os init --dry-run --adapters claude,codex
+DEVELOPER_OS_BRAIN=~/gate-brain developer-os init --yes --adapters claude,codex
 developer-os --version                                  # developer-os 0.1.0
 grep -c '"trust":"package-channel"' ~/.developer-os/state/release-trust.json   # 1
 developer-os doctor
@@ -1149,7 +1149,7 @@ developer-os --version                                  # developer-os 0.1.0
 developer-os doctor
 developer-os update --apply                             # reapply 0.1.1 from the keg
 developer-os uninstall --yes
-ls ~/brain                                              # the Brain is untouched
+ls ~/gate-brain                                              # the Brain is untouched
 ```
 
 Expected: every command exits 0, and each `--version` prints the version noted beside it. Record each command's exit code in the founder log.
