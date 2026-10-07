@@ -239,7 +239,10 @@ item names, the item governs, and that section's text is not rewritten.
 
 **Amended 2026-10-07 (D84, Task 11b) — `update` trusts the Homebrew package channel instead of an
 offline root key (founder decisions D84 (1) and the Task 11b design approved in conversation on
-2026-10-07).** D46 parked release signing; D84 (1) replaced the parked root-key design with trust in
+2026-10-07).** **Revised 2026-10-07, same day: the Task 11b plan review (F1–F10) found that K2 and K4
+as first approved misread the code — the `unsigned-local` package is not a release format and its
+admission rejects Homebrew's modes; K2, K3 and K4 are rewritten below with the founder's answers F4, F5,
+F7 and F8, and the founder approved the revised block.** D46 parked release signing; D84 (1) replaced the parked root-key design with trust in
 a distribution channel. The founder chose a Homebrew tap and keg adoption with no product network
 access. The block is normative. Where it disagrees with the section an item names, the item governs,
 and that section's text is not rewritten. It re-scopes BACKLOG NEW-111, NEW-112, NEW-118, NEW-163 and
@@ -255,45 +258,65 @@ NEW-171.
   same-uid boundary of `docs/architecture/threat-model.md` does not widen), and whoever controls the
   tap controls updates, as for every Homebrew formula; there is no transparency log.
 
-- **K2 — the update source is the installed keg, found at a fixed path.** The user runs
-  `brew upgrade developer-os`; `developer-os update` then admits the packaged bundle of the newest
-  installed keg as the target. The CLI resolves it only from this per-architecture table, never from
-  `PATH` and never by running `brew`: `arm64` → `/opt/homebrew/opt/developer-os/libexec/fallback`,
-  `x64` → `/usr/local/opt/developer-os/libexec/fallback`. The `opt` symlink is resolved once to its
-  canonical keg path under the same prefix's `Cellar/developer-os/<version>/`; the resolved root and
-  every ancestor up to the prefix must be owned by the current user or root with no group or other
-  write (NEW-113's fixed-path admission rule), and the root is then admitted exactly as fresh `init`
-  admits the packaged fallback today (`admitUnsignedLocalPackagedRelease`: inventory, sizes, modes,
-  SHA-256, release documents). Admission copies the bundle into
-  `releases/<version>/<platform>-<architecture>` through the existing bundle publication, so the
-  active and rollback releases never depend on the keg surviving `brew cleanup`. A missing table
-  path is `update_package_source_absent`, exit 4; any admission failure is exit 6.
+- **K2 — the keg carries a real, unsigned release; the update source is that keg.** *(Revised
+  2026-10-07.)* The `unsigned-local` package layout (`{files, schemaVersion, trust}` documents) is an
+  install-only layout and cannot be an update target: every update consumer requires
+  `ReleaseBundleManifestV1` (`validateBundleManifest`). The keg therefore carries the full release
+  format, unsigned: the exact `ReleaseBundleManifestV1` (with `entrypoint`, `runtimeEntrypoint`,
+  `plannerEntrypoint`, `verifierEntrypoint` and every entry), a release index document with the exact
+  fields of §4.3's selected row, and the `{schemaVersion, trust}` delegation stand-in. The packer stamps
+  `releaseSequence` and `releaseIndexSequence` per release from its input, both strictly increasing
+  across published releases, so §3.3's watermarks advance and a lower keg refuses as a downgrade. The
+  runtime is inside the hashed inventory: the packer copies the official Node 24 `darwin` binary for the
+  target architecture to `runtimeEntrypoint`, and builds the planner and verifier entrypoints as compiled
+  bundles (the verifier then joins `PLANNER_ENTRYPOINTS`, D72 (c)). The user runs
+  `brew upgrade developer-os`; `developer-os update` admits the newest installed keg's packaged release as
+  the target. The CLI resolves it only from this per-architecture table, never from `PATH` and never by
+  running `brew`: `arm64` → `/opt/homebrew/opt/developer-os/libexec/fallback`, `x64` →
+  `/usr/local/opt/developer-os/libexec/fallback`. The `opt` symlink is resolved once to its canonical
+  keg path under the same prefix's `Cellar/developer-os/<version>/`. Source admission accepts
+  Homebrew's modes: the keg root and every ancestor up to the prefix are owned by the current user or
+  root with no group or other write (NEW-113's fixed-path rule), directories `0755`, files `0644` or
+  `0755`, one link each, and every size and SHA-256 equal to the bundle manifest. The bundle is copied
+  into `releases/<version>/<platform>-<architecture>` through the existing bundle publication, which
+  writes each file with the manifest's mode (`0700`/`0600`); the copy compares the source's permission
+  class (executable or not) rather than its exact mode with the manifest entry. The active and rollback
+  releases never depend on the keg surviving `brew cleanup`. A missing table path is
+  `update_package_source_absent`, exit 4; any admission failure is exit 6. A fresh `init` run by the
+  keg's launcher admits the same packaged release from its colocated `fallback` directory and records
+  `trust: "package-channel"`; `pack:local-release` keeps producing the install-only `unsigned-local`
+  layout for development, and such a home never updates (unchanged NEW-147 refusal).
 
 - **K3 — no trust handoff.** The launcher's FD 3 document, `--offline-release-trust-fd=3`,
   `LAUNCHER_OFFLINE_RELEASE_ROOTS` and the CLI's FD 3 reader are deleted; §3.1's FD 3 sentences and
   §4.2's amendment of 2026-10-05 (D84 (6)) lapse with them. `UpdateFallbackHandoffV1` (D72 (d)) is
   built by the CLI from K2's admitted keg source instead of from FD 3, so the production composer stops
   refusing `update_fallback_unavailable`. NEW-112 closes by deletion: no descriptor is accepted from
-  any parent.
+  any parent. *(Revised 2026-10-07.)* The launcher's active-release admission (§3.1) replaces its
+  root and delegated signature checks with the same inventory, mode and hash checks against the
+  retained unsigned documents when the trust state is `"package-channel"`, and its packaged fallback
+  path is the keg's `libexec/fallback`.
 
-- **K4 — records keep their shape; the trust value is renamed.** The packaged release documents
-  (`metadata/release-key-delegation.json`, `metadata/release-index.json`, the bundle manifest) stay
-  unsigned, as the `unsigned-local` layout defines them, and are retained under
-  `state/release-metadata/` exactly as today; `ActiveReleaseRecordV1` and `ReleaseIdentityV1` keep
-  every field, filled from those documents' hashes and sequences. `ReleaseTrustStateV1.trust` admits
-  `"package-channel"` and, for the existing founder installation only, `"unsigned-local"`; every
-  update and rollback writes the trust state anew with `"package-channel"`, so no separate record
-  migration exists. The downgrade rule is §3.3's unchanged release watermark: a keg whose
-  `releaseSequence` is lower than `highestAcceptedReleaseSequence` refuses, except as `update
-  rollback` to the retained identity. The persisted-format migrations D72 (c) owes "no later than Task
-  11b" (`compensationCause` at `schemaVersion: 2`, the leaf-domain migration hash, P8's grammar) are
-  delivered by Task 11b's plan as §8.4 schema migrations run on the first update from the founder's
-  installation.
+- **K4 — records keep their shape; the trust value is renamed.** *(Revised 2026-10-07.)*
+  `ActiveReleaseRecordV1`, `ReleaseIdentityV1` and `ReleaseTrustStateV1` keep every field, filled from
+  K2's packaged documents (the delegation stand-in has sequence `0` and its own hash).
+  `ReleaseTrustStateV1.trust` gains `"package-channel"`; `"unsigned-local"` stays the value of an
+  install-only development home. **The founder's home moves by one reinstall (founder decision F4,
+  2026-10-07):** `brew install developer-os`, then `uninstall` and `init` from the keg as in
+  `docs/migration/founder-cutover.md` step 15, which already proves the Brain and every override
+  survive; every later release goes through `update`. **Accepted residual (founder decision F5,
+  2026-10-07):** the persisted-format changes of D72 (c) (`compensationCause` at `schemaVersion: 2`, the
+  leaf-domain migration hash, P8's grammar) live in lifecycle journals and plans that §8.4's
+  manifest-scoped migrations cannot reach; after the F4 reinstall no production journal or plan predates
+  them, so they carry no migration and an old-grammar journal or plan refuses as exit 6.
+  **Preview (F7):** for a keg source the preview's `download` block is replaced by a `packageSource`
+  block naming the canonical keg path and the bundle-manifest hash; nothing is downloaded.
 
 - **K5 — the re-scoped rows.** NEW-111: the launcher's `bootstrapClosure` and `updateEnvelope`
   readers replace its two stubs; its FD 3 item is K3. NEW-118 (1) and (2): `releases/<version>` and
   the empty ephemeral reservation get journalled structure transitions; (3) the Codex projection takes
-  the plugin version from the target bundle manifest; (4) the verifier gets a bounded read-only
+  the plugin version from the target release's version (F8, 2026-10-07: the plugin version equals the
+  release version, so `PLUGIN_VERSION` stops being the constant `"0.0.0"`); (4) the verifier gets a bounded read-only
   snapshot of the home instead of the plan's digests, and its compiled entrypoint joins
   `PLANNER_ENTRYPOINTS`. NEW-163, option B: `bin/developer-os.mjs` reads `state/active-release.json` at
   run time and imports `<bundleRoot>/<manifest.entrypoint>`, so neither update nor rollback rewrites
