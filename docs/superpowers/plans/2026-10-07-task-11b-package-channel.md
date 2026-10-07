@@ -917,6 +917,13 @@ git commit -m "fix(entrypoint): load the active record's bundle entrypoint at ru
 
 ### Task 12: The launcher admits package-channel releases, uses the keg fallback and drops FD 3 (L)
 
+> **Ruling 2026-10-07 (orchestrator, plan defect found in review):** this task's original rule that
+> "more than one plan returns `malformed`" contradicts Spec 2 §3.1/§6.4 and NEW-123 and would refuse every
+> command on a home with several retained envelopes (the founder's home has 12). After the handoff (a
+> valid active record), terminal, `unverified` and altered envelopes are inert; exactly one non-terminal
+> envelope is `non_terminal`; two or more are `malformed`; before the handoff the strict rule stands. The
+> launcher also applies K2's D96 Q1 ancestor rule to every in-place keg run.
+
 **Files:**
 - Modify: `packages/platform-macos/src/launcher/admission.ts:70-130`. `admit({ …, modes: "exact" | "homebrew" })`: `"homebrew"` accepts directories `0755` and files `0644`/`0755` by class, and a root owned by the uid or by root.
 - Modify: `apps/launcher/src/selection.ts`.
