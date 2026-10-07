@@ -161,7 +161,24 @@ Required behavior:
   accepted): product hooks restore its guards at cutover; afterwards boot out the legacy scheduled
   jobs, remove the legacy import block, the legacy plugin on both vendors, dead symlinks and
   orphaned generated agents. Archive the legacy repositories after one stable cycle; never delete.
-- [ ] Execute the eight unchecked Task 8 steps in the program plan (two were withdrawn by D58).
+- [ ] The program plan's Task 8 steps (moved here by D89; two were withdrawn by D58 — the runbook's
+  disposable-home rehearsal (step 7c), per-adapter gate cycle (step 16) and exercised rollback
+  (step 18) replace the separate shadow quarantine and the old-versus-new capture comparison):
+  - [ ] Run read-only `developer-os doctor` against the founder's vault and record redacted findings.
+  - [ ] Validate legacy topic aliases, schema, indexes, permissions, and protected paths.
+  - [ ] Cut over Claude first while preserving a one-command rollback manifest.
+  - [ ] Complete a full Claude capture/review/ingest/retrieval cycle and review the diff.
+  - [ ] Cut over Codex and repeat the lifecycle.
+  - [ ] Enable optional Git and `launchd` only if their explicit plans match the approved local policy.
+  - [ ] Disable legacy hooks/jobs only after new evidence passes; do not delete them.
+  - [ ] Exercise rollback once before declaring cutover complete.
+- Test (program Task 8): no duplicate hook writes occur during shadow mode; existing Brain bytes
+  remain unchanged until an accepted, validated ingest transaction; each adapter completes the same
+  outcome contract; rollback restores the legacy runtime while preserving post-cutover Brain changes;
+  independent review compares working tree, installed manifests, hooks, jobs, and actual command
+  evidence.
+- Checkpoint: the founder uses Developer OS as the primary runtime for one complete stable cycle;
+  legacy repositories remain recoverable.
 
 ### A16 · DOS-P9
 
@@ -170,7 +187,47 @@ Required behavior:
   Silicon/Intel packaging from Task 9.
 - [ ] Run the whole-history secret audit, clean-account matrix, closed beta, and reproducibility
   gates.
-- [ ] Execute the eight unchecked Task 9 steps. Outbound publication remains a founder action.
+- [ ] The program plan's Task 9 steps (moved here by D89). Outbound publication remains a founder
+  action.
+  - [ ] Obtain qualified legal approval for the exact OSI-approved license and commit the approved text.
+  - [ ] Run a fresh secret/history audit of the complete public branch.
+  - [ ] Produce self-contained Apple Silicon and Intel artifacts with pinned bundled runtime.
+  - [ ] Generate SHA-256 checksums, SBOM, changelog, schema versions, capability matrix, and rollback
+    instructions.
+  - [ ] Test Claude-only, Codex-only, and dual-agent tutorials on clean temporary macOS accounts.
+  - [ ] Run a closed beta with synthetic or participant-owned vaults; collect only explicit
+    user-reported issues because telemetry does not exist.
+  - [ ] Fix release blockers through normal specs/plans and rerun the full matrix.
+  - [ ] Publish repository visibility, GitHub Release, and Homebrew formula only after explicit
+    founder approval.
+- Files (program Task 9): `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, the approved
+  `LICENSE`; `docs/install/`, `docs/tutorials/`, `docs/troubleshooting/`, `docs/releases/`,
+  `docs/privacy.md`; `.github/workflows/release.yml` and the Homebrew formula source; Apple Silicon and
+  Intel packaging configuration.
+- Test (program Task 9): a fresh installation completes `install -> init -> capture -> review ->
+  ingest -> search -> update -> uninstall` without Brain loss; all unit, contract, integration, E2E,
+  security, generated-drift, packaging, and clean-account tests pass; public history and artifacts
+  contain no secret or private Brain fixture; release checksums verify and a modified artifact is
+  rejected; documentation accurately describes every capability difference and network action.
+- Checkpoint: `v1.0.0` is public and reproducible; legacy repositories may be archived but not deleted.
+- Program verification matrix (moved by D89):
+
+  | Gate | Command or evidence | Blocks |
+  |---|---|---|
+  | Historical secrets | founder rotation/log-review record with no secret values (waived as a blocker 2026-07-21; copying secret-bearing history stays forbidden) | public visibility |
+  | Repository validation | `npm run check` | every release |
+  | Generated artifacts | clean regeneration diff | adapter commits, release |
+  | Security | sentinel, path, prompt-injection, transaction, network suites | release |
+  | Agent compatibility | disposable real-agent matrix | founder cutover, release |
+  | Migration | exercised rollback (D58) | public beta |
+  | License | approved OSI license text reviewed by qualified counsel | public visibility, release |
+  | Packaging | checksums, SBOM, clean-account install | `v1.0.0` |
+
+- Program completion criteria (moved by D89): the program is complete only when A15's and A16's
+  checkpoints pass, the founder has used the migrated system through a complete stable cycle, public
+  artifacts reproduce from source, and `v1.0.0` meets every acceptance criterion in the approved
+  design (`specs/2026-07-21-developer-os-design.md`). Archiving legacy repositories is optional
+  cleanup after completion; deleting them is outside the program.
 
 ### Long-lead and external
 

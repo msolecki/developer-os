@@ -15,7 +15,6 @@ describe("isAllowed", () => {
       "docs/superpowers/BACKLOG.md",
       "docs/superpowers/ORDER.md",
       "docs/superpowers/SESSION.md",
-      "docs/superpowers/plans/2026-07-21-developer-os-program.md",
       "docs/superpowers/specs/2026-07-21-developer-os-design.md",
     ]) {
       expect(isAllowed(path), `${path} should be allowed`).toBe(true);
@@ -139,7 +138,6 @@ describe("the allowlist itself", () => {
       "docs/superpowers/BACKLOG.md",
       "docs/superpowers/ORDER.md",
       "docs/superpowers/SESSION.md",
-      "docs/superpowers/plans/2026-07-21-developer-os-program.md",
       "docs/superpowers/specs/2026-07-21-developer-os-design.md",
       "tests/repository/self-containment.ts",
       "tests/repository/self-containment.test.ts",
@@ -173,6 +171,10 @@ describe("the allowlist itself", () => {
  * than relaxing it: those references are now *forbidden* to come back
  * unnoticed. Every survivor is boundary prose that has to be there — the
  * self-contained-execution constraint, and Task 8, which is the cutover itself.
+ *
+ * The program plan's entry was removed on 2026-10-07, when D89 deleted the plan:
+ * its self-contained-execution constraint moved to `SESSION.md` "Hard rules" and
+ * Task 8 to `BACKLOG.md` §4, both wholly allowed.
  */
 describe("references inside the wholly-allowed documents", () => {
   it("has not grown since the rule was written", async () => {
@@ -181,7 +183,6 @@ describe("references inside the wholly-allowed documents", () => {
     const root = fileURLToPath(new URL("../../", import.meta.url));
 
     const baseline: Readonly<Record<string, number>> = {
-      "docs/superpowers/plans/2026-07-21-developer-os-program.md": 8,
       "docs/superpowers/specs/2026-07-21-developer-os-design.md": 12,
     };
 
