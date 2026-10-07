@@ -237,6 +237,79 @@ item names, the item governs, and that section's text is not rewritten.
   synthesizes each restored file's `ManagedArtifactV2` row from the retained inverse: the owner
   recorded there, `productVersion` = the previous release's version, `verification.mode: "content"`.
 
+**Amended 2026-10-07 (D84, Task 11b) — `update` trusts the Homebrew package channel instead of an
+offline root key (founder decisions D84 (1) and the Task 11b design approved in conversation on
+2026-10-07).** D46 parked release signing; D84 (1) replaced the parked root-key design with trust in
+a distribution channel. The founder chose a Homebrew tap and keg adoption with no product network
+access. The block is normative. Where it disagrees with the section an item names, the item governs,
+and that section's text is not rewritten. It re-scopes BACKLOG NEW-111, NEW-112, NEW-118, NEW-163 and
+NEW-171.
+
+- **K1 — the channel is the trust root.** Releases are published to the tap
+  `msolecki/homebrew-developer-os`, whose formula pins each release tarball's URL and `sha256`.
+  Homebrew verifies the download against the formula, and the formula's identity is the tap's Git
+  history fetched over HTTPS. The product performs no network request for an update. §4.1 (signature
+  envelopes), §4.2 (root delegation, `OfflineReleaseTrustV1`, `OfflineRootKeyV1`, the fixed metadata
+  locators), §4.3's signature checks and §4.5 (fixed-origin transport) are withdrawn. No product code
+  holds, rotates or verifies a key. Accepted residuals: a same-uid process can replace the keg (the
+  same-uid boundary of `docs/architecture/threat-model.md` does not widen), and whoever controls the
+  tap controls updates, as for every Homebrew formula; there is no transparency log.
+
+- **K2 — the update source is the installed keg, found at a fixed path.** The user runs
+  `brew upgrade developer-os`; `developer-os update` then admits the packaged bundle of the newest
+  installed keg as the target. The CLI resolves it only from this per-architecture table, never from
+  `PATH` and never by running `brew`: `arm64` → `/opt/homebrew/opt/developer-os/libexec/fallback`,
+  `x64` → `/usr/local/opt/developer-os/libexec/fallback`. The `opt` symlink is resolved once to its
+  canonical keg path under the same prefix's `Cellar/developer-os/<version>/`; the resolved root and
+  every ancestor up to the prefix must be owned by the current user or root with no group or other
+  write (NEW-113's fixed-path admission rule), and the root is then admitted exactly as fresh `init`
+  admits the packaged fallback today (`admitUnsignedLocalPackagedRelease`: inventory, sizes, modes,
+  SHA-256, release documents). Admission copies the bundle into
+  `releases/<version>/<platform>-<architecture>` through the existing bundle publication, so the
+  active and rollback releases never depend on the keg surviving `brew cleanup`. A missing table
+  path is `update_package_source_absent`, exit 4; any admission failure is exit 6.
+
+- **K3 — no trust handoff.** The launcher's FD 3 document, `--offline-release-trust-fd=3`,
+  `LAUNCHER_OFFLINE_RELEASE_ROOTS` and the CLI's FD 3 reader are deleted; §3.1's FD 3 sentences and
+  §4.2's amendment of 2026-10-05 (D84 (6)) lapse with them. `UpdateFallbackHandoffV1` (D72 (d)) is
+  built by the CLI from K2's admitted keg source instead of from FD 3, so the production composer stops
+  refusing `update_fallback_unavailable`. NEW-112 closes by deletion: no descriptor is accepted from
+  any parent.
+
+- **K4 — records keep their shape; the trust value is renamed.** The packaged release documents
+  (`metadata/release-key-delegation.json`, `metadata/release-index.json`, the bundle manifest) stay
+  unsigned, as the `unsigned-local` layout defines them, and are retained under
+  `state/release-metadata/` exactly as today; `ActiveReleaseRecordV1` and `ReleaseIdentityV1` keep
+  every field, filled from those documents' hashes and sequences. `ReleaseTrustStateV1.trust` admits
+  `"package-channel"` and, for the existing founder installation only, `"unsigned-local"`; every
+  update and rollback writes the trust state anew with `"package-channel"`, so no separate record
+  migration exists. The downgrade rule is §3.3's unchanged release watermark: a keg whose
+  `releaseSequence` is lower than `highestAcceptedReleaseSequence` refuses, except as `update
+  rollback` to the retained identity. The persisted-format migrations D72 (c) owes "no later than Task
+  11b" (`compensationCause` at `schemaVersion: 2`, the leaf-domain migration hash, P8's grammar) are
+  delivered by Task 11b's plan as §8.4 schema migrations run on the first update from the founder's
+  installation.
+
+- **K5 — the re-scoped rows.** NEW-111: the launcher's `bootstrapClosure` and `updateEnvelope`
+  readers replace its two stubs; its FD 3 item is K3. NEW-118 (1) and (2): `releases/<version>` and
+  the empty ephemeral reservation get journalled structure transitions; (3) the Codex projection takes
+  the plugin version from the target bundle manifest; (4) the verifier gets a bounded read-only
+  snapshot of the home instead of the plan's digests, and its compiled entrypoint joins
+  `PLANNER_ENTRYPOINTS`. NEW-163, option B: `bin/developer-os.mjs` reads `state/active-release.json` at
+  run time and imports `<bundleRoot>/<manifest.entrypoint>`, so neither update nor rollback rewrites
+  it. NEW-171, option (b): instruction rows are excluded from the planner request and carried through
+  unchanged by the current process; every `installedToken` arm checks the source token's kind.
+  Consequence accepted: a release cannot change installed instructions through `update`.
+
+- **K6 — verification.** Unit: K2's table and admission (owner, mode, the `opt` link, a downgrade
+  refusal, an absent path) and K4's trust-value admission. The §12 lifecycle proof (NEW-110 Task 12)
+  replaces its FD 3 fixture with a fixture prefix behind the existing fixed-path test seam. Withdrawn
+  §4 code is deleted with its tests, which is removal of the feature, not skipping. The gate, on a
+  disposable macOS account: `brew tap` a local clone of the tap, `brew install`, `init`, bump the
+  formula, `brew upgrade`, `update --apply`, `update rollback --apply`; then once on the founder
+  machine. Publication (building the tarballs, the GitHub Release, the tap pull request, the formula's
+  `license` field) is A16's specification, D84 (2), and needs L1 and L2.
+
 ---
 
 ## 1. Scope and invariants
