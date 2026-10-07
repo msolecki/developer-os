@@ -305,10 +305,7 @@ async function installPreimage(path: CanonicalAbsolutePathV1): Promise<void> {
   await nodeFs.writeFile(path, PREIMAGE_BYTES, { mode: 0o600 });
 }
 
-async function plantByteIdenticalFinalJournal(
-  home: ParticipantHomeV1,
-  ref: FoundationParticipantRefV1,
-): Promise<void> {
+async function plantByteIdenticalFinalJournal(ref: FoundationParticipantRefV1): Promise<void> {
   const staged = await nodeFs.readFile(ref.initialJournal.stagedPath);
   await nodeFs.writeFile(ref.initialJournal.finalPath, staged, { mode: 0o600, flag: "wx" });
   await nodeFs.unlink(ref.initialJournal.stagedPath);
@@ -430,7 +427,7 @@ describe("FoundationParticipantExecutor.apply", () => {
   it("refuses a byte-identical final journal with a different inode", async () => {
     const home = await nodeLifecycleHome("participant-different-inode");
     const ref = await home.participants.stage(forwardMarkerInput(home));
-    await plantByteIdenticalFinalJournal(home, ref);
+    await plantByteIdenticalFinalJournal(ref);
     const planted = await identityOf(ref.initialJournal.finalPath);
 
     await refusesRecoveryRequired(home.participants.apply(ref));

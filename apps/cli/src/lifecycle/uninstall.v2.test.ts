@@ -979,7 +979,6 @@ describe("V2 uninstall planning refusals", () => {
   }
 
   function syntheticManifest(
-    fixture: CommandFixture,
     artifacts: readonly { readonly path: string; readonly hash: string }[],
   ): InstallationManifestV2 {
     return {
@@ -1040,7 +1039,7 @@ describe("V2 uninstall planning refusals", () => {
     const { fixture, global } = await syntheticFixture("uninstall-capacity");
     expect(MAX_UNINSTALL_ARTIFACTS).toBe(7_936);
     const artifacts = await plantSyntheticArtifacts(fixture, MAX_UNINSTALL_ARTIFACTS + 1);
-    const request = await syntheticRequest(fixture, syntheticManifest(fixture, artifacts));
+    const request = await syntheticRequest(fixture, syntheticManifest(artifacts));
 
     await expect(new LifecycleUninstaller().preview(request, global)).rejects.toThrow(
       UninstallCapacityError,
@@ -1066,7 +1065,7 @@ describe("V2 uninstall planning refusals", () => {
     const artifacts = await plantSyntheticArtifacts(fixture, count);
     await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
     await plant(fixture.paths.manifestFile, "{}\n");
-    const request = await syntheticRequest(fixture, syntheticManifest(fixture, artifacts));
+    const request = await syntheticRequest(fixture, syntheticManifest(artifacts));
 
     const preview = await new LifecycleUninstaller().preview(request, global);
     const slotCount = preview.builder.slotCount;
@@ -1105,7 +1104,7 @@ describe("V2 uninstall planning refusals", () => {
     await plant(plist, "<plist/>\n");
     const request = await syntheticRequest(
       fixture,
-      syntheticManifest(fixture, [
+      syntheticManifest([
         { path: plist, hash: createHash("sha256").update("<plist/>\n").digest("hex") },
       ]),
     );
@@ -1119,7 +1118,7 @@ describe("V2 uninstall planning refusals", () => {
   it("refuses a directory at the activation record as recovery-required, never absent", async () => {
     const { fixture, global } = await syntheticFixture("uninstall-activation-directory");
     await nodeFs.mkdir(join(fixture.paths.stateDir, "lifecycle-activation.json"), { mode: 0o700 });
-    const request = await syntheticRequest(fixture, syntheticManifest(fixture, []));
+    const request = await syntheticRequest(fixture, syntheticManifest([]));
 
     await expect(new LifecycleUninstaller().preview(request, global)).rejects.toMatchObject({
       code: EXIT_CODES.recoveryRequired,
@@ -1137,7 +1136,7 @@ describe("V2 uninstall planning refusals", () => {
       ),
       "stale\n",
     );
-    const request = await syntheticRequest(fixture, syntheticManifest(fixture, []));
+    const request = await syntheticRequest(fixture, syntheticManifest([]));
 
     await expect(new LifecycleUninstaller().preview(request, global)).rejects.toMatchObject({
       code: EXIT_CODES.recoveryRequired,
@@ -1151,7 +1150,7 @@ describe("V2 uninstall planning refusals", () => {
     await plant(path, "edited\n");
     const request = await syntheticRequest(
       fixture,
-      syntheticManifest(fixture, [
+      syntheticManifest([
         { path, hash: createHash("sha256").update("original\n").digest("hex") },
       ]),
     );
