@@ -322,6 +322,106 @@ describe("a death right after the manifest moved to its tombstone (NEW-198)", ()
   }, CASE_TIMEOUT_MS);
 });
 
+/** Dies right after the `nth` rename whose source is the live manifest (1: preserve_before; 2: publish_terminal's preserve, or a compensation's move back). */
+function dieOnManifestMove(context: DyingCliContext, nth: number): ReturnType<typeof dieWhen> {
+  let moves = 0;
+  return dieWhen(context, (name, args) => (name === "renameNoReplace" || name === "renameOver") && (args[0] as { readonly path: string }).path.endsWith("/.developer-os/installation-manifest.json") && (moves += 1) === nth);
+}
+
+/** The single coordinator's manifest participant IDs, from its payload directories. */
+async function manifestParticipantIds(home: UpdatableHomeV1): Promise<readonly string[]> {
+  const lifecycleRoot = join(home.fixture.paths.home, "staging", "lifecycle");
+  const [root] = await nodeFs.readdir(lifecycleRoot);
+  if (root === undefined) throw new Error("no coordinator staging root");
+  return nodeFs.readdir(join(lifecycleRoot, root, "participants", "manifest"));
+}
+
+describe("the manifest stand-in's other windows and refusals (NEW-198 review)", () => {
+  it("admits the transitional manifest preserved by publish_terminal past the point of no return and finishes forward", async () => {
+    const home = await baseAt110("recovery-manifest-terminal");
+    const dying = dieOnManifestMove(home.fixture.context, 2);
+    expect(await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)).toBe("died");
+    expect(await exists(home.fixture.paths.manifestFile)).toBe(false);
+
+    await recoverUpdate(home.update());
+
+    const settledHome = await settled(home);
+    expect(settledHome.active.version).toBe("1.2.0");
+    expect(settledHome.rollback?.previous.version).toBe("1.1.0");
+  }, CASE_TIMEOUT_MS);
+
+  it("admits the preimage while a rejected run's compensation has moved the transitional manifest back, and reports exit 5", async () => {
+    const home = await installUpdatableHome("recovery-manifest-compensating", "arm64", { rejectingVersions: ["1.1.0"] });
+    const dying = dieOnManifestMove(home.fixture.context, 2);
+    expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    expect(await exists(home.fixture.paths.manifestFile)).toBe(false);
+
+    const resumed = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });
+
+    expect(resumed).toMatchObject({ ok: false, code: EXIT_CODES.securityRefusal });
+    expect((await settled(home)).active.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
+
+  it("refuses manifest_absent for a tombstone with a wrong mode, link count or length, then admits it once restored", async () => {
+    const home = await baseAt110("recovery-manifest-tombstone-shape");
+    const dying = dieOnManifestMove(home.fixture.context, 1);
+    expect(await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)).toBe("died");
+    const tombstone = join(home.fixture.paths.home, (await nodeFs.readdir(home.fixture.paths.home)).find((name) => name.endsWith(".json.tombstone")) ?? "");
+    const size = (await nodeFs.stat(tombstone)).size;
+    const variants: readonly (readonly [string, () => Promise<void>, () => Promise<void>])[] = [
+      ["mode", () => nodeFs.chmod(tombstone, 0o400), () => nodeFs.chmod(tombstone, 0o600)],
+      ["nlink", () => nodeFs.link(tombstone, `${tombstone}.second`), () => nodeFs.unlink(`${tombstone}.second`)],
+      ["size", () => nodeFs.appendFile(tombstone, " "), () => nodeFs.truncate(tombstone, size)],
+    ];
+    for (const [label, spoil, restore] of variants) {
+      await spoil();
+      await expect(recoverUpdate(home.update()), label).rejects.toThrow(/manifest_absent/u);
+      await restore();
+    }
+
+    await recoverUpdate(home.update());
+    expect((await settled(home)).active.version).toBe("1.2.0");
+  }, CASE_TIMEOUT_MS);
+
+  it("refuses manifest_absent when the coordinator's cursor is not at a manifest step, even with the exact preimage at a tombstone", async () => {
+    const home = await baseAt110("recovery-manifest-not-at-step");
+    const dying = dieWhen(home.fixture.context, (name, args) => name === "mkdirExclusive" && String(args[0]).endsWith("/releases/1.2.0/darwin-arm64/bin"));
+    expect(await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)).toBe("died");
+    const manifest = home.fixture.paths.manifestFile;
+    for (const id of await manifestParticipantIds(home)) {
+      const tombstone = join(home.fixture.paths.home, `.installation-manifest.${id}.json.tombstone`);
+      await nodeFs.rename(manifest, tombstone);
+      await expect(recoverUpdate(home.update()), id).rejects.toThrow(/manifest_absent/u);
+      await nodeFs.rename(tombstone, manifest);
+    }
+  }, CASE_TIMEOUT_MS);
+
+  it("refuses manifest_absent with two coordinator plans in the ledger", async () => {
+    const home = await baseAt110("recovery-manifest-two-plans");
+    const dying = dieOnManifestMove(home.fixture.context, 1);
+    expect(await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)).toBe("died");
+    const journals = join(home.fixture.paths.stateDir, "lifecycle-journals");
+    const plan = (await nodeFs.readdir(journals)).find((name) => name.endsWith(".plan.json")) ?? "";
+    const second = plan.replace(/_[0-9]+\.plan\.json$/u, "_99.plan.json");
+    await nodeFs.copyFile(join(journals, plan), join(journals, second));
+
+    await expect(recoverUpdate(home.update())).rejects.toThrow(/manifest_absent/u);
+  }, CASE_TIMEOUT_MS);
+
+  it("refuses manifest_absent for a missing manifest with no coordinator, and for a sole plan that is not an update plan", async () => {
+    const home = await installUpdatableHome("recovery-manifest-no-coordinator", "arm64");
+    const manifest = home.fixture.paths.manifestFile;
+    await nodeFs.rename(manifest, `${manifest}.aside`);
+    await expect(recoverUpdate(home.update())).rejects.toThrow(/manifest_absent/u);
+
+    const journals = join(home.fixture.paths.stateDir, "lifecycle-journals");
+    const id = `lc_${"1".repeat(64)}_9`;
+    await nodeFs.writeFile(join(journals, `${id}.plan.json`), "{}", { mode: 0o600 });
+    await nodeFs.writeFile(join(journals, `${id}.json`), "{}", { mode: 0o600 });
+    await expect(recoverUpdate(home.update())).rejects.toThrow(/manifest_absent/u);
+  }, CASE_TIMEOUT_MS);
+});
+
 describe("a coordinator that died between its journal rewrite temp and the rename", () => {
   it("removes the dead temp before resuming, so the closure clears", async () => {
     const home = await installUpdatableHome("recovery-coordinator-rewrite-temp", "arm64");
