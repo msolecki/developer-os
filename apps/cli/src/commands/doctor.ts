@@ -55,6 +55,7 @@ import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 import { compareCodePoints } from "@developer-os/workflow-schema";
 
+import { runAutomation } from "./automation/index.js";
 import { reportClaudeCapabilities } from "./claude-capabilities.js";
 import { reportCodexCapabilities } from "./codex-capabilities.js";
 import { readUntrustedText, UntrustedFileRefusal } from "./untrusted-file.js";
@@ -1944,8 +1945,32 @@ async function collectFindings(
       checkCodexRegistration(context, inspected, config, homes, options.probe),
     ),
     ...evidenceFindings,
+    ...await automationFindings(context),
     ...await manifestAnchorFindings(context),
   ], retainedBootstrapEvidence: evidenceIds, instructions };
+}
+
+/**
+ * NEW-169: a scheduled job whose latest run launchd reports with a non-zero `last exit code`. A
+ * run that records or exits silently exits 0, so a non-zero code means that run wrote no status
+ * record: launchd could not spawn it, it died before the runner recorded, or the runner refused.
+ * Read through `automation status`, so the live observation and the status model are the same.
+ * Silent when no job failed, and when status itself cannot answer (no V2 home, no lifecycle):
+ * `automation status` reports that refusal, and a healthy report's check list stays unchanged.
+ */
+async function automationFindings(context: CliContext): Promise<readonly Finding[]> {
+  if (context.lifecycle === undefined) return [];
+  // `runAutomation` turns every refusal into a failed result; it does not throw.
+  const status = await runAutomation(context, { subcommand: "status" });
+  if (!status.ok || status.data.kind !== "status") return [];
+  const failed = status.data.jobs.filter((job) => job.launchdExit !== undefined && job.launchdExit !== 0);
+  if (failed.length === 0) return [];
+  return [fail(
+    "automation",
+    `${failed.map((job) => `${job.job}: launchd exit ${String(job.launchdExit)}, no run recorded since`).join("; ")}; run developer-os automation status`,
+    [],
+    EXIT_CODES.operationalFailure,
+  )];
 }
 
 const MANIFEST_ANCHOR_ADVICE =
