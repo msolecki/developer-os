@@ -109,7 +109,7 @@ import { codexPluginTreeHash, inspectCodexRegistration, validateCodexRegistratio
 import type { CodexRegistrationRecordV1 } from "../instructions/codex-registration.js";
 import { codexInstructionPaths, resolveVendorHomes } from "../instructions/vendor-homes.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
-import { admitInstalledV2Home } from "../lifecycle/admission.js";
+import { admitInstalledV2Home, type PreservedManifestV1 } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../lifecycle/context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "../lifecycle/context.js";
 import { allocatedIdsFrom, cleanAllocatorTemp, gateManifestAdmission } from "../lifecycle/mutation-gate.js";
@@ -184,9 +184,51 @@ function lifecycleOf(context: CliContext): CliLifecycleContext {
 /** The ledger key and bookkeeping residue the V2 closure reads, from the admitted home. */
 async function ledgerAuthority(context: CliContext, lifecycle: CliLifecycleContext): Promise<{ readonly key: LifecycleHomeKeyV1; readonly residue: ReturnType<typeof residueFrom> }> {
   const { paths } = context;
-  const admitted = await admitInstalledV2Home({ fs: lifecycle.fs, paths, manifestAdmission: gateManifestAdmission(context), effectiveUid: lifecycle.effectiveUid });
+  const productHome = parseCanonicalAbsolutePathText(paths.home);
+  const preserved = (await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(paths.manifestFile))) === null ? await preservedManifest(lifecycle, productHome) : null;
+  const admitted = await admitInstalledV2Home({ fs: lifecycle.fs, paths, manifestAdmission: gateManifestAdmission(context), effectiveUid: lifecycle.effectiveUid, ...(preserved === null ? {} : { preservedManifest: preserved }) });
   const residue = residueFrom(await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({ productHome: paths.home, stateDirectory: paths.stateDir, initialRoots: [paths.home, paths.stateDir, context.userHome] })));
   return { key: lifecycleHomeKeyFromAdmission(admitted, paths), residue };
+}
+
+const COORDINATOR_PLAN_LEAF = /^(lc_[0-9a-f]{64}_[0-9]+)\.plan\.json$/u;
+
+/**
+ * Spec 2 §5.3 (NEW-198): from a manifest step's preserve rename until its publish, the live
+ * manifest is absent by design and its preimage sits at the plan's tombstone. When the ledger
+ * holds exactly one update coordinator whose current cursor (forward or compensating) is a
+ * `manifest` step, this returns that step's plan `before` at its tombstone path; admission then
+ * reads the tombstone only if it is still that exact inode and hash. Anything else is null, and
+ * the absent manifest refuses as before.
+ */
+async function preservedManifest(lifecycle: CliLifecycleContext, productHome: CanonicalAbsolutePathV1): Promise<PreservedManifestV1 | null> {
+  const root = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(join(productHome, "state", "lifecycle-journals")));
+  if (root?.kind !== "directory") return null;
+  const ids = (await namesOf(lifecycle, root)).flatMap((name) => COORDINATOR_PLAN_LEAF.exec(name)?.[1] ?? []);
+  if (ids.length !== 1) return null;
+  const id = ids[0] as LifecycleCoordinatorIdV1;
+  const store = new UpdateCoordinatorJournalStore({ fs: lifecycle.fs, productHome, effectiveUid: lifecycle.effectiveUid, uuid: lifecycle.uuid });
+  if (await store.isEnvelopeSuffix(id)) return null;
+  const { plan, journal } = await store.read(id);
+  const cursor = journal.direction === "forward" ? journal.nextStep : journal.compensationNext;
+  const step = cursor === null ? undefined : plan.steps[cursor];
+  if (step?.kind !== "manifest" || step.transition === "finalize_tombstones") return null;
+  const { execution, leaves } = await reopen(lifecycle, productHome, plan);
+  if (execution === null) return null;
+  const ref = step.transition === "publish_terminal" ? execution.manifest.terminal : execution.manifest.transitional;
+  const manifestPlan = (leaves.get(ref.path) ?? null) as ManifestStatePlanV1 | null;
+  const before = manifestPlan?.before;
+  if (manifestPlan === null || before?.state !== "present") return null;
+  // The tombstone must still be the journalled preimage: exact decimal dev/ino, owner, mode, links, length, hash.
+  const entry = await lifecycle.fs.lstat(manifestPlan.tombstonePath);
+  if (
+    entry?.kind !== "regular_file" || entry.dev !== before.dev || entry.ino !== before.ino || entry.ownerUid !== before.ownerUid ||
+    entry.mode !== before.mode || entry.nlink !== before.nlink || entry.size !== before.size
+  ) {
+    return null;
+  }
+  const bytes = await lifecycle.fs.readRegular(entry, Number(before.size));
+  return sha256Hex(bytes) === before.hash ? { entry, bytes } : null;
 }
 
 /** A guarded observation with a content hash for a regular file and a target hash for a symlink. */

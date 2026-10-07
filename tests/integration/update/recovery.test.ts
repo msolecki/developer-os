@@ -287,6 +287,41 @@ describe("a death inside a publication microstate, before the point of no return
   }, CASE_TIMEOUT_MS);
 });
 
+describe("a death right after the manifest moved to its tombstone (NEW-198)", () => {
+  /** The manifest participant's `preserve_before` rename: the live manifest is absent until the transitional publish. */
+  const afterManifestPreserved = (name: string, args: readonly unknown[]): boolean => name === "renameNoReplace" && (args[0] as { readonly path: string }).path.endsWith("/.developer-os/installation-manifest.json");
+
+  it("admits the home from the journalled preimage at its tombstone and resumes forward", async () => {
+    const home = await baseAt110("recovery-manifest-preserved");
+    const dying = dieWhen(home.fixture.context, afterManifestPreserved);
+    expect(await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)).toBe("died");
+    expect(await exists(home.fixture.paths.manifestFile)).toBe(false);
+
+    await recoverUpdate(home.update());
+
+    const settledHome = await settled(home);
+    expect(settledHome.active.version).toBe("1.2.0");
+    expect(settledHome.rollback?.previous.version).toBe("1.1.0");
+  }, CASE_TIMEOUT_MS);
+
+  it("still refuses an absent manifest whose tombstone is not the journalled preimage", async () => {
+    const home = await baseAt110("recovery-manifest-swapped");
+    const dying = dieWhen(home.fixture.context, afterManifestPreserved);
+    expect(await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)).toBe("died");
+    const parent = home.fixture.paths.home;
+    const tombstone = (await nodeFs.readdir(parent)).find((name) => name.startsWith(".installation-manifest.") && name.endsWith(".json.tombstone"));
+    if (tombstone === undefined) throw new Error("the preserve_before tombstone is missing");
+    // The same bytes under a new inode are not the journalled preimage.
+    const path = join(parent, tombstone);
+    const bytes = await nodeFs.readFile(path);
+    await nodeFs.rm(path);
+    await nodeFs.writeFile(path, bytes, { mode: 0o600 });
+
+    await expect(recoverUpdate(home.update())).rejects.toThrow(/manifest_absent/u);
+    expect(await exists(home.fixture.paths.manifestFile)).toBe(false);
+  }, CASE_TIMEOUT_MS);
+});
+
 describe("a coordinator that died between its journal rewrite temp and the rename", () => {
   it("removes the dead temp before resuming, so the closure clears", async () => {
     const home = await installUpdatableHome("recovery-coordinator-rewrite-temp", "arm64");
