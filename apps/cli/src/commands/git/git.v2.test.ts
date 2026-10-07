@@ -167,6 +167,43 @@ describe("git on a real V2 home", () => {
     REAL_FILESYSTEM_TIMEOUT_MS,
   );
 
+  /**
+   * A manifest-absent home that still carries the global lock may be a mutation in flight, so
+   * admission re-classifies it under that lock rather than calling it absent (`command-home.ts`).
+   * With the lock held elsewhere that re-classification cannot run: the answer is busy, not absent.
+   */
+  it(
+    "refuses with exit 6, not manifest_absent, when the manifest is absent and the global lock is held",
+    async () => {
+      const own = scriptedGitRuntime();
+      const fixture = await createCommandFixture("git-v2-absent-locked", {
+        root: await createLowEntropyFixtureRoot("git-v2-absent-locked"),
+        bootstrapAvailable: true,
+        effectPorts: scriptedEffectPorts(own, { on: false }),
+      });
+      const lock = join(fixture.paths.stateDir, ".lifecycle.lock");
+      await nodeFs.mkdir(fixture.paths.stateDir, { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(lock, new Uint8Array(), { mode: 0o600 });
+      await nodeFs.chmod(lock, 0o600);
+      const before = await nodeFs.lstat(lock, { bigint: true });
+      expect(await readOrNull(fixture.paths.manifestFile)).toBeNull();
+      const held = await new MacOsStableLockProvider().acquireExisting(lock as CanonicalAbsolutePathV1);
+      try {
+        const result = await runGit(fixture.context, { subcommand: "sync" });
+        expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+        expect(kindOf(result)).toBe("lifecycle_lock_busy");
+        expect(own.spawns).toEqual([]);
+        expect(own.networkCalls).toEqual([]);
+      } finally {
+        await held.release();
+      }
+      const after = await nodeFs.lstat(lock, { bigint: true });
+      expect([after.dev, after.ino]).toStrictEqual([before.dev, before.ino]);
+      expect(await readOrNull(fixture.paths.manifestFile)).toBeNull();
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
   it(
     "keeps a forged config.toml lifecycle with no activation arm inert",
     async () => {
