@@ -22,9 +22,10 @@ Codex refresh policy and re-registration, the compensation cause, the capability
 handoff, the proof scope, and admitted bookkeeping identities) — is the single block "Amended
 2026-09-28 (D72)" above §1; the 2026-09-29 retirement of the A12 instruction-artifacts spec
 repoints §5 to `docs/architecture/codex-adapter.md` §16 and §6.1 to `docs/architecture/foundation.md`
-§12.3, marked "Amended 2026-09-29: … retired" in place; the 2026-10-07 founder decision on NEW-195
+§12.3, marked "Amended 2026-09-29: … retired" in place; the 2026-10-07 founder decisions on NEW-195
 (publication microstates resume forward after death, and a fresh create that finds its path present
-is recorded as refused, §9.2) is marked "Amended 2026-10-07" in place.** This
+is recorded as refused, §9.2) and NEW-196 (accepted residual 11, §13.3) are marked "Amended
+2026-10-07" in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -5346,3 +5347,11 @@ Homebrew installation, SBOM, checksums, clean-account flows, and public metadata
     of the one union shown in §5.3. Both enforce §5.3's rules for their own envelope arm; unifying
     them would reopen shipped, security-sensitive bootstrap admission. **Owner: a later cleanup after
     the Spec 2 synthetic end-to-end run, re-testing bootstrap.**
+11. **A rejected update that dies inside its plan-only envelope suffix reports exit 1.** Amended
+    2026-10-07 (NEW-196, founder decision). A rejected-verifier run that dies between the
+    lifecycle-journal unlink and the coordinator-plan unlink (the plan-only envelope suffix) has
+    lost its journal, the only record of `compensationCause`; the resumed `update --apply` reports
+    exit 1 `update_coordinator_compensated` instead of exit 5 `update_verifier_rejected`. The home
+    is safe: the old release stays active and the trust stays advanced. A later `update --apply`
+    plans again, and its verifier rejects the target again with exit 5. **Owner: a later design
+    that persists the compensation cause outside the coordinator journal, if needed.**
