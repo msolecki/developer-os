@@ -77,6 +77,8 @@ export type LauncherUpdateEnvelopeV1 =
   | { readonly kind: "malformed" };
 
 export interface LauncherPackagedFallbackV1 {
+  /** The Homebrew prefix the keg lives under; the D96 Q1 rule covers every directory up to it. */
+  readonly prefix: CanonicalAbsolutePathV1;
   readonly bundleRoot: CanonicalAbsolutePathV1;
   readonly manifestPath: CanonicalAbsolutePathV1;
 }
@@ -89,7 +91,8 @@ export interface LauncherSelectionRequestV1 {
   readonly fs: LauncherGuardedReaderV1;
   /** The keg's `libexec/fallback`; null when the fixed table's `opt` link does not resolve to a keg. */
   readonly packagedFallback: LauncherPackagedFallbackV1 | null;
-  readonly bootstrapClosure: LauncherBootstrapClosureV1;
+  /** Reads the closure; `handoff` is true when an active record exists (Spec 2 §3.1). */
+  readonly bootstrapClosure: (handoff: boolean) => Promise<LauncherBootstrapClosureV1>;
   /** Reads the coordinator envelope an update-executor record names. */
   readonly readUpdateEnvelope: (coordinatorId: UpdateRecoveryExecutorRecordV1["coordinatorId"]) => Promise<LauncherUpdateEnvelopeV1>;
 }
@@ -248,11 +251,48 @@ async function readRetainedDocument<T>(
   }
 }
 
+function parentOf(path: string): string {
+  return path.slice(0, path.lastIndexOf("/"));
+}
+
+/**
+ * D96 Q1 (K2's ancestor rule) for every keg directory the bundle admission does not walk: the
+ * manifest's directory and each directory from the bundle's parent up to and including the prefix.
+ * Owned by the uid or root; never other-writable; group-writable only when the uid owns it.
+ * `ponytail:` mirrors platform-macos `assertTrustedDirectoryEntry` (Task 2), which is not on this
+ * task's base; switch to it at integration.
+ */
+async function assertKegAncestors(
+  fs: LauncherGuardedReaderV1,
+  fallback: LauncherPackagedFallbackV1,
+  effectiveUid: number,
+): Promise<void> {
+  if (!fallback.bundleRoot.startsWith(`${fallback.prefix}/`)) recoveryRequired("launcher_packaged_fallback_untrusted", fallback.bundleRoot);
+  const directories = [parentOf(fallback.manifestPath)];
+  for (let path = parentOf(fallback.bundleRoot); ; path = parentOf(path)) {
+    directories.push(path);
+    if (path === fallback.prefix) break;
+  }
+  for (const path of directories) {
+    const entry = await fs.lstat(path as CanonicalAbsolutePathV1);
+    if (
+      entry === null ||
+      entry.kind !== "directory" ||
+      (entry.ownerUid !== effectiveUid && entry.ownerUid !== 0) ||
+      (entry.mode & 0o002) !== 0 ||
+      ((entry.mode & 0o020) !== 0 && (entry.ownerUid === 0 || entry.ownerUid !== effectiveUid))
+    ) {
+      recoveryRequired("launcher_packaged_fallback_untrusted", path);
+    }
+  }
+}
+
 async function admitPackagedFallback(
   request: LauncherSelectionRequestV1,
 ): Promise<{ readonly bundle: AdmittedReleaseBundleV1; readonly manifestHash: LowerHexSha256 }> {
   const { fs, packagedFallback, platform, effectiveUid } = request;
   if (packagedFallback === null) recoveryRequired("launcher_packaged_fallback_unresolved", request.productHome);
+  await assertKegAncestors(fs, packagedFallback, effectiveUid);
   const { bytes, hash } = await readOwnedRegular(
     fs,
     packagedFallback.manifestPath,
@@ -524,14 +564,15 @@ export async function selectLauncherCandidate(
   const executor = await readUpdateExecutorRecord(request);
   if (executor !== null) return routeUpdateExecutor(request, executor);
 
-  if (request.bootstrapClosure.kind === "malformed") {
-    recoveryRequired("launcher_bootstrap_residue_malformed", request.productHome);
-  }
-
   const activePath = derive(request.productHome, "state/active-release.json");
   const activeEntry = await request.fs.lstat(activePath);
 
-  if (request.bootstrapClosure.kind === "non_terminal") {
+  const closure = await request.bootstrapClosure(activeEntry !== null);
+  if (closure.kind === "malformed") {
+    recoveryRequired("launcher_bootstrap_residue_malformed", request.productHome);
+  }
+
+  if (closure.kind === "non_terminal") {
     if (activeEntry !== null) {
       recoveryRequired("launcher_active_published_before_launchability_suffix", activePath);
     }
