@@ -67,11 +67,8 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate (one worktree each):
 
-- NEW-195 (P1: forward recovery stuck on an in-flight bundle or rollback-payload publication).
-- NEW-196 (rejected-verifier resume reports the wrong exit code).
-- NEW-198 (P1: recovery refuses `manifest_absent` after a death at the manifest `preserve_before` rename).
+- NEW-132 (the full recovery sweeps; its blockers closed 2026-10-07; needs a quiet machine, ~8 h sharded).
 
-NEW-132 (the full recovery sweeps) is blocked by NEW-195, NEW-196 and NEW-198; its harness is affordable now.
 
 Waiting on a founder observation: NEW-193 (4), the Codex `subagents` witness, after 2026-10-22. NEW-182 closed 2026-10-07.
 
@@ -124,6 +121,6 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
 - Founder stop points: 7, listed above.
-- Startable rows: 3 (NEW-195, NEW-196, NEW-198); NEW-132 is blocked by them; NEW-193 (4) waits for Codex after 2026-10-22. Founder action: NEW-183 (permission
+- Startable rows: 1 (NEW-132); NEW-193 (4) waits for Codex after 2026-10-22. Founder action: NEW-183 (permission
   rule). Founder design: the distribution design (NEW-163, NEW-171). Awaiting founder numbers: NEW-116.
-- Repository backlog: 22 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
+- Repository backlog: 20 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
