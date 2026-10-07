@@ -355,6 +355,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D96 (2026-10-07), founder: Task 11b plan answers.** Q1: keg-path ancestors follow D83 (3) — group
+  write admitted only on a directory the current uid owns, other write always refused (Homebrew's
+  `Cellar` and `opt` are `drwxrwxr-x <user>`). Q2: the packer builds both architectures in one run and
+  writes each bundle's real `.tar.zst` archive beside the keg trees for A16 to publish. Q3: the first
+  real planner keeps every owner, so `update` does not change vendor trees; NEW-200 owns changing them
+  and blocks `1.0.0`, not the beta. Q4: the entrypoint uses `manifest.entrypoint`, else
+  `LOCAL_BUNDLE_CLI_ENTRY`. Q5: the brew gate runs in a fresh macOS VM, then once on the founder
+  machine. Execution: subagent-driven, one worktree per task (D33).
 - **D95 (2026-10-07), founder: A16's publication design.** `specs/2026-10-07-developer-os-release-publication-design.md`
   is approved: tag-triggered `release.yml` on GitHub Actions (preflight requires a green `check.yml` on
   the tag's SHA), deterministic tarballs with Node 24 pinned by SHA-256, a **draft** release with

@@ -49,7 +49,7 @@ it; then Task 11b (parked, D46); then A16.
 The program plan was closed as bookkeeping on 2026-10-07 (D89; `git show ae25acd9:docs/superpowers/plans/2026-07-21-developer-os-program.md`): its
 open items — DOS-P7's remainder (Task 11b), the DOS-P8 cutover (A15) and DOS-P9's release (A16 with
 L1) — now live in `BACKLOG.md` §3–§4, and the program is complete when A16 is. Founder decisions
-D1–D95 live in `plans/2026-09-04-developer-os-completion-roadmap.md`.
+D1–D96 live in `plans/2026-09-04-developer-os-completion-roadmap.md`.
 
 ## Product path
 
@@ -58,7 +58,7 @@ Strict sequence; do not start a blocked row early.
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
 | A15 | DOS-P8 Founder migration (D58) — `docs/migration/founder-cutover.md` | — | rollback to the legacy runtime is exercised and one stable cycle completes | steps 1–15 done 2026-09-28/29; 16–18 after a week of use, 19 after one stable cycle |
-| A11b | DOS-P7 remainder: Task 11b (NEW-111, NEW-112, NEW-118, NEW-163, NEW-171) — Spec 2 block "Amended 2026-10-07 (D84, Task 11b)" | — (D94 designed it) | `update` reaches a real release on a disposable install, then on the founder machine | spec approved 2026-10-07 (D94); plan `plans/2026-10-07-task-11b-package-channel.md` written, awaiting founder answers Q1–Q5 and review |
+| A11b | DOS-P7 remainder: Task 11b (NEW-111, NEW-112, NEW-118, NEW-163, NEW-171) — Spec 2 block "Amended 2026-10-07 (D84, Task 11b)" | — (D94 designed it) | `update` reaches a real release on a disposable install, then on the founder machine | spec approved 2026-10-07 (D94); plan `plans/2026-10-07-task-11b-package-channel.md` approved (D96); executing wave 1 |
 | A16 | DOS-P9 Public beta and v1 — `specs/2026-10-07-developer-os-release-publication-design.md` | A11b, L1, L2 | `v1.0.0` is published and reproducible | spec approved 2026-10-07; plan after Task 11b's; blocked on A11b, L1, L2 |
 
 ## Repository work not owned by the product sequence
@@ -123,4 +123,4 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 - Founder stop points: 7, listed above.
 - Startable rows: 1 (NEW-132); NEW-193 (4) waits for Codex after 2026-10-22. Founder action: NEW-183 (permission
   rule). Founder design: the distribution design (NEW-163, NEW-171). Awaiting founder numbers: NEW-116.
-- Repository backlog: 19 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
+- Repository backlog: 20 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
