@@ -387,7 +387,10 @@ export async function createFresh<T>(create: () => Promise<T>, refused: (() => P
   try {
     return await create();
   } catch (error) {
-    if (refused !== undefined && error instanceof LifecycleRecoveryRequiredError && (error.reason === "lifecycle_guarded_path_exists" || error.reason === "bundle_path_exists")) await refused();
+    if (refused !== undefined && error instanceof LifecycleRecoveryRequiredError && (error.reason === "lifecycle_guarded_path_exists" || error.reason === "bundle_path_exists")) {
+      // A failed withdrawal never masks the path-exists refusal (only a death between the two leaves the intent bindable).
+      await refused().catch(() => undefined);
+    }
     throw error;
   }
 }

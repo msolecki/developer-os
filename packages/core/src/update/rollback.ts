@@ -1631,10 +1631,15 @@ export function advanceRollbackPayloadPublicationJournal(plan: RollbackPayloadSt
     case "create_refused": {
       // The one current create intent returns to its predecessor; a later pass creates again and refuses again.
       const entry = withdrawEntryIntent(current.entryWriteState);
-      if (current.structureWriteState?.state === "create_intent") next = { ...base, structureWriteState: null };
-      else if (entry !== null) next = { ...base, entryWriteState: entry.state };
-      else {
-        need(current.metadataWriteState?.state === "publish_intent");
+      // Only a forward publishing phase owns a create intent it may withdraw; compensation consumes its own.
+      if (current.structureWriteState?.state === "create_intent") {
+        need(publish !== null && current.phase === "structure_publishing");
+        next = { ...base, structureWriteState: null };
+      } else if (entry !== null) {
+        need(publish !== null && current.phase === "entries_publishing");
+        next = { ...base, entryWriteState: entry.state };
+      } else {
+        need(publish !== null && current.phase === "metadata_publishing" && current.metadataWriteState?.state === "publish_intent");
         next = { ...base, metadataWriteState: null };
       }
       break;

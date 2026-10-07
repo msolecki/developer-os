@@ -455,9 +455,10 @@ describe("a verifier that rejects the target (Spec 2 §9.4, D72 P7(b), Review Fo
       }
 
       // Spec 2 §13.3 residual 11 (NEW-196): inside the plan-only envelope suffix the journal and its cause are gone.
-      const code = (await inPlanOnlySuffix(home)) ? EXIT_CODES.operationalFailure : EXIT_CODES.securityRefusal;
+      const suffix = await inPlanOnlySuffix(home);
       const resumed = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });
-      expect(resumed, `point ${String(point)}`).toMatchObject({ ok: false, code });
+      if (suffix) expect(resumed, `point ${String(point)}`).toMatchObject({ ok: false, code: EXIT_CODES.operationalFailure, error: { message: "update_coordinator_compensated" } });
+      else expect(resumed, `point ${String(point)}`).toMatchObject({ ok: false, code: EXIT_CODES.securityRefusal });
       expect((await settled(home)).active.version, `point ${String(point)}`).toBe("1.0.0");
     }
   }), SWEEP_TIMEOUT_MS);

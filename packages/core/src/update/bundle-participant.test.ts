@@ -396,6 +396,17 @@ describe("BundlePublicationJournalV1", () => {
     expect(() => advanceBundlePublicationJournal(plan, first, { kind: "metadata_verified" }, later)).toThrow();
   });
 
+  it("withdraws a forward create intent with create_refused and refuses it once compensation started", () => {
+    const plan = publishPlan();
+    const atRoot = runPublication(plan, [{ kind: "root_intent" }]);
+    expect(advanceBundlePublicationJournal(plan, atRoot, { kind: "create_refused" }, later).rootWriteState).toBeNull();
+    const atEntry = runPublication(plan, [...rootSteps, { kind: "entry_intent" }]);
+    expect(advanceBundlePublicationJournal(plan, atEntry, { kind: "create_refused" }, later).entryWriteState).toBeNull();
+    const compensating = advanceBundlePublicationJournal(plan, atEntry, { kind: "compensate" }, later);
+    expect(compensating.entryWriteState?.state).toBe("entry_intent");
+    expect(() => advanceBundlePublicationJournal(plan, compensating, { kind: "create_refused" }, later)).toThrow();
+  });
+
   it("walks created metadata, then entries, then the root in reverse", () => {
     const plan = publishPlan();
     let journal = advanceBundlePublicationJournal(plan, verifiedPublication(plan), { kind: "compensate" }, later);
