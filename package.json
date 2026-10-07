@@ -31,6 +31,7 @@
     "render:claude": "tsc -b && node tests/dist/tools/render-claude.js",
     "render:codex": "tsc -b && node tests/dist/tools/render-codex.js",
     "pack:local-release": "tsc -b && node tests/dist/tools/pack-local-release.js",
+    "pack:release": "tsc -b && node tests/dist/tools/pack-release.js",
     "link:tests": "tsc -b && node tests/dist/tools/link-workspace-packages.js",
     "check": "npm run lint && npm test && npm run test:e2e && npm run test:vendor-ingest && pnpm --pm-on-fail=ignore build && git diff --check"
   },
