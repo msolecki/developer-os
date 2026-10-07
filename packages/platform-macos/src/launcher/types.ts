@@ -40,10 +40,18 @@ export interface AdmittedReleaseBundleV1 {
   readonly entrypoint: CanonicalAbsolutePathV1;
 }
 
+/**
+ * `exact`: every member's mode equals its manifest entry and the uid owns it (a product-home release).
+ * `homebrew`: directories `0755`, files `0755` or `0644` by the entry's permission class, owned by the
+ * uid or root (the package-channel keg, D84 K2/K3).
+ */
+export type LauncherBundleModesV1 = "exact" | "homebrew";
+
 export interface LauncherBundleAdmissionRequestV1 {
   readonly platform: LauncherPlatformIdentityV1;
   readonly bundleRoot: CanonicalAbsolutePathV1;
   readonly manifest: ReleaseBundleManifestV1;
   readonly effectiveUid: number;
+  readonly modes: LauncherBundleModesV1;
   readonly fs: LauncherGuardedReaderV1;
 }

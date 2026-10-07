@@ -4,13 +4,16 @@ import {
   decodeCanonicalJson,
   decodeUpdateExecutorRecordSlot,
   hashBytes,
-  isUnsignedLocalTrust,
+  isPackageChannelTrust,
   LifecycleRecoveryRequiredError,
   MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
+  PACKAGE_CHANNEL_RELEASE_KEY_ID,
   parseCanonicalAbsolutePathText,
   releaseIdentityHash,
   validateActiveReleaseRecord,
   validateBundleManifest,
+  validatePackageChannelDelegation,
+  validateReleaseIndex,
   validateReleaseTrustState,
   validateRollbackRecord,
 } from "@developer-os/core";
@@ -23,9 +26,9 @@ import type {
   ReleaseBundleManifestV1,
   ReleaseIdentityV1,
   ReleaseIndexV1,
-  ReleaseKeyDelegationV1,
   ReleaseTrustStateV1,
   RollbackRecordV1,
+  UInt64DecimalV1,
   UpdateRecoveryExecutorRecordV1,
 } from "@developer-os/core";
 import {
@@ -55,11 +58,9 @@ export type LauncherSelectionV1 =
     };
 
 /**
- * The bounded outcome of Spec 2 §6's bootstrap-closure reader. A real reader
- * (walking the plan/journal/retention envelope) is Task 9's territory and is
- * not re-implemented here; the launcher only routes on its verdict, taken as
- * an injected fact so this module stays a pure structural admission over
- * whatever produced it.
+ * The bounded outcome of Spec 2 §6's bootstrap-closure reader (`readers.ts`, NEW-111). The launcher
+ * only routes on its verdict, taken as an injected fact so this module stays a pure structural
+ * admission over whatever produced it.
  */
 export type LauncherBootstrapClosureV1 =
   | { readonly kind: "handoff_complete" }
@@ -67,8 +68,8 @@ export type LauncherBootstrapClosureV1 =
   | { readonly kind: "malformed" };
 
 /**
- * The bounded outcome of the V2 update-coordinator envelope reader (Spec 2 §9.2), injected like
- * the bootstrap closure: the launcher routes on it and never interprets update steps.
+ * The bounded outcome of the V2 update-coordinator envelope reader (Spec 2 §9.2, `readers.ts`):
+ * the launcher routes on it and never interprets update steps.
  */
 export type LauncherUpdateEnvelopeV1 =
   | { readonly kind: "absent" }
@@ -80,48 +81,24 @@ export interface LauncherPackagedFallbackV1 {
   readonly manifestPath: CanonicalAbsolutePathV1;
 }
 
-/** A retained signed document, structurally admitted and hash-pinned but not yet verified. */
-export interface LauncherRetainedDocumentV1 {
-  readonly schemaVersion: 1;
-  readonly kind: string;
-  readonly signed: unknown;
-  readonly signatures: readonly unknown[];
-}
-
-/**
- * The Task 11 signature port, consumed here through an injected interface
- * rather than implemented: this module never verifies an Ed25519 signature
- * itself. It hands over the delegation and index by the store slot each was
- * read from and receives the validated chain, which it then binds to the
- * release it launches.
- */
-export type LauncherRetainedDocumentVerifierV1 = (documents: {
-  readonly delegation: LauncherRetainedDocumentV1;
-  readonly index: LauncherRetainedDocumentV1;
-}) => { readonly delegation: ReleaseKeyDelegationV1; readonly index: ReleaseIndexV1 };
-
 export interface LauncherSelectionRequestV1 {
   readonly productHome: CanonicalAbsolutePathV1;
   readonly platform: LauncherPlatformIdentityV1;
   readonly effectiveUid: number;
   /** Read-only: this admission never mutates, so it only needs the guarded reader. */
   readonly fs: LauncherGuardedReaderV1;
-  readonly packagedFallback: LauncherPackagedFallbackV1;
+  /** The keg's `libexec/fallback`; null when the fixed table's `opt` link does not resolve to a keg. */
+  readonly packagedFallback: LauncherPackagedFallbackV1 | null;
   readonly bootstrapClosure: LauncherBootstrapClosureV1;
-  /** Absent when no reader is wired: an `executing` record then refuses as an orphan (exit 6). */
-  readonly updateEnvelope?: LauncherUpdateEnvelopeV1;
-  readonly verifyRetainedDocument: LauncherRetainedDocumentVerifierV1;
+  /** Reads the coordinator envelope an update-executor record names. */
+  readonly readUpdateEnvelope: (coordinatorId: UpdateRecoveryExecutorRecordV1["coordinatorId"]) => Promise<LauncherUpdateEnvelopeV1>;
 }
 
+/** Stdio only: no descriptor is handed to the release (NEW-112 closes by deletion, D84 K3). */
 export interface LauncherProcessRequestV1 {
   readonly executable: CanonicalAbsolutePathV1;
   readonly argv: readonly string[];
   readonly env: LauncherEnvironmentV1;
-  /**
-   * The sole extra descriptor the launcher ever reserves: read-only, and
-   * exactly one -- or none when no offline trust is configured.
-   */
-  readonly extraDescriptors: readonly [] | readonly [{ readonly fd: 3; readonly mode: "read_only_pipe" }];
 }
 
 const MAX_ACTIVE_BYTES = 16 * 1024;
@@ -146,7 +123,7 @@ function derive(root: CanonicalAbsolutePathV1, relative: string): CanonicalAbsol
  * through `LauncherGuardedReaderV1`; this evidence only satisfies the
  * `admitCanonicalAbsolutePath` grammar check inside `validateActiveReleaseRecord`.
  */
-function createCanonicalPathEvidence(): CanonicalPathEvidenceV1 {
+export function createCanonicalPathEvidence(): CanonicalPathEvidenceV1 {
   return {
     reopenCanonicalAbsolutePath: (path) => path,
     containsCanonicalPath: (root, candidate) => candidate === root || candidate.startsWith(`${root}/`),
@@ -154,22 +131,27 @@ function createCanonicalPathEvidence(): CanonicalPathEvidenceV1 {
   };
 }
 
-/** Product state files are written exactly 0600; a package-installed file's mode is not the product's. */
+/** Product state files are written exactly 0600; Homebrew installs the keg's metadata 0644. */
 const STATE_FILE_MODE = 0o600;
+const KEG_METADATA_MODE = 0o644;
+
+/** `"keg"`: the uid or root may own it, as Homebrew's installer does (D84 K2). */
+type LauncherOwnerV1 = number | "keg";
 
 function admitOwnedRegular(
   entry: LifecycleGuardedEntryV1 | null,
   path: CanonicalAbsolutePathV1,
   effectiveUid: number,
   maximumBytes: number,
-  mode: number | null,
+  mode: number,
   reason: string,
+  owner: LauncherOwnerV1 = effectiveUid,
 ): LifecycleGuardedEntryV1 {
   if (
     entry === null ||
     entry.kind !== "regular_file" ||
-    entry.ownerUid !== effectiveUid ||
-    (mode !== null && entry.mode !== mode) ||
+    (owner === "keg" ? entry.ownerUid !== effectiveUid && entry.ownerUid !== 0 : entry.ownerUid !== owner) ||
+    entry.mode !== mode ||
     entry.nlink !== 1 ||
     BigInt(entry.size) > BigInt(maximumBytes)
   ) {
@@ -178,27 +160,17 @@ function admitOwnedRegular(
   return entry;
 }
 
-async function ownedRegular(
-  fs: LauncherGuardedReaderV1,
-  path: CanonicalAbsolutePathV1,
-  effectiveUid: number,
-  maximumBytes: number,
-  mode: number | null,
-  reason: string,
-): Promise<LifecycleGuardedEntryV1> {
-  return admitOwnedRegular(await fs.lstat(path), path, effectiveUid, maximumBytes, mode, reason);
-}
-
 /** Read once: the bytes a caller hash-pins are the bytes it parses. */
 async function readOwnedRegular(
   fs: LauncherGuardedReaderV1,
   path: CanonicalAbsolutePathV1,
   effectiveUid: number,
   maximumBytes: number,
-  mode: number | null,
+  mode: number,
   reason: string,
+  owner: LauncherOwnerV1 = effectiveUid,
 ): Promise<{ readonly bytes: Uint8Array; readonly hash: LowerHexSha256 }> {
-  const entry = await ownedRegular(fs, path, effectiveUid, maximumBytes, mode, reason);
+  const entry = admitOwnedRegular(await fs.lstat(path), path, effectiveUid, maximumBytes, mode, reason, owner);
   const bytes = await fs.readRegular(entry, maximumBytes);
   return { bytes, hash: hashBytes(bytes) as LowerHexSha256 };
 }
@@ -255,54 +227,40 @@ function parseBundleManifest(bytes: Uint8Array, path: CanonicalAbsolutePathV1, m
   }
 }
 
-function parseRetainedDocumentEnvelope(
-  bytes: Uint8Array,
-  path: CanonicalAbsolutePathV1,
-  maximumBytes: number,
-): LauncherRetainedDocumentV1 {
-  let value: unknown;
-  try {
-    value = decodeCanonicalJson(bytes, maximumBytes);
-  } catch {
-    return recoveryRequired("launcher_retained_document_invalid", path);
-  }
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    (value as { schemaVersion?: unknown }).schemaVersion !== 1 ||
-    typeof (value as { kind?: unknown }).kind !== "string" ||
-    !Array.isArray((value as { signatures?: unknown }).signatures)
-  ) {
-    recoveryRequired("launcher_retained_document_invalid", path);
-  }
-  const record = value as { schemaVersion: 1; kind: string; signed: unknown; signatures: readonly unknown[] };
-  return record;
-}
-
-async function readRetainedDocument(
+/**
+ * A retained unsigned document, read by the hash its store slot names and decoded as the kind that
+ * slot holds, never as the kind it claims (D84 K3: inventory, mode and hash replace signatures).
+ */
+async function readRetainedDocument<T>(
   fs: LauncherGuardedReaderV1,
   path: CanonicalAbsolutePathV1,
   expectedHash: LowerHexSha256,
   maximumBytes: number,
   effectiveUid: number,
-): Promise<LauncherRetainedDocumentV1> {
+  admit: (value: unknown) => T,
+): Promise<T> {
   const { bytes, hash } = await readOwnedRegular(fs, path, effectiveUid, maximumBytes, STATE_FILE_MODE, "launcher_retained_document_missing");
   if (hash !== expectedHash) recoveryRequired("launcher_retained_document_hash_mismatch", path);
-  return parseRetainedDocumentEnvelope(bytes, path, maximumBytes);
+  try {
+    return admit(decodeCanonicalJson(bytes, maximumBytes));
+  } catch {
+    return recoveryRequired("launcher_retained_document_unverified", path);
+  }
 }
 
 async function admitPackagedFallback(
   request: LauncherSelectionRequestV1,
 ): Promise<{ readonly bundle: AdmittedReleaseBundleV1; readonly manifestHash: LowerHexSha256 }> {
   const { fs, packagedFallback, platform, effectiveUid } = request;
+  if (packagedFallback === null) recoveryRequired("launcher_packaged_fallback_unresolved", request.productHome);
   const { bytes, hash } = await readOwnedRegular(
     fs,
     packagedFallback.manifestPath,
     effectiveUid,
     MAX_BUNDLE_MANIFEST_BYTES,
-    null,
+    KEG_METADATA_MODE,
     "launcher_packaged_fallback_manifest_missing",
+    "keg",
   );
   const manifest = parseBundleManifest(bytes, packagedFallback.manifestPath, MAX_BUNDLE_MANIFEST_BYTES);
   const bundle = await new LauncherBundleAdmission().admit({
@@ -310,6 +268,7 @@ async function admitPackagedFallback(
     bundleRoot: packagedFallback.bundleRoot,
     manifest,
     effectiveUid,
+    modes: "homebrew",
     fs,
   });
   return { bundle, manifestHash: hash };
@@ -328,7 +287,9 @@ async function admitActiveRelease(
   const trustPath = derive(productHome, "state/release-trust.json");
   const trustRead = await readOwnedRegular(fs, trustPath, effectiveUid, MAX_TRUST_BYTES, STATE_FILE_MODE, "launcher_release_trust_missing");
   const trust = parseTrust(trustRead.bytes, trustPath);
-  if (isUnsignedLocalTrust(trust)) recoveryRequired("launcher_retained_document_unverified", trustPath);
+  // Only the package channel launches (D84 K3): an `unsigned-local` home and the withdrawn signed state
+  // (no `trust` member) route to recovery, never to signature code.
+  if (!isPackageChannelTrust(trust)) recoveryRequired("launcher_retained_document_unverified", trustPath);
   try {
     admitReleaseAgainstTrust(trust, active, "guarded_active");
   } catch {
@@ -372,7 +333,7 @@ async function admitRetainedRelease(
   active: ReleaseIdentityV1,
   stores: { readonly retainedBeside: ReleaseIdentityV1 | null; readonly trust: ReleaseTrustStateV1 | null } | "contains_release",
 ): Promise<AdmittedReleaseBundleV1> {
-  const { fs, productHome, effectiveUid, verifyRetainedDocument } = request;
+  const { fs, productHome, effectiveUid } = request;
   const delegationsRoot = derive(productHome, "state/release-metadata/delegations");
   const indexesRoot = derive(productHome, "state/release-metadata/indexes");
   const bundlesRoot = derive(productHome, "state/release-metadata/bundles");
@@ -391,22 +352,23 @@ async function admitRetainedRelease(
     await assertExactStoreSet(fs, bundlesRoot, names((identity) => identity.bundleManifestHash), effectiveUid);
   }
 
-  const indexPath = derive(indexesRoot, `${active.releaseIndexHash}.json`);
-  const delegationDocument = await readRetainedDocument(
+  await readRetainedDocument(
     fs,
     derive(delegationsRoot, `${active.delegationHash}.json`),
     active.delegationHash,
     MAX_DELEGATION_BYTES,
     effectiveUid,
+    validatePackageChannelDelegation,
   );
-  const indexDocument = await readRetainedDocument(fs, indexPath, active.releaseIndexHash, MAX_INDEX_BYTES, effectiveUid);
-  let chain: ReturnType<LauncherRetainedDocumentVerifierV1>;
-  try {
-    chain = verifyRetainedDocument({ delegation: delegationDocument, index: indexDocument });
-  } catch {
-    return recoveryRequired("launcher_retained_document_unverified", indexPath);
-  }
-  if (stores !== "contains_release" && stores.trust !== null) assertTrustNamesDelegation(stores.trust, active, chain.delegation);
+  const index = await readRetainedDocument(
+    fs,
+    derive(indexesRoot, `${active.releaseIndexHash}.json`),
+    active.releaseIndexHash,
+    MAX_INDEX_BYTES,
+    effectiveUid,
+    validateReleaseIndex,
+  );
+  if (stores !== "contains_release" && stores.trust !== null) assertTrustNamesDelegation(stores.trust, active);
 
   const bundleManifestPath = derive(bundlesRoot, `${active.bundleManifestHash}.json`);
   const { bytes: manifestBytes, hash: bundleManifestHash } = await readOwnedRegular(
@@ -421,30 +383,32 @@ async function admitRetainedRelease(
     recoveryRequired("launcher_bundle_manifest_hash_mismatch", bundleManifestPath);
   }
   const manifest = parseBundleManifest(manifestBytes, bundleManifestPath, MAX_BUNDLE_MANIFEST_BYTES);
-  bindReleaseIdentity(productHome, active, chain, manifest, bundleManifestHash, bundleManifestPath);
+  bindReleaseIdentity(productHome, active, index, manifest, bundleManifestHash, bundleManifestPath);
 
   return new LauncherBundleAdmission().admit({
     platform: { platform: active.platform, architecture: active.architecture },
     bundleRoot: active.bundleRoot,
     manifest,
     effectiveUid,
+    modes: "exact",
     fs,
   });
 }
 
 /**
- * Spec 2 §3.1: the signed index must list this exact release, bundle manifest and metadata
- * sequences -- core's `admitReleaseIdentity` is the one binding the `update` planner uses too.
+ * Spec 2 §3.1 as D84 K3 amends it: the retained index must list this exact release, bundle manifest
+ * and metadata sequences, and the delegation is the package channel's stand-in at sequence `0` --
+ * core's `admitReleaseIdentity` is the one binding the `update` planner uses too.
  */
 function bindReleaseIdentity(
   productHome: CanonicalAbsolutePathV1,
   active: ReleaseIdentityV1,
-  chain: ReturnType<LauncherRetainedDocumentVerifierV1>,
+  index: ReleaseIndexV1,
   manifest: ReleaseBundleManifestV1,
   bundleManifestHash: LowerHexSha256,
   path: CanonicalAbsolutePathV1,
 ): void {
-  const entry = chain.index.releases.find((candidate) => candidate.version === active.version);
+  const entry = index.releases.find((candidate) => candidate.version === active.version);
   if (entry === undefined) recoveryRequired("launcher_release_not_in_retained_index", path);
   try {
     admitReleaseIdentity(
@@ -472,10 +436,10 @@ function bindReleaseIdentity(
           releaseIdentityHash: releaseIdentityHash(entry, active.architecture),
         },
         metadata: {
-          delegationSequence: chain.delegation.sequence,
+          delegationSequence: PACKAGE_CHANNEL_DELEGATION_SEQUENCE,
           delegationHash: active.delegationHash,
-          delegatedReleaseKeyId: chain.delegation.releaseKey.keyId,
-          releaseIndexSequence: chain.index.sequence,
+          delegatedReleaseKeyId: PACKAGE_CHANNEL_RELEASE_KEY_ID,
+          releaseIndexSequence: index.sequence,
           releaseIndexHash: active.releaseIndexHash,
         },
         bundleManifest: manifest,
@@ -487,10 +451,13 @@ function bindReleaseIdentity(
   }
 }
 
+/** The package channel's delegation stand-in always sits at sequence `0` (D84 K4). */
+const PACKAGE_CHANNEL_DELEGATION_SEQUENCE = "0" as UInt64DecimalV1;
+
 /** The trust watermark at the active delegation's sequence must name that delegation and its key. */
-function assertTrustNamesDelegation(trust: ReleaseTrustStateV1, active: ReleaseIdentityV1, delegation: ReleaseKeyDelegationV1): void {
-  const comparison = BigInt(delegation.sequence) - BigInt(trust.highestDelegationSequence);
-  if (comparison > 0n || (comparison === 0n && (trust.delegationHash !== active.delegationHash || trust.delegatedReleaseKeyId !== delegation.releaseKey.keyId))) {
+function assertTrustNamesDelegation(trust: ReleaseTrustStateV1, active: ReleaseIdentityV1): void {
+  const comparison = BigInt(PACKAGE_CHANNEL_DELEGATION_SEQUENCE) - BigInt(trust.highestDelegationSequence);
+  if (comparison > 0n || (comparison === 0n && (trust.delegationHash !== active.delegationHash || trust.delegatedReleaseKeyId !== PACKAGE_CHANNEL_RELEASE_KEY_ID))) {
     recoveryRequired("launcher_active_release_not_dominated_by_trust", active.bundleRoot);
   }
 }
@@ -521,7 +488,7 @@ async function routeUpdateExecutor(
   request: LauncherSelectionRequestV1,
   record: UpdateRecoveryExecutorRecordV1,
 ): Promise<LauncherSelectionV1> {
-  const envelope = request.updateEnvelope ?? { kind: "absent" };
+  const envelope = await request.readUpdateEnvelope(record.coordinatorId);
   const recordPath = derive(request.productHome, "state/update-executor.json");
   if (envelope.kind === "malformed") recoveryRequired("launcher_update_envelope_malformed", request.productHome);
   const ownEnvelope = envelope.kind === "present" && envelope.coordinatorId === record.coordinatorId;
@@ -537,7 +504,7 @@ async function routeUpdateExecutor(
     bundle.manifest.launcherProtocol !== record.executor.launcherProtocol ||
     bundle.manifest.updateProtocol !== record.executor.updateProtocol
   ) {
-    recoveryRequired("launcher_update_fallback_mismatch", request.packagedFallback.manifestPath);
+    recoveryRequired("launcher_update_fallback_mismatch", recordPath);
   }
   return { kind: "package_fallback", bundle };
 }
@@ -585,29 +552,20 @@ export async function selectLauncherCandidate(
 }
 
 /**
- * A shell-free absolute execution request: the runtime entrypoint by
- * absolute path (never resolved through `PATH`), the bundle entrypoint as
- * the first argv element, the fixed internal `--offline-release-trust-fd=3`
- * argument, then the original public CLI argv — or, under bootstrap
- * recovery, exactly `init` in its place (Spec 2 §3.1). The FD 3 descriptor
- * is reserved read-only here; Task 11 owns actually opening and writing it.
- * The CLI's `bin.ts` removes the flag before its strict parser runs. Without
- * a trust pipe both the flag and the reservation are omitted, so no flag
- * ever names a descriptor that was never handed over.
+ * A shell-free absolute execution request: the runtime entrypoint by absolute path (never resolved
+ * through `PATH`), the bundle entrypoint as the first argv element, then the original public CLI
+ * argv -- or, under bootstrap recovery, exactly `init` in its place (Spec 2 §3.1). No flag names a
+ * descriptor and none is handed over (D84 K3).
  */
 export function buildLauncherProcessRequest(
   selection: LauncherSelectionV1,
   env: LauncherEnvironmentV1,
   publicArgv: readonly string[],
-  trustPipe: boolean,
 ): LauncherProcessRequestV1 {
   const trailingArgv = selection.kind === "bootstrap_recovery" ? selection.argv : publicArgv;
   return {
     executable: selection.bundle.runtimeEntrypoint,
-    argv: trustPipe
-      ? [selection.bundle.entrypoint, "--offline-release-trust-fd=3", ...trailingArgv]
-      : [selection.bundle.entrypoint, ...trailingArgv],
+    argv: [selection.bundle.entrypoint, ...trailingArgv],
     env,
-    extraDescriptors: trustPipe ? [{ fd: 3, mode: "read_only_pipe" }] : [],
   };
 }

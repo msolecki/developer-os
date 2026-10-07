@@ -161,6 +161,7 @@ describe("LauncherBundleAdmission", () => {
       bundleRoot,
       manifest,
       effectiveUid: EFFECTIVE_UID,
+      modes: "exact",
       fs: makeReader(nodes),
     });
 
@@ -178,6 +179,7 @@ describe("LauncherBundleAdmission", () => {
       bundleRoot,
       manifest,
       effectiveUid: EFFECTIVE_UID,
+      modes: "exact",
       fs: makeReader(nodes),
     });
 
@@ -193,6 +195,7 @@ describe("LauncherBundleAdmission", () => {
         bundleRoot,
         manifest,
         effectiveUid: EFFECTIVE_UID,
+        modes: "exact",
         fs: makeReader(nodes),
       }),
     ).rejects.toMatchObject({ code: 4 });
@@ -212,6 +215,7 @@ describe("LauncherBundleAdmission", () => {
         bundleRoot,
         manifest,
         effectiveUid: EFFECTIVE_UID,
+        modes: "exact",
         fs: makeReader(nodes),
       }),
     ).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
@@ -232,6 +236,7 @@ describe("LauncherBundleAdmission", () => {
         bundleRoot,
         manifest,
         effectiveUid: EFFECTIVE_UID,
+        modes: "exact",
         fs: makeReader(nodes),
       }),
     ).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
@@ -248,6 +253,7 @@ describe("LauncherBundleAdmission", () => {
         bundleRoot,
         manifest,
         effectiveUid: EFFECTIVE_UID,
+        modes: "exact",
         fs: makeReader(nodes),
       }),
     ).rejects.toMatchObject({ code: 6 });
@@ -265,6 +271,7 @@ describe("LauncherBundleAdmission", () => {
         bundleRoot,
         manifest,
         effectiveUid: EFFECTIVE_UID,
+        modes: "exact",
         fs: makeReader(nodes),
       }),
     ).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
@@ -282,6 +289,7 @@ describe("LauncherBundleAdmission", () => {
         bundleRoot,
         manifest,
         effectiveUid: EFFECTIVE_UID,
+        modes: "exact",
         fs: makeReader(nodes),
       }),
     ).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
@@ -296,8 +304,61 @@ describe("LauncherBundleAdmission", () => {
         bundleRoot,
         manifest,
         effectiveUid: EFFECTIVE_UID,
+        modes: "exact",
         fs: makeReader(new Map()),
       }),
     ).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
+  });
+});
+
+/** A keg as Homebrew installs it: directories 0755, files 0755 or 0644 by class, owned by `owner`. */
+function homebrewFixture(owner: number) {
+  const fixture = validBundleFixture("arm64");
+  for (const [path, node] of fixture.nodes) {
+    fixture.nodes.set(path, { ...node, ownerUid: owner, mode: 0o755 });
+  }
+  return fixture;
+}
+
+describe("LauncherBundleAdmission homebrew modes (D84 K3)", () => {
+  const admit = (fixture: ReturnType<typeof validBundleFixture>, modes: "exact" | "homebrew") =>
+    new LauncherBundleAdmission().admit({
+      platform: { platform: "darwin", architecture: "arm64" },
+      bundleRoot: fixture.bundleRoot,
+      manifest: fixture.manifest,
+      effectiveUid: EFFECTIVE_UID,
+      modes,
+      fs: makeReader(fixture.nodes),
+    });
+
+  it("admits a homebrew keg owned by the user or by root, and only in homebrew mode", async () => {
+    await expect(admit(homebrewFixture(EFFECTIVE_UID), "homebrew")).resolves.toMatchObject({ bundleRoot: BUNDLE_ROOT });
+    await expect(admit(homebrewFixture(0), "homebrew")).resolves.toMatchObject({ bundleRoot: BUNDLE_ROOT });
+    await expect(admit(homebrewFixture(EFFECTIVE_UID), "exact")).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
+    await expect(admit(homebrewFixture(EFFECTIVE_UID + 1), "homebrew")).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
+  });
+
+  it("refuses a homebrew keg whose permission class disagrees with the manifest", async () => {
+    const fixture = homebrewFixture(EFFECTIVE_UID);
+    fixture.nodes.set(`${BUNDLE_ROOT}/bin/cli`, { ...(fixture.nodes.get(`${BUNDLE_ROOT}/bin/cli`) as FakeNode), mode: 0o644 });
+    await expect(admit(fixture, "homebrew")).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
+    const writable = homebrewFixture(EFFECTIVE_UID);
+    writable.nodes.set(`${BUNDLE_ROOT}/bin`, { ...(writable.nodes.get(`${BUNDLE_ROOT}/bin`) as FakeNode), mode: 0o775 });
+    await expect(admit(writable, "homebrew")).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
+  });
+
+  it("admits a 0644 file whose manifest mode is 0600 in homebrew mode", async () => {
+    const fixture = homebrewFixture(EFFECTIVE_UID);
+    const data = Buffer.from("data\n");
+    const manifest = validateBundleManifest({
+      ...fixture.manifest,
+      entries: [...fixture.manifest.entries, { path: "bin/data", kind: "file" as const, mode: 384, bytes: data.byteLength.toString(), sha256: sha256(data) }].sort((a, b) => (a.path < b.path ? -1 : 1)),
+    });
+    const bin = fixture.nodes.get(`${BUNDLE_ROOT}/bin`) as Extract<FakeNode, { kind: "directory" }>;
+    fixture.nodes.set(`${BUNDLE_ROOT}/bin`, { ...bin, children: [...bin.children, "data"] });
+    fixture.nodes.set(`${BUNDLE_ROOT}/bin/data`, { kind: "regular_file", ownerUid: EFFECTIVE_UID, mode: 0o644, content: data });
+    await expect(admit({ ...fixture, manifest }, "homebrew")).resolves.toMatchObject({ bundleRoot: BUNDLE_ROOT });
+    fixture.nodes.set(`${BUNDLE_ROOT}/bin/data`, { kind: "regular_file", ownerUid: EFFECTIVE_UID, mode: 0o755, content: data });
+    await expect(admit({ ...fixture, manifest }, "homebrew")).rejects.toBeInstanceOf(LauncherBundleRecoveryRequiredError);
   });
 });
