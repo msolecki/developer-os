@@ -1,6 +1,6 @@
 # Developer OS — Release Publication Design (A16)
 
-**Status: founder-approved design of 2026-10-07 (conversation), written for founder review.** This is
+**Status: approved by the founder on 2026-10-07 (design in conversation, written spec reviewed the same day).** This is
 `ORDER.md` entry A16 (DOS-P9, program plan Task 9: `git show
 ae25acd9:docs/superpowers/plans/2026-07-21-developer-os-program.md`). It covers publication only.
 The update side, the packed release format and the packer belong to Spec 2's block "Amended 2026-10-07
