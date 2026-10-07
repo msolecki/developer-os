@@ -274,6 +274,21 @@ describe("guardStop", () => {
     expect(outcome.kind === "allow" ? outcome.note : "").toMatch(/^typecheck could not run: /u);
   });
 
+  it("still blocks when one reference fails without a TS code and another reports only TS6310", async () => {
+    const root = await project({ config: SOLUTION });
+    await mkRefs(root);
+    let n = 0;
+    const { runtime } = runtimeFor(root, () => {
+      n += 1;
+      if (n === 1) return Promise.resolve({ ...OK, exitCode: 1, stdout: "error TS6310: x\n" });
+      if (n === 2) return Promise.resolve({ ...OK, exitCode: 1, stderr: "FATAL ERROR: JavaScript heap out of memory\n" });
+      return Promise.resolve({ ...OK, exitCode: 1, stdout: "tsconfig.json(3,5): error TS6310: Referenced project '/x' may not disable emit.\n" });
+    });
+    const outcome = await guardStop(payload(false), runtime);
+    expect(outcome.kind).toBe("block");
+    expect(outcome.kind === "block" ? outcome.detail : "").toContain("heap out of memory");
+  });
+
   it("still blocks when the -p fallback reports a real error beside TS6310", async () => {
     const root = await project({ config: SOLUTION });
     await mkRefs(root);

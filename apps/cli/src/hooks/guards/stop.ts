@@ -160,8 +160,15 @@ export const guardStop: HookVerbHandler = async (payload, runtime) => {
       result = await run(["-b", "--noEmit", config]);
       if (result.exitCode !== 0 && !result.timedOut && BUILD_REJECTED.test(`${result.stdout}\n${result.stderr}`)) {
         let merged: ProcessResult = { ...result, exitCode: 0, stdout: "", stderr: "" };
+        // A reference that itself references stale projects fails -p the same way (TS6310): no real check ran.
+        // Any failing ref without a TS code, or with any other code, is a real failure and still blocks.
+        let onlyStale = true;
         for (const ref of refs) {
           const one = await run(["--noEmit", "-p", ref]);
+          if (one.exitCode !== 0) {
+            const codes = [...`${one.stdout}\n${one.stderr}`.matchAll(DIAGNOSTIC_CODE)].map((m) => m[1]);
+            if (codes.length === 0 || codes.some((c) => c !== "TS5094" && c !== "TS6310")) onlyStale = false;
+          }
           merged = {
             ...one,
             exitCode: one.exitCode === 0 ? merged.exitCode : one.exitCode,
@@ -170,9 +177,7 @@ export const guardStop: HookVerbHandler = async (payload, runtime) => {
           };
           if (one.timedOut || one.exitCode === null) break;
         }
-        // A reference that itself references stale projects fails -p the same way (TS6310): no real check ran.
-        const codes = [...`${merged.stdout}\n${merged.stderr}`.matchAll(DIAGNOSTIC_CODE)].map((m) => m[1]);
-        if (merged.exitCode !== 0 && !merged.timedOut && codes.length > 0 && codes.every((c) => c === "TS5094" || c === "TS6310")) {
+        if (onlyStale && merged.exitCode !== 0 && !merged.timedOut) {
           return { kind: "allow", note: "typecheck could not run: referenced projects have stale outputs (TS6310); run tsc -b" };
         }
         result = merged;
