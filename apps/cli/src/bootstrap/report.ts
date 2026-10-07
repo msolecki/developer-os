@@ -461,12 +461,18 @@ class RetentionParentIdentityChangedError extends Error {
   }
 }
 
-/** Complete retained-table projection shared by reporting and executor recovery. */
+/**
+ * Complete retained-table projection shared by reporting and executor recovery. Memoized per
+ * call (D84): the executor calls this directly, not through the inspection's memoizer, and walked
+ * `state/` once per row otherwise (NEW-197). Nothing is renamed on the strength of these
+ * projections; the retain loop's `observeAll` re-projects the live tree.
+ */
 export async function buildBootstrapRetentionEvidence(
-  request: BootstrapEvidenceInspectionRequestV1,
+  outerRequest: BootstrapEvidenceInspectionRequestV1,
   plan: FreshV2InitPlanV1,
   terminal: BootstrapJournalRecordV1,
 ): Promise<BootstrapRetentionEvidenceProjectionV1> {
+  const request = { ...outerRequest, projectPostimage: memoizePostimageProjector(outerRequest.projectPostimage) };
   const locations = deriveBootstrapRetentionLocations(plan, terminal);
   const physicalPath = async (logicalPath: CanonicalAbsolutePathV1): Promise<CanonicalAbsolutePathV1> => {
     const exact = locations.find((location) => location.sourcePath === logicalPath);

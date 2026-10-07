@@ -24,6 +24,7 @@ import type { BootstrapEvidenceGuardedEntryV1, BootstrapEvidenceGuardedReaderV1 
 import {
   assertOrdinaryCommandAdmitted,
   BootstrapRootInvalidError,
+  buildBootstrapRetentionEvidence,
   inspectBootstrapEvidence,
   inspectBootstrapEvidenceAdmission,
   NON_REGULAR_BOOTSTRAP_LEAF,
@@ -433,6 +434,34 @@ describe("inspectBootstrapEvidence", () => {
     };
 
     await inspectBootstrapEvidenceAdmission(request);
+
+    expect(walks).toBe(1);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-197: `init`'s executor builds this evidence without going through the inspection, and
+   * walked `state/` once per row's parent and source (~457 walks on a fresh home).
+   */
+  it("walks state/ once per evidence build, as the executor calls it (NEW-197)", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-evidence-walks", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const envelope = (await inspectBootstrapEvidenceAdmission(requestFor(fixture))).retainedEnvelopes[0];
+    if (envelope === undefined) throw new Error("fixture retained no verified envelope");
+    let walks = 0;
+    const countingWalk = (root: CanonicalAbsolutePathV1, productHome: CanonicalAbsolutePathV1) => {
+      if (root === fixture.paths.stateDir) walks += 1;
+      return projectRetainedDirectoryTreeOnce(root, productHome);
+    };
+    const base = requestFor(fixture);
+
+    await buildBootstrapRetentionEvidence({
+      ...base,
+      projectPostimage: (path: CanonicalAbsolutePathV1) =>
+        projectBootstrapRetentionPostimage(path, base.productHome, countingWalk),
+    }, envelope.plan, envelope.terminalJournal);
 
     expect(walks).toBe(1);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
