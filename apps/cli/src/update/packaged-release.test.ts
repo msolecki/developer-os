@@ -411,6 +411,43 @@ describe("admitPackageChannelRelease (D84 K2)", () => {
     const { prefix, packageRoot } = await kegFixture();
     const source = await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null });
     await nodeFs.chmod(join(packageRoot, "bundle/bin/cli"), 0o644);
-    await expect(inspectPackagedRelease(source)).rejects.toThrow();
+    await expect(inspectPackagedRelease(source)).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal, message: "packaged release changed after root-verified admission" });
+  });
+  it("refuses a non-canonical prefix instead of walking forever", async () => {
+    const { packageRoot } = await kegFixture();
+    await expect(admitPackageChannelRelease(packageRoot, { prefix: "", requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    await expect(admitPackageChannelRelease(packageRoot, { prefix: "/", requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+  });
+});
+
+describe("packageInventoryHash (v1 domain)", () => {
+  it("does not include the internal diskMode: an unsigned-local hash is the v1 hash of dev, ino and class mode only", async () => {
+    const root = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-inventory-hash-")));
+    roots.push(root);
+    await nodeFs.chmod(root, 0o700);
+    const files = ["metadata/release-key-delegation.json", "metadata/release-index.json", "metadata/bundle-manifest.json", "bundle/a"];
+    for (const file of files) {
+      await nodeFs.mkdir(join(root, file, ".."), { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(join(root, file), file, { mode: 0o600 });
+    }
+    const dir = async (path: string) => {
+      const stats = await nodeFs.lstat(join(root, path), { bigint: true });
+      return { relativePath: path, mode: 0o700, dev: stats.dev.toString(10), ino: stats.ino.toString(10) };
+    };
+    const row = async (path: string) => {
+      const stats = await nodeFs.lstat(join(root, path), { bigint: true });
+      return { relativePath: path, bytes: path.length, sha256: hash(path), mode: 0o600, dev: stats.dev.toString(10), ino: stats.ino.toString(10) };
+    };
+    const expected = createHash("sha256")
+      .update("developer-os/packaged-release-inventory/v1\0")
+      .update(encodeCanonicalJson({ directories: [await dir("bundle"), await dir("metadata")], files: [await row("bundle/a"), await row("metadata/bundle-manifest.json"), await row("metadata/release-index.json"), await row("metadata/release-key-delegation.json")] }).slice(0, -1))
+      .digest("hex");
+    const source = await admitRootVerifiedPackagedRelease({
+      packageRoot: root,
+      retainedMetadata: { delegation: files[0] as string, releaseIndex: files[1] as string, bundleManifest: files[2] as string },
+      bundleRoot: "bundle",
+      identity: { version: "0.0.0", releaseSequence: "1", releaseIdentityHash: hash("r"), delegationSequence: "1", delegationHash: hash(files[0] as string), delegatedReleaseKeyId: hash("k"), releaseIndexHash: hash(files[1] as string), releaseIndexSequence: "1", bundleManifestHash: hash(files[2] as string), platform: "darwin", architecture: "arm64", launcherProtocol: 1, updateProtocol: 1 },
+    });
+    expect((await inspectPackagedRelease(source)).packageInventoryHash).toBe(expected);
   });
 });

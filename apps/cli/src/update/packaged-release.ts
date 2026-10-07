@@ -296,7 +296,7 @@ async function inventory(packageRoot: string, policy: ModePolicy): Promise<{
   const orderedFiles = sortUtf8(files, (file) => file.relativePath);
   const hash = createHash("sha256")
     .update("developer-os/packaged-release-inventory/v1\0")
-    .update(encodeCanonicalJson({ directories: orderedDirectories, files: orderedFiles } as never).slice(0, -1))
+    .update(encodeCanonicalJson({ directories: orderedDirectories, files: orderedFiles.map((row) => ({ relativePath: row.relativePath, bytes: row.bytes, sha256: row.sha256, mode: row.mode, dev: row.dev, ino: row.ino })) } as never).slice(0, -1))
     .digest("hex") as LowerHexSha256;
   return {
     root: { dev: rootStats.dev.toString(10), ino: rootStats.ino.toString(10) },
@@ -593,6 +593,7 @@ export async function admitUnsignedLocalPackagedRelease(
 async function assertAncestors(packageRoot: string, prefix: string): Promise<void> {
   if (!packageRoot.startsWith(`${prefix}/`)) securityRefusal("packaged release root is not inside the package prefix");
   for (let path = packageRoot; ; path = dirname(path)) {
+    if (path === dirname(path) && path !== prefix) securityRefusal("package prefix is not an ancestor of the packaged release root");
     const stats = await nodeFs.lstat(path, { bigint: true });
     if (!stats.isDirectory() || stats.isSymbolicLink()) securityRefusal("packaged release ancestor is not a plain directory");
     assertTrustedDirectoryEntry(path, { uid: Number(stats.uid), mode: modeOf(stats) }, ownerUid());
