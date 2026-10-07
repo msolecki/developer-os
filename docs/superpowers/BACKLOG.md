@@ -380,3 +380,5 @@ This is an inbound-reference index, not completed backlog history. Current sourc
   `docs/architecture/knowledge-pipeline.md` and `threat-model.md`.
 - Adapter capability and hook constraints: `claude-adapter.md` and `codex-adapter.md`.
 - Remote/publication boundary: `docs/migration/exclusion-policy.md`, `SESSION.md`, and §7 above.
+- Release publication (A16): `specs/2026-10-07-developer-os-release-publication-design.md` (founder-approved design
+  2026-10-07; written spec awaiting founder review); the update side is Spec 2's Task 11b block (K1–K6).
