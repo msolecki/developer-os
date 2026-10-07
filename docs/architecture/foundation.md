@@ -1481,8 +1481,8 @@ contiguous chain per domain (W2-CONSTR-2); the anchor check joins with the first
 Spec 2's §12 gate is proven on the synthetic release for both architectures: install, preview and apply,
 a second apply, rollback, reapply and uninstall (`tests/e2e/release-update.test.ts`); every durable
 death point of apply, rollback and a verifier-rejected update recovers
-(`tests/integration/update/recovery.test.ts`); the signature chain runs through the production
-transport (`tests/integration/update/signature-transport.test.ts`); archives and the planner's
+(`tests/integration/update/recovery.test.ts`); the signature chain and the transport are unit-tested
+in `packages/security/src/update/` until D84 K1 withdraws them (Task 13); archives and the planner's
 request/result binding for both architectures (`tests/integration/update/archive-planner.test.ts`).
 The synthetic home carries the core owner only. The Git and automation leg joins with NEW-113, and
 the real-release half waits for Task 11b and A16.
