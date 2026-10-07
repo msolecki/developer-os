@@ -277,6 +277,14 @@ describe("target draft admission", () => {
     expect(() => admitTargetUpdateDraft(edit(draftValue(), path, next), request())).toThrow();
   });
 
+  it("refuses a draft row that relabels an installed token's kind (NEW-171)", () => {
+    const relabelled = edit(draftValue(), ["expectedManifest", "artifacts", 1], {
+      owner: "core", productVersion: "2.0.0", source: "state", mergeStrategy: "dedicated", path: { kind: "installed", token: t(1) },
+      kind: "file", verification: { mode: "content", installed: { kind: "installed", token: t(1) } },
+    });
+    expect(() => admitTargetUpdateDraft(relabelled, request())).toThrow();
+  });
+
   it("refuses a migration chain that is not in canonical execution order (NEW-135)", () => {
     const value = draftValue();
     value.migrations = [...(value.migrations as unknown[])].reverse();

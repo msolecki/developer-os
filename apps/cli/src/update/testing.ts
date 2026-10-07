@@ -308,8 +308,8 @@ function fixtureRows(codex: boolean): readonly FixtureRowV1[] {
   ];
 }
 
-function currentManifest(codex = false): InstallationManifestV2 {
-  const artifacts = fixtureRows(codex).map((row) => row.artifact).sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+function currentManifest(codex = false, extra: readonly ManagedArtifactV2[] = []): InstallationManifestV2 {
+  const artifacts = [...fixtureRows(codex).map((row) => row.artifact), ...extra].sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
   return { schemaVersion: 2, productVersion: parseStableSemver("1.0.0"), installedAt: INSTALLED_AT, artifacts } as unknown as InstallationManifestV2;
 }
 
@@ -527,6 +527,26 @@ export interface UpdateFixtureOptions {
   readonly codex?: { readonly registration: CodexRegistrationStateV1 };
   /** Adds one Brain note to the snapshot and drafts one Brain schema migration over it (NEW-192). */
   readonly migration?: boolean;
+  /** Installed rows the planner snapshot never carries (an attached instruction); NEW-171. */
+  readonly manifestRows?: readonly ManagedArtifactV2[];
+}
+
+/** An attached instruction row: it lives in the manifest but never in a planner request (NEW-171). */
+export function syntheticInstructionRow(): ManagedArtifactV2 {
+  return {
+    owner: "claude",
+    path: parseCanonicalAbsolutePathText("/synthetic/user/.claude/skills/code-review/SKILL.md"),
+    kind: "instruction",
+    productVersion: "1.0.0",
+    source: "skills/code-review/SKILL.md",
+    mergeStrategy: "dedicated",
+    existedBefore: false,
+    beforeHash: null,
+    backupRelativePath: null,
+    verifiedAt: INSTALLED_AT,
+    instruction: { category: "skill", id: "code-review", source: "default" },
+    verification: { mode: "content", installedHash: sha256(encoder.encode("synthetic skill")) },
+  } as unknown as ManagedArtifactV2;
 }
 
 /** A pinned identity for a `codex` no test ever spawns. */
@@ -554,6 +574,8 @@ export interface UpdateFixture {
   readonly events: string[];
   /** Transport request kinds only; empty proves no network was reached. */
   readonly requests: string[];
+  /** Every request the snapshot port produced for the planner. */
+  readonly plannerRequests: UpdatePlannerRequestV1[];
   readonly current: ReleaseIdentityV1;
   readonly releases: ReadonlyMap<string, SyntheticRelease>;
   /** The Codex projection the synthetic port reports (the current, pre-update state). */
@@ -653,7 +675,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
   const codex = options.codex !== undefined;
   const migration = options.migration === true;
   const home: UpdateHomeV1 = {
-    manifest: currentManifest(codex),
+    manifest: currentManifest(codex, options.manifestRows),
     active,
     trust: validateReleaseTrustState({
       schemaVersion: 1,
@@ -669,6 +691,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
   };
 
   const events: string[] = [];
+  const plannerRequests: UpdatePlannerRequestV1[] = [];
   const requests: string[] = [];
   const serve = syntheticReleaseServer({ delegationBytes, indexBytes, releases, requests, events, ...(options.substitutedManifest === undefined ? {} : { substitutedManifest: options.substitutedManifest }) });
 
@@ -728,6 +751,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
       events.push("snapshot");
       const rows = fixtureRows(codex);
       const request = plannerRequest(releasesInput, codex, migration);
+      plannerRequests.push(request);
       const tokenPaths = new Map(rows.map((row, ordinal) => [plannerPathToken(ordinal), row.artifact.path]));
       const inputBlobs = [...rows.flatMap((row) => (row.bytes === null ? [] : [row.bytes])), ...(migration ? [OLD_NOTE] : [])];
       return Promise.resolve({ request, inputBlobs, tokenPaths, ownerRoots: codex ? { core: SYNTHETIC_HOME, codex: SYNTHETIC_CODEX_HOMES.codexHome } : { core: SYNTHETIC_HOME } });
@@ -764,7 +788,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
     admitManifest: (value) => value as InstallationManifestV2,
     ...(options.codex === undefined ? {} : { codex: syntheticCodexPort(options.codex.registration) }),
   };
-  return { update, home, events, requests, current, releases, codexProjection: SYNTHETIC_CODEX_PROJECTION };
+  return { update, home, events, requests, plannerRequests, current, releases, codexProjection: SYNTHETIC_CODEX_PROJECTION };
 }
 
 /** A context whose every port fails loudly: proves a refusal happened before any of them. */

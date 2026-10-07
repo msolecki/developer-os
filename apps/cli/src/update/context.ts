@@ -356,7 +356,8 @@ async function snapshot(
 ): Promise<UpdatePlannerSnapshotV1> {
   const config = await readConfigFile(context, context.paths.configFile)
     ?? refuse("update_config_absent", EXIT_CODES.recoveryRequired, [context.paths.configFile], "developer-os doctor");
-  const rows = [...home.manifest.artifacts].sort((left, right) =>
+  // Instruction rows belong to attach/detach; they bypass the planner and are carried unchanged (NEW-171).
+  const rows = home.manifest.artifacts.filter((row) => row.kind !== "instruction").sort((left, right) =>
     OWNER_UPDATE_ORDER.indexOf(left.owner) - OWNER_UPDATE_ORDER.indexOf(right.owner) || compareBytes(left.path, right.path));
   const tokenPaths = new Map<PlannerPathTokenV1, CanonicalAbsolutePathV1>();
   const artifacts = rows.map((row, ordinal): PlannerManifestArtifactV1 => {

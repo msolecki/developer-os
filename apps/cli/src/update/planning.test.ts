@@ -19,6 +19,7 @@ import {
   FILE_A_PATH,
   FILE_B_PATH,
   SYNTHETIC_EVIDENCE,
+  syntheticInstructionRow,
 } from "./testing.js";
 import type { UpdateFixtureOptions } from "./testing.js";
 
@@ -117,6 +118,14 @@ describe("planUpdate", () => {
       "1.1.0",
     );
     expect(planned.result.outcome === "preview" ? planned.result.plan.target.version : null).toBe("1.1.0");
+  });
+
+  it("updates a home with an attached instruction and keeps its row identical (NEW-171)", async () => {
+    const fixture = createUpdateFixture({ manifestRows: [syntheticInstructionRow()] });
+    const prepared = await prepareUpdate(fixture.update, { version: "1.1.0" as never });
+    const row = prepared.apply?.materialized.manifest.artifacts.find((artifact) => artifact.kind === "instruction");
+    expect(row).toMatchObject({ ...syntheticInstructionRow(), productVersion: "1.1.0" });
+    expect(fixture.plannerRequests[0]?.manifest.artifacts.some((artifact) => (artifact as { kind: string }).kind === "instruction")).toBe(false);
   });
 
   it("returns an identical preview for a repeated run over the same signed metadata", async () => {
