@@ -1071,6 +1071,14 @@ check-then-act race is argued from the projections that bracket each mutation al
   that projection: the retain loop's `observeAll` later requires the live source to equal it.
   The Foundation terminal journal keeps its unmemoized before/after pair around its read.
   Retention tree projections per inspection: 2 → **1**, pinned by `report.test.ts`.
+  **Amended 2026-10-07 (NEW-197):** the memoizer now sits inside `buildBootstrapRetentionEvidence`,
+  once per build, so it covers both the inspection path and the executor's direct call
+  (`executor.ts` `buildRetentionEvidence`), which before walked `state/` once per row's source
+  and parent (456 walks on a fresh home; now 1, with a parity test against an unmemoized build).
+  Measured on the `installUpdatableHome` fixture with fsync stubbed: ~609k → **~361k** `lstat`
+  calls, `init` ~20 s → **~11 s**. The remaining ~300k are the retain loop's before/after parent
+  projections (four walks of `state/` per row), the accepted cost of the anti-TOCTOU pair above;
+  the founder closed NEW-197 at this gain rather than restructure `observeAll`.
 - **Content.** The NEW-133 content cache and its two-second racy-ctime margin are unchanged, so
   a changed file still misses the cache and is hashed again in whichever projection follows the
   change.
