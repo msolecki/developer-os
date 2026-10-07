@@ -72,7 +72,7 @@ The subsystem preserves the standing product boundaries:
 
 - no command here invokes a model or model-vendor CLI;
 - no scheduled job can spend vendor credits (superseded for the optional `brain-garden` job alone by
-  D77, 2026-09-30: `specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`);
+  D77, 2026-09-30: `git show ad359fd8:docs/superpowers/specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`);
 - no scheduler captures or ingests content automatically;
 - Git never fetches, pulls, merges, rebases, checks out, resolves, force-pushes, or rewrites history;
 - the product never stores or prompts for a Git credential;
@@ -3636,7 +3636,7 @@ each installed plist uses its generated descendant defined below:
 `<canonical-user-home>` is the guarded canonical home of the current console user, not an environment
 string. No label alias, filename override, alternate launchd domain, or additional plist is legal.
 
-Every registry member carries literal metadata `maySpawnVendor: false` (**amended 2026-10-01, NEW-134 / D77:** the registry grew to six jobs — the optional `brain-garden` and `brain-pulse` after `git-sync` — and `maySpawnVendor` is `true` for `brain-garden` alone; every `[0..4]` bound and "four jobs" statement in this spec reads as six; the gardener contract is `specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`). The scheduled-safe doctor
+Every registry member carries literal metadata `maySpawnVendor: false` (**amended 2026-10-01, NEW-134 / D77:** the registry grew to six jobs — the optional `brain-garden` and `brain-pulse` after `git-sync` — and `maySpawnVendor` is `true` for `brain-garden` alone; every `[0..4]` bound and "four jobs" statement in this spec reads as six; the gardener contract is `git show ad359fd8:docs/superpowers/specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`). The scheduled-safe doctor
 profile omits external vendor probes; it performs only configuration, manifest, path, and local
 artifact checks. The registry is exhaustively switched and its tests first assert that the enum is
 non-empty and exactly the four values above, so a vacuous `every()` cannot pass the no-vendor gate.

@@ -13,34 +13,32 @@ green on `5a7462a9` (2026-10-05: `npm run check` rc=0 in 288 min, `npm run test:
 passed, 1 skipped). `development` at `17cf02ca` (PR #21, NEW-144, merged; the tree of `17cf02ca`) is
 installed on the live machine with launchd automation enabled (D82): five jobs, `git-sync` off, Git
 disabled until the founder enables it (D76). A kickstarted scheduled `doctor` exited 0.
+Kickstarted on 2026-10-07: `brain-reindex` exited 0, then `brain-garden` ran Claude once (`success`
+`ok`, two gap targets, two hub proposals accepted and quarantined, none rejected), which closed NEW-134.
 
-1. **NEW-134's real `brain-garden` run with Claude** — first scheduled slot Sunday 2026-10-11 17:00.
-   Confirm its status record and captures (the `off` wording is done), then close the plan
-   (`plans/2026-09-30-developer-os-brain-gardener-pulse.md`) and the row.
-2. **A15 steps 16–18** (`docs/migration/founder-cutover.md`: per-adapter gate cycle, exercised
+1. **A15 steps 16–18** (`docs/migration/founder-cutover.md`: per-adapter gate cycle, exercised
    rollback) after one week of use; step 16 checks injection (NEW-139's fix installed since
    2026-10-04). **Step 19** after one stable cycle; it also removes the vault's legacy skills and
    tooling (step 13b's workflow is already disabled).
-3. **Codex hook approval after 2026-10-22** (A15), with NEW-104 and NEW-75's Codex half in the same
+2. **Codex hook approval after 2026-10-22** (A15), with NEW-104 and NEW-75's Codex half in the same
    window.
-4. **Reinstall, then `brain reindex`** (BRAIN-5 changed the `occurrences` default), **then the NEW-116
+3. **Reinstall, then `brain reindex`** (BRAIN-5 changed the `occurrences` default), **then the NEW-116
    re-run** (D86 (5)): `ingest` on the 31 refused captures, and report the counts.
-5. **Add a permission rule for NEW-183** to the founder's settings (the auto-mode classifier blocked the
+4. **Add a permission rule for NEW-183** to the founder's settings (the auto-mode classifier blocked the
    items the founder approved on 2026-10-06; see below).
 
 ## Founder stop points
 
 Each is executable from the document named; none is agent work.
 
-1. NEW-134: confirm the 2026-10-11 `brain-garden` run (above).
-2. A15 steps 16–19 and the Codex hook approval after 2026-10-22 (`docs/migration/founder-cutover.md`).
-3. A13's real-agent rows (evidence in `docs/architecture/hooks.md` §4): NEW-127 (Claude's unobserved
+1. A15 steps 16–19 and the Codex hook approval after 2026-10-22 (`docs/migration/founder-cutover.md`).
+2. A13's real-agent rows (evidence in `docs/architecture/hooks.md` §4): NEW-127 (Claude's unobserved
    rows and the isolated-`ingest` check) and NEW-104 (the Codex real-agent matrix, after 2026-10-22).
-4. NEW-75's Codex half: its credential path supplied separately and one real authenticated
+3. NEW-75's Codex half: its credential path supplied separately and one real authenticated
    `ingest --agent codex` (credits, after 2026-10-22).
-5. Reinstall, `brain reindex`, then the NEW-116 re-run of `ingest` on the 31 refused captures (D86 (5)).
-6. NEW-183: add the permission rule (founder action) so an agent can do the approved items.
-7. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
+4. Reinstall, `brain reindex`, then the NEW-116 re-run of `ingest` on the 31 refused captures (D86 (5)).
+5. NEW-183: add the permission rule (founder action) so an agent can do the approved items.
+6. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
    (percent-encoded links in Obsidian).
 
 Open sequence (D16, daily use before completeness): A15 on its own clock and the stop points beside
@@ -96,7 +94,7 @@ Decided by D84 (2026-10-05), next design work:
 
 Wave 1 of D83/D84 is integrated (2026-10-06): NEW-143, NEW-120, NEW-130, NEW-40, NEW-33, NEW-121,
 NEW-35, workflow versions, the Spec 2 §4.2 amendment, one retention walk and status `off`
-(the wording half of NEW-134; its real garden run stays owed).
+(the wording half of NEW-134).
 
 Awaiting founder numbers: NEW-116 (D86 (5): re-run `ingest` on the 31 refused captures after the next
 reinstall and `brain reindex`, and report the counts; the row closes or narrows on them).
@@ -122,7 +120,7 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 ## Count
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
-- Founder stop points: 7, listed above.
+- Founder stop points: 6, listed above.
 - Startable rows: 4 (NEW-132, NEW-169's remainder, NEW-182, NEW-193). Founder action: NEW-183 (permission
   rule). Founder design: the distribution design (NEW-163, NEW-171). Awaiting founder numbers: NEW-116.
-- Repository backlog: 21 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
+- Repository backlog: 20 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
