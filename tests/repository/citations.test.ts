@@ -121,6 +121,11 @@ interface Citation {
 const FULL = /(?:apps|packages|tests|workflows|docs)\/[\w./-]+\.[A-Za-z]+:(\d+)(?:-(\d+))?((?:,\d+(?:-\d+)?)*)/gu;
 /** A backticked filename with no directory. */
 const BARE = /`([\w.-]+\.[A-Za-z]+):(\d+)(?:-(\d+))?((?:,\d+(?:-\d+)?)*)`/gu;
+/**
+ * A backticked `./`-rooted filename: a repository-root file such as `package.json`, which every
+ * workspace also has, so its bare basename is ambiguous and it has no directory to write (NEW-193).
+ */
+const ROOTED = /`\.\/([\w.-]+\.[A-Za-z]+):(\d+)(?:-(\d+))?((?:,\d+(?:-\d+)?)*)`/gu;
 /** A backticked range with no filename, continuing from the previous citation. */
 const CONTINUATION = /`:(\d+)(?:-(\d+))?((?:,\d+(?:-\d+)?)*)`/gu;
 /**
@@ -246,6 +251,15 @@ export function extractCitations(
         at: match.index,
         named: match[1] ?? "",
         hasDirectory: false,
+        raw: match[0],
+        ranges: spans(match[2] ?? "", match[3], match[4]),
+      });
+    }
+    for (const match of line.matchAll(ROOTED)) {
+      hits.push({
+        at: match.index,
+        named: match[1] ?? "",
+        hasDirectory: true,
         raw: match[0],
         ranges: spans(match[2] ?? "", match[3], match[4]),
       });
@@ -1049,6 +1063,15 @@ describe("the extractor and the predicate this gate is built on", () => {
         "packages/core/src/config/types.ts",
         "packages/platform-macos/src/types.ts",
       ],
+    });
+  });
+
+  it("resolves a `./`-rooted citation to the repository-root file a bare basename cannot name", () => {
+    const rooted = first("`./package.json:39-40`");
+    expect(rooted).toMatchObject({ named: "package.json", hasDirectory: true, start: 39, end: 40 });
+    expect(resolveSource(rooted, ["package.json", "apps/cli/package.json"])).toStrictEqual({
+      kind: "resolved",
+      path: "package.json",
     });
   });
 
