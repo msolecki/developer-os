@@ -24,8 +24,9 @@ handoff, the proof scope, and admitted bookkeeping identities) — is the single
 repoints §5 to `docs/architecture/codex-adapter.md` §16 and §6.1 to `docs/architecture/foundation.md`
 §12.3, marked "Amended 2026-09-29: … retired" in place; the 2026-10-07 founder decisions on NEW-195
 (publication microstates resume forward after death, and a fresh create that finds its path present
-is recorded as refused, §9.2) and NEW-196 (accepted residual 11, §13.3) are marked "Amended
-2026-10-07" in place.** This
+is recorded as refused, §9.2), NEW-196 (accepted residual 11, §13.3) and NEW-198 (recovery admits a
+home whose manifest is preserved at its journalled tombstone, §5.3) are marked "Amended 2026-10-07"
+in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -1201,6 +1202,11 @@ changes; §5.3 was always describing `ManifestStatePlanV1`, which each bootstrap
 Apply moves the guarded present preimage no-replace to the tombstone, syncs, then no-replace publishes
 and verifies a present postimage or durably records committed absence. Rollback uses no-replace moves.
 Every absent/present/preimage/postimage/tombstone third state preserves all evidence as exit 6.
+**Amended 2026-10-07 (NEW-198, founder-approved):** while an update coordinator's current cursor is a
+`manifest` preserve or publish step and the live manifest is absent, recovery admits the home from
+that step's plan `before` at its tombstone path, only while the tombstone is still that exact inode
+(dev/ino), owner, mode, link count, length and hash and declares schema V2; any other absence or
+mismatch remains `manifest_absent`.
 
 A lifecycle `ManifestPayloadPathV1` is derived exactly as
 `staging/lifecycle/<coordinator-id>/participants/manifest/<participant-id>/after.json`; a bootstrap
