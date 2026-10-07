@@ -241,7 +241,12 @@ const AUTOMATION_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = 
  */
 export type CliContextFactory = (
   io: CliIo,
-  request: { readonly localRelease: string | null; readonly scheduledProductHome?: string },
+  request: {
+    readonly localRelease: string | null;
+    /** D84 K2: `init` without `--local-release` admits the Homebrew keg from the fixed table. */
+    readonly packageChannelInit: boolean;
+    readonly scheduledProductHome?: string;
+  },
 ) => CliContext | Promise<CliContext>;
 
 type OptionValues = Partial<Record<OptionName, boolean | string | readonly string[]>>;
@@ -744,6 +749,7 @@ async function dispatch(
   try {
     context = await createContext(io, {
       localRelease: optionString(invocation.values["local-release"]),
+      packageChannelInit: invocation.command === "init" && invocation.values["local-release"] === undefined,
     });
   } catch (error) {
     return emit(io, contextFailure(error), json, () => []);
@@ -939,7 +945,7 @@ async function runScheduledMode(
   }
   let context: CliContext;
   try {
-    context = await createContext(io, { localRelease: null, scheduledProductHome: invocation.productHome });
+    context = await createContext(io, { localRelease: null, packageChannelInit: false, scheduledProductHome: invocation.productHome });
   } catch (error) {
     return exitCodeOf(error);
   }

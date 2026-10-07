@@ -17,7 +17,7 @@ import { guardStop } from "./guards/stop.js";
 /** Structurally `main.ts`'s `CliContextFactory`; importing it would pull the whole command graph in. */
 export type HookContextFactory = (
   io: CliIo,
-  request: { readonly localRelease: string | null },
+  request: { readonly localRelease: string | null; readonly packageChannelInit: boolean },
 ) => CliContext | Promise<CliContext>;
 
 export interface HookRuntime {

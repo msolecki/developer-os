@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { deriveBootstrapRetentionAuthorities, deriveBootstrapRetentionLocations, deriveBootstrapTerminalJournal, encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
+import { deriveBootstrapRetentionAuthorities, deriveBootstrapRetentionLocations, deriveBootstrapTerminalJournal, encodeCanonicalJson, EXIT_CODES, PACKAGE_CHANNEL_RELEASE_KEY_ID } from "@developer-os/core";
 import type { CanonicalJsonValue } from "@developer-os/core";
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
@@ -138,6 +138,15 @@ async function closeBootstrapContext(context: CommandFixture["context"]): Promis
 }
 
 describe("BootstrapExecutor retained fresh V2 initialization", () => {
+  it("records package-channel trust when the packaged release is a keg (D84 K2, F6)", async () => {
+    const fixture = await createCommandFixture("init-package-channel", { bootstrapAvailable: true });
+    const result = await runInit(fixture.context, ACCEPTED);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    await closeBootstrapProcess(fixture);
+    const trust = JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, "release-trust.json"), "utf8")) as JsonRecord;
+    expect(trust).toMatchObject({ trust: "package-channel", delegatedReleaseKeyId: PACKAGE_CHANNEL_RELEASE_KEY_ID, highestDelegationSequence: "0" });
+  }, 300_000);
+
   it("creates every A12 bookkeeping root so a fresh home's lifecycle ledger is clear", async () => {
     const fixture = await createCommandFixture("bootstrap-fresh-ledger-clear", { bootstrapAvailable: true });
     const result = await runInit(fixture.context, ACCEPTED);

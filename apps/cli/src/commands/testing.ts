@@ -6,13 +6,16 @@ import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  encodeCanonicalJson,
   ManifestStore,
   resolveRuntimePaths,
   TransactionExecutor,
   TransactionStore,
+  validateBundleManifest,
 } from "@developer-os/core";
 import type {
   CanonicalAbsolutePathV1,
+  CanonicalJsonValue,
   HeldLifecycleStableLockV1,
   LifecycleLockDeadlineV1,
   LifecycleStableLockProviderV1,
@@ -62,11 +65,8 @@ import type { LifecycleEffectPortsV1 } from "../lifecycle/adapters.js";
 import { createLifecycleContext } from "../lifecycle/context.js";
 import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { createGatedTransactionExecutor } from "../lifecycle/mutation-gate.js";
-import {
-  admitRootVerifiedPackagedRelease,
-  type PackagedReleaseIdentityV1,
-} from "../update/packaged-release.js";
-import { releaseTemplateFiles } from "../update/local-release.js";
+import { admitPackageChannelRelease } from "../update/packaged-release.js";
+import { writePackageChannelRelease } from "../update/local-release.js";
 import type { ReleaseFileV1 } from "../update/local-release.js";
 
 const REDACTION_KEY = new Uint8Array(32).fill(11);
@@ -491,66 +491,72 @@ async function createSyntheticPackagedRelease(
   instructions: readonly ReleaseFileV1[] | undefined,
   architecture: "arm64" | "x64",
 ) {
-  const packageRoot = join(root, "packaged-release");
-  const retained = {
-    delegation: "metadata/release-key-delegation.json",
-    releaseIndex: "metadata/release-index.json",
-    bundleManifest: "metadata/bundle-manifest.json",
-  } as const;
-  const delegationBytes = new TextEncoder().encode("synthetic delegation\n");
-  const indexBytes = new TextEncoder().encode("synthetic release index\n");
-  const manifestBytes = new TextEncoder().encode("synthetic bundle manifest\n");
-  const files: Array<{
-    readonly relativePath: string;
-    readonly bytes: Uint8Array;
-    readonly mode?: 0o600 | 0o700;
-  }> = [
-    { relativePath: retained.delegation, bytes: delegationBytes },
-    { relativePath: retained.releaseIndex, bytes: indexBytes },
-    { relativePath: retained.bundleManifest, bytes: manifestBytes },
-    {
-      relativePath: "bundle/bin/developer-os",
-      bytes: new TextEncoder().encode("#!/bin/sh\nexit 0\n"),
-      mode: 0o700,
-    },
-    ...releaseTemplateFiles(),
+  // D84 K2: a Homebrew-shaped keg under `<root>/prefix`, admitted as the package channel.
+  const prefix = join(root, "prefix");
+  await nodeFs.mkdir(prefix, { mode: 0o755 });
+  await nodeFs.chmod(prefix, 0o755);
+  const keg = join(prefix, "Cellar", "developer-os", PRODUCT_VERSION);
+  await nodeFs.mkdir(join(keg, "libexec"), { recursive: true, mode: 0o755 });
+  const encode = (text: string) => new TextEncoder().encode(text);
+  const bundleFiles: ReleaseFileV1[] = [
+    { relativePath: "bin/cli", bytes: encode("#!/bin/sh\nexit 0\n"), mode: 0o700 },
+    { relativePath: "bin/planner", bytes: encode("#!/bin/sh\nexit 0\n"), mode: 0o700 },
+    { relativePath: "bin/runtime", bytes: encode("#!/bin/sh\nexit 0\n"), mode: 0o700 },
+    { relativePath: "bin/verifier", bytes: encode("#!/bin/sh\nexit 0\n"), mode: 0o700 },
     ...(instructions === undefined
       ? []
       : [
-          ...(await repositoryWorkflowFiles()),
-          ...instructions.map((file) => ({ ...file, relativePath: `bundle/instructions/${file.relativePath}` })),
+          ...(await repositoryWorkflowFiles()).map((file) => ({ ...file, relativePath: file.relativePath.slice("bundle/".length) })),
+          ...instructions.map((file) => ({ ...file, relativePath: `instructions/${file.relativePath}` })),
         ]),
   ];
-
-  await nodeFs.mkdir(packageRoot, { recursive: true, mode: 0o700 });
-  for (const file of files) {
-    const path = join(packageRoot, file.relativePath);
-    await nodeFs.mkdir(join(path, ".."), { recursive: true, mode: 0o700 });
-    await nodeFs.writeFile(path, file.bytes, { mode: file.mode ?? 0o600 });
+  const directories = new Set<string>();
+  for (const file of bundleFiles) {
+    const parts = file.relativePath.split("/");
+    for (let depth = 1; depth < parts.length; depth += 1) directories.add(parts.slice(0, depth).join("/"));
   }
-
-  const identity: PackagedReleaseIdentityV1 = {
-    version: "1.0.0",
+  const manifest = validateBundleManifest({
+    schemaVersion: 1,
+    version: PRODUCT_VERSION,
     releaseSequence: "1",
-    releaseIdentityHash: digest("synthetic release identity"),
-    delegationSequence: "1",
-    delegationHash: digest(delegationBytes),
-    delegatedReleaseKeyId: digest("synthetic delegated release key"),
-    releaseIndexSequence: "1",
-    releaseIndexHash: digest(indexBytes),
-    bundleManifestHash: digest(manifestBytes),
     platform: "darwin",
     architecture,
     launcherProtocol: 1,
     updateProtocol: 1,
-  };
-
-  return admitRootVerifiedPackagedRelease({
-    packageRoot: await nodeFs.realpath(packageRoot),
-    retainedMetadata: retained,
-    bundleRoot: "bundle",
-    identity,
+    entrypoint: "bin/cli",
+    runtimeEntrypoint: "bin/runtime",
+    plannerEntrypoint: "bin/planner",
+    verifierEntrypoint: "bin/verifier",
+    entries: [
+      ...[...directories].map((path) => ({ path, kind: "directory", mode: 448 })),
+      ...bundleFiles.map((file) => ({
+        path: file.relativePath,
+        kind: "file",
+        mode: file.mode === 0o700 ? 448 : 384,
+        bytes: String(file.bytes.byteLength),
+        sha256: digest(file.bytes),
+      })),
+    ].sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
   });
+  const manifestBytes = new TextEncoder().encode(encodeCanonicalJson(manifest as unknown as CanonicalJsonValue));
+  const reference = (candidate: "arm64" | "x64") => ({
+    platform: "darwin",
+    architecture: candidate,
+    archiveFormat: "zstd-ustar-v1",
+    archivePath: `${PRODUCT_VERSION}/darwin-${candidate}.tar.zst`,
+    archiveBytes: "10",
+    archiveSha256: digest(`archive ${candidate}`),
+    manifestPath: `${PRODUCT_VERSION}/darwin-${candidate}.manifest.json`,
+    manifestBytes: candidate === architecture ? String(manifestBytes.byteLength) : "11",
+    manifestSha256: candidate === architecture ? digest(manifestBytes) : digest(`other ${candidate}`),
+  });
+  const index = {
+    sequence: "1",
+    latestVersion: PRODUCT_VERSION,
+    releases: [{ version: PRODUCT_VERSION, releaseSequence: "1", minimumLauncherProtocol: 1, updateProtocol: 1, bundles: [reference("arm64"), reference("x64")] }],
+  } as unknown as CanonicalJsonValue;
+  const packageRoot = await writePackageChannelRelease({ outDir: join(keg, "libexec", "fallback"), index, manifest, bundleFiles });
+  return admitPackageChannelRelease(packageRoot, { prefix: await nodeFs.realpath(prefix), requireVersion: null });
 }
 
 export async function createCommandFixture(
