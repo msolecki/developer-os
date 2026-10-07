@@ -11,6 +11,7 @@ import {
   hookCommandTail,
   inspectDrift,
   isBootstrapFoundationTransactionId,
+  isPackageChannelTrust,
   isUnsignedLocalTrust,
   ManifestStateError,
   parseCanonicalAbsolutePathText,
@@ -1272,8 +1273,9 @@ async function checkReleaseTrust(paths: RuntimePaths): Promise<Finding> {
   const bytes = await readBoundedFile(file, MAX_RELEASE_TRUST_BYTES, "the release trust state");
   if (bytes === null) return pass("release-trust", "no release trust state is recorded", []);
   const state = validateReleaseTrustState(decodeCanonicalJson(bytes, MAX_RELEASE_TRUST_BYTES));
-  return isUnsignedLocalTrust(state)
-    ? warn("release-trust", UNSIGNED_LOCAL_TRUST_WARNING, [file])
+  if (isUnsignedLocalTrust(state)) return warn("release-trust", UNSIGNED_LOCAL_TRUST_WARNING, [file]);
+  return isPackageChannelTrust(state)
+    ? pass("release-trust", "Homebrew package-channel release trust", [file])
     : pass("release-trust", "signed release trust", [file]);
 }
 
