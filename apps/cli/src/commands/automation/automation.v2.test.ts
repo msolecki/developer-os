@@ -4,10 +4,12 @@
  * launchd effects) is real. Cases run in order and each leaves the home in the state the next reads.
  */
 import { spawnSync } from "node:child_process";
+import type { SpawnSyncReturns } from "node:child_process";
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -53,7 +55,7 @@ import { withLifecycleMutation } from "../../lifecycle/mutation-gate.js";
 import { automationLogSlotPath, automationRunnerLeasePath, automationStatusPath } from "../../lifecycle/runtime-records.js";
 import { hostWith, scriptedLaunchd } from "../../lifecycle/testing.js";
 import { renderEntrypoint } from "../../update/entrypoint.js";
-import { entrypointPath } from "../../update/local-release.js";
+import { entrypointPath, LOCAL_BUNDLE_CLI_ENTRY } from "../../update/local-release.js";
 import { runConfig } from "../config.js";
 import { runDoctor, runDoctorReport } from "../doctor.js";
 import { runGit } from "../git/index.js";
@@ -71,10 +73,12 @@ const UID = process.getuid?.() ?? 0;
 const CLOCK = parseUtcTimestamp("2026-09-23T00:00:00.000Z");
 const BASE_SCHEDULES = ["brain-reindex=daily@02:00", "brain-lint=daily@02:30", "doctor=weekly@mon,03:00"] as const;
 /**
- * The entrypoint `init` renders, aimed at this checkout's built CLI (`tests/node_modules/@developer-os/cli`)
- * so a generated plist's argv can really be executed (NEW-144).
+ * The entrypoint `init` renders. It follows the active record, so the test points the fixture release's
+ * default CLI path at the built CLI while a generated plist's argv is really executed (NEW-144).
  */
-const ENTRYPOINT = renderEntrypoint(resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..", "tests"));
+const ENTRYPOINT = renderEntrypoint();
+/** This checkout's built CLI (`tests/node_modules/@developer-os/cli`), which the fixture release's default CLI path is aimed at (NEW-144). */
+const BUILT_CLI = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..", "tests", "node_modules", "@developer-os", "cli", "dist", "bin.js");
 const encoder = new TextEncoder();
 
 const host = { drifted: false, thirdState: false, belowFloor: false };
@@ -175,9 +179,10 @@ function lifecycleOf(fixture: CommandFixture): CliLifecycleContext {
   return lifecycle;
 }
 
-/** The fixture release carries no CLI, so the entrypoint row `init` would write is written here the same way. */
+/** The entrypoint row `init` writes once a release is active; written here the same way when the fixture's setup has not. */
 async function installSyntheticEntrypoint(fixture: CommandFixture, lifecycle: CliLifecycleContext): Promise<void> {
   const path = entrypointPath(fixture.paths.home);
+  if (await nodeFs.lstat(path).then(() => true, () => false)) return;
   const content = ENTRYPOINT;
   await withLifecycleMutation(fixture.context, lifecycle, async (authority) => {
     const state = await gatedState(fixture.context, authority);
@@ -576,7 +581,27 @@ describe("automation on a real V2 home", () => {
       const env = { HOME: home.userHome, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
       // The pre-NEW-144 argv named the 0600, shebang-less module as the program: it cannot be executed.
       expect(spawnSync(argv[1], argv.slice(2), { cwd: "/", env }).error).toMatchObject({ code: "EACCES" });
-      const run = spawnSync(argv[0], argv.slice(1), { cwd: "/", env, encoding: "utf8", timeout: 120_000 });
+      // The fixture's retained bundle manifest is not JSON, so the script would refuse it: swap in a parseable
+      // one (no `entrypoint`, so the default CLI path) and the built CLI, and restore the home afterwards.
+      const activeFile = join(home.paths.stateDir, "active-release.json");
+      const activeBytes = await nodeFs.readFile(activeFile);
+      const active = JSON.parse(activeBytes.toString("utf8")) as { readonly bundleRoot: string; readonly bundleManifestHash: string };
+      const manifestBytes = "{}";
+      const manifestHash = createHash("sha256").update(manifestBytes).digest("hex");
+      const manifestFile = join(home.paths.stateDir, "release-metadata", "bundles", `${manifestHash}.json`);
+      const cli = join(active.bundleRoot, LOCAL_BUNDLE_CLI_ENTRY);
+      await nodeFs.mkdir(dirname(cli), { recursive: true });
+      await nodeFs.writeFile(cli, `await import(${JSON.stringify(pathToFileURL(BUILT_CLI).href)});\n`);
+      await nodeFs.writeFile(manifestFile, manifestBytes, { mode: 0o600 });
+      await nodeFs.writeFile(activeFile, JSON.stringify({ ...active, bundleManifestHash: manifestHash }));
+      let run: SpawnSyncReturns<string>;
+      try {
+        run = spawnSync(argv[0], argv.slice(1), { cwd: "/", env, encoding: "utf8", timeout: 120_000 });
+      } finally {
+        await nodeFs.writeFile(activeFile, activeBytes);
+        await nodeFs.rm(manifestFile);
+        await nodeFs.rm(join(active.bundleRoot, "node_modules"), { recursive: true, force: true });
+      }
       expect(run.error).toBeUndefined();
       expect(run.signal).toBeNull();
       expect(run.stderr).not.toContain("could not be loaded");
