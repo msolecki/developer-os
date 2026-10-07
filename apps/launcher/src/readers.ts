@@ -73,6 +73,15 @@ async function readStateFile(
  */
 type EnvelopeStatusV1 = "terminal" | "incomplete" | "unverified";
 
+/** `report.ts`'s `identityMatches`: owner, mode, link count, device and inode. */
+function sameIdentity(
+  entry: LifecycleGuardedEntryV1,
+  expected: { readonly ownerUid: number; readonly mode: number; readonly nlink: number; readonly dev: string; readonly ino: string },
+): boolean {
+  return entry.ownerUid === expected.ownerUid && entry.mode === expected.mode && entry.nlink === expected.nlink &&
+    entry.dev === expected.dev && entry.ino === expected.ino;
+}
+
 async function classifyEnvelope(
   fs: LauncherGuardedReaderV1,
   productHome: CanonicalAbsolutePathV1,
@@ -89,23 +98,36 @@ async function classifyEnvelope(
       { productHome, stateDirectory, expectedId: id },
       createCanonicalPathEvidence(),
     );
-    const slots: unknown[] = [];
-    for (const path of envelope.journalSlots) {
-      const bytes = await readStateFile(fs, path, effectiveUid, BOOTSTRAP_MAX_JOURNAL_BYTES);
-      if (bytes === null) return "unverified";
-      slots.push(bytes.byteLength === 0 ? null : decodeCanonicalJson(bytes, BOOTSTRAP_MAX_JOURNAL_BYTES));
+    // `report.ts`'s `slots_unbound`: each slot must be the regular file, with the identity, its plan bound.
+    const entries: LifecycleGuardedEntryV1[] = [];
+    for (const bound of plan.journalSlots) {
+      const entry = await fs.lstat(bound.path);
+      if (entry === null || entry.kind !== "regular_file" || !sameIdentity(entry, bound)) return "unverified";
+      entries.push(entry);
     }
-    if (slots[0] === null && slots[1] === null) {
-      const leaf = await fs.lstat(plan.bootstrapIdentity.path);
-      const expected = plan.bootstrapIdentity;
-      return leaf !== null && leaf.kind === "regular_file" && leaf.ownerUid === expected.ownerUid && leaf.mode === expected.mode &&
-        leaf.nlink === expected.nlink && leaf.size === "0" && leaf.dev === expected.dev && leaf.ino === expected.ino
-        ? "incomplete"
-        : "unverified";
+    // A slot torn by a death mid-write is no authority; it never fails the whole envelope (report.ts).
+    const slots: unknown[] = [];
+    for (const entry of entries) {
+      if (entry.size === "0") {
+        slots.push(null);
+        continue;
+      }
+      const bytes = await fs.readRegular(entry, BOOTSTRAP_MAX_JOURNAL_BYTES);
+      try {
+        slots.push(decodeCanonicalJson(bytes, BOOTSTRAP_MAX_JOURNAL_BYTES));
+      } catch {
+        slots.push(null);
+      }
     }
     const selection = selectBootstrapEvidenceJournal(plan, [slots[0], slots[1]]);
-    if (selection === null) return "unverified";
-    return TERMINAL_PHASES.has(selection.current.phase) ? "terminal" : "incomplete";
+    if (selection !== null) return TERMINAL_PHASES.has(selection.current.phase) ? "terminal" : "incomplete";
+    // No slot is authority: resumable only as `initialSlotWriteAdmissible` reads it (slot 1 still
+    // 0 bytes, neither slot decodes) and with the live leaf its plan persisted (NEW-83).
+    const leaf = await fs.lstat(plan.bootstrapIdentity.path);
+    return entries[1]?.size === "0" && slots[0] === null && slots[1] === null &&
+      leaf !== null && leaf.kind === "regular_file" && leaf.size === "0" && sameIdentity(leaf, plan.bootstrapIdentity)
+      ? "incomplete"
+      : "unverified";
   } catch {
     return "unverified";
   }
