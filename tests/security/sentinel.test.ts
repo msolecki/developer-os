@@ -431,6 +431,8 @@ describe("a planted sentinel, through update and rollback", () => {
       { kind: "rollback", apply: true, json: true },
     ];
     for (const invocation of invocations) {
+      // `brew upgrade` lands 1.2.0's keg before the unversioned update (D84 K2): the keg is the only source.
+      if (invocation.kind === "update" && invocation.version === null) await home.world.install("1.2.0");
       const result = await runUpdate(context, invocation);
       succeeded.push(result.ok);
       outputs.push(formatJsonResult(result));

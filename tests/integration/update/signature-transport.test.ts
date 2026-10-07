@@ -118,7 +118,6 @@ describe("the signed chain over the fixed-origin transport, per architecture", (
       `${ASSET_BASE}1.1.0/darwin-${architecture}.manifest.json`,
       `${ASSET_BASE}1.1.0/darwin-${architecture}.tar.zst`,
     ]);
-    await planned.apply?.scratch.cleanup();
   });
 
   it.each(SYNTHETIC_ARCHITECTURES)("refuses the other architecture's archive served for a %s home, before any scratch extraction", async (architecture) => {
@@ -176,7 +175,6 @@ describe("the transport is closed (Spec 2 §4.5)", () => {
 
     expect(planned.result.outcome).toBe("preview");
     expect(urls).toContain(target);
-    await planned.apply?.scratch.cleanup();
   });
 
   it.each([

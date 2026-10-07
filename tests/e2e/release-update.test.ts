@@ -16,12 +16,14 @@ import { installUpdatableHome, SYNTHETIC_ARCHITECTURES } from "@developer-os/cli
 import type { SyntheticArchitectureV1, UpdatableHomeV1 } from "@developer-os/cli/dist/update/testing.js";
 
 /**
- * Spec 2 §12's "complete lifecycle works" row on the synthetic release (D72 P7(f)): a real `init`
- * from the packaged release, then preview and apply, a second apply that retires the first
- * rollback set, rollback, reapply, and uninstall — for both `arm64` and `x64`. Every port but the
- * release world (FD 3 trust, transport, scratch, planner) is production, and `--apply` runs the
- * production ports with the packaged release as the fallback handoff. The Git and automation leg
- * joins with NEW-113; the real-release half waits for Task 11b and A16.
+ * Spec 2 §12's "complete lifecycle works" row on the synthetic release (D72 P7(f), D84 K6): a real
+ * `init` from the prefix's first keg, then preview and apply, a `brew upgrade` and a second apply
+ * that retires the first rollback set, rollback, reapply, and uninstall — for both `arm64` and
+ * `x64`. The update source is a real keg under a fixture prefix, resolved and admitted by the
+ * production code through the fixed-path seam; only the planner is the world's. `--apply` runs the
+ * production ports with the fallback handoff bound from the admitted keg (K3). An attached
+ * instruction row rides through every apply and rollback (NEW-171). The Git and automation leg
+ * joins with NEW-113; the real-release half waits for A16.
  */
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
@@ -56,8 +58,8 @@ async function run(lifecycle: Lifecycle, invocation: UpdateInvocationV1): Promis
   return result.data;
 }
 
-async function start(architecture: SyntheticArchitectureV1): Promise<Lifecycle> {
-  const home = await installUpdatableHome(`e2e-release-update-${architecture}`, architecture);
+async function start(architecture: SyntheticArchitectureV1, label = "lifecycle"): Promise<Lifecycle> {
+  const home = await installUpdatableHome(`e2e-release-update-${label}-${architecture}`, architecture, { instructions: true });
   const { paths, userHome } = home.fixture;
   await nodeFs.mkdir(join(paths.brain, "notes"), { recursive: true, mode: 0o700 });
   await nodeFs.writeFile(join(paths.brain, BRAIN_NOTE), BRAIN_NOTE_BYTES, { mode: 0o600 });
@@ -75,6 +77,11 @@ async function activeVersion(lifecycle: Lifecycle): Promise<string> {
 }
 
 const ENTRY = "bin/cli";
+
+/** The attached instruction rows, with the product version every update rewrites masked out. */
+function instructionRows(manifest: InstallationManifestV2): readonly unknown[] {
+  return manifest.artifacts.flatMap((row) => (row.kind === "instruction" ? [{ ...row, productVersion: null, verifiedAt: null }] : []));
+}
 
 /** NEW-163 B: the CLI the entrypoint script would load, resolved the way the script does (active record, then its retained manifest). */
 async function entrypointTarget(lifecycle: Lifecycle): Promise<string> {
@@ -118,19 +125,23 @@ describe("the synthetic release lifecycle (Spec 2 §12, D72 P7(f))", () => {
 
     const applied = await run(lifecycle, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });
     expect(applied).toMatchObject({ outcome: "applied", rollbackAvailable: true, active: { version: "1.1.0", architecture, bundleRoot: bundleRoot(lifecycle, "1.1.0") } });
+    const attached = instructionRows(lifecycle.manifests[0] as InstallationManifestV2);
+    expect(attached.length).toBeGreaterThan(0);
+    expect(instructionRows(await manifestOf(lifecycle.home))).toStrictEqual(attached);
     const verifier = world.releases.get("1.1.0")?.bundles.get(architecture)?.files.get("bin/verifier");
     expect(verifier).toBeDefined();
     expect(new Uint8Array(await nodeFs.readFile(join(bundleRoot(lifecycle, "1.1.0"), "bin", "verifier")))).toEqual(verifier);
     expect((await lifecycle.home.update().readHome()).rollback?.previous.version).toBe("1.0.0");
     await expectEntrypointFollowsActive(lifecycle);
 
-    // A second update retires the first rollback set with the release it retained.
+    // `brew upgrade` lands 1.2.0's keg; a second update retires the first rollback set with the release it retained.
+    await world.install("1.2.0");
     expect(await run(lifecycle, { kind: "update", version: null, apply: true, json: true })).toMatchObject({ outcome: "applied", active: { version: "1.2.0" } });
     expect(await exists(bundleRoot(lifecycle, "1.0.0"))).toBe(false);
     expect((await lifecycle.home.update().readHome()).rollback?.previous.version).toBe("1.1.0");
     await expectEntrypointFollowsActive(lifecycle);
 
-    // Rollback is local evidence only: no transport request, no planner run, trust unchanged.
+    // Rollback is local evidence only: no `readPackageSource` call, no planner run, trust unchanged.
     const trustFile = join(fixture.paths.stateDir, "release-trust.json");
     const trust = await nodeFs.readFile(trustFile);
     const requests = world.requests.length;
@@ -141,6 +152,7 @@ describe("the synthetic release lifecycle (Spec 2 §12, D72 P7(f))", () => {
     expect(world.requests).toHaveLength(requests);
     expect(world.plannerRuns).toHaveLength(plannerRuns);
     expect(await nodeFs.readFile(trustFile)).toEqual(trust);
+    expect(instructionRows(await manifestOf(lifecycle.home))).toStrictEqual(attached);
     expect(await exists(bundleRoot(lifecycle, "1.2.0"))).toBe(false);
     expect((await lifecycle.home.update().readHome()).rollback).toBeNull();
     await expectEntrypointFollowsActive(lifecycle);
@@ -149,9 +161,13 @@ describe("the synthetic release lifecycle (Spec 2 §12, D72 P7(f))", () => {
     expect(await activeVersion(lifecycle)).toBe("1.2.0");
     await expectEntrypointFollowsActive(lifecycle);
 
-    // Spec 2 §13.3 residual 9 (A8): no manifest this lifecycle published holds a symlink artifact.
+    // Spec 2 §13.3 residual 9 (A8): no manifest this lifecycle published holds a symlink artifact,
+    // and every one carries the attached instruction rows unchanged (NEW-171).
     expect(lifecycle.manifests.length).toBeGreaterThan(0);
-    for (const manifest of lifecycle.manifests) expect(manifest.artifacts.filter((row) => row.kind === "symlink")).toEqual([]);
+    for (const manifest of lifecycle.manifests) {
+      expect(manifest.artifacts.filter((row) => row.kind === "symlink")).toEqual([]);
+      expect(instructionRows(manifest)).toStrictEqual(attached);
+    }
 
     const requestsBeforeUninstall = world.requests.length;
     const removed = await runUninstall(fixture.context, ACCEPTED);
@@ -162,6 +178,23 @@ describe("the synthetic release lifecycle (Spec 2 §12, D72 P7(f))", () => {
     expect(await exists(fixture.paths.manifestFile)).toBe(false);
     expect(await exists(join(fixture.paths.home, "releases"))).toBe(false);
     expect(await exists(join(fixture.paths.home, "rollback"))).toBe(false);
-    await world.cleanup();
+  }, LIFECYCLE_TIMEOUT_MS);
+
+  // Review Focus 2: `brew cleanup` deletes the keg; the active and the rollback release live in `releases/<version>` alone.
+  it.each(SYNTHETIC_ARCHITECTURES)("(d) rolls back after the keg is removed (brew cleanup) on %s", async (architecture) => {
+    const lifecycle = await start(architecture, "cleanup");
+    const attached = instructionRows(lifecycle.manifests[0] as InstallationManifestV2);
+    // The rollback target is 1.1.0, not `init`'s 1.0.0: the first keg's runtime and verifier are `exit 0`
+    // stubs (Task 3's fixture), so no rollback onto it can pass the target verifier, keg or no keg.
+    await run(lifecycle, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: false });
+    await lifecycle.home.world.install("1.2.0");
+    await run(lifecycle, { kind: "update", version: null, apply: true, json: false });
+    await nodeFs.rm(lifecycle.home.world.prefix, { recursive: true, force: true });
+    const requests = lifecycle.home.world.requests.length;
+    await run(lifecycle, { kind: "rollback", apply: true, json: false });
+    expect(await activeVersion(lifecycle)).toBe("1.1.0");
+    expect(lifecycle.home.world.requests).toHaveLength(requests);
+    expect(instructionRows(await manifestOf(lifecycle.home))).toStrictEqual(attached);
+    await expectEntrypointFollowsActive(lifecycle);
   }, LIFECYCLE_TIMEOUT_MS);
 });

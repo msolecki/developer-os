@@ -193,7 +193,7 @@ export function renderUpdate(result: UpdateCommandResultV1): readonly string[] {
       const { plan } = result;
       return [
         `Update ${plan.current.version} -> ${plan.target.version} (preview: nothing was changed)`,
-        `download  ${plan.download.archiveBytes} bytes, ${String(plan.download.entryCount)} bundle entries`,
+        `source    ${renderPath(plan.packageSource.kegPath)} (bundle manifest ${plan.packageSource.bundleManifestHash})`,
         ...plan.owners.flatMap(renderOwner),
         ...plan.migrations.flatMap(renderMigration),
         plan.retainedRollback === null

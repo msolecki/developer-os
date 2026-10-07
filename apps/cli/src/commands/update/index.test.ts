@@ -146,7 +146,7 @@ describe("runUpdate", () => {
     expect(calls).toStrictEqual(["lock", "closure", "lock", "closure", "allocate"]);
     expect(update.requests).toStrictEqual([]);
     expect(update.events).not.toContain("planner");
-    expect(update.events).not.toContain("trust");
+    expect(update.events).not.toContain("package_source");
   });
 
   it("refuses a post-update edit at rollback --apply as a decision before any reservation", async () => {
@@ -234,7 +234,7 @@ describe("runUpdate", () => {
       expect(result.code, closure.kind).toBe(EXIT_CODES.recoveryRequired);
       if (!result.ok) expect(result.error).toMatchObject({ message: "update_recovery_other_operation", recovery });
     }
-    expect(update.events).not.toContain("trust");
+    expect(update.events).not.toContain("package_source");
     expect(update.events).not.toContain("planner");
     expect(update.requests).toStrictEqual([]);
   });
@@ -256,7 +256,7 @@ describe("runUpdate", () => {
 
     expect(result.ok).toBe(true);
     expect(result.ok && result.data).toMatchObject({ outcome, active: { version: "1.1.0" } });
-    expect(update.events).not.toContain("trust");
+    expect(update.events).not.toContain("package_source");
     expect(update.events).not.toContain("rollback.evidence");
     expect(update.requests).toStrictEqual([]);
   });

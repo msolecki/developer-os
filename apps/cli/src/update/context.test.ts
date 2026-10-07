@@ -24,7 +24,8 @@ import {
   removeCommandFixtures,
 } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
-import { createCliUpdateContext, readOfflineTrust } from "./context.js";
+import { createCliUpdateContext, packageSourcePorts, readOfflineTrust, readPackageChannelSource } from "./context.js";
+import type { AdmittedPackagedReleaseV1 } from "./packaged-release.js";
 import { tryLockScratchAttempt } from "./scratch-lock.js";
 import { releaseIdentityOf, UpdatePlanningRefusal } from "./planning.js";
 import type { RollbackRecordV1 } from "./planning.js";
@@ -181,15 +182,29 @@ describe("tryLockScratchAttempt", () => {
 });
 
 describe("apply ports", () => {
-  it("binds --apply in production with no fallback handoff, which refuses exit 4 before allocation and writes nothing (P7(d))", async () => {
+  it("binds update --apply's fallback to the keg planning admitted; with none admitted, composition refuses exit 4 and writes nothing (D84 K3)", async () => {
     const fixture = await installed("update-apply-no-fallback");
-    const ports = createCliUpdateContext(fixture.context).apply;
+    const update = createCliUpdateContext(fixture.context);
+    const ports = update.apply;
     if (ports === undefined) throw new Error("production binds the --apply ports");
+    const home = await update.readHome();
     const before = await inventoryDigest(fixture.root);
 
-    expect(await refusal(ports.withGlobalLock(() => ports.allocate(["lc", "rb", "mf", "mf"])))).toMatchObject({ reason: "update_fallback_unavailable", code: EXIT_CODES.capabilityUnavailable });
+    expect(await refusal(ports.compose({ home } as never))).toMatchObject({ reason: "update_fallback_unavailable", code: EXIT_CODES.capabilityUnavailable });
     expect(await inventoryDigest(fixture.root)).toEqual(before);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("remembers the keg each read admitted and hands over its manifest as the fallback (D84 K3)", async () => {
+    const keg = { identity: { bundleManifestHash: sha256("keg manifest"), launcherProtocol: 1, updateProtocol: 1 } } as unknown as AdmittedPackagedReleaseV1;
+    const ports = packageSourcePorts(() => Promise.resolve(keg));
+    expect(ports.fallback()).toBeNull();
+    expect(await ports.readPackageSource()).toBe(keg);
+    expect(ports.fallback()).toStrictEqual({ bundleManifestHash: sha256("keg manifest"), launcherProtocol: 1, updateProtocol: 1 });
+  });
+
+  it("refuses an architecture the source table does not name as an absent keg, exit 4", async () => {
+    expect(await refusal(readPackageChannelSource("ia32"))).toMatchObject({ reason: "update_package_source_absent", code: EXIT_CODES.capabilityUnavailable });
+  });
 
   it("reads a clear V2 closure through the bound ports under the global lock", async () => {
     const fixture = await installed("update-apply-closure");
@@ -199,11 +214,12 @@ describe("apply ports", () => {
     expect((await ports.withGlobalLock(() => ports.closure())).kind).toBe("clear");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("binds rollback --apply in production; without the fallback handoff its derivation refuses exit 4 before any read", async () => {
+  it("binds rollback --apply in production with the active release as its fallback, so it reads no keg; with no retained record it refuses before any read", async () => {
     const fixture = await createCommandFixture("update-rollback-apply-bound");
     const ports = createCliUpdateContext(fixture.context).apply;
     if (ports?.composeRollback === undefined) throw new Error("production binds the rollback derivation");
-    expect(await refusal(ports.composeRollback({} as UpdateRollbackComposeInputV1))).toMatchObject({ reason: "update_fallback_unavailable", code: EXIT_CODES.capabilityUnavailable });
+    const home = { manifest: { artifacts: [] }, active: { bundleManifestHash: sha256("active manifest"), launcherProtocol: 1, updateProtocol: 1 }, rollback: null };
+    expect(await refusal(ports.composeRollback({ home } as unknown as UpdateRollbackComposeInputV1))).toMatchObject({ reason: "update_rollback_unavailable", code: EXIT_CODES.capabilityUnavailable });
   });
 });
 

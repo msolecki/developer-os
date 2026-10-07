@@ -13,6 +13,7 @@ import {
   validateRollbackRecord,
 } from "./planning.js";
 import type { PlannedUpdateV1 } from "./planning.js";
+import type { UpdateScratchV1 } from "./context.js";
 import {
   createUpdateFixture,
   DIRECTORY_PATH,
@@ -40,7 +41,7 @@ async function refusal(work: Promise<unknown>): Promise<{ readonly reason: strin
 }
 
 describe("planUpdate", () => {
-  it("refuses an unsigned-local home right after the home gate, before FD 3, scratch or the network (NEW-147)", async () => {
+  it("refuses an unsigned-local home right after the home gate, before the keg is read (NEW-147)", async () => {
     const fixture = createUpdateFixture();
     const update = {
       ...fixture.update,
@@ -58,7 +59,22 @@ describe("planUpdate", () => {
     expect(fixture.requests).toStrictEqual([]);
   });
 
-  it("previews the selected signed release without returning private evidence", async () => {
+  it("refuses a home whose trust state is not the package channel, before the keg is read", async () => {
+    const fixture = createUpdateFixture();
+    const update = {
+      ...fixture.update,
+      readHome: async () => {
+        const home = await fixture.update.readHome();
+        // The signed state of the withdrawn root-key design: no `trust` member at all.
+        const signed = Object.fromEntries(Object.entries(home.trust).filter(([key]) => key !== "trust")) as unknown as typeof home.trust;
+        return { ...home, trust: signed };
+      },
+    };
+    expect(await refusal(planUpdate(update, { version: null }))).toStrictEqual({ reason: "update_trust_channel", code: EXIT_CODES.recoveryRequired });
+    expect(fixture.events).toStrictEqual(["home"]);
+  });
+
+  it("previews the selected packaged release without returning private evidence", async () => {
     const fixture = createUpdateFixture();
     const planned = await planUpdate(fixture.update, { version: null });
 
@@ -68,6 +84,7 @@ describe("planUpdate", () => {
     expect(plan.current.version).toBe("1.0.0");
     expect(plan.target.version).toBe("1.1.0");
     expect(plan.metadata.releaseIndexSequence).toBe("2");
+    expect(plan.metadata.delegationSequence).toBe("0");
     expect(plan.owners).toStrictEqual([{
       owner: "core",
       counts: { create: 0, replace: 2, remove: 0, unchanged: 1, externalEffects: 0 },
@@ -88,33 +105,17 @@ describe("planUpdate", () => {
     }
   });
 
-  it("gates the home first, reaches the network only after trust, and removes scratch last", async () => {
+  it("gates the home first, then reads the keg once; no FD 3, transport or scratch is reached", async () => {
     const fixture = createUpdateFixture({ residue: ["rp_11111111-1111-4111-8111-111111111111"] });
     await planUpdate(fixture.update, { version: null });
 
-    expect(fixture.events).toStrictEqual([
-      "home",
-      "trust",
-      "scratch.list",
-      "scratch.recover:rp_11111111-1111-4111-8111-111111111111",
-      "transport",
-      "transport:release_key_delegation",
-      "transport:release_index",
-      "transport:bundle_manifest",
-      "scratch.create",
-      "scratch.download",
-      "transport:archive",
-      "scratch.extract",
-      "snapshot",
-      "planner",
-      "capacity",
-      "scratch.cleanup",
-    ]);
+    expect(fixture.events).toStrictEqual(["home", "package_source", "snapshot", "planner", "capacity"]);
+    expect(fixture.requests).toStrictEqual([]);
   });
 
-  it("selects an explicitly requested stable version", async () => {
+  it("selects an explicitly requested stable version when it is the installed keg", async () => {
     const planned = await preview(
-      { releases: [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }, { version: "1.2.0", sequence: "3" }], latestVersion: "1.2.0" },
+      { releases: [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }, { version: "1.2.0", sequence: "3" }], kegVersion: "1.1.0" },
       "1.1.0",
     );
     expect(planned.result.outcome === "preview" ? planned.result.plan.target.version : null).toBe("1.1.0");
@@ -128,7 +129,7 @@ describe("planUpdate", () => {
     expect(fixture.plannerRequests[0]?.manifest.artifacts.some((artifact) => (artifact as { kind: string }).kind === "instruction")).toBe(false);
   });
 
-  it("returns an identical preview for a repeated run over the same signed metadata", async () => {
+  it("returns an identical preview for a repeated run over the same keg", async () => {
     const fixture = createUpdateFixture();
     const first = await planUpdate(fixture.update, { version: null });
     const second = await planUpdate(fixture.update, { version: null });
@@ -140,23 +141,21 @@ describe("planUpdate", () => {
     const forward = await preview();
     const reversed = await preview({ reversedOperations: true });
     if (forward.result.outcome !== "preview" || reversed.result.outcome !== "preview") throw new Error("expected previews");
-    // Each fixture signs with fresh keys, so the comparison is over what the keys do not sign.
     expect(reversed.result.plan.owners).toStrictEqual(forward.result.plan.owners);
     expect(reversed.result.plan.capacity).toStrictEqual(forward.result.plan.capacity);
   });
 
-  it("returns up_to_date with no scratch and no bundle request when the active release is latest", async () => {
+  it("returns up_to_date with no planner run when the keg is the active release", async () => {
     const fixture = createUpdateFixture({ releases: [{ version: "1.0.0", sequence: "1" }] });
     const planned = await planUpdate(fixture.update, { version: null });
 
     expect(planned.result).toStrictEqual({ schemaVersion: 1, outcome: "up_to_date", active: fixture.current });
     expect(planned.candidate).toBeNull();
-    expect(fixture.requests).toStrictEqual(["release_key_delegation", "release_index"]);
-    expect(fixture.events).not.toContain("scratch.create");
+    expect(fixture.events).toStrictEqual(["home", "package_source"]);
   });
 
   it("returns up_to_date after a rollback, when the trust watermark is above the active release (W2-PLANNING-2)", async () => {
-    const fixture = createUpdateFixture({ releases: [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }] });
+    const fixture = createUpdateFixture({ releases: [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }], kegVersion: "1.0.0" });
     const update = {
       ...fixture.update,
       readHome: async () => {
@@ -175,24 +174,24 @@ describe("planUpdate", () => {
   });
 
   it.each([
-    ["a version the index does not carry", { }, "9.9.9", "update_release_not_found", EXIT_CODES.invalidInput],
-    ["a downgrade", { active: "1.1.0" }, "1.0.0", "update_downgrade_refused", EXIT_CODES.invalidInput],
-  ] as const)("refuses %s before any scratch", async (_name, options, version, reason, code) => {
+    ["a version the keg does not carry", { }, "9.9.9", "update_release_not_found", EXIT_CODES.invalidInput],
+    ["a downgrade", { active: "1.1.0", kegVersion: "1.0.0" }, "1.0.0", "update_downgrade_refused", EXIT_CODES.invalidInput],
+  ] as const)("refuses %s before any planner run", async (_name, options, version, reason, code) => {
     const fixture = createUpdateFixture(options);
     expect(await refusal(planUpdate(fixture.update, { version: version as never }))).toStrictEqual({ reason, code });
-    expect(fixture.events).not.toContain("scratch.create");
+    expect(fixture.events).not.toContain("planner");
   });
 
-  it("refuses an index the delegated key did not sign", async () => {
-    const fixture = createUpdateFixture({ forgedIndex: true });
-    expect(await refusal(planUpdate(fixture.update, { version: null }))).toStrictEqual({ reason: "security_refusal", code: EXIT_CODES.securityRefusal });
-    expect(fixture.requests).toStrictEqual(["release_key_delegation", "release_index"]);
+  it("refuses a keg whose retained delegation is not the package-channel stand-in, exit 6", async () => {
+    const fixture = createUpdateFixture({ substitutedDelegation: new TextEncoder().encode("{\"schemaVersion\":1,\"trust\":\"unsigned-local\"}\n") });
+    expect(await refusal(planUpdate(fixture.update, { version: null }))).toStrictEqual({ reason: "update_package_source_invalid", code: EXIT_CODES.recoveryRequired });
+    expect(fixture.events).not.toContain("planner");
   });
 
-  it("refuses a bundle manifest that is not the signed one", async () => {
+  it("refuses a keg whose retained bundle manifest is not a bundle manifest, exit 6", async () => {
     const fixture = createUpdateFixture({ substitutedManifest: new TextEncoder().encode("{}\n") });
-    expect((await refusal(planUpdate(fixture.update, { version: null }))).code).toBe(EXIT_CODES.securityRefusal);
-    expect(fixture.events).not.toContain("scratch.create");
+    expect(await refusal(planUpdate(fixture.update, { version: null }))).toStrictEqual({ reason: "update_package_source_invalid", code: EXIT_CODES.recoveryRequired });
+    expect(fixture.events).not.toContain("planner");
   });
 
   it("refuses metadata older than the stored trust watermark", async () => {
@@ -208,33 +207,17 @@ describe("planUpdate", () => {
     expect(await refusal(planUpdate(fixture.update, { version: null }))).toStrictEqual({ reason, code: EXIT_CODES.capabilityUnavailable });
   });
 
-  it("removes scratch when the planner fails", async () => {
-    const fixture = createUpdateFixture({ plannerFailure: new SecurityRefusalError("Planner frame failed the secret screen") });
-    expect((await refusal(planUpdate(fixture.update, { version: null }))).code).toBe(EXIT_CODES.securityRefusal);
-    expect(fixture.events.at(-1)).toBe("scratch.cleanup");
-  });
+  it("surfaces the planner's refusal and its exit code unchanged, with no scratch to clean (W2-PLANNING-4)", async () => {
+    const failure = new SecurityRefusalError("Planner frame failed the secret screen");
+    const fixture = createUpdateFixture({ plannerFailure: failure });
+    const error: unknown = await planUpdate(fixture.update, { version: null }).then(() => null, (caught: unknown) => caught);
 
-  it("keeps the planning refusal and its exit code when scratch cleanup also fails (W2-PLANNING-4)", async () => {
-    const fixture = createUpdateFixture({ plannerFailure: new SecurityRefusalError("Planner frame failed the secret screen") });
-    const cleanupFailure = new Error("scratch cleanup failed");
-    const update = {
-      ...fixture.update,
-      scratch: {
-        ...fixture.update.scratch,
-        create: async (input: Parameters<typeof fixture.update.scratch.create>[0]) => ({
-          ...(await fixture.update.scratch.create(input)),
-          cleanup: () => Promise.reject(cleanupFailure),
-        }),
-      },
-    };
-    const error: unknown = await planUpdate(update, { version: null }).then(() => null, (caught: unknown) => caught);
-
-    expect(error).toBeInstanceOf(SecurityRefusalError);
+    expect(error).toBe(failure);
     expect((error as SecurityRefusalError).code).toBe(EXIT_CODES.securityRefusal);
-    expect((error as Error).cause).toBe(cleanupFailure);
+    expect(fixture.events.at(-1)).toBe("planner");
   });
 
-  it("refuses insufficient capacity without a preview and still removes scratch", async () => {
+  it("refuses insufficient capacity without a preview", async () => {
     const fixture = createUpdateFixture({
       capacity: { availableBytes: "1" as never, availableEntries: "10000000" as never, reservationGranularityBytes: "4096" as never },
     });
@@ -242,7 +225,7 @@ describe("planUpdate", () => {
       reason: "update_capacity_insufficient_bytes",
       code: EXIT_CODES.operationalFailure,
     });
-    expect(fixture.events.at(-1)).toBe("scratch.cleanup");
+    expect(fixture.events.at(-1)).toBe("capacity");
   });
 
   it("names the retained rollback release when one exists", async () => {
@@ -252,6 +235,7 @@ describe("planUpdate", () => {
       rollbackPrevious: "1.0.0",
     });
     const planned = await planUpdate(fixture.update, { version: null });
+    expect(fixture.releases.get("1.2.0")?.manifestHash).toBe(planned.result.outcome === "preview" ? planned.result.plan.target.bundleManifestHash : null);
     if (planned.result.outcome !== "preview") throw new Error("expected a preview");
     expect(planned.result.plan.retainedRollback?.release.version).toBe("1.0.0");
     expect(planned.result.plan.retainedRollback?.payload.entryCount).toBe(3);
@@ -289,7 +273,7 @@ describe("planUpdate", () => {
     expect(parsed.externalEffects).toStrictEqual([]);
   });
 
-  it("keeps the delegation, release index and bundle manifest byte-equal to what was fetched", async () => {
+  it("keeps the delegation, release index and bundle manifest byte-equal to what the keg retains", async () => {
     const fixture = createUpdateFixture();
     const planned = await prepareUpdate(fixture.update, { version: null });
     if (planned.apply === null) throw new Error("expected a prepared apply");
@@ -299,6 +283,35 @@ describe("planUpdate", () => {
 
     expect([hash(delegation), hash(index), hash(manifest)]).toStrictEqual([target.delegationHash, target.releaseIndexHash, target.bundleManifestHash]);
     expect(manifest).toBe(new TextDecoder().decode(fixture.releases.get("1.1.0")?.manifestBytes));
+  });
+});
+
+const never = (): never => {
+  throw new Error("a withdrawn update port was reached");
+};
+const neverScratch: UpdateScratchV1 = { create: never, listRecoverableAttempts: never, recoverCleanup: never };
+
+describe("planning from the package channel (D84 K2, K4 F7)", () => {
+  it("(a) previews the keg as packageSource and never touches FD 3, a transport or scratch", async () => {
+    const fixture = createUpdateFixture();
+    const result = await planUpdate({ ...fixture.update, readOfflineTrust: never, createTransport: never, scratch: neverScratch }, { version: null });
+    expect(result.result).toMatchObject({ outcome: "preview", plan: { packageSource: { kegPath: fixture.kegPath, bundleManifestHash: fixture.releases.get("1.1.0")?.manifestHash } } });
+    expect(result.result.outcome === "preview" && "download" in result.result.plan).toBe(false);
+  });
+
+  it("(b) refuses a keg below the trust watermark as a downgrade", async () => {
+    const fixture = createUpdateFixture({ kegVersion: "0.9.0", kegSequence: "1" });
+    await expect(planUpdate(fixture.update, { version: null })).rejects.toMatchObject({ reason: "update_downgrade_refused", code: EXIT_CODES.invalidInput });
+  });
+
+  it("(e) refuses the active version rebuilt with other bytes as a rebound, never up_to_date", async () => {
+    const fixture = createUpdateFixture({ kegVersion: "1.0.0", kegSequence: "1", rebuilt: true });
+    await expect(planUpdate(fixture.update, { version: null })).rejects.toMatchObject({ reason: "update_release_identity_rebound", code: EXIT_CODES.securityRefusal });
+  });
+
+  it("(f) refuses an absent keg as exit 4 before any write", async () => {
+    const fixture = createUpdateFixture({ kegAbsent: true });
+    await expect(planUpdate(fixture.update, { version: null })).rejects.toMatchObject({ code: EXIT_CODES.capabilityUnavailable, message: "update_package_source_absent" });
   });
 });
 
@@ -315,6 +328,7 @@ describe("planRollback", () => {
     expect(plan.consumesRollbackRecord).toBe(true);
     expect(plan.owners[0]?.paths.replace).toStrictEqual([FILE_A_PATH, FILE_B_PATH]);
     expect(fixture.events).toStrictEqual(["home", "rollback.evidence", "capacity"]);
+    expect(fixture.events).not.toContain("package_source");
     expect(fixture.requests).toStrictEqual([]);
   });
 

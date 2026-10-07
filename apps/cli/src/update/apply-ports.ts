@@ -964,7 +964,7 @@ async function removeParticipantDirectories(lifecycle: CliLifecycleContext, cons
 interface LiveSourcesV1 {
   readonly sources: UpdateComposedSourcesV1;
   readonly screen: ConstructionScreenV1;
-  /** The verified scratch extraction; null for a rollback, which reads no scratch. */
+  /** The admitted keg's bundle (D84 K2); null for a rollback, which reads no keg. */
   readonly scratch: Parameters<BundleSourceExecutor["stage"]>[1] | null;
 }
 
@@ -1090,9 +1090,11 @@ async function retainedBundleManifest(lifecycle: CliLifecycleContext, release: R
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Spec 2 §9's production `update --apply` ports. `fallback` is the launcher's FD 3 handoff; until
- * Task 11b extends it, production passes `() => null` and `allocate` refuses before any write
- * (D72 P7(d)). Every port runs under the one global lock `withGlobalLock` holds.
+ * Spec 2 §9's production `update --apply` ports. `fallback` is the keg this invocation admitted
+ * (D84 K3): `update --apply` composes with it, and refuses `update_fallback_unavailable` before
+ * any construction if none was admitted. A rollback reads no keg, so it composes with the active
+ * release's handoff, which is the keg it was installed from (Review Focus 2). Every port runs
+ * under the one global lock `withGlobalLock` holds.
  */
 export function productionUpdateApplyPorts(context: CliContext, fallback: () => UpdateFallbackHandoffV1 | null): UpdateApplyPortsV1 {
   const productHome = parseCanonicalAbsolutePathText(context.paths.home);
@@ -1106,8 +1108,7 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
     authority ??= ledgerAuthority(context, lifecycle());
     return authority;
   };
-  const composeDeps = (home: UpdateHomeV1): ComposeDepsV1 => {
-    const handoff = fallback() ?? refuse("update_fallback_unavailable", EXIT_CODES.capabilityUnavailable, context.paths.stateDir);
+  const composeDeps = (home: UpdateHomeV1, handoff: UpdateFallbackHandoffV1): ComposeDepsV1 => {
     const current = lifecycle();
     return {
       productHome,
@@ -1205,7 +1206,6 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
       return (await lifecycle().inspectClosureV2(key, residue)).closure;
     },
     allocate: async (prefixes: readonly LifecycleIdPrefixV1[]) => {
-      if (fallback() === null) refuse("update_fallback_unavailable", EXIT_CODES.capabilityUnavailable, context.paths.stateDir);
       if (prefixes[0] !== "lc") return thirdState("update_allocation_prefixes");
       const current = lifecycle();
       const { key, residue } = await ledger();
@@ -1216,14 +1216,16 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
       return id;
     },
     compose: async (input) => {
+      const deps = composeDeps(input.home, fallback() ?? refuse("update_fallback_unavailable", EXIT_CODES.capabilityUnavailable, context.paths.stateDir));
       const screen = await constructionScreen(context);
-      const composed = await composeUpdate(input, composeDeps(input.home));
+      const composed = await composeUpdate(input, deps);
       composedSources.set(input.coordinatorId, { sources: composed.sources, scratch: input.inputs.verified, screen });
       return composed;
     },
     // Local evidence only: the retained set and previous bundle manifest are reopened here, under the lock.
     composeRollback: async (input) => {
-      const deps = composeDeps(input.home);
+      const { bundleManifestHash, launcherProtocol, updateProtocol } = input.home.active;
+      const deps = composeDeps(input.home, fallback() ?? { bundleManifestHash, launcherProtocol, updateProtocol });
       const record = input.home.rollback ?? refuse("update_rollback_unavailable", EXIT_CODES.capabilityUnavailable);
       const screen = await constructionScreen(context);
       const composed = await composeRollback(input, {

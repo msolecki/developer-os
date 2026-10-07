@@ -163,7 +163,7 @@ export type {
   RollbackPayloadPreviewV1,
   RollbackPreviewInputV1,
   SchemaMigrationPreviewV1,
-  UpdateDownloadPreviewV1,
+  UpdatePackageSourcePreviewV1,
   UpdatePlanPreviewV1,
   UpdatePreviewInputV1,
   UpdateRollbackPreviewV1,

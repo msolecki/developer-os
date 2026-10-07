@@ -157,7 +157,7 @@ export function recoverUpdate(update: CliUpdateContext, operation?: UpdateOperat
 
 /**
  * Spec 2 §9.1: a clear V2 closure, the guarded home, the retained rollback evidence, and a fresh planner run over the
- * same verified scratch must reproduce the pre-lock candidate exactly; then aggregate feasibility
+ * same admitted keg must reproduce the pre-lock candidate exactly; then aggregate feasibility
  * is rechecked against a fresh capacity observation. Nothing is reserved or written before this.
  */
 async function revalidate(update: CliUpdateContext, ports: UpdateApplyPortsV1, prepared: PreparedUpdateApplyV1): Promise<{ readonly home: UpdateHomeV1; readonly materialized: MaterializedUpdateV1 }> {
@@ -176,8 +176,7 @@ async function revalidate(update: CliUpdateContext, ports: UpdateApplyPortsV1, p
 
 /**
  * Pre-handoff: construction plan → directories → files and both source envelopes (every output
- * frame screened and re-hashed into its exact consumers) → scratch cleanup → outer V2 plan and
- * journal. A failure before handoff is compensated through the construction-cleanup arm recovery
+ * frame screened and re-hashed into its exact consumers) → outer V2 plan and journal. A failure before handoff is compensated through the construction-cleanup arm recovery
  * would take; once the outer journal exists only the coordinator may choose a direction, so the
  * residue is left for the next recovery. A third state met while compensating outranks the failure.
  */
@@ -195,14 +194,13 @@ export async function beforeConstruction<T>(ports: UpdateApplyPortsV1, work: () 
   }
 }
 
-export async function construct(ports: UpdateApplyPortsV1, composition: UpdateApplyCompositionV1, outputs: readonly SecretScreenedBlobV1[], cleanupScratch: () => Promise<void>): Promise<void> {
+export async function construct(ports: UpdateApplyPortsV1, composition: UpdateApplyCompositionV1, outputs: readonly SecretScreenedBlobV1[]): Promise<void> {
   const plan = composition.construction;
   const store = ports.construction(plan.coordinatorId);
   try {
     await store.publish(plan);
     await store.stageDirectories(plan);
     await store.stageFiles(plan, frames(outputs));
-    await cleanupScratch();
     await store.publishOuter(plan, composition.outer);
   } catch (error) {
     try {
@@ -226,31 +224,21 @@ function resultOf(outcome: UpdateLifecycleOutcomeV1, inputs: UpdateTargetInputsV
  * coordinator block is reserved, every allocation-dependent byte is derived and checked against
  * exact capacity, the construction envelope hands off to the V2 coordinator, and the coordinator
  * runs the §9.3 steps. A failure before the verifier's durable success compensates to the old
- * release (trust stays advanced); the scratch attempt is removed on every path.
+ * release (trust stays advanced).
  */
 export async function applyUpdate(update: CliUpdateContext, prepared: PreparedUpdateApplyV1): Promise<UpdateApplyResultV1> {
-  let scratchOpen = true;
-  const cleanupScratch = async (): Promise<void> => {
-    if (!scratchOpen) return;
-    scratchOpen = false;
-    await prepared.scratch.cleanup();
-  };
-  try {
-    const ports = updateApplyPorts(update);
-    return await ports.withGlobalLock(async () => {
-      const { home, materialized } = await revalidate(update, ports, prepared);
-      const coordinatorId = await ports.allocate(updateApplyPrefixes(materialized));
-      const composition = await beforeConstruction(ports, async () => {
-        const composed = await ports.compose({ coordinatorId, home, inputs: prepared.inputs, materialized });
-        const plan = composed.construction;
-        if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_apply") refuse("update_composition_identity", EXIT_CODES.recoveryRequired);
-        requireCapacity(composed.capacity);
-        return composed;
-      });
-      await construct(ports, composition, materialized.run.outputBlobs, cleanupScratch);
-      return resultOf(await new UpdateLifecycleCoordinator(ports.coordinator(coordinatorId)).execute(coordinatorId), prepared.inputs);
+  const ports = updateApplyPorts(update);
+  return ports.withGlobalLock(async () => {
+    const { home, materialized } = await revalidate(update, ports, prepared);
+    const coordinatorId = await ports.allocate(updateApplyPrefixes(materialized));
+    const composition = await beforeConstruction(ports, async () => {
+      const composed = await ports.compose({ coordinatorId, home, inputs: prepared.inputs, materialized });
+      const plan = composed.construction;
+      if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_apply") refuse("update_composition_identity", EXIT_CODES.recoveryRequired);
+      requireCapacity(composed.capacity);
+      return composed;
     });
-  } finally {
-    await cleanupScratch();
-  }
+    await construct(ports, composition, materialized.run.outputBlobs);
+    return resultOf(await new UpdateLifecycleCoordinator(ports.coordinator(coordinatorId)).execute(coordinatorId), prepared.inputs);
+  });
 }

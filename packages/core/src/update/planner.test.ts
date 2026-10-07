@@ -492,7 +492,7 @@ describe("planner draft materialization", () => {
       ownerRoots: { codex: parseCanonicalAbsolutePathText("/home/.codex") },
       transcript: transcript(),
       metadata: { delegationSequence: u("1"), delegationHash: sha("delegation"), delegatedReleaseKeyId: sha("key"), releaseIndexSequence: u("2"), releaseIndexHash: sha("index-2") },
-      download: { archiveBytes: u("1024"), archiveSha256: sha("archive"), expandedBytes: u("4096"), entryCount: 3 },
+      packageSource: { kegPath: parseCanonicalAbsolutePathText("/prefix/Cellar/developer-os/2.0.0"), bundleManifestHash: sha("manifest-2.0.0") },
       retainedRollback: { release: release("1.0.0", "1"), payload: { payloadId: parseRollbackPayloadId(`rb_${sha("nonce")}_1`), entryCount: 2, aggregateBytes: 64 } },
       capacity,
       concreteManifest: { artifacts: [], schemaVersion: 2 },

@@ -16,7 +16,7 @@ import {
   type PreparedUpdateCandidateV1,
   type RollbackPayloadEntryV1,
   type SchemaMigrationPreviewV1,
-  type UpdateDownloadPreviewV1,
+  type UpdatePackageSourcePreviewV1,
   type UpdatePlanPreviewV1,
 } from "./preview.js";
 import { orderMigrationChain } from "./migration-planning.js";
@@ -1126,7 +1126,7 @@ export interface PlannerDraftMaterializationContextV1 {
   readonly ownerRoots: Readonly<Partial<Record<ArtifactOwner, CanonicalAbsolutePathV1>>>;
   readonly transcript: PlannerTranscriptIdentityV1;
   readonly metadata: ReleaseMetadataIdentityV1;
-  readonly download: UpdateDownloadPreviewV1;
+  readonly packageSource: UpdatePackageSourcePreviewV1;
   readonly retainedRollback: UpdatePlanPreviewV1["retainedRollback"];
   readonly capacity: UpdateCapacityInputV1;
   /** Built by the owner and manifest tasks from the rehydrated draft; bound here by hash. */
@@ -1200,7 +1200,7 @@ export function materializePlannerDraft(
     current: request.currentRelease,
     target: request.targetRelease,
     metadata: context.metadata,
-    download: context.download,
+    packageSource: context.packageSource,
     owners,
     migrations,
     planner: transcript,
