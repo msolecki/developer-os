@@ -46,7 +46,7 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-28 | founder, NEW-113 Task 2 addenda to D71 (roadmap D73), folded in at the plan close 2026-09-29 | a fourth `darwin` row `/usr/bin/git-receive-pack`, which `real_receive_pack` executes with argv0 `git-receive-pack`; the Git supervisor stays synchronous with a synchronous inspector/recheck pair | §4.2, §7 |
 | 2026-09-29 | NEW-110 plan close (Spec 2 D72 P8, NEW-86) | pointer: admitted bookkeeping paths carry their planned `dev`/`ino` | §2.1 |
 | 2026-09-29 | founder, closed-phase spec retirement | pointers: the retired A13 hooks spec §7.3 is `docs/architecture/hooks.md` §3.6; the retired A12 instruction-artifacts spec §6.3 is `docs/architecture/foundation.md` §12.4 | §2.1, §6 |
-| 2026-10-07 | founder, NEW-193 (6) | the runner-lease count follows the six-job registry of NEW-134 / D77 (`brain-reindex`, `brain-lint`, `doctor`, `git-sync`, `brain-garden`, `brain-pulse`): each statement of four runner, plan-bound or lifetime leases reads as six, one `AutomationRunnerLeaseV1` per job; the text says "four" in place and carries the amendment beside it | §2.2, §2.4, §6, §7 |
+| 2026-10-07 | founder, NEW-193 (6) | the runner-lease count follows the six-job registry of NEW-134 / D77 (`brain-reindex`, `brain-lint`, `doctor`, `git-sync`, `brain-garden`, `brain-pulse`): each statement of four runner, plan-bound or lifetime leases reads as six, one `AutomationRunnerLeaseV1` per job; the text says "four" in place and carries the amendment beside it; two derived counts recomputed from code: automation enable/reconcile entries are three to six (§5.3), and a complete planning observation admits one domain probe plus at most eighteen service probes (six jobs × three labels) | §2.2, §2.4, §5.3, §6, §7 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
 change is marked "Amended 2026-09-22 (A13 Q3-A)"; the later ones are marked with their decision
@@ -4178,7 +4178,7 @@ Apply accepts only this coordinator-embedded plan and recomputes all
 cross-bindings before any Foundation or launchd participant starts.
 
 Automation enable/reconcile entries equal the complete eligible registry (three entries, or four when
-Git sync is eligible); automation disable entries equal the complete installed automation set; and a
+Git sync is eligible; **Amended 2026-10-07 (NEW-193 (6), founder-approved):** three to six entries: the three mandatory jobs, `git-sync` when Git sync is eligible, and each of the optional `brain-garden` and `brain-pulse` only when it carries a schedule, as `reconcileAutomationSchedules` derives them from `eligibleLaunchdJobs` — `packages/platform-macos/src/launchd/schedule.ts:101-133`, `packages/platform-macos/src/launchd/registry.ts:280-282`); automation disable entries equal the complete installed automation set; and a
 `uninstall/present_manifest` entry set equals its complete manifest-owned launchd set and may be empty;
 `uninstall/present_manifest_without_launchd` has no `LaunchdPlanV1` (amended 2026-09-17, A14).
 No operation may omit an affected job or add an unaffected one.
@@ -4288,7 +4288,7 @@ transition is a foreign third state. Exactly the expected generated candidate pr
 label, generation }`; none of the owned candidates present is `unloaded`.
 
 After deduplication the candidate set has one to three targets per job. A complete four-job planning
-observation therefore admits at most one domain probe plus twelve service probes and shares one absolute
+observation therefore admits at most one domain probe plus twelve service probes (**Amended 2026-10-07 (NEW-193 (6), founder-approved):** a complete six-job observation admits at most one domain probe plus eighteen service probes: `validateJobs` caps the request at the six registry jobs and each job probes its deduplicated base, retained and planned labels, at most three — `packages/platform-macos/src/launchd/observe.ts:89-90,146`) and shares one absolute
 30,000-ms observation deadline; no per-job or per-probe restart extends it.
 
 There is deliberately no prefix enumeration. Every generation Developer OS can have produced is
