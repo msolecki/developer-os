@@ -721,7 +721,6 @@ export class BootstrapExecutor {
   ): Promise<CreatedPathEvidenceV1> {
     const path = deriveBootstrapCreationEvidencePaths(
       this.#dependencies.paths.home as CanonicalAbsolutePathV1,
-      "fresh_v2_init",
       plan.id,
       scope,
       ordinal,
@@ -1554,7 +1553,6 @@ export class BootstrapExecutor {
 
       const envelope = deriveBootstrapEnvelopePaths(
         paths.home as CanonicalAbsolutePathV1,
-        "fresh_v2_init",
         id,
       );
       let authorityPlan: FreshV2InitPlanV1 | null = null;
@@ -2200,7 +2198,7 @@ export class BootstrapExecutor {
       maximumJournalBytes: MAX_JOURNAL_BYTES,
     } as unknown as ManifestStatePlanV1;
 
-    const envelope = deriveBootstrapEnvelopePaths(paths.home as CanonicalAbsolutePathV1, "fresh_v2_init", input.id);
+    const envelope = deriveBootstrapEnvelopePaths(paths.home as CanonicalAbsolutePathV1, input.id);
     const maximumStagingEntries =
       2 * payloads.length +
       3 * (createdPaths.length + launch.paths.length) +
@@ -2682,10 +2680,6 @@ export class BootstrapExecutor {
         { cause: error },
       );
     }
-  }
-
-  private async readOrCreateJournal(plan: FreshV2InitPlanV1): Promise<FreshV2InitJournalV1> {
-    return (await this.storeFor(plan)).current();
   }
 
   private async writeJournal(
@@ -3204,7 +3198,6 @@ export class BootstrapExecutor {
         }
         const evidencePath = deriveBootstrapCreationEvidencePaths(
           this.#dependencies.paths.home as CanonicalAbsolutePathV1,
-          "fresh_v2_init",
           plan.id,
           scope,
           ordinal,
@@ -3271,7 +3264,6 @@ export class BootstrapExecutor {
     };
     const evidencePath = deriveBootstrapCreationEvidencePaths(
       this.#dependencies.paths.home as CanonicalAbsolutePathV1,
-      "fresh_v2_init",
       plan.id,
       scope,
       ordinal,
@@ -3944,7 +3936,6 @@ export class BootstrapExecutor {
       // Creation evidence written before the second failure is retained with the file (2), never left as residue.
       const evidencePath = deriveBootstrapCreationEvidencePaths(
         this.#dependencies.paths.home as CanonicalAbsolutePathV1,
-        "fresh_v2_init",
         plan.id,
         intent.scope,
         intent.ordinal,

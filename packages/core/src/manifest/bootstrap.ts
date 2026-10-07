@@ -537,7 +537,6 @@ export function validateBootstrapFoundationOrdinal(value: unknown):
 
 export function deriveBootstrapEnvelopePaths(
   productHome: CanonicalAbsolutePathV1,
-  operation: "fresh_v2_init",
   id: FreshV2InitIdV1,
 ): {
   readonly plan: ExactProductStatePathV1;
@@ -567,7 +566,6 @@ export function deriveBootstrapPayloadEvidencePaths(
 
 export function deriveBootstrapCreationEvidencePaths(
   productHome: CanonicalAbsolutePathV1,
-  operation: "fresh_v2_init",
   id: FreshV2InitIdV1,
   scope: "ordinary" | "launchability",
   ordinal: number,
@@ -1728,7 +1726,7 @@ export function validateBootstrapPlan(
     if (id !== context.id) return refuse();
     if (admitCanonicalAbsolutePath(context.productHome, context.evidence) !== context.productHome || context.stateRoot !== `${context.productHome}/state` || context.productStagingRoot !== `${context.productHome}/staging`) return refuse();
     const bootstrapIdentity = validateBootstrapIdentity(input.bootstrapIdentity, context);
-    const paths = deriveBootstrapEnvelopePaths(context.productHome, operation, id);
+    const paths = deriveBootstrapEnvelopePaths(context.productHome, id);
     const journalSlots = validateJournalSlots(input.journalSlots, paths.journalSlots, context);
     if (input.planPath !== paths.plan || input.stagingRoot !== paths.stagingRoot) return refuse();
     const admittedPreexistingPaths = boundedPaths(input.admittedPreexistingPaths, context);

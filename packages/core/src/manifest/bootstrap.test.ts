@@ -101,7 +101,7 @@ describe("bootstrap deterministic names and external-shape authority", () => {
   );
 
   it("catches a prefix or envelope-kind branch that derives caller-selected bootstrap paths", () => {
-    expect(deriveBootstrapEnvelopePaths(productHome, "fresh_v2_init", freshId)).toEqual({
+    expect(deriveBootstrapEnvelopePaths(productHome, freshId)).toEqual({
       plan: "/product/state/fresh-v2-init.fi_123e4567-e89b-42d3-a456-426614174000.plan.json",
       journalSlots: [
         "/product/state/fresh-v2-init.fi_123e4567-e89b-42d3-a456-426614174000.journal.0.json",
@@ -127,7 +127,6 @@ describe("bootstrap deterministic names and external-shape authority", () => {
     expect(
       deriveBootstrapCreationEvidencePaths(
         productHome,
-        "fresh_v2_init",
         freshId,
         "launchability",
         7,
@@ -1634,11 +1633,9 @@ describe("withdrawn v1_to_v2 bootstrap arm (D18, NEW-78)", () => {
   });
 
   it("derives no envelope or creation-evidence path for the withdrawn arm", () => {
-    expect(() => deriveBootstrapEnvelopePaths(productHome, "v1_to_v2" as never, migrationId as never)).toThrow(BootstrapStateError);
-    expect(() => deriveBootstrapEnvelopePaths(productHome, "fresh_v2_init", migrationId as never)).toThrow(BootstrapStateError);
+    expect(() => deriveBootstrapEnvelopePaths(productHome, migrationId as never)).toThrow(BootstrapStateError);
     expect(() => deriveBootstrapCreationEvidencePaths(
       productHome,
-      "v1_to_v2" as never,
       migrationId as never,
       "ordinary",
       0,
