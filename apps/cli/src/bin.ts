@@ -18,6 +18,7 @@ import { LAUNCHER_TRUST_ARGUMENT } from "./update/context.js";
 import {
   admitPackageChannelRelease,
   admitUnsignedLocalPackagedRelease,
+  isPackageSourceAbsent,
   resolvePackageChannelSource,
 } from "./update/packaged-release.js";
 import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
@@ -34,9 +35,10 @@ async function admitPackageChannelKeg(): Promise<PackagedReleaseSourceV1 | null>
     return await admitPackageChannelRelease(packageRoot, {
       prefix: PACKAGE_CHANNEL_SOURCE_TABLE[architecture].prefix,
       requireVersion: PRODUCT_VERSION,
+      architecture,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "update_package_source_absent") return null;
+    if (isPackageSourceAbsent(error)) return null;
     throw error;
   }
 }

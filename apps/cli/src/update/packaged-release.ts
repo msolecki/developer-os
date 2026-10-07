@@ -620,7 +620,7 @@ function decodeDocument(bytes: Uint8Array, limit: number): unknown {
  */
 export async function admitPackageChannelRelease(
   packageRoot: string,
-  options: { readonly prefix: string; readonly requireVersion: string | null },
+  options: { readonly prefix: string; readonly requireVersion: string | null; readonly architecture: "arm64" | "x64" },
 ): Promise<PackagedReleaseSourceV1> {
   try {
     await assertAncestors(packageRoot, options.prefix);
@@ -632,10 +632,7 @@ export async function admitPackageChannelRelease(
     validatePackageChannelDelegation(decodeDocument(delegationBytes, 1024));
     const index = validateReleaseIndex(decodeDocument(indexBytes, 4 * 1024 * 1024));
     const manifest = validateBundleManifest(decodeDocument(manifestBytes, 16 * 1024 * 1024));
-    const architecture = process.arch;
-    if (architecture !== "arm64" && architecture !== "x64") {
-      return securityRefusal("package-channel release supports only darwin arm64 or x64");
-    }
+    const architecture = options.architecture;
     const row = index.releases[0];
     const reference = row?.bundles[architecture === "arm64" ? 0 : 1];
     if (
@@ -707,6 +704,13 @@ export async function admitPackageChannelRelease(
  * D84 K4: resolves the table's `opt` link once, with no `brew` and no `PATH`. The link must
  * name `<prefix>/Cellar/developer-os/<stable-semver>` and that keg must already be canonical.
  */
+export const PACKAGE_SOURCE_ABSENT = "update_package_source_absent";
+
+/** True for the table path being absent (exit 4); `init` then reports no packaged handoff. */
+export function isPackageSourceAbsent(error: unknown): boolean {
+  return error instanceof PackagedReleaseError && error.code === EXIT_CODES.capabilityUnavailable && error.message === PACKAGE_SOURCE_ABSENT;
+}
+
 export async function resolvePackageChannelSource(
   architecture: "arm64" | "x64",
   table: typeof PACKAGE_CHANNEL_SOURCE_TABLE = PACKAGE_CHANNEL_SOURCE_TABLE,
@@ -717,7 +721,7 @@ export async function resolvePackageChannelSource(
       return await nodeFs.lstat(path, { bigint: true });
     } catch (error) {
       if ((error as { readonly code?: unknown }).code === "ENOENT") {
-        throw new PackagedReleaseError(EXIT_CODES.capabilityUnavailable, "update_package_source_absent");
+        throw new PackagedReleaseError(EXIT_CODES.capabilityUnavailable, PACKAGE_SOURCE_ABSENT);
       }
       throw error;
     }

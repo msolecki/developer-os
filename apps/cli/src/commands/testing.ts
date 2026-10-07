@@ -486,6 +486,8 @@ async function repositoryWorkflowFiles(): Promise<readonly ReleaseFileV1[]> {
   return files;
 }
 
+const SYNTHETIC_RELEASE_VERSION = "1.0.0";
+
 async function createSyntheticPackagedRelease(
   root: string,
   instructions: readonly ReleaseFileV1[] | undefined,
@@ -495,7 +497,7 @@ async function createSyntheticPackagedRelease(
   const prefix = join(root, "prefix");
   await nodeFs.mkdir(prefix, { mode: 0o755 });
   await nodeFs.chmod(prefix, 0o755);
-  const keg = join(prefix, "Cellar", "developer-os", PRODUCT_VERSION);
+  const keg = join(prefix, "Cellar", "developer-os", SYNTHETIC_RELEASE_VERSION);
   await nodeFs.mkdir(join(keg, "libexec"), { recursive: true, mode: 0o755 });
   const encode = (text: string) => new TextEncoder().encode(text);
   const bundleFiles: ReleaseFileV1[] = [
@@ -517,7 +519,7 @@ async function createSyntheticPackagedRelease(
   }
   const manifest = validateBundleManifest({
     schemaVersion: 1,
-    version: PRODUCT_VERSION,
+    version: SYNTHETIC_RELEASE_VERSION,
     releaseSequence: "1",
     platform: "darwin",
     architecture,
@@ -543,20 +545,20 @@ async function createSyntheticPackagedRelease(
     platform: "darwin",
     architecture: candidate,
     archiveFormat: "zstd-ustar-v1",
-    archivePath: `${PRODUCT_VERSION}/darwin-${candidate}.tar.zst`,
+    archivePath: `${SYNTHETIC_RELEASE_VERSION}/darwin-${candidate}.tar.zst`,
     archiveBytes: "10",
     archiveSha256: digest(`archive ${candidate}`),
-    manifestPath: `${PRODUCT_VERSION}/darwin-${candidate}.manifest.json`,
+    manifestPath: `${SYNTHETIC_RELEASE_VERSION}/darwin-${candidate}.manifest.json`,
     manifestBytes: candidate === architecture ? String(manifestBytes.byteLength) : "11",
     manifestSha256: candidate === architecture ? digest(manifestBytes) : digest(`other ${candidate}`),
   });
   const index = {
     sequence: "1",
-    latestVersion: PRODUCT_VERSION,
-    releases: [{ version: PRODUCT_VERSION, releaseSequence: "1", minimumLauncherProtocol: 1, updateProtocol: 1, bundles: [reference("arm64"), reference("x64")] }],
+    latestVersion: SYNTHETIC_RELEASE_VERSION,
+    releases: [{ version: SYNTHETIC_RELEASE_VERSION, releaseSequence: "1", minimumLauncherProtocol: 1, updateProtocol: 1, bundles: [reference("arm64"), reference("x64")] }],
   } as unknown as CanonicalJsonValue;
   const packageRoot = await writePackageChannelRelease({ outDir: join(keg, "libexec", "fallback"), index, manifest, bundleFiles });
-  return admitPackageChannelRelease(packageRoot, { prefix: await nodeFs.realpath(prefix), requireVersion: null });
+  return admitPackageChannelRelease(packageRoot, { prefix: await nodeFs.realpath(prefix), requireVersion: null, architecture });
 }
 
 export async function createCommandFixture(
