@@ -209,20 +209,35 @@ async function preservedManifest(lifecycle: CliLifecycleContext, productHome: Ca
   const id = ids[0] as LifecycleCoordinatorIdV1;
   const store = new UpdateCoordinatorJournalStore({ fs: lifecycle.fs, productHome, effectiveUid: lifecycle.effectiveUid, uuid: lifecycle.uuid });
   if (await store.isEnvelopeSuffix(id)) return null;
-  const { plan, journal } = await store.read(id);
+  let read: Awaited<ReturnType<UpdateCoordinatorJournalStore["read"]>>;
+  try {
+    read = await store.read(id);
+  } catch (error) {
+    // A sole plan that is not an update plan (V1, malformed) grants no stand-in; the absence stays `manifest_absent`.
+    if (error instanceof LifecycleRecoveryRequiredError) return null;
+    throw error;
+  }
+  const { plan, journal } = read;
   const cursor = journal.direction === "forward" ? journal.nextStep : journal.compensationNext;
   const step = cursor === null ? undefined : plan.steps[cursor];
   if (step?.kind !== "manifest" || step.transition === "finalize_tombstones") return null;
-  const { execution, leaves } = await reopen(lifecycle, productHome, plan);
+  const { execution, leaves, construction } = await reopen(lifecycle, productHome, plan);
   if (execution === null) return null;
   const ref = step.transition === "publish_terminal" ? execution.manifest.terminal : execution.manifest.transitional;
   const manifestPlan = (leaves.get(ref.path) ?? null) as ManifestStatePlanV1 | null;
   const before = manifestPlan?.before;
   if (manifestPlan === null || before?.state !== "present") return null;
-  // The tombstone must still be the journalled preimage: exact decimal dev/ino, owner, mode, links, length, hash.
+  // A staged `before` (the terminal plan's: the transitional postimage) carries no inode; construction evidence alone binds it (D72 P2).
+  let identity: { readonly dev: string; readonly ino: string } | null = before.dev !== null && before.ino !== null ? { dev: before.dev, ino: before.ino } : null;
+  if (identity === null && before.bytes?.kind === "update_expected" && construction !== null) {
+    identity = await constructionPayloadIdentity(lifecycle.fs, lifecycle.effectiveUid, construction)(before.bytes);
+  }
+  if (identity === null) return null;
+  // The cursor only selects the plan. The tombstone being the journalled preimage (exact decimal
+  // dev/ino, owner, mode, links, length, hash) is what proves the preserve rename ran.
   const entry = await lifecycle.fs.lstat(manifestPlan.tombstonePath);
   if (
-    entry?.kind !== "regular_file" || entry.dev !== before.dev || entry.ino !== before.ino || entry.ownerUid !== before.ownerUid ||
+    entry?.kind !== "regular_file" || entry.dev !== identity.dev || entry.ino !== identity.ino || entry.ownerUid !== before.ownerUid ||
     entry.mode !== before.mode || entry.nlink !== before.nlink || entry.size !== before.size
   ) {
     return null;
