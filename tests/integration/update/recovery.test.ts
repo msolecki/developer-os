@@ -326,11 +326,12 @@ describe("an allocation that died after its allocator temp landed", () => {
   }, CASE_TIMEOUT_MS);
 });
 
-describe("a run killed after it finalized and before its envelope plan was removed (NEW-162 follow-up)", () => {
-  /** Dies right after the coordinator's own journal is unlinked: the plan-only envelope suffix. */
-  const afterJournalRemoved = (context: DyingCliContext) =>
-    dieWhen(context, (name, args) => name === "unlinkExact" && /\/lc_[0-9a-f]{64}_[0-9]+\.json$/u.test((args[0] as { readonly path: string }).path));
+/** Dies right after the coordinator's own journal is unlinked: the plan-only envelope suffix. */
+function afterJournalRemoved(context: DyingCliContext): ReturnType<typeof dieWhen> {
+  return dieWhen(context, (name, args) => name === "unlinkExact" && /\/lc_[0-9a-f]{64}_[0-9]+\.json$/u.test((args[0] as { readonly path: string }).path));
+}
 
+describe("a run killed after it finalized and before its envelope plan was removed (NEW-162 follow-up)", () => {
   it("reports the finished rollback from `update rollback --apply` with exit 0", async () => {
     const home = await baseAt120("recovery-suffix-rollback");
     const dying = afterJournalRemoved(home.fixture.context);
@@ -400,6 +401,18 @@ describe("update rollback --apply at every death point (Spec 2 §10.2)", () => {
   }), SWEEP_TIMEOUT_MS);
 });
 
+/**
+ * True when a death left the coordinator in its plan-only envelope suffix: the lifecycle journal
+ * is unlinked and its plan is not. Spec 2 §13.3 residual 11 accepts exit 1 exactly there. The
+ * suffix is named by its state, not by point number: a reused home whose trust already advanced
+ * runs fewer steps, so the same death has a lower number (2262–2263 from a fresh home, 2256–2257
+ * after an earlier rejected run).
+ */
+async function inPlanOnlySuffix(home: UpdatableHomeV1): Promise<boolean> {
+  const names = await nodeFs.readdir(join(home.fixture.paths.stateDir, "lifecycle-journals"));
+  return names.some((name) => name.endsWith(".plan.json") && !names.includes(name.replace(/\.plan\.json$/u, ".json")));
+}
+
 describe("a verifier that rejects the target (Spec 2 §9.4, D72 P7(b), Review Focus 4)", () => {
   it("rolls back automatically, exits 5, keeps the old release active and the trust advanced", async () => {
     const home = await installUpdatableHome("recovery-rejected", "arm64", { rejectingVersions: ["1.1.0"] });
@@ -416,6 +429,21 @@ describe("a verifier that rejects the target (Spec 2 §9.4, D72 P7(b), Review Fo
     expect(await exists(bundleRoot(home, "1.1.0"))).toBe(false);
   }, CASE_TIMEOUT_MS);
 
+  it("reports a rejected run that died inside its plan-only envelope suffix as exit 1, then a rerun rejects it as exit 5 (Spec 2 §13.3 residual 11)", async () => {
+    const home = await installUpdatableHome("recovery-rejected-suffix", "arm64", { rejectingVersions: ["1.1.0"] });
+    const dying = afterJournalRemoved(home.fixture.context);
+    expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    expect(await inPlanOnlySuffix(home)).toBe(true);
+    const request = { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true } as const;
+
+    const resumed = await runUpdate({ ...home.fixture.context, update: home.update() }, request);
+
+    expect(resumed).toMatchObject({ ok: false, code: EXIT_CODES.operationalFailure, error: { message: "update_coordinator_compensated" } });
+    expect((await settled(home)).active.version).toBe("1.0.0");
+    expect(await runUpdate({ ...home.fixture.context, update: home.update() }, request)).toMatchObject({ ok: false, code: EXIT_CODES.securityRefusal });
+    expect((await settled(home)).active.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
+
   it("resumes a run that died anywhere in that update, including its automatic rollback, as exit 5", () => withoutFsync(async () => {
     const home = await installUpdatableHome("recovery-rejected-sweep", "arm64", { rejectingVersions: ["1.1.0"] });
     for (let point = SWEEP_RANGE.first; point <= SWEEP_RANGE.last; point += 1) {
@@ -426,8 +454,10 @@ describe("a verifier that rejects the target (Spec 2 §9.4, D72 P7(b), Review Fo
         break;
       }
 
+      // Spec 2 §13.3 residual 11 (NEW-196): inside the plan-only envelope suffix the journal and its cause are gone.
+      const code = (await inPlanOnlySuffix(home)) ? EXIT_CODES.operationalFailure : EXIT_CODES.securityRefusal;
       const resumed = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });
-      expect(resumed, `point ${String(point)}`).toMatchObject({ ok: false, code: EXIT_CODES.securityRefusal });
+      expect(resumed, `point ${String(point)}`).toMatchObject({ ok: false, code });
       expect((await settled(home)).active.version, `point ${String(point)}`).toBe("1.0.0");
     }
   }), SWEEP_TIMEOUT_MS);
