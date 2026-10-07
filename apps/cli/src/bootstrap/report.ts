@@ -388,7 +388,7 @@ export function admitBootstrapEvidencePlan(
   const participants = boundedArray(candidate?.foundationParticipants, 2, MAX_FOUNDATION_PARTICIPANTS);
   const launchabilityPaths = boundedArray(candidate?.launchabilityPaths, 7, MAX_LAUNCHABILITY_PATHS);
   const slots = boundedArray(candidate?.journalSlots, 2, 2);
-  const envelope = deriveBootstrapEnvelopePaths(input.productHome, "fresh_v2_init", input.expectedId);
+  const envelope = deriveBootstrapEnvelopePaths(input.productHome, input.expectedId);
   if (
     candidate === null || candidate.schemaVersion !== 1 || candidate.operation !== "fresh_v2_init" ||
     candidate.id !== input.expectedId || candidate.planPath !== envelope.plan ||
@@ -540,7 +540,7 @@ export async function buildBootstrapRetentionEvidence(
       const planned = plannedPaths[ordinal];
       if (planned === undefined) throw new Error("creation evidence cursor escaped plan");
       const evidencePath = deriveBootstrapCreationEvidencePaths(
-        request.productHome, "fresh_v2_init", plan.id, scope, ordinal,
+        request.productHome, plan.id, scope, ordinal,
         "00000000-0000-4000-8000-000000000000",
       ).evidence;
       createdPathEvidence.push(await guardedValue<CreatedPathEvidenceV1>(
@@ -1235,7 +1235,6 @@ async function inspectPlan(
             ordinal,
             path: deriveBootstrapCreationEvidencePaths(
               request.productHome,
-              "fresh_v2_init",
               plan.id,
               scope,
               ordinal,
@@ -1461,7 +1460,7 @@ export async function inspectBootstrapEvidenceAdmission(
     if (reportedIds.has(rawId as FreshV2InitIdV1)) continue;
     const counted = sumEntries(entries);
     const envelope = rawId.startsWith("fi_")
-      ? deriveBootstrapEnvelopePaths(request.productHome, "fresh_v2_init", rawId as FreshV2InitIdV1)
+      ? deriveBootstrapEnvelopePaths(request.productHome, rawId as FreshV2InitIdV1)
       : null;
     if (envelope !== null) {
       summaries.push({
