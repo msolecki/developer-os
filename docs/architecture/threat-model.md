@@ -1009,7 +1009,7 @@ the run `automation_disabled` before any handler runs; the pinned path must also
 (Ruling 37). The agent
 only returns JSON proposals; the product validates every one and writes accepted ones through the
 `capture` path into quarantine. Nothing reaches the vault without `review` and `ingest`.
-`brain-pulse` runs no agent. Spec: `docs/superpowers/specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`.
+`brain-pulse` runs no agent. Spec (retired 2026-10-07): `git show ad359fd8:docs/superpowers/specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`.
 
 | Boundary | Mechanism | Evidence |
 |---|---|---|

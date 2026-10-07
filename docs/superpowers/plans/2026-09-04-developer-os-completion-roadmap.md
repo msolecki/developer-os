@@ -437,8 +437,8 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   `scheduled` workflow trigger ships in the same change. D77 supersedes, for `brain-garden` only, the
   opt-in surfaces rule that no scheduled job can spend vendor credits (`maySpawnVendor` becomes `true`
   for that job alone), and the gardener's vendor executable is pinned in config at `automation enable`
-  and re-admitted by trust check on every run, never searched on launchd's `PATH`. Spec:
-  `specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`.
+  and re-admitted by trust check on every run, never searched on launchd's `PATH`. Spec (retired 2026-10-07 with its plan):
+  `git show ad359fd8:docs/superpowers/specs/2026-09-30-developer-os-brain-gardener-pulse-design.md`.
 - **D65 (2026-09-26), supersedes the exact-build pin of D59 Q1/Q2 and NEW-84's re-pinning rule.** An
   exact macOS build plus binary SHA-256 pin cannot ship: every macOS point update, and every other
   user's Mac, would refuse `git` and `automation`. Option A: resolve `/bin/launchctl`, the Git of the
