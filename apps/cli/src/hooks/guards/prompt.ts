@@ -16,10 +16,12 @@ interface SkillRule {
   readonly keywords: readonly string[];
 }
 
+/** Deliberately mirrors `isRecord` in packages/core/src/shape.ts, which is not on core's public export list (NEW-182). */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Deliberately mirrors `hasExactKeys` in packages/core/src/shape.ts, which is not on core's public export list (NEW-182). */
 function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   const own = Object.keys(value);
   return own.length === keys.length && keys.every((key) => Object.hasOwn(value, key));

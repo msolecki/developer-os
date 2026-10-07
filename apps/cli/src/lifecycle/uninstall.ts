@@ -262,6 +262,7 @@ function refuse(reason: string, ...paths: readonly CanonicalAbsolutePathV1[]): n
   throw new LifecycleRecoveryRequiredError(reason, paths);
 }
 
+/** Deliberately mirrors `syncDirectoryAt` in packages/core/src/lifecycle/fs-helpers.ts, which is not on core's public export list (NEW-182). */
 async function syncDirectoryAt(
   fs: LifecycleGuardedFileSystemV1,
   path: CanonicalAbsolutePathV1,
