@@ -25,9 +25,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readBootstrapClosure, readUpdateEnvelope, resolvePackagedFallback } from "./readers.js";
 import { selectLauncherCandidate } from "./selection.js";
 
-/** `main.ts`'s wiring: selection reads the closure once it knows whether an active record exists. */
-const closureOf = (fs: LauncherGuardedReaderV1, home: CanonicalAbsolutePathV1) => (handoff: boolean) =>
-  readBootstrapClosure(fs, home, UID, handoff);
 
 const UID = 501;
 const HOME = "/Users/test/.developer-os" as CanonicalAbsolutePathV1;
@@ -39,6 +36,8 @@ interface FakeFile {
   readonly ownerUid?: number;
   readonly dev?: string;
   readonly ino?: string;
+  /** An explicit directory, with `mode`; every other ancestor of a file is an implicit `0700` one. */
+  readonly directory?: true;
 }
 type Files = Readonly<Record<string, Buffer | FakeFile>>;
 
@@ -69,6 +68,7 @@ function fsOf(files: Files): LauncherGuardedReaderV1 {
   return {
     lstat: (path) => {
       const found = file(path);
+      if (found?.directory === true) return Promise.resolve(entry(path, "directory", found.mode ?? 0o700, found.ownerUid ?? UID, 0));
       if (found !== null) return Promise.resolve(entry(path, "regular_file", found.mode ?? 0o600, found.ownerUid ?? UID, found.bytes.byteLength, found));
       return Promise.resolve(children(path).length > 0 ? entry(path, "directory", 0o700, UID, 0) : null);
     },
@@ -110,6 +110,7 @@ describe("readUpdateEnvelope (NEW-111)", () => {
  * so its compiled test fixture is loaded by path, as `handoff.test.ts` loads the CLI).
  */
 interface BootstrapCapture {
+  readonly root: string;
   readonly home: CanonicalAbsolutePathV1;
   readonly files: Files;
 }
@@ -143,7 +144,7 @@ async function captureBootstrap(
   label: string,
   steps: readonly (string | null)[],
   root?: string,
-): Promise<BootstrapCapture & { readonly root: string }> {
+): Promise<BootstrapCapture> {
   const fixture = await testing.createCommandFixture(label, { bootstrapAvailable: true, ...(root === undefined ? {} : { root }) });
   for (const step of steps) {
     if (step === "uninstall") {
@@ -170,23 +171,49 @@ async function captureBootstrap(
 
 const ofId = (capture: BootstrapCapture, ordinal: number): Files =>
   Object.fromEntries(Object.entries(capture.files).filter(([path]) => path.includes(`-8000-${ordinal.toString(16).padStart(12, "0")}.`)));
+const leafless = (capture: BootstrapCapture): Files =>
+  Object.fromEntries(Object.entries(capture.files).filter(([path]) => !path.endsWith(".lifecycle-bootstrap.lock")));
 const planOf = (files: Files): string => Object.keys(files).find((path) => path.endsWith(".plan.json")) as string;
 
-/** A valid package-channel active release at `home`, as `selection.test.ts` builds one (D84 K3). */
-function activeHome(home: CanonicalAbsolutePathV1): Files {
-  const sha = (bytes: Buffer): LowerHexSha256 => createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
-  const json = (value: unknown): Buffer => Buffer.from(encodeCanonicalJson(value as CanonicalJsonValue), "utf8");
-  const bundleRoot = `${home}/releases/2.0.0/darwin-arm64`;
+const sha = (bytes: Buffer): LowerHexSha256 => createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
+const json = (value: unknown): Buffer => Buffer.from(encodeCanonicalJson(value as CanonicalJsonValue), "utf8");
+
+/** A four-entrypoint bundle and its manifest. */
+function release(version: string, releaseSequence: string) {
   const bin = Object.fromEntries(["cli", "planner", "runtime", "verifier"].map((name) => [name, Buffer.from(`#!/bin/sh\n# ${name}\n`)]));
   const manifest = validateBundleManifest({
-    schemaVersion: 1, version: "2.0.0", releaseSequence: "2", platform: "darwin", architecture: "arm64", launcherProtocol: 1, updateProtocol: 1,
+    schemaVersion: 1, version, releaseSequence, platform: "darwin", architecture: "arm64", launcherProtocol: 1, updateProtocol: 1,
     entrypoint: "bin/cli", runtimeEntrypoint: "bin/runtime", plannerEntrypoint: "bin/planner", verifierEntrypoint: "bin/verifier",
     entries: [
       { path: "bin", kind: "directory", mode: 448 },
       ...Object.entries(bin).map(([name, bytes]) => ({ path: `bin/${name}`, kind: "file", mode: 448, bytes: bytes.byteLength.toString(), sha256: sha(bytes) })),
     ],
   });
-  const manifestBytes = json(manifest);
+  return { bin, manifestBytes: json(manifest) };
+}
+
+const KEG = "/opt/homebrew/Cellar/developer-os/1.0.0/libexec/fallback";
+const KEG_FALLBACK = {
+  prefix: "/opt/homebrew" as CanonicalAbsolutePathV1,
+  bundleRoot: `${KEG}/bundle` as CanonicalAbsolutePathV1,
+  manifestPath: `${KEG}/metadata/bundle-manifest.json` as CanonicalAbsolutePathV1,
+};
+
+/** The keg's packaged fallback in Homebrew's modes (D84 K2/K3). */
+function keg(): Files {
+  const { bin, manifestBytes } = release("1.0.0", "1");
+  return {
+    [KEG_FALLBACK.bundleRoot]: { bytes: Buffer.alloc(0), directory: true, mode: 0o755 },
+    [`${KEG_FALLBACK.bundleRoot}/bin`]: { bytes: Buffer.alloc(0), directory: true, mode: 0o755 },
+    ...Object.fromEntries(Object.entries(bin).map(([name, bytes]) => [`${KEG_FALLBACK.bundleRoot}/bin/${name}`, { bytes, mode: 0o755 }])),
+    [KEG_FALLBACK.manifestPath]: { bytes: manifestBytes, mode: 0o644 },
+  };
+}
+
+/** A valid package-channel active release at `home`, as `selection.test.ts` builds one (D84 K3). */
+function activeHome(home: CanonicalAbsolutePathV1): Files {
+  const bundleRoot = `${home}/releases/2.0.0/darwin-arm64`;
+  const { bin, manifestBytes } = release("2.0.0", "2");
   const bundle = (architecture: string, manifestSha256: string) => ({
     platform: "darwin", architecture, archiveFormat: "zstd-ustar-v1", archivePath: `darwin-${architecture}.tar.zst`, archiveBytes: "1",
     archiveSha256: "a".repeat(64), manifestPath: `darwin-${architecture}-manifest.json`, manifestBytes: "1", manifestSha256,
@@ -214,21 +241,22 @@ function activeHome(home: CanonicalAbsolutePathV1): Files {
 }
 
 /** Launcher selection over one in-memory home, its bootstrap closure read by the real reader. */
-function selectOver(home: CanonicalAbsolutePathV1, files: Files) {
+async function selectOver(home: CanonicalAbsolutePathV1, files: Files) {
   const fs = fsOf(files);
   return selectLauncherCandidate({
     productHome: home,
     platform: { platform: "darwin", architecture: "arm64" },
     effectiveUid: UID,
     fs,
-    packagedFallback: null,
-    bootstrapClosure: closureOf(fs, home),
+    packagedFallback: KEG_FALLBACK,
+    bootstrapClosure: await readBootstrapClosure(fs, home, UID),
     readUpdateEnvelope: () => Promise.resolve({ kind: "absent" }),
   });
 }
 
 describe("readBootstrapClosure (NEW-111)", () => {
   let testing: CliTesting;
+  /** `fi_…01` interrupted right after its plan (both slots empty), in the same home as `several`. */
   let reserved: BootstrapCapture;
   /** `fi_…01` interrupted mid-bootstrap, in the same home as `several`. */
   let planned: BootstrapCapture;
@@ -238,39 +266,59 @@ describe("readBootstrapClosure (NEW-111)", () => {
   beforeAll(async () => {
     testing = (await import(new URL("commands/testing.js", cliDist).href)) as CliTesting;
     const main = (await import(new URL("main.js", cliDist).href)) as CliMain;
-    reserved = await captureBootstrap(testing, main, "launcher-closure-reserved", ["after_plan"]);
-    const first = await captureBootstrap(testing, main, "launcher-closure-several", ["after_first_payload"]);
-    planned = first;
-    await rm(first.home, { recursive: true, force: true });
-    several = await captureBootstrap(testing, main, "launcher-closure-several", [null, "uninstall", null, "uninstall", "after_first_payload"], first.root);
+    // Three fixtures in one root share one product home, so their envelopes combine into one `state/`.
+    reserved = await captureBootstrap(testing, main, "launcher-closure", ["after_plan"]);
+    await rm(reserved.home, { recursive: true, force: true });
+    planned = await captureBootstrap(testing, main, "launcher-closure", ["after_first_payload"], reserved.root);
+    await rm(planned.home, { recursive: true, force: true });
+    several = await captureBootstrap(testing, main, "launcher-closure", [null, "uninstall", null, "uninstall", "after_first_payload"], reserved.root);
   }, 300_000);
   afterAll(async () => {
     await testing.removeCommandFixtures();
   });
 
   it("reports handoff_complete with no bootstrap plan and non_terminal for a planned journal", async () => {
-    expect(await readBootstrapClosure(fsOf({}), HOME, UID, false)).toEqual({ kind: "handoff_complete" });
-    expect(await readBootstrapClosure(fsOf(planned.files), planned.home, UID, false)).toEqual({ kind: "non_terminal" });
+    expect(await readBootstrapClosure(fsOf({}), HOME, UID)).toEqual({ kind: "handoff_complete" });
+    expect(await readBootstrapClosure(fsOf(planned.files), planned.home, UID)).toEqual({ kind: "non_terminal" });
   });
 
   it("reports a plan whose two journal slots are still empty reservations as non_terminal only while its leaf is live", async () => {
     expect(Object.keys(reserved.files).filter((path) => path.includes(".journal.")).length).toBe(2);
-    expect(await readBootstrapClosure(fsOf(reserved.files), reserved.home, UID, false)).toEqual({ kind: "non_terminal" });
-    const leafless = Object.fromEntries(Object.entries(reserved.files).filter(([path]) => !path.endsWith(".lifecycle-bootstrap.lock")));
-    expect(await readBootstrapClosure(fsOf(leafless), reserved.home, UID, false)).toEqual({ kind: "malformed" });
+    expect(await readBootstrapClosure(fsOf(reserved.files), reserved.home, UID)).toEqual({ kind: "non_terminal" });
+    // Without its leaf the CLI classes it `unverified`, which is inert (NEW-123 decision B).
+    expect(await readBootstrapClosure(fsOf(leafless(reserved)), reserved.home, UID)).toEqual({ kind: "handoff_complete" });
   });
 
   it("reports a finalized bootstrap as handoff_complete", async () => {
-    expect(await readBootstrapClosure(fsOf(ofId(several, 1)), several.home, UID, false)).toEqual({ kind: "handoff_complete" });
+    expect(await readBootstrapClosure(fsOf(ofId(several, 1)), several.home, UID)).toEqual({ kind: "handoff_complete" });
   });
 
-  it("reports an altered plan, an unreadable slot or a group-readable plan as malformed before the handoff", async () => {
+  it("treats an altered plan, an unreadable slot or a group-readable plan as an inert unverified envelope", async () => {
     const plan = planOf(planned.files);
-    const slot = Object.keys(planned.files).find((path) => path.endsWith(".journal.0.json")) as string;
-    const altered = (path: string, value: Buffer | FakeFile) => fsOf({ ...planned.files, [path]: value });
-    expect(await readBootstrapClosure(altered(plan, Buffer.from("{}\n")), planned.home, UID, false)).toEqual({ kind: "malformed" });
-    expect(await readBootstrapClosure(altered(slot, Buffer.from("not json\n")), planned.home, UID, false)).toEqual({ kind: "malformed" });
-    expect(await readBootstrapClosure(altered(plan, { bytes: planned.files[plan] as Buffer, mode: 0o644 }), planned.home, UID, false)).toEqual({ kind: "malformed" });
+    const slots = Object.keys(planned.files).filter((path) => path.includes(".journal."));
+    const altered = (changes: Files) => fsOf({ ...planned.files, ...changes });
+    const garbage = Object.fromEntries(slots.map((path) => [path, Buffer.from("not json\n")]));
+    expect(await readBootstrapClosure(altered({ [plan]: Buffer.from("{}\n") }), planned.home, UID)).toEqual({ kind: "handoff_complete" });
+    expect(await readBootstrapClosure(altered(garbage), planned.home, UID)).toEqual({ kind: "handoff_complete" });
+    expect(await readBootstrapClosure(altered({ [plan]: { bytes: planned.files[plan] as Buffer, mode: 0o644 } }), planned.home, UID)).toEqual({ kind: "handoff_complete" });
+  });
+
+  it("(iv) routes a home with no active record past unverified and finalized envelopes to the packaged fallback (NEW-123 B)", async () => {
+    // After `uninstall` there is no active record; `init` must be able to start a new ID beside them.
+    await expect(selectOver(several.home, { ...ofId(several, 1), ...ofId(several, 2), ...keg() })).resolves.toMatchObject({ kind: "package_fallback" });
+    await expect(selectOver(several.home, { ...leafless(reserved), ...ofId(several, 2), ...keg() })).resolves.toMatchObject({ kind: "package_fallback" });
+  });
+
+  it("(v) refuses two incomplete envelopes with no active record as malformed", async () => {
+    const files = { ...ofId(planned, 1), ...ofId(several, 3), ...keg() };
+    await expect(selectOver(several.home, files)).rejects.toMatchObject({ code: 6, reason: "launcher_bootstrap_residue_malformed" });
+  });
+
+  it("routes one incomplete envelope with no active record to init through the packaged fallback", async () => {
+    await expect(selectOver(several.home, { ...ofId(several, 1), ...ofId(several, 3), ...keg() })).resolves.toMatchObject({
+      kind: "bootstrap_recovery",
+      argv: ["init"],
+    });
   });
 
   it("(i) launches the active release beside several finalized envelopes (Spec 2 §3.1, NEW-123)", async () => {
