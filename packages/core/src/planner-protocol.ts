@@ -12,3 +12,5 @@ export { parseLowerHexSha256 } from "./update/scalars.js";
 export { RELEASE_VERSION } from "./version.js";
 export { decodePlannerInput, encodePlannerOutput } from "./update/planner.js";
 export { planKeepAllRelease } from "./update/release-planner.js";
+export { decodePlannerJson, PLANNER_WIRE_BOUNDS_V1, plannerJsonBytes, PlannerWireDecoder, PlannerWireEncoder } from "./update/planner.js";
+export { verifyTargetSnapshot } from "./update/release-verifier.js";

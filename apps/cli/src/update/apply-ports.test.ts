@@ -1,15 +1,17 @@
-import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createNodeLifecycleGuardedFileSystem, encodeCanonicalJson, EXIT_CODES, LifecycleRecoveryRequiredError, parseCanonicalAbsolutePathText, parseLowerHexSha256, parseUInt64Decimal } from "@developer-os/core";
 import type { LifecycleGuardedEntryV1, ManifestBytesStateV1, ManifestStatePlanV1, UpdateExpectedPayloadRefV1 } from "@developer-os/core";
 import { createRedactor } from "@developer-os/security";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { removeCommandFixtures } from "../commands/testing.js";
 
 import type { CliContext } from "../context.js";
 import { codexPlanningInputs, constructionScreen, manifestPayloadIdentities, matchesManifestFileIdentity, runCleanups } from "./apply-ports.js";
-import { SYNTHETIC_COORDINATOR_ID } from "./testing.js";
+import { installUpdatableHome, SYNTHETIC_COORDINATOR_ID, tamperManifestBeforeVerifier, updateTo } from "./testing.js";
 
 function payload(ordinal: number): UpdateExpectedPayloadRefV1 {
   return {
@@ -191,4 +193,18 @@ describe("codexPlanningInputs (W2-PORTS-7)", () => {
     writeFileSync(oversized.registration, `${" ".repeat(9000)}${record}`, { mode: 0o600 });
     expect((await codexPlanningInputs(lifecycle, path(oversized.manifest), path(oversized.registration), admit)).record).toBeNull();
   });
+});
+
+describe("the target verifier snapshot (NEW-118 (4))", () => {
+  afterEach(removeCommandFixtures);
+
+  it("compensates when the installed manifest differs from the verified transitional manifest (NEW-118 (4))", async () => {
+    const home = await installUpdatableHome("verifier-snapshot", "arm64");
+    const tampered = tamperManifestBeforeVerifier(home.fixture.context);
+    // The rejected verifier starts the compensation, which cannot restore a manifest it did not publish: recovery-required, never a clean applied update.
+    await expect(updateTo(home.update(tampered), "1.1.0")).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    const journals = join(home.fixture.paths.stateDir, "lifecycle-journals");
+    const causes = readdirSync(journals).filter((name) => /^lc_[0-9a-f]{64}_\d+\.json$/.test(name)).map((name) => (JSON.parse(readFileSync(join(journals, name), "utf8")) as { readonly compensationCause: string | null }).compensationCause);
+    expect(causes).toEqual(["update_verifier_rejected"]);
+  }, 900_000);
 });

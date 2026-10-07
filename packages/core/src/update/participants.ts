@@ -8,10 +8,14 @@ import { compareUtf8, encodeCanonicalJson, hashCanonicalJsonNoLf, type Canonical
 import type { AllocatedLifecycleIdV1, EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ArtifactOwner, ManagedArtifactV2 } from "../manifest/types.js";
-import { updateLeafPlanHash } from "./bundle-participant.js";
-import { parseLeafPlanId, type ImmutableUpdatePlanRefV1, type OwnerExternalEffectIdV1, type UpdateLeafPlanIdV1, type UpdateLeafPlanKindV1 } from "./construction.js";
+import { parseLeafPlanId, type ImmutableUpdatePlanRefV1, type OwnerExternalEffectIdV1, type UpdateLeafPlanIdV1 } from "./construction.js";
 import { checkUpdateFoundationMutations, type SchemaMigrationPlanV1, type UpdateFoundationParticipantRefV2, type UpdatePayloadRefV1 } from "./migrations.js";
 import { OWNER_UPDATE_ORDER, MAX_OWNER_CHANGED_FILE_BYTES } from "./owner.js";
+import { migrationPostimagesHash, ownerPostimagesHash, updateParticipantDocumentBytes, updateParticipantDocumentHash } from "./postimages.js";
+import type { OwnerPostimageRowInputV1 } from "./postimages.js";
+
+export { migrationPostimagesHash, ownerPostimagesHash, updateParticipantDocumentBytes, updateParticipantDocumentHash };
+export type { OwnerPostimageRowInputV1 };
 import {
   deriveCanonicalStatePayloadPath,
   deriveUpdatePayloadPath,
@@ -189,16 +193,6 @@ function same(left: unknown, right: unknown): boolean {
   return canonical(left) === canonical(right);
 }
 
-
-/** An immutable plan's persisted bytes: canonical JSON plus one LF. */
-export function updateParticipantDocumentBytes(value: unknown): Uint8Array {
-  return new TextEncoder().encode(canonical(value));
-}
-
-/** The immutable plan ref hash (D72 P7(a)): §9.2's `developer-os/update-leaf/<kind>/v1\0` domain over the exact persisted bytes. */
-export function updateParticipantDocumentHash(kind: UpdateLeafPlanKindV1, value: unknown): LowerHexSha256 {
-  return updateLeafPlanHash(kind, updateParticipantDocumentBytes(value));
-}
 
 function parentOf(path: string): string {
   return path.slice(0, path.lastIndexOf("/"));
@@ -887,51 +881,6 @@ export interface TargetVerificationPlanV1 {
   readonly wallMilliseconds: number;
   readonly processCount: 1;
   readonly readOnly: true;
-}
-
-export interface OwnerPostimageRowInputV1 {
-  readonly ref: ImmutableUpdatePlanRefV1<"owner_update">;
-  readonly plan: OwnerUpdatePlanV1;
-  readonly effects: readonly { readonly ref: ImmutableUpdatePlanRefV1<"owner_external_effect">; readonly plan: OwnerExternalEffectPlanV1 }[];
-}
-
-/**
- * Spec 2 §9.2: `developer-os/update-owner-postimages/v1\0` over owner rows in canonical owner order;
- * each row is the owner-plan ref, every `{ targetPath, after }`, and each effect ref with its
- * proposed state hash. Recomputed from reopened plans, never trusted as a label.
- */
-export function ownerPostimagesHash(rows: readonly OwnerPostimageRowInputV1[]): LowerHexSha256 {
-  const owners = rows.map((row) => row.plan.owner);
-  if (!same(owners, OWNER_UPDATE_ORDER.filter((owner) => owners.includes(owner)))) fail("ownerPostimagesHash: rows not in canonical owner order");
-  return hashCanonicalJsonNoLf(
-    "developer-os/update-owner-postimages/v1",
-    rows.map((row) => {
-      if (row.ref.hash !== updateParticipantDocumentHash("owner_update", row.plan) || row.ref.id !== row.plan.id) fail("ownerPostimagesHash: a ref that is not its plan");
-      if (!same(row.effects.map((effect) => effect.ref), row.plan.externalEffects)) fail("ownerPostimagesHash: effects are not the owner plan's refs");
-      return {
-        ref: row.ref,
-        operations: row.plan.operations.map((operation) => ({ targetPath: operation.targetPath, after: operation.afterArtifact ?? { state: "absent" } })),
-        effects: row.effects.map((effect) => {
-          if (effect.ref.hash !== updateParticipantDocumentHash("owner_external_effect", effect.plan)) fail("ownerPostimagesHash: an effect ref that is not its plan");
-          return { ref: effect.ref, proposedStateHash: effect.plan.proposedStateHash };
-        }),
-      };
-    }),
-  );
-}
-
-/**
- * Spec 2 §9.2: `developer-os/update-migration-postimages/v1\0` over migration rows in execution
- * order; the empty migration set hashes the canonical empty array.
- */
-export function migrationPostimagesHash(rows: readonly { readonly ref: ImmutableUpdatePlanRefV1<"schema_migration">; readonly plan: SchemaMigrationPlanV1 }[]): LowerHexSha256 {
-  return hashCanonicalJsonNoLf(
-    "developer-os/update-migration-postimages/v1",
-    rows.map(({ ref, plan }) => {
-      if (ref.id !== plan.id || ref.hash !== updateParticipantDocumentHash("schema_migration", plan)) fail("migrationPostimagesHash: a ref that is not its plan");
-      return { ref, id: plan.id, domain: plan.domain, fromVersion: plan.fromVersion, toVersion: plan.toVersion, mutations: plan.mutations.map((mutation) => ({ path: mutation.path, afterHash: mutation.afterHash })) };
-    }),
-  );
 }
 
 export interface TargetVerificationContextV1 {
