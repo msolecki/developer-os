@@ -392,7 +392,7 @@ it("retains the target plugin version as the post-update projection (F8, NEW-118
 });
 ```
 
-If `createUpdateFixture` does not expose `codexProjection`, add it to `UpdateFixture` from the value at `testing.ts:542` as part of this step. Use the leaf accessor the existing Codex preview test in `planning.test.ts` uses.
+If `createUpdateFixture` does not expose `codexProjection`, add it to `UpdateFixture` from the value at `apps/cli/src/update/testing.ts:542` as part of this step. Use the leaf accessor the existing Codex preview test in `planning.test.ts` uses.
 
 - [ ] **Step 2: Run the tests and confirm they fail.** Run `npx tsc -b && npx vitest run packages/core/src/version.test.ts apps/cli/src/update/planning.test.ts -t "RELEASE_VERSION|target plugin version"`. Expected: FAIL, because `version.ts` does not exist. Once it exists, the effect still retains the current hash as its post-update projection.
 
@@ -724,7 +724,7 @@ git commit -m "feat(release): pack:release builds per-architecture kegs in the r
   The planner budget is `PLANNER_WIRE_BOUNDS_V1.wallMilliseconds`. `UpdateTargetInputsV1.transport` becomes `packageSource: { kegPath, bundleManifestHash }`. The capacity components are `verified_scratch` 0/0 and `durable_bundle_source` with the bundle's bytes and entries.
 - Modify: `packages/core/src/update/preview.ts:117-131,383-399` and `packages/core/src/update/planner.ts:1127,1201`. `download` becomes `packageSource: { readonly kegPath: CanonicalAbsolutePathV1; readonly bundleManifestHash: LowerHexSha256 }` (K4 F7).
 - Modify: `apps/cli/src/update/bundle-source.ts:295`. `copyVerified` compares the permission class: `((observed.mode & 0o100) !== 0) !== (entry.mode === 448)` refuses, and so does any group or other write bit on the source.
-- Modify: `apps/cli/src/update/compose.ts:1832-1866`. The comments and names change from scratch to package source. Behaviour is unchanged, because `sourceMode: entry.mode` must equal the row (`construction.ts:663`).
+- Modify: `apps/cli/src/update/compose.ts:1832-1866`. The comments and names change from scratch to package source. Behaviour is unchanged, because `sourceMode: entry.mode` must equal the row (`packages/core/src/update/construction.ts:663`).
 - Modify: `apps/cli/src/update/testing.ts`.
   - `createUpdateFixture` serves `readPackageSource` from its synthetic release, with unsigned documents and no Ed25519.
   - `createOnDiskReleaseWorld` writes real kegs for `ON_DISK_RELEASES` under a fixture prefix with `writePackageChannelRelease` and admits them with the production admission against a fixture table. This is the "fixture prefix behind the fixed-path seam" of K6.
