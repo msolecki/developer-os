@@ -59,6 +59,33 @@ export class MacOsPlatformTrustError extends Error {
   }
 }
 
+/**
+ * The D83 (3) ownership and write-bit rule for one directory on a trusted chain, shared by
+ * `assertTrustedExecutable` and the package-channel keg ancestors (D96 Q1): owned by the
+ * current uid or root, never other-writable, group-writable only when the uid owns it.
+ */
+export function assertTrustedDirectoryEntry(
+  component: string,
+  entry: { readonly uid: number; readonly mode: number },
+  uid: number,
+): void {
+  if (entry.uid !== uid && entry.uid !== 0) {
+    throw new MacOsPlatformTrustError(
+      `The executable is not trusted: ${component} is owned by neither this user nor root`,
+    );
+  }
+  if ((entry.mode & 0o002) !== 0) {
+    throw new MacOsPlatformTrustError(
+      `The executable is not trusted: ${component} is writable by any user`,
+    );
+  }
+  if ((entry.mode & 0o020) !== 0 && (entry.uid === 0 || entry.uid !== uid)) {
+    throw new MacOsPlatformTrustError(
+      `The executable is not trusted: ${component} is group-writable and owned by ${entry.uid === 0 ? "root" : "another user"}`,
+    );
+  }
+}
+
 export class MacOsPlatformDiscoveryError extends Error {
   readonly code = EXIT_CODES.operationalFailure;
 
@@ -401,21 +428,7 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
         );
       }
 
-      if (entry.uid !== uid && entry.uid !== 0) {
-        throw new MacOsPlatformTrustError(
-          `The executable is not trusted: ${component} is owned by neither this user nor root`,
-        );
-      }
-      if ((entry.mode & 0o002) !== 0) {
-        throw new MacOsPlatformTrustError(
-          `The executable is not trusted: ${component} is writable by any user`,
-        );
-      }
-      if ((entry.mode & 0o020) !== 0 && (entry.uid === 0 || entry.uid !== uid)) {
-        throw new MacOsPlatformTrustError(
-          `The executable is not trusted: ${component} is group-writable and owned by ${entry.uid === 0 ? "root" : "another user"}`,
-        );
-      }
+      assertTrustedDirectoryEntry(component, entry, uid);
     }
   }
 

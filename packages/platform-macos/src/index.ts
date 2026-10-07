@@ -1,4 +1,5 @@
 export {
+  assertTrustedDirectoryEntry,
   MacOsPlatformAdapter,
   MacOsPlatformDiscoveryError,
   MacOsPlatformTrustError,
