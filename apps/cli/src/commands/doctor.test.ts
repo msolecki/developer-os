@@ -1367,6 +1367,12 @@ describe("release-trust", () => {
     expect((await trustCheck("doctor-trust-signed", SIGNED_TRUST))?.status).toBe("pass");
   });
 
+  it("passes a package-channel state and names the channel, never signed trust (D84 K4)", async () => {
+    const check = await trustCheck("doctor-trust-channel", { ...SIGNED_TRUST, trust: "package-channel" });
+    expect(check?.status).toBe("pass");
+    expect(check?.message).toBe("Homebrew package-channel release trust");
+  });
+
   it("passes when no trust state is recorded", async () => {
     expect((await trustCheck("doctor-trust-absent", null))?.status).toBe("pass");
   });
