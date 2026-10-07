@@ -1,4 +1,6 @@
+import fsModule from "node:fs";
 import * as nodeFs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -38,14 +40,56 @@ import type { UpdatableHomeV1 } from "@developer-os/cli/dist/update/testing.js";
  *
  * A home the recovery left on the old release is reused for the next point (only trust and the
  * allocator moved, as a real retry would find them); one it carried forward is rebuilt. Identities
- * are inode-bound (P1, P8), so a home is never copied. A sweep takes hours, not minutes (measured
- * 2026-09-30: 2213 apply, 1480 rollback and 2267 rejected points, each point costlier than the last),
- * so `test:update-recovery` runs every other case and `test:update-recovery:sweeps` runs these.
+ * are inode-bound (P1, P8): `init` persists `dev`/`ino` pairs in its retention plan and in every
+ * retention tombstone under `state/`, so a copied or cloned home (new inodes) is a different home,
+ * and a home is never copied. A sweep takes hours, not minutes (2213 apply, 1480 rollback and 2267
+ * rejected points, each point replaying the run up to it), so `test:update-recovery` runs every
+ * other case and `test:update-recovery:sweeps` runs these, with fsync disabled (`withoutFsync`)
+ * and optionally restricted to a point range (`SWEEP_POINTS`) so the sweep can be sharded.
  */
 
 const SWEEP_TIMEOUT_MS = 172_800_000;
 const CASE_TIMEOUT_MS = 900_000;
 const MAXIMUM_DEATH_POINTS = 5_000;
+
+/**
+ * `SWEEP_POINTS=<first>-<last>` runs only those death points (inclusive) of each sweep, from a
+ * fresh home, the state the apply sweep already rebuilds after every forward point. A shard can
+ * see one direction only, so the both-directions assertions run on a full sweep alone. Unset, a
+ * sweep runs from point 1 until an uninjected run completes.
+ */
+const SWEEP_RANGE = ((): { readonly first: number; readonly last: number; readonly full: boolean } => {
+  const value = process.env.SWEEP_POINTS;
+  if (value === undefined || value === "") return { first: 1, last: MAXIMUM_DEATH_POINTS, full: true };
+  const match = /^([1-9][0-9]*)-([1-9][0-9]*)$/u.exec(value);
+  if (match === null || Number(match[1]) > Number(match[2])) throw new Error(`SWEEP_POINTS must be <first>-<last>, got ${value}`);
+  return { first: Number(match[1]), last: Number(match[2]), full: false };
+})();
+
+/**
+ * Runs `work` with every fsync a no-op. fsync orders the disk against a power loss; a synthetic
+ * death loses nothing the page cache holds, so no recovery here ever sees different bytes with or
+ * without it. Every guarded `syncDirectory` is still called and still counted as a death point
+ * (2213 and 1480 points either way); only its system call is skipped. That is about 2.6 ms per call
+ * and ~2000 calls per update on APFS (macOS fsync is F_FULLFSYNC), most of each point's cost.
+ */
+async function withoutFsync<T>(work: () => Promise<T>): Promise<T> {
+  const handle = await nodeFs.open(process.execPath, "r");
+  const prototype = Object.getPrototypeOf(handle) as { sync: () => Promise<void> };
+  await handle.close();
+  const { sync } = prototype;
+  const { fsyncSync } = fsModule;
+  prototype.sync = () => Promise.resolve();
+  Object.assign(fsModule, { fsyncSync: (): void => undefined });
+  syncBuiltinESMExports();
+  try {
+    return await work();
+  } finally {
+    prototype.sync = sync;
+    Object.assign(fsModule, { fsyncSync });
+    syncBuiltinESMExports();
+  }
+}
 
 afterEach(removeCommandFixtures);
 
@@ -90,14 +134,17 @@ function rollBack(update: CliUpdateContext): Promise<unknown> {
 }
 
 describe("update --apply at every death point (Spec 2 §9.3, §9.4)", () => {
-  it("recovers 1.1.0 -> 1.2.0 either to 1.2.0 with 1.1.0 retained or to 1.1.0 with the prior rollback intact", async () => {
+  it("recovers 1.1.0 -> 1.2.0 either to 1.2.0 with 1.1.0 retained or to 1.1.0 with the prior rollback intact", () => withoutFsync(async () => {
     let home = await baseAt110("recovery-apply-sweep");
     const directions = { forward: 0, backward: 0 };
-    let point = 1;
-    for (;; point += 1) {
+    let completed = false;
+    for (let point = SWEEP_RANGE.first; point <= SWEEP_RANGE.last; point += 1) {
       expect(point).toBeLessThan(MAXIMUM_DEATH_POINTS);
       const dying = dieAfterMutations(home.fixture.context, point);
-      if ((await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)) === "completed") break;
+      if ((await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)) === "completed") {
+        completed = true;
+        break;
+      }
 
       const recovered = await recoverUpdate(home.update());
       expect(["not_update", "coordinator", "envelope_suffix", "construction_cleaned", "executor_cleaned"]).toContain(recovered.kind);
@@ -115,11 +162,14 @@ describe("update --apply at every death point (Spec 2 §9.3, §9.4)", () => {
         directions.backward += 1;
       }
     }
+    if (!completed) return;
     // Both directions exist: the verifier's durable success is the one point of no return.
-    expect(directions.backward).toBeGreaterThan(0);
-    expect(directions.forward).toBeGreaterThan(0);
+    if (SWEEP_RANGE.full) {
+      expect(directions.backward).toBeGreaterThan(0);
+      expect(directions.forward).toBeGreaterThan(0);
+    }
     for (const directory of home.world.scratchDirectories) expect(await exists(directory)).toBe(false);
-  }, SWEEP_TIMEOUT_MS);
+  }), SWEEP_TIMEOUT_MS);
 });
 
 type DyingCliContext = Parameters<typeof dieAfterMutations>[0];
@@ -286,10 +336,11 @@ describe("a run killed after it finalized and before its envelope plan was remov
 });
 
 describe("update rollback --apply at every death point (Spec 2 §10.2)", () => {
-  it("recovers 1.2.0 -> 1.1.0 either to 1.1.0 with the set consumed or to 1.2.0 with it intact, with no network", async () => {
+  it("recovers 1.2.0 -> 1.1.0 either to 1.1.0 with the set consumed or to 1.2.0 with it intact, with no network", () => withoutFsync(async () => {
     const home = await baseAt120("recovery-rollback-sweep");
     const directions = { forward: 0, backward: 0 };
-    for (let point = 1; ; point += 1) {
+    let completed = false;
+    for (let point = SWEEP_RANGE.first; point <= SWEEP_RANGE.last; point += 1) {
       expect(point).toBeLessThan(MAXIMUM_DEATH_POINTS);
       const trust = await nodeFs.readFile(join(home.fixture.paths.stateDir, "release-trust.json"));
       const requests = home.world.requests.length;
@@ -300,7 +351,10 @@ describe("update rollback --apply at every death point (Spec 2 §10.2)", () => {
       expect(home.world.requests).toHaveLength(requests);
       expect(home.world.plannerRuns).toHaveLength(plannerRuns);
       expect(await nodeFs.readFile(join(home.fixture.paths.stateDir, "release-trust.json"))).toEqual(trust);
-      if (outcome === "completed") break;
+      if (outcome === "completed") {
+        completed = true;
+        break;
+      }
 
       const settledHome = await settled(home);
       if (settledHome.active.version === "1.1.0") {
@@ -315,10 +369,13 @@ describe("update rollback --apply at every death point (Spec 2 §10.2)", () => {
         directions.backward += 1;
       }
     }
-    expect(directions.backward).toBeGreaterThan(0);
-    expect(directions.forward).toBeGreaterThan(0);
+    if (!completed) return;
+    if (SWEEP_RANGE.full) {
+      expect(directions.backward).toBeGreaterThan(0);
+      expect(directions.forward).toBeGreaterThan(0);
+    }
     expect((await settled(home)).active.version).toBe("1.1.0");
-  }, SWEEP_TIMEOUT_MS);
+  }), SWEEP_TIMEOUT_MS);
 });
 
 describe("a verifier that rejects the target (Spec 2 §9.4, D72 P7(b), Review Focus 4)", () => {
@@ -337,20 +394,21 @@ describe("a verifier that rejects the target (Spec 2 §9.4, D72 P7(b), Review Fo
     expect(await exists(bundleRoot(home, "1.1.0"))).toBe(false);
   }, CASE_TIMEOUT_MS);
 
-  it("resumes a run that died anywhere in that update, including its automatic rollback, as exit 5", async () => {
+  it("resumes a run that died anywhere in that update, including its automatic rollback, as exit 5", () => withoutFsync(async () => {
     const home = await installUpdatableHome("recovery-rejected-sweep", "arm64", { rejectingVersions: ["1.1.0"] });
-    let point = 1;
-    for (;; point += 1) {
+    for (let point = SWEEP_RANGE.first; point <= SWEEP_RANGE.last; point += 1) {
       expect(point).toBeLessThan(MAXIMUM_DEATH_POINTS);
       const dying = dieAfterMutations(home.fixture.context, point);
-      if ((await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)) === "completed") break;
+      if ((await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)) === "completed") {
+        expect(point).toBeGreaterThan(1);
+        break;
+      }
 
       const resumed = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });
       expect(resumed, `point ${String(point)}`).toMatchObject({ ok: false, code: EXIT_CODES.securityRefusal });
       expect((await settled(home)).active.version, `point ${String(point)}`).toBe("1.0.0");
     }
-    expect(point).toBeGreaterThan(1);
-  }, SWEEP_TIMEOUT_MS);
+  }), SWEEP_TIMEOUT_MS);
 });
 
 const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
