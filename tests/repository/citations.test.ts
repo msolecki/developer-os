@@ -485,7 +485,8 @@ export function statedSuiteCounts(
  * cannot see a citation that drifted onto a comment: 73 of 112 identifier-bearing citations in
  * `threat-model.md` and `knowledge-pipeline.md` had. A doc line's backticked single-word tokens that
  * look like code (a capital or an underscore) are its identifiers; the line passes when any one occurs in any range it cites. A line naming none
- * (prose, test-title cells) is out of scope, so this narrows the gap and does not close it.
+ * (prose, test-title cells) has nothing to check its ranges against, so it is counted rather than
+ * checked, and that count may only fall (`IDENTIFIER_CHECKED`): this narrows the gap and does not close it.
  */
 export function lineIdentifiers(line: string): readonly string[] {
   return [...line.matchAll(/`([A-Za-z_$][\w$]*)(?:\(\))?`/gu)]
@@ -497,11 +498,18 @@ export function rangeText(contents: string, start: number, end: number): string 
   return contents.split("\n").slice(start - 1, end).join("\n");
 }
 
-/** Documents whose evidence column is held to the identifier-in-range rule. */
-const IDENTIFIER_CHECKED = [
-  "docs/architecture/threat-model.md",
-  "docs/architecture/knowledge-pipeline.md",
-] as const;
+/**
+ * Documents whose evidence column is held to the identifier-in-range rule, each with a **ceiling**
+ * on its citation lines that name no identifier (NEW-193). Those lines used to be skipped with no
+ * trace, so a new one — a range on a licence header, say — passed green. The ceiling is the count
+ * measured on 2026-10-07; a new identifier-less line goes red, and the fix is to name the symbol
+ * the range holds or to write an anchor. Lower a ceiling when a document sheds such lines, the
+ * mirror of `BASELINES`, which only detects loss.
+ */
+const IDENTIFIER_CHECKED: ReadonlyMap<string, number> = new Map([
+  ["docs/architecture/threat-model.md", 43],
+  ["docs/architecture/knowledge-pipeline.md", 50],
+]);
 
 async function repository(): Promise<{
   readonly root: string;
@@ -601,8 +609,9 @@ describe("every documented citation resolves", () => {
       }
     }
 
-    for (const doc of IDENTIFIER_CHECKED) {
+    for (const [doc, ceiling] of IDENTIFIER_CHECKED) {
       const text = await read(doc);
+      let unidentified = 0;
       const lines = text.split("\n");
       const anchoredSymbols = extractAnchors(text);
       const byLine = new Map<number, Citation[]>();
@@ -611,7 +620,10 @@ describe("every documented citation resolves", () => {
       }
       for (const [number, group] of byLine) {
         const identifiers = lineIdentifiers(lines[number - 1] ?? "");
-        if (identifiers.length === 0) continue;
+        if (identifiers.length === 0) {
+          unidentified += 1;
+          continue;
+        }
         /** An anchor is content-checked by the sweep above, so its symbol satisfies the line. */
         if (anchoredSymbols.some((anchor) => anchor.line === number && identifiers.includes(anchor.symbol))) continue;
         let excerpt = "";
@@ -623,6 +635,11 @@ describe("every documented citation resolves", () => {
         if (!identifiers.some((identifier) => containsIdentifier(excerpt, identifier))) {
           broken.push(`${doc}:${String(number)} cites no range containing ${identifiers.map((i) => `\`${i}\``).join(" or ")}`);
         }
+      }
+      if (unidentified > ceiling) {
+        broken.push(
+          `${doc} has ${String(unidentified)} citation lines naming no identifier, above its ceiling of ${String(ceiling)}: name the symbol each range holds, or write an anchor`,
+        );
       }
     }
 
