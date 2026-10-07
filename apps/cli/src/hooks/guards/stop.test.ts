@@ -256,6 +256,43 @@ describe("guardStop", () => {
     expect(requests).toHaveLength(3);
   });
 
+  it("allows with a note when the -p fallback fails only with TS6310 on stale references", async () => {
+    const root = await project({ config: SOLUTION });
+    await mkRefs(root);
+    let n = 0;
+    const { runtime, requests } = runtimeFor(root, () => {
+      n += 1;
+      return Promise.resolve({
+        ...OK,
+        exitCode: 1,
+        stdout: n === 1 ? "error TS6310: x\n" : "tsconfig.json(3,5): error TS6310: Referenced project '/x' may not disable emit.\n",
+      });
+    });
+    const outcome = await guardStop(payload(false), runtime);
+    expect(requests).toHaveLength(3);
+    expect(outcome.kind).toBe("allow");
+    expect(outcome.kind === "allow" ? outcome.note : "").toMatch(/^typecheck could not run: /u);
+  });
+
+  it("still blocks when the -p fallback reports a real error beside TS6310", async () => {
+    const root = await project({ config: SOLUTION });
+    await mkRefs(root);
+    let n = 0;
+    const { runtime } = runtimeFor(root, () => {
+      n += 1;
+      const stdout =
+        n === 1
+          ? "error TS6310: x\n"
+          : n === 2
+            ? "tsconfig.json(3,5): error TS6310: Referenced project '/x' may not disable emit.\n"
+            : "a.ts(1,7): error TS2322: Type 'string' is not assignable to type 'number'.\n";
+      return Promise.resolve({ ...OK, exitCode: 1, stdout });
+    });
+    const outcome = await guardStop(payload(false), runtime);
+    expect(outcome.kind).toBe("block");
+    expect(outcome.kind === "block" ? outcome.detail : "").toContain("error TS2322");
+  });
+
   it.each([
     ["an absolute path", (outside: string) => outside],
     ["a ../ path", () => "../outside-ref"],

@@ -119,6 +119,8 @@ const exists = (path: string) => lstat(path).then(() => true, () => false);
 
 /** Older tsc rejects `-b --noEmit` (TS5094, TS6310). */
 const BUILD_REJECTED = /^error (TS5094|TS6310)\b/mu;
+/** Every diagnostic code in tsc output, with or without a `file(line,col): ` prefix. */
+const DIAGNOSTIC_CODE = /\berror (TS\d+)\b/gu;
 
 export const guardStop: HookVerbHandler = async (payload, runtime) => {
   if (payload.stopHookActive !== false) return { kind: "allow" };
@@ -167,6 +169,11 @@ export const guardStop: HookVerbHandler = async (payload, runtime) => {
             stderr: `${merged.stderr}\n${one.stderr}`,
           };
           if (one.timedOut || one.exitCode === null) break;
+        }
+        // A reference that itself references stale projects fails -p the same way (TS6310): no real check ran.
+        const codes = [...`${merged.stdout}\n${merged.stderr}`.matchAll(DIAGNOSTIC_CODE)].map((m) => m[1]);
+        if (merged.exitCode !== 0 && !merged.timedOut && codes.length > 0 && codes.every((c) => c === "TS5094" || c === "TS6310")) {
+          return { kind: "allow", note: "typecheck could not run: referenced projects have stale outputs (TS6310); run tsc -b" };
         }
         result = merged;
       }
