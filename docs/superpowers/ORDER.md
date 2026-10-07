@@ -38,7 +38,8 @@ Each is executable from the document named; none is agent work.
    `ingest --agent codex` (credits, after 2026-10-22).
 4. Reinstall, `brain reindex`, then the NEW-116 re-run of `ingest` on the 31 refused captures (D86 (5)).
 5. NEW-183: add the permission rule (founder action) so an agent can do the approved items.
-6. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
+6. NEW-169's host kickstart check on the disposable gate account (`BACKLOG.md` NEW-169).
+7. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
    (percent-encoded links in Obsidian).
 
 Open sequence (D16, daily use before completeness): A15 on its own clock and the stop points beside
@@ -67,10 +68,9 @@ Startable without another product gate (one worktree each):
 
 - NEW-195 (P1: forward recovery stuck on an in-flight bundle or rollback-payload publication).
 - NEW-196 (rejected-verifier resume reports the wrong exit code).
-- NEW-169 (remaining half: a doctor check for a failed scheduled run, and the host kickstart check).
-- NEW-197 (`init`'s `lstat` storm in bootstrap retention).
+- NEW-198 (P1: recovery refuses `manifest_absent` after a death at the manifest `preserve_before` rename).
 
-NEW-132 (the full recovery sweeps) is blocked by NEW-195 and NEW-196; its harness is affordable now.
+NEW-132 (the full recovery sweeps) is blocked by NEW-195, NEW-196 and NEW-198; its harness is affordable now.
 
 Waiting on a founder decision or observation: NEW-193 (the stricter citations rule for 99 cells, the
 Codex `subagents` witness, the Spec 1 "four leases" amendment). NEW-182 closed 2026-10-07.
@@ -123,7 +123,7 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 ## Count
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
-- Founder stop points: 6, listed above.
-- Startable rows: 4 (NEW-195, NEW-196, NEW-169's remainder, NEW-197); NEW-132 is blocked by NEW-195/196; NEW-193 waits on the founder. Founder action: NEW-183 (permission
+- Founder stop points: 7, listed above.
+- Startable rows: 3 (NEW-195, NEW-196, NEW-198); NEW-132 is blocked by them; NEW-193 waits on the founder. Founder action: NEW-183 (permission
   rule). Founder design: the distribution design (NEW-163, NEW-171). Awaiting founder numbers: NEW-116.
 - Repository backlog: 22 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
