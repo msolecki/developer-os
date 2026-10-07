@@ -19,6 +19,7 @@ import { writePackageChannelRelease } from "./local-release.js";
 import type { ReleaseFileV1 } from "./local-release.js";
 import {
   admitPackageChannelRelease,
+  isPackageSourceAbsent,
   admitRootVerifiedPackagedRelease,
   admitUnsignedLocalPackagedRelease,
   inspectPackagedRelease,
@@ -352,7 +353,7 @@ function syntheticKegRelease(version: string, sequence: string, architecture: "a
   return { index, manifest, files };
 }
 
-async function kegFixture(version = "1.2.0", sequence = "3") {
+async function kegFixture(version = "1.2.0", sequence = "3", architecture: "arm64" | "x64" = ARCH) {
   const prefix = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-keg-")));
   roots.push(prefix);
   await nodeFs.chmod(prefix, 0o755);
@@ -360,40 +361,57 @@ async function kegFixture(version = "1.2.0", sequence = "3") {
   await nodeFs.mkdir(join(keg, "libexec"), { recursive: true, mode: 0o755 });
   await nodeFs.mkdir(join(prefix, "opt"), { mode: 0o755 });
   await nodeFs.symlink(`../Cellar/developer-os/${version}`, join(prefix, "opt", "developer-os"));
-  const { index, manifest, files } = syntheticKegRelease(version, sequence, process.arch as "arm64" | "x64");
+  const { index, manifest, files } = syntheticKegRelease(version, sequence, architecture);
   const packageRoot = await writePackageChannelRelease({ outDir: join(keg, "libexec", "fallback"), index, manifest, bundleFiles: files });
   return { prefix, keg, packageRoot, index, manifest };
 }
+const ARCH = process.arch as "arm64" | "x64";
 const table = (prefix: string) => ({ arm64: { prefix, opt: `${prefix}/opt/developer-os`, fallback: "libexec/fallback" }, x64: { prefix, opt: `${prefix}/opt/developer-os`, fallback: "libexec/fallback" } }) as never;
 
 describe("admitPackageChannelRelease (D84 K2)", () => {
   it("(a) admits Homebrew modes, derives the identity from the index row, and maps modes to their class", async () => {
     const { prefix, packageRoot, index } = await kegFixture();
-    const admitted = await inspectPackagedRelease(await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null }));
+    const admitted = await inspectPackagedRelease(await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: ARCH }));
     expect(admitted.trust).toBe("package-channel");
     expect(admitted.identity).toMatchObject({ version: "1.2.0", releaseSequence: "3", delegationSequence: "0", delegatedReleaseKeyId: PACKAGE_CHANNEL_RELEASE_KEY_ID, releaseIdentityHash: releaseIdentityHash((index as { releases: unknown[] }).releases[0], process.arch as "arm64") });
     expect(new Set(admitted.files.map((file) => file.mode))).toEqual(new Set([0o600, 0o700]));
   });
+  it("admits an x64 keg on any host when told the architecture", async () => {
+    const { prefix, packageRoot } = await kegFixture("1.2.0", "3", "x64");
+    const admitted = await inspectPackagedRelease(await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: "x64" }));
+    expect(admitted.identity.architecture).toBe("x64");
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: "arm64" })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+  });
+  it("classifies only the absent table path as no keg (init then gets null)", async () => {
+    const prefix = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-nokeg-")));
+    roots.push(prefix);
+    const absent = await resolvePackageChannelSource(ARCH, table(prefix)).catch((error: unknown) => error);
+    expect(isPackageSourceAbsent(absent)).toBe(true);
+    expect(isPackageSourceAbsent(new Error("update_package_source_absent"))).toBe(false);
+    const { prefix: broken } = await kegFixture();
+    await nodeFs.rm(join(broken, "Cellar/developer-os/1.2.0/libexec/fallback"), { recursive: true });
+    expect(isPackageSourceAbsent(await resolvePackageChannelSource(ARCH, table(broken)).catch((error: unknown) => error))).toBe(true);
+  });
   it("(b) refuses a 0666 bundle file as exit 6", async () => {
     const { prefix, packageRoot } = await kegFixture();
     await nodeFs.chmod(join(packageRoot, "bundle/bin/verifier"), 0o666);
-    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: ARCH })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
   });
   it("(c) refuses an executable bit that disagrees with the manifest mode", async () => {
     const { prefix, packageRoot } = await kegFixture();
     await nodeFs.chmod(join(packageRoot, "bundle/bin/runtime"), 0o644);
-    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: ARCH })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
   });
   it("(d) refuses an other-writable ancestor below the prefix and admits a group-writable one the user owns (Q1)", async () => {
     const { prefix, packageRoot } = await kegFixture();
     await nodeFs.chmod(join(prefix, "Cellar"), 0o775);
-    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null })).resolves.toBeDefined();
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: ARCH })).resolves.toBeDefined();
     await nodeFs.chmod(join(prefix, "Cellar"), 0o777);
-    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: ARCH })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
   });
   it("(e) splits the version check: init requires PRODUCT_VERSION, update does not", async () => {
     const { prefix, packageRoot } = await kegFixture();
-    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: "9.9.9" })).rejects.toMatchObject({ code: EXIT_CODES.capabilityUnavailable, message: "release_mismatch" });
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: "9.9.9", architecture: ARCH })).rejects.toMatchObject({ code: EXIT_CODES.capabilityUnavailable, message: "release_mismatch" });
   });
   it("(f) resolves the opt link once to its canonical keg, and an absent path is exit 4", async () => {
     const { prefix, keg } = await kegFixture();
@@ -409,14 +427,14 @@ describe("admitPackageChannelRelease (D84 K2)", () => {
   });
   it("(h) refuses a swapped file at reread", async () => {
     const { prefix, packageRoot } = await kegFixture();
-    const source = await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null });
+    const source = await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: ARCH });
     await nodeFs.chmod(join(packageRoot, "bundle/bin/cli"), 0o644);
     await expect(inspectPackagedRelease(source)).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal, message: "packaged release changed after root-verified admission" });
   });
   it("refuses a non-canonical prefix instead of walking forever", async () => {
     const { packageRoot } = await kegFixture();
-    await expect(admitPackageChannelRelease(packageRoot, { prefix: "", requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
-    await expect(admitPackageChannelRelease(packageRoot, { prefix: "/", requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    await expect(admitPackageChannelRelease(packageRoot, { prefix: "", requireVersion: null, architecture: ARCH })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    await expect(admitPackageChannelRelease(packageRoot, { prefix: "/", requireVersion: null, architecture: ARCH })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
   });
 });
 
