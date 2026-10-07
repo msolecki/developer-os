@@ -305,6 +305,8 @@ export type BundleSourceStepV1 =
 
 export type BundlePublicationStepV1 =
   | { readonly kind: "root_intent" }
+  /** A fresh exclusive create found its path present: the current create intent is withdrawn, so no recovery binds that path. */
+  | { readonly kind: "create_refused" }
   | ({ readonly kind: "root_created" } & Identity)
   | { readonly kind: "root_complete" }
   | { readonly kind: "root_verified" }
@@ -656,6 +658,17 @@ export function advanceEntry(state: UpdateEntryWriteStateV1 | null, next: number
     default:
       return null;
   }
+}
+
+/**
+ * `create_refused` on an entry: an entry intent returns to none and an evidence intent to its
+ * recorded entry, so the path a fresh exclusive create found present is never bound as this
+ * attempt's crash frontier. Null when no entry intent is current.
+ */
+export function withdrawEntryIntent(state: UpdateEntryWriteStateV1 | null): { readonly state: UpdateEntryWriteStateV1 | null } | null {
+  if (state?.state === "entry_intent") return { state: null };
+  if (state?.state === "evidence_intent") return { state: { ordinal: state.ordinal, state: "entry_created", dev: state.dev, ino: state.ino } };
+  return null;
 }
 
 /** Entry compensation walk: each reached entry, then its evidence, in reverse ordinal order. */
@@ -1113,7 +1126,7 @@ export function advanceBundlePublicationJournal(plan: BundlePublicationPlanV1, j
   const rootPath = plan.target.bundleRoot;
   switch (step.kind) {
     case "root_intent":
-      need(publish && current.phase === "planned");
+      need(publish && (current.phase === "planned" || (current.phase === "root_publishing" && current.rootWriteState === null)));
       next = { ...base, phase: "root_publishing", rootWriteState: { ordinal: 0, state: "create_intent" } };
       break;
     case "root_created":
@@ -1137,6 +1150,17 @@ export function advanceBundlePublicationJournal(plan: BundlePublicationPlanV1, j
       need(!publish && current.phase === "entries_publishing");
       next = { ...base, phase: afterEntry(current.nextEntry + 1), nextEntry: current.nextEntry + 1 };
       break;
+    case "create_refused": {
+      // The one current create intent returns to its predecessor; a later pass creates again and refuses again.
+      const entry = withdrawEntryIntent(current.entryWriteState);
+      if (current.rootWriteState?.state === "create_intent") next = { ...base, rootWriteState: null };
+      else if (entry !== null) next = { ...base, entryWriteState: entry.state };
+      else {
+        need(current.metadataWriteState?.state === "publish_intent");
+        next = { ...base, metadataWriteState: null };
+      }
+      break;
+    }
     case "metadata_intent":
       need(current.phase === "metadata_publishing" && current.metadataWriteState === null && bundleMetadataCreates(plan, current.nextMetadata));
       next = { ...base, metadataWriteState: { ordinal: current.nextMetadata, state: "publish_intent" } };

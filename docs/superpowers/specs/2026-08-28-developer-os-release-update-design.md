@@ -22,7 +22,9 @@ Codex refresh policy and re-registration, the compensation cause, the capability
 handoff, the proof scope, and admitted bookkeeping identities) — is the single block "Amended
 2026-09-28 (D72)" above §1; the 2026-09-29 retirement of the A12 instruction-artifacts spec
 repoints §5 to `docs/architecture/codex-adapter.md` §16 and §6.1 to `docs/architecture/foundation.md`
-§12.3, marked "Amended 2026-09-29: … retired" in place.** This
+§12.3, marked "Amended 2026-09-29: … retired" in place; the 2026-10-07 founder decision on NEW-195
+(publication microstates resume forward after death, and a fresh create that finds its path present
+is recorded as refused, §9.2) is marked "Amended 2026-10-07" in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -4432,6 +4434,14 @@ is `entryCount`, at most `200_000`. After that terminal cursor, the unchanged ou
 compaction entry guarded-removes the participant journal and immutable plan as its two recognizable
 fixed suffix actions, then advances once; a mutable journal never records its own deletion.
 
+**Amended 2026-10-07 (NEW-195, founder-approved):** After process death on the forward path, recovery resumes the current microstate: an intent
+persisted before the resuming run binds its exact empty crash frontier or retries creation when the
+path is absent; a created target, evidence or metadata inode is reopened by its recorded identity,
+its existing bytes must equal the planned prefix, and the write completes before the cursor
+advances. A fresh intent never binds a present path. A fresh create that finds the path present
+refuses and is recorded so that no later recovery binds it (the journal step `create_refused`
+withdraws that intent to its predecessor, so the next pass creates again and refuses again).
+
 `RollbackPayloadPublicationJournalV1` has five fixed structure transitions in order: payload root,
 `plans`, `plans/owner_inverse`, `plans/schema_migration_inverse`, and `blobs`. It then publishes the
 complete inventory entries in ordinal order, followed by `inverse-plan.json` and `inventory.json` in
@@ -4454,6 +4464,13 @@ retained payload through its retirement inventory, verifies absence, and only th
 publication journals require `nextEntry` not to exceed their enclosing exact count, reject the first
 over-bound metadata/structure/entry cursor and every phase/cursor mismatch, and never reuse the
 four-transition state journal.
+
+**Amended 2026-10-07 (NEW-195, founder-approved):** for `RollbackPayloadPublicationJournalV1` too, after process death on the forward path, recovery resumes the current microstate: an intent
+persisted before the resuming run binds its exact empty crash frontier or retries creation when the
+path is absent; a created target, evidence or metadata inode is reopened by its recorded identity,
+its existing bytes must equal the planned prefix, and the write completes before the cursor
+advances. A fresh intent never binds a present path. A fresh create that finds the path present
+refuses and is recorded so that no later recovery binds it (its `create_refused` step withdraws that intent the same way).
 
 The bundle-source structure prefix is exactly `source_envelope`, `source_payload_root`, then
 `source_evidence_root`; the rollback-source prefix appends `plans_root`,

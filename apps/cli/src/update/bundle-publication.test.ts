@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import {
   bundleInventoryHash,
   bundleMetadataPath,
   bundlePublicationEvidenceDirectory,
+  bundlePublicationEvidencePath,
   bundlePublicationJournalBytes,
   bundleSourceJournalBytes,
   bundleSourcePaths,
@@ -342,6 +344,70 @@ describe("BundlePublicationParticipant", () => {
     await nodeFs.writeFile(target(foreign), "#!/bin/sh\nexit 1\n", { flag: "r+" });
     await expect(participant(foreign).apply(foreignPlan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     expect(await nodeFs.readFile(target(foreign), "utf8")).toBe("#!/bin/sh\nexit 1\n");
+  });
+
+  it("records a fresh root create that found its path present, so a later pass refuses instead of adopting it", async () => {
+    const value = await fixture();
+    const plan = await publishPlan(value);
+    await nodeFs.mkdir(value.target.bundleRoot, { mode: 0o700 });
+    await expect(participant(value).apply(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(value, plan)).rootWriteState).toBeNull();
+    await expect(participant(value).apply(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(value, plan)).targetRootIdentity).toBeNull();
+    expect(await nodeFs.readdir(value.target.bundleRoot)).toEqual([]);
+  });
+
+  it("records a fresh entry create that found its path present, so a later pass refuses instead of adopting it", async () => {
+    const value = await fixture();
+    const plan = await publishPlan(value);
+    const [first] = files as readonly [(typeof files)[number]];
+    const target = `${value.target.bundleRoot}/${first.path}`;
+    let planted = false;
+    // Once `bin` is published, an empty file appears where the next entry is exclusively created.
+    const planting = participant(value, (point) => {
+      if (point === "evidence_written" && !planted) {
+        planted = true;
+        writeFileSync(target, "", { mode: first.mode, flag: "wx" });
+      }
+    });
+    await expect(planting.apply(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(value, plan)).entryWriteState).toBeNull();
+    await expect(participant(value).apply(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(value, plan)).nextEntry).toBe(1);
+    expect((await nodeFs.stat(target)).size).toBe(0);
+  });
+
+  it("refuses to resume a recorded entry whose inode was swapped or that grew past its plan", async () => {
+    const [first] = files as readonly [(typeof files)[number]];
+    const swapped = await fixture();
+    const swappedPlan = await publishPlan(swapped);
+    await expect(participant(swapped, dieAt("entry_written")).apply(swappedPlan)).rejects.toBeInstanceOf(Killed);
+    const target = `${swapped.target.bundleRoot}/${first.path}`;
+    await nodeFs.rm(target);
+    await nodeFs.writeFile(target, first.content, { mode: first.mode });
+    await expect(participant(swapped).apply(swappedPlan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+
+    const grown = await fixture();
+    const grownPlan = await publishPlan(grown);
+    await expect(participant(grown, dieAt("entry_written")).apply(grownPlan)).rejects.toBeInstanceOf(Killed);
+    await nodeFs.appendFile(`${grown.target.bundleRoot}/${first.path}`, "#");
+    await expect(participant(grown).apply(grownPlan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+  });
+
+  it("refuses to resume recorded evidence holding any bytes but its canonical prefix", async () => {
+    const value = await fixture();
+    const plan = await publishPlan(value);
+    await expect(participant(value, dieAt("evidence_created")).apply(plan)).rejects.toBeInstanceOf(Killed);
+    await nodeFs.writeFile(bundlePublicationEvidencePath(value.root, plan, 0), "x", { flag: "r+" });
+    await expect(participant(value).apply(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+  });
+
+  it("refuses to resume a recorded entry directory that is no longer empty", async () => {
+    const value = await fixture();
+    const plan = await publishPlan(value);
+    await expect(participant(value, dieAt("entry_created")).apply(plan)).rejects.toBeInstanceOf(Killed);
+    await nodeFs.writeFile(`${value.target.bundleRoot}/bin/planted`, "", { mode: 0o600 });
+    await expect(participant(value).apply(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
   });
 
   it("compensates a verified publication in exact reverse and resumes after a compensation death", async () => {

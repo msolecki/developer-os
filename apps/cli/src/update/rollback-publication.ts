@@ -54,6 +54,7 @@ import {
   BundleGuardedIo,
   BundleJournalFile,
   copyBundleEntry,
+  createFresh,
   parentPath,
   refuseBundle,
   removeBundleEntryPart,
@@ -199,6 +200,10 @@ export class RollbackPayloadParticipant {
     return next;
   }
 
+  async #refuseCreate(plan: RollbackPayloadStatePlanV1, file: Journal): Promise<void> {
+    await this.#advance(plan, file, { kind: "create_refused" });
+  }
+
   #published(plan: RollbackPayloadStatePlanV1): RollbackPayloadIdentityV1 {
     return plan.publish ?? refuseBundle("rollback_payload_not_publishing", this.#root);
   }
@@ -225,7 +230,7 @@ export class RollbackPayloadParticipant {
       if (resumed?.state !== "created") {
         let created = resumed === null ? null : await this.#boundStructure(plan, file);
         if (created === null) {
-          created = await this.#io.fs.mkdirExclusive(path);
+          created = await createFresh(() => this.#io.fs.mkdirExclusive(path), () => this.#refuseCreate(plan, file));
           this.#interrupt("structure_made");
         }
         // The parent entry is durable before the journal records the structure's identity.
@@ -256,6 +261,7 @@ export class RollbackPayloadParticipant {
         interrupt: (point) => {
           this.#interrupt(point);
         },
+        refuseCreate: () => this.#refuseCreate(plan, file),
       }, current.entryWriteState);
     }
     for (let current = file.value as RollbackPayloadPublicationJournalV1; current.nextMetadata < 2; current = file.value as RollbackPayloadPublicationJournalV1) {
@@ -273,10 +279,11 @@ export class RollbackPayloadParticipant {
     if ((file.value as RollbackPayloadPublicationJournalV1).metadataWriteState === null) await this.#advance(plan, file, { kind: "metadata_intent" });
     else await this.#bindMetadata(plan, file);
     const state = (file.value as RollbackPayloadPublicationJournalV1).metadataWriteState;
+    if (state?.ordinal !== ordinal) refuseBundle("rollback_payload_metadata_cursor", file.path);
     const path = rollbackPayloadMetadataPath(published.root, ordinal);
-    const target = state?.state === "published" ? await this.#io.reopenPrefix(path, state, 0o600, row.path, row.bytes) : await this.#io.createEmpty(path, 0o600);
+    const target = state.state === "published" ? await this.#io.reopenPrefix(path, state, 0o600, row.path, row.bytes) : await createFresh(() => this.#io.createEmpty(path, 0o600), () => this.#refuseCreate(plan, file));
     try {
-      if (state?.state !== "published") {
+      if (state.state !== "published") {
         await this.#advance(plan, file, { kind: "metadata_published", dev: target.entry.dev, ino: target.entry.ino });
         this.#interrupt("metadata_created");
       }
