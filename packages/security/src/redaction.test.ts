@@ -320,6 +320,13 @@ describe("redactText", () => {
       ["an sk- body of four short mixed parts", "task-ab1-cd2-ef3-gh4-ijkl-mnop-qrst", "sk-ab1-cd2-ef3-gh4-ijkl-mnop-qrst"],
       ["an sk- body of three short mixed parts", "task-ab1-cd2-ef3-ijkl-mnop-qrst", "sk-ab1-cd2-ef3-ijkl-mnop-qrst"],
       ["a random 48-character base64 token", `value ${base64Token} end`, base64Token],
+      /** Security review of NEW-199. */
+      ["three short IDs across / segments", "zq1/xw2/vb3-qwerty-plumbing-zydeco-jukebox", "zq1/xw2/vb3-qwerty-plumbing-zydeco-jukebox"],
+      ["a four-character mixed part", "DEV/developer-os-d84a-task-11b-homebrew-package-channel-trust.md", "d84a"],
+      ["a mixed-case short ID", "DEV/developer-os-D8a-task-11b-homebrew-package-channel-trust.md", "D8a"],
+      ["a 12-group base32 code in 3-character groups", "qzx-wvb-kjh-a7m-trp-lfd-nbc-xwq-zkp-g2v-mrt-hjw", "qzx-wvb-kjh-a7m-trp-lfd-nbc-xwq-zkp-g2v-mrt-hjw"], // gitleaks:allow -- synthetic test fixture
+      ["an 11-group base32 code in 3-character groups", "qzx-wvb-kjh-a7m-trp-lfd-nbc-xwq-zkp-g2v-mrt", "qzx-wvb-kjh-a7m-trp-lfd-nbc-xwq-zkp-g2v-mrt"], // gitleaks:allow -- synthetic test fixture
+      ["an sk- body of two short IDs and no four-letter word", "task-ab1-cd2-xyz-qwe-rty-uio", "sk-ab1-cd2-xyz-qwe-rty-uio"],
     ] as const) {
       for (const scope of ["text", "value"] as const) {
         it(`still redacts ${name} in ${scope} scope`, () => {

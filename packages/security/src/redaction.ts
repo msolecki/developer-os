@@ -510,14 +510,21 @@ const MAX_WORD_LIKE_PARTS = 12;
  * all-word passphrase joined by `-` is exempt too; a labelled one is credential-store.
  * ponytail: vowel test, not a dictionary; random vowel-bearing letter chunks still pass.
  * NEW-199: up to 2 parts may be short IDs (`d84`, `11b`); a third, or a longer mixed part,
- * falls back to the entropy check, so a recovery code (`ab1-cd2-ef3-…`) still redacts.
+ * falls back to the entropy check, so a recovery code (`ab1-cd2-ef3-…`) still redacts. Its
+ * security review: a run holding a short ID also needs a part of 4+ letters, as `isKebabSlug`
+ * does, so a code of 3-character groups (`qzx-wvb-a7m-…`) stays under the entropy check.
  */
 function isWordLikePath(run: string): boolean {
   const parts = run
     .split("/")
     .flatMap((segment) => segment.split(/[-_]/u))
     .filter((part) => part.length > 0);
-  return parts.length > 0 && parts.length <= MAX_WORD_LIKE_PARTS && areWordLikeParts(parts);
+  return (
+    parts.length > 0 &&
+    parts.length <= MAX_WORD_LIKE_PARTS &&
+    areWordLikeParts(parts) &&
+    (!parts.some(isShortIdPart) || parts.some((part) => /^[A-Za-z]{4,}$/u.test(part)))
+  );
 }
 
 function fingerprint(secret: string, key: Uint8Array): string {
