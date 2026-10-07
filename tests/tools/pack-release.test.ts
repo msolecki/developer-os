@@ -2,16 +2,19 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmod, cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { execPath } from "node:process";
+import { Readable } from "node:stream";
 
 import { afterAll, describe, expect, it } from "vitest";
 
 import { decodeCanonicalJson, validateBundleManifest, validateReleaseIndex } from "@developer-os/core";
+import { ZstdUstarAdmission } from "@developer-os/security";
 import { renderEntrypoint } from "@developer-os/cli/dist/update/entrypoint.js";
 import { admitPackageChannelRelease, inspectPackagedRelease } from "@developer-os/cli/dist/update/packaged-release.js";
 
-import { assertNodeBinary, pack } from "./pack-release.js";
+import { assertCleanCheckout, assertNodeBinary, pack } from "./pack-release.js";
+import { archiveOf } from "./release-archive.js";
 
 const roots: string[] = [];
 
@@ -31,17 +34,17 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-const HOST_NODE = { path: execPath, sha256: sha256(await readFile(execPath)) };
+const HOST_NODE = { path: execPath, sha256: sha256(await readFile(execPath)), version: process.versions.node };
 const ARCH = process.arch as "arm64" | "x64";
 
-/** A Node stand-in: a shell script that answers `--version`. It needs `skipCpuCheck`. */
-async function stubNode(version: string): Promise<{ readonly path: string; readonly sha256: string }> {
+/** A Node stand-in: a shell script running `body`, pinned to `version`. It needs `skipCpuCheck`. */
+async function stubNode(body = "echo v24.0.0", version = "24.0.0"): Promise<{ readonly path: string; readonly sha256: string; readonly version: string }> {
   const root = await realpath(await mkdtemp(join(tmpdir(), "developer-os-stub-node-")));
   roots.push(root);
   const path = join(root, "node");
-  const bytes = new TextEncoder().encode(`#!/bin/sh\necho ${version}\n`);
+  const bytes = new TextEncoder().encode(`#!/bin/sh\n${body}\n`);
   await writeFile(path, bytes, { mode: 0o755 });
-  return { path, sha256: sha256(bytes) };
+  return { path, sha256: sha256(bytes), version };
 }
 
 /** Relative path → mode and content digest for every entry under `root`. */
@@ -121,6 +124,21 @@ describe("pack:release (Task 11b K2)", () => {
       });
     }
 
+    // Each real archive passes the production archive admission against its own manifest.
+    for (const [position, architecture] of (["arm64", "x64"] as const).entries()) {
+      const reference = row?.bundles[position];
+      if (reference === undefined) throw new Error("the index row lists both bundles");
+      const archiveManifest = validateBundleManifest(decodeCanonicalJson(await readFile(`${out}/archives/0.1.0/darwin-${architecture}.manifest.json`), 16 * 1024 * 1024));
+      const admittedArchive = await new ZstdUstarAdmission().extract({
+        bundle: reference,
+        manifest: archiveManifest,
+        source: Readable.from([await readFile(`${out}/archives/0.1.0/darwin-${architecture}.tar.zst`)]) as AsyncIterable<Uint8Array>,
+        sink: { begin: () => Promise.resolve(), write: () => Promise.resolve(), end: () => Promise.resolve() },
+      });
+      expect(admittedArchive.entries).toBe(archiveManifest.entries.length);
+      expect(admittedArchive.entries).toBeGreaterThan(10);
+    }
+
     // Carried (1) and (2): the version-free entrypoint script imports the packed CLI, which reports
     // the stamped version; the Codex plugin version is the same bundled constant.
     const cli = await readFile(`${fallback}/bundle/node_modules/@developer-os/cli/dist/bin.js`, "utf8");
@@ -146,7 +164,7 @@ describe("pack:release (Task 11b K2)", () => {
   }, 600_000);
 
   it("packs the same inputs to byte-identical trees and archives", async () => {
-    const node = await stubNode("v24.0.0");
+    const node = await stubNode();
     const options = { ...OPTIONS, node: { arm64: node, x64: node }, skipCpuCheck: true };
     const first = await freshOutDir();
     const second = await freshOutDir();
@@ -164,12 +182,54 @@ describe("pack:release (Task 11b K2)", () => {
   });
 
   it("refuses a Node binary that is not Node 24 or does not match its pinned SHA-256", async () => {
-    const old = await stubNode("v22.11.0");
+    const old = await stubNode("echo v22.11.0", "22.11.0");
     await expect(assertNodeBinary(old, ARCH, { skipCpuCheck: true })).rejects.toThrow(/Node 24/u);
+    await expect(assertNodeBinary(await stubNode("echo v24.0", "24.0"), ARCH, { skipCpuCheck: true })).rejects.toThrow(/Node 24/u);
+    // The host-architecture slot must report exactly the version it is pinned as.
+    await expect(assertNodeBinary(await stubNode("echo v24.0.0", "24.1.0"), ARCH, { skipCpuCheck: true })).rejects.toThrow(/reports/u);
+    // A pin copied in upper case is the same pin.
+    await expect(settled(assertNodeBinary({ ...HOST_NODE, sha256: HOST_NODE.sha256.toUpperCase() }, ARCH))).resolves.toBe("resolved");
     await expect(settled(assertNodeBinary({ ...HOST_NODE, sha256: "0".repeat(64) }, ARCH))).rejects.toThrow(/SHA-256/u);
     // The hash is checked before the binary runs: a mismatched stub never answers `--version`.
-    const current = await stubNode("v24.0.0");
+    const current = await stubNode();
     await expect(assertNodeBinary({ ...current, sha256: "0".repeat(64) }, ARCH, { skipCpuCheck: true })).rejects.toThrow(/SHA-256/u);
+  });
+
+  it("never runs the foreign-architecture binary: its SHA-256 pin is the integrity authority", async () => {
+    const marker = join(dirname(await freshOutDir()), "ran");
+    const foreign = await stubNode(`touch ${marker}\necho v24.0.0`);
+    await expect(assertNodeBinary(foreign, ARCH === "arm64" ? "x64" : "arm64", { skipCpuCheck: true })).resolves.toBeInstanceOf(Uint8Array);
+    await expect(stat(marker)).rejects.toThrow(/ENOENT/u);
+    await expect(assertNodeBinary(foreign, ARCH, { skipCpuCheck: true })).resolves.toBeInstanceOf(Uint8Array);
+    expect((await stat(marker)).isFile()).toBe(true);
+  });
+
+  it("bounds the --version probe at 10 s", async () => {
+    const hung = await stubNode("exec sleep 60");
+    const started = Date.now();
+    await expect(assertNodeBinary(hung, ARCH, { skipCpuCheck: true })).rejects.toThrow(/--version/u);
+    expect(Date.now() - started).toBeLessThan(30_000);
+  }, 60_000);
+
+  it("the archive writer refuses a file entry with no bytes", () => {
+    expect(() => archiveOf([{ path: "missing", kind: "file", mode: 384, bytes: "0", sha256: "0".repeat(64) }] as unknown as Parameters<typeof archiveOf>[0], new Map())).toThrow(/missing/u);
+  });
+
+  it("the CLI refuses a dirty checkout unless --allow-dirty", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "developer-os-dirty-")));
+    roots.push(root);
+    const git = (...args: string[]): void => {
+      const result = spawnSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", ...args], { cwd: root, encoding: "utf8" });
+      if (result.status !== 0) throw new Error(result.stderr);
+    };
+    git("init", "-q");
+    await writeFile(join(root, "tracked"), "tracked\n");
+    git("add", "tracked");
+    git("commit", "-q", "-m", "fixture");
+    expect(() => { assertCleanCheckout(root, false); }).not.toThrow();
+    await writeFile(join(root, "untracked"), "draft\n");
+    expect(() => { assertCleanCheckout(root, false); }).toThrow(/uncommitted|--allow-dirty/u);
+    expect(() => { assertCleanCheckout(root, true); }).not.toThrow();
   });
 
   it.each([
@@ -179,13 +239,13 @@ describe("pack:release (Task 11b K2)", () => {
     ["a non-decimal release sequence", { releaseSequence: "07" }, /releaseSequence/u],
     ["an index sequence beyond UInt64", { indexSequence: "18446744073709551616" }, /indexSequence/u],
   ])("refuses %s", async (_label, override, message) => {
-    const node = await stubNode("v24.0.0");
+    const node = await stubNode();
     const out = await freshOutDir();
     await expect(pack({ outDir: out, ...OPTIONS, ...override, node: { arm64: node, x64: node }, skipCpuCheck: true })).rejects.toThrow(message);
   });
 
   it("refuses an existing output directory", async () => {
-    const node = await stubNode("v24.0.0");
+    const node = await stubNode();
     const out = await freshOutDir();
     await mkdir(out);
     await expect(pack({ outDir: out, ...OPTIONS, node: { arm64: node, x64: node }, skipCpuCheck: true })).rejects.toThrow(/already exists/u);

@@ -41,7 +41,8 @@ function ustarHeader(entry: ReleaseBundleEntryV1, size: number): Uint8Array {
 export function archiveOf(entries: readonly ReleaseBundleEntryV1[], files: ReadonlyMap<string, Uint8Array>): Uint8Array {
   const parts: Uint8Array[] = [];
   for (const entry of entries) {
-    const content = entry.kind === "file" ? (files.get(entry.path) ?? new Uint8Array()) : new Uint8Array();
+    const content = entry.kind === "file" ? files.get(entry.path) : new Uint8Array();
+    if (content === undefined) throw new Error(`refusing to archive: the bytes of ${entry.path} are missing`);
     parts.push(ustarHeader(entry, content.byteLength), content, new Uint8Array((BLOCK - (content.byteLength % BLOCK)) % BLOCK));
   }
   parts.push(new Uint8Array(2 * BLOCK));
