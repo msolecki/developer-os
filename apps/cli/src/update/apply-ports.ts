@@ -635,19 +635,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
         const plan = verification ?? thirdState("update_verification_plan_absent", root);
         const release = execution.operation === "update_apply" ? "target" : "previous";
         if (step.release !== release || plan.release.releaseIdentityHash !== execution.target.releaseIdentityHash) thirdState("update_verification_release", root);
-        // The bounded read-only snapshot of the home: the installed manifest (no-follow, at most `plan.inputBytes`) and the reopened owner and migration plans with their effects.
-        const manifest = await readBound(lifecycle, parseCanonicalAbsolutePathText(context.paths.manifestFile), plan.inputBytes) ?? thirdState("update_manifest_absent", context.paths.manifestFile);
-        const snapshot = {
-          manifest: Buffer.from(manifest).toString("base64"),
-          owners: execution.owners.flatMap((ref) => {
-            const ownerPlan = leaf<OwnerUpdatePlanV1>(ref);
-            return ownerPlan === null ? [] : [{ ref, plan: ownerPlan, effects: ownerPlan.externalEffects.map((effect) => ({ ref: effect, plan: leaf<OwnerExternalEffectPlanV1>(effect) ?? thirdState("update_owner_effect_plan_absent", effect.id) })) }];
-          }),
-          migrations: execution.migrations.flatMap((ref) => {
-            const migrationPlan = leaf<SchemaMigrationPlanV1>(ref);
-            return migrationPlan === null ? [] : [{ ref, plan: migrationPlan }];
-          }),
-        };
+        const snapshot = await verifierSnapshot(lifecycle, parseCanonicalAbsolutePathText(context.paths.manifestFile), execution, leaf);
         return runTargetVerifier(plan, await verifierPort(context, lifecycle, snapshot));
       },
       observe: () => Promise.resolve(BEFORE),
@@ -832,6 +820,28 @@ async function manifestParticipantOf(dispatch: DispatchContextV1, ownerPlans: re
       uid: lifecycle.effectiveUid,
       manifestAdmission: gateManifestAdmission(context),
     });
+  };
+}
+
+/**
+ * The bounded read-only snapshot of the home (NEW-118 (4)): the installed manifest (no-follow, at
+ * most the manifest's own maximum, refused before it is encoded) and the reopened owner and
+ * migration plans with their effects. A plan the execution names but cannot reopen is a third state.
+ */
+export async function verifierSnapshot(
+  lifecycle: Pick<CliLifecycleContext, "fs" | "effectiveUid">,
+  manifestFile: CanonicalAbsolutePathV1,
+  execution: Pick<UpdateExecutionPlanV1, "owners" | "migrations">,
+  leaf: (ref: ImmutableUpdatePlanRefV1) => unknown,
+): Promise<unknown> {
+  const manifest = await readBound(lifecycle, manifestFile, MAX_MANIFEST_BYTES) ?? thirdState("update_manifest_absent", manifestFile);
+  return {
+    manifest: Buffer.from(manifest).toString("base64"),
+    owners: execution.owners.map((ref) => {
+      const plan = (leaf(ref) ?? thirdState("update_owner_plan_absent", ref.id)) as OwnerUpdatePlanV1;
+      return { ref, plan, effects: plan.externalEffects.map((effect) => ({ ref: effect, plan: leaf(effect) ?? thirdState("update_owner_effect_plan_absent", effect.id) })) };
+    }),
+    migrations: execution.migrations.map((ref) => ({ ref, plan: leaf(ref) ?? thirdState("update_migration_plan_absent", ref.id) })),
   };
 }
 

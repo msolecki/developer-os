@@ -294,6 +294,7 @@ describe("target verifier supervision", () => {
   it.each<{ name: string; overrides: Partial<TargetVerifierRunRequestV1> }>([
     { name: "input beyond the plan's byte bound", overrides: { inputBlobs: [new Uint8Array(4_096)] } },
     { name: "a secret in the snapshot", overrides: { snapshot: { note: SECRET_MARKER } } },
+    { name: "a secret in the base64 manifest of the snapshot", overrides: { snapshot: { manifest: Buffer.from(SECRET_MARKER).toString("base64") } } },
     { name: "a secret in an input blob", overrides: { inputBlobs: [bytes(SECRET_MARKER)] } },
     { name: "a relative runtime", overrides: { runtime: "bin/runtime" } },
     { name: "a relative working directory", overrides: { cwd: "tmp" } },

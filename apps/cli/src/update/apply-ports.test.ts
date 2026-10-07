@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { removeCommandFixtures } from "../commands/testing.js";
 
 import type { CliContext } from "../context.js";
-import { codexPlanningInputs, constructionScreen, manifestPayloadIdentities, matchesManifestFileIdentity, runCleanups } from "./apply-ports.js";
+import { codexPlanningInputs, constructionScreen, verifierSnapshot, manifestPayloadIdentities, matchesManifestFileIdentity, runCleanups } from "./apply-ports.js";
 import { installUpdatableHome, SYNTHETIC_COORDINATOR_ID, tamperManifestBeforeVerifier, updateTo } from "./testing.js";
 
 function payload(ordinal: number): UpdateExpectedPayloadRefV1 {
@@ -192,6 +192,42 @@ describe("codexPlanningInputs (W2-PORTS-7)", () => {
     const oversized = home();
     writeFileSync(oversized.registration, `${" ".repeat(9000)}${record}`, { mode: 0o600 });
     expect((await codexPlanningInputs(lifecycle, path(oversized.manifest), path(oversized.registration), admit)).record).toBeNull();
+  });
+});
+
+describe("verifierSnapshot (NEW-118 (4))", () => {
+  const uid = process.getuid?.() ?? 0;
+  const lifecycle = {
+    effectiveUid: uid,
+    fs: createNodeLifecycleGuardedFileSystem({ effectiveUid: uid, renameNoReplace: () => Promise.reject(new Error("unused")) }),
+  };
+  const ref = (id: string) => ({ id, kind: "owner_update", path: `/synthetic/${id}.json` }) as never;
+  const manifestAt = (size: number): string => {
+    const file = join(mkdtempSync(join(tmpdir(), "developer-os-verifier-snapshot-")), "manifest.json");
+    writeFileSync(file, "{}\n", { mode: 0o600 });
+    truncateSync(file, size);
+    return file;
+  };
+
+  it("refuses a manifest beyond the manifest maximum before encoding it", async () => {
+    await expect(verifierSnapshot(lifecycle, parseCanonicalAbsolutePathText(manifestAt(67_108_865)), { owners: [], migrations: [] }, () => null)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+  });
+
+  it("encodes a manifest at the maximum", async () => {
+    const snapshot = await verifierSnapshot(lifecycle, parseCanonicalAbsolutePathText(manifestAt(10)), { owners: [], migrations: [] }, () => null) as { manifest: string };
+    expect(Buffer.from(snapshot.manifest, "base64").byteLength).toBe(10);
+  });
+
+  it.each([
+    ["an owner plan", { owners: [ref("owner")], migrations: [] }],
+    ["a migration plan", { owners: [], migrations: [ref("migration")] }],
+  ])("refuses a missing %s instead of dropping it", async (_name, execution) => {
+    await expect(verifierSnapshot(lifecycle, parseCanonicalAbsolutePathText(manifestAt(10)), execution, () => null)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+  });
+
+  it("refuses a missing owner effect plan", async () => {
+    const owner = { id: "owner", externalEffects: [ref("effect")] };
+    await expect(verifierSnapshot(lifecycle, parseCanonicalAbsolutePathText(manifestAt(10)), { owners: [ref("owner")], migrations: [] }, (r) => (r.id === "owner" ? owner : null))).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
   });
 });
 
