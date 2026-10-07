@@ -441,9 +441,9 @@ differently on every invocation: the field would populate, look correct, and mea
   creates, never throws and never repairs, returning `null` for absent, unreadable, symlinked,
   wrong-typed or too-short — every state `doctor` must be able to *report*, which it cannot do if
   building the context already threw. The root warns and falls back to an ephemeral key
-  (`:743-745`), so diagnostics are still redacted on a machine that has never been initialized.
-- `loadOrCreateRedactionKey` (`:687`) is the **point-of-use** door, called by `init` (`init.ts:346`,
-  `:975`, `:1026`, `:1061`) and by `capture`, `review` and `ingest` at their own points of use, and
+  (`apps/cli/src/context.ts` — `EPHEMERAL_KEY_WARNING`), so diagnostics are still redacted on a machine that has never been initialized.
+- `loadOrCreateRedactionKey` (`apps/cli/src/context.ts:687`) is the **point-of-use** door, called by `init` (`init.ts:349`,
+  `:976`, `:1027`, `:1062`) and by `capture`, `review` and `ingest` at their own points of use, and
   by `import` except under `--dry-run`. `import --dry-run`, `project init` and `project check` never
   create it: they read it with `readRedactionKey` and fall back to an ephemeral key. It creates
   when absent,
@@ -488,8 +488,8 @@ configuration value inside a document whose whole purpose is to be comparable ac
 substitutions are **pinned to a position** — `content` at index 0 only, `_indexes` at index 1 only and
 only when index 0 was `content` — so a vault folder literally named `content` nested under `staging/`
 cannot be corrupted, and every root is glob-escaped and NFC-normalized before it is spliced in.
-`ingest` resolves its declared scopes through it once per invocation (`ingest.ts:2330-2331`), against
-`INGEST_DECLARED_WRITE_SCOPES` (`:229-232`), which `ingest.test.ts` pins against
+`ingest` resolves its declared scopes through it once per invocation (`apps/cli/src/commands/ingest.ts` — `resolveScopeGlob`), against
+`INGEST_DECLARED_WRITE_SCOPES` (`apps/cli/src/commands/ingest.ts` — `INGEST_DECLARED_WRITE_SCOPES`), which `ingest.test.ts` pins against
 `workflows/ingest/workflow.yaml` so a contract edit that does not update the constant goes red. The
 compiler's declared-versus-derived arithmetic is untouched, so the equality rule stays the checked
 arithmetic it was designed to be.
