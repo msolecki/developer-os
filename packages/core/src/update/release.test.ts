@@ -5,7 +5,12 @@ import {
   admitReleaseAgainstTrust,
   admitReleaseIdentity,
   advanceReleaseTrust,
+  isPackageChannelTrust,
   isUnsignedLocalTrust,
+  PACKAGE_CHANNEL_DELEGATION_BYTES,
+  PACKAGE_CHANNEL_RELEASE_KEY_ID,
+  PACKAGE_CHANNEL_SOURCE_TABLE,
+  validatePackageChannelDelegation,
   releaseIdentityHash,
   ReleaseUnsignedLocalError,
   UNSIGNED_LOCAL_RELEASE_KEY_ID,
@@ -26,6 +31,7 @@ import {
   type ReleaseMetadataIdentityV1,
 } from "./release.js";
 import { admitCanonicalAbsolutePath, type CanonicalPathEvidenceV1 } from "./paths.js";
+import { decodeCanonicalJson } from "../lifecycle/canonical-json.js";
 import { parseLowerHexSha256, parseStableSemver } from "./scalars.js";
 
 const hex = (value: string | Uint8Array): string => createHash("sha256").update(value).digest("hex");
@@ -606,3 +612,45 @@ function delegationFixture() {
   const publicKey = Buffer.alloc(32, 18);
   return { sequence: "1", releaseKey: { algorithm: "ed25519", keyId: hex(publicKey), publicKey: publicKey.toString("base64url") }, metadataOrigins: [origin("metadata")], assetOrigins: [origin("asset")] };
 }
+
+function signedTrust() {
+  const h = "a".repeat(64);
+  return { schemaVersion: 1 as const, highestDelegationSequence: "1", delegationHash: h, delegatedReleaseKeyId: h, highestReleaseIndexSequence: "1", releaseIndexHash: h, highestAcceptedReleaseSequence: "5", releaseIdentityHash: h };
+}
+
+describe("the package-channel trust value (D84 K4)", () => {
+  const channel = () => ({ ...signedTrust(), trust: "package-channel" as const });
+
+  it("admits the value and keeps it distinct from unsigned-local", () => {
+    const state = validateReleaseTrustState(channel());
+    expect(isPackageChannelTrust(state)).toBe(true);
+    expect(isUnsignedLocalTrust(state)).toBe(false);
+    expect(() => validateReleaseTrustState({ ...signedTrust(), trust: "root-verified" })).toThrow();
+  });
+
+  it("advances a package-channel state and keeps its trust member", () => {
+    const state = channel();
+    const next = advanceReleaseTrust(state as never, {
+      delegationSequence: state.highestDelegationSequence, delegationHash: state.delegationHash, delegatedReleaseKeyId: state.delegatedReleaseKeyId,
+      releaseIndexSequence: (BigInt(state.highestReleaseIndexSequence) + 1n).toString() as never, releaseIndexHash: "b".repeat(64) as never,
+      releaseSequence: (BigInt(state.highestAcceptedReleaseSequence) + 1n).toString() as never, releaseIdentityHash: "c".repeat(64) as never,
+    } as never);
+    expect(next).toMatchObject({ trust: "package-channel", releaseIndexHash: "b".repeat(64) });
+  });
+
+  it("refuses a lower release sequence as an online downgrade", () => {
+    const state = channel();
+    expect(() => { admitReleaseAgainstTrust(state as never, { releaseSequence: "0" as never, releaseIdentityHash: "d".repeat(64) as never }, "online_target"); }).toThrow(/downgrade|replay/u);
+  });
+
+  it("pins the delegation stand-in, the key id and the fixed table", () => {
+    expect(new TextDecoder().decode(PACKAGE_CHANNEL_DELEGATION_BYTES)).toBe('{"schemaVersion":1,"trust":"package-channel"}\n');
+    expect(() => { validatePackageChannelDelegation(decodeCanonicalJson(PACKAGE_CHANNEL_DELEGATION_BYTES, 1024)); }).not.toThrow();
+    expect(() => { validatePackageChannelDelegation({ schemaVersion: 1, trust: "unsigned-local" }); }).toThrow();
+    expect(PACKAGE_CHANNEL_RELEASE_KEY_ID).toMatch(/^[0-9a-f]{64}$/u);
+    expect(PACKAGE_CHANNEL_SOURCE_TABLE).toEqual({
+      arm64: { prefix: "/opt/homebrew", opt: "/opt/homebrew/opt/developer-os", fallback: "libexec/fallback" },
+      x64: { prefix: "/usr/local", opt: "/usr/local/opt/developer-os", fallback: "libexec/fallback" },
+    });
+  });
+});

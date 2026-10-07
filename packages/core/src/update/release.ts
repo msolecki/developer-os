@@ -187,9 +187,29 @@ export interface SignedReleaseTrustStateV1 {
   readonly releaseIdentityHash: LowerHexSha256;
 }
 export type UnsignedLocalReleaseTrustStateV1 = SignedReleaseTrustStateV1 & { readonly trust: "unsigned-local" };
-export type ReleaseTrustStateV1 = SignedReleaseTrustStateV1 | UnsignedLocalReleaseTrustStateV1;
+export type PackageChannelReleaseTrustStateV1 = SignedReleaseTrustStateV1 & { readonly trust: "package-channel" };
+export type ReleaseTrustStateV1 = SignedReleaseTrustStateV1 | UnsignedLocalReleaseTrustStateV1 | PackageChannelReleaseTrustStateV1;
 
 export const UNSIGNED_LOCAL_RELEASE_KEY_ID = createHash("sha256").update("developer-os:unsigned-local-release-key:v1", "ascii").digest("hex") as LowerHexSha256;
+
+export const PACKAGE_CHANNEL_RELEASE_KEY_ID = createHash("sha256").update("developer-os:package-channel-release-key:v1", "ascii").digest("hex") as LowerHexSha256;
+/** The package-channel keg layout (D84 K4); the paths equal the unsigned-local layout. */
+export const PACKAGE_CHANNEL_LAYOUT = Object.freeze({
+  delegation: "metadata/release-key-delegation.json",
+  releaseIndex: "metadata/release-index.json",
+  bundleManifest: "metadata/bundle-manifest.json",
+  bundleRoot: "bundle",
+} as const);
+/** The fixed keg locator table: the only place the CLI finds the Homebrew keg. */
+export const PACKAGE_CHANNEL_SOURCE_TABLE = Object.freeze({
+  arm64: Object.freeze({ prefix: "/opt/homebrew" as CanonicalAbsolutePathV1, opt: "/opt/homebrew/opt/developer-os" as CanonicalAbsolutePathV1, fallback: "libexec/fallback" as const }),
+  x64: Object.freeze({ prefix: "/usr/local" as CanonicalAbsolutePathV1, opt: "/usr/local/opt/developer-os" as CanonicalAbsolutePathV1, fallback: "libexec/fallback" as const }),
+}) as Readonly<Record<"arm64" | "x64", { readonly prefix: CanonicalAbsolutePathV1; readonly opt: CanonicalAbsolutePathV1; readonly fallback: "libexec/fallback" }>>;
+export const PACKAGE_CHANNEL_DELEGATION_BYTES: Uint8Array = new TextEncoder().encode(encodeCanonicalJson({ schemaVersion: 1, trust: "package-channel" }));
+export function validatePackageChannelDelegation(value: unknown): void {
+  const input = exact(value, ["schemaVersion", "trust"], "PackageChannelDelegationV1");
+  if (input.schemaVersion !== 1 || input.trust !== "package-channel") fail("PackageChannelDelegationV1");
+}
 
 export class ReleaseUnsignedLocalError extends Error {
   readonly code = EXIT_CODES.capabilityUnavailable;
@@ -201,9 +221,11 @@ export class ReleaseUnsignedLocalError extends Error {
 }
 
 export function isUnsignedLocalTrust(state: ReleaseTrustStateV1): state is UnsignedLocalReleaseTrustStateV1 {
-  return "trust" in state;
+  return "trust" in state && state.trust === "unsigned-local";
 }
-
+export function isPackageChannelTrust(state: ReleaseTrustStateV1): state is PackageChannelReleaseTrustStateV1 {
+  return "trust" in state && state.trust === "package-channel";
+}
 const textEncoder = new TextEncoder();
 /** A signed bundle's bounds: entries, bytes per file, and aggregate file bytes (Spec 2 §3). */
 export const MAXIMUM_BUNDLE_ENTRIES = 200_000;
@@ -345,7 +367,7 @@ function validateBundleReference<TArchitecture extends "arm64" | "x64">(value: u
   if (BigInt(archiveBytes) < 1n || BigInt(archiveBytes) > 2_147_483_648n || BigInt(manifestBytes) < 1n || BigInt(manifestBytes) > 16_777_216n) fail("ReleaseBundleReferenceV1 bytes");
   return { platform: "darwin", architecture, archiveFormat: "zstd-ustar-v1", archivePath, archiveBytes, archiveSha256: parseLowerHexSha256(input.archiveSha256), manifestPath: parseOfficialReleaseRelativePath(input.manifestPath), manifestBytes, manifestSha256: parseLowerHexSha256(input.manifestSha256) };
 }
-function validateReleaseIndexEntry(value: unknown): ReleaseIndexEntryV1 {
+export function validateReleaseIndexEntry(value: unknown): ReleaseIndexEntryV1 {
   const input = exact(value, ["version", "releaseSequence", "minimumLauncherProtocol", "updateProtocol", "bundles"], "ReleaseIndexEntryV1");
   const bundles = list(input.bundles, 2, 2, "ReleaseIndexEntryV1.bundles");
   return { version: parseStableSemver(input.version), releaseSequence: parseUInt64Decimal(input.releaseSequence), minimumLauncherProtocol: parsePositiveUInt32(input.minimumLauncherProtocol), updateProtocol: parsePositiveUInt32(input.updateProtocol), bundles: [validateBundleReference(bundles[0], "arm64"), validateBundleReference(bundles[1], "x64")] };
@@ -461,11 +483,11 @@ export function validateActiveReleaseRecord(value: unknown, evidence: CanonicalP
 }
 const signedTrustKeys = ["schemaVersion", "highestDelegationSequence", "delegationHash", "delegatedReleaseKeyId", "highestReleaseIndexSequence", "releaseIndexHash", "highestAcceptedReleaseSequence", "releaseIdentityHash"] as const;
 export function validateReleaseTrustState(value: unknown): ReleaseTrustStateV1 {
-  const unsignedLocal = Object.hasOwn(record(value, "ReleaseTrustStateV1"), "trust");
-  const input = exact(value, unsignedLocal ? [...signedTrustKeys, "trust"] : signedTrustKeys, "ReleaseTrustStateV1");
-  if (input.schemaVersion !== 1 || (unsignedLocal && input.trust !== "unsigned-local")) fail("ReleaseTrustStateV1");
+  const hasTrust = Object.hasOwn(record(value, "ReleaseTrustStateV1"), "trust");
+  const input = exact(value, hasTrust ? [...signedTrustKeys, "trust"] : signedTrustKeys, "ReleaseTrustStateV1");
+  if (input.schemaVersion !== 1 || (hasTrust && input.trust !== "unsigned-local" && input.trust !== "package-channel")) fail("ReleaseTrustStateV1");
   const signed = { schemaVersion: 1 as const, highestDelegationSequence: parseUInt64Decimal(input.highestDelegationSequence), delegationHash: parseLowerHexSha256(input.delegationHash), delegatedReleaseKeyId: parseLowerHexSha256(input.delegatedReleaseKeyId), highestReleaseIndexSequence: parseUInt64Decimal(input.highestReleaseIndexSequence), releaseIndexHash: parseLowerHexSha256(input.releaseIndexHash), highestAcceptedReleaseSequence: parseUInt64Decimal(input.highestAcceptedReleaseSequence), releaseIdentityHash: parseLowerHexSha256(input.releaseIdentityHash) };
-  const trust: ReleaseTrustStateV1 = unsignedLocal ? { ...signed, trust: "unsigned-local" } : signed;
+  const trust: ReleaseTrustStateV1 = hasTrust ? { ...signed, trust: input.trust as "unsigned-local" | "package-channel" } : signed;
   assertCanonicalSize(trust, 16 * 1024, "ReleaseTrustStateV1 bytes");
   return trust;
 }
@@ -492,7 +514,8 @@ export function advanceReleaseTrust(current: ReleaseTrustStateV1, accepted: Rele
   if (compareUInt64(metadata.delegationSequence, trust.highestDelegationSequence) === 0 && metadata.delegatedReleaseKeyId !== trust.delegatedReleaseKeyId) fail("ReleaseTrustStateV1 delegation key replay");
   const [highestReleaseIndexSequence, releaseIndexHash] = advance(trust.highestReleaseIndexSequence, trust.releaseIndexHash, metadata.releaseIndexSequence, metadata.releaseIndexHash, "index");
   const [highestAcceptedReleaseSequence, nextReleaseIdentityHash] = advance(trust.highestAcceptedReleaseSequence, trust.releaseIdentityHash, releaseSequence, releaseIdentityHash, "release");
-  return { schemaVersion: 1, highestDelegationSequence, delegationHash, delegatedReleaseKeyId: metadata.delegatedReleaseKeyId, highestReleaseIndexSequence, releaseIndexHash, highestAcceptedReleaseSequence, releaseIdentityHash: nextReleaseIdentityHash };
+  const advanced = { schemaVersion: 1 as const, highestDelegationSequence, delegationHash, delegatedReleaseKeyId: metadata.delegatedReleaseKeyId, highestReleaseIndexSequence, releaseIndexHash, highestAcceptedReleaseSequence, releaseIdentityHash: nextReleaseIdentityHash };
+  return isPackageChannelTrust(trust) ? { ...advanced, trust: "package-channel" } : advanced;
 }
 export function admitReleaseAgainstTrust(trust: ReleaseTrustStateV1, release: Pick<ReleaseIdentityV1, "releaseSequence" | "releaseIdentityHash">, role: "online_target" | "guarded_active" | "guarded_retained_rollback"): void {
   const state = validateReleaseTrustState(trust);
