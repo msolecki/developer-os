@@ -16,7 +16,8 @@ disabled until the founder enables it (D76). A kickstarted scheduled `doctor` ex
 Kickstarted on 2026-10-07: `brain-reindex` exited 0, then `brain-garden` ran Claude once (`success`
 `ok`, two gap targets, two hub proposals accepted and quarantined, none rejected), which closed NEW-134.
 
-1. **A15 steps 16–18** (`docs/migration/founder-cutover.md`: per-adapter gate cycle, exercised
+1. **A15 steps 16–18.** Step 16 items 1–4 (Claude half) ran on 2026-10-07: capture `597d458f9fd75be7` → accept → `ingest --agent claude` wrote `DEV/developer-os-update-trusts-homebrew-tap-d84.md`, `brain lint` 0 errors, `brain reindex`, `brain search "homebrew"` returns it first; the new-session injection check is the founder's. A first synthetic capture (`a54eafa53539612a`) was ingested with no note (the agent proposed none; `ingest.ts` reports `ingested` with no notes listed), and the first ingest of `597d458f9fd75be7` was refused by NEW-199's false positive, then passed on retry. Items 5–7 (Codex, reinstall, uninstall) and steps 17–18 wait for the Codex window after 2026-10-22 and a green gate on the installed commit.
+   Originally: (`docs/migration/founder-cutover.md`: per-adapter gate cycle, exercised
    rollback) after one week of use; step 16 checks injection (NEW-139's fix installed since
    2026-10-04). **Step 19** after one stable cycle; it also removes the vault's legacy skills and
    tooling (step 13b's workflow is already disabled).
