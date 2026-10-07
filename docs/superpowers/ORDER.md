@@ -10,7 +10,7 @@ notes are the archive.
 
 **No agent product work is in flight; the next steps are founder- or time-gated.** The full suite is
 green on `5a7462a9` (2026-10-05: `npm run check` rc=0 in 288 min, `npm run test:pinned-host` 12
-passed, 1 skipped). `development` at `17cf02ca` (PR #21, NEW-144, merged; the tree of `7cdd4b97`) is
+passed, 1 skipped). `development` at `17cf02ca` (PR #21, NEW-144, merged; the tree of `17cf02ca`) is
 installed on the live machine with launchd automation enabled (D82): five jobs, `git-sync` off, Git
 disabled until the founder enables it (D76). A kickstarted scheduled `doctor` exited 0.
 
