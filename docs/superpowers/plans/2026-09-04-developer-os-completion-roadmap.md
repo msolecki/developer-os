@@ -355,6 +355,37 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D95 (2026-10-07), founder: A16's publication design.** `specs/2026-10-07-developer-os-release-publication-design.md`
+  is approved: tag-triggered `release.yml` on GitHub Actions (preflight requires a green `check.yml` on
+  the tag's SHA), deterministic tarballs with Node 24 pinned by SHA-256, a **draft** release with
+  `SHA256SUMS` and a CycloneDX SBOM (`cdxgen`), founder approval 1 = publishing the draft, `tap.yml`
+  opens a PR in `msolecki/homebrew-developer-os` with `TAP_PR_TOKEN`, founder approval 2 = merging it;
+  beta is `0.Y.Z` through the same tap; `releaseSequence = major·10⁶ + minor·10³ + patch`. L1 blocks the
+  first beta. Its plan follows Task 11b's, whose packer it consumes.
+- **D94 (2026-10-07), founder: Task 11b — `update` trusts the Homebrew package channel (D84 (1)).**
+  Spec 2's block "Amended 2026-10-07 (D84, Task 11b)", K1–K6, approved, then revised the same day after
+  the plan review (F1–F10) found K2/K4 misread the code and re-approved: the keg carries the real,
+  unsigned release format with Node 24 and compiled planner/verifier inside the hashed inventory; the
+  CLI admits it from a fixed `opt` path table (Homebrew modes at the source, manifest modes on copy);
+  FD 3 and the §4 signature/transport machinery are deleted; trust `"package-channel"`; (F4) the
+  founder's home moves by one reinstall from the keg; (F5) D72 (c)'s three journal/plan format changes
+  carry no migration (accepted residual); (F7) preview `packageSource` instead of `download`; (F8) the
+  Codex plugin version is the release version; NEW-163 option B, NEW-171 option (b). Task 11b owns the
+  packer and format, A16 only publication.
+- **D93 (2026-10-07), founder: NEW-199.** A 2–3 character one-case letter+digit part (`d84`, `11b`) is
+  word-like for the note-path and `sk-` kebab exemptions, at most two per run and only beside a
+  4+-letter word; the unlabelled-token residual is accepted in `threat-model.md`.
+- **D92 (2026-10-07), founder: recovery rows.** NEW-195: forward recovery resumes an in-flight
+  publication and a fresh create that finds its path present is journalled `create_refused` (Spec 2
+  §9.2 amended); NEW-196: option D, accepted residual 11 in Spec 2 §13.3; NEW-198: the manifest
+  stand-in at its journalled tombstone (Spec 2 §5.3 amended).
+- **D91 (2026-10-07), founder: NEW-193 and NEW-197.** NEW-193 (2a): every cited range on a line must
+  hold one of its identifiers, tests included, with no anchor bypass; (6): Spec 1 amended to the
+  six-job registry and its derived counts. NEW-197 closes at the safe 1.7x gain; the retain loop's
+  before/after walks stay as D84's anti-TOCTOU cost.
+- **D90 (2026-10-07), founder: session unblocking.** NEW-183's auto-mode rule is the founder's to add
+  (`autoMode.allow` in the user settings; `permissions.allow` does not reach the classifier); A15 step
+  16 runs founder-executed with agent guidance (items 1–4, the Claude half, done 2026-10-07).
 - **D89 (2026-10-07), founder: the program plan closes as bookkeeping, before A16.** Like D68, the
   plan is deleted although its last three tasks are open, because none of them is agent work it could
   schedule: Task 7's remainder is Task 11b (parked, D46/D84; its Phase 9 disposable-account gate was
@@ -558,7 +589,8 @@ NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the
 - [x] Task 26 (the lifecycle proof) on the synthetic arm64 and x64 fixture: NEW-110 Task 12
   (`b9faa189`, `e672ae1f`, `00afee8b`, `26baedd4`, `8b29e3c9`); the surviving contracts are in
   `docs/architecture/foundation.md` §11. D75: tests written, the full check is owed.
-- [ ] Task 11b: parked (D46), with NEW-111 and NEW-112. The real-release half of the gate waits for it
+- [ ] Task 11b: unparked by D84 and designed by D94 (Spec 2 K1–K6, revised and approved 2026-10-07); its plan
+  is being written. Was: parked (D46), with NEW-111 and NEW-112. The real-release half of the gate waits for it
   and A16, and so do the persisted-format migrations Spec 2's D72 block owes "no later than Task 11b".
 
 Gate: `update` dry-run and apply and rollback proven on a disposable install, then once on the founder machine. The synthetic half (disposable install, both architectures) landed with NEW-110 Task 12; the real-release half and the founder machine wait on Task 11b.
@@ -575,8 +607,9 @@ Runs after Phase 8 (D16), and takes over the automation job registry bullet from
   `b1a7c6a5`; review fixes `83647122`, `d92759a0`, `0c799c68`) and the plan closed on 2026-09-29 under
   D75; its surviving constraints are in `foundation.md` §10, `foundation-constraints.md` and
   `threat-model.md` §5.15. D75: tests written, the full check and `npm run test:pinned-host` are owed.
-- [ ] The gate below, on a disposable macOS account: NEW-113's Task 5, a founder step whose body is in
-  `BACKLOG.md` NEW-113.
+- [x] The gate below on a disposable macOS account (NEW-113's Task 5): skipped by D76 (2026-09-29); Git
+  sync and automation ship proven by their written tests, and automation was first enabled on the live
+  machine under D82.
 
 Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; scheduled runs observed.
 
@@ -599,7 +632,9 @@ Gate: one complete capture → review → ingest → search → reinstall → un
 
 ### Phase 11 — A16: release · L
 
-Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) still owed.
+Program plan Task 9 (`git show ae25acd9:…`), now specified by `specs/2026-10-07-developer-os-release-publication-design.md`
+(D95, approved 2026-10-07); its plan follows Task 11b's. L1 (license) and L2 (tap repository, `TAP_PR_TOKEN`,
+release permissions) still owed; L1 blocks the first beta.
 
 ## Risk register
 
@@ -623,9 +658,9 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 5b | `docs/architecture/brain.md` §6.13 (the spec was deleted 2026-09-29: `git show 343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`; its plan closed 2026-09-26) |
 | 6 | `docs/architecture/hooks.md` (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md`; its plan closed and was deleted 2026-09-29) |
 | 7 | `docs/architecture/foundation.md` §13, `knowledge-pipeline.md` §3.1 and `claude-adapter.md` §15 (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`; its plan closed and was deleted 2026-09-26) |
-| 8 | `plans/2026-09-28-new-110-spec2-apply.md` from NEW-110's Spec 2 revision pass (closed 2026-09-29, D75; both earlier plans closed 2026-09-26); Task 11b has no plan yet, its body is behind `BACKLOG.md` NEW-111's pointer |
+| 8 | `plans/2026-09-28-new-110-spec2-apply.md` from NEW-110's Spec 2 revision pass (closed 2026-09-29, D75; both earlier plans closed 2026-09-26); Task 11b is designed by Spec 2's K1–K6 block (D94); its plan is being written |
 | 9 | plan 1b (closed 2026-09-26), Spec 1's D71 amendment and `plans/2026-09-28-new-113-fixed-path-admission.md` (closed 2026-09-29, D75; Task 5 is in `BACKLOG.md` NEW-113) |
 | 10 | `docs/migration/founder-cutover.md` |
-| 11 | program plan Task 9 |
+| 11 | `specs/2026-10-07-developer-os-release-publication-design.md` (D95) and its plan, after Task 11b's |
 
 This roadmap is deleted when Phase 11 closes; until then it is the index `ORDER.md` points at for everything after the current `NOW` entry.
