@@ -271,11 +271,16 @@ describe("readBootstrapClosure (NEW-111)", () => {
   beforeAll(async () => {
     testing = (await import(new URL("commands/testing.js", cliDist).href)) as CliTesting;
     const main = (await import(new URL("main.js", cliDist).href)) as CliMain;
+    // The next fixture in the root rebuilds the product home and the keg under `<root>/prefix`.
+    const fresh = async (capture: BootstrapCapture) => {
+      await rm(capture.home, { recursive: true, force: true });
+      await rm(join(capture.root, "prefix"), { recursive: true, force: true });
+    };
     // Three fixtures in one root share one product home, so their envelopes combine into one `state/`.
     reserved = await captureBootstrap(testing, main, "launcher-closure", ["after_plan"]);
-    await rm(reserved.home, { recursive: true, force: true });
+    await fresh(reserved);
     planned = await captureBootstrap(testing, main, "launcher-closure", ["after_first_payload"], reserved.root);
-    await rm(planned.home, { recursive: true, force: true });
+    await fresh(planned);
     several = await captureBootstrap(testing, main, "launcher-closure", [null, "uninstall", null, "uninstall", "after_first_payload"], reserved.root);
   }, 300_000);
   afterAll(async () => {
