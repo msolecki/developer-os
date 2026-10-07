@@ -14,6 +14,7 @@ import {
   decodeIdentity,
   durableEntryEvidenceBytes,
   entryTop,
+  withdrawEntryIntent,
   exact,
   fail,
   identity,
@@ -1404,6 +1405,8 @@ export interface RollbackPayloadPublicationJournalV1 {
 
 export type RollbackPayloadPublicationStepV1 =
   | { readonly kind: "structure_intent" }
+  /** A fresh exclusive create found its path present: the current create intent is withdrawn, so no recovery binds that path. */
+  | { readonly kind: "create_refused" }
   | ({ readonly kind: "structure_created" } & Identity)
   | { readonly kind: "structure_complete" }
   | UpdateEntryStepV1
@@ -1625,6 +1628,17 @@ export function advanceRollbackPayloadPublicationJournal(plan: RollbackPayloadSt
       need(publish !== null && (current.phase === "planned" || current.phase === "structure_publishing") && current.structureWriteState === null);
       next = { ...base, phase: "structure_publishing", structureWriteState: { ordinal: current.nextStructure, state: "create_intent" } };
       break;
+    case "create_refused": {
+      // The one current create intent returns to its predecessor; a later pass creates again and refuses again.
+      const entry = withdrawEntryIntent(current.entryWriteState);
+      if (current.structureWriteState?.state === "create_intent") next = { ...base, structureWriteState: null };
+      else if (entry !== null) next = { ...base, entryWriteState: entry.state };
+      else {
+        need(current.metadataWriteState?.state === "publish_intent");
+        next = { ...base, metadataWriteState: null };
+      }
+      break;
+    }
     case "structure_created":
       need(current.phase === "structure_publishing" && current.structureWriteState?.state === "create_intent");
       next = { ...base, structureWriteState: { ordinal: current.nextStructure, state: "created", dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };

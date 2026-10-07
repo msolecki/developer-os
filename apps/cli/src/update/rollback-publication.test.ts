@@ -1,8 +1,10 @@
+import { writeFileSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 
 import {
   decodeCanonicalJson,
   LifecycleRecoveryRequiredError,
+  rollbackPayloadMetadataPath,
   rollbackPayloadPublicationJournalBytes,
   initialRollbackPayloadPublicationJournal,
   rollbackPayloadSourcePaths,
@@ -179,6 +181,44 @@ describe("RollbackPayloadParticipant.publish", () => {
     const inventory = await verifyRetainedRollbackPayload(new BundleGuardedIo(guardedFs(), uid), fixture.payload.identity);
     expect(inventory.entries.map((entry) => ({ ...entry }))).toStrictEqual(fixture.payload.inventory.entries);
     expect(await nodeFs.readdir(rollbackPublicationEvidenceDirectory(fixture.root, plan.id))).toHaveLength(fixture.payload.identity.entryCount);
+  });
+
+  it("records a fresh structure create that found its path present, so a later pass refuses instead of adopting it", async () => {
+    const fixture = await staged();
+    const plan = await publishPlan(fixture);
+    await nodeFs.mkdir(fixture.payload.identity.root, { mode: 0o700 });
+    await expect(participant(fixture).publish(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(fixture, plan)).structureWriteState).toBeNull();
+    await expect(participant(fixture).publish(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(fixture, plan)).structureIdentities).toStrictEqual([]);
+    expect(await nodeFs.readdir(fixture.payload.identity.root)).toStrictEqual([]);
+  });
+
+  it("records a fresh metadata create that found its path present, so a later pass refuses instead of adopting it", async () => {
+    const fixture = await staged();
+    const plan = await publishPlan(fixture);
+    const metadata = rollbackPayloadMetadataPath(fixture.payload.identity.root, 0);
+    let written = 0;
+    // After the last entry's evidence, an empty file appears where the inverse plan is exclusively created.
+    const planting = participant(fixture, (point) => {
+      if (point === "evidence_written" && (written += 1) === fixture.payload.identity.entryCount) writeFileSync(metadata, "", { mode: 0o600, flag: "wx" });
+    });
+    await expect(planting.publish(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(fixture, plan)).metadataWriteState).toBeNull();
+    await expect(participant(fixture).publish(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(fixture, plan)).metadataIdentities).toStrictEqual([]);
+    expect((await nodeFs.stat(metadata)).size).toBe(0);
+  });
+
+  it("refuses to resume a recorded metadata document holding any bytes but its planned prefix", async () => {
+    const fixture = await staged();
+    const plan = await publishPlan(fixture);
+    const dying = participant(fixture, (reached) => {
+      if (reached === "metadata_created") throw new Killed(reached);
+    });
+    await expect(dying.publish(plan)).rejects.toBeInstanceOf(Killed);
+    await nodeFs.writeFile(rollbackPayloadMetadataPath(fixture.payload.identity.root, 0), "x", { flag: "r+" });
+    await expect(participant(fixture).publish(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
   });
 
   it("resumes a compensation that died between steps", async () => {

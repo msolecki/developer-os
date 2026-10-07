@@ -45,6 +45,7 @@ import {
   BundleJournalFile,
   bundleSourceEvidenceSetHash,
   copyBundleEntry,
+  createFresh,
   parentPath,
   refuseBundle,
   removeBundleEntryPart,
@@ -134,6 +135,10 @@ export class BundlePublicationParticipant {
     return next;
   }
 
+  async #refuseCreate(plan: BundlePublicationPlanV1, file: Journal): Promise<void> {
+    await this.#advance(plan, file, { kind: "create_refused" });
+  }
+
   /**
    * Forward publication or verification. Process death never chooses rollback (Spec 2 §9.4), so a
    * forward journal left inside a microstate resumes it: an intent binds its exact empty crash
@@ -158,7 +163,7 @@ export class BundlePublicationParticipant {
       if (resumed?.state !== "created") {
         let created = resumed === null ? null : await this.#boundRoot(plan);
         if (created === null) {
-          created = await this.#io.fs.mkdirExclusive(plan.target.bundleRoot);
+          created = await createFresh(() => this.#io.fs.mkdirExclusive(plan.target.bundleRoot), () => this.#refuseCreate(plan, file));
           this.#interrupt("root_made");
         }
         // The parent entry is durable before the journal records the root's identity.
@@ -190,6 +195,7 @@ export class BundlePublicationParticipant {
         interrupt: (point) => {
           this.#interrupt(point);
         },
+        refuseCreate: () => this.#refuseCreate(plan, file),
       }, journal.entryWriteState);
     }
     for (let journal = file.value as BundlePublicationJournalV1; journal.nextMetadata < 3; journal = file.value as BundlePublicationJournalV1) {
@@ -284,7 +290,7 @@ export class BundlePublicationParticipant {
         if ((await this.#io.fs.hashRegular(found, BigInt(after.size))) !== after.hash) refuseBundle("bundle_metadata_payload", payload.path);
         if ((await this.#io.fs.lstat(row.path)) !== null) refuseBundle("bundle_metadata_exists", row.path);
         if (state === null) await this.#advance(plan, file, { kind: "metadata_intent" });
-        await this.#io.fs.renameNoReplace(found, row.path);
+        await createFresh(() => this.#io.fs.renameNoReplace(found, row.path), () => this.#refuseCreate(plan, file));
         this.#interrupt("metadata_renamed");
         moved = found;
       }
