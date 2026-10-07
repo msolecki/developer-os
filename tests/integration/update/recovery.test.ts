@@ -55,8 +55,11 @@ const MAXIMUM_DEATH_POINTS = 5_000;
 /**
  * `SWEEP_POINTS=<first>-<last>` runs only those death points (inclusive) of each sweep, from a
  * fresh home, the state the apply sweep already rebuilds after every forward point. A shard can
- * see one direction only, so the both-directions assertions run on a full sweep alone. Unset, a
- * sweep runs from point 1 until an uninjected run completes.
+ * see one direction only, so the both-directions assertions run on a full sweep alone. A shard
+ * starts from a fresh home, so the apply sweep's home reused after a backward point is exercised
+ * only by a full run, and a full sweep is still required once before A16. A sweep that completes
+ * at its first point injected no death and fails. Unset, a sweep runs from point 1 until an
+ * uninjected run completes.
  */
 const SWEEP_RANGE = ((): { readonly first: number; readonly last: number; readonly full: boolean } => {
   const value = process.env.SWEEP_POINTS;
@@ -142,6 +145,7 @@ describe("update --apply at every death point (Spec 2 §9.3, §9.4)", () => {
       expect(point).toBeLessThan(MAXIMUM_DEATH_POINTS);
       const dying = dieAfterMutations(home.fixture.context, point);
       if ((await attempt(updateTo(home.update(dying.context), "1.2.0"), dying.died)) === "completed") {
+        expect(point, "a range past the last death point injects nothing").toBeGreaterThan(SWEEP_RANGE.first);
         completed = true;
         break;
       }
@@ -352,6 +356,7 @@ describe("update rollback --apply at every death point (Spec 2 §10.2)", () => {
       expect(home.world.plannerRuns).toHaveLength(plannerRuns);
       expect(await nodeFs.readFile(join(home.fixture.paths.stateDir, "release-trust.json"))).toEqual(trust);
       if (outcome === "completed") {
+        expect(point, "a range past the last death point injects nothing").toBeGreaterThan(SWEEP_RANGE.first);
         completed = true;
         break;
       }
@@ -400,7 +405,7 @@ describe("a verifier that rejects the target (Spec 2 §9.4, D72 P7(b), Review Fo
       expect(point).toBeLessThan(MAXIMUM_DEATH_POINTS);
       const dying = dieAfterMutations(home.fixture.context, point);
       if ((await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)) === "completed") {
-        expect(point).toBeGreaterThan(1);
+        expect(point, "a range past the last death point injects nothing").toBeGreaterThan(SWEEP_RANGE.first);
         break;
       }
 
