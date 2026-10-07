@@ -718,8 +718,9 @@ behaviour described here.
   `platform`, `product-home`, `configuration`, `manifest`, `transactions`, `drift`, `brain`,
   `redaction-key`, `release-trust`, `entrypoint`, `agents`, `claude-capabilities`,
   `codex-capabilities`, `hooks`, `external-hooks`, `vendor-config`, `instructions`,
-  `codex-registration`, one `bootstrap-evidence:<id>` row per retained bootstrap envelope, and
-  `manifest-anchor` (a row only when the anchor cannot do its job). `lifecycle` (below) is added
+  `codex-registration`, one `bootstrap-evidence:<id>` row per retained bootstrap envelope,
+  `automation` (a row only when a failed scheduled run exists, below), and `manifest-anchor` (a
+  row only when the anchor cannot do its job). `lifecycle` (below) is added
   ahead of them when coordinator residue exists. **Never `fail`:** `entrypoint` (informational),
   `hooks`, `external-hooks` and `vendor-config` (each catches everything; `hooks.md` §3.7,
   `claude-adapter.md` §15), `redaction-key`, both `*-capabilities` rows and `manifest-anchor`
@@ -746,6 +747,13 @@ behaviour described here.
   coordinator owns, since the mutation gate refuses `repair` on them. `status` publishes the same
   survey as warnings (NEW-170), and a fresh `init` refused by a coordinator journal names
   `developer-os uninstall` as its recovery.
+- **`automation` fails on a scheduled run that launchd started and that wrote no record**
+  (NEW-169, `apps/cli/src/commands/doctor.ts` — `automationFindings`). It reads `automation
+  status` and fails, exit 1, for every job whose loaded generation launchd reports with a non-zero
+  `last exit code`: a run that records or exits silently exits 0, so a non-zero code means
+  launchd could not spawn it, it died before the runner recorded, or the runner refused. It is
+  absent when no job failed and when `automation status` itself refuses (no V2 home), so a healthy
+  report's check list is unchanged. Not in the scheduled-safe profile, which spawns no process.
 - **`init`'s post-install gate is scoped to the checks it is answerable for**, listed in
   `INIT_OWNED_CHECKS`: `product-home`, `configuration`, `manifest`, `drift`, `brain`. It used to
   gate on the whole `doctor` report, which meant any check failing for a reason the install did

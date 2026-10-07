@@ -55,6 +55,7 @@ import { hostWith, scriptedLaunchd } from "../../lifecycle/testing.js";
 import { renderEntrypoint } from "../../update/entrypoint.js";
 import { entrypointPath } from "../../update/local-release.js";
 import { runConfig } from "../config.js";
+import { runDoctor, runDoctorReport } from "../doctor.js";
 import { runGit } from "../git/index.js";
 import { createBareRemote, scriptedEffectPorts, scriptedGitRuntime } from "../git/testing.js";
 import { runInit } from "../init.js";
@@ -702,6 +703,37 @@ describe("automation on a real V2 home", () => {
         expect((await apply(home, "enable", BASE_SCHEDULES)).data).toMatchObject({ kind: "applied", operation: "automation_enable" });
       } finally {
         launchd.exits.clear();
+      }
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "fails doctor's automation check on a spawn failure: launchd exit 78 and an empty status file (NEW-169)",
+    async () => {
+      const home = await sharedHome();
+      if (!launchd.loaded.has("doctor")) await apply(home, "enable", BASE_SCHEDULES);
+      const record = automationStatusPath(parseCanonicalAbsolutePathText(home.paths.home), "doctor");
+      const before = await nodeFs.readFile(record).catch(() => null);
+      const automationCheck = async () => (await runDoctorReport(home.context)).checks.find((check) => check.id === "automation");
+      // Healthy (no non-zero exit): no row, so a healthy report's check list is unchanged.
+      expect(await automationCheck()).toBeUndefined();
+      await nodeFs.writeFile(record, "", { mode: 0o600 });
+      launchd.exits.set("doctor", 78);
+      try {
+        const status = dataOf(await runAutomation(home.context, { subcommand: "status" }));
+        if (status.kind !== "status") throw new Error("unreachable");
+        expect(renderAutomation(status).some((line) => line.startsWith("doctor") && line.endsWith("last run never; launchd exit 78, no run recorded since"))).toBe(true);
+        const check = await automationCheck();
+        expect(check?.status).toBe("fail");
+        expect(check?.message).toContain("doctor: launchd exit 78, no run recorded since");
+        const failed = await runDoctor(home.context);
+        expect(failed.ok).toBe(false);
+        if (failed.ok) throw new Error("unreachable");
+        expect(failed.error.message).toContain("automation: ");
+      } finally {
+        launchd.exits.clear();
+        await (before === null ? nodeFs.rm(record, { force: true }) : nodeFs.writeFile(record, before));
       }
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
