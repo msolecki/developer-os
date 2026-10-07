@@ -5,13 +5,24 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { encodeCanonicalJson, EXIT_CODES, UNSIGNED_LOCAL_RELEASE_KEY_ID } from "@developer-os/core";
+import {
+  encodeCanonicalJson,
+  EXIT_CODES,
+  PACKAGE_CHANNEL_RELEASE_KEY_ID,
+  releaseIdentityHash,
+  UNSIGNED_LOCAL_RELEASE_KEY_ID,
+  validateBundleManifest,
+} from "@developer-os/core";
 import type { CanonicalJsonValue } from "@developer-os/core";
 
+import { writePackageChannelRelease } from "./local-release.js";
+import type { ReleaseFileV1 } from "./local-release.js";
 import {
+  admitPackageChannelRelease,
   admitRootVerifiedPackagedRelease,
   admitUnsignedLocalPackagedRelease,
   inspectPackagedRelease,
+  resolvePackageChannelSource,
   unavailablePackagedReleaseSource,
   UNSIGNED_LOCAL_LAYOUT,
 } from "./packaged-release.js";
@@ -280,5 +291,126 @@ describe("admitUnsignedLocalPackagedRelease", () => {
     await expect(admitted.readFile("bundle/instructions/README.md")).rejects.toMatchObject({
       code: EXIT_CODES.securityRefusal,
     });
+  });
+});
+
+/** Synthetic keg release: both architectures are indexed, the manifest is the host architecture's. */
+function syntheticKegRelease(version: string, sequence: string, architecture: "arm64" | "x64") {
+  const encoder = new TextEncoder();
+  const bundle: ReadonlyArray<readonly [string, 0o600 | 0o700]> = [
+    ["bin/cli", 0o700],
+    ["bin/planner", 0o700],
+    ["bin/runtime", 0o700],
+    ["bin/verifier", 0o700],
+    ["share/note.txt", 0o600],
+  ];
+  const files: ReleaseFileV1[] = bundle.map(([relativePath, mode]) => ({
+    relativePath,
+    bytes: encoder.encode(`synthetic ${version} ${relativePath}\n`),
+    mode,
+  }));
+  const manifest = validateBundleManifest({
+    schemaVersion: 1,
+    version,
+    releaseSequence: sequence,
+    platform: "darwin",
+    architecture,
+    launcherProtocol: 1,
+    updateProtocol: 1,
+    entrypoint: "bin/cli",
+    runtimeEntrypoint: "bin/runtime",
+    plannerEntrypoint: "bin/planner",
+    verifierEntrypoint: "bin/verifier",
+    entries: [
+      { path: "bin", kind: "directory", mode: 448 },
+      ...files
+        .filter((file) => file.relativePath.startsWith("bin/"))
+        .map((file) => ({ path: file.relativePath, kind: "file", mode: 448, bytes: String(file.bytes.byteLength), sha256: hash(new TextDecoder().decode(file.bytes)) })),
+      { path: "share", kind: "directory", mode: 448 },
+      ...files
+        .filter((file) => file.relativePath.startsWith("share/"))
+        .map((file) => ({ path: file.relativePath, kind: "file", mode: 384, bytes: String(file.bytes.byteLength), sha256: hash(new TextDecoder().decode(file.bytes)) })),
+    ],
+  });
+  const manifestBytes = encoder.encode(encodeCanonicalJson(manifest as unknown as CanonicalJsonValue));
+  const reference = (candidate: "arm64" | "x64") => ({
+    platform: "darwin",
+    architecture: candidate,
+    archiveFormat: "zstd-ustar-v1",
+    archivePath: `${version}/darwin-${candidate}.tar.zst`,
+    archiveBytes: "10",
+    archiveSha256: hash(`archive ${candidate}`),
+    manifestPath: `${version}/darwin-${candidate}.manifest.json`,
+    manifestBytes: candidate === architecture ? String(manifestBytes.byteLength) : "11",
+    manifestSha256: candidate === architecture ? createHash("sha256").update(manifestBytes).digest("hex") : hash(`other ${candidate}`),
+  });
+  const index = {
+    sequence: "1",
+    latestVersion: version,
+    releases: [{ version, releaseSequence: sequence, minimumLauncherProtocol: 1, updateProtocol: 1, bundles: [reference("arm64"), reference("x64")] }],
+  } as unknown as CanonicalJsonValue;
+  return { index, manifest, files };
+}
+
+async function kegFixture(version = "1.2.0", sequence = "3") {
+  const prefix = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-keg-")));
+  roots.push(prefix);
+  await nodeFs.chmod(prefix, 0o755);
+  const keg = join(prefix, "Cellar", "developer-os", version);
+  await nodeFs.mkdir(join(keg, "libexec"), { recursive: true, mode: 0o755 });
+  await nodeFs.mkdir(join(prefix, "opt"), { mode: 0o755 });
+  await nodeFs.symlink(`../Cellar/developer-os/${version}`, join(prefix, "opt", "developer-os"));
+  const { index, manifest, files } = syntheticKegRelease(version, sequence, process.arch as "arm64" | "x64");
+  const packageRoot = await writePackageChannelRelease({ outDir: join(keg, "libexec", "fallback"), index, manifest, bundleFiles: files });
+  return { prefix, keg, packageRoot, index, manifest };
+}
+const table = (prefix: string) => ({ arm64: { prefix, opt: `${prefix}/opt/developer-os`, fallback: "libexec/fallback" }, x64: { prefix, opt: `${prefix}/opt/developer-os`, fallback: "libexec/fallback" } }) as never;
+
+describe("admitPackageChannelRelease (D84 K2)", () => {
+  it("(a) admits Homebrew modes, derives the identity from the index row, and maps modes to their class", async () => {
+    const { prefix, packageRoot, index } = await kegFixture();
+    const admitted = await inspectPackagedRelease(await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null }));
+    expect(admitted.trust).toBe("package-channel");
+    expect(admitted.identity).toMatchObject({ version: "1.2.0", releaseSequence: "3", delegationSequence: "0", delegatedReleaseKeyId: PACKAGE_CHANNEL_RELEASE_KEY_ID, releaseIdentityHash: releaseIdentityHash((index as { releases: unknown[] }).releases[0], process.arch as "arm64") });
+    expect(new Set(admitted.files.map((file) => file.mode))).toEqual(new Set([0o600, 0o700]));
+  });
+  it("(b) refuses a 0666 bundle file as exit 6", async () => {
+    const { prefix, packageRoot } = await kegFixture();
+    await nodeFs.chmod(join(packageRoot, "bundle/bin/verifier"), 0o666);
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+  });
+  it("(c) refuses an executable bit that disagrees with the manifest mode", async () => {
+    const { prefix, packageRoot } = await kegFixture();
+    await nodeFs.chmod(join(packageRoot, "bundle/bin/runtime"), 0o644);
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+  });
+  it("(d) refuses an other-writable ancestor below the prefix and admits a group-writable one the user owns (Q1)", async () => {
+    const { prefix, packageRoot } = await kegFixture();
+    await nodeFs.chmod(join(prefix, "Cellar"), 0o775);
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null })).resolves.toBeDefined();
+    await nodeFs.chmod(join(prefix, "Cellar"), 0o777);
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null })).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+  });
+  it("(e) splits the version check: init requires PRODUCT_VERSION, update does not", async () => {
+    const { prefix, packageRoot } = await kegFixture();
+    await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: "9.9.9" })).rejects.toMatchObject({ code: EXIT_CODES.capabilityUnavailable, message: "release_mismatch" });
+  });
+  it("(f) resolves the opt link once to its canonical keg, and an absent path is exit 4", async () => {
+    const { prefix, keg } = await kegFixture();
+    await expect(resolvePackageChannelSource(process.arch as "arm64", table(prefix))).resolves.toEqual({ kegRoot: keg, packageRoot: join(keg, "libexec/fallback") });
+    await nodeFs.rm(join(prefix, "opt", "developer-os"));
+    await expect(resolvePackageChannelSource(process.arch as "arm64", table(prefix))).rejects.toMatchObject({ code: EXIT_CODES.capabilityUnavailable, message: "update_package_source_absent" });
+  });
+  it("(g) refuses an opt link that leaves <prefix>/Cellar/developer-os", async () => {
+    const { prefix } = await kegFixture();
+    await nodeFs.rm(join(prefix, "opt", "developer-os"));
+    await nodeFs.symlink("/tmp", join(prefix, "opt", "developer-os"));
+    await expect(resolvePackageChannelSource(process.arch as "arm64", table(prefix))).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+  });
+  it("(h) refuses a swapped file at reread", async () => {
+    const { prefix, packageRoot } = await kegFixture();
+    const source = await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null });
+    await nodeFs.chmod(join(packageRoot, "bundle/bin/cli"), 0o644);
+    await expect(inspectPackagedRelease(source)).rejects.toThrow();
   });
 });

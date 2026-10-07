@@ -2,16 +2,26 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import type { BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import {
   decodeCanonicalJson,
   encodeCanonicalJson,
   EXIT_CODES,
+  PACKAGE_CHANNEL_LAYOUT,
+  PACKAGE_CHANNEL_RELEASE_KEY_ID,
+  PACKAGE_CHANNEL_SOURCE_TABLE,
+  parseCanonicalAbsolutePathText,
+  parseStableSemver,
+  releaseIdentityHash,
   sortUtf8,
   UNSIGNED_LOCAL_RELEASE_KEY_ID,
+  validateBundleManifest,
+  validatePackageChannelDelegation,
+  validateReleaseIndex,
 } from "@developer-os/core";
-import type { LowerHexSha256 } from "@developer-os/core";
+import type { CanonicalAbsolutePathV1, LowerHexSha256 } from "@developer-os/core";
+import { assertTrustedDirectoryEntry } from "@developer-os/platform-macos";
 
 const encoder = new TextEncoder();
 const MAX_PACKAGE_ENTRIES = 200_000;
@@ -57,7 +67,7 @@ export interface AdmittedPackagedReleaseFileV1 {
   readonly ino: string;
 }
 
-export type PackagedReleaseTrustV1 = "root-verified" | "unsigned-local";
+export type PackagedReleaseTrustV1 = "root-verified" | "unsigned-local" | "package-channel";
 
 export const UNSIGNED_LOCAL_LAYOUT = Object.freeze({
   delegation: "metadata/release-key-delegation.json",
@@ -81,7 +91,10 @@ export interface AdmittedPackagedReleaseV1 {
 
 class PackagedReleaseError extends Error {
   constructor(
-    readonly code: typeof EXIT_CODES.capabilityUnavailable | typeof EXIT_CODES.securityRefusal,
+    readonly code:
+      | typeof EXIT_CODES.capabilityUnavailable
+      | typeof EXIT_CODES.securityRefusal
+      | typeof EXIT_CODES.recoveryRequired,
     message: string,
   ) {
     super(message);
@@ -89,9 +102,15 @@ class PackagedReleaseError extends Error {
   }
 }
 
+/** `owner_only` is the root-verified and unsigned-local rule; `homebrew` is the keg's (D84 K2). */
+type ModePolicy = "owner_only" | "homebrew";
+
+/** A sealed row keeps the observed disk mode; `mode` is the class-mapped one consumers see. */
+type SealedFileRow = AdmittedPackagedReleaseFileV1 & { readonly diskMode: number };
+
 interface DirectorySnapshot {
   readonly relativePath: string;
-  readonly mode: 0o700;
+  readonly mode: 0o700 | 0o755;
   readonly dev: string;
   readonly ino: string;
 }
@@ -101,8 +120,10 @@ interface SealedPackagedRelease {
   readonly handoff: RootVerifiedPackagedReleaseV1;
   readonly root: { readonly dev: string; readonly ino: string };
   readonly directories: readonly DirectorySnapshot[];
-  readonly files: readonly AdmittedPackagedReleaseFileV1[];
+  readonly files: readonly SealedFileRow[];
   readonly inventoryHash: LowerHexSha256;
+  /** Package-channel only: the prefix whose ancestor chain admission checked. */
+  readonly ancestorPrefix: string | null;
 }
 
 const sealed = new WeakMap<PackagedReleaseSourceV1, SealedPackagedRelease | null>();
@@ -133,36 +154,47 @@ function ownerUid(): number {
   return typeof process.getuid === "function" ? process.getuid() : 0;
 }
 
-function assertRoot(stats: BigIntStats): void {
+function policyOf(trust: PackagedReleaseTrustV1): ModePolicy {
+  return trust === "package-channel" ? "homebrew" : "owner_only";
+}
+
+function ownedByTrustedUid(stats: BigIntStats, policy: ModePolicy): boolean {
+  const uid = Number(stats.uid);
+  return uid === ownerUid() || (policy === "homebrew" && uid === 0);
+}
+
+function assertRoot(stats: BigIntStats, policy: ModePolicy): void {
   if (
     !stats.isDirectory() ||
     stats.isSymbolicLink() ||
-    Number(stats.uid) !== ownerUid() ||
-    modeOf(stats) !== 0o700
+    !ownedByTrustedUid(stats, policy) ||
+    modeOf(stats) !== (policy === "homebrew" ? 0o755 : 0o700)
   ) {
     securityRefusal("packaged release root is not an owner-only guarded directory");
   }
 }
 
-function assertDirectory(stats: BigIntStats): void {
+function assertDirectory(stats: BigIntStats, policy: ModePolicy): void {
   if (
     !stats.isDirectory() ||
     stats.isSymbolicLink() ||
-    Number(stats.uid) !== ownerUid() ||
-    modeOf(stats) !== 0o700
+    !ownedByTrustedUid(stats, policy) ||
+    modeOf(stats) !== (policy === "homebrew" ? 0o755 : 0o700)
   ) {
     securityRefusal("packaged release directory changed identity or shape");
   }
 }
 
-function assertFile(stats: BigIntStats): 0o600 | 0o700 {
+/** Returns the observed disk mode after the policy admits it. */
+function assertFile(stats: BigIntStats, policy: ModePolicy): number {
   const mode = modeOf(stats);
+  const allowed = policy === "homebrew" ? mode === 0o644 || mode === 0o755 : mode === 0o600 || mode === 0o700;
   if (
     !stats.isFile() ||
     stats.isSymbolicLink() ||
-    Number(stats.uid) !== ownerUid() ||
+    !ownedByTrustedUid(stats, policy) ||
     Number(stats.nlink) !== 1 ||
-    (mode !== 0o600 && mode !== 0o700) ||
+    !allowed ||
     stats.size < 0n ||
     stats.size > BigInt(MAX_FILE_BYTES)
   ) {
@@ -171,11 +203,16 @@ function assertFile(stats: BigIntStats): 0o600 | 0o700 {
   return mode;
 }
 
-async function readGuardedFile(path: string, listed: BigIntStats): Promise<Uint8Array> {
+/** The permission class a consumer sees: executable or not (`0755`/`0700` vs `0644`/`0600`). */
+function classMode(diskMode: number): 0o600 | 0o700 {
+  return (diskMode & 0o100) !== 0 ? 0o700 : 0o600;
+}
+
+async function readGuardedFile(path: string, listed: BigIntStats, policy: ModePolicy): Promise<Uint8Array> {
   const handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const opened = await handle.stat({ bigint: true });
-    const mode = assertFile(opened);
+    const mode = assertFile(opened, policy);
     if (
       opened.dev !== listed.dev ||
       opened.ino !== listed.ino ||
@@ -204,10 +241,10 @@ async function readGuardedFile(path: string, listed: BigIntStats): Promise<Uint8
   }
 }
 
-async function inventory(packageRoot: string): Promise<{
+async function inventory(packageRoot: string, policy: ModePolicy): Promise<{
   readonly root: { readonly dev: string; readonly ino: string };
   readonly directories: readonly DirectorySnapshot[];
-  readonly files: readonly AdmittedPackagedReleaseFileV1[];
+  readonly files: readonly SealedFileRow[];
   readonly hash: LowerHexSha256;
 }> {
   const canonicalRoot = resolve(packageRoot);
@@ -215,9 +252,9 @@ async function inventory(packageRoot: string): Promise<{
     securityRefusal("packaged release root must already be canonical");
   }
   const rootStats = await nodeFs.lstat(packageRoot, { bigint: true });
-  assertRoot(rootStats);
+  assertRoot(rootStats, policy);
   const directories: DirectorySnapshot[] = [];
-  const files: AdmittedPackagedReleaseFileV1[] = [];
+  const files: SealedFileRow[] = [];
   const pending = [packageRoot];
   let count = 0;
   while (pending.length > 0) {
@@ -231,10 +268,10 @@ async function inventory(packageRoot: string): Promise<{
       const relativePath = canonicalRelativePath(relative(packageRoot, path).split(sep).join("/"));
       const stats = await nodeFs.lstat(path, { bigint: true });
       if (entry.isDirectory()) {
-        assertDirectory(stats);
+        assertDirectory(stats, policy);
         directories.push({
           relativePath,
-          mode: 0o700,
+          mode: policy === "homebrew" ? 0o755 : 0o700,
           dev: stats.dev.toString(10),
           ino: stats.ino.toString(10),
         });
@@ -242,13 +279,14 @@ async function inventory(packageRoot: string): Promise<{
         continue;
       }
       if (!entry.isFile()) securityRefusal("packaged release inventory contains a non-file entry");
-      const mode = assertFile(stats);
-      const bytes = await readGuardedFile(path, stats);
+      const diskMode = assertFile(stats, policy);
+      const bytes = await readGuardedFile(path, stats, policy);
       files.push({
         relativePath,
         bytes: bytes.byteLength,
         sha256: createHash("sha256").update(bytes).digest("hex") as LowerHexSha256,
-        mode,
+        mode: classMode(diskMode),
+        diskMode,
         dev: stats.dev.toString(10),
         ino: stats.ino.toString(10),
       });
@@ -294,10 +332,10 @@ function validateIdentity(value: PackagedReleaseIdentityV1): void {
   }
 }
 
-function requiredFile(
-  files: readonly AdmittedPackagedReleaseFileV1[],
+function requiredFile<TFile extends AdmittedPackagedReleaseFileV1>(
+  files: readonly TFile[],
   relativePath: string,
-): AdmittedPackagedReleaseFileV1 {
+): TFile {
   const canonical = canonicalRelativePath(relativePath);
   const file = files.find((candidate) => candidate.relativePath === canonical);
   if (file === undefined) return securityRefusal("packaged release is missing a retained file");
@@ -337,25 +375,26 @@ function sameInventory(left: SealedPackagedRelease, right: Awaited<ReturnType<ty
 
 async function assertSealedFileChain(
   snapshot: SealedPackagedRelease,
-  expected: AdmittedPackagedReleaseFileV1,
+  expected: SealedFileRow,
   sealedDirectories: ReadonlyMap<string, DirectorySnapshot>,
 ): Promise<BigIntStats> {
+  const policy = policyOf(snapshot.trust);
   const assertSealedDirectory = async (
     path: string,
     sealedIdentity: { readonly dev: string; readonly ino: string },
     root: boolean,
   ): Promise<void> => {
     const before = await nodeFs.lstat(path, { bigint: true });
-    if (root) assertRoot(before);
-    else assertDirectory(before);
+    if (root) assertRoot(before, policy);
+    else assertDirectory(before, policy);
     if (before.dev.toString(10) !== sealedIdentity.dev || before.ino.toString(10) !== sealedIdentity.ino) {
       securityRefusal("packaged release directory changed before payload staging");
     }
     const handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const opened = await handle.stat({ bigint: true });
-      if (root) assertRoot(opened);
-      else assertDirectory(opened);
+      if (root) assertRoot(opened, policy);
+      else assertDirectory(opened, policy);
       const fresh = await nodeFs.lstat(path, { bigint: true });
       if (
         opened.dev.toString(10) !== sealedIdentity.dev ||
@@ -391,12 +430,12 @@ async function assertSealedFileChain(
     join(snapshot.handoff.packageRoot, expected.relativePath),
     { bigint: true },
   );
-  const observedMode = assertFile(stats);
+  const observedMode = assertFile(stats, policy);
   if (
     stats.dev.toString(10) !== expected.dev ||
     stats.ino.toString(10) !== expected.ino ||
     Number(stats.size) !== expected.bytes ||
-    observedMode !== expected.mode
+    observedMode !== expected.diskMode
   ) {
     securityRefusal("packaged release file no longer matches its sealed row");
   }
@@ -407,6 +446,7 @@ function seal(
   trust: PackagedReleaseTrustV1,
   handoff: RootVerifiedPackagedReleaseV1,
   observed: Awaited<ReturnType<typeof inventory>>,
+  ancestorPrefix: string | null = null,
 ): PackagedReleaseSourceV1 {
   const source: PackagedReleaseSourceV1 = Object.freeze({ kind: "packaged_release_source_v1" });
   sealed.set(source, {
@@ -416,6 +456,7 @@ function seal(
     directories: structuredClone(observed.directories),
     files: structuredClone(observed.files),
     inventoryHash: observed.hash,
+    ancestorPrefix,
   });
   return source;
 }
@@ -423,7 +464,7 @@ function seal(
 export async function admitRootVerifiedPackagedRelease(
   handoff: RootVerifiedPackagedReleaseV1,
 ): Promise<PackagedReleaseSourceV1> {
-  const observed = await inventory(handoff.packageRoot);
+  const observed = await inventory(handoff.packageRoot, "owner_only");
   validateSemanticBindings(handoff, observed.files, observed.directories);
   return seal("root-verified", handoff, observed);
 }
@@ -453,9 +494,9 @@ function unsignedDocument(bytes: Uint8Array, keys: readonly string[]): UnsignedD
   return document;
 }
 
-async function readListed(packageRoot: string, relativePath: string): Promise<Uint8Array> {
+async function readListed(packageRoot: string, relativePath: string, policy: ModePolicy): Promise<Uint8Array> {
   const path = join(packageRoot, relativePath);
-  return readGuardedFile(path, await nodeFs.lstat(path, { bigint: true }));
+  return readGuardedFile(path, await nodeFs.lstat(path, { bigint: true }), policy);
 }
 
 function sha256Hex(bytes: Uint8Array | string): string {
@@ -466,14 +507,14 @@ export async function admitUnsignedLocalPackagedRelease(
   packageRoot: string,
   productVersion: string,
 ): Promise<PackagedReleaseSourceV1> {
-  const observed = await inventory(packageRoot);
+  const observed = await inventory(packageRoot, "owner_only");
   const layout = UNSIGNED_LOCAL_LAYOUT;
   requiredFile(observed.files, layout.delegation);
   requiredFile(observed.files, layout.releaseIndex);
   requiredFile(observed.files, layout.bundleManifest);
-  const delegationBytes = await readListed(packageRoot, layout.delegation);
-  const indexBytes = await readListed(packageRoot, layout.releaseIndex);
-  const manifestBytes = await readListed(packageRoot, layout.bundleManifest);
+  const delegationBytes = await readListed(packageRoot, layout.delegation, "owner_only");
+  const indexBytes = await readListed(packageRoot, layout.releaseIndex, "owner_only");
+  const manifestBytes = await readListed(packageRoot, layout.bundleManifest, "owner_only");
   unsignedDocument(delegationBytes, ["schemaVersion", "trust"]);
   const index = unsignedDocument(indexBytes, ["releaseSequence", "schemaVersion", "trust", "version"]);
   const manifest = unsignedDocument(manifestBytes, ["files", "schemaVersion", "trust"]);
@@ -544,6 +585,158 @@ export async function admitUnsignedLocalPackagedRelease(
   return seal("unsigned-local", handoff, observed);
 }
 
+/**
+ * Q1: every directory from the package root up to and including `prefix` passes the D83 (3)
+ * rule `assertTrustedExecutable` applies (owned by the uid or root, never other-writable,
+ * group-writable only when the uid owns it). Nothing above the prefix is inspected.
+ */
+async function assertAncestors(packageRoot: string, prefix: string): Promise<void> {
+  if (!packageRoot.startsWith(`${prefix}/`)) securityRefusal("packaged release root is not inside the package prefix");
+  for (let path = packageRoot; ; path = dirname(path)) {
+    const stats = await nodeFs.lstat(path, { bigint: true });
+    if (!stats.isDirectory() || stats.isSymbolicLink()) securityRefusal("packaged release ancestor is not a plain directory");
+    assertTrustedDirectoryEntry(path, { uid: Number(stats.uid), mode: modeOf(stats) }, ownerUid());
+    if (path === prefix) return;
+  }
+}
+
+function asRecoveryRequired(error: unknown): never {
+  if (error instanceof PackagedReleaseError && error.code !== EXIT_CODES.securityRefusal) throw error;
+  throw new PackagedReleaseError(
+    EXIT_CODES.recoveryRequired,
+    error instanceof Error ? error.message : "package-channel release admission failed",
+  );
+}
+
+function decodeDocument(bytes: Uint8Array, limit: number): unknown {
+  return decodeCanonicalJson(bytes, limit);
+}
+
+/**
+ * D84 K2: admits a Homebrew keg's `libexec/fallback`. The identity comes from the one index
+ * row, not from a signature: the package manager is the channel of trust. Every failure but
+ * the F1 version split is exit 6.
+ */
+export async function admitPackageChannelRelease(
+  packageRoot: string,
+  options: { readonly prefix: string; readonly requireVersion: string | null },
+): Promise<PackagedReleaseSourceV1> {
+  try {
+    await assertAncestors(packageRoot, options.prefix);
+    const observed = await inventory(packageRoot, "homebrew");
+    const layout = PACKAGE_CHANNEL_LAYOUT;
+    const delegationBytes = await readListed(packageRoot, layout.delegation, "homebrew");
+    const indexBytes = await readListed(packageRoot, layout.releaseIndex, "homebrew");
+    const manifestBytes = await readListed(packageRoot, layout.bundleManifest, "homebrew");
+    validatePackageChannelDelegation(decodeDocument(delegationBytes, 1024));
+    const index = validateReleaseIndex(decodeDocument(indexBytes, 4 * 1024 * 1024));
+    const manifest = validateBundleManifest(decodeDocument(manifestBytes, 16 * 1024 * 1024));
+    const architecture = process.arch;
+    if (architecture !== "arm64" && architecture !== "x64") {
+      return securityRefusal("package-channel release supports only darwin arm64 or x64");
+    }
+    const row = index.releases[0];
+    const reference = row?.bundles[architecture === "arm64" ? 0 : 1];
+    if (
+      index.releases.length !== 1 ||
+      row === undefined ||
+      reference === undefined ||
+      manifest.version !== row.version ||
+      manifest.releaseSequence !== row.releaseSequence ||
+      manifest.architecture !== architecture ||
+      reference.manifestSha256 !== sha256Hex(manifestBytes) ||
+      reference.manifestBytes !== String(manifestBytes.byteLength)
+    ) {
+      return securityRefusal("package-channel metadata does not agree with the index row");
+    }
+
+    const bundlePrefix = `${layout.bundleRoot}/`;
+    const bundleDirectories = observed.directories.filter((directory) => directory.relativePath.startsWith(bundlePrefix));
+    const bundleFiles = observed.files.filter((file) => file.relativePath.startsWith(bundlePrefix));
+    const directoryEntries = manifest.entries.filter((entry) => entry.kind === "directory");
+    const fileEntries = manifest.entries.filter((entry) => entry.kind === "file");
+    if (
+      bundleDirectories.length !== directoryEntries.length ||
+      bundleFiles.length !== fileEntries.length ||
+      directoryEntries.some((entry) => !bundleDirectories.some((directory) => directory.relativePath === `${bundlePrefix}${entry.path}`)) ||
+      fileEntries.some((entry) => {
+        const file = bundleFiles.find((candidate) => candidate.relativePath === `${bundlePrefix}${entry.path}`);
+        return (
+          file === undefined ||
+          String(file.bytes) !== entry.bytes ||
+          file.sha256 !== entry.sha256 ||
+          (file.diskMode & 0o100 ? 448 : 384) !== entry.mode
+        );
+      })
+    ) {
+      return securityRefusal("package-channel bundle inventory does not equal the bundle manifest");
+    }
+
+    const handoff: RootVerifiedPackagedReleaseV1 = {
+      packageRoot,
+      retainedMetadata: { delegation: layout.delegation, releaseIndex: layout.releaseIndex, bundleManifest: layout.bundleManifest },
+      bundleRoot: layout.bundleRoot,
+      identity: {
+        version: row.version,
+        releaseSequence: row.releaseSequence,
+        releaseIdentityHash: releaseIdentityHash(row, architecture),
+        delegationSequence: "0",
+        delegationHash: sha256Hex(delegationBytes),
+        delegatedReleaseKeyId: PACKAGE_CHANNEL_RELEASE_KEY_ID,
+        releaseIndexSequence: index.sequence,
+        releaseIndexHash: sha256Hex(indexBytes),
+        bundleManifestHash: sha256Hex(manifestBytes),
+        platform: "darwin",
+        architecture,
+        launcherProtocol: manifest.launcherProtocol,
+        updateProtocol: manifest.updateProtocol,
+      },
+    };
+    validateSemanticBindings(handoff, observed.files, observed.directories);
+    if (options.requireVersion !== null && row.version !== options.requireVersion) {
+      throw new PackagedReleaseError(EXIT_CODES.capabilityUnavailable, "release_mismatch");
+    }
+    return seal("package-channel", handoff, observed, options.prefix);
+  } catch (error) {
+    return asRecoveryRequired(error);
+  }
+}
+
+/**
+ * D84 K4: resolves the table's `opt` link once, with no `brew` and no `PATH`. The link must
+ * name `<prefix>/Cellar/developer-os/<stable-semver>` and that keg must already be canonical.
+ */
+export async function resolvePackageChannelSource(
+  architecture: "arm64" | "x64",
+  table: typeof PACKAGE_CHANNEL_SOURCE_TABLE = PACKAGE_CHANNEL_SOURCE_TABLE,
+): Promise<{ readonly kegRoot: CanonicalAbsolutePathV1; readonly packageRoot: CanonicalAbsolutePathV1 }> {
+  const entry = table[architecture];
+  const lstatOrAbsent = async (path: string): Promise<BigIntStats> => {
+    try {
+      return await nodeFs.lstat(path, { bigint: true });
+    } catch (error) {
+      if ((error as { readonly code?: unknown }).code === "ENOENT") {
+        throw new PackagedReleaseError(EXIT_CODES.capabilityUnavailable, "update_package_source_absent");
+      }
+      throw error;
+    }
+  };
+  try {
+    const link = await lstatOrAbsent(entry.opt);
+    if (!link.isSymbolicLink()) securityRefusal("the package source link is not a symbolic link");
+    const kegRoot = resolve(dirname(entry.opt), await nodeFs.readlink(entry.opt));
+    parseStableSemver(basename(kegRoot));
+    if (dirname(kegRoot) !== `${entry.prefix}/Cellar/developer-os` || (await nodeFs.realpath(kegRoot)) !== kegRoot) {
+      securityRefusal("the package source link leaves the package cellar");
+    }
+    const packageRoot = join(kegRoot, entry.fallback);
+    await lstatOrAbsent(packageRoot);
+    return { kegRoot: parseCanonicalAbsolutePathText(kegRoot), packageRoot: parseCanonicalAbsolutePathText(packageRoot) };
+  } catch (error) {
+    return asRecoveryRequired(error);
+  }
+}
+
 export function unavailablePackagedReleaseSource(): PackagedReleaseSourceV1 {
   const source: PackagedReleaseSourceV1 = Object.freeze({ kind: "packaged_release_source_v1" });
   sealed.set(source, null);
@@ -560,7 +753,8 @@ export async function inspectPackagedRelease(
       "this build has no root-verified packaged release handoff",
     );
   }
-  const observed = await inventory(snapshot.handoff.packageRoot);
+  if (snapshot.ancestorPrefix !== null) await assertAncestors(snapshot.handoff.packageRoot, snapshot.ancestorPrefix);
+  const observed = await inventory(snapshot.handoff.packageRoot, policyOf(snapshot.trust));
   validateSemanticBindings(snapshot.handoff, observed.files, observed.directories);
   if (!sameInventory(snapshot, observed)) {
     securityRefusal("packaged release changed after root-verified admission");
@@ -580,7 +774,7 @@ export async function inspectPackagedRelease(
     retainedMetadata: structuredClone(snapshot.handoff.retainedMetadata),
     bundleRoot: snapshot.handoff.bundleRoot,
     identity: structuredClone(snapshot.handoff.identity),
-    files: structuredClone(snapshot.files),
+    files: snapshot.files.map((file) => ({ relativePath: file.relativePath, bytes: file.bytes, sha256: file.sha256, mode: file.mode, dev: file.dev, ino: file.ino })),
     readFile: async (relativePath: string): Promise<Uint8Array> => {
       const expected = filesByPath.get(relativePath);
       if (expected === undefined) {
@@ -588,14 +782,14 @@ export async function inspectPackagedRelease(
       }
       const path = join(snapshot.handoff.packageRoot, expected.relativePath);
       const stats = await assertSealedFileChain(snapshot, expected, directoriesByPath);
-      const bytes = await readGuardedFile(path, stats);
+      const bytes = await readGuardedFile(path, stats, policyOf(snapshot.trust));
       const digest = createHash("sha256").update(bytes).digest("hex");
       if (
         stats.dev.toString(10) !== expected.dev ||
         stats.ino.toString(10) !== expected.ino ||
         bytes.byteLength !== expected.bytes ||
         digest !== expected.sha256 ||
-        modeOf(stats) !== expected.mode
+        modeOf(stats) !== expected.diskMode
       ) {
         securityRefusal("packaged release file no longer matches its sealed row");
       }
