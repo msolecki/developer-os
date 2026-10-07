@@ -252,14 +252,30 @@ function declaredInstallNonce(bytes: Uint8Array): LifecycleInstallNonceV1 {
   return (value as Record<string, CanonicalJsonValue>).installNonce as LifecycleInstallNonceV1;
 }
 
+/**
+ * Update recovery's stand-in for an absent live manifest: the in-flight coordinator's journalled
+ * preimage at its tombstone, already proven by the caller to be that exact inode, length and hash
+ * (Spec 2 §5.3, NEW-198). It must still declare schema V2.
+ */
+export interface PreservedManifestV1 {
+  readonly entry: LifecycleGuardedEntryV1;
+  readonly bytes: Uint8Array;
+}
+
 export async function admitInstalledV2Home(input: {
   readonly fs: LifecycleGuardedFileSystemV1;
   readonly paths: RuntimePaths;
   readonly manifestAdmission: ManifestAdmissionContextV1;
   readonly effectiveUid: number;
+  /** Update recovery only: the journalled preimage, consulted only when the live manifest is absent. */
+  readonly preservedManifest?: PreservedManifestV1;
 }): Promise<AdmittedV2HomeV1> {
   const { fs, paths, effectiveUid } = input;
-  const observed = await observeManifestSchema(fs, paths);
+  let observed = await observeManifestSchema(fs, paths);
+  if (observed.kind === "absent" && input.preservedManifest !== undefined) {
+    if (declaredSchemaVersion(input.preservedManifest.bytes) !== 2) refuse("manifest_invalid", input.preservedManifest.entry.path);
+    observed = { kind: "v2", ...input.preservedManifest };
+  }
   if (observed.kind === "absent") refuse("manifest_absent", paths.manifestFile);
   if (observed.kind === "v1") refuse("manifest_v1_not_migratable", paths.manifestFile);
   const manifest = parsing("manifest_invalid", paths.manifestFile, () =>
