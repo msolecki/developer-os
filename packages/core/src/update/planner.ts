@@ -731,6 +731,7 @@ function parseExpectedManifest(value: unknown, context: DraftContext): PlannerIn
     if (pathInput.kind === "installed") {
       installedPath = installedToken(pathInput, `${rowLabel}.path`, context);
       if (installedPath.owner !== owner) fail(`${rowLabel}.path: another owner's token`);
+      if (installedPath.kind !== artifact.kind) fail(`${rowLabel}.path: relabels the installed token's kind`);
       path = { kind: "installed", token: installedPath.token };
     } else if (pathInput.kind === "target_bundle") {
       exact(pathInput, ["kind", "path"], `${rowLabel}.path`);
@@ -751,6 +752,7 @@ function parseExpectedManifest(value: unknown, context: DraftContext): PlannerIn
       const contentInput = record(content, `${rowLabel}.verification.installed`);
       if (contentInput.kind !== "installed") return parseContentRef(contentInput, `${rowLabel}.verification.installed`, context.outputs);
       const source = installedToken(contentInput, `${rowLabel}.verification.installed`, context);
+      if (source.kind !== "file") fail(`${rowLabel}.verification.installed: not an installed file`);
       if (isNullBlob(source) && (installedPath === null || installedPath.token !== source.token)) fail(`${rowLabel}: a blob-less artifact may only be kept in place`);
       return { kind: "installed", token: source.token };
     };
@@ -774,7 +776,7 @@ function parseExpectedManifest(value: unknown, context: DraftContext): PlannerIn
     if (artifact.kind === "symlink" && verification.mode === "content") {
       exact(verification, ["mode", "installed"], `${rowLabel}.verification`);
       const source = installedToken(verification.installed, `${rowLabel}.verification.installed`, context);
-      if (source.observed.state !== "symlink") fail(`${rowLabel}.verification.installed: not an installed symlink`);
+      if (source.kind !== "symlink" || source.observed.state !== "symlink") fail(`${rowLabel}.verification.installed: not an installed symlink`);
       return { ...common, kind: "symlink", verification: { mode: "content", installed: { kind: "installed", token: source.token } } };
     }
     return fail(`${rowLabel}.kind`);

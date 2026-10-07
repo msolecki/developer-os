@@ -374,7 +374,11 @@ function concreteManifest(
     schemaVersion: 2,
     productVersion: draft.expectedManifest.productVersion,
     installedAt: home.manifest.installedAt,
-    artifacts: rows.sort(compareManifestRows),
+    // Instruction rows never reach the planner (NEW-171): carried unchanged at the target version.
+    artifacts: [
+      ...rows,
+      ...home.manifest.artifacts.filter((row) => row.kind === "instruction").map((row) => ({ ...row, productVersion: draft.expectedManifest.productVersion })),
+    ].sort(compareManifestRows),
   });
 }
 
