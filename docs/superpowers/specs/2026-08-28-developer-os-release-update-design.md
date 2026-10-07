@@ -286,7 +286,10 @@ NEW-171.
   writes each file with the manifest's mode (`0700`/`0600`); the copy compares the source's permission
   class (executable or not) rather than its exact mode with the manifest entry. The active and rollback
   releases never depend on the keg surviving `brew cleanup`. A missing table path is
-  `update_package_source_absent`, exit 4; any admission failure is exit 6. A fresh `init` run by the
+  `update_package_source_absent`, exit 4; any admission failure is exit 6. **Amended 2026-10-07
+  (D96 Q1):** "no group or other write" on the keg root's ancestors reads as D83 (3)'s rule — group write
+  is admitted only on a directory the current uid owns, other write is always refused — because Homebrew's
+  own `Cellar` and `opt` are group-writable and owned by the installing user. A fresh `init` run by the
   keg's launcher admits the same packaged release from its colocated `fallback` directory and records
   `trust: "package-channel"`; `pack:local-release` keeps producing the install-only `unsigned-local`
   layout for development, and such a home never updates (unchanged NEW-147 refusal).

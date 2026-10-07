@@ -12,9 +12,9 @@
 
 ---
 
-## Founder decisions required before execution
+## Founder decisions (answered 2026-10-07, D96: every recommended answer accepted)
 
-The spec and the code disagree in the places below. Each task that depends on a decision names it on its `Consumes:` line. The plan implements the **recommended** answer. A different answer changes only the named task.
+The spec and the code disagreed in the places below. Each task that depends on a decision names it on its `Consumes:` line. The plan implements the **recommended** answer. A different answer changes only the named task.
 
 - **Q1: Homebrew's own directories are group-writable (blocks Task 2).** On the founder machine, `stat` shows `drwxrwxr-x msolecki admin /opt/homebrew/Cellar` and the same for `/opt/homebrew/opt`. K2 says "the keg root and every ancestor up to the prefix are owned by the current user or root with no group or other write". Under that rule every real install is refused with exit 6. **Recommended:** reuse the D83 (3) rule of `assertTrustedExecutable` (`packages/platform-macos/src/macos.ts:322-330`). Group write is admitted only on a directory the current uid owns. It is refused on a root-owned directory and on a directory another user owns. Other-write is always refused. This keeps the residual D83 (3) already accepts for `/opt/homebrew/bin`.
 - **Q2: The index row has archive fields, but a keg has no archive (blocks Task 8).** `ReleaseIndexEntryV1.bundles` holds exactly two references, `[arm64, x64]`. Each reference needs `archivePath` ending in `.tar.zst`, `archiveBytes` of at least 1 and `archiveSha256`. `releaseIdentityHash` hashes all of these fields, and `admitReleaseIdentity` checks them against each other (`packages/core/src/update/release.ts:340-391`). **Recommended:** the packer builds both architectures in one run, which means it needs two official Node 24 binaries. It also writes each bundle's real zstd-ustar archive and manifest beside the keg trees (`<out>/archives/<version>/darwin-<arch>.tar.zst`, `….manifest.json`), so the fields describe real bytes that A16 can publish later. The keg trees do not contain the archives.
