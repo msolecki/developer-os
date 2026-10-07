@@ -25,6 +25,7 @@ import {
   ManifestStore,
   parseCanonicalAbsolutePathText,
   redactPayload,
+  RELEASE_VERSION,
   resolveRuntimePaths,
   TransactionExecutor,
   TransactionStore,
@@ -72,7 +73,7 @@ import { createGatedTransactionExecutor } from "./lifecycle/mutation-gate.js";
 import type { CliTransactionExecutor } from "./lifecycle/mutation-gate.js";
 import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
 
-export const PRODUCT_VERSION = "0.0.0";
+export const PRODUCT_VERSION = RELEASE_VERSION;
 
 export const REDACTION_KEY_BYTES = 32;
 

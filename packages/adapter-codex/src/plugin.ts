@@ -1,4 +1,4 @@
-import { compareUtf8 } from "@developer-os/core/planner-protocol";
+import { compareUtf8, RELEASE_VERSION } from "@developer-os/core/planner-protocol";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 
 /**
@@ -73,12 +73,11 @@ export const CODEX_MANIFEST_PATH = ".codex-plugin/plugin.json";
 export const PLUGIN_TREE_PREFIX = PLUGIN_TREE_SEGMENTS.slice(1).join("/");
 
 /**
- * This repository has not cut an independent release for any package — every
- * `package.json` in the workspace, including this adapter's own, is pinned at
- * `0.0.0`. The manifest's `version` tracks that convention rather than
- * inventing a second numbering scheme with nothing to keep it in sync.
+ * The manifest's `version` is the release version the packer stamps into the CLI and this plugin
+ * alike (Task 11b F8), so a registered plugin reports the version of the release that wrote it;
+ * an unpacked build keeps `0.0.0`.
  */
-export const PLUGIN_VERSION = "0.0.0";
+export const PLUGIN_VERSION = RELEASE_VERSION;
 
 /**
  * Scoped to what this plugin actually is — the Codex half of Developer OS —

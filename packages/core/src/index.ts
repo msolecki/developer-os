@@ -653,3 +653,4 @@ export type {
   LifecycleLedgerV2DependenciesV1,
   LifecycleLedgerV2SnapshotV1,
 } from "./lifecycle/index.js";
+export { RELEASE_VERSION } from "./version.js";

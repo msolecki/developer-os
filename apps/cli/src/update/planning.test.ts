@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 
-import { decodeCanonicalJson, EXIT_CODES, validateRetainedOwnerInverseProjection, validateRetainedSchemaMigrationInverseProjection } from "@developer-os/core";
+import { codexRegistrationProjectionHash, decodeCanonicalJson, decodeRetainedInverseLeaf, EXIT_CODES, validateRetainedOwnerInverseProjection, validateRetainedSchemaMigrationInverseProjection } from "@developer-os/core";
 import { SecurityRefusalError } from "@developer-os/security";
 import { describe, expect, it } from "vitest";
 
+import { codexVersionToken } from "./codex-effect-ports.js";
 import {
   planRollback,
   planUpdate,
@@ -245,6 +246,17 @@ describe("planUpdate", () => {
     if (planned.result.outcome !== "preview") throw new Error("expected a preview");
     expect(planned.result.plan.retainedRollback?.release.version).toBe("1.0.0");
     expect(planned.result.plan.retainedRollback?.payload.entryCount).toBe(3);
+  });
+
+  it("retains the target plugin version as the post-update projection (F8, NEW-118 (3))", async () => {
+    const fixture = createUpdateFixture({ codex: { registration: "registered" } });
+    const prepared = await prepareUpdate(fixture.update, { version: "1.1.0" as never });
+    const leaves = (prepared.candidate?.materialization.inversePlanProjections ?? []).map((leaf) => decodeRetainedInverseLeaf(leaf.kind, new TextEncoder().encode(leaf.projection.endsWith("\n") ? leaf.projection : `${leaf.projection}\n`)));
+    const codex = leaves.flatMap((leaf) => (leaf.kind === "owner_inverse" && leaf.owner === "codex" ? [leaf] : []))[0];
+    const effect = codex?.externalEffects[0];
+    if (effect === undefined) throw new Error("expected a Codex effect leaf");
+    expect(effect.expectedCurrentStateHash).toBe(codexRegistrationProjectionHash({ ...fixture.codexProjection, version: codexVersionToken("1.1.0") }));
+    expect(effect.restoreStateHash).toBe(codexRegistrationProjectionHash(fixture.codexProjection));
   });
 
   it("prepares one owner leaf and a preimage blob per changed file", async () => {

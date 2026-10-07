@@ -73,6 +73,7 @@ import { verifyReleaseMetadataChain } from "@developer-os/security";
 import type { ReleaseIndexDocumentV1, ReleaseKeyDelegationDocumentV1, TargetPlannerRunResultV1, VerifiedScratchBundleV1 } from "@developer-os/security";
 
 import { compareManifestRows } from "../instructions/attach.js";
+import { codexVersionToken } from "./codex-effect-ports.js";
 import { requireCodexRegistered } from "./codex-refresh.js";
 import { codexRegistrationFile } from "../instructions/vendor-homes.js";
 import type { CliUpdateContext, UpdateScratchAttemptV1, UpdateTransportV1 } from "./context.js";
@@ -735,7 +736,7 @@ export async function materializeUpdate(update: CliUpdateContext, home: UpdateHo
 
   const manifest = concreteManifest(update, home, snapshot, run.draft, run.outputBlobs, target);
   const bundleModes = new Map(bundleManifest.entries.flatMap((entry) => (entry.kind === "file" ? [[entry.path as string, entry.mode] as const] : [])));
-  const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs, bundleModes, await codexEffectOf(update, run.draft));
+  const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs, bundleModes, await codexEffectOf(update, run.draft, target));
   const inventoryBytes = prepared.entries.reduce((sum, entry) => sum + entry.bytes, 0);
   const participants = run.draft.ownerPlans.length + run.draft.migrations.length + 4;
   const observation = inputs.observation ?? await update.capacity();
@@ -770,23 +771,22 @@ export async function materializeUpdate(update: CliUpdateContext, home: UpdateHo
 /**
  * P6(c)/(e): a Codex tree change requires the owner `registered` before allocation (exit 3), and
  * its drafted refresh carries the pinned policy and the current projection, which the refresh
- * restores unchanged, so expected and restore states hash alike.
- * ponytail: the proposed projection keeps the current plugin version; a version bump reports as a
- * postimage mismatch and compensates until the target's plugin version is part of the projection.
+ * restores unchanged. The expected post-update state is the current projection at the target's
+ * plugin version (F8, NEW-118 (3)); the restore state is the current projection.
  */
-async function codexEffectOf(update: CliUpdateContext, draft: TargetUpdateDraftV1): Promise<RetainedExternalEffectInversePlanV1 | null> {
+async function codexEffectOf(update: CliUpdateContext, draft: TargetUpdateDraftV1, target: ReleaseIdentityV1): Promise<RetainedExternalEffectInversePlanV1 | null> {
   const plan = draft.ownerPlans.find((candidate) => candidate.owner === "codex");
   const changed = plan?.proposedOperations.some((operation) => operation.operation !== "keep") ?? false;
   if (plan === undefined || (!changed && plan.externalEffects.length === 0)) return null;
   const codex = (await update.codex?.()) ?? refuse("update_codex_unavailable", EXIT_CODES.capabilityUnavailable, [], "install the codex CLI, then run developer-os update again");
   requireCodexRegistered(codex.registration);
   if (plan.externalEffects.length === 0) return null;
-  const hash = codexRegistrationProjectionHash(codex.projection);
+  const restoreHash = codexRegistrationProjectionHash(codex.projection);
   return {
     kind: "codex_registration_refresh",
     providerProtocol: codex.policy.providerProtocol,
-    expectedCurrentStateHash: hash,
-    restoreStateHash: hash,
+    expectedCurrentStateHash: codexRegistrationProjectionHash({ ...codex.projection, version: codexVersionToken(target.version) }),
+    restoreStateHash: restoreHash,
     restorePayloads: [],
     processPolicy: codex.policy,
     processPolicyHash: ownerExternalEffectProcessPolicyHash(codex.policy),
