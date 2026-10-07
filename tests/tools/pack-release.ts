@@ -3,12 +3,19 @@
  * plus each bundle's real zstd-ustar archive and manifest, which the index row describes.
  *
  * `npm run pack:release -- --out <dir> --version <x.y.z> --release-sequence <n> --index-sequence <n>
- * --node-arm64 <path> --node-arm64-sha256 <hex> --node-x64 <path> --node-x64-sha256 <hex>`
+ * --node-arm64 <path> --node-arm64-sha256 <hex> --node-arm64-version <24.x.y> --node-x64 <path>
+ * --node-x64-sha256 <hex> --node-x64-version <24.x.y> [--allow-dirty]`
  *
- * The Node runtimes are inputs, pinned by SHA-256: the packer never downloads anything (A16's CI
- * fetches them). Each binary must match its pin, be a Mach-O of its architecture, and report Node
- * 24. The output directory must not exist. Same inputs, same bytes: every esbuild output, archive
- * and tree is a function of the commit, the version, the sequences and the two binaries.
+ * The Node runtimes are inputs, each pinned by SHA-256 and an exact `24.x.y` version
+ * (`--node-<arch>-version`): the packer never downloads anything (A16's CI fetches them). Each
+ * binary must match its pin and be a Mach-O of its architecture; only the host-architecture one is
+ * run, and it must report its pinned version. The output directory must not exist, and the CLI
+ * refuses a dirty checkout unless `--allow-dirty`.
+ *
+ * Runner contract: any macOS runner, either architecture, packs both kegs. Same inputs, same bytes:
+ * every esbuild output, archive and tree is a function of the commit, the version, the sequences
+ * and the two binaries, and of the packer's own Node version, because the archives are compressed
+ * by that Node's bundled zstd; pin the runner's Node to reproduce an archive byte for byte.
  *
  * <out>/darwin-<arch>/bin/developer-os            0755, the shell launcher Homebrew links
  * <out>/darwin-<arch>/libexec/launcher.mjs        0644, the bundled stable launcher
@@ -39,6 +46,19 @@ const ARCHITECTURES: readonly Architecture[] = ["arm64", "x64"];
 export interface NodeBinary {
   readonly path: string;
   readonly sha256: string;
+  /** The exact Node version the pin was copied for, `24.x.y`. */
+  readonly version: string;
+}
+
+/**
+ * The CLI packs committed state only: `collectTree` already refuses dirty `workflows/` and
+ * `instructions/`, and this refuses any other uncommitted change that would reach a bundle.
+ */
+export function assertCleanCheckout(root: string, allowDirty: boolean): void {
+  if (allowDirty) return;
+  if (execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).length > 0) {
+    throw new Error("refusing to pack: the checkout has uncommitted changes (pass --allow-dirty to pack anyway)");
+  }
 }
 
 /** Mach-O 64-bit magic and `cputype` (little-endian bytes 0–3 and 4–7). */
@@ -52,21 +72,36 @@ function sha256(bytes: Uint8Array): string {
 }
 
 /**
- * The verified bytes of a Node runtime. The pin is checked before the binary runs, so an
- * unverified file never executes; the bundle carries these bytes, not a second read.
- * `skipCpuCheck` is test-only: the CLI never sets it.
+ * The verified bytes of a Node runtime. The pin is checked before anything else, and the bundle
+ * carries these bytes, not a second read. Only the slot whose architecture is the host's runs
+ * (`--version`, bounded at 10 s, must equal the pinned version): a single-architecture runner
+ * cannot execute the other slot, so its SHA-256 pin, copied from nodejs.org's SHASUMS256.txt for
+ * that exact version, is its integrity authority. `skipCpuCheck` is test-only: the CLI never sets it.
  */
 export async function assertNodeBinary(binary: NodeBinary, architecture: Architecture, options: { readonly skipCpuCheck?: boolean } = {}): Promise<Uint8Array> {
+  let major: string | undefined;
+  try {
+    major = parseStableSemver(binary.version).split(".")[0];
+  } catch {
+    // Reported below.
+  }
+  if (major !== "24") throw new Error(`refusing to pack: ${binary.path} is pinned as ${binary.version}, which is not a stable Node 24 version`);
   const bytes = new Uint8Array(await readFile(binary.path));
-  if (sha256(bytes) !== binary.sha256) throw new Error(`refusing to pack: ${binary.path} does not match its pinned SHA-256`);
+  if (sha256(bytes) !== binary.sha256.toLowerCase()) throw new Error(`refusing to pack: ${binary.path} does not match its pinned SHA-256`);
   if (options.skipCpuCheck !== true) {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     if (bytes.byteLength < 8 || view.getUint32(0, true) !== MACH_O_64_MAGIC || view.getUint32(4, true) !== CPU_TYPE[architecture]) {
       throw new Error(`refusing to pack: ${binary.path} is not a Mach-O binary of the ${architecture} architecture`);
     }
   }
-  const { stdout: reported } = await promisify(execFile)(binary.path, ["--version"], { encoding: "utf8", env: {} });
-  if (/^v24\.\d+\.\d+\n?$/u.exec(reported) === null) throw new Error(`refusing to pack: ${binary.path} is not Node 24 (it reports ${reported.trim()})`);
+  if (architecture !== process.arch) return bytes;
+  let reported: string;
+  try {
+    ({ stdout: reported } = await promisify(execFile)(binary.path, ["--version"], { encoding: "utf8", env: {}, timeout: 10_000 }));
+  } catch (error) {
+    throw new Error(`refusing to pack: ${binary.path} --version failed or exceeded 10 s`, { cause: error });
+  }
+  if (reported !== `v${binary.version}\n`) throw new Error(`refusing to pack: ${binary.path} reports ${reported.trim()}, not its pinned v${binary.version}`);
   return bytes;
 }
 
@@ -238,25 +273,29 @@ if (isEntryPoint(argv[1])) {
     args: argv.slice(2),
     strict: true,
     allowPositionals: false,
-    options: Object.fromEntries(
-      ["out", "version", "release-sequence", "index-sequence", "node-arm64", "node-arm64-sha256", "node-x64", "node-x64-sha256"].map((name) => [name, { type: "string" as const }]),
-    ),
+    options: {
+      ...Object.fromEntries(
+        ["out", "version", "release-sequence", "index-sequence", ...ARCHITECTURES.flatMap((architecture) => [`node-${architecture}`, `node-${architecture}-sha256`, `node-${architecture}-version`])].map((name) => [name, { type: "string" as const }]),
+      ),
+      "allow-dirty": { type: "boolean" as const },
+    },
   });
   const required = (name: string): string => {
-    const value = values[name];
+    const value = (values as Readonly<Record<string, string | boolean | undefined>>)[name];
     if (typeof value !== "string" || value.length === 0) {
-      throw new Error("usage: npm run pack:release -- --out <dir> --version <x.y.z> --release-sequence <n> --index-sequence <n> --node-arm64 <path> --node-arm64-sha256 <hex> --node-x64 <path> --node-x64-sha256 <hex>");
+      throw new Error("usage: npm run pack:release -- --out <dir> --version <x.y.z> --release-sequence <n> --index-sequence <n> --node-arm64 <path> --node-arm64-sha256 <hex> --node-arm64-version <24.x.y> --node-x64 <path> --node-x64-sha256 <hex> --node-x64-version <24.x.y> [--allow-dirty]");
     }
     return value;
   };
+  assertCleanCheckout(repositoryRoot(), values["allow-dirty"] === true);
   const kegs = await pack({
     outDir: required("out"),
     version: required("version"),
     releaseSequence: required("release-sequence"),
     indexSequence: required("index-sequence"),
     node: {
-      arm64: { path: required("node-arm64"), sha256: required("node-arm64-sha256") },
-      x64: { path: required("node-x64"), sha256: required("node-x64-sha256") },
+      arm64: { path: required("node-arm64"), sha256: required("node-arm64-sha256"), version: required("node-arm64-version") },
+      x64: { path: required("node-x64"), sha256: required("node-x64-sha256"), version: required("node-x64-version") },
     },
   });
   stdout.write(`${kegs.arm64}\n${kegs.x64}\n`);
