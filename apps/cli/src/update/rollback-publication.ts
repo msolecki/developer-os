@@ -203,23 +203,36 @@ export class RollbackPayloadParticipant {
     return plan.publish ?? refuseBundle("rollback_payload_not_publishing", this.#root);
   }
 
-  /** Forward publication from a clean cursor; an in-flight microstate only compensates. */
+  /**
+   * Forward publication. Process death never chooses rollback (Spec 2 §9.4), so a forward journal
+   * left inside a microstate resumes it: an intent binds its exact empty crash frontier or retries
+   * the absent path, and a recorded inode is reopened and completed.
+   */
   async publish(value: RollbackPayloadStatePlanV1): Promise<RollbackPayloadObservationV1> {
     const { plan, file } = await this.#open(value);
     const published = this.#published(plan);
     const journal = file.value as RollbackPayloadPublicationJournalV1;
     if (!isRollbackPayloadPublicationForward(journal.phase)) refuseBundle("rollback_payload_not_forward", file.path);
-    if (journal.structureWriteState !== null || journal.entryWriteState !== null || journal.metadataWriteState !== null) refuseBundle("rollback_payload_in_flight", file.path);
     if (journal.phase === "verified") return observe(journal);
     const source = await this.#stagedSource(plan, true);
     const structures = rollbackPayloadStructures(published.root);
     for (let current = file.value as RollbackPayloadPublicationJournalV1; current.nextStructure < structures.length; current = file.value as RollbackPayloadPublicationJournalV1) {
       const parent = await this.#structureParent(current, current.nextStructure);
-      await this.#advance(plan, file, { kind: "structure_intent" });
-      const created = await this.#io.fs.mkdirExclusive((structures[current.nextStructure] as (typeof structures)[number]).path);
-      this.#interrupt("structure_made");
-      await this.#io.fs.syncDirectory(parent);
-      await this.#advance(plan, file, { kind: "structure_created", dev: created.dev, ino: created.ino });
+      const path = (structures[current.nextStructure] as (typeof structures)[number]).path;
+      // Only an intent persisted before this run is a crash frontier; a fresh intent never binds a present path.
+      const resumed = current.structureWriteState;
+      if (resumed === null) await this.#advance(plan, file, { kind: "structure_intent" });
+      if (resumed?.state !== "created") {
+        let created = resumed === null ? null : await this.#boundStructure(plan, file);
+        if (created === null) {
+          created = await this.#io.fs.mkdirExclusive(path);
+          this.#interrupt("structure_made");
+        }
+        // The parent entry is durable before the journal records the structure's identity.
+        await this.#io.fs.syncDirectory(parent);
+        await this.#advance(plan, file, { kind: "structure_created", dev: created.dev, ino: created.ino });
+      }
+      await this.#io.ownedDirectory(path, (file.value as RollbackPayloadPublicationJournalV1).structureWriteState as Extract<RollbackPayloadPublicationJournalV1["structureWriteState"], { readonly state: "created" }>);
       await this.#advance(plan, file, { kind: "structure_complete" });
     }
     const evidenceParent = await this.#evidenceDirectory(plan);
@@ -243,7 +256,7 @@ export class RollbackPayloadParticipant {
         interrupt: (point) => {
           this.#interrupt(point);
         },
-      });
+      }, current.entryWriteState);
     }
     for (let current = file.value as RollbackPayloadPublicationJournalV1; current.nextMetadata < 2; current = file.value as RollbackPayloadPublicationJournalV1) {
       await this.#publishMetadata(plan, file, source, current.nextMetadata);
@@ -257,11 +270,16 @@ export class RollbackPayloadParticipant {
     const row = source.journal.metadataIdentities[ordinal];
     if (row === undefined) return refuseBundle("rollback_source_metadata", source.plan.sourceRoot);
     const parent = await this.#structure(file.value as RollbackPayloadPublicationJournalV1, 0);
-    await this.#advance(plan, file, { kind: "metadata_intent" });
-    const target = await this.#io.createEmpty(rollbackPayloadMetadataPath(published.root, ordinal), 0o600);
+    if ((file.value as RollbackPayloadPublicationJournalV1).metadataWriteState === null) await this.#advance(plan, file, { kind: "metadata_intent" });
+    else await this.#bindMetadata(plan, file);
+    const state = (file.value as RollbackPayloadPublicationJournalV1).metadataWriteState;
+    const path = rollbackPayloadMetadataPath(published.root, ordinal);
+    const target = state?.state === "published" ? await this.#io.reopenPrefix(path, state, 0o600, row.path, row.bytes) : await this.#io.createEmpty(path, 0o600);
     try {
-      await this.#advance(plan, file, { kind: "metadata_published", dev: target.entry.dev, ino: target.entry.ino });
-      this.#interrupt("metadata_created");
+      if (state?.state !== "published") {
+        await this.#advance(plan, file, { kind: "metadata_published", dev: target.entry.dev, ino: target.entry.ino });
+        this.#interrupt("metadata_created");
+      }
       await this.#io.copyVerified(row.path, row, target.handle, { path: row.path as unknown as BundleRelativePathV1, kind: "file", mode: 384, bytes: parseUInt64Decimal(row.bytes.toString(10)), sha256: row.sha256 });
       this.#interrupt("metadata_written");
     } finally {
@@ -348,16 +366,32 @@ export class RollbackPayloadParticipant {
     return observe(file.value as RollbackPayloadPublicationJournalV1);
   }
 
+  /** A present path under a structure `create_intent` binds only the exact empty attempt-created directory; null when absent. */
+  async #boundStructure(plan: RollbackPayloadStatePlanV1, file: Journal): Promise<LifecycleGuardedEntryV1 | null> {
+    const journal = file.value as RollbackPayloadPublicationJournalV1;
+    const path = (rollbackPayloadStructures(this.#published(plan).root)[journal.nextStructure] as { readonly path: CanonicalAbsolutePathV1 }).path;
+    const found = await this.#io.fs.lstat(path);
+    if (found === null) return null;
+    if (found.kind !== "directory" || found.ownerUid !== this.#io.uid || found.mode !== 0o700 || !(await this.#io.emptyDirectory(found))) refuseBundle("bundle_unbound", path);
+    return found;
+  }
+
+  /** A metadata `publish_intent` whose path is present binds only the exact empty exclusive create. */
+  async #bindMetadata(plan: RollbackPayloadStatePlanV1, file: Journal): Promise<void> {
+    const metadata = (file.value as RollbackPayloadPublicationJournalV1).metadataWriteState;
+    if (metadata?.state !== "publish_intent") return;
+    const path = rollbackPayloadMetadataPath(this.#published(plan).root, metadata.ordinal);
+    const found = await this.#io.fs.lstat(path);
+    if (found === null) return;
+    if (!this.#io.isBoundedRegular(found, 0o600, 0)) refuseBundle("bundle_unbound", path);
+    await this.#advance(plan, file, { kind: "metadata_published", dev: found.dev, ino: found.ino });
+  }
+
   async #bindIntents(plan: RollbackPayloadStatePlanV1, file: Journal, source: StagedSource | null): Promise<void> {
     const published = this.#published(plan);
-    const journal = file.value as RollbackPayloadPublicationJournalV1;
-    if (journal.structureWriteState?.state === "create_intent") {
-      const path = (rollbackPayloadStructures(published.root)[journal.nextStructure] as { readonly path: CanonicalAbsolutePathV1 }).path;
-      const found = await this.#io.fs.lstat(path);
-      if (found !== null) {
-        if (found.kind !== "directory" || found.ownerUid !== this.#io.uid || found.mode !== 0o700 || !(await this.#io.emptyDirectory(found))) refuseBundle("bundle_unbound", path);
-        await this.#advance(plan, file, { kind: "structure_created", dev: found.dev, ino: found.ino });
-      }
+    if ((file.value as RollbackPayloadPublicationJournalV1).structureWriteState?.state === "create_intent") {
+      const found = await this.#boundStructure(plan, file);
+      if (found !== null) await this.#advance(plan, file, { kind: "structure_created", dev: found.dev, ino: found.ino });
     }
     const state = (file.value as RollbackPayloadPublicationJournalV1).entryWriteState;
     if (state !== null) {
@@ -366,15 +400,7 @@ export class RollbackPayloadParticipant {
       const step = await bindEntryIntent(this.#io, state, rollbackEntryAsFile(entry), entryPath(published.root, entry), rollbackPublicationEvidencePath(this.#root, plan, state.ordinal));
       if (step !== null) await this.#advance(plan, file, step);
     }
-    const metadata = (file.value as RollbackPayloadPublicationJournalV1).metadataWriteState;
-    if (metadata?.state === "publish_intent") {
-      const path = rollbackPayloadMetadataPath(published.root, metadata.ordinal);
-      const found = await this.#io.fs.lstat(path);
-      if (found !== null) {
-        if (!this.#io.isBoundedRegular(found, 0o600, 0)) refuseBundle("bundle_unbound", path);
-        await this.#advance(plan, file, { kind: "metadata_published", dev: found.dev, ino: found.ino });
-      }
-    }
+    await this.#bindMetadata(plan, file);
   }
 
   /**

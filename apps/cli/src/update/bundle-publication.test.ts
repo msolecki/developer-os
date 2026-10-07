@@ -314,6 +314,36 @@ describe("BundlePublicationParticipant", () => {
     await assertRolledBack(value, plan);
   });
 
+  /** Spec 2 §9.4: process death alone never chooses rollback, so a forward journal resumes its microstate. */
+  it.each(FORWARD_DEATHS)("resumes %s in the forward direction", async (point) => {
+    const value = await fixture();
+    const plan = await publishPlan(value);
+    await expect(participant(value, dieAt(point)).apply(plan)).rejects.toBeInstanceOf(Killed);
+    expect((await participant(value).apply(plan)).phase).toBe("verified");
+    for (const file of files) expect(await nodeFs.readFile(`${value.target.bundleRoot}/${file.path}`, "utf8")).toBe(file.content);
+    expect((await nodeFs.readdir(value.target.bundleRoot, { recursive: true })).map(String).sort()).toEqual(entries.map((entry) => entry.path).sort());
+    for (const ordinal of [0, 1, 2]) expect(await nodeFs.readFile(bundleMetadataPath(value.target, ordinal), "utf8")).toBe(metadataContent[ordinal]);
+    expect(await nodeFs.readdir(bundlePublicationEvidenceDirectory(value.root, publicationId))).toHaveLength(entries.length);
+  });
+
+  it("resumes a recorded entry holding a planned prefix and refuses one holding any other bytes", async () => {
+    const [first] = files as readonly [(typeof files)[number]];
+    const target = (value: Fixture): string => `${value.target.bundleRoot}/${first.path}`;
+    const prefix = await fixture();
+    const prefixPlan = await publishPlan(prefix);
+    await expect(participant(prefix, dieAt("entry_written")).apply(prefixPlan)).rejects.toBeInstanceOf(Killed);
+    await nodeFs.truncate(target(prefix), 5);
+    expect((await participant(prefix).apply(prefixPlan)).phase).toBe("verified");
+    expect(await nodeFs.readFile(target(prefix), "utf8")).toBe(first.content);
+
+    const foreign = await fixture();
+    const foreignPlan = await publishPlan(foreign);
+    await expect(participant(foreign, dieAt("entry_written")).apply(foreignPlan)).rejects.toBeInstanceOf(Killed);
+    await nodeFs.writeFile(target(foreign), "#!/bin/sh\nexit 1\n", { flag: "r+" });
+    await expect(participant(foreign).apply(foreignPlan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await nodeFs.readFile(target(foreign), "utf8")).toBe("#!/bin/sh\nexit 1\n");
+  });
+
   it("compensates a verified publication in exact reverse and resumes after a compensation death", async () => {
     const value = await fixture();
     const plan = await publishPlan(value);

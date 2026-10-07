@@ -166,6 +166,21 @@ describe("RollbackPayloadParticipant.publish", () => {
     expect(await exists(fixture.plan.sourceRoot)).toBe(true);
   });
 
+  /** Spec 2 §9.4: process death alone never chooses rollback, so a forward journal resumes its microstate. */
+  it.each(ROLLBACK_PUBLICATION_DEATH_POINTS.filter((point) => point !== "compensation_step" && point !== "compaction_step"))("resumes forward after death at %s", async (point) => {
+    const fixture = await staged();
+    const plan = await publishPlan(fixture);
+    const dying = participant(fixture, (reached) => {
+      if (reached === point) throw new Killed(point);
+    });
+    await expect(dying.publish(plan)).rejects.toBeInstanceOf(Killed);
+
+    expect((await participant(fixture).publish(plan)).phase).toBe("verified");
+    const inventory = await verifyRetainedRollbackPayload(new BundleGuardedIo(guardedFs(), uid), fixture.payload.identity);
+    expect(inventory.entries.map((entry) => ({ ...entry }))).toStrictEqual(fixture.payload.inventory.entries);
+    expect(await nodeFs.readdir(rollbackPublicationEvidenceDirectory(fixture.root, plan.id))).toHaveLength(fixture.payload.identity.entryCount);
+  });
+
   it("resumes a compensation that died between steps", async () => {
     const fixture = await staged();
     const plan = await publishPlan(fixture);
