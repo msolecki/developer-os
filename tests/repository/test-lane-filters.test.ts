@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { scanRegions } from "../helpers/typescript-lexer.js";
+
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 /**
@@ -38,8 +40,20 @@ export function filterFragments(filter: string): readonly string[] {
     .filter((fragment) => fragment.length > 0);
 }
 
+/**
+ * A title is never inside a comment, so a fragment that survives only in one (`// died`) matches
+ * no case and must still be reported. Comments are cut by the compiler's own lexer, not a regex.
+ */
 export function missingFragments(filter: string, source: string): readonly string[] {
-  return filterFragments(filter).filter((fragment) => !source.includes(fragment));
+  let code = "";
+  let at = 0;
+  for (const region of scanRegions(source)) {
+    if (region.kind === "string") continue;
+    code += `${source.slice(at, region.start)}\n`;
+    at = region.start + region.text.length;
+  }
+  code += source.slice(at);
+  return filterFragments(filter).filter((fragment) => !code.includes(fragment));
 }
 
 describe("every -t lane filter in package.json still matches its test file", () => {
@@ -67,7 +81,10 @@ describe("every -t lane filter in package.json still matches its test file", () 
       "death",
       "died",
     ]);
-    expect(missingFragments(filter, 'it("at every death point", () => {}); // died')).toStrictEqual(["died anywhere"]);
+    /** A fragment found only in a comment matches no case title, so it is still missing. */
+    expect(missingFragments(filter, 'it("at every death point", () => {}); // died')).toStrictEqual(["died anywhere", "died"]);
+    expect(missingFragments("died", '/* died */ it("x", () => {});')).toStrictEqual(["died"]);
+    expect(missingFragments("died", 'it("it died", () => {}); // not a comment: "//"')).toStrictEqual([]);
     expect(missingFragments("fine-grained death", 'it("fine grained death")')).toStrictEqual(["fine-grained death"]);
   });
 });
