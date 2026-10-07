@@ -141,7 +141,7 @@ stop so the next entry begins with fresh context.
 
 ## Hard rules
 
-- This repository is public. Do not add founder/client private content, credentials, or real private
+- This repository is public-bound. Do not add founder/client private content, credentials, or real private
   notes.
 - Do not read `~/claude-shared`, `~/brain`, or `DEVELOPER_OS_SOURCE_*` during build work. Frozen
   admissible inputs live in `docs/migration/`. DOS-P8 is the only live-machine cutover task.
@@ -154,6 +154,15 @@ stop so the next entry begins with fresh context.
 - Completed plans/specs are deleted after their surviving contract moves to the owning canonical
   document. Git history is the archive.
 - Approved specs are not silently rewritten.
+- A legacy fact that `docs/migration/` does not hold is a gap in the frozen record: close it with a
+  reviewed, redacted artifact in `docs/migration/` under the exclusion policy, never by reopening a
+  source repository. `DEVELOPER_OS_SOURCE_REPO` and `DEVELOPER_OS_SOURCE_BRAIN` are retired.
+- Never persist the founder's machine-specific absolute checkout path in public artifacts.
+- The repository stays private until its publication-candidate secret scan is clean and an
+  OSI-approved license is selected with qualified legal counsel (L1).
+- Each subsystem receives its own approved spec and implementation plan before code work, and every
+  new plan or spec is registered in `BACKLOG.md` in the same change that creates it.
+- Never overwrite drifted user configuration; stop with a three-way conflict report.
 
 ## Stop and ask
 

@@ -75,11 +75,11 @@ const FORBIDDEN: readonly ForbiddenPattern[] = [
  *
  * - `SESSION.md` states the rule itself, so the check would otherwise fail on
  *   the document that defines it.
- * - the program plan and the design spec were meant to be allowed only in their
- *   *cutover* sections. In practice both discuss the boundary throughout — scope,
+ * - the design spec (and, until its deletion on 2026-10-07 by D89, the program
+ *   plan) was meant to be allowed only in its *cutover* sections. In practice it discusses the boundary throughout — scope,
  *   non-goals, migration sources, the vault the founder may keep using — so a
  *   section-scoped allowlist would flag legitimate prose and would depend on
- *   heading names nobody has agreed to freeze. They are allowed whole, and the
+ *   heading names nobody has agreed to freeze. It is allowed whole, and the
  *   narrower rule is left to review.
  */
 export const ALLOWLIST: readonly string[] = [
@@ -88,7 +88,6 @@ export const ALLOWLIST: readonly string[] = [
   "docs/superpowers/BACKLOG.md",
   "docs/superpowers/ORDER.md",
   "docs/superpowers/SESSION.md",
-  "docs/superpowers/plans/2026-07-21-developer-os-program.md",
   "docs/superpowers/specs/2026-07-21-developer-os-design.md",
   /**
    * These two cannot express the rule without containing the strings it forbids.

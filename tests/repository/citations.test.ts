@@ -57,7 +57,7 @@ const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
  *
  * Each entry is a floor below the count measured on 2026-08-17 — threat-model 241,
  * knowledge-pipeline 81, BACKLOG 19, ORDER 4, foundation-constraints 4, workflow-schema 4,
- * program plan 11. **A floor detects loss and never staleness upward**: if a document
+ * program plan 11 (its floor was removed on 2026-10-07 with the plan, D89). **A floor detects loss and never staleness upward**: if a document
  * grows and a later change breaks most of its new citations, a floor set against the old
  * count stays green. The measured numbers are written here so that drift is visible to a
  * reader; re-record them when a document grows materially.
@@ -78,7 +78,6 @@ const BASELINES: ReadonlyMap<string, number> = new Map([
   ["docs/architecture/workflow-schema.md", 3],
   /** Lowered from 8 to 6 on 2026-09-29: the closed NEW-113 (D76) and NEW-117 rows took one each. */
   ["docs/superpowers/BACKLOG.md", 5],
-  ["docs/superpowers/plans/2026-07-21-developer-os-program.md", 8],
 ]);
 
 /**

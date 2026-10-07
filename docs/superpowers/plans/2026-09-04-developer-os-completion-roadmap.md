@@ -8,7 +8,7 @@
 
 Completed tasks were removed on 2026-09-23, 2026-09-24 and 2026-09-26; see git history. The phase closes of 4b, 5, 5b, 6, 7, 8 and 9 ran on 2026-09-25/26: full suite green on `bc17550`, one whole-phase review each with its findings fixed or recorded (D62–D64), PR #15 merged. What each phase still owes is listed under it.
 
-**Tech Stack:** as in `docs/superpowers/plans/2026-07-21-developer-os-program.md`.
+**Tech Stack:** Node.js 24.16.0, pnpm 11.3.0 workspaces, TypeScript strict mode, Vitest, ESLint, macOS `launchd`, Markdown/Obsidian vaults, GitHub Releases, and Homebrew distribution (from the program plan, closed by D89).
 
 **Spec:** `docs/superpowers/specs/2026-07-21-developer-os-design.md` (umbrella), Spec 1 and Spec 2 as named per phase, `docs/migration/instruction-inventory.md` for the A12–A14 scope.
 
@@ -355,6 +355,16 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D89 (2026-10-07), founder: the program plan closes as bookkeeping, before A16.** Like D68, the
+  plan is deleted although its last three tasks are open, because none of them is agent work it could
+  schedule: Task 7's remainder is Task 11b (parked, D46/D84; its Phase 9 disposable-account gate was
+  skipped by D76), Task 8 is A15 on the live machine, and Task 9 is A16 behind L1 and L2. Their open
+  steps, tests, the program verification matrix and the completion criteria move, updated to the
+  current gates (`npm run check`, D58's exercised rollback), into
+  `BACKLOG.md` §4 (A15, A16); the build constraints not already in `SESSION.md` "Hard rules" move
+  there; the product constraints are the umbrella design's. The body stays at
+  `git show ae25acd9:docs/superpowers/plans/2026-07-21-developer-os-program.md`. The program is complete when A16 is; this roadmap is now the
+  parent document.
 - **D88 (2026-10-06), founder: W2-SEC-GIT-1 amends spec §4.2.** The planned list and the node list enforce `when` and `minUses`; the process table
   only carries them as hash-bound metadata. The supervisor is not changed to enforce predicates there.
 - **D87 (2026-10-06), founder: wave-4 decisions.** (1) NEW-189: journal a publish intent before each rename. (2) BRAIN-3: remove garden `fix`.

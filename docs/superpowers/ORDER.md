@@ -44,9 +44,10 @@ Each is executable from the document named; none is agent work.
 Open sequence (D16, daily use before completeness): A15 on its own clock and the stop points beside
 it; then Task 11b (parked, D46); then A16.
 
-The parent document is `plans/2026-07-21-developer-os-program.md`: its open items are DOS-P7's
-remainder (Task 11b), the DOS-P8 cutover (A15) and DOS-P9's release (A16 with L1). It closes with
-A16. Founder decisions D1–D88 live in `plans/2026-09-04-developer-os-completion-roadmap.md`.
+The program plan was closed as bookkeeping on 2026-10-07 (D89; `git show ae25acd9:docs/superpowers/plans/2026-07-21-developer-os-program.md`): its
+open items — DOS-P7's remainder (Task 11b), the DOS-P8 cutover (A15) and DOS-P9's release (A16 with
+L1) — now live in `BACKLOG.md` §3–§4, and the program is complete when A16 is. Founder decisions
+D1–D89 live in `plans/2026-09-04-developer-os-completion-roadmap.md`.
 
 ## Product path
 

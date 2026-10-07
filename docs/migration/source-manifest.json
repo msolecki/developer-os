@@ -38,14 +38,14 @@
     "meaning": "Each evidenceSha256 proves the identity of the candidate at the moment Task 0 admitted it. It is frozen historical evidence and is not a checksum of the current working tree.",
     "recomputeOnVerification": false,
     "destinationsAmendedSince": [
-      "docs/superpowers/specs/2026-07-21-developer-os-design.md",
-      "docs/superpowers/plans/2026-07-21-developer-os-program.md"
+      "docs/superpowers/specs/2026-07-21-developer-os-design.md"
     ],
     "destinationsDeletedSince": [
-      "docs/superpowers/plans/2026-07-21-developer-os-foundation.md"
+      "docs/superpowers/plans/2026-07-21-developer-os-foundation.md",
+      "docs/superpowers/plans/2026-07-21-developer-os-program.md"
     ],
-    "deletionReason": "Retired at Foundation close under the finished-plan rule; recoverable from commit c4f883f^. Its durable output is docs/architecture/foundation.md, docs/architecture/foundation-constraints.md, and docs/releases/foundation-checkpoint.md.",
-    "consequence": "Neither surviving hash matches its destination today, and the third destination no longer exists. Do not read a mismatch as tampering, and do not overwrite these values: the pre-publication re-scan required by BACKLOG.md section 7 is what verifies the tree that actually ships."
+    "deletionReason": "The foundation plan was retired at Foundation close under the finished-plan rule; recoverable from commit c4f883f^. Its durable output is docs/architecture/foundation.md, docs/architecture/foundation-constraints.md, and docs/releases/foundation-checkpoint.md. The program plan was closed as bookkeeping on 2026-10-07 (D89); recoverable from commit ae25acd9. Its open items live in docs/superpowers/BACKLOG.md sections 3-4 and its build constraints in docs/superpowers/SESSION.md.",
+    "consequence": "The surviving hash does not match its destination today, and the other two destinations no longer exist. Do not read a mismatch as tampering, and do not overwrite these values: the pre-publication re-scan required by BACKLOG.md section 7 is what verifies the tree that actually ships."
   },
   "publicationCandidates": [
     {

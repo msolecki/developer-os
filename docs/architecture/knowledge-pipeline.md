@@ -708,7 +708,7 @@ cite the directory as a whole as though every case in it were evidence; the thre
 cases it relies on that are not.
 
 **The checkpoint's five criteria, verified against the tree on 2026-08-15**, are the table under
-Task 6's **Test** heading in `docs/superpowers/plans/2026-07-21-developer-os-program.md`, each with the
+Task 6's **Test** heading in `git show d72287a5^:docs/superpowers/plans/2026-07-21-developer-os-program.md`, each with the
 suite that was opened. One is weaker than its claim and says so there.
 
 ---
@@ -787,17 +787,17 @@ matching a former section below resolve through this note.
 | §8.3 | `threat-model.md` §5.3 |
 | §8.4 | this note §8.1; `threat-model.md` §5.8 |
 | §8.5 | `threat-model.md` §§1–9 |
-| §9 | testing/evidence — this note §§9, 11; `docs/architecture/threat-model.md` §8; `docs/superpowers/plans/2026-07-21-developer-os-program.md` Task 6 |
+| §9 | testing/evidence — this note §§9, 11; `docs/architecture/threat-model.md` §8; program plan Task 6 (`git show d72287a5^:docs/superpowers/plans/2026-07-21-developer-os-program.md`) |
 | §9.1 | `threat-model.md` §§5.7, 8; this note §11 |
 | §9.2 | `threat-model.md` §§5.3–5.4, 8; this note §11 |
 | §9.3 | `threat-model.md` §§5.4, 8; this note §11 |
 | §9.4 | `threat-model.md` §§5.5, 8; this note §11 |
 | §9.5 | `threat-model.md` §§5.10, 8; this note §11 |
 | §9.6 | `threat-model.md` §§5.9, 8; this note §11 |
-| §9.7 | this note §§1, 11; `docs/superpowers/plans/2026-07-21-developer-os-program.md` Task 6 |
+| §9.7 | this note §§1, 11; program plan Task 6 (`git show d72287a5^:docs/superpowers/plans/2026-07-21-developer-os-program.md`) |
 | §9.8 | this note §9; `threat-model.md` §8 |
 | §10 | verified vendor surfaces — this note §§10.3, 11; `docs/architecture/claude-adapter.md` §11; `docs/architecture/codex-adapter.md` §7 |
-| §10.1 | `docs/architecture/claude-adapter.md` §11; `docs/architecture/codex-adapter.md` §7; this note §11; `docs/superpowers/plans/2026-07-21-developer-os-program.md` Task 6 |
+| §10.1 | `docs/architecture/claude-adapter.md` §11; `docs/architecture/codex-adapter.md` §7; this note §11; program plan Task 6 (`git show d72287a5^:docs/superpowers/plans/2026-07-21-developer-os-program.md`) |
 | §10.2 | this note §10.3; `codex-adapter.md` §7 |
 | §10.3 | this note §§2, 10.3 |
 | §11 | this note §§1–8 for the capture/review/ingest interfaces, commands, handlers, redaction and persistent key; `docs/architecture/codex-adapter.md` §§7, 11 for schemas and invocation; `docs/architecture/claude-adapter.md` §§8, 11 for rendered handler commands and invocation; `docs/architecture/threat-model.md` for the interface boundaries |
