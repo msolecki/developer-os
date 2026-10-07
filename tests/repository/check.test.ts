@@ -670,4 +670,10 @@ describe("the release authority surfaces of this repository (Spec 2 §12, D72 P7
     expect(report.launcherEntrypoints).toEqual(expect.arrayContaining(["apps/launcher/src/handoff.ts", "apps/launcher/src/main.ts"]));
     for (const graph of report.plannerGraphs) expect(graph.modules).toContain(graph.entrypoint);
   });
+
+  it("scans the release planner module as a planner entrypoint", async () => {
+    const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
+    expect(report.plannerGraphs.map((graph) => graph.entrypoint)).toContain("packages/core/dist/update/release-planner.js");
+    expect(report.plannerGraphs.find((graph) => graph.entrypoint.endsWith("release-planner.js"))?.modules.length).toBeGreaterThan(0);
+  });
 });

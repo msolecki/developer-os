@@ -10,3 +10,5 @@ export { compareUtf8 } from "./lifecycle/canonical-json.js";
 export { parseBundleRelativePath } from "./update/release.js";
 export { parseLowerHexSha256 } from "./update/scalars.js";
 export { RELEASE_VERSION } from "./version.js";
+export { decodePlannerInput, encodePlannerOutput } from "./update/planner.js";
+export { planKeepAllRelease } from "./update/release-planner.js";
