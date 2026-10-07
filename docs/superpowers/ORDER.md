@@ -67,11 +67,10 @@ Startable without another product gate (one worktree each):
 
 - NEW-132 (update recovery death-point sweeps).
 - NEW-169 (remaining half: a doctor check for a failed scheduled run, and the host kickstart check).
-- NEW-182 (leftovers: DEAD-7 `readOrCreateJournal` and the unused `operation` parameters in
-  `apps/cli/src/bootstrap`, the two `noUnused*` compiler flags, the `syncDirectoryAt` and `prompt.ts`
-  copies that would widen the core public export list).
-- NEW-193 (small follow-ups: a `git.v2` "manifest absent with the lock held" test, three citations-gate
-  weaknesses, two stale `knowledge-pipeline.md` citations, a Codex `subagents` probe witness).
+- NEW-194 (the stop hook's typecheck fallback blocks with TS6310 on stale project references).
+
+Waiting on a founder decision or observation: NEW-193 (the stricter citations rule for 99 cells, the
+Codex `subagents` witness, the Spec 1 "four leases" amendment). NEW-182 closed 2026-10-07.
 
 Wave 4 (P3, 2026-10-07) is integrated: NEW-176..NEW-181, NEW-184..NEW-192 and the done items of NEW-183
 (D87, D88). The full fake-codex e2e of NEW-190 is deferred to Task 11b/A16 with no row.
@@ -122,6 +121,6 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 - Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 11b, parked), A16 (with L1, L2).
 - Founder stop points: 6, listed above.
-- Startable rows: 4 (NEW-132, NEW-169's remainder, NEW-182, NEW-193). Founder action: NEW-183 (permission
+- Startable rows: 3 (NEW-132, NEW-169's remainder, NEW-194); NEW-193 waits on the founder. Founder action: NEW-183 (permission
   rule). Founder design: the distribution design (NEW-163, NEW-171). Awaiting founder numbers: NEW-116.
 - Repository backlog: 20 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
