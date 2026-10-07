@@ -1206,7 +1206,10 @@ Every absent/present/preimage/postimage/tombstone third state preserves all evid
 `manifest` preserve or publish step and the live manifest is absent, recovery admits the home from
 that step's plan `before` at its tombstone path, only while the tombstone is still that exact inode
 (dev/ino), owner, mode, link count, length and hash and declares schema V2; any other absence or
-mismatch remains `manifest_absent`.
+mismatch remains `manifest_absent`. The cursor is `nextStep` forward and `compensationNext` while
+compensating; the ledger must hold exactly one update coordinator plan that is not an envelope suffix,
+and a sole non-update or unreadable plan grants nothing. For the terminal plan, whose staged `before`
+carries no inode, the dev/ino is the one its hash-bound construction evidence records.
 
 A lifecycle `ManifestPayloadPathV1` is derived exactly as
 `staging/lifecycle/<coordinator-id>/participants/manifest/<participant-id>/after.json`; a bootstrap
