@@ -457,13 +457,16 @@ describe("inspectBootstrapEvidence", () => {
     };
     const base = requestFor(fixture);
 
-    await buildBootstrapRetentionEvidence({
+    const memoized = await buildBootstrapRetentionEvidence({
       ...base,
       projectPostimage: (path: CanonicalAbsolutePathV1) =>
         projectBootstrapRetentionPostimage(path, base.productHome, countingWalk),
     }, envelope.plan, envelope.terminalJournal);
 
     expect(walks).toBe(1);
+    /** Parity: memoizing changes the cost, not the evidence. */
+    const unmemoized = await buildBootstrapRetentionEvidence(base, envelope.plan, envelope.terminalJournal, false);
+    expect(memoized).toEqual(unmemoized);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("walks a plan's retention roots and row parents in a single inventory call", async () => {
