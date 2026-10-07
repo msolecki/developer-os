@@ -114,8 +114,10 @@ export class TargetVerifierSupervisor {
     const bounds = targetVerifierWireBounds(plan);
     const { redactor } = this.dependencies;
     const requestJson = plannerJsonBytes({ schemaVersion: 1, plan, snapshot: run.snapshot });
-    // Built only from the validated plan and its own digests: hashes and product paths, never free text.
+    // The request carries the validated plan, the reopened plans and the installed manifest. The manifest travels as base64, which would hide its text from the screen, so its decoded bytes are screened too.
     screenPlannerFrame(redactor, requestJson, "path");
+    const manifest = (run.snapshot as { readonly manifest?: unknown } | null)?.manifest;
+    if (typeof manifest === "string") screenPlannerFrame(redactor, new Uint8Array(Buffer.from(manifest, "base64")), "path");
     for (const blob of run.inputBlobs) screenPlannerFrame(redactor, blob);
     // Frames the whole input before spawning, so an over-bound request never starts a process.
     const wire = new PlannerWireEncoder("input", bounds);
