@@ -160,7 +160,12 @@ async function captureBootstrap(
   const files: Record<string, Buffer | FakeFile> = {};
   for (const name of await readdir(state)) {
     const path = `${state}/${name}`;
-    if (name.startsWith("fresh-v2-init.")) files[path] = await readFile(path);
+    if (name.startsWith("fresh-v2-init.") && !name.includes(".journal.")) files[path] = await readFile(path);
+    // A plan binds each journal slot's identity, so a slot carries its real one.
+    if (name.startsWith("fresh-v2-init.") && name.includes(".journal.")) {
+      const slot = await lstat(path, { bigint: true });
+      files[path] = { bytes: await readFile(path), ownerUid: Number(slot.uid), dev: slot.dev.toString(), ino: slot.ino.toString() };
+    }
     if (name === ".lifecycle-bootstrap.lock") {
       const leaf = await lstat(path, { bigint: true });
       files[path] = { bytes: Buffer.alloc(0), ownerUid: Number(leaf.uid), dev: leaf.dev.toString(), ino: leaf.ino.toString() };
@@ -301,6 +306,28 @@ describe("readBootstrapClosure (NEW-111)", () => {
     expect(await readBootstrapClosure(altered({ [plan]: Buffer.from("{}\n") }), planned.home, UID)).toEqual({ kind: "handoff_complete" });
     expect(await readBootstrapClosure(altered(garbage), planned.home, UID)).toEqual({ kind: "handoff_complete" });
     expect(await readBootstrapClosure(altered({ [plan]: { bytes: planned.files[plan] as Buffer, mode: 0o644 } }), planned.home, UID)).toEqual({ kind: "handoff_complete" });
+  });
+
+  const slotOf = (capture: BootstrapCapture, ordinal: 0 | 1) =>
+    Object.keys(capture.files).find((path) => path.endsWith(`.journal.${String(ordinal)}.json`)) as string;
+  const torn = (capture: BootstrapCapture, path: string): Files => ({
+    ...capture.files,
+    [path]: { ...(capture.files[path] as FakeFile), bytes: Buffer.from('{"schemaVersion":1,"se') },
+  });
+
+  it("(1) keeps an envelope incomplete when a death mid-advance tore slot 1 and slot 0 still holds its journal", async () => {
+    expect((planned.files[slotOf(planned, 0)] as FakeFile).bytes.byteLength).toBeGreaterThan(0);
+    expect(await readBootstrapClosure(fsOf(torn(planned, slotOf(planned, 1))), planned.home, UID)).toEqual({ kind: "non_terminal" });
+  });
+
+  it("(2) keeps an envelope incomplete when the first journal write tore slot 0, slot 1 is empty and the leaf is live", async () => {
+    expect(await readBootstrapClosure(fsOf(torn(reserved, slotOf(reserved, 0))), reserved.home, UID)).toEqual({ kind: "non_terminal" });
+  });
+
+  it("treats a slot that is not the inode its plan bound as an unverified, inert envelope", async () => {
+    const path = slotOf(planned, 0);
+    const moved = { ...planned.files, [path]: { ...(planned.files[path] as FakeFile), ino: "424242" } };
+    expect(await readBootstrapClosure(fsOf(moved), planned.home, UID)).toEqual({ kind: "handoff_complete" });
   });
 
   it("(iv) routes a home with no active record past unverified and finalized envelopes to the packaged fallback (NEW-123 B)", async () => {
