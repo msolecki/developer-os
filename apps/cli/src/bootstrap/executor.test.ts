@@ -543,7 +543,9 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
         if (!resumed.ok) throw new Error(JSON.stringify({ name, resumed, trace: fixture.bootstrapTrace.slice(-30) }));
         expect(terminal).toMatchObject({ phase: "retained", terminalOutcome: "finalized" });
       }
-      expect(fixture.transactionUnlinkRequests).toStrictEqual([]);
+      // Recovery unlinks nothing of the bootstrap's. The entrypoint step that follows a completed init is its own
+      // gated transaction (allocated `tx_<64 hex>_<n>` id) and cleans up its own backups; `tx_fi_` ids are bootstrap.
+      expect(fixture.transactionUnlinkRequests.filter((path) => !/\/backups\/transactions\/tx_[0-9a-f]{64}_\d+\//u.test(path))).toStrictEqual([]);
       await expect(slotJournals(persisted.value)).resolves.toHaveLength(2);
       if (PRE_PLAN_DEATH_POINTS.has(name)) {
         expect(unverifiedIds.has(String(persisted.value.id))).toBe(false);
