@@ -3,7 +3,6 @@ import type { KeyObject } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { mkdir, realpath, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   admitTargetUpdateDraft,
@@ -82,7 +81,7 @@ import { planKeepAllRelease } from "@developer-os/core/planner-protocol";
 import type { BoundedReleaseResponseV1, ReleaseTransportRequestV1, VerifiedScratchBundleV1 } from "@developer-os/security";
 
 import { runInit } from "../commands/init.js";
-import { createCommandFixture } from "../commands/testing.js";
+import { createCommandFixture, runnableBundleFiles } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
 import type { CliContext } from "../context.js";
 import { productionUpdateApplyPorts } from "./apply-ports.js";
@@ -909,30 +908,6 @@ export function unreachableUpdateContext(): CliUpdateContext {
 // The on-disk release world: real kegs under a fixture prefix behind the fixed-path seam (K6).
 // ---------------------------------------------------------------------------------------------
 
-/** `bin/runtime` execs this Node binary: the verifier supervisor spawns it with an empty environment. */
-function runtimeScript(): Uint8Array {
-  return encoder.encode(`#!/bin/sh\nexec '${process.execPath}' "$@"\n`);
-}
-
-/**
- * The real release verifier: the compiled stdio shim Task 8 bundles as `bin/verifier.mjs`, so the
- * on-disk world recomputes its digests from the snapshot like a shipped release does.
- */
-function verifierScript(): Uint8Array {
-  const shim = pathToFileURL(fileURLToPath(import.meta.url).replace(/\/(?:src|dist)\/update\/[^/]+$/, "/dist/update/release-verifier-main.js")).href;
-  return encoder.encode(`import(${JSON.stringify(shim)}).catch(() => {\n  process.exitCode = 3;\n});\n`);
-}
-
-/** A verifier that disagrees: a clean non-zero exit, which the coordinator compensates (exit 5). */
-function rejectingVerifierScript(): Uint8Array {
-  return encoder.encode("\"use strict\";\nprocess.stdin.resume();\nprocess.stdin.on(\"end\", () => {\n  process.exitCode = 1;\n});\n");
-}
-
-/** Every bundle of the on-disk world carries a runnable runtime and verifier; the rest stay placeholders. */
-function runnableBundleFiles(rejecting: boolean): ReadonlyMap<string, Uint8Array> {
-  return new Map([["bin/runtime", runtimeScript()], ["bin/verifier", rejecting ? rejectingVerifierScript() : verifierScript()]]);
-}
-
 export interface OnDiskReleaseWorldV1 {
   readonly architecture: SyntheticArchitectureV1;
   readonly releases: ReadonlyMap<string, SyntheticRelease>;
@@ -942,8 +917,6 @@ export interface OnDiskReleaseWorldV1 {
   readonly requests: string[];
   /** Planner runs, in order: rollback and recovery must never add one. */
   readonly plannerRuns: string[];
-  /** Always empty: the keg is read in place and no scratch attempt exists (D84 K2). Removed with Task 13. */
-  readonly scratchDirectories: readonly string[];
   /** `brew upgrade`: repoints `<prefix>/opt/developer-os` at `version`'s keg. */
   readonly install: (version: string) => Promise<void>;
   /** The ports an installed home's update context replaces; every other port stays production. */
@@ -995,7 +968,6 @@ export async function createOnDiskReleaseWorld(options: {
     prefix,
     requests,
     plannerRuns,
-    scratchDirectories: [],
     install,
     ports: {
       readPackageSource: () => {

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   encodeCanonicalJson,
@@ -488,6 +488,33 @@ async function repositoryWorkflowFiles(): Promise<readonly ReleaseFileV1[]> {
 
 const SYNTHETIC_RELEASE_VERSION = "1.0.0";
 
+/** `bin/runtime` execs this Node binary: the verifier supervisor spawns it with an empty environment. */
+function runtimeScript(): Uint8Array {
+  return new TextEncoder().encode(`#!/bin/sh\nexec '${process.execPath}' "$@"\n`);
+}
+
+/**
+ * The real release verifier: the compiled stdio shim Task 8 bundles as `bin/verifier.mjs`, so a
+ * synthetic release recomputes its digests from the snapshot like a shipped release does.
+ */
+function verifierScript(): Uint8Array {
+  const shim = pathToFileURL(fileURLToPath(import.meta.url).replace(/\/(?:src|dist)\/commands\/[^/]+$/, "/dist/update/release-verifier-main.js")).href;
+  return new TextEncoder().encode(`import(${JSON.stringify(shim)}).catch(() => {\n  process.exitCode = 3;\n});\n`);
+}
+
+/** A verifier that disagrees: a clean non-zero exit, which the coordinator compensates (exit 5). */
+function rejectingVerifierScript(): Uint8Array {
+  return new TextEncoder().encode("\"use strict\";\nprocess.stdin.resume();\nprocess.stdin.on(\"end\", () => {\n  process.exitCode = 1;\n});\n");
+}
+
+/**
+ * A runnable `bin/runtime` and `bin/verifier` for a synthetic release, so an update or a rollback
+ * onto it passes the target verifier: the update world's kegs and `init`'s first keg alike.
+ */
+export function runnableBundleFiles(rejecting: boolean): ReadonlyMap<string, Uint8Array> {
+  return new Map([["bin/runtime", runtimeScript()], ["bin/verifier", rejecting ? rejectingVerifierScript() : verifierScript()]]);
+}
+
 async function createSyntheticPackagedRelease(
   root: string,
   instructions: readonly ReleaseFileV1[] | undefined,
@@ -503,8 +530,8 @@ async function createSyntheticPackagedRelease(
   const bundleFiles: ReleaseFileV1[] = [
     { relativePath: "bin/cli", bytes: encode("#!/bin/sh\nexit 0\n"), mode: 0o700 },
     { relativePath: "bin/planner", bytes: encode("#!/bin/sh\nexit 0\n"), mode: 0o700 },
-    { relativePath: "bin/runtime", bytes: encode("#!/bin/sh\nexit 0\n"), mode: 0o700 },
-    { relativePath: "bin/verifier", bytes: encode("#!/bin/sh\nexit 0\n"), mode: 0o700 },
+    // Runnable, so a rollback onto the `init`-installed release passes its verifier (F4's first rollback).
+    ...[...runnableBundleFiles(false)].map(([relativePath, bytes]) => ({ relativePath, bytes, mode: 0o700 as const })),
     ...(instructions === undefined
       ? []
       : [

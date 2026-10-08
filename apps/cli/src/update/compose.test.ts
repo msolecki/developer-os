@@ -14,6 +14,7 @@ import {
   type BundlePublicationPlanV1,
   type CanonicalStateFilePlanV1,
   type InstallationManifestV2,
+  type ManagedArtifactV2,
   type LifecycleCoordinatorIdV1,
   type OwnerUpdatePlanV1,
   type RollbackPayloadStatePlanV1,
@@ -58,6 +59,7 @@ import {
   rollbackTemplateHash,
   sha256,
   SYNTHETIC_CODEX_HOMES,
+  syntheticInstructionRow,
   SYNTHETIC_EVIDENCE,
   SYNTHETIC_HOME,
 } from "./testing.js";
@@ -231,8 +233,8 @@ function observedHash(path: string, hash: LowerHexSha256, bytes: number): Observ
 }
 
 /** The synthetic 1.1.0 home with 1.0.0 retained, after `update rollback` previewed it, observed under the lock. */
-async function rollbackFixture(): Promise<RollbackComposed> {
-  const fixture = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+async function rollbackFixture(manifestRows: readonly ManagedArtifactV2[] = []): Promise<RollbackComposed> {
+  const fixture = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0", manifestRows });
   const preview = await planRollback(fixture.update);
   const { home } = fixture;
   if (home.rollback === null) throw new Error("the fixture retains a rollback");
@@ -430,6 +432,17 @@ describe("composeRollback (Spec 2 §10.2, D72 P9)", () => {
     expect(restored).toMatchObject({ owner: "core", productVersion: input.preview.target.version, kind: "file", verification: { mode: "content", installedHash: sha256(OLD_A) } });
     expect(transitional?.productVersion).toBe(input.preview.target.version);
     expect(terminal?.artifacts.filter((row) => !row.path.startsWith(`${input.preview.current.bundleRoot}/`) && row.path !== input.preview.current.bundleRoot)).toEqual(terminal?.artifacts);
+  });
+
+  it("restamps an attached instruction row at the restored release's version and changes nothing else on it (NEW-171)", async () => {
+    // The update stamped the row at the release it installed (1.1.0); rollback restores 1.0.0.
+    const attached = { ...syntheticInstructionRow(), productVersion: "1.1.0" } as ManagedArtifactV2;
+    const { input, deps } = await rollbackFixture([attached]);
+    const manifests = manifestsOf(await composeRollback(input, deps));
+    expect(manifests).toHaveLength(2);
+    for (const manifest of manifests) {
+      expect(manifest.artifacts.filter((row) => row.kind === "instruction")).toEqual([{ ...attached, productVersion: input.preview.target.version }]);
+    }
   });
 
   it("verifies the previous bundle in place, the retained payload without publishing, and the record present-to-absent", async () => {
