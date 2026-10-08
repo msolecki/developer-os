@@ -2,8 +2,8 @@
  * NEW-202 (Spec 2, K8 "Amended 2026-10-08"): the launcher's closed CLI environment has no
  * `PATH`, so it hands the user's `PATH` over under this one name. It decides which binary is
  * `claude` or `codex` and nothing else: `vendorSearchPathOption` feeds only the adapter's
- * discovery `searchPath`, and every discovered path still pays `assertTrustedExecutable`
- * (D83 (3)) before it runs. `tests/repository/vendor-search-path.test.ts` pins the readers.
+ * discovery `searchPath`, and every discovered path is admitted before it runs
+ * (`assertTrustedExecutable`, D83 (3), or `capture`'s stricter pin). `tests/repository/vendor-search-path.test.ts` pins the readers.
  */
 export const VENDOR_SEARCH_PATH_VARIABLE = "DEVELOPER_OS_VENDOR_SEARCH_PATH";
 
