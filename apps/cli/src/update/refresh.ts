@@ -58,13 +58,24 @@ export function refreshExitCode(code: number | null): ExitCode {
   return code !== null && Number.isInteger(code) && code >= 0 && code <= 6 ? (code as ExitCode) : EXIT_CODES.operationalFailure;
 }
 
-export function runRefreshProcess(request: RefreshProcessV1): Promise<ExitCode> {
+/**
+ * K8's bound on the refresh child: ten minutes. The child is a whole `init`, whose Codex
+ * registration alone runs several `codex` steps bounded at 60 s each; a refresh past this is hung.
+ */
+export const REFRESH_TIMEOUT_MS = 600_000;
+
+/** A child past `timeoutMs` is killed; its `close`, after the kill, maps the signal to exit 1. */
+export function runRefreshProcess(request: RefreshProcessV1, timeoutMs: number = REFRESH_TIMEOUT_MS): Promise<ExitCode> {
   return new Promise((resolve) => {
     const child = spawn(request.executable, [...request.argv], { env: { ...request.env }, stdio: [...REFRESH_STDIO] });
+    // ponytail: kills the child only, not grandchildren it spawned; a process group if one is ever seen to outlive it.
+    const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
     child.once("error", () => {
+      clearTimeout(timer);
       resolve(EXIT_CODES.operationalFailure);
     });
     child.once("close", (code) => {
+      clearTimeout(timer);
       resolve(refreshExitCode(code));
     });
   });
@@ -78,4 +89,3 @@ export async function refreshActiveRelease(context: CliContext): Promise<ExitCod
     return error instanceof InstructionRefusal ? error.code : EXIT_CODES.operationalFailure;
   }
 }
-// ponytail: no timeout on the child, as the launcher sets none; add one if a hung refresh is ever observed.

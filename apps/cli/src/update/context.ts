@@ -81,6 +81,7 @@ import type { UpdateApplyPortsV1 } from "./apply.js";
 import { productionUpdateApplyPorts, updateCodexPort } from "./apply-ports.js";
 import { admitPackageChannelRelease, inspectPackagedRelease, resolvePackageChannelSource } from "./packaged-release.js";
 import type { AdmittedPackagedReleaseV1 } from "./packaged-release.js";
+import { refreshActiveRelease } from "./refresh.js";
 import {
   MAXIMUM_ROLLBACK_RECORD_BYTES,
   UpdatePlanningRefusal,
@@ -123,6 +124,12 @@ export interface CliUpdateContext {
    * projection; null when no trusted `codex` is installed. Absent in a context with no Codex owner.
    */
   readonly codex?: () => Promise<UpdateCodexV1 | null>;
+  /**
+   * K8: after a finalized apply or rollback, with the global lock released, re-render the stored
+   * adapters from the newly active release. Returns that run's exit code and never throws. Absent,
+   * nothing is refreshed (unit contexts); production spawns `<active runtime> <home>/bin/developer-os.mjs init`.
+   */
+  readonly refresh?: () => Promise<ExitCode>;
   /**
    * `--apply`'s mutation authority; absent, `update --apply` and `update rollback --apply` refuse
    * before any port is reached. Production binds the fallback handoff from the keg planning
@@ -556,5 +563,6 @@ export function createCliUpdateContext(context: CliContext): CliUpdateContext {
     admitManifest: (value) => validateManifestV2(value, gateManifestAdmission(context)),
     codex: updateCodexPort(context),
     apply: productionUpdateApplyPorts(context, source.fallback),
+    refresh: () => refreshActiveRelease(context),
   };
 }

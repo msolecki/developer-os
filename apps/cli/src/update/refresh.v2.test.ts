@@ -8,7 +8,7 @@ import { encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
 
 import { runInit } from "../commands/init.js";
 import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
-import { REFRESH_ARGV, REFRESH_STDIO, refreshActiveRelease, refreshEnvironment, refreshExitCode, refreshProcess, runRefreshProcess } from "./refresh.js";
+import { REFRESH_ARGV, REFRESH_STDIO, REFRESH_TIMEOUT_MS, refreshActiveRelease, refreshEnvironment, refreshExitCode, refreshProcess, runRefreshProcess } from "./refresh.js";
 
 afterAll(removeCommandFixtures);
 
@@ -96,5 +96,17 @@ describe("the K8 refresh process", () => {
     expect(() => refreshEnvironment(bad.context)).toThrow(expect.objectContaining({ reason: "brain_override_invalid", code: EXIT_CODES.invalidInput }));
     const good = await createCommandFixture("refresh-brain-ok", { env: { DEVELOPER_OS_BRAIN: "/synthetic/brain" } });
     expect(refreshEnvironment(good.context).DEVELOPER_OS_BRAIN).toBe("/synthetic/brain");
+  });
+
+  it("(j) kills a refresh that outlives its bound and maps it to exit 1 (K8's bounded timeout)", async () => {
+    expect(REFRESH_TIMEOUT_MS).toBe(600_000);
+    const fixture = await createCommandFixture("refresh-hang", {});
+    const pidFile = join(fixture.root, "hung.pid");
+    const started = Date.now();
+    const code = await runRefreshProcess({ executable: process.execPath, argv: ["-e", `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`], env: {} }, 500);
+    expect(code).toBe(EXIT_CODES.operationalFailure);
+    expect(Date.now() - started).toBeLessThan(5_000);
+    const pid = Number(await nodeFs.readFile(pidFile, "utf8"));
+    expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: "ESRCH" }));
   });
 });

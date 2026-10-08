@@ -341,11 +341,9 @@ function concreteManifest(
     schemaVersion: 2,
     productVersion: draft.expectedManifest.productVersion,
     installedAt: home.manifest.installedAt,
-    // Instruction rows never reach the planner (NEW-171): carried unchanged at the target version.
-    artifacts: [
-      ...rows,
-      ...home.manifest.artifacts.filter((row) => row.kind === "instruction").map((row) => ({ ...row, productVersion: draft.expectedManifest.productVersion })),
-    ].sort(compareManifestRows),
+    // Instruction rows never reach the planner (NEW-171) and are carried unchanged, stamp included
+    // (C1, reversing K7 (f)): the K8 refresh restamps what it renders, so doctor sees a missed refresh.
+    artifacts: [...rows, ...home.manifest.artifacts.filter((row) => row.kind === "instruction")].sort(compareManifestRows),
   });
 }
 

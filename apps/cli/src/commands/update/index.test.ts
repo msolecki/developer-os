@@ -250,12 +250,78 @@ describe("runUpdate", () => {
     };
     vi.mocked(recoverUpdate).mockImplementationOnce(() =>
       Promise.resolve({ kind: "coordinator", outcome: { kind: "finalized", id: SYNTHETIC_COORDINATOR_ID } }));
-    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply } }, invocation);
+    const refresh = vi.fn(() => Promise.resolve(EXIT_CODES.success));
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply, refresh } }, invocation);
 
     expect(result.ok).toBe(true);
     expect(result.ok && result.data).toMatchObject({ outcome, active: { version: "1.1.0" } });
     expect(update.events).not.toContain("package_source");
     expect(update.events).not.toContain("rollback.evidence");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [{ kind: "update", version: null, apply: true, json: false }, "applied"],
+    [{ kind: "rollback", apply: true, json: false }, "rolled_back"],
+  ] as const)("refreshes once after a successful %j, with the lock released, and keeps the result (K8)", async (invocation, outcome) => {
+    const commandFixture = await createCommandFixture(`update-refresh-${invocation.kind}`);
+    const update = invocation.kind === "update" ? createUpdateFixture() : createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+    // The security review's deadlock: the refresh is its own gated transaction, so it must start only once the swap's lock is released.
+    const events: string[] = [];
+    let held = false;
+    const apply: UpdateApplyPortsV1 = {
+      ...unreachableApplyPorts(),
+      withGlobalLock: async (work) => {
+        held = true;
+        events.push("lock");
+        try {
+          return await work();
+        } finally {
+          held = false;
+          events.push("unlock");
+        }
+      },
+      closure: () => Promise.resolve({ kind: "clear" }),
+      composeRollback: () => Promise.reject(new Error("unreachable")),
+    };
+    const swap = <T>(result: T): Promise<T> => apply.withGlobalLock(() => {
+      events.push("swap");
+      return Promise.resolve(result);
+    });
+    if (invocation.kind === "update") vi.mocked(applyUpdate).mockImplementationOnce((_update, prepared) => swap({ schemaVersion: 1, outcome: "applied", active: prepared.inputs.target, rollbackAvailable: true } as const));
+    else vi.mocked(applyRollback).mockImplementationOnce((_update, preview) => swap({ schemaVersion: 1, outcome: "rolled_back", active: preview.target, rollbackAvailable: false } as const));
+    const refresh = vi.fn(() => {
+      events.push(held ? "refresh under the lock" : "refresh");
+      return Promise.resolve(EXIT_CODES.success);
+    });
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply, refresh } }, invocation);
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.data.outcome).toBe(outcome);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(events.slice(-4)).toStrictEqual(["lock", "swap", "unlock", "refresh"]);
+  });
+
+  it("exits with the refresh's code and K8's message, keeping the swap in data (K8)", async () => {
+    const commandFixture = await createCommandFixture("update-refresh-fails");
+    const update = createUpdateFixture();
+    const apply: UpdateApplyPortsV1 = { ...unreachableApplyPorts(), withGlobalLock: (work) => work(), closure: () => Promise.resolve({ kind: "clear" }) };
+    vi.mocked(applyUpdate).mockImplementationOnce((_update, prepared) => Promise.resolve({ schemaVersion: 1, outcome: "applied", active: prepared.inputs.target, rollbackAvailable: true }));
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply, refresh: () => Promise.resolve(EXIT_CODES.decisionRequired) } }, { kind: "update", version: null, apply: true, json: true });
+
+    expect(result).toMatchObject({ ok: false, code: EXIT_CODES.decisionRequired, error: { kind: "workflows_not_refreshed", message: "workflows not refreshed: run developer-os init", recovery: "developer-os init" } });
+    if (!result.ok) expect(result.error.data).toMatchObject({ outcome: "applied" });
+  });
+
+  it("does not refresh after a preview or an automatic rollback (K8)", async () => {
+    const commandFixture = await createCommandFixture("update-refresh-not");
+    const update = createUpdateFixture();
+    const refresh = vi.fn(() => Promise.resolve(EXIT_CODES.success));
+    await runUpdate({ ...commandFixture.context, update: { ...update.update, refresh } }, { kind: "update", version: null, apply: false, json: false });
+    const apply: UpdateApplyPortsV1 = { ...unreachableApplyPorts(), withGlobalLock: (work) => work(), closure: () => Promise.resolve({ kind: "clear" }) };
+    vi.mocked(applyUpdate).mockImplementationOnce((_update, prepared) => Promise.resolve({ schemaVersion: 1, outcome: "rolled_back_automatically", active: prepared.inputs.current, cause: parseSafeReasonCode("update_step_not_applied") }));
+    await runUpdate({ ...commandFixture.context, update: { ...update.update, apply, refresh } }, { kind: "update", version: null, apply: true, json: false });
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it.each([
