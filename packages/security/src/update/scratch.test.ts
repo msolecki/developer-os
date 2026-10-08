@@ -187,7 +187,7 @@ const REQUEST = {
 function deliver(bytes: Uint8Array): (sink: ReleaseBodySink) => Promise<BoundedReleaseResponseV1> {
   return async (sink) => {
     for (let offset = 0; offset < bytes.byteLength; offset += 101) await sink(bytes.subarray(offset, offset + 101));
-    return { kind: "archive", bodyBytes: String(bytes.byteLength) as UInt64DecimalV1, bodyHash: sha256(bytes), redirected: false };
+    return { bodyBytes: String(bytes.byteLength) as UInt64DecimalV1, bodyHash: sha256(bytes) };
   };
 }
 
