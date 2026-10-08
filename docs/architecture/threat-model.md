@@ -698,7 +698,9 @@ without a source effect, and the one alternate-object path rejects list/C-quote 
 destination `HEAD` state is semantic, so an empty repository binds its symbolic ref without an
 invented OID. Scheduled plist argv carries the guarded product home inside its generation and ignores
 ambient path overrides before reading state; since NEW-144 (2026-10-05) its argv[0] is the absolute
-Node executable admitted at enable and argv[1] the entrypoint, both bound into the generation.
+Node executable admitted at enable and argv[1] the entrypoint, both bound into the generation; since
+NEW-204 (2026-10-08) a `package-channel` home's argv[0] is the hooks' Node through the fixed Homebrew
+`opt` link, never a release-tree path an update or rollback can retire.
 The Node path is the user's own runtime: same-uid writable and not root-admitted, unlike `/bin/launchctl`, so repointing a Homebrew `opt` link or replacing a mise install after enable is accepted by design (a compromised Node runtime is out of scope, §2). Legacy Foundation staging accepts only canonical mutation
 indices `0..4294967294`.
 The final 2026-08-27 correction removes the remaining authority gaps. Public lifecycle preview is
