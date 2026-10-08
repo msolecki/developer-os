@@ -69,9 +69,10 @@ async function readStateFile(
  * One envelope's status, as the CLI's evidence report classes it (`apps/cli/src/bootstrap/report.ts`):
  * `terminal` when its admitted journal reached a terminal phase; `incomplete` when its admitted
  * journal has not, or when both slots are still empty and the bootstrap leaf its plan persisted is
- * the live one (NEW-83); `unverified` for anything that does not admit.
+ * the live one (NEW-83); `unverified` for anything that does not admit; `malformed` when a bound
+ * slot cannot be read at all (the CLI's `readRegularFile` throws there, e.g. over-size, NEW-201).
  */
-type EnvelopeStatusV1 = "terminal" | "incomplete" | "unverified";
+type EnvelopeStatusV1 = "terminal" | "incomplete" | "unverified" | "malformed";
 
 /** `report.ts`'s `identityMatches`: owner, mode, link count, device and inode. */
 function sameIdentity(
@@ -112,7 +113,12 @@ async function classifyEnvelope(
         slots.push(null);
         continue;
       }
-      const bytes = await fs.readRegular(entry, BOOTSTRAP_MAX_JOURNAL_BYTES);
+      let bytes: Uint8Array;
+      try {
+        bytes = await fs.readRegular(entry, BOOTSTRAP_MAX_JOURNAL_BYTES);
+      } catch {
+        return "malformed";
+      }
       try {
         slots.push(decodeCanonicalJson(bytes, BOOTSTRAP_MAX_JOURNAL_BYTES));
       } catch {
@@ -155,6 +161,7 @@ export async function readBootstrapClosure(
   }
   const statuses: EnvelopeStatusV1[] = [];
   for (const id of ids) statuses.push(await classifyEnvelope(fs, productHome, stateDirectory, id, effectiveUid));
+  if (statuses.includes("malformed")) return { kind: "malformed" };
   const incomplete = statuses.filter((status) => status === "incomplete").length;
   return incomplete === 0 ? { kind: "handoff_complete" } : incomplete === 1 ? { kind: "non_terminal" } : { kind: "malformed" };
 }

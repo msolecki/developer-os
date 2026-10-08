@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  BOOTSTRAP_MAX_JOURNAL_BYTES,
   encodeCanonicalJson,
   PACKAGE_CHANNEL_DELEGATION_BYTES,
   PACKAGE_CHANNEL_RELEASE_KEY_ID,
@@ -72,7 +73,11 @@ function fsOf(files: Files): LauncherGuardedReaderV1 {
       if (found !== null) return Promise.resolve(entry(path, "regular_file", found.mode ?? 0o600, found.ownerUid ?? UID, found.bytes.byteLength, found));
       return Promise.resolve(children(path).length > 0 ? entry(path, "directory", 0o700, UID, 0) : null);
     },
-    readRegular: (target) => Promise.resolve(new Uint8Array(bytesOf(target.path))),
+    // The real reader refuses a file over `maximumBytes`; the fake must too (NEW-201 item 4).
+    readRegular: (target, maximumBytes) => {
+      const bytes = bytesOf(target.path);
+      return bytes.byteLength > maximumBytes ? Promise.reject(new Error("file exceeds its maximum size")) : Promise.resolve(new Uint8Array(bytes));
+    },
     hashRegular: (target) => Promise.resolve(createHash("sha256").update(bytesOf(target.path)).digest("hex") as LowerHexSha256),
     names: (directory) =>
       (async function* generate(): AsyncGenerator<string> {
@@ -318,6 +323,12 @@ describe("readBootstrapClosure (NEW-111)", () => {
   const torn = (capture: BootstrapCapture, path: string): Files => ({
     ...capture.files,
     [path]: { ...(capture.files[path] as FakeFile), bytes: Buffer.from('{"schemaVersion":1,"se') },
+  });
+
+  it("classes an over-size journal slot as malformed, as the CLI's reader throws (NEW-201)", async () => {
+    const path = slotOf(planned, 0);
+    const oversize = { ...planned.files, [path]: { ...(planned.files[path] as FakeFile), bytes: Buffer.alloc(BOOTSTRAP_MAX_JOURNAL_BYTES + 1, 0x20) } };
+    expect(await readBootstrapClosure(fsOf(oversize), planned.home, UID)).toEqual({ kind: "malformed" });
   });
 
   it("(1) keeps an envelope incomplete when a death mid-advance tore slot 1 and slot 0 still holds its journal", async () => {
