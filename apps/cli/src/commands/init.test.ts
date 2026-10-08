@@ -378,8 +378,8 @@ describe("runInit", () => {
       bootstrapAvailable: true,
     });
     await nodeFs.chmod(
-      join(invalid.root, "packaged-release", "bundle", "bin", "developer-os"),
-      0o600,
+      join(invalid.root, "prefix", "Cellar", "developer-os", "1.0.0", "libexec", "fallback", "bundle", "bin", "cli"),
+      0o644,
     );
     const before = await inventory(invalid.root);
     const refused = await runInit(invalid.context, {
@@ -967,9 +967,16 @@ describe("runInit", () => {
   });
 
   it("refuses with capabilityUnavailable when a persisted V2 plan exists and the bootstrap capability is absent", async () => {
-    const seeded = await createCommandFixture("init-v2-plan-no-capability-seed", { bootstrapAvailable: true });
+    // `init` now installs the entrypoint after the handoff, which supersedes a finalized plan; an
+    // interrupted bootstrap is the persisted plan that is still resumable.
+    const seeded = await createCommandFixture("init-v2-plan-no-capability-seed", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_plan",
+    });
     await nodeFs.mkdir(seeded.paths.brain, { recursive: true, mode: 0o700 });
-    expect((await runInit(seeded.context, ACCEPTED)).ok).toBe(true);
+    expect((await runInit(seeded.context, ACCEPTED)).ok).toBe(false);
+    const seededBootstrap = seeded.context.bootstrap;
+    if (seededBootstrap?.state === "available") await seededBootstrap.executor.close();
 
     const fixture = await createCommandFixture("init-v2-plan-no-capability", { root: seeded.root });
 
