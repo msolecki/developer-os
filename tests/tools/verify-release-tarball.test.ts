@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmod, cp, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { gzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -79,10 +79,10 @@ describe("verifyReleaseTarball (A16 §2 step 4)", () => {
 });
 
 /** A gzip ustar with the given members; `patch` edits each header (typeflag, name) before the checksum is recomputed. */
-function crafted(members: readonly { readonly path: string; readonly type?: string; readonly name?: string }[]): Uint8Array {
+function crafted(members: readonly { readonly path: string; readonly type?: string; readonly name?: string; readonly size?: number }[]): Uint8Array {
   const parts: Uint8Array[] = [];
   for (const member of members) {
-    const header = ustarHeader({ path: member.path, kind: member.type === "5" ? "directory" : "file", mode: member.type === "5" ? 0o755 : 0o644 }, 0, MTIME);
+    const header = ustarHeader({ path: member.path, kind: member.type === "5" ? "directory" : "file", mode: member.type === "5" ? 0o755 : 0o644 }, member.size ?? 0, MTIME);
     if (member.name !== undefined) {
       header.fill(0, 0, 100);
       header.set(new TextEncoder().encode(member.name), 0);
@@ -92,6 +92,7 @@ function crafted(members: readonly { readonly path: string; readonly type?: stri
     for (let index = 0; index < 512; index += 1) sum += index >= 148 && index < 156 ? 0x20 : (header[index] as number);
     header.set(new TextEncoder().encode(`${sum.toString(8).padStart(6, "0")}\0 `), 148);
     parts.push(header);
+    if (member.size !== undefined) parts.push(new Uint8Array(Math.ceil(member.size / 512) * 512));
   }
   parts.push(new Uint8Array(1024));
   return new Uint8Array(gzipSync(Buffer.concat(parts)));
@@ -108,4 +109,46 @@ describe("verifyReleaseTarball unpacking refusals", () => {
     await writeFile(path, crafted(members));
     await expect(verifyReleaseTarball({ tarball: path, version: "0.1.0", architecture: "arm64" })).rejects.toThrow(message);
   });
+
+  const tiny = [{ path: "bin", type: "5" }, { path: "bin/a", type: "5" }, { path: "bin/b", type: "5" }] as const;
+  it.each([
+    ["a gzip bomb", { maxOutputBytes: 1024 }, tiny, /exceeds/u],
+    ["an entry flood", { maxEntries: 2 }, tiny, /more than 2 entries/u],
+    ["an oversized entry", { maxEntryBytes: 10 }, [{ path: "bin", type: "5" }, { path: "bin/x", size: 11 }], /entry bytes/u],
+  ] as const)("refuses %s", async (_label, limits, members, message) => {
+    const path = join(await scratch(), "bad.tar.gz");
+    await writeFile(path, crafted(members));
+    await expect(verifyReleaseTarball({ tarball: path, version: "0.1.0", architecture: "arm64", limits })).rejects.toThrow(message);
+  });
+
+  it.each([
+    ["a truncated archive", (d: Uint8Array) => d.subarray(0, d.byteLength - 1024 - 1), /truncated|terminat/u],
+    ["one terminating block only", (d: Uint8Array) => d.subarray(0, d.byteLength - 512), /terminat/u],
+    ["bytes after the terminator", (d: Uint8Array) => Buffer.concat([d, new Uint8Array(512).fill(1)]), /terminat/u],
+  ] as const)("refuses %s", async (_label, mutate, message) => {
+    const path = join(await scratch(), "bad.tar.gz");
+    await writeFile(path, new Uint8Array(gzipSync(mutate(gunzipSync(crafted([{ path: "bin", type: "5" }, { path: "bin/f", size: 3 }]))))));
+    await expect(verifyReleaseTarball({ tarball: path, version: "0.1.0", architecture: "arm64" })).rejects.toThrow(message);
+  });
+
+  it.each([
+    ["a backslash", "bin/a\\b"],
+    ["a control character", "bin/a\u0001b"],
+  ])("refuses %s in a name", async (_label, name) => {
+    const path = join(await scratch(), "bad.tar.gz");
+    await writeFile(path, crafted([{ path: "bin", type: "5" }, { path: "bin/x", name }]));
+    await expect(verifyReleaseTarball({ tarball: path, version: "0.1.0", architecture: "arm64" })).rejects.toThrow(/unsafe path/u);
+  });
+
+  it("refuses a header without the ustar magic", async () => {
+    const data = gunzipSync(crafted([{ path: "bin", type: "5" }]));
+    data[257] = 0x58;
+    let sum = 0;
+    for (let index = 0; index < 512; index += 1) sum += index >= 148 && index < 156 ? 0x20 : (data[index] as number);
+    data.set(new TextEncoder().encode(`${sum.toString(8).padStart(6, "0")}\0 `), 148);
+    const path = join(await scratch(), "bad.tar.gz");
+    await writeFile(path, new Uint8Array(gzipSync(data)));
+    await expect(verifyReleaseTarball({ tarball: path, version: "0.1.0", architecture: "arm64" })).rejects.toThrow(/magic/u);
+  });
 });
+
