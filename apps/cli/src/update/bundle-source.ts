@@ -343,7 +343,8 @@ export class BundleJournalFile<TJournal> {
       this.value = validate(decoded);
     } catch (error) {
       // An old-grammar or torn journal is a third state (exit 6), never a plain error the coordinator would compensate.
-      if (error instanceof LifecycleRecoveryRequiredError) throw error;
+      // A JavaScript defect (TypeError, RangeError) is not a verdict on the bytes and stays exit 1.
+      if (error instanceof TypeError || error instanceof RangeError || error instanceof LifecycleRecoveryRequiredError) throw error;
       return refuseBundle("bundle_journal_invalid", this.path);
     }
     this.#entry = found.entry;
