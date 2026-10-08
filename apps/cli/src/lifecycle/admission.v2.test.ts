@@ -297,7 +297,12 @@ describe("structural V2 home admission", () => {
     };
 
     expect(await inspectDrift(await driftRequestFor(fixture, admitted.manifest))).toStrictEqual([]);
-    expect(admitted.allocator.nextCounter).toBe("0");
+    /**
+     * Bootstrap hands off `nextCounter: "0"` (§6.4 step 4); since NEW-163 option B (D84 K5) `init`
+     * then writes the release-independent entrypoint through the mutation gate, its one allocation.
+     */
+    expect(admitted.allocator.nextCounter).toBe("1");
+    expect(admitted.manifest.artifacts.filter((row) => row.source === "generated/entrypoint")).toHaveLength(1);
     expect(await observeLifecycleActivationRecord(portFor(), fixture.paths)).toStrictEqual({ state: "absent" });
     for (const name of ["update-rollback.json", "update-executor.json"]) {
       expect((await nodeFs.lstat(join(fixture.paths.stateDir, name))).size).toBe(0);
