@@ -66,6 +66,36 @@ describe("planMerge", () => {
     const target = plan.mutations.find((m) => m.path === "DEV/t.md")?.content ?? "";
     expect(target).toContain("see s and DEV/t\n");
     expect(target).toContain("see the target, s and [[r]]\n");
+    expect(plan.rewrittenLinks).toBe(4);
+  });
+
+  it("labels empty-display, anchored, spaced, title and case-folded links, and keeps fenced and third-note links", async () => {
+    const plan = await planRefactor(
+      { mode: "merge", source: "DEV/s.md", target: "DEV/t.md" },
+      memoryInput({
+        "DEV/s.md": noteText({ title: "Source", body: "a [[Target]] b [[S]] c\n\n```\n[[t]]\n```" }),
+        "DEV/t.md": noteText({ title: "Target", body: "x [[s|]] y [[s#a|d]] z [[ s | e ]] w [[Source]] v [[r]]" }),
+        "DEV/r.md": noteText({ title: "R", body: "R body" }),
+      }),
+    );
+    const target = plan.mutations.find((m) => m.path === "DEV/t.md")?.content ?? "";
+    expect(target).toContain("x s y d z e w Source v [[r]]\n");
+    expect(target).toContain("a Target b S c\n");
+    expect(target).toContain("```\n[[t]]\n```");
+    expect(plan.rewrittenLinks).toBe(6);
+  });
+
+  it("counts a link from a third note once and the pair's own links as labels", async () => {
+    const plan = await planRefactor(
+      { mode: "merge", source: "DEV/s.md", target: "DEV/t.md" },
+      memoryInput({
+        "DEV/s.md": noteText({ title: "Source", body: "see [[t]]" }),
+        "DEV/t.md": noteText({ title: "Target", body: "see [[s]]" }),
+        "DEV/r.md": noteText({ title: "R", body: "[[s]]" }),
+      }),
+    );
+    expect(plan.mutations.find((m) => m.path === "DEV/t.md")?.content).toContain("see s\n\n## Source\n\nsee t\n");
+    expect(plan.rewrittenLinks).toBe(3);
   });
 
   it("refuses merging a note into itself as brain_refactor_input_invalid", async () => {
