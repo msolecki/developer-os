@@ -102,6 +102,7 @@ import { createCanonicalPathEvidence } from "../bootstrap/admission.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { discoverEachAgent } from "../commands/doctor.js";
+import { reanchorManifest } from "../commands/git/service.js";
 import { readConfigFile } from "../config-file.js";
 import { readRedactionKey } from "../context.js";
 import type { CliContext } from "../context.js";
@@ -302,6 +303,12 @@ async function codexRuntime(context: CliContext, lifecycle: CliLifecycleContext,
   const run = supervisedOwnerEffectRun(new SupervisedProcessRunner(nodeSupervisedProcessDependencies));
   const observe = codexRegistrationObserver({ policy: pinned, tokens, resolveExecutable, run, screen: (text) => redactor(text).findings.length > 0 });
   return { executable, effect: { tokens, observe, resolveExecutable, run, redact: (text) => redactor(text).text }, dispose: () => rm(privateEffectTmp, { recursive: true, force: true }) };
+}
+
+/** The manifest's bytes through the guarded port, never through a symlink; null when it is not a regular file. */
+async function manifestBytes(lifecycle: CliLifecycleContext, file: string): Promise<Uint8Array | null> {
+  const entry = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(file));
+  return entry?.kind === "regular_file" && BigInt(entry.size) <= BigInt(MAX_MANIFEST_BYTES) ? lifecycle.fs.readRegular(entry, MAX_MANIFEST_BYTES) : null;
 }
 
 /** `CliUpdateContext.codex`: the planning-time registration state, policy, and current projection. */
@@ -1176,6 +1183,22 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
         return Promise.resolve();
       },
       clock: () => lifecycle().clock(),
+      // D54: the swap rewrote the manifest through this coordinator's journal, which `deriveManifestAnchor`
+      // never reads, so the anchor follows it here, as `reanchorManifest`'s Git and automation callers do.
+      // After the verifier (`finalized`), still under the lock, and before any compaction or journal
+      // removal, so a death after this point resumes onto a current anchor; `compacting` repeats it for a
+      // death between the two. `reanchorManifest` moves only an anchor naming the chain's preimage.
+      afterBoundary: async (boundary) => {
+        if (boundary.kind !== "journal_rewritten" || (boundary.journal.phase !== "finalized" && boundary.journal.phase !== "compacting")) return;
+        const { reopened } = await load();
+        if (reopened.execution === null) return;
+        const transitional = reopened.leaves.get(reopened.execution.manifest.transitional.path) as ManifestStatePlanV1 | undefined;
+        const terminal = reopened.leaves.get(reopened.execution.manifest.terminal.path) as ManifestStatePlanV1 | undefined;
+        if (transitional?.before.state !== "present" || terminal?.after.state !== "present") return;
+        const bytes = await manifestBytes(lifecycle(), context.paths.manifestFile);
+        if (bytes === null || sha256Hex(bytes) !== terminal.after.hash) return;
+        await reanchorManifest(context, lifecycle(), transitional.before.hash, bytes);
+      },
     };
   };
 
