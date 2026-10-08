@@ -647,8 +647,8 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     });
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
     await nodeFs.rename(
-      join(fixture.root, "packaged-release"),
-      join(fixture.root, "packaged-release.offline"),
+      join(fixture.root, "prefix"),
+      join(fixture.root, "prefix.offline"),
     );
 
     fixture.disableBootstrapInterrupt();
@@ -1685,7 +1685,7 @@ describe("bootstrap executor failure reporting and lock release (NEW-179)", () =
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
     const persisted = await persistedPlan(fixture);
     expect(await currentJournal(persisted.value)).toMatchObject({ phase: "compensating" });
-    await nodeFs.rename(join(fixture.root, "packaged-release"), join(fixture.root, "packaged-release.offline"));
+    await nodeFs.rename(join(fixture.root, "prefix"), join(fixture.root, "prefix.offline"));
     fixture.disableBootstrapFailure();
     fixture.disableBootstrapInterrupt();
     await closeBootstrapProcess(fixture);
