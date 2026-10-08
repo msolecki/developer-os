@@ -391,6 +391,32 @@ NEW-171.
   after a rollback or with no keg. (C3) Refreshed hooks name Node through the fixed `opt` path of K2's
   table, never through a release directory, so a later swap that retires a release cannot leave every
   hook exiting non-blocking.
+  **K8 rulings (founder, 2026-10-08).** **C1.** K7 (f) is withdrawn: neither `update --apply` nor
+  `update rollback --apply` restamps instruction rows. Both carry the rows unchanged, `productVersion`
+  included, as K5 states. The K8 refresh stamps every row it renders at the active release's version, so
+  `doctor`'s warning names exactly the rows that no refresh has rendered since the swap. **C2.** `init` on
+  an installed V2 home without `--adapters` renders from the active bundle's `instructions/` and
+  `workflows/` and does not need the keg. An absent keg, or a keg whose version differs from the active
+  release, is no packaged handoff rather than `release_mismatch`. The refresh K8 names is exactly this
+  `init`, spawned as `<active runtime> <product home>/bin/developer-os.mjs init`, and the public grammar
+  is unchanged. `init --adapters` keeps §12.3's keg render and its `release_mismatch` rule, and any other
+  keg admission failure still refuses with exit 6. A home whose trust is not `package-channel` keeps its
+  previous `init` behaviour. **C3.** On a `package-channel` home every rendered hook names Node through the
+  fixed `opt` path of K2's table for the active release's architecture,
+  `<opt>/libexec/fallback/bundle/<runtimeEntrypoint>`, and never a `releases/<version>` path, so no release
+  swap or retirement changes or breaks a hook. An `unsigned-local` home keeps naming the Node that ran
+  `init`. The hook exit-2 rule for a release that cannot load is unchanged. Accepted residuals: with the keg
+  removed by `brew uninstall` but no `developer-os uninstall`, every hook exits 127, which neither vendor
+  blocks on (doctor names `brew install developer-os`); between `brew upgrade` and `update`, hooks run the
+  new keg's Node on the active release's code. **The spawn.** The refresh runs only after the update's or
+  rollback's lifecycle and transaction lock are released, under a bounded timeout. Before spawning it
+  applies the launcher's rule that `bundleRoot` is `<home>/releases/<version>/darwin-<arch>` for the host
+  architecture (`active_release_root_mismatch`, exit 6). Its environment is exactly `HOME`,
+  `DEVELOPER_OS_HOME` and, when set and valid, `DEVELOPER_OS_BRAIN`, the launcher's (§3.1); its stdout is
+  discarded and its stderr inherited; a child exit outside 0–6, a signal or the timeout maps to exit 1.
+  **Proof.** NEW-200's proof is that an update changes a skill, a rollback restores it, and
+  `hooks/hooks.json` stays byte-identical across every swap; a change to the hook rows themselves is proved
+  only on a real release (K6's gate).
 
 
 ---
