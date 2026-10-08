@@ -46,7 +46,7 @@ import {
 import type { GeneratedLaunchdLabelV1, LaunchdPlanPreviewV1, LaunchdPlistPortV1 } from "@developer-os/platform-macos";
 
 import { compareManifestRows } from "../../instructions/attach.js";
-import { gatedState, manifestMutation, stableNodePath } from "../../instructions/apply.js";
+import { gatedState, manifestMutation } from "../../instructions/apply.js";
 import type { LifecycleEffectPortsV1 } from "../../lifecycle/adapters.js";
 import { lifecycleVariantFacts } from "../../lifecycle/codecs.js";
 import type { LifecycleExecutionPlanV1 } from "../../lifecycle/codecs.js";
@@ -324,6 +324,29 @@ async function readOrNull(path: string): Promise<string | null> {
   return nodeFs.readFile(path, "utf8").catch(() => null);
 }
 
+/** NEW-204: the fixture keg's `opt` link and the Node a package-channel home's plists name through it (C3). */
+function optLink(home: AutomationHomeV1): string {
+  return join(home.root, "prefix", "opt", "developer-os");
+}
+
+function optNode(home: AutomationHomeV1): string {
+  return join(optLink(home), "libexec", "fallback", "bundle", "bin", "runtime");
+}
+
+/** Repoints the `opt` link at `target` (a keg-shaped directory) for `run`, then back at the fixture keg. */
+async function withOptLinkAt<T>(home: AutomationHomeV1, target: string, run: () => Promise<T>): Promise<T> {
+  const link = optLink(home);
+  const original = await nodeFs.readlink(link);
+  await nodeFs.unlink(link);
+  await nodeFs.symlink(target, link);
+  try {
+    return await run();
+  } finally {
+    await nodeFs.unlink(link);
+    await nodeFs.symlink(original, link);
+  }
+}
+
 function allocatorPath(home: AutomationHomeV1): string {
   return join(home.paths.stateDir, "lifecycle-id-allocator.json");
 }
@@ -502,15 +525,21 @@ describe("automation on a real V2 home", () => {
     { name: "not executable", make: async (path: string) => nodeFs.writeFile(path, "#!/bin/sh\n", { mode: 0o600 }) },
     { name: "a directory", make: async (path: string) => nodeFs.mkdir(path, { mode: 0o700 }) },
   ])(
-    "refuses enable when the Node every plist would name is $name, and writes nothing (NEW-144)",
+    "refuses enable when the opt Node every plist would name is $name, and writes nothing (NEW-144, NEW-204)",
     async ({ name, make }) => {
       const home = await sharedHome();
-      const node = join(home.root, `node-${name.replaceAll(" ", "-")}`);
-      await make(node);
+      // A keg whose bundled runtime is $name, linked at `opt` the way `brew` would link a broken one.
+      const keg = join(home.root, `keg-${name.replaceAll(" ", "-")}`);
+      const runtimeDir = join(keg, "libexec", "fallback", "bundle", "bin");
+      await nodeFs.mkdir(runtimeDir, { recursive: true, mode: 0o700 });
+      await make(join(runtimeDir, "runtime"));
       const allocatorBefore = await nodeFs.readFile(allocatorPath(home));
       const eventsBefore = [...launchd.events];
-      const result = await runAutomation({ ...home.context, nodeExecutable: node }, { subcommand: "enable", schedules: [...BASE_SCHEDULES], apply: true });
-      expect(result).toMatchObject({ ok: false, code: EXIT_CODES.capabilityUnavailable, error: { kind: "automation_node_unavailable" } });
+      // `nodeExecutable` names a working Node: a package-channel home ignores it and names the opt link.
+      const result = await withOptLinkAt(home, keg, () =>
+        runAutomation({ ...home.context, nodeExecutable: process.execPath }, { subcommand: "enable", schedules: [...BASE_SCHEDULES], apply: true }),
+      );
+      expect(result).toMatchObject({ ok: false, code: EXIT_CODES.capabilityUnavailable, error: { kind: "automation_node_unavailable", paths: [optNode(home)] } });
       expect(await nodeFs.readFile(allocatorPath(home))).toEqual(allocatorBefore);
       expect(launchd.events).toStrictEqual(eventsBefore);
       expect(await readOrNull(plistPath(home, "doctor"))).toBeNull();
@@ -543,7 +572,10 @@ describe("automation on a real V2 home", () => {
       const entries = entriesOf(plan);
       expect(launchd.events.slice(eventsBefore)).toStrictEqual(entries.map((entry) => `bootstrap ${String(entry.generatedLabel)}`));
       const manifest = await readManifest(home);
-      const node = await stableNodePath(process.execPath);
+      // NEW-204: a package-channel home names Node through the fixed `opt` link, never the active release tree.
+      const node = optNode(home);
+      const active = JSON.parse(await nodeFs.readFile(join(home.paths.stateDir, "active-release.json"), "utf8")) as { readonly bundleRoot: string };
+      expect(node.startsWith(`${active.bundleRoot}/`)).toBe(false);
       expect(isAbsolute(node)).toBe(true);
       await nodeFs.access(node, constants.X_OK);
       for (const entry of entries) {
@@ -685,24 +717,30 @@ describe("automation on a real V2 home", () => {
   );
 
   it(
-    "reports node_unavailable once the Node the plists name is gone, and enable under a present Node replaces them",
+    "reports node_unavailable while the opt link is gone, refuses enable, and is current again once brew relinks it (NEW-144, NEW-204)",
     async () => {
       const home = await sharedHome();
-      const link = join(home.root, "moved-node");
-      await nodeFs.symlink(process.execPath, link);
-      const moved = await apply(home, "enable", [], { ...home.context, nodeExecutable: link });
-      expect(moved.data).toMatchObject({ kind: "applied", operation: "automation_reconcile" });
-      expect(parseCanonicalLaunchdPlist(await nodeFs.readFile(plistPath(home, "doctor"))).ProgramArguments[0]).toBe(link);
+      expect(parseCanonicalLaunchdPlist(await nodeFs.readFile(plistPath(home, "doctor"))).ProgramArguments[0]).toBe(optNode(home));
+      const installedOf = async (): Promise<readonly string[]> => {
+        const status = dataOf(await runAutomation(home.context, { subcommand: "status" }));
+        if (status.kind !== "status") throw new Error("unreachable");
+        return status.jobs.filter((job) => job.installed !== "absent").map((job) => job.installed);
+      };
+      const link = optLink(home);
+      const target = await nodeFs.readlink(link);
       await nodeFs.unlink(link);
-      const status = dataOf(await runAutomation(home.context, { subcommand: "status" }));
-      if (status.kind !== "status") throw new Error("unreachable");
-      expect(status.jobs.filter((job) => job.installed !== "absent").map((job) => job.installed)).toStrictEqual(["node_unavailable", "node_unavailable", "node_unavailable"]);
-      const restored = await apply(home, "enable");
-      expect(restored.data).toMatchObject({ kind: "applied", operation: "automation_reconcile" });
-      expect(entriesOf(lastPlan(home)).map((entry) => entry.operation)).toStrictEqual(["replace", "replace", "replace"]);
-      const after = dataOf(await runAutomation(home.context, { subcommand: "status" }));
-      if (after.kind !== "status") throw new Error("unreachable");
-      expect(after.jobs.filter((job) => job.installed !== "absent").map((job) => job.installed)).toStrictEqual(["current", "current", "current"]);
+      try {
+        expect(await installedOf()).toStrictEqual(["node_unavailable", "node_unavailable", "node_unavailable"]);
+        const eventsBefore = [...launchd.events];
+        // `nodeExecutable` cannot route around a package-channel home's opt rule.
+        const refused = await runAutomation({ ...home.context, nodeExecutable: process.execPath }, { subcommand: "enable", schedules: [], apply: true });
+        expect(refused).toMatchObject({ ok: false, code: EXIT_CODES.capabilityUnavailable, error: { kind: "automation_node_unavailable", paths: [optNode(home)] } });
+        expect(launchd.events).toStrictEqual(eventsBefore);
+      } finally {
+        await nodeFs.symlink(target, link);
+      }
+      // The plists never named a release: relinking `opt` restores every job without `automation enable`.
+      expect(await installedOf()).toStrictEqual(["current", "current", "current"]);
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );

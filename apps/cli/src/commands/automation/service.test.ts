@@ -22,7 +22,7 @@ import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 import { failureFrom } from "../../context.js";
 import type { CliContext } from "../../context.js";
 import { compareManifestRows } from "../../instructions/attach.js";
-import { gatedState, manifestMutation } from "../../instructions/apply.js";
+import { gatedState, manifestMutation, stableNodePath } from "../../instructions/apply.js";
 import type { LifecycleEffectPortsV1 } from "../../lifecycle/adapters.js";
 import type { CliLifecycleContext } from "../../lifecycle/context.js";
 import { withLifecycleMutation } from "../../lifecycle/mutation-gate.js";
@@ -35,7 +35,7 @@ import { createCommandFixture, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, remo
 import type { CommandFixture } from "../testing.js";
 import { runAutomation } from "./index.js";
 import { AutomationRunner, createAutomationRunnerDependencies, scheduledEligibility } from "./runner.js";
-import { AutomationCommandRefusal, createAutomationService, verifiedAutomationExecutable } from "./service.js";
+import { AutomationCommandRefusal, automationNodePath, createAutomationService, verifiedAutomationExecutable } from "./service.js";
 
 afterEach(removeCommandFixtures);
 
@@ -106,6 +106,51 @@ describe("verifiedAutomationExecutable", () => {
       code: EXIT_CODES.recoveryRequired,
     });
   });
+});
+
+describe("automationNodePath (NEW-144, NEW-204)", () => {
+  /** A package-channel home: `init` from the fixture keg, whose `opt/developer-os` link the fixture creates. */
+  async function packageChannelHome(label: string): Promise<{ readonly fixture: CommandFixture; readonly optNode: string }> {
+    const fixture = await createCommandFixture(label, { bootstrapAvailable: true });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    const result = await runInit(fixture.context, { dryRun: false, assumeYes: true });
+    if (!result.ok) throw new Error(`fixture init failed: ${JSON.stringify(result)}`);
+    return { fixture, optNode: join(fixture.root, "prefix", "opt", "developer-os", "libexec", "fallback", "bundle", "bin", "runtime") };
+  }
+
+  it("names the K2 table's opt Node on a package-channel home, never the Node it runs under", async () => {
+    const { fixture, optNode } = await packageChannelHome("automation-node-opt");
+    const active = JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, "active-release.json"), "utf8")) as { readonly bundleRoot: string };
+    expect(await automationNodePath(fixture.context)).toBe(optNode);
+    expect(await automationNodePath({ ...fixture.context, nodeExecutable: process.execPath })).toBe(optNode);
+    expect(optNode.startsWith(`${active.bundleRoot}/`)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("keeps the Node it runs under (stableNodePath) on a home with no active package-channel tree", async () => {
+    const fixture = await createCommandFixture("automation-node-local");
+    expect(await automationNodePath(fixture.context)).toBe(await stableNodePath(process.execPath));
+    const link = join(fixture.root, "node-link");
+    await nodeFs.symlink(process.execPath, link);
+    expect(await automationNodePath({ ...fixture.context, nodeExecutable: link })).toBe(link);
+  });
+
+  it("refuses automation_node_unavailable when the opt Node is not executable", async () => {
+    const { fixture, optNode } = await packageChannelHome("automation-node-opt-broken");
+    await nodeFs.chmod(await nodeFs.realpath(optNode), 0o600);
+    await expect(automationNodePath(fixture.context)).rejects.toMatchObject({
+      reason: "automation_node_unavailable",
+      code: EXIT_CODES.capabilityUnavailable,
+      paths: [optNode],
+    });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses an unreadable active release tree as exit 6, never falling back to the running Node", async () => {
+    const { fixture } = await packageChannelHome("automation-node-tree-invalid");
+    await nodeFs.writeFile(join(fixture.paths.stateDir, "active-release.json"), '{"schemaVersion":1}');
+    const refusal: unknown = await automationNodePath(fixture.context).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(AutomationCommandRefusal);
+    expect(refusal).toMatchObject({ reason: "active_release_tree_invalid", code: EXIT_CODES.recoveryRequired, recovery: "developer-os doctor" });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
 describe("automation enable pins the brain-garden vendor", () => {
