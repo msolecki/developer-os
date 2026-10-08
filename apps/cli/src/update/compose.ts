@@ -1902,7 +1902,7 @@ class UpdateComposer {
       ...owners.map((owner) => ["owner_update", owner.id, (owner.ref as ImmutableUpdatePlanRefV1).hash, { ...header(owner.id, (owner.ref as ImmutableUpdatePlanRefV1).hash), phase: "planned", nextForwardFoundation: 0, nextExternalEffect: 0, compensationNext: null, compactionNext: null, createdAt: at, updatedAt: at }] as const),
       ...owners.flatMap((owner) => (owner.effect === null ? [] : [["owner_external_effect", owner.effect.plan.id, owner.effect.ref.hash, { ...header(owner.effect.plan.id, owner.effect.ref.hash), phase: "planned", direction: "forward", nextTransition: 0, evidenceHash: null, createdAt: at, updatedAt: at }] as const])),
       ...migrations.map((plan, index) => ["schema_migration", plan.id, (migrationRefs[index] as ImmutableUpdatePlanRefV1).hash, { ...header(plan.id, (migrationRefs[index] as ImmutableUpdatePlanRefV1).hash), phase: "planned", nextForwardFoundation: 0, compensationNext: null, compactionNext: null, createdAt: at, updatedAt: at }] as const),
-      ...states.map(({ kind, plan, ref }) => [kind, plan.id, ref.hash, { ...header(plan.id, ref.hash), kind, phase: "planned", nextTransition: 0, compensationNext: null, createdAt: at, updatedAt: at }] as const),
+      ...states.map(({ kind, plan, ref }) => [kind, plan.id, ref.hash, { ...header(plan.id, ref.hash), kind, phase: "planned", nextTransition: 0, compensationNext: null, reservationReleased: null, createdAt: at, updatedAt: at }] as const),
       ["rollback_payload_state", rollbackState.id, refs.rollbackPayload.hash, initialRollbackPayloadPublicationJournal(rollbackState, at)],
     ];
     return values.map(([kind, id, planHash, value]) => {

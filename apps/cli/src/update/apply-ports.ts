@@ -560,7 +560,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
   const stateHandler = (step: CanonicalStateStepV1 | null, releaseReservation: boolean): UpdateStepHandlerV1<unknown> => ({
     apply: async () => {
       const found = step ?? thirdState("update_state_plan_absent", root);
-      if (releaseReservation) await releaseEmptyReservation(lifecycle, found.plan);
+      if (releaseReservation) await releaseEmptyReservation(state, found);
       return state.apply(found);
     },
     observe: () => state.observe(step ?? thirdState("update_state_plan_absent", root)),
@@ -734,16 +734,11 @@ function validateStateBytes(role: CanonicalStateFilePlanV1["role"], bytes: Uint8
 
 /**
  * §6.4's empty reservation holds no record, so the plan names it absent; its exact empty inode is
- * released before the first transition so the no-replace publication can land.
- * ponytail: the release is unjournaled; a compensated update leaves the reservation absent, which
- * the ephemeral manifest row admits (P5).
+ * released before the first transition so the no-replace publication can land. The state journal
+ * records that inode before the unlink and compensation recreates the empty reservation (NEW-118 (2)).
  */
-async function releaseEmptyReservation(lifecycle: CliLifecycleContext, plan: CanonicalStateFilePlanV1): Promise<void> {
-  if (plan.before.state !== "absent") return;
-  const entry = await lifecycle.fs.lstat(plan.path);
-  if (entry === null) return;
-  if (entry.kind !== "regular_file" || entry.size !== "0" || entry.ownerUid !== lifecycle.effectiveUid || entry.nlink !== 1) return;
-  await unlinkAndSyncParent(lifecycle, entry, plan.path);
+async function releaseEmptyReservation(state: CanonicalStateParticipant, step: CanonicalStateStepV1): Promise<void> {
+  await state.releaseReservation(step);
 }
 
 async function removeUnconsumedPayloads(journals: UpdateParticipantJournalStore, paths: readonly CanonicalAbsolutePathV1[]): Promise<void> {

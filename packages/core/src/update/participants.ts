@@ -748,6 +748,12 @@ export interface UpdateStateParticipantJournalV1<TKind extends UpdateStateLeafKi
   readonly phase: "planned" | "preimage_preserved" | "published" | "verified" | "compensating" | "finalized" | "rolled_back";
   readonly nextTransition: number;
   readonly compensationNext: number | null;
+  /**
+   * D84 K5 (NEW-118 (2)): the exact empty ephemeral reservation the rollback record's publication
+   * released, recorded before its unlink. Compensation recreates the empty `0600` reservation. Null
+   * for every other role and for a record that released nothing.
+   */
+  readonly reservationReleased: { readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 } | null;
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
@@ -840,8 +846,14 @@ export function isRetainedRecordVerification(plan: CanonicalStateFilePlanV1): bo
  */
 export function validateStateParticipantJournal<TKind extends UpdateStateLeafKindV1>(value: unknown, kind: TKind, plan: { readonly id: string; readonly coordinatorId: LifecycleCoordinatorIdV1; readonly retainedVerification?: boolean }, planHash: LowerHexSha256): UpdateStateParticipantJournalV1<TKind> {
   const label = "UpdateStateParticipantJournalV1";
-  const input = exact(value, ["schemaVersion", "kind", "id", "coordinatorId", "planHash", "phase", "nextTransition", "compensationNext", "createdAt", "updatedAt"], label);
+  const input = exact(value, ["schemaVersion", "kind", "id", "coordinatorId", "planHash", "phase", "nextTransition", "compensationNext", "reservationReleased", "createdAt", "updatedAt"], label);
   if (input.kind !== kind) fail(`${label}.kind`);
+  let reservationReleased: UpdateStateParticipantJournalV1["reservationReleased"] = null;
+  if (input.reservationReleased !== null) {
+    if (kind !== "rollback_record_state" || plan.retainedVerification === true) fail(`${label}.reservationReleased: only a publishing rollback record releases the reservation`);
+    const released = exact(input.reservationReleased, ["dev", "ino"], `${label}.reservationReleased`);
+    reservationReleased = { dev: parseUInt64Decimal(released.dev), ino: parseUInt64Decimal(released.ino) };
+  }
   const id = parseLeafPlanId(kind, input.id);
   const { createdAt, updatedAt } = journalHeader(input, plan, planHash, label);
   if (!STATE_JOURNAL_PHASES.includes(input.phase as UpdateStateParticipantJournalV1["phase"])) fail(`${label}.phase`);
@@ -858,7 +870,7 @@ export function validateStateParticipantJournal<TKind extends UpdateStateLeafKin
       (phase === "compensating" && next >= 1 && next <= 3 && compensation !== null && compensation < next) ||
       (phase === "rolled_back" && next <= 3 && compensation === -1);
   if (!legal) fail(`${label}: cursors do not match the phase`);
-  return { schemaVersion: 1, kind, id: id as UpdateLeafPlanIdV1<TKind>, coordinatorId: plan.coordinatorId, planHash: input.planHash as LowerHexSha256, phase, nextTransition: next, compensationNext: compensation, createdAt, updatedAt };
+  return { schemaVersion: 1, kind, id: id as UpdateLeafPlanIdV1<TKind>, coordinatorId: plan.coordinatorId, planHash: input.planHash as LowerHexSha256, phase, nextTransition: next, compensationNext: compensation, reservationReleased, createdAt, updatedAt };
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -314,14 +314,17 @@ export class CanonicalStateParticipant {
     if (journal.phase !== "compensating") {
       // The transition at `reached` may have moved its inode before the journal said so.
       if (reached < 3) await this.backward(plan, reached);
+      if (reached === 0) await this.restoreReservation(plan, journal);
       journal = await this.persist(path, reached === 0 ? { ...journal, phase: "rolled_back", compensationNext: -1 } : { ...journal, phase: "compensating", compensationNext: Math.min(reached, 3) - 1 });
     }
     while (journal.phase === "compensating" && journal.compensationNext !== null && journal.compensationNext >= 0) {
       await this.backward(plan, journal.compensationNext);
       const next = journal.compensationNext - 1;
+      if (next < 0) await this.restoreReservation(plan, journal);
       journal = await this.persist(path, next < 0 ? { ...journal, phase: "rolled_back", compensationNext: -1 } : { ...journal, compensationNext: next });
     }
-    await this.requireInventory(plan, plan.before.state === "present" ? "before" : "missing", "missing", plan.after.state === "present" ? "after" : "missing");
+    // A restored reservation is an empty file no state classifies, so the path reads as third by design.
+    await this.requireInventory(plan, plan.before.state === "present" ? "before" : journal.reservationReleased === null ? "missing" : "third", "missing", plan.after.state === "present" ? "after" : "missing");
     return { state: "compensated" };
   }
 
@@ -365,6 +368,43 @@ export class CanonicalStateParticipant {
       await journals.remove(step.journal.finalPath);
     }
     await journals.remove(step.planRef.path, participantPlanFileHash(step.planRef, step.plan));
+  }
+
+  /**
+   * NEW-118 (2): §6.4's empty reservation holds no record, so the plan names it absent; the no-replace
+   * publication needs the path free. The exact empty inode is journaled before its unlink, and a
+   * resumed intent finishes the unlink only for that inode.
+   */
+  async releaseReservation(step: CanonicalStateStepV1): Promise<void> {
+    const { plan } = step;
+    const journal = await this.openJournal(step);
+    const { fs, effectiveUid } = this.#dependencies;
+    if (plan.role !== "rollback_record" || plan.before.state !== "absent" || journal.phase !== "planned") return;
+    const entry = await fs.lstat(plan.path);
+    if (entry === null) return;
+    const recorded = journal.reservationReleased;
+    if (recorded === null && (entry.kind !== "regular_file" || entry.size !== "0" || entry.ownerUid !== effectiveUid || entry.nlink !== 1)) return;
+    if (recorded !== null && (entry.dev !== recorded.dev || entry.ino !== recorded.ino)) return;
+    if (recorded === null) await this.persist(step.journal.finalPath, { ...journal, reservationReleased: { dev: entry.dev, ino: entry.ino } });
+    await fs.unlinkExact(entry);
+    const parent = await fs.lstat(parentPath(plan.path));
+    if (parent?.kind !== "directory") return refuseParticipant("update_state_parent", plan.path);
+    await fs.syncDirectory(parent);
+  }
+
+  /** Compensation recreates the released empty `0600` reservation before the journal says rolled back. */
+  private async restoreReservation(plan: CanonicalStateFilePlanV1, journal: StateJournal): Promise<void> {
+    if (journal.reservationReleased === null) return;
+    const { fs } = this.#dependencies;
+    const found = await fs.lstat(plan.path);
+    if (found !== null) {
+      if (found.kind !== "regular_file" || found.size !== "0") refuseParticipant("update_state_third", plan.path);
+      return;
+    }
+    const parent = await fs.lstat(parentPath(plan.path));
+    if (parent?.kind !== "directory") return refuseParticipant("update_state_parent", plan.path);
+    await fs.writeExclusive(plan.path, new Uint8Array(0));
+    await fs.syncDirectory(parent);
   }
 
   private async openJournal(step: CanonicalStateStepV1): Promise<StateJournal> {

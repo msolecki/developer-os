@@ -409,9 +409,19 @@ describe("canonical state files", () => {
     expect(updateParticipantDocumentHash("active_release_state", plan)).toBe(updateParticipantDocumentHash("active_release_state", statePlan("active_release")));
   });
 
+  it("records a released reservation only on a publishing rollback record (NEW-118 (2))", () => {
+    const plan = statePlan("rollback_record");
+    const base = { schemaVersion: 1, kind: "rollback_record_state", id: plan.id, coordinatorId, planHash: updateParticipantDocumentHash("rollback_record_state", plan), phase: "planned", nextTransition: 0, compensationNext: null, createdAt: at, updatedAt: at };
+    const released = { dev: "5", ino: "77" };
+    expect(validateStateParticipantJournal({ ...base, reservationReleased: released }, "rollback_record_state", plan, base.planHash).reservationReleased).toEqual(released);
+    expect(() => validateStateParticipantJournal({ ...base, reservationReleased: { dev: "5" } }, "rollback_record_state", plan, base.planHash)).toThrow();
+    expect(() => validateStateParticipantJournal({ ...base, reservationReleased: released }, "rollback_record_state", { ...plan, retainedVerification: true }, base.planHash)).toThrow();
+    expect(() => validateStateParticipantJournal({ ...base, kind: "active_release_state", planHash: updateParticipantDocumentHash("active_release_state", plan), reservationReleased: released }, "active_release_state", plan, updateParticipantDocumentHash("active_release_state", plan))).toThrow();
+  });
+
   it("accepts only the linear transition prefix", () => {
     const plan = statePlan("active_release");
-    const base = { schemaVersion: 1, kind: "active_release_state", id: plan.id, coordinatorId, planHash: updateParticipantDocumentHash("active_release_state", plan), createdAt: at, updatedAt: at };
+    const base = { schemaVersion: 1, kind: "active_release_state", id: plan.id, coordinatorId, planHash: updateParticipantDocumentHash("active_release_state", plan), reservationReleased: null, createdAt: at, updatedAt: at };
     expect(validateStateParticipantJournal({ ...base, phase: "published", nextTransition: 2, compensationNext: null }, "active_release_state", plan, base.planHash).phase).toBe("published");
     expect(validateStateParticipantJournal({ ...base, phase: "compensating", nextTransition: 2, compensationNext: 1 }, "active_release_state", plan, base.planHash).phase).toBe("compensating");
     expect(() => validateStateParticipantJournal({ ...base, phase: "published", nextTransition: 1, compensationNext: null }, "active_release_state", plan, base.planHash)).toThrow();

@@ -367,7 +367,8 @@ function runPublication(plan: BundlePublicationPlanV1, steps: readonly BundlePub
   return steps.reduce((journal, step) => advanceBundlePublicationJournal(plan, journal, step, later), from);
 }
 
-const rootSteps: readonly BundlePublicationStepV1[] = [{ kind: "root_intent" }, { kind: "root_created", dev: u64("5"), ino: u64("60") }, { kind: "root_complete" }];
+const versionSteps: readonly BundlePublicationStepV1[] = [{ kind: "version_directory_intent" }, { kind: "version_directory_created", created: true, dev: u64("5"), ino: u64("59") }];
+const rootSteps: readonly BundlePublicationStepV1[] = [...versionSteps, { kind: "root_intent" }, { kind: "root_created", dev: u64("5"), ino: u64("60") }, { kind: "root_complete" }];
 const createdMetadata = (ino: string): readonly BundlePublicationStepV1[] => [{ kind: "metadata_intent" }, { kind: "metadata_published", dev: u64("9"), ino: u64(ino) }, { kind: "metadata_complete" }];
 
 function verifiedPublication(plan = publishPlan()): BundlePublicationJournalV1 {
@@ -398,7 +399,9 @@ describe("BundlePublicationJournalV1", () => {
 
   it("withdraws a forward create intent with create_refused and refuses it once compensation started", () => {
     const plan = publishPlan();
-    const atRoot = runPublication(plan, [{ kind: "root_intent" }]);
+    const atVersion = runPublication(plan, [{ kind: "version_directory_intent" }]);
+    expect(advanceBundlePublicationJournal(plan, atVersion, { kind: "create_refused" }, later).versionDirectory).toBeNull();
+    const atRoot = runPublication(plan, [...versionSteps, { kind: "root_intent" }]);
     expect(advanceBundlePublicationJournal(plan, atRoot, { kind: "create_refused" }, later).rootWriteState).toBeNull();
     const atEntry = runPublication(plan, [...rootSteps, { kind: "entry_intent" }]);
     expect(advanceBundlePublicationJournal(plan, atEntry, { kind: "create_refused" }, later).entryWriteState).toBeNull();
@@ -417,8 +420,45 @@ describe("BundlePublicationJournalV1", () => {
           : `r${String(journal.compensationRootNext)}`);
       journal = advanceBundlePublicationJournal(plan, journal, { kind: "compensation_step" }, later);
     }
-    expect(walk).toEqual(["m2", "m1", "m0", "m-1", "entry2", "evidence2", "entry1", "evidence1", "entry0", "evidence0", "e-1", "r0", "r-1"]);
+    expect(walk).toEqual(["m2", "m1", "m0", "m-1", "entry2", "evidence2", "entry1", "evidence1", "entry0", "evidence0", "e-1", "r1", "r0", "r-1"]);
     expect(validateBundlePublicationJournal(journal, plan).compensationRootNext).toBe(-1);
+  });
+
+  it("journals releases/<version> before the root: an intent binds a created identity, a reused directory records created false (NEW-118 (1))", () => {
+    const plan = publishPlan();
+    const intent = runPublication(plan, [{ kind: "version_directory_intent" }]);
+    expect([intent.phase, intent.versionDirectory]).toEqual(["root_publishing", { state: "create_intent" }]);
+    // The root needs its parent recorded first, and a created directory needs its intent.
+    expect(() => advanceBundlePublicationJournal(plan, intent, { kind: "root_intent" }, later)).toThrow();
+    expect(() => advanceBundlePublicationJournal(plan, initialBundlePublicationJournal(plan, at), { kind: "version_directory_created", created: true, dev: u64("5"), ino: u64("59") }, later)).toThrow();
+    const reused = runPublication(plan, [{ kind: "version_directory_created", created: false, dev: u64("5"), ino: u64("58") }].map((step) => step as BundlePublicationStepV1));
+    expect(reused.versionDirectory).toEqual({ state: "created", created: false, dev: u64("5"), ino: u64("58") });
+    expect(() => advanceBundlePublicationJournal(plan, intent, { kind: "version_directory_created", created: false, dev: u64("5"), ino: u64("58") }, later)).toThrow();
+    expect(() => advanceBundlePublicationJournal(plan, reused, { kind: "version_directory_intent" }, later)).toThrow();
+  });
+
+  it("removes a created releases/<version> only after the root, and never a reused one (NEW-118 (1))", () => {
+    const plan = publishPlan();
+    const walkOf = (steps: readonly BundlePublicationStepV1[]): string[] => {
+      let journal = runPublication(plan, [...steps, { kind: "compensate" }]);
+      const walk: string[] = [];
+      while (journal.phase !== "rolled_back") {
+        if (journal.phase === "compensating_root") walk.push(`r${String(journal.compensationRootNext)}`);
+        journal = advanceBundlePublicationJournal(plan, journal, { kind: "compensation_step" }, later);
+      }
+      return walk;
+    };
+    expect(walkOf(versionSteps)).toEqual(["r0", "r-1"]);
+    expect(walkOf([{ kind: "version_directory_created", created: false, dev: u64("5"), ino: u64("58") }])).toEqual(["r-1"]);
+    // A never-bound intent has nothing to remove and is dropped at rolled_back.
+    const dropped = (() => {
+      let journal = runPublication(plan, [{ kind: "version_directory_intent" }, { kind: "compensate" }]);
+      while (journal.phase !== "rolled_back") journal = advanceBundlePublicationJournal(plan, journal, { kind: "compensation_step" }, later);
+      return journal;
+    })();
+    expect(dropped.versionDirectory).toBeNull();
+    expect(() => validateBundlePublicationJournal({ ...dropped, versionDirectory: { state: "create_intent" } }, plan)).toThrow();
+    expect(() => validateBundlePublicationJournal({ ...verifyJournalOf(), versionDirectory: { state: "created", created: true, dev: u64("5"), ino: u64("59") } }, verifyPlan())).toThrow();
   });
 
   it("verifies a previous bundle without any mutation cursor and compensates to rolled_back directly", () => {
@@ -470,7 +510,7 @@ describe("forward created/published steps after compensation began, and rolled_b
 
   it("refuses root_created and metadata_published on a compensating publication journal with a leftover intent", () => {
     const plan = publishPlan();
-    const root = compensatePublication(plan, [{ kind: "root_intent" }]);
+    const root = compensatePublication(plan, [...versionSteps, { kind: "root_intent" }]);
     expect(root.rootWriteState?.state).toBe("create_intent");
     expect(() => advanceBundlePublicationJournal(plan, root, { kind: "root_created", dev: u64("5"), ino: u64("97") }, later)).toThrow();
     const metadata = compensatePublication(plan, [...rootSteps, ...entries.flatMap((_, ordinal) => entryCopy((60 + ordinal).toString(10))), { kind: "metadata_intent" }]);
@@ -495,3 +535,7 @@ describe("forward created/published steps after compensation began, and rolled_b
     expect(() => validateBundleSourceJournal({ ...journal, entryWriteState: { ordinal: journal.nextEntry, state: "entry_intent" } }, plan)).toThrow();
   });
 });
+
+function verifyJournalOf(): BundlePublicationJournalV1 {
+  return initialBundlePublicationJournal(verifyPlan(), at);
+}

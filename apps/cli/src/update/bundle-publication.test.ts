@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -268,8 +268,14 @@ async function journalOf(value: Fixture, plan: BundlePublicationPlanV1): Promise
 }
 
 /** After compensation: no target byte remains and only the already retained index survives. */
-async function assertRolledBack(value: Fixture, plan: BundlePublicationPlanV1): Promise<void> {
+/** A new release: the fixture's pre-made `releases/<version>` is removed so the publication creates it. */
+async function newRelease(value: Fixture): Promise<void> {
+  await nodeFs.rmdir(`${value.home}/releases/1.2.0`);
+}
+
+async function assertRolledBack(value: Fixture, plan: BundlePublicationPlanV1, created = true): Promise<void> {
   expect((await journalOf(value, plan)).phase).toBe("rolled_back");
+  expect(await exists(`${value.home}/releases/1.2.0`)).toBe(!created);
   expect(await exists(value.target.bundleRoot)).toBe(false);
   expect(await exists(bundleMetadataPath(value.target, 0))).toBe(false);
   expect(await nodeFs.readFile(bundleMetadataPath(value.target, 1), "utf8")).toBe(metadataContent[1]);
@@ -295,20 +301,68 @@ describe("BundlePublicationParticipant", () => {
     expect(await nodeFs.readdir(bundlePublicationEvidenceDirectory(value.root, publicationId))).toHaveLength(entries.length);
   });
 
-  it("creates an absent releases/<version> directory for a new release and leaves it empty after compensation", async () => {
+  it("creates an absent releases/<version> directory for a new release and removes it, empty, on compensation (NEW-118 (1))", async () => {
     const value = await fixture();
     const versionRoot = `${value.home}/releases/1.2.0`;
-    await nodeFs.rmdir(versionRoot);
+    await newRelease(value);
     const plan = await publishPlan(value);
     await participant(value).apply(plan);
     expect((await nodeFs.stat(versionRoot)).mode & 0o777).toBe(0o700);
+    expect((await journalOf(value, plan)).versionDirectory).toEqual({ state: "created", created: true, ...(await identityOf(versionRoot)) });
     await participant(value).compensate(plan);
     await assertRolledBack(value, plan);
-    expect(await nodeFs.readdir(versionRoot)).toEqual([]);
+  });
+
+  it("reuses an existing releases/<version> directory, records created false, and keeps it on compensation", async () => {
+    const value = await fixture();
+    const plan = await publishPlan(value);
+    await participant(value).apply(plan);
+    expect((await journalOf(value, plan)).versionDirectory).toMatchObject({ state: "created", created: false });
+    await participant(value).compensate(plan);
+    await assertRolledBack(value, plan, false);
+  });
+
+  it("keeps a created releases/<version> that gained a sibling", async () => {
+    const value = await fixture();
+    await newRelease(value);
+    const plan = await publishPlan(value);
+    await participant(value).apply(plan);
+    await nodeFs.mkdir(`${value.home}/releases/1.2.0/darwin-x64`, { mode: 0o700 });
+    await participant(value).compensate(plan);
+    expect(await nodeFs.readdir(`${value.home}/releases/1.2.0`)).toEqual(["darwin-x64"]);
+  });
+
+  it("refuses to remove a created releases/<version> whose identity changed", async () => {
+    const value = await fixture();
+    await newRelease(value);
+    const plan = await publishPlan(value);
+    await participant(value).apply(plan);
+    await nodeFs.rename(`${value.home}/releases/1.2.0`, `${value.home}/releases/moved`);
+    await nodeFs.mkdir(`${value.home}/releases/1.2.0`, { mode: 0o700 });
+    await expect(participant(value).compensate(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await exists(`${value.home}/releases/1.2.0`)).toBe(true);
+  });
+
+  it("records a fresh version directory create that found its path present, so a later pass reuses it with created false", async () => {
+    const value = await fixture();
+    await newRelease(value);
+    const plan = await publishPlan(value);
+    let planted = false;
+    const racing = participant(value, (point) => {
+      if (point === "journal_rewritten" && !planted) {
+        planted = true;
+        mkdirSync(`${value.home}/releases/1.2.0`, { mode: 0o700 });
+      }
+    });
+    await expect(racing.apply(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect((await journalOf(value, plan)).versionDirectory).toBeNull();
+    await participant(value).apply(plan);
+    expect((await journalOf(value, plan)).versionDirectory).toMatchObject({ state: "created", created: false });
   });
 
   it.each(FORWARD_DEATHS)("recovers %s in the compensating direction", async (point) => {
     const value = await fixture();
+    await newRelease(value);
     const plan = await publishPlan(value);
     await expect(participant(value, dieAt(point)).apply(plan)).rejects.toBeInstanceOf(Killed);
     const observation = await participant(value).compensate(plan);
@@ -319,6 +373,7 @@ describe("BundlePublicationParticipant", () => {
   /** Spec 2 §9.4: process death alone never chooses rollback, so a forward journal resumes its microstate. */
   it.each(FORWARD_DEATHS)("resumes %s in the forward direction", async (point) => {
     const value = await fixture();
+    await newRelease(value);
     const plan = await publishPlan(value);
     await expect(participant(value, dieAt(point)).apply(plan)).rejects.toBeInstanceOf(Killed);
     expect((await participant(value).apply(plan)).phase).toBe("verified");
@@ -416,7 +471,7 @@ describe("BundlePublicationParticipant", () => {
     await participant(value).apply(plan);
     await expect(participant(value, dieAt("compensation_step")).compensate(plan)).rejects.toBeInstanceOf(Killed);
     await participant(value).compensate(plan);
-    await assertRolledBack(value, plan);
+    await assertRolledBack(value, plan, false);
   });
 
   it("verifies the previous bundle without publishing a byte and compensates to nothing", async () => {
@@ -461,7 +516,7 @@ describe("BundlePublicationParticipant", () => {
     await participant(value).compensate(plan);
     await participant(value).compact(plan);
     expect((await journalOf(value, plan)).phase).toBe("rolled_back");
-    await assertRolledBack(value, plan);
+    await assertRolledBack(value, plan, false);
   });
 
   it("refuses a present target root, a source that is not ready, and a tampered source plan", async () => {
@@ -504,6 +559,6 @@ describe("BundlePublicationParticipant", () => {
     await nodeFs.writeFile(payload, metadataContent[2] as string, { mode: 0o600 });
     await expect(participant(value).apply(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     await participant(value).compensate(plan);
-    await assertRolledBack(value, plan);
+    await assertRolledBack(value, plan, false);
   });
 });

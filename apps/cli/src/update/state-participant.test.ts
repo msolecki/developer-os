@@ -127,7 +127,7 @@ async function stateFixture(role: "release_trust" | "active_release" | "rollback
   const planPath = updateLeafPlanPath(root, kind, id);
   await writeOwned(planPath, updateParticipantDocumentBytes(plan));
   const planHash = updateParticipantDocumentHash(kind, plan);
-  const initial = encoder.encode(encodeCanonicalJson({ schemaVersion: 1, kind, id, coordinatorId, planHash, phase: "planned", nextTransition: 0, compensationNext: null, createdAt: at, updatedAt: at }));
+  const initial = encoder.encode(encodeCanonicalJson({ schemaVersion: 1, kind, id, coordinatorId, planHash, phase: "planned", nextTransition: 0, compensationNext: null, reservationReleased: null, createdAt: at, updatedAt: at }));
   const stagedPath = parseCanonicalAbsolutePathText(`${root}/update/initial-journals/${kind}/${id}.json`);
   await writeOwned(stagedPath, initial);
   const journal = { kind, id, planHash, finalPath: updateParticipantJournalPath(root, kind, id), stagedPath, stagedExpected: { constructionOrdinal: 1, hash: sha(initial), bytes: initial.byteLength, mode: 384 } } as UpdateInitialJournalRefV1;
@@ -209,6 +209,53 @@ describe("canonical state participant", () => {
     expect(await read(step.plan.path)).toBe('{"record":"after"}\n');
     await participant.compensate(step);
     expect(await read(step.plan.path)).toBeNull();
+  });
+
+  it("journals the empty reservation it releases and restores it, empty and 0600, on compensation (NEW-118 (2))", async () => {
+    const { step, participant } = await stateFixture("rollback_record", { before: false });
+    await nodeFs.writeFile(step.plan.path, "", { mode: 0o600 });
+    const released = await identityOf(step.plan.path);
+    await participant.releaseReservation(step);
+    await participant.apply(step);
+    expect(JSON.parse((await read(step.journal.finalPath)) ?? "null")).toMatchObject({ reservationReleased: released });
+    expect(await read(step.plan.path)).toBe('{"record":"after"}\n');
+    await participant.compensate(step);
+    const restored = await nodeFs.lstat(step.plan.path);
+    expect([restored.size, restored.mode & 0o777]).toEqual([0, 0o600]);
+    expect(JSON.parse((await read(step.journal.finalPath)) ?? "null")).toMatchObject({ phase: "rolled_back", reservationReleased: released });
+  });
+
+  it("finishes a release whose intent was journaled before the unlink, and restores it when compensated first (NEW-118 (2))", async () => {
+    const resumed = await stateFixture("rollback_record", { before: false });
+    await nodeFs.writeFile(resumed.step.plan.path, "", { mode: 0o600 });
+    const journal = (await resumed.journals.open(resumed.step.journal)) as Record<string, unknown>;
+    await resumed.journals.rewrite(resumed.step.journal.finalPath, { ...journal, reservationReleased: await identityOf(resumed.step.plan.path) });
+    await resumed.participant.releaseReservation(resumed.step);
+    await expect(resumed.participant.apply(resumed.step)).resolves.toEqual({ state: "verified" });
+    expect(await read(resumed.step.plan.path)).toBe('{"record":"after"}\n');
+
+    const compensated = await stateFixture("rollback_record", { before: false });
+    await nodeFs.writeFile(compensated.step.plan.path, "", { mode: 0o600 });
+    const intent = (await compensated.journals.open(compensated.step.journal)) as Record<string, unknown>;
+    await compensated.journals.rewrite(compensated.step.journal.finalPath, { ...intent, reservationReleased: await identityOf(compensated.step.plan.path) });
+    await expect(compensated.participant.compensate(compensated.step)).resolves.toEqual({ state: "compensated" });
+    expect(await read(compensated.step.plan.path)).toBe("");
+  });
+
+  it("releases only the exact empty reservation: a non-empty or foreign inode is a third state (NEW-118 (2))", async () => {
+    const { step, participant, journals } = await stateFixture("rollback_record", { before: false });
+    await nodeFs.writeFile(step.plan.path, "x", { mode: 0o600 });
+    await participant.releaseReservation(step);
+    await expect(participant.apply(step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(JSON.parse((await read(step.journal.finalPath)) ?? "null")).toMatchObject({ reservationReleased: null });
+    expect(await read(step.plan.path)).toBe("x");
+    await nodeFs.rm(step.plan.path);
+    await nodeFs.writeFile(step.plan.path, "", { mode: 0o600 });
+    const journal = (await journals.open(step.journal)) as Record<string, unknown>;
+    await journals.rewrite(step.journal.finalPath, { ...journal, reservationReleased: { dev: "1", ino: "1" } });
+    await participant.releaseReservation(step);
+    await expect(participant.apply(step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await read(step.plan.path)).toBe("");
   });
 
   it("verifies a retained record without changing it", async () => {

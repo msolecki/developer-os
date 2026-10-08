@@ -470,6 +470,7 @@ export type {
   BundleMetadataStatePlanV1,
   BundlePublicationJournalV1,
   BundlePublicationPhaseV1,
+  BundleVersionDirectoryStateV1,
   BundlePublicationPlanV1,
   BundlePublicationSourceV1,
   BundlePublicationStepV1,

@@ -260,12 +260,23 @@ export type BundlePublicationPhaseV1 =
   | "compensating_metadata" | "compensating_entries" | "compensating_root"
   | "finalized" | "rolled_back" | "compacting";
 
+/**
+ * D84 K5 (NEW-118 (1)): `releases/<version>` is a journalled structure transition. An intent is
+ * written while the path is absent; `created` is true when this attempt made the directory and
+ * false when a compensated attempt's or another bundle's directory was reused, which compensation
+ * never removes.
+ */
+export type BundleVersionDirectoryStateV1 =
+  | { readonly state: "create_intent" }
+  | ({ readonly state: "created"; readonly created: boolean } & Identity);
+
 export interface BundlePublicationJournalV1 {
   readonly schemaVersion: 1;
   readonly id: SafeReasonCodeV1;
   readonly coordinatorId: LifecycleCoordinatorIdV1;
   readonly planHash: LowerHexSha256;
   readonly phase: BundlePublicationPhaseV1;
+  readonly versionDirectory: BundleVersionDirectoryStateV1 | null;
   readonly nextRootTransition: number;
   readonly rootWriteState: UpdatePublicationStructureWriteStateV1 | null;
   readonly targetRootIdentity: UpdateDirectoryIdentityV1 | null;
@@ -307,6 +318,8 @@ export type BundleSourceStepV1 =
   | { readonly kind: "compaction_step" };
 
 export type BundlePublicationStepV1 =
+  | { readonly kind: "version_directory_intent" }
+  | ({ readonly kind: "version_directory_created"; readonly created: boolean } & Identity)
   | { readonly kind: "root_intent" }
   /** A fresh exclusive create found its path present: the current create intent is withdrawn, so no recovery binds that path. */
   | { readonly kind: "create_refused" }
@@ -340,7 +353,7 @@ const PUBLICATION_FORWARD: readonly BundlePublicationPhaseV1[] = ["planned", "ro
 const SOURCE_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "sourceRoot", "evidenceRoot", "sourceRootBefore", "entries", "inventoryHash", "aggregateBytes", "maximumPlanBytes", "maximumJournalBytes"];
 const SOURCE_JOURNAL_KEYS = ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "nextStructure", "structureIdentities", "structureWriteState", "nextEntry", "entryWriteState", "readyWriteState", "readyIdentity", "compensationNext", "compensationPart", "compensationStructureNext", "compactionNext", "createdAt", "updatedAt"];
 const PUBLICATION_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "action", "target", "source", "targetRootBefore", "metadata", "entries", "inventoryHash", "maximumPlanBytes", "maximumJournalBytes"];
-const PUBLICATION_JOURNAL_KEYS = ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "nextRootTransition", "rootWriteState", "targetRootIdentity", "nextEntry", "entryWriteState", "nextMetadata", "metadataWriteState", "metadataIdentities", "compensationMetadataNext", "compensationNext", "compensationPart", "compensationRootNext", "compactionNext", "createdAt", "updatedAt"];
+const PUBLICATION_JOURNAL_KEYS = ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "versionDirectory", "nextRootTransition", "rootWriteState", "targetRootIdentity", "nextEntry", "entryWriteState", "nextMetadata", "metadataWriteState", "metadataIdentities", "compensationMetadataNext", "compensationNext", "compensationPart", "compensationRootNext", "compactionNext", "createdAt", "updatedAt"];
 const METADATA_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "role", "path", "tombstonePath", "before", "after", "reversal", "maximumPlanBytes", "maximumJournalBytes"];
 const IDENTITY_KEYS = ["version", "releaseSequence", "releaseIdentityHash", "delegationSequence", "delegationHash", "releaseIndexSequence", "releaseIndexHash", "bundleManifestHash", "bundleRoot", "platform", "architecture", "launcherProtocol", "updateProtocol"];
 const READY_KEYS = ["schemaVersion", "coordinatorId", "stagingPlanHash", "sourceRoot", "sourceRootDev", "sourceRootIno", "structureIdentitiesHash", "inventoryHash", "evidenceSetHash", "entryCount", "aggregateBytes"];
@@ -981,6 +994,7 @@ export function initialBundlePublicationJournal(plan: BundlePublicationPlanV1, c
     coordinatorId: plan.coordinatorId,
     planHash: bundlePublicationPlanHash(plan),
     phase: "planned",
+    versionDirectory: null,
     nextRootTransition: 0,
     rootWriteState: null,
     targetRootIdentity: null,
@@ -1007,8 +1021,23 @@ function metadataTop(state: UpdatePublicationMetadataWriteStateV1 | null, next: 
   return state?.state === "published" ? next : next - 1;
 }
 
-function rootTop(journal: BundlePublicationJournalV1): number {
-  return journal.rootWriteState?.state === "created" || journal.targetRootIdentity !== null ? 0 : -1;
+/** The reached structure prefix, in creation order: 0 is `releases/<version>` (only when this attempt made it), 1 is the target root. */
+function publicationStructureTop(journal: BundlePublicationJournalV1): number {
+  if (journal.rootWriteState?.state === "created" || journal.targetRootIdentity !== null) return 1;
+  return journal.versionDirectory?.state === "created" && journal.versionDirectory.created ? 0 : -1;
+}
+
+function checkVersionDirectory(value: unknown, label: string): BundleVersionDirectoryStateV1 | null {
+  if (value === null) return null;
+  const state = record(value, label).state;
+  if (state === "create_intent") {
+    exact(value, ["state"], label);
+    return value as BundleVersionDirectoryStateV1;
+  }
+  if (state !== "created") return fail(`${label}.state`);
+  const input = identity(value, ["state", "created", "dev", "ino"], label);
+  if (typeof input.created !== "boolean") fail(`${label}.created`);
+  return value as BundleVersionDirectoryStateV1;
 }
 
 export function validateBundlePublicationJournal(value: unknown, plan: BundlePublicationPlanV1): BundlePublicationJournalV1 {
@@ -1021,6 +1050,7 @@ export function validateBundlePublicationJournal(value: unknown, plan: BundlePub
   const N = plan.entries.length;
   const nextRoot = integer(input.nextRootTransition, 0, 1, `${label}.nextRootTransition`);
   const rootState = checkStructureState(input.rootWriteState, nextRoot, 1, `${label}.rootWriteState`);
+  const versionDirectory = checkVersionDirectory(input.versionDirectory, `${label}.versionDirectory`);
   const rootIdentity = checkDirectoryIdentities(input.targetRootIdentity === null ? [] : [input.targetRootIdentity], [{ role: "target_bundle_root", path: plan.target.bundleRoot }], `${label}.targetRootIdentity`)[0] ?? null;
   if ((rootIdentity !== null) !== (nextRoot === 1)) fail(`${label}.targetRootIdentity: not the root transition`);
   if (rootIdentity !== null && plan.targetRootBefore.state === "present" && (rootIdentity.dev !== plan.targetRootBefore.dev || rootIdentity.ino !== plan.targetRootBefore.ino)) fail(`${label}.targetRootIdentity: not the planned preimage`);
@@ -1045,12 +1075,15 @@ export function validateBundlePublicationJournal(value: unknown, plan: BundlePub
   const compMetadata = nullableInteger(input.compensationMetadataNext, -1, 2, `${label}.compensationMetadataNext`);
   const compensation = nullableInteger(input.compensationNext, -1, N - 1, `${label}.compensationNext`);
   const part = input.compensationPart === null ? null : oneOf(input.compensationPart, ["entry", "evidence"] as const, `${label}.compensationPart`);
-  const compRoot = nullableInteger(input.compensationRootNext, -1, 0, `${label}.compensationRootNext`);
+  const compRoot = nullableInteger(input.compensationRootNext, -1, 1, `${label}.compensationRootNext`);
   const compaction = nullableInteger(input.compactionNext, 0, N, `${label}.compactionNext`);
   const { createdAt, updatedAt } = checkTimestamps(input, label);
 
   // Verify-only publication never writes, so it has no write state and no compensation cursor.
   if (!publish && (rootState !== null || entryState !== null || metadataState !== null || compMetadata !== null || compensation !== null || compRoot !== null)) fail(`${label}: verify_previous with a mutation cursor`);
+  // Verify-only never creates the directory, and no root or later step exists without the recorded directory.
+  if (!publish && versionDirectory !== null) fail(`${label}: verify_previous with a version directory`);
+  if (publish && (rootState !== null || nextRoot === 1) && versionDirectory?.state !== "created") fail(`${label}.versionDirectory: the root needs its recorded parent`);
   const noCompensation = compMetadata === null && compensation === null && part === null && compRoot === null;
   const clean = noCompensation && compaction === null;
   const rootDone = nextRoot === 1 && rootState === null;
@@ -1060,7 +1093,7 @@ export function validateBundlePublicationJournal(value: unknown, plan: BundlePub
   let legal: boolean;
   switch (phase) {
     case "planned":
-      legal = clean && nextRoot === 0 && rootState === null && nextEntry === 0 && entryState === null && nextMetadata === 0 && updatedAt === createdAt;
+      legal = clean && versionDirectory === null && nextRoot === 0 && rootState === null && nextEntry === 0 && entryState === null && nextMetadata === 0 && updatedAt === createdAt;
       break;
     case "root_publishing":
       legal = clean && publish && nextRoot === 0 && nextEntry === 0 && entryState === null && nextMetadata === 0;
@@ -1082,11 +1115,11 @@ export function validateBundlePublicationJournal(value: unknown, plan: BundlePub
       legal = publish && compaction === null && compMetadata === -1 && compensation !== null && compensation <= entryTop(entryState, nextEntry) && (compensation >= 0) === (part !== null) && compRoot === null;
       break;
     case "compensating_root":
-      legal = publish && compaction === null && compMetadata === -1 && compensation === -1 && part === null && compRoot !== null && compRoot <= rootTop(journal);
+      legal = publish && compaction === null && compMetadata === -1 && compensation === -1 && part === null && compRoot !== null && compRoot <= publicationStructureTop(journal);
       break;
     case "rolled_back":
       // Rolled back clears every write state, as the rollback journals do.
-      legal = compaction === null && rootState === null && entryState === null && metadataState === null && (publish ? compMetadata === -1 && compensation === -1 && part === null && compRoot === -1 : noCompensation);
+      legal = compaction === null && versionDirectory?.state !== "create_intent" && rootState === null && entryState === null && metadataState === null && (publish ? compMetadata === -1 && compensation === -1 && part === null && compRoot === -1 : noCompensation);
       break;
     case "compacting":
       legal = noCompensation && complete && compaction !== null;
@@ -1123,6 +1156,17 @@ export function advanceBundlePublicationJournal(plan: BundlePublicationPlanV1, j
   }
   const rootPath = plan.target.bundleRoot;
   switch (step.kind) {
+    case "version_directory_intent":
+      need(publish && current.versionDirectory === null && (current.phase === "planned" || (current.phase === "root_publishing" && current.rootWriteState === null)));
+      next = { ...base, phase: "root_publishing", versionDirectory: { state: "create_intent" } };
+      break;
+    case "version_directory_created":
+      // A reused directory (`created: false`) has no intent; only a directory this attempt made is bound to one.
+      need(publish && current.rootWriteState === null && (step.created
+        ? current.phase === "root_publishing" && current.versionDirectory?.state === "create_intent"
+        : current.versionDirectory === null && (current.phase === "planned" || current.phase === "root_publishing")));
+      next = { ...base, phase: "root_publishing", versionDirectory: { state: "created", created: step.created, dev: parseUInt64Decimal(step.dev), ino: parseUInt64Decimal(step.ino) } };
+      break;
     case "root_intent":
       need(publish && (current.phase === "planned" || (current.phase === "root_publishing" && current.rootWriteState === null)));
       next = { ...base, phase: "root_publishing", rootWriteState: { ordinal: 0, state: "create_intent" } };
@@ -1152,7 +1196,10 @@ export function advanceBundlePublicationJournal(plan: BundlePublicationPlanV1, j
       // The one current create intent returns to its predecessor; a later pass creates again and refuses again.
       const entry = withdrawEntryIntent(current.entryWriteState);
       // Only a forward publishing phase owns a create intent it may withdraw; compensation consumes its own.
-      if (current.rootWriteState?.state === "create_intent") {
+      if (current.versionDirectory?.state === "create_intent") {
+        need(publish && current.phase === "root_publishing");
+        next = { ...base, versionDirectory: null };
+      } else if (current.rootWriteState?.state === "create_intent") {
         need(publish && current.phase === "root_publishing");
         next = { ...base, rootWriteState: null };
       } else if (entry !== null) {
@@ -1204,10 +1251,13 @@ export function advanceBundlePublicationJournal(plan: BundlePublicationPlanV1, j
         if (at >= 0) {
           const walked = nextEntryCompensation(at, current.compensationPart);
           next = { ...base, compensationNext: walked.at, compensationPart: walked.part };
-        } else next = { ...base, phase: "compensating_root", compensationRootNext: rootTop(current) };
+        } else next = { ...base, phase: "compensating_root", compensationRootNext: publicationStructureTop(current) };
       } else {
         need(current.phase === "compensating_root");
-        next = current.compensationRootNext === 0 ? { ...base, compensationRootNext: -1 } : { ...base, phase: "rolled_back", rootWriteState: null, entryWriteState: null, metadataWriteState: null };
+        // A directory intent that never bound has nothing to remove and is dropped; a recorded directory stays as evidence.
+        next = (current.compensationRootNext as number) >= 0
+          ? { ...base, compensationRootNext: (current.compensationRootNext as number) - 1 }
+          : { ...base, phase: "rolled_back", versionDirectory: current.versionDirectory?.state === "created" ? current.versionDirectory : null, rootWriteState: null, entryWriteState: null, metadataWriteState: null };
       }
       break;
     }
