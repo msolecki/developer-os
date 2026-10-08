@@ -297,6 +297,27 @@ const BOTH_VENDORS = [
 ];
 
 describe("doctor names every instruction artifact", () => {
+  it("warns while any instruction row's productVersion differs from the active release (K8, C1)", async () => {
+    const { fixture } = await install("doctor-instructions-stale", { vendors: ["claude"] });
+    const before = new Uint8Array(await nodeFs.readFile(fixture.paths.manifestFile));
+    const manifest = decodeCanonicalJson(before, MAX_MANIFEST_BYTES) as unknown as InstallationManifestV2;
+    const active = JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, "active-release.json"), "utf8")) as { version: string };
+    const stale = manifest.artifacts.filter((row) => row.kind === "instruction").length;
+    expect(stale).toBeGreaterThan(0);
+    const older = { ...manifest, artifacts: manifest.artifacts.map((row) => (row.kind === "instruction" ? { ...row, productVersion: "0.9.0" } : row)) };
+    const lifecycle = fixture.context.lifecycle;
+    if (lifecycle === undefined) throw new Error("no lifecycle context");
+    await withLifecycleMutation(fixture.context, lifecycle, () => fixture.context.executor.execute({
+      kind: "instructions",
+      mutations: [{ targetPath: fixture.paths.manifestFile, operation: "replace", content: encoder.encode(encodeCanonicalJson(older as unknown as CanonicalJsonValue)), expectedBeforeHash: sha(before) }],
+    }));
+
+    const finding = check(await runDoctorReport(fixture.context), "instructions");
+
+    expect(finding.status).toBe("warn");
+    expect(finding.message).toContain(`workflows not refreshed: ${String(stale)} instruction rows were rendered by a release other than the active ${active.version}; run developer-os init`);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("lists every catalog artifact and each block once per selected vendor, from the hash-verified catalog", async () => {
     const { fixture, home } = await install("doctor-instructions-both", { vendors: ["claude", "codex"] });
 

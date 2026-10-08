@@ -21,6 +21,7 @@ import {
   validateActiveReleaseRecord,
   validateInstructionCatalog,
   validateReleaseTrustState,
+  PACKAGE_CHANNEL_SOURCE_TABLE,
 } from "@developer-os/core";
 import type {
   BootstrapEvidenceSummaryV1,
@@ -676,6 +677,8 @@ async function checkCodexCapabilities(
 export const CODEX_UNTRUSTED_HOOK_MESSAGE = "installed; not observed firing — approve it in Codex if you have not";
 /** A Node upgrade that removes the rendered path makes every hook exit 127, which both vendors ignore. */
 const HOOK_EXECUTABLE_RECOVERY = "developer-os init";
+/** C3: a dead Node under the keg's `opt` link is restored by the package, which `init` cannot do. */
+const HOOK_OPT_NODE_RECOVERY = "brew install developer-os";
 export const MAX_CLAUDE_SETTINGS_BYTES = 1_048_576;
 const CODEX_EXTERNAL_HOOKS = "codex=unknown (config.toml is not read (codex-adapter.md §2.3))";
 const HOUR_MS = 3_600_000;
@@ -771,7 +774,8 @@ interface VendorHooksReport {
   readonly text: string;
   readonly healthy: boolean;
   readonly unfired: boolean;
-  readonly dead: boolean;
+  /** The recovery for a dead hook command; `null` while the command is live. */
+  readonly dead: string | null;
   readonly firing: FiringVerdict;
 }
 
@@ -782,7 +786,7 @@ async function reportVendorHooks(
   installed: InstalledHooks,
 ): Promise<VendorHooksReport> {
   if (installed.state !== "installed") {
-    return { text: `${vendor}=${installed.state}`, healthy: installed.state === "not-installed", unfired: false, dead: false, firing: new Map() };
+    return { text: `${vendor}=${installed.state}`, healthy: installed.state === "not-installed", unfired: false, dead: null, firing: new Map() };
   }
   const lastSeen = new Map<string, number>();
   const { records, recordFailed } = await readHookFiringObservations(stateDirectory, vendor);
@@ -825,7 +829,11 @@ async function reportVendorHooks(
     text: unfired ? `${parts.join(" ")} (${CODEX_UNTRUSTED_HOOK_MESSAGE})` : parts.join(" "),
     healthy: installed.missing.length === 0 && !installed.conflicting && installed.executableLive && !unfired && !recordFailed,
     unfired,
-    dead: !installed.executableLive,
+    dead: installed.executableLive
+      ? null
+      : Object.values(context.packageChannelTable ?? PACKAGE_CHANNEL_SOURCE_TABLE).some((entry) => installed.executable?.startsWith(`${entry.opt}/`) === true)
+        ? HOOK_OPT_NODE_RECOVERY
+        : HOOK_EXECUTABLE_RECOVERY,
   };
 }
 
@@ -858,7 +866,7 @@ function checkProductHooks({ installed, claude, codex }: HookReports): Finding {
   const paths = [installed.claude.path, installed.codex.path].filter((path): path is string => path !== null);
   const finding = (claude.healthy && codex.healthy ? pass : warn)("hooks", `${claude.text}; ${codex.text}`, paths);
   // A dead command fires for nobody, so re-rendering it comes before any trust step.
-  const recovery = claude.dead || codex.dead ? HOOK_EXECUTABLE_RECOVERY : codex.unfired ? CODEX_HOOK_TRUST_STEP : null;
+  const recovery = claude.dead ?? codex.dead ?? (codex.unfired ? CODEX_HOOK_TRUST_STEP : null);
   return recovery === null ? finding : { ...finding, check: { ...finding.check, recovery } };
 }
 
@@ -1368,6 +1376,8 @@ export async function inspectV2Drift(
 interface InstalledCatalog {
   readonly rows: readonly InstructionCatalogRowV1[];
   readonly workflowIds: ReadonlySet<string>;
+  /** The version the active release record names; `null` with no record. */
+  readonly activeVersion: string | null;
 }
 
 /**
@@ -1379,8 +1389,8 @@ async function readInstalledCatalog(
   manifest: InstallationManifestV2,
 ): Promise<InstalledCatalog> {
   const activeBytes = await readBoundedFile(join(paths.stateDir, "active-release.json"), MAX_ACTIVE_RELEASE_BYTES, "the active release record");
-  if (activeBytes === null) return { rows: [], workflowIds: new Set() };
-  const { bundleRoot } = validateActiveReleaseRecord(
+  if (activeBytes === null) return { rows: [], workflowIds: new Set(), activeVersion: null };
+  const { bundleRoot, version: activeVersion } = validateActiveReleaseRecord(
     decodeCanonicalJson(activeBytes, MAX_ACTIVE_RELEASE_BYTES),
     createCanonicalPathEvidence(),
   );
@@ -1393,13 +1403,13 @@ async function readInstalledCatalog(
   );
   const catalogPath = join(bundleRoot, "instructions", "catalog.json");
   const row = manifest.artifacts.find((artifact) => artifact.path === catalogPath);
-  if (row === undefined) return { rows: [], workflowIds };
+  if (row === undefined) return { rows: [], workflowIds, activeVersion };
   const bytes = await readBoundedFile(catalogPath, MAX_CATALOG_BYTES, "the installed instruction catalog");
   if (row.kind !== "file" || row.verification.mode !== "content" || bytes === null || hashBytes(bytes) !== row.verification.installedHash) {
     throw new Error("the installed instruction catalog does not match its manifest record");
   }
   const catalog = validateInstructionCatalog(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), workflowIds);
-  return { rows: catalog.artifacts, workflowIds };
+  return { rows: catalog.artifacts, workflowIds, activeVersion };
 }
 
 function key(category: InstructionCategoryV1, id: string): string {
@@ -1528,7 +1538,7 @@ async function inspectInstructions(
   homes: VendorHomesV1,
 ): Promise<{ readonly finding: Finding; readonly statuses: readonly InstructionStatusV1[] }> {
   const vendors = selectedVendors(config);
-  const catalog = vendors.length === 0 ? { rows: [], workflowIds: new Set<string>() } : await readInstalledCatalog(paths, manifest);
+  const catalog = vendors.length === 0 ? { rows: [], workflowIds: new Set<string>(), activeVersion: null } : await readInstalledCatalog(paths, manifest);
   const findingAt = new Map(vendorFindings.map((finding) => [finding.path, finding]));
   const statuses: InstructionStatusV1[] = [];
   for (const vendor of vendors) {
@@ -1557,14 +1567,25 @@ async function inspectInstructions(
       ),
     };
   }
-  return { statuses, finding: instructionAdvisories(context, statuses, `${String(statuses.length)} instruction artifacts match their record`) };
+  const staleRows = catalog.activeVersion === null
+    ? 0
+    : manifest.artifacts.filter((row) => row.kind === "instruction" && vendors.includes(row.owner as Vendor) && row.productVersion !== catalog.activeVersion).length;
+  return {
+    statuses,
+    finding: instructionAdvisories(context, statuses, `${String(statuses.length)} instruction artifacts match their record`, staleRows === 0 ? null : { rows: staleRows, version: catalog.activeVersion as string }),
+  };
 }
 
 /** `foundation.md` §12.5: a set `CLAUDE_CONFIG_DIR` is not followed, so the managed files are not what Claude reads. */
-function instructionAdvisories(context: CliContext, statuses: readonly InstructionStatusV1[], passMessage: string): Finding {
+function instructionAdvisories(context: CliContext, statuses: readonly InstructionStatusV1[], passMessage: string,
+  stale: { readonly rows: number; readonly version: string } | null = null,
+): Finding {
   const unsupported = statuses.filter((status) => status.state === "unsupported-vendor");
   const heldBack = statuses.filter((status) => status.state === "held-back");
   const warnings = [
+    ...(stale === null
+      ? []
+      : [`workflows not refreshed: ${String(stale.rows)} instruction rows were rendered by a release other than the active ${stale.version}; run developer-os init`]),
     ...(unsupported.length > 0
       ? [`${String(unsupported.length)} instruction artifacts are unsupported by their vendor: ${unsupported.map((status) => `${status.owner} ${status.category}/${status.id}`).join(", ")}`]
       : []),
