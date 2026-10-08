@@ -1663,6 +1663,20 @@ describe("hooks and external-hooks", () => {
     expect(hooks.recovery).toBe("developer-os init");
   });
 
+  it("advises brew install when the hooks name a missing opt Node of a package-channel home", async () => {
+    const fixture = await hooksFixture("doctor-hooks-dead-opt-node");
+    const opt = join(binDirectory, "opt-gone");
+    const entry = { prefix: binDirectory, opt, fallback: "libexec/fallback" };
+    const context = { ...fixture.context, packageChannelTable: { arm64: entry, x64: entry } } as unknown as typeof fixture.context;
+    await plantHooks(fixture, undefined, { node: join(opt, "libexec/fallback/bundle/node"), entrypoint: HOOK_EXECUTABLE.entrypoint });
+
+    const hooks = (await hookFindings(context, await hookReports(context, fixture.paths.stateDir))).map((finding) => finding.check).find((check) => check.id === "hooks");
+
+    expect(hooks?.status).toBe("warn");
+    expect(hooks?.message).toContain("executable=missing");
+    expect(hooks?.recovery).toBe("brew install developer-os");
+  });
+
   it("counts a Codex verb whose only record predates the installed hooks file as not fired", async () => {
     const fixture = await hooksFixture("doctor-hooks-codex-stale");
     await plantCodexHooks(fixture, new Date("2026-09-22T11:30:00.000Z"));
