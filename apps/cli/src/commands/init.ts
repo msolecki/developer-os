@@ -6,6 +6,7 @@ import {
   foldPath,
   hashBytes,
   isBootstrapFoundationTransactionId,
+  LifecycleRecoveryRefusalError,
   serializeConfig,
   success,
   validateChangePlan,
@@ -335,6 +336,24 @@ async function assertV2Undrifted(
     );
   }
   return unchanged;
+}
+
+/**
+ * NEW-123 B: a fresh init beside an `unverified` retained envelope must succeed, yet every gated
+ * mutation refuses that envelope's evidence by design (NEW-99). The entrypoint is written through the
+ * gate, so its refusal there is a warning, not a failed init: `doctor` names the residue and a re-run
+ * of `init` writes the entrypoint once it is cleared.
+ */
+async function installEntrypointBesideEnvelope(context: CliContext): Promise<readonly string[]> {
+  try {
+    await installEntrypoint(context);
+    return [];
+  } catch (error) {
+    if (error instanceof LifecycleRecoveryRefusalError && error.reason === "lifecycle_ledger_finding") {
+      return ["the entrypoint was not written: retained bootstrap evidence blocks it; run developer-os doctor, then init again"];
+    }
+    throw error;
+  }
 }
 
 async function settleExistingV2(
@@ -975,18 +994,18 @@ export async function runInit(
       await dropStaleManifestAnchor(context);
       loadOrCreateRedactionKey(context.paths.stateDir);
       // D53: before the instructions, whose Claude hooks name it.
-      await installEntrypoint(context);
+      const entrypointWarnings = await installEntrypointBesideEnvelope(context);
       /**
        * After the handoff, never inside it (`foundation.md` §12.3): an instruction failure leaves a complete
        * V2 home, and `init` exits with the instruction step's code.
        */
       const selection = options.adapters ?? null;
-      if (selection === null) return success(outcomeResult(outcome), [ADAPTERS_NEXT_STEP]);
+      if (selection === null) return success(outcomeResult(outcome), [...entrypointWarnings, ADAPTERS_NEXT_STEP]);
       const applied = await applyInstructions(context, {
         selection,
         release: await inspectPackagedRelease(bootstrap.packagedRelease),
       });
-      return success(outcomeResult(outcome), applied.warnings);
+      return success(outcomeResult(outcome), [...entrypointWarnings, ...applied.warnings]);
     }
 
     if (manifest?.schemaVersion === 2) {
