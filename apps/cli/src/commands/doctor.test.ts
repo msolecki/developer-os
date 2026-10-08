@@ -308,6 +308,20 @@ describe("runDoctor", () => {
    * a leak actually surfaces: somewhere in the `--json` document the user pipes
    * to a colleague.
    */
+  it("warns, naming the residue advice, when an active release has no entrypoint installed (NEW-123 B)", async () => {
+    const fixture = await createCommandFixture("doctor-entrypoint-missing");
+    await runInit(fixture.context, ACCEPTED);
+    // `doctor` only checks that an active record exists; the fixture's init has no packaged release to activate.
+    await nodeFs.writeFile(join(fixture.paths.stateDir, "active-release.json"), "{}", { mode: 0o600 });
+
+    const result = await runDoctor(fixture.context);
+
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    const check = result.data.checks.find((candidate) => candidate.id === "entrypoint");
+    expect(check?.status).toBe("warn");
+    expect(check?.message).toContain("clear the retained bootstrap residue, then init again");
+  }, 120_000);
+
   it("reports the redaction key as present with its mode, never a byte of it", async () => {
     const fixture = await createCommandFixture("doctor-redaction-key-present");
     await runInit(fixture.context, ACCEPTED);

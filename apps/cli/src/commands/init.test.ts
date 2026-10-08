@@ -4,12 +4,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EXIT_CODES, loadConfig, serializeConfig } from "@developer-os/core";
+import { EXIT_CODES, LifecycleRecoveryRefusalError, loadConfig, serializeConfig } from "@developer-os/core";
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 import { structuredResultVerbs } from "@developer-os/workflow-schema";
 import type * as SecurityModule from "@developer-os/security";
 
-import { runInit } from "./init.js";
+import { isUnverifiedEnvelopeFinding, runInit } from "./init.js";
 import type { InitDependencies } from "./init.js";
 import { createCommandFixture, exists, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "./testing.js";
 import { runUninstall } from "./uninstall.js";
@@ -1002,4 +1002,23 @@ describe("runInit", () => {
 
     expect(result.ok).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("isUnverifiedEnvelopeFinding (NEW-123 B)", () => {
+  const staging = "/synthetic/home/staging";
+  const refusal = (reason: string, path: string): LifecycleRecoveryRefusalError =>
+    new LifecycleRecoveryRefusalError(reason, "developer-os doctor", [path]);
+
+  it("swallows only a ledger finding on an unverified envelope's tx_fi_ staging", () => {
+    expect(isUnverifiedEnvelopeFinding(refusal("lifecycle_ledger_finding", `${staging}/transactions/tx_fi_x_0000000000_f`), staging)).toBe(true);
+  });
+
+  it.each([
+    ["a corrupt non-bootstrap journal", refusal("lifecycle_ledger_finding", "/synthetic/home/state/transactions/tx_abc.json")],
+    ["staging that is not a bootstrap id", refusal("lifecycle_ledger_finding", `${staging}/transactions/tx_${"a".repeat(64)}_0`)],
+    ["another refusal reason", refusal("lifecycle_coordinator_nonce_conflict", `${staging}/transactions/tx_fi_x_0_f`)],
+    ["a foreign error", new Error("boom")],
+  ])("rethrows %s", (_name, error) => {
+    expect(isUnverifiedEnvelopeFinding(error, staging)).toBe(false);
+  });
 });

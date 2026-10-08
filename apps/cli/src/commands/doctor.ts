@@ -925,6 +925,9 @@ async function checkPlatform(context: CliContext): Promise<Finding> {
   }
 }
 
+const activeReleaseExists = (context: CliContext, paths: RuntimePaths): Promise<boolean> =>
+  context.fs.lstat(join(paths.stateDir, "active-release.json")).then(() => true, () => false);
+
 /**
  * D53: how to run the product. Informational only; drift of the file itself is the `drift`
  * check's, and the product never writes shell startup files, so the alias is a suggestion.
@@ -948,7 +951,9 @@ async function checkEntrypoint(context: CliContext, paths: RuntimePaths): Promis
         `run Developer OS with: node ${path}; to shorten it, add alias developer-os='node ${path}' to your shell startup file yourself (Developer OS never edits it)`,
         [path],
       )
-    : pass("entrypoint", "no entrypoint is installed; init --local-release <dir> writes one from a launchable local build", [path]);
+    : await activeReleaseExists(context, paths)
+      ? warn("entrypoint", "an active release exists but no entrypoint is installed: run doctor, clear the retained bootstrap residue, then init again", [path])
+      : pass("entrypoint", "no entrypoint is installed; init --local-release <dir> writes one from a launchable local build", [path]);
 }
 
 async function checkProductHome(

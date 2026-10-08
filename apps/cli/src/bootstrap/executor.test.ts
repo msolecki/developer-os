@@ -543,9 +543,16 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
         if (!resumed.ok) throw new Error(JSON.stringify({ name, resumed, trace: fixture.bootstrapTrace.slice(-30) }));
         expect(terminal).toMatchObject({ phase: "retained", terminalOutcome: "finalized" });
       }
-      // Recovery unlinks nothing of the bootstrap's. The entrypoint step that follows a completed init is its own
-      // gated transaction (allocated `tx_<64 hex>_<n>` id) and cleans up its own backups; `tx_fi_` ids are bootstrap.
-      expect(fixture.transactionUnlinkRequests.filter((path) => !/\/backups\/transactions\/tx_[0-9a-f]{64}_\d+\//u.test(path))).toStrictEqual([]);
+      // Recovery unlinks nothing of the bootstrap's. The entrypoint step after a completed init is its own gated
+      // transaction (one allocated `tx_<64 hex>_<n>` id, never `tx_fi_`): its two mutations leave exactly these four
+      // backup leaves under that single id. The file-system seam does not carry the transaction kind, so the id is
+      // pinned by shape and count.
+      const entrypointUnlinks = fixture.transactionUnlinkRequests.filter((path) => /\/backups\/transactions\/tx_[0-9a-f]{64}_\d+\//u.test(path));
+      expect(new Set(entrypointUnlinks.map((path) => dirname(path))).size).toBeLessThanOrEqual(1);
+      expect(entrypointUnlinks.map((path) => basename(path)).toSorted()).toStrictEqual(
+        entrypointUnlinks.length === 0 ? [] : ["0.bin", "0.bin.tmp", "1.bin", "1.bin.tmp"],
+      );
+      expect(fixture.transactionUnlinkRequests.filter((path) => !entrypointUnlinks.includes(path))).toStrictEqual([]);
       await expect(slotJournals(persisted.value)).resolves.toHaveLength(2);
       if (PRE_PLAN_DEATH_POINTS.has(name)) {
         expect(unverifiedIds.has(String(persisted.value.id))).toBe(false);
