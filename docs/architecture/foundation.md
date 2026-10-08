@@ -1591,6 +1591,19 @@ the other adapter nor the CLI.
 - **Backups.** A pre-existing vendor file's whole-file backup is the content-addressed
   `backups/instruction-<owner>-<sha256>`, reused when identical, admitted by the bookkeeping shape
   (`packages/core/src/lifecycle/bookkeeping.ts` — `INSTRUCTION_BACKUP_NAME`), never restored.
+- **Render source and refresh (Spec 2 K8, NEW-200).** `init` without `--adapters` on an installed
+  `package-channel` home renders from the active release's bundle, never the keg
+  (`apps/cli/src/instructions/active-release.ts` — `readActiveReleaseTree`), so it works after
+  `brew cleanup` and `release_mismatch` does not apply. `update --apply` and
+  `update rollback --apply` run that `init` once the lifecycle is finalized and the global lock is
+  released, from the newly active `<home>/bin/developer-os.mjs`, in a closed environment with a
+  600-second bound (`apps/cli/src/update/refresh.ts` — `refreshActiveRelease`,
+  `REFRESH_TIMEOUT_MS`). A refresh failure never reverts the swap; the command exits with K8's
+  message and `doctor` warns until a later `init` succeeds.
+- **Hook Node (C3).** A `package-channel` home's hooks name Node through the fixed Homebrew `opt`
+  link of the K2 table, so no release swap or retirement changes or breaks a hook; an
+  `unsigned-local` home keeps the Node that ran `init`
+  (`apps/cli/src/instructions/active-release.ts` — `hookNodePath`).
 
 ### 12.4 Detach and `uninstall`
 
@@ -1643,7 +1656,9 @@ the other adapter nor the CLI.
   by `(owner, category, id)`, each `installed`, `drifted`, `missing`, `emulated` (a Codex scoped
   rule), `unsupported-vendor` (a Codex output style) or `held-back`. Any drifted row makes its
   artifact `drifted`. It fails, exit 3, on `drifted`, `missing` or `block_malformed`, and warns on
-  `unsupported-vendor`, `held-back` and a set `CLAUDE_CONFIG_DIR`. Human output follows a
+  `unsupported-vendor`, `held-back` and a set `CLAUDE_CONFIG_DIR`. It also warns `workflows not refreshed` when
+  any instruction row was stamped by a release other than the active one, naming `developer-os init`
+  as the repair (K8, C1). Human output follows a
   non-passing `instructions` check with one `<owner> <category>/<id>: <source>, <state>` line per
   artifact (`apps/cli/src/main.ts` — `renderDoctor`), on success and on failure alike.
 - `held-back` is a Claude category in

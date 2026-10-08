@@ -1103,7 +1103,7 @@ This task supplies the exact sentences. The controller places and words the surr
 - Modify: `docs/superpowers/plans/2026-10-07-task-11b-package-channel.md` Task 14 (VM gate: after `update --apply` and after `update rollback --apply`, `~/.claude/skills/developer-os/hooks/hooks.json` is byte-identical and names `/opt/homebrew/opt/developer-os/libexec/fallback/bundle/bin/node`; the Codex plugin manifest's `version` is the active release)
 
 - [ ] **Step 1: Run the deferred suites on a quiet machine, detached** (no other agent running tests): `nohup npm run check > /tmp/n200-check.log 2>&1 &`, then wait for it with Monitor. Expected: exit 0. Show failures only. Then run `npm run test:pinned-host` and `npm run test:vendor-brain`. Expected: PASS.
-- [ ] **Step 2: `git diff --check` and `git status`** show only the doc changes. Commit them with exact paths:
+- [x] **Step 2: `git diff --check` and `git status`** show only the doc changes (2026-10-08: docs done; Step 1 runs with Task 11b Task 14's suites). Commit them with exact paths:
 
 ```bash
 git add -f docs/superpowers/BACKLOG.md docs/superpowers/plans/2026-10-07-task-11b-package-channel.md docs/superpowers/plans/2026-10-08-new-200-active-release-refresh.md
