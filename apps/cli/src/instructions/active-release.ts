@@ -28,8 +28,18 @@ export interface ActiveReleaseTreeV1 extends ReleaseTreeV1 {
   readonly runtimeEntrypoint: string;
 }
 
-function invalid(path: string): never {
-  throw new InstructionRefusal({ reason: "active_release_tree_invalid", code: EXIT_CODES.recoveryRequired, paths: [path], recovery: "developer-os doctor" });
+function invalid(path: string, cause?: unknown): never {
+  if (cause instanceof InstructionRefusal && cause.reason === "active_release_tree_invalid") throw cause;
+  throw new InstructionRefusal({ reason: "active_release_tree_invalid", code: EXIT_CODES.recoveryRequired, paths: [path], recovery: "developer-os doctor", ...(cause === undefined ? {} : { cause }) });
+}
+
+/** Every failure under `path` (a validator's, an `ELOOP` from a symlink) refuses exit 6, the original kept as `cause`. */
+async function guarded<T>(path: string, read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    return invalid(path, error);
+  }
 }
 
 /**
@@ -40,6 +50,10 @@ function invalid(path: string): never {
  */
 export async function readActiveReleaseTree(context: CliContext): Promise<ActiveReleaseTreeV1 | null> {
   const activePath = join(context.paths.stateDir, "active-release.json");
+  return guarded(activePath, () => readTree(context, activePath));
+}
+
+async function readTree(context: CliContext, activePath: string): Promise<ActiveReleaseTreeV1 | null> {
   const trustBytes = await readNoFollow(join(context.paths.stateDir, "release-trust.json"));
   const activeBytes = await readNoFollow(activePath);
   if (trustBytes === null || activeBytes === null) return null;
@@ -59,12 +73,12 @@ export async function readActiveReleaseTree(context: CliContext): Promise<Active
     runtimeEntrypoint: manifest.runtimeEntrypoint,
     bundleRoot: active.bundleRoot,
     files: [...entries.keys()].filter((path) => RENDERED.test(path.slice(active.bundleRoot.length + 1))).map((relativePath) => ({ relativePath })),
-    readFile: async (path) => {
+    readFile: (path) => guarded(path, async () => {
       const entry = entries.get(path);
       const bytes = entry === undefined ? null : await readNoFollow(path);
       if (entry === undefined || bytes === null || String(bytes.byteLength) !== entry.bytes || hashBytes(bytes) !== entry.sha256) invalid(path);
       return bytes;
-    },
+    }),
   };
 }
 

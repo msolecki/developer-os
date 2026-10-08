@@ -124,8 +124,9 @@ export class InstructionRefusal extends Error {
     readonly paths: readonly string[];
     readonly evidence?: ConflictEvidence | null;
     readonly recovery: string;
+    readonly cause?: unknown;
   }) {
-    super(`${input.reason}: ${input.paths.join(", ")}`);
+    super(`${input.reason}: ${input.paths.join(", ")}`, "cause" in input ? { cause: input.cause } : undefined);
     // failureFrom publishes kindOf(name), so this spelling is what yields the reason code.
     this.name = `${input.reason.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join("")}Error`;
     this.reason = input.reason;
