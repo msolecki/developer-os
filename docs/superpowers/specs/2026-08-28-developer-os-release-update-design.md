@@ -405,7 +405,8 @@ NEW-171.
   fixed `opt` path of K2's table for the active release's architecture,
   `<opt>/libexec/fallback/bundle/<runtimeEntrypoint>`, and never a `releases/<version>` path, so no release
   swap or retirement changes or breaks a hook. An `unsigned-local` home keeps naming the Node that ran
-  `init`. Every launchd plist's `ProgramArguments[0]` follows the same rule (NEW-204, 2026-10-08). The hook exit-2 rule for a release that cannot load is unchanged. Accepted residuals: with the keg
+  `init`. Every launchd plist's `ProgramArguments[0]` follows the same package-channel rule (NEW-204,
+  2026-10-08). The hook exit-2 rule for a release that cannot load is unchanged. Accepted residuals: with the keg
   removed by `brew uninstall` but no `developer-os uninstall`, every hook exits 127, which neither vendor
   blocks on (doctor names `brew install developer-os`); between `brew upgrade` and `update`, hooks run the
   new keg's Node on the active release's code. **The spawn.** The refresh runs only after the update's or

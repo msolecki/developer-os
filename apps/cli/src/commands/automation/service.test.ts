@@ -29,6 +29,9 @@ import { withLifecycleMutation } from "../../lifecycle/mutation-gate.js";
 import { automationStatusPath, parseAutomationStatusRecord } from "../../lifecycle/runtime-records.js";
 import { hostWith, scriptedLaunchd } from "../../lifecycle/testing.js";
 import { entrypointPath } from "../../update/local-release.js";
+import { planRollback } from "../../update/planning.js";
+import { applyRollback } from "../../update/rollback-apply.js";
+import { installUpdatableHome, updateTo } from "../../update/testing.js";
 import { scriptedEffectPorts, scriptedGitRuntime } from "../git/testing.js";
 import { runInit } from "../init.js";
 import { createCommandFixture, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../testing.js";
@@ -120,10 +123,8 @@ describe("automationNodePath (NEW-144, NEW-204)", () => {
 
   it("names the K2 table's opt Node on a package-channel home, never the Node it runs under", async () => {
     const { fixture, optNode } = await packageChannelHome("automation-node-opt");
-    const active = JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, "active-release.json"), "utf8")) as { readonly bundleRoot: string };
     expect(await automationNodePath(fixture.context)).toBe(optNode);
     expect(await automationNodePath({ ...fixture.context, nodeExecutable: process.execPath })).toBe(optNode);
-    expect(optNode.startsWith(`${active.bundleRoot}/`)).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("keeps the Node it runs under (stableNodePath) on a home with no active package-channel tree", async () => {
@@ -153,12 +154,41 @@ describe("automationNodePath (NEW-144, NEW-204)", () => {
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
+/** One scripted launchd per home: its loaded labels are per job, so a shared one leaks between cases. */
+const effectPorts = (launchd: ReturnType<typeof scriptedLaunchd>) => (context: CliLifecycleContext): LifecycleEffectPortsV1 => ({
+  ...scriptedEffectPorts(scriptedGitRuntime(), { on: false })(context),
+  launchd: launchd.ports,
+});
+
+describe("a package-channel home's plists across update and rollback (NEW-204)", () => {
+  it("names the opt Node, so retiring the release the CLI ran under leaves every job current and every plist unchanged", async () => {
+    const launchd = scriptedLaunchd({ clock: () => parseUtcTimestamp("2026-10-08T00:00:00.000Z"), host: hostWith() });
+    const home = await installUpdatableHome("automation-update-retire", "arm64", { effectPorts: effectPorts(launchd) });
+    const { fixture } = home;
+    await nodeFs.mkdir(join(fixture.userHome, "Library", "LaunchAgents"), { recursive: true, mode: 0o700 });
+    await expect(updateTo(home.update(), "1.1.0")).resolves.toMatchObject({ outcome: "applied" });
+    const active = JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, "active-release.json"), "utf8")) as { readonly bundleRoot: string };
+    // In production the CLI runs under the active release's bundled Node, which the rollback below retires.
+    const releaseNode = join(active.bundleRoot, "bin", "runtime");
+    const enabled = await runAutomation({ ...fixture.context, nodeExecutable: releaseNode }, { subcommand: "enable", schedules: ["brain-reindex=daily@02:00", "brain-lint=daily@02:30", "doctor=weekly@mon,03:00"], apply: true });
+    expect(enabled, JSON.stringify(enabled)).toMatchObject({ ok: true, data: { kind: "applied", operation: "automation_enable" } });
+    const userHome = parseCanonicalAbsolutePathText(fixture.userHome);
+    const jobs = ["brain-reindex", "brain-lint", "doctor"] as const;
+    const plistsBefore = await Promise.all(jobs.map((job) => nodeFs.readFile(launchdPlistPath(userHome, job), "utf8")));
+
+    const update = home.update();
+    await expect(applyRollback(update, await planRollback(update))).resolves.toMatchObject({ outcome: "rolled_back" });
+
+    await expect(nodeFs.lstat(releaseNode)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await Promise.all(jobs.map((job) => nodeFs.readFile(launchdPlistPath(userHome, job), "utf8")))).toStrictEqual(plistsBefore);
+    const status = await runAutomation(fixture.context, { subcommand: "status" });
+    expect(status.ok, JSON.stringify(status)).toBe(true);
+    if (!status.ok || status.data.kind !== "status") throw new Error("unreachable");
+    expect(status.data.jobs.filter((job) => job.installed !== "absent").map((job) => [job.job, job.installed])).toStrictEqual(jobs.map((job) => [job, "current"]));
+  }, 900_000);
+});
+
 describe("automation enable pins the brain-garden vendor", () => {
-  /** One scripted launchd per home: its loaded labels are per job, so a shared one leaks between cases. */
-  const effectPorts = (launchd: ReturnType<typeof scriptedLaunchd>) => (context: CliLifecycleContext): LifecycleEffectPortsV1 => ({
-    ...scriptedEffectPorts(scriptedGitRuntime(), { on: false })(context),
-    launchd: launchd.ports,
-  });
   const schedules = ["brain-reindex=daily@02:00", "brain-lint=daily@02:30", "doctor=weekly@mon,03:00", "brain-garden=weekly@sun,17:00"];
 
   async function installEntrypoint(fixture: CommandFixture, lifecycle: CliLifecycleContext): Promise<void> {

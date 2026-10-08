@@ -1604,7 +1604,7 @@ the other adapter nor the CLI.
   link of the K2 table, so no release swap or retirement changes or breaks a hook; an
   `unsigned-local` home keeps the Node that ran `init`
   (`apps/cli/src/instructions/active-release.ts` — `hookNodePath`). The launchd plists' argv[0]
-  follows the same rule, admitted at `automation enable` as an executable regular file (NEW-204,
+  follows the same package-channel rule, admitted at `automation enable` as an executable regular file (NEW-204,
   `apps/cli/src/commands/automation/service.ts` — `automationNodePath`).
 
 ### 12.4 Detach and `uninstall`
