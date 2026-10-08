@@ -2020,14 +2020,14 @@ paths.ts:109-116: `/** Validates the current filesystem snapshot. Task 5 transac
 
 ### SEC-5 · dead-code · SecurityPolicy interface is exported but never implemented or referenced
 
-`packages/security/src/index.ts:190` · removal confidence: high
+`packages/security/src/index.ts` — `SecurityPolicy` (re-pointed 2026-10-08: Task 11b T13 removed lines above it) · removal confidence: high
 
 **Problem.** SecurityPolicy (assertReadable, assertWritable, assertDisjoint, redact, assertCommand) is a Task 4 shape that nothing implements or consumes. ProtectedPathPolicy, CommandPolicy and createGuards replaced it. Only foundation-constraints.md still describes it as if it were live, which suggests an aggregate policy object exists when it does not.
 
 **Evidence.**
 
 ```
-Grep `rg -n "\bSecurityPolicy\b" -g '*.ts' -g '*.md'` finds only packages/security/src/index.ts:190 (`export interface SecurityPolicy {`) and docs/architecture/foundation-constraints.md:189,322 (`the SecurityPolicy interface in Task 4 still return Promise<void>`). No implementation, import or type use exists anywhere.
+Grep `rg -n "\bSecurityPolicy\b" -g '*.ts' -g '*.md'` finds only packages/security/src/index.ts (`export interface SecurityPolicy {`) and docs/architecture/foundation-constraints.md:189,322 (`the SecurityPolicy interface in Task 4 still return Promise<void>`). No implementation, import or type use exists anywhere.
 ```
 
 **Fix.** Delete the interface from index.ts (lines 190-196) and update the two foundation-constraints.md paragraphs to say it was retired.
@@ -2647,7 +2647,7 @@ status.ts:73-74 `const drift = manifest === null ? [] : await inspectManagedDrif
 
 `apps/cli/src/commands/automation/garden.ts:81` · related: NEW-134
 
-**Problem.** `brain lint` groups title duplicates by `perceptualKey(screenControlCharacters(title)).toLowerCase()`. That key applies NFC and strips invisible characters, so 'Café' (NFC) and 'Café' (NFD), or 'Caching' and 'Cach\u200Bing', form one group (lint.ts:691). Index titles are stored raw, because parseNote does not normalize. Garden's `structuralCommands` then regroups lint's findings by `note.title.toLowerCase()`, which splits such a pair into two single-note groups. The single-note branch emits `developer-os brain retire '<path>' --dry-run`. So a duplicate pair that should become one `refactor --merge` suggestion comes out as two retire suggestions, one for each note.
+**Problem.** `brain lint` groups title duplicates by `perceptualKey(screenControlCharacters(title)).toLowerCase()`. That key applies NFC and strips invisible characters, so 'Café' (NFC) and 'Café' (NFD), or 'Caching' and 'Cach\u200Bing' (with a U+200B zero-width space), form one group (lint.ts:691). Index titles are stored raw, because parseNote does not normalize. Garden's `structuralCommands` then regroups lint's findings by `note.title.toLowerCase()`, which splits such a pair into two single-note groups. The single-note branch emits `developer-os brain retire '<path>' --dry-run`. So a duplicate pair that should become one `refactor --merge` suggestion comes out as two retire suggestions, one for each note.
 
 **Evidence.**
 
