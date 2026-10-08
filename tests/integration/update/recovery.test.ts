@@ -21,7 +21,7 @@ import {
   validateUpdateTerminalRetirementPlan,
 } from "@developer-os/core";
 import { runUpdate } from "@developer-os/cli/dist/commands/update/index.js";
-import { exists, removeCommandFixtures } from "@developer-os/cli/dist/commands/testing.js";
+import { exists, inventoryDigest, removeCommandFixtures } from "@developer-os/cli/dist/commands/testing.js";
 import { recoverUpdate } from "@developer-os/cli/dist/update/apply.js";
 import type { CliUpdateContext } from "@developer-os/cli/dist/update/context.js";
 import { planRollback } from "@developer-os/cli/dist/update/planning.js";
@@ -679,5 +679,39 @@ describe("the ephemeral reservations (D72 P5, Review Focus 2)", () => {
 
     expect(await updateTo(home.update(), "1.1.0")).toMatchObject({ outcome: "applied", active: { version: "1.1.0" } });
     expect((await settled(home)).rollback?.previous.version).toBe("1.0.0");
+  }, CASE_TIMEOUT_MS);
+});
+
+describe("a death between the release-directory intent and its mkdir (NEW-118 (1), (2))", () => {
+  it("recovers the release-directory intent after death between intent and mkdir", async () => {
+    const home = await installUpdatableHome("recovery-version-directory-intent", "arm64", { rejectingVersions: ["1.1.0"] });
+    const releases = join(home.fixture.paths.home, "releases");
+    const before = await inventoryDigest(releases);
+    // The journal write that records the intent precedes the mkdir; the process dies before the directory exists.
+    const lifecycle = home.fixture.context.lifecycle;
+    if (lifecycle === undefined) throw new Error("the fixture has no lifecycle ports");
+    let died = false;
+    const fs: Record<string, unknown> = { ...lifecycle.fs };
+    for (const name of ["writeExclusive", "mkdirExclusive", "renameOver", "renameNoReplace", "unlinkExact", "rmdirExactEmpty", "syncDirectory"] as const) {
+      const real = lifecycle.fs[name].bind(lifecycle.fs) as (...args: readonly unknown[]) => Promise<unknown>;
+      fs[name] = async (...args: readonly unknown[]): Promise<unknown> => {
+        if (!died && name === "mkdirExclusive" && String(args[0]).endsWith("/releases/1.1.0")) {
+          died = true;
+          expect(await exists(String(args[0]))).toBe(false);
+        }
+        if (died) throw new SyntheticDeathError();
+        return real(...args);
+      };
+    }
+    const context = { ...home.fixture.context, lifecycle: { ...lifecycle, fs: fs as unknown as typeof lifecycle.fs } };
+    expect(await attempt(updateTo(home.update(context), "1.1.0"), () => died)).toBe("died");
+
+    await recoverUpdate(home.update());
+
+    const settledHome = await settled(home);
+    expect(settledHome.active.version).toBe("1.0.0");
+    expect(await inventoryDigest(releases)).toEqual(before);
+    const reservation = await nodeFs.lstat(join(home.fixture.paths.stateDir, "update-rollback.json"));
+    expect([reservation.size, reservation.mode & 0o777]).toEqual([0, 0o600]);
   }, CASE_TIMEOUT_MS);
 });

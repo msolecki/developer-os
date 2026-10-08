@@ -1,4 +1,5 @@
 import { mkdtempSync, readdirSync, readFileSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
+import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -242,5 +243,17 @@ describe("the target verifier snapshot (NEW-118 (4))", () => {
     const journals = join(home.fixture.paths.stateDir, "lifecycle-journals");
     const causes = readdirSync(journals).filter((name) => /^lc_[0-9a-f]{64}_\d+\.json$/.test(name)).map((name) => (JSON.parse(readFileSync(join(journals, name), "utf8")) as { readonly compensationCause: string | null }).compensationCause);
     expect(causes).toEqual(["update_verifier_rejected"]);
+  }, 900_000);
+});
+
+describe("a compensated update's structures (NEW-118 (1), (2))", () => {
+  afterEach(removeCommandFixtures);
+
+  it("a compensated update removes the release directory it created and restores the empty reservation (NEW-118 (1), (2))", async () => {
+    const home = await installUpdatableHome("compensated-structures", "arm64", { rejectingVersions: ["1.1.0"] });
+    await expect(updateTo(home.update(), "1.1.0")).resolves.toMatchObject({ outcome: "rolled_back_automatically" });
+    expect(await nodeFs.lstat(join(home.fixture.paths.home, "releases", "1.1.0")).then(() => true, () => false)).toBe(false);
+    const reservation = await nodeFs.lstat(join(home.fixture.paths.stateDir, "update-rollback.json"));
+    expect([reservation.size, reservation.mode & 0o777]).toEqual([0, 0o600]);
   }, 900_000);
 });

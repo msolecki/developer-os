@@ -57,10 +57,11 @@ import {
 } from "./bundle-source.js";
 import type { UpdatePayloadIdentityResolverV1 } from "./state-participant.js";
 
-export type BundlePublicationDeathPointV1 = BundleEntryDeathPointV1 | "root_made" | "metadata_renamed";
+export type BundlePublicationDeathPointV1 = BundleEntryDeathPointV1 | "version_directory_made" | "root_made" | "metadata_renamed";
 
 export const BUNDLE_PUBLICATION_DEATH_POINTS: readonly BundlePublicationDeathPointV1[] = Object.freeze([
   "journal_rewritten",
+  "version_directory_made",
   "root_made",
   "entry_created",
   "entry_written",
@@ -156,7 +157,7 @@ export class BundlePublicationParticipant {
   async #publish(plan: BundlePublicationPlanV1, file: Journal): Promise<void> {
     const source = await this.#stagedSource(plan);
     if ((file.value as BundlePublicationJournalV1).nextRootTransition === 0) {
-      const parent = await this.#versionDirectory(plan);
+      const parent = await this.#versionDirectory(plan, file);
       // Only an intent persisted before this run is a crash frontier; a fresh intent never binds a present path.
       const resumed = (file.value as BundlePublicationJournalV1).rootWriteState;
       if (resumed === null) await this.#advance(plan, file, { kind: "root_intent" });
@@ -206,20 +207,42 @@ export class BundlePublicationParticipant {
   }
 
   /**
-   * D72 addendum: a new release's `releases/<version>` is created no-replace under the retained
-   * `releases` root, or reused when a compensated attempt already made it. It is outside the
-   * coordinator staging root, so it cannot be a construction directory; it is never removed here,
-   * because only the empty directory can remain and the next attempt reuses it.
-   * ponytail: identity is not journaled; a bundle journal structure transition would record it.
+   * D72 addendum, D84 K5 (NEW-118 (1)): a new release's `releases/<version>` is created no-replace
+   * under the retained `releases` root, or reused when a compensated attempt left it or another
+   * bundle of the version shares it. It is outside the coordinator staging root, so it is journaled
+   * here: an intent while the path is absent, then its identity with `created`. Compensation removes
+   * only a directory this attempt created, and only while it is empty under that identity.
    */
-  async #versionDirectory(plan: BundlePublicationPlanV1): Promise<LifecycleGuardedEntryV1> {
+  async #versionDirectory(plan: BundlePublicationPlanV1, file: Journal): Promise<LifecycleGuardedEntryV1> {
     const path = parentPath(plan.target.bundleRoot);
-    if ((await this.#io.fs.lstat(path)) === null) {
-      const releases = await this.#io.ownedDirectory(parentPath(path));
-      await this.#io.fs.mkdirExclusive(path);
-      await this.#io.fs.syncDirectory(releases);
+    const recorded = (file.value as BundlePublicationJournalV1).versionDirectory;
+    if (recorded?.state === "created") return this.#io.ownedDirectory(path, recorded);
+    const releases = await this.#io.ownedDirectory(parentPath(path));
+    let found = await this.#io.fs.lstat(path);
+    if (recorded === null && found !== null) {
+      const reused = await this.#io.ownedDirectory(path);
+      await this.#advance(plan, file, { kind: "version_directory_created", created: false, dev: reused.dev, ino: reused.ino });
+      return reused;
     }
-    return this.#io.ownedDirectory(path);
+    if (recorded === null) await this.#advance(plan, file, { kind: "version_directory_intent" });
+    // A resumed intent binds only the exact empty attempt-created directory; a fresh intent never binds a present path.
+    found = recorded === null ? null : await this.#boundVersionDirectory(plan);
+    if (found === null) {
+      found = await createFresh(() => this.#io.fs.mkdirExclusive(path), () => this.#refuseCreate(plan, file));
+      this.#interrupt("version_directory_made");
+    }
+    await this.#io.fs.syncDirectory(releases);
+    await this.#advance(plan, file, { kind: "version_directory_created", created: true, dev: found.dev, ino: found.ino });
+    return this.#io.ownedDirectory(path, found);
+  }
+
+  /** A present path under a `create_intent` binds only the exact empty owned directory; null when absent. */
+  async #boundVersionDirectory(plan: BundlePublicationPlanV1): Promise<LifecycleGuardedEntryV1 | null> {
+    const path = parentPath(plan.target.bundleRoot);
+    const found = await this.#io.fs.lstat(path);
+    if (found === null) return null;
+    if (found.kind !== "directory" || found.ownerUid !== this.#io.uid || found.mode !== 0o700 || !(await this.#io.emptyDirectory(found))) refuseBundle("bundle_unbound", path);
+    return found;
   }
 
   /**
@@ -348,6 +371,10 @@ export class BundlePublicationParticipant {
   }
 
   async #bindIntents(plan: BundlePublicationPlanV1, file: Journal): Promise<void> {
+    if ((file.value as BundlePublicationJournalV1).versionDirectory?.state === "create_intent") {
+      const found = await this.#boundVersionDirectory(plan);
+      if (found !== null) await this.#advance(plan, file, { kind: "version_directory_created", created: true, dev: found.dev, ino: found.ino });
+    }
     if ((file.value as BundlePublicationJournalV1).rootWriteState?.state === "create_intent") {
       const found = await this.#boundRoot(plan);
       if (found !== null) await this.#advance(plan, file, { kind: "root_created", dev: found.dev, ino: found.ino });
@@ -387,7 +414,8 @@ export class BundlePublicationParticipant {
     for (let journal = file.value as BundlePublicationJournalV1; journal.phase.startsWith("compensating_"); journal = file.value as BundlePublicationJournalV1) {
       if (journal.phase === "compensating_metadata") await this.#compensateMetadata(plan, journal);
       else if (journal.phase === "compensating_entries") await this.#compensateEntry(plan, journal);
-      else if (journal.compensationRootNext === 0) {
+      else if (journal.compensationRootNext === 0) await this.#removeVersionDirectory(plan, journal);
+      else if (journal.compensationRootNext === 1) {
         const identity = journal.targetRootIdentity ?? (journal.rootWriteState?.state === "created" ? journal.rootWriteState : null);
         if (identity === null) return refuseBundle("bundle_unbound", plan.target.bundleRoot);
         await this.#io.removeDirectory(plan.target.bundleRoot, identity);
@@ -398,6 +426,17 @@ export class BundlePublicationParticipant {
     const terminal = file.value as BundlePublicationJournalV1;
     if (terminal.phase !== "rolled_back") refuseBundle("bundle_publication_not_compensable", file.path);
     return observe(terminal);
+  }
+
+  /** Only a directory this attempt created, and only while empty: a sibling bundle of the version keeps it. */
+  async #removeVersionDirectory(plan: BundlePublicationPlanV1, journal: BundlePublicationJournalV1): Promise<void> {
+    const recorded = journal.versionDirectory;
+    if (recorded?.state !== "created" || !recorded.created) return;
+    const path = parentPath(plan.target.bundleRoot);
+    const found = await this.#io.fs.lstat(path);
+    if (found === null) return;
+    const directory = await this.#io.ownedDirectory(path, recorded);
+    if (await this.#io.emptyDirectory(directory)) await this.#io.removeDirectory(path, recorded);
   }
 
   async #compensateMetadata(plan: BundlePublicationPlanV1, journal: BundlePublicationJournalV1): Promise<void> {
