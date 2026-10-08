@@ -7,6 +7,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -1216,7 +1217,28 @@ function networkOffences(path: string, source: string): readonly string[] {
   return offences;
 }
 
+/**
+ * `tsc -b` never deletes the output of a removed source, so a stale `dist/*.js` is scanned as
+ * if it shipped. It is reported under its own message, never as a capability finding and never
+ * silently skipped; the fix is to delete the file (or `rm -rf dist` and rebuild).
+ */
+function orphanDistModules(
+  dist: string,
+  srcDir: string,
+  files: readonly string[],
+  hasSource: (path: string) => boolean,
+): readonly string[] {
+  return files
+    .filter((file) => !hasSource(join(srcDir, relative(dist, file).replace(/\.js$/u, ".ts"))))
+    .map((file) => `${file} has no matching source (stale tsc output; delete it or rebuild dist)`);
+}
+
 describe("Foundation boundaries", () => {
+  it("names an orphan dist module under its own message", () => {
+    const orphans = orphanDistModules("/p/dist", "/p/src", ["/p/dist/a.js", "/p/dist/gone/b.js"], (path) => path === "/p/src/a.ts");
+    expect(orphans).toStrictEqual(["/p/dist/gone/b.js has no matching source (stale tsc output; delete it or rebuild dist)"]);
+  });
+
   it("ships no network capability", async () => {
     const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -1243,6 +1265,7 @@ describe("Foundation boundaries", () => {
     expect(workspaces).toContain("packages/brain");
 
     const offenders: string[] = [];
+    const orphans: string[] = [];
     const classified: string[] = [];
     const perPackage = new Map<string, number>();
     for (const packageDir of workspaces) {
@@ -1264,6 +1287,9 @@ describe("Foundation boundaries", () => {
         `${dist} contains no compiled modules`,
       ).toBeGreaterThan(0);
 
+      orphans.push(
+        ...orphanDistModules(dist, join(repoRoot, packageDir, "src"), files.map(([path]) => path), existsSync),
+      );
       perPackage.set(packageDir, files.length);
       for (const [path] of files) {
         const source = await readFile(path, "utf8");
@@ -1275,6 +1301,7 @@ describe("Foundation boundaries", () => {
       }
     }
 
+    expect(orphans, "orphan dist modules (not a network finding)").toStrictEqual([]);
     expect(offenders).toStrictEqual([]);
     /** A classification whose file no longer exists admits nothing and should be removed. */
     expect(classified.sort()).toStrictEqual(
