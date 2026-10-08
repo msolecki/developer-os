@@ -90,8 +90,8 @@ boundary was missing that was not.
 ## 2. What is being defended, and against whom
 
 Developer OS is a **local-first CLI on one developer's machine**. There is no server, no account and
-no telemetry, and no network except the explicit `update` plan and apply, which fetch signed release
-metadata and bundles (§5.16, §7). The assets are therefore local and few:
+no telemetry. No product module makes a network request: Homebrew downloads releases, and the
+`update` plan and apply read only the installed package (§5.16, §7). The assets are therefore local and few:
 
 | Asset | Why it matters |
 |---|---|

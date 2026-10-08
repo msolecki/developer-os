@@ -26,9 +26,9 @@ developer-os repair --resume <id>
 developer-os doctor
 ```
 
-## "workflows not refreshed: run developer-os init"
+## Workflows are older than the installed release
 
-An update replaced the release but not the workflows that your agents use. Refresh them:
+An update replaced the release but not the workflows that your agents use. Run `developer-os init` to refresh them:
 
 ```sh
 developer-os init --adapters claude,codex
@@ -38,7 +38,7 @@ Name only the adapters you use.
 
 ## A second install of the same version refuses
 
-`update_release_identity_rebound`: a package with the same version number but different bytes is a security refusal. The product does not switch to it. Uninstall with Homebrew, reinstall, and report it through [SECURITY.md](../../SECURITY.md) if you did not expect it.
+`update_release_identity_rebound` is a security refusal. The installed package has the same version as the release this product home runs, but its bundle bytes differ. The product does not switch to it. Reinstalling the package from the tap, with `brew reinstall developer-os`, restores the bytes the tap publishes. If the refusal persists, do not work around it. Report it through [SECURITY.md](../../SECURITY.md).
 
 ## Reporting
 
