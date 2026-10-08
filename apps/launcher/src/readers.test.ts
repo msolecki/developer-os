@@ -331,6 +331,17 @@ describe("readBootstrapClosure (NEW-111)", () => {
     expect(await readBootstrapClosure(fsOf(oversize), planned.home, UID)).toEqual({ kind: "malformed" });
   });
 
+  it("keeps a slot that vanishes between lstat and read inert, not malformed (NEW-201)", async () => {
+    const path = slotOf(planned, 0);
+    const base = fsOf(planned.files);
+    const racing: LauncherGuardedReaderV1 = {
+      ...base,
+      readRegular: (entry, maximumBytes) =>
+        entry.path === path ? Promise.reject(new Error("ENOENT")) : base.readRegular(entry, maximumBytes),
+    };
+    expect(await readBootstrapClosure(racing, planned.home, UID)).toEqual({ kind: "handoff_complete" });
+  });
+
   it("(1) keeps an envelope incomplete when a death mid-advance tore slot 1 and slot 0 still holds its journal", async () => {
     expect((planned.files[slotOf(planned, 0)] as FakeFile).bytes.byteLength).toBeGreaterThan(0);
     expect(await readBootstrapClosure(fsOf(torn(planned, slotOf(planned, 1))), planned.home, UID)).toEqual({ kind: "non_terminal" });

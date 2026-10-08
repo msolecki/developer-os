@@ -70,7 +70,7 @@ async function readStateFile(
  * `terminal` when its admitted journal reached a terminal phase; `incomplete` when its admitted
  * journal has not, or when both slots are still empty and the bootstrap leaf its plan persisted is
  * the live one (NEW-83); `unverified` for anything that does not admit; `malformed` when a bound
- * slot cannot be read at all (the CLI's `readRegularFile` throws there, e.g. over-size, NEW-201).
+ * slot is over-size (the CLI's `readRegularFile` throws there, NEW-201).
  */
 type EnvelopeStatusV1 = "terminal" | "incomplete" | "unverified" | "malformed";
 
@@ -113,12 +113,10 @@ async function classifyEnvelope(
         slots.push(null);
         continue;
       }
-      let bytes: Uint8Array;
-      try {
-        bytes = await fs.readRegular(entry, BOOTSTRAP_MAX_JOURNAL_BYTES);
-      } catch {
-        return "malformed";
-      }
+      // The CLI's reader throws on an over-size slot: deterministic, so exit 6. Any other read
+      // failure (a slot vanishing or rewritten by a concurrent init) stays inert via the outer catch.
+      if (BigInt(entry.size) > BigInt(BOOTSTRAP_MAX_JOURNAL_BYTES)) return "malformed";
+      const bytes = await fs.readRegular(entry, BOOTSTRAP_MAX_JOURNAL_BYTES);
       try {
         slots.push(decodeCanonicalJson(bytes, BOOTSTRAP_MAX_JOURNAL_BYTES));
       } catch {
