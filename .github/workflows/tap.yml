@@ -1,0 +1,72 @@
+name: tap
+
+# A16 §2 step 7: the founder published a draft release (approval 1). Render the
+# formula from the published assets and open a pull request in the tap. Merging
+# it (approval 2) is the release.
+#
+# Action SHAs were read with `gh api repos/<owner>/<repo>/git/ref/tags/v4` from
+# the actions organisation's own repositories on 2026-10-08 (the `v4` tag).
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  formula:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+      - name: Enable pnpm through corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm --pm-on-fail=ignore build
+      - name: Download, verify and render
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
+          version="${TAG#v}"
+          mkdir "$RUNNER_TEMP/assets"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/assets" \
+            --pattern SHA256SUMS --pattern "developer-os-${version}-darwin-*.tar.gz"
+          (cd "$RUNNER_TEMP/assets" && shasum -a 256 -c SHA256SUMS)
+          node tests/dist/tools/render-formula.js --version "$version" --sums "$RUNNER_TEMP/assets/SHA256SUMS" > "$RUNNER_TEMP/developer-os.rb"
+          ruby -c "$RUNNER_TEMP/developer-os.rb"
+      # Last step, and the only one that sees the tap token: it runs gh and git
+      # on a fresh clone of the tap and nothing from this repository.
+      - name: Open the tap pull request
+        env:
+          GH_TOKEN: ${{ secrets.TAP_PR_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
+          branch="release/${TAG}"
+          gh auth setup-git
+          gh repo clone msolecki/homebrew-developer-os "$RUNNER_TEMP/tap"
+          cd "$RUNNER_TEMP/tap" || exit 1
+          git checkout -b "$branch"
+          mkdir -p Formula
+          cp "$RUNNER_TEMP/developer-os.rb" Formula/developer-os.rb
+          git add Formula/developer-os.rb
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "developer-os ${TAG#v}"
+          git push origin "$branch"
+          gh pr create --repo msolecki/homebrew-developer-os --head "$branch" \
+            --title "developer-os ${TAG#v}" \
+            --body "Release ${TAG}: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
