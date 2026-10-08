@@ -14,6 +14,7 @@ import {
   isPackageChannelTrust,
   isUnsignedLocalTrust,
   ManifestStateError,
+  PACKAGE_CHANNEL_SOURCE_TABLE,
   parseCanonicalAbsolutePathText,
   parseLifecycleInstallNonce,
   parseSafeReasonCode,
@@ -21,7 +22,6 @@ import {
   validateActiveReleaseRecord,
   validateInstructionCatalog,
   validateReleaseTrustState,
-  PACKAGE_CHANNEL_SOURCE_TABLE,
 } from "@developer-os/core";
 import type {
   BootstrapEvidenceSummaryV1,
@@ -724,6 +724,19 @@ async function executableLive(context: CliContext, prefix: string): Promise<bool
   }
 }
 
+/** True only when the hook Node itself sits under a keg `opt` link and is gone; a dead entrypoint is `init`'s to restore. */
+async function optNodeDead(context: CliContext, executable: string | null): Promise<boolean> {
+  const node = executable?.split(" ")[0];
+  if (node === undefined) return false;
+  if (!Object.values(context.packageChannelTable ?? PACKAGE_CHANNEL_SOURCE_TABLE).some((entry) => node.startsWith(`${entry.opt}/`))) return false;
+  try {
+    const stat = await context.fs.stat(node);
+    return !(stat.isFile() && (stat.mode & 0o111) !== 0);
+  } catch {
+    return true;
+  }
+}
+
 async function readInstalledHooks(context: CliContext, vendor: HookVendor): Promise<InstalledHooks> {
   let path: string | null = null;
   try {
@@ -831,7 +844,7 @@ async function reportVendorHooks(
     unfired,
     dead: installed.executableLive
       ? null
-      : Object.values(context.packageChannelTable ?? PACKAGE_CHANNEL_SOURCE_TABLE).some((entry) => installed.executable?.startsWith(`${entry.opt}/`) === true)
+      : (await optNodeDead(context, installed.executable))
         ? HOOK_OPT_NODE_RECOVERY
         : HOOK_EXECUTABLE_RECOVERY,
   };
