@@ -16,17 +16,11 @@ import {
   UNSIGNED_LOCAL_RELEASE_KEY_ID,
   selectRelease,
   validateBundleManifest,
-  validateOfflineReleaseTrust,
   validateReleaseIndex,
   validateReleaseTrustState,
   validateActiveReleaseRecord,
   validateReleaseIdentity,
-  validateReleaseKeyDelegation,
-  validateSignedReleaseDocument,
-  signedReleaseDocumentSigningBytes,
-  parseOfficialReleasePathPrefix,
   parseOfficialReleaseRelativePath,
-  parseLowercaseAsciiDnsName,
   type ReleaseIdentityV1,
   type ReleaseMetadataIdentityV1,
 } from "./release.js";
@@ -94,22 +88,6 @@ describe("release schemas", () => {
     expect(() => validateReleaseIndex({ sequence: "1", latestVersion: "1.0.0", releases: [{ ...entry(), bundles: [arm, bundle("x64")] }] })).toThrow();
   });
 
-  it("admits only the closed offline trust handoff", () => {
-    const publicKey = Buffer.alloc(32, 1).toString("base64url");
-    const input = {
-      schemaVersion: 1,
-      handoffProtocol: 1,
-      onlineRootKeyId: hex(Buffer.alloc(32, 1)),
-      acceptedRoots: [{ role: "online_current", algorithm: "ed25519", keyId: hex(Buffer.alloc(32, 1)), publicKey }],
-      delegationLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-key-delegation-v1.json" },
-      indexLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-index-v1.json" },
-      metadataRedirectOrigins: [{ scheme: "https", host: "github.com", port: 443, pathPrefix: "/msolecki/developer-os/" }],
-    };
-    const trusted = validateOfflineReleaseTrust(input);
-    (input.delegationLocator as { assetName: string }).assetName = "release-index-v1.json";
-    expect(trusted.delegationLocator.assetName).toBe("release-key-delegation-v1.json");
-  });
-
   it("refuses release trust replay and accepts a higher immutable observation", () => {
     const current = validateReleaseTrustState({
       schemaVersion: 1,
@@ -171,16 +149,6 @@ describe("release schemas", () => {
     expect(() => selectRelease(index, { version: parseStableSemver("1.0.0"), active: { ...active, releaseIdentityHash: parseLowerHexSha256(hex("rebound")) } })).toThrow();
   });
 
-  it.each(["xn--bcher-kva.example", "127.0.0.1", "0x7f.1"]) ("refuses non-DNS hostname %s", (host) => {
-    expect(() => validateOfflineReleaseTrust({
-      schemaVersion: 1, handoffProtocol: 1, onlineRootKeyId: hex(Buffer.alloc(32, 1)),
-      acceptedRoots: [{ role: "online_current", algorithm: "ed25519", keyId: hex(Buffer.alloc(32, 1)), publicKey: Buffer.alloc(32, 1).toString("base64url") }],
-      delegationLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-key-delegation-v1.json" },
-      indexLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-index-v1.json" },
-      metadataRedirectOrigins: [{ scheme: "https", host, port: 443, pathPrefix: "/msolecki/developer-os/" }],
-    })).toThrow();
-  });
-
   it("binds a persisted identity to its exact derived root and verified release context", () => {
     const selected = selectRelease(validateReleaseIndex({ sequence: "2", latestVersion: "2.0.0", releases: [entry("1.0.0", "1"), entry("2.0.0", "2")] }), {
       version: parseStableSemver("2.0.0"), active: {
@@ -207,49 +175,6 @@ describe("release schemas", () => {
   });
 
   it.each([
-    ["extra root", { schemaVersion: 1, kind: "index", signed: {}, signatures: [], extra: true }],
-    ["wrong schema", { schemaVersion: 2, kind: "index", signed: {}, signatures: [] }],
-    ["wrong kind", { schemaVersion: 1, kind: "delegation", signed: {}, signatures: [] }],
-    ["two signatures", { schemaVersion: 1, kind: "index", signed: {}, signatures: [{ algorithm: "ed25519", keyId: hash, signature: Buffer.alloc(64).toString("base64url") }, { algorithm: "ed25519", keyId: hash, signature: Buffer.alloc(64).toString("base64url") }] }],
-    ["63 byte signature", { schemaVersion: 1, kind: "index", signed: {}, signatures: [{ algorithm: "ed25519", keyId: hash, signature: Buffer.alloc(63).toString("base64url") }] }],
-    ["65 byte signature", { schemaVersion: 1, kind: "index", signed: {}, signatures: [{ algorithm: "ed25519", keyId: hash, signature: Buffer.alloc(65).toString("base64url") }] }],
-    ["padded signature", { schemaVersion: 1, kind: "index", signed: {}, signatures: [{ algorithm: "ed25519", keyId: hash, signature: `${Buffer.alloc(64).toString("base64url") }=` }] }],
-  ])("refuses signed envelope %s", (_name, document) => {
-    expect(() => validateSignedReleaseDocument(document, "index", (value) => value)).toThrow();
-  });
-  it("admits one exact 64-byte signature and signs only canonical no-LF content", () => {
-    const document = { schemaVersion: 1, kind: "index", signed: { a: 1 }, signatures: [{ algorithm: "ed25519", keyId: hash, signature: Buffer.alloc(64).toString("base64url") }] };
-    expect(validateSignedReleaseDocument(document, "index", (value) => value).signatures).toHaveLength(1);
-    expect(new TextDecoder().decode(signedReleaseDocumentSigningBytes("index", { a: 1 }))).toBe('developer-os/index/v1\0{"a":1}');
-  });
-
-  it.each([
-    ["zero roots", []], ["reversed roots", [{ role: "retained_offline_previous", algorithm: "ed25519", keyId: hex(Buffer.alloc(32, 1)), publicKey: Buffer.alloc(32, 1).toString("base64url") }]],
-  ])("refuses offline root cardinality/role %s", (_name, acceptedRoots) => {
-    expect(() => validateOfflineReleaseTrust({ schemaVersion: 1, handoffProtocol: 1, onlineRootKeyId: hex(Buffer.alloc(32, 1)), acceptedRoots, delegationLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-key-delegation-v1.json" }, indexLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-index-v1.json" }, metadataRedirectOrigins: [{ scheme: "https", host: "github.com", port: 443, pathPrefix: "/msolecki/developer-os/" }] })).toThrow();
-  });
-  it("admits ordered current/previous root rotation and rejects duplicate root ids", () => {
-    const first = Buffer.alloc(32, 1); const second = Buffer.alloc(32, 2);
-    const roots = [
-      { role: "online_current", algorithm: "ed25519", keyId: hex(first), publicKey: first.toString("base64url") },
-      { role: "retained_offline_previous", algorithm: "ed25519", keyId: hex(second), publicKey: second.toString("base64url") },
-    ];
-    const handoff = { schemaVersion: 1, handoffProtocol: 1, onlineRootKeyId: hex(first), acceptedRoots: roots, delegationLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-key-delegation-v1.json" }, indexLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-index-v1.json" }, metadataRedirectOrigins: [{ scheme: "https", host: "github.com", port: 443, pathPrefix: "/msolecki/developer-os/" }] };
-    expect(validateOfflineReleaseTrust(handoff).acceptedRoots).toHaveLength(2);
-    expect(() => validateOfflineReleaseTrust({ ...handoff, acceptedRoots: [roots[0], { ...roots[1], keyId: hex(first) }] })).toThrow();
-  });
-  it.each([["no asset", []], ["five assets", Array.from({ length: 5 }, () => ({ scheme: "https", host: "github.com", port: 443, pathPrefix: "/msolecki/developer-os/" }))]])("refuses delegation asset cardinality %s", (_name, assetOrigins) => {
-    const publicKey = Buffer.alloc(32, 3);
-    expect(() => validateReleaseKeyDelegation({ sequence: "1", releaseKey: { algorithm: "ed25519", keyId: hex(publicKey), publicKey: publicKey.toString("base64url") }, metadataOrigins: [{ scheme: "https", host: "github.com", port: 443, pathPrefix: "/msolecki/developer-os/" }], assetOrigins })).toThrow();
-  });
-
-  it.each([
-    ["trailing dot", "github.com."], ["wildcard", "*.example.com"], ["ipv6", "[::1]"],
-  ])("refuses DNS grammar %s", (_name, host) => {
-    expect(() => validateOfflineReleaseTrust({ schemaVersion: 1, handoffProtocol: 1, onlineRootKeyId: hex(Buffer.alloc(32, 1)), acceptedRoots: [{ role: "online_current", algorithm: "ed25519", keyId: hex(Buffer.alloc(32, 1)), publicKey: Buffer.alloc(32, 1).toString("base64url") }], delegationLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-key-delegation-v1.json" }, indexLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-index-v1.json" }, metadataRedirectOrigins: [{ scheme: "https", host, port: 443, pathPrefix: "/msolecki/developer-os/" }] })).toThrow();
-  });
-
-  it.each([
     ["empty release list", { sequence: "1", latestVersion: "1.0.0", releases: [] }],
     ["latest mismatch", { sequence: "1", latestVersion: "2.0.0", releases: [entry()] }],
     ["numeric semver reversal", { sequence: "1", latestVersion: "2.0.0", releases: [entry("10.0.0", "1"), entry("2.0.0", "2")] }],
@@ -264,10 +189,10 @@ describe("release schemas", () => {
   ])("refuses bundle manifest %s", (_name, mutate) => { expect(() => validateBundleManifest(mutate(validManifest()))).toThrow(); });
 
   it.each([
-    ["prefix 2049", `/${"a".repeat(2047)}/`], ["relative query", "a?b"], ["lower percent", "a%2f"], ["decoded slash", "a%2F"], ["decoded control", "a%00"],
-  ])("refuses closed release prefix grammar %s", (_name, value) => { expect(() => parseOfficialReleasePathPrefix(value)).toThrow(); });
+    ["relative query", "a?b"], ["lower percent", "a%2f"], ["decoded slash", "a%2F"], ["decoded control", "a%00"],
+  ])("refuses closed release path grammar %s", (_name, value) => { expect(() => parseOfficialReleaseRelativePath(value)).toThrow(); });
   it.each([["relative 2049", "a".repeat(2049)], ["fragment", "a#b"], ["dot", "."]])("refuses closed release relative grammar %s", (_name, value) => { expect(() => parseOfficialReleaseRelativePath(value)).toThrow(); });
-  it.each([["prefix segment 129", `/${Array.from({ length: 129 }, () => "a").join("/")}/`], ["relative segment 129", Array.from({ length: 129 }, () => "a").join("/")], ["backslash", "a%5C"], ["dotdot", "%2E%2E"]])("refuses release path structural boundary %s", (_name, value) => { expect(() => parseOfficialReleasePathPrefix(`/${value}/`)).toThrow(); expect(() => parseOfficialReleaseRelativePath(value)).toThrow(); });
+  it.each([["relative segment 129", Array.from({ length: 129 }, () => "a").join("/")], ["backslash", "a%5C"], ["dotdot", "%2E%2E"]])("refuses release path structural boundary %s", (_name, value) => { expect(() => parseOfficialReleaseRelativePath(value)).toThrow(); });
 
   it("admits 10,000 ordered releases and refuses the immediate 10,001st row", () => {
     const compact = (index: number) => ({ version: `0.0.${String(index)}`, releaseSequence: String(index), minimumLauncherProtocol: 1, updateProtocol: 1, bundles: [
@@ -339,46 +264,9 @@ describe("release schemas", () => {
     expect(() => selectRelease(validateReleaseIndex({ sequence: "2", latestVersion: "2.0.0", releases: [entry("1.0.0", "1"), entry("2.0.0", "2")] }), { version: parseStableSemver("1.0.0"), active: identityFixture("2.0.0", "2") })).toThrow("release downgrade");
   });
 
-  it.each(["localhost", "a".repeat(64), Array.from({ length: 128 }, () => "a").join("."), "127.0.0.1", "[::1]"])("refuses DNS boundary %s", (host) => {
-    expect(() => parseLowercaseHost(host)).toThrow();
-  });
-  it("admits DNS 63-byte labels, 253-byte total, and 127 labels", () => {
-    expect(parseLowercaseHost(`${"a".repeat(63)}.com`)).toBe(`${"a".repeat(63)}.com`);
-    expect(parseLowercaseHost(`${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(61)}`)).toHaveLength(253);
-    expect(parseLowercaseHost(Array.from({ length: 127 }, () => "a").join("."))).toHaveLength(253);
-  });
-  it("admits legal LDH names with a numeric final label", () => {
-    expect(parseLowercaseHost("foo.123")).toBe("foo.123");
-    expect(parseLowercaseHost("0xg.example")).toBe("0xg.example");
-  });
-  it.each(["127.0.0.1", "127.1", "0x7f.1", "0177.0.0.1", "2130706433", "0x", "0x.1", "127.0.0x"])("refuses alternate IPv4 spelling %s", (host) => {
-    expect(() => parseLowercaseHost(host)).toThrow();
-  });
-
   it("admits exact URL path bounds and refuses their first overages", () => {
-    expect(parseOfficialReleasePathPrefix(`/${"a".repeat(2046)}/`)).toHaveLength(2048);
     expect(parseOfficialReleaseRelativePath("a".repeat(2048))).toHaveLength(2048);
-    expect(() => parseOfficialReleasePathPrefix(`/${"a".repeat(2047)}/`)).toThrow();
     expect(() => parseOfficialReleaseRelativePath("a".repeat(2049))).toThrow();
-  });
-
-  it.each([
-    ["wrong algorithm", { algorithm: "rsa" }],
-    ["nested extra", { keyId: hash, extra: true }],
-  ])("refuses signed document %s", (_name, mutation) => {
-    const document = { schemaVersion: 1, kind: "index", signed: {}, signatures: [{ algorithm: "ed25519", keyId: hash, signature: Buffer.alloc(64).toString("base64url"), ...mutation }] };
-    expect(() => validateSignedReleaseDocument(document, "index", (value) => value)).toThrow();
-  });
-
-  it.each([1, 4])("admits delegation with %i distinct asset origins", (count) => {
-    const publicKey = Buffer.alloc(32, 8);
-    expect(validateReleaseKeyDelegation({ sequence: "1", releaseKey: { algorithm: "ed25519", keyId: hex(publicKey), publicKey: publicKey.toString("base64url") }, metadataOrigins: [origin("metadata")], assetOrigins: Array.from({ length: count }, (_, index) => origin(`asset-${String(index)}`)) }).assetOrigins).toHaveLength(count);
-  });
-  it.each([
-    ["metadata zero", []], ["metadata two", [origin("one"), origin("two")]], ["duplicate assets", [origin("same"), origin("same")]], ["key id mismatch", [origin("one")]],
-  ])("refuses delegation %s", (_name, metadataOrigins) => {
-    const publicKey = Buffer.alloc(32, 9);
-    expect(() => validateReleaseKeyDelegation({ sequence: "1", releaseKey: { algorithm: "ed25519", keyId: _name === "key id mismatch" ? hash : hex(publicKey), publicKey: publicKey.toString("base64url") }, metadataOrigins: _name === "duplicate assets" || _name === "key id mismatch" ? [origin("metadata")] : metadataOrigins, assetOrigins: _name === "duplicate assets" ? metadataOrigins : [origin("asset")] })).toThrow();
   });
 
   it.each([
@@ -476,20 +364,6 @@ describe("release schemas", () => {
     expect(advanceReleaseTrust(trustAtTwo(), { ...acceptedAtTwo(), releaseIndexSequence: "3", releaseIndexHash: hex("i3") } as never)).toMatchObject({ highestReleaseIndexSequence: "3" });
   });
 
-  it.each([
-    ["three roots", (input: ReturnType<typeof offlineTrustFixture>) => ({ ...input, acceptedRoots: [...input.acceptedRoots, input.acceptedRoots[0]] })],
-    ["mismatched online root key id", (input: ReturnType<typeof offlineTrustFixture>) => ({ ...input, onlineRootKeyId: hash })],
-    ["mismatched locator pairing", (input: ReturnType<typeof offlineTrustFixture>) => ({ ...input, delegationLocator: { ...input.delegationLocator, assetName: "release-index-v1.json" } })],
-  ])("refuses offline trust %s", (_name, mutate) => {
-    expect(() => validateOfflineReleaseTrust(mutate(offlineTrustFixture()))).toThrow();
-  });
-
-  it("keeps offline trust byte limits conjunctive with its root and origin cardinalities", () => {
-    const input = offlineTrustFixture();
-    input.metadataRedirectOrigins = Array.from({ length: 5 }, (_, index) => ({ scheme: "https", host: `a${String(index)}.example`, port: 443, pathPrefix: `/${"a".repeat(2045)}/` }));
-    expect(() => validateOfflineReleaseTrust(input)).toThrow("metadataRedirectOrigins");
-  });
-
   it("enforces the bundle-manifest byte cap independently of its 200,000-row cardinality cap", () => {
     const manifest = validManifest();
     const longEntries = Array.from({ length: 80_000 }, (_, index) => ({ path: `bin/z${String(index).padStart(5, "0")}${"a".repeat(93)}`, kind: "file", mode: 384, bytes: "1", sha256: hash }));
@@ -528,9 +402,6 @@ describe("release schemas", () => {
   });
 
   it.each([
-    ["offline root", () => validateOfflineReleaseTrust({ ...offlineTrustFixture(), extra: true })],
-    ["delegation root", () => validateReleaseKeyDelegation({ ...delegationFixture(), extra: true })],
-    ["delegated key", () => validateReleaseKeyDelegation({ ...delegationFixture(), releaseKey: { ...delegationFixture().releaseKey, extra: true } })],
     ["index root", () => validateReleaseIndex({ ...validateReleaseIndex({ sequence: "1", latestVersion: "1.0.0", releases: [entry()] }), extra: true })],
     ["manifest row", () => validateBundleManifest({ ...validManifest(), entries: [{ ...validManifest().entries[0], extra: true }, ...validManifest().entries.slice(1)] })],
     ["trust root", () => validateReleaseTrustState({ ...trustFixture(), extra: true })],
@@ -579,8 +450,6 @@ function validManifest() {
   return { schemaVersion: 1, version: "1.0.0", releaseSequence: "1", platform: "darwin", architecture: "arm64", launcherProtocol: 1, updateProtocol: 1, entrypoint: "bin/cli", runtimeEntrypoint: "bin/runtime", plannerEntrypoint: "bin/planner", verifierEntrypoint: "bin/verifier", entries: [{ path: "bin", kind: "directory", mode: 448 }, { path: "bin/cli", kind: "file", mode: 448, bytes: "1", sha256: hash }, { path: "bin/planner", kind: "file", mode: 448, bytes: "1", sha256: hash }, { path: "bin/runtime", kind: "file", mode: 448, bytes: "1", sha256: hash }, { path: "bin/verifier", kind: "file", mode: 448, bytes: "1", sha256: hash }] };
 }
 
-function parseLowercaseHost(host: string) { return parseLowercaseAsciiDnsName(host); }
-function origin(host: string) { return { scheme: "https", host: `${host}.example`, port: 443, pathPrefix: "/releases/" }; }
 function identityFixture(version = "1.0.0", sequence = "1") {
   return { version: parseStableSemver(version), releaseSequence: sequence, releaseIdentityHash: releaseIdentityHash(entry(version, sequence), "arm64"), delegationSequence: "1", delegationHash: parseLowerHexSha256(hash), releaseIndexSequence: "1", releaseIndexHash: parseLowerHexSha256(hash), bundleManifestHash: parseLowerHexSha256(hash), bundleRoot: admitCanonicalAbsolutePath(`/product/releases/${version}/darwin-arm64`, evidence), platform: "darwin" as const, architecture: "arm64" as const, launcherProtocol: 1, updateProtocol: 1 } as ReleaseIdentityV1;
 }
@@ -604,14 +473,6 @@ function trustFixture() { return validateReleaseTrustState({ schemaVersion: 1, h
 function acceptedFixture() { return { delegationSequence: "1", delegationHash: hash, delegatedReleaseKeyId: key, releaseIndexSequence: "1", releaseIndexHash: hash, releaseSequence: "1", releaseIdentityHash: hash }; }
 function trustAtTwo() { return validateReleaseTrustState({ schemaVersion: 1, highestDelegationSequence: "2", delegationHash: hex("d2"), delegatedReleaseKeyId: hex("k2"), highestReleaseIndexSequence: "2", releaseIndexHash: hex("i2"), highestAcceptedReleaseSequence: "2", releaseIdentityHash: hex("r2") }); }
 function acceptedAtTwo() { return { delegationSequence: "2", delegationHash: hex("d2"), delegatedReleaseKeyId: hex("k2"), releaseIndexSequence: "2", releaseIndexHash: hex("i2"), releaseSequence: "2", releaseIdentityHash: hex("r2") }; }
-function offlineTrustFixture() {
-  const publicKey = Buffer.alloc(32, 17);
-  return { schemaVersion: 1, handoffProtocol: 1, onlineRootKeyId: hex(publicKey), acceptedRoots: [{ role: "online_current", algorithm: "ed25519", keyId: hex(publicKey), publicKey: publicKey.toString("base64url") }], delegationLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-key-delegation-v1.json" }, indexLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-index-v1.json" }, metadataRedirectOrigins: [origin("redirect")] };
-}
-function delegationFixture() {
-  const publicKey = Buffer.alloc(32, 18);
-  return { sequence: "1", releaseKey: { algorithm: "ed25519", keyId: hex(publicKey), publicKey: publicKey.toString("base64url") }, metadataOrigins: [origin("metadata")], assetOrigins: [origin("asset")] };
-}
 
 function signedTrust() {
   const h = "a".repeat(64);
