@@ -95,7 +95,9 @@ import type {
 import type { CliContext } from "../../context.js";
 import { selectVendor } from "../ingest.js";
 import { stableNodePath } from "../../instructions/apply.js";
-import { compareManifestRows } from "../../instructions/attach.js";
+import { hookNodePath, readActiveReleaseTree } from "../../instructions/active-release.js";
+import type { ActiveReleaseTreeV1 } from "../../instructions/active-release.js";
+import { compareManifestRows, InstructionRefusal } from "../../instructions/attach.js";
 import type { LifecycleExecutionPlanV1, LifecyclePlanPreviewV1 } from "../../lifecycle/codecs.js";
 import { lifecyclePushPlanHash, lifecycleVariantFacts } from "../../lifecycle/codecs.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "../../lifecycle/context.js";
@@ -357,21 +359,33 @@ export async function verifiedAutomationExecutable(
 
 /**
  * NEW-144: launchd's PATH holds neither mise nor Homebrew, and the entrypoint is a mode-0600 module
- * with no shebang, so every plist's argv[0] is the absolute Node this command runs under — Homebrew's
- * version-free `opt` link when it names the same binary (`stableNodePath`). Enable admits it as an
- * executable regular file. Residual: a Node upgrade or move that deletes this path (a mise version
- * directory, a Homebrew Cellar path with no `opt` link) stops every job until `automation enable`
- * runs again; `automation status` reports such a job `node_unavailable`.
+ * with no shebang, so every plist's argv[0] is an absolute Node, admitted at enable as an executable
+ * regular file. NEW-204: a `package-channel` home names it as hooks do (`hookNodePath`, C3) — the K2
+ * table's fixed `opt` link to the active bundle's runtime — so no update, retention or rollback
+ * leaves a job naming a retired release's Node. A home with no active package-channel tree keeps
+ * the Node this command runs under, Homebrew's version-free `opt` link when it names the same binary
+ * (`stableNodePath`). An unreadable tree refuses `active_release_tree_invalid` (exit 6). Residual: a
+ * Node upgrade or move that deletes this path (a mise version directory, a Homebrew Cellar path with
+ * no `opt` link) stops every job until `automation enable` runs again, and a missing `opt` link stops
+ * them until Homebrew relinks it; `automation status` reports such a job `node_unavailable`.
  */
 export async function automationNodePath(context: CliContext): Promise<CanonicalAbsolutePathV1> {
-  const path = await stableNodePath(context.nodeExecutable ?? process.execPath);
+  let tree: ActiveReleaseTreeV1 | null;
+  try {
+    tree = await readActiveReleaseTree(context);
+  } catch (error) {
+    if (!(error instanceof InstructionRefusal)) throw error;
+    return refuse(error.reason, error.code, error.paths, error.recovery);
+  }
+  const path = tree === null ? await stableNodePath(context.nodeExecutable ?? process.execPath) : await hookNodePath(context, tree);
   try {
     const node = parseCanonicalAbsolutePathText(path);
     if (await nodeExecutable(node)) return node;
   } catch {
     // falls through to the refusal: not a canonical absolute path
   }
-  return refuse("automation_node_unavailable", EXIT_CODES.capabilityUnavailable, [path], "run developer-os automation enable under an absolute, executable node");
+  const recovery = tree === null ? "run developer-os automation enable under an absolute, executable node" : "brew reinstall developer-os";
+  return refuse("automation_node_unavailable", EXIT_CODES.capabilityUnavailable, [path], recovery);
 }
 
 async function nodeExecutable(path: string): Promise<boolean> {

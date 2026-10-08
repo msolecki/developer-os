@@ -36,6 +36,7 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-17 | founder, plan 1a blocking questions | A14 (D24) closed variant `uninstall/present_manifest_without_launchd` for a present-manifest uninstall with no launchd evidence, derived and never chosen; A15 (D25) `M(finalize_tombstones)` removes the preimage manifest's empty directory rows before it deletes the manifest tombstone; A16 (D28) the allocated `mf` manifest participant ID is reserved last in a composite's ID block | §2.1, §2.2, §2.4, §5.3, §6, §7 |
 | 2026-09-22 | founder, A13 Q3-A (D47) | `state/hooks` reserved runtime path for hook firing records: owner, admitted shape, best-effort write exception, uninstall order | §2.1, §6 |
 | 2026-09-23 | founder, plan 1b questions (D59) | Git and launchd rows re-pinned to the measured machine (NEW-84); `certification` field; stale launchd row refuses with the manual `bootout` (residual 10); HTTPS and SSH refuse `unsupported_git_distribution` until their process traces are recorded; pinned-host tests | §4.2, §5.3, §7, §8.3 |
+| 2026-10-08 | defect fix (NEW-204), no new decision | on a `package-channel` home `ProgramArguments[0]` names Node through the fixed `opt` link as hooks do (Spec 2 C3), so a release retired by an update or a rollback never strands an enabled job; other homes are unchanged | §5.3 |
 | 2026-10-05 | defect fix (NEW-144), no new decision | `ProgramArguments[0]` is the absolute Node executable and `[1]` the entrypoint (ten arguments): launchd cannot exec the mode-`0600`, shebang-less entrypoint and every job exited `EX_CONFIG` (78); a retained pre-NEW-144 nine-argument plist still parses, so `automation enable --apply` replaces it; both output paths stay the null sink | §5.3 |
 | 2026-10-03 | founder (D82), after NEW-138 | launchd bootstrap by the plan-bound plist path with a pre-spawn identity/byte recheck and a post-bootstrap identity, byte and `launchctl print` verification that boots out on mismatch; the FD-3 snapshot, its creation/attempt types and `/dev/fd/3` argv are withdrawn; only a `keep` arm binds a plist inode (NEW-138) | §5.3 |
 | 2026-09-24 | founder (D61) | backslash handling settled: `GitConfigQuotedPathV1` refuses a backslash, matching Core's `CanonicalAbsolutePathV1` | §4.2 |
@@ -3933,6 +3934,12 @@ entrypoint is a mode-`0600` module with no shebang, so naming it as the program 
 `automation enable --apply` replaces such a plist and disable or uninstall removes it; nothing emits it.
 Residual: a Node upgrade or move that deletes element 0's path stops every job until `automation
 enable` runs again; `automation status` reports such a job `node_unavailable`.
+**Amended 2026-10-08 (NEW-204):** on a `package-channel` home element 0 is the Node hooks name (Spec 2
+K8, C3): `<opt>/libexec/fallback/bundle/<runtimeEntrypoint>` through the fixed Homebrew `opt` link of
+K2's table, never a `releases/<version>` path, so no `update --apply`, retention or `update rollback
+--apply` leaves a job naming a retired release; a missing `opt` link reports `node_unavailable` until
+Homebrew relinks it. An unreadable active release tree refuses enable `active_release_tree_invalid`
+(exit 6). A home with no active `package-channel` tree keeps the rule above.
 `StartCalendarInterval` is one `<dict>`: hourly emits only `Minute`; daily emits `Hour`, then `Minute`;
 weekly emits `Weekday`, then `Hour`, then `Minute`. Integers use unsigned base-10 with no leading zero.
 The weekday map is exactly `sun=0`, `mon=1`, `tue=2`, `wed=3`, `thu=4`, `fri=5`, `sat=6`; the stored

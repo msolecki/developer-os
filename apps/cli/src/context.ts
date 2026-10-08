@@ -223,8 +223,8 @@ export interface CliContext {
    */
   readonly lifecycle?: CliLifecycleContext | undefined;
   /**
-   * The Node binary this process runs under, which every generated launchd plist names as argv[0]
-   * (NEW-144). Absent: `process.execPath`; a test injects a missing or non-executable path.
+   * The Node a launchd plist names as argv[0] on a home with no active package-channel tree (NEW-144;
+   * package-channel: the `opt` Node, NEW-204). Absent: `process.execPath`; a test injects a bad path.
    */
   readonly nodeExecutable?: string | undefined;
   /** The plan-only update ports; absent, `update` binds the production ones from this context. */

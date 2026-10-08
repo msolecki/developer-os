@@ -586,6 +586,10 @@ async function createSyntheticPackagedRelease(
     releases: [{ version: SYNTHETIC_RELEASE_VERSION, releaseSequence: "1", minimumLauncherProtocol: 1, updateProtocol: 1, bundles: [reference("arm64"), reference("x64")] }],
   } as unknown as CanonicalJsonValue;
   const packageRoot = await writePackageChannelRelease({ outDir: join(keg, "libexec", "fallback"), index, manifest, bundleFiles });
+  // `brew install` links the keg at `opt/developer-os`; hooks and launchd plists name Node through it (C3, NEW-204).
+  await nodeFs.mkdir(join(prefix, "opt"), { mode: 0o755 });
+  await nodeFs.chmod(join(prefix, "opt"), 0o755);
+  await nodeFs.symlink(`../Cellar/developer-os/${SYNTHETIC_RELEASE_VERSION}`, join(prefix, "opt", "developer-os"));
   return admitPackageChannelRelease(packageRoot, { prefix: await nodeFs.realpath(prefix), requireVersion: null, architecture });
 }
 
@@ -615,7 +619,7 @@ export async function createCommandFixture(
   const packagedRelease = options.bootstrapAvailable === true
     ? await createSyntheticPackagedRelease(root, options.instructions, options.architecture ?? "arm64")
     : null;
-  // C3: the K2 table over the fixture keg's prefix, the one `createOnDiskReleaseWorld` links `opt/developer-os` in.
+  // C3: the K2 table over the fixture keg's prefix, whose `opt/developer-os` link the synthetic release (or `createOnDiskReleaseWorld`) creates.
   const fixtureTable = (() => {
     const entry = { prefix: join(root, "prefix"), opt: join(root, "prefix", "opt", "developer-os"), fallback: "libexec/fallback" } as const;
     return { arm64: entry, x64: entry } as unknown as typeof PACKAGE_CHANNEL_SOURCE_TABLE;
