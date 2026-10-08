@@ -118,11 +118,11 @@ describe("planUpdate", () => {
     expect(planned.result.outcome === "preview" ? planned.result.plan.target.version : null).toBe("1.1.0");
   });
 
-  it("updates a home with an attached instruction and keeps its row identical (NEW-171)", async () => {
+  it("carries an attached instruction row unchanged, its stamp included; the refresh restamps it (NEW-171, C1 reverses K7 (f))", async () => {
     const fixture = createUpdateFixture({ manifestRows: [syntheticInstructionRow()] });
     const prepared = await prepareUpdate(fixture.update, { version: "1.1.0" as never });
     const row = prepared.apply?.materialized.manifest.artifacts.find((artifact) => artifact.kind === "instruction");
-    expect(row).toMatchObject({ ...syntheticInstructionRow(), productVersion: "1.1.0" });
+    expect(row).toStrictEqual(syntheticInstructionRow());
     expect(fixture.plannerRequests[0]?.manifest.artifacts.some((artifact) => (artifact as { kind: string }).kind === "instruction")).toBe(false);
   });
 

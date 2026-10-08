@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
 import { mkdir, realpath, rm, symlink } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   admitTargetUpdateDraft,
@@ -72,9 +72,10 @@ import type {
   UtcTimestampV1,
 } from "@developer-os/core";
 import { planKeepAllRelease } from "@developer-os/core/planner-protocol";
+import type { ProcessRequest, ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import { runInit } from "../commands/init.js";
-import { createCommandFixture, runnableBundleFiles } from "../commands/testing.js";
+import { createCommandFixture, repositoryWorkflowFiles, runnableBundleFiles } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
 import type { CliContext } from "../context.js";
 import { productionUpdateApplyPorts } from "./apply-ports.js";
@@ -144,6 +145,8 @@ export interface SyntheticReleaseOptionsV1 {
   readonly updateProtocol?: number;
   /** Replaces a bundle file's placeholder bytes, e.g. with a runnable runtime and verifier. */
   readonly files?: (architecture: SyntheticArchitectureV1) => ReadonlyMap<string, Uint8Array>;
+  /** Adds `0600` files beside `BUNDLE_FILES`, e.g. `instructions/` and `workflows/`; their parents become directory entries. */
+  readonly extraFiles?: (architecture: SyntheticArchitectureV1) => ReadonlyMap<string, Uint8Array>;
 }
 
 const BUNDLE_FILES: readonly string[] = ["bin/cli", "bin/planner", "bin/runtime", "bin/verifier"];
@@ -151,6 +154,13 @@ const BUNDLE_FILES: readonly string[] = ["bin/cli", "bin/planner", "bin/runtime"
 function syntheticBundle(version: string, sequence: string, architecture: SyntheticArchitectureV1, options: SyntheticReleaseOptionsV1): SyntheticBundleV1 {
   const replaced = options.files?.(architecture);
   const files = new Map(BUNDLE_FILES.map((path) => [path, replaced?.get(path) ?? encoder.encode(`synthetic ${version} ${architecture} ${path}\n`)]));
+  const extra = options.extraFiles?.(architecture) ?? new Map<string, Uint8Array>();
+  for (const [path, bytes] of extra) files.set(path, bytes);
+  const directories = new Set(["bin"]);
+  for (const path of extra.keys()) {
+    const parts = path.split("/");
+    for (let depth = 1; depth < parts.length; depth += 1) directories.add(parts.slice(0, depth).join("/"));
+  }
   const manifest = validateBundleManifest({
     schemaVersion: 1,
     version,
@@ -164,9 +174,9 @@ function syntheticBundle(version: string, sequence: string, architecture: Synthe
     plannerEntrypoint: "bin/planner",
     verifierEntrypoint: "bin/verifier",
     entries: [
-      { path: "bin", kind: "directory", mode: 448 },
-      ...[...files].map(([path, bytes]) => ({ path, kind: "file", mode: 448, bytes: String(bytes.byteLength), sha256: sha256(bytes) })),
-    ],
+      ...[...directories].map((path) => ({ path, kind: "directory", mode: 448 })),
+      ...[...files].map(([path, bytes]) => ({ path, kind: "file", mode: extra.has(path) ? 384 : 448, bytes: String(bytes.byteLength), sha256: sha256(bytes) })),
+    ].sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
   });
   const manifestBytes = bytesOf(manifest);
   return { manifest, manifestBytes, manifestHash: sha256(manifestBytes), archive: encoder.encode(`synthetic ${version} ${architecture} archive bytes\n`), files };
@@ -776,9 +786,12 @@ export async function createOnDiskReleaseWorld(options: {
   readonly releases: readonly { readonly version: string; readonly sequence: string }[];
   /** Releases whose verifier rejects every update to them. */
   readonly rejectingVersions?: readonly string[];
+  /** Every release also carries `workflows/` and `instructions/` (`releaseTree`), so a refresh renders from it. */
+  readonly instructions?: boolean;
 }): Promise<OnDiskReleaseWorldV1> {
   const files = (version: string) => () => runnableBundleFiles(options.rejectingVersions?.includes(version) === true);
-  const releases = new Map(options.releases.map((spec) => [spec.version, syntheticRelease(spec.version, spec.sequence, { files: files(spec.version) }, options.architecture)]));
+  const tree = options.instructions === true ? await releaseTree() : null;
+  const releases = new Map(options.releases.map((spec) => [spec.version, syntheticRelease(spec.version, spec.sequence, { files: files(spec.version), ...(tree === null ? {} : { extraFiles: () => tree(spec.version) }) }, options.architecture)]));
   const prefix = await realpath(options.prefix);
   for (const release of releases.values()) {
     const libexec = join(prefix, "Cellar", "developer-os", release.version, "libexec");
@@ -787,7 +800,7 @@ export async function createOnDiskReleaseWorld(options: {
       outDir: join(libexec, "fallback"),
       index: { sequence: release.sequence, latestVersion: release.version, releases: [release.entry] } as unknown as CanonicalJsonValue,
       manifest: release.manifest,
-      bundleFiles: [...release.files].map(([relativePath, bytes]) => ({ relativePath, bytes, mode: 0o700 })),
+      bundleFiles: [...release.files].map(([relativePath, bytes]) => ({ relativePath, bytes, mode: release.manifest.entries.some((entry) => entry.path === relativePath && entry.mode === 448) ? 0o700 : 0o600 })),
     });
   }
   const link = join(prefix, "opt", "developer-os");
@@ -847,7 +860,19 @@ const WORLD_OF = new WeakMap<CliUpdateContext, OnDiskReleaseWorldV1>();
  */
 export function onDiskUpdateContext(context: CliContext, world: OnDiskReleaseWorldV1): CliUpdateContext {
   const source = packageSourcePorts(world.ports.readPackageSource);
-  const update: CliUpdateContext = { ...createCliUpdateContext(context), planner: world.ports.planner, readPackageSource: source.readPackageSource, apply: productionUpdateApplyPorts(context, source.fallback) };
+  const update: CliUpdateContext = {
+    ...createCliUpdateContext(context),
+    planner: world.ports.planner,
+    readPackageSource: source.readPackageSource,
+    apply: productionUpdateApplyPorts(context, source.fallback),
+    // K8's child, in process: plain `init` over this context renders from the active bundle (C2).
+    // The synthetic `bin/cli` cannot load a CLI, and the fixture's vendors are invisible to a child.
+    refresh: async () => {
+      // The child is a fresh process: once `brew cleanup` removed the prefix, `bin.ts` admits no keg.
+      const child: CliContext = existsSync(world.prefix) ? context : { ...context, bootstrap: { state: "unavailable_until_packaged_handoff" } };
+      return (await runInit(child, { dryRun: false, assumeYes: true })).code;
+    },
+  };
   WORLD_OF.set(update, world);
   return update;
 }
@@ -865,20 +890,74 @@ export const ON_DISK_RELEASES = [{ version: "1.1.0", sequence: "2" }, { version:
 
 /** The synthetic `claude` an instruction-attaching home discovers; nothing ever spawns it but `--version`. */
 const SYNTHETIC_CLAUDE = "/synthetic/opt/bin/claude";
+/** The synthetic `codex` an instruction-attaching home discovers; `syntheticVendorRunner` answers for it. */
+const SYNTHETIC_CODEX = "/synthetic/opt/bin/codex";
 
-/** One Claude skill the first keg carries, so `init --adapters claude` attaches an instruction row (NEW-171). */
+/** One skill for both vendors the first keg carries, so `init --adapters claude,codex` attaches instruction rows (NEW-171). */
 const SYNTHETIC_INSTRUCTIONS = [
-  { relativePath: "catalog.json", bytes: encoder.encode(`${JSON.stringify({ schemaVersion: 1, artifacts: [{ category: "skill", id: "triage", legacyName: "triage", vendors: ["claude"], thinCommand: false }] })}\n`), mode: 0o600 },
+  { relativePath: "catalog.json", bytes: encoder.encode(`${JSON.stringify({ schemaVersion: 1, artifacts: [{ category: "skill", id: "triage", legacyName: "triage", vendors: ["claude", "codex"], thinCommand: false }] })}\n`), mode: 0o600 },
   { relativePath: "skills/triage/SKILL.md", bytes: encoder.encode("---\nname: triage\ndescription: Triage a defect.\n---\nTriage.\n"), mode: 0o600 },
 ] as const;
+
+/** Release 1.2.0's triage skill: the rendered change an update brings and a rollback takes back (NEW-200). */
+const TRIAGE_1_2_0 = encoder.encode("---\nname: triage\ndescription: Triage a defect.\n---\nTriage, then reproduce.\n");
+
+/** Every release's `workflows/` (the repository's) and `instructions/`; 1.2.0 changes the triage skill. */
+async function releaseTree(): Promise<(version: string) => ReadonlyMap<string, Uint8Array>> {
+  const workflows = (await repositoryWorkflowFiles()).map((file) => [file.relativePath.slice("bundle/".length), file.bytes] as const);
+  return (version) => new Map([
+    ...workflows,
+    ...SYNTHETIC_INSTRUCTIONS.map((file) => [`instructions/${file.relativePath}`, version === "1.2.0" && file.relativePath === "skills/triage/SKILL.md" ? TRIAGE_1_2_0 : file.bytes] as const),
+  ]);
+}
+
+/**
+ * The vendor CLIs a fixture's in-process `init`, `doctor` and `uninstall` run: Claude answers
+ * `--version`; Codex keeps its marketplace and plugin state across calls.
+ */
+function syntheticVendorRunner(pluginRoot: () => string): ProcessRunner {
+  const codex = { marketplace: false, registered: false };
+  const ok = (stdout: string): ProcessResult => ({ stdout, stderr: "", exitCode: 0, signal: null, timedOut: false });
+  return {
+    run(request: ProcessRequest): Promise<ProcessResult> {
+      const argv = request.args.join(" ");
+      if (argv === "--version") return Promise.resolve(ok(request.executable === SYNTHETIC_CODEX ? "codex-cli 0.155.1\n" : "2.1.280 (Claude Code)\n"));
+      switch (argv) {
+        case "plugin list --json":
+          return Promise.resolve(ok(JSON.stringify({ installed: codex.registered ? [{ name: "developer-os", enabled: true, source: { source: "local", path: pluginRoot() } }] : [] })));
+        case "plugin marketplace list":
+          return Promise.resolve(ok(codex.marketplace ? `developer-os  ${dirname(dirname(pluginRoot()))}\n` : "No plugin marketplaces in scope.\n"));
+        case "plugin add developer-os@developer-os --json":
+          codex.registered = true;
+          return Promise.resolve(ok("{}"));
+        case "plugin remove developer-os@developer-os":
+          codex.registered = false;
+          return Promise.resolve(ok(""));
+        case "plugin marketplace remove developer-os":
+          codex.marketplace = false;
+          return Promise.resolve(ok(""));
+        case "debug prompt-input probe":
+          return Promise.resolve(ok(""));
+        default:
+          if (argv.startsWith("plugin marketplace add ")) {
+            codex.marketplace = true;
+            return Promise.resolve(ok(""));
+          }
+          return Promise.reject(new Error(`unexpected spawn: ${argv}`));
+      }
+    },
+  };
+}
 
 /**
  * A real `init` from the prefix's first keg (`1.0.0`, Task 3's `<fixture root>/prefix`), a Brain,
  * and the `ON_DISK_RELEASES` kegs written into that same prefix. With `instructions`, `init
- * --adapters claude` also attaches the keg's one Claude skill as an instruction row.
+ * --adapters claude,codex` also attaches the keg's one skill for both vendors, and every later
+ * keg carries its own `instructions/` and `workflows/` for the K8 refresh to render.
  */
 export async function installUpdatableHome(label: string, architecture: SyntheticArchitectureV1, options: { readonly rejectingVersions?: readonly string[]; readonly instructions?: boolean } = {}): Promise<UpdatableHomeV1> {
   const instructions = options.instructions === true;
+  let pluginRoot = "";
   const fixture = await createCommandFixture(label, {
     bootstrapAvailable: true,
     architecture,
@@ -887,20 +966,17 @@ export async function installUpdatableHome(label: string, architecture: Syntheti
           instructions: SYNTHETIC_INSTRUCTIONS,
           agents: {
             claude: { name: "claude", installed: true, executablePath: SYNTHETIC_CLAUDE, version: null },
-            codex: { name: "codex", installed: false, executablePath: null, version: null },
+            codex: { name: "codex", installed: true, executablePath: SYNTHETIC_CODEX, version: null },
           },
-          runner: {
-            run: (request) => request.args.join(" ") === "--version"
-              ? Promise.resolve({ stdout: "2.1.280 (Claude Code)\n", stderr: "", exitCode: 0, signal: null, timedOut: false })
-              : Promise.reject(new Error(`unexpected spawn: ${request.args.join(" ")}`)),
-          },
+          runner: syntheticVendorRunner(() => pluginRoot),
         }
       : {}),
   });
+  pluginRoot = join(fixture.paths.home, "codex", "plugins", "developer-os");
   await mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
-  const initialized = await runInit(fixture.context, { dryRun: false, assumeYes: true, ...(instructions ? { adapters: ["claude"] as const } : {}) });
+  const initialized = await runInit(fixture.context, { dryRun: false, assumeYes: true, ...(instructions ? { adapters: ["claude", "codex"] as const } : {}) });
   if (!initialized.ok) throw new Error(`fixture init failed: ${JSON.stringify(initialized)}`);
-  const world = await createOnDiskReleaseWorld({ architecture, prefix: join(fixture.root, "prefix"), releases: ON_DISK_RELEASES, ...(options.rejectingVersions === undefined ? {} : { rejectingVersions: options.rejectingVersions }) });
+  const world = await createOnDiskReleaseWorld({ architecture, prefix: join(fixture.root, "prefix"), releases: ON_DISK_RELEASES, instructions, ...(options.rejectingVersions === undefined ? {} : { rejectingVersions: options.rejectingVersions }) });
   const installed = releaseIdentityOf((await createCliUpdateContext(fixture.context).readHome()).active);
   return { fixture, world, installed, update: (context = fixture.context) => onDiskUpdateContext(context, world) };
 }
