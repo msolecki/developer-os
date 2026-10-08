@@ -442,8 +442,8 @@ differently on every invocation: the field would populate, look correct, and mea
   wrong-typed or too-short — every state `doctor` must be able to *report*, which it cannot do if
   building the context already threw. The root warns and falls back to an ephemeral key
   (`apps/cli/src/context.ts` — `EPHEMERAL_KEY_WARNING`), so diagnostics are still redacted on a machine that has never been initialized.
-- `loadOrCreateRedactionKey` (`apps/cli/src/context.ts:683`) is the **point-of-use** door, called by `init` (`init.ts:349`,
-  `:976`, `:1027`, `:1062`) and by `capture`, `review` and `ingest` at their own points of use, and
+- `loadOrCreateRedactionKey` (`apps/cli/src/context.ts:683`) is the **point-of-use** door, called by `init` (`init.ts:375`,
+  `:1002`, `:1053`, `:1088`) and by `capture`, `review` and `ingest` at their own points of use, and
   by `import` except under `--dry-run`. `import --dry-run`, `project init` and `project check` never
   create it: they read it with `readRedactionKey` and fall back to an ephemeral key. It creates
   when absent,
