@@ -1159,7 +1159,7 @@ developer-os uninstall --yes
 ls ~/gate-brain                                              # the Brain is untouched
 ```
 
-Expected: every command exits 0, and each `--version` prints the version noted beside it. Record each command's exit code in the founder log.
+Expected: every command exits 0, and each `--version` prints the version noted beside it. Record each command's exit code in the founder log. **NEW-200 (K8, C3):** after `update --apply` and after `update rollback --apply`, `~/.claude/skills/developer-os/hooks/hooks.json` is byte-identical to its copy before the command and names `/opt/homebrew/opt/developer-os/libexec/fallback/bundle/bin/node`; the Codex plugin manifest's `version` is the active release; `doctor` prints no `workflows not refreshed` warning. **NEW-202:** `init --adapters claude,codex` finds both vendors through the user's `PATH` under the launcher.
 
 - [ ] **Step 6: Run the F4 reinstall on the founder machine (K4, F4).** Follow `docs/migration/founder-cutover.md` step 15, with its "before" captures unchanged. Then replace its pack and init lines with:
 
