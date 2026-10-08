@@ -78,9 +78,16 @@ async function activeVersion(lifecycle: Lifecycle): Promise<string> {
 
 const ENTRY = "bin/cli";
 
-/** The attached instruction rows, with the product version every update rewrites masked out. */
+/**
+ * The attached instruction rows. Every apply and rollback stamps them at the release it installs
+ * (NEW-171), which is asserted here; that one field is then masked so the rest compares exactly.
+ */
 function instructionRows(manifest: InstallationManifestV2): readonly unknown[] {
-  return manifest.artifacts.flatMap((row) => (row.kind === "instruction" ? [{ ...row, productVersion: null, verifiedAt: null }] : []));
+  return manifest.artifacts.flatMap((row) => {
+    if (row.kind !== "instruction") return [];
+    expect(row.productVersion).toBe(manifest.productVersion);
+    return [{ ...row, productVersion: null }];
+  });
 }
 
 /** NEW-163 B: the CLI the entrypoint script would load, resolved the way the script does (active record, then its retained manifest). */
@@ -184,15 +191,15 @@ describe("the synthetic release lifecycle (Spec 2 §12, D72 P7(f))", () => {
   it.each(SYNTHETIC_ARCHITECTURES)("(d) rolls back after the keg is removed (brew cleanup) on %s", async (architecture) => {
     const lifecycle = await start(architecture, "cleanup");
     const attached = instructionRows(lifecycle.manifests[0] as InstallationManifestV2);
-    // The rollback target is 1.1.0, not `init`'s 1.0.0: the first keg's runtime and verifier are `exit 0`
-    // stubs (Task 3's fixture), so no rollback onto it can pass the target verifier, keg or no keg.
     await run(lifecycle, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: false });
-    await lifecycle.home.world.install("1.2.0");
-    await run(lifecycle, { kind: "update", version: null, apply: true, json: false });
     await nodeFs.rm(lifecycle.home.world.prefix, { recursive: true, force: true });
     const requests = lifecycle.home.world.requests.length;
-    await run(lifecycle, { kind: "rollback", apply: true, json: false });
-    expect(await activeVersion(lifecycle)).toBe("1.1.0");
+    // A fresh process: no keg was read in it, so `--apply` composes with the active release's fallback handoff.
+    const fresh = { ...lifecycle, context: { ...lifecycle.home.fixture.context, update: lifecycle.home.update() } };
+    await run(fresh, { kind: "rollback", apply: true, json: false });
+    // F4's first rollback: back onto the release `init` copied from the (now deleted) first keg.
+    expect(await activeVersion(lifecycle)).toBe("1.0.0");
+    expect((await manifestOf(lifecycle.home)).productVersion).toBe("1.0.0");
     expect(lifecycle.home.world.requests).toHaveLength(requests);
     expect(instructionRows(await manifestOf(lifecycle.home))).toStrictEqual(attached);
     await expectEntrypointFollowsActive(lifecycle);

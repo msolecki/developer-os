@@ -1004,6 +1004,9 @@ class UpdateComposer {
         else if (op.operation !== "keep" && op.after !== null) rows.set(op.targetPath, op.after);
       }
     }
+    // Instruction rows never reach a planner or an inverse (NEW-171): restamped at the restored
+    // release's version, as the update's concrete manifest stamps them at the target's.
+    for (const row of [...rows.values()]) if (row.kind === "instruction") rows.set(row.path, { ...row, productVersion: target.version });
     const rehash = (at: string, hash: LowerHexSha256): void => {
       const row = rows.get(at);
       if (row?.kind !== "file" || installedHash(row) === null) return;

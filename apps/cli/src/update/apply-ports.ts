@@ -1090,6 +1090,15 @@ async function retainedBundleManifest(lifecycle: CliLifecycleContext, release: R
 // ---------------------------------------------------------------------------------------------
 
 /**
+ * A rollback's fallback handoff: the keg this process admitted, else the active release's own
+ * manifest hash and protocols. A rollback reads no keg, so after `brew cleanup` the active release,
+ * which was installed from the current keg, is the handoff (D84 K3, Review Focus 2).
+ */
+export function rollbackFallback(admitted: UpdateFallbackHandoffV1 | null, active: Pick<ReleaseIdentityV1, "bundleManifestHash" | "launcherProtocol" | "updateProtocol">): UpdateFallbackHandoffV1 {
+  return admitted ?? { bundleManifestHash: active.bundleManifestHash, launcherProtocol: active.launcherProtocol, updateProtocol: active.updateProtocol };
+}
+
+/**
  * Spec 2 §9's production `update --apply` ports. `fallback` is the keg this invocation admitted
  * (D84 K3): `update --apply` composes with it, and refuses `update_fallback_unavailable` before
  * any construction if none was admitted. A rollback reads no keg, so it composes with the active
@@ -1224,8 +1233,7 @@ export function productionUpdateApplyPorts(context: CliContext, fallback: () => 
     },
     // Local evidence only: the retained set and previous bundle manifest are reopened here, under the lock.
     composeRollback: async (input) => {
-      const { bundleManifestHash, launcherProtocol, updateProtocol } = input.home.active;
-      const deps = composeDeps(input.home, fallback() ?? { bundleManifestHash, launcherProtocol, updateProtocol });
+      const deps = composeDeps(input.home, rollbackFallback(fallback(), input.home.active));
       const record = input.home.rollback ?? refuse("update_rollback_unavailable", EXIT_CODES.capabilityUnavailable);
       const screen = await constructionScreen(context);
       const composed = await composeRollback(input, {

@@ -26,6 +26,7 @@ import {
 import type { CommandFixture } from "../commands/testing.js";
 import { createCliUpdateContext, packageSourcePorts, readOfflineTrust, readPackageChannelSource } from "./context.js";
 import type { AdmittedPackagedReleaseV1 } from "./packaged-release.js";
+import { rollbackFallback } from "./apply-ports.js";
 import { tryLockScratchAttempt } from "./scratch-lock.js";
 import { releaseIdentityOf, UpdatePlanningRefusal } from "./planning.js";
 import type { RollbackRecordV1 } from "./planning.js";
@@ -220,6 +221,13 @@ describe("apply ports", () => {
     if (ports?.composeRollback === undefined) throw new Error("production binds the rollback derivation");
     const home = { manifest: { artifacts: [] }, active: { bundleManifestHash: sha256("active manifest"), launcherProtocol: 1, updateProtocol: 1 }, rollback: null };
     expect(await refusal(ports.composeRollback({ home } as unknown as UpdateRollbackComposeInputV1))).toMatchObject({ reason: "update_rollback_unavailable", code: EXIT_CODES.capabilityUnavailable });
+  });
+
+  it("derives the rollback handoff from the active release's manifest hash and protocols when no keg was read, and prefers an admitted keg's (D84 K3)", () => {
+    const active = { bundleManifestHash: sha256("active manifest"), launcherProtocol: 3, updateProtocol: 2 } as unknown as Parameters<typeof rollbackFallback>[1];
+    expect(rollbackFallback(null, active)).toStrictEqual({ bundleManifestHash: sha256("active manifest"), launcherProtocol: 3, updateProtocol: 2 });
+    const keg = { bundleManifestHash: sha256("keg manifest"), launcherProtocol: 1, updateProtocol: 1 } as unknown as Parameters<typeof rollbackFallback>[0];
+    expect(rollbackFallback(keg, active)).toBe(keg);
   });
 });
 

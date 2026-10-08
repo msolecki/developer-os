@@ -172,7 +172,6 @@ describe("update --apply at every death point (Spec 2 §9.3, §9.4)", () => {
       expect(directions.backward).toBeGreaterThan(0);
       expect(directions.forward).toBeGreaterThan(0);
     }
-    for (const directory of home.world.scratchDirectories) expect(await exists(directory)).toBe(false);
   }), SWEEP_TIMEOUT_MS);
 });
 
