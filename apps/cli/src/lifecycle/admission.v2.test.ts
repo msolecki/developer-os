@@ -222,11 +222,17 @@ function withBytesAt(path: string, replacement: Uint8Array | string, body: () =>
   );
 }
 
+/** The active bundle's CLI entrypoint, named by its retained bundle manifest (Spec 2 D84 K2). */
 async function bundleFile(fixture: CommandFixture): Promise<string> {
-  const releaseRoot = join(fixture.paths.home, "releases", "1.0.0");
-  const [platform] = await nodeFs.readdir(releaseRoot);
-  if (platform === undefined) throw new Error("fixture installed no release bundle");
-  return join(releaseRoot, platform, "bin", "developer-os");
+  const active = JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, "active-release.json"), "utf8")) as {
+    readonly bundleRoot: string;
+    readonly bundleManifestHash: string;
+  };
+  const manifest = JSON.parse(await nodeFs.readFile(
+    join(fixture.paths.stateDir, "release-metadata", "bundles", `${active.bundleManifestHash}.json`),
+    "utf8",
+  )) as { readonly entrypoint: string };
+  return join(active.bundleRoot, manifest.entrypoint);
 }
 
 async function withDriftedBundleFile(fixture: CommandFixture, body: () => Promise<void>): Promise<void> {
