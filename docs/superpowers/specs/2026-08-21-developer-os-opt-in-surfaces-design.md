@@ -3939,7 +3939,9 @@ K8, C3): `<opt>/libexec/fallback/bundle/<runtimeEntrypoint>` through the fixed H
 K2's table, never a `releases/<version>` path, so no `update --apply`, retention or `update rollback
 --apply` leaves a job naming a retired release; a missing `opt` link reports `node_unavailable` until
 Homebrew relinks it. An unreadable active release tree refuses enable `active_release_tree_invalid`
-(exit 6). A home with no active `package-channel` tree keeps the rule above.
+(exit 6). A plist written before this amendment that names a `releases/<version>` Node reports
+`stale` until `automation enable` replaces it. A home with no active `package-channel` tree keeps
+the rule above.
 `StartCalendarInterval` is one `<dict>`: hourly emits only `Minute`; daily emits `Hour`, then `Minute`;
 weekly emits `Weekday`, then `Hour`, then `Minute`. Integers use unsigned base-10 with no leading zero.
 The weekday map is exactly `sun=0`, `mon=1`, `tue=2`, `wed=3`, `thu=4`, `fri=5`, `sat=6`; the stored
