@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { EXIT_CODES } from "@developer-os/core";
+import { encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
 
 import { runInit } from "../commands/init.js";
 import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
@@ -77,18 +77,18 @@ describe("the K8 refresh process", () => {
     await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
     expect((await runInit(fixture.context, { dryRun: false, assumeYes: true })).ok).toBe(true);
     const recordPath = join(fixture.paths.stateDir, "active-release.json");
-    const active = JSON.parse(await nodeFs.readFile(recordPath, "utf8")) as { bundleRoot: string };
-    await nodeFs.writeFile(recordPath, JSON.stringify({ ...active, bundleRoot: `${active.bundleRoot}/../elsewhere` }));
+    const active = JSON.parse(await nodeFs.readFile(recordPath, "utf8")) as { bundleRoot: string; architecture: string };
+    await nodeFs.writeFile(recordPath, encodeCanonicalJson({ ...active, bundleRoot: `${fixture.paths.home}/releases/9.9.9/darwin-${active.architecture}` }));
+    await expect(refreshProcess(fixture.context)).rejects.toMatchObject({ reason: "active_release_root_mismatch", code: EXIT_CODES.recoveryRequired });
     expect(await refreshActiveRelease(fixture.context)).toBe(EXIT_CODES.recoveryRequired);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("(h) refuses an active release built for another architecture than the host", async () => {
-    const fixture = await createCommandFixture("refresh-arch", { bootstrapAvailable: true, architecture: "x64" });
+    const fixture = await createCommandFixture("refresh-arch", { bootstrapAvailable: true, architecture: process.arch === "x64" ? "arm64" : "x64" });
     await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
     expect((await runInit(fixture.context, { dryRun: false, assumeYes: true })).ok).toBe(true);
-    const host = (await fixture.context.platform.inspect()).architecture;
-    if (host === "x64") return;
-    expect(await refreshActiveRelease(fixture.context)).toBe(EXIT_CODES.recoveryRequired);
+    expect((await fixture.context.platform.inspect()).architecture).not.toBe((JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, "active-release.json"), "utf8")) as { architecture: string }).architecture);
+    await expect(refreshProcess(fixture.context)).rejects.toMatchObject({ reason: "active_release_root_mismatch", code: EXIT_CODES.recoveryRequired });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("(i) refuses a non-canonical Brain override as the launcher does (exit 2) and passes a valid one through", async () => {
