@@ -368,6 +368,23 @@ NEW-171.
   (f) **Instruction rows** are restamped to the restored release's `productVersion` on rollback, as
   update restamps them (NEW-171 (b)).
 
+- **K8 — the active release refreshes its own workflows (NEW-200; founder-approved 2026-10-08).**
+  After a successful `update --apply` or `update rollback --apply`, once the active record is
+  finalized, the CLI runs `<product home>/bin/developer-os.mjs` — so the newly active release's own
+  code — to perform §12.3's installed-home reconcile with the stored `adapters.*`, as its own
+  Foundation transaction under its own gate entry, after the update's lifecycle has closed. The
+  render source is the active bundle's `instructions/` and `workflows/` trees under
+  `releases/<version>/<platform>-<architecture>`, never the keg, so a rollback refreshes after
+  `brew cleanup` and `release_mismatch` no longer applies to this step. Every §12.3 rule stands: an
+  edited managed file refuses `instruction_target_drifted` (exit 3) and is left as is, a deleted one is
+  restored, a row the release no longer renders is removed unless edited, and Codex is re-registered
+  with the release version (NEW-118 (3) takes effect). A refresh failure never reverts the release
+  swap: `update` exits with the refresh's code and the message "workflows not refreshed: run
+  developer-os init", and `doctor` warns while any instruction row's `productVersion` differs from the
+  active release. The planner stays keep-all (D96 Q3); K7 (e)'s verifier residual does not widen,
+  because the refresh verifies its own transaction. Accepted residual: a crash between the release
+  swap and the refresh leaves the previous workflows until the next `update`, rollback or `init`.
+
 
 ---
 
