@@ -245,6 +245,8 @@ export type CliContextFactory = (
     readonly localRelease: string | null;
     /** D84 K2: `init` without `--local-release` admits the Homebrew keg from the fixed table. */
     readonly packageChannelInit: boolean;
+    /** C2: `init` without `--adapters` renders an installed home from its active bundle, so a mismatched keg is no handoff. */
+    readonly packageMismatchIsAbsent?: boolean;
     readonly scheduledProductHome?: string;
   },
 ) => CliContext | Promise<CliContext>;
@@ -750,6 +752,7 @@ async function dispatch(
     context = await createContext(io, {
       localRelease: optionString(invocation.values["local-release"]),
       packageChannelInit: invocation.command === "init" && invocation.values["local-release"] === undefined,
+      packageMismatchIsAbsent: invocation.command === "init" && invocation.values.adapters === undefined,
     });
   } catch (error) {
     return emit(io, contextFailure(error), json, () => []);

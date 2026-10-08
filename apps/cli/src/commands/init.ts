@@ -379,6 +379,8 @@ async function settleExistingV2(
     warnings = (await applyInstructions(context, {
       selection: options.adapters ?? null,
       release: bootstrap?.state === "available" ? await inspectPackagedRelease(bootstrap.packagedRelease) : null,
+      // C2: a re-run without --adapters renders from the active bundle (K8's refresh is this run).
+      ...(options.adapters == null ? { source: "active-release" as const } : {}),
     })).warnings;
   }
   return {
