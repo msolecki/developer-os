@@ -1,6 +1,6 @@
 # Developer OS — Release Publication Design (A16)
 
-**Status: approved by the founder on 2026-10-07 (design in conversation, written spec reviewed the same day).** This is
+**Status: approved by the founder on 2026-10-07 (design in conversation, written spec reviewed the same day); §3.3 added 2026-10-08 from the Task 11b packer, awaiting ratification.** This is
 `ORDER.md` entry A16 (DOS-P9, program plan Task 9: `git show
 ae25acd9:docs/superpowers/plans/2026-07-21-developer-os-program.md`). It covers publication only.
 The update side, the packed release format and the packer belong to Spec 2's block "Amended 2026-10-07
@@ -105,6 +105,25 @@ K2's source admission accepts.
 It increases strictly with semver and needs no stored state. `releaseIndexSequence` equals it. Beta
 releases are `0.Y.Z` in the same tap, and every beta after the first reaches its testers through
 `update`. `1.0.0` is tagged when the beta has no open release blocker and L1 and L2 are closed.
+
+### 3.3 Amended 2026-10-08 (Task 11b implementation; awaiting founder ratification)
+
+The packer that Task 11b built (`npm run pack:release`, `tests/tools/pack-release.ts`) changes three
+details of §2 and §3.1:
+
+- **One packer run builds both architectures** (D96 Q2). It writes each keg tree with `bin/developer-os`
+  and `libexec/{launcher.mjs, fallback/}` at the keg root, plus each bundle's `.tar.zst` archive and
+  manifest under `archives/<version>/`. The release tarball therefore holds the keg root itself, and
+  the formula installs it with `prefix.install Dir["*"]` rather than `libexec.install`. §2 step 3's
+  per-architecture matrix becomes one macOS job; the two tarballs are still published separately.
+- **Node is a packer input, never fetched by the packer.** Each slot is `{path, sha256, version}`. The
+  workflow downloads both official Node 24 `darwin` archives and passes the SHA-256 pinned in the
+  repository. The packer runs `--version` only on the host-architecture binary, so any macOS runner
+  works; the zstd bytes depend on the Node that runs the packer, which the workflow pins.
+- **Clean tree, no revisions.** `release.yml` never passes `--allow-dirty`, and the packer refuses that
+  flag when `CI` is set. The formula never uses Homebrew's `revision`: the launcher admits only
+  `Cellar/developer-os/<stable-semver>` kegs, so a `1.2.0_1` keg would remove the fallback. Installed
+  metadata is mode `0644` and directories `0755`, which the launcher and K2 admission require.
 
 ## 4. Documentation set
 
