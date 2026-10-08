@@ -10,6 +10,12 @@ export type {
   MacOsPlatformAdapterOptions,
   MacOsPlatformEnvironment,
 } from "./macos.js";
+export {
+  MAX_VENDOR_SEARCH_PATH_BYTES,
+  parseVendorSearchPath,
+  VENDOR_SEARCH_PATH_VARIABLE,
+  vendorSearchPathOption,
+} from "./vendor-search-path.js";
 export { DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath, inspectSystemPathSync } from "./system-executables.js";
 export type {
   AgentDiscovery,

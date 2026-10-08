@@ -47,7 +47,7 @@ import {
   MacOsPlatformAdapter,
   MacOsRetainedRename,
   MacOsStableLockProvider,
-  MacOsTransactionLockProvider,
+  MacOsTransactionLockProvider, vendorSearchPathOption,
 } from "@developer-os/platform-macos";
 import type { PlatformAdapter } from "@developer-os/platform-macos";
 import {
@@ -818,7 +818,7 @@ export function createProductionContext(
     userHome: options.userHome,
     now,
     ids: { next: (): string => `tx_${randomUUID()}` },
-    platform: new MacOsPlatformAdapter({ runner }),
+    platform: new MacOsPlatformAdapter({ runner, ...vendorSearchPathOption(options.env) }),
     transactions: new TransactionStore({
       stateDir: paths.stateDir,
       fs: NODE_FILE_SYSTEM,
