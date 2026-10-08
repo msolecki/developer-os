@@ -20,75 +20,11 @@ import {
   parseUtcTimestamp,
 } from "./scalars.js";
 
-declare const base64UrlNoPaddingV1: unique symbol;
-declare const lowercaseAsciiDnsNameV1: unique symbol;
-declare const officialReleasePathPrefixV1: unique symbol;
 declare const officialReleaseRelativePathV1: unique symbol;
 declare const bundleRelativePathV1: unique symbol;
 
-export type Base64UrlNoPaddingV1 = string & { readonly [base64UrlNoPaddingV1]: true };
-export type LowercaseAsciiDnsNameV1 = string & { readonly [lowercaseAsciiDnsNameV1]: true };
-export type OfficialReleasePathPrefixV1 = string & { readonly [officialReleasePathPrefixV1]: true };
 export type OfficialReleaseRelativePathV1 = string & { readonly [officialReleaseRelativePathV1]: true };
 export type BundleRelativePathV1 = string & { readonly [bundleRelativePathV1]: true };
-
-export interface Ed25519SignatureV1 {
-  readonly algorithm: "ed25519";
-  readonly keyId: LowerHexSha256;
-  readonly signature: Base64UrlNoPaddingV1;
-}
-
-export interface SignedReleaseDocumentV1<TKind extends string, TSigned> {
-  readonly schemaVersion: 1;
-  readonly kind: TKind;
-  readonly signed: TSigned;
-  readonly signatures: readonly [Ed25519SignatureV1];
-}
-
-export interface OfficialReleaseOriginV1 {
-  readonly scheme: "https";
-  readonly host: LowercaseAsciiDnsNameV1;
-  readonly port: 443;
-  readonly pathPrefix: OfficialReleasePathPrefixV1;
-}
-
-export type OfficialReleaseAssetOriginV1 = OfficialReleaseOriginV1;
-
-export interface FixedReleaseMetadataLocatorV1 {
-  readonly origin: "https://github.com";
-  readonly repositoryPath: "/msolecki/developer-os/releases/latest/download/";
-  readonly assetName: "release-key-delegation-v1.json" | "release-index-v1.json";
-}
-
-export interface OfflineRootKeyV1 {
-  readonly role: "online_current" | "retained_offline_previous";
-  readonly algorithm: "ed25519";
-  readonly keyId: LowerHexSha256;
-  readonly publicKey: Base64UrlNoPaddingV1;
-}
-
-export interface OfflineReleaseTrustV1 {
-  readonly schemaVersion: 1;
-  readonly handoffProtocol: 1;
-  readonly onlineRootKeyId: LowerHexSha256;
-  readonly acceptedRoots: readonly OfflineRootKeyV1[];
-  readonly delegationLocator: FixedReleaseMetadataLocatorV1;
-  readonly indexLocator: FixedReleaseMetadataLocatorV1;
-  readonly metadataRedirectOrigins: readonly OfficialReleaseAssetOriginV1[];
-}
-
-export interface DelegatedReleaseKeyV1 {
-  readonly algorithm: "ed25519";
-  readonly keyId: LowerHexSha256;
-  readonly publicKey: Base64UrlNoPaddingV1;
-}
-
-export interface ReleaseKeyDelegationV1 {
-  readonly sequence: UInt64DecimalV1;
-  readonly releaseKey: DelegatedReleaseKeyV1;
-  readonly metadataOrigins: readonly [OfficialReleaseOriginV1];
-  readonly assetOrigins: readonly OfficialReleaseAssetOriginV1[];
-}
 
 export interface ReleaseBundleReferenceV1 {
   readonly platform: "darwin";
@@ -243,40 +179,6 @@ function compareSemver(left: StableSemverV1, right: StableSemverV1): number {
 function assertCanonicalSize(value: unknown, maximumBytes: number, label: string): void {
   if (textEncoder.encode(encodeCanonicalJson(value as CanonicalJsonValue)).byteLength > maximumBytes) fail(label);
 }
-function parseBase64Url(value: unknown, label: string, length: number): Base64UrlNoPaddingV1 {
-  const input = string(value, label);
-  if (!/^[A-Za-z0-9_-]+$/.test(input)) fail(label);
-  const decoded = Buffer.from(input, "base64url");
-  if (decoded.byteLength !== length || decoded.toString("base64url") !== input) fail(label);
-  return input as Base64UrlNoPaddingV1;
-}
-function publicKeyId(key: Base64UrlNoPaddingV1): LowerHexSha256 { return createHash("sha256").update(Buffer.from(key, "base64url")).digest("hex") as LowerHexSha256; }
-function parseIpv4Number(value: string): bigint | null {
-  if (value === "0x") return 0n;
-  if (/^0x[0-9a-f]+$/.test(value)) return BigInt(value);
-  if (/^0[0-7]+$/.test(value) && value.length > 1) return BigInt(`0o${value.slice(1)}`);
-  if (/^(?:0|[1-9][0-9]*)$/.test(value)) return BigInt(value);
-  return null;
-}
-function isIpv4Literal(value: string): boolean {
-  const labels = value.split(".");
-  if (labels.length < 1 || labels.length > 4) return false;
-  const numbers = labels.map(parseIpv4Number);
-  if (numbers.some((number) => number === null)) return false;
-  const numeric = numbers as bigint[];
-  if (numeric.slice(0, -1).some((number) => number > 255n)) return false;
-  const finalMaximum = (1n << BigInt(8 * (5 - numeric.length))) - 1n;
-  return (numeric[numeric.length - 1] as bigint) <= finalMaximum;
-}
-
-export function parseLowercaseAsciiDnsName(value: unknown): LowercaseAsciiDnsNameV1 {
-  const input = string(value, "LowercaseAsciiDnsNameV1");
-  if (bytes(input) < 1 || bytes(input) > 253 || input === "localhost" || input.includes("%") || !/^[a-z0-9-]+(?:\.[a-z0-9-]+)*$/.test(input)) fail("LowercaseAsciiDnsNameV1");
-  const labels = input.split(".");
-  if (labels.length > 127 || input.startsWith("xn--") || labels.some((label) => label.startsWith("xn--") || label.length > 63 || label.startsWith("-") || label.endsWith("-")) || isIpv4Literal(input)) fail("LowercaseAsciiDnsNameV1");
-  return input as LowercaseAsciiDnsNameV1;
-}
-
 function parseUrlSegments(value: unknown, label: string, prefix: boolean): string {
   const input = string(value, label);
   if (bytes(input) < 1 || bytes(input) > 2048 || /[?#\\]/.test(input) || (prefix && (!input.startsWith("/") || !input.endsWith("/"))) || (!prefix && (input.startsWith("/") || input.endsWith("/")))) fail(label);
@@ -291,74 +193,7 @@ function parseUrlSegments(value: unknown, label: string, prefix: boolean): strin
   }
   return input;
 }
-export function parseOfficialReleasePathPrefix(value: unknown): OfficialReleasePathPrefixV1 { return parseUrlSegments(value, "OfficialReleasePathPrefixV1", true) as OfficialReleasePathPrefixV1; }
 export function parseOfficialReleaseRelativePath(value: unknown): OfficialReleaseRelativePathV1 { return parseUrlSegments(value, "OfficialReleaseRelativePathV1", false) as OfficialReleaseRelativePathV1; }
-export function validateOfficialReleaseOrigin(value: unknown): OfficialReleaseOriginV1 {
-  const input = exact(value, ["scheme", "host", "port", "pathPrefix"], "OfficialReleaseOriginV1");
-  if (input.scheme !== "https" || input.port !== 443) fail("OfficialReleaseOriginV1");
-  return { scheme: "https", host: parseLowercaseAsciiDnsName(input.host), port: 443, pathPrefix: parseOfficialReleasePathPrefix(input.pathPrefix) };
-}
-export function validateFixedReleaseMetadataLocator(value: unknown): FixedReleaseMetadataLocatorV1 {
-  const input = exact(value, ["origin", "repositoryPath", "assetName"], "FixedReleaseMetadataLocatorV1");
-  if (input.origin !== "https://github.com" || input.repositoryPath !== "/msolecki/developer-os/releases/latest/download/" || (input.assetName !== "release-key-delegation-v1.json" && input.assetName !== "release-index-v1.json")) fail("FixedReleaseMetadataLocatorV1");
-  return { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: input.assetName };
-}
-
-function validateSignature(value: unknown): Ed25519SignatureV1 {
-  const input = exact(value, ["algorithm", "keyId", "signature"], "Ed25519SignatureV1");
-  if (input.algorithm !== "ed25519") fail("Ed25519SignatureV1");
-  return { algorithm: "ed25519", keyId: parseLowerHexSha256(input.keyId), signature: parseBase64Url(input.signature, "Ed25519SignatureV1.signature", 64) };
-}
-export function validateSignedReleaseDocument<TKind extends string, TSigned>(value: unknown, kind: TKind, validateSigned: (value: unknown) => TSigned): SignedReleaseDocumentV1<TKind, TSigned> {
-  const input = exact(value, ["schemaVersion", "kind", "signed", "signatures"], "SignedReleaseDocumentV1");
-  if (input.schemaVersion !== 1 || input.kind !== kind) fail("SignedReleaseDocumentV1");
-  const signatures = list(input.signatures, 1, 1, "SignedReleaseDocumentV1.signatures");
-  return { schemaVersion: 1, kind, signed: validateSigned(input.signed), signatures: [validateSignature(signatures[0])] };
-}
-export function signedReleaseDocumentSigningBytes(kind: string, signed: CanonicalJsonValue): Uint8Array {
-  if (!/^[a-z][a-z0-9-]*$/.test(kind)) fail("signed document kind");
-  const canonical = encodeCanonicalJson(signed);
-  return textEncoder.encode(`developer-os/${kind}/v1\0${canonical.slice(0, -1)}`);
-}
-
-function validateRootKey(value: unknown): OfflineRootKeyV1 {
-  const input = exact(value, ["role", "algorithm", "keyId", "publicKey"], "OfflineRootKeyV1");
-  if ((input.role !== "online_current" && input.role !== "retained_offline_previous") || input.algorithm !== "ed25519") fail("OfflineRootKeyV1");
-  const publicKey = parseBase64Url(input.publicKey, "OfflineRootKeyV1.publicKey", 32);
-  const keyId = parseLowerHexSha256(input.keyId);
-  if (publicKeyId(publicKey) !== keyId) fail("OfflineRootKeyV1.keyId");
-  return { role: input.role, algorithm: "ed25519", keyId, publicKey };
-}
-export function validateOfflineReleaseTrust(value: unknown): OfflineReleaseTrustV1 {
-  const input = exact(value, ["schemaVersion", "handoffProtocol", "onlineRootKeyId", "acceptedRoots", "delegationLocator", "indexLocator", "metadataRedirectOrigins"], "OfflineReleaseTrustV1");
-  if (input.schemaVersion !== 1 || input.handoffProtocol !== 1) fail("OfflineReleaseTrustV1");
-  const roots = list(input.acceptedRoots, 1, 2, "OfflineReleaseTrustV1.acceptedRoots").map(validateRootKey);
-  if (roots[0]?.role !== "online_current" || roots.filter((root) => root.role === "online_current").length !== 1 || new Set(roots.map((root) => root.keyId)).size !== roots.length || (roots.length === 2 && roots[1]?.role !== "retained_offline_previous")) fail("OfflineReleaseTrustV1.acceptedRoots");
-  const onlineRootKeyId = parseLowerHexSha256(input.onlineRootKeyId);
-  if (roots[0].keyId !== onlineRootKeyId) fail("OfflineReleaseTrustV1.onlineRootKeyId");
-  const delegationLocator = validateFixedReleaseMetadataLocator(input.delegationLocator); const indexLocator = validateFixedReleaseMetadataLocator(input.indexLocator);
-  if (delegationLocator.assetName !== "release-key-delegation-v1.json" || indexLocator.assetName !== "release-index-v1.json") fail("OfflineReleaseTrustV1 locators");
-  const metadataRedirectOrigins = list(input.metadataRedirectOrigins, 1, 4, "OfflineReleaseTrustV1.metadataRedirectOrigins").map(validateOfficialReleaseOrigin);
-  const trusted = { schemaVersion: 1, handoffProtocol: 1, onlineRootKeyId, acceptedRoots: roots, delegationLocator, indexLocator, metadataRedirectOrigins } as const;
-  assertCanonicalSize(trusted, 65_536, "OfflineReleaseTrustV1 bytes");
-  return trusted;
-}
-
-export function validateReleaseKeyDelegation(value: unknown): ReleaseKeyDelegationV1 {
-  const input = exact(value, ["sequence", "releaseKey", "metadataOrigins", "assetOrigins"], "ReleaseKeyDelegationV1");
-  const releaseKeyInput = exact(input.releaseKey, ["algorithm", "keyId", "publicKey"], "DelegatedReleaseKeyV1");
-  if (releaseKeyInput.algorithm !== "ed25519") fail("DelegatedReleaseKeyV1");
-  const publicKey = parseBase64Url(releaseKeyInput.publicKey, "DelegatedReleaseKeyV1.publicKey", 32); const keyId = parseLowerHexSha256(releaseKeyInput.keyId);
-  if (publicKeyId(publicKey) !== keyId) fail("DelegatedReleaseKeyV1.keyId");
-  const metadataOrigins = list(input.metadataOrigins, 1, 1, "ReleaseKeyDelegationV1.metadataOrigins").map(validateOfficialReleaseOrigin);
-  const assetOrigins = list(input.assetOrigins, 1, 4, "ReleaseKeyDelegationV1.assetOrigins").map(validateOfficialReleaseOrigin);
-  const serializedOrigins = new Set(assetOrigins.map((origin) => JSON.stringify(origin)));
-  if (serializedOrigins.size !== assetOrigins.length) fail("ReleaseKeyDelegationV1.assetOrigins");
-  const delegation = { sequence: parseUInt64Decimal(input.sequence), releaseKey: { algorithm: "ed25519" as const, keyId, publicKey }, metadataOrigins: [metadataOrigins[0] as OfficialReleaseOriginV1] as [OfficialReleaseOriginV1], assetOrigins };
-  assertCanonicalSize(delegation, 65_536, "ReleaseKeyDelegationV1 bytes");
-  return delegation;
-}
-
 function validateBundleReference<TArchitecture extends "arm64" | "x64">(value: unknown, architecture: TArchitecture): ReleaseBundleReferenceV1 & { readonly architecture: TArchitecture } {
   const input = exact(value, ["platform", "architecture", "archiveFormat", "archivePath", "archiveBytes", "archiveSha256", "manifestPath", "manifestBytes", "manifestSha256"], "ReleaseBundleReferenceV1");
   if (input.platform !== "darwin" || input.architecture !== architecture || input.archiveFormat !== "zstd-ustar-v1") fail("ReleaseBundleReferenceV1");
