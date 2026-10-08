@@ -811,12 +811,14 @@ not exist here" look identical from outside and are not the same thing.
   other goes unread — which is how the gap stayed invisible. No module count is stated here
   any more: a number in prose that no test pins is the same defect in a different shape.
 
-  **Amended 2026-09-28 (Spec 2, D72 P7(f)): one explicit exception.** The release transport
-  (`packages/security/src/update/transport.ts`) is the product's only network module, and only
-  `update` plan and apply compose it (§11). The same scan classifies it by name, and the lint
-  gate's `inspectReleaseAuthoritySurfaces` (`tests/repository/check.ts`) holds both halves on
-  every run: exactly that module reaches a network, and exactly `apps/cli/src/update/context.ts`
-  composes it.
+  **Amended 2026-09-28 (Spec 2, D72 P7(f)): one explicit exception**, the §4.5 release transport,
+  composed only by `update` plan and apply (§11). **Withdrawn 2026-10-08 (D84 K1, Task 11b Task
+  13):** the transport is deleted with its tests, so the exception is gone and no shipped module is
+  classified as network-capable. The lint gate's `inspectReleaseAuthoritySurfaces`
+  (`tests/repository/check.ts`) holds the empty set on every run: no product module reaches a
+  network, none composes a release transport, and its synthetic positive control
+  (`NETWORK_POSITIVE_CONTROL`) must still be reported, so an empty result cannot come from a
+  predicate that matches nothing.
 - **No agent integration.** Agents are *discovered* — `/usr/bin/which`, with a `PATH` and
   nothing else — and never executed. `AgentDiscovery.version` is permanently `null` in
   Foundation because determining it requires running the binary. Discovery that refuses, or
@@ -1387,26 +1389,29 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
   `state/update-rollback.json` plus `rollback/<payload-id>/` hold the one retained rollback set.
   `state/update-executor.json` names the recovery executor while an update runs. Each is written
   only by a coordinator step; nothing else mutates them.
-- **Trust.** A release is admitted only through the signed chain: an offline root (the launcher's
-  FD 3 handoff) delegates one release key, which signs the release index, which names each
-  bundle's archive and manifest by size and SHA-256 for both `arm64` and `x64`. Delegation, index
-  and accepted-release sequences are high watermarks: a lower one refuses as replay (exit 5), and
-  trust never moves backwards — not on compensation, not on rollback.
+- **Trust.** *(Amended 2026-10-08, D84 K1–K3.)* The signed chain this bullet described — an
+  offline root from the launcher's FD 3 handoff delegating one release key that signs the release
+  index — is withdrawn and its code deleted. The Homebrew package channel is the trust root: the
+  installed keg's release index row names each bundle's archive and manifest by size and SHA-256
+  for both `arm64` and `x64`, and the keg is admitted by owner, mode class, inventory and the
+  bundle manifest's hashes (`apps/cli/src/update/packaged-release.ts` —
+  `admitPackageChannelRelease`). Delegation, index and accepted-release sequences are high
+  watermarks: a lower one refuses as replay (exit 5), and trust never moves backwards — not on
+  compensation, not on rollback.
 - **Architecture.** The installed release's architecture selects the bundle (`arm64` is ordinal 0,
   `x64` ordinal 1 in every index entry); the bundle manifest, the release identity and the bundle
   root carry it, and a bundle, archive or manifest of the other architecture refuses.
 
 ### 11.2 `update` and `update rollback`
 
-- **Plan-only by default.** `update` reads the home, the FD 3 trust, the signed metadata and the
-  bundle, runs the target planner over one attempt-owned scratch (held under a per-attempt flock for
-  its lifetime, so a concurrent `update`'s residue sweep cleans only attempts whose process died,
-  NEW-173) and prints a preview; it writes
-  nothing durable. An unsigned-local home refuses `release_unsigned_local` (exit 4) right after the
-  home read, and an invocation the launcher did not mark with `--offline-release-trust-fd=3` refuses
-  `update_launcher_handoff_absent` (exit 4) before any fstat, read or close of FD 3, which outside
-  the launcher is not the trust pipe (NEW-147). `update rollback` reads only retained local
-  evidence: no FD 3, transport, scratch or planner.
+- **Plan-only by default.** *(Amended 2026-10-08, D84 K2–K3.)* `update` reads the home and the
+  installed keg (`apps/cli/src/update/context.ts` — `readPackageChannelSource`), runs the target
+  planner over the keg's bundle read in place and prints a preview; it writes nothing durable. An
+  unsigned-local home refuses `release_unsigned_local` (exit 4) right after the home read. The FD 3
+  trust read, the `--offline-release-trust-fd=3` marker and its `update_launcher_handoff_absent`
+  refusal, the transport and the attempt-owned scratch with its per-attempt flock (NEW-173) are
+  deleted: no update path reads a descriptor from its parent or reaches a network.
+  `update rollback` reads only retained local evidence: no keg and no planner.
 - **Apply.** `--apply` heals the update residue its own operation recorded first; residue the other
   operation recorded refuses exit 6 naming that operation's `--apply` command (Spec 2 §9.2), and a
   resumed coordinator ends the invocation, finalized or compensated, without planning again
@@ -1432,9 +1437,10 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
   compensates to the old release (trust stays advanced); after it every step force-forwards. A
   resumed run reports the exit class of the persisted `compensationCause` (D72 P7(b)): a verifier
   rejection is exit 5, anything else exit 1.
-- **Fallback handoff.** Production binds `--apply` with no fallback until Task 11b extends the
-  launcher's FD 3 document, so it refuses `update_fallback_unavailable`, exit 4, before any write
-  (D72 P7(d)). Only the synthetic fixture supplies one.
+- **Fallback handoff.** *(Amended 2026-10-08, D84 K3.)* Production built no fallback before Task
+  11b and refused `update_fallback_unavailable`, exit 4, before any write (D72 P7(d)). It now builds
+  `UpdateFallbackHandoffV1` from the keg planning admitted (`apps/cli/src/update/context.ts` —
+  `packageFallbackOf`); only an `--apply` whose invocation admitted no keg still refuses exit 4.
 - **Codex.** A Codex tree change re-registers the plugin exactly once (`codex-adapter.md` §14).
 
 ### 11.3 The D72 rules the code relies on

@@ -641,8 +641,8 @@ Added 2026-09-28 (NEW-110 Task 12, D72). The bounds Spec 2 fixes, as the shipped
 - **Transport.** 64 KiB response headers, a 30-second idle deadline re-armed on progress, one
   15-minute wall per attempt shared with the planner and verifier; bodies of at most 64 KiB
   (delegation), 4 MiB (index), 16 MiB (bundle manifest) and 2 GiB (archive), each asset also held
-  to its exact signed size (`MAXIMUM_BODY_BYTES` and the constants beside it in
-  `packages/security/src/update/transport.ts`).
+  to its exact signed size. **Withdrawn 2026-10-08 (D84 K1):** Task 11b Task 13 deleted the transport
+  that held these bounds; `update` reads the installed keg and reaches no network.
 - **Archive.** One Zstandard frame with a window of at most 128 MiB (`MAXIMUM_ZSTD_WINDOW_LOG`) over
   exactly `expectedUstarBytes(manifest)` of ustar (`packages/security/src/update/archive.ts`).
 - **Planner wire.** `PLANNER_WIRE_BOUNDS_V1` (`packages/core/src/update/planner.ts`): 256 MiB of
