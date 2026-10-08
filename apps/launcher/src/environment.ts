@@ -1,4 +1,5 @@
 import { EXIT_CODES, parseCanonicalAbsolutePathText } from "@developer-os/core";
+import { parseVendorSearchPath } from "@developer-os/platform-macos";
 
 /**
  * The closed, sanitized environment the launcher hands the CLI process. Spec
@@ -10,6 +11,8 @@ export interface LauncherEnvironmentV1 {
   readonly HOME: string;
   readonly DEVELOPER_OS_HOME: string;
   readonly DEVELOPER_OS_BRAIN?: string;
+  /** The `PATH` the launcher received, for vendor discovery only (NEW-202). */
+  readonly DEVELOPER_OS_VENDOR_SEARCH_PATH?: string;
 }
 
 export interface LauncherEnvironmentRequestV1 {
@@ -28,6 +31,12 @@ export interface LauncherEnvironmentRequestV1 {
    * "the launcher does not resolve or open the Brain" (Spec 2 §3.1).
    */
   readonly brainOverride: string | null;
+  /**
+   * The launcher's own `PATH`, or `null` when absent. Passed on as
+   * `DEVELOPER_OS_VENDOR_SEARCH_PATH` when `parseVendorSearchPath` accepts it;
+   * otherwise simply not passed — never a refusal (NEW-202).
+   */
+  readonly vendorSearchPath: string | null;
 }
 
 /** Missing/invalid `HOME` or an invalid Brain override: exit 2 before exec (Spec 2 §3.1). */
@@ -53,9 +62,13 @@ export function buildLauncherEnvironment(request: LauncherEnvironmentRequestV1):
   assertAbsolute(request.home, "HOME");
   assertAbsolute(request.productHome, "DEVELOPER_OS_HOME");
 
-  if (request.brainOverride === null) {
-    return { HOME: request.home, DEVELOPER_OS_HOME: request.productHome };
-  }
+  const vendor = parseVendorSearchPath(request.vendorSearchPath ?? undefined);
+  const base = {
+    HOME: request.home,
+    DEVELOPER_OS_HOME: request.productHome,
+    ...(vendor === null ? {} : { DEVELOPER_OS_VENDOR_SEARCH_PATH: vendor }),
+  };
+  if (request.brainOverride === null) return base;
 
   let brain: string;
   try {
@@ -64,5 +77,5 @@ export function buildLauncherEnvironment(request: LauncherEnvironmentRequestV1):
     throw new LauncherEnvironmentError("DEVELOPER_OS_BRAIN must be a valid bounded absolute path");
   }
 
-  return { HOME: request.home, DEVELOPER_OS_HOME: request.productHome, DEVELOPER_OS_BRAIN: brain };
+  return { ...base, DEVELOPER_OS_BRAIN: brain };
 }

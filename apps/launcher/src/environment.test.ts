@@ -6,6 +6,7 @@ const envFixture = {
   home: "/Users/test",
   productHome: "/Users/test/.developer-os",
   brainOverride: null,
+  vendorSearchPath: null,
 } as const;
 
 describe("buildLauncherEnvironment", () => {
@@ -62,5 +63,23 @@ describe("buildLauncherEnvironment", () => {
   it("never inherits or merges the ambient process environment", () => {
     const result = buildLauncherEnvironment(envFixture);
     expect(Object.keys(result).sort()).toEqual(["DEVELOPER_OS_HOME", "HOME"]);
+  });
+
+  it("adds the received PATH as the vendor search path, and only that variable (NEW-202)", () => {
+    const result = buildLauncherEnvironment({ ...envFixture, vendorSearchPath: "/opt/homebrew/bin:/usr/bin:/bin" });
+    expect(result).toEqual({
+      HOME: "/Users/test",
+      DEVELOPER_OS_HOME: "/Users/test/.developer-os",
+      DEVELOPER_OS_VENDOR_SEARCH_PATH: "/opt/homebrew/bin:/usr/bin:/bin",
+    });
+  });
+
+  it("drops an empty, NUL-carrying or oversize vendor search path instead of refusing (NEW-202)", () => {
+    for (const vendorSearchPath of ["", "/opt/homebrew/bin\0:/usr/bin", `/${"a".repeat(32 * 1024)}`]) {
+      expect(Object.keys(buildLauncherEnvironment({ ...envFixture, vendorSearchPath })).sort()).toEqual([
+        "DEVELOPER_OS_HOME",
+        "HOME",
+      ]);
+    }
   });
 });

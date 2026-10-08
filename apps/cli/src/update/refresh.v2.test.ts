@@ -98,6 +98,15 @@ describe("the K8 refresh process", () => {
     expect(refreshEnvironment(good.context).DEVELOPER_OS_BRAIN).toBe("/synthetic/brain");
   });
 
+  it("(j) passes the vendor search path on when the parent has a valid one, and drops it otherwise (NEW-202)", async () => {
+    const withIt = await createCommandFixture("refresh-vendor", { env: { PATH: "/synthetic/bin", DEVELOPER_OS_VENDOR_SEARCH_PATH: "/opt/homebrew/bin:/usr/bin" } });
+    expect(refreshEnvironment(withIt.context)).toStrictEqual({ HOME: withIt.context.userHome, DEVELOPER_OS_HOME: withIt.context.paths.home, DEVELOPER_OS_VENDOR_SEARCH_PATH: "/opt/homebrew/bin:/usr/bin" });
+    for (const raw of ["", "/opt/homebrew/bin\0", `/${"a".repeat(32 * 1024)}`]) {
+      const fixture = await createCommandFixture("refresh-vendor-bad", { env: { DEVELOPER_OS_VENDOR_SEARCH_PATH: raw } });
+      expect(Object.keys(refreshEnvironment(fixture.context)).sort()).toStrictEqual(["DEVELOPER_OS_HOME", "HOME"]);
+    }
+  });
+
   it("(j) kills a refresh that outlives its bound and maps it to exit 1 (K8's bounded timeout)", async () => {
     expect(REFRESH_TIMEOUT_MS).toBe(600_000);
     const fixture = await createCommandFixture("refresh-hang", {});

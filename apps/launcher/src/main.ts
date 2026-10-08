@@ -38,6 +38,7 @@ async function main(): Promise<void> {
     home,
     productHome,
     brainOverride: process.env.DEVELOPER_OS_BRAIN ?? null,
+    vendorSearchPath: process.env.PATH ?? null,
   });
 
   const effectiveUid = process.getuid?.() ?? -1;
