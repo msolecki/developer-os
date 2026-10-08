@@ -23,7 +23,6 @@ import type { InstructionCatalogV1, InstructionCategoryV1, InstructionIdV1 } fro
 import { loadWorkflow } from "@developer-os/workflow-schema";
 import type { WorkflowContractV1 } from "@developer-os/workflow-schema";
 
-import type { AdmittedPackagedReleaseV1 } from "../update/packaged-release.js";
 
 type Vendor = "claude" | "codex";
 type SourceCategory = Exclude<InstructionCategoryV1, "command" | "vendor-file">;
@@ -110,8 +109,15 @@ function assertArtifact(where: string, category: SourceCategory, files: readonly
   assertInstructionArtifactBounds(where, files.map((file) => file.bytes.byteLength));
 }
 
+/** What the loaders read from a release: an admitted keg (`AdmittedPackagedReleaseV1`) or the active bundle (K8). */
+export interface ReleaseTreeV1 {
+  readonly bundleRoot: string;
+  readonly files: readonly { readonly relativePath: string }[];
+  readonly readFile: (relativePath: string) => Promise<Uint8Array>;
+}
+
 /** `bundle/workflows/<name>/workflow.yaml`, read through the admitted release only. */
-export async function loadReleaseWorkflows(release: AdmittedPackagedReleaseV1): Promise<readonly WorkflowContractV1[]> {
+export async function loadReleaseWorkflows(release: ReleaseTreeV1): Promise<readonly WorkflowContractV1[]> {
   const prefix = `${release.bundleRoot}/`;
   const files = sortUtf8(
     release.files.filter((file) => file.relativePath.startsWith(prefix) && WORKFLOW_FILE.test(file.relativePath.slice(prefix.length))),
@@ -137,7 +143,7 @@ export async function loadReleaseWorkflows(release: AdmittedPackagedReleaseV1): 
 
 /** `bundle/instructions/`: the catalog and exactly the files its rows claim (`foundation.md` §12.1). */
 export async function loadInstructionDefaults(
-  release: AdmittedPackagedReleaseV1,
+  release: ReleaseTreeV1,
   workflowIds: ReadonlySet<string>,
 ): Promise<InstructionDefaultsV1> {
   const root = `${release.bundleRoot}/instructions/`;

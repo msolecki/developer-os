@@ -36,6 +36,7 @@ import type { LifecycleMutationAuthorityV1 } from "../lifecycle/mutation-gate.js
 import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { entrypointPath } from "../update/local-release.js";
 import type { AdmittedPackagedReleaseV1 } from "../update/packaged-release.js";
+import { hookNodePath, readActiveReleaseTree } from "./active-release.js";
 import { compareManifestRows, InstructionRefusal, planInstructionAttach } from "./attach.js";
 import type { InstructionApplyReportV1 } from "./attach.js";
 import {
@@ -50,7 +51,7 @@ import type { CodexRegistrationRecordV1, CodexRegistrationStateV1 } from "./code
 import { InstructionRefusal as DetachRefusal, planInstructionDetach } from "./detach.js";
 import type { InstructionFileSystemV1 } from "./detach.js";
 import { loadInstructionDefaults, loadInstructionOverrides, loadReleaseWorkflows, mergeInstructionSources } from "./sources.js";
-import type { InstructionSourceSetV1 } from "./sources.js";
+import type { InstructionSourceSetV1, ReleaseTreeV1 } from "./sources.js";
 import { codexHomeFromEnv, codexInstructionPaths, resolveVendorHomes } from "./vendor-homes.js";
 import type { VendorHomesV1 } from "./vendor-homes.js";
 
@@ -223,7 +224,7 @@ export function manifestMutation(context: CliContext, manifest: InstallationMani
 }
 
 async function loadSources(
-  release: AdmittedPackagedReleaseV1,
+  release: ReleaseTreeV1,
   selection: AdapterSelectionV1,
   productHome: string,
   effectiveUid: number,
@@ -328,6 +329,8 @@ export async function applyInstructions(context: CliContext, input: {
   /** `null`: use the stored `adapters.*`. */
   readonly selection: AdapterSelectionV1 | null;
   readonly release: AdmittedPackagedReleaseV1 | null;
+  /** K8/C2: render from the active bundle when the home has one; `release` is the fallback for a home without. */
+  readonly source?: "active-release";
 }): Promise<InstructionApplyResultV1> {
   const stored = await readConfigFile(context, context.paths.configFile);
   const selection = input.selection ?? (stored === null ? [] : VENDORS.filter((vendor) => stored.adapters[vendor]));
@@ -354,11 +357,13 @@ export async function applyInstructions(context: CliContext, input: {
     });
   }
 
+  const active = selection.length > 0 ? await readActiveReleaseTree(context) : null;
+  const tree: ReleaseTreeV1 | null = input.source === "active-release" && active !== null ? active : input.release;
   /**
-   * A13 Tasks 14 and 15: both vendors' hooks run `<this Node> <product-home>/bin/developer-os.mjs`.
+   * A13 Tasks 14 and 15 and C3: hooks run `<node> <product-home>/bin/developer-os.mjs`.
    * Checked once, before any transaction, so an unsafe home refuses with exit 2 and nothing written.
    */
-  const hookExecutable: HookCommandExecutable = { node: await stableNodePath(process.execPath), entrypoint: entrypointPath(home) };
+  const hookExecutable: HookCommandExecutable = { node: await hookNodePath(context, active), entrypoint: entrypointPath(home) };
   if (selection.length > 0) {
     assertHookNodePath(hookExecutable.node);
     assertHookExecutablePath(hookExecutable.entrypoint);
@@ -366,7 +371,7 @@ export async function applyInstructions(context: CliContext, input: {
 
   const executables = await discoverExecutables(context);
   for (const vendor of selection) await assertAdapterAvailable(context, vendor, executables.get(vendor) ?? null);
-  if (selection.length > 0) {
+  if (selection.length > 0 && tree === input.release) {
     if (input.release === null) {
       throw new InstructionRefusal({
         reason: "packaged_release_unavailable",
@@ -416,9 +421,9 @@ export async function applyInstructions(context: CliContext, input: {
     });
   }
 
-  if (selection.length === 0 || input.release === null) return { ...EMPTY_REPORT, registration: null, warnings };
+  if (selection.length === 0 || tree === null) return { ...EMPTY_REPORT, registration: null, warnings };
 
-  const { workflows, sources } = await loadSources(input.release, selection, home, lifecycle.effectiveUid);
+  const { workflows, sources } = await loadSources(tree, selection, home, lifecycle.effectiveUid);
   const report = await withLifecycleMutation(context, lifecycle, async (authority) => {
     const state = await gatedState(context, authority);
     const plan = await planInstructionAttach({

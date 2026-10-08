@@ -355,7 +355,7 @@ describe("init --adapters claude installs Claude hooks naming the local-build en
   let firstRender: string;
   let outsideBefore: readonly string[];
 
-  it("installs hooks/hooks.json as a manifest row whose every command is <node> <entrypoint>", async () => {
+  it("installs hooks/hooks.json as a manifest row whose every command is <opt node> <entrypoint> (C3)", async () => {
     installed = await home("init-claude-hooks");
     const { fixture } = installed;
     await nodeFs.mkdir(installed.claudeHome, { recursive: true, mode: 0o700 });
@@ -369,7 +369,7 @@ describe("init --adapters claude installs Claude hooks naming the local-build en
     firstRender = await nodeFs.readFile(hooksFile, "utf8");
     const commands = hookCommands(firstRender);
     expect(commands.length).toBeGreaterThan(0);
-    const prefix = `${process.execPath} ${join(fixture.paths.home, "bin", "developer-os.mjs")} `;
+    const prefix = `${join(fixture.root, "prefix", "opt", "developer-os", "libexec", "fallback", "bundle", "bin", "runtime")} ${join(fixture.paths.home, "bin", "developer-os.mjs")} `;
     for (const command of commands) expect(command.startsWith(prefix), command).toBe(true);
     const row = (await manifestOf(fixture)).artifacts.find((artifact) => artifact.path === hooksFile);
     expect(row).toMatchObject({ owner: "claude", kind: "file", verification: { mode: "content" } });

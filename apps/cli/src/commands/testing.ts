@@ -19,6 +19,7 @@ import type {
   HeldLifecycleStableLockV1,
   LifecycleLockDeadlineV1,
   LifecycleStableLockProviderV1,
+  PACKAGE_CHANNEL_SOURCE_TABLE,
   RuntimePaths,
   TransactionJournalV1,
   TransactionLockHandle,
@@ -614,6 +615,11 @@ export async function createCommandFixture(
   const packagedRelease = options.bootstrapAvailable === true
     ? await createSyntheticPackagedRelease(root, options.instructions, options.architecture ?? "arm64")
     : null;
+  // C3: the K2 table over the fixture keg's prefix, the one `createOnDiskReleaseWorld` links `opt/developer-os` in.
+  const fixtureTable = (() => {
+    const entry = { prefix: join(root, "prefix"), opt: join(root, "prefix", "opt", "developer-os"), fallback: "libexec/fallback" } as const;
+    return { arm64: entry, x64: entry } as unknown as typeof PACKAGE_CHANNEL_SOURCE_TABLE;
+  })();
   const bootstrapTrace: string[] = [];
   const lifecycleLockEvents: string[] = [];
   const stableLockEvents: string[] = [];
@@ -827,6 +833,7 @@ export async function createCommandFixture(
         ? { state: "unavailable_until_packaged_handoff" }
         : { state: "available", executor: bootstrapExecutor, packagedRelease, inspectEvidence },
       lifecycle,
+      packageChannelTable: fixtureTable,
     };
     composed.current = built;
     return built;
