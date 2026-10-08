@@ -54,6 +54,20 @@ describe("planMerge", () => {
     expect(plan.mutations.map((m) => [m.operation, m.path])).toContainEqual(["remove", "DEV/s.md"]);
   });
 
+  it("turns every link the merged target would have to itself into its label", async () => {
+    const plan = await planRefactor(
+      { mode: "merge", source: "DEV/s.md", target: "DEV/t.md" },
+      memoryInput({
+        "DEV/s.md": noteText({ title: "Source", body: "see [[t|the target]], [[s#Top]] and [[r]]" }),
+        "DEV/t.md": noteText({ title: "Target", body: "see [[s]] and [[DEV/t]]" }),
+        "DEV/r.md": noteText({ title: "R", body: "R body" }),
+      }),
+    );
+    const target = plan.mutations.find((m) => m.path === "DEV/t.md")?.content ?? "";
+    expect(target).toContain("see s and DEV/t\n");
+    expect(target).toContain("see the target, s and [[r]]\n");
+  });
+
   it("refuses merging a note into itself as brain_refactor_input_invalid", async () => {
     await expect(
       planRefactor(

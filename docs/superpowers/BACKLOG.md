@@ -302,9 +302,6 @@ in `d157227..28cfe19`, and m4 plus the mock-only `apply_patch` grammar, moved in
 ### Phase 5b · A12b (A12b plan remainder)
 
 - Workflow versions (review M7): closed by `a71cc629` (D84 (4)).
-- Contract gap (`docs/architecture/brain.md` §6.13, merge mode and R6): after `brain refactor
-  --merge`, `[[s]]` links in the target's own body become links to itself. Only frontmatter edits
-  are forbidden; body cleanup is unspecified.
 - `knowledge-pipeline.md` §§1, 3, 5, 7 (the Task 16 amendments) were not reviewed.
 
 ### Phase 6 · A13 (plan closed 2026-09-29; the real-agent rows are NEW-104 and NEW-127)
