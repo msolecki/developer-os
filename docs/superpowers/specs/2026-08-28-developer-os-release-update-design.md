@@ -340,6 +340,35 @@ NEW-171.
   machine. Publication (building the tarballs, the GitHub Release, the tap pull request, the formula's
   `license` field) is A16's specification, D84 (2), and needs L1 and L2.
 
+- **K7 — implementation record (Task 11b plan, 2026-10-08; awaiting founder ratification).** Rulings
+  the plan's execution made inside K1–K6, recorded so the text above is read with them:
+  (a) **Exit codes.** A keg whose release version or architecture does not match the request refuses
+  `release_mismatch`, exit 4 (a selection mismatch, as for `unsigned-local`), and the post-admission
+  reread of a packaged release refuses with exit 5 as the other trust kinds do; every other keg
+  admission failure is exit 6. No keg and no active release is exit 6 in the launcher
+  (`launcher_packaged_fallback_unresolved`).
+  (b) **Launcher bootstrap closure.** The launcher classifies bootstrap envelopes exactly as the CLI's
+  evidence report does: terminal, `unverified`, torn-slot and altered envelopes are inert before and
+  after the handoff (NEW-123 decision B); exactly one incomplete envelope routes `init` through the
+  packaged fallback; two or more refuse. The D96 Q1 ancestor rule also governs every in-place keg run.
+  (c) **Journal grammar (NEW-118 (1), (2)).** The bundle journal's `versionDirectory` is
+  `{state: "create_intent"} | {state: "created", created, dev, ino}` and the state journal's
+  `reservationReleased` records the release before the unlink; a version directory left by a refused
+  fresh create (§9.2, NEW-195) is reused by the next run as `created: false` and never compensated.
+  A journal without these keys refuses as exit 6 (the F5 residual).
+  (d) **Rollback fallback.** `update rollback --apply` builds `UpdateFallbackHandoffV1` from a keg this
+  process admitted, otherwise from the active release's manifest hash and protocols. Accepted residual:
+  after a `brew upgrade` with no `update`, a crash inside rollback's terminal cleanup refuses
+  `launcher_update_fallback_mismatch` (exit 6), and with the keg removed it cannot route at all.
+  (e) **Verifier scope.** The verifier recomputes the manifest digest from a bounded read of the
+  installed manifest; its owner and migration digests are recomputed from the same hash-checked plan
+  leaves and therefore cannot detect a tampered owner artifact. With D96 Q3's keep-all planner no
+  update changes an owner tree; hashing the real target artifacts, and §9.3's active/bundle equality,
+  belong to NEW-200. Accepted residual within the same-uid boundary.
+  (f) **Instruction rows** are restamped to the restored release's `productVersion` on rollback, as
+  update restamps them (NEW-171 (b)).
+
+
 ---
 
 ## 1. Scope and invariants
