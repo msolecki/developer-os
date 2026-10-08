@@ -573,6 +573,14 @@ describe("no product module reaches a remote network", () => {
     expect(networkCapable.filter((path) => !localOnly.includes(path)).sort()).toStrictEqual([]);
   });
 
+  it("classifies every import form as a network reach, the bare side-effect import included", () => {
+    for (const source of ['import "node:https";', "import 'node:tls';", 'import { get } from "node:http";', 'const later = import("node:dns");', 'require("undici");']) {
+      expect(networkModule.test(source), source).toBe(true);
+    }
+    expect(networkModule.test('import { readFile } from "node:fs";')).toBe(false);
+    expect(networkModule.test('const label = "node:https";')).toBe(false);
+  });
+
   it("stops classifying the Git gateway trampoline once its net binding is aliased", async () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const root = (await promisify(execFile)("git", ["rev-parse", "--show-toplevel"], { cwd: here })).stdout.trim();

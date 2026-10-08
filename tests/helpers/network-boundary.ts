@@ -5,7 +5,7 @@
  */
 
 export const networkModule =
-  /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|net|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
+  /(?:from\s+|import\s*(?:\(\s*)?|require\s*\(\s*)["'](?:node:)?(?:https?|http2|net|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
 
 /**
  * The Git gateway server's shape: its only value import from a network module is `createServer`
