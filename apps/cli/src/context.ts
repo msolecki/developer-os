@@ -37,6 +37,7 @@ import type {
   DriftFileSystem,
   ManifestFileSystem,
   ManifestGuards,
+  PACKAGE_CHANNEL_SOURCE_TABLE,
   PathEnvironment,
   RuntimePaths,
   TransactionFileSystem,
@@ -228,6 +229,8 @@ export interface CliContext {
   readonly nodeExecutable?: string | undefined;
   /** The plan-only update ports; absent, `update` binds the production ones from this context. */
   readonly update?: CliUpdateContext | undefined;
+  /** K6's fixed-path test seam for the K2 table (C3 hook Node); production leaves it unset. */
+  readonly packageChannelTable?: typeof PACKAGE_CHANNEL_SOURCE_TABLE;
 }
 
 export const NODE_FILE_SYSTEM: CliFileSystem = {

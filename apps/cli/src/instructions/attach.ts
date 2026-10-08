@@ -173,11 +173,10 @@ export function compareManifestRows(left: ManagedArtifactV2, right: ManagedArtif
     || compareBytes(left.verification.mode, right.verification.mode);
 }
 
-/** Keeps the recorded row, `verifiedAt` included, when nothing but the stamp would change. */
+/** Keeps the recorded row, `verifiedAt` included, when nothing but the time would change; a new release's stamp counts (C1). */
 function settle(candidate: ManagedArtifactV2, previous: ManagedArtifactV2 | undefined): ManagedArtifactV2 {
   if (previous === undefined) return candidate;
-  const restamped = { ...candidate, productVersion: previous.productVersion, verifiedAt: previous.verifiedAt };
-  return canonical(restamped) === canonical(previous) ? previous : candidate;
+  return canonical({ ...candidate, verifiedAt: previous.verifiedAt }) === canonical(previous) ? previous : candidate;
 }
 
 function installedHashOf(row: ManagedArtifactV2): string | null {

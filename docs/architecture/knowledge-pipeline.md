@@ -437,12 +437,12 @@ differently on every invocation: the field would populate, look correct, and mea
 
 **The key is durable, and the load has two doors, not one:**
 
-- `readRedactionKey` (`apps/cli/src/context.ts:704`) is the **composition root's** door. It never
+- `readRedactionKey` (`apps/cli/src/context.ts:707`) is the **composition root's** door. It never
   creates, never throws and never repairs, returning `null` for absent, unreadable, symlinked,
   wrong-typed or too-short — every state `doctor` must be able to *report*, which it cannot do if
   building the context already threw. The root warns and falls back to an ephemeral key
   (`apps/cli/src/context.ts` — `EPHEMERAL_KEY_WARNING`), so diagnostics are still redacted on a machine that has never been initialized.
-- `loadOrCreateRedactionKey` (`apps/cli/src/context.ts:683`) is the **point-of-use** door, called by `init` (`init.ts:375`,
+- `loadOrCreateRedactionKey` (`apps/cli/src/context.ts:686`) is the **point-of-use** door, called by `init` (`init.ts:375`,
   `:1002`, `:1053`, `:1088`) and by `capture`, `review` and `ingest` at their own points of use, and
   by `import` except under `--dry-run`. `import --dry-run`, `project init` and `project check` never
   create it: they read it with `readRedactionKey` and fall back to an ephemeral key. It creates
@@ -542,7 +542,7 @@ root and the canonical target **against each other, never against the content ro
 directory replaced by a symlink carried its own containment check with it. `capture` — the command
 that *writes* the observation — had no such check at all. All three commands now prove the quarantine
 root inside the configured content root once per run through one shared implementation
-(`apps/cli/src/context.ts:348-361`), each injecting its own refusal so the exit code and recovery text
+(`apps/cli/src/context.ts:351-364`), each injecting its own refusal so the exit code and recovery text
 stay its own. The security suite's parked `it.fails` has been an ordinary passing case since
 2026-08-15, and it went red the day the guard changed, exactly as the parking intended.
 
