@@ -1,0 +1,70 @@
+# A16 §5: the release preflight runs gitleaks over the full history at the tag.
+# Every [[allowlists]] entry names the synthetic fixture it admits and why it is not a secret.
+[extend]
+useDefault = true
+
+# Each entry pairs one exact file path with the full literal admitted token (condition = "AND"),
+# scoped to one rule, so any other secret in the same file or on the same line is still reported.
+
+[[allowlists]]
+description = "Synthetic AWS-shaped key (AKIA plus an alphabet run) in the garden validator tests; never issued by AWS"
+condition = "AND"
+targetRules = ["aws-access-token"]
+paths = ['''^packages/brain/src/garden/validate\.test\.ts$''']
+regexes = ['''^AKIAABCDEFGHIJKLMNOP$''']
+
+[[allowlists]]
+description = "Synthetic placeholder sk-synthetic-... in the automation runner test; it authenticates nothing"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^apps/cli/src/commands/automation/runner\.test\.ts$''']
+regexes = ['''^sk-synthetic-0123456789abcdef$''']
+
+[[allowlists]]
+description = "Synthetic placeholder sk-synthetic-... in the runtime-records test; it authenticates nothing"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^apps/cli/src/lifecycle/runtime-records\.test\.ts$''']
+regexes = ['''^sk-synthetic-0123456789abcdef$''']
+
+[[allowlists]]
+description = "Base64 of the ASCII text synthetic-test-material-not-key, the body of a fake private key block in the project-check test"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^apps/cli/src/commands/project-check\.test\.ts$''']
+regexes = ['''^c3ludGhldGljLXRlc3QtbWF0ZXJpYWwtbm90LWtleQ==$''']
+
+[[allowlists]]
+description = "Hex id-shape test input in the review command test; not a credential"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^apps/cli/src/commands/review\.test\.ts$''']
+regexes = ['''^0f1e2d3c4b5a697$''']
+
+[[allowlists]]
+description = "Fake Stripe-shaped test key (sk_test_ plus a digit run) in the redaction tests; never issued by Stripe"
+condition = "AND"
+targetRules = ["stripe-access-token"]
+paths = ['''^packages/security/src/redaction\.test\.ts$''']
+regexes = ['''^sk_test_0123456789abcdef$''']
+
+[[allowlists]]
+description = "Prose word hourly/daily/weekly in the program plan that matched generic-api-key; not a credential"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^docs/superpowers/plans/2026-07-21-developer-os-program\.md$''']
+regexes = ['''^hourly/daily/weekly$''']
+
+[[allowlists]]
+description = "Prose word unsigned-UTF-8 in the release-update specification that matched generic-api-key; not a credential"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^docs/superpowers/specs/2026-08-28-developer-os-release-update-design\.md$''']
+regexes = ['''^unsigned-UTF-8$''']
+
+[[allowlists]]
+description = "Fake Stripe-shaped live key (sk_live_ plus a digit run) in a redaction example in the knowledge-pipeline plan; never issued by Stripe"
+condition = "AND"
+targetRules = ["stripe-access-token"]
+paths = ['''^docs/superpowers/plans/2026-07-21-developer-os-knowledge-pipeline\.md$''']
+regexes = ['''^sk_live_0123456789abcdef$''']
