@@ -35,10 +35,8 @@ export type ReleaseBodySink = (chunk: Uint8Array) => Promise<void>;
 
 /** What a completed archive download reports: its byte count and SHA-256, checked against the signed reference. */
 export interface BoundedReleaseResponseV1 {
-  readonly kind: "release_key_delegation" | "release_index" | "bundle_manifest" | "archive";
   readonly bodyBytes: UInt64DecimalV1;
   readonly bodyHash: LowerHexSha256;
-  readonly redirected: boolean;
 }
 
 export type ReleasePlanningAttemptIdV1 = `rp_${string}`;
