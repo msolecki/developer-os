@@ -590,6 +590,9 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
   it("names an uninstall killed past commit_absence in doctor and status, and their recovery reaches a clean home (NEW-160, NEW-170)", async () => {
     const fixture = await initializedV2Fixture("uninstall-surveyed-after-commit-absence");
     const expectedResidue = await bookkeepingSetAndRetainedEvidence(fixture);
+    // `init`'s gated entrypoint write anchored the manifest; the resumed run must remove it too (D54 finding 1).
+    const anchor = join(fixture.paths.home, MANIFEST_ANCHOR_RELATIVE_PATH);
+    expect(await exists(anchor)).toBe(true);
     const uninstaller = new LifecycleUninstaller({ afterBoundary: dieAtFirst("empty_directory_removed") });
     await expect(uninstaller.execute(await requestFor(fixture))).rejects.toThrow(SyntheticDeath);
     expect(await exists(fixture.paths.manifestFile)).toBe(false);
@@ -609,6 +612,7 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
 
     const resumed = await runUninstall(fixture.context, ACCEPTED);
     if (!resumed.ok) throw new Error(`${String(resumed.code)} ${resumed.error.kind}: ${resumed.error.message}`);
+    expect(await exists(anchor)).toBe(false);
     expect(await productHomeResidue(fixture)).toStrictEqual(expectedResidue);
     const after = await runStatus(fixture.context);
     if (!after.ok) throw new Error(after.error.message);
