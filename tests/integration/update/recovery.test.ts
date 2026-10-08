@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fsModule from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
@@ -460,6 +461,12 @@ describe("an allocation that died after its allocator temp landed", () => {
   }, CASE_TIMEOUT_MS);
 });
 
+/** D54: the anchor names the manifest on disk, so `init` and `doctor` read the bootstrap as settled. */
+async function expectAnchored(home: UpdatableHomeV1): Promise<void> {
+  const anchor = JSON.parse(await nodeFs.readFile(join(home.fixture.paths.home, "state", "manifest-anchor.json"), "utf8")) as { readonly manifestHash: string };
+  expect(anchor.manifestHash).toBe(createHash("sha256").update(await nodeFs.readFile(home.fixture.paths.manifestFile)).digest("hex"));
+}
+
 /** Dies right after the coordinator's own journal is unlinked: the plan-only envelope suffix. */
 function afterJournalRemoved(context: DyingCliContext): ReturnType<typeof dieWhen> {
   return dieWhen(context, (name, args) => name === "unlinkExact" && /\/lc_[0-9a-f]{64}_[0-9]+\.json$/u.test((args[0] as { readonly path: string }).path));
@@ -470,6 +477,8 @@ describe("a run killed after it finalized and before its envelope plan was remov
     const home = await baseAt120("recovery-suffix-rollback");
     const dying = afterJournalRemoved(home.fixture.context);
     expect(await attempt(rollBack(home.update(dying.context)), dying.died)).toBe("died");
+    // The anchor moved at `finalized`, before the journal's removal killed the run.
+    await expectAnchored(home);
 
     const result = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "rollback", apply: true, json: true });
 
@@ -481,6 +490,7 @@ describe("a run killed after it finalized and before its envelope plan was remov
     const home = await installUpdatableHome("recovery-suffix-apply", "arm64");
     const dying = afterJournalRemoved(home.fixture.context);
     expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    await expectAnchored(home);
     const runs = home.world.plannerRuns.length;
 
     const result = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });

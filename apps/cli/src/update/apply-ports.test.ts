@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,7 +13,36 @@ import { removeCommandFixtures } from "../commands/testing.js";
 
 import type { CliContext } from "../context.js";
 import { codexPlanningInputs, constructionScreen, verifierSnapshot, manifestPayloadIdentities, matchesManifestFileIdentity, runCleanups } from "./apply-ports.js";
+import { planRollback } from "./planning.js";
+import { applyRollback } from "./rollback-apply.js";
 import { installUpdatableHome, SYNTHETIC_COORDINATOR_ID, tamperManifestBeforeVerifier, updateTo } from "./testing.js";
+
+describe("the manifest anchor after a finalized swap (D54, K8)", () => {
+  afterEach(removeCommandFixtures);
+
+  /** `init` reads a finalized bootstrap as superseded only while the anchor names the manifest on disk. */
+  function anchored(home: Awaited<ReturnType<typeof installUpdatableHome>>): { readonly anchor: string; readonly manifest: string } {
+    const anchor = JSON.parse(readFileSync(join(home.fixture.paths.home, "state", "manifest-anchor.json"), "utf8")) as { manifestHash: string };
+    return { anchor: anchor.manifestHash, manifest: createHash("sha256").update(readFileSync(home.fixture.paths.manifestFile)).digest("hex") };
+  }
+
+  it("re-anchors the manifest after update --apply and after update rollback --apply", async () => {
+    const home = await installUpdatableHome("reanchor", "arm64");
+    const installed = anchored(home);
+    expect(installed.anchor).toBe(installed.manifest);
+
+    await expect(updateTo(home.update(), "1.1.0")).resolves.toMatchObject({ outcome: "applied" });
+    const updated = anchored(home);
+    expect(updated.manifest).not.toBe(installed.manifest);
+    expect(updated.anchor).toBe(updated.manifest);
+
+    const update = home.update();
+    await expect(applyRollback(update, await planRollback(update))).resolves.toMatchObject({ outcome: "rolled_back" });
+    const rolledBack = anchored(home);
+    expect(rolledBack.manifest).not.toBe(updated.manifest);
+    expect(rolledBack.anchor).toBe(rolledBack.manifest);
+  }, 900_000);
+});
 
 function payload(ordinal: number): UpdateExpectedPayloadRefV1 {
   return {
