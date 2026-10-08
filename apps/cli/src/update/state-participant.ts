@@ -384,7 +384,8 @@ export class CanonicalStateParticipant {
     if (entry === null) return;
     const recorded = journal.reservationReleased;
     if (recorded === null && (entry.kind !== "regular_file" || entry.size !== "0" || entry.ownerUid !== effectiveUid || entry.nlink !== 1)) return;
-    if (recorded !== null && (entry.dev !== recorded.dev || entry.ino !== recorded.ino)) return;
+    // A resumed intent unlinks only the recorded inode, and only while it is still empty.
+    if (recorded !== null && (entry.dev !== recorded.dev || entry.ino !== recorded.ino || entry.size !== "0")) return;
     if (recorded === null) await this.persist(step.journal.finalPath, { ...journal, reservationReleased: { dev: entry.dev, ino: entry.ino } });
     await fs.unlinkExact(entry);
     const parent = await fs.lstat(parentPath(plan.path));
@@ -398,7 +399,7 @@ export class CanonicalStateParticipant {
     const { fs } = this.#dependencies;
     const found = await fs.lstat(plan.path);
     if (found !== null) {
-      if (found.kind !== "regular_file" || found.size !== "0") refuseParticipant("update_state_third", plan.path);
+      if (found.kind !== "regular_file" || found.size !== "0" || found.ownerUid !== this.#dependencies.effectiveUid || found.mode !== 0o600 || found.nlink !== 1) refuseParticipant("update_state_third", plan.path);
       return;
     }
     const parent = await fs.lstat(parentPath(plan.path));
@@ -413,7 +414,13 @@ export class CanonicalStateParticipant {
     const kind = stateLeafKindForRole(role);
     if (step.journal.kind !== kind || step.planRef.kind !== kind || step.planRef.hash !== updateParticipantDocumentHash(kind, step.plan) || step.journal.planHash !== step.planRef.hash) refuseParticipant("update_state_binding", step.journal.finalPath);
     const value = await this.#dependencies.journals.open(step.journal);
-    return validateStateParticipantJournal(value, kind, { id: step.plan.id, coordinatorId: step.plan.coordinatorId, retainedVerification: isRetainedRecordVerification(step.plan) }, step.planRef.hash);
+    try {
+      return validateStateParticipantJournal(value, kind, { id: step.plan.id, coordinatorId: step.plan.coordinatorId, retainedVerification: isRetainedRecordVerification(step.plan) }, step.planRef.hash);
+    } catch (error) {
+      // An old-grammar journal is a third state (exit 6), never a plain error the coordinator would compensate.
+      if (error instanceof LifecycleRecoveryRequiredError) throw error;
+      return refuseParticipant("update_state_journal_invalid", step.journal.finalPath);
+    }
   }
 
   private async persist(path: CanonicalAbsolutePathV1, journal: StateJournal): Promise<StateJournal> {

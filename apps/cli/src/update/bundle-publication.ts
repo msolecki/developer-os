@@ -224,6 +224,8 @@ export class BundlePublicationParticipant {
       await this.#advance(plan, file, { kind: "version_directory_created", created: false, dev: reused.dev, ino: reused.ino });
       return reused;
     }
+    // After a refused create (`create_refused`) the intent is withdrawn and the directory belongs to someone else:
+    // the next run finds it present and records it `created: false`, so it is reused and never compensated.
     if (recorded === null) await this.#advance(plan, file, { kind: "version_directory_intent" });
     // A resumed intent binds only the exact empty attempt-created directory; a fresh intent never binds a present path.
     found = recorded === null ? null : await this.#boundVersionDirectory(plan);

@@ -560,7 +560,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
   const stateHandler = (step: CanonicalStateStepV1 | null, releaseReservation: boolean): UpdateStepHandlerV1<unknown> => ({
     apply: async () => {
       const found = step ?? thirdState("update_state_plan_absent", root);
-      if (releaseReservation) await releaseEmptyReservation(state, found);
+      if (releaseReservation) await state.releaseReservation(found);
       return state.apply(found);
     },
     observe: () => state.observe(step ?? thirdState("update_state_plan_absent", root)),
@@ -730,15 +730,6 @@ function validateStateBytes(role: CanonicalStateFilePlanV1["role"], bytes: Uint8
   else if (role === "release_trust") validateReleaseTrustState(value);
   else if (role === "rollback_record") validateRollbackRecord(value, createCanonicalPathEvidence());
   else thirdState("update_state_role");
-}
-
-/**
- * §6.4's empty reservation holds no record, so the plan names it absent; its exact empty inode is
- * released before the first transition so the no-replace publication can land. The state journal
- * records that inode before the unlink and compensation recreates the empty reservation (NEW-118 (2)).
- */
-async function releaseEmptyReservation(state: CanonicalStateParticipant, step: CanonicalStateStepV1): Promise<void> {
-  await state.releaseReservation(step);
 }
 
 async function removeUnconsumedPayloads(journals: UpdateParticipantJournalStore, paths: readonly CanonicalAbsolutePathV1[]): Promise<void> {

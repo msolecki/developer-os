@@ -258,6 +258,17 @@ describe("canonical state participant", () => {
     expect(await read(step.plan.path)).toBe("");
   });
 
+  it("does not unlink a recorded reservation inode that is no longer empty (NEW-118 (2))", async () => {
+    const grown = await stateFixture("rollback_record", { before: false });
+    await nodeFs.writeFile(grown.step.plan.path, "", { mode: 0o600 });
+    const journal = (await grown.journals.open(grown.step.journal)) as Record<string, unknown>;
+    await grown.journals.rewrite(grown.step.journal.finalPath, { ...journal, reservationReleased: await identityOf(grown.step.plan.path) });
+    await nodeFs.writeFile(grown.step.plan.path, "x");
+    await grown.participant.releaseReservation(grown.step);
+    expect(await read(grown.step.plan.path)).toBe("x");
+
+  });
+
   it("verifies a retained record without changing it", async () => {
     const { step, participant } = await stateFixture("rollback_record", { after: false });
     await expect(participant.verifyRetained(step)).resolves.toEqual({ state: "verified" });
