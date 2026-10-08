@@ -37,6 +37,7 @@ import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { coordinatorNonceOf, uninstallResidueFrom } from "./context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
 import { manifestAdmissionFor } from "./manifest-admission.js";
+import { removeManifestAnchorOrWarn } from "./manifest-anchor.js";
 import {
   createUninstallAdapters,
   createUninstallParticipants,
@@ -417,6 +418,10 @@ async function resumeUninstall(
       )
       .recover(global, { resumeUninstall: true });
     holds.global = recovered.global;
+    // A compensated resume restores the manifest, and its anchor with it; only a finished one removes it.
+    if ((await observeManifestSchema(lifecycle.fs, paths)).kind === "absent") {
+      await removeManifestAnchorOrWarn(lifecycle.fs, paths.home, lifecycle.effectiveUid, (text) => { context.io.stderr(text); });
+    }
   } finally {
     await releaseUninstallHolds(holds);
   }

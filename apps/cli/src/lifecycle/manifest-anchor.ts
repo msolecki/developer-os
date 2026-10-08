@@ -124,6 +124,24 @@ export async function removeManifestAnchor(
 }
 
 /**
+ * D54 review, finding 1: once uninstall leaves no manifest the anchor describes no installation.
+ * The caller holds the global lock; a failure is reported (finding 3), never a failed uninstall.
+ */
+export async function removeManifestAnchorOrWarn(
+  fs: LifecycleGuardedFileSystemV1,
+  productHome: string,
+  effectiveUid: number,
+  stderr: (text: string) => void,
+): Promise<void> {
+  try {
+    await removeManifestAnchor(fs, productHome, effectiveUid);
+  } catch (error) {
+    if (isCodeDefect(error)) throw error;
+    stderr(MANIFEST_ANCHOR_WARNING);
+  }
+}
+
+/**
  * D54 review, finding 3: the anchor is evidence for a later `init`, never part of a committed
  * transaction, so a failure to record, derive or remove it is reported on `stderr` and the
  * command's result stands. The anchor is then absent or stale, which `init` reads as "not
