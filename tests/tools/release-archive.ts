@@ -15,22 +15,36 @@ function octal(value: number, width: number): string {
   return `${value.toString(8).padStart(width - 1, "0")}\0`;
 }
 
-function ustarHeader(entry: ReleaseBundleEntryV1, size: number): Uint8Array {
+export interface UstarEntry {
+  readonly path: string;
+  readonly kind: "file" | "directory";
+  readonly mode: number;
+}
+
+/** The bundle archive's fixed mtime (Spec 2 §3); release tarballs pass the tag commit's time. */
+const BUNDLE_MTIME = 0o14_000_000_000;
+
+export function ustarHeader(entry: UstarEntry, size: number, mtime: number = BUNDLE_MTIME): Uint8Array {
+  const boundary = entry.path.lastIndexOf("/");
+  const name = boundary < 0 ? entry.path : entry.path.slice(boundary + 1);
+  const prefix = boundary < 0 ? "" : entry.path.slice(0, boundary);
+  if (encoder.encode(name).byteLength > 100 || encoder.encode(prefix).byteLength > 155) {
+    throw new Error(`refusing to archive: ${entry.path} does not fit a ustar header`);
+  }
   const header = new Uint8Array(BLOCK);
   const put = (offset: number, text: string): void => {
     header.set(encoder.encode(text), offset);
   };
-  const boundary = entry.path.lastIndexOf("/");
-  put(0, boundary < 0 ? entry.path : entry.path.slice(boundary + 1));
+  put(0, name);
   put(100, octal(entry.mode, 8));
   put(108, octal(0, 8));
   put(116, octal(0, 8));
   put(124, octal(size, 12));
-  put(136, octal(0o14_000_000_000, 12));
+  put(136, octal(mtime, 12));
   put(156, entry.kind === "directory" ? "5" : "0");
   put(257, "ustar\0");
   put(263, "00");
-  put(345, boundary < 0 ? "" : entry.path.slice(0, boundary));
+  put(345, prefix);
   let sum = 0;
   for (let index = 0; index < BLOCK; index += 1) sum += index >= 148 && index < 156 ? 0x20 : (header[index] as number);
   put(148, `${sum.toString(8).padStart(6, "0")}\0 `);
