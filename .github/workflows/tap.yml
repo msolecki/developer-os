@@ -1,17 +1,26 @@
 name: tap
 
-# A16 §2 step 7: the founder published a draft release (approval 1). Render the
-# formula from the published assets and open a pull request in the tap. Merging
-# it (approval 2) is the release.
+# A16 §2 step 7: the founder published a draft release (approval 1). Update the
+# formula in the tap from the published SHA256SUMS and open a pull request.
+# Merging it (approval 2) is the release.
+#
+# This workflow runs no repository code: no checkout, no Node, no build. It
+# fetches SHA256SUMS and the one edit script from the release tag with the
+# job's read-only token, edits the five known lines of the tap's EXISTING
+# `Formula/developer-os.rb`, and pushes with the tap token.
+#
+# L2 (founder actions, before the first release):
+#   1. Commit the initial `Formula/developer-os.rb` to the tap by hand, rendered
+#      locally with `node tests/dist/tools/render-formula.js`. This workflow only
+#      updates `version`, both `url` lines and both `sha256` lines of that file
+#      and refuses a formula of any other shape.
+#   2. Create `TAP_PR_TOKEN` as an Environment secret of the `tap` environment
+#      (not a repository secret) and give the environment a deployment rule that
+#      admits only `v*` tags. The token is then reachable by no other job, no
+#      other ref, and only by the final step below.
 #
 # Action SHAs were read with `gh api repos/actions/<repo>/git/ref/tags/<tag>`
 # from the actions organisation's own repositories on 2026-10-08.
-#
-# The tap job is bound to the `tap` Environment. L2 (founder action): create
-# `TAP_PR_TOKEN` as an Environment secret of `tap` (not a repository secret) and
-# give the environment a deployment rule that admits only `v*` tags. The token
-# is then reachable by no other job and no other ref. The build job runs
-# repository code and never sees it; the tap job runs no repository code.
 on:
   release:
     types: [published]
@@ -24,92 +33,47 @@ defaults:
     shell: bash
 
 jobs:
-  formula:
-    runs-on: macos-15
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: ${{ github.event.release.tag_name }}
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .node-version
-      - name: Enable pnpm through corepack
-        run: corepack enable
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm --pm-on-fail=ignore build
-      - name: Download, verify and render
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-        run: |
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
-          version="${TAG#v}"
-          mkdir "$RUNNER_TEMP/assets"
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/assets" \
-            --pattern SHA256SUMS --pattern "developer-os-${version}-darwin-*.tar.gz"
-          (cd "$RUNNER_TEMP/assets" && shasum -a 256 -c SHA256SUMS)
-          node tests/dist/tools/render-formula.js --version "$version" --sums "$RUNNER_TEMP/assets/SHA256SUMS" > "$RUNNER_TEMP/developer-os.rb"
-          ruby -c "$RUNNER_TEMP/developer-os.rb"
-      - name: Upload the formula
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: formula
-          path: ${{ runner.temp }}/developer-os.rb
-          if-no-files-found: error
-
   tap:
-    needs: formula
     runs-on: macos-15
     timeout-minutes: 10
     environment: tap
     permissions:
       contents: read
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: formula
-          path: ${{ runner.temp }}/formula
-      - name: Re-verify the formula against the published SHA256SUMS
+      - name: Fetch SHA256SUMS and the edit script from the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
-          formula="$RUNNER_TEMP/formula/developer-os.rb"
-          mkdir "$RUNNER_TEMP/sums"
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/sums" --pattern SHA256SUMS
-          [ "$(grep -c '^ *sha256 "[0-9a-f]\{64\}"$' "$formula")" = 2 ] || { echo "formula must carry exactly two sha256 lines" >&2; exit 1; }
-          while read -r digest; do
-            grep -q "^${digest}  " "$RUNNER_TEMP/sums/SHA256SUMS" || { echo "sha256 not in SHA256SUMS: $digest" >&2; exit 1; }
-          done < <(sed -n 's/^ *sha256 "\([0-9a-f]\{64\}\)"$/\1/p' "$formula")
-          prefix="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/"
-          [ "$(grep -c '^ *url "' "$formula")" = 2 ] || { echo "formula must carry exactly two url lines" >&2; exit 1; }
-          while read -r url; do
-            [[ "$url" == "$prefix"* ]] || { echo "url outside the release: $url" >&2; exit 1; }
-          done < <(sed -n 's/^ *url "\([^"]*\)"$/\1/p' "$formula")
-      # Last step, and the only one that sees the tap token: gh and git on a
-      # fresh clone of the tap, nothing from this repository.
-      - name: Open the tap pull request
+          mkdir "$RUNNER_TEMP/in"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/in" --pattern SHA256SUMS
+          gh api -H "Accept: application/vnd.github.raw+json" \
+            "repos/${GITHUB_REPOSITORY}/contents/.github/release/update-formula.sh?ref=${TAG}" > "$RUNNER_TEMP/in/update-formula.sh"
+      - name: Clone the tap, edit the formula and commit
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
+          /usr/bin/git clone --depth 1 https://github.com/msolecki/homebrew-developer-os.git "$RUNNER_TEMP/tap"
+          cd "$RUNNER_TEMP/tap" || exit 1
+          /usr/bin/git checkout -b "release/${TAG}"
+          /bin/bash "$RUNNER_TEMP/in/update-formula.sh" "$TAG" "$RUNNER_TEMP/in/SHA256SUMS" Formula/developer-os.rb
+          [ "$(/usr/bin/git diff --numstat)" = "$(printf '5\t5\tFormula/developer-os.rb')" ] || { echo "diff is not exactly five lines of the formula" >&2; exit 1; }
+          /usr/bin/git add Formula/developer-os.rb
+          /usr/bin/git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "developer-os ${TAG#v}"
+      # Last step, and the only one that sees the tap token: gh and git on the
+      # already-committed clone, nothing from this repository.
+      - name: Push the branch and open the tap pull request
         env:
           GH_TOKEN: ${{ secrets.TAP_PR_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
-          branch="release/${TAG}"
-          gh auth setup-git
-          gh repo clone msolecki/homebrew-developer-os "$RUNNER_TEMP/tap"
           cd "$RUNNER_TEMP/tap" || exit 1
-          /usr/bin/git checkout -b "$branch"
-          mkdir -p Formula
-          cp "$RUNNER_TEMP/formula/developer-os.rb" Formula/developer-os.rb
-          /usr/bin/git add Formula/developer-os.rb
-          /usr/bin/git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -m "developer-os ${TAG#v}"
-          /usr/bin/git push origin "$branch"
-          gh pr create --repo msolecki/homebrew-developer-os --head "$branch" \
+          gh auth setup-git
+          /usr/bin/git push origin "release/${TAG}"
+          gh pr create --repo msolecki/homebrew-developer-os --head "release/${TAG}" \
             --title "developer-os ${TAG#v}" \
             --body "Release ${TAG}: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
