@@ -71,4 +71,30 @@ describe("the K8 refresh process", () => {
     await nodeFs.appendFile(join(fixture.paths.stateDir, "release-metadata", "bundles", `${active.bundleManifestHash}.json`), " ");
     expect(await refreshActiveRelease(fixture.context)).toBe(EXIT_CODES.recoveryRequired);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("(g) refuses exit 6 when the active record's bundle root is not the derived release root", async () => {
+    const fixture = await createCommandFixture("refresh-root", { bootstrapAvailable: true });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, { dryRun: false, assumeYes: true })).ok).toBe(true);
+    const recordPath = join(fixture.paths.stateDir, "active-release.json");
+    const active = JSON.parse(await nodeFs.readFile(recordPath, "utf8")) as { bundleRoot: string };
+    await nodeFs.writeFile(recordPath, JSON.stringify({ ...active, bundleRoot: `${active.bundleRoot}/../elsewhere` }));
+    expect(await refreshActiveRelease(fixture.context)).toBe(EXIT_CODES.recoveryRequired);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("(h) refuses an active release built for another architecture than the host", async () => {
+    const fixture = await createCommandFixture("refresh-arch", { bootstrapAvailable: true, architecture: "x64" });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, { dryRun: false, assumeYes: true })).ok).toBe(true);
+    const host = (await fixture.context.platform.inspect()).architecture;
+    if (host === "x64") return;
+    expect(await refreshActiveRelease(fixture.context)).toBe(EXIT_CODES.recoveryRequired);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("(i) refuses a non-canonical Brain override as the launcher does (exit 2) and passes a valid one through", async () => {
+    const bad = await createCommandFixture("refresh-brain", { env: { DEVELOPER_OS_BRAIN: "/synthetic/a/../brain" } });
+    expect(() => refreshEnvironment(bad.context)).toThrow(expect.objectContaining({ reason: "brain_override_invalid", code: EXIT_CODES.invalidInput }));
+    const good = await createCommandFixture("refresh-brain-ok", { env: { DEVELOPER_OS_BRAIN: "/synthetic/brain" } });
+    expect(refreshEnvironment(good.context).DEVELOPER_OS_BRAIN).toBe("/synthetic/brain");
+  });
 });
