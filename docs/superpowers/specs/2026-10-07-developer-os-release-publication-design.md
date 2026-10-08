@@ -120,8 +120,8 @@ details of §2 and §3.1:
   workflow downloads both official Node 24 `darwin` archives and passes the SHA-256 pinned in the
   repository. The packer runs `--version` only on the host-architecture binary, so any macOS runner
   works; the zstd bytes depend on the Node that runs the packer, which the workflow pins.
-- **Clean tree, no revisions.** `release.yml` never passes `--allow-dirty`, and the packer refuses that
-  flag when `CI` is set. The formula never uses Homebrew's `revision`: the launcher admits only
+- **Clean tree, no revisions.** `release.yml` never passes `--allow-dirty`; the A16 plan makes the packer
+  refuse that flag when `CI` is set (not yet implemented). The formula never uses Homebrew's `revision`: the launcher admits only
   `Cellar/developer-os/<stable-semver>` kegs, so a `1.2.0_1` keg would remove the fallback. Installed
   metadata is mode `0644` and directories `0755`, which the launcher and K2 admission require.
 
