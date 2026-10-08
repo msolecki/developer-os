@@ -12,6 +12,10 @@ name: release
 # a read-only token. publish holds `contents: write` and runs no repository or
 # dependency code: it downloads the assets, re-verifies them with the runner's
 # own tools, and drafts the release with gh.
+#
+# publish is bound to the `release` Environment. L2 (founder action): create the
+# `release` Environment with a deployment rule that admits only `v*` tags, so
+# the write token is reachable from no other ref.
 on:
   push:
     tags:
@@ -185,6 +189,7 @@ jobs:
     needs: [build, sbom]
     runs-on: macos-15
     timeout-minutes: 10
+    environment: release
     permissions:
       contents: write
     # No checkout and no repository or dependency code in this job: only the

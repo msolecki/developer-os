@@ -51,6 +51,7 @@ const violations = (text: string): string[] => {
   }
   if (/actions\/checkout|setup-node|\b(?:pnpm|npm|npx|node|corepack|tsc)\b|tests\/dist/u.test(withoutComments(publish))) found.push("publish runs repo code");
   if (!/^ {4}needs: \[build, sbom\]$/mu.test(publish)) found.push("publish needs");
+  if (!/^ {4}environment: release$/mu.test(publish)) found.push("publish environment");
   if (!publish.includes('cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"') || !/shasum -a 256 "developer-os-\$\{version\}-darwin-\$\{arch\}\.tar\.gz"/u.test(publish)) found.push("publish re-verifies");
   if (!publish.includes('gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag')) found.push("draft");
 
@@ -112,6 +113,7 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "publish pnpm": ["publish runs repo code", (t) => t.replace('gh release create "$GITHUB_REF_NAME"', 'pnpm exec x; gh release create "$GITHUB_REF_NAME"')],
   "publish without re-verify": ["publish re-verifies", (t) => t.replace('cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"', "true")],
   "publish before sbom": ["publish needs", (t) => t.replace("needs: [build, sbom]", "needs: build")],
+  "publish without environment": ["publish environment", (t) => t.replace("    environment: release\n", "")],
   "not a draft": ["draft", (t) => t.replace(" --draft --verify-tag", " --verify-tag")],
   "tag pin": ["action pins", (t) => t.replace("# v4.6.2", "# v4")],
   "branch pin": ["action pins", (t) => t.replace(/@d3f86a106a0bac45b974a628896c90dbdf5c8093/u, "@v4")],
