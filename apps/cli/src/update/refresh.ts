@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-import { EXIT_CODES } from "@developer-os/core";
+import { EXIT_CODES, parseCanonicalAbsolutePathText } from "@developer-os/core";
 import type { ExitCode } from "@developer-os/core";
 
 import type { CliContext } from "../context.js";
@@ -21,12 +21,21 @@ export interface RefreshProcessV1 {
 
 /** The launcher's closed environment (Spec 2 §3.1, `apps/launcher/src/environment.ts`): never `PATH`, nothing inherited. */
 export function refreshEnvironment(context: CliContext): Record<string, string> {
-  const brain = context.env.DEVELOPER_OS_BRAIN;
+  const raw = context.env.DEVELOPER_OS_BRAIN;
   return {
     HOME: context.userHome,
     DEVELOPER_OS_HOME: context.paths.home,
-    ...(brain === undefined || brain === "" ? {} : { DEVELOPER_OS_BRAIN: brain }),
+    ...(raw === undefined || raw === "" ? {} : { DEVELOPER_OS_BRAIN: brain(raw, context) }),
   };
+}
+
+/** The launcher's rule (`buildLauncherEnvironment`): an invalid Brain override is refused, exit 2, never passed on. */
+function brain(raw: string, context: CliContext): string {
+  try {
+    return parseCanonicalAbsolutePathText(raw);
+  } catch (cause) {
+    throw new InstructionRefusal({ reason: "brain_override_invalid", code: EXIT_CODES.invalidInput, paths: [context.paths.home], recovery: "unset DEVELOPER_OS_BRAIN or set a canonical absolute path", cause });
+  }
 }
 
 function noTree(context: CliContext): never {
@@ -37,6 +46,10 @@ function noTree(context: CliContext): never {
 export async function refreshProcess(context: CliContext): Promise<RefreshProcessV1> {
   // `update` admits only package-channel homes, so a null tree here is a broken home.
   const tree = (await readActiveReleaseTree(context)) ?? noTree(context);
+  // The launcher's rule (`admitRetainedRelease`): the root is derived, never taken from the record, and matches the host.
+  if (tree.bundleRoot !== `${context.paths.home}/releases/${tree.version}/darwin-${tree.architecture}` || tree.architecture !== (await context.platform.inspect()).architecture) {
+    throw new InstructionRefusal({ reason: "active_release_tree_invalid", code: EXIT_CODES.recoveryRequired, paths: [tree.bundleRoot], recovery: "developer-os doctor" });
+  }
   return { executable: `${tree.bundleRoot}/${tree.runtimeEntrypoint}`, argv: [entrypointPath(context.paths.home), ...REFRESH_ARGV], env: refreshEnvironment(context) };
 }
 
