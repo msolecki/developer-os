@@ -82,6 +82,7 @@ import {
 } from "../instructions/codex-registration.js";
 import type { CodexRegistrationRecordV1 } from "../instructions/codex-registration.js";
 import { UNPROVEN_CLAUDE_CATEGORIES } from "../instructions/attach.js";
+import { HOOK_OPT_NODE_RECOVERY } from "../instructions/active-release.js";
 import { loadInstructionOverrides } from "../instructions/sources.js";
 import {
   claudeInstructionPaths,
@@ -677,8 +678,6 @@ async function checkCodexCapabilities(
 export const CODEX_UNTRUSTED_HOOK_MESSAGE = "installed; not observed firing — approve it in Codex if you have not";
 /** A Node upgrade that removes the rendered path makes every hook exit 127, which both vendors ignore. */
 const HOOK_EXECUTABLE_RECOVERY = "developer-os init";
-/** C3: a dead Node under the keg's `opt` link is restored by the package, which `init` cannot do. */
-const HOOK_OPT_NODE_RECOVERY = "brew install developer-os";
 export const MAX_CLAUDE_SETTINGS_BYTES = 1_048_576;
 const CODEX_EXTERNAL_HOOKS = "codex=unknown (config.toml is not read (codex-adapter.md §2.3))";
 const HOUR_MS = 3_600_000;

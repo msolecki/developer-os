@@ -82,6 +82,9 @@ async function readTree(context: CliContext, activePath: string): Promise<Active
   };
 }
 
+/** C3: a dead Node under the keg's `opt` link is restored by the package, which `init` cannot do. */
+export const HOOK_OPT_NODE_RECOVERY = "brew install developer-os";
+
 /**
  * C3 (2026-10-08): a `package-channel` home's hooks name Node through the K2 table's fixed `opt`
  * link, so no release swap or retirement changes or breaks a hook; never `PATH`, never `realpath`.
