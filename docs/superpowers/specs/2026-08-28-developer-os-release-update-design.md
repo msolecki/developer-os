@@ -384,6 +384,13 @@ NEW-171.
   active release. The planner stays keep-all (D96 Q3); K7 (e)'s verifier residual does not widen,
   because the refresh verifies its own transaction. Accepted residual: a crash between the release
   swap and the refresh leaves the previous workflows until the next `update`, rollback or `init`.
+  **Amended 2026-10-08 (NEW-200 plan, founder decisions C1–C3).** (C1) The release swap no longer
+  restamps instruction rows, which reverses K7 (f): the refresh stamps every row it renders, so
+  `doctor`'s warning marks a refresh that did not complete. (C2) `init` on an installed home without
+  `--adapters` renders from the active bundle as the refresh does, so "run developer-os init" works
+  after a rollback or with no keg. (C3) Refreshed hooks name Node through the fixed `opt` path of K2's
+  table, never through a release directory, so a later swap that retires a release cannot leave every
+  hook exiting non-blocking.
 
 
 ---
