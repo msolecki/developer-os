@@ -708,6 +708,51 @@ export function isReleaseMismatch(error: unknown): boolean {
   return error instanceof PackagedReleaseError && error.code === EXIT_CODES.capabilityUnavailable && error.message === "release_mismatch";
 }
 
+/**
+ * D84 K2: `init` admits the keg the fixed table names. An absent keg is not an error: `init` then
+ * reports `unavailable_until_packaged_handoff` as before. C2: a keg of another version is no keg
+ * either, but only for `init` without `--adapters` (`mismatchIsAbsentIn`, the product state
+ * directory) on a home that already holds a V2 install, so a fresh or V1 home still refuses
+ * `release_mismatch` instead of falling through to a V1 install. Any other refusal propagates (exit 6).
+ */
+export async function admitInitPackageChannelKeg(input: {
+  readonly architecture: string;
+  readonly requireVersion: string;
+  readonly mismatchIsAbsentIn: string | null;
+  readonly table?: typeof PACKAGE_CHANNEL_SOURCE_TABLE;
+}): Promise<PackagedReleaseSourceV1 | null> {
+  const { architecture } = input;
+  if (architecture !== "arm64" && architecture !== "x64") return null;
+  const table = input.table ?? PACKAGE_CHANNEL_SOURCE_TABLE;
+  try {
+    const { packageRoot } = await resolvePackageChannelSource(architecture, table);
+    return await admitPackageChannelRelease(packageRoot, {
+      prefix: table[architecture].prefix,
+      requireVersion: input.requireVersion,
+      architecture,
+    });
+  } catch (error) {
+    if (isPackageSourceAbsent(error)) return null;
+    if (isReleaseMismatch(error) && input.mismatchIsAbsentIn !== null && await holdsActiveRelease(input.mismatchIsAbsentIn)) return null;
+    throw error;
+  }
+}
+
+/** A regular `<stateDir>/active-release.json`, opened without following a link: the home holds a V2 install. */
+async function holdsActiveRelease(stateDir: string): Promise<boolean> {
+  let handle;
+  try {
+    handle = await nodeFs.open(join(stateDir, "active-release.json"), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch {
+    return false;
+  }
+  try {
+    return (await handle.stat({ bigint: true })).isFile();
+  } finally {
+    await handle.close();
+  }
+}
+
 export async function resolvePackageChannelSource(
   architecture: "arm64" | "x64",
   table: typeof PACKAGE_CHANNEL_SOURCE_TABLE = PACKAGE_CHANNEL_SOURCE_TABLE,

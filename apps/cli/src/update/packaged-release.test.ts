@@ -18,6 +18,7 @@ import type { CanonicalJsonValue } from "@developer-os/core";
 import { writePackageChannelRelease } from "./local-release.js";
 import type { ReleaseFileV1 } from "./local-release.js";
 import {
+  admitInitPackageChannelKeg,
   admitPackageChannelRelease,
   isPackageSourceAbsent,
   isReleaseMismatch,
@@ -381,6 +382,29 @@ describe("admitPackageChannelRelease (D84 K2)", () => {
     const error = await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: "9.9.9", architecture: ARCH }).catch((caught: unknown) => caught);
     expect(isReleaseMismatch(error)).toBe(true);
     expect(isReleaseMismatch(new PackagedReleaseError(EXIT_CODES.recoveryRequired, "release_mismatch"))).toBe(false);
+  });
+  it("admits a mismatched keg as no keg only beside an installed home's active release (C2 fix)", async () => {
+    const { prefix } = await kegFixture("1.2.0");
+    const stateDir = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-c2-state-")));
+    roots.push(stateDir);
+    const admit = (mismatchIsAbsentIn: string | null, requireVersion = "9.9.9") =>
+      admitInitPackageChannelKeg({ architecture: ARCH, requireVersion, mismatchIsAbsentIn, table: table(prefix) });
+    const mismatch = { code: EXIT_CODES.capabilityUnavailable, message: "release_mismatch" };
+
+    await expect(admit(null)).rejects.toMatchObject(mismatch);
+    // Fresh or V1: no active release recorded.
+    await expect(admit(stateDir)).rejects.toMatchObject(mismatch);
+    // A symlinked record is not followed.
+    await nodeFs.writeFile(join(stateDir, "elsewhere.json"), "{}\n");
+    await nodeFs.symlink("elsewhere.json", join(stateDir, "active-release.json"));
+    await expect(admit(stateDir)).rejects.toMatchObject(mismatch);
+    await nodeFs.rm(join(stateDir, "active-release.json"));
+    // Installed V2.
+    await nodeFs.writeFile(join(stateDir, "active-release.json"), "{}\n");
+    await expect(admit(stateDir)).resolves.toBeNull();
+    await expect(admit(stateDir, "1.2.0")).resolves.not.toBeNull();
+    await nodeFs.rm(join(prefix, "opt", "developer-os"));
+    await expect(admit(null)).resolves.toBeNull();
   });
   it("(f) resolves the opt link once to its canonical keg, and an absent path is exit 4", async () => {
     const { prefix, keg } = await kegFixture();
