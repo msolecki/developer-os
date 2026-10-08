@@ -380,5 +380,6 @@ This is an inbound-reference index, not completed backlog history. Current sourc
 - Adapter capability and hook constraints: `claude-adapter.md` and `codex-adapter.md`.
 - Remote/publication boundary: `docs/migration/exclusion-policy.md`, `SESSION.md`, and §7 above.
 - Task 11b (A11b): `plans/2026-10-07-task-11b-package-channel.md` (14 tasks, approved 2026-10-07 with D96's answers; executing).
+- A16 plan: `plans/2026-10-08-a16-release-publication.md` (11 tasks; T1–T10 buildable now, T11 founder with L1/L2; written 2026-10-08, awaiting founder review).
 - Release publication (A16): `specs/2026-10-07-developer-os-release-publication-design.md` (approved by the founder
   2026-10-07); the update side is Spec 2's Task 11b block (K1–K6).

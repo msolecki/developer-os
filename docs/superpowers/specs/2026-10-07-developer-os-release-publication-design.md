@@ -125,6 +125,19 @@ details of §2 and §3.1:
   `Cellar/developer-os/<stable-semver>` kegs, so a `1.2.0_1` keg would remove the fallback. Installed
   metadata is mode `0644` and directories `0755`, which the launcher and K2 admission require.
 
+### 3.4 Amended 2026-10-08 (A16 plan rulings; awaiting founder ratification)
+
+- §2 step 3 and §3.1 are read through §3.3: one packer job, no `--architecture` flag, Node passed in,
+  and the formula installs the keg root with `prefix.install Dir["*"]`.
+- The repository pins each Node archive's SHA-256 from `SHASUMS256.txt`; CI verifies the archive,
+  extracts `bin/node`, and passes that binary's own SHA-256 to the packer.
+- The per-bundle `.tar.zst` archives the packer writes describe the index rows' archive fields and are
+  not published; the release assets stay the two tarballs, `SHA256SUMS` and the SBOM.
+- §5's clean-account gate runs in a fresh macOS VM (D96 Q5), not a second account.
+- A tag is released only from a `development` commit that has its own successful `check.yml` push run.
+- Known risk, proven only by the VM gate: Homebrew's install-time relocation or re-signing must leave
+  `libexec/fallback` byte- and mode-identical, or K2 admission refuses every real install.
+
 ## 4. Documentation set
 
 These are created before the first beta, as listed in program plan Task 9: `README.md`, `SECURITY.md`
