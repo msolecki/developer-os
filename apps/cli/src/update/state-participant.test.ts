@@ -33,7 +33,7 @@ import {
   type UpdateConstructionPlanV1,
   type UpdateInitialJournalRefV1,
 } from "@developer-os/core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CanonicalStateParticipant, constructionPayloadIdentity, runTargetVerifier, UpdateParticipantJournalStore, type CanonicalStateStepV1 } from "./state-participant.js";
 
@@ -329,6 +329,19 @@ describe("canonical state participant", () => {
     const other = await stateFixture("active_release");
     const after = other.step.plan.after as Extract<CanonicalStatePostimageV1, { readonly state: "present" }>;
     await expect(constructionPayloadIdentity(guardedFs(), uid, constructionPlan(other.root, after))({ ...after.payload, hash: sha("other") })).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+  });
+
+  it("lets a TypeError inside the journal validator propagate (exit 1) instead of refusing it as a third state (NEW-201)", async () => {
+    const { step, participant, journals } = await stateFixture("active_release");
+    const boom = (): never => {
+      throw new TypeError("validator defect");
+    };
+    // `then` must stay readable or the mocked promise itself rejects before the validator runs.
+    const hostile = new Proxy({}, { get: (_target, key) => (key === "then" ? undefined : boom()), has: boom, ownKeys: boom, getPrototypeOf: boom, getOwnPropertyDescriptor: boom });
+    vi.spyOn(journals, "open").mockResolvedValue(hostile);
+    const failure = await participant.apply(step).then(() => null, (error: unknown) => error);
+    expect(failure).toBeInstanceOf(TypeError);
+    expect(failure).not.toBeInstanceOf(LifecycleRecoveryRequiredError);
   });
 
   it("refuses a journal present at both staged and final paths", async () => {
