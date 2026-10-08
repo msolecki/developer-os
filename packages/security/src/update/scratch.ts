@@ -29,7 +29,17 @@ import type {
 
 import { SecurityRefusalError } from "../paths.js";
 import { ZstdUstarAdmission } from "./archive.js";
-import type { BoundedReleaseResponseV1, ReleaseBodySink } from "./transport.js";
+
+/** One streamed chunk of the archive body; a refusal raised here stops the download. */
+export type ReleaseBodySink = (chunk: Uint8Array) => Promise<void>;
+
+/** What a completed archive download reports: its byte count and SHA-256, checked against the signed reference. */
+export interface BoundedReleaseResponseV1 {
+  readonly kind: "release_key_delegation" | "release_index" | "bundle_manifest" | "archive";
+  readonly bodyBytes: UInt64DecimalV1;
+  readonly bodyHash: LowerHexSha256;
+  readonly redirected: boolean;
+}
 
 export type ReleasePlanningAttemptIdV1 = `rp_${string}`;
 
@@ -653,11 +663,12 @@ export class ReleasePlanningScratchAttempt {
   }
 
   /**
-   * Streams the signed archive into `archive.zst`. `receive` is the Task 12
-   * transport call bound to this sink. A policy refusal raised here is a
-   * `SecurityRefusalError`, which the transport passes through; any other sink
-   * failure (an identity third state, a disk error) is rethrown as itself
-   * rather than as the transport's network label.
+   * Streams the archive into `archive.zst`. `receive` is the caller's body
+   * source bound to this sink; no production caller exists since D84 K1
+   * withdrew the transport (§4.4 keeps this store). A policy refusal raised
+   * here is a `SecurityRefusalError`, passed through; any other sink failure
+   * (an identity third state, a disk error) is rethrown as itself rather than
+   * as the source's own error.
    */
   async download(receive: (sink: ReleaseBodySink) => Promise<BoundedReleaseResponseV1>): Promise<void> {
     const { fs, effectiveUid } = this.dependencies;

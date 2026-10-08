@@ -13,7 +13,6 @@ import {
   validateRollbackRecord,
 } from "./planning.js";
 import type { PlannedUpdateV1 } from "./planning.js";
-import type { UpdateScratchV1 } from "./context.js";
 import {
   createUpdateFixture,
   DIRECTORY_PATH,
@@ -56,7 +55,6 @@ describe("planUpdate", () => {
       code: EXIT_CODES.capabilityUnavailable,
     });
     expect(fixture.events).toStrictEqual(["home"]);
-    expect(fixture.requests).toStrictEqual([]);
   });
 
   it("refuses a home whose trust state is not the package channel, before the keg is read", async () => {
@@ -105,12 +103,11 @@ describe("planUpdate", () => {
     }
   });
 
-  it("gates the home first, then reads the keg once; no FD 3, transport or scratch is reached", async () => {
-    const fixture = createUpdateFixture({ residue: ["rp_11111111-1111-4111-8111-111111111111"] });
+  it("gates the home first, then reads the keg once", async () => {
+    const fixture = createUpdateFixture();
     await planUpdate(fixture.update, { version: null });
 
     expect(fixture.events).toStrictEqual(["home", "package_source", "snapshot", "planner", "capacity"]);
-    expect(fixture.requests).toStrictEqual([]);
   });
 
   it("selects an explicitly requested stable version when it is the installed keg", async () => {
@@ -286,15 +283,10 @@ describe("planUpdate", () => {
   });
 });
 
-const never = (): never => {
-  throw new Error("a withdrawn update port was reached");
-};
-const neverScratch: UpdateScratchV1 = { create: never, listRecoverableAttempts: never, recoverCleanup: never };
-
 describe("planning from the package channel (D84 K2, K4 F7)", () => {
-  it("(a) previews the keg as packageSource and never touches FD 3, a transport or scratch", async () => {
+  it("(a) previews the keg as packageSource", async () => {
     const fixture = createUpdateFixture();
-    const result = await planUpdate({ ...fixture.update, createTransport: never, scratch: neverScratch }, { version: null });
+    const result = await planUpdate(fixture.update, { version: null });
     expect(result.result).toMatchObject({ outcome: "preview", plan: { packageSource: { kegPath: fixture.kegPath, bundleManifestHash: fixture.releases.get("1.1.0")?.manifestHash } } });
     expect(result.result.outcome === "preview" && "download" in result.result.plan).toBe(false);
   });
@@ -329,7 +321,6 @@ describe("planRollback", () => {
     expect(plan.owners[0]?.paths.replace).toStrictEqual([FILE_A_PATH, FILE_B_PATH]);
     expect(fixture.events).toStrictEqual(["home", "rollback.evidence", "capacity"]);
     expect(fixture.events).not.toContain("package_source");
-    expect(fixture.requests).toStrictEqual([]);
   });
 
   it("is deterministic for the same retained evidence", async () => {

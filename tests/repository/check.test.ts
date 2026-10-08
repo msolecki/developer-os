@@ -84,12 +84,12 @@ const OPT_IN_SEEDS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The release authority gate is total too: the release transport, its one composition and the
- * launcher's exec stand in for the real modules unless a case says otherwise.
+ * The release authority gate is total too: the network positive control and the launcher's exec
+ * stand in for the real files unless a case says otherwise. No product module reaches a network
+ * (D84 K1), so no seed does.
  */
 const RELEASE_SEEDS: Readonly<Record<string, string>> = {
-  "packages/security/src/update/transport.ts": 'import { request } from "node:https";\nexport const exchange = request;\n',
-  "apps/cli/src/update/context.ts": "export const transport = (): unknown => nodeReleaseExchange;\n",
+  "tests/repository/fixtures/network-positive-control.ts": 'import "node:https";\n',
   "apps/launcher/src/main.ts": "export const launch = (): unknown => execAdmittedRelease();\n",
 };
 
@@ -561,8 +561,7 @@ describe("the repository check gate", () => {
   });
 
   it.each([
-    { removed: "packages/security/src/update/transport.ts", problem: "no module reaches the release transport's network" },
-    { removed: "apps/cli/src/update/context.ts", problem: "no module composes the release transport" },
+    { removed: "tests/repository/fixtures/network-positive-control.ts", problem: "the network positive control tests/repository/fixtures/network-positive-control.ts is not reported" },
     { removed: "apps/launcher/src/main.ts", problem: "no launcher module execs an admitted release" },
   ])("fails when a release authority scope is empty: $problem", async ({ removed, problem }) => {
     const seeds = Object.fromEntries(Object.entries(RELEASE_SEEDS).filter(([path]) => path !== removed));
@@ -587,7 +586,8 @@ describe("the repository check gate", () => {
     { name: "window?.fetch", path: "packages/core/src/stray-optional-window.ts", source: "export const load = (url: string): unknown => window?.fetch?.(url);\n" },
     { name: "an https import", path: "apps/cli/src/commands/stray-https.ts", source: 'import { get } from "node:https";\nexport const probe = get;\n' },
     { name: "a dynamic tls import", path: "apps/cli/src/stray-tls.ts", source: 'export const later = (): unknown => import("node:tls");\n' },
-  ])("fails, and names the module, on $name outside the release transport", async ({ path, source }) => {
+    { name: "a bare https import", path: "packages/security/src/update/transport.ts", source: 'import "node:https";\n' },
+  ])("fails, and names the module, on $name", async ({ path, source }) => {
     const root = await sandbox({ [path]: source });
 
     const outcome = await check(root);
@@ -596,7 +596,7 @@ describe("the repository check gate", () => {
     expect(outcome.stderr).toContain(`unexpected network entrypoint: ${path}`);
   });
 
-  it("fails when a command other than update composes the release transport", async () => {
+  it("fails when any module composes a release transport again (D84 K1)", async () => {
     const root = await sandbox({ "apps/cli/src/commands/doctor-network.ts": "export const probe = (): unknown => new FixedReleaseTransport();\n" });
 
     const outcome = await check(root);
@@ -651,20 +651,32 @@ describe("the opt-in authority surfaces of this repository", () => {
 describe("the release authority surfaces of this repository (Spec 2 §12, D72 P7(f))", () => {
   const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-  it("enumerates every network, launcher and planner-graph scope non-empty", async () => {
+  it("enumerates every launcher and planner-graph scope non-empty", async () => {
     const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
-    expect(report.networkEntrypoints.length).toBeGreaterThan(0);
-    expect(report.transportCompositions.length).toBeGreaterThan(0);
     expect(report.launcherEntrypoints.length).toBeGreaterThan(0);
     expect(report.plannerGraphs.length).toBeGreaterThan(0);
     expect(report.plannerGraphs.every((graph) => graph.modules.length > 0)).toBe(true);
     expect(describeReleaseAuthorityProblems(report)).toEqual([]);
   });
 
-  it("finds the network in exactly the release transport, composed only by the update context", async () => {
+  it("finds no product network entrypoint and still flags the positive control (K1)", async () => {
     const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
-    expect(report.networkEntrypoints).toStrictEqual([...RELEASE_NETWORK_ENTRYPOINTS]);
-    expect(report.transportCompositions).toStrictEqual([...RELEASE_TRANSPORT_COMPOSITION]);
+    expect(report.networkEntrypoints).toEqual([]);
+    expect(report.transportCompositions).toEqual([]);
+    expect(RELEASE_NETWORK_ENTRYPOINTS).toEqual([]);
+    expect(RELEASE_TRANSPORT_COMPOSITION).toEqual([]);
+    expect(report.positiveControl).toEqual(["tests/repository/fixtures/network-positive-control.ts"]);
+    expect(describeReleaseAuthorityProblems(report)).toEqual([]);
+  });
+
+  it("reports a network entrypoint, a transport composition or a silent positive control as a problem", async () => {
+    const report = await inspectReleaseAuthoritySurfaces(repositoryRoot);
+    expect(describeReleaseAuthorityProblems({ ...report, networkEntrypoints: ["packages/core/src/index.ts"] }))
+      .toEqual(["unexpected network entrypoint: packages/core/src/index.ts"]);
+    expect(describeReleaseAuthorityProblems({ ...report, transportCompositions: ["apps/cli/src/update/context.ts"] }))
+      .toEqual(["unexpected release transport composition: apps/cli/src/update/context.ts"]);
+    expect(describeReleaseAuthorityProblems({ ...report, positiveControl: [] }))
+      .toEqual(["the network positive control tests/repository/fixtures/network-positive-control.ts is not reported"]);
   });
 
   it("finds the launcher's exec and each planner entrypoint in its own graph", async () => {

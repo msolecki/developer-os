@@ -170,8 +170,6 @@ describe("the planner's request and result are bound before allocation (Spec 2 Â
     };
 
     expect(await refusal(prepareUpdate(lying, { version: null }))).toEqual({ code: EXIT_CODES.securityRefusal, reason: "update_planner_output_invalid" });
-    // D84 K2: the keg is read in place, so there is no scratch to leave behind.
-    expect(fixture.events).not.toContain("scratch.create");
   });
 
   it("refuses a transcript whose request hash is not the request the current process sent", async () => {
@@ -212,7 +210,6 @@ describe("a Codex tree change (D72 P6, NEW-61)", () => {
     expect(await refusal(prepareUpdate(fixture.update, { version: null }))).toEqual({ code: EXIT_CODES.decisionRequired, reason: `update_codex_registration_${registration}` });
     expect(fixture.events).toContain("planner");
     expect(fixture.events).not.toContain("capacity");
-    expect(fixture.events).not.toContain("scratch.create");
   });
 
   it("previews exactly one registration refresh for the Codex owner", async () => {

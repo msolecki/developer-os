@@ -1181,9 +1181,8 @@ const NETWORK_GLOBALS = [/[^\w.]fetch\s*\(/u, /XMLHttpRequest/u, /WebSocket/u];
  * **Classified, not exempted: the same rules `tests/security/network.test.ts` applies to the
  * sources, applied here to what actually ships, through the same classifier.**
  *
- * - Spec 2 (`2026-08-28-developer-os-release-update-design.md`): "No command other than
- *   `developer-os update` performs an update network request." Its fixed release transport is
- *   the one module that may reach a network, whatever it imports.
+ * - Spec 2 (`2026-08-28-developer-os-release-update-design.md`), amended by D84 K1: the product
+ *   makes no network request for an update, so no shipped module is exempt from these patterns.
  * - Plan 1b (`2026-09-23-developer-os-opt-in-surfaces-1b.md`) gives the Git runtime a gateway
  *   server on a Unix-domain socket inside its private quarantine directory, and the gateway
  *   trampoline a client of that socket. `node:net` is how a process opens one, so each is
@@ -1195,13 +1194,11 @@ const NETWORK_GLOBALS = [/[^\w.]fetch\s*\(/u, /XMLHttpRequest/u, /WebSocket/u];
  *
  * Every other compiled module is held to every pattern, unchanged.
  */
-const RELEASE_TRANSPORT = "packages/security/dist/update/transport.js";
 const LOCAL_SOCKET_SERVER = "apps/cli/dist/commands/git/runtime.js";
 const LOCAL_SOCKET_CLIENT = "packages/security/dist/git/gateways.js";
 const CAPABILITY_CLASSIFIER = "packages/security/dist/update/graph.js";
 
 function networkOffences(path: string, source: string): readonly string[] {
-  if (path === RELEASE_TRANSPORT) return [];
   const offences: string[] = [];
   const modules = [...source.matchAll(NETWORK_MODULE)].map((match) => match[0]);
   const localSocket =
@@ -1272,7 +1269,7 @@ describe("Foundation boundaries", () => {
         const source = await readFile(path, "utf8");
         const shipped = relative(repoRoot, path);
         offenders.push(...networkOffences(shipped, source));
-        if ([RELEASE_TRANSPORT, LOCAL_SOCKET_SERVER, LOCAL_SOCKET_CLIENT, CAPABILITY_CLASSIFIER].includes(shipped)) {
+        if ([LOCAL_SOCKET_SERVER, LOCAL_SOCKET_CLIENT, CAPABILITY_CLASSIFIER].includes(shipped)) {
           classified.push(shipped);
         }
       }
@@ -1281,7 +1278,7 @@ describe("Foundation boundaries", () => {
     expect(offenders).toStrictEqual([]);
     /** A classification whose file no longer exists admits nothing and should be removed. */
     expect(classified.sort()).toStrictEqual(
-      [RELEASE_TRANSPORT, LOCAL_SOCKET_SERVER, LOCAL_SOCKET_CLIENT, CAPABILITY_CLASSIFIER].sort(),
+      [LOCAL_SOCKET_SERVER, LOCAL_SOCKET_CLIENT, CAPABILITY_CLASSIFIER].sort(),
     );
 
     /**
@@ -1303,7 +1300,7 @@ describe("Foundation boundaries", () => {
    * file stays clean as built, and one added network reach makes it — or any other module —
    * an offender again.
    */
-  it("still flags a new network reach outside the release transport", async () => {
+  it("still flags a new network reach in any shipped module", async () => {
     const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
     const https = 'import { request } from "node:https";\n';
     const admitted = [LOCAL_SOCKET_SERVER, LOCAL_SOCKET_CLIENT, CAPABILITY_CLASSIFIER];

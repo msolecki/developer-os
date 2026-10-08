@@ -77,7 +77,6 @@ interface RollbackFixture {
   readonly preview: UpdateRollbackPreviewV1;
   readonly world: RollbackWorldV1;
   readonly events: string[];
-  readonly requests: string[];
   readonly allocatorReservations: number;
   identity(which: "current" | "previous"): ReleaseIdentityV1;
   activeIdentity(): Promise<ReleaseIdentityV1>;
@@ -320,7 +319,6 @@ async function rollbackFixture(options: RollbackFixtureOptions = {}): Promise<Ro
     preview,
     world,
     events: base.events,
-    requests: base.requests,
     get allocatorReservations() {
       return world.allocatorReservations;
     },
@@ -406,11 +404,10 @@ describe("applyRollback revalidation", () => {
     expect(fixture.allocatorReservations).toBe(0);
   });
 
-  it("reads only local evidence: no transport, trust handoff, scratch, or planner", async () => {
+  it("reads only local evidence: no keg and no planner", async () => {
     const fixture = await rollbackFixture();
     await applyRollback(fixture.update, fixture.preview);
-    expect(fixture.requests).toStrictEqual([]);
-    expect(fixture.events.filter((event) => event === "planner" || event === "trust" || event === "transport" || event.startsWith("scratch."))).toStrictEqual([]);
+    expect(fixture.events.filter((event) => event === "planner" || event === "package_source")).toStrictEqual([]);
     expect(fixture.world.frames).toBe(0);
   });
 
@@ -548,11 +545,12 @@ describe("applyRollback compensation", () => {
 describe("applyRollback death and recovery", () => {
   it.each(rollbackApplyDeathPoints)("recovers rollback death at $name", async (point) => {
     const fixture = await interruptRollback(point);
-    const requests = fixture.requests.length;
+    const kegReads = (): number => fixture.events.filter((event) => event === "package_source").length;
+    const before = kegReads();
     await fixture.recoverWithoutNetwork();
     expect(await fixture.activeIdentity()).toEqual(fixture.identity(point.expectedActive));
     expect(await fixture.assertValidTerminalGeneration()).toBe(true);
-    expect(fixture.requests).toHaveLength(requests);
+    expect(kegReads()).toBe(before);
   });
 
   it("compensates a construction that died before handoff and keeps the retained rollback", async () => {
