@@ -6,42 +6,27 @@ import { createInterface } from "node:readline/promises";
 
 import { parseScheduledInvocation } from "./commands/automation/index.js";
 import { MAX_CAPTURE_INPUT_BYTES } from "./commands/capture.js";
-import { PACKAGE_CHANNEL_SOURCE_TABLE } from "@developer-os/core";
+import { resolveRuntimePaths } from "@developer-os/core";
 
-import { createProductionContext, PRODUCT_VERSION } from "./context.js";
+import { createProductionContext, pathEnvironmentFor, PRODUCT_VERSION } from "./context.js";
 import { hookLastResortExit, isHookInvocation } from "./hooks/argv.js";
 import { firingRecordWaitMs, settleFiringRecords } from "./hooks/entry.js";
 import type { HookEnvironment } from "./hooks/entry.js";
 import type { CliIo } from "./io.js";
 import { run } from "./main.js";
-import {
-  admitPackageChannelRelease,
-  admitUnsignedLocalPackagedRelease,
-  isPackageSourceAbsent,
-  isReleaseMismatch,
-  resolvePackageChannelSource,
-} from "./update/packaged-release.js";
+import { admitInitPackageChannelKeg, admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
 import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
 
 /**
- * D84 K2: `init` admits the keg the fixed table names. An absent keg is not an error: `init` then
- * reports `unavailable_until_packaged_handoff` as before. C2: with `mismatchIsAbsent`, a keg of another
- * version is no keg either. Any other refusal propagates (exit 6).
+ * D84 K2 and C2: `init` admits the keg the fixed table names, by `admitInitPackageChannelKeg`'s rules.
+ * `mismatchIsAbsent` hands it the product state directory, where an installed V2 home's active release lives.
  */
-async function admitPackageChannelKeg(mismatchIsAbsent: boolean): Promise<PackagedReleaseSourceV1 | null> {
-  const architecture = process.arch;
-  if (architecture !== "arm64" && architecture !== "x64") return null;
-  try {
-    const { packageRoot } = await resolvePackageChannelSource(architecture);
-    return await admitPackageChannelRelease(packageRoot, {
-      prefix: PACKAGE_CHANNEL_SOURCE_TABLE[architecture].prefix,
-      requireVersion: PRODUCT_VERSION,
-      architecture,
-    });
-  } catch (error) {
-    if (isPackageSourceAbsent(error) || (mismatchIsAbsent && isReleaseMismatch(error))) return null;
-    throw error;
-  }
+function admitPackageChannelKeg(userHome: string, mismatchIsAbsent: boolean): Promise<PackagedReleaseSourceV1 | null> {
+  return admitInitPackageChannelKeg({
+    architecture: process.arch,
+    requireVersion: PRODUCT_VERSION,
+    mismatchIsAbsentIn: mismatchIsAbsent ? resolveRuntimePaths(pathEnvironmentFor({ userHome, env: process.env })).stateDir : null,
+  });
 }
 
 /**
@@ -187,7 +172,7 @@ if ((home === undefined || home.length === 0) && !scheduledMode) {
         localRelease: request.localRelease !== null
           ? await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION)
           : request.packageChannelInit
-            ? await admitPackageChannelKeg(request.packageMismatchIsAbsent === true)
+            ? await admitPackageChannelKeg(home, request.packageMismatchIsAbsent === true)
             : null,
       });
     },

@@ -15,13 +15,16 @@ import type { AdapterSelectionV1 } from "../instructions/apply.js";
 import { UNPROVEN_CLAUDE_CATEGORIES } from "../instructions/attach.js";
 import { codexHomeRecordPath } from "../instructions/vendor-homes.js";
 import { loadReleaseWorkflows } from "../instructions/sources.js";
-import { inspectPackagedRelease } from "../update/packaged-release.js";
+import { run } from "../main.js";
+import type { CliContextFactory } from "../main.js";
+import type { CliContext } from "../context.js";
+import { admitInitPackageChannelKeg, inspectPackagedRelease } from "../update/packaged-release.js";
 import type { ReleaseFileV1 } from "../update/local-release.js";
 import { runDoctorReport } from "./doctor.js";
 import { runInit } from "./init.js";
 import type { InitOptions } from "./init.js";
 import { runUninstall } from "./uninstall.js";
-import { createCommandFixture, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "./testing.js";
+import { createCommandFixture, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, RecordingIo, removeCommandFixtures } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 
 afterAll(removeCommandFixtures);
@@ -152,30 +155,89 @@ async function workflowIds(fixture: CommandFixture): Promise<readonly string[]> 
   return (await loadReleaseWorkflows(await inspectPackagedRelease(bootstrap.packagedRelease))).map((workflow) => workflow.id);
 }
 
+/**
+ * C2 as `bin.ts` wires it: the fixture keg under `<root>/prefix` is admitted against a version it is
+ * not, and the request's `packageMismatchIsAbsent` decides whether that refuses or is no keg.
+ */
+/** The fixture keg carries no `opt/developer-os` link; `bin.ts` resolves the keg through it. */
+async function linkKeg(root: string): Promise<void> {
+  if (existsSync(join(root, "prefix", "opt", "developer-os"))) return;
+  await nodeFs.mkdir(join(root, "prefix", "opt"), { mode: 0o755 });
+  await nodeFs.chmod(join(root, "prefix", "opt"), 0o755);
+  const [version] = await nodeFs.readdir(join(root, "prefix", "Cellar", "developer-os"));
+  if (version === undefined) throw new Error("the fixture has no keg");
+  await nodeFs.symlink(`../Cellar/developer-os/${version}`, join(root, "prefix", "opt", "developer-os"));
+}
+
+function binFactory(root: string, stateDir: string, withKeg: CliContext, withoutKeg: CliContext): CliContextFactory {
+  const entry = { prefix: join(root, "prefix"), opt: join(root, "prefix", "opt", "developer-os"), fallback: "libexec/fallback" };
+  return async (_io, request) => {
+    const keg = await admitInitPackageChannelKeg({
+      architecture: "arm64",
+      requireVersion: "9.9.9",
+      mismatchIsAbsentIn: request.packageMismatchIsAbsent === true ? stateDir : null,
+      table: { arm64: entry, x64: entry } as never,
+    });
+    return keg === null ? withoutKeg : withKeg;
+  };
+}
+
 describe("init without --adapters renders from the active bundle (K8, C2, one chained home)", () => {
   let installed: Home;
+  let kegless: CommandFixture;
   let skillPath: string;
 
-  it("(a) restores a deleted managed file with the keg removed", async () => {
+  it("(a) restores a deleted managed file beside a keg of another version", async () => {
     installed = await home("init-active-render");
     expect((await runInit(installed.fixture.context, options(["claude"]))).ok).toBe(true);
     const skill = (await manifestOf(installed.fixture)).artifacts.find((row) => row.kind === "instruction" && row.owner === "claude" && row.path.endsWith("/SKILL.md"));
     if (skill === undefined) throw new Error("no rendered skill");
     skillPath = skill.path;
     await nodeFs.rm(skillPath);
-    await nodeFs.rm(join(installed.fixture.root, "prefix"), { recursive: true, force: true });
-    const kegless = await createCommandFixture("init-active-render-kegless", { root: installed.fixture.root, runner: installed.fixture.context.runner, agents: AGENTS });
+    kegless = await createCommandFixture("init-active-render-kegless", { root: installed.fixture.root, runner: installed.fixture.context.runner, agents: AGENTS });
+    await linkKeg(installed.fixture.root);
+    const io = new RecordingIo();
 
-    const result = await runInit(kegless.context, options(null));
+    const code = await run(["init", "--yes"], io, binFactory(installed.fixture.root, installed.fixture.paths.stateDir, installed.fixture.context, kegless.context));
 
-    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(code, io.err.join("\n")).toBe(EXIT_CODES.success);
     expect(existsSync(skillPath)).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("(b) keeps release_mismatch for init --adapters with no keg", async () => {
-    const kegless = await createCommandFixture("init-active-render-adapters", { root: installed.fixture.root, runner: installed.fixture.context.runner, agents: AGENTS });
-    const result = await runInit(kegless.context, options(["claude"]));
-    expect(result).toMatchObject({ ok: false, code: EXIT_CODES.capabilityUnavailable });
+  it("(b) keeps release_mismatch for init --adapters beside a keg of another version", async () => {
+    const io = new RecordingIo();
+    const code = await run(["init", "--yes", "--adapters", "claude"], io, binFactory(installed.fixture.root, installed.fixture.paths.stateDir, installed.fixture.context, kegless.context));
+    expect(code).toBe(EXIT_CODES.capabilityUnavailable);
+    expect([...io.out, ...io.err].join("\n")).toContain("release_mismatch");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("(c) keeps release_mismatch on a fresh home: no silent V1 install", async () => {
+    const fresh = await home("init-active-render-fresh");
+    const without = await createCommandFixture("init-active-render-fresh-kegless", { root: fresh.fixture.root, runner: fresh.fixture.context.runner, agents: AGENTS });
+    await linkKeg(fresh.fixture.root);
+    const io = new RecordingIo();
+
+    const code = await run(["init", "--yes"], io, binFactory(fresh.fixture.root, fresh.fixture.paths.stateDir, fresh.fixture.context, without.context));
+
+    expect(code).toBe(EXIT_CODES.capabilityUnavailable);
+    expect([...io.out, ...io.err].join("\n")).toContain("release_mismatch");
+    expect(existsSync(fresh.fixture.paths.manifestFile)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("(d) keeps release_mismatch on a V1 home", async () => {
+    const legacy = await home("init-active-render-v1");
+    const v1 = await createCommandFixture("init-active-render-v1-legacy", { root: legacy.fixture.root, runner: legacy.fixture.context.runner, agents: AGENTS });
+    expect((await runInit(v1.context, options(null))).ok).toBe(true);
+    const before = await nodeFs.readFile(v1.paths.manifestFile);
+    expect((JSON.parse(before.toString("utf8")) as { readonly schemaVersion: unknown }).schemaVersion).toBe(1);
+    await linkKeg(legacy.fixture.root);
+    const io = new RecordingIo();
+
+    const code = await run(["init", "--yes"], io, binFactory(legacy.fixture.root, legacy.fixture.paths.stateDir, legacy.fixture.context, v1.context));
+
+    expect(code).toBe(EXIT_CODES.capabilityUnavailable);
+    expect([...io.out, ...io.err].join("\n")).toContain("release_mismatch");
+    expect(await nodeFs.readFile(v1.paths.manifestFile)).toEqual(before);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
