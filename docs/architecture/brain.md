@@ -388,7 +388,10 @@ where the spec was silent or conflicted with the code; the residuals are the one
 - **Modes.** `retire`: remove, then create `_graveyard/<note>` with the bytes unchanged; refused
   while anything links to or cites the note. `--rename`/`--move`: remove, then create at the new path
   with the bytes unchanged. `--merge`: the target's header stays byte-exact, and its body gains
-  `\n\n## <source title>\n\n<source body, trimmed>\n`; the source goes to `_graveyard/`. `--split`:
+  `\n\n## <source title>\n\n<source body, trimmed>\n`; every link in that merged body that resolved
+  to the source or the target becomes its label (the `|display` text, else the link text as written;
+  founder decision 2026-10-08), so the merged note never links to itself; the source goes to
+  `_graveyard/`. `--split`:
   the section, from its heading to the next heading of equal or higher level, becomes `<slug>.md`,
   and the parent keeps `See [[<slug>]].` in its place. **No existing frontmatter is ever edited.**
   The split child is rendered fresh: the heading as `title`, the parent's `type`, `tags` and
