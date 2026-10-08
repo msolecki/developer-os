@@ -60,9 +60,11 @@ export interface OptInAuthorityReportV1 {
  * the registration has no spawn of its own (it runs `codex` through a `ProcessRunner`, which is
  * `NodeProcessRunner`), and the tree carries four more: the supervised-process primitive both
  * Git and launchd run on, Spec 2's planner child and its `ps` sampler, and the Git gateway's
- * receive-pack trampoline bridge.
+ * receive-pack trampoline bridge. NEW-200 K8 adds the post-update `init` refresh on the active
+ * release's runtime (closed environment, no `PATH`).
  */
 export const ALLOWED_SPAWN_SITES: readonly string[] = [
+  "apps/cli/src/update/refresh.ts::runRefreshProcess",
   "apps/launcher/src/handoff.ts::execAdmittedRelease",
   "packages/platform-macos/src/retained-rename.ts::SpawnRenameAtxRunner",
   "packages/platform-macos/src/transaction-lock.ts::SpawnLockfRunner",
