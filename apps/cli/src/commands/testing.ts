@@ -523,9 +523,15 @@ async function createSyntheticPackagedRelease(
 ) {
   // D84 K2: a Homebrew-shaped keg under `<root>/prefix`, admitted as the package channel.
   const prefix = join(root, "prefix");
+  const keg = join(prefix, "Cellar", "developer-os", SYNTHETIC_RELEASE_VERSION);
+  const fallback = join(keg, "libexec", "fallback");
+  // A second fixture on a shared `root` admits the keg the first one installed: one prefix holds one keg.
+  const installed = await nodeFs.realpath(fallback).catch(() => null);
+  if (installed !== null) {
+    return admitPackageChannelRelease(installed, { prefix: await nodeFs.realpath(prefix), requireVersion: null, architecture });
+  }
   await nodeFs.mkdir(prefix, { mode: 0o755 });
   await nodeFs.chmod(prefix, 0o755);
-  const keg = join(prefix, "Cellar", "developer-os", SYNTHETIC_RELEASE_VERSION);
   await nodeFs.mkdir(join(keg, "libexec"), { recursive: true, mode: 0o755 });
   const encode = (text: string) => new TextEncoder().encode(text);
   const bundleFiles: ReleaseFileV1[] = [
@@ -585,7 +591,7 @@ async function createSyntheticPackagedRelease(
     latestVersion: SYNTHETIC_RELEASE_VERSION,
     releases: [{ version: SYNTHETIC_RELEASE_VERSION, releaseSequence: "1", minimumLauncherProtocol: 1, updateProtocol: 1, bundles: [reference("arm64"), reference("x64")] }],
   } as unknown as CanonicalJsonValue;
-  const packageRoot = await writePackageChannelRelease({ outDir: join(keg, "libexec", "fallback"), index, manifest, bundleFiles });
+  const packageRoot = await writePackageChannelRelease({ outDir: fallback, index, manifest, bundleFiles });
   // `brew install` links the keg at `opt/developer-os`; hooks and launchd plists name Node through it (C3, NEW-204).
   await nodeFs.mkdir(join(prefix, "opt"), { mode: 0o755 });
   await nodeFs.chmod(join(prefix, "opt"), 0o755);
