@@ -5,8 +5,8 @@ name: tap
 # Merging it (approval 2) is the release.
 #
 # This workflow runs no repository code: no checkout, no Node, no build. It
-# fetches SHA256SUMS and the one edit script from the release tag with the
-# job's read-only token, edits the five known lines of the tap's EXISTING
+# fetches SHA256SUMS from the release and the one edit script at the event
+# commit (`GITHUB_SHA`, so a moved tag cannot swap it) with the job's read-only token, edits the five known lines of the tap's EXISTING
 # `Formula/developer-os.rb`, and pushes with the tap token.
 #
 # L2 (founder actions, before the first release):
@@ -40,7 +40,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Fetch SHA256SUMS and the edit script from the release
+      - name: Fetch SHA256SUMS from the release and the edit script at the event commit
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
@@ -49,7 +49,7 @@ jobs:
           mkdir "$RUNNER_TEMP/in"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/in" --pattern SHA256SUMS
           gh api -H "Accept: application/vnd.github.raw+json" \
-            "repos/${GITHUB_REPOSITORY}/contents/.github/release/update-formula.sh?ref=${TAG}" > "$RUNNER_TEMP/in/update-formula.sh"
+            "repos/${GITHUB_REPOSITORY}/contents/.github/release/update-formula.sh?ref=${GITHUB_SHA}" > "$RUNNER_TEMP/in/update-formula.sh"
       - name: Clone the tap, edit the formula and commit
         env:
           TAG: ${{ github.event.release.tag_name }}
