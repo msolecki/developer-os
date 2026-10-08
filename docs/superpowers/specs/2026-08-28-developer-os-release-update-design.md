@@ -417,6 +417,12 @@ NEW-171.
   **Proof.** NEW-200's proof is that an update changes a skill, a rollback restores it, and
   `hooks/hooks.json` stays byte-identical across every swap; a change to the hook rows themselves is proved
   only on a real release (K6's gate).
+  **Amended 2026-10-08 (NEW-202, founder decision): vendor search path.** §3.1's closed CLI environment
+  and K8's refresh environment gain exactly one variable, `DEVELOPER_OS_VENDOR_SEARCH_PATH`, carrying the
+  user's `PATH` as the launcher received it. It is used only by vendor discovery (`claude`, `codex`), never
+  exported further except to the refresh child, and never used to resolve any other executable. It must
+  contain no NUL, and every executable discovery finds through it passes the existing trusted-executable
+  admission (D83 (3)) before use. Without it, discovery keeps today's fixed fallback path.
 
 
 ---
