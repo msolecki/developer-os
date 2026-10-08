@@ -121,6 +121,8 @@ describe("automation enable pins the brain-garden vendor", () => {
     const content = new TextEncoder().encode(ENTRYPOINT);
     await withLifecycleMutation(fixture.context, lifecycle, async (authority) => {
       const state = await gatedState(fixture.context, authority);
+      // `init` installs the real entrypoint already; this helper only stands in when it did not.
+      if (state.manifest.artifacts.some((artifact) => artifact.path === path)) return;
       const common = {
         owner: "core",
         productVersion: state.manifest.productVersion,
