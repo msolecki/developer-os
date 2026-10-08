@@ -4,8 +4,14 @@ name: tap
 # formula from the published assets and open a pull request in the tap. Merging
 # it (approval 2) is the release.
 #
-# Action SHAs were read with `gh api repos/<owner>/<repo>/git/ref/tags/v4` from
-# the actions organisation's own repositories on 2026-10-08 (the `v4` tag).
+# Action SHAs were read with `gh api repos/actions/<repo>/git/ref/tags/<tag>`
+# from the actions organisation's own repositories on 2026-10-08.
+#
+# The tap job is bound to the `tap` Environment. L2 (founder action): create
+# `TAP_PR_TOKEN` as an Environment secret of `tap` (not a repository secret) and
+# give the environment a deployment rule that admits only `v*` tags. The token
+# is then reachable by no other job and no other ref. The build job runs
+# repository code and never sees it; the tap job runs no repository code.
 on:
   release:
     types: [published]
@@ -22,11 +28,11 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.release.tag_name }}
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
       - name: Enable pnpm through corepack
@@ -48,8 +54,45 @@ jobs:
           (cd "$RUNNER_TEMP/assets" && shasum -a 256 -c SHA256SUMS)
           node tests/dist/tools/render-formula.js --version "$version" --sums "$RUNNER_TEMP/assets/SHA256SUMS" > "$RUNNER_TEMP/developer-os.rb"
           ruby -c "$RUNNER_TEMP/developer-os.rb"
-      # Last step, and the only one that sees the tap token: it runs gh and git
-      # on a fresh clone of the tap and nothing from this repository.
+      - name: Upload the formula
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: formula
+          path: ${{ runner.temp }}/developer-os.rb
+          if-no-files-found: error
+
+  tap:
+    needs: formula
+    runs-on: macos-15
+    timeout-minutes: 10
+    environment: tap
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: formula
+          path: ${{ runner.temp }}/formula
+      - name: Re-verify the formula against the published SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
+          formula="$RUNNER_TEMP/formula/developer-os.rb"
+          mkdir "$RUNNER_TEMP/sums"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/sums" --pattern SHA256SUMS
+          [ "$(grep -c '^ *sha256 "[0-9a-f]\{64\}"$' "$formula")" = 2 ] || { echo "formula must carry exactly two sha256 lines" >&2; exit 1; }
+          while read -r digest; do
+            grep -q "^${digest}  " "$RUNNER_TEMP/sums/SHA256SUMS" || { echo "sha256 not in SHA256SUMS: $digest" >&2; exit 1; }
+          done < <(sed -n 's/^ *sha256 "\([0-9a-f]\{64\}\)"$/\1/p' "$formula")
+          prefix="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/"
+          [ "$(grep -c '^ *url "' "$formula")" = 2 ] || { echo "formula must carry exactly two url lines" >&2; exit 1; }
+          while read -r url; do
+            [[ "$url" == "$prefix"* ]] || { echo "url outside the release: $url" >&2; exit 1; }
+          done < <(sed -n 's/^ *url "\([^"]*\)"$/\1/p' "$formula")
+      # Last step, and the only one that sees the tap token: gh and git on a
+      # fresh clone of the tap, nothing from this repository.
       - name: Open the tap pull request
         env:
           GH_TOKEN: ${{ secrets.TAP_PR_TOKEN }}
@@ -60,13 +103,13 @@ jobs:
           gh auth setup-git
           gh repo clone msolecki/homebrew-developer-os "$RUNNER_TEMP/tap"
           cd "$RUNNER_TEMP/tap" || exit 1
-          git checkout -b "$branch"
+          /usr/bin/git checkout -b "$branch"
           mkdir -p Formula
-          cp "$RUNNER_TEMP/developer-os.rb" Formula/developer-os.rb
-          git add Formula/developer-os.rb
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+          cp "$RUNNER_TEMP/formula/developer-os.rb" Formula/developer-os.rb
+          /usr/bin/git add Formula/developer-os.rb
+          /usr/bin/git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -m "developer-os ${TAG#v}"
-          git push origin "$branch"
+          /usr/bin/git push origin "$branch"
           gh pr create --repo msolecki/homebrew-developer-os --head "$branch" \
             --title "developer-os ${TAG#v}" \
             --body "Release ${TAG}: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
