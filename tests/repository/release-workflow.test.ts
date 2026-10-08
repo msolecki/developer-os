@@ -53,6 +53,13 @@ const violations = (text: string): string[] => {
   if (!/^ {4}needs: \[build, sbom\]$/mu.test(publish)) found.push("publish needs");
   if (!/^ {4}environment: release$/mu.test(publish)) found.push("publish environment");
   if (!publish.includes('cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"') || !/shasum -a 256 "developer-os-\$\{version\}-darwin-\$\{arch\}\.tar\.gz"/u.test(publish)) found.push("publish re-verifies");
+  const downloads = [...publish.matchAll(/uses: actions\/download-artifact@\S+ # v[\d.]+\n {8}with:\n(?: {10}.*\n)*? {10}path: (.*)\n/gu)].map((match) => match[1]);
+  if (downloads.length !== 2 || new Set(downloads).size !== downloads.length) found.push("download paths");
+  const releaseList = '[ "$actual" = "$expected" ] && [ -z "$(find "$release" -mindepth 1 ! -type f)" ] || { echo "::error::unexpected release artifact';
+  const sbomList = '[ "$actual" = "developer-os-${version}.cdx.json" ] && [ -z "$(find "$sbom" -mindepth 1 ! -type f)" ] || { echo "::error::unexpected sbom artifact';
+  const listed = publish.indexOf(releaseList);
+  const sbomListed = publish.indexOf(sbomList);
+  if (listed < 0 || sbomListed < 0 || Math.max(listed, sbomListed) > publish.indexOf("shasum -a 256") || !publish.includes("expected=$(printf '%s\\n' SHA256SUMS \"developer-os-${version}-darwin-arm64.tar.gz\" \"developer-os-${version}-darwin-x64.tar.gz\" notes.md | LC_ALL=C sort)")) found.push("accept list");
   if (!publish.includes('gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag')) found.push("draft");
 
   // 2. Every action pinned by full commit SHA with its version.
@@ -114,6 +121,10 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "publish without re-verify": ["publish re-verifies", (t) => t.replace('cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"', "true")],
   "publish before sbom": ["publish needs", (t) => t.replace("needs: [build, sbom]", "needs: build")],
   "publish without environment": ["publish environment", (t) => t.replace("    environment: release\n", "")],
+  "shared download path": ["download paths", (t) => t.replace("path: ${{ runner.temp }}/sbom\n          if-no-files-found", "§").replace("path: ${{ runner.temp }}/sbom", "path: ${{ runner.temp }}/release").replace("§", "path: ${{ runner.temp }}/sbom\n          if-no-files-found")],
+  "no release accept list": ["accept list", (t) => t.replace(/\[ "\$actual" = "\$expected" \] && \[ -z "\$\(find "\$release" -mindepth 1 ! -type f\)" \] \|\| /u, "")],
+  "no sbom accept list": ["accept list", (t) => t.replace(/\[ "\$actual" = "developer-os-\$\{version\}\.cdx\.json" \] && \[ -z "\$\(find "\$sbom" -mindepth 1 ! -type f\)" \] \|\| /u, "")],
+  "sbom admitted to release list": ["accept list", (t) => t.replace('"developer-os-${version}-darwin-x64.tar.gz" notes.md | LC_ALL=C sort)', '"developer-os-${version}-darwin-x64.tar.gz" "developer-os-${version}.cdx.json" notes.md | LC_ALL=C sort)')],
   "not a draft": ["draft", (t) => t.replace(" --draft --verify-tag", " --verify-tag")],
   "tag pin": ["action pins", (t) => t.replace("# v4.6.2", "# v4")],
   "branch pin": ["action pins", (t) => t.replace(/@d3f86a106a0bac45b974a628896c90dbdf5c8093/u, "@v4")],

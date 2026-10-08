@@ -14,8 +14,15 @@ name: release
 # own tools, and drafts the release with gh.
 #
 # publish is bound to the `release` Environment. L2 (founder action): create the
-# `release` Environment with a deployment rule that admits only `v*` tags, so
-# the write token is reachable from no other ref.
+# `release` Environment with a deployment rule that admits only `v*` tags. The
+# rule gates only this job's run; it does not make a write token unreachable
+# from other refs or workflows.
+#
+# Recorded residual (founder decision): cdxgen's transitive dependencies are
+# not pinned (`pnpm dlx` resolves without a lockfile; pinning needs a
+# devDependency and a lockfile change). The sbom artifact lands in its own
+# directory and publish accepts exactly one regular file from it, so that code
+# can affect only the SBOM file, never the tarballs or SHA256SUMS.
 on:
   push:
     tags:
@@ -193,7 +200,8 @@ jobs:
     permissions:
       contents: write
     # No checkout and no repository or dependency code in this job: only the
-    # downloaded assets, the runner's shasum, gzip and jq, and gh.
+    # downloaded assets, the runner's shasum, gzip, find and jq, and gh. Each
+    # artifact downloads into its own directory, so one cannot overwrite another.
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -202,21 +210,28 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: sbom
-          path: ${{ runner.temp }}/release
+          path: ${{ runner.temp }}/sbom
       - name: Re-verify the assets
         run: |
           [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME"; exit 1; }
           version="${GITHUB_REF_NAME#v}"
-          cd "$RUNNER_TEMP/release"
-          expected=$(printf '%s\n' SHA256SUMS "developer-os-${version}-darwin-arm64.tar.gz" "developer-os-${version}-darwin-x64.tar.gz" "developer-os-${version}.cdx.json" notes.md | LC_ALL=C sort)
-          actual=$(find . -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)
-          [ "$actual" = "$expected" ] || { echo "::error::unexpected asset set: ${actual}"; exit 1; }
+          # Accept lists, checked before anything else reads the assets: the
+          # release artifact holds exactly these four regular files, the sbom
+          # artifact exactly one. A subdirectory, link or extra file refuses.
+          release="$RUNNER_TEMP/release"
+          sbom="$RUNNER_TEMP/sbom"
+          expected=$(printf '%s\n' SHA256SUMS "developer-os-${version}-darwin-arm64.tar.gz" "developer-os-${version}-darwin-x64.tar.gz" notes.md | LC_ALL=C sort)
+          actual=$(cd "$release" && find . -mindepth 1 | sed 's|^\./||' | LC_ALL=C sort)
+          [ "$actual" = "$expected" ] && [ -z "$(find "$release" -mindepth 1 ! -type f)" ] || { echo "::error::unexpected release artifact: ${actual}"; exit 1; }
+          actual=$(cd "$sbom" && find . -mindepth 1 | sed 's|^\./||')
+          [ "$actual" = "developer-os-${version}.cdx.json" ] && [ -z "$(find "$sbom" -mindepth 1 ! -type f)" ] || { echo "::error::unexpected sbom artifact: ${actual}"; exit 1; }
+          cd "$release"
           for arch in arm64 x64; do
             shasum -a 256 "developer-os-${version}-darwin-${arch}.tar.gz"
             gzip -t "developer-os-${version}-darwin-${arch}.tar.gz"
           done > "$RUNNER_TEMP/SHA256SUMS.recomputed"
           cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"
-          jq -e '.bomFormat == "CycloneDX"' "developer-os-${version}.cdx.json" > /dev/null
+          jq -e '.bomFormat == "CycloneDX"' "$sbom/developer-os-${version}.cdx.json" > /dev/null
           [ -s notes.md ] || { echo "::error::empty release notes"; exit 1; }
       - name: Draft release
         env:
@@ -230,4 +245,4 @@ jobs:
             "developer-os-${version}-darwin-arm64.tar.gz" \
             "developer-os-${version}-darwin-x64.tar.gz" \
             SHA256SUMS \
-            "developer-os-${version}.cdx.json"
+            "$RUNNER_TEMP/sbom/developer-os-${version}.cdx.json"
