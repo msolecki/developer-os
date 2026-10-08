@@ -215,7 +215,7 @@ describe("pack:release (Task 11b K2)", () => {
     expect(() => archiveOf([{ path: "missing", kind: "file", mode: 384, bytes: "0", sha256: "0".repeat(64) }] as unknown as Parameters<typeof archiveOf>[0], new Map())).toThrow(/missing/u);
   });
 
-  it("the CLI refuses a dirty checkout unless --allow-dirty", async () => {
+  it("the CLI refuses a dirty checkout unless --allow-dirty, and refuses --allow-dirty when CI is set", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "developer-os-dirty-")));
     roots.push(root);
     const git = (...args: string[]): void => {
@@ -226,10 +226,15 @@ describe("pack:release (Task 11b K2)", () => {
     await writeFile(join(root, "tracked"), "tracked\n");
     git("add", "tracked");
     git("commit", "-q", "-m", "fixture");
-    expect(() => { assertCleanCheckout(root, false); }).not.toThrow();
+    expect(() => { assertCleanCheckout(root, false, {}); }).not.toThrow();
+    expect(() => { assertCleanCheckout(root, false, { CI: "true" }); }).not.toThrow();
+    // A clean tree does not make the flag acceptable in CI: the flag itself is refused.
+    expect(() => { assertCleanCheckout(root, true, { CI: "true" }); }).toThrow(/--allow-dirty is refused when CI is set/u);
     await writeFile(join(root, "untracked"), "draft\n");
-    expect(() => { assertCleanCheckout(root, false); }).toThrow(/uncommitted|--allow-dirty/u);
-    expect(() => { assertCleanCheckout(root, true); }).not.toThrow();
+    expect(() => { assertCleanCheckout(root, false, {}); }).toThrow(/uncommitted|--allow-dirty/u);
+    expect(() => { assertCleanCheckout(root, true, {}); }).not.toThrow();
+    expect(() => { assertCleanCheckout(root, true, { CI: "" }); }).not.toThrow();
+    expect(() => { assertCleanCheckout(root, true, { CI: "1" }); }).toThrow(/--allow-dirty is refused when CI is set/u);
   });
 
   it.each([

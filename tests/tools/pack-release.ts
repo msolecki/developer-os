@@ -9,8 +9,8 @@
  * The Node runtimes are inputs, each pinned by SHA-256 and an exact `24.x.y` version
  * (`--node-<arch>-version`): the packer never downloads anything (A16's CI fetches them). Each
  * binary must match its pin and be a Mach-O of its architecture; only the host-architecture one is
- * run, and it must report its pinned version. The output directory must not exist, and the CLI
- * refuses a dirty checkout unless `--allow-dirty`.
+ * run, and it must report its pinned version. The output directory must not exist, the CLI
+ * refuses a dirty checkout unless `--allow-dirty`, and refuses `--allow-dirty` whenever `CI` is set.
  *
  * Runner contract: any macOS runner, either architecture, packs both kegs. Same inputs, same bytes:
  * every esbuild output, archive and tree is a function of the commit, the version, the sequences
@@ -28,7 +28,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { chmod, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { argv, stdout } from "node:process";
+import { argv, env, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
 
@@ -53,8 +53,10 @@ export interface NodeBinary {
 /**
  * The CLI packs committed state only: `collectTree` already refuses dirty `workflows/` and
  * `instructions/`, and this refuses any other uncommitted change that would reach a bundle.
+ * CI never packs a dirty tree (A16 §3.3): with `CI` set, `--allow-dirty` itself is refused.
  */
-export function assertCleanCheckout(root: string, allowDirty: boolean): void {
+export function assertCleanCheckout(root: string, allowDirty: boolean, env: Readonly<Record<string, string | undefined>>): void {
+  if (allowDirty && (env.CI ?? "") !== "") throw new Error("refusing to pack: --allow-dirty is refused when CI is set");
   if (allowDirty) return;
   if (execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).length > 0) {
     throw new Error("refusing to pack: the checkout has uncommitted changes (pass --allow-dirty to pack anyway)");
@@ -75,8 +77,9 @@ function sha256(bytes: Uint8Array): string {
  * The verified bytes of a Node runtime. The pin is checked before anything else, and the bundle
  * carries these bytes, not a second read. Only the slot whose architecture is the host's runs
  * (`--version`, bounded at 10 s, must equal the pinned version): a single-architecture runner
- * cannot execute the other slot, so its SHA-256 pin, copied from nodejs.org's SHASUMS256.txt for
- * that exact version, is its integrity authority. `skipCpuCheck` is test-only: the CLI never sets it.
+ * cannot execute the other slot, so its SHA-256 pin is its integrity authority; A16's CI derives it
+ * from the extracted binary of an archive whose SHA-256 is pinned in `.github/release/pins.json`
+ * from nodejs.org's `SHASUMS256.txt`. `skipCpuCheck` is test-only: the CLI never sets it.
  */
 export async function assertNodeBinary(binary: NodeBinary, architecture: Architecture, options: { readonly skipCpuCheck?: boolean } = {}): Promise<Uint8Array> {
   let major: string | undefined;
@@ -287,7 +290,7 @@ if (isEntryPoint(argv[1])) {
     }
     return value;
   };
-  assertCleanCheckout(repositoryRoot(), values["allow-dirty"] === true);
+  assertCleanCheckout(repositoryRoot(), values["allow-dirty"] === true, env);
   const kegs = await pack({
     outDir: required("out"),
     version: required("version"),
