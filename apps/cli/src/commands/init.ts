@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import {
   EXIT_CODES,
@@ -338,6 +338,13 @@ async function assertV2Undrifted(
   return unchanged;
 }
 
+/** Only the retained `tx_fi_` staging of an unverified bootstrap envelope; any other finding is real corruption. */
+export function isUnverifiedEnvelopeFinding(error: unknown, stagingDir: string): error is LifecycleRecoveryRefusalError {
+  if (!(error instanceof LifecycleRecoveryRefusalError) || error.reason !== "lifecycle_ledger_finding") return false;
+  const [finding] = error.paths;
+  return finding !== undefined && dirname(finding) === join(stagingDir, "transactions") && basename(finding).startsWith("tx_fi_");
+}
+
 /**
  * NEW-123 B: a fresh init beside an `unverified` retained envelope must succeed, yet every gated
  * mutation refuses that envelope's evidence by design (NEW-99). The entrypoint is written through the
@@ -349,7 +356,7 @@ async function installEntrypointBesideEnvelope(context: CliContext): Promise<rea
     await installEntrypoint(context);
     return [];
   } catch (error) {
-    if (error instanceof LifecycleRecoveryRefusalError && error.reason === "lifecycle_ledger_finding") {
+    if (isUnverifiedEnvelopeFinding(error, context.paths.stagingDir)) {
       return ["the entrypoint was not written: retained bootstrap evidence blocks it; run developer-os doctor, then init again"];
     }
     throw error;
