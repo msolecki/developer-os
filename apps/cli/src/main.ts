@@ -75,7 +75,7 @@ const USAGE = [
   "  doctor     run every health check without repairing anything",
   "  repair     resume or roll back one incomplete transaction",
   "  uninstall  remove manifest-owned artifacts",
-  "  update     [rollback]: preview a signed release update, or a rollback to the retained release",
+  "  update     [rollback]: preview a release update from the installed package, or a rollback to the retained release",
   "  git        enable --remote <url> [--branch <name>] | disable | status | sync: opt-in Brain synchronization",
   "  automation enable --schedule <job>=<schedule>... | disable | status: opt-in scheduled jobs",
   "",

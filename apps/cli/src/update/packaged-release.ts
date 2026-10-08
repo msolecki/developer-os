@@ -43,7 +43,7 @@ export interface PackagedReleaseIdentityV1 {
   readonly updateProtocol: number;
 }
 
-export interface RootVerifiedPackagedReleaseV1 {
+export interface PackagedReleaseHandoffV1 {
   readonly packageRoot: string;
   readonly retainedMetadata: {
     readonly delegation: string;
@@ -67,7 +67,7 @@ export interface AdmittedPackagedReleaseFileV1 {
   readonly ino: string;
 }
 
-export type PackagedReleaseTrustV1 = "root-verified" | "unsigned-local" | "package-channel";
+export type PackagedReleaseTrustV1 = "unsigned-local" | "package-channel";
 
 export const UNSIGNED_LOCAL_LAYOUT = Object.freeze({
   delegation: "metadata/release-key-delegation.json",
@@ -82,7 +82,7 @@ export interface AdmittedPackagedReleaseV1 {
   readonly packageRootDev: string;
   readonly packageRootIno: string;
   readonly packageInventoryHash: LowerHexSha256;
-  readonly retainedMetadata: RootVerifiedPackagedReleaseV1["retainedMetadata"];
+  readonly retainedMetadata: PackagedReleaseHandoffV1["retainedMetadata"];
   readonly bundleRoot: string;
   readonly identity: PackagedReleaseIdentityV1;
   readonly files: readonly AdmittedPackagedReleaseFileV1[];
@@ -102,7 +102,7 @@ class PackagedReleaseError extends Error {
   }
 }
 
-/** `owner_only` is the root-verified and unsigned-local rule; `homebrew` is the keg's (D84 K2). */
+/** `owner_only` is the unsigned-local rule; `homebrew` is the keg's (D84 K2). */
 type ModePolicy = "owner_only" | "homebrew";
 
 /** A sealed row keeps the observed disk mode; `mode` is the class-mapped one consumers see. */
@@ -117,7 +117,7 @@ interface DirectorySnapshot {
 
 interface SealedPackagedRelease {
   readonly trust: PackagedReleaseTrustV1;
-  readonly handoff: RootVerifiedPackagedReleaseV1;
+  readonly handoff: PackagedReleaseHandoffV1;
   readonly root: { readonly dev: string; readonly ino: string };
   readonly directories: readonly DirectorySnapshot[];
   readonly files: readonly SealedFileRow[];
@@ -343,7 +343,7 @@ function requiredFile<TFile extends AdmittedPackagedReleaseFileV1>(
 }
 
 function validateSemanticBindings(
-  handoff: RootVerifiedPackagedReleaseV1,
+  handoff: PackagedReleaseHandoffV1,
   files: readonly AdmittedPackagedReleaseFileV1[],
   directories: readonly DirectorySnapshot[],
 ): void {
@@ -444,7 +444,7 @@ async function assertSealedFileChain(
 
 function seal(
   trust: PackagedReleaseTrustV1,
-  handoff: RootVerifiedPackagedReleaseV1,
+  handoff: PackagedReleaseHandoffV1,
   observed: Awaited<ReturnType<typeof inventory>>,
   ancestorPrefix: string | null = null,
 ): PackagedReleaseSourceV1 {
@@ -459,14 +459,6 @@ function seal(
     ancestorPrefix,
   });
   return source;
-}
-
-export async function admitRootVerifiedPackagedRelease(
-  handoff: RootVerifiedPackagedReleaseV1,
-): Promise<PackagedReleaseSourceV1> {
-  const observed = await inventory(handoff.packageRoot, "owner_only");
-  validateSemanticBindings(handoff, observed.files, observed.directories);
-  return seal("root-verified", handoff, observed);
 }
 
 type UnsignedDocument = Record<string, unknown>;
@@ -551,7 +543,7 @@ export async function admitUnsignedLocalPackagedRelease(
       "unsigned local release supports only darwin arm64 or x64",
     );
   }
-  const handoff: RootVerifiedPackagedReleaseV1 = {
+  const handoff: PackagedReleaseHandoffV1 = {
     packageRoot,
     retainedMetadata: {
       delegation: layout.delegation,
@@ -670,7 +662,7 @@ export async function admitPackageChannelRelease(
       return securityRefusal("package-channel bundle inventory does not equal the bundle manifest");
     }
 
-    const handoff: RootVerifiedPackagedReleaseV1 = {
+    const handoff: PackagedReleaseHandoffV1 = {
       packageRoot,
       retainedMetadata: { delegation: layout.delegation, releaseIndex: layout.releaseIndex, bundleManifest: layout.bundleManifest },
       bundleRoot: layout.bundleRoot,
@@ -755,14 +747,14 @@ export async function inspectPackagedRelease(
   if (snapshot === undefined || snapshot === null) {
     throw new PackagedReleaseError(
       EXIT_CODES.capabilityUnavailable,
-      "this build has no root-verified packaged release handoff",
+      "this build has no packaged release handoff",
     );
   }
   if (snapshot.ancestorPrefix !== null) await assertAncestors(snapshot.handoff.packageRoot, snapshot.ancestorPrefix);
   const observed = await inventory(snapshot.handoff.packageRoot, policyOf(snapshot.trust));
   validateSemanticBindings(snapshot.handoff, observed.files, observed.directories);
   if (!sameInventory(snapshot, observed)) {
-    securityRefusal("packaged release changed after root-verified admission");
+    securityRefusal("packaged release changed after admission");
   }
   const filesByPath = new Map(
     snapshot.files.map((file) => [file.relativePath, file] as const),

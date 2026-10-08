@@ -14,7 +14,6 @@ import { firingRecordWaitMs, settleFiringRecords } from "./hooks/entry.js";
 import type { HookEnvironment } from "./hooks/entry.js";
 import type { CliIo } from "./io.js";
 import { run } from "./main.js";
-import { LAUNCHER_TRUST_ARGUMENT } from "./update/context.js";
 import {
   admitPackageChannelRelease,
   admitUnsignedLocalPackagedRelease,
@@ -138,11 +137,7 @@ const io: CliIo = {
 };
 
 const home = process.env.HOME;
-const launchedArgv = process.argv.slice(2);
-// `update` reads FD 3 itself; the marker is not a public option, so no parser ever sees it.
-// Its presence is kept: without it FD 3 is not a trust pipe, and `update` must not touch it (NEW-147).
-const launcherTrustHandoff = launchedArgv[0] === LAUNCHER_TRUST_ARGUMENT;
-const argv = launcherTrustHandoff ? launchedArgv.slice(1) : launchedArgv;
+const argv = process.argv.slice(2);
 const hookMode = isHookInvocation(argv);
 const scheduledMode = parseScheduledInvocation(argv) !== null;
 const pendingRecords: Promise<void>[] = [];
@@ -192,7 +187,6 @@ if ((home === undefined || home.length === 0) && !scheduledMode) {
           : request.packageChannelInit
             ? await admitPackageChannelKeg()
             : null,
-        launcherTrustHandoff,
       });
     },
     hookMode && home !== undefined ? hookEnvironment(home) : undefined);

@@ -294,7 +294,7 @@ const neverScratch: UpdateScratchV1 = { create: never, listRecoverableAttempts: 
 describe("planning from the package channel (D84 K2, K4 F7)", () => {
   it("(a) previews the keg as packageSource and never touches FD 3, a transport or scratch", async () => {
     const fixture = createUpdateFixture();
-    const result = await planUpdate({ ...fixture.update, readOfflineTrust: never, createTransport: never, scratch: neverScratch }, { version: null });
+    const result = await planUpdate({ ...fixture.update, createTransport: never, scratch: neverScratch }, { version: null });
     expect(result.result).toMatchObject({ outcome: "preview", plan: { packageSource: { kegPath: fixture.kegPath, bundleManifestHash: fixture.releases.get("1.1.0")?.manifestHash } } });
     expect(result.result.outcome === "preview" && "download" in result.result.plan).toBe(false);
   });

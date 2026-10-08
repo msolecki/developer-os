@@ -492,7 +492,6 @@ describe("update rollback reaches no network", () => {
     };
     const update: CliUpdateContext = {
       ...fixture.update,
-      readOfflineTrust: never,
       createTransport: never,
       scratch: { create: never, listRecoverableAttempts: never, recoverCleanup: never },
       planner: { run: never },
