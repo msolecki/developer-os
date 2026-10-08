@@ -39,6 +39,7 @@ const violations = (text: string): string[] => {
   for (const line of text.split("\n").filter((row) => row.includes("github.event.release"))) if (!/^\s+TAG: \$\{\{ github\.event\.release\.tag_name \}\}$/u.test(line)) found.push("event data outside env");
   for (const run of text.split(/^\s+run: \|\n/mu).slice(1)) if ((run.split(/\n {6}(?:- |#)/u)[0] ?? "").includes("${{")) found.push("expression in run");
   if (!/\^v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\$/u.test(text)) found.push("tag validation");
+  if (!text.includes("update-formula.sh?ref=${GITHUB_SHA}\"")) found.push("script ref");
   return found;
 };
 
@@ -62,6 +63,7 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "pin without version comment": ["action pins", (t) => t.replace("    steps:\n", `    steps:\n      - uses: actions/cache@${SHA}\n`)],
   "event data in run": ["expression in run", (t) => t.replace('mkdir "$RUNNER_TEMP/in"', 'echo ${{ github.event.release.name }}; mkdir "$RUNNER_TEMP/in"')],
   "event data off TAG": ["event data outside env", (t) => t.replace("          GH_TOKEN: ${{ github.token }}", "          GH_TOKEN: ${{ github.token }}\n          NAME: ${{ github.event.release.name }}")],
+  "script by moved tag": ["script ref", (t) => t.replace("?ref=${GITHUB_SHA}", "?ref=${TAG}")],
   "no tag validation": ["tag validation", (t) => t.replaceAll("^v[0-9]+\\.[0-9]+\\.[0-9]+$", "^v.*$")],
 };
 
@@ -85,5 +87,11 @@ describe("tap.yml (A16 §2 step 7)", () => {
     expect(workflow).toContain("git diff --numstat");
     expect(workflow.indexOf("git diff --numstat")).toBeLessThan(workflow.indexOf("git push"));
     expect(workflow).toContain("gh pr create --repo msolecki/homebrew-developer-os");
+  });
+
+  it("keeps the edit script away from runner state and git configuration", async () => {
+    const script = await readFile(join(root, ".github/release/update-formula.sh"), "utf8");
+    expect(script.length).toBeGreaterThan(0);
+    expect(code(script)).not.toMatch(/GITHUB_PATH|GITHUB_ENV|BASH_ENV|hooks|\.git\/|git config/u);
   });
 });

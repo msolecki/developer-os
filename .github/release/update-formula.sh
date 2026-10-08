@@ -3,6 +3,11 @@
 #   update-formula.sh <vX.Y.Z> <SHA256SUMS> <Formula/developer-os.rb>
 # Rewrites exactly the version line, both url lines and both sha256 lines, and
 # refuses (exit 1, file untouched) on anything outside the expected shape.
+#
+# The refused-construct list below is a tripwire, not a complete filter. The
+# trust root is the formula already merged into the tap by the founder; the
+# five-lines-only checks here and the 5/5 `git diff --numstat` guard in the
+# workflow limit what one run can change.
 set -euo pipefail
 
 die() { echo "update-formula: $*" >&2; exit 1; }
