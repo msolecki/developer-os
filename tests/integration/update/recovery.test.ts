@@ -715,3 +715,42 @@ describe("a death between the release-directory intent and its mkdir (NEW-118 (1
     expect([reservation.size, reservation.mode & 0o777]).toEqual([0, 0o600]);
   }, CASE_TIMEOUT_MS);
 });
+
+describe("an old-grammar participant journal (F5 residual, NEW-118 (1), (2))", () => {
+  /** The first `*.json` under a staging coordinator's participant-journal kind directory. */
+  async function journalOf(home: UpdatableHomeV1, kind: string): Promise<string> {
+    const lifecycleRoot = join(home.fixture.paths.home, "staging", "lifecycle");
+    for (const root of await nodeFs.readdir(lifecycleRoot)) {
+      const directory = join(lifecycleRoot, root, "update", "journals", kind);
+      const [leaf] = await nodeFs.readdir(directory).catch(() => []);
+      if (leaf !== undefined) return join(directory, leaf);
+    }
+    throw new Error(`no ${kind} journal`);
+  }
+
+  async function coordinatorJournals(home: UpdatableHomeV1): Promise<Record<string, string>> {
+    const directory = join(home.fixture.paths.stateDir, "lifecycle-journals");
+    const rows: Record<string, string> = {};
+    for (const name of await nodeFs.readdir(directory)) rows[name] = await nodeFs.readFile(join(directory, name), "utf8");
+    return rows;
+  }
+
+  it.each([
+    ["state", "reservationReleased", "rollback_record_state", (name: string, args: readonly unknown[]) => name === "unlinkExact" && (args[0] as { readonly path: string }).path.endsWith("/state/update-rollback.json")],
+    ["bundle", "versionDirectory", "bundle_publication", (name: string, args: readonly unknown[]) => name === "syncDirectory" && (args[0] as { readonly path: string }).path.endsWith("/releases/1.1.0")],
+  ])("refuses a %s journal missing %s as exit 6 and leaves the coordinator journal byte-identical", async (_label, key, kind, fatal) => {
+    const home = await installUpdatableHome(`recovery-old-grammar-${kind}`, "arm64");
+    const dying = dieWhen(home.fixture.context, fatal);
+    expect(await attempt(updateTo(home.update(dying.context), "1.1.0"), dying.died)).toBe("died");
+    const path = await journalOf(home, kind);
+    const { [key]: removed, ...journal } = JSON.parse(await nodeFs.readFile(path, "utf8")) as Record<string, unknown>;
+    expect(removed).not.toBeUndefined();
+    await nodeFs.writeFile(path, encodeCanonicalJson(journal as never));
+    const before = await coordinatorJournals(home);
+
+    const resumed = await runUpdate({ ...home.fixture.context, update: home.update() }, { kind: "update", version: parseStableSemver("1.1.0"), apply: true, json: true });
+
+    expect(resumed).toMatchObject({ ok: false, code: EXIT_CODES.recoveryRequired });
+    expect(await coordinatorJournals(home)).toEqual(before);
+  }, CASE_TIMEOUT_MS);
+});

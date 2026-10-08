@@ -338,7 +338,14 @@ export class BundleJournalFile<TJournal> {
   async load(validate: (value: unknown) => TJournal): Promise<TJournal> {
     const found = await this.#io.readBounded(this.path, 0o600, this.#maximumBytes);
     if (found === null) return refuseBundle("bundle_journal_missing", this.path);
-    this.value = validate(this.#io.decodeExact(found.bytes, this.#maximumBytes, this.path));
+    const decoded = this.#io.decodeExact(found.bytes, this.#maximumBytes, this.path);
+    try {
+      this.value = validate(decoded);
+    } catch (error) {
+      // An old-grammar or torn journal is a third state (exit 6), never a plain error the coordinator would compensate.
+      if (error instanceof LifecycleRecoveryRequiredError) throw error;
+      return refuseBundle("bundle_journal_invalid", this.path);
+    }
     this.#entry = found.entry;
     return this.value;
   }
