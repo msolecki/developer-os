@@ -33,7 +33,7 @@ import {
 import type { VerifiedScratchBundleV1 } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BUNDLE_SOURCE_DEATH_POINTS, BundleGuardedIo, BundleSourceExecutor, type BundleSourceDeathPointV1 } from "./bundle-source.js";
+import { BUNDLE_SOURCE_DEATH_POINTS, BundleGuardedIo, BundleJournalFile, BundleSourceExecutor, type BundleSourceDeathPointV1 } from "./bundle-source.js";
 import { resolveSourceParent } from "./construction.js";
 import { readConstructionJournal, stageSourceConstruction } from "./rollback-testing.js";
 
@@ -269,6 +269,23 @@ describe("BundleSourceExecutor", () => {
     await nodeFs.writeFile(swapped, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     await expect(compensateOf(value)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
     expect(await exists(swapped)).toBe(true);
+  });
+});
+
+describe("BundleJournalFile.load validator wrap (NEW-201)", () => {
+  const path = parseCanonicalAbsolutePathText("/tmp/dos-journal.json");
+  const io = {
+    readBounded: () => Promise.resolve({ bytes: new Uint8Array(2), entry: {} }),
+    decodeExact: () => ({}),
+  } as unknown as BundleGuardedIo;
+
+  it("refuses a validator throw as a third state (exit 6) but lets a TypeError or RangeError propagate (exit 1)", async () => {
+    const load = (error: Error) => new BundleJournalFile<never>(io, path, 16).load(() => {
+      throw error;
+    }).then(() => null, (failure: unknown) => failure);
+    expect(await load(new Error("torn journal"))).toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await load(new TypeError("defect"))).toBeInstanceOf(TypeError);
+    expect(await load(new RangeError("defect"))).toBeInstanceOf(RangeError);
   });
 });
 

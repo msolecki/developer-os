@@ -418,7 +418,8 @@ export class CanonicalStateParticipant {
       return validateStateParticipantJournal(value, kind, { id: step.plan.id, coordinatorId: step.plan.coordinatorId, retainedVerification: isRetainedRecordVerification(step.plan) }, step.planRef.hash);
     } catch (error) {
       // An old-grammar journal is a third state (exit 6), never a plain error the coordinator would compensate.
-      if (error instanceof LifecycleRecoveryRequiredError) throw error;
+      // A JavaScript defect (TypeError, RangeError) is not a verdict on the bytes and stays exit 1.
+      if (error instanceof TypeError || error instanceof RangeError || error instanceof LifecycleRecoveryRequiredError) throw error;
       return refuseParticipant("update_state_journal_invalid", step.journal.finalPath);
     }
   }
