@@ -4,6 +4,7 @@
  * tampered anchor still refuses with exit 6.
  */
 import * as nodeFs from "node:fs/promises";
+import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -99,9 +100,22 @@ async function anchorBytes(fixture: CommandFixture): Promise<Uint8Array> {
   return new Uint8Array(await nodeFs.readFile(manifestAnchorPath(fixture.paths.home)));
 }
 
-/** The manifest the finalized bootstrap left, read before any gated write moves it. */
-async function bootstrapHashOf(fixture: CommandFixture): Promise<string> {
-  return hashBytes(await manifestBytes(fixture));
+/**
+ * The manifest the finalized bootstrap published, as its retained plan records it: the hash
+ * `supersededV2Handoff` requires the anchor's chain to start at. Not the live manifest, which
+ * `init`'s own gated entrypoint write (NEW-163 option B, Spec 2 D84 K5) has already moved.
+ */
+async function bootstrapHashOf(fixture: CommandFixture, excluding: ReadonlySet<string> = new Set()): Promise<string> {
+  const plans = (await bootstrapPlanNames(fixture)).filter((name) => !excluding.has(name));
+  if (plans.length !== 1) throw new Error(`fixture holds ${String(plans.length)} bootstrap plans`);
+  const plan = JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, plans[0] as string), "utf8")) as {
+    readonly manifest: { readonly after: { readonly hash: string } };
+  };
+  return plan.manifest.after.hash;
+}
+
+async function bootstrapPlanNames(fixture: CommandFixture): Promise<readonly string[]> {
+  return (await nodeFs.readdir(fixture.paths.stateDir)).filter((name) => name.endsWith(".plan.json"));
 }
 
 async function anchorExists(fixture: CommandFixture): Promise<boolean> {
@@ -207,10 +221,14 @@ describe("the durable manifest anchor (D54)", () => {
     await expectInitSettles(fixture);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  /**
+   * The first gated manifest write after the bootstrap is `init`'s own entrypoint write (NEW-163
+   * option B, Spec 2 D84 K5), so "never written" is that commit dying before its anchor.
+   */
   it("recovers an anchor that was never written at all", async () => {
     const fixture = await initialisedV2Home("anchor-crash-first");
     const bootstrap = await bootstrapHashOf(fixture);
-    const written = await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
+    const written = await manifestBytes(fixture);
     await nodeFs.unlink(manifestAnchorPath(fixture.paths.home));
 
     await noOpGateSession(fixture);
@@ -249,7 +267,8 @@ describe("the manifest anchor fails safe (D54 review)", () => {
   it("replaces a malformed owned anchor from the committed journal", async () => {
     const fixture = await initialisedV2Home("anchor-malformed-derive");
     const bootstrap = await bootstrapHashOf(fixture);
-    const written = await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
+    // The first committed manifest write is `init`'s entrypoint write (NEW-163 option B, Spec 2 D84 K5).
+    const written = await manifestBytes(fixture);
     // An interrupted first write: the owned shape, not the exact encoding.
     await nodeFs.writeFile(manifestAnchorPath(fixture.paths.home), "{");
 
@@ -346,6 +365,7 @@ describe("the durable manifest anchor after attach (D54)", () => {
     expect(attached.ok, JSON.stringify(attached)).toBe(true);
     const earlierManifest = await manifestBytes(fixture);
     const earlierAnchor = await anchorBytes(fixture);
+    const earlierPlans = new Set(await bootstrapPlanNames(fixture));
 
     const uninstalled = await runUninstall(fixture.context, ACCEPTED);
     expect(uninstalled.ok, JSON.stringify(uninstalled)).toBe(true);
@@ -355,7 +375,7 @@ describe("the durable manifest anchor after attach (D54)", () => {
     const reinstalled = await runInit(context, ACCEPTED);
     expect(reinstalled.ok, JSON.stringify(reinstalled)).toBe(true);
     // The binding is what is under test: the two bootstraps must not share a manifest.
-    expect(decodeManifestAnchor(earlierAnchor)?.bootstrapManifestHash).not.toBe(await bootstrapHashOf(fixture));
+    expect(decodeManifestAnchor(earlierAnchor)?.bootstrapManifestHash).not.toBe(await bootstrapHashOf(fixture, earlierPlans));
 
     // The earlier installation's manifest and anchor come back (a backup restore, a copied home).
     await nodeFs.writeFile(fixture.paths.manifestFile, earlierManifest);
