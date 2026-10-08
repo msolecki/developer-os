@@ -140,7 +140,7 @@ import {
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { uninstallResidueFrom } from "./context.js";
 import { manifestAdmissionFor } from "./manifest-admission.js";
-import { isCodeDefect, MANIFEST_ANCHOR_WARNING, removeManifestAnchor } from "./manifest-anchor.js";
+import { removeManifestAnchorOrWarn } from "./manifest-anchor.js";
 import { allocatedIdsFrom, cleanAllocatorTemp, requireLifecycleStagingRoot, withLifecycleMutation } from "./mutation-gate.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
 import {
@@ -1725,16 +1725,7 @@ export class LifecycleUninstaller {
         .recovery(request.key, adapters, residue)
         .recover(current(), { resumeUninstall: true });
       holds.global = settled.global;
-      /**
-       * D54 review, finding 1: the manifest is gone, so the anchor describes no installation.
-       * Still under the global lock; a failure is reported, never a failed uninstall.
-       */
-      try {
-        await removeManifestAnchor(lifecycle.fs, productHome, lifecycle.effectiveUid);
-      } catch (error) {
-        if (isCodeDefect(error)) throw error;
-        context.io.stderr(MANIFEST_ANCHOR_WARNING);
-      }
+      await removeManifestAnchorOrWarn(lifecycle.fs, productHome, lifecycle.effectiveUid, (text) => { context.io.stderr(text); });
 
       /**
        * W2-UNINST-3: what this run removed, not what the preview listed: the files its artifact steps
