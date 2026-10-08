@@ -1,0 +1,228 @@
+name: release
+
+# A16 (docs/superpowers/specs/2026-10-07-developer-os-release-publication-design.md):
+# a pushed tag vX.Y.Z on development becomes a DRAFT release. Publishing the draft
+# is the founder's first approval; tap.yml then opens the tap pull request, and
+# merging it is the second. Nothing here reaches a user.
+#
+# Action SHAs were read with `gh api repos/actions/<repo>/git/ref/tags/<tag>`
+# from the actions organisation's own repositories on 2026-10-08.
+#
+# Trust split: preflight, build and sbom run repository and dependency code with
+# a read-only token. publish holds `contents: write` and runs no repository or
+# dependency code: it downloads the assets, re-verifies them with the runner's
+# own tools, and drafts the release with gh.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  preflight:
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Tag is a stable version
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME (want vX.Y.Z)"; exit 1; }
+          [ "$GITHUB_REF" = "refs/tags/$GITHUB_REF_NAME" ] || { echo "::error::not a tag push: $GITHUB_REF"; exit 1; }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The history scan reads every fetched ref, and the ancestry check
+          # needs origin/development.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tag is on development
+        run: git merge-base --is-ancestor HEAD origin/development
+      - name: check.yml passed on this commit
+        # Never rerun the ~4 h suite here. A pull_request run tests a merge ref,
+        # not this tree, and a cancelled run proves nothing, so only a completed,
+        # successful push run on development counts (CONTRIBUTING, Releasing).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-parse 'HEAD^{commit}')
+          count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/check.yml/runs?head_sha=${sha}&branch=development&event=push&status=success&per_page=100" \
+            | jq --arg sha "$sha" '[.workflow_runs[] | select(.head_sha == $sha and .event == "push" and .head_branch == "development" and .status == "completed" and .conclusion == "success")] | length')
+          if [ "$count" -lt 1 ]; then
+            echo "::error::no completed, successful check.yml push run on development for ${sha}. Land the commit on development, wait for its check.yml push run to finish green (a cancelled run or a pull-request run does not count), then tag that exact commit."
+            exit 1
+          fi
+      - name: History secret scan
+        run: |
+          [ "$(uname -m)" = arm64 ] || { echo "::error::gitleaks is pinned for darwin-arm64 only"; exit 1; }
+          version=$(jq -r '.gitleaks.version' .github/release/pins.json)
+          sum=$(jq -r '.gitleaks["darwin-arm64"]' .github/release/pins.json)
+          archive="gitleaks_${version}_darwin_arm64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
+          echo "${sum}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+          mkdir "$RUNNER_TEMP/gitleaks"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/gitleaks" gitleaks
+          "$RUNNER_TEMP/gitleaks/gitleaks" git --config .gitleaks.toml --log-opts=--all --redact --exit-code 1 .
+
+  build:
+    needs: preflight
+    # One runner type for both architectures: gzip bytes may differ across CPU
+    # types (zlib SIMD), so the tarballs are built and compared on this one.
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Tag is a stable version
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME"; exit 1; }
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          # The archives' zstd bytes depend on the Node that runs the packer (§3.3).
+          node-version-file: .node-version
+      - name: Enable pnpm through corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm --pm-on-fail=ignore build
+      - name: Release inputs
+        run: |
+          sequence=$(node tests/dist/tools/release-metadata.js sequence "$VERSION")
+          [[ "$sequence" =~ ^[0-9]+$ ]] || { echo "::error::bad release sequence: $sequence"; exit 1; }
+          node_version=$(jq -r '.node.version' .github/release/pins.json)
+          [ "$(node --version)" = "v${node_version}" ] || { echo "::error::runner Node $(node --version) is not the pinned v${node_version}"; exit 1; }
+          {
+            echo "SEQUENCE=${sequence}"
+            echo "MTIME=$(git log -1 --format=%ct)"
+            echo "NODE_VERSION=${node_version}"
+          } >> "$GITHUB_ENV"
+      - name: Node runtimes
+        # Outside the checkout, so the packer's clean-tree check still holds.
+        run: |
+          for arch in arm64 x64; do
+            key="darwin-${arch}"
+            archive="node-v${NODE_VERSION}-darwin-${arch}.tar.gz"
+            curl -fsSL -o "$RUNNER_TEMP/$archive" "https://nodejs.org/dist/v${NODE_VERSION}/${archive}"
+            echo "$(jq -r --arg key "$key" '.node[$key]' .github/release/pins.json)  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+            mkdir "$RUNNER_TEMP/node-${arch}"
+            tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/node-${arch}" --strip-components 2 "node-v${NODE_VERSION}-darwin-${arch}/bin/node"
+          done
+      - name: Pack twice and compare
+        run: |
+          arm64_sha=$(shasum -a 256 "$RUNNER_TEMP/node-arm64/node" | cut -d' ' -f1)
+          x64_sha=$(shasum -a 256 "$RUNNER_TEMP/node-x64/node" | cut -d' ' -f1)
+          for run in 1 2; do
+            node tests/dist/tools/pack-release.js --out "$RUNNER_TEMP/pack-${run}" \
+              --version "$VERSION" --release-sequence "$SEQUENCE" --index-sequence "$SEQUENCE" \
+              --node-arm64 "$RUNNER_TEMP/node-arm64/node" --node-arm64-sha256 "$arm64_sha" --node-arm64-version "$NODE_VERSION" \
+              --node-x64 "$RUNNER_TEMP/node-x64/node" --node-x64-sha256 "$x64_sha" --node-x64-version "$NODE_VERSION"
+            node tests/dist/tools/release-tarball.js --pack "$RUNNER_TEMP/pack-${run}" --version "$VERSION" --mtime "$MTIME" --dest "$RUNNER_TEMP/dist-${run}"
+          done
+          cmp "$RUNNER_TEMP/dist-1/SHA256SUMS" "$RUNNER_TEMP/dist-2/SHA256SUMS"
+      - name: Verify both tarballs
+        run: |
+          node tests/dist/tools/verify-release-tarball.js --tarball "$RUNNER_TEMP/dist-1/developer-os-${VERSION}-darwin-arm64.tar.gz" --version "$VERSION" --architecture arm64
+          node tests/dist/tools/verify-release-tarball.js --tarball "$RUNNER_TEMP/dist-1/developer-os-${VERSION}-darwin-x64.tar.gz" --version "$VERSION" --architecture x64
+      - name: Release notes
+        # A missing CHANGELOG section makes the reader exit non-zero.
+        run: node tests/dist/tools/release-metadata.js notes "$VERSION" > "$RUNNER_TEMP/dist-1/notes.md"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/dist-1
+          if-no-files-found: error
+
+  sbom:
+    needs: preflight
+    # Its own job, so third-party cdxgen code never shares a runner with the tarballs.
+    runs-on: macos-15
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Tag is a stable version
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME"; exit 1; }
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+      - name: Enable pnpm through corepack
+        run: corepack enable
+      - name: SBOM
+        run: |
+          cdxgen=$(jq -r '.cdxgen.version' .github/release/pins.json)
+          mkdir "$RUNNER_TEMP/sbom"
+          pnpm dlx "@cyclonedx/cdxgen@${cdxgen}" -t js --no-install-deps -o "$RUNNER_TEMP/sbom/developer-os-${VERSION}.cdx.json" .
+          jq -e '.bomFormat == "CycloneDX"' "$RUNNER_TEMP/sbom/developer-os-${VERSION}.cdx.json" > /dev/null
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom
+          path: ${{ runner.temp }}/sbom
+          if-no-files-found: error
+
+  publish:
+    needs: [build, sbom]
+    runs-on: macos-15
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    # No checkout and no repository or dependency code in this job: only the
+    # downloaded assets, the runner's shasum, gzip and jq, and gh.
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sbom
+          path: ${{ runner.temp }}/release
+      - name: Re-verify the assets
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME"; exit 1; }
+          version="${GITHUB_REF_NAME#v}"
+          cd "$RUNNER_TEMP/release"
+          expected=$(printf '%s\n' SHA256SUMS "developer-os-${version}-darwin-arm64.tar.gz" "developer-os-${version}-darwin-x64.tar.gz" "developer-os-${version}.cdx.json" notes.md | LC_ALL=C sort)
+          actual=$(find . -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)
+          [ "$actual" = "$expected" ] || { echo "::error::unexpected asset set: ${actual}"; exit 1; }
+          for arch in arm64 x64; do
+            shasum -a 256 "developer-os-${version}-darwin-${arch}.tar.gz"
+            gzip -t "developer-os-${version}-darwin-${arch}.tar.gz"
+          done > "$RUNNER_TEMP/SHA256SUMS.recomputed"
+          cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"
+          jq -e '.bomFormat == "CycloneDX"' "developer-os-${version}.cdx.json" > /dev/null
+          [ -s notes.md ] || { echo "::error::empty release notes"; exit 1; }
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME"; exit 1; }
+          version="${GITHUB_REF_NAME#v}"
+          cd "$RUNNER_TEMP/release"
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+            --title "$GITHUB_REF_NAME" --notes-file notes.md \
+            "developer-os-${version}-darwin-arm64.tar.gz" \
+            "developer-os-${version}-darwin-x64.tar.gz" \
+            SHA256SUMS \
+            "developer-os-${version}.cdx.json"
