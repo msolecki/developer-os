@@ -167,6 +167,7 @@ export function rewriteReferrers(
   moved: string,
   target: string,
   dropAnchor: (tail: string) => boolean,
+  skip: string | null = null,
 ): { readonly changes: readonly RefactorMutationV1[]; readonly rewritten: number } {
   const P = inVault(state, moved);
   const T = inVault(state, target);
@@ -195,6 +196,7 @@ export function rewriteReferrers(
     ...new Set(
       state.build.graph.edges
         .filter((edge) => edge.target === P && edge.source !== P)
+        .filter((edge) => skip === null || edge.source !== inVault(state, skip))
         .map((edge) => edge.source),
     ),
   ].sort(byPath);

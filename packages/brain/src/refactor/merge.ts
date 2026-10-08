@@ -16,7 +16,7 @@ import type { ModePlanV1, PreStateV1 } from "./plan.js";
 export function planMerge(state: PreStateV1, source: string, target: string): ModePlanV1 {
   const sourceBytes = bytesOf(state, source);
   const targetBytes = bytesOf(state, target);
-  const referrers = rewriteReferrers(state, source, target, () => false);
+  const referrers = rewriteReferrers(state, source, target, () => false, target);
   const parsedSource = parseNote(sourceBytes);
   const parsedTarget = parseNote(targetBytes);
   if (!parsedSource.ok || !parsedTarget.ok) {
@@ -25,34 +25,39 @@ export function planMerge(state: PreStateV1, source: string, target: string): Mo
 
   const title = screenControlCharacters(parsedSource.note.frontmatter.title);
   const merged = `${parsedTarget.note.body.trimEnd()}\n\n## ${title}\n\n${parsedSource.note.body.trim()}\n`;
-  const body = unlinkSelf(state, merged, [source, target]);
+  const unlinked = unlinkSelf(state, merged, [source, target]);
   return {
     moves: new Map([[source, target]]),
     changes: [
-      ...referrers.changes.filter((change) => change.path !== target),
+      ...referrers.changes,
       {
         operation: "replace",
         path: target,
-        content: renderNote({ header: parsedTarget.note.header, body }),
+        content: renderNote({ header: parsedTarget.note.header, body: unlinked.body }),
         before: targetBytes,
       },
       { operation: "remove", path: source, content: null, before: sourceBytes },
       { operation: "create", path: `${GRAVEYARD}/${source}`, content: sourceBytes, before: null },
     ],
     extraEdges: [],
-    rewrittenLinks: referrers.rewritten,
+    rewrittenLinks: referrers.rewritten + unlinked.rewritten,
   };
 }
 
-function unlinkSelf(state: PreStateV1, body: string, paths: readonly string[]): string {
+function unlinkSelf(
+  state: PreStateV1,
+  body: string,
+  paths: readonly string[],
+): { readonly body: string; readonly rewritten: number } {
   const resolve = createLinkResolver(state.build.index.notes, state.contentRoot);
   const self = new Set(paths.map((path) => inVault(state, path)));
   return rewriteWikilinks(body, (occurrence) =>
     self.has(resolve(occurrence.text.trim()) ?? "") ? labelOf(occurrence) : null,
-  ).body;
+  );
 }
 
 function labelOf(occurrence: WikilinkOccurrence): string {
   const bar = occurrence.tail.indexOf("|");
-  return bar === -1 ? occurrence.text.trim() : occurrence.tail.slice(bar + 1).trim();
+  const display = bar === -1 ? "" : occurrence.tail.slice(bar + 1).trim();
+  return display === "" ? occurrence.text.trim() : display;
 }
