@@ -574,8 +574,6 @@ describe("automation on a real V2 home", () => {
       const manifest = await readManifest(home);
       // NEW-204: a package-channel home names Node through the fixed `opt` link, never the active release tree.
       const node = optNode(home);
-      const active = JSON.parse(await nodeFs.readFile(join(home.paths.stateDir, "active-release.json"), "utf8")) as { readonly bundleRoot: string };
-      expect(node.startsWith(`${active.bundleRoot}/`)).toBe(false);
       expect(isAbsolute(node)).toBe(true);
       await nodeFs.access(node, constants.X_OK);
       for (const entry of entries) {
@@ -740,6 +738,38 @@ describe("automation on a real V2 home", () => {
         await nodeFs.symlink(target, link);
       }
       // The plists never named a release: relinking `opt` restores every job without `automation enable`.
+      expect(await installedOf()).toStrictEqual(["current", "current", "current"]);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "reports a plist naming the active release's Node stale on a package-channel home, and enable replaces it (NEW-204)",
+    async () => {
+      const home = await sharedHome();
+      const active = JSON.parse(await nodeFs.readFile(join(home.paths.stateDir, "active-release.json"), "utf8")) as { readonly bundleRoot: string };
+      const releaseNode = join(active.bundleRoot, "bin", "runtime");
+      // A pre-NEW-204 enable: with the trust record aside the home reads as having no tree, so the plists
+      // name the Node the CLI ran under, here the active release's bundled runtime.
+      const trust = join(home.paths.stateDir, "release-trust.json");
+      await nodeFs.rename(trust, `${trust}.aside`);
+      try {
+        const legacy = await apply(home, "enable", [], { ...home.context, nodeExecutable: releaseNode });
+        expect(legacy.data).toMatchObject({ kind: "applied", operation: "automation_reconcile" });
+      } finally {
+        await nodeFs.rename(`${trust}.aside`, trust);
+      }
+      expect(parseCanonicalLaunchdPlist(await nodeFs.readFile(plistPath(home, "doctor"))).ProgramArguments[0]).toBe(releaseNode);
+      const installedOf = async (): Promise<readonly string[]> => {
+        const status = dataOf(await runAutomation(home.context, { subcommand: "status" }));
+        if (status.kind !== "status") throw new Error("unreachable");
+        return status.jobs.filter((job) => job.installed !== "absent").map((job) => job.installed);
+      };
+      expect(await installedOf()).toStrictEqual(["stale", "stale", "stale"]);
+      const restored = await apply(home, "enable");
+      expect(restored.data).toMatchObject({ kind: "applied", operation: "automation_reconcile" });
+      expect(entriesOf(lastPlan(home)).map((entry) => entry.operation)).toStrictEqual(["replace", "replace", "replace"]);
+      expect(parseCanonicalLaunchdPlist(await nodeFs.readFile(plistPath(home, "doctor"))).ProgramArguments[0]).toBe(optNode(home));
       expect(await installedOf()).toStrictEqual(["current", "current", "current"]);
     },
     REAL_FILESYSTEM_TIMEOUT_MS,

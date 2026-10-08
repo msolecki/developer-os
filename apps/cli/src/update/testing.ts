@@ -76,7 +76,7 @@ import type { ProcessRequest, ProcessResult, ProcessRunner } from "@developer-os
 
 import { runInit } from "../commands/init.js";
 import { createCommandFixture, repositoryWorkflowFiles, runnableBundleFiles } from "../commands/testing.js";
-import type { CommandFixture } from "../commands/testing.js";
+import type { CommandFixture, FixtureOptions } from "../commands/testing.js";
 import type { CliContext } from "../context.js";
 import { productionUpdateApplyPorts } from "./apply-ports.js";
 import { applyUpdate } from "./apply.js";
@@ -955,12 +955,17 @@ function syntheticVendorRunner(pluginRoot: () => string): ProcessRunner {
  * --adapters claude,codex` also attaches the keg's one skill for both vendors, and every later
  * keg carries its own `instructions/` and `workflows/` for the K8 refresh to render.
  */
-export async function installUpdatableHome(label: string, architecture: SyntheticArchitectureV1, options: { readonly rejectingVersions?: readonly string[]; readonly instructions?: boolean } = {}): Promise<UpdatableHomeV1> {
+export async function installUpdatableHome(
+  label: string,
+  architecture: SyntheticArchitectureV1,
+  options: { readonly rejectingVersions?: readonly string[]; readonly instructions?: boolean; readonly effectPorts?: FixtureOptions["effectPorts"] } = {},
+): Promise<UpdatableHomeV1> {
   const instructions = options.instructions === true;
   let pluginRoot = "";
   const fixture = await createCommandFixture(label, {
     bootstrapAvailable: true,
     architecture,
+    ...(options.effectPorts === undefined ? {} : { effectPorts: options.effectPorts }),
     ...(instructions
       ? {
           instructions: SYNTHETIC_INSTRUCTIONS,

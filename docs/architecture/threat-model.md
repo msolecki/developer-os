@@ -699,9 +699,11 @@ destination `HEAD` state is semantic, so an empty repository binds its symbolic 
 invented OID. Scheduled plist argv carries the guarded product home inside its generation and ignores
 ambient path overrides before reading state; since NEW-144 (2026-10-05) its argv[0] is the absolute
 Node executable admitted at enable and argv[1] the entrypoint, both bound into the generation; since
-NEW-204 (2026-10-08) a `package-channel` home's argv[0] is the hooks' Node through the fixed Homebrew
-`opt` link, never a release-tree path an update or rollback can retire.
-The Node path is the user's own runtime: same-uid writable and not root-admitted, unlike `/bin/launchctl`, so repointing a Homebrew `opt` link or replacing a mise install after enable is accepted by design (a compromised Node runtime is out of scope, §2). Legacy Foundation staging accepts only canonical mutation
+NEW-204 (2026-10-08) every plist that enable writes on a `package-channel` home names the hooks' Node
+through the fixed Homebrew `opt` link, never a release-tree path an update or rollback can retire, and
+`automation status` reports a plist written before NEW-204 that names a release-tree Node `stale` until
+enable replaces it.
+On a home with no active `package-channel` tree the Node path is the user's own runtime: same-uid writable and not root-admitted, unlike `/bin/launchctl`, so repointing a Homebrew `opt` link or replacing a mise install after enable is accepted by design (a compromised Node runtime is out of scope, §2). On a `package-channel` home it is the keg's bundled runtime behind the `opt` link, which carries the same Homebrew-prefix trust as the keg itself. Residual: on x64 a multi-user Homebrew under `/usr/local` can leave that `opt` link writable by another admin user, who can then repoint every scheduled job's Node. Legacy Foundation staging accepts only canonical mutation
 indices `0..4294967294`.
 The final 2026-08-27 correction removes the remaining authority gaps. Public lifecycle preview is
 allocation-free and contains no staging identity; apply must revalidate its hash before it can reserve

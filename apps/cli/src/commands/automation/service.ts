@@ -95,7 +95,7 @@ import type {
 import type { CliContext } from "../../context.js";
 import { selectVendor } from "../ingest.js";
 import { stableNodePath } from "../../instructions/apply.js";
-import { hookNodePath, readActiveReleaseTree } from "../../instructions/active-release.js";
+import { HOOK_OPT_NODE_RECOVERY, hookNodePath, readActiveReleaseTree } from "../../instructions/active-release.js";
 import type { ActiveReleaseTreeV1 } from "../../instructions/active-release.js";
 import { compareManifestRows, InstructionRefusal } from "../../instructions/attach.js";
 import type { LifecycleExecutionPlanV1, LifecyclePlanPreviewV1 } from "../../lifecycle/codecs.js";
@@ -370,13 +370,7 @@ export async function verifiedAutomationExecutable(
  * them until Homebrew relinks it; `automation status` reports such a job `node_unavailable`.
  */
 export async function automationNodePath(context: CliContext): Promise<CanonicalAbsolutePathV1> {
-  let tree: ActiveReleaseTreeV1 | null;
-  try {
-    tree = await readActiveReleaseTree(context);
-  } catch (error) {
-    if (!(error instanceof InstructionRefusal)) throw error;
-    return refuse(error.reason, error.code, error.paths, error.recovery);
-  }
+  const tree = await activeTree(context);
   const path = tree === null ? await stableNodePath(context.nodeExecutable ?? process.execPath) : await hookNodePath(context, tree);
   try {
     const node = parseCanonicalAbsolutePathText(path);
@@ -384,8 +378,18 @@ export async function automationNodePath(context: CliContext): Promise<Canonical
   } catch {
     // falls through to the refusal: not a canonical absolute path
   }
-  const recovery = tree === null ? "run developer-os automation enable under an absolute, executable node" : "brew reinstall developer-os";
+  const recovery = tree === null ? "run developer-os automation enable under an absolute, executable node" : HOOK_OPT_NODE_RECOVERY;
   return refuse("automation_node_unavailable", EXIT_CODES.capabilityUnavailable, [path], recovery);
+}
+
+/** `readActiveReleaseTree`, its exit-6 refusal rethrown as this command's own. */
+async function activeTree(context: CliContext): Promise<ActiveReleaseTreeV1 | null> {
+  try {
+    return await readActiveReleaseTree(context);
+  } catch (error) {
+    if (!(error instanceof InstructionRefusal)) throw error;
+    return refuse(error.reason, error.code, error.paths, error.recovery);
+  }
 }
 
 async function nodeExecutable(path: string): Promise<boolean> {
@@ -1124,12 +1128,14 @@ async function currentLabels(
 ): Promise<ReadonlyMap<ScheduledJobIdV1, GeneratedLaunchdLabelV1> | null> {
   const lifecycleConfig = home.config.automation.lifecycle;
   if (!home.config.automation.enabled || lifecycleConfig === undefined) return new Map();
-  let nodePath = installedNode;
+  let nodePath: CanonicalAbsolutePathV1;
   let executablePath: CanonicalAbsolutePathV1;
   try {
     executablePath = await verifiedAutomationExecutable(lifecycle, home.key.productHome, home.manifest);
-    // The installed plists' Node, so a status run under another Node (a mise per-directory version) is not `stale`.
-    nodePath ??= await automationNodePath(context);
+    // With no active package-channel tree, the installed plists' Node, so a status run under another Node
+    // (a mise per-directory version) is not `stale`. A package-channel home's plists must name the `opt`
+    // Node (NEW-204): one naming a release-tree Node is `stale`, as enable would replace it.
+    nodePath = installedNode !== null && (await activeTree(context)) === null ? installedNode : await automationNodePath(context);
   } catch (error) {
     if (error instanceof AutomationCommandRefusal) return null;
     throw error;
