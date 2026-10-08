@@ -723,7 +723,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
   const specs = options.releases ?? [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }];
   const releases = new Map(specs.map((spec) => [spec.version, syntheticRelease(spec.version, spec.sequence, spec, options.architecture)]));
   const release = (version: string): SyntheticRelease => releases.get(version) ?? (() => { throw new Error(`fixture has no ${version}`); })();
-  const { delegationBytes, indexBytes, offline } = signedReleaseMetadata(
+  const { delegationBytes, indexBytes } = signedReleaseMetadata(
     specs.map((spec) => release(spec.version)),
     options.latestVersion ?? specs[specs.length - 1]?.version ?? "1.1.0",
     options.forgedIndex === true,
@@ -816,10 +816,6 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
       events.push("package_source");
       return options.kegAbsent === true ? readPackageChannelSource("arm64", ABSENT_PACKAGE_TABLE) : Promise.resolve(keg);
     },
-    readOfflineTrust: () => {
-      events.push("trust");
-      return Promise.resolve(offline);
-    },
     createTransport: () => {
       events.push("transport");
       return { get: serve, remainingMilliseconds: () => 600_000 };
@@ -893,7 +889,6 @@ export function unreachableUpdateContext(): CliUpdateContext {
     clock: never,
     readHome: never,
     readPackageSource: never,
-    readOfflineTrust: never,
     createTransport: never,
     scratch: { create: never, listRecoverableAttempts: never, recoverCleanup: never },
     snapshot: never,

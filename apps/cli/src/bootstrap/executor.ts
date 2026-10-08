@@ -550,7 +550,7 @@ function requiredPackageFile(
   if (file === undefined) {
     throw new FreshBootstrapError(
       EXIT_CODES.securityRefusal,
-      `root-verified package is missing ${relativePath}`,
+      `packaged release is missing ${relativePath}`,
     );
   }
   return file;
@@ -2321,7 +2321,7 @@ export class BootstrapExecutor {
       releaseIndexHash: packaged.identity.releaseIndexHash,
       highestAcceptedReleaseSequence: packaged.identity.releaseSequence,
       releaseIdentityHash: packaged.identity.releaseIdentityHash,
-      ...(packaged.trust === "root-verified" ? {} : { trust: packaged.trust }),
+      trust: packaged.trust,
     } as const;
     const activeValue = {
       schemaVersion: 1,
