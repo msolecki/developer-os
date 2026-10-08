@@ -23,7 +23,6 @@ import type { InstructionCatalogV1, InstructionCategoryV1, InstructionIdV1 } fro
 import { loadWorkflow } from "@developer-os/workflow-schema";
 import type { WorkflowContractV1 } from "@developer-os/workflow-schema";
 
-
 type Vendor = "claude" | "codex";
 type SourceCategory = Exclude<InstructionCategoryV1, "command" | "vendor-file">;
 
