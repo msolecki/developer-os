@@ -1479,7 +1479,10 @@ describe("init --local-release dispatch", () => {
       EXIT_CODES.capabilityUnavailable,
     );
     expect(await run(["init", "--yes"], collectingIo(lines), recording)).toBe(EXIT_CODES.capabilityUnavailable);
-    expect(requests).toStrictEqual([{ localRelease: "/x", packageChannelInit: false }, { localRelease: null, packageChannelInit: true }]);
+    expect(requests).toStrictEqual([
+      { localRelease: "/x", packageChannelInit: false, packageMismatchIsAbsent: true },
+      { localRelease: null, packageChannelInit: true, packageMismatchIsAbsent: true },
+    ]);
   });
 
   it("asks for the package channel only for init without --local-release", async () => {
@@ -1490,11 +1493,13 @@ describe("init --local-release dispatch", () => {
     };
     await run(["init", "--dry-run"], collectingIo([]), factory);
     await run(["init", "--dry-run", "--local-release", "/x"], collectingIo([]), factory);
+    await run(["init", "--dry-run", "--adapters", "claude"], collectingIo([]), factory);
     await run(["doctor"], collectingIo([]), factory);
     expect(seen).toEqual([
-      { localRelease: null, packageChannelInit: true },
-      { localRelease: "/x", packageChannelInit: false },
-      { localRelease: null, packageChannelInit: false },
+      { localRelease: null, packageChannelInit: true, packageMismatchIsAbsent: true },
+      { localRelease: "/x", packageChannelInit: false, packageMismatchIsAbsent: true },
+      { localRelease: null, packageChannelInit: true, packageMismatchIsAbsent: false },
+      { localRelease: null, packageChannelInit: false, packageMismatchIsAbsent: false },
     ]);
   });
 

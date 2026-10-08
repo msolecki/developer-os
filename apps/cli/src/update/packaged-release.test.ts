@@ -20,8 +20,10 @@ import type { ReleaseFileV1 } from "./local-release.js";
 import {
   admitPackageChannelRelease,
   isPackageSourceAbsent,
+  isReleaseMismatch,
   admitUnsignedLocalPackagedRelease,
   inspectPackagedRelease,
+  PackagedReleaseError,
   resolvePackageChannelSource,
   unavailablePackagedReleaseSource,
   UNSIGNED_LOCAL_LAYOUT,
@@ -373,6 +375,12 @@ describe("admitPackageChannelRelease (D84 K2)", () => {
   it("(e) splits the version check: init requires PRODUCT_VERSION, update does not", async () => {
     const { prefix, packageRoot } = await kegFixture();
     await expect(admitPackageChannelRelease(packageRoot, { prefix, requireVersion: "9.9.9", architecture: ARCH })).rejects.toMatchObject({ code: EXIT_CODES.capabilityUnavailable, message: "release_mismatch" });
+  });
+  it("classifies a version split as release_mismatch, and nothing else (C2)", async () => {
+    const { prefix, packageRoot } = await kegFixture();
+    const error = await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: "9.9.9", architecture: ARCH }).catch((caught: unknown) => caught);
+    expect(isReleaseMismatch(error)).toBe(true);
+    expect(isReleaseMismatch(new PackagedReleaseError(EXIT_CODES.recoveryRequired, "release_mismatch"))).toBe(false);
   });
   it("(f) resolves the opt link once to its canonical keg, and an absent path is exit 4", async () => {
     const { prefix, keg } = await kegFixture();

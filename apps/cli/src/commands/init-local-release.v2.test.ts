@@ -100,6 +100,14 @@ describe("init --local-release", () => {
     expect(trust).toContain('"trust":"unsigned-local"');
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("(c) re-runs init without flags on an unsigned-local home unchanged: no exit 6 from the active-tree reader (C2)", async () => {
+    const { root, home } = await temporaryHome("init-local-release-rerun");
+    const dir = await writeUnsignedLocalRelease({ outDir: join(root, "pkg"), version: PRODUCT_VERSION, bundleFiles: [{ relativePath: "instructions/catalog.json", bytes: new TextEncoder().encode('{"artifacts":[],"schemaVersion":1}\n'), mode: 0o600 }] });
+    expect(await run(["init", "--yes", "--local-release", dir], new RecordingIo(), productionFactory(home))).toBe(EXIT_CODES.success);
+    const io = new RecordingIo();
+    expect(await run(["init", "--yes"], io, productionFactory(home)), io.err.join("\n")).toBe(EXIT_CODES.success);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("still takes the V1 path without the flag: no silent fallback to a local build", async () => {
     const { home } = await temporaryHome("init-no-local-release");
     const io = new RecordingIo();

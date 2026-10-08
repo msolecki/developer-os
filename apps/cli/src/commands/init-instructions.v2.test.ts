@@ -152,6 +152,33 @@ async function workflowIds(fixture: CommandFixture): Promise<readonly string[]> 
   return (await loadReleaseWorkflows(await inspectPackagedRelease(bootstrap.packagedRelease))).map((workflow) => workflow.id);
 }
 
+describe("init without --adapters renders from the active bundle (K8, C2, one chained home)", () => {
+  let installed: Home;
+  let skillPath: string;
+
+  it("(a) restores a deleted managed file with the keg removed", async () => {
+    installed = await home("init-active-render");
+    expect((await runInit(installed.fixture.context, options(["claude"]))).ok).toBe(true);
+    const skill = (await manifestOf(installed.fixture)).artifacts.find((row) => row.kind === "instruction" && row.owner === "claude" && row.path.endsWith("/SKILL.md"));
+    if (skill === undefined) throw new Error("no rendered skill");
+    skillPath = skill.path;
+    await nodeFs.rm(skillPath);
+    await nodeFs.rm(join(installed.fixture.root, "prefix"), { recursive: true, force: true });
+    const kegless = await createCommandFixture("init-active-render-kegless", { root: installed.fixture.root, runner: installed.fixture.context.runner, agents: AGENTS });
+
+    const result = await runInit(kegless.context, options(null));
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(existsSync(skillPath)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("(b) keeps release_mismatch for init --adapters with no keg", async () => {
+    const kegless = await createCommandFixture("init-active-render-adapters", { root: installed.fixture.root, runner: installed.fixture.context.runner, agents: AGENTS });
+    const result = await runInit(kegless.context, options(["claude"]));
+    expect(result).toMatchObject({ ok: false, code: EXIT_CODES.capabilityUnavailable });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
 describe("init --adapters: fresh install and reconcile (one chained home)", () => {
   let installed: Home;
 

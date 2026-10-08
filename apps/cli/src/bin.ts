@@ -18,15 +18,17 @@ import {
   admitPackageChannelRelease,
   admitUnsignedLocalPackagedRelease,
   isPackageSourceAbsent,
+  isReleaseMismatch,
   resolvePackageChannelSource,
 } from "./update/packaged-release.js";
 import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
 
 /**
  * D84 K2: `init` admits the keg the fixed table names. An absent keg is not an error: `init` then
- * reports `unavailable_until_packaged_handoff` as before. Any other refusal propagates (exit 6).
+ * reports `unavailable_until_packaged_handoff` as before. C2: with `mismatchIsAbsent`, a keg of another
+ * version is no keg either. Any other refusal propagates (exit 6).
  */
-async function admitPackageChannelKeg(): Promise<PackagedReleaseSourceV1 | null> {
+async function admitPackageChannelKeg(mismatchIsAbsent: boolean): Promise<PackagedReleaseSourceV1 | null> {
   const architecture = process.arch;
   if (architecture !== "arm64" && architecture !== "x64") return null;
   try {
@@ -37,7 +39,7 @@ async function admitPackageChannelKeg(): Promise<PackagedReleaseSourceV1 | null>
       architecture,
     });
   } catch (error) {
-    if (isPackageSourceAbsent(error)) return null;
+    if (isPackageSourceAbsent(error) || (mismatchIsAbsent && isReleaseMismatch(error))) return null;
     throw error;
   }
 }
@@ -185,7 +187,7 @@ if ((home === undefined || home.length === 0) && !scheduledMode) {
         localRelease: request.localRelease !== null
           ? await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION)
           : request.packageChannelInit
-            ? await admitPackageChannelKeg()
+            ? await admitPackageChannelKeg(request.packageMismatchIsAbsent === true)
             : null,
       });
     },
