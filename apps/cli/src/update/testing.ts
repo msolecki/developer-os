@@ -1,5 +1,4 @@
-import { createHash, generateKeyPairSync, sign as signEd25519 } from "node:crypto";
-import type { KeyObject } from "node:crypto";
+import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { mkdir, realpath, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -37,11 +36,8 @@ import {
   plannerPathToken,
   releaseIdentityHash,
   rollbackStepListHash,
-  signedReleaseDocumentSigningBytes,
   validateBundleManifest,
-  validateOfficialReleaseOrigin,
   validateReleaseIndex,
-  validateReleaseKeyDelegation,
   validateReleaseTrustState,
   validateUpdatePlannerRequest,
   MAXIMUM_RECOVERY_EXECUTOR_BYTES,
@@ -59,13 +55,11 @@ import type {
   UpdateOperationV1,
   UpdateRecoveryExecutorRecordV1,
   UpdateStepOwnerV1,
-  Base64UrlNoPaddingV1,
   CanonicalJsonValue,
   CanonicalPathEvidenceV1,
   InstallationManifestV2,
   LowerHexSha256,
   ManagedArtifactV2,
-  OfflineReleaseTrustV1,
   ReleaseBundleManifestV1,
   ReleaseIdentityV1,
   ReleaseIndexEntryV1,
@@ -78,7 +72,6 @@ import type {
   UtcTimestampV1,
 } from "@developer-os/core";
 import { planKeepAllRelease } from "@developer-os/core/planner-protocol";
-import type { BoundedReleaseResponseV1, ReleaseTransportRequestV1, VerifiedScratchBundleV1 } from "@developer-os/security";
 
 import { runInit } from "../commands/init.js";
 import { createCommandFixture, runnableBundleFiles } from "../commands/testing.js";
@@ -89,7 +82,7 @@ import { applyUpdate } from "./apply.js";
 import type { UpdateApplyResultV1 } from "./apply.js";
 import { prepareUpdate, releaseIdentityOf } from "./planning.js";
 import { createCliUpdateContext, packageSourcePorts, readPackageChannelSource } from "./context.js";
-import type { CliUpdateContext, UpdateCodexV1, UpdateScratchAttemptV1 } from "./context.js";
+import type { CliUpdateContext, UpdateCodexV1 } from "./context.js";
 import { writePackageChannelRelease } from "./local-release.js";
 import type { AdmittedPackagedReleaseV1 } from "./packaged-release.js";
 import { CODEX_REFRESH_PROVIDER_PROTOCOL, codexRefreshPolicy } from "./codex-refresh.js";
@@ -120,27 +113,6 @@ export function sha256(value: string | Uint8Array): LowerHexSha256 {
 function bytesOf(value: unknown): Uint8Array {
   return encoder.encode(encodeCanonicalJson(value as CanonicalJsonValue));
 }
-
-interface SyntheticKey {
-  readonly keyId: LowerHexSha256;
-  readonly publicKey: Base64UrlNoPaddingV1;
-  readonly privateKey: KeyObject;
-}
-
-function generateKey(): SyntheticKey {
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  const encoded = (publicKey.export({ format: "jwk" }) as { readonly x: string }).x as Base64UrlNoPaddingV1;
-  return { keyId: sha256(Buffer.from(encoded, "base64url")), publicKey: encoded, privateKey };
-}
-
-function signDocument(kind: string, signed: unknown, key: SyntheticKey): Uint8Array {
-  const signature = signEd25519(null, signedReleaseDocumentSigningBytes(kind, signed as CanonicalJsonValue), key.privateKey).toString("base64url");
-  return bytesOf({ schemaVersion: 1, kind, signed, signatures: [{ algorithm: "ed25519", keyId: key.keyId, signature }] });
-}
-
-const ORIGIN = validateOfficialReleaseOrigin({ scheme: "https", host: "releases.example", port: 443, pathPrefix: "/developer-os/" });
-/** Spec 2 pins both metadata locators; only the asset origins are fixture-chosen. */
-const LOCATOR = { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/" } as const;
 
 export type SyntheticArchitectureV1 = "arm64" | "x64";
 
@@ -222,14 +194,6 @@ function syntheticRelease(version: string, sequence: string, options: SyntheticR
     bundles: SYNTHETIC_ARCHITECTURES.map(reference),
   } as unknown as ReleaseIndexEntryV1;
   return { version: parseStableSemver(version), sequence, architecture, ...bundleOf(architecture), bundles, entry };
-}
-
-/** The one bundle, of either architecture, whose signed archive hash a transport request names. */
-function servedBundle(releases: Iterable<SyntheticRelease>, archiveSha256: LowerHexSha256): SyntheticBundleV1 {
-  for (const release of releases) {
-    for (const bundle of release.bundles.values()) if (sha256(bundle.archive) === archiveSha256) return bundle;
-  }
-  throw new Error("fixture served an unknown bundle");
 }
 
 /**
@@ -459,74 +423,11 @@ function screened(blobs: readonly Uint8Array[]): readonly SecretScreenedBlobV1[]
   return blobs.map((content, ordinal) => ({ ordinal, bytes: content.byteLength, sha256: sha256(content), content }) as unknown as SecretScreenedBlobV1);
 }
 
-interface SignedReleaseMetadataV1 {
-  readonly delegationBytes: Uint8Array;
-  readonly indexBytes: Uint8Array;
-  readonly offline: OfflineReleaseTrustV1;
-  readonly releaseKey: SyntheticKey;
-}
-
-/** A fresh Ed25519 root, its delegation of a fresh release key, and the index over `releases`. */
-function signedReleaseMetadata(releases: readonly SyntheticRelease[], latestVersion: string, forgedIndex: boolean): SignedReleaseMetadataV1 {
-  const root = generateKey();
-  const releaseKey = generateKey();
-  const delegation = validateReleaseKeyDelegation({
-    sequence: "2",
-    releaseKey: { algorithm: "ed25519", keyId: releaseKey.keyId, publicKey: releaseKey.publicKey },
-    metadataOrigins: [ORIGIN],
-    assetOrigins: [ORIGIN],
-  });
-  const index = validateReleaseIndex({ sequence: "2", latestVersion, releases: releases.map((release) => release.entry) });
-  const offline = {
-    schemaVersion: 1,
-    handoffProtocol: 1,
-    onlineRootKeyId: root.keyId,
-    acceptedRoots: [{ role: "online_current", algorithm: "ed25519", keyId: root.keyId, publicKey: root.publicKey }],
-    delegationLocator: { ...LOCATOR, assetName: "release-key-delegation-v1.json" },
-    indexLocator: { ...LOCATOR, assetName: "release-index-v1.json" },
-    metadataRedirectOrigins: [ORIGIN],
-  } as unknown as OfflineReleaseTrustV1;
-  return {
-    delegationBytes: signDocument("release-key-delegation", delegation, root),
-    indexBytes: signDocument("release-index", index, forgedIndex ? generateKey() : releaseKey),
-    offline,
-    releaseKey,
-  };
-}
-
-/**
- * The recording transport: both metadata documents, and either architecture's manifest or archive by its signed hash.
- * Withdrawn by D84 K1 with the ports it serves; only Security's transport tests reach it until Task 13.
- */
-function syntheticReleaseServer(input: {
-  readonly delegationBytes: Uint8Array;
-  readonly indexBytes: Uint8Array;
-  readonly releases: ReadonlyMap<string, SyntheticRelease>;
-  readonly requests: string[];
-  readonly events: string[];
-}): (request: ReleaseTransportRequestV1) => Promise<BoundedReleaseResponseV1> {
-  return async (request) => {
-    input.requests.push(request.kind);
-    input.events.push(`transport:${request.kind}`);
-    let body: Uint8Array;
-    if (!("bundle" in request)) {
-      body = request.kind === "release_key_delegation" ? input.delegationBytes : input.indexBytes;
-    } else {
-      const selected = servedBundle(input.releases.values(), request.bundle.archiveSha256);
-      body = request.kind === "archive" ? selected.archive : selected.manifestBytes;
-    }
-    await request.sink(body);
-    return { kind: request.kind, bodyBytes: String(body.byteLength) as BoundedReleaseResponseV1["bodyBytes"], bodyHash: sha256(body), redirected: false };
-  };
-}
-
 export interface UpdateFixtureOptions {
   /** The index's releases; the first is the active one unless `active` names another. */
   readonly releases?: readonly { readonly version: string; readonly sequence: string; readonly minimumLauncherProtocol?: number; readonly updateProtocol?: number }[];
   readonly latestVersion?: string;
   readonly active?: string;
-  /** Signs the transport's index with a key the delegation never named. */
-  readonly forgedIndex?: boolean;
   /** The installed keg's version (D84 K2); absent, the latest release. A version the releases lack is synthesized. */
   readonly kegVersion?: string;
   /** The synthesized keg's release sequence; absent, `"1"`. */
@@ -541,7 +442,6 @@ export interface UpdateFixtureOptions {
   readonly substitutedDelegation?: Uint8Array;
   readonly trustSequence?: string;
   readonly reversedOperations?: boolean;
-  readonly residue?: readonly string[];
   readonly capacity?: UpdateCapacityObservationV1;
   readonly plannerFailure?: Error;
   /** A retained rollback set: `active` then names the installed release and this the previous one. */
@@ -598,8 +498,6 @@ export interface UpdateFixture {
   readonly home: UpdateHomeV1;
   /** Ordered port calls: the observable sequence every ordering test reads. */
   readonly events: string[];
-  /** Transport request kinds only; empty proves no network was reached. */
-  readonly requests: string[];
   /** The canonical keg path `readPackageSource` admits, as the preview's `packageSource` names it. */
   readonly kegPath: CanonicalAbsolutePathV1;
   /** Every request the snapshot port produced for the planner. */
@@ -715,20 +613,12 @@ function syntheticKeg(release: SyntheticRelease, kegPath: CanonicalAbsolutePathV
 /**
  * A complete synthetic update world behind `CliUpdateContext`: a package-channel home, one keg
  * served from memory, and a planner answering with a real admitted draft and a transcript that
- * hashes exactly what it returns. The withdrawn FD 3, transport and scratch ports stay wired to
- * signed metadata over a fresh Ed25519 root until Task 13, so Security's transport tests keep a
- * world to run against; no planning path reaches them.
+ * hashes exactly what it returns. No port reaches a network (D84 K1).
  */
 export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateFixture {
   const specs = options.releases ?? [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }];
   const releases = new Map(specs.map((spec) => [spec.version, syntheticRelease(spec.version, spec.sequence, spec, options.architecture)]));
   const release = (version: string): SyntheticRelease => releases.get(version) ?? (() => { throw new Error(`fixture has no ${version}`); })();
-  const { delegationBytes, indexBytes } = signedReleaseMetadata(
-    specs.map((spec) => release(spec.version)),
-    options.latestVersion ?? specs[specs.length - 1]?.version ?? "1.1.0",
-    options.forgedIndex === true,
-  );
-
   const kegVersion = options.kegVersion ?? options.latestVersion ?? specs[specs.length - 1]?.version ?? "1.1.0";
   const kegRelease = options.rebuilt === true || !releases.has(kegVersion)
     ? syntheticRelease(kegVersion, options.kegSequence ?? releases.get(kegVersion)?.sequence ?? "1", options.rebuilt === true ? { files: () => new Map([["bin/cli", encoder.encode(`rebuilt ${kegVersion}\n`)]]) } : {}, options.architecture)
@@ -779,30 +669,6 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
 
   const events: string[] = [];
   const plannerRequests: UpdatePlannerRequestV1[] = [];
-  const requests: string[] = [];
-  const serve = syntheticReleaseServer({ delegationBytes, indexBytes, releases, requests, events });
-
-  const attempt = (manifest: ReleaseBundleManifestV1): UpdateScratchAttemptV1 => ({
-    download: async (receive) => {
-      events.push("scratch.download");
-      await receive(() => Promise.resolve());
-    },
-    extract: (bundle) => {
-      events.push("scratch.extract");
-      const verified: VerifiedScratchBundleV1 = {
-        id: "rp_00000000-0000-4000-8000-000000000000",
-        planHash: sha256("synthetic scratch plan"),
-        manifestHash: bundle.manifestSha256,
-        root: parseCanonicalAbsolutePathText(`${SYNTHETIC_TEMP}/extracted`),
-        entries: manifest.entries.length,
-      };
-      return Promise.resolve(verified);
-    },
-    cleanup: () => {
-      events.push("scratch.cleanup");
-      return Promise.resolve();
-    },
-  });
 
   const update: CliUpdateContext = {
     productHome: SYNTHETIC_HOME,
@@ -815,24 +681,6 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
     readPackageSource: () => {
       events.push("package_source");
       return options.kegAbsent === true ? readPackageChannelSource("arm64", ABSENT_PACKAGE_TABLE) : Promise.resolve(keg);
-    },
-    createTransport: () => {
-      events.push("transport");
-      return { get: serve, remainingMilliseconds: () => 600_000 };
-    },
-    scratch: {
-      create: (request) => {
-        events.push("scratch.create");
-        return Promise.resolve(attempt(request.manifest));
-      },
-      listRecoverableAttempts: () => {
-        events.push("scratch.list");
-        return Promise.resolve((options.residue ?? []) as never);
-      },
-      recoverCleanup: (id) => {
-        events.push(`scratch.recover:${id}`);
-        return Promise.resolve();
-      },
     },
     snapshot: (_home, releasesInput) => {
       events.push("snapshot");
@@ -875,7 +723,7 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
     admitManifest: (value) => value as InstallationManifestV2,
     ...(options.codex === undefined ? {} : { codex: syntheticCodexPort(options.codex.registration) }),
   };
-  return { update, home, events, requests, kegPath, plannerRequests, current, releases, codexProjection: SYNTHETIC_CODEX_PROJECTION };
+  return { update, home, events, kegPath, plannerRequests, current, releases, codexProjection: SYNTHETIC_CODEX_PROJECTION };
 }
 
 /** A context whose every port fails loudly: proves a refusal happened before any of them. */
@@ -889,8 +737,6 @@ export function unreachableUpdateContext(): CliUpdateContext {
     clock: never,
     readHome: never,
     readPackageSource: never,
-    createTransport: never,
-    scratch: { create: never, listRecoverableAttempts: never, recoverCleanup: never },
     snapshot: never,
     planner: { run: never },
     readRollbackEvidence: never,

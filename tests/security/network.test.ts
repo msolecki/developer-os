@@ -476,50 +476,47 @@ describe("the bootstrap refusal paths", () => {
 const GIT_GATEWAY_TRAMPOLINE_SOURCE = "packages/security/src/git/gateways.ts";
 
 /**
- * **Rollback and recovery are local.** Spec 2 §11/§12 (D72 P7(f)): of the whole `update`
- * surface only plan and apply reach the release transport. `update rollback` reads retained
- * evidence alone, so a context whose every release port throws still previews it, and the
- * recording transport it could have reached sees nothing. The on-disk apply, recovery and
- * rollback legs assert the same over the real ports in `tests/integration/update/recovery.test.ts`.
+ * **Rollback and recovery are local.** Spec 2 §11/§12 as amended by D84 K1: no `update` path
+ * reaches a network, and `update rollback` does not even read the keg. It reads retained evidence
+ * alone, so a context whose keg and planner ports throw still previews it. The on-disk apply,
+ * recovery and rollback legs assert the same over the real ports in
+ * `tests/integration/update/recovery.test.ts`.
  */
 describe("update rollback reaches no network", () => {
   afterEach(removeCommandFixtures);
 
-  it("previews a rollback with the FD 3 trust, transport, scratch and planner ports all unreachable", async () => {
+  it("previews a rollback with the keg and planner ports unreachable", async () => {
     const fixture = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
     const never = (): never => {
       throw new Error("a release port was reached");
     };
     const update: CliUpdateContext = {
       ...fixture.update,
-      createTransport: never,
-      scratch: { create: never, listRecoverableAttempts: never, recoverCleanup: never },
+      readPackageSource: never,
       planner: { run: never },
     };
 
     const result = await runUpdate({ ...(await createCommandFixture("network-rollback-preview")).context, update }, { kind: "rollback", apply: false, json: true });
 
     expect(result).toMatchObject({ ok: true, data: { outcome: "rollback_preview" } });
-    expect(fixture.requests).toStrictEqual([]);
-    expect(fixture.events.filter((event) => event.startsWith("transport") || event === "trust" || event === "package_source" || event === "planner")).toStrictEqual([]);
-    /** The positive control: the same fixture's update preview does read its keg, and still makes no request (D84 K1, K2). */
+    expect(fixture.events.filter((event) => event === "package_source" || event === "planner")).toStrictEqual([]);
+    /** The positive control: the same fixture's update preview does read its keg (D84 K2). */
     await runUpdate({ ...(await createCommandFixture("network-update-preview")).context, update: fixture.update }, { kind: "update", version: null, apply: false, json: true });
     expect(fixture.events).toContain("package_source");
-    expect(fixture.requests).toStrictEqual([]);
   });
 });
 
 /**
- * **The update-only row, statically.** `tests/repository/check.ts`'s release authority gate
- * holds the same boundary on every lint run; this row classifies the sources directly: every non-test TypeScript
- * source under `packages/` and `apps/` is read, and the set of files that can
- * open a socket — a network module import or a global `fetch` call — must be
- * exactly the fixed release transport. Total in both directions like the rows
- * above: an empty set would mean the transport stopped being the entrypoint,
- * and any second member is an unclassified network path.
+ * **No product module reaches a remote network (D84 K1), statically.** `tests/repository/check.ts`'s
+ * release authority gate holds the same boundary on every lint run; this row classifies the sources
+ * directly: every non-test TypeScript source under `packages/` and `apps/` is read, and the set of
+ * files that can open a socket — a network module import or a global `fetch` call — must be exactly
+ * the two classified local Unix-domain socket sites. The scan stays total: `sources` must be
+ * non-empty, and the local-socket classification must find both sites, so a scan that read nothing
+ * cannot pass.
  */
-describe("the release transport is the only network entrypoint", () => {
-  it("finds network capability in exactly packages/security/src/update/transport.ts", async () => {
+describe("no product module reaches a remote network", () => {
+  it("finds network capability in no product module", async () => {
     const run = promisify(execFile);
     const here = dirname(fileURLToPath(import.meta.url));
     const root = (await run("git", ["rev-parse", "--show-toplevel"], { cwd: here })).stdout.trim();
@@ -573,9 +570,7 @@ describe("the release transport is the only network entrypoint", () => {
     }
     expect(localOnly).toStrictEqual([...localSocketServers, ...localSocketClients]);
 
-    expect(networkCapable.filter((path) => !localOnly.includes(path)).sort()).toStrictEqual([
-      "packages/security/src/update/transport.ts",
-    ]);
+    expect(networkCapable.filter((path) => !localOnly.includes(path)).sort()).toStrictEqual([]);
   });
 
   it("stops classifying the Git gateway trampoline once its net binding is aliased", async () => {

@@ -1,7 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type { Stats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 
 import {
@@ -38,7 +36,6 @@ import type {
   InstallationManifestV2,
   LowerHexSha256,
   ManagedArtifactV2,
-  OfflineReleaseTrustV1,
   OwnerExternalEffectProcessPolicyV1,
   PlannerArtifactInputV1,
   PlannerBrainEntryV1,
@@ -47,7 +44,6 @@ import type {
   PlannerManifestSnapshotV1,
   PlannerObservedStateV1,
   PlannerPathTokenV1,
-  ReleaseBundleReferenceV1,
   ReleaseIdentityV1,
   RetainedInversePlanRefV1,
   RetainedOwnerInverseProjectionV1,
@@ -60,23 +56,11 @@ import { codexOwnerUpdateProvider } from "@developer-os/adapter-codex";
 import { isBrainMigrationPath } from "@developer-os/brain";
 import {
   createRedactor,
-  FixedReleaseTransport,
-  nodeReleaseExchange,
-  ReleasePlanningScratchStore,
   sampleNodePlannerProcess,
   spawnNodePlannerChild,
   TargetPlannerSupervisor,
 } from "@developer-os/security";
-import type {
-  BoundedReleaseResponseV1,
-  ReleaseBodySink,
-  ReleasePlanningAttemptIdV1,
-  ReleasePlanningScratchRequestV1,
-  ReleaseTransportRequestV1,
-  TargetPlannerRunRequestV1,
-  TargetPlannerRunResultV1,
-  VerifiedScratchBundleV1,
-} from "@developer-os/security";
+import type { TargetPlannerRunRequestV1, TargetPlannerRunResultV1 } from "@developer-os/security";
 
 import { createCanonicalPathEvidence } from "../bootstrap/admission.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
@@ -94,7 +78,6 @@ import { gateManifestAdmission } from "../lifecycle/mutation-gate.js";
 import type { CodexRegistrationStateV1 } from "../instructions/codex-registration.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
-import { tryLockScratchAttempt } from "./scratch-lock.js";
 import { productionUpdateApplyPorts, updateCodexPort } from "./apply-ports.js";
 import { admitPackageChannelRelease, inspectPackagedRelease, resolvePackageChannelSource } from "./packaged-release.js";
 import type { AdmittedPackagedReleaseV1 } from "./packaged-release.js";
@@ -111,27 +94,9 @@ import type {
   UpdatePlannerSnapshotV1,
 } from "./planning.js";
 
-/** One attempt's fixed-origin transport; its wall budget is shared with the planner. */
-export interface UpdateTransportV1 {
-  get(request: ReleaseTransportRequestV1): Promise<BoundedReleaseResponseV1>;
-  remainingMilliseconds(): number;
-}
-
-export interface UpdateScratchAttemptV1 {
-  download(receive: (sink: ReleaseBodySink) => Promise<BoundedReleaseResponseV1>): Promise<void>;
-  extract(bundle: ReleaseBundleReferenceV1): Promise<VerifiedScratchBundleV1>;
-  cleanup(): Promise<void>;
-}
-
-export interface UpdateScratchV1 {
-  create(request: ReleasePlanningScratchRequestV1): Promise<UpdateScratchAttemptV1>;
-  listRecoverableAttempts(): Promise<readonly ReleasePlanningAttemptIdV1[]>;
-  recoverCleanup(id: ReleasePlanningAttemptIdV1): Promise<void>;
-}
-
 /**
  * Every port the plan-only commands use. Production binds them here; a test replaces any of them,
- * so the orchestration in `planning.ts` is exercised without a network, a launcher, or a planner.
+ * so the orchestration in `planning.ts` is exercised without a keg, a launcher, or a planner.
  */
 export interface CliUpdateContext {
   readonly productHome: CanonicalAbsolutePathV1;
@@ -144,9 +109,6 @@ export interface CliUpdateContext {
    * `update` only; rollback never reads it, so it survives `brew cleanup` removing the keg.
    */
   readonly readPackageSource: () => Promise<AdmittedPackagedReleaseV1>;
-  /** Withdrawn by D84 K1; declared until Task 13 deletes it, and no planning path calls it. */
-  readonly createTransport: (trust: OfflineReleaseTrustV1) => UpdateTransportV1;
-  readonly scratch: UpdateScratchV1;
   readonly snapshot: (
     home: UpdateHomeV1,
     releases: { readonly current: ReleaseIdentityV1; readonly target: ReleaseIdentityV1; readonly plannedAt: UtcTimestampV1 },
@@ -555,29 +517,6 @@ export function packageSourcePorts(read: () => Promise<AdmittedPackagedReleaseV1
   };
 }
 
-function scratchPort(context: CliContext): UpdateScratchV1 {
-  let store: Promise<ReleasePlanningScratchStore> | null = null;
-  const bound = (): Promise<ReleasePlanningScratchStore> => {
-    store ??= (async () => {
-      const lifecycle = lifecycleOf(context);
-      return new ReleasePlanningScratchStore({
-        fs: lifecycle.fs,
-        systemTemp: parseCanonicalAbsolutePathText(await nodeFs.realpath(tmpdir())),
-        effectiveUid: lifecycle.effectiveUid,
-        uuid: randomUUID,
-        clock: () => lifecycle.clock(),
-        tryLock: (path) => tryLockScratchAttempt(path),
-      });
-    })();
-    return store;
-  };
-  return {
-    create: async (request) => (await bound()).create(request),
-    listRecoverableAttempts: async () => (await bound()).listRecoverableAttempts(),
-    recoverCleanup: async (id) => (await bound()).recoverCleanup(id),
-  };
-}
-
 /** The user-bound redactor, patterns included: any finding in a frame refuses. */
 async function runPlanner(context: CliContext, request: TargetPlannerRunRequestV1): Promise<TargetPlannerRunResultV1> {
   const key = readRedactionKey(context.paths.stateDir)
@@ -610,8 +549,6 @@ export function createCliUpdateContext(context: CliContext): CliUpdateContext {
     clock: () => lifecycleOf(context).clock(),
     readHome: () => readHome(context),
     readPackageSource: source.readPackageSource,
-    createTransport: (trust) => new FixedReleaseTransport({ trust, exchange: nodeReleaseExchange, now: () => performance.now(), setTimer }),
-    scratch: scratchPort(context),
     snapshot: (home, releases) => snapshot(context, home, releases),
     planner: { run: (request) => runPlanner(context, request) },
     readRollbackEvidence: (_home, record) => readRollbackEvidence(context, record),

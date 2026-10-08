@@ -79,7 +79,7 @@ interface ApplyFixture {
   readonly previous: ReleaseIdentityV1;
   readonly target: ReleaseIdentityV1;
   readonly allocatorReservations: number;
-  /** Keg reads, transport requests and scratch calls made after the preview; revalidation must make none. */
+  /** Keg reads made after the preview; revalidation must make none. */
   requestsAfterPreview(): readonly string[];
   activeIdentity(): Promise<ReleaseIdentityV1>;
   runAnyCommandToRecover(): Promise<void>;
@@ -327,8 +327,8 @@ async function applyFixture(options: ApplyFixtureOptions = {}): Promise<ApplyFix
     get allocatorReservations() {
       return world.allocatorReservations;
     },
-    // The keg read, any transport request, and any scratch port call after the preview: apply makes none.
-    requestsAfterPreview: () => base.events.slice(previewEvents).filter((event) => event === "package_source" || event.startsWith("transport") || event.startsWith("scratch")),
+    // The keg read after the preview: apply makes none.
+    requestsAfterPreview: () => base.events.slice(previewEvents).filter((event) => event === "package_source"),
     activeIdentity: () => Promise.resolve(world.active === "target" ? prepared.inputs.target : prepared.inputs.current),
     runAnyCommandToRecover: async () => {
       world.dead = false;
@@ -457,12 +457,11 @@ describe("applyUpdate forward execution", () => {
     expect(await fixture.activeIdentity()).toEqual(fixture.target);
   });
 
-  it("stages the sources from the admitted keg with no keg re-read and no scratch, then hands off (D84 K2)", async () => {
+  it("stages the sources from the admitted keg with no keg re-read, then hands off (D84 K2)", async () => {
     const fixture = await applyFixture();
     await applyUpdate(fixture.update, fixture.prepared);
     expect(fixture.events.indexOf("construction_files")).toBeLessThan(fixture.events.indexOf("construction_handed_off"));
     expect(fixture.requestsAfterPreview()).toStrictEqual([]);
-    expect(fixture.events.filter((event) => event.startsWith("scratch"))).toStrictEqual([]);
   });
 
   it("crosses the point of no return only at the verifier and then force-forwards retirement", async () => {

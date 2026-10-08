@@ -1675,7 +1675,6 @@ describe("update dispatch", () => {
     const harness = await updateHarness("update-refuses");
     expect(await invoke(harness, argv)).toBe(2);
     expect(harness.contextBuilds).toBe(0);
-    expect(harness.update.requests).toEqual([]);
   });
 
   it("leaves every durable scope byte-identical after preview", async () => {
@@ -1689,7 +1688,6 @@ describe("update dispatch", () => {
   it("makes no release request and reads no keg for rollback", async () => {
     const harness = await updateHarness("update-rollback-offline");
     await runMain(["update", "rollback"], harness);
-    expect(harness.update.requests).toEqual([]);
     expect(harness.update.events).not.toContain("package_source");
   });
 

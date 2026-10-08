@@ -144,7 +144,6 @@ describe("runUpdate", () => {
     expect(result.code).toBe(EXIT_CODES.operationalFailure);
     if (!result.ok) expect(result.error.message).toBe("update_allocator_unavailable");
     expect(calls).toStrictEqual(["lock", "closure", "lock", "closure", "allocate"]);
-    expect(update.requests).toStrictEqual([]);
     expect(update.events).not.toContain("planner");
     expect(update.events).not.toContain("package_source");
   });
@@ -236,7 +235,6 @@ describe("runUpdate", () => {
     }
     expect(update.events).not.toContain("package_source");
     expect(update.events).not.toContain("planner");
-    expect(update.requests).toStrictEqual([]);
   });
 
   it.each([
@@ -258,7 +256,6 @@ describe("runUpdate", () => {
     expect(result.ok && result.data).toMatchObject({ outcome, active: { version: "1.1.0" } });
     expect(update.events).not.toContain("package_source");
     expect(update.events).not.toContain("rollback.evidence");
-    expect(update.requests).toStrictEqual([]);
   });
 
   it.each([
@@ -285,7 +282,6 @@ describe("runUpdate", () => {
       expect(result.error.recovery).toContain("Developer OS 1.1.0 is still active");
     }
     expect(update.events).not.toContain("planner");
-    expect(update.requests).toStrictEqual([]);
   });
 
   it("returns the plan-only arms through the injected ports", async () => {
@@ -313,7 +309,6 @@ describe("runUpdate", () => {
     if (result.ok) return;
     expect(result.error.message).toBe("update_managed_drift");
     expect(result.error.paths).toStrictEqual([FILE_A_PATH]);
-    expect(update.requests).toStrictEqual([]);
   });
 });
 

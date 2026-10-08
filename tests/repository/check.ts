@@ -257,30 +257,38 @@ function findPlannerCapabilities(root: string): readonly string[] {
 }
 
 /**
- * Spec 2 §12's "network remains explicit" row, as a total classifier (D72 P7(f)): the release
- * transport is the only product module that can reach a network, only the update context composes
- * it, the launcher execs a release from its own entrypoints, and every planner graph is non-empty.
+ * Spec 2 §12's "network remains explicit" row, as a total classifier, amended by D84 K1: no
+ * product module reaches a network, no product module composes a release transport, the launcher
+ * execs a release from its own entrypoints, and every planner graph is non-empty. Both network
+ * sets are empty, so a positive control keeps the empty-set assertion meaningful: the synthetic
+ * `NETWORK_POSITIVE_CONTROL` file goes through the same predicate and must be reported.
  * `node:net` is not listed: the Git gateway's Unix-domain socket is classified by
  * `tests/security/network.test.ts`, which also proves the socket never leaves the host.
  */
-export const RELEASE_NETWORK_ENTRYPOINTS: readonly string[] = ["packages/security/src/update/transport.ts"];
-export const RELEASE_TRANSPORT_COMPOSITION: readonly string[] = ["apps/cli/src/update/context.ts"];
+export const RELEASE_NETWORK_ENTRYPOINTS: readonly string[] = [];
+export const RELEASE_TRANSPORT_COMPOSITION: readonly string[] = [];
+export const NETWORK_POSITIVE_CONTROL = "tests/repository/fixtures/network-positive-control.ts";
 
 const REMOTE_NETWORK_MODULE =
-  /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
+  /(?:from\s+|import\s*(?:\(\s*)?|require\s*\(\s*)["'](?:node:)?(?:https?|http2|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
 /** Bracket access (`globalThis["fetch"]`) is a declared residual: `codeWithoutLiterals` erases the key. */
 const GLOBAL_FETCH = /(?<![.\w$])(?:(?:globalThis|self|window)\s*\??\.\s*)?fetch\s*(?:(?:\?\.\s*)?\(|\.\s*(?:call|apply)\s*\()/u;
+/** The withdrawn §4.5 transport's names (D84 K1): any product module naming one again is reported. */
 const TRANSPORT_COMPOSER = /\b(?:nodeReleaseExchange|FixedReleaseTransport)\b/u;
 const LAUNCHER_EXEC = /\bexecAdmittedRelease\b/u;
 const PRODUCT_SOURCE = /^(?:packages|apps)\/[^/]+\/src\/.*\.ts$/u;
-/** The transport's own module and the package barrels that re-export it name the composer without composing it. */
-const TRANSPORT_DEFINITION = /^packages\/security\/src\/(?:update\/(?:transport|index)|index)\.ts$/u;
+
+function reachesNetwork(content: string): boolean {
+  return REMOTE_NETWORK_MODULE.test(content) || GLOBAL_FETCH.test(codeWithoutLiterals(content));
+}
 
 export interface ReleaseAuthorityReportV1 {
   /** Product modules that import a remote network module or call the global `fetch`. */
   readonly networkEntrypoints: readonly string[];
-  /** Product modules outside the transport's definition that compose the release transport. */
+  /** Product modules that compose a release transport. */
   readonly transportCompositions: readonly string[];
+  /** The positive control, when the network predicate reports it. */
+  readonly positiveControl: readonly string[];
   /** Launcher modules that exec an admitted release. */
   readonly launcherEntrypoints: readonly string[];
   /** Each compiled planner entrypoint and the transitive module graph it reaches. */
@@ -303,29 +311,36 @@ export async function inspectReleaseAuthoritySurfaces(root: string): Promise<Rel
       throw error;
     }
     const code = codeWithoutLiterals(content);
-    if (REMOTE_NETWORK_MODULE.test(content) || GLOBAL_FETCH.test(code)) networkEntrypoints.push(path);
-    if (!TRANSPORT_DEFINITION.test(path) && TRANSPORT_COMPOSER.test(code)) transportCompositions.push(path);
+    if (reachesNetwork(content)) networkEntrypoints.push(path);
+    if (TRANSPORT_COMPOSER.test(code)) transportCompositions.push(path);
     if (path.startsWith("apps/launcher/src/") && LAUNCHER_EXEC.test(code)) launcherEntrypoints.push(path);
   }
+  const control = await readFile(join(root, NETWORK_POSITIVE_CONTROL), "utf8").catch((error: unknown) => {
+    if (isMissing(error)) return "";
+    throw error;
+  });
+  const positiveControl = reachesNetwork(control) ? [NETWORK_POSITIVE_CONTROL] : [];
   const plannerGraphs = PLANNER_ENTRYPOINTS.map((entrypoint) => ({
     entrypoint,
     modules: inspectPlannerGraph(join(root, entrypoint)).modules.map((module) => relative(root, module)),
   }));
-  return { networkEntrypoints, transportCompositions, launcherEntrypoints, plannerGraphs };
+  return { networkEntrypoints, transportCompositions, positiveControl, launcherEntrypoints, plannerGraphs };
 }
 
-/** The lint gate's reading: every scope non-empty, and exactly the allowlisted network and transport sites. */
+/** The lint gate's reading: no network or transport site, the control reported, every other scope non-empty. */
 export function describeReleaseAuthorityProblems(report: ReleaseAuthorityReportV1): readonly string[] {
   const problems: string[] = [];
-  if (report.networkEntrypoints.length === 0) problems.push("no module reaches the release transport's network");
   for (const path of report.networkEntrypoints) {
     if (!RELEASE_NETWORK_ENTRYPOINTS.includes(path)) problems.push(`unexpected network entrypoint: ${path}`);
   }
-  if (report.transportCompositions.length === 0) problems.push("no module composes the release transport");
   for (const path of report.transportCompositions) {
     if (!RELEASE_TRANSPORT_COMPOSITION.includes(path)) problems.push(`unexpected release transport composition: ${path}`);
   }
+  if (!report.positiveControl.includes(NETWORK_POSITIVE_CONTROL)) {
+    problems.push(`the network positive control ${NETWORK_POSITIVE_CONTROL} is not reported`);
+  }
   if (report.launcherEntrypoints.length === 0) problems.push("no launcher module execs an admitted release");
+  if (report.plannerGraphs.length === 0) problems.push("no planner graph is scanned");
   for (const graph of report.plannerGraphs) {
     if (graph.modules.length === 0) problems.push(`the planner graph of ${graph.entrypoint} is empty`);
   }

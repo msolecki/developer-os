@@ -30,7 +30,7 @@ import {
   type ReleasePlanningScratchStoreDependencies,
   type ReleaseScratchBoundaryV1,
 } from "./scratch.js";
-import type { BoundedReleaseResponseV1, ReleaseBodySink } from "./transport.js";
+import type { BoundedReleaseResponseV1, ReleaseBodySink } from "./scratch.js";
 
 const UID = process.getuid?.() ?? 0;
 const encoder = new TextEncoder();
