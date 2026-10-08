@@ -2647,7 +2647,7 @@ status.ts:73-74 `const drift = manifest === null ? [] : await inspectManagedDrif
 
 `apps/cli/src/commands/automation/garden.ts:81` · related: NEW-134
 
-**Problem.** `brain lint` groups title duplicates by `perceptualKey(screenControlCharacters(title)).toLowerCase()`. That key applies NFC and strips invisible characters, so 'Café' (NFC) and 'Café' (NFD), or 'Caching' and 'Cach​ing', form one group (lint.ts:691). Index titles are stored raw, because parseNote does not normalize. Garden's `structuralCommands` then regroups lint's findings by `note.title.toLowerCase()`, which splits such a pair into two single-note groups. The single-note branch emits `developer-os brain retire '<path>' --dry-run`. So a duplicate pair that should become one `refactor --merge` suggestion comes out as two retire suggestions, one for each note.
+**Problem.** `brain lint` groups title duplicates by `perceptualKey(screenControlCharacters(title)).toLowerCase()`. That key applies NFC and strips invisible characters, so 'Café' (NFC) and 'Café' (NFD), or 'Caching' and 'Cach\u200Bing', form one group (lint.ts:691). Index titles are stored raw, because parseNote does not normalize. Garden's `structuralCommands` then regroups lint's findings by `note.title.toLowerCase()`, which splits such a pair into two single-note groups. The single-note branch emits `developer-os brain retire '<path>' --dry-run`. So a duplicate pair that should become one `refactor --merge` suggestion comes out as two retire suggestions, one for each note.
 
 **Evidence.**
 
