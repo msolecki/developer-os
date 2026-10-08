@@ -472,7 +472,7 @@ function digest(bytes: Uint8Array | string): string {
 
 const REPOSITORY_WORKFLOWS = new URL("../../../../workflows/", import.meta.url);
 
-async function repositoryWorkflowFiles(): Promise<readonly ReleaseFileV1[]> {
+export async function repositoryWorkflowFiles(): Promise<readonly ReleaseFileV1[]> {
   const base = fileURLToPath(REPOSITORY_WORKFLOWS);
   const files: ReleaseFileV1[] = [];
   for (const entry of await nodeFs.readdir(base, { recursive: true, withFileTypes: true })) {

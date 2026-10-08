@@ -434,14 +434,13 @@ describe("composeRollback (Spec 2 §10.2, D72 P9)", () => {
     expect(terminal?.artifacts.filter((row) => !row.path.startsWith(`${input.preview.current.bundleRoot}/`) && row.path !== input.preview.current.bundleRoot)).toEqual(terminal?.artifacts);
   });
 
-  it("restamps an attached instruction row at the restored release's version and changes nothing else on it (NEW-171)", async () => {
-    // The update stamped the row at the release it installed (1.1.0); rollback restores 1.0.0.
+  it("carries an attached instruction row unchanged through rollback, its stamp included (NEW-171, C1 reverses K7 (f))", async () => {
     const attached = { ...syntheticInstructionRow(), productVersion: "1.1.0" } as ManagedArtifactV2;
     const { input, deps } = await rollbackFixture([attached]);
     const manifests = manifestsOf(await composeRollback(input, deps));
     expect(manifests).toHaveLength(2);
     for (const manifest of manifests) {
-      expect(manifest.artifacts.filter((row) => row.kind === "instruction")).toEqual([{ ...attached, productVersion: input.preview.target.version }]);
+      expect(manifest.artifacts.filter((row) => row.kind === "instruction")).toEqual([attached]);
     }
   });
 

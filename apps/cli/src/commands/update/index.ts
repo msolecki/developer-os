@@ -137,6 +137,21 @@ async function runRollbackApply(update: CliUpdateContext): Promise<CliResult<Upd
   });
 }
 
+export const WORKFLOWS_NOT_REFRESHED = "workflows not refreshed: run developer-os init";
+
+/**
+ * K8: runs after `runApply` or `runRollbackApply` returned, so the swap's global lock is released and
+ * its lifecycle closed; the refresh is its own gated transaction. A refresh failure never reverts
+ * the swap: the command exits with the refresh's code and keeps the result in `data`.
+ */
+async function refreshed(context: CliContext, update: CliUpdateContext, result: CliResult<UpdateCommandResultV1>): Promise<CliResult<UpdateCommandResultV1>> {
+  if (!result.ok || update.refresh === undefined || (result.data.outcome !== "applied" && result.data.outcome !== "rolled_back")) return result;
+  const code = await update.refresh();
+  if (code === EXIT_CODES.success) return result;
+  const error = Object.assign(new Error(WORKFLOWS_NOT_REFRESHED), { name: "WorkflowsNotRefreshedError", code });
+  return failureFrom(context, error, [], "developer-os init", result.data);
+}
+
 /**
  * `--apply` needs the injected apply ports, and `update rollback --apply` also their rollback
  * derivation; either absent refuses before any other port is reached.
@@ -152,10 +167,10 @@ export async function runUpdate(context: CliContext, invocation: UpdateInvocatio
   if (invocation.apply && invocation.kind === "rollback" && update.apply?.composeRollback === undefined) return unavailable();
   try {
     if (invocation.kind === "rollback") {
-      if (invocation.apply) return await runRollbackApply(update);
+      if (invocation.apply) return await refreshed(context, update, await runRollbackApply(update));
       return success({ schemaVersion: 1, outcome: "rollback_preview", plan: await planRollback(update) });
     }
-    if (invocation.apply) return await runApply(update, invocation.version);
+    if (invocation.apply) return await refreshed(context, update, await runApply(update, invocation.version));
     return success((await planUpdate(update, { version: invocation.version })).result);
   } catch (error) {
     if (error instanceof UpdatePlanningRefusal) return failureFrom(context, error, error.paths, error.recovery);
