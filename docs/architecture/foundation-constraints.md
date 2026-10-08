@@ -465,7 +465,7 @@ recorded here because that is where a reader looks for what Foundation cannot do
 
 **Found 2026-08-07, by the fresh-context review of DOS-P2 Task 1.**
 
-`init` records `config.toml` as a managed artifact (`apps/cli/src/commands/init.ts:474-480`), and
+`init` records `config.toml` as a managed artifact (`apps/cli/src/commands/init.ts:476-482`), and
 drift compares its content hash. Foundation ships **no command that edits configuration**, so
 the only way to change any setting is to edit the file by hand — which is drift.
 

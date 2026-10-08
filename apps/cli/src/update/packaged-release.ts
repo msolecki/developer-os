@@ -89,7 +89,7 @@ export interface AdmittedPackagedReleaseV1 {
   readonly readFile: (relativePath: string) => Promise<Uint8Array>;
 }
 
-class PackagedReleaseError extends Error {
+export class PackagedReleaseError extends Error {
   constructor(
     readonly code:
       | typeof EXIT_CODES.capabilityUnavailable
@@ -701,6 +701,11 @@ export const PACKAGE_SOURCE_ABSENT = "update_package_source_absent";
 /** True for the table path being absent (exit 4); `init` then reports no packaged handoff. */
 export function isPackageSourceAbsent(error: unknown): boolean {
   return error instanceof PackagedReleaseError && error.code === EXIT_CODES.capabilityUnavailable && error.message === PACKAGE_SOURCE_ABSENT;
+}
+
+/** C2: a keg whose version differs from this build: on an installed home, `init` without `--adapters` treats it as no keg. */
+export function isReleaseMismatch(error: unknown): boolean {
+  return error instanceof PackagedReleaseError && error.code === EXIT_CODES.capabilityUnavailable && error.message === "release_mismatch";
 }
 
 export async function resolvePackageChannelSource(
