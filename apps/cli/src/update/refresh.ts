@@ -48,7 +48,7 @@ export async function refreshProcess(context: CliContext): Promise<RefreshProces
   const tree = (await readActiveReleaseTree(context)) ?? noTree(context);
   // The launcher's rule (`admitRetainedRelease`): the root is derived, never taken from the record, and matches the host.
   if (tree.bundleRoot !== `${context.paths.home}/releases/${tree.version}/darwin-${tree.architecture}` || tree.architecture !== (await context.platform.inspect()).architecture) {
-    throw new InstructionRefusal({ reason: "active_release_tree_invalid", code: EXIT_CODES.recoveryRequired, paths: [tree.bundleRoot], recovery: "developer-os doctor" });
+    throw new InstructionRefusal({ reason: "active_release_root_mismatch", code: EXIT_CODES.recoveryRequired, paths: [tree.bundleRoot], recovery: "developer-os doctor" });
   }
   return { executable: `${tree.bundleRoot}/${tree.runtimeEntrypoint}`, argv: [entrypointPath(context.paths.home), ...REFRESH_ARGV], env: refreshEnvironment(context) };
 }
