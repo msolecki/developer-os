@@ -5,10 +5,9 @@
  * Foundation, manifest, both Git effects, both launchd effects — is the shipped one.
  */
 import * as nodeFs from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
-  hashBytes,
   parseCanonicalAbsolutePathText,
   parseEffectiveUid,
   parseUtcTimestamp,
@@ -16,7 +15,6 @@ import {
 import type {
   HeldLifecycleStableLockV1,
   LifecycleCoordinatorStore,
-  ManagedArtifactV2,
   ScheduledJobIdV1,
 } from "@developer-os/core";
 import {
@@ -35,12 +33,9 @@ import { runInit } from "@developer-os/cli/dist/commands/init.js";
 import { createCommandFixture, createLowEntropyFixtureRoot } from "@developer-os/cli/dist/commands/testing.js";
 import type { CommandFixture } from "@developer-os/cli/dist/commands/testing.js";
 import type { CliContext } from "@developer-os/cli/dist/context.js";
-import { gatedState, manifestMutation } from "@developer-os/cli/dist/instructions/apply.js";
-import { compareManifestRows } from "@developer-os/cli/dist/instructions/attach.js";
 import type { LifecycleEffectPortsV1 } from "@developer-os/cli/dist/lifecycle/adapters.js";
 import type { LifecycleExecutionPlanV1 } from "@developer-os/cli/dist/lifecycle/codecs.js";
 import type { CliLifecycleContext } from "@developer-os/cli/dist/lifecycle/context.js";
-import { withLifecycleMutation } from "@developer-os/cli/dist/lifecycle/mutation-gate.js";
 import { scriptedLaunchd } from "@developer-os/cli/dist/lifecycle/testing.js";
 import type { ScriptedLaunchdV1 } from "@developer-os/cli/dist/lifecycle/testing.js";
 import { entrypointPath } from "@developer-os/cli/dist/update/local-release.js";
@@ -48,9 +43,7 @@ import { entrypointPath } from "@developer-os/cli/dist/update/local-release.js";
 export const OPT_IN_UID = process.getuid?.() ?? 0;
 export const BASE_SCHEDULES = ["brain-reindex=daily@02:00", "brain-lint=daily@02:30", "doctor=weekly@mon,03:00"] as const;
 const CLOCK = parseUtcTimestamp("2026-09-23T00:00:00.000Z");
-const ENTRYPOINT = "// synthetic Developer OS entrypoint\n";
 const GIT_JOURNAL_TEMP = /^\.ge_[0-9a-f]{64}_[0-9]+\.[0-9a-f-]+\.json\.tmp$/u;
-const encoder = new TextEncoder();
 
 /** A process death at a chosen boundary: the coordinator does not catch it, so the ledger stays open. */
 export class SyntheticDeath extends Error {
@@ -174,38 +167,6 @@ function recordingStore(
   });
 }
 
-/** The fixture release carries no CLI, so the entrypoint row `init` would write is written here the same way. */
-async function installSyntheticEntrypoint(fixture: CommandFixture, lifecycle: CliLifecycleContext): Promise<void> {
-  const path = entrypointPath(fixture.paths.home);
-  const content = encoder.encode(ENTRYPOINT);
-  await withLifecycleMutation(fixture.context, lifecycle, async (authority) => {
-    const state = await gatedState(fixture.context, authority);
-    const common = {
-      owner: "core",
-      productVersion: state.manifest.productVersion,
-      existedBefore: false,
-      beforeHash: null,
-      backupRelativePath: null,
-      mergeStrategy: "dedicated",
-      verifiedAt: state.manifest.installedAt,
-    };
-    const parentOwned = state.manifest.artifacts.some((artifact) => artifact.path === dirname(path));
-    const rows = [
-      ...state.manifest.artifacts,
-      ...(parentOwned ? [] : [{ ...common, path: dirname(path), source: "generated/directory", kind: "directory", verification: { mode: "content" } }]),
-      { ...common, path, source: "generated/entrypoint", kind: "file", verification: { mode: "content", installedHash: hashBytes(content) } },
-    ] as unknown as ManagedArtifactV2[];
-    await nodeFs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await fixture.context.executor.execute({
-      kind: "entrypoint",
-      mutations: [
-        { targetPath: path, operation: "create", content },
-        manifestMutation(fixture.context, { ...state.manifest, artifacts: rows.sort(compareManifestRows) }, state.manifestHash),
-      ],
-    });
-  });
-}
-
 export async function createOptInHome(name: string): Promise<OptInHomeV1> {
   const runtime = scriptedGitRuntime();
   const launchd = scriptedLaunchd({ clock: () => CLOCK });
@@ -231,7 +192,16 @@ export async function createOptInHome(name: string): Promise<OptInHomeV1> {
   await nodeFs.mkdir(join(fixture.userHome, "Library", "LaunchAgents"), { recursive: true, mode: 0o700 });
   const base = fixture.context.lifecycle;
   if (base === undefined) throw new Error("the fixture composed no lifecycle context");
-  await installSyntheticEntrypoint(fixture, base);
+  // Spec 2 D84 K5 (NEW-163 option B): `init` itself wrote the one release-independent entrypoint
+  // through the mutation gate; the scheduled runs below name it as their executable.
+  const manifest = JSON.parse(await nodeFs.readFile(fixture.paths.manifestFile, "utf8")) as {
+    readonly artifacts: readonly { readonly path: string; readonly source: string }[];
+  };
+  const entrypoints = manifest.artifacts.filter((row) => row.source === "generated/entrypoint");
+  if (entrypoints.length !== 1 || entrypoints[0]?.path !== entrypointPath(fixture.paths.home)) {
+    throw new Error(`fixture init left no single entrypoint row: ${JSON.stringify(entrypoints)}`);
+  }
+  if (!(await nodeFs.lstat(entrypointPath(fixture.paths.home))).isFile()) throw new Error("fixture init wrote no entrypoint");
   const plans: LifecycleExecutionPlanV1[] = [];
   const lifecycle: CliLifecycleContext = { ...base, store: (key) => recordingStore(base.store(key), plans, faults) };
   const remote = await createBareRemote(join(fixture.root, "remote.git"));
