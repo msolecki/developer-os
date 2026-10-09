@@ -597,8 +597,8 @@ NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the
 - [x] Task 26 (the lifecycle proof) on the synthetic arm64 and x64 fixture: NEW-110 Task 12
   (`b9faa189`, `e672ae1f`, `00afee8b`, `26baedd4`, `8b29e3c9`); the surviving contracts are in
   `docs/architecture/foundation.md` §11. D75: tests written, the full check is owed.
-- [ ] Task 11b: unparked by D84 and designed by D94 (Spec 2 K1–K6, revised and approved 2026-10-07); its plan
-  is being written. Was: parked (D46), with NEW-111 and NEW-112. The real-release half of the gate waits for it
+- [ ] Task 11b: unparked by D84 and designed by D94 (Spec 2 K1–K8); code merged to `development` 2026-10-09
+  (#37, #38); only its Task 14 (VM brew gate, F4 reinstall) remains. Was: parked (D46), with NEW-111 and NEW-112. The real-release half of the gate waits for it
   and A16, and so do the persisted-format migrations Spec 2's D72 block owes "no later than Task 11b".
 
 Gate: `update` dry-run and apply and rollback proven on a disposable install, then once on the founder machine. The synthetic half (disposable install, both architectures) landed with NEW-110 Task 12; the real-release half and the founder machine wait on Task 11b.
