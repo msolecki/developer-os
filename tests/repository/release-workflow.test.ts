@@ -153,6 +153,7 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "cdxgen unlocked": ["cdxgen", (t) => t.replace("pnpm exec cdxgen ", 'pnpm dlx "@cyclonedx/cdxgen@latest" ')],
   "cdxgen version unchecked": ["cdxgen", (t) => t.replace('[ "$installed" = "$cdxgen" ] ||', "true ||")],
   "cdxgen lockfile ignored": ["cdxgen", (t) => t.replace("pnpm install --frozen-lockfile --ignore-scripts", "pnpm install")],
+  "cdxgen install scripts": ["cdxgen", (t) => t.replace("pnpm install --frozen-lockfile --ignore-scripts", "pnpm install --frozen-lockfile")],
   "notes dropped": ["notes", (t) => t.replace("release-metadata.js notes", "release-metadata.js sequence")],
 };
 

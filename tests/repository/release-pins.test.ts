@@ -21,4 +21,10 @@ describe("release pins (A16 §2, §3.3, §5)", () => {
     expect(pins.gitleaks).toEqual({ version: semver(), "darwin-arm64": hex() });
     expect(pins.cdxgen).toEqual({ version: semver() });
   });
+
+  it("pins the root cdxgen devDependency to the same exact version as pins.json", async () => {
+    const pins = JSON.parse(await readFile(join(root, ".github/release/pins.json"), "utf8")) as { cdxgen: { version: string } };
+    const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as { devDependencies: Record<string, string> };
+    expect(manifest.devDependencies["@cyclonedx/cdxgen"]).toBe(pins.cdxgen.version);
+  });
 });
