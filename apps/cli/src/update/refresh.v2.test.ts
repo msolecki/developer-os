@@ -29,7 +29,7 @@ describe("the K8 refresh process", () => {
     const fixture = await createCommandFixture("refresh-spawn", { env: { PATH: "/synthetic/bin", DEVELOPER_OS_BRAIN: "/synthetic/brain", CODEX_HOME: "/synthetic/codex" } });
     const { executable, record } = await stub(fixture.root, 3);
     const env = refreshEnvironment(fixture.context);
-    expect(Object.keys(env).sort()).toStrictEqual(["DEVELOPER_OS_BRAIN", "DEVELOPER_OS_HOME", "HOME"]);
+    expect(Object.keys(env).sort()).toStrictEqual(["CODEX_HOME", "DEVELOPER_OS_BRAIN", "DEVELOPER_OS_HOME", "HOME"]);
     expect(await runRefreshProcess({ executable, argv: ["/synthetic/home/bin/developer-os.mjs", ...REFRESH_ARGV], env })).toBe(EXIT_CODES.decisionRequired);
     const seen = JSON.parse(await nodeFs.readFile(record, "utf8")) as { argv: string[]; env: Record<string, string> };
     expect(seen.argv).toStrictEqual(["/synthetic/home/bin/developer-os.mjs", "init"]);
@@ -119,6 +119,19 @@ describe("the K8 refresh process", () => {
     for (const raw of ["", "/opt/homebrew/bin\0", `/${"a".repeat(32 * 1024)}`]) {
       const fixture = await createCommandFixture("refresh-vendor-bad", { env: { DEVELOPER_OS_VENDOR_SEARCH_PATH: raw } });
       expect(Object.keys(refreshEnvironment(fixture.context)).sort()).toStrictEqual(["DEVELOPER_OS_HOME", "HOME"]);
+    }
+  });
+
+  it("(k) passes valid vendor homes on, omits absent or empty ones, and refuses an invalid one as the launcher does (exit 2) (NEW-208)", async () => {
+    const withThem = await createCommandFixture("refresh-homes", { env: { CODEX_HOME: "/synthetic/codex", CLAUDE_CONFIG_DIR: "/synthetic/claude" } });
+    expect(refreshEnvironment(withThem.context)).toStrictEqual({ HOME: withThem.context.userHome, DEVELOPER_OS_HOME: withThem.context.paths.home, CODEX_HOME: "/synthetic/codex", CLAUDE_CONFIG_DIR: "/synthetic/claude" });
+    const empty = await createCommandFixture("refresh-homes-empty", { env: { CODEX_HOME: "", CLAUDE_CONFIG_DIR: "" } });
+    expect(Object.keys(refreshEnvironment(empty.context)).sort()).toStrictEqual(["DEVELOPER_OS_HOME", "HOME"]);
+    for (const variable of ["CODEX_HOME", "CLAUDE_CONFIG_DIR"]) {
+      for (const raw of ["/synthetic/co\0dex", "relative/codex", "/synthetic/a/../codex", "/synthetic/codex/"]) {
+        const bad = { ...empty.context, env: { ...empty.context.env, [variable]: raw } };
+        expect(() => refreshEnvironment(bad), `${variable}=${raw}`).toThrow(expect.objectContaining({ reason: "vendor_home_invalid", code: EXIT_CODES.invalidInput, recovery: `unset ${variable} or set a canonical absolute path` }));
+      }
     }
   });
 

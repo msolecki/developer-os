@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 
 import { EXIT_CODES, parseCanonicalAbsolutePathText } from "@developer-os/core";
 import type { ExitCode } from "@developer-os/core";
-import { parseVendorSearchPath, VENDOR_SEARCH_PATH_VARIABLE } from "@developer-os/platform-macos";
+import { parseVendorHomeVariables, parseVendorSearchPath, VENDOR_SEARCH_PATH_VARIABLE, VendorHomeVariableError } from "@developer-os/platform-macos";
 
 import type { CliContext } from "../context.js";
 import { readActiveReleaseTree } from "../instructions/active-release.js";
@@ -20,7 +20,7 @@ export interface RefreshProcessV1 {
   readonly env: Readonly<Record<string, string>>;
 }
 
-/** The launcher's closed environment (Spec 2 §3.1, `apps/launcher/src/environment.ts`): never `PATH`, nothing inherited but the vendor search path (NEW-202). */
+/** The launcher's closed environment (Spec 2 §3.1, `apps/launcher/src/environment.ts`): never `PATH`, nothing inherited but the vendor search path (NEW-202) and the vendor homes (NEW-208). */
 export function refreshEnvironment(context: CliContext): Record<string, string> {
   const raw = context.env.DEVELOPER_OS_BRAIN;
   const vendor = parseVendorSearchPath(context.env[VENDOR_SEARCH_PATH_VARIABLE]);
@@ -29,7 +29,18 @@ export function refreshEnvironment(context: CliContext): Record<string, string> 
     DEVELOPER_OS_HOME: context.paths.home,
     ...(raw === undefined || raw === "" ? {} : { DEVELOPER_OS_BRAIN: brain(raw, context) }),
     ...(vendor === null ? {} : { [VENDOR_SEARCH_PATH_VARIABLE]: vendor }),
+    ...vendorHomes(context),
   };
+}
+
+/** The launcher's rule (`parseVendorHomeVariables`, NEW-208): an invalid vendor home is refused, exit 2, never passed on. */
+function vendorHomes(context: CliContext): Record<string, string> {
+  try {
+    return parseVendorHomeVariables(context.env);
+  } catch (cause) {
+    if (!(cause instanceof VendorHomeVariableError)) throw cause;
+    throw new InstructionRefusal({ reason: "vendor_home_invalid", code: EXIT_CODES.invalidInput, paths: [context.paths.home], recovery: `unset ${cause.variable} or set a canonical absolute path`, cause });
+  }
 }
 
 /** The launcher's rule (`buildLauncherEnvironment`): an invalid Brain override is refused, exit 2, never passed on. */

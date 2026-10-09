@@ -1,5 +1,6 @@
 import { EXIT_CODES, parseCanonicalAbsolutePathText } from "@developer-os/core";
-import { parseVendorSearchPath } from "@developer-os/platform-macos";
+import { parseVendorHomeVariables, parseVendorSearchPath, VendorHomeVariableError } from "@developer-os/platform-macos";
+import type { VendorHomeVariable } from "@developer-os/platform-macos";
 
 /**
  * The closed, sanitized environment the launcher hands the CLI process. Spec
@@ -13,6 +14,9 @@ export interface LauncherEnvironmentV1 {
   readonly DEVELOPER_OS_BRAIN?: string;
   /** The `PATH` the launcher received, for vendor discovery only (NEW-202). */
   readonly DEVELOPER_OS_VENDOR_SEARCH_PATH?: string;
+  /** The vendor homes the CLI reads, each when set and valid (NEW-208). */
+  readonly CODEX_HOME?: string;
+  readonly CLAUDE_CONFIG_DIR?: string;
 }
 
 export interface LauncherEnvironmentRequestV1 {
@@ -37,9 +41,15 @@ export interface LauncherEnvironmentRequestV1 {
    * otherwise simply not passed — never a refusal (NEW-202).
    */
   readonly vendorSearchPath: string | null;
+  /**
+   * The raw `CODEX_HOME` and `CLAUDE_CONFIG_DIR`, each absent when unset. An empty value is
+   * not passed; any other must be canonical absolute or the launcher refuses, exit 2, like the
+   * Brain override (`parseVendorHomeVariables`, NEW-208). Never resolved or opened here.
+   */
+  readonly vendorHomes: Readonly<Partial<Record<VendorHomeVariable, string | undefined>>>;
 }
 
-/** Missing/invalid `HOME` or an invalid Brain override: exit 2 before exec (Spec 2 §3.1). */
+/** Missing/invalid `HOME`, an invalid Brain override or vendor home: exit 2 before exec (Spec 2 §3.1). */
 export class LauncherEnvironmentError extends Error {
   readonly code = EXIT_CODES.invalidInput;
 
@@ -63,10 +73,18 @@ export function buildLauncherEnvironment(request: LauncherEnvironmentRequestV1):
   assertAbsolute(request.productHome, "DEVELOPER_OS_HOME");
 
   const vendor = parseVendorSearchPath(request.vendorSearchPath ?? undefined);
+  let vendorHomes: Partial<Record<VendorHomeVariable, string>>;
+  try {
+    vendorHomes = parseVendorHomeVariables(request.vendorHomes);
+  } catch (error) {
+    if (error instanceof VendorHomeVariableError) throw new LauncherEnvironmentError(error.message);
+    throw error;
+  }
   const base = {
     HOME: request.home,
     DEVELOPER_OS_HOME: request.productHome,
     ...(vendor === null ? {} : { DEVELOPER_OS_VENDOR_SEARCH_PATH: vendor }),
+    ...vendorHomes,
   };
   if (request.brainOverride === null) return base;
 

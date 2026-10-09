@@ -35,6 +35,18 @@ describe("resolveVendorHomes", () => {
   });
 });
 
+describe("resolveVendorHomes under the launcher (NEW-208)", () => {
+  it("picks the CODEX_HOME a launcher-built closed environment carries", async () => {
+    // The CLI may not depend on the launcher package, so this loads the launcher's compiled module, as the keg runs it.
+    const launcher = (await import(new URL("../../../launcher/dist/environment.js", import.meta.url).href)) as {
+      buildLauncherEnvironment(request: object): Readonly<Record<string, string>>;
+    };
+    const env = launcher.buildLauncherEnvironment({ home: H, productHome: P, brainOverride: null, vendorSearchPath: null, vendorHomes: { CODEX_HOME: "/synthetic/codex", CLAUDE_CONFIG_DIR: "/synthetic/claude" } });
+    expect(env).toMatchObject({ CODEX_HOME: "/synthetic/codex", CLAUDE_CONFIG_DIR: "/synthetic/claude" });
+    expect(resolveVendorHomes(env, H, P).codexHome).toBe("/synthetic/codex");
+  });
+});
+
 describe("vendor instruction paths", () => {
   const homes = resolveVendorHomes({ CODEX_HOME: "/synthetic/codex" }, H, P);
 
