@@ -202,6 +202,20 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   a durable anchor (`state/manifest-anchor`) that the mutation gate writes after every committed
   manifest-writing transaction, before compaction; the ledger itself is compacted, so it cannot carry
   the proof. A hand-edited manifest still refuses with exit 6.
+  **Amended 2026-10-09 (NEW-206, founder decision).** A lost anchor is not rebuilt past `init`'s
+  own entrypoint write. Every gate entry's recovery compacts each finalized standalone journal, so
+  compaction keeps only the writes since the last gate entry. When the anchor is lost after any
+  gated manifest write beyond `init`'s own, which can happen through an external delete, a backup
+  without `state/`, or a failed anchor write, no retained evidence chains the bootstrap plan's
+  `manifest.after.hash` to the live manifest. The anchor therefore cannot be re-derived, and a
+  re-run `init` refuses with exit 6 and the manual-archive message. This is accepted as an
+  availability-only residual: it fails safe, and no trust is widened. The refusal is pinned by
+  `apps/cli/src/lifecycle/manifest-anchor.v2.test.ts`, test "refuses a re-run init when the anchor
+  is lost after a write beyond init's entrypoint write (fail-closed)". Two alternatives were rejected
+  because each adds new durable state for an availability gain: (A) keep manifest-writing journals,
+  or a hash-only record of each, out of compaction until the anchor covers them; (B) keep a retained
+  log of each committed manifest write's before/after hash pair, so that a lost anchor could be
+  rebuilt by chaining from the bootstrap's after-hash.
 - **D55 (2026-09-23).** The launchable CLI is bundled with `esbuild` (root devDependency) into a single
   module plus third-party license files, so fresh `init` retains a handful of files instead of ~500
   (measured 63 min vs ~11 min).
