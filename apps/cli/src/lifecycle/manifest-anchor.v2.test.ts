@@ -267,7 +267,7 @@ describe("the manifest anchor fails safe (D54 review)", () => {
   /**
    * Pins today's fail-closed gap: with no anchor, the gate takes the latest committed write's
    * `before` as the chain start. Past `init`'s entrypoint write that is not the bootstrap's
-   * manifest, so a re-run `init` refuses instead of settling. A fix changes this deliberately.
+   * manifest, so a re-run `init` refuses instead of settling. Accepted by design (D54, NEW-206).
    */
   it("refuses a re-run init when the anchor is lost after a write beyond init's entrypoint write (fail-closed)", async () => {
     const fixture = await initialisedV2Home("anchor-lost-after-second-write");
