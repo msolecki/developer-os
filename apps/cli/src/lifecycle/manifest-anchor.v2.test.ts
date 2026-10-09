@@ -143,7 +143,7 @@ async function expectInitRefusesArchive(fixture: CommandFixture): Promise<void> 
 }
 
 describe("the durable manifest anchor (D54)", () => {
-  it("settles a re-run init after one committed gated manifest write", async () => {
+  it("settles a re-run init after one committed gated manifest write beyond init's entrypoint write", async () => {
     const fixture = await initialisedV2Home("anchor-one");
     const bootstrap = await bootstrapHashOf(fixture);
     const written = await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
@@ -152,7 +152,7 @@ describe("the durable manifest anchor (D54)", () => {
     await expectInitSettles(fixture);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("settles after two chained gated transactions, across a compaction of the first", async () => {
+  it("settles after two chained gated transactions beyond init's entrypoint write, across a compaction of the first", async () => {
     const fixture = await initialisedV2Home("anchor-chain");
     const bootstrap = await bootstrapHashOf(fixture);
     await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
@@ -225,7 +225,7 @@ describe("the durable manifest anchor (D54)", () => {
    * The first gated manifest write after the bootstrap is `init`'s own entrypoint write (NEW-163
    * option B, Spec 2 D84 K5), so "never written" is that commit dying before its anchor.
    */
-  it("recovers an anchor that was never written at all", async () => {
+  it("recovers the anchor init's entrypoint write never wrote", async () => {
     const fixture = await initialisedV2Home("anchor-crash-first");
     const bootstrap = await bootstrapHashOf(fixture);
     const written = await manifestBytes(fixture);
@@ -261,6 +261,25 @@ describe("the manifest anchor fails safe (D54 review)", () => {
     await noOpGateSession(fixture);
 
     expect(await anchorExists(fixture)).toBe(false);
+    await expectInitRefusesArchive(fixture);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * Pins today's fail-closed gap: with no anchor, the gate takes the latest committed write's
+   * `before` as the chain start. Past `init`'s entrypoint write that is not the bootstrap's
+   * manifest, so a re-run `init` refuses instead of settling. A fix changes this deliberately.
+   */
+  it("refuses a re-run init when the anchor is lost after a write beyond init's entrypoint write (fail-closed)", async () => {
+    const fixture = await initialisedV2Home("anchor-lost-after-second-write");
+    const bootstrap = await bootstrapHashOf(fixture);
+    const written = await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
+    await nodeFs.unlink(manifestAnchorPath(fixture.paths.home));
+
+    await noOpGateSession(fixture);
+
+    const derived = decodeManifestAnchor(await anchorBytes(fixture));
+    expect(derived?.manifestHash).toBe(hashBytes(written));
+    expect(derived?.bootstrapManifestHash).not.toBe(bootstrap);
     await expectInitRefusesArchive(fixture);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 

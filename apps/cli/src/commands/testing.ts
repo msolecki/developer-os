@@ -528,6 +528,7 @@ async function createSyntheticPackagedRelease(
   // A second fixture on a shared `root` admits the keg the first one installed: one prefix holds one keg.
   const installed = await nodeFs.realpath(fallback).catch(() => null);
   if (installed !== null) {
+    if (instructions !== undefined) throw new Error("a shared-root fixture reuses the first keg, so it cannot carry its own instructions");
     return admitPackageChannelRelease(installed, { prefix: await nodeFs.realpath(prefix), requireVersion: null, architecture });
   }
   await nodeFs.mkdir(prefix, { mode: 0o755 });
