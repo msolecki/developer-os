@@ -1383,8 +1383,10 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
 
 ### 11.1 The installed release
 
-- **Layout.** A release lives at `releases/<version>/darwin-<arch>/` with its three signed metadata
-  documents retained under `state/release-metadata/`. `state/active-release.json` names the one
+- **Layout.** A release lives at `releases/<version>/darwin-<arch>/` with its three metadata
+  documents (delegation, release index, bundle manifest) retained by hash under
+  `state/release-metadata/`; since D84 K1–K3 they are bound by the installed keg's size and SHA-256
+  rows, not by signatures. `state/active-release.json` names the one
   active release, `state/release-trust.json` holds the trust high watermarks, and
   `state/update-rollback.json` plus `rollback/<payload-id>/` hold the one retained rollback set.
   `state/update-executor.json` names the recovery executor while an update runs. Each is written
@@ -1452,8 +1454,8 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
   automation plans keep `"inline"`.
 - **P3** — the four `manifest/*` steps run over two plans, transitional and terminal; the terminal
   set is the transitional set minus exactly the retired partition, or the handler refuses exit 6.
-- **P4** — the three signed metadata documents are construction `plan_derived` rows with the role
-  `release_metadata_after`, bound to their signed hashes.
+- **P4** — the three retained metadata documents are construction `plan_derived` rows with the role
+  `release_metadata_after`, bound to their hashes (signed until D84 K1; the keg's rows since).
 - **P5** — an ephemeral reservation may be absent or empty; `keep` never reads or hashes it, so a
   home without `state/update-rollback.json` or `state/git-sync.json` updates.
 - **P8** — admitted bookkeeping paths carry their planned identity (NEW-86).
@@ -1463,19 +1465,25 @@ and NEW-112 depend on it; this section is what a reader of the code needs.
 
 ### 11.4 Exit codes on the update surface
 
-Spec 2 §11's mapping on top of §6: 1 for a bounded transport interruption or a failure after a prior
-capacity check; 2 for a malformed request, a nonexistent release or a downgrade; 3 for managed
-drift, a post-update edit blocking rollback, or a Codex registration that is not `registered`; 4
-for an unsupported architecture, a launcher or protocol too old, no launcher trust handoff, an
-unsigned-local home, or no fallback handoff; 5 for any
-signature, checksum, origin, archive, process or verifier refusal; 6 for an incomplete or
-contradictory journal, a third state, missing rollback evidence, or malformed trust, active or
-manifest state. Messages carry fixed reason codes only.
+Spec 2 §11's mapping on top of §6, *amended 2026-10-08 (D84 K1–K3)*: no network, no FD 3 and no
+signatures remain, so the transport, launcher-trust-handoff and signature rows are withdrawn. 1 for
+a failure after a prior capacity check, or a refresh child that dies, is killed or exits outside
+0–6; 2 for a malformed request, a nonexistent release or a downgrade; 3 for managed drift, a
+post-update edit blocking rollback, or a Codex registration that is not `registered`; 4 for an
+unsupported architecture, a launcher or protocol too old (`update_protocol_too_new`), an absent or
+mismatched package keg, an unsigned-local home (`release_unsigned_local`), or no fallback handoff
+(`update_fallback_unavailable`); 5 for a package-channel admission refusal (keg link, owner, mode,
+inventory, size or SHA-256 against the keg's rows), a trust replay, or an archive, process or
+verifier refusal; 6 for an incomplete or contradictory journal, a third state, missing rollback
+evidence, malformed trust, active or manifest state, or an active release tree that no longer
+matches its bundle manifest. Messages carry fixed reason codes only.
 
-### 11.5 Accepted residuals (Spec 2 §13.3, unchanged)
+### 11.5 Accepted residuals (Spec 2 §13.3, amended 2026-10-08 by D84 K1–K3)
 
-No first-observation freeze resistance; one root and one active release key; one previous version
-only; rollback never merges; one fixed online source; the signed target planner is not OS-sandboxed;
+No first-observation freeze resistance; one previous version only; rollback never merges; the
+target planner, read from the admitted keg, is not OS-sandboxed (the root, the release key and the
+online source this list named are withdrawn with the signed chain: the Homebrew tap is the trust
+root and the update source is the installed keg);
 protocol growth refuses until the launcher upgrades; publication is A16's; the `symlink` artifact
 arm is validated but unreachable (held as an exact set by `tests/security/symlink-escape.test.ts`);
 two V2 Foundation ref types. No migration chain is checked to start at the installed schema version:
@@ -1487,11 +1495,12 @@ contiguous chain per domain (W2-CONSTR-2); the anchor check joins with the first
 Spec 2's §12 gate is proven on the synthetic release for both architectures: install, preview and apply,
 a second apply, rollback, reapply and uninstall (`tests/e2e/release-update.test.ts`); every durable
 death point of apply, rollback and a verifier-rejected update recovers
-(`tests/integration/update/recovery.test.ts`); the signature chain and the transport are unit-tested
-in `packages/security/src/update/` until D84 K1 withdraws them (Task 13); archives and the planner's
+(`tests/integration/update/recovery.test.ts`); the signature chain and the transport were unit-tested
+in `packages/security/src/update/` until D84 K1 withdrew them (Task 13); archives and the planner's
 request/result binding for both architectures (`tests/integration/update/archive-planner.test.ts`).
-The synthetic home carries the core owner only. The Git and automation leg joins with NEW-113, and
-the real-release half waits for Task 11b and A16.
+The synthetic home carries the core owner only. The Git and automation leg joins with NEW-113. For
+the real-release half, Task 11b is code complete; A16's release workflows exist, and its first tag
+is the founder's to push.
 
 ## 12. Instruction artifacts (A12)
 
