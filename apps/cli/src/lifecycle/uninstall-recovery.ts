@@ -419,7 +419,8 @@ async function resumeUninstall(
       .recover(global, { resumeUninstall: true });
     holds.global = recovered.global;
     // A compensated resume restores the manifest, and its anchor with it; only a finished one removes it.
-    if ((await observeManifestSchema(lifecycle.fs, paths)).kind === "absent") {
+    // identity-free stat, the rule `anchorCommitted` applies: no regular manifest, no installation.
+    if ((await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(paths.manifestFile)))?.kind !== "regular_file") {
       await removeManifestAnchorOrWarn(lifecycle.fs, paths.home, lifecycle.effectiveUid, (text) => { context.io.stderr(text); });
     }
   } finally {
