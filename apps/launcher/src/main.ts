@@ -7,7 +7,7 @@
  */
 import { arch, platform as nodePlatform } from "node:os";
 
-import { admitLauncherPlatformIdentity } from "@developer-os/platform-macos";
+import { admitLauncherPlatformIdentity, VENDOR_HOME_VARIABLES } from "@developer-os/platform-macos";
 import { PACKAGE_CHANNEL_SOURCE_TABLE, resolveRuntimePaths } from "@developer-os/core";
 import type { CanonicalAbsolutePathV1 } from "@developer-os/core";
 
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     productHome,
     brainOverride: process.env.DEVELOPER_OS_BRAIN ?? null,
     vendorSearchPath: process.env.PATH ?? null,
-    vendorHomes: { CODEX_HOME: process.env.CODEX_HOME, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR },
+    vendorHomes: Object.fromEntries(VENDOR_HOME_VARIABLES.map((variable) => [variable, process.env[variable]])),
   });
 
   const effectiveUid = process.getuid?.() ?? -1;

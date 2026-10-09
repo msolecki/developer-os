@@ -19,7 +19,8 @@ const NEEDLES = [
 
 const ALLOWED = [
   "apps/cli/src/update/refresh.ts", // passed on to the refresh child
-  "apps/launcher/src/environment.ts", // set from the launcher's own environment
+  "apps/launcher/src/environment.ts", // checks and passes on what main.ts read
+  "apps/launcher/src/main.ts", // reads each listed variable from the launcher's own environment
   "packages/platform-macos/src/index.ts",
   "packages/platform-macos/src/vendor-home-variables.ts",
 ];

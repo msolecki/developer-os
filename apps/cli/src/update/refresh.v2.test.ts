@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
+import { VENDOR_HOME_VARIABLES } from "@developer-os/platform-macos";
 
 import { runInit } from "../commands/init.js";
 import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
@@ -133,6 +134,20 @@ describe("the K8 refresh process", () => {
         expect(() => refreshEnvironment(bad), `${variable}=${raw}`).toThrow(expect.objectContaining({ reason: "vendor_home_invalid", code: EXIT_CODES.invalidInput, recovery: `unset ${variable} or set a canonical absolute path` }));
       }
     }
+  });
+
+  it("(l) passes the same vendor homes as the launcher for the same input (NEW-208 lockstep)", async () => {
+    const vendorHomes = Object.fromEntries(VENDOR_HOME_VARIABLES.map((variable) => [variable, `/synthetic/${variable.toLowerCase()}`]));
+    const fixture = await createCommandFixture("refresh-lockstep", { env: vendorHomes });
+    // The CLI may not depend on the launcher package, so this loads the launcher's compiled module, as the keg runs it.
+    const launcher = (await import(new URL("../../../launcher/dist/environment.js", import.meta.url).href)) as {
+      buildLauncherEnvironment(request: object): Readonly<Record<string, string>>;
+    };
+    const fromLauncher = launcher.buildLauncherEnvironment({ home: fixture.context.userHome, productHome: fixture.context.paths.home, brainOverride: null, vendorSearchPath: null, vendorHomes });
+    const fromRefresh = refreshEnvironment(fixture.context);
+    const pick = (env: Readonly<Record<string, string>>) => Object.fromEntries(Object.entries(env).filter(([key]) => (VENDOR_HOME_VARIABLES as readonly string[]).includes(key)));
+    expect(pick(fromLauncher)).toStrictEqual(vendorHomes);
+    expect(pick(fromRefresh)).toStrictEqual(pick(fromLauncher));
   });
 
   it("(j) kills a refresh that outlives its bound and maps it to exit 1 (K8's bounded timeout)", async () => {
