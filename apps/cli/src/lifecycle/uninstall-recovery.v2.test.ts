@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { EXIT_CODES, parseCanonicalAbsolutePathText } from "@developer-os/core";
+import { EXIT_CODES, hashBytes, parseCanonicalAbsolutePathText } from "@developer-os/core";
 import type {
   CanonicalAbsolutePathV1,
   HeldLifecycleStableLockV1,
@@ -27,6 +27,7 @@ import {
 import type { CommandFixture, FixtureOptions } from "../commands/testing.js";
 import { runUninstall } from "../commands/uninstall.js";
 import { manifestAdmissionFor } from "./manifest-admission.js";
+import { decodeManifestAnchor, manifestAnchorPath } from "./manifest-anchor.js";
 import type { CliContext } from "../context.js";
 import { admitInstalledV2Home } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
@@ -497,6 +498,9 @@ describe("uninstall dispatch and the recovery-only arm", () => {
 
       expect((await runUninstall(fixture.rebuildContext(), ACCEPTED)).ok, point).toBe(true);
       if (arm === "compensation") {
+        // The resume restored the installation, so the anchor of its manifest stays (D54 finding 1).
+        const anchor = decodeManifestAnchor(await nodeFs.readFile(manifestAnchorPath(fixture.paths.home)));
+        expect(anchor?.manifestHash, `${point} anchor`).toBe(hashBytes(await nodeFs.readFile(fixture.paths.manifestFile)));
         expect(
           (await runUninstall(fixture.rebuildContext(), ACCEPTED)).ok,
           `${point} then uninstall`,
