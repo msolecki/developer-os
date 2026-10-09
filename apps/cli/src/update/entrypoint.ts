@@ -28,7 +28,8 @@ const MAX_BUNDLE_MANIFEST_BYTES = 4 * 1024 * 1024;
  * retained bundle manifest and loads that manifest's `entrypoint` (D96 Q4: `LOCAL_BUNDLE_CLI_ENTRY`
  * when the manifest names none). Every read is no-follow, a regular file owned by the caller with no
  * group or other write, size-bounded, and the manifest must hash to the record. Nothing is resolved
- * through PATH. A release that cannot load exits 2 for the three security guards: Node's own exit 1
+ * through PATH. The bundle root must be exactly `releases/<version>/darwin-<process.arch>`, the launcher's
+ * and the refresh's rule. A release that cannot load exits 2 for the three security guards: Node's own exit 1
  * is non-blocking to both vendors, so a missing bundle would silently allow every guarded call. The
  * import target is a file URL, so a `#`, `%` or space in the home cannot change what it names.
  */
@@ -38,7 +39,7 @@ export function renderEntrypoint(): Uint8Array {
       'import { createHash } from "node:crypto";\n' +
       'import { constants } from "node:fs";\n' +
       'import { open } from "node:fs/promises";\n' +
-      'import { isAbsolute, join, normalize, sep } from "node:path";\n' +
+      'import { isAbsolute, join } from "node:path";\n' +
       'import { fileURLToPath, pathToFileURL } from "node:url";\n' +
       "async function read(path, limit) {\n" +
       "  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);\n" +
@@ -55,7 +56,7 @@ export function renderEntrypoint(): Uint8Array {
       '  const state = join(home, "state");\n' +
       `  const active = JSON.parse(await read(join(state, "active-release.json"), ${String(MAX_ACTIVE_RELEASE_BYTES)}));\n` +
       "  const hash = active.bundleManifestHash;\n" +
-      '  if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash) || typeof active.bundleRoot !== "string" || !isAbsolute(active.bundleRoot) || normalize(active.bundleRoot) !== active.bundleRoot || !active.bundleRoot.startsWith(join(home, "releases") + sep)) throw new Error("refused");\n' +
+      '  if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash) || typeof active.version !== "string" || !/^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$/.test(active.version) || active.bundleRoot !== join(home, "releases", active.version, "darwin-" + process.arch)) throw new Error("refused");\n' +
       `  const bytes = await read(join(state, "release-metadata", "bundles", hash + ".json"), ${String(MAX_BUNDLE_MANIFEST_BYTES)});\n` +
       '  if (createHash("sha256").update(bytes).digest("hex") !== hash) throw new Error("refused");\n' +
       `  const entry = JSON.parse(bytes).entrypoint ?? ${JSON.stringify(LOCAL_BUNDLE_CLI_ENTRY)};\n` +

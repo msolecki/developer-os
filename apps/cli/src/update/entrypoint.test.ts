@@ -23,7 +23,7 @@ async function entrypointHome(
 ): Promise<{ readonly entrypoint: string; readonly root: string; readonly bundleRoot: string }> {
   const root = await realpath(await mkdtemp(join(tmpdir(), "developer-os-entrypoint-")));
   dirs.push(root);
-  const bundleRoot = join(root, "releases", "1.0.0", "darwin-arm64");
+  const bundleRoot = join(root, "releases", "1.0.0", `darwin-${process.arch}`);
   const entrypoint = join(root, "bin", "developer-os.mjs");
   await mkdir(dirname(entrypoint));
   await writeFile(entrypoint, renderEntrypoint(), { mode: 0o600 });
@@ -34,7 +34,7 @@ async function entrypointHome(
     const bundleManifestHash = createHash("sha256").update(manifestBytes).digest("hex");
     await mkdir(join(root, "state", "release-metadata", "bundles"), { recursive: true });
     await writeFile(join(root, "state", "release-metadata", "bundles", `${bundleManifestHash}.json`), manifestBytes, { mode: 0o600 });
-    await writeFile(join(root, "state", "active-release.json"), JSON.stringify({ bundleManifestHash, bundleRoot }), { mode: 0o600 });
+    await writeFile(join(root, "state", "active-release.json"), JSON.stringify({ version: "1.0.0", bundleManifestHash, bundleRoot }), { mode: 0o600 });
   }
   return { entrypoint, root, bundleRoot };
 }
@@ -99,6 +99,26 @@ describe("renderEntrypoint", () => {
     const active = JSON.parse(await readFile(record, "utf8")) as object;
     await writeFile(record, JSON.stringify({ ...active, bundleRoot: outside }), { mode: 0o600 });
     expect(run(home.entrypoint, ["guard", "command"])).toMatchObject({ status: 2, stdout: "" });
+  });
+
+  it("refuses a bundle root under releases/ that is not exactly releases/<version>/darwin-<arch>", async () => {
+    const other = process.arch === "arm64" ? "x64" : "arm64";
+    for (const [version, relative] of [
+      ["1.0.0", ["9.9.9", `darwin-${process.arch}`]],
+      ["1.0.0", ["1.0.0", `darwin-${other}`]],
+      ["1.0.0", ["1.0.0", `darwin-${process.arch}`, "nested"]],
+      ["x/../1.0.0", ["1.0.0", `darwin-${process.arch}`]],
+      [undefined, ["1.0.0", `darwin-${process.arch}`]],
+    ] as const) {
+      const home = await entrypointHome('process.stdout.write("loaded\\n");\n');
+      const bundleRoot = join(home.root, "releases", ...relative);
+      await mkdir(join(bundleRoot, dirname(LOCAL_BUNDLE_CLI_ENTRY)), { recursive: true });
+      await writeFile(join(bundleRoot, LOCAL_BUNDLE_CLI_ENTRY), 'process.stdout.write("loaded\\n");\n', { mode: 0o600 });
+      const record = join(home.root, "state", "active-release.json");
+      const active = JSON.parse(await readFile(record, "utf8")) as object;
+      await writeFile(record, JSON.stringify({ ...active, version, bundleRoot }), { mode: 0o600 });
+      expect(run(home.entrypoint, ["guard", "command"])).toMatchObject({ status: 2, stdout: "" });
+    }
   });
 
   it("refuses a group-writable active record", async () => {

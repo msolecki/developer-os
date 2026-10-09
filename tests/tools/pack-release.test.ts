@@ -151,7 +151,7 @@ describe("pack:release (Task 11b K2)", () => {
     await mkdir(join(home, "state", "release-metadata", "bundles"), { recursive: true });
     const manifestHash = sha256(manifestBytes);
     await writeFile(join(home, "state", "release-metadata", "bundles", `${manifestHash}.json`), manifestBytes, { mode: 0o600 });
-    await writeFile(join(home, "state", "active-release.json"), JSON.stringify({ bundleRoot, bundleManifestHash: manifestHash }), { mode: 0o600 });
+    await writeFile(join(home, "state", "active-release.json"), JSON.stringify({ version: "0.1.0", bundleRoot, bundleManifestHash: manifestHash }), { mode: 0o600 });
     await mkdir(join(home, "bin"));
     await writeFile(join(home, "bin", "developer-os.mjs"), renderEntrypoint(), { mode: 0o600 });
     const run = spawnSync(join(bundleRoot, "bin", "node"), [join(home, "bin", "developer-os.mjs"), "--version"], {
