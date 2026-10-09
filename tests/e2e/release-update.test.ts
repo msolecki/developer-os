@@ -136,7 +136,11 @@ async function expectEntrypointFollowsActive(lifecycle: Lifecycle): Promise<void
   const original = await nodeFs.readFile(target);
   await nodeFs.writeFile(target, `process.stdout.write(${JSON.stringify(`marker:${target}\n`)});\n`);
   try {
-    const result = spawnSync(process.execPath, [join(lifecycle.home.fixture.paths.home, "bin", "developer-os.mjs"), "--version"], { encoding: "utf8" });
+    // Production runs the script on the keg's own Node, so `process.arch` is the release's architecture
+    // (an x64 keg's Node runs under Rosetta). The host Node stands in for it here, so the harness
+    // reports the world's architecture, the way the fixture's platform does for the launcher and the refresh.
+    const arch = `data:text/javascript,Object.defineProperty(process,"arch",{value:${JSON.stringify(lifecycle.home.world.architecture)}})`;
+    const result = spawnSync(process.execPath, ["--import", arch, join(lifecycle.home.fixture.paths.home, "bin", "developer-os.mjs"), "--version"], { encoding: "utf8" });
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`marker:${target}\n`);
   } finally {
