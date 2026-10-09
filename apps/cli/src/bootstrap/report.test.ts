@@ -191,7 +191,7 @@ describe("inspectBootstrapEvidence", () => {
     expect(await nodeFs.readFile(unrelated, "utf8")).toBe("unrelated sibling\n");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("withholds retained parent authorities from an altered envelope whose journal selection stays exact", async () => {
+  it("withholds retained parent authorities from an altered envelope and returns them once the alteration is undone", async () => {
     const fixture = await createCommandFixture("bootstrap-report-altered-authorities", {
       bootstrapAvailable: true,
     });
@@ -203,8 +203,9 @@ describe("inspectBootstrapEvidence", () => {
     /**
      * Settled, not active: `init`'s own gated entrypoint write (Spec 2 D84 K5, NEW-163 option B)
      * moves the manifest past the plan's handoff, so the envelope is superseded through the
-     * manifest anchor (D54). `active` therefore no longer witnesses the exact journal selection;
-     * the restore below does.
+     * manifest anchor (D54) and `active` is null. No public field of the altered admission then
+     * witnesses the journal selection; the restore below proves only that the withheld authorities
+     * come from the alteration itself, not from a change the alteration left behind.
      */
     expect(verified.active).toBeNull();
     expect(verified.blocksNewIntent).toBe(false);
@@ -224,10 +225,7 @@ describe("inspectBootstrapEvidence", () => {
     expect(altered.blocksNewIntent).toBe(false);
     expect(altered.retainedParentAuthorities).toStrictEqual([]);
 
-    /**
-     * The alteration touched no journal slot, so the selection stayed exact: removing the extra
-     * row alone restores the verified envelope and every authority it withheld.
-     */
+    /** Removing the extra row alone restores the verified envelope and every authority it withheld. */
     await nodeFs.unlink(extra);
     const restored = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
 
