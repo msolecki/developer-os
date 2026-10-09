@@ -1475,7 +1475,8 @@ mismatched package keg, an unsigned-local home (`release_unsigned_local`), or no
 (`update_fallback_unavailable`); 5 for a package-channel admission refusal (keg link, owner, mode,
 inventory, size or SHA-256 against the keg's rows), a trust replay, or an archive, process or
 verifier refusal; 6 for an incomplete or contradictory journal, a third state, missing rollback
-evidence, malformed trust, active or manifest state, or an active release tree that no longer
+evidence, malformed trust, active or manifest state, a keg whose metadata documents fail validation
+(Spec 2 K8 C2), or an active release tree that no longer
 matches its bundle manifest. Messages carry fixed reason codes only.
 
 ### 11.5 Accepted residuals (Spec 2 §13.3, amended 2026-10-08 by D84 K1–K3)
