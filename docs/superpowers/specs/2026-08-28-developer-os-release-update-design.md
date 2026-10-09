@@ -413,7 +413,8 @@ NEW-171.
   rollback's lifecycle and transaction lock are released, under a bounded timeout. Before spawning it
   applies the launcher's rule that `bundleRoot` is `<home>/releases/<version>/darwin-<arch>` for the host
   architecture (`active_release_root_mismatch`, exit 6). Its environment is exactly `HOME`,
-  `DEVELOPER_OS_HOME` and, when set and valid, `DEVELOPER_OS_BRAIN`, the launcher's (§3.1); its stdout is
+  `DEVELOPER_OS_HOME` and, when set and valid, `DEVELOPER_OS_BRAIN`, `DEVELOPER_OS_VENDOR_SEARCH_PATH`,
+  `CODEX_HOME` and `CLAUDE_CONFIG_DIR`, the launcher's (§3.1; the last three amended below); its stdout is
   discarded and its stderr inherited; a child exit outside 0–6, a signal or the timeout maps to exit 1.
   **Proof.** NEW-200's proof is that an update changes a skill, a rollback restores it, and
   `hooks/hooks.json` stays byte-identical across every swap; a change to the hook rows themselves is proved
@@ -424,6 +425,18 @@ NEW-171.
   exported further except to the refresh child, and never used to resolve any other executable. It must
   contain no NUL, and every executable discovery finds through it passes the existing trusted-executable
   admission (D83 (3)) before use. Without it, discovery keeps today's fixed fallback path.
+  **Amended 2026-10-09 (NEW-208, founder decision): vendor homes.** §3.1's closed CLI environment and
+  K8's refresh environment also carry `CODEX_HOME` and `CLAUDE_CONFIG_DIR`, each only when set, so a
+  Homebrew run registers Codex under the home Codex reads. An empty value is not passed, as the CLI reads
+  it as unset. Any other value must pass the Brain override's grammar (canonical absolute, bounded, no
+  NUL) or the launcher refuses with exit 2 before exec, and the refresh refuses `vendor_home_invalid`,
+  exit 2, without spawning; dropping it instead would put Codex artifacts silently under `~/.codex`. Both
+  iterate one list (`packages/platform-macos/src/vendor-home-variables.ts` — `parseVendorHomeVariables`),
+  so they pass the same set. The CLI's rules are unchanged: `CODEX_HOME` is honoured only when absolute,
+  `CLAUDE_CONFIG_DIR` is never followed and only warned about. Under the launcher the grammar is stricter
+  than a direct CLI run, which `resolve()`s any absolute `CODEX_HOME`: a trailing slash or `..` segment
+  refuses there. A keg install that already recorded `~/.codex` while `CODEX_HOME` named another home now
+  reaches `codex_home_mismatch`, exit 3, on its next `init` or refresh, as a direct run always did.
 
 
 ---
@@ -632,7 +645,9 @@ only canonical `HOME`, canonical `DEVELOPER_OS_HOME` equal to the exact product-
 launcher already validated, and the original optional `DEVELOPER_OS_BRAIN` only after its bounded
 absolute-path input grammar accepts it. The launcher does not resolve or open the Brain; the CLI performs the ordinary
 canonicalization, containment, and guarded-root checks before use. Missing/invalid `HOME` or an
-invalid Brain override is exit 2 before exec. This path-context handoff is the sole exception to the
+invalid Brain override is exit 2 before exec. (Amended 2026-10-08, NEW-202, and 2026-10-09, NEW-208, founder
+decisions, K8: the environment also carries `DEVELOPER_OS_VENDOR_SEARCH_PATH`, and `CODEX_HOME` and
+`CLAUDE_CONFIG_DIR` under the Brain override's grammar, an invalid one exit 2 before exec.) This path-context handoff is the sole exception to the
 empty environment; every network, planner, verifier, vendor, and other descendant receives its own
 independently constructed empty/closed environment and never inherits it. The launcher supplies the
 §4.2 trust handoff on read-only inherited descriptor 3
