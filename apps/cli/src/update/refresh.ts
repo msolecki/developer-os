@@ -53,7 +53,11 @@ export async function refreshProcess(context: CliContext): Promise<RefreshProces
   if (tree.bundleRoot !== `${context.paths.home}/releases/${tree.version}/darwin-${tree.architecture}` || tree.architecture !== (await context.platform.inspect()).architecture) {
     throw new InstructionRefusal({ reason: "active_release_root_mismatch", code: EXIT_CODES.recoveryRequired, paths: [tree.bundleRoot], recovery: "developer-os doctor" });
   }
-  return { executable: `${tree.bundleRoot}/${tree.runtimeEntrypoint}`, argv: [entrypointPath(context.paths.home), ...REFRESH_ARGV], env: refreshEnvironment(context) };
+  const executable = `${tree.bundleRoot}/${tree.runtimeEntrypoint}`;
+  // The runtime must be the manifest's bytes (size and SHA-256), or a swapped file would run as the release.
+  // ponytail: verify-then-spawn by path; the bundle is the caller's own 0700 tree, so the window is the owner's.
+  await tree.readFile(executable);
+  return { executable, argv: [entrypointPath(context.paths.home), ...REFRESH_ARGV], env: refreshEnvironment(context) };
 }
 
 /** 0–6 are the product's own codes; a signal, `null`, or a shell's 126/127 is an operational failure. */
