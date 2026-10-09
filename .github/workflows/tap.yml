@@ -4,10 +4,21 @@ name: tap
 # formula in the tap from the published SHA256SUMS and open a pull request.
 # Merging it (approval 2) is the release.
 #
-# This workflow runs no repository code: no checkout, no Node, no build. It
-# fetches SHA256SUMS from the release and the one edit script at the event
-# commit (`GITHUB_SHA`, so a moved tag cannot swap it) with the job's read-only token, edits the five known lines of the tap's EXISTING
-# `Formula/developer-os.rb`, and pushes with the tap token.
+# Trust split, as in release.yml:
+#   edit  runs repository code: the one edit script, fetched at the event commit
+#         (`GITHUB_SHA`, so a moved tag cannot swap it) with the job's read-only
+#         token. No environment, no secret. It clones the tap, edits the five
+#         known lines of the EXISTING `Formula/developer-os.rb`, and uploads only
+#         that file as an artifact.
+#   push  runs no repository code: no checkout, no Node, no script. It is the only
+#         job bound to the `tap` environment and the only one that can see
+#         `TAP_PR_TOKEN`. It clones the tap fresh, accepts exactly one regular
+#         file from the artifact, copies it in, re-checks that the diff is exactly
+#         five changed lines of `Formula/developer-os.rb`, then pushes and opens
+#         the pull request. git and gh are called by absolute path and git hooks
+#         are disabled, so nothing an earlier step could plant runs with the token.
+#         gh is the runner image's Homebrew install: macos-15 is arm64, so
+#         `/opt/homebrew/bin/gh`; the job fails if it is not there.
 #
 # L2 (founder actions, before the first release):
 #   1. Commit the initial `Formula/developer-os.rb` to the tap by hand, rendered
@@ -17,7 +28,7 @@ name: tap
 #   2. Create `TAP_PR_TOKEN` as an Environment secret of the `tap` environment
 #      (not a repository secret) and give the environment a deployment rule that
 #      admits only `v*` tags. The token is then reachable by no other job, no
-#      other ref, and only by the final step below.
+#      other ref, and only by the final step of `push`.
 #
 # Action SHAs were read with `gh api repos/actions/<repo>/git/ref/tags/<tag>`
 # from the actions organisation's own repositories on 2026-10-08.
@@ -33,10 +44,9 @@ defaults:
     shell: bash
 
 jobs:
-  tap:
+  edit:
     runs-on: macos-15
     timeout-minutes: 10
-    environment: tap
     permissions:
       contents: read
     steps:
@@ -50,30 +60,64 @@ jobs:
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/in" --pattern SHA256SUMS
           gh api -H "Accept: application/vnd.github.raw+json" \
             "repos/${GITHUB_REPOSITORY}/contents/.github/release/update-formula.sh?ref=${GITHUB_SHA}" > "$RUNNER_TEMP/in/update-formula.sh"
-      - name: Clone the tap, edit the formula and commit
+      - name: Clone the tap and edit the formula
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
           /usr/bin/git clone --depth 1 https://github.com/msolecki/homebrew-developer-os.git "$RUNNER_TEMP/tap"
           cd "$RUNNER_TEMP/tap" || exit 1
-          /usr/bin/git checkout -b "release/${TAG}"
           /bin/bash "$RUNNER_TEMP/in/update-formula.sh" "$TAG" "$RUNNER_TEMP/in/SHA256SUMS" Formula/developer-os.rb
-          [ "$(/usr/bin/git diff --numstat)" = "$(printf '5\t5\tFormula/developer-os.rb')" ] || { echo "diff is not exactly five lines of the formula" >&2; exit 1; }
-          /usr/bin/git add Formula/developer-os.rb
-          /usr/bin/git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: formula
+          path: ${{ runner.temp }}/tap/Formula/developer-os.rb
+          if-no-files-found: error
+
+  push:
+    needs: edit
+    runs-on: macos-15
+    timeout-minutes: 10
+    environment: tap
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: formula
+          path: ${{ runner.temp }}/formula
+      - name: Clone the tap fresh, take the edited formula and commit
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
+          # Accept list, checked before anything reads the artifact: exactly one regular file.
+          artifact="$RUNNER_TEMP/formula"
+          actual=$(cd "$artifact" && find . -mindepth 1 | sed 's|^\./||')
+          [ "$actual" = "developer-os.rb" ] && [ -z "$(find "$artifact" -mindepth 1 ! -type f)" ] || { echo "unexpected formula artifact: ${actual}" >&2; exit 1; }
+          /usr/bin/git -c core.hooksPath=/dev/null clone --depth 1 https://github.com/msolecki/homebrew-developer-os.git "$RUNNER_TEMP/tap"
+          cd "$RUNNER_TEMP/tap" || exit 1
+          /usr/bin/git -c core.hooksPath=/dev/null checkout -b "release/${TAG}"
+          cp "$artifact/developer-os.rb" Formula/developer-os.rb
+          [ "$(/usr/bin/git -c core.hooksPath=/dev/null diff --numstat)" = "$(printf '5\t5\tFormula/developer-os.rb')" ] || { echo "diff is not exactly five lines of the formula" >&2; exit 1; }
+          [ "$(/usr/bin/git -c core.hooksPath=/dev/null status --porcelain)" = " M Formula/developer-os.rb" ] || { echo "the tap clone changed beyond the formula" >&2; exit 1; }
+          /usr/bin/git -c core.hooksPath=/dev/null add Formula/developer-os.rb
+          /usr/bin/git -c core.hooksPath=/dev/null -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -m "developer-os ${TAG#v}"
-      # Last step, and the only one that sees the tap token: gh and git on the
-      # already-committed clone, nothing from this repository.
+      # Last step, and the only one that sees the tap token: absolute-path gh and
+      # git on the already-committed clone, nothing from this repository.
       - name: Push the branch and open the tap pull request
         env:
           GH_TOKEN: ${{ secrets.TAP_PR_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
+          gh=/opt/homebrew/bin/gh
+          [ -x "$gh" ] || { echo "missing $gh" >&2; exit 1; }
           cd "$RUNNER_TEMP/tap" || exit 1
-          gh auth setup-git
-          /usr/bin/git push origin "release/${TAG}"
-          gh pr create --repo msolecki/homebrew-developer-os --head "release/${TAG}" \
+          /usr/bin/git -c core.hooksPath=/dev/null -c credential.helper= -c credential.helper="!$gh auth git-credential" push origin "release/${TAG}"
+          "$gh" pr create --repo msolecki/homebrew-developer-os --head "release/${TAG}" \
             --title "developer-os ${TAG#v}" \
             --body "Release ${TAG}: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
