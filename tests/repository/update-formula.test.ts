@@ -54,6 +54,9 @@ describe("update-formula.sh (A16 §2 step 7)", () => {
   it("refuses a custom def install", () => {
     refuses(good.replace('prefix.install Dir["*"]', 'system "echo hi"\n    prefix.install Dir["*"]'));
   });
+  it("refuses a revision line (spec §3.3: a 1.2.0_1 keg removes the fallback)", () => {
+    refuses(good.replace(/( {2}version "[^"]*"\n)/u, "$1  revision 1\n"));
+  });
   it("refuses a third url", () => {
     refuses(good.replace("  depends_on :macos\n", '  url "https://github.com/msolecki/developer-os/releases/download/v0.1.0/developer-os-0.1.0-darwin-arm64.tar.gz"\n  depends_on :macos\n'));
   });

@@ -42,7 +42,7 @@ count() { grep -Ec "$1" "$formula" || true; }
 [ "$(count "$shape_version")" = 1 ] && [ "$(count '^ *version ')" = 1 ] || die "formula must have exactly one version line"
 [ "$(count "$(shape_url arm64)")" = 1 ] && [ "$(count "$(shape_url x64)")" = 1 ] && [ "$(count '^ *url ')" = 2 ] || die "formula must have exactly two url lines, one per architecture"
 [ "$(count "$shape_sha")" = 2 ] && [ "$(count '^ *sha256 ')" = 2 ] || die "formula must have exactly two sha256 lines"
-[ "$(count 'resource |using:|post_install|patch |system |`|^ *require|^ *eval')" = 0 ] || die "formula carries a construct this workflow does not edit around"
+[ "$(count 'resource |using:|post_install|patch |system |`|^ *require|^ *eval|^ *revision ')" = 0 ] || die "formula carries a construct this workflow does not edit around"
 [ "$(count '^  def install$')" = 1 ] || die "formula must have exactly one def install"
 grep -A2 '^  def install$' "$formula" | sed -n 2,3p | paste -sd'|' - | grep -qx '    prefix.install Dir\["\*"\]|  end' || die "formula install block is not the expected one"
 
