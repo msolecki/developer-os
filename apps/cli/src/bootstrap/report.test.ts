@@ -200,6 +200,14 @@ describe("inspectBootstrapEvidence", () => {
     const verified = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
     expect(verified.report.ids[0]?.status).toBe("verified");
     expect(verified.retainedParentAuthorities.length).toBeGreaterThan(0);
+    /**
+     * Settled, not active: `init`'s own gated entrypoint write (Spec 2 D84 K5, NEW-163 option B)
+     * moves the manifest past the plan's handoff, so the envelope is superseded through the
+     * manifest anchor (D54). `active` therefore no longer witnesses the exact journal selection;
+     * the restore below does.
+     */
+    expect(verified.active).toBeNull();
+    expect(verified.blocksNewIntent).toBe(false);
     const target = await firstExternalRegularFile(
       await retainedTombstones(fixture.root),
       [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
@@ -207,17 +215,24 @@ describe("inspectBootstrapEvidence", () => {
     if (target === null) throw new Error("fixture retained no external-parent regular-file tombstone");
     const id = /^\.developer-os-retained\.(fi_[0-9a-f-]+)\./u.exec(basename(target))?.[1];
     if (id === undefined) throw new Error("fixture tombstone has no bootstrap ID");
-    await nodeFs.writeFile(
-      join(dirname(target), `.developer-os-retained.${id}.9999999999.tombstone`),
-      RETAINED_SECRET,
-      { mode: 0o600 },
-    );
+    const extra = join(dirname(target), `.developer-os-retained.${id}.9999999999.tombstone`);
+    await nodeFs.writeFile(extra, RETAINED_SECRET, { mode: 0o600 });
 
     const altered = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
 
     expect(altered.report.ids[0]?.status).toBe("altered");
-    expect(altered.active).not.toBeNull();
+    expect(altered.blocksNewIntent).toBe(false);
     expect(altered.retainedParentAuthorities).toStrictEqual([]);
+
+    /**
+     * The alteration touched no journal slot, so the selection stayed exact: removing the extra
+     * row alone restores the verified envelope and every authority it withheld.
+     */
+    await nodeFs.unlink(extra);
+    const restored = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+
+    expect(restored.report.ids[0]?.status).toBe("verified");
+    expect(restored.retainedParentAuthorities).toStrictEqual(verified.retainedParentAuthorities);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
@@ -494,17 +509,19 @@ describe("inspectBootstrapEvidence", () => {
      * through the total above: one call carries every retention root and row
      * parent, and no second call carries a subset of them.
      */
-    expect(arities.filter((arity) => arity > 2)).toStrictEqual([4, 470]);
+    expect(arities.filter((arity) => arity > 2)).toStrictEqual([4, 482]);
 
     /**
-     * Measured against this fixture's 233-location plan: the outer
+     * Measured against this fixture's 239-location plan: the outer
      * `initialRoots` walk (1), the plan's journal-slot walk (1), one walk per
-     * payload/created-path/foundation-participant evidence read (227),
-     * the manifest-handoff check (1) — and, until the roots/row-parents walks are
-     * grouped into one call, two more instead of one. 231 is that total with
-     * the group, whose one call carries 470 roots (233 sources, 233 tombstones,
-     * 4 row parents); it moves in lockstep with the fixture's shape, not a fixed
-     * constant, so a future change to the fixture is expected to move it too.
+     * payload/created-path/foundation-participant evidence read (233),
+     * the exact manifest-handoff check (1), the superseded-handoff check's
+     * anchor and manifest reads (2) — and, until the roots/row-parents walks
+     * are grouped into one call, two more instead of one. 239 is that total
+     * with the group, whose one call carries 482 roots (239 sources, 239
+     * tombstones, 4 row parents); it moves in lockstep with the fixture's shape
+     * and with how `init` leaves the manifest, not a fixed constant, so a future
+     * change to either is expected to move it too.
      * It was 155 against a 156-location plan until plan 1a Task 1 (2026-09-17)
      * moved D19's release layout under `state/release-metadata`: its three
      * `<hash>.json` files are three more created paths, so three more
@@ -525,8 +542,17 @@ describe("inspectBootstrapEvidence", () => {
      * reserved `state/ingest-attempts.json`: one more created path and its
      * empty-reservation payload, so 2 more locations (233; 470 roots = 233
      * sources + 233 tombstones + 4 row parents) and 2 more evidence reads.
+     * It was 231 until NEW-163 option B (316781fc, 2026-10-07, Spec 2 D84 K5):
+     * `init` now writes the entrypoint through the mutation gate after the
+     * handoff, so the exact-handoff check misses and the superseded check
+     * (D54) reads the anchor and the manifest, 2 more walks with no new
+     * location. It was 233 against 233 (470 roots) until the K2 keg fixture
+     * (50fb2c16, 2026-10-07, Spec 2 D84 K2) replaced the bundle's one
+     * `bin/developer-os` with `bin/{cli,planner,runtime,verifier}`: 3 more
+     * payloads and 3 more launchability created paths, so 6 more locations
+     * (239; 482 roots) and 6 more evidence reads.
      */
-    expect(walks).toBe(231);
+    expect(walks).toBe(239);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("looks up retained rows by key instead of scanning them per location", async () => {
