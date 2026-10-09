@@ -16,6 +16,8 @@ export {
   VENDOR_SEARCH_PATH_VARIABLE,
   vendorSearchPathOption,
 } from "./vendor-search-path.js";
+export { parseVendorHomeVariables, VENDOR_HOME_VARIABLES, VendorHomeVariableError } from "./vendor-home-variables.js";
+export type { VendorHomeVariable } from "./vendor-home-variables.js";
 export { DARWIN_SYSTEM_EXECUTABLES, inspectSystemPath, inspectSystemPathSync } from "./system-executables.js";
 export type {
   AgentDiscovery,

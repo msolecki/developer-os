@@ -7,6 +7,7 @@ const envFixture = {
   productHome: "/Users/test/.developer-os",
   brainOverride: null,
   vendorSearchPath: null,
+  vendorHomes: {},
 } as const;
 
 describe("buildLauncherEnvironment", () => {
@@ -80,6 +81,36 @@ describe("buildLauncherEnvironment", () => {
         "DEVELOPER_OS_HOME",
         "HOME",
       ]);
+    }
+  });
+
+  it("passes a valid CODEX_HOME and CLAUDE_CONFIG_DIR on unchanged (NEW-208)", () => {
+    const vendorHomes = { CODEX_HOME: "/Users/test/codex-home", CLAUDE_CONFIG_DIR: "/Users/test/claude-config" };
+    expect(buildLauncherEnvironment({ ...envFixture, vendorHomes })).toEqual({
+      HOME: "/Users/test",
+      DEVELOPER_OS_HOME: "/Users/test/.developer-os",
+      ...vendorHomes,
+    });
+  });
+
+  it("omits an absent or empty vendor home (NEW-208)", () => {
+    for (const vendorHomes of [{}, { CODEX_HOME: undefined, CLAUDE_CONFIG_DIR: undefined }, { CODEX_HOME: "", CLAUDE_CONFIG_DIR: "" }]) {
+      expect(Object.keys(buildLauncherEnvironment({ ...envFixture, vendorHomes })).sort()).toEqual(["DEVELOPER_OS_HOME", "HOME"]);
+    }
+  });
+
+  it("refuses a NUL-carrying, relative or non-canonical vendor home with exit 2 before exec (NEW-208)", () => {
+    for (const variable of ["CODEX_HOME", "CLAUDE_CONFIG_DIR"] as const) {
+      for (const raw of ["/Users/test/co\0dex", "relative/codex", "/Users/test/../codex", "/Users/test/codex/"]) {
+        try {
+          buildLauncherEnvironment({ ...envFixture, vendorHomes: { [variable]: raw } });
+          expect.unreachable(`${variable}=${raw}`);
+        } catch (error) {
+          expect(error).toBeInstanceOf(LauncherEnvironmentError);
+          expect((error as LauncherEnvironmentError).code).toBe(2);
+          expect((error as LauncherEnvironmentError).message).toContain(variable);
+        }
+      }
     }
   });
 });
