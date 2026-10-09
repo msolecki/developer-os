@@ -248,12 +248,14 @@ describe("bootstrap evidence identity on a real V2 home", () => {
   /**
    * NEW-140: a reinstalled home keeps one terminal envelope per earlier install. Each decoy here is
    * the fixture's own plan under another init ID with another published manifest hash, the shape an
-   * earlier install leaves; the decoy IDs sort on both sides of the real one.
+   * earlier install leaves; the decoy IDs sort on both sides of the real one. The hash replaced is
+   * the one the plan published (`manifest.after.hash`), which is the live manifest's only until a
+   * completed `init`'s own gated entrypoint write moves it (Spec 2 D84 K5, NEW-163 option B).
    */
   async function plantEarlierInstallPlans(fixture: CommandFixture, count: number): Promise<void> {
     const plan = await onlyPersistedPlan(fixture);
     const text = await nodeFs.readFile(join(fixture.paths.stateDir, `fresh-v2-init.${plan.id}.plan.json`), "utf8");
-    const manifestHash = createHash("sha256").update(await nodeFs.readFile(fixture.paths.manifestFile)).digest("hex");
+    const manifestHash = publishedHashOf(text);
     expect(text).toContain(manifestHash);
     const uuid = plan.id.slice("fi_".length);
     for (let index = 0; index < count; index += 1) {
@@ -293,12 +295,27 @@ describe("bootstrap evidence identity on a real V2 home", () => {
     const fixture = await createCommandFixture("bootstrap-gate-reinstalls", { bootstrapAvailable: true });
     await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const { text, uuid, manifestHash, currentHash } = await decoySource(fixture);
     const single = await admissionsOf(fixture);
 
     await plantEarlierInstallPlans(fixture, 9);
 
-    expect(single).toStrictEqual({ plans: 1, slots: 1 });
+    /**
+     * The home's own finalized plan published the bootstrap's manifest, which `init`'s gated
+     * entrypoint write has since moved (Spec 2 D84 K5, NEW-163 option B): on a completed home the
+     * gate admits no plan at all, its own included.
+     */
+    expect(currentHash).not.toBe(manifestHash);
+    expect(single).toStrictEqual({ plans: 0, slots: 0 });
     expect(await admissionsOf(fixture)).toStrictEqual(single);
+
+    /** The filter still admits the one plan that published the current manifest, and only it. */
+    await nodeFs.writeFile(
+      decoyPlanPath(fixture),
+      text.replaceAll(uuid, DECOY_UUID).replaceAll(manifestHash, currentHash),
+      { mode: 0o600 },
+    );
+    expect((await admissionsOf(fixture)).plans).toBe(single.plans + 1);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses an ordinary command over the non-terminal envelope among earlier installs' envelopes (NEW-140)", async () => {
@@ -317,19 +334,28 @@ describe("bootstrap evidence identity on a real V2 home", () => {
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   const sha256 = (bytes: string | Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+  /** The manifest hash a plan published at its handoff. */
+  function publishedHashOf(text: string): string {
+    return (JSON.parse(text) as { readonly manifest: { readonly after: { readonly hash: string } } }).manifest.after.hash;
+  }
   const DECOY_UUID = "00000000-0000-4000-8000-0000000000de";
   const OTHER_HASH = "e".repeat(64);
 
-  /** The fixture's own plan text and published manifest hash, with the plan's UUID moved to the decoy's. */
+  /**
+   * The fixture's own plan text, the manifest hash it published and the live manifest's hash. The
+   * two hashes differ on a completed home: `init`'s gated entrypoint write moves the manifest past
+   * the handoff (Spec 2 D84 K5, NEW-163 option B). They are equal on an interrupted bootstrap.
+   */
   async function decoySource(fixture: CommandFixture): Promise<{
     readonly text: string;
     readonly uuid: string;
     readonly manifestHash: string;
+    readonly currentHash: string;
   }> {
     const plan = await onlyPersistedPlan(fixture);
     const uuid = plan.id.slice("fi_".length);
     const text = await nodeFs.readFile(join(fixture.paths.stateDir, `fresh-v2-init.${plan.id}.plan.json`), "utf8");
-    return { text, uuid, manifestHash: sha256(await nodeFs.readFile(fixture.paths.manifestFile)) };
+    return { text, uuid, manifestHash: publishedHashOf(text), currentHash: sha256(await nodeFs.readFile(fixture.paths.manifestFile)) };
   }
 
   function decoyPlanPath(fixture: CommandFixture): string {
@@ -341,17 +367,19 @@ describe("bootstrap evidence identity on a real V2 home", () => {
     await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
     const single = await admissionsOf(fixture);
-    const { text, uuid, manifestHash } = await decoySource(fixture);
+    const { text, uuid, manifestHash, currentHash } = await decoySource(fixture);
     const decoy = JSON.parse(text.replaceAll(uuid, DECOY_UUID).replaceAll(manifestHash, OTHER_HASH)) as {
       manifest: { before: unknown; after: Record<string, unknown> };
     };
-    decoy.manifest.before = { ...decoy.manifest.after, hash: manifestHash };
+    decoy.manifest.before = { ...decoy.manifest.after, hash: currentHash };
     const bytes = encodeCanonicalJson(decoy as unknown as CanonicalJsonValue);
-    expect(bytes).toContain(manifestHash);
+    expect(bytes).toContain(currentHash);
     expect(decoy.manifest.after.hash).toBe(OTHER_HASH);
     await nodeFs.writeFile(decoyPlanPath(fixture), bytes, { mode: 0o600 });
 
-    expect(single).toStrictEqual({ plans: 1, slots: 1 });
+    // A completed home's own plan published a manifest `init`'s entrypoint write has moved (D84 K5).
+    expect(currentHash).not.toBe(manifestHash);
+    expect(single).toStrictEqual({ plans: 0, slots: 0 });
     expect(await admissionsOf(fixture)).toStrictEqual(single);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
@@ -400,12 +428,13 @@ describe("bootstrap evidence identity on a real V2 home", () => {
     await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
     const single = await admissionsOf(fixture);
-    const { text, uuid, manifestHash } = await decoySource(fixture);
+    const { text, uuid, manifestHash, currentHash } = await decoySource(fixture);
     await plantEarlierInstallPlans(fixture, 4);
-    const moved = text.replaceAll(uuid, DECOY_UUID);
+    const moved = text.replaceAll(uuid, DECOY_UUID).replaceAll(manifestHash, currentHash);
+    expect(moved).toContain(currentHash);
     await nodeFs.writeFile(
       decoyPlanPath(fixture),
-      moved.slice(0, moved.indexOf(manifestHash) + manifestHash.length),
+      moved.slice(0, moved.indexOf(currentHash) + currentHash.length),
       { mode: 0o600 },
     );
 
