@@ -1606,7 +1606,8 @@ the other adapter nor the CLI.
   (`apps/cli/src/instructions/active-release.ts` — `readActiveReleaseTree`), so it works after
   `brew cleanup` and `release_mismatch` does not apply. `update --apply` and
   `update rollback --apply` run that `init` once the lifecycle is finalized and the global lock is
-  released, from the newly active `<home>/bin/developer-os.mjs`, in a closed environment with a
+  released, from the newly active `<home>/bin/developer-os.mjs`, in the launcher's closed environment
+  (including `CODEX_HOME` and `CLAUDE_CONFIG_DIR` when valid, NEW-208) with a
   600-second bound (`apps/cli/src/update/refresh.ts` — `refreshActiveRelease`,
   `REFRESH_TIMEOUT_MS`). A refresh failure never reverts the swap; the command exits with K8's
   message and `doctor` warns until a later `init` succeeds.
@@ -1650,7 +1651,9 @@ the other adapter nor the CLI.
   Codex home (FLOW-UNINST-3). A set
   absolute `CODEX_HOME` that differs refuses `codex_home_mismatch`, exit 3; deselecting Codex
   removes the record. `CLAUDE_CONFIG_DIR` is never followed, and `doctor`'s `instructions` check
-  warns while it is set.
+  warns while it is set. Under the launcher both variables reach the CLI only as canonical absolute
+  paths; any other set value refuses exit 2 before exec (Spec 2 §3.1, amended 2026-10-09, NEW-208;
+  `packages/platform-macos/src/vendor-home-variables.ts` — `parseVendorHomeVariables`).
 - `apps/cli/src/bootstrap/admission.ts` — `isVendorAuthorized` is the whole external
   authorization, exact per owner and arm, refusing `.` and `..` segments. `claude`: the subtree
   `H/.claude/skills/developer-os/` (`file`, `directory`, and `instruction` content of category
