@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import * as nodeFs from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -70,6 +70,21 @@ describe("the K8 refresh process", () => {
     const active = JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, "active-release.json"), "utf8")) as { bundleManifestHash: string };
     await nodeFs.appendFile(join(fixture.paths.stateDir, "release-metadata", "bundles", `${active.bundleManifestHash}.json`), " ");
     expect(await refreshActiveRelease(fixture.context)).toBe(EXIT_CODES.recoveryRequired);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("(f2) returns exit 6 without spawning when the runtime differs from the bundle manifest", async () => {
+    const fixture = await createCommandFixture("refresh-runtime", { bootstrapAvailable: true });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, { dryRun: false, assumeYes: true })).ok).toBe(true);
+    const active = JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, "active-release.json"), "utf8")) as { bundleRoot: string };
+    const runtime = `${active.bundleRoot}/bin/runtime`;
+    const marker = join(fixture.root, "swapped-runtime-ran");
+    await nodeFs.chmod(dirname(runtime), 0o700);
+    await nodeFs.rm(runtime);
+    await nodeFs.writeFile(runtime, `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o700 });
+    await expect(refreshProcess(fixture.context)).rejects.toMatchObject({ reason: "active_release_tree_invalid", code: EXIT_CODES.recoveryRequired, paths: [runtime] });
+    expect(await refreshActiveRelease(fixture.context)).toBe(EXIT_CODES.recoveryRequired);
+    await expect(nodeFs.access(marker)).rejects.toMatchObject({ code: "ENOENT" });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("(g) refuses exit 6 when the active record's bundle root is not the derived release root", async () => {
