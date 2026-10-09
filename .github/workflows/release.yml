@@ -18,9 +18,9 @@ name: release
 # rule gates only this job's run; it does not make a write token unreachable
 # from other refs or workflows.
 #
-# Recorded residual (founder decision): cdxgen's transitive dependencies are
-# not pinned (`pnpm dlx` resolves without a lockfile; pinning needs a
-# devDependency and a lockfile change). The sbom artifact lands in its own
+# cdxgen is an exact root devDependency, so the lockfile pins its whole tree
+# (NEW-201, founder decision 2026-10-09); the job refuses if the installed
+# version differs from pins.json. The sbom artifact lands in its own
 # directory and publish accepts exactly one regular file from it, so that code
 # can affect only the SBOM file, never the tarballs or SHA256SUMS.
 on:
@@ -183,8 +183,11 @@ jobs:
       - name: SBOM
         run: |
           cdxgen=$(jq -r '.cdxgen.version' .github/release/pins.json)
+          pnpm install --frozen-lockfile --ignore-scripts
+          installed=$(jq -r '.version' node_modules/@cyclonedx/cdxgen/package.json)
+          [ "$installed" = "$cdxgen" ] || { echo "::error::cdxgen $installed is not the pinned $cdxgen"; exit 1; }
           mkdir "$RUNNER_TEMP/sbom"
-          pnpm dlx "@cyclonedx/cdxgen@${cdxgen}" -t js --no-install-deps -o "$RUNNER_TEMP/sbom/developer-os-${VERSION}.cdx.json" .
+          pnpm exec cdxgen -t js --no-install-deps -o "$RUNNER_TEMP/sbom/developer-os-${VERSION}.cdx.json" .
           jq -e '.bomFormat == "CycloneDX"' "$RUNNER_TEMP/sbom/developer-os-${VERSION}.cdx.json" > /dev/null
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

@@ -98,7 +98,9 @@ const violations = (text: string): string[] => {
   if (!preflight.includes("git merge-base --is-ancestor HEAD origin/development")) found.push("on development");
 
   // 9. Pinned cdxgen in a read-only job.
-  if (!sbom.includes('cdxgen=$(jq -r \'.cdxgen.version\' .github/release/pins.json)') || !sbom.includes('pnpm dlx "@cyclonedx/cdxgen@${cdxgen}"')) found.push("cdxgen");
+  const pinned = sbom.includes('cdxgen=$(jq -r \'.cdxgen.version\' .github/release/pins.json)') && sbom.includes('[ "$installed" = "$cdxgen" ] ||');
+  const locked = sbom.includes("pnpm install --frozen-lockfile --ignore-scripts") && sbom.includes("pnpm exec cdxgen ") && !sbom.includes("pnpm dlx");
+  if (!pinned || !locked) found.push("cdxgen");
 
   // 10. Release notes from the CHANGELOG reader.
   if (!build.includes('node tests/dist/tools/release-metadata.js notes "$VERSION" > "$RUNNER_TEMP/dist-1/notes.md"')) found.push("notes");
@@ -148,7 +150,9 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "in progress": ["check.yml run", (t) => t.replace(' and .status == "completed"', "")],
   "other commit": ["check.yml run", (t) => t.replace("select(.head_sha == $sha and ", "select(")],
   "off development": ["on development", (t) => t.replace("git merge-base --is-ancestor HEAD origin/development", "true")],
-  "cdxgen latest": ["cdxgen", (t) => t.replace('"@cyclonedx/cdxgen@${cdxgen}"', '"@cyclonedx/cdxgen@latest"')],
+  "cdxgen unlocked": ["cdxgen", (t) => t.replace("pnpm exec cdxgen ", 'pnpm dlx "@cyclonedx/cdxgen@latest" ')],
+  "cdxgen version unchecked": ["cdxgen", (t) => t.replace('[ "$installed" = "$cdxgen" ] ||', "true ||")],
+  "cdxgen lockfile ignored": ["cdxgen", (t) => t.replace("pnpm install --frozen-lockfile --ignore-scripts", "pnpm install")],
   "notes dropped": ["notes", (t) => t.replace("release-metadata.js notes", "release-metadata.js sequence")],
 };
 
