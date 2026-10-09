@@ -238,7 +238,27 @@ async function bundleFile(fixture: CommandFixture): Promise<string> {
 async function withDriftedBundleFile(fixture: CommandFixture, body: () => Promise<void>): Promise<void> {
   const path = await bundleFile(fixture);
   const bytes = await nodeFs.readFile(path);
-  await withBytesAt(path, Buffer.from(bytes.toString("utf8").replace("exit 0", "exit 1")), body);
+  const drifted = Buffer.from(bytes.toString("utf8").replace("exit 0", "exit 1"));
+  expect(drifted.equals(bytes)).toBe(false);
+  await withBytesAt(path, drifted, body);
+}
+
+/** Every `lifecycle_allocator` plan-derived source the retained bootstrap plans record. */
+async function plannedAllocatorHandoffs(fixture: CommandFixture): Promise<readonly unknown[]> {
+  const found: unknown[] = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+    } else if (typeof value === "object" && value !== null) {
+      const row = value as Record<string, unknown>;
+      if (row.role === "lifecycle_allocator") found.push(row.value);
+      Object.values(row).forEach(visit);
+    }
+  };
+  for (const name of await nodeFs.readdir(fixture.paths.stateDir)) {
+    if (name.endsWith(".plan.json")) visit(JSON.parse(await nodeFs.readFile(join(fixture.paths.stateDir, name), "utf8")));
+  }
+  return found;
 }
 
 async function withEveryRetainedTombstoneAltered(
@@ -299,7 +319,7 @@ describe("structural V2 home admission", () => {
     const fixture = await sharedInitializedV2Fixture();
     const admitted = await admit(fixture) as {
       readonly manifest: InstallationManifestV2;
-      readonly allocator: { readonly nextCounter: string };
+      readonly allocator: { readonly installNonce: string; readonly nextCounter: string };
     };
 
     expect(await inspectDrift(await driftRequestFor(fixture, admitted.manifest))).toStrictEqual([]);
@@ -307,6 +327,9 @@ describe("structural V2 home admission", () => {
      * Bootstrap hands off `nextCounter: "0"` (§6.4 step 4); since NEW-163 option B (D84 K5) `init`
      * then writes the release-independent entrypoint through the mutation gate, its one allocation.
      */
+    expect(await plannedAllocatorHandoffs(fixture)).toStrictEqual([
+      { schemaVersion: 1, installNonce: admitted.allocator.installNonce, nextCounter: "0" },
+    ]);
     expect(admitted.allocator.nextCounter).toBe("1");
     expect(admitted.manifest.artifacts.filter((row) => row.source === "generated/entrypoint")).toHaveLength(1);
     expect(await observeLifecycleActivationRecord(portFor(), fixture.paths)).toStrictEqual({ state: "absent" });
