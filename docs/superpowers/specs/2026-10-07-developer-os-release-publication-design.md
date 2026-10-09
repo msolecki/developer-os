@@ -51,11 +51,18 @@ Two founder approvals gate every release. Nothing reaches a user before both.
    fails the job.
 6. **Approval 1.** The founder reviews the draft and publishes it. Assets only get public URLs once the
    release is published.
-7. **Tap PR** (`.github/workflows/tap.yml`, `on: release: types: [published]`). It downloads the
-   published tarballs, checks them against `SHA256SUMS`, and opens a pull request in
-   `msolecki/homebrew-developer-os` that updates `Formula/developer-os.rb` (`version`, both `url`s and
-   both `sha256`s). It authenticates with `TAP_PR_TOKEN`, a fine-grained token limited to that one
-   repository with contents and pull-request write access.
+7. **Tap PR** (`.github/workflows/tap.yml`, `on: release: types: [published]`). It downloads only
+   `SHA256SUMS` from the published release, not the tarballs: the publish job already re-verified the
+   tarballs against it (step 5), and the formula needs only their hashes. Two jobs split the trust, as
+   `release.yml` does. The `edit` job (no environment, read-only token, no secret) runs
+   `.github/release/update-formula.sh` fetched at the event commit, which rewrites `version`, both
+   `url`s and both `sha256`s of the tap's existing `Formula/developer-os.rb`, and uploads only that file
+   as an artifact. The `push` job (`environment: tap`, `needs: edit`) runs no repository code: it clones
+   the tap fresh, accepts exactly that one file from the artifact, re-checks that the diff is exactly
+   five changed lines of `Formula/developer-os.rb`, and pushes and opens a pull request in
+   `msolecki/homebrew-developer-os` with absolute-path `git` (hooks disabled) and `gh`. Only that job's
+   last step sees `TAP_PR_TOKEN`, a fine-grained token limited to that one repository with contents and
+   pull-request write access.
 8. **Approval 2.** The founder merges the tap PR. That merge is the release: `brew upgrade` sees it.
 
 A failed or abandoned release is withdrawn by deleting the draft or closing the tap PR. A published but
@@ -120,8 +127,8 @@ details of §2 and §3.1:
   workflow downloads both official Node 24 `darwin` archives and passes the SHA-256 pinned in the
   repository. The packer runs `--version` only on the host-architecture binary, so any macOS runner
   works; the zstd bytes depend on the Node that runs the packer, which the workflow pins.
-- **Clean tree, no revisions.** `release.yml` never passes `--allow-dirty`; the A16 plan makes the packer
-  refuse that flag when `CI` is set (not yet implemented). The formula never uses Homebrew's `revision`: the launcher admits only
+- **Clean tree, no revisions.** `release.yml` never passes `--allow-dirty`; the packer refuses that flag
+  when `CI` is set (`tests/tools/pack-release.ts`, `assertCleanCheckout`). The formula never uses Homebrew's `revision`: the launcher admits only
   `Cellar/developer-os/<stable-semver>` kegs, so a `1.2.0_1` keg would remove the fallback. Installed
   metadata is mode `0644` and directories `0755`, which the launcher and K2 admission require.
 
