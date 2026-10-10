@@ -677,6 +677,7 @@ describe("guardStop", () => {
 
   it.each([
     ["a timeout", () => Promise.resolve({ ...OK, exitCode: null, signal: "SIGKILL" as const, timedOut: true })],
+    ["a missing exit code", () => Promise.resolve({ ...OK, exitCode: null, signal: "SIGTERM" as const })],
     ["a spawn rejection", () => Promise.reject(new Error("spawn ENOENT"))],
     ["an output overflow", () => Promise.reject(new Error("Process output exceeded capture limit"))],
   ])("allows with a note on %s", async (_name, respond) => {

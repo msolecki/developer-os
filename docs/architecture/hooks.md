@@ -441,8 +441,8 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   (NEW-194). Otherwise a non-zero exit is `block` (`typecheck`) with the first 40 non-empty lines;
   a timeout, a missing exit code or a spawn failure is `allow`. `tsc` may write `.tsbuildinfo`
   files (the default name beside each config, under its `outDir`, or its `tsBuildInfoFile`): the
-  verb removes those inside the root that did not exist before the run, and a failed removal is
-  `allow` with a note.
+  verb removes those inside the root that did not exist before the run. A failed removal turns a
+  passing run into `allow` with the note `build-info cleanup failed`; a failing run still blocks.
 - **`format`.** Uses `biome format --write` when `biome.json` or `biome.jsonc` exists, else
   `prettier --write` when a file in `PRETTIER_CONFIG_FILES` exists (a `package.json` key does not
   count). One run covers every edited file that exists inside the root and passes
