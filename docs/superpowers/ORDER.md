@@ -25,8 +25,6 @@ Kickstarted on 2026-10-07: `brain-reindex` exited 0, then `brain-garden` ran Cla
    window.
 3. **Reinstall, then `brain reindex`** (BRAIN-5 changed the `occurrences` default), **then the NEW-116
    re-run** (D86 (5)): `ingest` on the 31 refused captures, and report the counts.
-4. **Add a permission rule for NEW-183** to the founder's settings (the auto-mode classifier blocked the
-   items the founder approved on 2026-10-06; see below).
 
 ## Founder stop points
 
@@ -38,9 +36,8 @@ Each is executable from the document named; none is agent work.
 3. NEW-75's Codex half: its credential path supplied separately and one real authenticated
    `ingest --agent codex` (credits, after 2026-10-22).
 4. Reinstall, `brain reindex`, then the NEW-116 re-run of `ingest` on the 31 refused captures (D86 (5)).
-5. NEW-183: add the permission rule (founder action) so an agent can do the approved items.
-6. NEW-169's host kickstart check on the disposable gate account (`BACKLOG.md` NEW-169).
-7. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
+5. NEW-169's host kickstart check on the disposable gate account (`BACKLOG.md` NEW-169).
+6. Observations: NEW-45 (one paid Codex run), NEW-42 (capture inside both vendors' TUIs), NEW-7
    (percent-encoded links in Obsidian).
 
 Open sequence (D16, daily use before completeness): A15 on its own clock and the stop points beside
@@ -75,12 +72,8 @@ Waiting on a founder observation: NEW-193 (4), the Codex `subagents` witness, af
 Wave 4 (P3, 2026-10-07) is integrated: NEW-176..NEW-181, NEW-184..NEW-192 and the done items of NEW-183
 (D87, D88). The full fake-codex e2e of NEW-190 is deferred to Task 11b/A16 with no row.
 
-Blocked on a founder action:
-
-- NEW-183 (remainder: SEC-1 `inheritedFds` and its stale FD-3 comment, DEAD-6/SEC-2/SEC-6 unused
-  exports, SEC-5 the `resolveOwnedPath` docstring, FLOW-UPD-6). The founder approved them on 2026-10-06;
-  the auto-mode permission classifier blocks them until a permission rule is added to the founder's
-  settings.
+NEW-183's remainder is integrated (2026-10-10, reviewed READY). Awaiting a founder decision: NEW-212
+(delete or keep `GitSyncPlanV1` and `SecurityPolicy`, the review's two leftovers).
 
 Waves 2-3 of the 2026-10-05 audit are integrated (2026-10-06, D86): NEW-131, NEW-141, NEW-142, NEW-146,
 NEW-53 and NEW-147..NEW-175 except NEW-163, NEW-169 (half), NEW-171.
@@ -119,7 +112,7 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 ## Count
 
 - Product sequence: 2 open entries — A15 (steps 16, 19), A16 (Task 11, with L1, L2); A11b closed (D98).
-- Founder stop points: 7, listed above.
-- Startable rows: 1 (NEW-132); NEW-193 (4) waits for Codex after 2026-10-22. Founder action: NEW-183 (permission
-  rule). Awaiting founder numbers: NEW-116.
+- Founder stop points: 6, listed above.
+- Startable rows: 1 (NEW-132); NEW-193 (4) waits for Codex after 2026-10-22. Founder decision: NEW-212.
+  Awaiting founder numbers: NEW-116.
 - Repository backlog: 32 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.

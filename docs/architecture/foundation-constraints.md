@@ -44,9 +44,9 @@ execution envelopes, closes `config get/set` key/value/result/redaction-output g
 enable the sole publisher of a new `.git`; every sync uses bounded object/index/reflog/ref effects.
 Required source/destination reflogs are exact staged CAS postimages, generated Git-config paths reject
 controls/line breaks, and the in-process pack reader has explicit compressed/object/inflation/delta/
-RAM/temp/deadline budgets. On an admitted `/bin/launchctl` (D71), Launchd bootstrap inherits as FD 3 only the
-descriptor of the already-unlinked, immutable private snapshot; the real source plist descriptor is
-never inherited and there is no pathname fallback. Runner admission first authenticates installed manifest/plist/
+RAM/temp/deadline budgets. On an admitted `/bin/launchctl` (D71), launchd bootstrap reads the
+installed plist by path and the child inherits no descriptor beyond stdio (D82, 2026-10-03; the FD 3
+snapshot handoff and the `inheritedFds` spawn field are deleted, NEW-183). Runner admission first authenticates installed manifest/plist/
 generation evidence, then decides active handler versus inert `automation_disabled` status under its
 lease/global lock. Fresh absent-manifest uninstall inventories the complete product home and admits
 only exact empty/key-only shapes before touching the redaction key.
