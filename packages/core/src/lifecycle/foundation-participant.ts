@@ -248,7 +248,7 @@ export class FoundationParticipantExecutor {
     for (const mutation of ref.mutations) {
       const stagedPath = mutation.stagedPath;
       if (stagedPath === null) continue;
-      await unlinkStagedBlob(fs, stagedPath);
+      if (!(await unlinkStagedBlob(fs, stagedPath))) continue;
       await syncDirectoryAt(this.dependencies.fs, lifecycleParentPath(stagedPath));
       await this.dependencies.afterBoundary?.("staged_blob_unlinked");
     }
