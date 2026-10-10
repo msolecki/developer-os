@@ -7,6 +7,7 @@ import {
   admitTargetUpdateDraft,
   decodePlannerInput,
   encodePlannerOutput,
+  gitScopeFingerprint,
   PLANNER_WIRE_BOUNDS_V1,
   plannerBlobSetHash,
   plannerJsonBytes,
@@ -92,6 +93,18 @@ function requestWithBrain(path: string, note: Uint8Array, aliases: Record<string
     config: { ...(value.config as object), brain: { schemaVersion: 1, contentRoot: "notes", topicFolders: [], topicAliases: aliases, indexesDir: "indexes", retrieval: { maxCandidates: 20 }, staleness: { reviewAfterDays: 90 } } },
     brain: { schemaVersion: 1, root: "brain_root", folderPolicyVersion: 1, entries: [{ path, mode: 384, bytes: note.byteLength, sha256: sha(note), blob: ref }], aggregateBytes: note.byteLength },
   });
+}
+
+/** Git sync enabled with a full lifecycle record, its scope fingerprint the real digest. */
+function requestWithGit(declaredUrl: string): UpdatePlannerRequestV1 {
+  const value = requestValue();
+  const scope = { brainPath: "/Users/admin/gate-brain", contentRoot: "notes", topicFolders: ["clients"], topicAliases: { work: "clients" }, indexesDir: "indexes" };
+  const lifecycle = {
+    schemaVersion: 1, repositoryRoot: "/Users/admin/gate-brain", branch: "main",
+    remote: { name: "developer-os", transport: "https", declaredUrl, effectivePushUrl: declaredUrl },
+    scope: { ...scope, fingerprint: gitScopeFingerprint(scope as unknown as Parameters<typeof gitScopeFingerprint>[0]) },
+  };
+  return validateUpdatePlannerRequest({ ...value, config: { ...(value.config as object), git: { enabled: true, lifecycle } } });
 }
 
 function draft(outputBytes = nextBytes.byteLength, source = "tools/tool.md", base: UpdatePlannerRequestV1 = request()): TargetUpdateDraftV1 {
@@ -339,6 +352,28 @@ describe("target planner supervision", () => {
       const { supervisor, spawned } = harness(answer(validOutput), undefined, real());
       await expect(supervisor.run(run({ request: requestWithBrain(path, blob, aliases), inputBlobs: [toolBytes, blob] }))).rejects.toThrow("secret screen");
       expect(spawned).toHaveLength(0);
+    });
+
+    it("passes a full Git lifecycle whose scope fingerprint is a real digest", async () => {
+      const gitRequest = requestWithGit("https://github.com/acme/brain.git");
+      expect(gitRequest.config.git.lifecycle?.scope.fingerprint).toMatch(/^[0-9a-f]{64}$/u);
+      const { supervisor } = harness(answer(validOutput), undefined, real());
+      await expect(supervisor.run(run({ request: gitRequest }))).resolves.toBeDefined();
+    });
+
+    it("refuses a prefix-less token in a remote URL path segment as the Git configuration", async () => {
+      const { supervisor, spawned } = harness(answer(validOutput), undefined, real());
+      await expect(supervisor.run(run({ request: requestWithGit(`https://github.com/acme/${token40()}.git`) }))).rejects.toThrow("Planner frame failed the secret screen: the Git configuration");
+      expect(spawned).toHaveLength(0);
+    });
+
+    it("names the category, never the value", async () => {
+      const secret = token40();
+      const { supervisor } = harness(answer(validOutput), undefined, real());
+      const error = await supervisor.run(run({ request: requestWithBrain(`notes/${secret}.md`, note), inputBlobs: [toolBytes, note] })).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(SecurityRefusalError);
+      expect((error as Error).message).toBe("Planner frame failed the secret screen: a Brain note path");
+      expect((error as Error).message).not.toContain(secret);
     });
 
     it("passes a Brain note and its configuration with nothing secret-shaped", async () => {
