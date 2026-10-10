@@ -19,6 +19,7 @@ import {
   admitLifecycleFoundationInitialJournal,
   recoverTransaction,
   TransactionBackupRetentionError,
+  TransactionConflictError,
   TransactionExecutor,
   TransactionPlanError,
   TransactionPreconditionError,
@@ -1904,6 +1905,26 @@ describe('TransactionExecutor durable recovery', () => {
       await expectBytes(replacePath, NEW_BYTES);
       await expectMissing(removePath);
       expect(unlinkCalls).toContain(removePath);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it('refuses a symlink target leaf before any write, leaving the link and its target intact (AUD-012)', async () => {
+    const fixture = await createFixture('symlink-leaf');
+    const realPath = join(fixture.workspaceDir, 'real.bin');
+    const linkPath = join(fixture.workspaceDir, 'link.bin');
+
+    try {
+      await installOriginal(realPath);
+      await nodeFs.symlink(realPath, linkPath);
+
+      await expect(
+        createExecutor(fixture).execute(replacePlan(linkPath)),
+      ).rejects.toBeInstanceOf(TransactionConflictError);
+
+      expect((await nodeFs.lstat(linkPath)).isSymbolicLink()).toBe(true);
+      await expectBytes(realPath, ORIGINAL_BYTES);
     } finally {
       await removeFixture(fixture);
     }

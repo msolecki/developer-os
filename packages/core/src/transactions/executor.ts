@@ -2276,9 +2276,10 @@ export class TransactionExecutor {
        * identity-free stat: mode and times only, never `dev`/`ino`.
        * `BigIntStats.atimeMs` and `.mtimeMs` are whole milliseconds, while
        * `Stats` keeps the sub-millisecond fraction that this backup metadata is
-       * compared against on rollback (`verifyOriginal`).
+       * compared against on rollback (`verifyOriginal`). `lstat`, so a symlink leaf is refused
+       * rather than snapshotted through and then replaced by a regular file (AUD-012).
        */
-      const stats = await this.dependencies.fs.stat(targetPath);
+      const stats = await this.dependencies.fs.lstat(targetPath);
       if (!stats.isFile()) throw new TransactionConflictError();
       const bytes = await this.dependencies.fs.readFile(targetPath);
       return {
