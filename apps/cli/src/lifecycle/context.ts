@@ -7,7 +7,6 @@
 import { randomUUID } from "node:crypto";
 import {
   chmod,
-  link,
   lstat,
   mkdir,
   open,
@@ -15,7 +14,6 @@ import {
   rename,
   stat,
   unlink,
-  utimes,
 } from "node:fs/promises";
 
 import {
@@ -180,7 +178,6 @@ export function uninstallResidueFrom(evidence: LifecycleResidueEvidenceV1): Life
 
 const NODE_TRANSACTION_FILE_SYSTEM = {
   chmod,
-  link,
   lstat,
   mkdir,
   open,
@@ -188,7 +185,6 @@ const NODE_TRANSACTION_FILE_SYSTEM = {
   rename,
   stat,
   unlink,
-  utimes,
 };
 
 export function createLifecycleContext(input: {
