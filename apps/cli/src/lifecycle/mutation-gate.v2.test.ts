@@ -366,6 +366,7 @@ function syntheticUninstallPlan(
       dev: DEV,
       ino: INO,
     },
+    payloads: [],
   };
 
   return {

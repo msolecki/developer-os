@@ -236,6 +236,7 @@ export function syntheticUninstall(
       dev: DEV,
       ino: INO,
     },
+    payloads: [],
   };
 
   const synthetic: SyntheticUninstallV1 = {

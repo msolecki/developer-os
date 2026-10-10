@@ -146,6 +146,7 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
   "apps/cli/src/update/rollback-publication.ts",
   "apps/cli/src/update/recovery.ts",
   "apps/cli/src/update/foundation-port.ts",
+  "apps/cli/src/lifecycle/uninstall-payloads.ts",
   "apps/launcher/src/readers.ts",
 ];
 
