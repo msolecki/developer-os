@@ -544,6 +544,20 @@ describe("FoundationParticipantExecutor.observe and discardUnstarted", () => {
     expect([...(await nodeFs.readFile(home.configPath))]).toStrictEqual([...PREIMAGE_BYTES]);
   });
 
+  it("repeats after a death that already removed the participant's staging directory (AUD-011)", async () => {
+    const home = await nodeLifecycleHome("participant-discard-repeat");
+    await installPreimage(home.configPath);
+    const ref = await home.participants.stage(forwardConfigInput(home));
+    await home.participants.discardUnstarted(ref);
+    await nodeFs.rmdir(join(home.roots.foundationStaging, FORWARD_ID));
+
+    const recorder = home.boundaryRecorder();
+    await recorder.participants.discardUnstarted(ref);
+
+    expect(recorder.boundaries).toStrictEqual([]);
+    expect([...(await nodeFs.readFile(home.configPath))]).toStrictEqual([...PREIMAGE_BYTES]);
+  });
+
   it("refuses to discard once a mutation target has left its recorded preimage", async () => {
     const home = await nodeLifecycleHome("participant-discard-drift");
     await installPreimage(home.configPath);
