@@ -959,6 +959,19 @@ nothing else re-checks:** `brainPath` is a canonical absolute path from the file
 `assertRootsAnchored` where `init` does — so a hand-edited vault path outside the home is refused by
 one command and accepted by the other. That is `brain.md` §4 residual 5, owned by DOS-P7.
 
+**Runtime paths are resolved, not admitted (AUD-015).** `resolveRuntimePaths` resolves
+`DEVELOPER_OS_HOME`, `DEVELOPER_OS_BRAIN` and `brainPath` with `path.resolve`, so a trailing slash,
+`.` or `..` reaches no consumer, but it does not check the rest of the `CanonicalAbsolutePathV1`
+grammar. A decomposed (NFD) home is the ordinary macOS case it lets through, by design:
+`productionLifecycleContext` leaves the lifecycle capability absent for it instead of failing, and
+`status` and `doctor` still build a manifest admission for it, because a V1 manifest ignores that
+admission. The admissions therefore keep their `as CanonicalAbsolutePathV1` casts
+(`apps/cli/src/lifecycle/manifest-admission.ts` — `manifestAdmissionFor`,
+`apps/cli/src/commands/doctor.ts` — `manifestAdmission`); parsing there would throw both commands out
+on that home.
+Pinned by `apps/cli/src/context.test.ts` → "leaves the lifecycle capability absent, rather than
+failing, on a decomposed product home" and `apps/cli/src/lifecycle/manifest-admission.test.ts`.
+
 ### 5.13 The lifecycle kernel's mutation gate and global lock (Spec 1a)
 
 Plan 1a shipped the gate every V2 Foundation mutation passes through and the lock it runs under.
