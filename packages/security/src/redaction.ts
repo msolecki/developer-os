@@ -583,6 +583,15 @@ export function createRedactor(
   return (text: string, scope?: RedactionScope) => redactText(text, key, options, scope);
 }
 
+/**
+ * AUD-007: the shell (`export`, `setenv`), compose-list (`- `), YAML (`NAME:`) and JSON
+ * (`"NAME": "v"`, anywhere on the line, so only its value) spellings of one env-secret name.
+ */
+const ENV_SECRET_NAME = String.raw`[A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASS|API_KEY|PRIVATE_KEY|ACCESS_KEY)[A-Za-z0-9_]*`;
+const ENV_SECRET_ASSIGNMENT = new RegExp(String.raw`(?:^|[\r\n])\s*(?:(?:export|-)[ \t]+)?["']?${ENV_SECRET_NAME}["']?\s*[:=]\s*([^\r\n]+)`, "gu");
+const ENV_SECRET_SETENV = new RegExp(String.raw`(?:^|[\r\n])\s*setenv[ \t]+${ENV_SECRET_NAME}[ \t]+([^\r\n]+)`, "gu");
+const ENV_SECRET_QUOTED_KEY = new RegExp(String.raw`["']${ENV_SECRET_NAME}["']\s*:\s*("(?:[^"\\\r\n]|\\.)*"|'[^'\r\n]*'|[^\s,}\]]+)`, "gu");
+
 export function redactText(
   text: string,
   key: Uint8Array,
@@ -618,14 +627,28 @@ export function redactText(
   );
   addCapturedMatches(
     normalizedText,
-    /(?:^|[\r\n])\s*[A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASS|API_KEY|PRIVATE_KEY|ACCESS_KEY)[A-Za-z0-9_]*\s*=\s*([^\r\n]+)/gu,
+    ENV_SECRET_ASSIGNMENT,
     "env-secret",
     1,
     candidates,
   );
   addCapturedMatches(
     normalizedText,
-    /Authorization\s*:\s*Bearer\s+([A-Za-z0-9._~+/=-]+)/giu,
+    ENV_SECRET_SETENV,
+    "env-secret",
+    1,
+    candidates,
+  );
+  addCapturedMatches(
+    normalizedText,
+    ENV_SECRET_QUOTED_KEY,
+    "env-secret",
+    1,
+    candidates,
+  );
+  addCapturedMatches(
+    normalizedText,
+    /Authorization["']?\s*:\s*["']?(?:Bearer|Basic)\s+([A-Za-z0-9._~+/=-]+)/giu,
     "bearer-token",
     1,
     candidates,
@@ -688,6 +711,14 @@ export function redactText(
   addCapturedMatches(
     normalizedText,
     /(?:aws_secret_access_key|aws_session_token|_authToken|_auth|_password)\s*[:=]\s*(\S+)/giu,
+    "credential-store",
+    1,
+    candidates,
+  );
+  /** AUD-007: the password of `scheme://user:password@host`; a user with no password has none. */
+  addCapturedMatches(
+    normalizedText,
+    /\b[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s/:@]+:([^\s/@]+)@/gu,
     "credential-store",
     1,
     candidates,

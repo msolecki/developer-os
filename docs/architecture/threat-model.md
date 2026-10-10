@@ -184,7 +184,7 @@ watched-failure demonstration, §8 is what says so.
 | Raw text is never persisted, hashed, logged or sent to a model | `redactAndNormalize` redacts, then normalizes, then hashes, in one function that cannot be reordered from outside (`packages/brain/src/capture/build.ts:179-196`); `buildCapture` calls it before anything else exists (`:216-220`) | `tests/security/sentinel.test.ts` — `keeps the sentinel out of the capture file`, `the model input`, `the staging directory`, `every validator report`, `the canonical note` |
 | The pre-redaction bound measures and nothing else | `resolveText` takes a byte length and refuses; the text is not logged, hashed or echoed into any refusal (`apps/cli/src/commands/capture.ts:348-380`) | the same suite's per-artifact sweep |
 | The capture id derives from redacted content, so two texts differing only by a secret are one capture | `captureId` is the first 16 hex of the hash over the redacted, normalized content (`packages/brain/src/capture/build.ts:221`) | `tests/security/sentinel.test.ts` — `keeps the sentinel out of the deduplication hash` **(§8: no watched failure)** |
-| A fingerprint identifies a secret without carrying it | HMAC-SHA256 under the install's key, truncated to 16 hex (`createHmac`, `packages/security/src/redaction.ts:530-535`); the key must be at least 32 bytes or `redactText` throws (`packages/security/src/redaction.ts:586-594`) | `packages/security/src/redaction.test.ts` |
+| A fingerprint identifies a secret without carrying it | HMAC-SHA256 under the install's key, truncated to 16 hex (`createHmac`, `packages/security/src/redaction.ts:530-535`); the key must be at least 32 bytes or `redactText` throws (`packages/security/src/redaction.ts` — `redactText`) | `packages/security/src/redaction.test.ts` |
 | A pathological PEM marker cannot make redaction superlinear | the PEM body is bounded at 8,000 characters, chosen by measurement rather than for being finite (`packages/security/src/redaction.ts:356-376`) | `packages/security/src/redaction.test.ts` |
 | Quarantine is created private | `mkdir` with mode `0o700` (`apps/cli/src/commands/quarantine.ts:293`) | — |
 
@@ -584,6 +584,18 @@ of one-case word parts after a letter, with at least one part of four or more le
 (`xsk-bake-tor-vil-mun-pek`), stays exempt as a kebab-case word. No real key shape takes that
 path: 0 of 600,000 random `sk-proj-`, `sk-ant-api03-` and legacy base62 bodies pass `isKebabSlug`,
 so only a hand-built string does.
+
+**AUD-007 widened three classes without adding one.** `env-secret` now also reads `export NAME=v`,
+`setenv NAME v`, a compose list item `- NAME=v`, a YAML `NAME: v` and a quoted JSON key
+`"NAME": "v"` anywhere on a line (only the value, so the rest of a one-line object survives);
+`bearer-token` reads `Authorization: Basic` and a quoted header name or value; `credential-store`
+reads the password of `scheme://user:password@host` (`packages/security/src/redaction.ts` —
+`ENV_SECRET_QUOTED_KEY`). `export default …`, `the token is valid`, `git@host:repo` and a URL with a
+user and no password stay unchanged. Pinned by `redaction.test.ts` → "env-secret, Authorization and
+URL userinfo spellings (AUD-007)". **Accepted residuals:** the name stays upper-case-suffixed, so a
+lower-case JSON or YAML key (`"password": "v"`, `api_token: v`) is not `env-secret`; `curl -u
+user:password` has no class; and an unlabelled value under the high-entropy class's 40-character run
+floor stays in the clear.
 
 ### 5.8 The redaction key — the product's first secret at rest
 

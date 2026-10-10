@@ -440,6 +440,41 @@ describe("redactText", () => {
     });
   });
 
+  describe("env-secret, Authorization and URL userinfo spellings (AUD-007)", () => {
+    it.each([
+      ["export", "export API_TOKEN=s3cr3t-value", "s3cr3t-value", "env-secret"],
+      ["setenv", "setenv API_TOKEN s3cr3t-value", "s3cr3t-value", "env-secret"],
+      ["a YAML list item", "  - DB_PASSWORD=s3cr3t-value", "s3cr3t-value", "env-secret"],
+      ["a YAML key", "DB_PASSWORD: s3cr3t-value", "s3cr3t-value", "env-secret"],
+      ["a JSON key", '{"API_TOKEN": "s3cr3t-value", "region": "eu"}', "s3cr3t-value", "env-secret"],
+      ["Authorization Basic", "Authorization: Basic dXNlcjpzM2NyM3Q=", "dXNlcjpzM2NyM3Q=", "bearer-token"],
+      ["a quoted Authorization header", '-H "Authorization: Bearer s3cr3t.value"', "s3cr3t.value", "bearer-token"],
+      ["a JSON Authorization header", '{"Authorization": "Bearer s3cr3t.value"}', "s3cr3t.value", "bearer-token"],
+      ["URL userinfo", "postgres://admin:s3cr3t-value@db.example.com:5432/app", "s3cr3t-value", "credential-store"],
+    ])("redacts the value in %s", (_name, input, secret, expectedClass) => {
+      const result = redactText(input, deterministicKey);
+      expect(result.text).not.toContain(secret);
+      expect(result.findings.map((finding) => finding.class)).toContain(expectedClass);
+    });
+
+    it("keeps the region after a JSON secret", () => {
+      expect(redactText('{"API_TOKEN": "s3cr3t-value", "region": "eu"}', deterministicKey).text).toBe(
+        '{"API_TOKEN": [REDACTED:env-secret], "region": "eu"}',
+      );
+    });
+
+    it.each([
+      "export default function main() {}",
+      "the token is valid",
+      "git@github.com:org/repo.git",
+      "https://user@example.com/path",
+      "https://example.com:8443/path?a=b",
+      "Authorization: required for every call",
+    ])("leaves %s unchanged", (input) => {
+      expect(redactText(input, deterministicKey)).toStrictEqual({ text: input, findings: [] });
+    });
+  });
+
   describe("certificate", () => {
     it("redacts a PEM certificate block, which the private-key pattern does not match", () => {
       const source = `-----BEGIN CERTIFICATE-----\nQUJDREVGR0g=\n-----END CERTIFICATE-----`;
