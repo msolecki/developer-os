@@ -253,6 +253,10 @@ interface WorldOptionsV1 {
   readonly failFoundationRollback?: boolean;
   readonly pushOutcome?: "succeeded" | "failed";
   readonly stepHooks?: LifecycleParticipantAdaptersV1<SyntheticPlan>["stepHooks"];
+  /** Rewraps the world's adapters after `failAt`, for a test that needs a custom arm. */
+  readonly wrapAdapters?: (
+    adapters: LifecycleParticipantAdaptersV1<SyntheticPlan>,
+  ) => LifecycleParticipantAdaptersV1<SyntheticPlan>;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -736,10 +740,11 @@ async function syntheticWorld(
       applyFailure.applied = false;
       applyFailure.rollback = worldOptions.failFoundationRollback === true;
     }
-    const wrapped: LifecycleParticipantAdaptersV1<SyntheticPlan> =
+    const failed: LifecycleParticipantAdaptersV1<SyntheticPlan> =
       failing === undefined
         ? adapters
         : failingAdapters(adapters, failing, steps);
+    const wrapped = worldOptions.wrapAdapters?.(failed) ?? failed;
     return {
       store,
       fs,
@@ -1041,6 +1046,40 @@ describe("compensation order", () => {
       "P^-1",
       "F(uninstall_marker)^-1",
     ]);
+    expect(world.unjournaledMutations()).toStrictEqual([]);
+  }, 120_000);
+
+  it("restores the current `K(stage)` even when observe still reads `before` (NEW-210)", async () => {
+    // `K(stage)` moves one payload and dies while a later source still sits in place, so observe
+    // aggregates to `before`; only `restore` brings the moved payload back.
+    const world = await syntheticWorld("uninstall/present_manifest_without_launchd");
+    const moved = { value: false };
+    const { outcome } = await world.execute({
+      wrapAdapters: (adapters) => {
+        const key = adapters.redactionKey;
+        if (key === null) throw new Error("fixture lost its K arm");
+        return {
+          ...adapters,
+          redactionKey: {
+            ...key,
+            stage: () => {
+              moved.value = true;
+              return Promise.reject(new SyntheticDeath("K(stage) after one payload"));
+            },
+            observe: () => Promise.resolve("before"),
+            restore: async (plan) => {
+              await key.restore(plan);
+              moved.value = false;
+            },
+          },
+        };
+      },
+    });
+
+    expect(outcome.kind).toBe("rolled_back");
+    expect(moved.value).toBe(false);
+    expect(world.compensationOrder()).toStrictEqual(["F(uninstall_artifacts)^-1", "F(uninstall_marker)^-1"]);
+    expect(await world.terminalState()).toStrictEqual(await world.expectedAfter(false));
     expect(world.unjournaledMutations()).toStrictEqual([]);
   }, 120_000);
 

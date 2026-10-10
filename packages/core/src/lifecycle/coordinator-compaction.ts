@@ -191,6 +191,8 @@ async function removeCoordinatorStaging<TPlan extends CoordinatorPlan>(
     manifestStaging,
     participants,
     foundationStaging,
+    // NEW-210: `K` empties `payloads` before the terminal phase; a non-empty one refuses and stays.
+    childOf(coordinatorStaging, "payloads"),
     coordinatorStaging,
   ];
   for (const path of directories) {

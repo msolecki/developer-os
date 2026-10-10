@@ -675,9 +675,9 @@ export class LifecycleCoordinator<TPlan extends CoordinatorPlan> {
         if (key === null) {
           refuseLifecycleRecovery("lifecycle_coordinator_key_arm", plan.authority.productHome);
         }
-        if (step.transition === "stage" && (await key.observe(plan)) === "staged") {
-          await key.restore(plan);
-        }
+        // A torn `K(stage)` may have moved some payloads while a later source still sits in place,
+        // so observe reads `before`; `restore` is idempotent and brings back whatever moved.
+        if (step.transition === "stage") await key.restore(plan);
         return "hold";
       }
       case "network_push":

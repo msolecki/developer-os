@@ -522,6 +522,36 @@ describe("terminal coordinator compaction", () => {
     }
   }, 300_000);
 
+  it("removes an empty uninstall `payloads` directory with the coordinator staging (NEW-210)", async () => {
+    const world = await uninstallWorld("compaction-payloads-empty");
+    await world.execute();
+    await nodeFs.mkdir(join(world.home, "staging", "lifecycle", world.plan.id, "payloads"), {
+      recursive: true,
+      mode: 0o700,
+    });
+    const record = await terminalRecord(world);
+
+    await compactTerminalCoordinator(world.dependencies(), record, world.global);
+
+    expect(await world.exists(`staging/lifecycle/${world.plan.id}`)).toBe(false);
+    await expectFullyCollected(world);
+  }, 120_000);
+
+  it("refuses a non-empty `payloads` directory and preserves the payload (NEW-210)", async () => {
+    const world = await uninstallWorld("compaction-payloads-full");
+    await world.execute();
+    const payloads = join(world.home, "staging", "lifecycle", world.plan.id, "payloads");
+    await nodeFs.mkdir(payloads, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(join(payloads, "0"), "payload\n", { mode: 0o600 });
+    const record = await terminalRecord(world);
+
+    await expect(compactTerminalCoordinator(world.dependencies(), record, world.global)).rejects.toThrow(
+      expect.objectContaining({ reason: "lifecycle_guarded_not_empty" }),
+    );
+
+    expect(await nodeFs.readFile(join(payloads, "0"), "utf8")).toBe("payload\n");
+  }, 120_000);
+
   it("refuses a coordinator whose journal is not terminal and changes nothing", async () => {
     const world = await uninstallWorld("compaction-non-terminal");
     const record = await terminalRecord(world);
