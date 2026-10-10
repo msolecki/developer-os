@@ -820,6 +820,18 @@ function observationOf(
   return { kind: "other" };
 }
 
+/** W2-UNINST-3: the leaves an uninstall collects outside its artifact steps; `removed` lists those it found and left absent. */
+export function uninstallCollectedLeaves(productHome: CanonicalAbsolutePathV1, manifestPath: CanonicalAbsolutePathV1): readonly CanonicalAbsolutePathV1[] {
+  return [
+    stateLeaf(productHome, MARKER_LEAF),
+    manifestPath,
+    stateLeaf(productHome, ALLOCATOR_LEAF),
+    stateLeaf(productHome, NONCE_LEAF),
+    hookFiringRecordsPath(productHome),
+    codexIngestHomePath(productHome),
+  ];
+}
+
 export function hookFiringRecordsPath(productHome: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
   return canonical(`${productHome}/${HOOK_FIRING_RECORDS_RELATIVE_PATH}`);
 }
@@ -1849,14 +1861,7 @@ export class LifecycleUninstaller {
        * directory are not in it.
        */
       const collected: string[] = [];
-      for (const leaf of [
-        inputs.markerPreimage.targetPath,
-        inputs.manifestPath,
-        stateLeaf(productHome, ALLOCATOR_LEAF),
-        stateLeaf(productHome, NONCE_LEAF),
-        hookFiringRecordsPath(productHome),
-        codexIngestHomePath(productHome),
-      ]) {
+      for (const leaf of uninstallCollectedLeaves(productHome, inputs.manifestPath)) {
         if (preview.removable.includes(leaf) && (await guardedEntry(lifecycle.fs, leaf)) === null) collected.push(leaf);
       }
       const removed = [

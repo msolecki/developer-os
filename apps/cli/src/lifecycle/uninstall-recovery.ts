@@ -42,6 +42,7 @@ import {
   createUninstallAdapters,
   createUninstallParticipants,
   releaseUninstallHolds,
+  uninstallCollectedLeaves,
 } from "./uninstall.js";
 import type { LifecycleUninstallRequestV1, UninstallHoldsV1 } from "./uninstall.js";
 
@@ -80,6 +81,15 @@ function guardedEntry(
   path: CanonicalAbsolutePathV1,
 ): Promise<LifecycleGuardedEntryV1 | null> {
   return fs.lstat(path);
+}
+
+async function presentOf(
+  lifecycle: CliLifecycleContext,
+  paths: readonly CanonicalAbsolutePathV1[],
+): Promise<CanonicalAbsolutePathV1[]> {
+  const present: CanonicalAbsolutePathV1[] = [];
+  for (const path of paths) if ((await guardedEntry(lifecycle.fs, path)) !== null) present.push(path);
+  return present;
 }
 
 function stateLeaf(paths: RuntimePaths, leaf: string): CanonicalAbsolutePathV1 {
@@ -402,6 +412,11 @@ async function resumeUninstall(
     if (readmitted === null || readmitted.id !== dispatch.id) {
       refuse("uninstall_recovery_arm_moved", paths.home);
     }
+    const leaves = uninstallCollectedLeaves(
+      parseCanonicalAbsolutePathText(paths.home),
+      parseCanonicalAbsolutePathText(paths.manifestFile),
+    );
+    const presentBefore = await presentOf(lifecycle, leaves);
     const recovered = await lifecycle
       .recovery(
         dispatch.key,
@@ -422,6 +437,9 @@ async function resumeUninstall(
     // identity-free stat, the rule `anchorCommitted` applies: no regular manifest, no installation.
     if ((await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(paths.manifestFile)))?.kind !== "regular_file") {
       await removeManifestAnchorOrWarn(lifecycle.fs, paths.home, lifecycle.effectiveUid, (text) => { context.io.stderr(text); });
+      // AUD-058: what this resume removed, as the main path reports it; the artifact steps finished before it was admitted.
+      const presentAfter = await presentOf(lifecycle, presentBefore);
+      removed.push(...presentBefore.filter((leaf) => !presentAfter.includes(leaf)));
     }
   } finally {
     await releaseUninstallHolds(holds);
@@ -429,7 +447,7 @@ async function resumeUninstall(
 
   return success({
     schemaVersion: 1,
-    removed,
+    removed: [...new Set(removed)].sort(),
     restored: [],
     preserved: [...new Set([...preservedRetentionRoots(evidence), ...preserved])],
     retainedBootstrapEvidence: evidence.report.ids,
