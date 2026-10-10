@@ -458,6 +458,15 @@ describe("createProductionContext", () => {
     await expect(nodeFs.lstat(context.paths.home)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("composes the lifecycle services for a product home spelled with a trailing slash (AUD-015)", async () => {
+    const fixture = await createFixture("production-context-trailing-slash");
+    const home = join(fixture.homeDir, "dos");
+    const context = createProductionContext({ io: NULL_IO, env: { DEVELOPER_OS_HOME: `${home}/` }, userHome: fixture.homeDir });
+
+    expect(context.paths.home).toBe(home);
+    expect(context.lifecycle).toBeDefined();
+  });
+
   it("leaves the lifecycle capability absent, rather than failing, on a decomposed product home", async () => {
     const fixture = await createFixture("production-context-nfd");
     const decomposed = join(fixture.homeDir, "José");
