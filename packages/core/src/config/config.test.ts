@@ -79,6 +79,20 @@ describe("loadConfig", () => {
         'brainPath = "/Users/test/Developer\0Brain"',
       ),
     },
+    {
+      name: "a brain path with a trailing slash (AUD-015)",
+      source: validToml.replace(
+        'brainPath = "/Users/test/DeveloperBrain"',
+        'brainPath = "/Users/test/DeveloperBrain/"',
+      ),
+    },
+    {
+      name: "a brain path with a dot segment (AUD-015)",
+      source: validToml.replace(
+        'brainPath = "/Users/test/DeveloperBrain"',
+        'brainPath = "/Users/test/./DeveloperBrain"',
+      ),
+    },
   ])("rejects $name", ({ source }) => {
     expect(() => loadConfig(source)).toThrow();
   });
@@ -448,6 +462,12 @@ describe("resolveRuntimePaths", () => {
       logsDir: "/Volumes/State/developer-os/logs",
       brain: "/Volumes/Knowledge/Brain",
     });
+  });
+
+  it("resolves a trailing-slash home and Brain to the canonical spelling (AUD-015)", () => {
+    expect(
+      resolveRuntimePaths({ HOME: "/Users/test", DEVELOPER_OS_HOME: "/tmp/dos/", DEVELOPER_OS_BRAIN: "/tmp/brain//" }),
+    ).toMatchObject({ home: "/tmp/dos", configFile: "/tmp/dos/config.toml", brain: "/tmp/brain" });
   });
 
   it.each([
