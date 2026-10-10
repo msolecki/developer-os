@@ -178,7 +178,22 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
   };
   const texts = new Map<string, string | null>();
   for (const path of [...selected.gaps.flatMap((gap) => gap.notePaths), ...selected.isolated]) texts.set(path, await readNote(path));
-  const { prompt, targets } = buildGardenPrompt({ targets: selected, notes, readNote: (path) => texts.get(path) ?? "" });
+
+  /**
+   * The capture path's own redactor — same key, same user patterns, default scope. AUD-004: no
+   * text it would alter reaches the vendor, so a gap or isolated target carrying one is dropped
+   * and a candidate whose listing would carry one is left out.
+   */
+  const redact = createRedactor(loadOrCreateRedactionKey(paths.stateDir), { userPatterns: config.redaction?.patterns ?? [] });
+  const exposes = (text: string): boolean => redact(text).findings.length > 0;
+  const sendable = (path: string): boolean => !exposes(texts.get(path) ?? "");
+  const clean = {
+    gaps: selected.gaps.filter((gap) => gap.notePaths.every(sendable)),
+    isolated: selected.isolated.filter(sendable),
+  };
+  if (clean.gaps.length === 0 && clean.isolated.length === 0) return skipped("nothing_to_do", base);
+  const listable = notes.filter((note) => !exposes(`${note.path}\n${note.title}\n${note.summary}`));
+  const { prompt, targets } = buildGardenPrompt({ targets: clean, notes: listable, readNote: (path) => texts.get(path) ?? "" });
   const counts = { gaps: targets.gaps.length, isolated: targets.isolated.length };
 
   /** Re-admitted at the last moment: the prompt build can take long enough for a swap. */
@@ -202,11 +217,10 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
   }
 
   /**
-   * The capture path's own redactor — same key, same user patterns, default scope — and its
-   * own normalization, so a proposal accepted here is quarantined byte for byte. `runCapture`
-   * redacts nothing but the text; any change it would make counts as a finding.
+   * The same redactor and the capture path's own normalization, so a proposal accepted here is
+   * quarantined byte for byte. `runCapture` redacts nothing but the text; any change it would
+   * make counts as a finding.
    */
-  const redact = createRedactor(loadOrCreateRedactionKey(paths.stateDir), { userPatterns: config.redaction?.patterns ?? [] });
   const redactionFindings = (text: string): number => {
     const { content, redaction } = redactAndNormalize(text, redact);
     return redaction.length + (content === text.replace(/\n$/u, "") ? 0 : 1);
