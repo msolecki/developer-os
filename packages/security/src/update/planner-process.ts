@@ -113,15 +113,33 @@ export function screenPlannerFrame(redactor: Redactor, bytes: Uint8Array, scope:
 /**
  * Schema-verified rows whose bytes the product itself writes as exact-key JSON of a path and a
  * digest (`codexHome`, `treeHash`). `developer-os-config-v1` is schema-verified too but user-edited,
- * so it is not here and its bytes keep the `text` screen.
+ * so it is not here and its bytes keep the `text` screen. A row counts only while its observed
+ * bytes are still the ones the product recorded installing; an edited one keeps `text`.
  */
 const PRODUCT_RECORD_SCHEMAS: ReadonlySet<string> = new Set(["codex-registration-v1"]);
 
 function productRecordBlobOrdinals(request: UpdatePlannerRequestV1): ReadonlySet<number> {
   return new Set(request.artifactInputs.flatMap((input) =>
-    input.verification.mode === "schema" && PRODUCT_RECORD_SCHEMAS.has(input.verification.schemaId) && input.observed.state === "content" && input.observed.blob !== null
+    input.verification.mode === "schema" && PRODUCT_RECORD_SCHEMAS.has(input.verification.schemaId) &&
+    input.observed.state === "content" && input.observed.blob !== null && input.observed.sha256 === input.verification.installedHash
       ? [input.observed.blob.ordinal]
       : []));
+}
+
+/**
+ * The request leaves the user wrote: the Brain and Git sections of `config.toml` (repository root,
+ * Brain path, remote URLs, folders, aliases), the automation schedules, and the Brain note paths.
+ * The `path` screen of the whole request skips `high-entropy`, so these alone get `text` too. The
+ * Git scope's `fingerprint` is the product's digest of the rest of the scope and is left out.
+ */
+function userDerivedRequestLeaves(request: UpdatePlannerRequestV1): Uint8Array {
+  const { brain, git, automation } = request.config;
+  let gitLeaves: unknown = git;
+  if (git.lifecycle !== undefined) {
+    const scope = Object.fromEntries(Object.entries(git.lifecycle.scope).filter(([key]) => key !== "fingerprint"));
+    gitLeaves = { ...git, lifecycle: { ...git.lifecycle, scope } };
+  }
+  return plannerJsonBytes({ brain, git: gitLeaves, automation, entries: request.brain.entries.map((entry) => entry.path) });
 }
 
 interface Supervision {
@@ -152,8 +170,9 @@ export class TargetPlannerSupervisor {
     const { redactor } = this.dependencies;
     const requestJson = plannerJsonBytes(request);
     if (requestJson.byteLength > this.#bounds.requestJsonBytes) refuse("Planner request exceeds its bound");
-    // The product built it from the validated snapshot: digests, tokens, enums and relative paths, with the Brain root and redaction literals already tokenized.
+    // Product-built from the validated snapshot: digests, tokens, enums and relative paths, with artifact paths, the Brain root and redaction literals tokenized. Its user-written leaves are screened again with `text`.
     screenPlannerFrame(redactor, requestJson, "path");
+    screenPlannerFrame(redactor, userDerivedRequestLeaves(request));
     const refs = plannerInputBlobRefs(request);
     if (refs.length !== run.inputBlobs.length) refuse("Planner input blobs differ from the request");
     const inputHasher = new PlannerBlobSetHasher("input", refs.length);
@@ -293,7 +312,7 @@ async function readOutput(
     supervision.progress();
     for (const frame of wire.push(chunk)) {
       if (frame.kind === "json") {
-        // Admitted first: exact keys, rebuilt to byte equality, so no free text survives to be screened and `path` holds. Nothing is hashed or accepted before the screen.
+        // Admitted first (exact keys, rebuilt to byte equality); nothing is hashed or accepted before the screen. Bounded relative-path text still survives admission (`source`, owner-relative and migration paths, up to 4 KiB): `path` screens it for every class except `high-entropy`, which every digest leaf would trip.
         admitted = admitTargetUpdateDraft(decodePlannerJson(frame.payload, bounds.resultJsonBytes), request);
         screenPlannerFrame(redactor, frame.payload, "path");
         resultHash = plannerJsonHash("output", frame.payload);
