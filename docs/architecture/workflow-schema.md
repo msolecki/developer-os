@@ -302,7 +302,9 @@ with `do`. Effect steps name the closed table in `src/vocabulary.ts`; prose is i
 touches the filesystem, network, a process or vault must be a verb. The compiler unions verb
 footprints and requires exact equality with declared read/write scopes, rejecting both under- and
 over-declaration. Only `agent.prompt` remains unimplemented; configured vault roots resolve at the
-handler boundary rather than by templating canonical workflow YAML.
+handler boundary rather than by templating canonical workflow YAML. A `with` value written
+`$input.<name>` must name a declared input; anything else is an `input-undeclared` error on that
+step (`packages/workflow-schema/src/validate.ts` — `inputReferences`).
 
 Only `ingest` declares a write scope outside `content/_raw/quarantine/**`, and it expresses that in
 effect verbs only; a workflow whose only write is quarantine may carry prose, because prose writes

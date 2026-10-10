@@ -265,7 +265,32 @@ export function validateWorkflow(
     }
   }
 
+  for (const step of contract.steps) {
+    /**
+     * The renderer tells an agent to substitute every `$input.<name>` value
+     * with what the user supplied for that input; a name no input declares
+     * renders a step that points at nothing.
+     */
+    for (const name of inputReferences(step.with)) {
+      if (Object.hasOwn(contract.inputs, name)) continue;
+      add(
+        "input-undeclared",
+        "error",
+        `\`$input.${fragment(name)}\` names no declared input`,
+        step.id,
+      );
+    }
+  }
+
   return summarize(findings, contract);
+}
+
+function inputReferences(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value.startsWith("$input.") ? [value.slice("$input.".length)] : [];
+  }
+  if (value === null || typeof value !== "object") return [];
+  return Object.values(value).flatMap(inputReferences);
 }
 
 function summarize(
