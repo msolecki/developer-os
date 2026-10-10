@@ -1,13 +1,12 @@
-import { decodeCanonicalJson, encodeCanonicalJson } from "../lifecycle/canonical-json.js";
+import { compareUtf8, decodeCanonicalJson, encodeCanonicalJson } from "../lifecycle/canonical-json.js";
 import { admitCanonicalAbsolutePath, admitVaultFreeRelativePath } from "../update/paths.js";
 import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
 import { parseLowerHexSha256, parseStableSemver, parseUtcTimestamp } from "../update/scalars.js";
-import { ManifestStateError, validateManifest } from "./store.js";
+import { ManifestStateError, MAX_MANIFEST_BYTES, validateManifest } from "./store.js";
 import { parseInstructionId } from "../instructions/bounds.js";
 import type { InstructionCategoryV1, InstructionIdV1 } from "../instructions/bounds.js";
 import type { ArtifactOwner, InstallationManifest, InstallationManifestV1, InstallationManifestV2, InstructionBlockMemberV1, InstructionIdentityV1, ManifestAdmissionContextV1, ManagedArtifactSchemaIdV1, ManagedArtifactV2, MergeStrategy, OwnerPathArmV1 } from "./types.js";
 
-const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_ARTIFACTS = 1_000_000;
 const owners = new Set<ArtifactOwner>(["core", "claude", "codex", "macos"]);
 const mergeStrategies = new Set<MergeStrategy>(["dedicated", "semantic-json", "semantic-toml", "marked-block"]);
@@ -78,7 +77,7 @@ function instructionArtifact(input: Record<string, unknown>, base: CommonV2, ver
   if (base.mergeStrategy !== "marked-block" || (base.owner !== "claude" && base.owner !== "codex") || identity.category !== "vendor-file" || identity.source !== "default") invalid();
   if (!Array.isArray(identity.members) || identity.members.length < 1 || identity.members.length > MAX_BLOCK_MEMBERS) invalid();
   const members = identity.members.map(member);
-  for (let i = 1; i < members.length; i += 1) { const a = members[i - 1] as InstructionBlockMemberV1; const b = members[i] as InstructionBlockMemberV1; if ((compare(a.category, b.category) || compare(a.id, b.id)) >= 0) invalid(); }
+  for (let i = 1; i < members.length; i += 1) { const a = members[i - 1] as InstructionBlockMemberV1; const b = members[i] as InstructionBlockMemberV1; if ((compareUtf8(a.category, b.category) || compareUtf8(a.id, b.id)) >= 0) invalid(); }
   return { ...base, kind: "instruction", instruction: { category: "vendor-file", id: instructionId(identity.id), source: "default", members }, verification: { mode: "block", blockHash: call(() => parseLowerHexSha256(verification.blockHash)) } };
 }
 function artifact(value: unknown, context: ManifestAdmissionContextV1): ManagedArtifactV2 {
@@ -92,9 +91,8 @@ function artifact(value: unknown, context: ManifestAdmissionContextV1): ManagedA
   if (input.kind === "symlink" && verification.mode === "content") { exact(verification, ["installedHash", "mode"]); restore(base, false); return { ...base, kind: "symlink", verification: { mode: "content", installedHash: call(() => parseLowerHexSha256(verification.installedHash)) } }; }
   return invalid();
 }
-function compare(left: string, right: string): number { const a = encoder.encode(left); const b = encoder.encode(right); for (let i = 0; i < Math.min(a.length, b.length); i += 1) { if (a[i] !== b[i]) return (a[i] as number) - (b[i] as number); } return a.length - b.length; }
 function mode(value: ManagedArtifactV2): string { return value.verification.mode; }
-function validateInventory(artifacts: readonly ManagedArtifactV2[]): void { const paths = new Set<string>(); const blockOwners = new Set<ArtifactOwner>(); let previous: ManagedArtifactV2 | undefined; for (const value of artifacts) { if (value.verification.mode === "block") { if (blockOwners.has(value.owner)) invalid(); blockOwners.add(value.owner); } const folded = value.path.normalize("NFC").toLowerCase(); if (paths.has(folded)) invalid(); paths.add(folded); if (previous !== undefined) { const order = compare(previous.path, value.path) || compare(previous.owner, value.owner) || compare(previous.kind, value.kind) || compare(mode(previous), mode(value)); if (order >= 0) invalid(); } previous = value; } }
+function validateInventory(artifacts: readonly ManagedArtifactV2[]): void { const paths = new Set<string>(); const blockOwners = new Set<ArtifactOwner>(); let previous: ManagedArtifactV2 | undefined; for (const value of artifacts) { if (value.verification.mode === "block") { if (blockOwners.has(value.owner)) invalid(); blockOwners.add(value.owner); } const folded = value.path.normalize("NFC").toLowerCase(); if (paths.has(folded)) invalid(); paths.add(folded); if (previous !== undefined) { const order = compareUtf8(previous.path, value.path) || compareUtf8(previous.owner, value.owner) || compareUtf8(previous.kind, value.kind) || compareUtf8(mode(previous), mode(value)); if (order >= 0) invalid(); } previous = value; } }
 
 function whitespace(byte: number | undefined): boolean { return byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d; }
 function skipWhitespace(bytes: Uint8Array, index: number): number { while (whitespace(bytes[index])) index += 1; return index; }
@@ -106,7 +104,7 @@ function countArtifactsBeforeDecode(bytes: Uint8Array): void { try { let index =
 
 export function validateManifestV2(value: unknown, context: ManifestAdmissionContextV1): InstallationManifestV2 {
   const input = object(value); exact(input, ["artifacts", "installedAt", "productVersion", "schemaVersion"]); if (input.schemaVersion !== 2 || !Array.isArray(input.artifacts) || input.artifacts.length < 1 || input.artifacts.length > MAX_ARTIFACTS) invalid();
-  if (bytes(call(() => encodeCanonicalJson(input as never))) > MAX_BYTES) invalid();
+  if (bytes(call(() => encodeCanonicalJson(input as never))) > MAX_MANIFEST_BYTES) invalid();
   const manifest = { schemaVersion: 2 as const, productVersion: call(() => parseStableSemver(input.productVersion)), installedAt: call(() => parseUtcTimestamp(input.installedAt)), artifacts: input.artifacts.map((entry) => artifact(entry, context)) };
   validateInventory(manifest.artifacts); return manifest;
 }
@@ -114,18 +112,18 @@ export function validateManifestV2(value: unknown, context: ManifestAdmissionCon
 export function validateManifestV1(value: unknown): InstallationManifestV1 { return validateManifest(value); }
 
 function legacyBytes(bytes: Uint8Array): unknown {
-  if (bytes.byteLength < 1 || bytes.byteLength > MAX_BYTES) invalid(); let text: string; try { text = decoder.decode(bytes); } catch { return invalid(); }
+  if (bytes.byteLength < 1 || bytes.byteLength > MAX_MANIFEST_BYTES) invalid(); let text: string; try { text = decoder.decode(bytes); } catch { return invalid(); }
   if (!text.endsWith("\n") || text.endsWith("\n\n")) invalid(); let value: unknown; try { value = JSON.parse(text.slice(0, -1)); } catch { return invalid(); }
   const validated = validateManifestV1(value); const roundTrip = `${JSON.stringify(validated)}\n`; const canonical = encoder.encode(roundTrip); if (canonical.byteLength !== bytes.byteLength || canonical.some((byte, index) => byte !== bytes[index])) invalid(); return value;
 }
 
 export function validateManifestBytes(bytes: Uint8Array, context?: ManifestAdmissionContextV1): InstallationManifest {
-  if (bytes.byteLength < 1 || bytes.byteLength > MAX_BYTES) invalid();
+  if (bytes.byteLength < 1 || bytes.byteLength > MAX_MANIFEST_BYTES) invalid();
   countArtifactsBeforeDecode(bytes);
   let text: string; try { text = decoder.decode(bytes); } catch { return invalid(); }
   let candidate: unknown; try { candidate = JSON.parse(text); } catch { return invalid(); }
   if (object(candidate).schemaVersion === 1) { legacyBytes(bytes); return validateManifestV1(candidate); }
   if (object(candidate).schemaVersion !== 2 || context === undefined) invalid();
-  let canonical: unknown; try { canonical = decodeCanonicalJson(bytes, MAX_BYTES); } catch { return invalid(); }
+  let canonical: unknown; try { canonical = decodeCanonicalJson(bytes, MAX_MANIFEST_BYTES); } catch { return invalid(); }
   return validateManifestV2(canonical, context);
 }

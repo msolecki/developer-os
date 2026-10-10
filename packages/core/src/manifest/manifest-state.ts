@@ -22,9 +22,9 @@ import {
   type UInt64DecimalV1,
 } from "../update/scalars.js";
 import type { ManifestAdmissionContextV1 } from "./types.js";
+import { MAX_MANIFEST_BYTES } from "./store.js";
 import { validateManifestBytes } from "./v2.js";
 
-const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 const MAX_PLAN_BYTES = 16_777_216;
 const MAX_JOURNAL_BYTES = 1_048_576;
 const MAX_FOUNDATION_TRANSACTIONS = 1_000_000;
