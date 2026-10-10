@@ -1,7 +1,7 @@
 import {
   flattenUpdateRetirementLeaves,
   MAXIMUM_LEAF_PLAN_BYTES,
-  MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
+  MAXIMUM_BUNDLE_FILE_BYTES,
   updateLeafPlanHash,
   validateUpdateTerminalRetirementPlan,
   type CanonicalAbsolutePathV1,
@@ -78,7 +78,8 @@ export class UpdateRetirementParticipant implements UpdateRetirementHandlerV1 {
   }
 
   async #requireFile(entry: LifecycleGuardedEntryV1, leaf: RetirementLeafV1): Promise<void> {
-    const maximumBytes = leaf.bytes ?? MAXIMUM_ROLLBACK_DOCUMENT_BYTES;
+    if (leaf.bytes === null && leaf.sha256 === null) return refuseBundle("update_retirement_leaf", leaf.path);
+    const maximumBytes = leaf.bytes ?? MAXIMUM_BUNDLE_FILE_BYTES;
     const bound = entry.kind === "regular_file" && entry.ownerUid === this.#dependencies.effectiveUid && entry.nlink === 1 && BigInt(entry.size) <= BigInt(maximumBytes) && (leaf.bytes === null || entry.size === leaf.bytes.toString(10));
     if (!bound || (leaf.sha256 !== null && (await this.#dependencies.fs.hashRegular(entry, BigInt(maximumBytes))) !== leaf.sha256)) refuseBundle("update_retirement_leaf", leaf.path);
   }
