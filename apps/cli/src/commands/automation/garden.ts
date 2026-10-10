@@ -181,12 +181,12 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
 
   /**
    * The capture path's own redactor — same key, same user patterns, default scope. AUD-004: no
-   * text it would alter reaches the vendor, so a gap or isolated target carrying one is dropped
+   * text it would alter reaches the vendor, so a gap or isolated target whose path or text carries one is dropped
    * and a candidate whose listing would carry one is left out.
    */
   const redact = createRedactor(loadOrCreateRedactionKey(paths.stateDir), { userPatterns: config.redaction?.patterns ?? [] });
   const exposes = (text: string): boolean => redact(text).findings.length > 0;
-  const sendable = (path: string): boolean => !exposes(texts.get(path) ?? "");
+  const sendable = (path: string): boolean => !exposes(path) && !exposes(texts.get(path) ?? "");
   const clean = {
     gaps: selected.gaps.filter((gap) => gap.notePaths.every(sendable)),
     isolated: selected.isolated.filter(sendable),

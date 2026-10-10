@@ -301,6 +301,18 @@ describe("runScheduledGarden", () => {
     expect(await quarantined(home)).toHaveLength(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("never sends the agent a target whose own path the redactor would alter (AUD-004)", async () => {
+    const tokenNamed = "DEV/Q7xLp2VnR8tKw4ZmB6yHc1JsF9dGa3Uq0eTiNoXr5vMk.md";
+    const home = await garden({ isolated: ["DEV/alpha.md"], extra: { [tokenNamed]: note("Opaque", { created: "2000-01-01" }) } });
+
+    const result = await run(home);
+
+    expect(result, JSON.stringify(result)).toMatchObject({ outcome: "success", reasonCode: "ok" });
+    expect(home.calls).toHaveLength(1);
+    expect(home.calls[0]).toContain("DEV/alpha.md");
+    expect(home.calls[0]).not.toContain("Q7xLp2VnR8tKw4ZmB6yHc1JsF9dGa3Uq0eTiNoXr5vMk");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("never sends the agent a note the redactor would alter: its gap or isolated target is dropped (AUD-004)", async () => {
     const secret = `ghp_${"a".repeat(36)}`;
     const withClient = note("delta", { created: "2000-01-01" }).replace("delta holds", "Acme Industries holds");
