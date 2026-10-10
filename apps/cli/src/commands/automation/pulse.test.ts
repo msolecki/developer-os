@@ -3,13 +3,14 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { parseCanonicalAbsolutePathText } from "@developer-os/core";
+import { loadConfig, parseCanonicalAbsolutePathText, parseSafeReasonCode, parseUtcTimestamp, serializeConfig } from "@developer-os/core";
 import type { HeldLifecycleStableLockV1 } from "@developer-os/core";
 import type { ProcessRequest, ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import type { CliContext } from "../../context.js";
 import { runBrain } from "../brain.js";
 import { runInit } from "../init.js";
+import { automationLogSlotPath, encodeAutomationLogRecord } from "../../lifecycle/runtime-records.js";
 import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../testing.js";
 import type { CommandFixture } from "../testing.js";
 import { runScheduledPulse } from "./pulse.js";
@@ -156,5 +157,51 @@ describe("brain-pulse", () => {
     expect(report).toContain("index_missing");
     expect(report).not.toContain("lint_errors");
     expect(report).toContain("developer-os brain reindex");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("ignores leftover garden logs once brain-garden is no longer scheduled (AUD-018)", async () => {
+    const clock = { at: START };
+    const fixture = await installed(
+      "pulse-unscheduled-garden",
+      (): Promise<ProcessResult> => Promise.resolve({ stdout: "", stderr: "", exitCode: 0, signal: null, timedOut: false }),
+      clock,
+      true,
+    );
+    const home = parseCanonicalAbsolutePathText(fixture.paths.home);
+    for (const n of [0, 1]) {
+      const record = encodeAutomationLogRecord({
+        schemaVersion: 1,
+        job: "brain-garden",
+        outcome: "handler_failed",
+        reasonCode: parseSafeReasonCode("handler_failed"),
+        startedAt: parseUtcTimestamp("2026-07-29T12:00:00.000Z"),
+        completedAt: parseUtcTimestamp("2026-07-29T12:01:00.000Z"),
+        data: null,
+      });
+      await nodeFs.mkdir(join(fixture.paths.home, "logs"), { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(automationLogSlotPath(home, "brain-garden", n), record, { mode: 0o600 });
+    }
+
+    expect(await pulse(fixture)).toMatchObject({ outcome: "success", reasonCode: "pulse_healthy" });
+    expect(await nodeFs.readFile(slot(fixture, 0), "utf8")).not.toContain("garden_failed");
+
+    const config = loadConfig(await nodeFs.readFile(fixture.paths.configFile, "utf8"));
+    const schedule = { cadence: "daily", hour: 3, minute: 0 } as const;
+    await nodeFs.writeFile(
+      fixture.paths.configFile,
+      serializeConfig({
+        ...config,
+        automation: {
+          ...config.automation,
+          lifecycle: {
+            schemaVersion: 1,
+            schedules: (["brain-reindex", "brain-lint", "doctor", "brain-garden"] as const).map((job) => ({ job, schedule })),
+          },
+        },
+      }),
+    );
+    clock.at = START + DAY;
+    await pulse(fixture);
+    expect(await nodeFs.readFile(slot(fixture, 0), "utf8")).toContain("garden_failed_twice");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
