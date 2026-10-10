@@ -315,6 +315,7 @@ describe("NodeProcessRunner", () => {
     const started = Date.now();
 
     const result = await runner.run(createRequest({ args: ["-e", parentScript], timeoutMs: 200 }));
+    expect(Number(result.stdout)).toBeGreaterThan(0);
     process.kill(Number(result.stdout), "SIGKILL");
 
     expect(result.timedOut).toBe(true);
