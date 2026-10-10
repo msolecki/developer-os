@@ -414,9 +414,9 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   root; the note is read at that canonical path (NEW-185; a poisoned index or a symlinked note or
   folder injects no outside file). The output
   is the vault map, then the note, capped at 16,384 bytes; the vault map is truncated first, at a
-  line boundary, with `VAULT_MAP_TRUNCATED_MARKER`. The text is redacted with the built-in classes and
-  the configuration's `[redaction] patterns`, under the durable key when one exists (NEW-159), as
-  capture and ingest redact. A gate refusal, a missing configuration or any error is `allow` with one
+  line boundary, with `VAULT_MAP_TRUNCATED_MARKER`. The map and the note are redacted before that
+  budgeting and cap (AUD-028), with the built-in classes and the configuration's `[redaction]
+  patterns`, under the durable key when one exists (NEW-159), as capture and ingest redact. A gate refusal, a missing configuration or any error is `allow` with one
   note. The verb writes nothing but its firing record.
 - **`stop`.** Runs only when the root has `tsconfig.json` and a project-local `tsc`. It checks
   `tsconfig.check.json` when present, else `tsconfig.json`. A non-zero exit is `block`
