@@ -104,10 +104,10 @@ interface ParticipantHomeV1 {
 }
 
 /**
- * The death after publication is injected at `fs.stat`, not at the publisher: the bridge
+ * The death after publication is injected at `fs.lstat`, not at the publisher: the bridge
  * converts a publisher throw into `TransactionStateError` exactly as the shipped bootstrap
  * bridge does, so a publisher-side death could not be told apart from a refusal. `backUp`
- * reaches `snapshot` — the first `stat` of a mutation target — after the rename and before
+ * reaches `snapshot` — the first `lstat` of a mutation target — after the rename and before
  * any phase transition, and `snapshot` rethrows a non-`ENOENT` error untouched.
  */
 function transactionExecutor(
@@ -120,12 +120,12 @@ function transactionExecutor(
   const publisher = createLinkUnlinkRenameNoReplace();
   const fs: TransactionFileSystem = {
     ...nodeFs,
-    stat: ((path: Parameters<typeof nodeFs.stat>[0], ...rest: readonly never[]) => {
+    lstat: ((path: Parameters<typeof nodeFs.lstat>[0], ...rest: readonly never[]) => {
       if (String(path) === options.deathAfterPublicationAt) {
         throw new SyntheticDeath("initial_journal_published");
       }
-      return nodeFs.stat(path, ...rest);
-    }) as typeof nodeFs.stat,
+      return nodeFs.lstat(path, ...rest);
+    }) as typeof nodeFs.lstat,
   };
   return new TransactionExecutor({
     stateDir: join(home, "state"),
