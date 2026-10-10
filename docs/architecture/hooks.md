@@ -542,7 +542,10 @@ This holds in both the probed and the unprobed `doctor` run. Without such a reco
   `<vendor>.record_failed.json` (§3.6) adds `record=failed`, so a `never` may be a hook that fired
   and could not record it. The text says the marker clears on that vendor's next successful record
   write (within 24 h): the fresh-record shortcut runs before the gate, so it never removes the
-  marker. It is `warn`, never `fail`.
+  marker. It is `warn`, never `fail`. A vendor the configuration leaves out of `adapters` reports
+  `<vendor>=not-selected` and passes with no recovery (AUD-022): detaching keeps the Codex plugin
+  tree (`foundation.md` §12.4), and its hooks cannot fire, so the trust step could never clear.
+  Its firing records still feed the capability checks.
 - **`external-hooks`** (Q2-A) reads `~/.claude/settings.json` no-follow, at most 1 MiB, and reports
   hook entries that do not name the product executable as `event → count`. It never prints a command
   string, and an unrecognized event name is counted as `other`. Any read failure is `unknown`. Codex
