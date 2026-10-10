@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import fsSync from "node:fs";
 import {
   chmod,
-  link,
   lstat,
   mkdir,
   open,
@@ -13,7 +12,6 @@ import {
   rmdir,
   stat,
   unlink,
-  utimes,
 } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -235,7 +233,6 @@ export interface CliContext {
 
 export const NODE_FILE_SYSTEM: CliFileSystem = {
   chmod,
-  link,
   lstat,
   mkdir,
   open,
@@ -246,7 +243,6 @@ export const NODE_FILE_SYSTEM: CliFileSystem = {
   rmdir,
   stat,
   unlink,
-  utimes,
 };
 const BOOTSTRAP_RETAINED_RENAME = new MacOsRetainedRename();
 export const publishBootstrapInitialJournalNoReplace =

@@ -437,12 +437,12 @@ differently on every invocation: the field would populate, look correct, and mea
 
 **The key is durable, and the load has two doors, not one:**
 
-- `readRedactionKey` (`apps/cli/src/context.ts:707`) is the **composition root's** door. It never
+- `readRedactionKey` (`apps/cli/src/context.ts` — `readRedactionKey`) is the **composition root's** door. It never
   creates, never throws and never repairs, returning `null` for absent, unreadable, symlinked,
   wrong-typed or too-short — every state `doctor` must be able to *report*, which it cannot do if
   building the context already threw. The root warns and falls back to an ephemeral key
   (`apps/cli/src/context.ts` — `EPHEMERAL_KEY_WARNING`), so diagnostics are still redacted on a machine that has never been initialized.
-- `loadOrCreateRedactionKey` (`apps/cli/src/context.ts:686`) is the **point-of-use** door, called by `init` (`init.ts:375`,
+- `loadOrCreateRedactionKey` (`apps/cli/src/context.ts` — `loadOrCreateRedactionKey`) is the **point-of-use** door, called by `init` (`init.ts:375`,
   `:1002`, `:1053`, `:1088`) and by `capture`, `review` and `ingest` at their own points of use, and
   by `import` except under `--dry-run`. `import --dry-run`, `project init` and `project check` never
   create it: they read it with `readRedactionKey` and fall back to an ephemeral key. It creates
@@ -593,7 +593,7 @@ unfinished work only. **All four are closed**: Track R entry R2 built them betwe
 2026-08-20, and each item below records what it closed rather than what is still owed.
 
 1. **and 2. An optional caller-supplied precondition on `PlannedFileMutation` — closed 2026-08-20**
-   (`packages/core/src/transactions/types.ts:83`, enforced at
+   (`packages/core/src/transactions/types.ts` — `expectedBeforeHash`, enforced at
    `packages/core/src/transactions/executor.ts:1609-1614`). `review --decision edit` now hands the
    executor the digest of the bytes it read; `capture` still supplies none. Before it, the executor computed
    `expectedBeforeHash` from the snapshot it took when `execute()` ran, so a command could not
