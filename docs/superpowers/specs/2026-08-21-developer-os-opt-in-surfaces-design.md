@@ -2057,7 +2057,7 @@ exactly `{sourcePath, payloadPath, mode, size, dev, ino, sha256}`: `sourcePath` 
 product home, and not under `staging/` or `state/` (case-folded); `payloadPath` is exactly
 `<product home>/staging/lifecycle/<coordinator-id>/payloads/<ordinal>` for the row's zero-based index,
 recomputed and never trusted; `mode` is `0600` or `0700`; `size` is 16 MiB + 1 through
-`MAXIMUM_BUNDLE_FILE_BYTES`; sources are unique case-folded; at most 7,936 rows. "Cannot target any second
+`MAXIMUM_BUNDLE_FILE_BYTES`; sources are unique case-folded; the codec also accepts v2 with `payloads: []`; at most 7,936 rows, and planning more throws `UninstallCapacityError`. "Cannot target any second
 path" above now applies to the key only. `K(stage)` creates `payloads/` (`0700`, owner-held), then moves
 each row in ordinal order by an identity-checked no-replace rename, hashing it first and walking every
 ancestor below the product home no-follow, and syncs both parents; only then does it move the key.
@@ -2067,9 +2067,10 @@ a torn `K(stage)` leaves some rows at their source and some at `payloadPath`, an
 whichever moved; a torn `K(delete)` leaves a prefix of unlinked rows and resumes forward. A row absent at
 both paths in `K(stage)` or restore, a symlinked ancestor, both paths present or a wrong
 kind/owner/mode/size/link/device/inode is `lifecycle_recovery_required` (`uninstall_payload_identity`,
-`uninstall_payload_state` or `uninstall_payload_hash`) and is preserved. Ledger admission accepts a
-`payloads/<ordinal>` leaf only under a published plan and only below its row count. Compaction refuses a
-non-empty `payloads/` (`lifecycle_guarded_not_empty`) before any unlink and removes the empty directory
+`uninstall_payload_state`, `uninstall_payload_hash` or `uninstall_payload_parent`, the last for a bad `payloads/` directory or a missing parent) and is preserved. Ledger admission accepts a
+`payloads/<ordinal>` leaf only under a published plan and only below its row count, and only as an owner-held
+`0600`/`0700` single-link regular file of at most `MAXIMUM_BUNDLE_FILE_BYTES`; otherwise `lifecycle_staging_shape`. Compaction refuses a
+non-empty `payloads/` (`lifecycle_guarded_not_empty`) before it unlinks any other piece of the coordinator staging and removes the empty directory
 with the coordinator staging; a payload left under a terminal or compacting coordinator is also the
 ledger finding `lifecycle_staging_payload_terminal`.
 
