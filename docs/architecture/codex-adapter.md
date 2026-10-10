@@ -101,7 +101,13 @@ our enabled tree and `skills=unknown` when it could not be read. DOS-P6 removed 
 by this product and resolve to `not-used` before either gate (`CODEX_NOT_USED_KEYS`). `subagents`
 left that list with D87 (NEW-186): the catalog agents ship as `agents/developer-os-<id>.toml`.
 `codex plugin list --json` does not list agents, so no probe settles the key and it reports
-`unknown`. Both adapters
+`unknown`. A role carries only `AGENT_TOML_KEYS` (`packages/adapter-codex/src/agent-toml.ts` —
+`renderAgentToml`), so it is prompt-only: the four catalog agents that describe themselves as
+read-only (`code-reviewer`, `performance-engineer`, `research-analyst`, `security-auditor`) are
+read-only on Codex by instruction alone and run under the parent session's sandbox, so in a
+`workspace-write` session they can edit files. `sandbox_mode` is an accepted role key (§15, "agent
+TOML key set"), but whether a role-level value narrows the parent session is unobserved; emitting
+`sandbox_mode = "read-only"` for those four waits on that probe (AUD-032). Both adapters
 share this vocabulary and their key lists are asserted equal.
 
 **The probe is genuinely better here.** `codex plugin list --json` settles three questions in one
