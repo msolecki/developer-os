@@ -304,6 +304,23 @@ describe("NodeProcessRunner", () => {
     },
   );
 
+  it("settles a timed-out run although a descendant in another session holds stdout", async () => {
+    const runner = new NodeProcessRunner(allowCommandsPolicy());
+    const parentScript = [
+      'const { spawn } = require("node:child_process")',
+      'const holder = spawn("/bin/sleep", ["30"], { detached: true, stdio: "inherit" })',
+      "process.stdout.write(String(holder.pid))",
+      "setTimeout(() => undefined, 10_000)",
+    ].join("; ");
+    const started = Date.now();
+
+    const result = await runner.run(createRequest({ args: ["-e", parentScript], timeoutMs: 200 }));
+    process.kill(Number(result.stdout), "SIGKILL");
+
+    expect(result.timedOut).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1_500);
+  }, 10_000);
+
   it("redacts captured stdout and stderr through the injected policy", async () => {
     const syntheticSecret = "synthetic-process-secret-7xQ9";
     const policy: CommandPolicy = {

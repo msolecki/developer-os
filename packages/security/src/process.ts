@@ -177,6 +177,10 @@ export class NodeProcessRunner implements ProcessRunner {
         signalProcessTree("SIGTERM");
         forceKillTimer = setTimeout(() => {
           signalProcessTree("SIGKILL");
+          // AUD-029: a descendant in another session can hold the pipes, and `close` waits for them.
+          child.stdin.destroy();
+          child.stdout.destroy();
+          child.stderr.destroy();
           timeoutEscalationComplete = true;
           finishFromClose();
         }, 100);
