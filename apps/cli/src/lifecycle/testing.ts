@@ -942,8 +942,8 @@ export interface ScriptedLaunchdV1 {
  * An injected launchd domain: observation reads `loaded`, `bootout` and bootstrap edit it, and the
  * plan-bound plist checks run against the real files. No process is ever spawned; `host` (an
  * admitted `hostWith()` by default) is what every process table load admits. `launchctl:
- * "scripted"` keeps the real FD-3 snapshot bootstrapper and bootout runner and scripts only the
- * `/bin/launchctl` process: a bootstrap loads the label it reads from the inherited descriptor.
+ * "scripted"` keeps the real path bootstrapper and bootout runner and scripts only the
+ * `/bin/launchctl` process: a bootstrap loads the label it reads from the plist path in its argv (D82).
  */
 export function scriptedLaunchd(options: {
   readonly clock: () => UtcTimestampV1;
@@ -1010,7 +1010,6 @@ export function scriptedLaunchd(options: {
   const runner = {
     run: async (request: SupervisedSpawnRequestV1, sink?: (chunk: Uint8Array, stream: "stdout" | "stderr") => void) => {
       const [command, domainOrTarget, path] = request.argv.map(String);
-      if (request.inheritedFds.length !== 0) throw new Error("launchctl inherits no descriptor (D82)");
       const labelOf = (target: string): GeneratedLaunchdLabelV1 => target.slice(target.indexOf("/", "gui/".length) + 1) as GeneratedLaunchdLabelV1;
       if (command === "print") {
         const label = labelOf(String(domainOrTarget));

@@ -200,7 +200,6 @@ export class LaunchdObserver {
       env: { ...table.environment },
       cwd: table.emptyDirectory.path,
       stdin: "ignore",
-      inheritedFds: [],
       stdoutCap: queryProfile.stdoutMaxBytes,
       stderrCap: queryProfile.stderrMaxBytes,
       idleMs: queryProfile.idleDeadlineMs,

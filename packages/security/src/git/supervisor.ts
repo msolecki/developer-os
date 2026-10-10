@@ -311,7 +311,6 @@ export class GitProcessSupervisor implements GitProcessSupervisorV1 {
       env: admission.env,
       cwd: admission.cwd,
       stdin: request.stdin,
-      inheritedFds: [],
       stdoutCap: bound.io.stdoutMaxBytes,
       stderrCap: bound.io.stderrMaxBytes,
       idleMs: bound.io.idleDeadlineMs,

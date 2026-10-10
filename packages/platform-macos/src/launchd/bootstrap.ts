@@ -386,7 +386,6 @@ export class LaunchdPathBootstrapper {
         env: { ...table.environment },
         cwd: table.staging.home.path,
         stdin: "ignore",
-        inheritedFds: [],
         stdoutCap: profile.stdoutMaxBytes,
         stderrCap: profile.stderrMaxBytes,
         idleMs: profile.idleDeadlineMs,

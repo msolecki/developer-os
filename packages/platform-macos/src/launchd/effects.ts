@@ -243,7 +243,6 @@ export class LaunchdBootoutRunner implements LaunchdBootoutPortV1 {
       env: { ...table.environment },
       cwd: table.staging.home.path,
       stdin: "ignore",
-      inheritedFds: [],
       stdoutCap: mutationProfile.stdoutMaxBytes,
       stderrCap: mutationProfile.stderrMaxBytes,
       idleMs: mutationProfile.idleDeadlineMs,

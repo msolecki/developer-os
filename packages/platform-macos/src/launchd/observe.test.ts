@@ -225,7 +225,6 @@ describe("LaunchdObserver", () => {
       });
       expect(request.cwd).toBe("/private/var/empty");
       expect(request.stdin).toBe("ignore");
-      expect(request.inheritedFds).toEqual([]);
       expect(request.stdoutCap).toBe(4194304);
       expect(request.stderrCap).toBe(1048576);
       expect(request.idleMs).toBe(30000);

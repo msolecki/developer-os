@@ -919,7 +919,6 @@ describe("LaunchdBootoutRunner", () => {
     expect(requests[0]?.argv).toStrictEqual(["bootout", target]);
     expect(requests[0]?.env).toStrictEqual({ ...table.environment });
     expect(requests[0]?.cwd).toBe(table.staging.home.path);
-    expect(requests[0]?.inheritedFds).toStrictEqual([]);
     expect(requests[0]?.phase).toBe(phase);
   });
 

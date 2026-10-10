@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto";
-import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -183,7 +181,6 @@ function setup(script: ChildScript): { readonly clock: VirtualClock; readonly de
     env: {},
     cwd: "/",
     stdin: "ignore",
-    inheritedFds: [],
     stdoutCap: 1_024,
     stderrCap: 1_024,
     idleMs: 30_000,
@@ -251,14 +248,13 @@ describe("SupervisedProcessRunner", () => {
     expect(deps.signals).toEqual([]);
   });
 
-  it("passes exactly the requested environment and only FD 3 when asked", async () => {
+  it("passes exactly the requested environment", async () => {
     const { deps, runner, request } = setup({});
-    await runner.run({ ...request, env: { LANG: "C" }, inheritedFds: [{ childFd: 3, parentFd: 42 }] });
+    await runner.run({ ...request, env: { LANG: "C" } });
     expect(deps.lastSpawn.env).toEqual({ LANG: "C" });
-    expect(deps.lastSpawn.stdio).toEqual(["ignore", "pipe", "pipe", 42]);
   });
 
-  it("passes exactly three descriptors without an FD 3 request and pipes stdin bytes only when given", async () => {
+  it("passes exactly three descriptors and pipes stdin bytes only when given", async () => {
     const { deps, runner, request } = setup({});
     await runner.run(request);
     expect(deps.lastSpawn.stdio).toEqual(["ignore", "pipe", "pipe"]);
@@ -356,21 +352,6 @@ describe("SupervisedProcessRunner", () => {
     expect(deps.spawned).toBe(0);
   });
 
-  it("refuses any inherited descriptor other than the single childFd 3", async () => {
-    const { deps, runner, request } = setup({});
-    const invalid = [
-      [{ childFd: 4, parentFd: 42 }],
-      [{ childFd: 3, parentFd: 42 }, { childFd: 3, parentFd: 43 }],
-      [{ childFd: 3, parentFd: -1 }],
-      [{ childFd: 3, parentFd: 1.5 }],
-    ] as unknown as SupervisedSpawnRequestV1["inheritedFds"][];
-    expect(invalid.length).toBeGreaterThan(0);
-    for (const inheritedFds of invalid) {
-      await expect(runner.run({ ...request, inheritedFds })).rejects.toBeInstanceOf(SecurityRefusalError);
-    }
-    expect(deps.spawned).toBe(0);
-  });
-
   it("refuses non-integer caps and non-positive deadlines", async () => {
     const { deps, runner, request } = setup({});
     for (const invalid of [{ stdoutCap: -1 }, { stderrCap: 0.5 }, { idleMs: 0 }, { wallMs: Number.POSITIVE_INFINITY }, { terminationGraceMs: 0 }]) {
@@ -388,7 +369,6 @@ describe("nodeSupervisedProcessDependencies", () => {
     env: {},
     cwd: tmpdir(),
     stdin: "ignore",
-    inheritedFds: [],
     stdoutCap: 65_536,
     stderrCap: 65_536,
     idleMs: 10_000,
@@ -412,25 +392,6 @@ describe("nodeSupervisedProcessDependencies", () => {
     expect(evidence.exitCode).toBe(0);
     expect(JSON.parse(output.text())).toEqual(literal);
     expect(evidence.stdoutSha256).toBe(sha(output.text()));
-  });
-
-  it("hands the child exactly the parent descriptor as FD 3", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "supervised-fd3-"));
-    const file = join(directory, "snapshot.plist");
-    writeFileSync(file, "synthetic snapshot bytes");
-    const fd = openSync(file, "r");
-    try {
-      const output = collect();
-      const evidence = await runner.run(
-        { ...nodeRequest("process.stdout.write(require('node:fs').readFileSync(3))", runner.beginPhase("fd3", 30_000)), inheritedFds: [{ childFd: 3, parentFd: fd }] },
-        output.sink,
-      );
-      expect(evidence.exitCode).toBe(0);
-      expect(output.text()).toBe("synthetic snapshot bytes");
-    } finally {
-      closeSync(fd);
-      rmSync(directory, { recursive: true, force: true });
-    }
   });
 
   it("terminates and reaps a real hanging child at its wall deadline", async () => {
