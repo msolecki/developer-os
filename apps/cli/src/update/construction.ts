@@ -769,9 +769,10 @@ export class UpdateConstructionStore {
     if (constructionDeletionAuthority(row) === "nested") {
       // Compaction runs after every nested owner compacted, so an absent row is terminal.
       if (target === null) return;
-      // A payload no nested owner consumed (its step never ran, NEW-241) is removed below like a
-      // construction leaf, only as the evidenced inode with the row's bytes; any other row refuses.
-      if (row.role.kind !== "payload") refuse("update_construction_nested_not_terminal", row.path);
+      // A state payload no nested owner consumed (its step never ran, NEW-241) is removed below like a
+      // construction leaf, only as the evidenced inode with the row's bytes. Any other row refuses, so a
+      // leftover owner or migration payload still surfaces its owner's compaction defect.
+      if (row.role.kind !== "payload" || row.role.payloadKind !== "state_after") refuse("update_construction_nested_not_terminal", row.path);
     }
     // Evidence is removed only at the following odd cursor, so it must still be here.
     const identity = await this.#evidencedIdentity(plan, row.ordinal, evidencePath);
