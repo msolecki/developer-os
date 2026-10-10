@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
@@ -132,9 +133,26 @@ async function entrypointTarget(lifecycle: Lifecycle): Promise<string> {
 async function expectEntrypointFollowsActive(lifecycle: Lifecycle): Promise<void> {
   const target = await entrypointTarget(lifecycle);
   expect(target).toBe(`${(await lifecycle.home.update().readHome()).active.bundleRoot}/${ENTRY}`);
-  // The real script (owner, mode and hash checks included) loads a stub CLI at that target; the published bytes are restored.
+  // The real script (owner, mode and hash checks included) loads a stub CLI at that target. The script hashes the
+  // entry against its manifest row (AUD-005), so the stub's row is bound into a retained manifest the active
+  // record names for this run; the published bytes and records are restored.
+  const { stateDir } = lifecycle.home.fixture.paths;
+  const activeFile = join(stateDir, "active-release.json");
+  const activeBytes = await nodeFs.readFile(activeFile);
+  const active = JSON.parse(activeBytes.toString("utf8")) as { readonly bundleManifestHash: string };
+  const bundles = join(stateDir, "release-metadata", "bundles");
+  const manifest = JSON.parse(await nodeFs.readFile(join(bundles, `${active.bundleManifestHash}.json`), "utf8")) as {
+    readonly entries: readonly { readonly path: string }[];
+  };
+  const stub = `process.stdout.write(${JSON.stringify(`marker:${target}\n`)});\n`;
+  const stubRow = { bytes: String(Buffer.byteLength(stub)), sha256: createHash("sha256").update(stub).digest("hex") };
+  const stubManifest = JSON.stringify({ ...manifest, entries: manifest.entries.map((entry) => (entry.path === ENTRY ? { ...entry, ...stubRow } : entry)) });
+  const stubManifestHash = createHash("sha256").update(stubManifest).digest("hex");
+  const stubManifestFile = join(bundles, `${stubManifestHash}.json`);
   const original = await nodeFs.readFile(target);
-  await nodeFs.writeFile(target, `process.stdout.write(${JSON.stringify(`marker:${target}\n`)});\n`);
+  await nodeFs.writeFile(target, stub);
+  await nodeFs.writeFile(stubManifestFile, stubManifest, { mode: 0o600 });
+  await nodeFs.writeFile(activeFile, JSON.stringify({ ...active, bundleManifestHash: stubManifestHash }));
   try {
     // Production runs the script on the keg's own Node, so `process.arch` is the release's architecture
     // (an x64 keg's Node runs under Rosetta). The host Node stands in for it here, so the harness
@@ -145,6 +163,8 @@ async function expectEntrypointFollowsActive(lifecycle: Lifecycle): Promise<void
     expect(result.stdout).toBe(`marker:${target}\n`);
   } finally {
     await nodeFs.writeFile(target, original);
+    await nodeFs.writeFile(activeFile, activeBytes);
+    await nodeFs.rm(stubManifestFile);
   }
 }
 

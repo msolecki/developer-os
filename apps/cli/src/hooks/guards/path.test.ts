@@ -214,7 +214,19 @@ describe("guard path", () => {
     const guard = (filePath: string) =>
       guardPath({ cwd: project, toolName: "Write", command: null, filePath, prompt: null, stopHookActive: null }, custom);
     expect(await guard(join(home, "dos", "codex", "codex-home"))).toMatchObject({ kind: "block", ruleId: "product-state" });
-    expect(await run(join(home, ".developer-os", "notes.md"), "Write")).toStrictEqual({ kind: "allow" });
+  });
+
+  it("blocks writes anywhere in the product home and the Claude plugin root, but not a sibling plugin (AUD-005)", async () => {
+    for (const path of [
+      join(home, ".developer-os", "bin", "developer-os.mjs"),
+      join(home, ".developer-os", "releases", "1.0.0", "darwin-arm64", "x.js"),
+      join(home, ".developer-os", "config.toml"),
+      join(home, ".claude", "skills", "developer-os", "hooks", "hooks.json"),
+    ]) {
+      expect(await run(path, "Write")).toMatchObject({ kind: "block", ruleId: "product-state" });
+    }
+    expect(await run(join(home, ".claude", "skills", "other", "hooks", "hooks.json"), "Write")).toStrictEqual({ kind: "allow" });
+    expect(await run(join(home, ".claude", "skills", "developer-os-extra", "SKILL.md"), "Write")).toStrictEqual({ kind: "allow" });
   });
 
   it("ignores a tool that is not a file matcher", async () => {
