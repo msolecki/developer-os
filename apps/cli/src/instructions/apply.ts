@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
@@ -118,7 +119,32 @@ export async function readNoFollow(path: string): Promise<Uint8Array | null> {
   }
   try {
     if (!(await handle.stat()).isFile()) return null;
-    return new Uint8Array(await handle.readFile());
+    const bytes = await handle.readFile();
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * `readNoFollow`'s open, hashed in fixed chunks: a hash-only caller never holds the file, which
+ * for the installed ~122 MB runtime was the update's largest single allocation.
+ */
+export async function hashNoFollow(path: string): Promise<{ readonly bytes: number; readonly sha256: LowerHexSha256 } | null> {
+  let handle;
+  try {
+    handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    if (isMissingEntry(error)) return null;
+    throw error;
+  }
+  try {
+    if (!(await handle.stat()).isFile()) return null;
+    const hash = createHash("sha256");
+    const chunk = new Uint8Array(1 << 20);
+    let bytes = 0;
+    for (let read = 0; (read = (await handle.read(chunk, 0, chunk.byteLength, bytes)).bytesRead) > 0; bytes += read) hash.update(chunk.subarray(0, read));
+    return { bytes, sha256: hash.digest("hex") as LowerHexSha256 };
   } finally {
     await handle.close();
   }
