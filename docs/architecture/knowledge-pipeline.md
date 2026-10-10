@@ -44,7 +44,7 @@ field on no code path (`tests/repository/transcript-path.test.ts`). So the obser
 from the agent, mid-session, at the point of insight: the rendered skill tells it to run
 `developer-os capture` with its own summary.
 
-**Hooks are therefore declined, not deferred.** *Amended 2026-09-22 (A13, D47): this holds only for the two capture hooks, `session_end_capture` and `pre_compact_backup`. The eight non-capture hook verbs ship in both vendor trees (`hooks.md` §3.1), and the not-used list is four keys (see "The capability vocabulary" below). The text that follows is the 2026-08-13 record.* Both adapter notes recorded the blocker
+**Hooks are therefore declined, not deferred.** *Amended 2026-09-22 (A13, D47): this holds only for the two capture hooks, `session_end_capture` and `pre_compact_backup`. The eight non-capture hook verbs ship in both vendor trees (`hooks.md` §3.1), and the not-used list is three keys, four until D87 removed `subagents` (see "The capability vocabulary" below). The text that follows is the 2026-08-13 record.* Both adapter notes recorded the blocker
 as a missing executable bit; that was wrong and is corrected here, because a
 later reader would otherwise solve the wrong problem. A `"type": "command"` handler names a command
 *string*, so naming the installed binary ships no script and needs no mode bit. What hooks lacked was
