@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { buildConflictEvidence, inspectDrift, ManifestStateError, renderInstructionBlock } from "./index.js";
+import { MAXIMUM_BUNDLE_FILE_BYTES } from "../update/release.js";
 import type { ConflictEvidenceRequest, DriftRequestV2, InstallationManifestV2, ManagedArtifactV2 } from "./index.js";
 
 const hash = (bytes: string): string => createHash("sha256").update(bytes).digest("hex");
@@ -46,6 +47,17 @@ describe("V2 manifest drift", () => {
         ? { schemas: { validate: (): void => { throw new Error(path); } } }
         : {};
       expect((await inspectDrift(request(create(path), options)))[0]?.kind ?? null).toBe(expected);
+    } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
+  });
+
+  it("hashes a content file over the 8 MiB diff bound, as a release's bundled Node runtime is", async () => {
+    const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-v2-large-"));
+    const path = join(root, "node");
+    try {
+      const bytes = new Uint8Array(8 * 1024 * 1024 + 1).fill(0x6e);
+      await nodeFs.writeFile(path, bytes);
+      const installedHash = createHash("sha256").update(bytes).digest("hex");
+      await expect(inspectDrift(request(artifact(path, { verification: { mode: "content", installedHash } })))).resolves.toStrictEqual([]);
     } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
   });
 
@@ -185,8 +197,10 @@ describe("V2 manifest drift", () => {
       expect(flags & constants.O_NOFOLLOW).toBe(constants.O_NOFOLLOW);
 
       let opened = false;
-      const sizeFs = { ...nodeFs, lstat: (candidate: Parameters<typeof nodeFs.lstat>[0]) => nodeFs.lstat(candidate).then((stats) => Object.assign(Object.create(stats), { size: 8 * 1024 * 1024 + 1 }) as unknown as typeof stats), open: () => { opened = true; return nodeFs.open(path, "r"); } };
-      await expect(inspectDrift(request(artifact(path), { fs: sizeFs as unknown as DriftRequestV2["fs"] }))).rejects.toBeInstanceOf(Error);
+      const sizedFs = (size: number): DriftRequestV2["fs"] => ({ ...nodeFs, lstat: (candidate: Parameters<typeof nodeFs.lstat>[0]) => nodeFs.lstat(candidate).then((stats) => Object.assign(Object.create(stats), { size: BigInt(size) }) as unknown as typeof stats), open: () => { opened = true; return nodeFs.open(path, "r"); } }) as unknown as DriftRequestV2["fs"];
+      await expect(inspectDrift(request(artifact(path), { fs: sizedFs(MAXIMUM_BUNDLE_FILE_BYTES + 1) }))).rejects.toBeInstanceOf(Error);
+      const instruction = artifact(path, { owner: "claude", kind: "instruction", instruction: { category: "rule", id: "x", source: "default" } });
+      await expect(inspectDrift(request(instruction, { fs: sizedFs(8 * 1024 * 1024 + 1) }))).rejects.toBeInstanceOf(Error);
       expect(opened).toBe(false);
 
       let legacyReadCalled = false;

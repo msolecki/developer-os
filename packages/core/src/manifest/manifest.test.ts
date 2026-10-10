@@ -466,6 +466,20 @@ describe("detectDrift", () => {
     }
   });
 
+  it("hashes a file over the 8 MiB diff bound, as uninstall's V1 view of a release's bundled Node is", async () => {
+    const fixture = await createFixture("drift-large");
+    const filePath = join(fixture.homeDir, "node");
+    try {
+      const bytes = new Uint8Array(8 * 1024 * 1024 + 1).fill(0x6e);
+      await nodeFs.writeFile(filePath, bytes, { mode: 0o700 });
+      const installedHash = createHash("sha256").update(bytes).digest("hex");
+      await expect(detectDrift({ manifest: manifestOf([artifact({ path: filePath, installedHash })]), fs: nodeFs, guards: allowAll }))
+        .resolves.toStrictEqual([]);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it("reports nothing when every managed artifact still matches its record", async () => {
     const fixture = await createFixture("drift-clean");
     const filePath = join(fixture.homeDir, "settings.json");
