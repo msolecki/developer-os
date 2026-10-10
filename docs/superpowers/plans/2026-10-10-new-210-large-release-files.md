@@ -168,7 +168,7 @@ Otherwise the preview refuses `uninstall_artifact_too_large` (exit 6) before any
 
 ### Task 6: Spec, threat model and BACKLOG (S)
 
-- [ ] **Spec 2, after K8. Add K9:**
+- [x] **Spec 2, after K8. Add K9:**
   - (a) Terminal retirement retains no bytes. A file leaf with null `bytes` is hash-read up to `MAXIMUM_BUNDLE_FILE_BYTES` and must carry a `sha256`. §9.2's "document bounded by 64 MiB" reading of a null `bytes` is withdrawn for retirement.
   - (b) Uninstall removes a product-home regular file larger than 16 MiB by moving it aside through Spec 1 §2.4's `K` arm, not through `F(uninstall_artifacts)`. Planning refuses `uninstall_artifact_too_large` (exit 6) for such a file when any of these fails:
     - owner-held, mode `0600`/`0700`;
@@ -178,17 +178,17 @@ Otherwise the preview refuses `uninstall_artifact_too_large` (exit 6) before any
     - at most `MAXIMUM_BUNDLE_FILE_BYTES`.
 
     Accepted residual: two removal mechanisms coexist.
-- [ ] **Spec 2 §9.2:** a one-line K9 (a) note.
-- [ ] **Spec 1 §2.4 `K`:** "Amended 2026-10-10 (Spec 2 K9 (b))", covering:
+- [x] **Spec 2 §9.2:** a one-line K9 (a) note.
+- [x] **Spec 1 §2.4 `K`:** "Amended 2026-10-10 (Spec 2 K9 (b))", covering:
   - the `schemaVersion: 2` `payloads` row grammar, with exactly `staging/lifecycle/<coordinator-id>/payloads/<ordinal>`;
   - "cannot target any second path" now applies to the key only;
   - the stage, restore and delete order;
   - a moved prefix is a legal state before the cursor;
   - compaction and closure admission;
   - both paths present or a wrong identity → `lifecycle_recovery_required`.
-- [ ] **Spec 1 ~1830 and §6 step 3:** one-line notes. Also extend the "redaction-key deletion is secret-opaque" test row with the payload crash boundaries.
-- [ ] **Threat model:** the payload unlink window is the same-uid residual (Spec 1 §8.3 residual 8).
-- [ ] **BACKLOG:** close NEW-210 with the SHAs.
+- [x] **Spec 1 ~1830 and §6 step 3:** one-line notes. Also extend the "redaction-key deletion is secret-opaque" test row with the payload crash boundaries.
+- [x] **Threat model:** the payload unlink window is the same-uid residual (Spec 1 §8.3 residual 8).
+- [x] **BACKLOG:** close NEW-210 with the SHAs.
 
 ### Task 7: VM re-check (S)
 
@@ -205,4 +205,4 @@ On the `dos-gate` VM, with two releases built from the merged code:
 1. The `K` participant is still named `redactionKey`; renaming it is optional churn.
 2. Release directory modes on a keg-initialized home are assumed to be `0700`. If they are not, the preview refuses before reservation, and the Task 7 VM run will show it.
 3. Moving the running Node binary is assumed safe on macOS, because the inode persists. Task 7 verifies this.
-4. The payload is hashed twice: once by preview and once inside `renameNoReplace`. That costs about 1 s; accepted.
+4. Each payload is read in full about four times: the V1 drift hash (streamed since Task 4), the preview hash, the stage hash and the hash inside `renameNoReplace`. That costs a few seconds on a 122 MB file; accepted. V2 doctor drift still reads a content row whole (`ponytail:` note in `packages/core/src/manifest/drift.ts`).
