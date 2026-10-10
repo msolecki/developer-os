@@ -9,9 +9,15 @@ import { MAX_PROPOSED_NOTES, NOTE_KEYS, PROPOSAL_KEYS } from "./proposal.js";
  * One capture, one agent call, and a prompt bounded by one envelope rather
  * than by however long a capture file happens to be (spec §6.1). A capture is
  * a file a human may hand-edit, so the bound is enforced here rather than
- * inferred from whatever wrote it.
+ * inferred from whatever wrote it. It covers `capture`'s 64 KiB input, since
+ * no grapheme is shorter than a byte (AUD-010).
  */
-export const MAX_PROMPT_CONTENT_GRAPHEMES = 16 * 1024;
+export const MAX_PROMPT_CONTENT_GRAPHEMES = 64 * 1024;
+
+/** Whether `buildIngestPrompt` would cut this content; ingest refuses rather than send part of it (AUD-010). */
+export function exceedsPromptContentBound(content: string): boolean {
+  return boundedProse(content, MAX_PROMPT_CONTENT_GRAPHEMES) !== boundedProse(content, Number.MAX_SAFE_INTEGER);
+}
 
 /**
  * The roadmap states this bound as "32 KiB". Read as **graphemes**, not

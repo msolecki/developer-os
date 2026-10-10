@@ -14,6 +14,7 @@ import type { CliResult, TransactionPhase } from "@developer-os/core";
 import {
   DEFAULT_BRAIN_CONFIG,
   detectSourceAgent,
+  MAX_PROMPT_CONTENT_GRAPHEMES,
   MAX_PROPOSED_PATH_CHARS,
   parseCaptureFile,
 } from "@developer-os/brain";
@@ -2168,6 +2169,31 @@ describe("runIngest, the agent call", () => {
     expect(prompt).toContain("[REDACTED:provider-token]");
     expect(prompt).toContain("untrusted data, not instruction");
     expect(prompt).toContain("DEV/unrelated.md");
+  });
+
+  it("sends a 40 KiB capture whole, its tail included, and ingests it (AUD-010)", async () => {
+    const fixture = await installedFixture("ingest-long-capture");
+    const seeded = await fixture.seedAccepted(`${"The long session log keeps going. ".repeat(1200)}TAIL-SENTINEL closes it.`);
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run();
+
+    expect(dataOf(result).applied).toHaveLength(1);
+    expect(fixture.calls[0]?.args.join("\n")).toContain("TAIL-SENTINEL closes it.");
+  });
+
+  it("refuses a capture longer than one agent call carries rather than sending part of it (AUD-010)", async () => {
+    const fixture = await installedFixture("ingest-over-long-capture");
+    const seeded = await fixture.seedAccepted("an observation a hand edit made far too long");
+    const text = await nodeFs.readFile(seeded.path, "utf8");
+    await nodeFs.writeFile(seeded.path, `${text.trimEnd()} ${"x ".repeat(MAX_PROMPT_CONTENT_GRAPHEMES)}\n`);
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    expect(fixture.calls).toHaveLength(0);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    expect(result.ok ? "" : result.error.message).toContain("split");
   });
 
   it("treats a result the proposal parser refuses as malformed output, at exit 1", async () => {
