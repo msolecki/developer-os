@@ -28,7 +28,8 @@ developer-os update
 developer-os update --apply
 ```
 
-`developer-os update` previews the change. After an update, run `developer-os init` to refresh the workflows.
+`developer-os update` previews the change. `developer-os update --apply` refreshes the workflows itself, and so does
+`developer-os update rollback --apply`. Run `developer-os init` only when either reports `workflows not refreshed`.
 
 ## Rollback
 
