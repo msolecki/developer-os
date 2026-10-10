@@ -4,7 +4,10 @@ import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canon
 import type { CanonicalAbsolutePathV1, CanonicalPathEvidenceV1 } from "../update/paths.js";
 import type { LowerHexSha256 } from "../update/scalars.js";
 import {
+  BOOTSTRAP_MAX_CREATED_PATHS as MAX_CREATED_PATHS,
+  BOOTSTRAP_MAX_FOUNDATION_PARTICIPANTS as MAX_FOUNDATION_PARTICIPANTS,
   BOOTSTRAP_MAX_JOURNAL_BYTES,
+  BOOTSTRAP_MAX_LAUNCHABILITY_PATHS as MAX_LAUNCHABILITY_PATHS,
   BOOTSTRAP_MAX_PLAN_BYTES,
   deriveBootstrapEnvelopePaths,
   validateBootstrapJournal,
@@ -27,9 +30,6 @@ import type { FreshV2InitIdV1, ManifestStatePlanAdmissionContextV1 } from "./man
  * and supplies the canonical-path evidence its own process can produce.
  */
 
-const MAX_CREATED_PATHS = 1_000_000;
-const MAX_LAUNCHABILITY_PATHS = 200_006;
-const MAX_FOUNDATION_PARTICIPANTS = 512;
 const encoder = new TextEncoder();
 
 function record(value: unknown): Record<string, unknown> | null {
