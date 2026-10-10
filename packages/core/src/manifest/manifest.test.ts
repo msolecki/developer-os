@@ -477,6 +477,24 @@ describe("detectDrift", () => {
       const release = artifact({ path: filePath, installedHash, owner: "core", source: "bundle/bin/node" });
       await expect(detectDrift({ manifest: manifestOf([release]), fs: nodeFs, guards: allowAll })).resolves.toStrictEqual([]);
 
+      // NEW-210: the hash streams, so a 122 MB Node is never held in memory by the uninstall preview.
+      const buffers: number[] = [];
+      const recordingFs: typeof nodeFs = {
+        ...nodeFs,
+        open: (async (...args: Parameters<typeof nodeFs.open>) => {
+          const handle = await nodeFs.open(...args);
+          const read = handle.read.bind(handle) as (...rest: unknown[]) => Promise<unknown>;
+          (handle as unknown as { read: unknown }).read = (buffer: Uint8Array, ...rest: unknown[]) => {
+            buffers.push(buffer.byteLength);
+            return read(buffer, ...rest);
+          };
+          return handle;
+        }),
+      };
+      await expect(detectDrift({ manifest: manifestOf([release]), fs: recordingFs, guards: allowAll })).resolves.toStrictEqual([]);
+      expect(buffers.length).toBeGreaterThan(1);
+      expect(Math.max(...buffers)).toBeLessThanOrEqual(1024 * 1024);
+
       // The bound is the release format's, and only for a release or rollback file: a downcast instruction or schema row keeps 8 MiB.
       let opened = false;
       const sizedFs = (size: number): typeof nodeFs => ({
