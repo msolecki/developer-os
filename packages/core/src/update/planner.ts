@@ -36,6 +36,7 @@ import {
   parseSchemaMigrationId,
   parseStableSemver,
   parseUtcTimestamp,
+  sha256Hex,
   type LowerHexSha256,
   type PositiveUInt32V1,
   type SchemaMigrationIdV1,
@@ -308,9 +309,6 @@ function same(left: unknown, right: unknown): boolean {
   return canonical(left) === canonical(right);
 }
 
-function sha256Hex(bytes: Uint8Array): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
-}
 
 export function plannerPathToken(ordinal: number): PlannerPathTokenV1 {
   return `artifact_${encodeTenDigitOrdinal(integer(ordinal, 0, MAX_TOKEN_ORDINAL, "PlannerPathTokenV1"))}`;

@@ -12,7 +12,6 @@ import {
   MAX_MUTATIONS,
   orderMigrationChain,
   same,
-  sha256Hex,
   subjectKey,
 } from "./migration-planning.js";
 import {
@@ -39,6 +38,7 @@ import {
   fail,
   parseLowerHexSha256,
   parseUtcTimestamp,
+  sha256Hex,
   type LowerHexSha256,
   type PositiveUInt32V1,
   type SafeReasonCodeV1,

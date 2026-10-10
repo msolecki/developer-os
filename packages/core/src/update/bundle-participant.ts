@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 
 import { decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { EffectiveUidV1 } from "../lifecycle/ids.js";
@@ -21,6 +20,7 @@ import {
   parseUInt64Decimal,
   parseUtcTimestamp,
   record,
+  sha256Hex,
   type LowerHexSha256,
   type SafeReasonCodeV1,
   type UInt64DecimalV1,
@@ -369,9 +369,6 @@ export function canonical(value: unknown): string {
   return encodeCanonicalJson(value as CanonicalJsonValue);
 }
 
-export function sha256Hex(bytes: Uint8Array | string): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
-}
 
 
 export function identity(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {

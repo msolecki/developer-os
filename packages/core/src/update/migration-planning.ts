@@ -2,7 +2,6 @@
  * Spec 2 §8.4's pure migration planning, split from `migrations.ts` so a target planner bundle
  * imports it without the Foundation journal store (Spec 2 §2's capability-absence gate).
  */
-import { createHash } from "node:crypto";
 
 import { compareUtf8, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type {
@@ -17,7 +16,7 @@ import type {
   SchemaMigrationVersionRangeV1,
 } from "./migrations.js";
 import type { PlannerOutputBlobRefV1, SchemaMigrationDraftV1, SchemaMigrationMutationDraftV1 } from "./planner.js";
-import { fail, parsePositiveUInt32, parseSchemaMigrationId, type LowerHexSha256 } from "./scalars.js";
+import { fail, parsePositiveUInt32, parseSchemaMigrationId, sha256Hex } from "./scalars.js";
 
 export const SCHEMA_MIGRATION_DOMAIN_ORDER: readonly SchemaMigrationDomainV1[] = Object.freeze(["product_state", "brain"]);
 
@@ -26,9 +25,6 @@ export const MAX_MUTATIONS = 100_000;
 const MAX_BLOB_BYTES = 16_777_216;
 export const MAX_RETAINED_BLOB_ORDINAL = 999_999;
 
-export function sha256Hex(bytes: Uint8Array | string): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
-}
 
 export function canonical(value: unknown): string {
   return encodeCanonicalJson(value as CanonicalJsonValue);

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 declare const stableSemverV1: unique symbol;
 declare const uint64DecimalV1: unique symbol;
 declare const positiveUInt32V1: unique symbol;
@@ -140,4 +142,8 @@ export function nullableInteger(value: unknown, minimum: number, maximum: number
 export function oneOf<T>(value: unknown, allowed: readonly T[], label: string): T {
   if (!allowed.includes(value as T)) fail(label);
   return value as T;
+}
+
+export function sha256Hex(bytes: Uint8Array | string): LowerHexSha256 {
+  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
