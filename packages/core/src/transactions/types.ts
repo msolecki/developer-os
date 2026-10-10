@@ -1,6 +1,5 @@
 import type {
   chmod,
-  link,
   lstat,
   mkdir,
   open,
@@ -8,7 +7,6 @@ import type {
   rename,
   stat,
   unlink,
-  utimes,
 } from "node:fs/promises";
 
 import type { BootstrapRetentionPostimageV1 } from "../manifest/bootstrap-retention.js";
@@ -90,7 +88,6 @@ export interface TransactionPlan {
 
 export interface TransactionFileSystem {
   readonly chmod: typeof chmod;
-  readonly link: typeof link;
   readonly lstat: typeof lstat;
   readonly mkdir: typeof mkdir;
   readonly open: typeof open;
@@ -98,7 +95,6 @@ export interface TransactionFileSystem {
   readonly rename: typeof rename;
   readonly stat: typeof stat;
   readonly unlink: typeof unlink;
-  readonly utimes: typeof utimes;
 }
 
 export type TransactionAfterPhase = (
