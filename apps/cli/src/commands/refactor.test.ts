@@ -1,7 +1,7 @@
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
-import { EXIT_CODES, loadConfig, serializeConfig } from "@developer-os/core";
+import { EXIT_CODES, loadConfig, serializeConfig, TransactionPlanError } from "@developer-os/core";
 import { DEFAULT_BRAIN_CONFIG } from "@developer-os/brain";
 import type { RefactorRequestV1 } from "@developer-os/brain";
 import { afterEach, describe, expect, it } from "vitest";
@@ -239,6 +239,53 @@ describe("runRefactor", () => {
     expect(!result.ok && result.error.kind).toBe("note_changed_since_read");
     expect(await exists(join(graveyard, "INFRA"))).toBe(false);
     expect(await exists(graveyard)).toBe(graveyardBefore);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses exit 3 note_changed_since_read when a note to move vanishes between plan and apply", async () => {
+    const fixture = await installed("refactor-vanished");
+    const { context } = recording(fixture.context, async (kind) => {
+      if (kind === "brain-refactor") await nodeFs.rm(join(fixture.content, LINKED));
+    });
+
+    const result = await runRefactor(context, { subcommand: "refactor", request: RENAME, dryRun: false });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.decisionRequired,
+      "note_changed_since_read",
+    ]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("does not report a malformed transaction plan as a changed note (AUD-054)", async () => {
+    const fixture = await installed("refactor-plan-error");
+    const { context } = recording(fixture.context, (kind) =>
+      kind === "brain-refactor" ? Promise.reject(new TransactionPlanError()) : Promise.resolve(),
+    );
+
+    const result = await runRefactor(context, { subcommand: "refactor", request: RENAME, dryRun: false });
+
+    expect(!result.ok && result.code).toBe(EXIT_CODES.invalidInput);
+    expect(!result.ok && result.error.kind).not.toBe("note_changed_since_read");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses exit 5 when the post-apply reindex meets an index directory outside the content root (AUD-055)", async () => {
+    const fixture = await installed("refactor-index-escape");
+    const indexes = join(fixture.content, "_indexes");
+    const stolen = join(fixture.root, "stolen-indexes");
+    const { context } = recording(fixture.context, async (kind) => {
+      if (kind !== "brain-refactor") return;
+      await nodeFs.rm(indexes, { recursive: true });
+      await nodeFs.mkdir(stolen, { recursive: true, mode: 0o700 });
+      await nodeFs.symlink(stolen, indexes);
+    });
+
+    const result = await runRefactor(context, { subcommand: "refactor", request: RENAME, dryRun: false });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.securityRefusal,
+      "refactor_reindex_failed",
+    ]);
+    expect(!result.ok && result.error.message).toMatch(/applied in transaction \S+, but the index was not rebuilt/u);
+    expect(await nodeFs.readdir(stolen)).toStrictEqual([]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses exit 3 refactor_destination_exists for a non-note file already at the destination", async () => {

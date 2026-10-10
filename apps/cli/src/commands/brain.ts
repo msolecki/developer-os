@@ -92,7 +92,7 @@ const MAX_REPORTED_ERRORS = 20;
 
 type FailureExitCode = Exclude<ExitCode, typeof EXIT_CODES.success>;
 
-class BrainRefusal extends Error {
+export class BrainRefusal extends Error {
   constructor(
     readonly code: FailureExitCode,
     message: string,
@@ -102,6 +102,16 @@ class BrainRefusal extends Error {
     super(message);
     this.name = "BrainRefusal";
   }
+}
+
+/** The index directory resolving outside the content root (NEW-19); `brain refactor`'s reindex shares it (AUD-055). */
+export function indexEscapeRefusal(message: string, paths: readonly string[]): BrainRefusal {
+  return new BrainRefusal(
+    EXIT_CODES.securityRefusal,
+    message,
+    paths,
+    "restore the index directory inside the vault's content root; nothing is read or written through an index path that leaves it",
+  );
 }
 
 /**
@@ -173,13 +183,7 @@ async function runReindex(
     kind: "brain-reindex",
     refuse: (message, paths) =>
       new BrainRefusal(EXIT_CODES.operationalFailure, message, paths),
-    refuseIndexEscape: (message, paths) =>
-      new BrainRefusal(
-        EXIT_CODES.securityRefusal,
-        message,
-        paths,
-        "restore the index directory inside the vault's content root; nothing is read or written through an index path that leaves it",
-      ),
+    refuseIndexEscape: indexEscapeRefusal,
   });
 
   return success({
