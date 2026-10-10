@@ -27,6 +27,8 @@ import type {
   UInt64DecimalV1,
 } from "@developer-os/core";
 import { isMissingEntry } from "../config-file.js";
+import { validateUninstallPayloads } from "./uninstall-payloads.js";
+import type { UninstallPayloadV1 } from "./uninstall-payloads.js";
 
 const SOURCE_LEAF = "redaction.key";
 const SECRET_MODE = 0o600;
@@ -34,6 +36,7 @@ const MINIMUM_SECRET_BYTES = 32;
 const MAXIMUM_SECRET_BYTES = 1_048_576;
 
 const PLAN_KEYS = ["schemaVersion", "coordinatorId", "sourcePath", "tombstonePath", "before"];
+const PLAN_KEYS_V2 = [...PLAN_KEYS, "payloads"];
 const ABSENT_KEYS = ["state"];
 const PRESENT_KEYS = ["state", "kind", "ownerUid", "mode", "nlink", "size", "dev", "ino"];
 
@@ -50,12 +53,19 @@ export type SecretOpaqueFileStateV1 =
       readonly ino: UInt64DecimalV1;
     };
 
+/**
+ * v2 adds the NEW-210 payloads. A v1 plan decodes as `payloads: []` and keeps its version,
+ * because the ledger refuses a stored plan whose re-encoding differs from its bytes
+ * (`ledger.ts` `lifecycle_coordinator_plan_bytes`), so an in-flight v1 uninstall must re-encode
+ * exactly as written.
+ */
 export interface RedactionKeyStatePlanV1 {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 1 | 2;
   readonly coordinatorId: LifecycleCoordinatorIdV1;
   readonly sourcePath: CanonicalAbsolutePathV1;
   readonly tombstonePath: CanonicalAbsolutePathV1;
   readonly before: SecretOpaqueFileStateV1;
+  readonly payloads: readonly UninstallPayloadV1[];
 }
 
 function fail(label: string): never {
@@ -94,13 +104,18 @@ export function redactionKeyTombstonePath(
 }
 
 function planJson(plan: RedactionKeyStatePlanV1): CanonicalJsonValue {
-  return {
+  const base = {
     schemaVersion: plan.schemaVersion,
     coordinatorId: plan.coordinatorId,
     sourcePath: plan.sourcePath,
     tombstonePath: plan.tombstonePath,
     before: plan.before as unknown as CanonicalJsonValue,
   };
+  if (plan.schemaVersion === 1) {
+    if (plan.payloads.length !== 0) fail("RedactionKeyStatePlanV1: v1 payloads");
+    return base;
+  }
+  return { ...base, payloads: plan.payloads as unknown as CanonicalJsonValue };
 }
 
 function validateBefore(value: unknown): SecretOpaqueFileStateV1 {
@@ -140,19 +155,27 @@ export function createRedactionKeyStatePlanCodec(
   return {
     validate(value: unknown): RedactionKeyStatePlanV1 {
       const label = "RedactionKeyStatePlanV1";
-      const input = exact(value, PLAN_KEYS, label);
-      if (input.schemaVersion !== 1) fail(`${label}: schemaVersion`);
+      const schemaVersion = (value as { readonly schemaVersion?: unknown } | null)?.schemaVersion;
+      if (schemaVersion !== 1 && schemaVersion !== 2) fail(`${label}: schemaVersion`);
+      /** A decoded v1 plan carries `payloads: []` in memory, so validating it again must admit that. */
+      const legacyInMemory = schemaVersion === 1 && Object.hasOwn(value as object, "payloads");
+      const input = exact(value, schemaVersion === 2 || legacyInMemory ? PLAN_KEYS_V2 : PLAN_KEYS, label);
+      if (legacyInMemory && !(Array.isArray(input.payloads) && input.payloads.length === 0)) {
+        fail(`${label}: v1 payloads`);
+      }
       const coordinatorId = parseLifecycleCoordinatorId(input.coordinatorId, context.nonce);
       if (input.sourcePath !== redactionKeySourcePath(stateDirectory)) fail(`${label}: sourcePath`);
       if (input.tombstonePath !== redactionKeyTombstonePath(stateDirectory, coordinatorId)) {
         fail(`${label}: tombstonePath`);
       }
       return {
-        schemaVersion: 1,
+        schemaVersion,
         coordinatorId,
         sourcePath: redactionKeySourcePath(stateDirectory),
         tombstonePath: redactionKeyTombstonePath(stateDirectory, coordinatorId),
         before: validateBefore(input.before),
+        payloads:
+          schemaVersion === 1 ? [] : validateUninstallPayloads(input.payloads, context.productHome, coordinatorId),
       };
     },
     encode: (plan) => encodeCanonicalJson(planJson(plan)),

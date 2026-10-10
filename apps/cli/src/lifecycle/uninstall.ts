@@ -19,7 +19,6 @@ import {
   LifecycleCoordinator,
   LifecycleRecoveryRequiredError,
   LIFECYCLE_LEASE_DRAIN_MS,
-  LIFECYCLE_UNINSTALL_ARTIFACT_STEPS,
   ManifestStateParticipant,
   SCHEDULED_JOB_IDS,
   TransactionExecutor,
@@ -154,6 +153,7 @@ import {
   stageRedactionKey,
 } from "./redaction-key.js";
 import type { RedactionKeyStatePlanV1 } from "./redaction-key.js";
+import { MAX_ARTIFACTS_PER_STEP, MAX_MUTATION_BYTES, MAX_UNINSTALL_ARTIFACTS } from "./uninstall-payloads.js";
 import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 const GLOBAL_LOCK_LEAF = ".lifecycle.lock";
@@ -161,11 +161,6 @@ const MARKER_LEAF = "uninstalling.json";
 const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
 const NONCE_LEAF = "lifecycle-install-nonce";
 const ACTIVATION_LEAF = "lifecycle-activation.json";
-/** §2.4's `FoundationParticipantRefV1.mutations[1..256]`, per `F(uninstall_artifacts)` step. */
-const MAX_ARTIFACTS_PER_STEP = 256;
-/** D45: 31 steps of 256, the 7,936-mutation ceiling. */
-export const MAX_UNINSTALL_ARTIFACTS = MAX_ARTIFACTS_PER_STEP * LIFECYCLE_UNINSTALL_ARTIFACT_STEPS.maximum;
-const MAX_MUTATION_BYTES = 16_777_216;
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 const MAX_PLAN_BYTES = 16_777_216;
 const MAX_JOURNAL_BYTES = 1_048_576;
@@ -236,7 +231,7 @@ export class UninstallCapacityError extends Error {
   }
 }
 
-export { refuseUnsupportedLaunchd };
+export { refuseUnsupportedLaunchd, MAX_UNINSTALL_ARTIFACTS };
 
 /** identity-free stat: the guarded port takes a path and nothing else, and returns an already-exact decimal identity. */
 function guardedEntry(
@@ -628,6 +623,7 @@ function uninstallBuilder(
               coordinatorId as LifecycleCoordinatorIdV1,
             ),
             before: inputs.keyBefore,
+            payloads: [],
           },
         },
         push: null,
