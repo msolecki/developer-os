@@ -258,6 +258,22 @@ describe("ProtectedPathPolicy", () => {
     });
   });
 
+  it.each([
+    ["a dangling file link", "notes.txt", ".ssh/authorized_keys", "notes.txt"],
+    ["a dangling directory link", "keys", ".ssh", "keys/authorized_keys"],
+  ])("refuses writing through %s into an absent ~/.ssh", async (_label, linkName, target, written) => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const home = join(temporaryDirectory, "synthetic-home");
+    const project = join(home, "project");
+    await mkdir(project, { recursive: true });
+    await symlink(join(home, target), join(project, linkName));
+    const policy = new ProtectedPathPolicy(home);
+
+    await expect(policy.assertWritable(join(project, written))).rejects.toMatchObject({
+      code: EXIT_CODES.securityRefusal,
+    });
+  });
+
   it("reads from the opened safe descriptor after the original alias is swapped", async () => {
     const temporaryDirectory = await makeTemporaryDirectory();
     const home = join(temporaryDirectory, "synthetic-home");

@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { lstat, readlink, realpath } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -43,6 +43,19 @@ function isSameOrDescendant(parent: string, candidate: string): boolean {
   );
 }
 
+const MAX_SYMLINK_HOPS = 40;
+
+async function danglingLinkTarget(path: string): Promise<string | undefined> {
+  try {
+    return (await lstat(path)).isSymbolicLink() ? await readlink(path) : undefined;
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 export async function canonicalizePlannedPath(path: string): Promise<string> {
   if (path.includes("\0")) {
     refuse("Path contains a NUL byte");
@@ -53,6 +66,7 @@ export async function canonicalizePlannedPath(path: string): Promise<string> {
 
   let existingAncestor = resolve(path);
   const unresolvedSegments: string[] = [];
+  let symlinkHops = 0;
 
   for (;;) {
     try {
@@ -66,6 +80,17 @@ export async function canonicalizePlannedPath(path: string): Promise<string> {
       const parent = dirname(existingAncestor);
       if (parent === existingAncestor) {
         refuse("No existing ancestor could be resolved");
+      }
+
+      // A dangling symlink is missing to realpath but present to lstat; a write through it lands at its target.
+      const linkTarget = await danglingLinkTarget(existingAncestor);
+      if (linkTarget !== undefined) {
+        symlinkHops += 1;
+        if (symlinkHops > MAX_SYMLINK_HOPS) {
+          refuse("Too many symbolic links");
+        }
+        existingAncestor = resolve(await realpath(parent), linkTarget);
+        continue;
       }
 
       unresolvedSegments.unshift(basename(existingAncestor));

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EXIT_CODES } from "@developer-os/core";
@@ -52,6 +52,29 @@ describe("canonicalizePlannedPath", () => {
     ).resolves.toBe(
       join(canonicalExistingDirectory, "planned-child", "planned-grandchild"),
     );
+  });
+
+  it("follows a dangling symlink to where a write through it would land", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const canonicalTemporaryDirectory = await realpath(temporaryDirectory);
+    await mkdir(join(temporaryDirectory, "real-dir"));
+    await symlink("real-dir/absent-target", join(temporaryDirectory, "file-link"));
+    await symlink(join(temporaryDirectory, "absent-dir"), join(temporaryDirectory, "dir-link"));
+
+    await expect(canonicalizePlannedPath(join(temporaryDirectory, "file-link"))).resolves.toBe(
+      join(canonicalTemporaryDirectory, "real-dir", "absent-target"),
+    );
+    await expect(canonicalizePlannedPath(join(temporaryDirectory, "dir-link", "child"))).resolves.toBe(
+      join(canonicalTemporaryDirectory, "absent-dir", "child"),
+    );
+  });
+
+  it("refuses a chain of dangling symlinks that never ends", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    await symlink("loop-b/x", join(temporaryDirectory, "loop-a"));
+    await symlink("loop-a/x", join(temporaryDirectory, "loop-b"));
+
+    await expect(canonicalizePlannedPath(join(temporaryDirectory, "loop-a"))).rejects.toThrow();
   });
 
   it.each(["relative/planned", "/tmp/synthetic\0planned"])(
