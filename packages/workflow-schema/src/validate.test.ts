@@ -181,6 +181,27 @@ describe("validateWorkflow", () => {
     expect(unknown.map((f) => f.stepId)).toStrictEqual(["first", "second"]);
   });
 
+  it("names every `$input.<name>` in a step's `with` that no input declares", () => {
+    const result = validateWorkflow(
+      "f.yaml",
+      raw({
+        inputs: { query: { type: "string", required: true, description: "Q." } },
+        steps: [
+          {
+            id: "a",
+            do: "brain.search",
+            with: { query: "$input.query", limit: "$input.limit", nested: ["$input.gone"] },
+          },
+        ],
+      }),
+    );
+    const undeclared = result.findings.filter((f) => f.rule === "input-undeclared");
+    expect(undeclared.map((f) => [f.stepId, f.severity, f.message])).toStrictEqual([
+      ["a", "error", "`$input.limit` names no declared input"],
+      ["a", "error", "`$input.gone` names no declared input"],
+    ]);
+  });
+
   it("returns a result for input no file could produce, rather than throwing", () => {
     /**
      * `validateWorkflow` takes `unknown` and is documented as supporting a
