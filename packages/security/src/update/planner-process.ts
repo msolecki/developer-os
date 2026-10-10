@@ -106,8 +106,8 @@ function sha256(bytes: Uint8Array): LowerHexSha256 {
  * every string leaf is a digest, token, enum or path takes the `path` scope; anything else takes
  * `text`. `text` keeps `high-entropy`, which fires on every real SHA-256 hex digest by design.
  */
-export function screenPlannerFrame(redactor: Redactor, bytes: Uint8Array, scope: RedactionScope = "text"): void {
-  if (redactor(textDecoder.decode(bytes), scope).findings.length > 0) refuse("Planner frame failed the secret screen");
+export function screenPlannerFrame(redactor: Redactor, bytes: Uint8Array, scope: RedactionScope = "text", category?: string): void {
+  if (redactor(textDecoder.decode(bytes), scope).findings.length > 0) refuse(`Planner frame failed the secret screen${category === undefined ? "" : `: ${category}`}`);
 }
 
 /**
@@ -131,15 +131,21 @@ function productRecordBlobOrdinals(request: UpdatePlannerRequestV1): ReadonlySet
  * Brain path, remote URLs, folders, aliases), the automation schedules, and the Brain note paths.
  * The `path` screen of the whole request skips `high-entropy`, so these alone get `text` too. The
  * Git scope's `fingerprint` is the product's digest of the rest of the scope and is left out.
+ * Screened as four groups so a refusal names a fixed category the user can act on, never a value.
  */
-function userDerivedRequestLeaves(request: UpdatePlannerRequestV1): Uint8Array {
+function userWrittenRequestGroups(request: UpdatePlannerRequestV1): readonly (readonly [string, Uint8Array])[] {
   const { brain, git, automation } = request.config;
   let gitLeaves: unknown = git;
   if (git.lifecycle !== undefined) {
     const scope = Object.fromEntries(Object.entries(git.lifecycle.scope).filter(([key]) => key !== "fingerprint"));
     gitLeaves = { ...git, lifecycle: { ...git.lifecycle, scope } };
   }
-  return plannerJsonBytes({ brain, git: gitLeaves, automation, entries: request.brain.entries.map((entry) => entry.path) });
+  return [
+    ["a Brain note path", plannerJsonBytes(request.brain.entries.map((entry) => entry.path))],
+    ["the Brain configuration", plannerJsonBytes(brain)],
+    ["the Git configuration", plannerJsonBytes(gitLeaves)],
+    ["the automation configuration", plannerJsonBytes(automation)],
+  ];
 }
 
 interface Supervision {
@@ -172,7 +178,7 @@ export class TargetPlannerSupervisor {
     if (requestJson.byteLength > this.#bounds.requestJsonBytes) refuse("Planner request exceeds its bound");
     // Product-built from the validated snapshot: digests, tokens, enums and relative paths, with artifact paths, the Brain root and redaction literals tokenized. Its user-written leaves are screened again with `text`.
     screenPlannerFrame(redactor, requestJson, "path");
-    screenPlannerFrame(redactor, userDerivedRequestLeaves(request));
+    for (const [category, leaves] of userWrittenRequestGroups(request)) screenPlannerFrame(redactor, leaves, "text", category);
     const refs = plannerInputBlobRefs(request);
     if (refs.length !== run.inputBlobs.length) refuse("Planner input blobs differ from the request");
     const inputHasher = new PlannerBlobSetHasher("input", refs.length);
