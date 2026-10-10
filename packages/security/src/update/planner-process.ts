@@ -102,11 +102,26 @@ function sha256(bytes: Uint8Array): LowerHexSha256 {
 
 /**
  * Spec 2 §8.2: every request/result frame and blob is screened before it is hashed, sent, or
- * accepted. The diagnostic is fixed; neither the bytes nor the finding reach it. A frame the
- * product derived from a validated plan takes the `path` scope; anything else takes `text`.
+ * accepted. The diagnostic is fixed; neither the bytes nor the finding reach it. A frame whose
+ * every string leaf is a digest, token, enum or path takes the `path` scope; anything else takes
+ * `text`. `text` keeps `high-entropy`, which fires on every real SHA-256 hex digest by design.
  */
 export function screenPlannerFrame(redactor: Redactor, bytes: Uint8Array, scope: RedactionScope = "text"): void {
   if (redactor(textDecoder.decode(bytes), scope).findings.length > 0) refuse("Planner frame failed the secret screen");
+}
+
+/**
+ * Schema-verified rows whose bytes the product itself writes as exact-key JSON of a path and a
+ * digest (`codexHome`, `treeHash`). `developer-os-config-v1` is schema-verified too but user-edited,
+ * so it is not here and its bytes keep the `text` screen.
+ */
+const PRODUCT_RECORD_SCHEMAS: ReadonlySet<string> = new Set(["codex-registration-v1"]);
+
+function productRecordBlobOrdinals(request: UpdatePlannerRequestV1): ReadonlySet<number> {
+  return new Set(request.artifactInputs.flatMap((input) =>
+    input.verification.mode === "schema" && PRODUCT_RECORD_SCHEMAS.has(input.verification.schemaId) && input.observed.state === "content" && input.observed.blob !== null
+      ? [input.observed.blob.ordinal]
+      : []));
 }
 
 interface Supervision {
@@ -137,12 +152,14 @@ export class TargetPlannerSupervisor {
     const { redactor } = this.dependencies;
     const requestJson = plannerJsonBytes(request);
     if (requestJson.byteLength > this.#bounds.requestJsonBytes) refuse("Planner request exceeds its bound");
-    screenPlannerFrame(redactor, requestJson);
+    // The product built it from the validated snapshot: digests, tokens, enums and relative paths, with the Brain root and redaction literals already tokenized.
+    screenPlannerFrame(redactor, requestJson, "path");
     const refs = plannerInputBlobRefs(request);
     if (refs.length !== run.inputBlobs.length) refuse("Planner input blobs differ from the request");
     const inputHasher = new PlannerBlobSetHasher("input", refs.length);
+    const productRecords = productRecordBlobOrdinals(request);
     run.inputBlobs.forEach((blob, ordinal) => {
-      screenPlannerFrame(redactor, blob);
+      screenPlannerFrame(redactor, blob, productRecords.has(ordinal) ? "path" : "text");
       const hash = sha256(blob);
       const ref = refs[ordinal];
       if (ref === undefined || ref.bytes !== blob.byteLength || ref.sha256 !== hash) refuse("Planner input blob differs from its reference");
@@ -276,8 +293,9 @@ async function readOutput(
     supervision.progress();
     for (const frame of wire.push(chunk)) {
       if (frame.kind === "json") {
-        screenPlannerFrame(redactor, frame.payload);
+        // Admitted first: exact keys, rebuilt to byte equality, so no free text survives to be screened and `path` holds. Nothing is hashed or accepted before the screen.
         admitted = admitTargetUpdateDraft(decodePlannerJson(frame.payload, bounds.resultJsonBytes), request);
+        screenPlannerFrame(redactor, frame.payload, "path");
         resultHash = plannerJsonHash("output", frame.payload);
         hasher = new PlannerBlobSetHasher("output", admitted.outputBlobs.length);
       } else if (frame.kind === "blob") {
