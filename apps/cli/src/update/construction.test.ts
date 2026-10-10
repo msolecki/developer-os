@@ -70,7 +70,6 @@ interface Fixture {
   readonly plan: UpdateConstructionPlanV1;
   readonly rowBytes: ReadonlyMap<number, Uint8Array>;
   readonly frames: readonly SecretScreenedBlobV1[];
-  readonly nested: Set<number>;
 }
 
 /** A synthetic apply: three read-only leaves, a manifest leaf, a rollback source, one owner frame, one rollback-only frame. */
@@ -126,7 +125,7 @@ async function fixture(): Promise<Fixture> {
   });
   const rowBytes = new Map(contents.map((content, ordinal) => [ordinal, encoder.encode(content)]));
   const frames = [ownerBlob, inverseBlob].map((content, ordinal) => ({ ordinal, bytes: content.byteLength, sha256: sha(content), content }) as SecretScreenedBlobV1);
-  return { home, root, plan, rowBytes, frames, nested: new Set() };
+  return { home, root, plan, rowBytes, frames };
 }
 
 function sources(fixtureValue: Fixture, overrides: Partial<UpdateConstructionSourcePortV1> = {}): UpdateConstructionSourcePortV1 {
@@ -136,7 +135,6 @@ function sources(fixtureValue: Fixture, overrides: Partial<UpdateConstructionSou
     consumeRollbackEntry: () => Promise.resolve(),
     finishSources: () => Promise.resolve(),
     compensateSources: () => Promise.resolve(),
-    nestedTerminal: (_plan, row) => Promise.resolve(fixtureValue.nested.has(row.ordinal)),
     ...overrides,
   };
 }
@@ -415,14 +413,37 @@ describe("UpdateConstructionStore", () => {
     const value = await fixture();
     const target = store(value);
     await construct(value, target);
-    for (const row of value.plan.files.slice(3)) {
-      await nodeFs.rm(row.path);
-      value.nested.add(row.ordinal);
-    }
+    for (const row of value.plan.files.slice(3)) await nodeFs.rm(row.path);
     await target.compact(value.plan);
     await target.removeEnvelope(value.plan);
     expect(await nodeFs.readdir(value.root)).toEqual([]);
     for (const row of value.plan.files.slice(0, 3)) expect(await exists(row.path)).toBe(false);
+  });
+
+  it("removes a leftover payload row no nested owner consumed, by its evidenced inode and hash (NEW-241)", async () => {
+    const value = await fixture();
+    const target = store(value);
+    await construct(value, target);
+    const leftover = value.plan.files.find((row) => row.role.kind === "payload" && row.role.payloadKind === "state_after") as UpdateConstructionFilePlanV1;
+    for (const row of value.plan.files.slice(3)) if (row !== leftover) await nodeFs.rm(row.path);
+    await target.compact(value.plan);
+    await target.removeEnvelope(value.plan);
+    expect(await nodeFs.readdir(value.root)).toEqual([]);
+  });
+
+  it("refuses a leftover payload row whose bytes changed on the same inode (NEW-241)", async () => {
+    const value = await fixture();
+    const target = store(value);
+    await construct(value, target);
+    const leftover = value.plan.files.find((row) => row.role.kind === "payload" && row.role.payloadKind === "state_after") as UpdateConstructionFilePlanV1;
+    for (const row of value.plan.files.slice(3)) if (row !== leftover) await nodeFs.rm(row.path);
+    const original = await nodeFs.readFile(leftover.path);
+    await nodeFs.writeFile(leftover.path, Buffer.from(original).fill(0x20));
+    await expect(target.compact(value.plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await exists(leftover.path)).toBe(true);
+    await nodeFs.writeFile(leftover.path, original);
+    await target.compact(value.plan);
+    expect(await exists(leftover.path)).toBe(false);
   });
 
   it("refuses compaction of a delegated row that is still present or not terminal", async () => {
@@ -436,10 +457,7 @@ describe("UpdateConstructionStore", () => {
   it("resumes compaction after a death between a file and its evidence", async () => {
     const value = await fixture();
     await construct(value, store(value));
-    for (const row of value.plan.files.slice(3)) {
-      await nodeFs.rm(row.path);
-      value.nested.add(row.ordinal);
-    }
+    for (const row of value.plan.files.slice(3)) await nodeFs.rm(row.path);
     const plannedFiles = value.plan.files.length;
     await expect(store(value, { interrupt: killAt("compaction_step", 2 * plannedFiles - 5) }).compact(value.plan)).rejects.toBeInstanceOf(Killed);
     const resumed = store(value);

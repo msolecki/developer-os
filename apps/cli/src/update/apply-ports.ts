@@ -1019,8 +1019,6 @@ function recoverySources(lifecycle: CliLifecycleContext, root: CanonicalAbsolute
       if (sources.rollback !== null && (await reached("rollback_payload_source", sources.rollback.plan.id))) await new RollbackPayloadSourceExecutor(deps, root).compensate(sources.rollback.plan, plan, journal);
       if (sources.bundle !== null && (await reached("bundle_source_staging", sources.bundle.plan.id))) await new BundleSourceExecutor(deps, root).compensate(sources.bundle.plan, plan, journal);
     },
-    // ponytail: the store asks only once the row is already absent; the nested owner's own compaction removed it.
-    nestedTerminal: () => Promise.resolve(true),
   };
 }
 

@@ -287,6 +287,25 @@ describe("canonical state participant", () => {
     expect(await read(step.plan.path)).toBe('{"record":"after"}\n');
   });
 
+  it("compacts a step that never ran: its unconsumed payload goes with the plan (NEW-241)", async () => {
+    const { step, participant } = await stateFixture("active_release");
+    const payload = (step.plan.after as Extract<CanonicalStatePostimageV1, { readonly state: "present" }>).payload.path;
+    await participant.compact(step);
+    expect(await read(payload)).toBeNull();
+    expect(await read(step.planRef.path)).toBeNull();
+    expect(await read(step.plan.path)).toBe('{"record":"before"}\n');
+  });
+
+  it("refuses to compact an unreached step whose payload is not the construction-evidenced inode (NEW-241)", async () => {
+    const { step, participant } = await stateFixture("active_release");
+    const payload = (step.plan.after as Extract<CanonicalStatePostimageV1, { readonly state: "present" }>).payload.path;
+    await nodeFs.rm(payload);
+    await writeOwned(payload, '{"record":"after"}\n');
+    await expect(participant.compact(step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await read(payload)).toBe('{"record":"after"}\n');
+    expect(await read(step.planRef.path)).not.toBeNull();
+  });
+
   it("fixes the plan bytes before the payload exists and takes the postimage inode from construction evidence", async () => {
     const { step, participant } = await stateFixture("active_release");
     expect(Object.keys(step.plan.after)).not.toContain("dev");

@@ -9,11 +9,13 @@ import type { LifecycleGuardedEntryV1, ManifestBytesStateV1, ManifestStatePlanV1
 import { createRedactor } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { runDoctorReport } from "../commands/doctor.js";
 import { removeCommandFixtures } from "../commands/testing.js";
 
 import type { CliContext } from "../context.js";
 import { codexPlanningInputs, constructionScreen, verifierSnapshot, manifestPayloadIdentities, matchesManifestFileIdentity, runCleanups } from "./apply-ports.js";
 import { planRollback } from "./planning.js";
+import { recoverUpdate } from "./apply.js";
 import { applyRollback } from "./rollback-apply.js";
 import { installUpdatableHome, SYNTHETIC_COORDINATOR_ID, tamperManifestBeforeVerifier, updateTo } from "./testing.js";
 
@@ -285,5 +287,137 @@ describe("a compensated update's structures (NEW-118 (1), (2))", () => {
     expect(await nodeFs.lstat(join(home.fixture.paths.home, "releases", "1.1.0")).then(() => true, () => false)).toBe(false);
     const reservation = await nodeFs.lstat(join(home.fixture.paths.stateDir, "update-rollback.json"));
     expect([reservation.size, reservation.mode & 0o777]).toEqual([0, 0o600]);
+  }, 900_000);
+});
+
+type FixtureFs = NonNullable<CliContext["lifecycle"]>["fs"];
+type Mutation = "writeExclusive" | "mkdirExclusive" | "renameOver" | "renameNoReplace" | "unlinkExact" | "rmdirExactEmpty";
+const MUTATIONS: readonly Mutation[] = ["writeExclusive", "mkdirExclusive", "renameOver", "renameNoReplace", "unlinkExact", "rmdirExactEmpty"];
+
+function pathsOf(args: readonly unknown[]): readonly string[] {
+  return args.map((arg) => (typeof arg === "string" ? arg : (arg as { readonly path?: string } | null)?.path ?? ""));
+}
+
+/**
+ * The same context whose guarded filesystem lets `around` intercept every durable mutation: it
+ * returns the real call's result, or throws instead of (or after) running it.
+ */
+function intercepted(context: CliContext, around: (name: Mutation, paths: readonly string[], real: () => Promise<unknown>) => Promise<unknown>): CliContext {
+  const lifecycle = context.lifecycle;
+  if (lifecycle === undefined) throw new Error("the fixture has no lifecycle ports");
+  const fs: Record<string, unknown> = { ...lifecycle.fs };
+  for (const name of MUTATIONS) {
+    const real = lifecycle.fs[name].bind(lifecycle.fs) as (...args: readonly unknown[]) => Promise<unknown>;
+    fs[name] = (...args: readonly unknown[]): Promise<unknown> => around(name, pathsOf(args), () => real(...args));
+  }
+  return { ...context, lifecycle: { ...lifecycle, fs: fs as unknown as FixtureFs } };
+}
+
+/** A plain (non-recovery) error refusing the first mutation `marks` selects, as the real renameatx runner refused step 0 (NEW-241). */
+function failFirst(context: CliContext, marks: (name: Mutation, path: string) => boolean): CliContext {
+  let failed = false;
+  return intercepted(context, (name, paths, real) => {
+    if (!failed && marks(name, paths[0] ?? "")) {
+      failed = true;
+      return Promise.reject(new Error("synthetic step refusal"));
+    }
+    return real();
+  });
+}
+
+/**
+ * The first durable mutation of each compensable outer step before the verifier, in the one-owner
+ * fixture's step order. The manifest steps (3, 4) are absent: the manifest participant turns any
+ * failure into a third state (exit 6, resumed forward), so they never start compensation.
+ */
+const STEP_MARKS: readonly (readonly [string, (name: Mutation, path: string) => boolean])[] = [
+  ["0 bundle", (name, path) => name === "mkdirExclusive" && path.endsWith("/update/journals/bundle_publication")],
+  ["1 owner_files", (name, path) => name === "mkdirExclusive" && path.endsWith("/update/journals/owner_update")],
+  ["2 rollback_payload", (name, path) => name === "mkdirExclusive" && path.endsWith("/update/journals/rollback_payload_state")],
+  ["5 trust", (name, path) => name === "mkdirExclusive" && path.endsWith("/update/journals/release_trust_state")],
+  ["6 rollback_record", (name, path) => name === "mkdirExclusive" && path.endsWith("/update/journals/rollback_record_state")],
+  ["7 active", (name, path) => name === "mkdirExclusive" && path.endsWith("/update/journals/active_release_state")],
+];
+
+/** The home is back on 1.0.0 with a clear closure, no staging left and no failing doctor check. */
+async function expectCleanlyRolledBack(home: Awaited<ReturnType<typeof installUpdatableHome>>): Promise<void> {
+  const update = home.update();
+  const ports = update.apply;
+  if (ports === undefined) throw new Error("the on-disk context binds the apply ports");
+  expect((await ports.withGlobalLock(() => ports.closure())).kind).toBe("clear");
+  expect(await nodeFs.readdir(join(home.fixture.paths.home, "staging", "lifecycle")).catch(() => [])).toEqual([]);
+  expect((await update.readHome()).active.version).toBe("1.0.0");
+  expect((await runDoctorReport(home.fixture.context)).checks.filter((check) => check.status === "fail")).toEqual([]);
+}
+
+describe("a step that fails before the verifier compensates and compacts cleanly (NEW-241)", () => {
+  afterEach(removeCommandFixtures);
+
+  it.each(STEP_MARKS)("fails at step %s, rolls back automatically and leaves no unremovable payload", async (_step, marks) => {
+    const home = await installUpdatableHome("step-failure", "arm64");
+    await expect(updateTo(home.update(failFirst(home.fixture.context, marks)), "1.1.0")).resolves.toMatchObject({ outcome: "rolled_back_automatically" });
+    await expectCleanlyRolledBack(home);
+  }, 900_000);
+});
+
+class StuckHomeDeath extends Error {}
+
+/**
+ * The VM evidence's shape (NEW-241), built over real ports: step 0 refused, the state participants'
+ * compaction left their unconsumed payloads (the pre-fix behavior), and the process died once the
+ * construction cursor reached the first of them, so the outer journal sits at `coordinator_staging`.
+ * Returns that present payload row's path.
+ */
+async function stuckOnLeftoverPayload(home: Awaited<ReturnType<typeof installUpdatableHome>>): Promise<string> {
+  const fail = failFirst(home.fixture.context, (name, path) => name === "mkdirExclusive" && path.endsWith("/update/journals/bundle_publication"));
+  const stuck = { row: "" };
+  const dying = intercepted(fail, async (name, paths, real) => {
+    if (stuck.row !== "") throw new StuckHomeDeath();
+    if (name === "unlinkExact" && paths[0]?.includes("/update/payloads/state/") === true) return undefined;
+    const result = await real();
+    const journalPath = paths[1] ?? "";
+    if (name === "renameOver" && journalPath.endsWith("/update-construction.journal.json")) {
+      const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { readonly phase: string; readonly compactionNext: number | null };
+      const plan = JSON.parse(readFileSync(journalPath.replace(/journal\.json$/u, "plan.json"), "utf8")) as { readonly files: readonly { readonly path: string }[] };
+      const cursor = journal.compactionNext ?? -1;
+      const row = plan.files[plan.files.length - 1 - cursor / 2];
+      if (journal.phase === "compacting" && cursor % 2 === 0 && row?.path.includes("/update/payloads/state/") === true) {
+        stuck.row = row.path;
+        throw new StuckHomeDeath();
+      }
+    }
+    return result;
+  });
+  await expect(updateTo(home.update(dying), "1.1.0")).rejects.toBeInstanceOf(StuckHomeDeath);
+  if (stuck.row === "") throw new Error("the construction compaction never reached a state payload row");
+  expect(await nodeFs.lstat(stuck.row).then(() => true, () => false)).toBe(true);
+  return stuck.row;
+}
+
+describe("a home stuck on leftover state payloads at construction compaction (NEW-241)", () => {
+  afterEach(removeCommandFixtures);
+
+  it("recovers through construction compaction without manual edits", async () => {
+    const home = await installUpdatableHome("stuck-payloads", "arm64");
+    const stuckRow = await stuckOnLeftoverPayload(home);
+
+    await recoverUpdate(home.update());
+
+    expect(await nodeFs.lstat(stuckRow).then(() => true, () => false)).toBe(false);
+    await expectCleanlyRolledBack(home);
+  }, 900_000);
+
+  it("refuses a leftover payload whose bytes changed on the same inode, then recovers once they are restored", async () => {
+    const home = await installUpdatableHome("stuck-payloads-changed", "arm64");
+    const stuckRow = await stuckOnLeftoverPayload(home);
+    const original = readFileSync(stuckRow);
+    writeFileSync(stuckRow, "{\"tampered\":true}\n");
+
+    await expect(recoverUpdate(home.update())).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    expect(await nodeFs.lstat(stuckRow).then(() => true, () => false)).toBe(true);
+
+    writeFileSync(stuckRow, original);
+    await recoverUpdate(home.update());
+    await expectCleanlyRolledBack(home);
   }, 900_000);
 });

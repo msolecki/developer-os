@@ -358,15 +358,24 @@ export class CanonicalStateParticipant {
     await this.persist(step.journal.finalPath, { ...journal, phase: "finalized", nextTransition: 4 });
   }
 
-  /** The matching outer compaction entry: an unconsumed payload, then the journal, then the plan last. */
+  /**
+   * The matching outer compaction entry: an unconsumed payload, then the journal, then the plan last.
+   * A step that never ran has no final journal, yet its payload is still staged (NEW-241); it goes
+   * only while it is the construction-evidenced inode with the planned bytes.
+   */
   async compact(step: CanonicalStateStepV1): Promise<void> {
     const { journals, fs } = this.#dependencies;
-    if ((await fs.lstat(step.journal.finalPath)) !== null) {
+    const reached = (await fs.lstat(step.journal.finalPath)) !== null;
+    if (reached) {
       const journal = await this.openJournal(step);
       if (journal.phase !== "finalized" && journal.phase !== "rolled_back") refuseParticipant("update_state_compaction_not_terminal", step.journal.finalPath);
-      if (step.plan.after.state === "present") await journals.remove(step.plan.after.payload.path, step.plan.after.hash);
-      await journals.remove(step.journal.finalPath);
     }
+    const { after } = step.plan;
+    if (after.state === "present" && (await fs.lstat(after.payload.path)) !== null) {
+      if ((await this.observeFile(after.payload.path, step.plan)) !== "after") refuseParticipant("update_state_third", after.payload.path);
+      await journals.remove(after.payload.path, after.hash);
+    }
+    if (reached) await journals.remove(step.journal.finalPath);
     await journals.remove(step.planRef.path, participantPlanFileHash(step.planRef, step.plan));
   }
 

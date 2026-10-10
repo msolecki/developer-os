@@ -95,7 +95,6 @@ const UNUSED_SOURCE_PORT = {
   consumeRollbackEntry: () => Promise.resolve(),
   finishSources: () => Promise.resolve(),
   compensateSources: () => Promise.resolve(),
-  nestedTerminal: () => Promise.resolve(false),
 };
 
 /** What a fresh process sees: the persisted construction journal, validated against its plan. */
