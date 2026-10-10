@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join as joinPath } from "node:path";
@@ -19,7 +19,8 @@ import type { CanonicalPathEvidenceV1, TargetUpdateDraftV1, UpdatePlannerRequest
 import { describe, expect, it } from "vitest";
 
 import { SecurityRefusalError } from "../paths.js";
-import type { RedactionResult } from "../redaction.js";
+import { createRedactor } from "../redaction.js";
+import type { RedactionResult, Redactor } from "../redaction.js";
 import {
   sampleNodePlannerProcess,
   spawnNodePlannerChild,
@@ -69,14 +70,27 @@ function requestValue(targetProtocol = 1): Record<string, unknown> {
 
 const request = (): UpdatePlannerRequestV1 => validateUpdatePlannerRequest(requestValue());
 
-function draft(outputBytes = nextBytes.byteLength): TargetUpdateDraftV1 {
+/** One row whose observed bytes are `blob`, verified as `verification` (default: content). */
+function requestWithBlob(blob: Uint8Array, verification: Record<string, unknown> = { mode: "content", installedHash: sha(blob) }): UpdatePlannerRequestV1 {
+  const value = requestValue();
+  const [row] = (value.manifest as { artifacts: Record<string, unknown>[] }).artifacts;
+  const [input] = value.artifactInputs as Record<string, unknown>[];
+  const ref = { stream: "input", ordinal: 0, bytes: blob.byteLength, sha256: sha(blob) };
+  return validateUpdatePlannerRequest({
+    ...value,
+    manifest: { ...(value.manifest as object), artifacts: [{ ...row, verification, currentHash: sha(blob) }] },
+    artifactInputs: [{ ...input, verification, observed: { state: "content", mode: 384, bytes: blob.byteLength, sha256: sha(blob), blob: ref } }],
+  });
+}
+
+function draft(outputBytes = nextBytes.byteLength, source = "tools/tool.md"): TargetUpdateDraftV1 {
   const value = requestValue();
   const blob = { stream: "output", ordinal: 0, bytes: outputBytes };
   return admitTargetUpdateDraft({
     schemaVersion: 1, protocol: 1, currentRelease: value.currentRelease, targetRelease: value.targetRelease,
     ownerPlans: [{ owner: "core", currentArtifacts: [token], proposedOperations: [{ operation: "replace", target: { kind: "installed", token }, expectedHash: sha(toolBytes), content: { kind: "output_blob", blob } }], externalEffects: [] }],
     migrations: [],
-    expectedManifest: { schemaVersion: 2, productVersion: "2.0.0", artifacts: [{ owner: "core", path: { kind: "installed", token }, productVersion: "2.0.0", source: "tools/tool.md", mergeStrategy: "dedicated", kind: "file", verification: { mode: "content", installed: { kind: "output_blob", blob } } }] },
+    expectedManifest: { schemaVersion: 2, productVersion: "2.0.0", artifacts: [{ owner: "core", path: { kind: "installed", token }, productVersion: "2.0.0", source, mergeStrategy: "dedicated", kind: "file", verification: { mode: "content", installed: { kind: "output_blob", blob } } }] },
   }, request()).draft;
 }
 
@@ -156,7 +170,9 @@ interface Timer {
   cancelled: boolean;
 }
 
-function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null | "reject" = { residentBytes: 1024, descendants: 0 }) {
+const markerRedactor: Redactor = (text: string): RedactionResult => ({ text, findings: text.includes(SECRET_MARKER) ? [{ class: "provider-token", fingerprint: "synthetic" }] : [] });
+
+function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null | "reject" = { residentBytes: 1024, descendants: 0 }, redactor = markerRedactor) {
   const timers: Timer[] = [];
   const spawned: PlannerSpawnRequestV1[] = [];
   let child: FakePlannerChild | null = null;
@@ -175,7 +191,7 @@ function harness(behavior: Behavior, sample: PlannerProcessSampleV1 | null | "re
       };
     },
     sample: () => (sample === "reject" ? Promise.reject(new SecurityRefusalError("Planner sampling failed")) : Promise.resolve(sample)),
-    redactor: (text: string): RedactionResult => ({ text, findings: text.includes(SECRET_MARKER) ? [{ class: "provider-token", fingerprint: "synthetic" }] : [] }),
+    redactor,
     sampleIntervalMilliseconds: 5,
   });
   const fire = (milliseconds: number): void => {
@@ -268,11 +284,51 @@ describe("target planner supervision", () => {
 
   it("refuses a secret in the result JSON before hashing it", async () => {
     const { supervisor, child } = harness(answer(() => {
-      const json = bytes(`{"note":"${SECRET_MARKER}"}`);
+      const json = plannerJsonBytes(draft(nextBytes.byteLength, `tools/${SECRET_MARKER}.md`));
       return join(MAGIC, header(0x11, json.byteLength), json, header(0x13, 0));
     }));
     await expect(supervisor.run(run())).rejects.toThrow("secret screen");
     expect(child().reaped).toBe(true);
+  });
+
+  it("refuses a result JSON outside the draft schema before screening it", async () => {
+    const { supervisor, child } = harness(answer(() => {
+      const json = bytes(`{"note":"${SECRET_MARKER}"}`);
+      return join(MAGIC, header(0x11, json.byteLength), json, header(0x13, 0));
+    }));
+    await expect(supervisor.run(run())).rejects.toBeInstanceOf(SecurityRefusalError);
+    expect(child().reaped).toBe(true);
+  });
+
+  /**
+   * The Homebrew VM gate (2026-10-10): every frame carries real SHA-256 hex digests, which the
+   * `text` screen's `high-entropy` class redacts by design, so a real redactor refused every update.
+   */
+  describe("with the production redactor", () => {
+    const real = (): Redactor => createRedactor(randomBytes(32));
+    const registration = bytes(`{"codexHome":"/Users/admin/.codex","treeHash":"${sha("tree")}"}`);
+
+    it("passes the digests of a real request, product record blob and admitted result", async () => {
+      const { supervisor } = harness(answer(validOutput), undefined, real());
+      await expect(supervisor.run(run())).resolves.toMatchObject({ draft: draft() });
+
+      const record = harness(answer(() => new Uint8Array()), undefined, real());
+      const recordRun = run({ request: requestWithBlob(registration, { mode: "schema", schemaId: "codex-registration-v1", installedHash: sha(registration) }), inputBlobs: [registration] });
+      await expect(record.supervisor.run(recordRun)).rejects.not.toThrow("secret screen");
+      expect(record.spawned).toHaveLength(1);
+    });
+
+    it.each([
+      { name: "a digest-shaped value in a content blob", blob: registration, verification: undefined },
+      { name: "an AWS key in a product record blob", blob: bytes(`{"codexHome":"/Users/admin/.codex","treeHash":"AKIAABCDEFGHIJKLMNOP"}`), verification: "schema" },
+      { name: "a high-entropy token in a user-edited schema blob", blob: bytes(`token = "${randomBytes(30).toString("base64")}"\n`), verification: "config" },
+    ])("still refuses $name", async ({ blob, verification }) => {
+      const mode = verification === undefined ? undefined
+        : { mode: "schema", schemaId: verification === "schema" ? "codex-registration-v1" : "developer-os-config-v1", installedHash: sha(blob) };
+      const { supervisor, spawned } = harness(answer(validOutput), undefined, real());
+      await expect(supervisor.run(run({ request: requestWithBlob(blob, mode), inputBlobs: [blob] }))).rejects.toThrow("secret screen");
+      expect(spawned).toHaveLength(0);
+    });
   });
 
   it.each<{ name: string; milliseconds: number }>([
