@@ -723,7 +723,7 @@ type IdentityV1 = readonly [path: string, dev: string, ino: string, mode: number
 
 async function identityOf(path: string): Promise<IdentityV1> {
   const stat = await nodeFs.lstat(path, { bigint: true });
-  return [path, String(stat.dev), String(stat.ino), Number(stat.mode & 0o777n)];
+  return [path, stat.dev.toString(10), stat.ino.toString(10), Number(stat.mode & 0o777n)];
 }
 
 /** What the plan recorded for `payload` when it was admitted at its source. */
