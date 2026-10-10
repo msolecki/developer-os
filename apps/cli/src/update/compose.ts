@@ -908,7 +908,7 @@ class UpdateComposer {
   #retainedBlob(payloadId: RollbackPayloadIdV1, restore: Extract<RetainedInversePathStateV1, { readonly state: "file" }>, subject: string): UpdateConstructionRetainedRollbackBlobSourceV1 {
     const chunk = restore.payload?.chunks.length === 1 ? restore.payload.chunks[0] : undefined;
     const ordinal = chunk === undefined ? undefined : RETAINED_BLOB_PATH.exec(chunk.path)?.[1];
-    // ponytail: an empty preimage retains no blob, so it has no source arm yet; add a zero-byte arm to P9 if empty managed files appear.
+    // ponytail: an empty preimage retains no blob and has no source arm, so rollback over it refuses; a zero-byte arm is a new P9/D72 source kind (Spec 2 amendment), declined in AUD-035 while no release changes an empty managed file.
     if (chunk === undefined || ordinal === undefined || chunk.bytes !== restore.bytes || chunk.sha256 !== restore.sha256) return refuse("update_rollback_restore_unavailable", EXIT_CODES.capabilityUnavailable, subject);
     return { kind: "retained_rollback_blob", payloadId, ordinal: Number(ordinal), bytes: restore.bytes, sha256: restore.sha256, mode: restore.mode };
   }
