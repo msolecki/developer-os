@@ -22,6 +22,26 @@ description: "Answer a question from the vault alone, naming a note path for eve
 - **Refuse** (input-invalid, exit 2): A question is required and must not be empty.
 - **Refuse** (scope-violation, exit 5): This workflow reads the vault and writes nothing but one capture, through developer-os capture.
 
+## Inputs
+
+- `question` (string, required): The question to answer from the vault.
+- `file-back` (boolean, optional): When true, quarantine the answer as one capture for review. False when absent.
+
+## Scopes
+
+Read:
+
+```text
+content/**
+content/_indexes/**
+```
+
+Write:
+
+```text
+content/_raw/quarantine/**
+```
+
 ## Steps
 
 ### load-index
@@ -62,6 +82,11 @@ Effect: `capture.write`
 developer-os capture
 ```
 
+
+## Checks
+
+- every claim in the answer names a vault-relative source path
+- nothing is written except at most one capture, through developer-os capture, and only when file-back is true
 
 ## Recovery
 

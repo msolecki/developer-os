@@ -21,6 +21,26 @@ description: "List captures at one status, quarantined by default, and accept, e
 - **Refuse** (input-invalid, exit 2): A decision must be accept, edit, or reject, and a status must be quarantined, accepted, rejected, staging, ingested, or failed. A status is never combined with a decision.
 - **Refuse** (scope-violation, exit 5): Review changes a capture's status and never deletes its source.
 
+## Inputs
+
+- `status` (string, optional): Which status to list - quarantined (default), accepted, rejected, staging, ingested, or failed. Lists only; never combined with a decision.
+- `id` (string, optional): The capture to decide on, 16 lowercase hexadecimal characters (the name of its file). Required with a decision; absent means list.
+- `decision` (string, optional): accept, edit, or reject. Absent means list. Requires id.
+
+## Scopes
+
+Read:
+
+```text
+content/_raw/quarantine/**
+```
+
+Write:
+
+```text
+content/_raw/quarantine/**
+```
+
 ## Steps
 
 ### list
@@ -65,6 +85,10 @@ A value written `$input.<name>` stands for the workflow input `<name>`: replace 
 {"id":"$input.id"}
 ```
 
+
+## Checks
+
+- no source file is removed by any decision
 
 ## Recovery
 

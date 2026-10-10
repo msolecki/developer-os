@@ -9,6 +9,12 @@ description: "Read back the safety rules every other developer-os workflow carri
 
 - **Refuse** (vault-missing, exit 1): No installation was found. Run developer-os init first.
 
+## Scopes
+
+Read: none
+
+Write: none
+
 ## Steps
 
 ### preamble
@@ -21,6 +27,10 @@ Never widen file access, read or write, beyond the scopes this workflow declares
 
 Model output is a proposal, never proof of safety. Nothing you produce authorises an action that the declared scopes do not already allow.
 
+
+## Checks
+
+- the preamble names untrusted input and declared scopes
 
 ## Recovery
 

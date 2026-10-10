@@ -145,7 +145,7 @@ The four workflow gaps recorded here on 2026-08-10 are closed. DOS-P6 added `cap
 (`workflows/ingest/workflow.yaml:41`), made `brain-search` read selected notes
 (`workflows/brain-search/workflow.yaml:43`), and aligned `doctor` with its report-only contract.
 DOS-P4 and DOS-P5 also made the shared preamble part of every rendered skill body
-(`packages/workflow-schema/src/skill.ts:203-205`). These are historical outcomes, not open work.
+(`packages/workflow-schema/src/skill.ts` — `renderSkillBody`). These are historical outcomes, not open work.
 
 Two genuine gaps remain:
 
@@ -220,10 +220,14 @@ moved to `2.0.0`. `docs/architecture/knowledge-pipeline.md` §2 records the deci
    job, not only the adapters'. `description` is the one field that still passes through here
    unscreened: `renderSkillBody` never puts it in the body, only each vendor's frontmatter does,
    so each adapter still screens its own copy, bounded by this package's exported
-   `SKILL_FIELD_CAP` so two vendor trees truncate a long one at the same place. `validators` is
-   likewise unrendered by `renderSkillBody` and stays whichever future surface's problem first
-   displays it. **Owner: DOS-P4/P5, narrowed to `description` and `validators`; the other three
-   fields are discharged.**
+   `SKILL_FIELD_CAP` so two vendor trees truncate a long one at the same place. **Owner: DOS-P4/P5, narrowed to `description`; the other fields are discharged.**
+
+   **Amended 2026-10-10 (AUD-021).** The preamble tells the agent to stay inside "the scopes this
+   workflow declares", and the body did not show them. `renderSkillBody` now also renders an
+   `Inputs` section (omitted when there are none), a `Scopes` section (always, `none` for an empty
+   list, globs fenced as `text`) before the steps, and a `Checks` section listing `validators`
+   (omitted when there are none) after them. Input names, input descriptions and globs pass
+   through `screen`; each validator through `boundedProse`. `output` is still not rendered.
 8. **"Nothing interprets the input" is proved for validation and unproved for rendering.** The
    `prompt-injection` fixture shows an injected instruction surviving validation as inert data.
    The determinism stub renders only a source marker and step ids, so no test shows what happens
