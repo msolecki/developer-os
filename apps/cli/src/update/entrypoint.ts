@@ -21,13 +21,17 @@ import { ENTRYPOINT_DIRECTORY, entrypointPath, LOCAL_BUNDLE_CLI_ENTRY } from "./
 const MAX_ACTIVE_RELEASE_BYTES = 16 * 1024;
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 const MAX_BUNDLE_MANIFEST_BYTES = 4 * 1024 * 1024;
+const MAX_BUNDLE_ENTRY_BYTES = 64 * 1024 * 1024;
 
 
 /**
  * NEW-163 B: one script for every release. At run time it follows `state/active-release.json` to the
  * retained bundle manifest and loads that manifest's `entrypoint` (D96 Q4: `LOCAL_BUNDLE_CLI_ENTRY`
- * when the manifest names none). Every read is no-follow, a regular file owned by the caller with no
- * group or other write, size-bounded, and the manifest must hash to the record. Nothing is resolved
+ * when the manifest names none), only when the entry file's size and sha256 equal its manifest row
+ * (`entries` in a package-channel manifest, `files` in an unsigned-local one; AUD-005). The modules
+ * the entry imports are not re-hashed per hook: `guard path` refuses agent writes under `releases/`.
+ * Every read is no-follow, a regular file owned by the caller with no group or other write,
+ * size-bounded, and the manifest must hash to the record. Nothing is resolved
  * through PATH. The bundle root must be exactly `releases/<version>/darwin-<process.arch>`, the launcher's
  * and the refresh's rule. A release that cannot load exits 2 for the three security guards: Node's own exit 1
  * is non-blocking to both vendors, so a missing bundle would silently allow every guarded call. The
@@ -59,9 +63,15 @@ export function renderEntrypoint(): Uint8Array {
       '  if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash) || typeof active.version !== "string" || !/^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$/.test(active.version) || active.bundleRoot !== join(home, "releases", active.version, "darwin-" + process.arch)) throw new Error("refused");\n' +
       `  const bytes = await read(join(state, "release-metadata", "bundles", hash + ".json"), ${String(MAX_BUNDLE_MANIFEST_BYTES)});\n` +
       '  if (createHash("sha256").update(bytes).digest("hex") !== hash) throw new Error("refused");\n' +
-      `  const entry = JSON.parse(bytes).entrypoint ?? ${JSON.stringify(LOCAL_BUNDLE_CLI_ENTRY)};\n` +
+      `  const manifest = JSON.parse(bytes);\n` +
+      `  const entry = manifest.entrypoint ?? ${JSON.stringify(LOCAL_BUNDLE_CLI_ENTRY)};\n` +
       '  if (typeof entry !== "string" || entry === "" || isAbsolute(entry) || entry.split("/").some((part) => part === ".." || part === "." || part === "")) throw new Error("refused");\n' +
-      "  await import(pathToFileURL(join(active.bundleRoot, entry)).href);\n" +
+      "  const rows = manifest.entries ?? manifest.files;\n" +
+      '  const row = Array.isArray(rows) ? rows.find((candidate) => candidate?.path === entry && (candidate.kind ?? "file") === "file") : undefined;\n' +
+      "  const file = join(active.bundleRoot, entry);\n" +
+      `  const code = await read(file, ${String(MAX_BUNDLE_ENTRY_BYTES)});\n` +
+      '  if (row === undefined || String(row.bytes) !== String(code.byteLength) || createHash("sha256").update(code).digest("hex") !== row.sha256) throw new Error("refused");\n' +
+      "  await import(pathToFileURL(file).href);\n" +
       "} catch {\n" +
       "  const [verb, kind] = process.argv.slice(2);\n" +
       '  process.stderr.write("developer-os: the active release could not be loaded\\n");\n' +

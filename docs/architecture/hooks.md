@@ -313,7 +313,10 @@ the K2 table's fixed `opt` link, so no release swap or retirement changes or bre
 `unsigned-local` home has no active release tree and keeps the Node that ran `init`, the path
 `stableNodePath` resolves (the version-free `<prefix>/opt/<formula>` link when it resolves to the
 running Node). Naming Node means the entrypoint's `env node` shebang never
-runs. Both tokens must match `^/[A-Za-z0-9._+@/-]+$` and have no empty, `.` or `..` segment
+runs. The entrypoint follows `state/active-release.json` to the retained bundle manifest, whose
+sha256 must equal the record, and imports the manifest's entry file only when its size and sha256
+equal that file's manifest row (`apps/cli/src/update/entrypoint.ts` — `renderEntrypoint`, AUD-005).
+The modules the entry imports in turn are not re-hashed on every hook. Both tokens must match `^/[A-Za-z0-9._+@/-]+$` and have no empty, `.` or `..` segment
 (`assertHookNodePath`); the entrypoint must also have no segment shaped like a version or a hash
 (`assertHookExecutablePath`). A refusal stops `init` with exit 2 before any transaction. The product
 refuses an unsafe path rather than quoting it, because vendors run the command through a shell. The
@@ -369,7 +372,7 @@ stderr line.
 | `guard prompt` | `UserPromptSubmit` | `UserPromptSubmit` | open | `context` naming at most 3 skills from `.developer-os/skill-rules.json` |
 | `guard command` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `pipe-to-shell`, `pipe-to-interpreter`, `download-process-substitution`, `recursive-delete-root`, `sql-destructive` (D67) |
 | `guard commit` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `hook-bypass` (also `git -c core.hooksPath=…`, D67), `force-push` (`--force-with-lease` allowed) |
-| `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy` and the hook-only `HOOK_PROTECTED_PATH_RULES` (D67), for every edited path |
+| `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy` and the hook-only `HOOK_PROTECTED_PATH_RULES` (D67), for every edited path; `product-state` for a path in the product home or the Claude plugin root `~/.claude/skills/developer-os/` (AUD-005) |
 | `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | project-local `biome` (`biome.json` or `biome.jsonc`, D67) or `prettier` over every edited file still present; `advise` on a formatter error |
 | `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | `advise` when an edited path resolves through a symlink out of the project root |
 | `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit` (`tsc -b --noEmit` when the config has `references`); `block` with the first 40 diagnostic lines |
@@ -670,6 +673,11 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
   the user home or below it (a dotfiles repository), `ProtectedPathPolicy` is the only barrier, as
   it is for an absolute Claude path. The spec's G7 wording ("never the user home") needs the same
   refinement.
+- **The product's own code is refused to file tools, not to the shell (AUD-005).** `guard path`
+  refuses an agent write anywhere in the product home (`bin/developer-os.mjs`, `releases/`,
+  `config.toml`, `codex/`, `state/`) and in the Claude plugin root, whose `hooks/hooks.json`
+  registers the guards; a sibling plugin under `~/.claude/skills/` is not covered. A `Bash` write
+  there passes, as the next bullet says, and could switch every guard off for later sessions.
 - **`guard path` does not see a shell write.** `echo … > .env` through `Bash` passes it on both
   vendors (parity with Claude). On Codex an `apply_patch` invoked from the shell tool presumably
   reaches the hook as `Bash` (unobserved), and is then not protected.

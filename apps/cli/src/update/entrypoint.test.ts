@@ -30,7 +30,8 @@ async function entrypointHome(
   if (bundle !== null) {
     await mkdir(dirname(join(bundleRoot, entry)), { recursive: true });
     await writeFile(join(bundleRoot, entry), bundle, { mode: 0o600 });
-    const manifestBytes = JSON.stringify({ schemaVersion: 1, ...manifest });
+    const files = [{ bytes: Buffer.byteLength(bundle), path: entry, sha256: createHash("sha256").update(bundle).digest("hex") }];
+    const manifestBytes = JSON.stringify({ schemaVersion: 1, files, ...manifest });
     const bundleManifestHash = createHash("sha256").update(manifestBytes).digest("hex");
     await mkdir(join(root, "state", "release-metadata", "bundles"), { recursive: true });
     await writeFile(join(root, "state", "release-metadata", "bundles", `${bundleManifestHash}.json`), manifestBytes, { mode: 0o600 });
@@ -88,6 +89,26 @@ describe("renderEntrypoint", () => {
     await writeFile(join(tampered.bundleRoot, "other.mjs"), 'process.stdout.write("loaded\\n");\n', { mode: 0o600 });
     await writeFile(join(metadata, name as string), JSON.stringify({ schemaVersion: 1, entrypoint: "other.mjs" }), { mode: 0o600 });
     expect(run(tampered.entrypoint, ["guard", "path"])).toMatchObject({ status: 2, stdout: "" });
+  });
+
+  it("refuses an entry file whose bytes differ from its bundle manifest row (AUD-005)", async () => {
+    const flipped = await entrypointHome('process.stdout.write("loaded\\n");\n');
+    await writeFile(join(flipped.bundleRoot, LOCAL_BUNDLE_CLI_ENTRY), 'process.stdout.write("LOADED\\n");\n', { mode: 0o600 });
+    expect(run(flipped.entrypoint, ["guard", "command"])).toMatchObject({ status: 2, stdout: "" });
+
+    const unlisted = await entrypointHome('process.stdout.write("loaded\\n");\n', { files: [] });
+    expect(run(unlisted.entrypoint, ["guard", "path"])).toMatchObject({ status: 2, stdout: "" });
+  });
+
+  it("checks the entry against a package-channel manifest's file entries", async () => {
+    const bundle = 'process.stdout.write("loaded\\n");\n';
+    const sha256 = createHash("sha256").update(bundle).digest("hex");
+    const entries = [{ kind: "file", path: LOCAL_BUNDLE_CLI_ENTRY, bytes: String(Buffer.byteLength(bundle)), sha256, mode: 420 }];
+    const listed = await entrypointHome(bundle, { files: undefined, entries });
+    expect(run(listed.entrypoint, ["--version"])).toMatchObject({ status: 0, stdout: "loaded\n" });
+
+    const directory = await entrypointHome(bundle, { files: undefined, entries: [{ ...entries[0], kind: "directory" }] });
+    expect(run(directory.entrypoint, ["guard", "commit"])).toMatchObject({ status: 2, stdout: "" });
   });
 
   it("refuses a bundle root outside the home's releases directory", async () => {

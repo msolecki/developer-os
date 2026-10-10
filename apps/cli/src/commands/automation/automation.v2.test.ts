@@ -613,16 +613,19 @@ describe("automation on a real V2 home", () => {
       // The pre-NEW-144 argv named the 0600, shebang-less module as the program: it cannot be executed.
       expect(spawnSync(argv[1], argv.slice(2), { cwd: "/", env }).error).toMatchObject({ code: "EACCES" });
       // The fixture's retained bundle manifest is not JSON, so the script would refuse it: swap in a parseable
-      // one (no `entrypoint`, so the default CLI path) and the built CLI, and restore the home afterwards.
+      // one (no `entrypoint`, so the default CLI path, whose row the script checks) and the built CLI, and
+      // restore the home afterwards.
       const activeFile = join(home.paths.stateDir, "active-release.json");
       const activeBytes = await nodeFs.readFile(activeFile);
       const active = JSON.parse(activeBytes.toString("utf8")) as { readonly bundleRoot: string; readonly bundleManifestHash: string };
-      const manifestBytes = "{}";
+      const cliBytes = `await import(${JSON.stringify(pathToFileURL(BUILT_CLI).href)});\n`;
+      const cliRow = { bytes: Buffer.byteLength(cliBytes), path: LOCAL_BUNDLE_CLI_ENTRY, sha256: createHash("sha256").update(cliBytes).digest("hex") };
+      const manifestBytes = JSON.stringify({ files: [cliRow] });
       const manifestHash = createHash("sha256").update(manifestBytes).digest("hex");
       const manifestFile = join(home.paths.stateDir, "release-metadata", "bundles", `${manifestHash}.json`);
       const cli = join(active.bundleRoot, LOCAL_BUNDLE_CLI_ENTRY);
       await nodeFs.mkdir(dirname(cli), { recursive: true });
-      await nodeFs.writeFile(cli, `await import(${JSON.stringify(pathToFileURL(BUILT_CLI).href)});\n`);
+      await nodeFs.writeFile(cli, cliBytes);
       await nodeFs.writeFile(manifestFile, manifestBytes, { mode: 0o600 });
       await nodeFs.writeFile(activeFile, JSON.stringify({ ...active, bundleManifestHash: manifestHash }));
       let run: SpawnSyncReturns<string>;

@@ -54,17 +54,19 @@ function hookProtected(path: string, home: string): boolean {
 }
 
 /**
- * Audit follow-up to CRITIC-2: the product home's `codex/` and `state/` trees hold the records the
- * product trusts (the recorded Codex home, the redaction key, journals). Product commands write them
- * directly, never through this hook, so an agent tool write there is refused: rewriting
- * `codex/codex-home` would otherwise redirect which `auth.json` is protected. Both the default
- * `~/.developer-os` and an absolute `DEVELOPER_OS_HOME` count.
+ * Audit follow-up to CRITIC-2, widened by AUD-005: the whole product home (the records the product
+ * trusts, `config.toml`, `bin/developer-os.mjs` that every hook runs, and the `releases/` it imports)
+ * and the Claude plugin root (whose `hooks/hooks.json` registers these guards). Product commands write
+ * them directly, never through this hook, so an agent tool write there is refused: rewriting
+ * `codex/codex-home` would otherwise redirect which `auth.json` is protected, and rewriting the
+ * entrypoint or a hook row would switch every guard off. Both the default `~/.developer-os` and an
+ * absolute `DEVELOPER_OS_HOME` count.
  */
 async function productStateRoots(env: Readonly<Record<string, string | undefined>>, userHome: string): Promise<readonly string[]> {
   const productHomes = [join(userHome, ".developer-os")];
   const configured = env.DEVELOPER_OS_HOME;
   if (configured !== undefined && isAbsolute(configured)) productHomes.push(configured);
-  const roots = productHomes.flatMap((productHome) => [join(productHome, "codex"), join(productHome, "state")]);
+  const roots = [...productHomes, join(userHome, ".claude", "skills", "developer-os")];
   return [...roots, ...(await Promise.all(roots.map((root) => canonicalizePlannedPath(root))))];
 }
 
