@@ -69,6 +69,17 @@ describe("guardEdit", () => {
     expect(outcome.kind === "advise" ? outcome.detail : "").toContain("CLAUDE.md");
   });
 
+  it("advises shared-file for an absolute path spelled through a symlinked project directory", async () => {
+    const outside = await tempDir();
+    await writeFile(join(outside, "shared.md"), "shared\n");
+    const root = await project();
+    await symlink(join(outside, "shared.md"), join(root, "CLAUDE.md"));
+    const alias = join(await tempDir(), "alias");
+    await symlink(root, alias);
+    const outcome = await guardEdit(edited(join(alias, "CLAUDE.md")), runtimeFor(alias));
+    expect(outcome.kind === "advise" ? outcome.ruleId : outcome.kind).toBe("shared-file");
+  });
+
   it("allows a plain file inside the root", async () => {
     const root = await project();
     await writeFile(join(root, "a.ts"), "export {};\n");
