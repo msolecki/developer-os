@@ -2383,19 +2383,24 @@ describe("the uninstall payload staging (NEW-210)", () => {
     expect(snapshot.findings).toStrictEqual([]);
   });
 
-  async function terminalHome(): Promise<HomeV1> {
+  async function terminalHome(overrides: Partial<LifecycleCoordinatorJournalV1> = {}): Promise<HomeV1> {
     const home = await newHome();
-    await plantCoordinator(home, WITH_PAYLOADS, journalFor(WITH_PAYLOADS));
+    await plantCoordinator(home, WITH_PAYLOADS, journalFor(WITH_PAYLOADS, overrides));
     for (const ref of WITH_PAYLOADS.plan.participants.foundation) {
-      if (ref.role.kind === "forward") await plantFoundationJournal(home, ref.id);
+      // A rolled-back coordinator stopped at step 0, so no participant journal is legal.
+      if (overrides.phase !== "rolled_back" && ref.role.kind === "forward") await plantFoundationJournal(home, ref.id);
     }
     await mkdir(home, `staging/lifecycle/${UNINSTALL.id}`);
     await mkdir(home, PAYLOADS);
     return home;
   }
 
-  it("reports a payload left under a terminal coordinator, which compaction would refuse", async () => {
-    const home = await terminalHome();
+  it.each([
+    ["finalized", { phase: "finalized" }],
+    ["rolled_back", { phase: "rolled_back", nextStep: 0, compensationNext: -1 }],
+    ["compacting", { phase: "compacting", compactionNext: 0, terminalOutcome: "finalized" }],
+  ] as const)("reports a payload left under a %s coordinator, which compaction would refuse", async (_label, overrides) => {
+    const home = await terminalHome(overrides);
     await write(home, `${PAYLOADS}/0`, "payload\n");
 
     const snapshot = await inspect(home);
@@ -2403,6 +2408,12 @@ describe("the uninstall payload staging (NEW-210)", () => {
     expect(snapshot.findings).toStrictEqual([
       { reason: "lifecycle_staging_payload_terminal", path: path(`${HOME}/${PAYLOADS}/0`) },
     ]);
+  });
+
+  it("raises no terminal-payload finding for an active coordinator", async () => {
+    const home = await stagedHome(["0"]);
+
+    expect((await inspect(home)).findings).toStrictEqual([]);
   });
 
   it("admits an empty `payloads` directory under a terminal coordinator", async () => {

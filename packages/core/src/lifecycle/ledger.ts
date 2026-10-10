@@ -1227,7 +1227,7 @@ async function countStagingSubtree<TPlan extends CoordinatorPlan>(
       continue;
     }
     const entry = await admitStagingShape(scan, child, shape);
-    if (shape === "payload") facts.payloadPaths.push(child);
+    if (shape === "payload" && entry !== null) facts.payloadPaths.push(child);
     if (entry !== null && entry.kind === "directory") {
       await countStagingSubtree(scan, facts, entry, admit, relative);
       if (scan.stopped) return;
@@ -1424,7 +1424,7 @@ async function resolveCoordinators<TPlan extends CoordinatorPlan>(
             ? "terminal"
             : "active";
       admitParticipantCursor(scan, plan, journal, foundation);
-      if (state === "terminal") {
+      if (state === "terminal" || state === "compacting") {
         // NEW-210: compaction refuses a non-empty `payloads`, so doctor must surface the stuck state.
         for (const payload of scan.staging.get(id)?.payloadPaths ?? []) {
           refuse(scan, "lifecycle_staging_payload_terminal", payload);
