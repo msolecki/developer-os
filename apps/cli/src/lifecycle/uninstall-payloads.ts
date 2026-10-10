@@ -42,7 +42,7 @@ export interface UninstallPayloadV1 {
 
 export type UninstallPayloadStateV1 = "before" | "staged" | "deleted";
 
-/** Task 4 widens `UninstallBoundaryV1` with this. */
+/** The payload half of `UninstallBoundaryV1`. */
 export interface UninstallPayloadBoundaryV1 {
   readonly kind: "payload_staged" | "payload_deleted";
   readonly ordinal: number;

@@ -495,10 +495,8 @@ const SYNTHETIC_RELEASE_VERSION = "1.0.0";
  * `bin/runtime` execs this Node binary: the verifier supervisor spawns it with an empty environment.
  * The trailing comment, never read past `exec`, makes it larger than 8 MiB like a real keg's
  * bundled Node, so every reader of a release file is exercised past the 8 MiB diff bound.
- * It deliberately stays under the 16 MiB lifecycle walls a real 122 MB Node still hits:
- * uninstall's `MAX_MUTATION_BYTES` and `LIFECYCLE_PLAN_BOUNDS.mutationContentSize`,
- * `MAXIMUM_ROLLBACK_BLOB_BYTES`, and the 64 MiB retirement cap (`MAXIMUM_ROLLBACK_DOCUMENT_BYTES`).
- * Crossing them is the open defect NEW-210; raise the padding when it is fixed.
+ * Do not raise it: tests that need a file past the 16 MiB lifecycle bounds (uninstall `K`
+ * payloads, NEW-210) add their own sparse `extraBundleFiles`.
  */
 const RUNTIME_PADDING = `#${"0".repeat(8 * 1024 * 1024)}\n`;
 function runtimeScript(): Uint8Array {
