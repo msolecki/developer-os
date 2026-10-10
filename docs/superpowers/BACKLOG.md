@@ -33,7 +33,7 @@ expects are in `docs/superpowers/plans/2026-09-04-developer-os-completion-roadma
 
 There are 40 numbered rows. They are not automatically ordered ahead of A15.
 
-**Folded 2026-10-10: the full repository audit of 2026-10-10** (read-only, 61 agents, against `809a98de`; `docs/superpowers/audits/2026-10-10-full-audit.md`): 128 findings after deduplication (P0 0, P1 3, P2 23, P3 102; 14 verifier-refuted candidates excluded), grouped into 20 implementation sessions as NEW-213..NEW-232. The 8 open rows from NEW-147 up were re-verified: 7 accurate, 1 mis-cited (NEW-205; the audit's correction is in NEW-232).
+**Folded 2026-10-10: the full repository audit of 2026-10-10** (read-only, 61 agents, against `809a98de`; `docs/superpowers/audits/2026-10-10-full-audit.md`): 128 findings after deduplication (P0 0, P1 3, P2 23, P3 102; 14 verifier-refuted candidates excluded), grouped into 20 implementation sessions as NEW-213..NEW-232. Plan: `plans/2026-10-10-audit-fixes.md` (AUD-001 belongs to NEW-210; S01b, S11–S13, S16, S17 wait for NEW-210). The 8 open rows from NEW-147 up were re-verified: 7 accurate, 1 mis-cited (NEW-205; the audit's correction is in NEW-232).
 
 **Folded 2026-10-06: the full repository audit of 2026-10-05** (read-only, 71 agents, against
 `5a7462a9`; 166 findings: P0 1, P1 3, P2 26, P3 136; the audit's 27 verifier-refuted findings are not
