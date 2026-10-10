@@ -1237,7 +1237,12 @@ record.
   (`packages/core/src/lifecycle/ledger.ts`, `classify`) is the healthy, retryable state of a
   coordinator stuck on a failed `network_push`/`destination_git_effect` step. Since plan 1b it is
   reachable in production: a `git sync` whose push fails leaves the persisted push plan and a
-  `retry_only` closure, and the next sync retries only that push. Commit `11f1b55` (`packages/core/src/lifecycle/recovery.ts`) fixed `recover()`'s
+  `retry_only` closure, and the next sync retries only that push. A scheduled `git-sync` whose
+  retry fails again writes no log or status record: the post-handler recheck exits silently while the
+  closure is not `clear` (`apps/cli/src/commands/automation/runner.ts` — `closure_not_clear`), as the
+  opt-in-surfaces design §5.1 step 8 requires. The pending push is visible as `lifecycle retry_only`
+  in `automation status` and `git status`; a record or a `doctor` check for it would be a spec change,
+  so AUD-051 was declined on that basis (2026-10-10). Commit `11f1b55` (`packages/core/src/lifecycle/recovery.ts`) fixed `recover()`'s
   `collectCoordinator` to leave such a coordinator alone rather than throw
   `lifecycle_coordinator_not_terminal`, by reusing the inspected snapshot's own `closure` instead of
   re-deriving the condition.
