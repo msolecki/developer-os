@@ -679,8 +679,14 @@ describe("UpdateLifecycleCoordinator", () => {
     ["a hostile name", () => Object.assign(new Error("m"), { name: "Bad Name/../x" }), "update_step_failed"],
     ["a hostile code", () => Object.assign(new Error("m"), { name: "Weird", code: "../etc" }), "step_weird"],
     ["an oversize name", () => Object.assign(new Error("m"), { name: "A".repeat(80) }), "update_step_failed"],
+    ["a bare Error", () => new Error("m"), "step_error"],
+    ["an Error-suffixed name with errno", () => Object.assign(new Error("m"), { name: "DiskFullError", code: "ENOSPC" }), "step_disk_full_enospc"],
+    ["a lowercase name", () => Object.assign(new Error("m"), { name: "lower" }), "update_step_failed"],
+    ["a mangled name", () => Object.assign(new Error("m"), { name: "Bad_Name" }), "update_step_failed"],
+    ["a plain object", () => ({ detail: "/secret" }), "update_step_failed"],
     ["an existing reason", () => Object.assign(new Error("m"), { code: "EXDEV", reason: "custom_reason" }), "custom_reason"],
   ])("journals the derived cause for %s", async (_label, make, expected) => {
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- non-Error rejections are cases under test
     const fixture = await interruptUpdateCoordinator(null, "target_verifier", () => Promise.reject(make()));
     expect(fixture.firstRun.outcome).toEqual({ kind: "rolled_back", id: coordinatorId, cause: expected });
   });
