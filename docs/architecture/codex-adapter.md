@@ -517,6 +517,16 @@ rather than performed; and the provisional JSONL reduction was replaced after a 
     `doctor` reports `stale` when the recorded hash no longer matches the tree, and `--probe` reports
     `cache-stale` when prompt-input bytes differ; re-running `init` recovers both
     (`apps/cli/src/instructions/codex-registration.ts`).
+15. **Hooks are installed on every supported version, but observed only on one** (AUD-071). `init`
+    binds `withCodexHooks` into the install tree unconditionally
+    (`apps/cli/src/instructions/attach.ts` — `withCodexHooks`), while hooks were observed firing
+    only on `0.155.1` and the floor is `0.147.0` (`packages/adapter-codex/src/versions.ts` —
+    `CODEX_HOOKS_OBSERVED_VERSION`); Claude has the same gap between `2.1.142` and `2.1.280`. What
+    `0.147.0`–`0.155.0` does with the manifest's `"hooks"` key is unobserved: it may load the hooks,
+    ignore them, or refuse the plugin. The version table already reports `plugin_hooks` below the
+    observed version as not permitted. Not fixed here, deliberately: gating the hooks on the version
+    would remove the file guards from those installs, and raising the floor is item 8's decision.
+    Settling it needs an old-binary load observation. **Owner: DOS-P9**, with item 8.
 
 ## 12. What DOS-P8 must know
 
