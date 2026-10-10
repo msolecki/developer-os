@@ -920,3 +920,20 @@ describe("the uninstall control-file adapter (NEW-97)", () => {
     expect(await exists(join(fixture.paths.stateDir, "lifecycle-id-allocator.json"))).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
+
+describe("the resumed uninstall result (AUD-058)", () => {
+  it("reports as removed the bookkeeping leaves the resume collected, not only emptied directories", async () => {
+    const fixture = await initializedV2Fixture("uninstall-recovery-removed");
+    await killUninstallAt(fixture, "M(commit_absence) durable");
+    const leaves = ["uninstalling.json", "lifecycle-install-nonce", "lifecycle-id-allocator.json"]
+      .map((leaf) => join(fixture.paths.stateDir, leaf));
+    for (const leaf of leaves) expect(await exists(leaf), leaf).toBe(true);
+
+    const resumed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+
+    if (!resumed.ok) throw new Error(JSON.stringify(resumed.error));
+    expect(resumed.data.removed).toEqual(expect.arrayContaining(leaves));
+    expect(resumed.data.removed).not.toContain(fixture.paths.manifestFile);
+    for (const path of resumed.data.removed) expect(await exists(path), path).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
