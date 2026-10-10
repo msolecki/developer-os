@@ -403,7 +403,8 @@ async function readWholeVault(fixture: IngestFixture): Promise<string> {
  * Writes a minimal `IndexDocumentV1` straight to the artifact `brain reindex`
  * would otherwise produce, so a test can seed the excerpt `ingest` reads
  * without running a real reindex. Only `path`, `title` and `summary` are
- * populated because `readIndexExcerpt` reads only those three.
+ * populated because `readIndexExcerpt` reads only those three. Paths are vault paths
+ * (`content/DEV/x.md`), as `brain reindex` writes them.
  */
 async function writeIndex(
   fixture: IngestFixture,
@@ -2046,7 +2047,7 @@ describe("runIngest, the agent call", () => {
     const fixture = await installedFixture("ingest-index-excerpt");
     const seeded = await fixture.seedAccepted("an observation about excerpts");
     await writeIndex(fixture, [
-      { path: "DEV/existing.md", title: "Existing note", summary: "Already in the vault." },
+      { path: "content/DEV/existing.md", title: "Existing note", summary: "Already in the vault." },
     ]);
     fixture.reply(() => oneNote(seeded.id));
 
@@ -2058,6 +2059,23 @@ describe("runIngest, the agent call", () => {
     expect(prompt).toContain("Already in the vault.");
   });
 
+  it("lists index entries content-relative, as the prompt asks paths to be, and skips any outside the content root (AUD-019)", async () => {
+    const fixture = await installedFixture("ingest-index-excerpt-content-relative");
+    await fixture.seedAccepted("an observation about path conventions");
+    await writeIndex(fixture, [
+      { path: "content/DEV/a.md", title: "A", summary: "Inside." },
+      { path: "elsewhere/DEV/b.md", title: "B", summary: "Outside." },
+    ]);
+    fixture.reply(() => nothingProposed());
+
+    await fixture.run();
+
+    const prompt = fixture.calls[0]?.args.join("\n") ?? "";
+    expect(prompt).toContain("- DEV/a.md — A: Inside.");
+    expect(prompt).not.toContain("content/DEV/a.md");
+    expect(prompt).not.toContain("DEV/b.md");
+  });
+
   /**
    * NEW-130 audit: a vault path is redacted at least as strictly as text scope did, so a note
    * named by a random token does not reach the model in the clear. Title and summary too.
@@ -2067,8 +2085,8 @@ describe("runIngest, the agent call", () => {
     await fixture.seedAccepted("an observation about token-named notes");
     const token = "Q7xLp2VnR8tKw4ZmB6yHc1JsF9dGa3Uq0eTiNoXr5vMk"; // gitleaks:allow -- synthetic test fixture
     await writeIndex(fixture, [
-      { path: `vault/${token}.md`, title: "Token-named note", summary: `Also holds ${SECRET}.` },
-      { path: "DEV/plain-note.md", title: "Plain note", summary: "Nothing secret." },
+      { path: `content/vault/${token}.md`, title: "Token-named note", summary: `Also holds ${SECRET}.` },
+      { path: "content/DEV/plain-note.md", title: "Plain note", summary: "Nothing secret." },
     ]);
     fixture.reply(() => nothingProposed());
 
@@ -2106,7 +2124,7 @@ describe("runIngest, the agent call", () => {
     await fixture.seedAccepted(`an observation holding ${SECRET}`);
     /** The excerpt is a second channel into the same prompt; it must not undo the redaction above. */
     await writeIndex(fixture, [
-      { path: "DEV/unrelated.md", title: "Unrelated note", summary: `Also holds ${SECRET}.` },
+      { path: "content/DEV/unrelated.md", title: "Unrelated note", summary: `Also holds ${SECRET}.` },
     ]);
     fixture.reply(() => nothingProposed());
 
@@ -2254,7 +2272,7 @@ describe("runIngest, the agent call", () => {
       "utf8",
     );
     await writeIndex(fixture, [
-      { path: "DEV/unrelated.md", title: "Unrelated note", summary: "Also mentions Northwind Traders." },
+      { path: "content/DEV/unrelated.md", title: "Unrelated note", summary: "Also mentions Northwind Traders." },
     ]);
     fixture.reply(() => oneNote(seeded.id));
 
@@ -3513,7 +3531,7 @@ describe("runIngest, a hand edit while the agent runs (D83, NEW-40)", () => {
   it("refuses when the index the prompt was built from is edited during the call", async () => {
     const fixture = await installedFixture("ingest-call-index-edit");
     const seeded = await fixture.seedAccepted("an observation whose index moves on");
-    await writeIndex(fixture, [{ path: "DEV/known.md", title: "Known", summary: "Known." }]);
+    await writeIndex(fixture, [{ path: "content/DEV/known.md", title: "Known", summary: "Known." }]);
     const indexPath = join(fixture.content, "_indexes", "index.json");
     fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
     const edited = '{"edited":"by hand"}\n';
@@ -3539,7 +3557,7 @@ describe("runIngest, a hand edit while the agent runs (D83, NEW-40)", () => {
   it("refuses when the index is deleted during the call", async () => {
     const fixture = await installedFixture("ingest-call-index-delete");
     const seeded = await fixture.seedAccepted("an observation whose index disappears");
-    await writeIndex(fixture, [{ path: "DEV/known.md", title: "Known", summary: "Known." }]);
+    await writeIndex(fixture, [{ path: "content/DEV/known.md", title: "Known", summary: "Known." }]);
     const indexPath = join(fixture.content, "_indexes", "index.json");
     fixture.reply(() => oneNote(seeded.id, TARGET, "Mid call"));
     fixture.duringCall(async () => {
@@ -3613,13 +3631,13 @@ describe("runIngest, a hand edit while the agent runs (D83, NEW-40)", () => {
       await fixture.seedAccepted("the second observation of three"),
       await fixture.seedAccepted("the third observation of three"),
     ].sort(byId);
-    await writeIndex(fixture, [{ path: "DEV/known.md", title: "Known", summary: "Known." }]);
+    await writeIndex(fixture, [{ path: "content/DEV/known.md", title: "Known", summary: "Known." }]);
     fixture.reply(() => nothingProposed());
     let edits = 0;
     fixture.duringCall(async () => {
       if (edits > 0) return;
       edits += 1;
-      await writeIndex(fixture, [{ path: "DEV/other.md", title: "Other", summary: "Other." }]);
+      await writeIndex(fixture, [{ path: "content/DEV/other.md", title: "Other", summary: "Other." }]);
     });
 
     const result = await fixture.run();
@@ -3635,7 +3653,7 @@ describe("runIngest, a hand edit while the agent runs (D83, NEW-40)", () => {
   it("ingests when the index changes between run start and the capture's snapshot", async () => {
     const fixture = await installedFixture("ingest-index-edit-before-call");
     const seeded = await fixture.seedAccepted("an observation after an early index edit");
-    await writeIndex(fixture, [{ path: "DEV/known.md", title: "Known", summary: "Known." }]);
+    await writeIndex(fixture, [{ path: "content/DEV/known.md", title: "Known", summary: "Known." }]);
     const indexPath = join(fixture.content, "_indexes", "index.json");
     fixture.reply(() => nothingProposed());
     let raced = false;
@@ -3652,7 +3670,7 @@ describe("runIngest, a hand edit while the agent runs (D83, NEW-40)", () => {
           /** The run-setup read of the index; the edit lands before any capture is staged. */
           if (path === indexPath && !raced) {
             raced = true;
-            await writeIndex(fixture, [{ path: "DEV/other.md", title: "Other", summary: "Other." }]);
+            await writeIndex(fixture, [{ path: "content/DEV/other.md", title: "Other", summary: "Other." }]);
           }
           return text;
         },

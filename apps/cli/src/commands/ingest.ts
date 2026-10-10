@@ -2303,12 +2303,14 @@ async function readIndexExcerpt(
     );
     return { entries: [], state: "unreadable" };
   }
-  return { entries: parseIndexExcerpt(text, indexPath, context, redact), state };
+  return { entries: parseIndexExcerpt(text, indexPath, brainConfig.contentRoot, context, redact), state };
 }
 
+/** Index paths are vault paths; the prompt lists them content-relative, as it asks the model to write them (AUD-019). */
 function parseIndexExcerpt(
   text: string,
   indexPath: string,
+  contentRoot: string,
   context: CliContext,
   redact: Redactor,
 ): readonly IndexExcerptEntryV1[] {
@@ -2330,11 +2332,15 @@ function parseIndexExcerpt(
     return [];
   }
 
-  return parsed.notes.filter(isIndexNoteShape).map((note) => ({
-    path: redact(note.path, "value").text,
-    title: redact(note.title).text,
-    summary: redact(note.summary).text,
-  }));
+  const prefix = `${contentRoot}/`;
+  return parsed.notes
+    .filter(isIndexNoteShape)
+    .filter((note) => note.path.startsWith(prefix))
+    .map((note) => ({
+      path: redact(note.path.slice(prefix.length), "value").text,
+      title: redact(note.title).text,
+      summary: redact(note.summary).text,
+    }));
 }
 
 function compareIds(left: IngestedCaptureV1, right: IngestedCaptureV1): number {
