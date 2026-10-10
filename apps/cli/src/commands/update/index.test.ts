@@ -313,6 +313,16 @@ describe("runUpdate", () => {
     if (!result.ok) expect(result.error.data).toMatchObject({ outcome: "applied" });
   });
 
+  it("points a refresh that needs recovery at doctor, not init (AUD-016)", async () => {
+    const commandFixture = await createCommandFixture("update-refresh-recovery");
+    const update = createUpdateFixture();
+    const apply: UpdateApplyPortsV1 = { ...unreachableApplyPorts(), withGlobalLock: (work) => work(), closure: () => Promise.resolve({ kind: "clear" }) };
+    vi.mocked(applyUpdate).mockImplementationOnce((_update, prepared) => Promise.resolve({ schemaVersion: 1, outcome: "applied", active: prepared.inputs.target, rollbackAvailable: true }));
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply, refresh: () => Promise.resolve(EXIT_CODES.recoveryRequired) } }, { kind: "update", version: null, apply: true, json: true });
+
+    expect(result).toMatchObject({ ok: false, code: EXIT_CODES.recoveryRequired, error: { kind: "workflows_not_refreshed", recovery: "developer-os doctor" } });
+  });
+
   it("does not refresh after a preview or an automatic rollback (K8)", async () => {
     const commandFixture = await createCommandFixture("update-refresh-not");
     const update = createUpdateFixture();

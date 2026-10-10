@@ -149,7 +149,7 @@ async function refreshed(context: CliContext, update: CliUpdateContext, result: 
   const code = await update.refresh();
   if (code === EXIT_CODES.success) return result;
   const error = Object.assign(new Error(WORKFLOWS_NOT_REFRESHED), { name: "WorkflowsNotRefreshedError", code });
-  return failureFrom(context, error, [], "developer-os init", result.data);
+  return failureFrom(context, error, [], code === EXIT_CODES.recoveryRequired ? "developer-os doctor" : "developer-os init", result.data);
 }
 
 /**
@@ -197,6 +197,13 @@ function renderMigration(migration: SchemaMigrationPreviewV1): readonly string[]
 
 function renderCapacity(capacity: UpdateCapacityProjectionV1): string {
   return `capacity  needs ${capacity.requiredBytes} bytes and ${capacity.requiredEntries} entries; ${capacity.availableBytes} bytes and ${capacity.availableEntries} entries are free`;
+}
+
+/** K8's refresh failure keeps the swap in `error.data`; a human sees that it landed. */
+export function renderUpdateFailureData(data: unknown): readonly string[] {
+  if (typeof data !== "object" || data === null || !("outcome" in data)) return [];
+  const { outcome } = data as { readonly outcome: unknown };
+  return outcome === "applied" || outcome === "rolled_back" ? renderUpdate(data as UpdateCommandResultV1) : [];
 }
 
 /** The human view of the same typed result `--json` prints; paths are rendered, never raw. */

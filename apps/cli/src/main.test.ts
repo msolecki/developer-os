@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 
 import { EXIT_CODES, serializeConfig } from "@developer-os/core";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createCommandFixture,
@@ -19,6 +19,9 @@ import type { CliIo } from "./io.js";
 import { renderReview, run } from "./main.js";
 import { renderUpdate } from "./commands/update/index.js";
 import type { UpdateCommandResultV1 } from "./commands/update/index.js";
+import { applyUpdate } from "./update/apply.js";
+import type * as ApplyModule from "./update/apply.js";
+import type { UpdateApplyPortsV1 } from "./update/apply.js";
 import { createUpdateFixture } from "./update/testing.js";
 import type { UpdateFixture } from "./update/testing.js";
 import type { CliContextFactory } from "./main.js";
@@ -27,6 +30,12 @@ import { PRODUCT_VERSION } from "./context.js";
 import { admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
 import type { ReviewResultV1 } from "./commands/review.js";
 import { BOOTSTRAP_MANUAL_ARCHIVE, MALFORMED_V2_MANIFEST } from "./bootstrap/report.js";
+
+/** Pass-through by default; a case stubs one apply outcome with `mockImplementationOnce`. */
+vi.mock("./update/apply.js", async (original) => {
+  const actual = await original<typeof ApplyModule>();
+  return { ...actual, applyUpdate: vi.fn(actual.applyUpdate) };
+});
 
 afterEach(removeCommandFixtures);
 
@@ -1709,6 +1718,38 @@ describe("update dispatch", () => {
     expect(await invoke(harness, ["update", "--apply", "--json"])).toBe(EXIT_CODES.capabilityUnavailable);
     expect(harness.fixture.io.out.at(-1)).toContain("update_apply_unavailable");
     expect(harness.update.events).toStrictEqual([]);
+  });
+
+  it("tells a human the update is installed when only the workflow refresh failed (AUD-016)", async () => {
+    const harness = await updateHarness("update-refresh-fails-human");
+    const never = (): never => {
+      throw new Error("an apply port was reached");
+    };
+    const apply: UpdateApplyPortsV1 = {
+      withGlobalLock: (work) => work(),
+      closure: () => Promise.resolve({ kind: "clear" }),
+      allocate: never,
+      compose: never,
+      construction: never,
+      coordinator: never,
+      envelope: { isEnvelopeSuffix: never, completeEnvelopeSuffix: never },
+      executorCleanup: never,
+    };
+    vi.mocked(applyUpdate).mockImplementationOnce((_update, prepared) =>
+      Promise.resolve({ schemaVersion: 1, outcome: "applied", active: prepared.inputs.target, rollbackAvailable: true }),
+    );
+    const context = {
+      ...harness.fixture.context,
+      update: { ...harness.update.update, apply, refresh: () => Promise.resolve(EXIT_CODES.operationalFailure) },
+    };
+
+    const exitCode = await run(["update", "--apply"], harness.fixture.io, () => context);
+
+    expect(exitCode).toBe(EXIT_CODES.operationalFailure);
+    expect(harness.fixture.io.out).toContain(
+      "Developer OS 1.2.0 is installed; `developer-os update rollback` can return to the previous release.",
+    );
+    expect(harness.fixture.io.err).toContain("workflows not refreshed: run developer-os init");
   });
 
   it("keeps the bare --version flag printing the product version", async () => {

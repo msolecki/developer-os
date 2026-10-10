@@ -45,7 +45,7 @@ import { runStatus } from "./commands/status.js";
 import type { StatusReportV1 } from "./commands/status.js";
 import { runUninstall } from "./commands/uninstall.js";
 import type { UninstallResultV1 } from "./commands/uninstall.js";
-import { parseUpdateArgv, renderUpdate, runUpdate } from "./commands/update/index.js";
+import { parseUpdateArgv, renderUpdate, renderUpdateFailureData, runUpdate } from "./commands/update/index.js";
 import type { UpdateInvocationV1 } from "./commands/update/index.js";
 import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js";
 import { assertOrdinaryCommandAdmitted, BootstrapRecoveryRequiredError, BootstrapRootInvalidError } from "./bootstrap/report.js";
@@ -920,7 +920,7 @@ async function dispatch(
     case "update":
       return invocation.update === undefined
         ? emit(io, usageFailure(), json, () => [])
-        : emit(io, await runUpdate(context, invocation.update), json, renderUpdate);
+        : emit(io, await runUpdate(context, invocation.update), json, renderUpdate, renderUpdateFailureData);
     case "brain":
     case "search":
       return emit(
