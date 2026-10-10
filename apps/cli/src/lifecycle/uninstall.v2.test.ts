@@ -983,7 +983,7 @@ describe("V2 uninstall planning refusals", () => {
   }
 
   function syntheticManifest(
-    artifacts: readonly { readonly path: string; readonly hash: string }[],
+    artifacts: readonly { readonly path: string; readonly hash: string; readonly source?: string }[],
   ): InstallationManifestV2 {
     return {
       schemaVersion: 2,
@@ -997,7 +997,7 @@ describe("V2 uninstall planning refusals", () => {
         existedBefore: false,
         beforeHash: null,
         backupRelativePath: null,
-        source: "generated/synthetic",
+        source: entry.source ?? "generated/synthetic",
         mergeStrategy: "dedicated",
         verifiedAt: "2026-09-21T00:00:00.000Z",
         verification: { mode: "content", installedHash: entry.hash },
@@ -1148,6 +1148,74 @@ describe("V2 uninstall planning refusals", () => {
     });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  /** NEW-210: a sparse 17 MiB release-bundle row at `relative`, reached through `linkedAs` when given. */
+  async function plantLargeRow(
+    fixture: CommandFixture,
+    relative: string,
+    linkedAs?: string,
+  ): Promise<{ readonly path: string; readonly hash: string; readonly source: string }> {
+    const size = 17 * 1024 * 1024;
+    const real = join(fixture.paths.home, relative);
+    await nodeFs.mkdir(join(fixture.paths.home, "staging", "lifecycle"), { recursive: true, mode: 0o700 });
+    await nodeFs.mkdir(join(real, ".."), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(real, "", { mode: 0o700 });
+    await nodeFs.truncate(real, size);
+    let path = real;
+    if (linkedAs !== undefined) {
+      await nodeFs.symlink(join(real, ".."), join(fixture.paths.home, linkedAs));
+      path = join(fixture.paths.home, linkedAs, relative.slice(relative.lastIndexOf("/") + 1));
+    }
+    return { path, hash: createHash("sha256").update(Buffer.alloc(size)).digest("hex"), source: "bundle/bin/large" };
+  }
+
+  it("plans a file larger than 16 MiB as a K payload in a v2 plan, with its staging leaves reserved (NEW-210)", async () => {
+    const { fixture, global } = await syntheticFixture("uninstall-large-plan");
+    const row = await plantLargeRow(fixture, "releases/bin/large");
+    await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
+    await plant(fixture.paths.manifestFile, "{}\n");
+    const request = await syntheticRequest(fixture, syntheticManifest([row]));
+
+    const preview = await new LifecycleUninstaller().preview(request, global);
+    const ids = Array.from({ length: preview.builder.slotCount }, (_unused, index) => `tx_${"f".repeat(64)}_${String(index)}`);
+    const { plan, reservation } = preview.builder.build(ids);
+
+    expect(preview.removable).toContain(row.path);
+    expect(validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan))).toBe(preview.variant);
+    expect(plan.participants.redactionKey?.schemaVersion).toBe(2);
+    expect(plan.participants.redactionKey?.payloads).toMatchObject([
+      { sourcePath: row.path, size: 17 * 1024 * 1024, mode: 0o700, sha256: row.hash },
+    ]);
+    expect(plan.participants.redactionKey?.payloads[0]?.payloadPath).toBe(
+      join(fixture.paths.home, "staging", "lifecycle", ids[0] ?? "", "payloads", "0"),
+    );
+    const byId = new Map(plan.participants.foundation.map((ref) => [ref.id as string, ref]));
+    const removed = plan.steps.flatMap((step) =>
+      step.kind === "foundation" && step.slot === "uninstall_artifacts"
+        ? (byId.get(step.participantId)?.mutations ?? []).map((mutation) => mutation.targetPath as string)
+        : [],
+    );
+    expect(removed).not.toContain(row.path);
+    // 2 + 2 * 4 refs, then `payloads/` and its one leaf.
+    expect(reservation.lifecycleStaging).toBe(12);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it.each([
+    ["a symlinked ancestor", "releases/bin/large", "linked"],
+    ["a non-ASCII path component", "releases/b\u00efn/large", undefined],
+  ])("refuses a file larger than 16 MiB under %s before it allocates (NEW-210)", async (_label, relative, linkedAs) => {
+    const { fixture, global } = await syntheticFixture("uninstall-large-unmovable");
+    const row = await plantLargeRow(fixture, relative, linkedAs);
+    await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
+    await plant(fixture.paths.manifestFile, "{}\n");
+    const request = await syntheticRequest(fixture, syntheticManifest([row]));
+
+    await expect(new LifecycleUninstaller().preview(request, global)).rejects.toMatchObject({
+      code: EXIT_CODES.recoveryRequired,
+      reason: "uninstall_artifact_too_large",
+    });
+    expect(await exists(row.path)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("refuses an edited content artifact before it allocates", async () => {
     const { fixture, global } = await syntheticFixture("uninstall-edited-artifact");
     const path = join(fixture.paths.home, "edited.json");
@@ -1240,4 +1308,132 @@ describe("chunking artifact removals into F(uninstall_artifacts) steps (D45)", (
       });
     }
   });
+});
+
+/**
+ * NEW-210: a product-home file larger than `MAX_MUTATION_BYTES` leaves through the `K` arm as a
+ * payload, moved aside by identity rather than journaled by content.
+ */
+describe("V2 uninstall of a product-home file larger than 16 MiB (NEW-210)", () => {
+  const LARGE_BYTES = 17 * 1024 * 1024;
+  const PREVIEW = { dryRun: true, assumeYes: true } as const;
+
+  async function largeFixture(name: string): Promise<{ readonly fixture: V2FixtureV1; readonly large: string }> {
+    const fixture = await initializedV2Fixture(name, {
+      extraBundleFiles: [{ relativePath: "bin/large", bytes: new Uint8Array(LARGE_BYTES), mode: 0o700 }],
+    });
+    const rows = (await admittedOf(fixture)).manifest.artifacts.filter((row) => row.path.endsWith("/bin/large"));
+    const large = rows[0]?.path;
+    if (rows.length !== 1 || large === undefined) throw new Error("the install recorded no bin/large row");
+    expect((await nodeFs.stat(large)).size).toBe(LARGE_BYTES);
+    return { fixture, large };
+  }
+
+  function failure(result: Awaited<ReturnType<typeof runUninstall>>): string {
+    return result.ok ? "ok" : `${String(result.code)} ${result.error.kind}: ${result.error.message}`;
+  }
+
+  it("lists the file as removable in the dry run", async () => {
+    const { fixture, large } = await largeFixture("uninstall-large-preview");
+    const counter = await allocatorCounter(fixture);
+
+    const result = await runUninstall(fixture.context, PREVIEW);
+
+    if (!result.ok) throw new Error(failure(result));
+    expect(result.data.removed).toContain(large);
+    expect(await allocatorCounter(fixture)).toBe(counter);
+    expect(await exists(large)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("moves the file aside, deletes it after commit and leaves exactly the bookkeeping set", async () => {
+    const { fixture, large } = await largeFixture("uninstall-large-apply");
+    const expectedResidue = await bookkeepingSetAndRetainedEvidence(fixture);
+    const request = await requestFor(fixture);
+    const uninstaller = new LifecycleUninstaller({
+      afterBoundary: (boundary) => {
+        fixture.boundaries.push(boundary);
+      },
+    });
+
+    const result = await uninstaller.execute(request);
+
+    expect(result.removed).toContain(large);
+    const key = fixture.publishedPlans.at(-1)?.participants.redactionKey;
+    expect(key?.schemaVersion).toBe(2);
+    expect(key?.payloads.map((payload) => [payload.sourcePath, payload.size, payload.mode])).toStrictEqual([
+      [large, LARGE_BYTES, 0o700],
+    ]);
+    expect(key?.payloads[0]?.payloadPath).toBe(
+      join(fixture.paths.home, "staging", "lifecycle", result.transactionId ?? "", "payloads", "0"),
+    );
+    const kinds = fixture.boundaries.map((boundary) => boundary.kind);
+    expect(kinds.filter((kind) => kind === "payload_staged" || kind === "payload_deleted")).toStrictEqual([
+      "payload_staged",
+      "payload_deleted",
+    ]);
+    expect(await productHomeResidue(fixture)).toStrictEqual(expectedResidue);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("keeps an ordinary install's K plan at v1 with no payloads", async () => {
+    const fixture = await initializedV2Fixture("uninstall-large-none");
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(failure(result));
+    const key = fixture.publishedPlans.at(-1)?.participants.redactionKey;
+    expect(key?.schemaVersion).toBe(1);
+    expect(key?.payloads).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("restores the same inode, byte-identical, after a death once M(preserve_before) applied", async () => {
+    const { fixture, large } = await largeFixture("uninstall-large-compensate");
+    const before = await nodeFs.stat(large, { bigint: true });
+    const digest = await digestsOf([large]);
+    const request = await requestFor(fixture);
+    let fired = false;
+    const uninstaller = new LifecycleUninstaller({
+      afterBoundary: (boundary) => {
+        if (fired || boundary.kind !== "participant_returned" || boundary.direction !== "forward") return;
+        const step = fixture.publishedPlans.at(-1)?.steps[boundary.step];
+        if (step?.kind !== "manifest" || step.transition !== "preserve_before") return;
+        fired = true;
+        throw new SyntheticDeath("preserve_before");
+      },
+    });
+
+    await expect(uninstaller.execute(request)).rejects.toThrow(SyntheticDeath);
+    expect(fired).toBe(true);
+    expect(await exists(large)).toBe(false);
+    await recoverUninstall(fixture);
+
+    const after = await nodeFs.stat(large, { bigint: true });
+    expect([after.dev, after.ino, after.mode & 0o777n]).toStrictEqual([before.dev, before.ino, 0o700n]);
+    expect(await digestsOf([large])).toStrictEqual(digest);
+    expect(await exists(join(fixture.paths.home, "staging", "lifecycle"))).toBe(true);
+    expect(await nodeFs.readdir(join(fixture.paths.home, "staging", "lifecycle"))).toStrictEqual([]);
+    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it.each([
+    ["a mode that is not 0600 or 0700", async (large: string) => nodeFs.chmod(large, 0o644)],
+    ["a parent that is not 0700", async (large: string) => nodeFs.chmod(join(large, ".."), 0o755)],
+    [
+      "a second link",
+      async (large: string) => nodeFs.link(large, join(large, "..", "..", "large-link")),
+    ],
+  ])("refuses %s before it reserves an id", async (_label, mutate) => {
+    const { fixture, large } = await largeFixture("uninstall-large-refused");
+    await mutate(large);
+    const counter = await allocatorCounter(fixture);
+
+    for (const options of [PREVIEW, ACCEPTED]) {
+      const result = await runUninstall(fixture.rebuildContext(), options);
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+      expect(JSON.stringify(result.error)).toContain("uninstall_artifact_too_large");
+    }
+    expect(await allocatorCounter(fixture)).toBe(counter);
+    expect(await exists(large)).toBe(true);
+    expect(fixture.publishedPlans).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

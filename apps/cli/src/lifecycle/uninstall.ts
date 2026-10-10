@@ -19,6 +19,7 @@ import {
   LifecycleCoordinator,
   LifecycleRecoveryRequiredError,
   LIFECYCLE_LEASE_DRAIN_MS,
+  MAXIMUM_BUNDLE_FILE_BYTES,
   ManifestStateParticipant,
   SCHEDULED_JOB_IDS,
   TransactionExecutor,
@@ -153,7 +154,17 @@ import {
   stageRedactionKey,
 } from "./redaction-key.js";
 import type { RedactionKeyStatePlanV1 } from "./redaction-key.js";
-import { MAX_ARTIFACTS_PER_STEP, MAX_MUTATION_BYTES, MAX_UNINSTALL_ARTIFACTS } from "./uninstall-payloads.js";
+import {
+  MAX_ARTIFACTS_PER_STEP,
+  MAX_MUTATION_BYTES,
+  MAX_UNINSTALL_ARTIFACTS,
+  deletePayloads,
+  observePayloads,
+  restorePayloads,
+  stagePayloads,
+  uninstallPayloadPath,
+} from "./uninstall-payloads.js";
+import type { UninstallPayloadBoundaryV1, UninstallPayloadV1 } from "./uninstall-payloads.js";
 import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 const GLOBAL_LOCK_LEAF = ".lifecycle.lock";
@@ -191,7 +202,8 @@ export interface LifecycleUninstallPreviewV1 {
 export type UninstallBoundaryV1 =
   | LifecycleCoordinatorBoundaryV1
   | { readonly kind: "lease_path_removed"; readonly job: ScheduledJobIdV1 }
-  | { readonly kind: "empty_directory_removed"; readonly path: CanonicalAbsolutePathV1 };
+  | { readonly kind: "empty_directory_removed"; readonly path: CanonicalAbsolutePathV1 }
+  | UninstallPayloadBoundaryV1;
 
 export type UninstallBoundaryHook = (boundary: UninstallBoundaryV1) => void | Promise<void>;
 
@@ -339,6 +351,8 @@ interface UninstallPlanInputsV1 {
   readonly keyBefore: RedactionKeyStatePlanV1["before"];
   readonly markerPreimage: ArtifactMutationV1;
   readonly chunks: readonly (readonly ArtifactMutationV1[])[];
+  /** NEW-210: the files larger than `MAX_MUTATION_BYTES`, moved aside by `K`; the coordinator fixes each `payloadPath`. */
+  readonly payloads: readonly Omit<UninstallPayloadV1, "payloadPath">[];
   readonly createdAt: string;
   readonly launchd: UninstallLaunchdInputsV1 | null;
   refs: readonly FoundationParticipantRefV1[] | null;
@@ -433,9 +447,11 @@ function reservationFor(inputs: UninstallPlanInputsV1): LifecycleLeafReservation
     foundationBackups: refs + 5 * (1 + 1 + artifacts),
     /**
      * The coordinator directory, its `foundation` child, one directory and one journal per ref,
-     * and for `P` the `launchd-process` root, `home`, `tmp` and one bootstrap snapshot.
+     * for `P` the `launchd-process` root, `home`, `tmp` and one bootstrap snapshot, and for `K`
+     * the `payloads` directory and one leaf per payload.
      */
-    lifecycleStaging: 2 + 2 * refs + (inputs.launchd === null ? 0 : 4),
+    lifecycleStaging:
+      2 + 2 * refs + (inputs.launchd === null ? 0 : 4) + (inputs.payloads.length === 0 ? 0 : 1 + inputs.payloads.length),
   };
 }
 
@@ -615,7 +631,6 @@ function uninstallBuilder(
           launchdAfterFiles: null,
           launchd,
           redactionKey: {
-            schemaVersion: 1,
             coordinatorId: coordinatorId as LifecycleCoordinatorIdV1,
             sourcePath: redactionKeySourcePath(canonical(`${inputs.productHome}/state`)),
             tombstonePath: redactionKeyTombstonePath(
@@ -623,7 +638,16 @@ function uninstallBuilder(
               coordinatorId as LifecycleCoordinatorIdV1,
             ),
             before: inputs.keyBefore,
-            payloads: [],
+            /** v1 exactly when nothing is carried, so a payload-free plan encodes as it always has. */
+            ...(inputs.payloads.length === 0
+              ? { schemaVersion: 1 as const, payloads: [] }
+              : {
+                  schemaVersion: 2 as const,
+                  payloads: inputs.payloads.map((payload, ordinal) => ({
+                    ...payload,
+                    payloadPath: uninstallPayloadPath(inputs.productHome, coordinatorId, ordinal),
+                  })),
+                }),
           },
         },
         push: null,
@@ -992,6 +1016,11 @@ export function createUninstallAdapters(input: {
   const isArtifactStep = (step: LifecycleExecutionPlanV1["steps"][number]): boolean =>
     step.kind === "foundation" && step.slot === "uninstall_artifacts";
 
+  const uid = request.lifecycle.effectiveUid;
+  /** `ensureStagingDirectory` creates it before the plan is published, so `K` only adds `payloads/`. */
+  const coordinatorStagingOf = (plan: LifecycleExecutionPlanV1): CanonicalAbsolutePathV1 =>
+    canonical(`${request.lifecycle.roots.lifecycleStaging}/${plan.id}`);
+
   const keyPlanOf = (plan: LifecycleExecutionPlanV1): RedactionKeyStatePlanV1 => {
     const key = plan.participants.redactionKey;
     if (key === null) refuse("lifecycle_coordinator_key_arm", productHome);
@@ -1046,11 +1075,35 @@ export function createUninstallAdapters(input: {
         return observed.state;
       },
     },
+    /**
+     * NEW-210: `K` carries the key and the payloads. Payloads stage before the key and are deleted
+     * before it; restore runs the other way, the key first, so every order is the mirror of stage.
+     */
     redactionKey: {
-      stage: (plan) => stageRedactionKey(fs, keyPlanOf(plan)),
-      delete: (plan) => deleteRedactionKey(fs, keyPlanOf(plan)),
-      restore: (plan) => restoreRedactionKey(fs, keyPlanOf(plan)),
-      observe: (plan) => observeRedactionKeyState(fs, keyPlanOf(plan)),
+      stage: async (plan) => {
+        const key = keyPlanOf(plan);
+        await stagePayloads(fs, uid, coordinatorStagingOf(plan), key.payloads, boundary);
+        await stageRedactionKey(fs, key);
+      },
+      delete: async (plan) => {
+        const key = keyPlanOf(plan);
+        await deletePayloads(fs, uid, key.payloads, boundary);
+        await deleteRedactionKey(fs, key);
+      },
+      restore: async (plan) => {
+        const key = keyPlanOf(plan);
+        await restoreRedactionKey(fs, key);
+        await restorePayloads(fs, uid, key.payloads);
+      },
+      /** An empty payload list observes as `deleted`, so it never outvotes the key. */
+      observe: async (plan) => {
+        const key = keyPlanOf(plan);
+        const keyState = await observeRedactionKeyState(fs, key);
+        if (key.payloads.length === 0) return keyState;
+        const states = new Set([keyState, await observePayloads(fs, uid, key.payloads)]);
+        if (states.has("before")) return "before";
+        return states.has("staged") ? "staged" : "deleted";
+      },
     },
     sourceGitEffect: null,
     destinationGitEffect: null,
@@ -1412,6 +1465,70 @@ async function deriveVariant(
   return evidence ? "uninstall/present_manifest" : "uninstall/present_manifest_without_launchd";
 }
 
+/** The device `K` renames payloads onto; a home from before `staging/lifecycle` existed reads its parent's. */
+async function lifecycleStagingDevice(
+  lifecycle: CliLifecycleContext,
+  productHome: CanonicalAbsolutePathV1,
+): Promise<string> {
+  for (const path of [lifecycle.roots.lifecycleStaging, canonical(`${productHome}/staging`)]) {
+    const entry = await guardedEntry(lifecycle.fs, path);
+    if (entry?.kind === "directory") return entry.dev;
+  }
+  return refuse("lifecycle_guarded_parent", lifecycle.roots.lifecycleStaging);
+}
+
+/** `renameatx_np`'s basename rule (platform-macos `isAsciiBasename`): printable ASCII, no space. */
+const ASCII_COMPONENT = /^[\x21-\x7e]+$/u;
+
+/**
+ * NEW-210 (Spec 2 K9 (b)): a removable file larger than `MAX_MUTATION_BYTES` is a `K` payload only
+ * when the no-replace rename into `staging/lifecycle` can carry it and compensation can rename the
+ * same inode back. Every ancestor below the product home is read no-follow, so a symlinked one
+ * refuses here instead of being followed by `stage`. The hash streams; nothing is read into memory.
+ */
+async function admitPayload(
+  lifecycle: CliLifecycleContext,
+  productHome: CanonicalAbsolutePathV1,
+  artifactPath: string,
+  observed: LifecycleGuardedEntryV1,
+  stagingDevice: string,
+): Promise<Omit<UninstallPayloadV1, "payloadPath">> {
+  const path = observed.path;
+  const tooLarge = (): never => refuse("uninstall_artifact_too_large", path);
+  if (artifactPath !== path || !path.startsWith(`${productHome}/`)) tooLarge();
+  const components = path.slice(productHome.length + 1).split("/");
+  const top = components[0]?.toLowerCase();
+  if (top === "staging" || top === "state" || components.some((part) => !ASCII_COMPONENT.test(part))) tooLarge();
+  let ancestor: string = productHome;
+  let parent: LifecycleGuardedEntryV1 | null = null;
+  for (const part of components.slice(0, -1)) {
+    ancestor = `${ancestor}/${part}`;
+    parent = await guardedEntry(lifecycle.fs, canonical(ancestor));
+    if (parent?.kind !== "directory") tooLarge();
+  }
+  const uid = lifecycle.effectiveUid;
+  if (
+    parent === null ||
+    parent.ownerUid !== uid ||
+    parent.mode !== 0o700 ||
+    observed.ownerUid !== uid ||
+    (observed.mode !== 0o600 && observed.mode !== 0o700) ||
+    observed.nlink !== 1 ||
+    BigInt(observed.size) > BigInt(MAXIMUM_BUNDLE_FILE_BYTES) ||
+    observed.dev !== stagingDevice
+  ) {
+    tooLarge();
+  }
+  return {
+    sourcePath: path,
+    mode: observed.mode === 0o700 ? 448 : 384,
+    size: Number(observed.size),
+    dev: observed.dev,
+    ino: observed.ino,
+    sha256: await lifecycle.fs.hashRegular(observed, BigInt(MAXIMUM_BUNDLE_FILE_BYTES)),
+  };
+}
+
 export class LifecycleUninstaller {
   private readonly afterBoundary: UninstallBoundaryHook | undefined;
 
@@ -1489,12 +1606,16 @@ export class LifecycleUninstaller {
     const ordered = [...files].sort((left, right) => removalOrder(left.artifact.path, right.artifact.path));
 
     const artifacts: ArtifactMutationV1[] = [];
+    const payloads: Omit<UninstallPayloadV1, "payloadPath">[] = [];
+    let stagingDevice: string | null = null;
     for (const entry of ordered) {
       const path = canonical(entry.canonicalPath);
       const observed = await guardedEntry(lifecycle.fs, path);
       if (observed === null || observed.kind !== "regular_file") continue;
       if (BigInt(observed.size) > BigInt(MAX_MUTATION_BYTES)) {
-        refuse("uninstall_artifact_too_large", path);
+        stagingDevice ??= await lifecycleStagingDevice(lifecycle, productHome);
+        payloads.push(await admitPayload(lifecycle, productHome, entry.artifact.path, observed, stagingDevice));
+        continue;
       }
       const content = await lifecycle.fs.readRegular(observed, MAX_MUTATION_BYTES);
       artifacts.push({
@@ -1519,6 +1640,7 @@ export class LifecycleUninstaller {
     }
     artifacts.sort((left, right) => removalOrder(left.targetPath, right.targetPath));
     const chunks = chunkUninstallArtifacts(artifacts, productHome);
+    if (payloads.length > MAX_UNINSTALL_ARTIFACTS) throw new UninstallCapacityError(payloads.length, productHome);
     const markerEntry = await guardedEntry(lifecycle.fs, markerPath);
     if (markerEntry === null || markerEntry.kind !== "regular_file") {
       refuse("uninstall_marker_absent", markerPath);
@@ -1547,6 +1669,7 @@ export class LifecycleUninstaller {
       ),
       markerPreimage,
       chunks,
+      payloads,
       createdAt: context.now().toISOString(),
       launchd: launchd?.launchd ?? null,
       refs: null,
@@ -1742,6 +1865,7 @@ export class LifecycleUninstaller {
       }
       const removed = [
         ...inputs.chunks.flat().map((mutation) => mutation.targetPath as string),
+        ...inputs.payloads.map((payload) => payload.sourcePath as string),
         ...collected,
         ...removedDirectories,
       ];

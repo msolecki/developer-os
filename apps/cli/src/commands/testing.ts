@@ -449,6 +449,8 @@ export interface FixtureOptions {
   readonly instructions?: readonly ReleaseFileV1[];
   /** With `bootstrapAvailable`, the synthetic release's architecture; absent, `arm64`. */
   readonly architecture?: "arm64" | "x64";
+  /** With `bootstrapAvailable`, further `bundle/` files (paths relative to it), such as a NEW-210 large file. */
+  readonly extraBundleFiles?: readonly ReleaseFileV1[];
   /** Uses the real kernel-backed lifecycle lock provider for exclusion tests. */
   readonly bootstrapProductionLocks?: boolean;
   /** Inserts an adversarial namespace race immediately before lifecycle lock acquisition. */
@@ -529,6 +531,7 @@ async function createSyntheticPackagedRelease(
   root: string,
   instructions: readonly ReleaseFileV1[] | undefined,
   architecture: "arm64" | "x64",
+  extraBundleFiles: readonly ReleaseFileV1[] = [],
 ) {
   // D84 K2: a Homebrew-shaped keg under `<root>/prefix`, admitted as the package channel.
   const prefix = join(root, "prefix");
@@ -537,7 +540,9 @@ async function createSyntheticPackagedRelease(
   // A second fixture on a shared `root` admits the keg the first one installed: one prefix holds one keg.
   const installed = await nodeFs.realpath(fallback).catch(() => null);
   if (installed !== null) {
-    if (instructions !== undefined) throw new Error("a shared-root fixture reuses the first keg, so it cannot carry its own instructions");
+    if (instructions !== undefined || extraBundleFiles.length !== 0) {
+      throw new Error("a shared-root fixture reuses the first keg, so it cannot carry its own bundle files");
+    }
     return admitPackageChannelRelease(installed, { prefix: await nodeFs.realpath(prefix), requireVersion: null, architecture });
   }
   await nodeFs.mkdir(prefix, { mode: 0o755 });
@@ -555,6 +560,7 @@ async function createSyntheticPackagedRelease(
           ...(await repositoryWorkflowFiles()).map((file) => ({ ...file, relativePath: file.relativePath.slice("bundle/".length) })),
           ...instructions.map((file) => ({ ...file, relativePath: `instructions/${file.relativePath}` })),
         ]),
+    ...extraBundleFiles,
   ];
   const directories = new Set<string>();
   for (const file of bundleFiles) {
@@ -633,7 +639,7 @@ export async function createCommandFixture(
   const guards = createGuards(policy, REDACTION_KEY);
   const paths = resolveRuntimePaths(pathEnvironmentFor({ userHome, env }));
   const packagedRelease = options.bootstrapAvailable === true
-    ? await createSyntheticPackagedRelease(root, options.instructions, options.architecture ?? "arm64")
+    ? await createSyntheticPackagedRelease(root, options.instructions, options.architecture ?? "arm64", options.extraBundleFiles)
     : null;
   // C3: the K2 table over the fixture keg's prefix, whose `opt/developer-os` link the synthetic release (or `createOnDiskReleaseWorld`) creates.
   const fixtureTable = (() => {
