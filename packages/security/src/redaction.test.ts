@@ -463,6 +463,14 @@ describe("redactText", () => {
       );
     });
 
+    it("bounds the URL scheme, so a long dotted run stays linear (AUD-007 review)", () => {
+      expect(redactText(`${"a".repeat(100)}://admin:s3cr3t-value@host`, deterministicKey).text).toContain("s3cr3t-value");
+      // Measured unbounded: 10.3 s for 200 KB of "a."; bounded: about 13 ms.
+      const started = performance.now();
+      redactText("a.".repeat(100_000), deterministicKey);
+      expect(performance.now() - started).toBeLessThan(1_000);
+    });
+
     it.each([
       "export default function main() {}",
       "the token is valid",

@@ -715,10 +715,13 @@ export function redactText(
     1,
     candidates,
   );
-  /** AUD-007: the password of `scheme://user:password@host`; a user with no password has none. */
+  /**
+   * AUD-007: the password of `scheme://user:password@host`; a user with no password has none. The
+   * scheme is bounded: unbounded, a `\b` at every `.` made a long dotted run quadratic.
+   */
   addCapturedMatches(
     normalizedText,
-    /\b[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s/:@]+:([^\s/@]+)@/gu,
+    /\b[A-Za-z][A-Za-z0-9+.-]{0,63}:\/\/[^\s/:@]+:([^\s/@]+)@/gu,
     "credential-store",
     1,
     candidates,
