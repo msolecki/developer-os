@@ -1,5 +1,3 @@
-import { isAbsolute } from "node:path";
-
 import { parse, stringify } from "smol-toml";
 import { z } from "zod";
 
@@ -20,16 +18,6 @@ import {
 } from "./lifecycle.js";
 import { pathSegmentViolation } from "./segment.js";
 import type { DeveloperOsConfigV1 } from "./types.js";
-
-export const absolutePathSchema = z
-  .string()
-  .min(1)
-  .refine((value) => !value.includes("\0"), {
-    message: "Path must not contain NUL bytes",
-  })
-  .refine(isAbsolute, {
-    message: "Path must be absolute",
-  });
 
 /**
  * A single path segment, never a path. Topic folders, the content root, and the
@@ -418,7 +406,7 @@ export function parseAutomationConfig(value: unknown): AutomationConfigV1 {
 const configSchema = z
   .object({
     schemaVersion: z.literal(1),
-    brainPath: absolutePathSchema,
+    brainPath: brandedString(parseCanonicalAbsolutePathText),
     adapters: z
       .object({
         claude: z.boolean(),

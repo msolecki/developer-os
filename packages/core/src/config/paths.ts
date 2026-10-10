@@ -1,4 +1,4 @@
-import { isAbsolute, join, normalize } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 import type {
   DeveloperOsConfigV1,
@@ -19,7 +19,8 @@ function validateAbsolutePath(value: string, label: string): string {
     throw new Error(`${label} must be an absolute path`);
   }
 
-  return normalize(value);
+  // AUD-015: `normalize` keeps a trailing slash, which `CanonicalAbsolutePathV1` refuses.
+  return resolve(value);
 }
 
 export function resolveRuntimePaths(

@@ -129,7 +129,7 @@ pretends to sandbox it.
 | **Vault content** | user data, hand-edited, and may contain secrets the user wrote into their own notes | `packages/brain/src/schema/note.ts`, via `BrainService` |
 | **Model output** | a proposal chosen by a model that has just read untrusted capture text | `packages/brain/src/ingest/proposal.ts:202` |
 | **The vendor CLI's stdout** | a third-party binary's output, streamed, and parsed into an object callers will spread | `packages/security/src/cli.ts:249` |
-| **Configuration** | a TOML file the user edits by hand | `apps/cli/src/config-file.ts:38` (`readConfigFile`), then `loadConfig` (`packages/core/src/config/loader.ts:472-497`) |
+| **Configuration** | a TOML file the user edits by hand | `apps/cli/src/config-file.ts:38` (`readConfigFile`), then `loadConfig` (`packages/core/src/config/loader.ts` — `loadConfig`) |
 | **The installation manifest** | a JSON file on disk that decides ownership, and therefore deletion | `packages/core/src/manifest/store.ts:271` |
 | **`PATH`** | it decides which binary is `claude` or `codex` | `packages/platform-macos/src/macos.ts:209-211` |
 | **Every path anywhere** | a symlink makes the written path and the destination differ, which is the whole bug class | `packages/security/src/paths.ts` — `canonicalizePlannedPath` |
@@ -486,7 +486,7 @@ described an unwired half: the `user-pattern` class was implemented, tested and 
 product.
 
 **It is wired now.** `configSchema` carries an optional `[redaction]` table
-(`packages/core/src/config/loader.ts:442`, whose `redactionSchema` is at `:181`), and the three
+(`packages/core/src/config/loader.ts` — `redactionSchema`), and the three
 commands that redact bind the user's patterns into a closure at their composition root —
 `apps/cli/src/commands/capture.ts:627`, `apps/cli/src/commands/review.ts:712`,
 `apps/cli/src/commands/ingest.ts` — `createRedactor`. `createRedactor` is the only production entry to
@@ -914,10 +914,10 @@ rather than a detail — see the last row.
 |---|---|---|
 | Configuration is read through the protected-path policy, never with a bare `readFile` | the guarded reader canonicalizes, refuses a protected name, opens `O_NOFOLLOW` and re-checks `dev`/`ino` after the open (`packages/security/src/protected-paths.ts:115-158`), reached through `context.guards.readText` (`apps/cli/src/context.ts` — `readText`, `apps/cli/src/config-file.ts:54`) | `packages/security/src/protected-paths.test.ts:76-82` — `allows the Developer OS configuration path` through `assertReadable`; `:261-286` — `reads from the opened safe descriptor after the original alias is swapped` |
 | Absence is distinguished from a refusal | `lstat` is checked *first*, because the guarded reader reports a missing file as a security refusal — the right answer for a read and the wrong one for "this machine has never been initialized" (`apps/cli/src/config-file.ts:45-50`) | `apps/cli/src/commands/doctor.test.ts` |
-| An unknown key is refused rather than ignored | `configSchema` is `.strict()`, as is every nested table (`packages/core/src/config/loader.ts:403-429`, `brainSchema` and `redactionSchema` at `:140-158,181-215`) — so a typo'd or injected key fails the load instead of being silently dropped | `packages/core/src/config/config.test.ts` |
+| An unknown key is refused rather than ignored | `configSchema` is `.strict()`, as is every nested table (`packages/core/src/config/loader.ts` — `configSchema`, with `brainSchema` and `redactionSchema`) — so a typo'd or injected key fails the load instead of being silently dropped | `packages/core/src/config/config.test.ts` |
 | A parse failure never prints the file it failed on — **through `readConfigFile`** | a `loadConfig` throw becomes a content-free `ConfigurationError`, because `smol-toml` embeds three raw source lines in `TomlError.message` and propagating it printed whatever was read into `status`, `doctor` and their `--json` (`apps/cli/src/config-file.ts:15-22,54-58`). Redaction is deliberately not the only thing standing on this path | `tests/e2e/foundation.test.ts:1337-1372` — `never quotes the configuration it failed to parse`, planting a `SENTINEL` |
 | The same boundary on a `brain` run | **holds.** `readConfig` reads through `readConfigFile` (`apps/cli/src/commands/brain.ts` — `readConfig`) and propagates `ConfigurationError` unmodified, so a `TomlError` never reaches `redactDiagnostic`. NEW-17, closed | `apps/cli/src/commands/brain.test.ts` |
-| Telemetry cannot be switched on by editing the file | the key is `z.literal(false)` (`packages/core/src/config/loader.ts:427`), so `telemetry = true` fails the load | `packages/core/src/config/config.test.ts` |
+| Telemetry cannot be switched on by editing the file | the key is `z.literal(false)` (`packages/core/src/config/loader.ts` — `telemetry`), so `telemetry = true` fails the load | `packages/core/src/config/config.test.ts` |
 
 **Pending DOS-P7 command boundary, ratified 2026-08-27:** `config get/set` will enumerate exact
 readable/mutable keys, accept one per-key `CanonicalJsonV1` value, allow `null` only for whole optional
@@ -931,7 +931,7 @@ through; `git enable`/`automation enable` shipped with plan 1b (§5.15).
 `[redaction]` table, added on 2026-08-17 when NEW-16 closed, so the `user-pattern` class is
 configurable — this paragraph asserted the opposite for a day after the wiring landed, in a
 section a reader reaches *before* §5.7. **And one thing it decides that
-nothing else re-checks:** `brainPath` is an absolute path from the file, and `reindex` does not call
+nothing else re-checks:** `brainPath` is a canonical absolute path from the file (`parseCanonicalAbsolutePathText`, so no trailing slash, `.` or `..`; AUD-015), and `reindex` does not call
 `assertRootsAnchored` where `init` does — so a hand-edited vault path outside the home is refused by
 one command and accepted by the other. That is `brain.md` §4 residual 5, owned by DOS-P7.
 
@@ -1123,7 +1123,7 @@ look identical from outside and are not the same thing.
 | **Reading a session transcript** | no code path opens the field the vendors ship in every hook payload | `tests/repository/transcript-path.test.ts` — a gate rather than a reviewer's grep, with the needle assembled at runtime so the file does not match its own source |
 | **A hook that spawns a vendor, reads a transcript or writes vendor configuration** | A13 ships hooks (`hooks.md` §3), so hooks themselves are no longer absent; these three things are. Nothing reachable from `apps/cli/src/hooks/entry.ts` imports an adapter package or an invocation module. `decodeHookPayload` reads an allow-list of named fields and never iterates the payload. No hook code writes `~/.claude/settings.json` or a Codex file, and Codex trust stays manual (D7). The hooks file exists only in the install tree, and `plugin_hooks` is `yes` only from a firing record under `state/hooks/`, never from a listing. Those records are a product-home write outside any transaction, bounded to 512 bytes each, best effort and written only after the outcome (the Q3-A exception) | `apps/cli/src/hooks/isolation.test.ts` — `reaches no adapter package and no invocation module from the hook entry`; `tests/repository/transcript-path.test.ts`, unchanged; `packages/adapter-claude/src/plugin.test.ts` — `keeps hooks out of the checked-in tree and puts them only in the install tree`; `apps/cli/src/hooks/firing-records.test.ts` — `writes nothing and creates nothing when the directory is absent`. That no hook writes vendor configuration rests on the hook modules holding no such write call, which is a review claim |
 | **Automatic capture** | nothing captures on session start, session end or compaction. The two transcript-dependent legacy hooks stay declined: `session_end_capture` and `pre_compact_backup` stay in both `NOT_USED` lists, no capture hook is rendered, and Codex `pre_compact` is unused. Capture content is agent-authored, and `capture` refuses without `--text` or stdin rather than sourcing text itself — a session-end trigger could only supply that text by reading a transcript, which the row above refuses. The `SessionStart` hook reads the vault and writes nothing there; its only write is its firing record | `apps/cli/src/commands/capture.test.ts`; `apps/cli/src/adapter-capability-parity.test.ts` keeps the two `NOT_USED` lists identical. That no `HOOK_HANDLERS` verb writes quarantine, the vault or a transaction is a review claim over the verb modules, not a test |
-| **Telemetry** | `telemetry` is `z.literal(false)` in the configuration schema (`packages/core/src/config/loader.ts:427`) | `packages/core/src/config/config.test.ts` |
+| **Telemetry** | `telemetry` is `z.literal(false)` in the configuration schema (`packages/core/src/config/loader.ts` — `telemetry`) | `packages/core/src/config/config.test.ts` |
 | **Reading anything outside this repository** | `npm run lint` runs a git-driven enumerator over tracked *and untracked* files | `tests/repository/self-containment.ts` — a lint rule rather than a sandbox, and it says so: it refuses the obvious spellings so that crossing the boundary has to be deliberate and visible in a diff |
 | **Writing a vendor configuration file** | the `doctor` check `vendor-config` reads the Claude user settings file through `readUntrustedText` and examines only `permissions.deny`; `project init` writes no vendor settings file (A14 Q4); the Codex config file is neither read nor written (D7) | `apps/cli/src/commands/vendor-config.test.ts` — `is value-free: no allow, env or deny string reaches the check` and `warns instead of failing when the read throws`. It proves the check reports no value; that nothing writes the file rests on the module holding no write call, which is a review claim |
 
