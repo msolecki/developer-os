@@ -55,14 +55,14 @@ const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 const PREVIEW = { dryRun: true, assumeYes: true } as const;
 
 /**
- * The chained case measured 1080.9 s (2026-09-21) on the second of two green isolated runs,
- * whose whole-file figures were 1147.2 s and 1139.3 s. Only that run carried per-case timing,
- * so this is one observation where the rest of this job's figures are maxima of two or more;
- * it is scaled by the 0.7% whole-file spread to 1088.4 s rather than taken as measured, and
- * ceil(1088.4 x 2 x 1.5) leaves a hosted runner at ~2x unable to trip it. It cannot take
- * `REAL_FILESYSTEM_TIMEOUT_MS`: 1080.9 s doubled is more than twice that 900 s budget.
+ * NEW-210 (2026-10-10) grew the chain to seven kill points and two 17 MiB payloads per init. Its
+ * first green isolated run took 500.98 s for the whole file. The six-point chain measured 1080.9 s
+ * on 2026-09-21, and the whole-file spread (0.7%) scaled that to 1088.4 s. That figure, scaled to
+ * seven points, is 1269.8 s and outweighs the new run, so it sets the budget:
+ * ceil(1269.8 x 2 x 1.5) leaves a hosted runner at ~2x unable to trip it. It cannot take
+ * `REAL_FILESYSTEM_TIMEOUT_MS`: either figure doubled exceeds that 900 s budget.
  */
-const CHAIN_TIMEOUT_MS = 3_266_000;
+const CHAIN_TIMEOUT_MS = 3_810_000;
 
 const POINTS = [
   ["M(preserve_before) applied, cursor not advanced", "compensation"],
@@ -484,7 +484,7 @@ async function observedMicrostate(
     keyTombstone: await exists(leaves.keyTombstonePath),
     nonce: await exists(join(fixture.paths.stateDir, "lifecycle-install-nonce")),
     allocator: await exists(join(fixture.paths.stateDir, "lifecycle-id-allocator.json")),
-    payloadStaged: [await exists(first?.payloadPath ?? ""), await exists(second?.payloadPath ?? "")],
+    payloadStaged: [first !== undefined && (await exists(first.payloadPath)), second !== undefined && (await exists(second.payloadPath))],
   };
 }
 
@@ -541,6 +541,7 @@ describe("uninstall dispatch and the recovery-only arm", () => {
      */
     const fixture = await initializedV2Fixture("uninstall-recovery-chain", LARGE_OPTIONS);
     for (const [point, arm] of POINTS) {
+      const sources = arm === "compensation" ? await largeSourceIdentities(fixture) : [];
       await killUninstallAt(fixture, point);
       const dispatched = fixture.rebuildContext();
       expect(
@@ -562,6 +563,11 @@ describe("uninstall dispatch and the recovery-only arm", () => {
 
       expect((await runUninstall(fixture.rebuildContext(), ACCEPTED)).ok, point).toBe(true);
       if (arm === "compensation") {
+        // Compensation renamed each payload's own inode back, mode included.
+        expect(
+          await Promise.all(sources.map(([path]) => identityOf(path))),
+          `${point} restored payloads`,
+        ).toStrictEqual(sources);
         // The resume restored the installation, so the anchor of its manifest stays (D54 finding 1).
         const anchor = decodeManifestAnchor(await nodeFs.readFile(manifestAnchorPath(fixture.paths.home)));
         expect(anchor?.manifestHash, `${point} anchor`).toBe(hashBytes(await nodeFs.readFile(fixture.paths.manifestFile)));
@@ -713,9 +719,27 @@ async function diedInsideKStage(fixture: V2FixtureV1): Promise<void> {
   ).rejects.toThrow(SyntheticDeath);
 }
 
-async function identityOf(path: string): Promise<readonly [bigint, bigint]> {
-  const stat = await nodeFs.stat(path, { bigint: true });
-  return [stat.dev, stat.ino];
+type IdentityV1 = readonly [path: string, dev: string, ino: string, mode: number];
+
+async function identityOf(path: string): Promise<IdentityV1> {
+  const stat = await nodeFs.lstat(path, { bigint: true });
+  return [path, String(stat.dev), String(stat.ino), Number(stat.mode & 0o777n)];
+}
+
+/** What the plan recorded for `payload` when it was admitted at its source. */
+function identityAt(path: string, payload: UninstallPayloadV1): IdentityV1 {
+  return [path, payload.dev, payload.ino, payload.mode];
+}
+
+/** The two large release files at their sources, read from the admitted manifest before any kill. */
+async function largeSourceIdentities(fixture: V2FixtureV1): Promise<readonly IdentityV1[]> {
+  const admitted = (await requestFor(fixture)).admitted;
+  const paths = (admitted?.manifest.artifacts ?? [])
+    .map((artifact) => artifact.path as string)
+    .filter((path) => /\/bin\/large-[ab]$/u.test(path))
+    .sort();
+  if (paths.length !== 2) throw new Error(`the manifest records ${String(paths.length)} large files, not 2`);
+  return Promise.all(paths.map(identityOf));
 }
 
 describe("a death inside K(stage) with one of two payloads moved (NEW-210)", () => {
@@ -740,9 +764,9 @@ describe("a death inside K(stage) with one of two payloads moved (NEW-210)", () 
 
     /** The compensation renamed the moved inode back, so the next plan admitted the same identities. */
     expect(fixture.publishedPlans.length).toBe(published + 1);
-    expect(payloadsOf(fixture).map((payload) => [payload.sourcePath, payload.ino])).toStrictEqual([
-      [first.sourcePath, first.ino],
-      [second.sourcePath, second.ino],
+    expect(payloadsOf(fixture).map((payload) => identityAt(payload.sourcePath, payload))).toStrictEqual([
+      identityAt(first.sourcePath, first),
+      identityAt(second.sourcePath, second),
     ]);
     const settled = fixture.rebuildContext();
     expect(await dispatchUninstall(settled, lifecycleOf(settled))).toStrictEqual({
@@ -761,7 +785,7 @@ describe("a death inside K(stage) with one of two payloads moved (NEW-210)", () 
    * fail-closed rule as a payload absent at both names). Nothing is lost: ordinal 0 waits in
    * `payloads/0`, and once the original is back recovery restores both inodes.
    */
-  it("fails the second move on a swapped identity, strands nothing, and restores every payload once the original is back", async () => {
+  it("fails the second move on a swapped identity, holds ordinal 0 in payloads/ behind exit 6, and restores every payload once the original is back", async () => {
     const fixture = await initializedV2Fixture("uninstall-recovery-k-stage-swap", LARGE_OPTIONS);
     let aside = "";
     const uninstaller = new LifecycleUninstaller({
@@ -787,16 +811,25 @@ describe("a death inside K(stage) with one of two payloads moved (NEW-210)", () 
       readonly compensationNext: number | null;
     };
     expect([journal.phase, journal.compensationNext]).toStrictEqual(["participants_applying", null]);
-    expect(await exists(first.sourcePath)).toBe(false);
-    expect(await identityOf(first.payloadPath)).toStrictEqual([BigInt(first.dev), BigInt(first.ino)]);
-    expect(await exists(second.payloadPath)).toBe(false);
-    expect(await identityOf(second.sourcePath)).not.toStrictEqual([BigInt(second.dev), BigInt(second.ino)]);
+    const held = async (): Promise<void> => {
+      expect(await exists(first.sourcePath)).toBe(false);
+      expect(await identityOf(first.payloadPath)).toStrictEqual(identityAt(first.payloadPath, first));
+      expect(await exists(second.payloadPath)).toBe(false);
+      expect(await identityOf(second.sourcePath)).not.toStrictEqual(identityAt(second.sourcePath, second));
+    };
+    await held();
+
+    /** The refusal is the restore path's, so a second run refuses the same way and moves nothing. */
+    const again = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+    expect(again.ok).toBe(false);
+    if (!again.ok) expect(again.code).toBe(EXIT_CODES.recoveryRequired);
+    await held();
 
     await nodeFs.rename(aside, second.sourcePath);
     await recoverUninstall(fixture);
 
     for (const payload of [first, second]) {
-      expect(await identityOf(payload.sourcePath)).toStrictEqual([BigInt(payload.dev), BigInt(payload.ino)]);
+      expect(await identityOf(payload.sourcePath)).toStrictEqual(identityAt(payload.sourcePath, payload));
       expect(await exists(dirname(payload.payloadPath))).toBe(false);
     }
     expect(await exists(fixture.paths.manifestFile)).toBe(true);
