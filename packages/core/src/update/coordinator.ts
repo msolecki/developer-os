@@ -1126,7 +1126,7 @@ function causeOf(error: unknown): SafeReasonCodeV1 {
   }
   // Unknown step error: derive a bounded code from the class name and an errno-style string `.code`
   // only. The message can carry paths or user data, so it is never read.
-  if (error instanceof Error) {
+  if (error instanceof Error && /^[A-Z][A-Za-z0-9]{0,40}$/.test(error.name)) {
     const code = "code" in error && typeof error.code === "string" && /^E[A-Z0-9]+$/.test(error.code) ? `_${error.code.toLowerCase()}` : "";
     const name = error.name.replace(/Error$/, "").replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
     try {
