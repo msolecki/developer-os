@@ -4,7 +4,6 @@ import type { RedactionResult } from "./redaction.js";
 export {
   assertDisjointPaths,
   canonicalizePlannedPath,
-  resolveOwnedPath,
   SecurityRefusalError,
 } from "./paths.js";
 export {
@@ -45,7 +44,6 @@ export type {
 export type { NormalizedShellCommand } from "./shell-command.js";
 export {
   admitPosixRootOwned,
-  recheckSystemExecutable,
   recheckSystemExecutableSync,
   SystemExecutableRefusalError,
 } from "./system-executables.js";
@@ -133,7 +131,7 @@ export type {
   GitProcessPhaseBudgetV1,
   SupportedGitProcessTableV1,
 } from "./git/index.js";
-export { PERSISTED_GIT_PUSH_PLAN_CODEC, validateGitSyncPlan } from "./git/index.js";
+export { PERSISTED_GIT_PUSH_PLAN_CODEC } from "./git/index.js";
 export type { GitSyncPlanV1, PersistedGitPushPlanV1 } from "./git/index.js";
 export {
   GuardedSha1PackReader,

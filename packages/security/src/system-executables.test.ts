@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   admitPosixRootOwned,
   admitPosixRootOwnedSync,
-  recheckSystemExecutable,
   recheckSystemExecutableSync,
   SystemExecutableRefusalError,
   type SystemExecutableRowV1,
@@ -49,7 +48,7 @@ describe("posix_root_owned", () => {
   it.each(["dev", "ino", "size", "sha256"] as const)("recheck refuses a changed %s", async (field) => {
     const admitted = await admitPosixRootOwned(GIT, host());
     const drift = file({ [field]: field === "size" ? 1 : field === "sha256" ? "b".repeat(64) : "9" });
-    await expect(recheckSystemExecutable(GIT, host({ "/usr/bin/git": drift }), admitted)).rejects.toThrow(SystemExecutableRefusalError);
+    expect(() => { recheckSystemExecutableSync(GIT, hostSync({ "/usr/bin/git": drift }), admitted); }).toThrow(SystemExecutableRefusalError);
   });
   it("the synchronous pair applies the same predicate and recheck", async () => {
     expect(admitPosixRootOwnedSync(GIT, hostSync())).toEqual(await admitPosixRootOwned(GIT, host()));

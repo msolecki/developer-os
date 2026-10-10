@@ -21,7 +21,6 @@ describe("the package's public door", () => {
       [
         "assertDisjointPaths",
         "canonicalizePlannedPath",
-        "resolveOwnedPath",
         "SecurityRefusalError",
         "ProtectedPathPolicy",
         "PROTECTED_PATH_RULES",
@@ -59,7 +58,6 @@ describe("the package's public door", () => {
         "parseGitVersionLine",
         "validateSupportedGitProcessTable",
         "PERSISTED_GIT_PUSH_PLAN_CODEC",
-        "validateGitSyncPlan",
         "GuardedSha1PackReader",
         "materializeSanitizedBareDestinationShadow",
         "prepareLocalReceive",
@@ -82,7 +80,6 @@ describe("the package's public door", () => {
         "sanitizedGitEnvironment",
         "TargetVerifierSupervisor",
         "admitPosixRootOwned",
-        "recheckSystemExecutable",
         "recheckSystemExecutableSync",
         "SystemExecutableRefusalError",
       ].sort(),

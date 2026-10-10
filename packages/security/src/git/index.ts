@@ -66,7 +66,6 @@ export type {
   GitPushPhaseV1,
 } from "./supervisor.js";
 export {
-  bindShadowConfigToTemplate,
   createOpaqueGitLocalToken,
   deslotShadowConfig,
   hashShadowConfig,
@@ -122,7 +121,7 @@ export type {
   SanitizedLocalRemoteHelperV1,
   SanitizedSshBridgeV1,
 } from "./gateways.js";
-export { PERSISTED_GIT_PUSH_PLAN_CODEC, validateGitSyncPlan, validatePersistedGitPushPlan } from "./push-plan.js";
+export { PERSISTED_GIT_PUSH_PLAN_CODEC, validatePersistedGitPushPlan } from "./push-plan.js";
 export type { GitSyncPlanV1, PersistedGitPushDestinationV1, PersistedGitPushPlanV1 } from "./push-plan.js";
 export {
   destroyGitQuarantine,

@@ -6,15 +6,15 @@ import { Duplex } from "node:stream";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { DARWIN_SYSTEM_EXECUTABLES } from "@developer-os/platform-macos";
-import { admitGitExecutables, recheckSystemExecutable } from "@developer-os/security";
-import type { GitProcessPhaseV1, SystemPathInspectorV1, SystemPathObservationV1 } from "@developer-os/security";
+import { admitGitExecutables, recheckSystemExecutableSync } from "@developer-os/security";
+import type { GitProcessPhaseV1, SystemPathInspectorSyncV1, SystemPathInspectorV1, SystemPathObservationV1 } from "@developer-os/security";
 
 import { bridgeReceivePack, createProductionGitRuntime, readLine, withoutAppleShimAdditions, withoutGitChildAdditions, withoutReceiveQuarantine } from "./runtime.js";
 
 type PresentObservation = Exclude<SystemPathObservationV1, { kind: "absent" }>;
 
 /** A stock macOS host: every fixed path and ancestor root-owned `0755`; `overrides` change fields of one path. */
-function stockHost(overrides: Readonly<Record<string, Partial<PresentObservation>>> = {}): SystemPathInspectorV1 {
+function stockHostSync(overrides: Readonly<Record<string, Partial<PresentObservation>>> = {}): SystemPathInspectorSyncV1 {
   const directory: PresentObservation = { kind: "directory", ownerUid: 0, mode: 0o755, dev: "1", ino: "2", size: 64, sha256: null };
   const file = (ino: string, sha256: string): PresentObservation => ({ kind: "file", ownerUid: 0, mode: 0o755, dev: "1", ino, size: 119_000, sha256 });
   const paths: Record<string, PresentObservation> = {
@@ -25,7 +25,12 @@ function stockHost(overrides: Readonly<Record<string, Partial<PresentObservation
     "/usr/bin/git-receive-pack": file("11", "b".repeat(64)),
   };
   for (const [path, change] of Object.entries(overrides)) paths[path] = { ...(paths[path] as PresentObservation), ...change };
-  return (path) => Promise.resolve(paths[path] ?? { kind: "absent" });
+  return (path) => paths[path] ?? { kind: "absent" };
+}
+
+function stockHost(overrides: Readonly<Record<string, Partial<PresentObservation>>> = {}): SystemPathInspectorV1 {
+  const host = stockHostSync(overrides);
+  return (path) => Promise.resolve(host(path));
 }
 
 const GIT_ROW = DARWIN_SYSTEM_EXECUTABLES.find((row) => row.id === "git");
@@ -51,9 +56,9 @@ describe("fixed-path Git admission (D71)", () => {
   it("retry re-admits after a binary change between plan and retry", async () => {
     if (GIT_ROW === undefined) throw new Error("fixture: no darwin git row");
     const first = await admitGitExecutables(DARWIN_SYSTEM_EXECUTABLES, stockHost(), "arm64", "local");
-    const updated = stockHost({ "/usr/bin/git": { sha256: "d".repeat(64), ino: "42" } });
-    await expect(admitGitExecutables(DARWIN_SYSTEM_EXECUTABLES, updated, "arm64", "local")).resolves.toBeDefined();
-    await expect(recheckSystemExecutable(GIT_ROW, updated, first.git)).rejects.toThrow();
+    const change = { "/usr/bin/git": { sha256: "d".repeat(64), ino: "42" } };
+    await expect(admitGitExecutables(DARWIN_SYSTEM_EXECUTABLES, stockHost(change), "arm64", "local")).resolves.toBeDefined();
+    expect(() => { recheckSystemExecutableSync(GIT_ROW, stockHostSync(change), first.git); }).toThrow();
   });
 
   it("refuses HTTPS and SSH before observing any path", async () => {

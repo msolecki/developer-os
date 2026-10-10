@@ -7,7 +7,6 @@ import {
   relative,
   resolve,
   sep,
-  win32,
 } from "node:path";
 import { EXIT_CODES } from "@developer-os/core";
 
@@ -104,37 +103,4 @@ export async function assertDisjointPaths(
       }
     }
   }
-}
-
-/**
- * Validates the current filesystem snapshot. Task 5 transaction guards must
- * invoke it immediately before every filesystem operation.
- */
-export async function resolveOwnedPath(
-  root: string,
-  candidate: string,
-): Promise<string> {
-  if (candidate.length === 0) {
-    refuse("Owned path candidate must not be empty");
-  }
-  if (candidate.includes("\0")) {
-    refuse("Owned path candidate contains a NUL byte");
-  }
-  if (isAbsolute(candidate) || win32.isAbsolute(candidate)) {
-    refuse("Owned path candidate must be relative");
-  }
-  if (candidate.split(/[\\/]/u).includes("..")) {
-    refuse("Owned path candidate must not traverse upward");
-  }
-
-  const canonicalRoot = await canonicalizePlannedPath(root);
-  const canonicalCandidate = await canonicalizePlannedPath(
-    resolve(root, candidate),
-  );
-
-  if (!isSameOrDescendant(canonicalRoot, canonicalCandidate)) {
-    refuse("Owned path candidate escapes its root");
-  }
-
-  return canonicalCandidate;
 }

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EXIT_CODES } from "@developer-os/core";
@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   assertDisjointPaths,
   canonicalizePlannedPath,
-  resolveOwnedPath,
 } from "./paths.js";
 
 const temporaryDirectories = new Set<string>();
@@ -114,64 +113,5 @@ describe("assertDisjointPaths", () => {
     await Promise.all([mkdir(first), mkdir(second)]);
 
     await expect(assertDisjointPaths([first, second])).resolves.toBeUndefined();
-  });
-});
-
-describe("resolveOwnedPath", () => {
-  it("rejects a symlink escape from the owned root", async () => {
-    const temporaryDirectory = await makeTemporaryDirectory();
-    const ownedRoot = join(temporaryDirectory, "brain");
-    const outside = join(temporaryDirectory, "outside-the-owned-root");
-    await Promise.all([mkdir(ownedRoot), mkdir(outside)]);
-    await symlink(outside, join(ownedRoot, "link"));
-
-    await expect(
-      resolveOwnedPath(ownedRoot, "link/secret.md"),
-    ).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal });
-  });
-
-  it("resolves a normal missing relative child under the canonical root", async () => {
-    const temporaryDirectory = await makeTemporaryDirectory();
-    const ownedRoot = join(temporaryDirectory, "brain");
-    await mkdir(ownedRoot);
-    const canonicalRoot = await realpath(ownedRoot);
-
-    await expect(
-      resolveOwnedPath(ownedRoot, "notes/missing.md"),
-    ).resolves.toBe(join(canonicalRoot, "notes", "missing.md"));
-  });
-
-  it("refuses apply-time drift after a missing component becomes an escape symlink", async () => {
-    const temporaryDirectory = await makeTemporaryDirectory();
-    const ownedRoot = join(temporaryDirectory, "brain");
-    const outside = join(temporaryDirectory, "outside-the-owned-root");
-    const candidate = "planned-child/entry.md";
-    await Promise.all([mkdir(ownedRoot), mkdir(outside)]);
-    const canonicalRoot = await realpath(ownedRoot);
-
-    await expect(resolveOwnedPath(ownedRoot, candidate)).resolves.toBe(
-      join(canonicalRoot, "planned-child", "entry.md"),
-    );
-
-    await symlink(outside, join(ownedRoot, "planned-child"));
-
-    await expect(resolveOwnedPath(ownedRoot, candidate)).rejects.toMatchObject({
-      code: EXIT_CODES.securityRefusal,
-    });
-  });
-
-  it.each([
-    "/absolute/child.md",
-    "child\0name.md",
-    "../outside.md",
-    "nested/../sibling.md",
-  ])("rejects unsafe candidate %j with a security refusal", async (candidate) => {
-    const temporaryDirectory = await makeTemporaryDirectory();
-    const ownedRoot = join(temporaryDirectory, "brain");
-    await mkdir(ownedRoot);
-
-    await expect(resolveOwnedPath(ownedRoot, candidate)).rejects.toMatchObject({
-      code: EXIT_CODES.securityRefusal,
-    });
   });
 });

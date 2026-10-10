@@ -136,14 +136,6 @@ function requireUnchanged(fresh: AdmittedSystemExecutableV1, admitted: AdmittedS
 }
 
 /** Re-admits and refuses any difference from the invocation's admitted evidence. */
-export async function recheckSystemExecutable(
-  row: SystemExecutableRowV1,
-  inspect: SystemPathInspectorV1,
-  admitted: AdmittedSystemExecutableV1,
-): Promise<void> {
-  requireUnchanged(await admitPosixRootOwned(row, inspect), admitted);
-}
-
 export function recheckSystemExecutableSync(
   row: SystemExecutableRowV1,
   inspect: SystemPathInspectorSyncV1,

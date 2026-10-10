@@ -20,7 +20,6 @@ import {
   validateGitRefState,
   validateGitReflogState,
   validateGitSourceState,
-  validateGitSyncPlanCore,
   type CanonicalAbsolutePathV1,
   type CanonicalJsonV1,
   type CanonicalJsonValue,
@@ -169,7 +168,3 @@ export const PERSISTED_GIT_PUSH_PLAN_CODEC: LifecycleHashedValueCodec<PersistedG
   encode: (plan: PersistedGitPushPlanV1): CanonicalJsonV1 => encodeCanonicalJson(plan as unknown as CanonicalJsonValue),
   hash: (plan: PersistedGitPushPlanV1): LowerHexSha256 => hashCanonicalJson(PUSH_PLAN_DOMAIN, plan as unknown as CanonicalJsonValue),
 });
-
-export function validateGitSyncPlan(value: unknown): GitSyncPlanV1 {
-  return validateGitSyncPlanCore(value, PERSISTED_GIT_PUSH_PLAN_CODEC);
-}
