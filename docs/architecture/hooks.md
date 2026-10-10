@@ -306,9 +306,13 @@ this commit. Where the phase is not finished, it says so.
 Every hook entry's command is `<executable> guard <kind> --vendor <vendor>` or
 `<executable> brain status --inject --vendor <vendor>`. `hookCommandTail` in
 `packages/core/src/hooks/contract.ts` owns the tail, so both adapters render the same bytes.
-The executable is two tokens, `<node> <entrypoint>`: the Node path `stableNodePath` resolves (the
-version-free `<prefix>/opt/<formula>` link when it resolves to the running Node), then
-`<product-home>/bin/developer-os.mjs`. Naming Node means the entrypoint's `env node` shebang never
+The executable is two tokens, `<node> <entrypoint>`: the Node path `hookNodePath`
+(`apps/cli/src/instructions/active-release.ts`) returns, then `<product-home>/bin/developer-os.mjs`.
+On a `package-channel` home (C3, 2026-10-08) that Node is the runtime the keg ships, named through
+the K2 table's fixed `opt` link, so no release swap or retirement changes or breaks a hook. An
+`unsigned-local` home has no active release tree and keeps the Node that ran `init`, the path
+`stableNodePath` resolves (the version-free `<prefix>/opt/<formula>` link when it resolves to the
+running Node). Naming Node means the entrypoint's `env node` shebang never
 runs. Both tokens must match `^/[A-Za-z0-9._+@/-]+$` and have no empty, `.` or `..` segment
 (`assertHookNodePath`); the entrypoint must also have no segment shaped like a version or a hash
 (`assertHookExecutablePath`). A refusal stops `init` with exit 2 before any transaction. The product
@@ -537,8 +541,10 @@ This holds in both the probed and the unprobed `doctor` run. Without such a reco
   writer, since no record written then can pass it and honouring it would rewrite on every fire;
   `doctor` keeps comparing against it. A shared
   executable whose Node or entrypoint no longer exists (a Node upgrade removed the rendered path, so
-  every hook exits 127, which both vendors ignore) adds `executable=missing` with `recovery`
-  `developer-os init`, which takes precedence over the trust step. A vendor's
+  every hook exits 127, which both vendors ignore) adds `executable=missing` with a `recovery` that
+  takes precedence over the trust step: `brew install developer-os` (`HOOK_OPT_NODE_RECOVERY`) when
+  the dead Node lies under a keg `opt` link, because `init` would render the same path again, and
+  `developer-os init` otherwise. A vendor's
   `<vendor>.record_failed.json` (§3.6) adds `record=failed`, so a `never` may be a hook that fired
   and could not record it. The text says the marker clears on that vendor's next successful record
   write (within 24 h): the fresh-record shortcut runs before the gate, so it never removes the
