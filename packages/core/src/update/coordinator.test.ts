@@ -673,6 +673,18 @@ describe("UpdateLifecycleCoordinator", () => {
     expect(await fixture.assertExpectedTerminal()).toBe(true);
   });
 
+  it.each([
+    ["an errno error", () => Object.assign(new Error("/secret/path"), { code: "EXDEV" }), "step_error_exdev"],
+    ["a named class", () => Object.assign(new Error("m"), { name: "MacOsRetainedRenameUnavailableError" }), "step_mac_os_retained_rename_unavailable"],
+    ["a hostile name", () => Object.assign(new Error("m"), { name: "Bad Name/../x" }), "update_step_failed"],
+    ["a hostile code", () => Object.assign(new Error("m"), { name: "Weird", code: "../etc" }), "step_weird"],
+    ["an oversize name", () => Object.assign(new Error("m"), { name: "A".repeat(80) }), "update_step_failed"],
+    ["an existing reason", () => Object.assign(new Error("m"), { code: "EXDEV", reason: "custom_reason" }), "custom_reason"],
+  ])("journals the derived cause for %s", async (_label, make, expected) => {
+    const fixture = await interruptUpdateCoordinator(null, "target_verifier", () => Promise.reject(make()));
+    expect(fixture.firstRun.outcome).toEqual({ kind: "rolled_back", id: coordinatorId, cause: expected });
+  });
+
   it("compensates a rejected target verifier back to the old active release without reversing trust", async () => {
     const built = plan();
     const fixture = await interruptUpdateCoordinator(null, "target_verifier", () => Promise.reject(new UpdateStepRejectedError("update_verifier_rejected", [])));
