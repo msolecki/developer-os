@@ -14,7 +14,7 @@ const UNNAMED_PROJECT = "unnamed";
 const MAX_PROJECT_SLUG_LENGTH = 64;
 
 /**
- * Everything that is not a letter or a digit becomes one separator, in any
+ * Everything that is not a letter, a digit or a combining mark becomes one separator, in any
  * script: the slug is human-readable by design (design spec §13.1), so a
  * project named `Zeitplan Änderung` keeps its letters rather than being
  * transliterated into something its owner would not recognise.
@@ -24,16 +24,15 @@ const MAX_PROJECT_SLUG_LENGTH = 64;
  * every other interpolated string in this product: `buildCapture` applies
  * `screenEnvelopeScalar` to it regardless of what arrives here.
  *
- * **The "letters, digits and hyphens" that the fold produces is true of the
- * characters it keeps and not quite true of the string it returns.** `slice`
- * counts UTF-16 code units, so a basename made of astral characters — emoji,
- * or any script above the BMP — can be cut between a surrogate pair and leave
- * a lone surrogate at the end. It is written to the vault as such: neither
- * this fold nor `screenControlCharacters` treats an unpaired surrogate as a
- * character to remove. Recorded rather than fixed here, deliberately: the
- * exposure predates this bound (the slice only moved when the trim order was
- * corrected), and grapheme-safe truncation is a decision for the whole branch
- * rather than for one command's slug.
+ * **Combining marks belong to the word they sit in** (AUD-052): a vowel sign
+ * or tone mark is `\p{M}`, not `\p{L}`, and treating it as a separator split
+ * `प्रोजेक्ट` into `प-र-ज-क-ट`. Lowercased before NFC, because `toLowerCase` can
+ * itself emit a combining mark (`İ` becomes `i` plus U+0307).
+ *
+ * **The bound counts code points, not UTF-16 units** (AUD-053), so an astral
+ * character at the boundary is kept or dropped whole and never leaves a lone
+ * surrogate in the frontmatter. Grapheme-safe truncation is still a decision
+ * for the whole branch, not for one command's slug.
  *
  * **Sliced before it is trimmed, not after.** Trimming first left the slice
  * free to cut through a separator run and end the slug on a hyphen, so a
@@ -42,11 +41,13 @@ const MAX_PROJECT_SLUG_LENGTH = 64;
  * trim, after the cut, is correct in both directions.
  */
 export function slugify(value: string): string {
-  const slug = value
-    .normalize("NFC")
+  const folded = value
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .normalize("NFC")
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, "-");
+  const slug = Array.from(folded)
     .slice(0, MAX_PROJECT_SLUG_LENGTH)
+    .join("")
     .replace(/^-+|-+$/gu, "");
 
   return slug.length === 0 ? UNNAMED_PROJECT : slug;
