@@ -769,7 +769,7 @@ export function rollbackEntryParentStructure(entry: RollbackPayloadEntryV1): 2 |
 export interface RollbackPayloadLeafV1 {
   readonly path: CanonicalAbsolutePathV1;
   readonly kind: "file" | "directory";
-  /** Exact bytes for an entry; `null` for a directory or a document bounded by 64 MiB. */
+  /** Exact bytes for an entry; `null`: size not carried; bounded by `MAXIMUM_BUNDLE_FILE_BYTES`, content bound by `sha256` (also `null` for a directory). */
   readonly bytes: number | null;
   readonly sha256: LowerHexSha256 | null;
 }

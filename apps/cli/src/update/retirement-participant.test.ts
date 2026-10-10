@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   createNodeLifecycleGuardedFileSystem,
   LifecycleRecoveryRequiredError,
+  MAXIMUM_BUNDLE_FILE_BYTES,
   parseCanonicalAbsolutePathText,
   parseLowerHexSha256,
   parseSafeReasonCode,
@@ -99,7 +100,44 @@ async function retireFrom(handler: UpdateRetirementParticipant, from: number, se
   for (let ordinal = from; ordinal < maximum; ordinal += 1) await handler.retire(step(set), ordinal);
 }
 
+const MIB = 1_048_576;
+
+/** Replaces the first leaf with a sparse `size`-byte file carried as a null-size leaf. */
+async function sparseLeaf(size: number, sha256: LowerHexSha256 | null): Promise<{ found: Fixture; path: string }> {
+  const found = await fixture();
+  const path = found.leaves[0]?.path as string;
+  await nodeFs.truncate(path, size);
+  const leaf: RetirementLeafV1 = { path: found.leaves[0]?.path as CanonicalAbsolutePathV1, kind: "file", bytes: null, sha256 };
+  return { found: { ...found, leaves: [leaf, ...found.leaves.slice(1)] }, path };
+}
+
+async function sparseSha(path: string): Promise<LowerHexSha256> {
+  const hash = createHash("sha256");
+  for await (const chunk of (await import("node:fs")).createReadStream(path)) hash.update(chunk as Buffer);
+  return parseLowerHexSha256(hash.digest("hex"));
+}
+
 describe("UpdateRetirementParticipant", () => {
+  it("retires a 65 MiB file leaf whose size is not carried", async () => {
+    const { found, path } = await sparseLeaf(65 * MIB, null);
+    const hashed = await sparseSha(path);
+    const leaf = { ...(found.leaves[0] as RetirementLeafV1), sha256: hashed };
+    await participant({ ...found, leaves: [leaf, ...found.leaves.slice(1)] }).retire(step(), 0);
+    expect(await exists(path)).toBe(false);
+  });
+
+  it("refuses a leaf above the bundle file bound on size alone", async () => {
+    const { found, path } = await sparseLeaf(MAXIMUM_BUNDLE_FILE_BYTES + 1, sha("never read"));
+    await expect(participant(found).retire(step(), 0)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await exists(path)).toBe(true);
+  });
+
+  it("refuses a file leaf with neither a size nor a hash", async () => {
+    const { found, path } = await sparseLeaf(10, null);
+    await expect(participant(found).retire(step(), 0)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await exists(path)).toBe(true);
+  });
+
   it.each<UpdateRetirementSetV1>(["prior_rollback", "consumed_rollback_and_rejected_release"])("retires every %s leaf in cursor order and keeps the shared parent", async (set) => {
     const found = await fixture(set);
     const handler = participant(found);

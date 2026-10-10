@@ -54,7 +54,6 @@ function leafOf(artifact: ManagedArtifactV2, entry: RetirementInventoryRefV1): R
   if (entry.kind === "rollback_record" && artifact.path === entry.root) return { path: artifact.path, kind: "file", bytes: null, sha256: entry.inventoryHash };
   const hash = contentHashOf(artifact);
   if (hash === null) return refuseBundle("update_retirement_leaf", artifact.path);
-  // ponytail: the manifest carries no size, so a file leaf is bounded by the 64-MiB document cap; bundle files above it refuse until the leaf carries its signed size.
   return { path: artifact.path, kind: "file", bytes: null, sha256: hash };
 }
 
