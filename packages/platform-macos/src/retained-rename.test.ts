@@ -985,7 +985,105 @@ it("requires the fixed osascript capability on a supported macOS host", async ()
   await expect(nodeFs.access(OSASCRIPT, constants.X_OK)).resolves.toBeUndefined();
 });
 
+/** An exact request for `<root>/<from>/<name>` -> `<root>/<to>/<name>` (a staged journal's publication shape). */
+async function createSameNameRequest(label: string, to: string): Promise<{
+  readonly root: string;
+  readonly sourcePath: string;
+  readonly destinationPath: string;
+  readonly request: ExactNoReplaceRenameRequestV1;
+}> {
+  const root = await nodeFs.mkdtemp(join(tmpdir(), `developer-os-retained-rename-${label}-`));
+  const sourceParent = join(root, "initial-journals");
+  const destinationParent = join(root, to);
+  for (const directory of new Set([sourceParent, destinationParent])) {
+    await nodeFs.mkdir(directory, { mode: 0o700 });
+    await nodeFs.chmod(directory, 0o700);
+  }
+  const sourcePath = join(sourceParent, "bundle.json");
+  const destinationPath = join(destinationParent, "bundle.json");
+  await nodeFs.writeFile(sourcePath, "{}", { mode: 0o600 });
+  await nodeFs.chmod(sourcePath, 0o600);
+  const [from, into, source] = await Promise.all([
+    nodeFs.lstat(sourceParent, { bigint: true }),
+    nodeFs.lstat(destinationParent, { bigint: true }),
+    nodeFs.lstat(sourcePath, { bigint: true }),
+  ]);
+  const parent = (path: string, stats: BigIntStats) => ({
+    path: path as CanonicalAbsolutePathV1,
+    ownerUid: currentUid(),
+    mode: 0o700 as const,
+    dev: decimal(stats.dev),
+    ino: decimal(stats.ino),
+  });
+  return {
+    root,
+    sourcePath,
+    destinationPath,
+    request: {
+      sourcePath: sourcePath as CanonicalAbsolutePathV1,
+      destinationPath: destinationPath as CanonicalAbsolutePathV1,
+      sourceParent: parent(sourceParent, from),
+      destinationParent: parent(destinationParent, into),
+      postimage: {
+        kind: "regular_file",
+        ownerUid: currentUid(),
+        mode: 0o600,
+        nlink: 1,
+        bytes: decimal(source.size),
+        sha256: parseLowerHexSha256(createHash("sha256").update("{}").digest("hex")),
+        dev: decimal(source.dev),
+        ino: decimal(source.ino),
+      },
+    },
+  };
+}
+
 describe.runIf(process.platform === "darwin")("SpawnRenameAtxRunner real kernel boundary", () => {
+  it("publishes a same-name file across directories (initial-journals/x.json -> journals/x.json)", async () => {
+    const value = await createSameNameRequest("real-same-name", "journals");
+    try {
+      await new MacOsRetainedRename().renameNoReplace(value.request);
+      expect(await pathIdentity(value.sourcePath)).toBeNull();
+      expect(await pathIdentity(value.destinationPath)).toMatchObject({ ino: BigInt(value.request.postimage.ino) });
+    } finally {
+      await nodeFs.rm(value.root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a same-name move within one directory, by path and by parent identity", async () => {
+    const value = await createSameNameRequest("real-same-directory", "initial-journals");
+    const alias = join(value.root, "alias");
+    await nodeFs.symlink("initial-journals", alias);
+    const before = await pathIdentity(value.sourcePath);
+    try {
+      await expect(new MacOsRetainedRename().renameNoReplace(value.request)).rejects.toBeInstanceOf(
+        MacOsRetainedRenameRefusalError,
+      );
+      await expect(new MacOsRetainedRename().renameNoReplace({
+        ...value.request,
+        destinationPath: join(alias, "bundle.json") as CanonicalAbsolutePathV1,
+        destinationParent: { ...value.request.destinationParent, path: alias as CanonicalAbsolutePathV1 },
+      })).rejects.toBeInstanceOf(MacOsRetainedRenameRefusalError);
+      expect(await pathIdentity(value.sourcePath)).toStrictEqual(before);
+    } finally {
+      await nodeFs.rm(value.root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a same-name cross-directory move onto an existing destination without changing either inode", async () => {
+    const value = await createSameNameRequest("real-same-name-occupied", "journals");
+    await nodeFs.writeFile(value.destinationPath, "occupied", { mode: 0o600 });
+    const before = await Promise.all([pathIdentity(value.sourcePath), pathIdentity(value.destinationPath)]);
+    try {
+      await expect(new MacOsRetainedRename().renameNoReplace(value.request)).rejects.toBeInstanceOf(
+        MacOsRetainedRenameThirdStateError,
+      );
+      expect(await Promise.all([pathIdentity(value.sourcePath), pathIdentity(value.destinationPath)])).toStrictEqual(before);
+    } finally {
+      await nodeFs.rm(value.root, { recursive: true, force: true });
+    }
+  });
+
   it("atomically publishes a file across retained parent descriptors 3 and 4", async () => {
     const value = await createCrossParentRequest("real-cross-parent-file");
     try {

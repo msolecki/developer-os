@@ -39,6 +39,7 @@ import {
   MacOsRetainedRename,
   MacOsStableLockProvider,
   MacOsTransactionLockProvider,
+  SpawnRenameAtxRunner,
 } from "@developer-os/platform-macos";
 import { ProtectedPathPolicy } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
@@ -145,8 +146,10 @@ class RecordingStableLockProvider implements LifecycleStableLockProviderV1 {
  * shim. Keep the shim's descriptor/identity checks, but settle its injected
  * runner in-process so a retained table with hundreds of rows does not spawn
  * hundreds of `osascript` processes. Platform tests cover the real syscall.
+ * Its preconditions are the production runner's own, so a request the real
+ * runner refuses fails here too.
  */
-class InProcessRenameAtxRunner implements RenameAtxRunner {
+export class InProcessRenameAtxRunner implements RenameAtxRunner {
   readonly #parents = new Map<number, string>();
   readonly requests: RenameAtxRunRequestV1[] = [];
 
@@ -154,7 +157,13 @@ class InProcessRenameAtxRunner implements RenameAtxRunner {
     this.#parents.set(descriptor, path);
   }
 
-  async run(request: RenameAtxRunRequestV1): Promise<{ readonly exitCode: number; readonly signal: null }> {
+  run(request: RenameAtxRunRequestV1): Promise<{ readonly exitCode: number; readonly signal: null }> {
+    // Production preconditions, thrown synchronously exactly as the spawning runner throws them.
+    SpawnRenameAtxRunner.assertRequest(request);
+    return this.#run(request);
+  }
+
+  async #run(request: RenameAtxRunRequestV1): Promise<{ readonly exitCode: number; readonly signal: null }> {
     this.requests.push(structuredClone(request));
     const { sourceParentDescriptor: sourceDescriptor, destinationParentDescriptor: destinationDescriptor, destinationName } = request;
     const sourceParent = this.#parents.get(sourceDescriptor);
