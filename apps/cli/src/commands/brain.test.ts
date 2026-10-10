@@ -422,6 +422,34 @@ describe("brain reindex", () => {
     expect(result.code).toBe(EXIT_CODES.invalidInput);
     expect(result.error.recovery).toBe("developer-os init");
   });
+
+  it("propagates a config.toml the guarded reader refuses instead of calling it uninitialized (AUD-017)", async () => {
+    const fixture = await installed("brain-config-symlink");
+    const elsewhere = join(fixture.userHome, ".ssh", "config.toml");
+    await nodeFs.mkdir(dirname(elsewhere), { recursive: true, mode: 0o700 });
+    await nodeFs.rename(fixture.paths.configFile, elsewhere);
+    await nodeFs.symlink(elsewhere, fixture.paths.configFile);
+
+    const result = await runBrain(fixture.context, OPTIONS);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).not.toBe(EXIT_CODES.invalidInput);
+    expect(result.error.message).not.toContain("not initialized");
+    expect(result.error.recovery).toBeUndefined();
+  });
+
+  it("propagates an unreadable config.toml instead of calling it uninitialized (AUD-017)", async () => {
+    const fixture = await installed("brain-config-unreadable");
+    await nodeFs.chmod(fixture.paths.configFile, 0o000);
+
+    const result = await runBrain(fixture.context, OPTIONS);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).not.toBe(EXIT_CODES.invalidInput);
+    expect(result.error.message).not.toContain("not initialized");
+  });
 });
 
 describe("brain lint", () => {
