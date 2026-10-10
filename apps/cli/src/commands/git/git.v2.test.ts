@@ -3,6 +3,7 @@
  * here (Q5): a scripted `GitRuntimeV1` stands in for the quarantine rebuild and the local helper
  * graph, while every lifecycle participant — Foundation, manifest, both Git effects — is real.
  */
+import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
@@ -34,6 +35,7 @@ import { runBrain } from "../brain.js";
 import { runConfig } from "../config.js";
 import { runInit } from "../init.js";
 import { manifestAdmissionFor } from "../../lifecycle/manifest-admission.js";
+import { decodeManifestAnchor, manifestAnchorPath } from "../../lifecycle/manifest-anchor.js";
 import { createCommandFixture, createLowEntropyFixtureRoot, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../testing.js";
 import type { CommandFixture } from "../testing.js";
 import { runGit } from "./index.js";
@@ -521,6 +523,54 @@ describe("git on a real V2 home", () => {
       expect(await readOrNull(join(home.gitDirectory, "refs", "heads", "main"))).toBe(head);
       expect(kindOf(await runGit(home.context, { subcommand: "sync" }))).toBe("git_disabled");
       expect(await closureOf(home)).toBe("clear");
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+});
+
+describe("the manifest anchor across git enable (AUD-034)", () => {
+  it(
+    "re-anchors the rewritten manifest before settle, so a settle failure leaves no stale anchor and a re-run init succeeds",
+    async () => {
+      const fixture = await createCommandFixture("git-v2-anchor", {
+        root: await createLowEntropyFixtureRoot("git-v2-anchor"),
+        bootstrapAvailable: true,
+        effectPorts: scriptedEffectPorts(runtime, rejectDestination),
+      });
+      await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+      const installed = await runInit(fixture.context, { dryRun: false, assumeYes: true });
+      if (!installed.ok) throw new Error(`fixture init failed: ${JSON.stringify(installed)}`);
+      const remote = await createBareRemote(join(fixture.root, "remote.git"));
+      const lifecycle = fixture.context.lifecycle;
+      if (lifecycle === undefined) throw new Error("the fixture composed no lifecycle context");
+      const manifestBefore = await nodeFs.readFile(fixture.paths.manifestFile);
+      const failingSettle = {
+        ...fixture.context,
+        lifecycle: {
+          ...lifecycle,
+          recovery: (...args: Parameters<typeof lifecycle.recovery>) => {
+            const recovery = lifecycle.recovery(...args);
+            const recover = recovery.recover.bind(recovery);
+            Object.defineProperty(recovery, "recover", {
+              value: async (...recoverArgs: Parameters<typeof recover>) => {
+                if (!(await nodeFs.readFile(fixture.paths.manifestFile)).equals(manifestBefore)) throw new Error("injected settle failure");
+                return recover(...recoverArgs);
+              },
+            });
+            return recovery;
+          },
+        },
+      };
+
+      const failed = await runGit(failingSettle, { subcommand: "enable", remote, branch: null, apply: true });
+
+      expect(failed.ok).toBe(false);
+      const manifest = await nodeFs.readFile(fixture.paths.manifestFile);
+      expect(manifest.equals(manifestBefore)).toBe(false);
+      const anchor = decodeManifestAnchor(await nodeFs.readFile(manifestAnchorPath(fixture.paths.home)));
+      expect(anchor?.manifestHash).toBe(createHash("sha256").update(manifest).digest("hex"));
+      const rerun = await runInit(fixture.rebuildContext(), { dryRun: false, assumeYes: true });
+      expect(rerun.ok, JSON.stringify(rerun)).toBe(true);
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );

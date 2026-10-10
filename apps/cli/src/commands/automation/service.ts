@@ -1229,8 +1229,9 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
       throw error;
     }
     await executeCoordinator(context, lifecycle, home.key, coordinatorId, global);
-    await settle(context, lifecycle, home.key, prepared.residue, global);
+    // AUD-034: before settle, so a settle failure cannot leave the finalized manifest unanchored.
     if (!planned.liveOnly) await reanchorManifest(context, lifecycle, home.manifestFile.hash, planned.files.manifest);
+    await settle(context, lifecycle, home.key, prepared.residue, global);
     return {
       exitCode: EXIT_CODES.success,
       data: { kind: "applied", operation: planned.operation, transactionId: coordinatorId, previewHash: planned.preview.previewHash },

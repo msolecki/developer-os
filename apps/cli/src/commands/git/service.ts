@@ -1821,8 +1821,9 @@ export function createGitService(context: CliContext, lifecycle: CliLifecycleCon
       throw error;
     }
     await executeCoordinator(context, lifecycle, prepared.home.key, coordinatorId, global, NO_PUSH);
-    await settle(context, lifecycle, prepared.home.key, prepared.residue, global);
+    // AUD-034: before settle, so a settle failure cannot leave the finalized manifest unanchored.
     await reanchorManifest(context, lifecycle, prepared.home.manifestFile.hash, inputs.files.manifest);
+    await settle(context, lifecycle, prepared.home.key, prepared.residue, global);
     return {
       exitCode: EXIT_CODES.success,
       data: { kind: "applied", operation, transactionId: coordinatorId, previewHash: recomputed.previewHash },
