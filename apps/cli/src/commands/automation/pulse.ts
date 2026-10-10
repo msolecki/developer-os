@@ -134,7 +134,10 @@ export async function runScheduledPulse(context: CliContext, held: HeldLifecycle
     isolated: findings.filter((finding) => finding.class === "isolated").length,
     gaps: findings.filter((finding) => finding.class === "gap").length,
     indexGeneratedAt: facts.generatedAt,
-    gardenLast: await gardenLast(context, productHome),
+    // Nothing removes garden logs on unschedule, so they speak only while garden is scheduled (AUD-018).
+    gardenLast: config.automation.lifecycle?.schedules.some((entry) => entry.job === "brain-garden") === true
+      ? await gardenLast(context, productHome)
+      : [],
   };
 
   const slots: { path: string; bytes: Uint8Array | null }[] = [];
