@@ -1,5 +1,5 @@
 import * as nodeFs from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -44,6 +44,7 @@ import {
   LifecycleUninstaller,
   releaseUninstallHolds,
 } from "./uninstall.js";
+import type { UninstallPayloadV1 } from "./uninstall-payloads.js";
 import type {
   LifecycleUninstallRequestV1,
   UninstallBoundaryV1,
@@ -66,6 +67,7 @@ const CHAIN_TIMEOUT_MS = 3_266_000;
 const POINTS = [
   ["M(preserve_before) applied, cursor not advanced", "compensation"],
   ["M(commit_absence) durable", "force_forward"],
+  ["K(delete) after one payload unlinked", "force_forward"],
   ["M(finalize_tombstones) after one empty-directory removal", "force_forward"],
   ["coordinator_envelope after nonce removal", "force_forward"],
   ["plan plus lock", "envelope_suffix"],
@@ -87,6 +89,8 @@ const MICROSTATES: Readonly<
       readonly keyTombstone: boolean;
       readonly nonce: boolean;
       readonly allocator: boolean;
+      /** NEW-210: whether `payloads/<n>` holds each of the two large files, by ordinal. */
+      readonly payloadStaged: readonly [boolean, boolean];
     }
   >
 > = {
@@ -95,37 +99,64 @@ const MICROSTATES: Readonly<
     keyTombstone: true,
     nonce: true,
     allocator: true,
+    payloadStaged: [true, true],
   },
   "M(commit_absence) durable": {
     manifestTombstone: true,
     keyTombstone: true,
     nonce: true,
     allocator: true,
+    payloadStaged: [true, true],
+  },
+  /** `K(delete)` unlinks the payloads before the key, so the key tombstone outlives the first. */
+  "K(delete) after one payload unlinked": {
+    manifestTombstone: true,
+    keyTombstone: true,
+    nonce: true,
+    allocator: true,
+    payloadStaged: [false, true],
   },
   "M(finalize_tombstones) after one empty-directory removal": {
     manifestTombstone: true,
     keyTombstone: false,
     nonce: true,
     allocator: true,
+    payloadStaged: [false, false],
   },
   "coordinator_envelope after nonce removal": {
     manifestTombstone: false,
     keyTombstone: false,
     nonce: false,
     allocator: false,
+    payloadStaged: [false, false],
   },
   "plan plus lock": {
     manifestTombstone: false,
     keyTombstone: false,
     nonce: false,
     allocator: false,
+    payloadStaged: [false, false],
   },
   "plan only": {
     manifestTombstone: false,
     keyTombstone: false,
     nonce: false,
     allocator: false,
+    payloadStaged: [false, false],
   },
+};
+
+/**
+ * NEW-210: two release files over `MAX_MUTATION_BYTES`, so a home initialized with these carries
+ * two `K` payloads and a kill between them leaves one moved and one not.
+ */
+const LARGE_BYTES = 17 * 1024 * 1024;
+const LARGE_OPTIONS: FixtureOptions = {
+  extraBundleFiles: ["bin/large-a", "bin/large-b"].map((relativePath) => ({
+    relativePath,
+    bytes: new Uint8Array(LARGE_BYTES),
+    mode: 0o700 as const,
+  })),
 };
 
 class SyntheticDeath extends Error {
@@ -305,6 +336,18 @@ function dieAtFirst(kind: UninstallBoundaryV1["kind"]): (boundary: UninstallBoun
   };
 }
 
+function dieAtPayload(
+  kind: "payload_staged" | "payload_deleted",
+  ordinal: number,
+): (boundary: UninstallBoundaryV1) => void {
+  let fired = false;
+  return (boundary) => {
+    if (fired || boundary.kind !== kind || boundary.ordinal !== ordinal) return;
+    fired = true;
+    throw new SyntheticDeath(`${kind} ${String(ordinal)}`);
+  };
+}
+
 async function died(
   fixture: V2FixtureV1,
   afterBoundary: (boundary: UninstallBoundaryV1) => void,
@@ -313,13 +356,13 @@ async function died(
   await expect(uninstaller.execute(await requestFor(fixture))).rejects.toThrow(SyntheticDeath);
 }
 
-/**
- * `CliLifecycleContext.recovery` binds no `afterBoundary`, so the compaction boundaries
- * `compactTerminalCoordinator` publishes are unreachable from a hook. The adapters it calls are
- * this caller's own, and `removeEnvelopeLeaves` takes the nonce through
- * `controlFiles.removeNonce`, which is the last reachable point inside the envelope entry.
- */
-async function dieInsideEnvelopeCompaction(fixture: V2FixtureV1): Promise<void> {
+type UninstallAdaptersV1 = ReturnType<typeof createUninstallAdapters>;
+
+/** One recovery-only pass over the fixture's coordinator, with `adapt` wrapped around its adapters. */
+async function recoverUninstall(
+  fixture: V2FixtureV1,
+  adapt: (adapters: UninstallAdaptersV1) => UninstallAdaptersV1 = (adapters) => adapters,
+): Promise<void> {
   const context = fixture.rebuildContext();
   const lifecycle = lifecycleOf(context);
   const key = await recoveryKeyOf(fixture, context);
@@ -344,7 +387,24 @@ async function dieInsideEnvelopeCompaction(fixture: V2FixtureV1): Promise<void> 
       ...createUninstallParticipants(request),
       holds,
     });
-    const killing = {
+    const recovered = await lifecycle
+      .recovery(key, adapt(adapters), residueFrom(evidence))
+      .recover(global, { resumeUninstall: true });
+    holds.global = recovered.global;
+  } finally {
+    await releaseUninstallHolds(holds);
+  }
+}
+
+/**
+ * `CliLifecycleContext.recovery` binds no `afterBoundary`, so the compaction boundaries
+ * `compactTerminalCoordinator` publishes are unreachable from a hook. The adapters it calls are
+ * this caller's own, and `removeEnvelopeLeaves` takes the nonce through
+ * `controlFiles.removeNonce`, which is the last reachable point inside the envelope entry.
+ */
+async function dieInsideEnvelopeCompaction(fixture: V2FixtureV1): Promise<void> {
+  await expect(
+    recoverUninstall(fixture, (adapters) => ({
       ...adapters,
       controlFiles: {
         removeAllocator: (plan: LifecycleExecutionPlanV1, outcome: LifecycleTerminalOutcomeV1) =>
@@ -354,15 +414,8 @@ async function dieInsideEnvelopeCompaction(fixture: V2FixtureV1): Promise<void> 
           throw new SyntheticDeath("coordinator_envelope after nonce removal");
         },
       },
-    };
-    await expect(
-      lifecycle.recovery(key, killing, residueFrom(evidence)).recover(global, {
-        resumeUninstall: true,
-      }),
-    ).rejects.toThrow(SyntheticDeath);
-  } finally {
-    await releaseUninstallHolds(holds);
-  }
+    })),
+  ).rejects.toThrow(SyntheticDeath);
 }
 
 function envelopeLeafPath(fixture: V2FixtureV1, leaf: "journal" | "lock"): CanonicalAbsolutePathV1 {
@@ -398,6 +451,9 @@ async function killUninstallAt(fixture: V2FixtureV1, point: KillPointV1): Promis
     case "M(commit_absence) durable":
       await died(fixture, dieAfterStepJournal(manifestStep("commit_absence"), planOf));
       return;
+    case "K(delete) after one payload unlinked":
+      await died(fixture, dieAtPayload("payload_deleted", 0));
+      return;
     case "M(finalize_tombstones) after one empty-directory removal":
       await died(fixture, dieAtFirst("empty_directory_removed"));
       return;
@@ -412,15 +468,23 @@ async function killUninstallAt(fixture: V2FixtureV1, point: KillPointV1): Promis
   }
 }
 
+function payloadsOf(fixture: V2FixtureV1): readonly UninstallPayloadV1[] {
+  const payloads = currentPlan(fixture).participants.redactionKey?.payloads ?? [];
+  if (payloads.length !== 2) throw new Error(`the uninstall plan carries ${String(payloads.length)} payloads, not 2`);
+  return payloads;
+}
+
 async function observedMicrostate(
   fixture: V2FixtureV1,
 ): Promise<(typeof MICROSTATES)[KillPointV1]> {
   const leaves = manifestLeafOf(fixture);
+  const [first, second] = payloadsOf(fixture);
   return {
     manifestTombstone: await exists(leaves.tombstonePath),
     keyTombstone: await exists(leaves.keyTombstonePath),
     nonce: await exists(join(fixture.paths.stateDir, "lifecycle-install-nonce")),
     allocator: await exists(join(fixture.paths.stateDir, "lifecycle-id-allocator.json")),
+    payloadStaged: [await exists(first?.payloadPath ?? ""), await exists(second?.payloadPath ?? "")],
   };
 }
 
@@ -475,7 +539,7 @@ describe("uninstall dispatch and the recovery-only arm", () => {
      * out of `retainedEnvelopes` and the second `uninstall` refused exit 6 over Foundation
      * staging it could no longer attribute.
      */
-    const fixture = await initializedV2Fixture("uninstall-recovery-chain");
+    const fixture = await initializedV2Fixture("uninstall-recovery-chain", LARGE_OPTIONS);
     for (const [point, arm] of POINTS) {
       await killUninstallAt(fixture, point);
       const dispatched = fixture.rebuildContext();
@@ -510,6 +574,10 @@ describe("uninstall dispatch and the recovery-only arm", () => {
       expect(await dispatchUninstall(settled, lifecycleOf(settled)), point).toStrictEqual({
         kind: "absent_manifest",
       });
+      for (const payload of payloadsOf(fixture)) {
+        expect(await exists(payload.sourcePath), `${point} ${payload.sourcePath}`).toBe(false);
+        expect(await exists(dirname(payload.payloadPath)), `${point} payloads`).toBe(false);
+      }
       expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok, `init after ${point}`).toBe(
         true,
       );
@@ -611,6 +679,132 @@ describe("uninstall dispatch and the recovery-only arm", () => {
     expect(
       await dispatchUninstall(fixture.context, lifecycleOf(fixture.context)),
     ).toStrictEqual({ kind: "v1_foundation" });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+/**
+ * NEW-210: `K(stage)` runs before the point of no return, so a death inside it compensates. A hook
+ * that throws there is caught as a step failure and compensated in process, which no real crash
+ * does; from the moment it fires, every port call this run's participants make throws as well, so
+ * the run stops touching the disk exactly where it died.
+ */
+async function diedInsideKStage(fixture: V2FixtureV1): Promise<void> {
+  const request = await requestFor(fixture);
+  let dead = false;
+  const fs = new Proxy(request.lifecycle.fs, {
+    get(target, property): unknown {
+      const value: unknown = Reflect.get(target, property);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]): unknown => {
+        if (dead) throw new SyntheticDeath(`fs.${String(property)} after the death`);
+        return (value as (...values: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+  const uninstaller = new LifecycleUninstaller({
+    afterBoundary: (boundary) => {
+      if (dead || boundary.kind !== "payload_staged" || boundary.ordinal !== 0) return;
+      dead = true;
+      throw new SyntheticDeath("payload_staged 0");
+    },
+  });
+  await expect(
+    uninstaller.execute({ ...request, lifecycle: { ...request.lifecycle, fs } }),
+  ).rejects.toThrow(SyntheticDeath);
+}
+
+async function identityOf(path: string): Promise<readonly [bigint, bigint]> {
+  const stat = await nodeFs.stat(path, { bigint: true });
+  return [stat.dev, stat.ino];
+}
+
+describe("a death inside K(stage) with one of two payloads moved (NEW-210)", () => {
+  it("compensates the moved payload and resumes the uninstall forward", async () => {
+    const fixture = await initializedV2Fixture("uninstall-recovery-k-stage", LARGE_OPTIONS);
+    await diedInsideKStage(fixture);
+    const [first, second] = payloadsOf(fixture);
+    if (first === undefined || second === undefined) throw new Error("unreachable");
+    expect(await exists(first.sourcePath)).toBe(false);
+    expect(await exists(first.payloadPath)).toBe(true);
+    expect(await exists(second.sourcePath)).toBe(true);
+    expect(await exists(second.payloadPath)).toBe(false);
+    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+    const dispatched = fixture.rebuildContext();
+    expect(await dispatchUninstall(dispatched, lifecycleOf(dispatched))).toMatchObject({
+      kind: "v2_coordinator",
+    });
+
+    const published = fixture.publishedPlans.length;
+    const resumed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+    expect(resumed.ok, JSON.stringify(resumed)).toBe(true);
+
+    /** The compensation renamed the moved inode back, so the next plan admitted the same identities. */
+    expect(fixture.publishedPlans.length).toBe(published + 1);
+    expect(payloadsOf(fixture).map((payload) => [payload.sourcePath, payload.ino])).toStrictEqual([
+      [first.sourcePath, first.ino],
+      [second.sourcePath, second.ino],
+    ]);
+    const settled = fixture.rebuildContext();
+    expect(await dispatchUninstall(settled, lifecycleOf(settled))).toStrictEqual({
+      kind: "absent_manifest",
+    });
+    for (const payload of payloadsOf(fixture)) {
+      expect(await exists(payload.sourcePath)).toBe(false);
+      expect(await exists(dirname(payload.payloadPath))).toBe(false);
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * The swap fails the second move, and compensation then refuses rather than restoring: it runs in
+   * reverse, and an entry with nothing staged whose source is a foreign inode is indistinguishable
+   * from a payload lost after its move, so it refuses before ordinal 0 is renamed back (the same
+   * fail-closed rule as a payload absent at both names). Nothing is lost: ordinal 0 waits in
+   * `payloads/0`, and once the original is back recovery restores both inodes.
+   */
+  it("fails the second move on a swapped identity, strands nothing, and restores every payload once the original is back", async () => {
+    const fixture = await initializedV2Fixture("uninstall-recovery-k-stage-swap", LARGE_OPTIONS);
+    let aside = "";
+    const uninstaller = new LifecycleUninstaller({
+      afterBoundary: async (boundary) => {
+        if (aside !== "" || boundary.kind !== "payload_staged" || boundary.ordinal !== 0) return;
+        const second = payloadsOf(fixture)[1]?.sourcePath ?? "";
+        aside = `${second}.aside`;
+        await nodeFs.rename(second, aside);
+        await nodeFs.writeFile(second, new Uint8Array(LARGE_BYTES), { mode: 0o700 });
+      },
+    });
+    const [first, second] = await (async () => {
+      await expect(uninstaller.execute(await requestFor(fixture))).rejects.toMatchObject({
+        code: EXIT_CODES.recoveryRequired,
+        reason: "uninstall_payload_identity",
+      });
+      return payloadsOf(fixture);
+    })();
+    if (first === undefined || second === undefined) throw new Error("unreachable");
+    /** The compensation refused inside its first resolution, before the journal left the forward phase. */
+    const journal = JSON.parse(await nodeFs.readFile(envelopeLeafPath(fixture, "journal"), "utf8")) as {
+      readonly phase: string;
+      readonly compensationNext: number | null;
+    };
+    expect([journal.phase, journal.compensationNext]).toStrictEqual(["participants_applying", null]);
+    expect(await exists(first.sourcePath)).toBe(false);
+    expect(await identityOf(first.payloadPath)).toStrictEqual([BigInt(first.dev), BigInt(first.ino)]);
+    expect(await exists(second.payloadPath)).toBe(false);
+    expect(await identityOf(second.sourcePath)).not.toStrictEqual([BigInt(second.dev), BigInt(second.ino)]);
+
+    await nodeFs.rename(aside, second.sourcePath);
+    await recoverUninstall(fixture);
+
+    for (const payload of [first, second]) {
+      expect(await identityOf(payload.sourcePath)).toStrictEqual([BigInt(payload.dev), BigInt(payload.ino)]);
+      expect(await exists(dirname(payload.payloadPath))).toBe(false);
+    }
+    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+    expect((await runUninstall(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
+    const settled = fixture.rebuildContext();
+    expect(await dispatchUninstall(settled, lifecycleOf(settled))).toStrictEqual({
+      kind: "absent_manifest",
+    });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 

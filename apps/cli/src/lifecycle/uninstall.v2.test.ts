@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import * as nodeFs from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -1491,6 +1491,42 @@ describe("V2 uninstall of a product-home file larger than 16 MiB (NEW-210)", () 
     expect(await exists(join(fixture.paths.home, "staging", "lifecycle"))).toBe(true);
     expect(await nodeFs.readdir(join(fixture.paths.home, "staging", "lifecycle"))).toStrictEqual([]);
     expect(await exists(fixture.paths.manifestFile)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** NEW-160 with a payload: a kill inside `K(delete)` is past the commit, so both surveys name the resume. */
+  it("names an uninstall killed inside K(delete) in doctor and status, and the resume leaves no payloads directory", async () => {
+    const { fixture, large } = await largeFixture("uninstall-large-killed-in-delete");
+    const expectedResidue = await bookkeepingSetAndRetainedEvidence(fixture);
+    let fired = false;
+    const uninstaller = new LifecycleUninstaller({
+      afterBoundary: (boundary) => {
+        if (fired || boundary.kind !== "payload_deleted") return;
+        fired = true;
+        throw new SyntheticDeath("payload_deleted 0");
+      },
+    });
+    await expect(uninstaller.execute(await requestFor(fixture))).rejects.toThrow(SyntheticDeath);
+    const payloadPath = fixture.publishedPlans.at(-1)?.participants.redactionKey?.payloads[0]?.payloadPath ?? "";
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+    expect([await exists(large), await exists(payloadPath), await exists(dirname(payloadPath))]).toStrictEqual([
+      false,
+      false,
+      true,
+    ]);
+
+    const doctor = await runDoctor(fixture.context);
+    if (doctor.ok) throw new Error("doctor passed over an unfinished uninstall");
+    expect(doctor.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(doctor.error.recovery).toBe("developer-os uninstall");
+    expect(doctor.error.message).toMatch(/uninstall coordinator lc_[0-9a-f]{64}_[0-9]+ is unfinished or still running/u);
+    const status = await runStatus(fixture.context);
+    if (!status.ok) throw new Error(status.error.message);
+    expect(status.warnings.join("\n")).toMatch(/uninstall coordinator lc_[0-9a-f]{64}_[0-9]+ is unfinished or still running \(active\): .*; recovery: developer-os uninstall/u);
+
+    const resumed = await runUninstall(fixture.context, ACCEPTED);
+    if (!resumed.ok) throw new Error(failure(resumed));
+    expect(await exists(dirname(payloadPath))).toBe(false);
+    expect(await productHomeResidue(fixture)).toStrictEqual(expectedResidue);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it.each([
