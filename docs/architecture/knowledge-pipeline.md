@@ -212,10 +212,12 @@ means "edited" — `CAPTURE_STATUSES` is frozen at six members and recording an 
 a seventh to say what the file's own mtime already says.
 
 **The content transition an edit really is happens in the parser.** `parseCaptureFile`
-(`packages/brain/src/capture/parse.ts:163-167`) recomputes exactly three fields — `content`,
-`deduplicationHash` and `redaction` — and preserves everything else. A hand edit is legitimate, and it
-is how a secret gets pasted into a vault file, so the body is **re-redacted on the way in** rather
-than trusted until ingest.
+(`packages/brain/src/capture/parse.ts` — `parseCaptureFile`) recomputes exactly two fields — `content`
+and `deduplicationHash` — and preserves everything else. A hand edit is legitimate, and it is how a
+secret gets pasted into a vault file, so the body is **re-redacted on the way in** rather than trusted
+until ingest. `redaction` is the stored capture-time findings plus any the re-redaction adds, one per
+fingerprint (`mergeFindings`): the body holds only markers by then, so a fresh pass alone would report
+none and every rewrite would erase the record `review`'s redaction count reads (AUD-013).
 
 **The id is assigned once and never recomputed** (`packages/brain/src/capture/parse.ts:22-26`, amended by the founder
 2026-08-13). Under recomputation every content-changing edit would refuse, and the secret the user

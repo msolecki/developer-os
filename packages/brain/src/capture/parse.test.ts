@@ -175,28 +175,36 @@ describe("parseCaptureFile", () => {
     expect(envelope.deduplicationHash).not.toBe(built.envelope.deduplicationHash);
   });
 
-  it("reports the findings of the pass it just ran, which is empty for already-redacted text", () => {
-    /**
-     * Not a defect, and the one behaviour here a later reader will misread.
-     * `redaction` is recomputed on every parse (spec §5.3) and re-redacting
-     * already-redacted content finds nothing — `[REDACTED:provider-token]`
-     * matches no pattern — so a capture written with one finding reads back
-     * with an empty list the first time `review` touches it. The fingerprints
-     * were only ever comparable within the run that produced them; the
-     * placeholder in `content` is the durable evidence. Task 19's architecture
-     * note carries this, because an empty `redaction` otherwise reads as
-     * "nothing was ever redacted".
-     */
-    const withSecret = buildCapture({ ...request, text: `token ${providerToken("a")}` });
-    expect(withSecret.envelope.redaction).toHaveLength(1);
+  it("keeps the stored findings through a round trip, so review counts them and a rewrite keeps them (AUD-013)", () => {
+    const withSecrets = buildCapture({ ...request, text: `token ${providerToken("a")} and ${providerToken("b")}` });
+    expect(withSecrets.envelope.redaction).toHaveLength(2);
 
-    const parsed = accepted(
-      parseCaptureFile(withSecret.fileName, withSecret.contents, redact),
+    const parsed = accepted(parseCaptureFile(withSecrets.fileName, withSecrets.contents, redact));
+
+    expect(parsed.redaction).toEqual(withSecrets.envelope.redaction);
+    expect(parsed.content).toContain("[REDACTED:provider-token]");
+    expect(parsed.deduplicationHash).toBe(withSecrets.envelope.deduplicationHash);
+  });
+
+  it("adds the findings of a hand-edited secret to the stored ones, once per fingerprint", () => {
+    const withSecret = buildCapture({ ...request, text: `token ${providerToken("a")}` });
+    const edited = withSecret.contents.replace("\n\ntoken ", `\n\n${providerToken("c")} ${providerToken("c")} `);
+
+    const parsed = accepted(parseCaptureFile(withSecret.fileName, edited, redact));
+
+    expect(parsed.redaction).toHaveLength(2);
+    expect(parsed.redaction[0]).toEqual(withSecret.envelope.redaction[0]);
+  });
+
+  it("drops a stored finding that is not a class and a fingerprint, rather than echoing it", () => {
+    const file = BASE_FILE.replace(
+      "redaction: []",
+      'redaction:\n  - class: provider-token\n    fingerprint: "0123456789abcdef"\n  - class: "x\\ny"\n    fingerprint: ghp_notafingerprint\n  - nonsense',
     );
 
-    expect(parsed.redaction).toEqual([]);
-    expect(parsed.content).toContain("[REDACTED:provider-token]");
-    expect(parsed.deduplicationHash).toBe(withSecret.envelope.deduplicationHash);
+    const parsed = accepted(parseCaptureFile(`${SAMPLE_ID}.md`, file, redact));
+
+    expect(parsed.redaction).toEqual([{ class: "provider-token", fingerprint: "0123456789abcdef" }]);
   });
 
   it.each([

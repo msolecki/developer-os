@@ -224,8 +224,8 @@ async function readWholeVault(fixture: ReviewFixture): Promise<string> {
  * emitter quotes any scalar whose plain form would resolve as another type, and
  * a 64-character hex digest can be one.
  *
- * This exists because `parseCaptureFile` *recomputes* `deduplicationHash`,
- * `content` and `redaction` from the body rather than reading them
+ * This exists because `parseCaptureFile` *recomputes* `deduplicationHash`
+ * and `content` from the body rather than reading them
  * (`packages/brain/src/capture/parse.ts`), so an envelope parsed back off disk
  * cannot see a stale frontmatter hash at all: it reports what the bytes *should*
  * hash to, not what the file says they do. Only the raw line distinguishes a
@@ -293,6 +293,22 @@ describe("runReview", () => {
     expect(after).not.toContain("Northwind Traders");
     expect(after).toContain("[REDACTED:user-pattern]");
     expect(after).toContain("migration needs a rollback plan");
+  });
+
+  it("keeps the capture-time redaction findings through a decision and counts them (AUD-013)", async () => {
+    const fixture = await installedFixture("review-keeps-findings");
+    const seeded = await fixture.seed(`two tokens: ghp_${"a".repeat(36)} and ghp_${"b".repeat(36)}`);
+    const findingLines = (text: string): number => text.match(/^ {2}- class: /gmu)?.length ?? 0;
+    expect(findingLines(await nodeFs.readFile(seeded.path, "utf8"))).toBe(2);
+
+    const decided = await fixture.run(fixture.context, { id: seeded.id, decision: "accept" });
+    expect(decided.ok, "the accept must succeed").toBe(true);
+
+    expect(findingLines(await nodeFs.readFile(seeded.path, "utf8"))).toBe(2);
+    const listed = await fixture.run(fixture.context, { status: "accepted" });
+    expect(listed.ok && listed.data.captures).toStrictEqual([
+      { captureId: seeded.id, status: "accepted", note: null, redactionCount: 2 },
+    ]);
   });
 
   it("lists quarantined captures and nothing else", async () => {
