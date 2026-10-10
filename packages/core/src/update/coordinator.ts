@@ -1124,6 +1124,17 @@ function causeOf(error: unknown): SafeReasonCodeV1 {
       return UNNAMED_CAUSE;
     }
   }
+  // Unknown step error: derive a bounded code from the class name and an errno-style string `.code`
+  // only. The message can carry paths or user data, so it is never read.
+  if (error instanceof Error) {
+    const code = "code" in error && typeof error.code === "string" && /^E[A-Z0-9]+$/.test(error.code) ? `_${error.code.toLowerCase()}` : "";
+    const name = error.name.replace(/Error$/, "").replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+    try {
+      return parseSafeReasonCode(`step_${name || "error"}${code}`);
+    } catch {
+      // fall through to the generic code
+    }
+  }
   return parseSafeReasonCode("update_step_failed");
 }
 
