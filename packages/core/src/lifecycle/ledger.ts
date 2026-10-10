@@ -68,11 +68,12 @@ import {
   type FoundationTerminalCompactionV1,
   type LifecycleCoordinatorJournalV1,
   type LifecycleCoordinatorPlanCoreV1,
+  type LifecycleRedactionKeyCoreV1,
   type LifecycleJournalClosureV1,
 } from "./types.js";
 import { LOWERCASE_V4_UUID } from "./fs-helpers.js";
 
-type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
+type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 
 export interface LifecycleLedgerDependenciesV1<TPlan extends CoordinatorPlan> {
   readonly fs: LifecycleGuardedFileSystemV1;
@@ -1104,11 +1105,10 @@ function manifestStagingAdmission<TPlan extends CoordinatorPlan>(
 /**
  * NEW-210: `K` moves each large uninstall file to `payloads/<ordinal>`. Only a published plan
  * says how many there are, so a planless tree admits no `payloads` at all (and planless recovery
- * never deletes one). Core reads the opaque `K` leaf only for its `payloads` count.
+ * never deletes one). Core reads the `K` leaf only for its `payloads` count.
  */
 function payloadStagingAdmission(plan: CoordinatorPlan): StagingAdmissionV1 {
-  const payloads = (plan.participants.redactionKey as { readonly payloads?: unknown } | null)?.payloads;
-  const count = Array.isArray(payloads) ? payloads.length : 0;
+  const count = plan.participants.redactionKey?.payloads.length ?? 0;
   return (relative) => (/^(?:0|[1-9][0-9]*)$/.test(relative) && Number(relative) < count ? "payload" : null);
 }
 

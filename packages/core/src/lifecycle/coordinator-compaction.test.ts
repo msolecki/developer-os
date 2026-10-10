@@ -227,7 +227,7 @@ async function uninstallWorld(
       launchdBeforeFiles: null,
       launchdAfterFiles: null,
       launchd: null,
-      redactionKey: { marker: "redaction-key" },
+      redactionKey: { marker: "redaction-key", payloads: [] },
     },
     push: null,
     steps,

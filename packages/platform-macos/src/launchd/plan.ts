@@ -16,6 +16,7 @@ import {
   type LaunchdEffectIdV1,
   type LifecycleCoordinatorIdV1,
   type LifecycleCoordinatorPlanCoreV1,
+  type LifecycleRedactionKeyCoreV1,
   type LifecycleValueCodec,
   type LowerHexSha256,
   sortUtf8,
@@ -679,7 +680,7 @@ export const LAUNCHD_PLAN_CODEC: LifecycleValueCodec<LaunchdPlanV1> = Object.fre
   encode: (plan: LaunchdPlanV1) => encodeCanonicalJson(canonical(plan)),
 });
 
-type LaunchdCoordinatorPlanV1 = LifecycleCoordinatorPlanCoreV1<unknown, LaunchdPlanV1, unknown, unknown>;
+type LaunchdCoordinatorPlanV1 = LifecycleCoordinatorPlanCoreV1<unknown, LaunchdPlanV1, LifecycleRedactionKeyCoreV1, unknown>;
 
 function assertForwardMutation(coordinator: LaunchdCoordinatorPlanV1, binding: LifecycleFileBindingV1, label: string): void {
   if (binding.participantId === null) return;

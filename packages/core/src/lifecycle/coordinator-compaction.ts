@@ -28,11 +28,12 @@ import {
   type LifecycleCompactionEntryV1,
   type LifecycleCoordinatorJournalV1,
   type LifecycleCoordinatorPlanCoreV1,
+  type LifecycleRedactionKeyCoreV1,
   type LifecycleTerminalOutcomeV1,
 } from "./types.js";
 import { childOf, readStrictFoundationJournal, syncDirectoryAt, unlinkStagedBlob } from "./fs-helpers.js";
 
-type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
+type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 
 type ParticipantCompactionPositionV1 =
   | "executed"

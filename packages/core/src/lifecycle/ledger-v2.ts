@@ -50,10 +50,10 @@ import {
   type LifecycleLedgerSnapshotV1,
 } from "./ledger.js";
 import { classifyLifecycleJournalClosureV2, type LifecycleClosureV2ObservationV1 } from "./recovery.js";
-import type { LifecycleCoordinatorPlanCoreV1, LifecycleJournalClosureV2 } from "./types.js";
+import type { LifecycleCoordinatorPlanCoreV1, LifecycleJournalClosureV2, LifecycleRedactionKeyCoreV1 } from "./types.js";
 import { namesOf } from "./fs-helpers.js";
 
-type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
+type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 
 export type LifecycleLedgerV2DependenciesV1<TPlan extends CoordinatorPlan> = Omit<
   LifecycleLedgerDependenciesV1<TPlan>,

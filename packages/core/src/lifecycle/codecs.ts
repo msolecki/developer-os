@@ -41,6 +41,7 @@ import {
   type FoundationParticipantRefV1,
   type LifecycleCoordinatorJournalV1,
   type LifecycleCoordinatorPlanCoreV1,
+  type LifecycleRedactionKeyCoreV1,
   type LifecycleCoordinatorStepV1,
   type LifecycleEffectRefV1,
   type LifecyclePlanPreviewCoreV1,
@@ -66,7 +67,7 @@ export interface LifecycleHashedValueCodec<T> extends LifecycleValueCodec<T> {
 export interface LifecycleLeafCodecsV1<
   TManifest,
   TLaunchd,
-  TRedactionKey,
+  TRedactionKey extends LifecycleRedactionKeyCoreV1,
   TPush,
   TProjection,
   TGitPreview,
@@ -605,7 +606,7 @@ export function lifecyclePreviewHash(
 export function createLifecycleCodecs<
   TManifest,
   TLaunchd,
-  TRedactionKey,
+  TRedactionKey extends LifecycleRedactionKeyCoreV1,
   TPush,
   TProjection,
   TGitPreview,

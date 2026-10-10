@@ -12,6 +12,7 @@ import {
   type LifecycleCoordinatorOperationV1,
   type LifecycleCoordinatorPhaseV1,
   type LifecycleCoordinatorPlanCoreV1,
+  type LifecycleRedactionKeyCoreV1,
   type LifecycleCoordinatorStepV1,
   type LifecycleEffectRefV1,
   type LifecycleTerminalCompactionV1,
@@ -102,7 +103,7 @@ export type LifecycleReservationSlotV1 = {
   readonly role: string;
 };
 
-type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
+type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 
 function fail(label: string): never {
   throw new Error(`invalid ${label}`);

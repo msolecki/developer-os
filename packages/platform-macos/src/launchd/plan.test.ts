@@ -9,6 +9,7 @@ import {
   type LaunchdEffectIdV1,
   type LifecycleCoordinatorIdV1,
   type LifecycleCoordinatorPlanCoreV1,
+  type LifecycleRedactionKeyCoreV1,
   type LowerHexSha256,
   type ScheduledJobIdV1,
   type UInt64DecimalV1,
@@ -449,7 +450,7 @@ describe("assertLaunchdPlanBindings", () => {
         launchdAfterFiles: plan.afterFilesEffect,
       },
       ...overrides,
-    }) as unknown as LifecycleCoordinatorPlanCoreV1<unknown, LaunchdPlanV1, unknown, unknown>;
+    }) as unknown as LifecycleCoordinatorPlanCoreV1<unknown, LaunchdPlanV1, LifecycleRedactionKeyCoreV1, unknown>;
 
   it("accepts the embedding coordinator whose Foundation mutations match every binding", () => {
     expect(() => { assertLaunchdPlanBindings(plan, coordinator()); }).not.toThrow();

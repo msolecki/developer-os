@@ -83,6 +83,10 @@ function path(text: string): CanonicalAbsolutePathV1 {
 interface SyntheticLeaf {
   readonly marker: string;
 }
+/** NEW-210: core reads the `K` leaf for its `payloads` count. */
+interface SyntheticKeyLeaf extends SyntheticLeaf {
+  readonly payloads: readonly unknown[];
+}
 interface SyntheticPush extends SyntheticLeaf {
   readonly planHash: LowerHexSha256;
 }
@@ -108,7 +112,7 @@ type LeafName =
 type SyntheticLeaves = LifecycleLeafCodecsV1<
   SyntheticLeaf,
   SyntheticLeaf,
-  SyntheticLeaf,
+  SyntheticKeyLeaf,
   SyntheticPush,
   SyntheticProjection,
   SyntheticLeaf,
@@ -121,7 +125,7 @@ type SyntheticLeaves = LifecycleLeafCodecsV1<
 type SyntheticPlan = LifecycleCoordinatorPlanCoreV1<
   SyntheticLeaf,
   SyntheticLeaf,
-  SyntheticLeaf,
+  SyntheticKeyLeaf,
   SyntheticPush
 >;
 type SyntheticPreview = LifecyclePlanPreviewCoreV1<
@@ -159,7 +163,7 @@ function syntheticLeafCodecs(): SyntheticLeaves {
   return {
     manifest: codec<SyntheticLeaf>("manifest"),
     launchd: codec<SyntheticLeaf>("launchd"),
-    redactionKey: codec<SyntheticLeaf>("redactionKey"),
+    redactionKey: codec<SyntheticKeyLeaf>("redactionKey"),
     push: codec<SyntheticPush>("push"),
     pushPlanHash: (push) => push.planHash,
     projection: codec<SyntheticProjection>("projection"),
@@ -356,7 +360,7 @@ function syntheticUninstallPlan(): SyntheticPlan {
       launchdBeforeFiles: null,
       launchdAfterFiles: null,
       launchd: null,
-      redactionKey: { marker: "redaction-key" },
+      redactionKey: { marker: "redaction-key", payloads: [] },
     },
     push: null,
     steps,
