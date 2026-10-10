@@ -489,9 +489,14 @@ export async function repositoryWorkflowFiles(): Promise<readonly ReleaseFileV1[
 
 const SYNTHETIC_RELEASE_VERSION = "1.0.0";
 
-/** `bin/runtime` execs this Node binary: the verifier supervisor spawns it with an empty environment. */
+/**
+ * `bin/runtime` execs this Node binary: the verifier supervisor spawns it with an empty environment.
+ * The trailing comment, never read past `exec`, makes it larger than 8 MiB like a real keg's
+ * bundled Node, so every reader of a release file is exercised past the 8 MiB diff bound.
+ */
+const RUNTIME_PADDING = `#${"0".repeat(8 * 1024 * 1024)}\n`;
 function runtimeScript(): Uint8Array {
-  return new TextEncoder().encode(`#!/bin/sh\nexec '${process.execPath}' "$@"\n`);
+  return new TextEncoder().encode(`#!/bin/sh\nexec '${process.execPath}' "$@"\n${RUNTIME_PADDING}`);
 }
 
 /**

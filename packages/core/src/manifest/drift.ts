@@ -3,6 +3,7 @@ import { isAbsolute, resolve } from "node:path";
 
 import { extractInstructionBlock } from "./instruction-block.js";
 import { readStableRegularFile } from "./fs-read.js";
+import { MAXIMUM_BUNDLE_FILE_BYTES } from "../update/release.js";
 import {
   containsPath,
   hashBytes,
@@ -26,6 +27,12 @@ const DIFF_CONTEXT_LINES = 3;
 const MAX_DIFF_LINES = 1000;
 const MAX_DIFF_BYTES = 1024 * 1024;
 const MAX_READ_BYTES = 8 * 1024 * 1024;
+/**
+ * A content-hashed `file` row (V1, or V2 `content`) may be any release bundle file, and the bundled Node runtime alone
+ * is over 100 MiB, so the bound is the release format's own per-file bound, not the diff bound.
+ * ponytail: whole-file read; stream the hash if doctor's peak memory starts to matter.
+ */
+const MAX_CONTENT_HASH_BYTES = MAXIMUM_BUNDLE_FILE_BYTES;
 const MAX_LINK_TARGET_BYTES = 4096;
 const BINARY_NOTICE = "[binary content omitted]";
 const OVERSIZED_NOTICE = "[content too large to diff]";
@@ -50,6 +57,7 @@ async function readGuardedFile(
   fs: DriftFileSystem,
   guards: ManifestGuards,
   path: string,
+  maxBytes = MAX_READ_BYTES,
 ): Promise<Uint8Array | null> {
   let canonical: string;
   try { canonical = await guards.assertReadable(path); } catch { throw new ManifestStateError(); }
@@ -62,10 +70,10 @@ async function readGuardedFile(
     rethrowRedacted(error);
   }
   if (stats.isSymbolicLink() || !stats.isFile()) throw new ManifestStateError();
-  if (stats.size > MAX_READ_BYTES) throw new ManifestStateError();
+  if (stats.size > maxBytes) throw new ManifestStateError();
 
   try {
-    return await readStableRegularFile(fs, canonical, stats, MAX_READ_BYTES);
+    return await readStableRegularFile(fs, canonical, stats, maxBytes);
   } catch (error) {
     if (isMissing(error)) return null;
     rethrowRedacted(error);
@@ -126,7 +134,7 @@ async function inspectArtifact(
     return finding(artifact, "type_changed", null);
   }
 
-  const bytes = await readGuardedFile(fs, guards, artifact.path);
+  const bytes = await readGuardedFile(fs, guards, artifact.path, MAX_CONTENT_HASH_BYTES);
   if (bytes === null) return finding(artifact, "missing", null);
   const actualHash = hashBytes(bytes);
   return actualHash === artifact.installedHash
@@ -171,10 +179,11 @@ async function readV2File(
   request: DriftRequestV2,
   canonical: string,
   before: BigIntStats,
+  maxBytes: number,
 ): Promise<Uint8Array | null> {
   if (before.isSymbolicLink() || !before.isFile()) return null;
-  if (before.size < 0n || before.size > BigInt(MAX_READ_BYTES)) throw new ManifestStateError();
-  try { return await readStableRegularFile(request.fs, canonical, before, MAX_READ_BYTES); }
+  if (before.size < 0n || before.size > BigInt(maxBytes)) throw new ManifestStateError();
+  try { return await readStableRegularFile(request.fs, canonical, before, maxBytes); }
   catch (error) { if (isMissing(error)) return null; rethrowRedacted(error); }
 }
 
@@ -208,7 +217,7 @@ async function inspectV2Artifact(artifact: ManagedArtifactV2, request: DriftRequ
       return null;
     } catch { return v2Finding(artifact, "schema_invalid", null); }
   }
-  const bytes = await readV2File(request, canonical, stats);
+  const bytes = await readV2File(request, canonical, stats, artifact.kind === "file" && artifact.verification.mode === "content" ? MAX_CONTENT_HASH_BYTES : MAX_READ_BYTES);
   if (bytes === null) return v2Finding(artifact, "missing", null);
   if (artifact.verification.mode === "schema") {
     try { request.schemas.validate(artifact.verification.schemaId, bytes); return null; }
