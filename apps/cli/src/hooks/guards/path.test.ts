@@ -183,6 +183,13 @@ describe("guard path", () => {
     expect(await run("npmrc-link", "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
   });
 
+  it("blocks a dangling project symlink into an absent ~/.ssh", async () => {
+    await symlink(join(home, ".ssh", "authorized_keys"), join(project, "notes.txt"));
+    await symlink(join(home, ".ssh"), join(project, "keys"));
+    expect(await run("notes.txt", "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
+    expect(await run("keys/authorized_keys", "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
+  });
+
   // CRITIC-2: `CODEX_HOME` and the home a Codex attach recorded both hold the Codex credential.
   it("blocks auth.json under CODEX_HOME and under the recorded Codex home", async () => {
     await mkdir(join(home, ".developer-os", "codex"), { recursive: true });

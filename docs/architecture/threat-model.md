@@ -132,7 +132,7 @@ pretends to sandbox it.
 | **Configuration** | a TOML file the user edits by hand | `apps/cli/src/config-file.ts:38` (`readConfigFile`), then `loadConfig` (`packages/core/src/config/loader.ts:472-497`) |
 | **The installation manifest** | a JSON file on disk that decides ownership, and therefore deletion | `packages/core/src/manifest/store.ts:271` |
 | **`PATH`** | it decides which binary is `claude` or `codex` | `packages/platform-macos/src/macos.ts:209-211` |
-| **Every path anywhere** | a symlink makes the written path and the destination differ, which is the whole bug class | `packages/security/src/paths.ts:45` |
+| **Every path anywhere** | a symlink makes the written path and the destination differ, which is the whole bug class | `packages/security/src/paths.ts` — `canonicalizePlannedPath` |
 
 **One rule sits above all of them, and its ordering is the rule:** *redact before truncating,
 hashing, logging, persisting, or sending to a model.* It is enforced structurally rather than by
