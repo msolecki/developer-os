@@ -712,6 +712,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       await closeBootstrapProcess(fixture);
       const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
       expect(resumed.ok ? 0 : resumed.code).toBe(EXIT_CODES.recoveryRequired);
+      expect(resumed.ok ? "" : resumed.error.message).toContain("the retained bootstrap rolled back");
     } else if (!failed.ok) {
       expect(failed.error.message).toContain(`synthetic bootstrap failure at ${failure}`);
     }
@@ -1702,6 +1703,7 @@ describe("bootstrap executor failure reporting and lock release (NEW-179)", () =
     const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
 
     expect(resumed.ok ? 0 : resumed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(resumed.ok ? "" : resumed.error.message).toContain("the retained bootstrap rolled back");
     expect(await currentJournal(persisted.value), JSON.stringify({ resumed, trace: fixture.bootstrapTrace.slice(-30) }))
       .toMatchObject({ phase: "retained", terminalOutcome: "rolled_back" });
   }, REAL_FILESYSTEM_TIMEOUT_MS);

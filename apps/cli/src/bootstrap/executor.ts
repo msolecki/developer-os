@@ -1697,6 +1697,7 @@ export class BootstrapExecutor {
       const packaged = journal.direction === "forward" && journal.nextPayload < plan.payloads.length
         ? await inspectPackagedRelease(this.#dependencies.packagedRelease)
         : null;
+      const resumedCompensation = journal.direction === "compensating";
       try {
         journal = await this.stagePayloads(plan, journal, packaged);
         journal = await this.createOrdinary(plan, journal);
@@ -1720,6 +1721,8 @@ export class BootstrapExecutor {
             throw chainedFailure(error, "rolling it back also failed", rollbackError);
           }
           if (settleError !== undefined) throw chainedFailure(error, "finishing the interrupted step also failed", settleError);
+          // AUD-057: a resumed rollback skips every stage, so `error` is only retention's "no terminal state".
+          if (resumedCompensation) throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "the retained bootstrap rolled back");
         }
         throw error;
       }
