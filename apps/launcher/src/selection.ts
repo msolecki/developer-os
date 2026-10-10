@@ -33,7 +33,9 @@ import type {
 } from "@developer-os/core";
 import {
   admitLauncherPlatformIdentity,
+  assertTrustedDirectoryEntry,
   LauncherBundleAdmission,
+  MacOsPlatformTrustError,
 } from "@developer-os/platform-macos";
 import type {
   AdmittedReleaseBundleV1,
@@ -258,8 +260,6 @@ function parentOf(path: string): string {
  * D96 Q1 (K2's ancestor rule) for every keg directory the bundle admission does not walk: the
  * manifest's directory and each directory from the bundle's parent up to and including the prefix.
  * Owned by the uid or root; never other-writable; group-writable only when the uid owns it.
- * `ponytail:` mirrors platform-macos `assertTrustedDirectoryEntry` (Task 2), which is not on this
- * task's base; switch to it at integration.
  */
 async function assertKegAncestors(
   fs: LauncherGuardedReaderV1,
@@ -274,14 +274,12 @@ async function assertKegAncestors(
   }
   for (const path of directories) {
     const entry = await fs.lstat(path as CanonicalAbsolutePathV1);
-    if (
-      entry === null ||
-      entry.kind !== "directory" ||
-      (entry.ownerUid !== effectiveUid && entry.ownerUid !== 0) ||
-      (entry.mode & 0o002) !== 0 ||
-      ((entry.mode & 0o020) !== 0 && (entry.ownerUid === 0 || entry.ownerUid !== effectiveUid))
-    ) {
-      recoveryRequired("launcher_packaged_fallback_untrusted", path);
+    if (entry === null || entry.kind !== "directory") recoveryRequired("launcher_packaged_fallback_untrusted", path);
+    try {
+      assertTrustedDirectoryEntry(path, { uid: entry.ownerUid, mode: entry.mode }, effectiveUid);
+    } catch (error) {
+      if (error instanceof MacOsPlatformTrustError) recoveryRequired("launcher_packaged_fallback_untrusted", path);
+      throw error;
     }
   }
 }
