@@ -57,6 +57,11 @@ function lifecycleParentPath(path: CanonicalAbsolutePathV1): CanonicalAbsolutePa
   return parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/")));
 }
 
+/** A JavaScript defect is not a verdict on the bytes and stays exit 1. */
+function isJavaScriptDefect(error: unknown): boolean {
+  return error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError;
+}
+
 function refuseSchemaV1(): never {
   return refuse("update_coordinator_schema_v1");
 }
@@ -83,7 +88,8 @@ export class UpdateCoordinatorJournalStore implements UpdateLifecycleCoordinator
     let journal: UpdateLifecycleCoordinatorJournalV2;
     try {
       journal = validateUpdateCoordinatorJournal(decodeCanonicalJson(bytes, plan.maximumJournalBytes), plan, updateCoordinatorPlanHash(plan));
-    } catch {
+    } catch (error) {
+      if (isJavaScriptDefect(error)) throw error;
       return refuse("update_coordinator_journal_bytes", paths.journal);
     }
     if (decoder.decode(updateCoordinatorJournalBytes(plan, journal)) !== decoder.decode(bytes)) refuse("update_coordinator_journal_bytes", paths.journal);
@@ -186,7 +192,7 @@ export class UpdateCoordinatorJournalStore implements UpdateLifecycleCoordinator
       if (dispatched.schemaVersion !== 2) return refuse("update_coordinator_schema_v1", paths.plan);
       plan = dispatched.plan;
     } catch (error) {
-      if (error instanceof LifecycleRecoveryRequiredError) throw error;
+      if (error instanceof LifecycleRecoveryRequiredError || isJavaScriptDefect(error)) throw error;
       return refuse("update_coordinator_plan_bytes", paths.plan);
     }
     if (plan.id !== id) refuse("update_coordinator_plan_identity", paths.plan);
