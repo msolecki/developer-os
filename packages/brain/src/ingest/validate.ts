@@ -116,6 +116,11 @@ export interface IngestValidationContext {
   readonly brain: BrainServiceDependencies;
   /** Content-root-relative path this proposal replaces (a note capture with beforeSha256 !== null); absent otherwise. */
   readonly replaces?: string;
+  /**
+   * A note capture, whose text a person accepted in review. Absent, the proposal is model
+   * output and must record itself as `author: agent` with `reviewed: null` (AUD-008).
+   */
+  readonly noteCapture?: true;
 }
 
 function finding(
@@ -447,12 +452,23 @@ async function sourceAndProvenance(
 function confidenceAndLifecycle(
   notes: readonly ProposedNote[],
   parsed: ReadonlyMap<ProposedNote, NoteParseResult>,
+  modelAuthored: boolean,
 ): readonly IngestValidationFinding[] {
   const findings: IngestValidationFinding[] = [];
   for (const note of notes) {
     const result = parsed.get(note);
     if (result === undefined || !result.ok) continue;
     const front = result.note.frontmatter;
+
+    if (modelAuthored && (front.author !== "agent" || front.reviewed !== null)) {
+      findings.push(
+        finding(
+          "confidence-and-lifecycle",
+          note.path,
+          "a model-authored note must record author agent and reviewed null; it may not claim human authorship or a review",
+        ),
+      );
+    }
 
     /**
      * `NoteFrontmatterV1` requires the same keys whatever the stage, so "the
@@ -1002,7 +1018,7 @@ export async function validateProposal(
     )),
     ...linkAndGraph(projection, proposedByVaultPath),
     ...duplicateDetection(projection, proposedByVaultPath),
-    ...confidenceAndLifecycle(notes, parsed),
+    ...confidenceAndLifecycle(notes, parsed, context.noteCapture !== true),
     ...secretScan(notes, context.redact),
     ...deterministicReindex(projection),
     ...generatedOutputConsistency(resolved, config, indexesRootCanonical),

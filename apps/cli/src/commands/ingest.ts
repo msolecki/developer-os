@@ -2077,6 +2077,7 @@ async function ingestOne(
       redact,
       brain: dependenciesFor(context, paths.brain, environment.config),
       ...(note === null || note.beforeSha256 === null ? {} : { replaces: note.path }),
+      ...(note === null ? {} : { noteCapture: true as const }),
     });
     if (!validation.ok) throw refusalFrom(validation.findings, envelope.captureId);
 
