@@ -22,6 +22,25 @@ description: "Turn brain lint findings into proposals - note captures for conten
 - **Refuse** (input-invalid, exit 2): A limit must be a positive integer.
 - **Refuse** (scope-violation, exit 5): This workflow writes nothing but captures, through developer-os capture.
 
+## Inputs
+
+- `limit` (integer, optional): The most captures to propose in one run. 5 when absent.
+
+## Scopes
+
+Read:
+
+```text
+content/**
+content/_indexes/**
+```
+
+Write:
+
+```text
+content/_raw/quarantine/**
+```
+
 ## Steps
 
 ### lint
@@ -52,6 +71,11 @@ Effect: `capture.writeNote`
 developer-os capture --note
 ```
 
+
+## Checks
+
+- no more captures than limit, and at most one per note
+- every structural proposal is printed with --dry-run and never applied
 
 ## Recovery
 

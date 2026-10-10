@@ -22,6 +22,25 @@ description: "Synthesise one compiled note from the notes on a topic and quarant
 - **Refuse** (input-invalid, exit 2): A topic is required, and a compiled note needs at least two source notes.
 - **Refuse** (scope-violation, exit 5): This workflow reads the vault and writes nothing but one capture, through developer-os capture.
 
+## Inputs
+
+- `topic` (string, required): A tag or a query naming what to compile.
+
+## Scopes
+
+Read:
+
+```text
+content/**
+content/_indexes/**
+```
+
+Write:
+
+```text
+content/_raw/quarantine/**
+```
+
 ## Steps
 
 ### load-index
@@ -58,6 +77,11 @@ Effect: `capture.writeNote`
 developer-os capture --note
 ```
 
+
+## Checks
+
+- the capture was written with --note naming a destination no note occupies
+- every source the draft names is a note that was read
 
 ## Recovery
 

@@ -19,6 +19,12 @@ description: "Report the installation's health and the agent capability matrix."
 
 - **Refuse** (vault-missing, exit 1): No installation was found. Run developer-os init first.
 
+## Scopes
+
+Read: none
+
+Write: none
+
 ## Steps
 
 ### report
@@ -33,6 +39,10 @@ developer-os doctor
 
 List only the failing checks and what each one requires. A wall of passing output tells nobody anything.
 
+
+## Checks
+
+- every failing check names a recovery command
 
 ## Recovery
 

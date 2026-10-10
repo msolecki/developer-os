@@ -41,8 +41,9 @@ export interface SkillBodyOptions {
  * emits rather than a message this package prints. That theory covered only
  * findings because this package rendered nothing else. Now that
  * `renderSkillBody` renders the body, this function *is* the screen for it —
- * `id`, `refusals[].message`, `steps[].prose` (via `boundedProse`, below) and
- * `recovery.resume` all pass through it before they reach an artifact.
+ * `id`, `refusals[].message`, `steps[].prose` (via `boundedProse`, below),
+ * `recovery.resume`, input names and descriptions, scope globs and `validators`
+ * (via `boundedProse`) all pass through it before they reach an artifact.
  * `description` is the one field that never does: it does not appear in the
  * body at all, only in each vendor's frontmatter, so each adapter still
  * screens its own copy — bounded by `SKILL_FIELD_CAP`, exported from this
@@ -206,7 +207,10 @@ export function renderSkillBody(
 
   lines.push(`# ${screen(rendered.id)}`, "");
   lines.push(...renderRefusals(rendered), "");
+  lines.push(...renderInputs(rendered));
+  lines.push(...renderScopes(rendered), "");
   lines.push(...renderSteps(rendered), "");
+  lines.push(...renderChecks(rendered));
   lines.push(...renderRecovery(rendered));
 
   return lines;
@@ -304,6 +308,40 @@ function renderRefusals(
     (refusal) =>
       `- **Refuse** (${screen(refusal.when)}, exit ${String(refusal.exit)}): ${screener(refusal.message)}`,
   );
+}
+
+/** Omitted when empty: a heading with nothing under it says nothing (AUD-021). */
+function renderInputs(contract: WorkflowContractV1): readonly string[] {
+  const entries = Object.entries(contract.inputs);
+  if (entries.length === 0) return [];
+  return [
+    "## Inputs",
+    "",
+    ...entries.map(([name, field]) =>
+      `- \`${screen(name)}\` (${field.type}, ${field.required ? "required" : "optional"}): ${screen(field.description)}`),
+    "",
+  ];
+}
+
+/**
+ * The boundary the preamble tells the agent to stay inside, so it is always rendered (AUD-021).
+ * Globs are fenced rather than inlined: they are free strings, and a backtick in one would
+ * otherwise end its code span.
+ */
+function renderScopes(contract: WorkflowContractV1): readonly string[] {
+  const list = (label: string, globs: readonly string[]): readonly string[] =>
+    globs.length === 0 ? [`${label}: none`] : [`${label}:`, "", ...fenced(globs.map(screen).join("\n"), "text")];
+  return ["## Scopes", "", ...list("Read", contract.scopes.read), "", ...list("Write", contract.scopes.write)];
+}
+
+function renderChecks(contract: WorkflowContractV1): readonly string[] {
+  if (contract.validators.length === 0) return [];
+  return [
+    "## Checks",
+    "",
+    ...contract.validators.flatMap((validator) => bullet(boundedProse(validator, SKILL_FIELD_CAP).split("\n\n"))),
+    "",
+  ];
 }
 
 const INPUT_PLACEHOLDER_NOTE =

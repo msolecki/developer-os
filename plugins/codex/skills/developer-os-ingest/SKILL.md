@@ -21,6 +21,22 @@ description: "Stage accepted captures outside the vault, validate them, then app
 - **Refuse** (vault-missing, exit 1): No vault was found. Run developer-os init first.
 - **Refuse** (scope-violation, exit 5): Staging is outside the vault; only apply writes into it.
 
+## Scopes
+
+Read:
+
+```text
+content/**
+content/_raw/quarantine/**
+```
+
+Write:
+
+```text
+content/**
+content/_indexes/**
+```
+
 ## Steps
 
 ### stage
@@ -55,6 +71,10 @@ Effect: `brain.reindex`
 developer-os brain reindex
 ```
 
+
+## Checks
+
+- a failed apply leaves every capture retryable and none marked ingested
 
 ## Recovery
 

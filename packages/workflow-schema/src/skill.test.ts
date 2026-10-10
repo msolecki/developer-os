@@ -614,3 +614,35 @@ describe("skill body refusals found by the review of those fixes", () => {
     expect(contents).toContain("one two");
   });
 });
+
+/** AUD-021: the preamble tells the agent to obey "the scopes this workflow declares", so the body shows them. */
+describe("skill body declarations the agent must see", () => {
+  const declaring = contract({
+    inputs: { note: { type: "path", required: true, description: "the note to revise" } },
+    scopes: { read: ["content/**", "content/_raw/quarantine/**"], write: ["content/_indexes/**"] },
+    validators: ["a failed apply leaves every capture retryable"],
+  });
+
+  it("renders the inputs, the scopes and the checks, in that order around the steps", () => {
+    const { contents } = render(declaring);
+    expect(contents).toContain("## Inputs\n\n- `note` (path, required): the note to revise\n");
+    expect(contents).toContain("## Scopes\n\nRead:\n\n```text\ncontent/**\ncontent/_raw/quarantine/**\n```\n\nWrite:\n\n```text\ncontent/_indexes/**\n```\n");
+    expect(contents).toContain("## Checks\n\n- a failed apply leaves every capture retryable\n");
+    const order = ["## Inputs", "## Scopes", "## Steps", "## Checks", "## Recovery"].map((heading) => contents.indexOf(heading));
+    expect(order).toStrictEqual([...order].sort((left, right) => left - right));
+  });
+
+  it("states an empty scope as none and omits an empty inputs or checks section", () => {
+    const { contents } = render(contract({ validators: [] }));
+    expect(contents).toContain("## Scopes\n\nRead: none\n\nWrite: none\n");
+    expect(contents).not.toContain("## Inputs");
+    expect(contents).not.toContain("## Checks");
+  });
+
+  it("keeps a hostile glob inside its fence and neutralizes a validator that is a bare fence", () => {
+    const { contents } = render(contract({ scopes: { read: ["a```b"], write: [] }, validators: ["```"] }));
+    expect(contents).toContain("````text\na```b\n````");
+    expect(contents).toContain("- \\```");
+    expect(contents).toContain("## Recovery");
+  });
+});

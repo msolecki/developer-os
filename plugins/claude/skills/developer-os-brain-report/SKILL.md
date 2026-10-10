@@ -22,6 +22,26 @@ description: "Write a report for a person on one subject from the vault and its 
 - **Refuse** (input-invalid, exit 2): A subject is required and must not be empty.
 - **Refuse** (scope-violation, exit 5): This workflow reads the vault and writes nothing but one capture, through developer-os capture.
 
+## Inputs
+
+- `subject` (string, required): What the report is about - a query, a tag, or a topic folder.
+- `file-back` (boolean, optional): When true, quarantine the report as one capture for review. False when absent.
+
+## Scopes
+
+Read:
+
+```text
+content/**
+content/_indexes/**
+```
+
+Write:
+
+```text
+content/_raw/quarantine/**
+```
+
 ## Steps
 
 ### load-index
@@ -70,6 +90,11 @@ Effect: `capture.write`
 developer-os capture
 ```
 
+
+## Checks
+
+- every claim in the report names a vault-relative source path
+- nothing is written except at most one capture, through developer-os capture, and only when file-back is true
 
 ## Recovery
 
