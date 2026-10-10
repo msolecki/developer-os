@@ -57,7 +57,9 @@ describe("V2 manifest drift", () => {
       const bytes = new Uint8Array(8 * 1024 * 1024 + 1).fill(0x6e);
       await nodeFs.writeFile(path, bytes);
       const installedHash = createHash("sha256").update(bytes).digest("hex");
-      await expect(inspectDrift(request(artifact(path, { verification: { mode: "content", installedHash } })))).resolves.toStrictEqual([]);
+      await expect(inspectDrift(request(artifact(path, { source: "bundle/bin/node", verification: { mode: "content", installedHash } })))).resolves.toStrictEqual([]);
+      await expect(inspectDrift(request(artifact(path, { source: "generated/release/bin/node", verification: { mode: "content", installedHash } })))).resolves.toStrictEqual([]);
+      await expect(inspectDrift(request(artifact(path, { source: "generated/rollback", verification: { mode: "content", installedHash } })))).resolves.toStrictEqual([]);
     } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
   });
 
@@ -198,9 +200,15 @@ describe("V2 manifest drift", () => {
 
       let opened = false;
       const sizedFs = (size: number): DriftRequestV2["fs"] => ({ ...nodeFs, lstat: (candidate: Parameters<typeof nodeFs.lstat>[0]) => nodeFs.lstat(candidate).then((stats) => Object.assign(Object.create(stats), { size: BigInt(size) }) as unknown as typeof stats), open: () => { opened = true; return nodeFs.open(path, "r"); } }) as unknown as DriftRequestV2["fs"];
-      await expect(inspectDrift(request(artifact(path), { fs: sizedFs(MAXIMUM_BUNDLE_FILE_BYTES + 1) }))).rejects.toBeInstanceOf(Error);
-      const instruction = artifact(path, { owner: "claude", kind: "instruction", instruction: { category: "rule", id: "x", source: "default" } });
-      await expect(inspectDrift(request(instruction, { fs: sizedFs(8 * 1024 * 1024 + 1) }))).rejects.toBeInstanceOf(Error);
+      // Only a release or rollback file gets the bundle bound; every other row keeps 8 MiB.
+      await expect(inspectDrift(request(artifact(path, { source: "bundle/bin/node" }), { fs: sizedFs(MAXIMUM_BUNDLE_FILE_BYTES + 1) }))).rejects.toBeInstanceOf(ManifestStateError);
+      const overDiffBound = [
+        artifact(path),
+        artifact(path, { source: "generated/rollback_restore" }),
+        artifact(path, { source: "bundle/bin/node", verification: { mode: "schema", schemaId: "developer-os-config-v1", installedHash: hash("installed") } }),
+        artifact(path, { owner: "claude", kind: "instruction", instruction: { category: "rule", id: "x", source: "default" } }),
+      ];
+      for (const row of overDiffBound) await expect(inspectDrift(request(row, { fs: sizedFs(8 * 1024 * 1024 + 1) }))).rejects.toBeInstanceOf(ManifestStateError);
       expect(opened).toBe(false);
 
       let legacyReadCalled = false;

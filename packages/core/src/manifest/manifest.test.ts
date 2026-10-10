@@ -21,6 +21,7 @@ import {
 import type { InstallationManifestV1, InstallationManifestV2, ManagedArtifactV1, ManifestAdmissionContextV1 } from "./index.js";
 import { admitCanonicalAbsolutePath, type CanonicalPathEvidenceV1 } from "../update/paths.js";
 import { encodeCanonicalJson } from "../lifecycle/canonical-json.js";
+import { MAXIMUM_BUNDLE_FILE_BYTES } from "../update/release.js";
 
 const PRODUCT_VERSION = "0.0.0";
 const INSTALLED_TEXT = "installed-line-one\ninstalled-line-two\n";
@@ -473,8 +474,21 @@ describe("detectDrift", () => {
       const bytes = new Uint8Array(8 * 1024 * 1024 + 1).fill(0x6e);
       await nodeFs.writeFile(filePath, bytes, { mode: 0o700 });
       const installedHash = createHash("sha256").update(bytes).digest("hex");
-      await expect(detectDrift({ manifest: manifestOf([artifact({ path: filePath, installedHash })]), fs: nodeFs, guards: allowAll }))
-        .resolves.toStrictEqual([]);
+      const release = artifact({ path: filePath, installedHash, owner: "core", source: "bundle/bin/node" });
+      await expect(detectDrift({ manifest: manifestOf([release]), fs: nodeFs, guards: allowAll })).resolves.toStrictEqual([]);
+
+      // The bound is the release format's, and only for a release or rollback file: a downcast instruction or schema row keeps 8 MiB.
+      let opened = false;
+      const sizedFs = (size: number): typeof nodeFs => ({
+        ...nodeFs,
+        lstat: ((candidate: string) => nodeFs.lstat(candidate, { bigint: true }).then((stats): object => Object.assign(Object.create(stats) as object, { size: BigInt(size) }))) as unknown as typeof nodeFs.lstat,
+        open: (() => { opened = true; return nodeFs.open(filePath, "r"); }),
+      });
+      await expect(detectDrift({ manifest: manifestOf([release]), fs: sizedFs(MAXIMUM_BUNDLE_FILE_BYTES + 1), guards: allowAll }))
+        .rejects.toBeInstanceOf(ManifestStateError);
+      await expect(detectDrift({ manifest: manifestOf([artifact({ path: filePath, installedHash })]), fs: sizedFs(8 * 1024 * 1024 + 1), guards: allowAll }))
+        .rejects.toBeInstanceOf(ManifestStateError);
+      expect(opened).toBe(false);
     } finally {
       await removeFixture(fixture);
     }
