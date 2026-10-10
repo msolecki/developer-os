@@ -916,6 +916,18 @@ and retires the Foundation-era invariant — it records the execution and **not*
 which is why NEW-15 existed rather than a pointer to it. Stated here because the brief names `PATH` as
 a boundary this document must carry, and carrying it accurately means saying which half is enforced.
 
+**Hooks run the project's own tools, and the project is not trusted (AUD-006, open).** `guard stop`
+runs `node_modules/typescript`'s bin whenever `tsconfig.json` exists, and `guard format` runs a local
+`prettier` or `biome` (prettier also loads a `.prettierrc.js`), all under the hook's Node
+(`apps/cli/src/hooks/guards/child.ts` — `localBin`). `localBin` confines the path to the project
+root; it does not check provenance. So a cloned repository that commits `node_modules/typescript`
+runs its code as the user when the agent's first turn ends, with no tool call approved and no
+`npm install` run. **This is not an accepted residual; it awaits a founder decision.** The audit's
+two fixes each need one: refusing a git-tracked or undeclared tool needs a hook to spawn an admitted
+`git` (hooks have none, and `PATH` is not an option, `hooks.md` §3.8) inside the untrusted checkout,
+and a root `package.json` declaration is written by the same attacker; the alternative is a
+per-project opt-in, a product decision.
+
 ### 5.12 Configuration
 
 `config.toml` is a file the user edits by hand, and a parse of it happens on every `doctor`, `status`
