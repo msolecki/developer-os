@@ -438,6 +438,28 @@ NEW-171.
   refuses there. A keg install that already recorded `~/.codex` while `CODEX_HOME` named another home now
   reaches `codex_home_mismatch`, exit 3, on its next `init` or refresh, as a direct run always did.
 
+- **K9 — a real keg's release files (NEW-210; founder-approved 2026-10-10, option B).** A Homebrew keg's
+  bundled Node is about 122 MB, which broke two lifecycle bounds. (a) **Terminal retirement retains no
+  bytes.** A file leaf with null `bytes` is hash-read up to `MAXIMUM_BUNDLE_FILE_BYTES`
+  (`packages/core/src/update/release.ts`) and must carry a `sha256`; a leaf with neither refuses
+  `update_retirement_leaf` (exit 6), as does a file over the bound or one whose hash differs.
+  §9.2's reading of a null `bytes` as a document bounded by 64 MiB is withdrawn for retirement.
+  (`apps/cli/src/update/retirement-participant.ts` — `#requireFile`.) (b) **Uninstall moves a large
+  file aside.** A product-home regular file larger than 16 MiB (`MAX_MUTATION_BYTES`) is removed by
+  Spec 1 §2.4's `K` arm, which renames it by its recorded identity into
+  `staging/lifecycle/<coordinator-id>/payloads/<ordinal>` and unlinks it after `M(commit_absence)`;
+  compensation renames the same inode back. It never goes through `F(uninstall_artifacts)`, and no byte of
+  it is read into memory or journaled. Planning refuses `uninstall_artifact_too_large` (exit 6), before any
+  ID is reserved, when any of these fails: the file is owner-held, mode `0600` or `0700`, single-link
+  and at most `MAXIMUM_BUNDLE_FILE_BYTES`; its path is printable ASCII without a space and not under
+  `staging/` or `state/` (case-folded); every ancestor below the product home is read no-follow; its
+  parent is an owner-held `0700` directory, which may be the product home itself; and it is on the same
+  device as `staging/lifecycle`. A home without `staging/` has no device to compare, so it refuses too.
+  Each payload is read in full four times (the V1 drift hash, the preview hash, the stage hash, and the
+  hash inside the no-replace rename), always streamed. V2 doctor drift still reads a content row whole.
+  Accepted residual: two removal mechanisms coexist, and the window between the no-follow walk and the
+  rename is the same-uid residual (Spec 1 §8.3 residual 8).
+
 
 ---
 
@@ -4759,6 +4781,9 @@ succeeds and the first leaf over either bound refuses before intent — **amende
 the 1,200,012 aggregate above counts 1,000,000 inventory entries, which no 64-MiB inventory can
 hold. These rules close the
 plan/state/cursor tables rather than delegating recovery semantics to implementations.
+
+**Amended 2026-10-10 (K9 (a)):** a retirement file leaf with null `bytes` is hash-read up to
+`MAXIMUM_BUNDLE_FILE_BYTES`, not a 64 MiB document.
 
 A `CanonicalStatePayloadPathV1` is exactly
 `staging/lifecycle/<coordinator-id>/update/payloads/state/<role>/<id>.json`, where role/ID equal the

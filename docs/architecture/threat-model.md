@@ -735,6 +735,11 @@ Directory-creation authority is deliberately not reconstructed after process dea
 product/state skeleton may remain, while file/control residue never gains that exception. §8.3's
 residual 8 stands accepted: macOS unlinks a regular file by pathname, so the recheck narrows the
 window between the observation and the unlink and cannot close it.
+**Uninstall payloads (NEW-210, 2026-10-10)** share that residual: a product-home file over 16 MiB is moved
+aside by an identity-checked no-replace rename and unlinked by pathname after commit, and every ancestor
+below the home is walked no-follow first (`apps/cli/src/lifecycle/uninstall-payloads.ts` — `stagePayloads`).
+The window between that walk and `renameatx_np` is the same-uid residual of §8.3's residual 8; a symlinked
+ancestor present at the walk refuses `uninstall_payload_identity`.
 The same closure applied at launchd's byte boundary until D82 removed the snapshot leaf. An absent-manifest
 uninstall crash leaves the key or no key and nothing else, because neither arm writes a journal;
 §8.3's residual 9, the shape admission that decides which arm runs, stands accepted with it.

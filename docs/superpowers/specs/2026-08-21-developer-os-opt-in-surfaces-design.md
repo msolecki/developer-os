@@ -1829,7 +1829,9 @@ greatest observed index may be that same complete pair or exactly one of the thr
 states emitted by unchanged `writeStaged`: `<i>.bin.tmp` alone; `<i>.bin` alone; or `<i>.bin` plus
 `<i>.bin.sha256.tmp`. Allocated DOS-P7 content final/temp leaves are 0..16 MiB; every
 `FoundationMutationRefV1` create/replace binds their exact size/hash, remove binds both null, and
-planning refuses an oversized payload before ID reservation or staging. A legacy UUID ID retains
+planning refuses an oversized payload before ID reservation or staging. *Amended 2026-10-10 (Spec 2 K9 (b)):* a removable product-home file over 16 MiB is not an
+`F(uninstall_artifacts)` content leaf; it is a `K` payload (§2.4), and planning refuses
+`uninstall_artifact_too_large` before ID reservation when it cannot be one. A legacy UUID ID retains
 the shipped executor's 0..2^53-1 file-size range and is hashed by bounded-memory streaming rather than
 materialized; allocated payload verification is streamed too. The digest temp is 0..65 bytes, and every temp/final leaf is owner-owned, 0600, regular,
 single-link, and reopened by identity. No earlier index may be
@@ -2046,6 +2048,30 @@ link/device/inode checks, and never read file content. Its exact `CanonicalJsonV
 the coordinator plan's bytes and hash; it has no hash of its own (the separate
 `developer-os:redaction-key-state-plan:v1` hash had no reader and was removed, amended 2026-10-06,
 NEW-177), no bytes or content-hash field, and cannot target any second path.
+
+**Amended 2026-10-10 (Spec 2 K9 (b)).** `K` also carries the uninstall payloads: the removable product-home
+regular files larger than 16 MiB, which `F(uninstall_artifacts)` cannot journal. `RedactionKeyStatePlanV1`
+is `schemaVersion: 1` with no `payloads` field when nothing is carried, byte-identical to before and
+decoding as `payloads: []`; it is `schemaVersion: 2` with `payloads` only when at least one is. A row is
+exactly `{sourcePath, payloadPath, mode, size, dev, ino, sha256}`: `sourcePath` is canonical, inside the
+product home, and not under `staging/` or `state/` (case-folded); `payloadPath` is exactly
+`<product home>/staging/lifecycle/<coordinator-id>/payloads/<ordinal>` for the row's zero-based index,
+recomputed and never trusted; `mode` is `0600` or `0700`; `size` is 16 MiB + 1 through
+`MAXIMUM_BUNDLE_FILE_BYTES`; sources are unique case-folded; at most 7,936 rows. "Cannot target any second
+path" above now applies to the key only. `K(stage)` creates `payloads/` (`0700`, owner-held), then moves
+each row in ordinal order by an identity-checked no-replace rename, hashing it first and walking every
+ancestor below the product home no-follow, and syncs both parents; only then does it move the key.
+`K(delete)` unlinks the payloads in ordinal order, then the key tombstone. Restore runs the mirror: the
+key first, then the payloads in reverse ordinal order. A moved prefix is a legal state before the cursor:
+a torn `K(stage)` leaves some rows at their source and some at `payloadPath`, and recovery restores
+whichever moved; a torn `K(delete)` leaves a prefix of unlinked rows and resumes forward. A row absent at
+both paths in `K(stage)` or restore, a symlinked ancestor, both paths present or a wrong
+kind/owner/mode/size/link/device/inode is `lifecycle_recovery_required` (`uninstall_payload_identity`,
+`uninstall_payload_state` or `uninstall_payload_hash`) and is preserved. Ledger admission accepts a
+`payloads/<ordinal>` leaf only under a published plan and only below its row count. Compaction refuses a
+non-empty `payloads/` (`lifecycle_guarded_not_empty`) before any unlink and removes the empty directory
+with the coordinator staging; a payload left under a terminal or compacting coordinator is also the
+ledger finding `lifecycle_staging_payload_terminal`.
 
 `K(stage)` and `K(delete)` are bound exhaustively to coordinator position. Before `K(stage)`, source
 equals `before` and the tombstone is absent. For a present arm, the only apply-before-cursor state is
@@ -4460,6 +4486,9 @@ derivable, so no product-owned label can be loaded.
    sibling tombstone to be absent, record only its type/owner/mode/link-count/size/device/inode identity, atomically rename it to
    that tombstone in the same owner-only directory, sync the directory, and verify original-absent plus
    matching-tombstone-present. A symlink, wrong type, collision, or third state refuses/requires recovery.
+   *Amended 2026-10-10 (Spec 2 K9 (b)):* before the key, the same `K(stage)` moves each large payload file
+   (over 16 MiB) aside by the same identity-checked no-replace rename (§2.4), so no payload byte is read
+   into a journal.
 4. With every paired inverse Foundation plan and its independently staged preimage, the secret-opaque
    key tombstone, and the coordinator journal still present,
    apply the uninstall
@@ -4630,7 +4659,7 @@ only the global mutation-lock file retains the stable never-unlink contract.
 | manifest transitions are no-overwrite | concurrent replacement before/after every tombstone and publication boundary preserves every third state; present↔present, present→absent, absent→present, rollback, and recovery use only exact no-replace moves/publication |
 | uninstall removes its manifest recoverably | failure/death before and after no-replace move, preserved-inode verification, and durable committed-absence record proves exact compensation or force-forward completion, never overwrite/deletion of a concurrent manifest or a stale live manifest; death after each empty-directory removal and before the manifest tombstone deletion re-derives the directory list from the tombstone and completes, and a non-empty directory is preserved and reported (amended 2026-09-17, A15) |
 | uninstall then init round-trips | on a synthetic home each sequence succeeds without manual action and retained bootstrap evidence stays inert: V2 `init` → present-manifest uninstall → `init`; V2 `init` → uninstall → uninstall again → `init`; absent-manifest key deletion → `init`; `key_absent` → `init`; present-manifest uninstall killed at `M(preserve_before)` before and after its cursor advance, `M(commit_absence)`, `K(delete)`, `M(finalize_tombstones)`, each control-file microstate, plan-plus-lock and plan-only → uninstall → `init`; V2 `init` rolled back → uninstall → `init`; two complete install/uninstall cycles → `init`; fresh V2 `init` → `config set` and `git enable` preview with closure `clear` beside retained evidence (amended 2026-09-17, A9) |
-| redaction-key deletion is secret-opaque | strict source/tombstone derivation plus present/absent, collision, wrong-type/owner/mode/size/link/device/inode, identity-swap, and every `K(stage)`/manifest-absence/`K(delete)` crash boundary prove no key byte or content hash enters memory/journal/log; rollback before manifest absence renames it back, while recovery after manifest absence only deletes the bound tombstone |
+| redaction-key deletion is secret-opaque | strict source/tombstone derivation plus present/absent, collision, wrong-type/owner/mode/size/link/device/inode, identity-swap, and every `K(stage)`/manifest-absence/`K(delete)` crash boundary (for payloads too: a kill after the first of two payload moves resumes forward or restores both, a kill after one payload unlink resumes forward, a payload absent at both paths refuses, a symlinked ancestor refuses at stage and restore, and a non-empty `payloads/` blocks compaction and is a ledger finding under a terminal coordinator) prove no key byte or content hash enters memory/journal/log; rollback before manifest absence renames it back, while recovery after manifest absence only deletes the bound tombstone |
 
 Git integration uses only temporary repositories and local bare remotes with synthetic identity and
 no real credential. Launchd integration uses only injected filesystems, clocks, process runners, and
@@ -4821,7 +4850,11 @@ filesystem/process/clock dependencies rather than reaching global state directly
 8. **Absent-manifest key deletion has a check-then-unlink window.** Node has no descriptor-relative
    unlink, so a same-uid process can swap `state/redaction.key` between the identity recheck and
    `unlink`. The worst outcome is removal of a planted regular file at a product-reserved path inside the
-   product's own `state`. The withdrawn envelope design's tombstone unlink had the same window. **Owner:
+   product's own `state`. *Amended 2026-10-10 (Spec 2 K9 (b)):* the uninstall payload moves have the same
+   shape: Node has no descriptor-relative rename, so a same-uid process can swap a directory component
+   or the source between the no-follow ancestor walk (plus identity recheck) and `renameatx_np`, and the
+   unlink of a staged payload is by pathname. The worst outcome is a planted file moved into, or
+   removed from, the product's own `staging/lifecycle` or the product home. The withdrawn envelope design's tombstone unlink had the same window. **Owner:
    the accepted local-write boundary. Added 2026-09-17 (A3).**
 9. **Bookkeeping paths are admitted by shape.** A planted empty directory or zero-byte file at a
    bookkeeping path is admitted by fresh `init` and absent-manifest uninstall; neither grants anything a
