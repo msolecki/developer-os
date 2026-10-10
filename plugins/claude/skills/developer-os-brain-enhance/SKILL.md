@@ -3,7 +3,7 @@ name: "developer-os-brain-enhance"
 description: "Propose a revision of one existing note as a note capture bound to the note's current bytes; the note changes only after review and ingest, and only if nobody edited it meanwhile."
 ---
 
-<!-- Generated from workflows/brain-enhance/workflow.yaml (brain-enhance@1.0.1). Do not edit. -->
+<!-- Generated from workflows/brain-enhance/workflow.yaml (brain-enhance@1.0.2). Do not edit. -->
 
 ## Always
 
@@ -50,7 +50,7 @@ Effect: `brain.readNote`
 
 ### draft
 
-Write the whole revised note, frontmatter and body. Keep every frontmatter key you do not mean to change exactly as it is, created included, and set updated to today's date. Improve the summary, tags, aliases and links to the related notes you read; do not invent facts no note states. Then pass the whole note to the next step, with --note naming the note being revised, on stdin through a quoted heredoc: developer-os capture --note '<note>' <<'<word>' ... <word>, where <word> is a delimiter that appears on no line of the text.
+Write the whole revised note, frontmatter and body. Keep every frontmatter key you do not mean to change exactly as it is, created included, and set updated to today's date. Improve the summary, tags, aliases and links to the related notes you read; do not invent facts no note states. Then pass the whole note to the next step, with --note naming the note being revised, on stdin through a quoted heredoc: developer-os capture --note '<note>' <<'<word>' ... <word>, where <word> is a delimiter that appears on no line of the text. Stop with the input-invalid refusal when the note's path contains a single quote.
 
 ### capture
 

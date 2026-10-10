@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: brain-enhance
-version: 1.0.1
+version: 1.0.2
 description: Propose a revision of one existing note as a note capture bound to the note's current bytes; the note changes only after review and ingest, and only if nobody edited it meanwhile.
 triggers:
   - manual
@@ -56,7 +56,9 @@ steps:
       pass the whole note to the next step, with --note naming the note being
       revised, on stdin through a quoted heredoc:
       developer-os capture --note '<note>' <<'<word>' ... <word>,
-      where <word> is a delimiter that appears on no line of the text.
+      where <word> is a delimiter that appears on no line of the text. Stop
+      with the input-invalid refusal when the note's path contains a single
+      quote.
   - id: capture
     do: capture.writeNote
 validators:

@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: brain-compile
-version: 1.0.1
+version: 1.0.2
 description: Synthesise one compiled note from the notes on a topic and quarantine it as a note capture; nothing reaches the vault until review and ingest.
 triggers:
   - manual
@@ -52,7 +52,8 @@ steps:
       you read. Write title and summary as double-quoted strings, because a
       bare colon inside them breaks the frontmatter. The body synthesises those notes and links each one with a
       wikilink. Choose a destination path relative to the content root, inside
-      a configured topic folder, that no note occupies yet. Stop with the
+      a configured topic folder, that no note occupies yet and whose path
+      contains no single quote. Stop with the
       input-invalid refusal when fewer than two notes were read. Then pass the
       note to the next step on stdin through a quoted heredoc:
       developer-os capture --note '<path>' <<'<word>' ... <word>,
