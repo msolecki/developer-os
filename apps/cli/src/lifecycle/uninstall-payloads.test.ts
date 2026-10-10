@@ -84,8 +84,15 @@ async function fixture(): Promise<Fixture> {
 }
 
 /** A sparse file: 17 MiB on paper, a few bytes on disk. */
-async function plant(value: Fixture, ordinal: number, name: string, mode: 0o600 | 0o700 = 0o700): Promise<UninstallPayloadV1> {
-  const source = `${value.home}/bin/${name}`;
+async function plant(
+  value: Fixture,
+  ordinal: number,
+  name: string,
+  mode: 0o600 | 0o700 = 0o700,
+  directory = "bin",
+): Promise<UninstallPayloadV1> {
+  await nodeFs.mkdir(`${value.home}/${directory}`, { recursive: true, mode: 0o700 });
+  const source = `${value.home}/${directory}/${name}`;
   await nodeFs.writeFile(source, `payload ${name}\n`, { mode });
   await nodeFs.truncate(source, LARGE);
   await nodeFs.chmod(source, mode);
@@ -424,6 +431,33 @@ describe("refused and preserved", () => {
     expect((await refusal(stagePayloads(value.fs, UID, value.staging, [payload]))).reason).toBe("uninstall_payload_identity");
     expect(await exists(payload.payloadPath)).toBe(false);
     expect(await identity(`${value.home}/../outside/a`)).toBe(`${payload.dev}:${payload.ino}`);
+  });
+
+  /** A grandparent swapped for a symlink to an outside `0700` tree: only the no-follow walk sees it. */
+  async function swapGrandparent(value: Fixture): Promise<string> {
+    const outside = `${value.home}/../outside`;
+    await nodeFs.rename(`${value.home}/x`, outside);
+    await nodeFs.symlink(outside, `${value.home}/x`);
+    return outside;
+  }
+
+  it("stage through a symlinked grandparent, moving nothing", async () => {
+    const value = await fixture();
+    const payload = await plant(value, 0, "a", 0o700, "x/bin");
+    const outside = await swapGrandparent(value);
+    expect((await refusal(stagePayloads(value.fs, UID, value.staging, [payload]))).reason).toBe("uninstall_payload_identity");
+    expect(await exists(payload.payloadPath)).toBe(false);
+    expect(await identity(`${outside}/bin/a`)).toBe(`${payload.dev}:${payload.ino}`);
+  });
+
+  it("restore through a symlinked grandparent, moving nothing", async () => {
+    const value = await fixture();
+    const payload = await plant(value, 0, "a", 0o700, "x/bin");
+    await stagePayloads(value.fs, UID, value.staging, [payload]);
+    const outside = await swapGrandparent(value);
+    expect((await refusal(restorePayloads(value.fs, UID, [payload]))).reason).toBe("uninstall_payload_identity");
+    expect(await identity(payload.payloadPath)).toBe(`${payload.dev}:${payload.ino}`);
+    expect(await nodeFs.readdir(`${outside}/bin`)).toStrictEqual([]);
   });
 
   it("a payloads directory that is not owner-held 0700", async () => {
