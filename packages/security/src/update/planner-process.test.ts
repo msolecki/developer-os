@@ -83,15 +83,26 @@ function requestWithBlob(blob: Uint8Array, verification: Record<string, unknown>
   });
 }
 
-function draft(outputBytes = nextBytes.byteLength, source = "tools/tool.md"): TargetUpdateDraftV1 {
+/** One Brain note at `path` (its bytes are `note`), with `aliases` as the configured topic aliases. */
+function requestWithBrain(path: string, note: Uint8Array, aliases: Record<string, string> = {}): UpdatePlannerRequestV1 {
   const value = requestValue();
+  const ref = { stream: "input", ordinal: 1, bytes: note.byteLength, sha256: sha(note) };
+  return validateUpdatePlannerRequest({
+    ...value,
+    config: { ...(value.config as object), brain: { schemaVersion: 1, contentRoot: "notes", topicFolders: [], topicAliases: aliases, indexesDir: "indexes", retrieval: { maxCandidates: 20 }, staleness: { reviewAfterDays: 90 } } },
+    brain: { schemaVersion: 1, root: "brain_root", folderPolicyVersion: 1, entries: [{ path, mode: 384, bytes: note.byteLength, sha256: sha(note), blob: ref }], aggregateBytes: note.byteLength },
+  });
+}
+
+function draft(outputBytes = nextBytes.byteLength, source = "tools/tool.md", base: UpdatePlannerRequestV1 = request()): TargetUpdateDraftV1 {
   const blob = { stream: "output", ordinal: 0, bytes: outputBytes };
+  const expectedHash = base.manifest.artifacts[0]?.currentHash;
   return admitTargetUpdateDraft({
-    schemaVersion: 1, protocol: 1, currentRelease: value.currentRelease, targetRelease: value.targetRelease,
-    ownerPlans: [{ owner: "core", currentArtifacts: [token], proposedOperations: [{ operation: "replace", target: { kind: "installed", token }, expectedHash: sha(toolBytes), content: { kind: "output_blob", blob } }], externalEffects: [] }],
+    schemaVersion: 1, protocol: 1, currentRelease: base.currentRelease, targetRelease: base.targetRelease,
+    ownerPlans: [{ owner: "core", currentArtifacts: [token], proposedOperations: [{ operation: "replace", target: { kind: "installed", token }, expectedHash, content: { kind: "output_blob", blob } }], externalEffects: [] }],
     migrations: [],
     expectedManifest: { schemaVersion: 2, productVersion: "2.0.0", artifacts: [{ owner: "core", path: { kind: "installed", token }, productVersion: "2.0.0", source, mergeStrategy: "dedicated", kind: "file", verification: { mode: "content", installed: { kind: "output_blob", blob } } }] },
-  }, request()).draft;
+  }, base).draft;
 }
 
 class Pipe implements AsyncIterable<Uint8Array> {
@@ -221,7 +232,7 @@ const answer = (output: (stdin: Uint8Array) => Uint8Array, exitCode = 0): Behavi
 };
 const validOutput = (stdin: Uint8Array): Uint8Array => {
   const decoded = decodePlannerInput(stdin);
-  return encodePlannerOutput(decoded.request, draft(), [nextBytes]);
+  return encodePlannerOutput(decoded.request, draft(nextBytes.byteLength, "tools/tool.md", decoded.request), [nextBytes]);
 };
 
 function header(kind: number, length: number): Uint8Array {
@@ -312,19 +323,46 @@ describe("target planner supervision", () => {
       const { supervisor } = harness(answer(validOutput), undefined, real());
       await expect(supervisor.run(run())).resolves.toMatchObject({ draft: draft() });
 
-      const record = harness(answer(() => new Uint8Array()), undefined, real());
-      const recordRun = run({ request: requestWithBlob(registration, { mode: "schema", schemaId: "codex-registration-v1", installedHash: sha(registration) }), inputBlobs: [registration] });
-      await expect(record.supervisor.run(recordRun)).rejects.not.toThrow("secret screen");
-      expect(record.spawned).toHaveLength(1);
+      const recordRequest = requestWithBlob(registration, { mode: "schema", schemaId: "codex-registration-v1", installedHash: sha(registration) });
+      const record = harness(answer(validOutput), undefined, real());
+      await expect(record.supervisor.run(run({ request: recordRequest, inputBlobs: [registration] }))).resolves.toMatchObject({ draft: draft(nextBytes.byteLength, "tools/tool.md", recordRequest) });
+    });
+
+    const token40 = (): string => randomBytes(30).toString("base64url").replace(/[-_]/gu, "x");
+    const note = bytes("# Note\n");
+    it.each([
+      { name: "a provider token in a Brain note path", path: `notes/ghp_${"a1B2c3D4e5".repeat(4)}.md`, blob: note, aliases: {} },
+      { name: "a prefix-less high-entropy token in a Brain note path", path: `notes/${token40()}.md`, blob: note, aliases: {} },
+      { name: "a prefix-less high-entropy token in a topic alias", path: "notes/kept.md", blob: note, aliases: { work: token40() } },
+      { name: "a digest-shaped value in a Brain note, which keeps text", path: "notes/kept.md", blob: registration, aliases: {} },
+    ])("refuses $name before spawning", async ({ path, blob, aliases }) => {
+      const { supervisor, spawned } = harness(answer(validOutput), undefined, real());
+      await expect(supervisor.run(run({ request: requestWithBrain(path, blob, aliases), inputBlobs: [toolBytes, blob] }))).rejects.toThrow("secret screen");
+      expect(spawned).toHaveLength(0);
+    });
+
+    it("passes a Brain note and its configuration with nothing secret-shaped", async () => {
+      const { supervisor } = harness(answer(validOutput), undefined, real());
+      await expect(supervisor.run(run({ request: requestWithBrain("notes/kept.md", note, { work: "client-work" }), inputBlobs: [toolBytes, note] }))).resolves.toBeDefined();
+    });
+
+    it("refuses a named pattern in an admitted result source", async () => {
+      const { supervisor, child } = harness(answer((stdin) => {
+        const json = plannerJsonBytes(draft(nextBytes.byteLength, `tools/ghp_${"a1B2c3D4e5".repeat(4)}.md`, decodePlannerInput(stdin).request));
+        return join(MAGIC, header(0x11, json.byteLength), json, header(0x13, 0));
+      }), undefined, real());
+      await expect(supervisor.run(run())).rejects.toThrow("secret screen");
+      expect(child().reaped).toBe(true);
     });
 
     it.each([
       { name: "a digest-shaped value in a content blob", blob: registration, verification: undefined },
       { name: "an AWS key in a product record blob", blob: bytes(`{"codexHome":"/Users/admin/.codex","treeHash":"AKIAABCDEFGHIJKLMNOP"}`), verification: "schema" },
       { name: "a high-entropy token in a user-edited schema blob", blob: bytes(`token = "${randomBytes(30).toString("base64")}"\n`), verification: "config" },
+      { name: "a product record edited since install", blob: registration, verification: "edited" },
     ])("still refuses $name", async ({ blob, verification }) => {
       const mode = verification === undefined ? undefined
-        : { mode: "schema", schemaId: verification === "schema" ? "codex-registration-v1" : "developer-os-config-v1", installedHash: sha(blob) };
+        : { mode: "schema", schemaId: verification === "config" ? "developer-os-config-v1" : "codex-registration-v1", installedHash: verification === "edited" ? sha("as installed") : sha(blob) };
       const { supervisor, spawned } = harness(answer(validOutput), undefined, real());
       await expect(supervisor.run(run({ request: requestWithBlob(blob, mode), inputBlobs: [blob] }))).rejects.toThrow("secret screen");
       expect(spawned).toHaveLength(0);
