@@ -114,6 +114,8 @@ export interface MacOsRetainedRenameDependencies {
 
 export class MacOsRetainedRenameUnavailableError extends Error {
   readonly code = EXIT_CODES.capabilityUnavailable;
+  /** A safe reason code, so a journal that records this failure keeps its cause. */
+  readonly reason = "retained_rename_unavailable";
 
   constructor() {
     super("retained rename capability is unavailable");
@@ -123,6 +125,8 @@ export class MacOsRetainedRenameUnavailableError extends Error {
 
 export class MacOsRetainedRenameRefusalError extends Error {
   readonly code = EXIT_CODES.securityRefusal;
+  /** A safe reason code, so a journal that records this failure keeps its cause. */
+  readonly reason = "retained_rename_refused";
 
   constructor() {
     super("retained rename refused");
@@ -132,6 +136,8 @@ export class MacOsRetainedRenameRefusalError extends Error {
 
 export class MacOsRetainedRenameThirdStateError extends Error {
   readonly code = EXIT_CODES.recoveryRequired;
+  /** A safe reason code, so a journal that records this failure keeps its cause. */
+  readonly reason = "retained_rename_third_state";
 
   constructor() {
     super("retained rename state requires recovery");
@@ -171,13 +177,24 @@ function assertRunnerRequest(request: RenameAtxRunRequestV1): void {
     destinationParentDescriptor < 0 ||
     !isAsciiBasename(request.sourceName) ||
     !isAsciiBasename(destinationName) ||
-    request.sourceName === destinationName
+    // A same-name move is legitimate across directories (staged journal ->
+    // published journal); only the same parent descriptor makes it a no-op.
+    // Same-directory requests are refused upstream by parent path and identity.
+    (sourceParentDescriptor === destinationParentDescriptor && request.sourceName === destinationName)
   ) {
     throw new MacOsRetainedRenameRefusalError();
   }
 }
 
 export class SpawnRenameAtxRunner implements RenameAtxRunner {
+  /**
+   * The runner's own preconditions, synchronous and before any spawn. Exposed so
+   * an in-process test runner refuses exactly what this one refuses.
+   */
+  static assertRequest(request: RenameAtxRunRequestV1): void {
+    assertRunnerRequest(request);
+  }
+
   run(request: RenameAtxRunRequestV1): Promise<RenameAtxRunResultV1> {
     assertRunnerRequest(request);
     const { sourceParentDescriptor, destinationParentDescriptor, destinationName } = request;
@@ -491,7 +508,11 @@ export class MacOsRetainedRename {
       join(request.destinationParent.path, destination) !== request.destinationPath ||
       !isAsciiBasename(source) ||
       !isAsciiBasename(destination) ||
-      (request.sourceParent.path === request.destinationParent.path && source === destination) ||
+      (source === destination && (
+        request.sourceParent.path === request.destinationParent.path ||
+        (toUInt64(request.sourceParent.dev) === toUInt64(request.destinationParent.dev) &&
+          toUInt64(request.sourceParent.ino) === toUInt64(request.destinationParent.ino))
+      )) ||
       !hasExactParentMode(request.sourceParent) ||
       !hasExactParentMode(request.destinationParent) ||
       !Number.isSafeInteger(request.sourceParent.ownerUid) ||
