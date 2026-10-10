@@ -6,6 +6,7 @@ import { CAPTURE_STATUSES } from "../schema/capture.js";
 import type {
   CaptureEnvelopeV1,
   CaptureNoteTargetV1,
+  CaptureRedactionFinding,
   CaptureStatus,
 } from "../schema/capture.js";
 import { isUnsafeProposedNotePath } from "../ingest/proposal.js";
@@ -118,6 +119,42 @@ function readSessionId(
 }
 
 const SHA256_HEX = /^[0-9a-f]{64}$/u;
+const FINDING_CLASS = /^[a-z0-9-]{1,64}$/u;
+const FINDING_FINGERPRINT = /^[0-9a-f]{16}$/u;
+
+/**
+ * The findings recorded at capture time (AUD-013): the body holds only markers by now, so a
+ * fresh pass cannot find them again. An entry that is not a class and a fingerprint is dropped,
+ * never echoed; a hand edit of this list is not a reason to refuse the file.
+ */
+function readStoredRedaction(fields: Record<string, unknown>): CaptureRedactionFinding[] {
+  const value = fields.redaction;
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry: unknown): CaptureRedactionFinding[] => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return [];
+    const { class: findingClass, fingerprint, patternIndex } = entry as Record<string, unknown>;
+    if (typeof findingClass !== "string" || !FINDING_CLASS.test(findingClass)) return [];
+    if (typeof fingerprint !== "string" || !FINDING_FINGERPRINT.test(fingerprint)) return [];
+    if (patternIndex === undefined) return [{ class: findingClass, fingerprint }];
+    return Number.isSafeInteger(patternIndex) && (patternIndex as number) >= 0
+      ? [{ class: findingClass, fingerprint, patternIndex: patternIndex as number }]
+      : [];
+  });
+}
+
+function mergeFindings(
+  stored: readonly CaptureRedactionFinding[],
+  fresh: readonly CaptureRedactionFinding[],
+): CaptureRedactionFinding[] {
+  const merged = [...stored];
+  const seen = new Set(stored.map((finding) => finding.fingerprint));
+  for (const finding of fresh) {
+    if (seen.has(finding.fingerprint)) continue;
+    seen.add(finding.fingerprint);
+    merged.push(finding);
+  }
+  return merged;
+}
 
 /**
  * An absent key is a plain capture. Present, it is exactly `path` and
@@ -160,11 +197,12 @@ function readNote(
  * file could carry twice. A path is not a name and refuses — the caller
  * enumerating a directory knows which of the two it holds.
  *
- * **Three fields are recomputed rather than read**: `content`,
- * `deduplicationHash` and `redaction`. A hand edit is legitimate, and it is how
- * a secret gets pasted into a vault file, so the body is re-redacted here — on
- * the review path — rather than being trusted until ingest. Everything else in
- * the envelope is preserved.
+ * **Two fields are recomputed rather than read**: `content` and
+ * `deduplicationHash`. A hand edit is legitimate, and it is how a secret gets
+ * pasted into a vault file, so the body is re-redacted here — on the review
+ * path — rather than being trusted until ingest. `redaction` is the stored
+ * findings plus any the re-redaction adds. Everything else in the envelope is
+ * preserved.
  *
  * **Refusal precedence is part of the contract.** Structural refusals are
  * decided before the id comparison, because a file whose frontmatter cannot be
@@ -242,7 +280,8 @@ export function parseCaptureFile(
     return refuse("id-mismatch");
   }
 
-  const { content, deduplicationHash, redaction } = redactAndNormalize(body, redact);
+  const { content, deduplicationHash, redaction: fresh } = redactAndNormalize(body, redact);
+  const redaction = mergeFindings(readStoredRedaction(fields), fresh);
 
   return {
     ok: true,

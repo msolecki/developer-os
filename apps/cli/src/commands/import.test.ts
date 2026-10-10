@@ -474,7 +474,7 @@ describe("redaction precedes everything", () => {
       "utf8",
     );
     expect(written).not.toContain(SENTINEL);
-    /** `parseCaptureFile` re-derives `redaction` from the already-redacted body, so read the stored findings. */
+    /** The persisted findings, read from the raw file: each carries a class and a fingerprint, never the value. */
     const stored = /^redaction:\n((?: {2}.*\n)+)/mu.exec(written)?.[1] ?? "";
     const findings = stored.split(/^ {2}- /mu).filter((chunk) => chunk !== "");
     expect(findings.length).toBe(file?.redactionCount);
