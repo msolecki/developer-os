@@ -489,7 +489,7 @@ product.
 (`packages/core/src/config/loader.ts:442`, whose `redactionSchema` is at `:181`), and the three
 commands that redact bind the user's patterns into a closure at their composition root —
 `apps/cli/src/commands/capture.ts:627`, `apps/cli/src/commands/review.ts:712`,
-`apps/cli/src/commands/ingest.ts:2680`. `createRedactor` is the only production entry to
+`apps/cli/src/commands/ingest.ts` — `createRedactor`. `createRedactor` is the only production entry to
 `redactText`, enforced by `tests/repository/redactor-entry.test.ts`, which is what keeps a new call
 site from silently opting out of the user's own patterns. **The composition-root runner follows the
 same patterns once configuration is read (NEW-26):** `readConfigFile` calls the context's optional
