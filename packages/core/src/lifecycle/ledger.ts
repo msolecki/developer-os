@@ -15,6 +15,7 @@ import type { LifecycleInstallNonceV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { TransactionPhase } from "../transactions/types.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
+import { MAXIMUM_BUNDLE_FILE_BYTES } from "../update/release.js";
 import {
   parseSafeReasonCode,
   type LowerHexSha256,
@@ -876,7 +877,7 @@ async function validateEffectJournals<TPlan extends CoordinatorPlan>(
   }
 }
 
-const STAGING_CHILDREN = ["foundation", "git", "launchd-process", "participants"] as const;
+const STAGING_CHILDREN = ["foundation", "git", "launchd-process", "participants", "payloads"] as const;
 
 async function scanLifecycleStaging<TPlan extends CoordinatorPlan>(
   scan: LedgerScanV1<TPlan>,
@@ -958,6 +959,16 @@ async function scanCoordinatorStaging<TPlan extends CoordinatorPlan>(
       if (scan.stopped) return;
       continue;
     }
+    if (name === "payloads") {
+      const plan = scan.coordinators.get(coordinatorId)?.plan ?? null;
+      if (plan === null) {
+        refuse(scan, "lifecycle_staging_name", path);
+        continue;
+      }
+      await countStagingSubtree(scan, facts, entry, payloadStagingAdmission(plan), "");
+      if (scan.stopped) return;
+      continue;
+    }
     const codec = name === "git" ? scan.dependencies.gitEffectPlanCodec : scan.dependencies.launchdEffectPlanCodec;
     if (codec === null) {
       refuse(scan, "lifecycle_staging_effect_unsupported", path);
@@ -977,7 +988,7 @@ async function scanCoordinatorStaging<TPlan extends CoordinatorPlan>(
  * 0700 directory, any owner-held directory or regular file a validated effect
  * plan lists, or the one bounded 0600 bootstrap snapshot.
  */
-type StagingShapeV1 = "directory" | "entry" | "snapshot";
+type StagingShapeV1 = "directory" | "entry" | "payload" | "snapshot";
 type StagingAdmissionV1 = (relative: string) => StagingShapeV1 | null;
 
 function effectStagingChildren<TPlan extends CoordinatorPlan>(
@@ -1090,6 +1101,17 @@ function manifestStagingAdmission<TPlan extends CoordinatorPlan>(
   return (relative) => admitted.get(relative) ?? null;
 }
 
+/**
+ * NEW-210: `K` moves each large uninstall file to `payloads/<ordinal>`. Only a published plan
+ * says how many there are, so a planless tree admits no `payloads` at all (and planless recovery
+ * never deletes one). Core reads the opaque `K` leaf only for its `payloads` count.
+ */
+function payloadStagingAdmission(plan: CoordinatorPlan): StagingAdmissionV1 {
+  const payloads = (plan.participants.redactionKey as { readonly payloads?: unknown } | null)?.payloads;
+  const count = Array.isArray(payloads) ? payloads.length : 0;
+  return (relative) => (/^(?:0|[1-9][0-9]*)$/.test(relative) && Number(relative) < count ? "payload" : null);
+}
+
 /** §2.4: the manifest payload is staged before the coordinator plan that will name its `mf` ID. */
 function planlessManifestAdmission(nonce: LifecycleInstallNonceV1 | null): StagingAdmissionV1 {
   return (relative) => {
@@ -1146,6 +1168,21 @@ async function admitStagingShape<TPlan extends CoordinatorPlan>(
   shape: StagingShapeV1,
 ): Promise<LifecycleGuardedEntryV1 | null> {
   if (shape === "directory") return guardedDirectory(scan, path, "lifecycle_staging_shape");
+  if (shape === "payload") {
+    const entry = await scan.dependencies.fs.lstat(path);
+    if (
+      entry === null ||
+      entry.kind !== "regular_file" ||
+      entry.ownerUid !== scan.dependencies.effectiveUid ||
+      (entry.mode !== 0o600 && entry.mode !== 0o700) ||
+      entry.nlink !== 1 ||
+      BigInt(entry.size) > BigInt(MAXIMUM_BUNDLE_FILE_BYTES)
+    ) {
+      refuse(scan, "lifecycle_staging_shape", path);
+      return null;
+    }
+    return entry;
+  }
   if (shape === "snapshot") {
     return guardedRegularFile(scan, path, MAX_LAUNCHD_BOOTSTRAP_SNAPSHOT_BYTES, "lifecycle_staging_shape");
   }

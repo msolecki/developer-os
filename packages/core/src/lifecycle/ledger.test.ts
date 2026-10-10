@@ -634,13 +634,15 @@ async function uninstallAtArtifacts(options: {
   readonly manifest?: boolean;
   readonly manifestBytes?: string;
   readonly nextStep?: number;
+  readonly coordinator?: SyntheticCoordinatorV1;
 }): Promise<HomeV1> {
   const home = await newHome();
-  const cursor = options.nextStep ?? artifactsStepIndex(UNINSTALL) + 1;
+  const coordinator = options.coordinator ?? UNINSTALL;
+  const cursor = options.nextStep ?? artifactsStepIndex(coordinator) + 1;
   await plantCoordinator(
     home,
-    UNINSTALL,
-    journalFor(UNINSTALL, { phase: "participants_applying", nextStep: cursor }),
+    coordinator,
+    journalFor(coordinator, { phase: "participants_applying", nextStep: cursor }),
   );
   if (options.artifactsJournal !== false) {
     await plantFoundationJournal(home, artifactsParticipantId(UNINSTALL));
@@ -2298,6 +2300,107 @@ describe("the effect journal hookup", () => {
 
       expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_shape", path: path(target) }]);
     });
+  });
+});
+
+describe("the uninstall payload staging (NEW-210)", () => {
+  const plan = {
+    ...UNINSTALL.plan,
+    participants: {
+      ...UNINSTALL.plan.participants,
+      redactionKey: { marker: "redaction-key", payloads: [{ marker: "p0" }, { marker: "p1" }] },
+    },
+  };
+  const WITH_PAYLOADS: SyntheticCoordinatorV1 = { ...UNINSTALL, plan, planHash: CODECS.executionPlan.hash(plan) };
+  const PAYLOADS = `staging/lifecycle/${UNINSTALL.id}/payloads`;
+
+  async function stagedHome(leaves: readonly string[], coordinator: SyntheticCoordinatorV1 | null = WITH_PAYLOADS): Promise<HomeV1> {
+    const home =
+      coordinator === null
+        ? await newHome()
+        : await uninstallAtArtifacts({ leasePathsRemoved: 0, coordinator });
+    await mkdir(home, `staging/lifecycle/${UNINSTALL.id}`);
+    await mkdir(home, PAYLOADS);
+    for (const leaf of leaves) await write(home, `${PAYLOADS}/${leaf}`, "payload\n");
+    return home;
+  }
+
+  function patched(
+    fs: LifecycleGuardedFileSystemV1,
+    target: string,
+    patch: Partial<LifecycleGuardedEntryV1>,
+  ): LifecycleGuardedFileSystemV1 {
+    return {
+      ...fs,
+      lstat: async (candidate) => {
+        const entry = await fs.lstat(candidate);
+        return entry !== null && candidate === target ? { ...entry, ...patch } : entry;
+      },
+    };
+  }
+
+  it("admits payloads/0..N-1 under the published plan", async () => {
+    const home = await stagedHome(["0", "1"]);
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([]);
+  });
+
+  it.each(["2", "00", "01", "-1", "x"])("refuses payloads/%s", async (leaf) => {
+    const home = await stagedHome(["0", leaf]);
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([
+      { reason: "lifecycle_staging_name", path: path(`${HOME}/${PAYLOADS}/${leaf}`) },
+    ]);
+  });
+
+  it("admits no payload under a plan whose `K` carries none (v1)", async () => {
+    const home = await stagedHome(["0"], UNINSTALL);
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([
+      { reason: "lifecycle_staging_name", path: path(`${HOME}/${PAYLOADS}/0`) },
+    ]);
+  });
+
+  it.each([
+    ["a symlink", { kind: "symlink" }],
+    ["a directory", { kind: "directory" }],
+    ["hard-linked", { nlink: 2 }],
+    ["foreign-owned", { ownerUid: UID + 1 }],
+    ["mode 0644", { mode: 0o644 }],
+    ["above the bundle bound", { size: parseUInt64Decimal("536870913") }],
+  ] as const)("refuses a payload that is %s", async (_label, patch) => {
+    const home = await stagedHome(["0"]);
+    const target = `${HOME}/${PAYLOADS}/0`;
+
+    const snapshot = await inspect(home, { fs: patched(home.fs, target, patch) });
+
+    expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_shape", path: path(target) }]);
+  });
+
+  it("admits a 0700 payload", async () => {
+    const home = await stagedHome(["0"]);
+    const target = `${HOME}/${PAYLOADS}/0`;
+
+    const snapshot = await inspect(home, { fs: patched(home.fs, target, { mode: 0o700 }) });
+
+    expect(snapshot.findings).toStrictEqual([]);
+  });
+
+  it("refuses `payloads` without a plan", async () => {
+    const home = await stagedHome([], null);
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([
+      { reason: "lifecycle_staging_name", path: path(`${HOME}/${PAYLOADS}`) },
+    ]);
+    expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
   });
 });
 
