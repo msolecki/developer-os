@@ -16,7 +16,7 @@ import type {
   MergeStrategy,
 } from "./types.js";
 
-const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
+export const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 
 const MANIFEST_KEYS = [
   "artifacts",
