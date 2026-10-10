@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 
-import { codexRegistrationProjectionHash, decodeCanonicalJson, decodeRetainedInverseLeaf, EXIT_CODES, validateRetainedOwnerInverseProjection, validateRetainedSchemaMigrationInverseProjection } from "@developer-os/core";
+import { codexRegistrationProjectionHash, decodeCanonicalJson, decodeRetainedInverseLeaf, EXIT_CODES, ownerExternalEffectProcessPolicyHash, parseLowerHexSha256, validateRetainedOwnerInverseProjection, validateRetainedSchemaMigrationInverseProjection } from "@developer-os/core";
 import { SecurityRefusalError } from "@developer-os/security";
 import { describe, expect, it } from "vitest";
 
 import { codexVersionToken } from "./codex-effect-ports.js";
+import { codexRefreshPolicy } from "./codex-refresh.js";
 import {
   planRollback,
   planUpdate,
@@ -18,6 +19,7 @@ import {
   DIRECTORY_PATH,
   FILE_A_PATH,
   FILE_B_PATH,
+  SYNTHETIC_CODEX_EXECUTABLE,
   SYNTHETIC_EVIDENCE,
   syntheticInstructionRow,
 } from "./testing.js";
@@ -339,6 +341,39 @@ describe("planRollback", () => {
     if (record === null) throw new Error("expected a record");
     const mismatched = { ...fixture.update, readHome: () => Promise.resolve({ ...fixture.home, rollback: { ...record, installed: record.previous } }) };
     expect(await refusal(planRollback(mismatched))).toStrictEqual({ reason: "update_rollback_record_mismatch", code: EXIT_CODES.recoveryRequired });
+  });
+
+  /** The fixture's evidence plus a Codex leaf whose retained refresh pinned `executableSha256`. */
+  function withRetainedCodexEffect(fixture: ReturnType<typeof createUpdateFixture>, executableSha256: string): typeof fixture.update {
+    const policy = codexRefreshPolicy({ ...SYNTHETIC_CODEX_EXECUTABLE, identity: { ...SYNTHETIC_CODEX_EXECUTABLE.identity, sha256: parseLowerHexSha256(executableSha256) } });
+    const hash = codexRegistrationProjectionHash(fixture.codexProjection);
+    const effect = { kind: "codex_registration_refresh", providerProtocol: policy.providerProtocol, expectedCurrentStateHash: hash, restoreStateHash: hash, restorePayloads: [], processPolicy: policy, processPolicyHash: ownerExternalEffectProcessPolicyHash(policy) } as const;
+    return {
+      ...fixture.update,
+      readRollbackEvidence: async (home, record) => {
+        const evidence = await fixture.update.readRollbackEvidence(home, record);
+        const [core] = evidence.owners;
+        if (core === undefined) throw new Error("expected the core leaf");
+        return { ...evidence, owners: [...evidence.owners, { ...core, id: "owner_codex" as typeof core.id, owner: "codex", operations: [], externalEffects: [effect] }] };
+      },
+    };
+  }
+
+  it("previews a retained Codex refresh while the pinned codex is unchanged (AUD-014)", async () => {
+    const fixture = createUpdateFixture({ ...rollbackOptions, codex: { registration: "registered" } });
+    const plan = await planRollback(withRetainedCodexEffect(fixture, SYNTHETIC_CODEX_EXECUTABLE.identity.sha256));
+    expect(plan.owners.map((owner) => [owner.owner, owner.counts.externalEffects])).toStrictEqual([["core", 0], ["codex", 1]]);
+  });
+
+  it("refuses before allocation when the codex the update pinned has changed (AUD-014)", async () => {
+    const fixture = createUpdateFixture({ ...rollbackOptions, codex: { registration: "registered" } });
+    const upgraded = createHash("sha256").update("codex before the upgrade").digest("hex");
+    expect(await refusal(planRollback(withRetainedCodexEffect(fixture, upgraded)))).toStrictEqual({ reason: "update_rollback_codex_changed", code: EXIT_CODES.capabilityUnavailable });
+  });
+
+  it("refuses before allocation when codex is no longer installed (AUD-014)", async () => {
+    const fixture = createUpdateFixture(rollbackOptions);
+    expect(await refusal(planRollback(withRetainedCodexEffect(fixture, SYNTHETIC_CODEX_EXECUTABLE.identity.sha256)))).toStrictEqual({ reason: "update_codex_unavailable", code: EXIT_CODES.capabilityUnavailable });
   });
 
   it("surfaces a post-update edit as a decision", async () => {

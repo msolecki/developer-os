@@ -765,6 +765,18 @@ function ownerRollbackPreview(leaf: RetainedOwnerInverseProjectionV1, manifest: 
 }
 
 /**
+ * Rollback replays the retained refresh's process policy byte-equal, so a codex upgraded or removed
+ * since the update would fail mid-transaction; `revalidate` reruns this before allocation (AUD-014).
+ */
+async function requireRetainedCodexPolicy(update: CliUpdateContext, owners: readonly RetainedOwnerInverseProjectionV1[]): Promise<void> {
+  const retained = owners.flatMap((leaf) => leaf.externalEffects);
+  if (retained.length === 0) return;
+  const codex = (await update.codex?.()) ?? refuse("update_codex_unavailable", EXIT_CODES.capabilityUnavailable, [], "install the codex CLI, then run developer-os update rollback again");
+  const current = ownerExternalEffectProcessPolicyHash(codex.policy);
+  if (retained.some((effect) => effect.processPolicyHash !== current)) refuse("update_rollback_codex_changed", EXIT_CODES.capabilityUnavailable);
+}
+
+/**
  * Plan-only `update rollback` (Spec 2 §10.2): retained local evidence only, so the keg is never
  * read. A post-update edit is refused inside `readRollbackEvidence`.
  */
@@ -777,6 +789,7 @@ export async function planRollback(update: CliUpdateContext): Promise<UpdateRoll
     admitReleaseAgainstTrust(home.trust, record.previous, "guarded_retained_rollback");
   });
   const evidence = await update.readRollbackEvidence(home, record);
+  await requireRetainedCodexPolicy(update, evidence.owners);
   const observation = await update.capacity();
   try {
     return buildRollbackPreview({
