@@ -72,7 +72,7 @@ content to capture.
 **The capability vocabulary changed with the decision.** `wrapper-required` was removed rather than
 kept beside a new value: it meant "we are not certain, and the wrapper produces the same capture
 anyway", and the decision deletes the second half, leaving advice to run a command that will not
-exist. `CAPABILITY_STATES` is `yes | unknown | not-used`
+exist. `CAPABILITY_STATES` is `yes | no | unknown | not-used` (`no` added by NEW-62)
 (`packages/core/src/capabilities/index.ts`), and, since A13, `session_end_capture`, `pre_compact_backup` and
 `durable_project_guidance` resolve to **`not-used` before the version table or any observation is
 consulted**, in both adapters (`CLAUDE_NOT_USED_KEYS`, `CODEX_NOT_USED_KEYS`). `plugin_hooks` and
@@ -722,7 +722,7 @@ suite that was opened. One is weaker than its claim and says so there.
 | the vault, its two invariants, and the discovery rules a proposal is judged against | `docs/architecture/brain.md` |
 | note captures (`capture --note`), verbatim ingest, `brain retire`/`brain refactor`: A12b's decisions and residuals | `brain.md` §6.13 |
 | the workflow contract, `extends`, and the declared-versus-derived scope arithmetic | `docs/architecture/workflow-schema.md` |
-| the capability model — two gates, three values, recorded twice on purpose | `claude-adapter.md` §3, `codex-adapter.md` §3 |
+| the capability model — two gates, four values, recorded twice on purpose | `claude-adapter.md` §3, `codex-adapter.md` §3 |
 | per-vendor residuals with owners | `codex-adapter.md` §11, `claude-adapter.md` §9 |
 | transactions, ownership, exit codes, and what Foundation deliberately cannot do | `docs/architecture/foundation.md`, `foundation-constraints.md` |
 

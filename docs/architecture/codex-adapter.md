@@ -25,7 +25,7 @@ one capability vocabulary — this note says so rather than restating it as a co
 | `src/discover.ts` | `discoverCodex`, bound to `@developer-os/security`'s `discoverCli`; `CodexInstallation` as an alias of `CliInstallation` |
 | `src/versions.ts` | the capability keys and the supported floor; `tablePermits(key, version)` closes over that table and calls `@developer-os/core`'s generic `tablePermits` |
 | `src/probe.ts` | run `codex plugin list --json` behind an injected runner and report what it observed |
-| `src/capabilities.ts` | table plus observation into the three-value model |
+| `src/capabilities.ts` | table plus observation into the four-value model |
 | `src/render.ts` | `CodexRenderer`: contract → `SKILL.md` frontmatter (`name`, `description`) and artifact path. The body comes from `packages/workflow-schema/src/skill.ts` — see §6 |
 | `src/plugin.ts` | the plugin tree, its manifest, and `PLUGIN_TREE_PREFIX` — the single re-root (§4) |
 | `src/marketplace.ts` | `.agents/plugins/marketplace.json`; `source.path` is a fixed marketplace-root-relative constant (§4), no longer built against `context.home`; never checked in because it lives at the marketplace root, outside the plugin root the checked-in `plugins/codex/` tree mirrors |
@@ -432,7 +432,7 @@ The completed design's table, updated with the implemented DOS-P6 outcome.
 | direct invocation `maxTurns` | bounded and enforced | no field; the shared `agent.prompt` parser refuses the key (§7) |
 | supported floor | `2.1.142`, kept low by design | `0.147.0`, one observed version |
 
-The capability vocabulary, the three-value model, the exit codes, the skill body and the
+The capability vocabulary, the four-value model, the exit codes, the skill body and the
 `agent.prompt` argument schema are **identical by construction**, and three of those five became so
 during DOS-P5 rather than before it. Everything that differs is a vendor mechanism; nothing that
 differs is a contract.
