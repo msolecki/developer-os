@@ -1193,10 +1193,10 @@ record.
   validate (the drained preview then reports an invalid one as drift, exit 3); any other read
   refusal still refuses. The result's `removed` lists only what the run removed: the artifact-step
   targets, the leaves compaction collects and the directories `finalize_tombstones` removed. A
-  resumed uninstall (`resumeUninstall` in `apps/cli/src/lifecycle/uninstall-recovery.ts`) reports
+  resumed uninstall (`apps/cli/src/lifecycle/uninstall-recovery.ts` — `resumeUninstall`) reports
   the same way: its artifact steps ran before the kill, so it lists the leaves of
-  `uninstallCollectedLeaves` present when it started and absent when it finished, and the
-  directories it removed.
+  `apps/cli/src/lifecycle/uninstall.ts` — `uninstallCollectedLeaves` present when it started and
+  absent when it finished, and the directories it removed.
 - **The non-creating global lock and lock order.** `packages/core/src/lifecycle/locks.ts` states the
   rule its types enforce: the global lock at `state/.lifecycle.lock` is created only by Spec 2's
   fresh `init`, so every other acquirer opens an existing path without `O_CREAT` and refuses
