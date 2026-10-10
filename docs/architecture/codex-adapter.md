@@ -236,7 +236,7 @@ and DOS-P6 declined hooks on 2026-08-13. That reason still holds for the capture
 capture workflow requires agent-authored observation text, and a session-end hook can supply no such
 text without opening `transcript_path`, which this product refuses on every code path. A capture
 hook would therefore have nothing faithful to capture. `session_end_capture` and
-`pre_compact_backup` stay `not-used`, Codex `pre_compact` stays unused, and `developer-os run codex`
+`pre_compact_backup` stay `not-used`, the Codex `preCompact` event stays unused, and `developer-os run codex`
 stays declined.
 
 ## 6. Rendering — the skill body is shared
@@ -591,9 +591,15 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
     `tests/integration/update/archive-planner.test.ts` (one refresh leaf, the rewritten record).
     The refresh has run only against scripted Codex output; the synthetic on-disk lifecycle
     installs no Codex owner.
-- **Hook events available:** `pre_tool_use`, `post_tool_use`, `pre_compact`, `session_start`,
-  `user_prompt_submit`, `stop`, `subagent_start`. There is no session-end event, so
-  `sessionEndCapture` parity is impossible on this vendor. A plugin manifest may carry `"hooks"`.
+- **Hook events available:** the plugin `hooks.json` takes **PascalCase** event keys (`PreToolUse`,
+  `PostToolUse`, `SessionStart`, `UserPromptSubmit`, `Stop` observed); a snake_case key is silently
+  ignored (`hooks.md` §1 item 4). The schema's full event set, as `hooks/list` reports it in
+  camelCase, also has `permissionRequest`, `preCompact`, `postCompact`, `sessionEnd`,
+  `subagentStart`, `subagentStop` and `interrupt`; their `hooks.json` keys are unobserved.
+  A session-end event exists, but `sessionEndCapture` stays declined: a session-end hook cannot
+  supply the agent-authored observation text without reading `transcript_path`, which this product
+  refuses on every code path (§5, "What stays declined in both adapters"). A plugin manifest may
+  carry `"hooks"`.
 - **Hooks require per-hook trust** recorded in the user's config file, which this adapter never
   writes (§2). A product-installed hook runs only after interactive approval; the founder accepted
   manual trust on 2026-09-04 (A13). The executable-bit blocker described beside `PLUGIN_TREE_PREFIX`
