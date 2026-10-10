@@ -178,6 +178,8 @@ describe("the K plan codec v2", () => {
     ["a source outside the home", { sourcePath: "/elsewhere/node" }, /sourcePath/u],
     ["a source under staging/", { sourcePath: "/product/staging/node" }, /sourcePath/u],
     ["a source under state/", { sourcePath: "/product/state/node" }, /sourcePath/u],
+    ["a source under Staging/ (case-folded)", { sourcePath: "/product/Staging/node" }, /sourcePath/u],
+    ["a source under STATE/ (case-folded)", { sourcePath: "/product/STATE/node" }, /sourcePath/u],
     ["a size of exactly 16 MiB", { size: MAX_MUTATION_BYTES }, /size/u],
     ["a size above the bundle bound", { size: MAXIMUM_BUNDLE_FILE_BYTES + 1 }, /size/u],
     ["a mode other than 0600/0700", { mode: 420 }, /mode/u],
@@ -195,12 +197,25 @@ describe("the K plan codec v2", () => {
         payloads: [payload, { ...payload, payloadPath: `/product/staging/lifecycle/${COORDINATOR}/payloads/1` }],
       }),
     ).toThrow(/duplicate/u);
+    expect(() =>
+      codec.validate({
+        ...v2,
+        payloads: [
+          payload,
+          {
+            ...payload,
+            sourcePath: payload.sourcePath.toUpperCase().replace("/PRODUCT/", "/product/"),
+            payloadPath: `/product/staging/lifecycle/${COORDINATOR}/payloads/1`,
+          },
+        ],
+      }),
+    ).toThrow(/duplicate/u);
     const many = Array.from({ length: MAX_UNINSTALL_ARTIFACTS + 1 }, (_, ordinal) => ({
       ...payload,
       sourcePath: `/product/bin/${String(ordinal)}`,
       payloadPath: `/product/staging/lifecycle/${COORDINATOR}/payloads/${String(ordinal)}`,
     }));
-    expect(() => codec.validate({ ...v2, payloads: many })).toThrow(/UninstallPayloadV1/u);
+    expect(() => codec.validate({ ...v2, payloads: many })).toThrow(/UninstallPayloadV1\[\]$/u);
   });
 });
 
@@ -347,6 +362,45 @@ describe("refused and preserved", () => {
     expect((await refusal(run)).reason).toBe("uninstall_payload_identity");
     expect(await exists(payload.payloadPath)).toBe(true);
     expect(await exists(payload.sourcePath)).toBe(false);
+  });
+
+  it("a source whose parent is not 0700", async () => {
+    const value = await fixture();
+    const payload = await plant(value, 0, "a");
+    await nodeFs.chmod(`${value.home}/bin`, 0o755);
+    await refusedStage(value, payload);
+    expect(await identity(payload.sourcePath)).toBe(`${payload.dev}:${payload.ino}`);
+  });
+
+  it("delete of an entry still at before", async () => {
+    const value = await fixture();
+    const payload = await plant(value, 0, "a");
+    expect((await refusal(deletePayloads(value.fs, UID, [payload]))).reason).toBe("uninstall_payload_identity");
+    expect(await identity(payload.sourcePath)).toBe(`${payload.dev}:${payload.ino}`);
+  });
+
+  it("restore over a source that came back with a new inode while staged", async () => {
+    const value = await fixture();
+    const payload = await plant(value, 0, "a");
+    await stagePayloads(value.fs, UID, value.staging, [payload]);
+    await nodeFs.copyFile(payload.payloadPath, payload.sourcePath);
+    await nodeFs.chmod(payload.sourcePath, 0o700);
+    const intruder = await identity(payload.sourcePath);
+    expect((await refusal(restorePayloads(value.fs, UID, [payload]))).reason).toBe("uninstall_payload_identity");
+    expect(await identity(payload.sourcePath)).toBe(intruder);
+    expect(await identity(payload.payloadPath)).toBe(`${payload.dev}:${payload.ino}`);
+  });
+
+  it("restore of a staged payload that vanished, leaving the other entries in place", async () => {
+    const value = await fixture();
+    const first = await plant(value, 0, "a");
+    const second = await plant(value, 1, "b");
+    const payloads = [first, second];
+    await stagePayloads(value.fs, UID, value.staging, payloads);
+    await nodeFs.unlink(second.payloadPath);
+    expect((await refusal(restorePayloads(value.fs, UID, payloads))).reason).toBe("uninstall_payload_identity");
+    expect(await identity(first.payloadPath)).toBe(`${first.dev}:${first.ino}`);
+    expect(await exists(first.sourcePath)).toBe(false);
   });
 
   it("a payloads directory that is not owner-held 0700", async () => {
