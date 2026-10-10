@@ -428,6 +428,16 @@ synthetic non-zero-exit case in `invoke.test.ts` goes red without it — so what
 adds is not the guard but the demonstration, against bytes a vendor actually emitted, of the payload
 the guard keeps out.
 
+**Accepted residual, recorded 2026-10-10 (AUD-027): the prompt travels in argv.** `invokeClaude`
+passes it as the `-p` value (`packages/adapter-claude/src/invoke.ts` — `invokeClaude`) and
+`invokeCodex` as the positional instruction with an empty stdin (`packages/adapter-codex/src/invoke.ts`
+— `invokeCodex`). For the life of each call, up to its timeout, any local account can read it with
+`ps`: during ingest a redacted capture body plus the index excerpt, and the unattended gardener's note
+bundle (§5.17), which is vault text. On a single-user Mac nothing widens; on a Mac shared with other
+accounts this discloses that text to them. Moving the prompt to stdin is owed, not done: both CLIs
+are believed to read the prompt from a non-TTY stdin, but the shipped argv is pinned to observed
+vendor behaviour, so the change waits on one recorded real run per vendor.
+
 ### 5.6 The vault the model reads, and the vault the product reads
 
 The agent is given read-only access to a vault that may contain secrets the **user** wrote into their
