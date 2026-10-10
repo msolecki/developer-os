@@ -24,7 +24,7 @@ async function execute(context: CliContext, lifecycle: CliLifecycleContext, requ
     case "status":
       return service.status();
     case "sync":
-      return withGlobalLock(context, lifecycle, (global) => service.sync("interactive", global));
+      return withGlobalLock(context, lifecycle, (global) => service.sync(global));
     case "enable": {
       const preview = await service.previewEnable({ remote: request.remote, branch: request.branch });
       if (!request.apply) {

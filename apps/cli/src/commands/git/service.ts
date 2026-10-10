@@ -179,7 +179,7 @@ export interface GitService {
   previewDisable(): Promise<LifecyclePlanPreviewV1>;
   applyDisable(preview: LifecyclePlanPreviewV1, global: HeldLifecycleStableLockV1): Promise<GitCommandResultV1>;
   status(): Promise<GitCommandResultV1>;
-  sync(mode: "interactive" | "scheduled", global: HeldLifecycleStableLockV1): Promise<GitCommandResultV1>;
+  sync(global: HeldLifecycleStableLockV1): Promise<GitCommandResultV1>;
 }
 
 /**
@@ -1904,7 +1904,7 @@ export function createGitService(context: CliContext, lifecycle: CliLifecycleCon
     };
   };
 
-  const sync = async (_mode: "interactive" | "scheduled", global: HeldLifecycleStableLockV1): Promise<GitCommandResultV1> => {
+  const sync = async (global: HeldLifecycleStableLockV1): Promise<GitCommandResultV1> => {
     const prepared = await prepareUnderLock(context, lifecycle, global);
     if (prepared.snapshot.closure.kind === "retry_only") return retry(prepared, global);
     requireClear(prepared, context.paths);
