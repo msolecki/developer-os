@@ -26,7 +26,7 @@ import type {
 
 import { failureFrom, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
-import { readConfig } from "./brain.js";
+import { BrainRefusal, indexEscapeRefusal, readConfig } from "./brain.js";
 import { isTopicNotePath } from "./capture.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
 import { isMissingEntry } from "../config-file.js";
@@ -166,6 +166,29 @@ async function containedTarget(
   return canonical;
 }
 
+/**
+ * The executor raises `TransactionPlanError` both for a malformed plan and for a `create` target
+ * that now exists or a `replace`/`remove` target that is gone. Only the second is a note that
+ * changed after it was read; the first is an internal fault and must not loop the user through
+ * "run again" (AUD-054).
+ */
+async function targetPresenceDrifted(
+  context: CliContext,
+  mutations: readonly PlannedFileMutation[],
+): Promise<boolean> {
+  for (const { targetPath, operation } of mutations) {
+    const present = await context.fs.lstat(targetPath).then(
+      () => true,
+      (error: unknown) => {
+        if (isMissingEntry(error)) return false;
+        throw error;
+      },
+    );
+    if (present !== (operation !== "create")) return true;
+  }
+  return false;
+}
+
 function sha256(text: string): string {
   return createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
 }
@@ -301,6 +324,9 @@ export async function runRefactor(
           if (directory === first || directory === dirname(directory)) break;
         }
       }
+      if (error instanceof TransactionPlanError && !(await targetPresenceDrifted(context, mutations))) {
+        throw error;
+      }
       throw new BrainRefactorRefusal(
         "note_changed_since_read",
         EXIT_CODES.decisionRequired,
@@ -319,15 +345,16 @@ export async function runRefactor(
         files: (await new BrainService(deps).reindex()).files,
         kind: KINDS.reindex,
         refuse: (message) => new Error(message),
-        refuseIndexEscape: (message) => new Error(message),
+        refuseIndexEscape: indexEscapeRefusal,
       });
     } catch (error) {
+      const escaped = error instanceof BrainRefusal && error.code === EXIT_CODES.securityRefusal;
       throw new BrainRefactorRefusal(
         "refactor_reindex_failed",
-        EXIT_CODES.operationalFailure,
+        escaped ? error.code : EXIT_CODES.operationalFailure,
         `the ${options.subcommand} was applied in transaction ${transactionId}, but the index was not rebuilt: ${error instanceof Error ? error.message : String(error)}`,
-        [],
-        "developer-os brain reindex",
+        escaped ? error.paths : [],
+        escaped ? `${error.recovery ?? ""}; then developer-os brain reindex` : "developer-os brain reindex",
       );
     }
 

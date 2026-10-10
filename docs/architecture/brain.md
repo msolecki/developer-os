@@ -316,7 +316,9 @@ Brain adds no exit class: `1` is validation or lint error, `2` malformed config 
 `5` a path-security refusal, and `6` incomplete transaction/recovery required. `brain retire` and
 `brain refactor` also use Foundation's `3` for their conflicts: an occupied destination
 (`refactor_destination_exists`), a note still referred to (`retire_has_referrers`), and a note
-changed between planning and apply (`note_changed_since_read`).
+changed between planning and apply (`note_changed_since_read`) — a changed hash, or a target that
+appeared or vanished. Any other executor plan error is an internal fault and keeps its own exit
+code rather than asking for a rerun (AUD-054).
 
 ### 6.12 Produced interfaces and gates
 
@@ -415,7 +417,10 @@ where the spec was silent or conflicted with the code; the residuals are the one
   `--dry-run`). Exit 2: usage (zero or two mode flags) and `brain_refactor_input_invalid`. Exit 3:
   the three conflicts in §6.11. Exit 1: `refactor_postcondition_failed`, `refactor_too_wide`, and
   `refactor_reindex_failed` (applied, index not rebuilt; recovery `brain reindex`). Exit 5:
-  `brain_refactor_path_refused`, `brain_refactor_in_agent_session`. Exit 6: incomplete transaction.
+  `brain_refactor_path_refused`, `brain_refactor_in_agent_session`, and `refactor_reindex_failed`
+  when the index directory resolves outside the content root — the same refusal `brain reindex`
+  raises (`apps/cli/src/commands/brain.ts` — `indexEscapeRefusal`), still naming the applied
+  transaction (AUD-055). Exit 6: incomplete transaction.
 
 **Implementation decisions.**
 
