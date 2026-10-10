@@ -100,8 +100,6 @@ export interface UpdateConstructionSourcePortV1 {
   readonly finishSources: (plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1) => Promise<void>;
   /** Pre-handoff compensation of the reached nested prefix; runs before construction rows are removed. */
   readonly compensateSources: (plan: UpdateConstructionPlanV1, journal: UpdateConstructionJournalV1) => Promise<void>;
-  /** Terminal nested evidence that makes a delegated row's guarded absence legal during compaction. */
-  readonly nestedTerminal: (plan: UpdateConstructionPlanV1, row: UpdateConstructionFilePlanV1) => Promise<boolean>;
 }
 
 export interface UpdateConstructionStoreDependenciesV1 {
@@ -769,8 +767,11 @@ export class UpdateConstructionStore {
     }
     const target = await this.#dependencies.fs.lstat(row.path);
     if (constructionDeletionAuthority(row) === "nested") {
-      if (target !== null || !(await this.#dependencies.sources.nestedTerminal(plan, row))) refuse("update_construction_nested_not_terminal", row.path);
-      return;
+      // Compaction runs after every nested owner compacted, so an absent row is terminal.
+      if (target === null) return;
+      // A payload no nested owner consumed (its step never ran, NEW-241) is removed below like a
+      // construction leaf, only as the evidenced inode with the row's bytes; any other row refuses.
+      if (row.role.kind !== "payload") refuse("update_construction_nested_not_terminal", row.path);
     }
     // Evidence is removed only at the following odd cursor, so it must still be here.
     const identity = await this.#evidencedIdentity(plan, row.ordinal, evidencePath);
