@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -352,6 +352,13 @@ describe("guardStop", () => {
     await rm(join(root, "..", "outside-ref"), { recursive: true, force: true });
   });
 
+  it("allows with a note and no tsc when the tsconfig cannot be read", async () => {
+    const root = await project({ config: "[]\n" });
+    const { runtime, requests } = runtimeFor(root);
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow", note: "typecheck skipped: tsconfig could not be read" });
+    expect(requests).toStrictEqual([]);
+  });
+
   it("parses a BOM-prefixed tsconfig and keeps a comma-bracket inside a string", async () => {
     const config = '\uFEFF{ "x": "a, ]", "references": [{ "path": "packages/ui" }] }';
     const root = await project({ config });
@@ -433,6 +440,22 @@ describe("guardStop", () => {
     await guardStop(payload(false), runtime);
     expect(await readFile(join(root, "p/tsconfig.tsbuildinfo"), "utf8")).toBe("keep");
     expect((await lstat(join(root, "tsconfig.tsbuildinfo"))).isSymbolicLink()).toBe(true);
+  });
+
+  it("allows with a note when a build-info file it created cannot be removed", async () => {
+    const root = await project({ config: '{ "compilerOptions": { "tsBuildInfoFile": "./out/b.tsbuildinfo" } }' });
+    await mkdir(join(root, "out"));
+    const file = join(root, "out/b.tsbuildinfo");
+    const { runtime } = runtimeFor(root, async () => {
+      await writeFile(file, "x");
+      await chmod(join(root, "out"), 0o555);
+      return OK;
+    });
+    try {
+      expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow", note: "build-info cleanup failed" });
+    } finally {
+      await chmod(join(root, "out"), 0o755);
+    }
   });
 
   it("survives a directory at a candidate path and still returns a result", async () => {
