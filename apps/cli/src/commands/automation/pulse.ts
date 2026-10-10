@@ -129,6 +129,7 @@ export async function runScheduledPulse(context: CliContext, held: HeldLifecycle
         : findings.filter((f) => f.severity === "error" && !(facts.generatedAt === null && f.class === "index-drift")).length,
     quarantined: await listCaptureSummaries(context, "quarantined"),
     accepted: await listCaptureSummaries(context, "accepted"),
+    staging: (await listCaptureSummaries(context, "staging")).length,
     notes: facts.notes,
     edges: facts.edges,
     isolated: findings.filter((finding) => finding.class === "isolated").length,

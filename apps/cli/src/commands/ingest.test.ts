@@ -1051,6 +1051,22 @@ describe("runIngest, the status ladder", () => {
     expect(statuses).toStrictEqual(["ingested", "accepted", "accepted"]);
   });
 
+  it("warns about a capture left at staging, naming the listing that shows it (AUD-009)", async () => {
+    const fixture = await installedFixture("ingest-warns-staging");
+    const stranded = await fixture.seedAccepted("an observation an interrupted ingest left behind");
+    const text = await nodeFs.readFile(stranded.path, "utf8");
+    await nodeFs.writeFile(stranded.path, text.replace(/^status: "?accepted"?$/mu, "status: staging"));
+    expect(await fixture.statusOf(stranded.id)).toBe("staging");
+
+    const result = await fixture.run();
+
+    expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+    const warning = fixture.io.err.find((line) => line.includes(stranded.id));
+    expect(warning).toContain("staging");
+    expect(warning).toContain("developer-os review --status staging");
+    expect(fixture.calls).toHaveLength(0);
+  });
+
   it("ingests nothing, and refuses nothing, when no capture is accepted", async () => {
     const fixture = await installedFixture("ingest-empty");
 

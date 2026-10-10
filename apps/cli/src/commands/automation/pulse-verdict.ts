@@ -7,6 +7,8 @@ export interface PulseInputV1 {
   readonly lintErrors: number;
   readonly quarantined: readonly { readonly createdAt: string }[];
   readonly accepted: readonly { readonly createdAt: string }[];
+  /** AUD-009: ingest never selects a capture again once it is left here, so any one needs a person. */
+  readonly staging: number;
   readonly notes: number;
   readonly edges: number;
   readonly isolated: number;
@@ -68,6 +70,7 @@ export function computePulse(
   if (quarantinedAges.includes(true)) attention.push("quarantined_capture_waiting");
   if (acceptedAges.includes(true)) attention.push("accepted_capture_not_ingested");
   if (quarantinedAges.includes(null) || acceptedAges.includes(null)) attention.push("capture_date_unreadable");
+  if (input.staging > 0) attention.push("capture_left_at_staging");
   const isolatedGrew = previous !== null && input.notes > 0 && input.isolated > previous.isolated;
   if (isolatedGrew && previous.isolatedGrew) attention.push("isolated_growing");
   if (input.gardenLast[0] === "skipped_review_queue_full") attention.push("garden_skipped_review_queue_full");
@@ -100,6 +103,7 @@ export function renderPulseReport(header: PulseHeaderV1, reasons: readonly strin
     `- gaps: ${String(input.gaps)}`,
     `- quarantined captures: ${String(input.quarantined.length)}`,
     `- accepted captures awaiting ingest: ${String(input.accepted.length)}`,
+    `- captures left at staging: ${String(input.staging)}`,
     `- failing doctor checks: ${String(input.doctorFailing)}`,
     `- lint errors: ${String(input.lintErrors)}`,
     `- index generated: ${renderGeneratedAt(input.indexGeneratedAt)}`,

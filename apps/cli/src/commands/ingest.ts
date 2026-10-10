@@ -278,9 +278,11 @@ const CAPTURE_FILE_SUFFIX = ".md";
  * **The residual, stated rather than closed:** a crash between `apply` and
  * `ingested` leaves a capture at `staging` with its notes already written.
  * `staging` is not `accepted`, so the next run does not select it and cannot
- * double-apply — it is visible and inert, and `developer-os repair` plus a hand
- * edit of the status is what moves it. No arrangement of these removes that
- * window, because no two of them can share a transaction.
+ * double-apply — it is inert, every run warns about it naming `review --status
+ * staging`, and `brain-pulse` reports `capture_left_at_staging` (AUD-009). Only a
+ * hand edit of the status moves it; `repair` resolves an incomplete transaction,
+ * never a capture's status. No arrangement of these removes that window,
+ * because no two of them can share a transaction.
  */
 const TRANSACTION_KINDS = {
   stage: "ingest-stage",
@@ -689,6 +691,8 @@ interface Selection {
   /** Captures whose own envelope could not be read, reported and not processed. */
   readonly unreadable: readonly IngestedCaptureV1[];
   readonly warnings: readonly string[];
+  /** AUD-009: one line per capture an earlier run left at `staging`, which no run selects again. */
+  readonly staging: readonly string[];
 }
 
 /**
@@ -718,6 +722,7 @@ async function selectCaptures(
   const accepted: SelectedCapture[] = [];
   const unreadable: IngestedCaptureV1[] = [];
   const warnings: string[] = [];
+  const staging: string[] = [];
 
   for (const fileName of await captureFileNames(context, quarantine)) {
     const text = await context.guards.readText(join(quarantine, fileName));
@@ -731,6 +736,11 @@ async function selectCaptures(
       );
       continue;
     }
+    if (outcome.envelope.status === "staging") {
+      staging.push(
+        `capture ${renderPath(captureIdOf(fileName))} was left at staging by an earlier ingest and is skipped; developer-os review --status staging lists it, and only a hand edit of its status moves it`,
+      );
+    }
     if (outcome.envelope.status !== "accepted") continue;
     accepted.push({ fileName, plain: outcome.envelope.note === null });
   }
@@ -741,6 +751,7 @@ async function selectCaptures(
     acceptedIds: accepted.map((capture) => captureIdOf(capture.fileName)),
     unreadable,
     warnings,
+    staging,
   };
 }
 
@@ -2815,7 +2826,7 @@ export async function runIngest(
       ),
     );
     /** On stderr directly: the report's own warnings are the unreadable captures, listed as such. */
-    for (const warning of [recorded.warning, unwritten]) {
+    for (const warning of [recorded.warning, unwritten, ...selection.staging]) {
       if (warning !== null) context.io.stderr(`warning: ${warning}`);
     }
 

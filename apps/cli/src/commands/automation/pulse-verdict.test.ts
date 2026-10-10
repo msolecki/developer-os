@@ -9,6 +9,7 @@ const base: PulseInputV1 = {
   lintErrors: 0,
   quarantined: [],
   accepted: [],
+  staging: 0,
   notes: 200,
   edges: 400,
   isolated: 3,
@@ -37,6 +38,12 @@ describe("computePulse", () => {
   });
   it("needs attention when accepted captures wait more than 14 days for ingest", () => {
     expect(computePulse({ ...base, accepted: [{ createdAt: "2026-09-20T07:59:00Z" }] }, null).header.verdict).toBe("attention");
+  });
+  it("needs attention when a capture is left at staging, whatever its age (AUD-009)", () => {
+    const { header, reasons } = computePulse({ ...base, staging: 1 }, null);
+    expect(header.verdict).toBe("attention");
+    expect(reasons).toContain("capture_left_at_staging");
+    expect(renderPulseReport(header, reasons, { ...base, staging: 1 })).toContain("- captures left at staging: 1");
   });
   it("needs attention when isolated grew two reports in a row", () => {
     const prev = { date: "2026-09-28", verdict: "healthy", isolated: 2, isolatedGrew: true } as const;
