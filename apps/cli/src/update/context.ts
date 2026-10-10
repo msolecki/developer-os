@@ -361,6 +361,7 @@ async function snapshot(
     const observed = await observe(row, dependencies.has(token), blobs);
     artifactInputs.push({ token, owner, kind, verification, productVersion, source, mergeStrategy, observed });
   }
+  // Spec 2 §8.2 requires every Brain entry as a screened input blob even for a keep-all planner; gating it needs an amendment (AUD-036, declined).
   const entries = await brainEntries(context, config, blobs);
   const request = validateUpdatePlannerRequest({
     schemaVersion: 1,
