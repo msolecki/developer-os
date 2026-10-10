@@ -44,8 +44,8 @@ import {
 } from "./bundle-participant.js";
 import { updateLeafPlanPath } from "./construction.js";
 import { updateParticipantJournalPath } from "./participants.js";
-import { deriveCanonicalStatePayloadPath, parseCanonicalAbsolutePathText } from "./paths.js";
-import type { BundleRelativePathV1, ReleaseBundleEntryV1, ReleaseIdentityV1 } from "./release.js";
+import { deriveCanonicalStatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalPathEvidenceV1 } from "./paths.js";
+import { validateReleaseIdentity, type BundleRelativePathV1, type ReleaseBundleEntryV1, type ReleaseIdentityV1 } from "./release.js";
 import { parseLowerHexSha256, parseSafeReasonCode, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256, type SafeReasonCodeV1 } from "./scalars.js";
 
 const encoder = new TextEncoder();
@@ -57,6 +57,11 @@ const nonce = "b".repeat(64);
 const coordinatorId = `lc_${nonce}_3` as LifecycleCoordinatorIdV1;
 const home = parseCanonicalAbsolutePathText("/synthetic/home/.developer-os");
 const root = parseCanonicalAbsolutePathText(`${home}/staging/lifecycle/${coordinatorId}`);
+const evidence: CanonicalPathEvidenceV1 = {
+  reopenCanonicalAbsolutePath: (value) => value,
+  containsCanonicalPath: (parent, candidate) => candidate === parent || candidate.startsWith(`${parent}/`),
+  hasFoldedAlias: () => false,
+};
 const sourceId = parseSafeReasonCode("bundle_source");
 const publicationId = parseSafeReasonCode("bundle_publication");
 const rel = (path: string): BundleRelativePathV1 => path as BundleRelativePathV1;
@@ -334,8 +339,8 @@ describe("source evidence and ready proof", () => {
 
 describe("BundlePublicationPlanV1", () => {
   it("admits publish_target and verify_previous", () => {
-    expect(validateBundlePublicationPlan(publishPlan(), root).action).toBe("publish_target");
-    expect(validateBundlePublicationPlan(verifyPlan(), root).action).toBe("verify_previous");
+    expect(validateBundlePublicationPlan(publishPlan(), root, evidence).action).toBe("publish_target");
+    expect(validateBundlePublicationPlan(verifyPlan(), root, evidence).action).toBe("verify_previous");
   });
 
   it.each<[string, () => unknown]>([
@@ -353,7 +358,13 @@ describe("BundlePublicationPlanV1", () => {
     ["a wrong inventory hash", () => ({ ...publishPlan(), inventoryHash: sha("other") })],
     ["a bundle root outside releases", () => ({ ...publishPlan(), target: { ...target, bundleRoot: parseCanonicalAbsolutePathText(`${home}/elsewhere`) } })],
   ])("refuses %s", (_name, build) => {
-    expect(() => validateBundlePublicationPlan(build(), root)).toThrow();
+    expect(() => validateBundlePublicationPlan(build(), root, evidence)).toThrow();
+  });
+
+  it("refuses a target bundle root the path evidence does not admit, as validateReleaseIdentity does (AUD-102)", () => {
+    const resolved: CanonicalPathEvidenceV1 = { ...evidence, reopenCanonicalAbsolutePath: (value) => (value === target.bundleRoot ? `${value}-resolved` : value) };
+    expect(() => validateReleaseIdentity(target, resolved)).toThrow();
+    expect(() => validateBundlePublicationPlan(publishPlan(), root, resolved)).toThrow();
   });
 
   it("derives the three retained metadata paths from the target hashes", () => {

@@ -4,8 +4,8 @@ import type { EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { MAXIMUM_LEAF_PLAN_BYTES, MAXIMUM_PARTICIPANT_JOURNAL_BYTES, updateLeafPlanPath, type ImmutableUpdatePlanRefV1, type UpdateLeafPlanKindV1 } from "./construction.js";
 import { updateLeafPlanHash } from "./postimages.js";
-import { deriveCanonicalStatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type CanonicalStatePayloadPathV1 } from "./paths.js";
-import { MAXIMUM_BUNDLE_AGGREGATE_BYTES, validateBundleEntries, type ReleaseBundleEntryV1, type ReleaseIdentityV1 } from "./release.js";
+import { deriveCanonicalStatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1, type CanonicalStatePayloadPathV1 } from "./paths.js";
+import { MAXIMUM_BUNDLE_AGGREGATE_BYTES, validateBundleEntries, validateReleaseIdentity, type ReleaseBundleEntryV1, type ReleaseIdentityV1 } from "./release.js";
 import {
   encodeTenDigitOrdinal,
   exact,
@@ -355,7 +355,6 @@ const SOURCE_JOURNAL_KEYS = ["schemaVersion", "id", "coordinatorId", "planHash",
 const PUBLICATION_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "action", "target", "source", "targetRootBefore", "metadata", "entries", "inventoryHash", "maximumPlanBytes", "maximumJournalBytes"];
 const PUBLICATION_JOURNAL_KEYS = ["schemaVersion", "id", "coordinatorId", "planHash", "phase", "versionDirectory", "nextRootTransition", "rootWriteState", "targetRootIdentity", "nextEntry", "entryWriteState", "nextMetadata", "metadataWriteState", "metadataIdentities", "compensationMetadataNext", "compensationNext", "compensationPart", "compensationRootNext", "compactionNext", "createdAt", "updatedAt"];
 const METADATA_PLAN_KEYS = ["schemaVersion", "id", "coordinatorId", "role", "path", "tombstonePath", "before", "after", "reversal", "maximumPlanBytes", "maximumJournalBytes"];
-const IDENTITY_KEYS = ["version", "releaseSequence", "releaseIdentityHash", "delegationSequence", "delegationHash", "releaseIndexSequence", "releaseIndexHash", "bundleManifestHash", "bundleRoot", "platform", "architecture", "launcherProtocol", "updateProtocol"];
 const READY_KEYS = ["schemaVersion", "coordinatorId", "stagingPlanHash", "sourceRoot", "sourceRootDev", "sourceRootIno", "structureIdentitiesHash", "inventoryHash", "evidenceSetHash", "entryCount", "aggregateBytes"];
 const encoder = new TextEncoder();
 /** Plans are immutable once validated; re-encoding up to 16 MiB per journal transition would be quadratic. */
@@ -867,18 +866,10 @@ export function bundleMetadataPath(target: ReleaseIdentityV1, ordinal: number): 
   return parseCanonicalAbsolutePathText(`${productHomeOf(target, "BundlePublicationPlanV1")}/state/release-metadata/${METADATA_STORES[ordinal] as string}/${hash}.json`);
 }
 
-function validateTarget(value: unknown, label: string): ReleaseIdentityV1 {
-  const input = exact(value, IDENTITY_KEYS, label);
-  parseStableSemver(input.version);
-  for (const key of ["releaseSequence", "delegationSequence", "releaseIndexSequence"]) parseUInt64Decimal(input[key]);
-  for (const key of ["releaseIdentityHash", "delegationHash", "releaseIndexHash", "bundleManifestHash"]) parseLowerHexSha256(input[key]);
-  parseCanonicalAbsolutePathText(input.bundleRoot);
-  if (input.platform !== "darwin") fail(`${label}.platform`);
-  oneOf(input.architecture, ["arm64", "x64"], `${label}.architecture`);
-  integer(input.launcherProtocol, 1, 4_294_967_295, `${label}.launcherProtocol`);
-  integer(input.updateProtocol, 1, 4_294_967_295, `${label}.updateProtocol`);
-  productHomeOf(input as unknown as ReleaseIdentityV1, label);
-  return input as unknown as ReleaseIdentityV1;
+function validateTarget(value: unknown, evidence: CanonicalPathEvidenceV1, label: string): ReleaseIdentityV1 {
+  const target = validateReleaseIdentity(value, evidence);
+  productHomeOf(target, label);
+  return target;
 }
 
 function validateMetadataState(value: unknown, side: "before" | "after", label: string): BundleMetadataFileStateV1 {
@@ -932,14 +923,14 @@ function validateMetadataPlan(value: unknown, plan: Readonly<Record<string, unkn
   return input as unknown as BundleMetadataStatePlanV1;
 }
 
-export function validateBundlePublicationPlan(value: unknown, stagingRoot: CanonicalAbsolutePathV1): BundlePublicationPlanV1 {
+export function validateBundlePublicationPlan(value: unknown, stagingRoot: CanonicalAbsolutePathV1, evidence: CanonicalPathEvidenceV1): BundlePublicationPlanV1 {
   const label = "BundlePublicationPlanV1";
   const input = exact(value, PUBLICATION_PLAN_KEYS, label);
   if (input.schemaVersion !== 1) fail(`${label}.schemaVersion`);
   parseSafeReasonCode(input.id);
   coordinatorOf(stagingRoot, input.coordinatorId, label);
   const action = oneOf(input.action, ["publish_target", "verify_previous"] as const, `${label}.action`);
-  const target = validateTarget(input.target, `${label}.target`);
+  const target = validateTarget(input.target, evidence, `${label}.target`);
   const entries = validateBundleEntries(input.entries, `${label}.entries`);
   if (input.inventoryHash !== bundleInventoryHash(entries)) fail(`${label}.inventoryHash`);
   const source = record(input.source, `${label}.source`);

@@ -31,6 +31,7 @@ import {
   type BundleSourceStagingJournalV1,
   type BundleSourceStagingPlanV1,
   type CanonicalAbsolutePathV1,
+  type CanonicalPathEvidenceV1,
   type LifecycleGuardedEntryV1,
   type PresentBundleMetadataPostimageV1,
   type PresentBundleMetadataPreimageV1,
@@ -89,6 +90,7 @@ type Journal = BundleJournalFile<BundlePublicationJournalV1>;
 export interface BundlePublicationDependenciesV1 extends BundleParticipantDependenciesV1<BundlePublicationDeathPointV1> {
   /** A created metadata postimage's identity, from its payload's construction evidence only (D60). */
   readonly payloadIdentity: UpdatePayloadIdentityResolverV1;
+  readonly evidence: CanonicalPathEvidenceV1;
 }
 
 function observe(journal: BundlePublicationJournalV1): BundlePublicationObservationV1 {
@@ -122,7 +124,7 @@ export class BundlePublicationParticipant {
   }
 
   async #open(value: BundlePublicationPlanV1): Promise<{ readonly plan: BundlePublicationPlanV1; readonly file: Journal }> {
-    const plan = validateBundlePublicationPlan(value, this.#root);
+    const plan = validateBundlePublicationPlan(value, this.#root, this.#dependencies.evidence);
     const file = new BundleJournalFile<BundlePublicationJournalV1>(this.#io, updateParticipantJournalPath(this.#root, "bundle_publication", plan.id), plan.maximumJournalBytes);
     await file.load((input) => validateBundlePublicationJournal(input, plan));
     return { plan, file };
