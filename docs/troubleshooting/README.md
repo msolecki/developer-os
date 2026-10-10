@@ -17,24 +17,25 @@ developer-os status
 | 3 | A decision is required. |
 | 4 | A capability is unavailable. For `update_package_source_absent`, run `brew install developer-os`. |
 | 5 | Security refusal. |
-| 6 | Recovery required. Run `developer-os repair --resume <id>`, then `developer-os doctor`. |
+| 6 | Recovery required. Run the command on the `Recovery` line of the error, then `developer-os doctor`. |
 
-The `<id>` is the transaction that `doctor` or `status` reports.
+Exit 6 has more than one remedy, so the CLI names the right one on its `Recovery` line; `developer-os doctor` prints the same line for every finding it reports. The forms are:
 
-```sh
-developer-os repair --resume <id>
-developer-os doctor
-```
+- `developer-os repair --resume <id>` or `developer-os repair --rollback <id>` for a stopped transaction. The `<id>` is the transaction that `doctor` or `status` reports.
+- `developer-os init` for an interrupted install (a `tx_fi_*` transaction). `repair` refuses it.
+- `developer-os uninstall` for an interrupted uninstall.
+- `developer-os update --apply` or `developer-os update rollback --apply` for an interrupted update or rollback. `repair` refuses these too.
+- An instruction to fix a named file or record by hand, then re-run the command.
 
 ## Workflows are older than the installed release
 
-An update replaced the release but not the workflows that your agents use. Run `developer-os init` to refresh them:
+An update replaced the release but not the workflows that your agents use. Refresh them from the active release:
 
 ```sh
-developer-os init --adapters claude,codex
+developer-os init
 ```
 
-Name only the adapters you use.
+Pass `--adapters` only to change which agents are selected: it renders from the installed package instead of the active release, and the adapters it leaves out are detached.
 
 ## A second install of the same version refuses
 
