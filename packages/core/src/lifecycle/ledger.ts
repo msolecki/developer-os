@@ -207,6 +207,8 @@ interface StagingFactsV1 {
   readonly entry: LifecycleGuardedEntryV1;
   leaves: number;
   readonly participantIds: Set<AllocatedLifecycleIdV1<"tx">>;
+  /** NEW-210: admitted `payloads/<ordinal>` leaves; a terminal coordinator must hold none. */
+  readonly payloadPaths: CanonicalAbsolutePathV1[];
 }
 
 interface LedgerScanV1<TPlan extends CoordinatorPlan> {
@@ -902,7 +904,7 @@ async function scanLifecycleStaging<TPlan extends CoordinatorPlan>(
     }
     const entry = await guardedDirectory(scan, path, "lifecycle_staging_shape");
     if (entry === null) continue;
-    const facts: StagingFactsV1 = { entry, leaves: 1, participantIds: new Set() };
+    const facts: StagingFactsV1 = { entry, leaves: 1, participantIds: new Set(), payloadPaths: [] };
     scan.staging.set(id, facts);
     await scanCoordinatorStaging(scan, id, facts, nonce);
     scan.counts.lifecycleStagingMaximumPerCoordinator = Math.max(
@@ -1225,6 +1227,7 @@ async function countStagingSubtree<TPlan extends CoordinatorPlan>(
       continue;
     }
     const entry = await admitStagingShape(scan, child, shape);
+    if (shape === "payload") facts.payloadPaths.push(child);
     if (entry !== null && entry.kind === "directory") {
       await countStagingSubtree(scan, facts, entry, admit, relative);
       if (scan.stopped) return;
@@ -1421,6 +1424,12 @@ async function resolveCoordinators<TPlan extends CoordinatorPlan>(
             ? "terminal"
             : "active";
       admitParticipantCursor(scan, plan, journal, foundation);
+      if (state === "terminal") {
+        // NEW-210: compaction refuses a non-empty `payloads`, so doctor must surface the stuck state.
+        for (const payload of scan.staging.get(id)?.payloadPaths ?? []) {
+          refuse(scan, "lifecycle_staging_payload_terminal", payload);
+        }
+      }
       records.push({ id: coordinatorId, plan, variant, journal, lock: facts.lock, state });
       continue;
     }

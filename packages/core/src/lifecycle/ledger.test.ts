@@ -432,6 +432,21 @@ function journalFor(
   };
 }
 
+/** Overrides the entry `lstat` reports for `target`. */
+function withEntry(
+  fs: LifecycleGuardedFileSystemV1,
+  target: string,
+  patch: Partial<LifecycleGuardedEntryV1>,
+): LifecycleGuardedFileSystemV1 {
+  return {
+    ...fs,
+    lstat: async (candidate) => {
+      const entry = await fs.lstat(candidate);
+      return entry !== null && candidate === target ? { ...entry, ...patch } : entry;
+    },
+  };
+}
+
 interface HomeV1 {
   readonly fs: LifecycleGuardedFileSystemV1;
   readonly roots: LifecycleLedgerRootsV1;
@@ -1916,20 +1931,6 @@ describe("the effect journal hookup", () => {
     else await write(home, relative, "staged\n");
   }
 
-  function withEntry(
-    fs: LifecycleGuardedFileSystemV1,
-    target: string,
-    patch: Partial<LifecycleGuardedEntryV1>,
-  ): LifecycleGuardedFileSystemV1 {
-    return {
-      ...fs,
-      lstat: async (candidate) => {
-        const entry = await fs.lstat(candidate);
-        return entry !== null && candidate === target ? { ...entry, ...patch } : entry;
-      },
-    };
-  }
-
   describe("terminal classification", () => {
     it.each(["finalized", "rolled_back"])("classifies a %s Git effect journal as terminal and the closure clear", async (phase) => {
       const home = await terminalLocalSync({ source: phase, destination: phase });
@@ -2329,20 +2330,6 @@ describe("the uninstall payload staging (NEW-210)", () => {
     return home;
   }
 
-  function patched(
-    fs: LifecycleGuardedFileSystemV1,
-    target: string,
-    patch: Partial<LifecycleGuardedEntryV1>,
-  ): LifecycleGuardedFileSystemV1 {
-    return {
-      ...fs,
-      lstat: async (candidate) => {
-        const entry = await fs.lstat(candidate);
-        return entry !== null && candidate === target ? { ...entry, ...patch } : entry;
-      },
-    };
-  }
-
   it("admits payloads/0..N-1 under the published plan", async () => {
     const home = await stagedHome(["0", "1"]);
 
@@ -2382,7 +2369,7 @@ describe("the uninstall payload staging (NEW-210)", () => {
     const home = await stagedHome(["0"]);
     const target = `${HOME}/${PAYLOADS}/0`;
 
-    const snapshot = await inspect(home, { fs: patched(home.fs, target, patch) });
+    const snapshot = await inspect(home, { fs: withEntry(home.fs, target, patch) });
 
     expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_shape", path: path(target) }]);
   });
@@ -2391,9 +2378,37 @@ describe("the uninstall payload staging (NEW-210)", () => {
     const home = await stagedHome(["0"]);
     const target = `${HOME}/${PAYLOADS}/0`;
 
-    const snapshot = await inspect(home, { fs: patched(home.fs, target, { mode: 0o700 }) });
+    const snapshot = await inspect(home, { fs: withEntry(home.fs, target, { mode: 0o700 }) });
 
     expect(snapshot.findings).toStrictEqual([]);
+  });
+
+  async function terminalHome(): Promise<HomeV1> {
+    const home = await newHome();
+    await plantCoordinator(home, WITH_PAYLOADS, journalFor(WITH_PAYLOADS));
+    for (const ref of WITH_PAYLOADS.plan.participants.foundation) {
+      if (ref.role.kind === "forward") await plantFoundationJournal(home, ref.id);
+    }
+    await mkdir(home, `staging/lifecycle/${UNINSTALL.id}`);
+    await mkdir(home, PAYLOADS);
+    return home;
+  }
+
+  it("reports a payload left under a terminal coordinator, which compaction would refuse", async () => {
+    const home = await terminalHome();
+    await write(home, `${PAYLOADS}/0`, "payload\n");
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([
+      { reason: "lifecycle_staging_payload_terminal", path: path(`${HOME}/${PAYLOADS}/0`) },
+    ]);
+  });
+
+  it("admits an empty `payloads` directory under a terminal coordinator", async () => {
+    const home = await terminalHome();
+
+    expect((await inspect(home)).findings).toStrictEqual([]);
   });
 
   it("refuses `payloads` without a plan", async () => {

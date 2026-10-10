@@ -170,6 +170,13 @@ async function removeCoordinatorStaging<TPlan extends CoordinatorPlan>(
   const { fs, roots } = dependencies;
   const coordinatorStaging = childOf(roots.lifecycleStaging, plan.id);
   const foundationStaging = childOf(coordinatorStaging, "foundation");
+  // NEW-210: refuse a non-empty `payloads` before any unlink, so a refusal leaves the other pieces intact.
+  const payloads = await fs.lstat(childOf(coordinatorStaging, "payloads"));
+  if (payloads !== null) {
+    for await (const name of fs.names(payloads)) {
+      refuseLifecycleRecovery("lifecycle_guarded_not_empty", `${payloads.path}/${name}`);
+    }
+  }
   for (const ref of plan.participants.foundation) {
     const directory = await fs.lstat(childOf(foundationStaging, ref.id));
     if (directory === null) continue;

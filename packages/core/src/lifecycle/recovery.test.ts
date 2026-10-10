@@ -608,6 +608,24 @@ describe("coordinator orphans", () => {
     expect(await world.exists(`staging/lifecycle/${world.plan.id}`)).toBe(false);
   }, 120_000);
 
+  it("refuses a planless staging tree holding a payload and keeps the payload bytes (NEW-210)", async () => {
+    const world = await recoveryWorld("recovery-planless-payloads", { publish: false });
+    const staging = join(world.home, "staging", "lifecycle", world.plan.id);
+    const payload = join(staging, "payloads", "0");
+    await nodeFs.mkdir(join(staging, "foundation"), { recursive: true, mode: 0o700 });
+    await nodeFs.mkdir(join(staging, "participants"), { recursive: true, mode: 0o700 });
+    await nodeFs.mkdir(join(staging, "payloads"), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(payload, "payload bytes", { mode: 0o600 });
+
+    await expect(world.recovery().recover(world.global, { resumeUninstall: false })).rejects.toThrow(
+      expect.objectContaining({ reason: "lifecycle_ledger_finding" }),
+    );
+
+    expect(await nodeFs.readFile(payload, "utf8")).toBe("payload bytes");
+    expect((await nodeFs.stat(join(staging, "foundation"))).isDirectory()).toBe(true);
+    expect((await nodeFs.stat(join(staging, "participants"))).isDirectory()).toBe(true);
+  }, 120_000);
+
   it("refuses on any ledger finding and deletes nothing", async () => {
     const world = await recoveryWorld("recovery-finding", { publish: false });
     await world.plantUnknownLeaf();
