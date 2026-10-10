@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 
 import { createRedactor } from "@developer-os/security";
 import type { ProcessRequest, ProcessResult } from "@developer-os/security";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HookPayloadV1 } from "../payload.js";
 import type { HookRuntime } from "../registry.js";
@@ -122,7 +122,13 @@ describe("guardStop", () => {
   it("runs the local tsc script under the hook's node with the marker only", async () => {
     const root = await project();
     const { runtime, requests } = runtimeFor(root);
-    expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
+    // Freeze the clock: a millisecond tick between the deadline and the spawn made timeoutMs 119999.
+    const now = vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    try {
+      expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
+    } finally {
+      now.mockRestore();
+    }
     expect(requests).toHaveLength(1);
     const [request] = requests;
     expect(request?.executable).toBe("/synthetic/bin/node");
