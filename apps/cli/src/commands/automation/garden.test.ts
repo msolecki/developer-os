@@ -290,15 +290,38 @@ describe("runScheduledGarden", () => {
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("rejects a proposal the capture redactor would alter, using the configured user patterns", async () => {
-    const withClient = note("delta", { created: "2000-01-01" }).replace("delta holds", "Acme Industries holds");
-    const home = await garden({ extra: { "DEV/delta.md": withClient }, redactionPatterns: ["Acme Industries"] });
-    home.reply = { proposals: [{ kind: "related", target: "DEV/delta.md", note: related(withClient, ["beta", "gamma"]) }] };
+    const home = await garden({ gitGap: true, redactionPatterns: ["Acme Industries"] });
+    const hub = hubNote("git", GIT_NOTES.map(baseName), GIT_NOTES).replace("The notes on", "Acme Industries notes on");
+    home.reply = { proposals: [{ kind: "hub", target: "DEV/git-hub.md", note: hub }] };
 
     const result = await run(home);
 
     expect(result, JSON.stringify(result)).toMatchObject({ outcome: "success", reasonCode: "ok" });
-    expect(dataOf(result).rejected).toEqual([{ target: "DEV/delta.md", code: "redaction_would_alter" }]);
+    expect(dataOf(result).rejected).toEqual([{ target: "DEV/git-hub.md", code: "redaction_would_alter" }]);
     expect(await quarantined(home)).toHaveLength(0);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("never sends the agent a note the redactor would alter: its gap or isolated target is dropped (AUD-004)", async () => {
+    const secret = `ghp_${"a".repeat(36)}`;
+    const withClient = note("delta", { created: "2000-01-01" }).replace("delta holds", "Acme Industries holds");
+    const withToken = note("epsilon", { created: "2000-01-01" }).replace("epsilon holds", `epsilon holds ${secret} and`);
+    const gapWithToken = note("git-one", { tags: ["git"], created: "2000-01-03" }).replace("holds", `holds ${secret}`);
+    const home = await garden({
+      isolated: ["DEV/alpha.md"],
+      gitGap: true,
+      extra: { "DEV/delta.md": withClient, "DEV/epsilon.md": withToken, "DEV/git-one.md": gapWithToken },
+      redactionPatterns: ["Acme Industries"],
+    });
+
+    const result = await run(home);
+
+    expect(result, JSON.stringify(result)).toMatchObject({ outcome: "success", reasonCode: "ok" });
+    expect(home.calls).toHaveLength(1);
+    expect(home.calls[0]).toContain("DEV/alpha.md");
+    expect(home.calls[0]).not.toContain("Acme Industries");
+    expect(home.calls[0]).not.toContain(secret);
+    expect(home.calls[0]).not.toContain("Gap: notes tagged git");
+    expect(dataOf(result).targets.gaps).toBe(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses before spawning when the pinned executable was replaced", async () => {
