@@ -84,7 +84,9 @@ function validatePayload(
   const sourcePath = parseCanonicalAbsolutePathText(input.sourcePath);
   if (!sourcePath.startsWith(`${productHome}/`)) fail(`${label}: sourcePath`);
   const top = sourcePath.slice(productHome.length + 1).split("/")[0];
-  if (top === "staging" || top === "state") fail(`${label}: sourcePath`);
+  /** APFS is case-insensitive by default, so `Staging/` names the same directory as `staging/`. */
+  const folded = top?.toLowerCase();
+  if (folded === "staging" || folded === "state") fail(`${label}: sourcePath`);
   const payloadPath = uninstallPayloadPath(productHome, coordinatorId, ordinal);
   if (input.payloadPath !== payloadPath) fail(`${label}: payloadPath`);
   if (input.mode !== 384 && input.mode !== 448) fail(`${label}: mode`);
@@ -115,7 +117,7 @@ export function validateUninstallPayloads(
 ): readonly UninstallPayloadV1[] {
   if (!Array.isArray(value) || value.length > MAX_UNINSTALL_ARTIFACTS) fail("UninstallPayloadV1[]");
   const payloads = value.map((entry, ordinal) => validatePayload(entry, productHome, coordinatorId, ordinal));
-  if (new Set(payloads.map((payload) => payload.sourcePath)).size !== payloads.length) {
+  if (new Set(payloads.map((payload) => payload.sourcePath.toLowerCase())).size !== payloads.length) {
     fail("UninstallPayloadV1[]: duplicate sourcePath");
   }
   return payloads;
@@ -134,9 +136,15 @@ function sameIdentity(entry: LifecycleGuardedEntryV1 | null, uid: number, payloa
   );
 }
 
-async function syncParent(fs: LifecycleGuardedFileSystemV1, path: CanonicalAbsolutePathV1): Promise<void> {
+/** `optional`: a resumed skip syncs what exists; a parent never created has nothing to make durable. */
+async function syncParent(
+  fs: LifecycleGuardedFileSystemV1,
+  path: CanonicalAbsolutePathV1,
+  optional = false,
+): Promise<void> {
   const parentPath = parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/")));
   const parent = await fs.lstat(parentPath);
+  if (parent === null && optional) return;
   if (parent === null || parent.kind !== "directory") refuse("uninstall_payload_parent", parentPath);
   await fs.syncDirectory(parent);
 }
@@ -208,7 +216,12 @@ export async function stagePayloads(
   for (const [ordinal, payload] of payloads.entries()) {
     const source = await fs.lstat(payload.sourcePath);
     const staged = await fs.lstat(payload.payloadPath);
-    if (source === null && sameIdentity(staged, uid, payload)) continue;
+    if (source === null && sameIdentity(staged, uid, payload)) {
+      // A resumed skip: the rename may have landed without its syncs.
+      await syncParent(fs, payload.sourcePath, true);
+      await syncParent(fs, payload.payloadPath);
+      continue;
+    }
     if (staged !== null || source === null || !sameIdentity(source, uid, payload)) {
       refuse("uninstall_payload_identity", payload.sourcePath, payload.payloadPath);
     }
@@ -231,7 +244,12 @@ export async function restorePayloads(
   for (const payload of [...payloads].reverse()) {
     const source = await fs.lstat(payload.sourcePath);
     const staged = await fs.lstat(payload.payloadPath);
-    if (staged === null && sameIdentity(source, uid, payload)) continue;
+    if (staged === null && sameIdentity(source, uid, payload)) {
+      await syncParent(fs, payload.payloadPath, true);
+      await syncParent(fs, payload.sourcePath);
+      continue;
+    }
+    // Absent at both names refuses: unlike the key, a payload has no transition that removes it before `delete`.
     if (source !== null || staged === null || !sameIdentity(staged, uid, payload)) {
       refuse("uninstall_payload_identity", payload.sourcePath, payload.payloadPath);
     }
@@ -250,7 +268,10 @@ export async function deletePayloads(
   for (const [ordinal, payload] of payloads.entries()) {
     const source = await fs.lstat(payload.sourcePath);
     const staged = await fs.lstat(payload.payloadPath);
-    if (source === null && staged === null) continue;
+    if (source === null && staged === null) {
+      await syncParent(fs, payload.payloadPath, true);
+      continue;
+    }
     if (source !== null || staged === null || !sameIdentity(staged, uid, payload)) {
       refuse("uninstall_payload_identity", payload.sourcePath, payload.payloadPath);
     }
