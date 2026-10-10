@@ -2,7 +2,7 @@ import type { BigIntStats } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 import { extractInstructionBlock } from "./instruction-block.js";
-import { readStableRegularFile } from "./fs-read.js";
+import { hashStableRegularFile, readStableRegularFile } from "./fs-read.js";
 import { MAXIMUM_BUNDLE_FILE_BYTES } from "../update/release.js";
 import {
   containsPath,
@@ -33,7 +33,8 @@ const MAX_READ_BYTES = 8 * 1024 * 1024;
  * bound; every other row (instruction, schema, vendor and configuration files, and uninstall's V1
  * downcast of them) keeps the 8 MiB read bound. Init records a bundle file as `bundle/<path>`, an
  * update as `generated/release/<path>`, and a retained rollback file as `generated/rollback`.
- * ponytail: whole-file read; stream the hash if doctor's peak memory starts to matter.
+ * V1 drift (uninstall's preview) streams the hash (NEW-210).
+ * ponytail: V2's content read is still whole-file; stream it too if doctor's peak memory starts to matter.
  */
 const MAX_RELEASE_FILE_BYTES = MAXIMUM_BUNDLE_FILE_BYTES;
 function readBoundFor(source: string): number {
@@ -61,12 +62,13 @@ function rethrowRedacted(error: unknown): never {
  * same inode that was inspected. Mirrors the pattern in the transaction
  * executor.
  */
-async function readGuardedFile(
+async function guardedRead<T>(
   fs: DriftFileSystem,
   guards: ManifestGuards,
   path: string,
-  maxBytes = MAX_READ_BYTES,
-): Promise<Uint8Array | null> {
+  maxBytes: number,
+  reader: (fs: DriftFileSystem, canonical: string, stats: BigIntStats, maxBytes: number) => Promise<T>,
+): Promise<T | null> {
   let canonical: string;
   try { canonical = await guards.assertReadable(path); } catch { throw new ManifestStateError(); }
 
@@ -81,11 +83,19 @@ async function readGuardedFile(
   if (stats.size > maxBytes) throw new ManifestStateError();
 
   try {
-    return await readStableRegularFile(fs, canonical, stats, maxBytes);
+    return await reader(fs, canonical, stats, maxBytes);
   } catch (error) {
     if (isMissing(error)) return null;
     rethrowRedacted(error);
   }
+}
+
+function readGuardedFile(fs: DriftFileSystem, guards: ManifestGuards, path: string): Promise<Uint8Array | null> {
+  return guardedRead(fs, guards, path, MAX_READ_BYTES, readStableRegularFile);
+}
+
+function hashGuardedFile(fs: DriftFileSystem, guards: ManifestGuards, path: string, maxBytes: number): Promise<string | null> {
+  return guardedRead(fs, guards, path, maxBytes, hashStableRegularFile);
 }
 
 function finding(
@@ -142,9 +152,8 @@ async function inspectArtifact(
     return finding(artifact, "type_changed", null);
   }
 
-  const bytes = await readGuardedFile(fs, guards, artifact.path, readBoundFor(artifact.source));
-  if (bytes === null) return finding(artifact, "missing", null);
-  const actualHash = hashBytes(bytes);
+  const actualHash = await hashGuardedFile(fs, guards, artifact.path, readBoundFor(artifact.source));
+  if (actualHash === null) return finding(artifact, "missing", null);
   return actualHash === artifact.installedHash
     ? null
     : finding(artifact, "content_changed", actualHash);

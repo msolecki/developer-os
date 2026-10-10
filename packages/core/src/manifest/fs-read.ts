@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { constants, type BigIntStats } from "node:fs";
 import type { open } from "node:fs/promises";
 
@@ -31,6 +32,41 @@ export async function readStableRegularFile(
     const after = await handle.stat({ bigint: true });
     if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) throw new ManifestStateError();
     return bytes;
+  } finally {
+    await handle.close();
+  }
+}
+
+const HASH_CHUNK_BYTES = 1024 * 1024;
+
+/**
+ * `readStableRegularFile`'s proof, hashed in 1 MiB chunks rather than held whole: a release's
+ * bundled Node is over 100 MiB, and drift needs only its digest (NEW-210).
+ */
+export async function hashStableRegularFile(
+  fs: { readonly open: typeof open },
+  canonical: string,
+  before: BigIntStats,
+  maxBytes: number,
+): Promise<string> {
+  const handle = await fs.open(canonical, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size < 0n || opened.size > BigInt(maxBytes)) throw new ManifestStateError();
+    const size = Number(opened.size);
+    const hash = createHash("sha256");
+    const chunk = new Uint8Array(Math.min(HASH_CHUNK_BYTES, Math.max(size, 1)));
+    let offset = 0;
+    while (offset < size) {
+      const result = await handle.read(chunk, 0, Math.min(chunk.byteLength, size - offset), offset);
+      if (result.bytesRead < 1) throw new ManifestStateError();
+      hash.update(chunk.subarray(0, result.bytesRead));
+      offset += result.bytesRead;
+    }
+    if ((await handle.read(new Uint8Array(1), 0, 1, size)).bytesRead !== 0) throw new ManifestStateError();
+    const after = await handle.stat({ bigint: true });
+    if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) throw new ManifestStateError();
+    return hash.digest("hex");
   } finally {
     await handle.close();
   }
