@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: ingest
-version: 2.0.0
+version: 2.1.0
 description: Stage accepted captures outside the vault, validate them, then apply transactionally.
 triggers:
   - manual
@@ -9,7 +9,7 @@ output:
   applied:
     type: integer
     required: true
-    description: How many notes were written.
+    description: How many captures reached ingested, the length of applied in the command's JSON result.
 capabilities:
   - structured_result
 scopes:
@@ -29,7 +29,7 @@ refusals:
     message: No vault was found. Run developer-os init first.
   - when: scope-violation
     exit: 5
-    message: Staging is outside the vault; only apply writes into it.
+    message: Staging is outside the vault; only the apply and its reindex write into it.
 steps:
   - id: stage
     do: ingest.stage
@@ -40,7 +40,12 @@ steps:
   - id: reindex
     do: brain.reindex
 validators:
-  - a failed apply leaves every capture retryable and none marked ingested
+  - a capture is marked ingested only after its notes are in the vault and the index is rebuilt
+  - a refused capture that wrote nothing stays accepted, and the next run tries it again
+  - a capture left at staging is never selected again; its line names the notes it wrote and the hand step that resolves it
 recovery:
-  leaves: a staged transaction that was never applied
-  resume: developer-os repair --resume <transaction-id>
+  leaves: >-
+    a capture left at staging, which ingest never selects again: follow the recovery printed on its
+    line. If developer-os status reports an incomplete transaction, resolve it with developer-os
+    repair first, then run ingest again for the captures still accepted
+  resume: developer-os ingest

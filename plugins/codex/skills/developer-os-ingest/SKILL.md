@@ -3,7 +3,7 @@ name: "developer-os-ingest"
 description: "Stage accepted captures outside the vault, validate them, then apply transactionally."
 ---
 
-<!-- Generated from workflows/ingest/workflow.yaml (ingest@2.0.0). Do not edit. -->
+<!-- Generated from workflows/ingest/workflow.yaml (ingest@2.1.0). Do not edit. -->
 
 ## Always
 
@@ -19,7 +19,7 @@ description: "Stage accepted captures outside the vault, validate them, then app
 
 - **Refuse** (capability-missing, exit 4): This workflow needs a structured result and the agent does not provide one.
 - **Refuse** (vault-missing, exit 1): No vault was found. Run developer-os init first.
-- **Refuse** (scope-violation, exit 5): Staging is outside the vault; only apply writes into it.
+- **Refuse** (scope-violation, exit 5): Staging is outside the vault; only the apply and its reindex write into it.
 
 ## Scopes
 
@@ -51,17 +51,13 @@ developer-os ingest
 
 Effect: `ingest.validate`
 
-```text
-developer-os ingest
-```
+Runs inside the command above; do not run it again.
 
 ### apply
 
 Effect: `ingest.apply`
 
-```text
-developer-os ingest
-```
+Runs inside the command above; do not run it again.
 
 ### reindex
 
@@ -74,14 +70,16 @@ developer-os brain reindex
 
 ## Checks
 
-- a failed apply leaves every capture retryable and none marked ingested
+- a capture is marked ingested only after its notes are in the vault and the index is rebuilt
+- a refused capture that wrote nothing stays accepted, and the next run tries it again
+- a capture left at staging is never selected again; its line names the notes it wrote and the hand step that resolves it
 
 ## Recovery
 
-a staged transaction that was never applied
+a capture left at staging, which ingest never selects again: follow the recovery printed on its line. If developer-os status reports an incomplete transaction, resolve it with developer-os repair first, then run ingest again for the captures still accepted
 
 Do not run this automatically. It is text for a person to read:
 
 ```text
-developer-os repair --resume <transaction-id>
+developer-os ingest
 ```
