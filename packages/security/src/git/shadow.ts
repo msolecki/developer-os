@@ -383,21 +383,6 @@ export function instantiateShadowConfig(
   };
 }
 
-/**
- * A retry re-instantiates against the persisted template hash alone; a
- * concrete projection that does not de-slot to it is recovery-required and
- * never falls back to a newly calculated config.
- */
-export function bindShadowConfigToTemplate(
-  persistedTemplateHash: LowerHexSha256,
-  template: SanitizedGitShadowConfigTemplateV1,
-  slots: SanitizedGitShadowSlotsV1,
-): InstantiatedGitShadowConfigV1 {
-  const instance = instantiateShadowConfig(template, slots);
-  if (instance.templateHash !== persistedTemplateHash) refuse("git_shadow_template_mismatch");
-  return instance;
-}
-
 export interface GitShadowSnapshotRefV1 {
   readonly ref: FullBranchRefV1;
   readonly bytes: Uint8Array;

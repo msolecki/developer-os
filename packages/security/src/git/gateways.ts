@@ -431,6 +431,8 @@ function bridgeArgvOf(destination: SanitizedSshBridgeV1): readonly string[] {
  * `git-receive-pack` path, then consumes the separate same-PID system-SSH
  * permit. The fixed options carry no config, proxy, local command or TTY,
  * and `GIT_SSH_VARIANT=ssh` means Git never runs an `-G` detection probe.
+ * Dormant: nothing calls it in production until the SSH transport ships,
+ * because the CLI refuses every non-local transport (commands/git/service.ts).
  */
 export function runSshBridge(invocation: GitSshBridgeInvocationV1): GitGatewayOutcomeV1 {
   try {

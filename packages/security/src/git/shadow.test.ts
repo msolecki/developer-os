@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SecurityRefusalError } from "../paths.js";
 import { parseGitConfigQuotedPath } from "./process-table.js";
 import {
-  bindShadowConfigToTemplate,
   createOpaqueGitLocalToken,
   deslotShadowConfig,
   hashShadowConfig,
@@ -172,7 +171,6 @@ describe("template instantiation", () => {
     expect(first.configBytesHash).not.toBe(second.configBytesHash);
     expect(deslotShadowConfig(second.configProjection)).toEqual(localTemplate);
     expect(hashShadowConfigTemplate(deslotShadowConfig(first.configProjection))).toBe(first.templateHash);
-    expect(bindShadowConfigToTemplate(first.templateHash, localTemplate, { ...slots, opaqueLocalToken: TOKEN }).templateHash).toBe(first.templateHash);
   });
 
   it("binds a local source only through the internal selector, never a real path", () => {
@@ -182,10 +180,9 @@ describe("template instantiation", () => {
     expect(concrete.bytes).not.toContain("file:");
   });
 
-  it("refuses a slot that does not belong to the template and a template bound to another hash", () => {
+  it("refuses a slot that does not belong to the template", () => {
     expect(() => instantiateShadowConfig(template, { ...slots, opaqueLocalToken: TOKEN })).toThrow(SecurityRefusalError);
     expect(() => instantiateShadowConfig(localTemplate, slots)).toThrow(SecurityRefusalError);
-    expect(() => bindShadowConfigToTemplate(hashShadowConfigTemplate(localTemplate), template, slots)).toThrow("git_shadow_template_mismatch");
   });
 
   it("refuses a template with a local literal URL, an extra key or the wrong arm", () => {
