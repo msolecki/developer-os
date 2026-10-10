@@ -646,3 +646,32 @@ describe("skill body declarations the agent must see", () => {
     expect(contents).toContain("## Recovery");
   });
 });
+
+/** AUD-020: `ingest.stage`, `ingest.validate` and `ingest.apply` are one `developer-os ingest`. */
+describe("consecutive steps sharing one command", () => {
+  const ladder = contract({
+    steps: [
+      { id: "stage", do: "ingest.stage" },
+      { id: "validate", do: "ingest.validate" },
+      { id: "apply", do: "ingest.apply" },
+    ],
+  });
+
+  it("renders the command once and points the later steps at it", () => {
+    const { contents } = render(ladder);
+    expect(contents.match(/^developer-os ingest$/gmu)).toHaveLength(1);
+    expect(contents.match(/^Runs inside the command above; do not run it again\.$/gmu)).toHaveLength(2);
+  });
+
+  it("still renders the command again for a step whose with-block makes it a separate invocation", () => {
+    const { contents } = render(contract({
+      steps: [
+        { id: "list", do: "capture.list", with: { status: "pending" } },
+        { id: "decide", do: "capture.setStatus", with: { id: "$input.id" } },
+        { id: "relist", do: "capture.list" },
+      ],
+    }));
+    expect(contents.match(/^developer-os review$/gmu)).toHaveLength(3);
+    expect(contents).not.toContain("Runs inside the command above");
+  });
+});
