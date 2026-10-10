@@ -382,6 +382,15 @@ Spec §3's snake_case Codex event names are superseded by §1 question 4: Codex 
 PascalCase keys and silently ignores snake_case ones. Claude 2.1.280 has no `MultiEdit` tool, so
 that matcher alternative never matches.
 
+**Excluded (AUD-030): Claude `NotebookEdit`.** The file matcher is `Edit|Write|MultiEdit`
+(`packages/adapter-claude/src/hooks.ts` — `FILE_TOOLS`) and `editedPaths` reads only
+`tool_input.file_path`, so a `NotebookEdit` call never reaches `guard path`, `guard format` or
+`guard edit`: an existing `.ipynb` under a protected segment can be edited without a
+`protected-path` refusal. Its payload field (believed `notebook_path`) is not observed. Adding it
+waits on a captured `NotebookEdit` payload fixture; with it, the tool joins the matcher and
+`HOOK_TOOL_MATCHERS`, reading that field and failing closed when it is absent, and `guard format`
+must then not hand a notebook to the formatter.
+
 The `guard` verbs skip the ordinary-command gate and read no product-home state. They redact with an
 ephemeral key (spec G3). The shell guards match only after `normalizeShellCommand`, the same
 normalizer `assertSafeCommand` uses, and they split quote-aware segments with `shellSegments` at
