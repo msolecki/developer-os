@@ -35,7 +35,7 @@ row fall short of that, and each says so where it appears:**
    failure mode §1 exists to prevent, one level down. §8 is the whole accounting, **including what
    about §8 itself is not checkable against this repository.**
 
-**Two things stay where they are.** The **capability model** — two gates, three values — is recorded
+**Two things stay where they are.** The **capability model** — two gates, four values — is recorded
 per adapter and is deliberately not moved here; `codex-adapter.md` §3 says why, and
 `apps/cli/src/adapter-capability-parity.test.ts` is what keeps the two vocabularies identical while
 it stays there. The **residuals** with named owners stay in their own notes' residual sections; this
@@ -1251,7 +1251,7 @@ and possibly still live. The measurement record is "Two gate-integrity residuals
 
 | For | Read |
 |---|---|
-| The capability model — two gates, three values, and why it is recorded twice | `claude-adapter.md` §3 and `codex-adapter.md` §3; parity enforced by `apps/cli/src/adapter-capability-parity.test.ts`. Both notes record the DOS-P6 result, amended by A13: the capture keys and the other declined surfaces are `not-used`; `plugin_hooks` and `session_start_injection` resolve from firing records and stay `unknown` without one; `unknown` remains reserved for a fact nobody could establish (the `not-used` amendment, §8 of `git show d72287a^:docs/superpowers/BACKLOG.md`). The hook contract and its residuals are `hooks.md` §3 |
+| The capability model — two gates, four values, and why it is recorded twice | `claude-adapter.md` §3 and `codex-adapter.md` §3; parity enforced by `apps/cli/src/adapter-capability-parity.test.ts`. Both notes record the DOS-P6 result, amended by A13: the capture keys and the other declined surfaces are `not-used`; `plugin_hooks` and `session_start_injection` resolve from firing records and stay `unknown` without one; `unknown` remains reserved for a fact nobody could establish (the `not-used` amendment, §8 of `git show d72287a^:docs/superpowers/BACKLOG.md`). The hook contract and its residuals are `hooks.md` §3 |
 | The two-adapter differences table DOS-P6 designs against | `codex-adapter.md` §9 |
 | Fourteen Codex residuals and twelve Claude ones, most with owners | `codex-adapter.md` §11, `claude-adapter.md` §9 |
 | The mutation pipeline, ownership, exit codes and what Foundation cannot do | `foundation.md` §3, §4, §6, §7 |

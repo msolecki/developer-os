@@ -19,7 +19,7 @@ implementation plan was deleted when its last step closed; git history is the ar
 | `src/discover.ts` | `discoverClaude`, bound to `@developer-os/security`'s `discoverCli`; `ClaudeInstallation` as an alias of `CliInstallation` (Task 3.5, see `docs/architecture/foundation.md`) |
 | `src/versions.ts` | the capability keys and the supported floor; `tablePermits(key, version)` closes over that table and calls `@developer-os/core`'s generic `tablePermits` |
 | `src/probe.ts` | run `claude plugin validate` behind an injected runner and report what it observed |
-| `src/capabilities.ts` | table plus observation into the three-value model |
+| `src/capabilities.ts` | table plus observation into the four-value model |
 | `src/render.ts` | `ClaudeRenderer`: contract → `SKILL.md` frontmatter (`name`, `description`) and artifact path. The body — the `shared` preamble and the screen seam — moved to `packages/workflow-schema/src/skill.ts` on 2026-08-12; see §6 |
 | `src/plugin.ts` | the plugin tree and its minimal manifest |
 | `src/compose.ts` | `renderClaudePlugin` — find `shared`, render every workflow under `workflows/`, order the tree |
