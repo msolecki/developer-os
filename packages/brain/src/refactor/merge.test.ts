@@ -85,6 +85,20 @@ describe("planMerge", () => {
     expect(plan.rewrittenLinks).toBe(6);
   });
 
+  it("unlinks an embed of either note without leaving its `!` behind", async () => {
+    const plan = await planRefactor(
+      { mode: "merge", source: "DEV/s.md", target: "DEV/t.md" },
+      memoryInput({
+        "DEV/s.md": noteText({ title: "Source", body: "see ![[t]]" }),
+        "DEV/t.md": noteText({ title: "Target", body: "see ![[s|it]] and ![[r]]" }),
+        "DEV/r.md": noteText({ title: "R", body: "R body" }),
+      }),
+    );
+    expect(plan.mutations.find((m) => m.path === "DEV/t.md")?.content).toContain(
+      "see it and ![[r]]\n\n## Source\n\nsee t\n",
+    );
+  });
+
   it("counts a link from a third note once and the pair's own links as labels", async () => {
     const plan = await planRefactor(
       { mode: "merge", source: "DEV/s.md", target: "DEV/t.md" },
