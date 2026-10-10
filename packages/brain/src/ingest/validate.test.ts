@@ -173,7 +173,7 @@ function brainDeps(vaultRoot: string): BrainServiceDependencies {
 
 function contextFor(
   vaultRoot: string,
-  options: { readonly replaces?: string } = {},
+  options: { readonly replaces?: string; readonly noteCapture?: true } = {},
 ): IngestValidationContext {
   return {
     captureId: CAPTURE_ID,
@@ -556,15 +556,29 @@ describe("confidence-and-lifecycle", () => {
     expect(validators(result)).toContain("confidence-and-lifecycle");
   });
 
-  it("accepts an established note carrying a review date", async () => {
+  it("accepts an established note carrying a review date from a reviewed note capture", async () => {
     const result = await validateProposal(
       proposal(
-        note("DEV/settled.md", { stage: "established", reviewed: "2026-08-10" }),
+        note("DEV/settled.md", { stage: "established", reviewed: "2026-08-10", author: "human" }),
       ),
-      contextFor(await makeVault()),
+      contextFor(await makeVault(), { noteCapture: true }),
     );
 
     expect(validators(result)).not.toContain("confidence-and-lifecycle");
+  });
+
+  it.each([
+    ["claims human authorship", { author: "human" }],
+    ["claims a review date", { reviewed: "2026-10-01" }],
+    ["claims settled, reviewed knowledge", { stage: "established", reviewed: "2026-10-01" }],
+  ])("refuses a model-authored note that %s (AUD-008)", async (_label, fields) => {
+    const result = await validateProposal(
+      proposal(note("DEV/forged.md", fields)),
+      contextFor(await makeVault()),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("confidence-and-lifecycle");
   });
 
   it("accepts an emerging note, which is the stage a new proposal belongs in", async () => {

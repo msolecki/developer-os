@@ -399,17 +399,17 @@ still pass the exhaustiveness test because the typo went into the expectation to
 
 | Validator | Enforced at | What it refuses |
 |---|---|---|
-| `schema-and-frontmatter` | `packages/brain/src/ingest/validate.ts:339` | a note the canonical schema does not accept |
-| `source-and-provenance` | `:412` | a note whose `sourceCaptureId` is not the capture being ingested |
-| `link-and-graph` | `:989` | links the lint build grades as broken |
-| `duplicate-detection` | `:1011` | a proposal colliding with a note already in the vault |
-| `confidence-and-lifecycle` | `:446` | `established` without a `reviewed` date, `deprecated` without `updated` |
-| `secret-scan` | `:505` | a secret the model handed back |
-| `deterministic-reindex` | `:1024` | a proposal whose projection does not rebuild deterministically |
-| `generated-output-consistency` | `:760` | a write into the generated indexes directory |
-| `write-scope` | `:619` | a path outside the declared, resolved write scopes, or whose first segment is not a configured topic folder or an alias resolving to one (`content/DEV/x.md` is refused) |
+| `schema-and-frontmatter` | `packages/brain/src/ingest/validate.ts` — `schemaAndFrontmatter` | a note the canonical schema does not accept |
+| `source-and-provenance` | `packages/brain/src/ingest/validate.ts` — `sourceAndProvenance` | a note whose `sourceCaptureId` is not the capture being ingested |
+| `link-and-graph` | `packages/brain/src/ingest/validate.ts` — `linkAndGraph` | links the lint build grades as broken |
+| `duplicate-detection` | `packages/brain/src/ingest/validate.ts` — `duplicateDetection` | a proposal colliding with a note already in the vault |
+| `confidence-and-lifecycle` | `packages/brain/src/ingest/validate.ts` — `confidenceAndLifecycle` | `established` without a `reviewed` date, `deprecated` without `updated`; and, unless the proposal is a reviewed note capture (`noteCapture`), a model-authored note not recording `author: agent` with `reviewed: null` (AUD-008) |
+| `secret-scan` | `packages/brain/src/ingest/validate.ts` — `secretScan` | a secret the model handed back |
+| `deterministic-reindex` | `packages/brain/src/ingest/validate.ts` — `deterministicReindex` | a proposal whose projection does not rebuild deterministically |
+| `generated-output-consistency` | `packages/brain/src/ingest/validate.ts` — `generatedOutputConsistency` | a write into the generated indexes directory |
+| `write-scope` | `packages/brain/src/ingest/validate.ts` — `writeScope` | a path outside the declared, resolved write scopes, or whose first segment is not a configured topic folder or an alias resolving to one (`content/DEV/x.md` is refused) |
 
-`validateProposal` (`:940`) runs them, is total and side-effect-free, and a finding names the class and
+`validateProposal` (`packages/brain/src/ingest/validate.ts` — `validateProposal`) runs them, is total and side-effect-free, and a finding names the class and
 the file **never the value** (`:67-72`) — the report is written and logged, and the proposal is model
 output that has just read material an attacker may have written.
 
@@ -535,9 +535,9 @@ skipped.
 The fix gives the destination the canonical twin `generatedOutputConsistency` already had:
 `privateRootsCanonical` is measured with `containsPathLoosely` because this branch **denies** rather
 than grants, and the destination's own segments are folded and checked too, because neither subsumes
-the other (`packages/brain/src/ingest/validate.ts:714-767`, with the reasoning at `:584-598`).
-Evidence: `packages/brain/src/ingest/validate.test.ts:872` — "refuses a path whose case differs from the private folder it
-resolves into" — and `:882`, the in-vault symlink.
+the other (`packages/brain/src/ingest/validate.ts` — `containsPathLoosely`, with the reasoning at `packages/brain/src/ingest/validate.ts` — `excludedSegment`).
+Evidence: `packages/brain/src/ingest/validate.test.ts:938` — "refuses a path whose case differs from the private folder it
+resolves into" — and `:948`, the in-vault symlink.
 
 **Its twin closed `BACKLOG.md` §1 NEW-14.** `resolveCapturePath` compared the canonical quarantine
 root and the canonical target **against each other, never against the content root**, so a quarantine
