@@ -24,6 +24,7 @@ import {
   parseSchemaMigrationId,
   parseUInt64Decimal,
   parseUtcTimestamp,
+  sha256Hex,
   type LowerHexSha256,
   type SafeReasonCodeV1,
   type SchemaMigrationIdV1,
@@ -428,9 +429,6 @@ const EVIDENCE_KEYS = ["schemaVersion", "coordinatorId", "constructionPlanHash",
 const GUARDED_PREIMAGE_KEYS = ["kind", "authority", "path", "ownerUid", "mode", "nlink", "bytes", "sha256", "dev", "ino"];
 const PLAN_REF_KEYS = ["kind", "id", "path", "hash", "bytes"];
 
-function sha256Hex(bytes: Uint8Array | string): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
-}
 
 function canonical(value: unknown): CanonicalJsonV1 {
   return encodeCanonicalJson(value as CanonicalJsonValue);

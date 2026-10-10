@@ -4,7 +4,6 @@
  * `UpdateLifecycleCoordinator` engine, which touches the world only through injected ports.
  * The Spec 1 schema-V1 unions are never widened; a V2 plan shares only their paths and caps.
  */
-import { createHash } from "node:crypto";
 
 import { compareUtf8, decodeCanonicalJson, encodeCanonicalJson, hashCanonicalJson, hashCanonicalJsonNoLf, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { LifecycleRecoveryRequiredError, refuseLifecycleRecovery } from "../lifecycle/guarded-fs.js";
@@ -12,6 +11,9 @@ import { parseLifecycleCoordinatorId } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ArtifactOwner } from "../manifest/types.js";
 import {
+  MAXIMUM_CONSTRUCTION_PLAN_BYTES,
+  MAXIMUM_LEAF_PLAN_BYTES,
+  MAXIMUM_PARTICIPANT_JOURNAL_BYTES,
   MAXIMUM_RECOVERY_EXECUTOR_BYTES,
   parseLeafPlanId,
   updateConstructionEnvelopePaths,
@@ -61,6 +63,7 @@ import {
   parseSafeReasonCode,
   parseSchemaMigrationId,
   parseUtcTimestamp,
+  sha256Hex,
   type LowerHexSha256,
   type PositiveUInt32V1,
   type SafeReasonCodeV1,
@@ -236,12 +239,9 @@ export const MAXIMUM_UPDATE_RETIREMENT_LEAVES = 1_200_012;
  */
 export const UPDATE_COORDINATOR_PLAN_HASH_DOMAIN = "developer-os:lifecycle-coordinator-plan:v2";
 
-const MAX_LEAF_BYTES = 16_777_216;
-const MAX_CONSTRUCTION_BYTES = 536_870_912;
 const MAX_OWNERS = 16;
 const MAX_MIGRATIONS = 10_000;
 const MAX_INITIAL_JOURNALS = 20_100;
-const MAX_JOURNAL_BYTES = 1_048_576;
 const OPERATIONS: readonly UpdateOperationV1[] = ["update_apply", "update_rollback"];
 const PHASES: readonly UpdateLifecycleCoordinatorPhaseV2[] = ["planned", "participants_applying", "active_publishing", "verifying", "compensating", "terminal_finalizing", "finalized", "rolled_back", "compacting"];
 const TARGET_JOURNAL_KINDS: readonly UpdateTargetJournalKindV1[] = ["bundle_publication", "owner_update", "owner_external_effect", "schema_migration", "manifest_state", "release_trust_state", "active_release_state", "rollback_record_state", "rollback_payload_state"];
@@ -257,9 +257,6 @@ function canonicalBytes(value: unknown): Uint8Array {
   return encoder.encode(encodeCanonicalJson(value as CanonicalJsonValue));
 }
 
-function sha256Hex(bytes: Uint8Array): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
-}
 
 function same(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(left as CanonicalJsonValue) === encodeCanonicalJson(right as CanonicalJsonValue);
@@ -405,7 +402,7 @@ function parseRef<TKind extends UpdateLeafPlanKindV1>(value: unknown, kind: TKin
   if (input.kind !== kind) fail(`${label}.kind`);
   const id = parseLeafPlanId(kind, input.id);
   if (input.path !== updateLeafPlanPath(stagingRoot, kind, id)) fail(`${label}.path`);
-  return { kind, id, path: input.path, hash: parseLowerHexSha256(input.hash), bytes: integer(input.bytes, 1, MAX_LEAF_BYTES, `${label}.bytes`) } as ImmutableUpdatePlanRefV1<TKind>;
+  return { kind, id, path: input.path, hash: parseLowerHexSha256(input.hash), bytes: integer(input.bytes, 1, MAXIMUM_LEAF_PLAN_BYTES, `${label}.bytes`) } as ImmutableUpdatePlanRefV1<TKind>;
 }
 
 function parseInitialJournal(value: unknown, label: string): UpdateInitialJournalRefV1 {
@@ -421,7 +418,7 @@ function parseInitialJournal(value: unknown, label: string): UpdateInitialJourna
     stagedExpected: {
       constructionOrdinal: integer(staged.constructionOrdinal, 0, 1_099_999, `${label}.constructionOrdinal`),
       hash: parseLowerHexSha256(staged.hash),
-      bytes: integer(staged.bytes, 1, MAX_JOURNAL_BYTES, `${label}.bytes`),
+      bytes: integer(staged.bytes, 1, MAXIMUM_PARTICIPANT_JOURNAL_BYTES, `${label}.bytes`),
       mode: staged.mode === 384 ? 384 : fail(`${label}.mode`),
     },
   } as UpdateInitialJournalRefV1;
@@ -486,7 +483,7 @@ export function validateUpdateExecutionPlan(value: unknown, context: UpdateExecu
     operation,
     previewHash,
     executionBindingHash,
-    maximumPlanBytes: integer(input.maximumPlanBytes, 1, MAX_LEAF_BYTES, `${label}.maximumPlanBytes`),
+    maximumPlanBytes: integer(input.maximumPlanBytes, 1, MAXIMUM_LEAF_PLAN_BYTES, `${label}.maximumPlanBytes`),
     current,
     target,
     metadata: validateReleaseMetadataIdentity(input.metadata),
@@ -835,7 +832,7 @@ export function validateUpdateCoordinatorPlan(value: unknown, productHome: Canon
     maximumJournalBytes: integer(input.maximumJournalBytes, 1, MAXIMUM_UPDATE_COORDINATOR_JOURNAL_BYTES, `${label}.maximumJournalBytes`),
     recoveryExecutorInitialHash: parseLowerHexSha256(input.recoveryExecutorInitialHash),
     recoveryExecutorTerminalHash: parseLowerHexSha256(input.recoveryExecutorTerminalHash),
-    construction: { path: updateConstructionEnvelopePaths(stagingRoot).plan, hash: parseLowerHexSha256(construction.hash), bytes: integer(construction.bytes, 1, MAX_CONSTRUCTION_BYTES, `${label}.construction.bytes`) },
+    construction: { path: updateConstructionEnvelopePaths(stagingRoot).plan, hash: parseLowerHexSha256(construction.hash), bytes: integer(construction.bytes, 1, MAXIMUM_CONSTRUCTION_PLAN_BYTES, `${label}.construction.bytes`) },
     update: parseRef(input.update, "update_execution", stagingRoot, `${label}.update`),
     steps: list(input.steps, 1, MAXIMUM_UPDATE_COORDINATOR_STEPS, `${label}.steps`).map((step, index) => parseStep(step, `${label}.steps[${index.toString(10)}]`)),
     compaction: {
