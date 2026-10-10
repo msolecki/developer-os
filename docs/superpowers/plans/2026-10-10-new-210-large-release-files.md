@@ -107,7 +107,7 @@ export function deletePayloads(fs, uid, payloads, boundary?): Promise<void>;
 
 **Files:**
 - Modify: `packages/core/src/lifecycle/coordinator.ts` ~678: `if (step.transition === "stage") await key.restore(plan);`. `restoreRedactionKey` is already a no-op without a tombstone.
-- Modify: `packages/core/src/lifecycle/ledger.ts` ~879 and ~945. Add `"payloads"` to `STAGING_CHILDREN`. Under a published plan, admit exactly `payloads/<ordinal>` for ordinal < `plan.participants.redactionKey.payloads.length`, each an owner-held single-link regular file. With no plan, `payloads` refuses. Do NOT add it to `DERIVED_STAGING_CHILDREN` (`recovery.ts:46`).
+- Modify: `packages/core/src/lifecycle/ledger.ts` ~879 and ~945. Add `"payloads"` to `STAGING_CHILDREN`. Under a published plan, admit exactly `payloads/<ordinal>` for ordinal < `plan.participants.redactionKey.payloads.length`, each an owner-held single-link regular file. With no plan, `payloads` refuses. Do NOT add it to `DERIVED_STAGING_CHILDREN` (`packages/core/src/lifecycle/recovery.ts:46`).
 - Modify: `packages/core/src/lifecycle/coordinator-compaction.ts` ~189-200: `rmdirExactEmpty` of `payloads` before the coordinator staging directory. A non-empty `payloads` refuses and is preserved.
 - Tests: `coordinator.test.ts`, `ledger.test.ts`, `coordinator-compaction.test.ts`.
 
