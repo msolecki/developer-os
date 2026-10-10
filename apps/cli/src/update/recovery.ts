@@ -205,7 +205,9 @@ export async function readUpdateExecutorRecord(
   let record: ReturnType<typeof decodeUpdateExecutorRecordSlot>;
   try {
     record = decodeUpdateExecutorRecordSlot(await fs.readRegular(entry, MAXIMUM_RECOVERY_EXECUTOR_BYTES), evidence);
-  } catch {
+  } catch (error) {
+    // A JavaScript defect is not a verdict on the bytes and stays exit 1.
+    if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) throw error;
     return refuse("update_executor_record_malformed", path);
   }
   return record === "reservation" ? null : { entry, record };

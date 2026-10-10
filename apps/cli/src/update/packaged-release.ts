@@ -96,8 +96,9 @@ export class PackagedReleaseError extends Error {
       | typeof EXIT_CODES.securityRefusal
       | typeof EXIT_CODES.recoveryRequired,
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "PackagedReleaseError";
   }
 }
@@ -621,9 +622,12 @@ async function assertAncestors(packageRoot: string, prefix: string): Promise<voi
 
 function asRecoveryRequired(error: unknown): never {
   if (error instanceof PackagedReleaseError && error.code !== EXIT_CODES.securityRefusal) throw error;
+  // A JavaScript defect is not a verdict on the keg and stays exit 1.
+  if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) throw error;
   throw new PackagedReleaseError(
     EXIT_CODES.recoveryRequired,
     error instanceof Error ? error.message : "package-channel release admission failed",
+    { cause: error },
   );
 }
 

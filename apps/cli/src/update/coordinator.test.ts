@@ -64,6 +64,20 @@ interface Envelope {
   readonly store: (interrupt?: (point: UpdateCoordinatorStoreDeathPointV1) => void) => UpdateCoordinatorJournalStore;
 }
 
+/** A port whose `readRegular` hands back bytes that throw on any access, from the `from`-th read on: a JavaScript defect, not malformed bytes. */
+function defectiveReadFs(fs: LifecycleGuardedFileSystemV1, from = 1): LifecycleGuardedFileSystemV1 {
+  let reads = 0;
+  const defect = new Proxy(new Uint8Array(1), { get: () => { throw new TypeError("defect"); } });
+  return new Proxy(fs, {
+    get: (target, key) => {
+      const value = Reflect.get(target, key) as unknown;
+      if (typeof value !== "function") return value;
+      const method = (value as (...args: unknown[]) => unknown).bind(target);
+      return key === "readRegular" ? (...args: unknown[]) => (++reads >= from ? Promise.resolve(defect) : method(...args)) : method;
+    },
+  });
+}
+
 async function envelope(): Promise<Envelope> {
   const home = parseCanonicalAbsolutePathText(await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "dos-update-coordinator-"))));
   homes.push(home);
@@ -155,6 +169,13 @@ describe("UpdateCoordinatorJournalStore", () => {
     const third = await envelope();
     await nodeFs.chmod(third.paths.journal, 0o644);
     await expect(third.store().read(SYNTHETIC_COORDINATOR_ID)).rejects.toMatchObject({ code: 6 });
+  });
+
+  it("lets a JavaScript defect while decoding the plan or journal escape as itself, not as exit 6 (AUD-059)", async () => {
+    const { home } = await envelope();
+    const store = (from: number) => new UpdateCoordinatorJournalStore({ fs: defectiveReadFs(guardedFs(), from), productHome: home, effectiveUid: uid, uuid });
+    await expect(store(1).read(SYNTHETIC_COORDINATOR_ID)).rejects.toBeInstanceOf(TypeError);
+    await expect(store(2).read(SYNTHETIC_COORDINATOR_ID)).rejects.toBeInstanceOf(TypeError);
   });
 
   it("removes the envelope journal, lock, then plan, and finishes a plan-only suffix", async () => {

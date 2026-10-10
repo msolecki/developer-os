@@ -53,6 +53,20 @@ function guardedFs(): LifecycleGuardedFileSystemV1 {
   });
 }
 
+/** A port whose `readRegular` hands back bytes that throw on any access, from the `from`-th read on: a JavaScript defect, not malformed bytes. */
+function defectiveReadFs(fs: LifecycleGuardedFileSystemV1, from = 1): LifecycleGuardedFileSystemV1 {
+  let reads = 0;
+  const defect = new Proxy(new Uint8Array(1), { get: () => { throw new TypeError("defect"); } });
+  return new Proxy(fs, {
+    get: (target, key) => {
+      const value = Reflect.get(target, key) as unknown;
+      if (typeof value !== "function") return value;
+      const method = (value as (...args: unknown[]) => unknown).bind(target);
+      return key === "readRegular" ? (...args: unknown[]) => (++reads >= from ? Promise.resolve(defect) : method(...args)) : method;
+    },
+  });
+}
+
 async function exists(path: string): Promise<boolean> {
   return nodeFs.lstat(path).then(() => true, () => false);
 }
@@ -183,6 +197,12 @@ describe("the update_executor_cleanup suffix", () => {
     const { home, finalPath } = await world();
     await nodeFs.writeFile(finalPath, "not json\n", { mode: 0o600 });
     await expect(readUpdateExecutorRecord(guardedFs(), home, uid, SYNTHETIC_EVIDENCE)).rejects.toMatchObject({ code: 6 });
+  });
+
+  it("lets a JavaScript defect while decoding the record escape as itself, not as exit 6 (AUD-059)", async () => {
+    const { home, finalPath } = await world();
+    await nodeFs.writeFile(finalPath, "not json\n", { mode: 0o600 });
+    await expect(readUpdateExecutorRecord(defectiveReadFs(guardedFs()), home, uid, SYNTHETIC_EVIDENCE)).rejects.toBeInstanceOf(TypeError);
   });
 });
 

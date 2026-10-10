@@ -461,6 +461,15 @@ describe("admitPackageChannelRelease (D84 K2)", () => {
     await nodeFs.symlink("/tmp", join(prefix, "opt", "developer-os"));
     await expect(resolvePackageChannelSource(process.arch as "arm64", table(prefix))).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
   });
+  it("rethrows a JavaScript defect unchanged and keeps the cause of a wrapped refusal (AUD-059)", async () => {
+    const { prefix, packageRoot } = await kegFixture();
+    await expect(admitPackageChannelRelease(42 as never, { prefix, requireVersion: null, architecture: ARCH })).rejects.toBeInstanceOf(TypeError);
+    await expect(resolvePackageChannelSource(process.arch as "arm64", { [process.arch]: { prefix, opt: 42, fallback: "libexec/fallback" } } as never)).rejects.toBeInstanceOf(TypeError);
+    await nodeFs.rm(join(packageRoot, "bundle/bin/cli"));
+    const refusal = await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: ARCH }).catch((error: unknown) => error);
+    expect(refusal).toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    expect((refusal as Error).cause).toBeInstanceOf(Error);
+  });
   it("(h) refuses a swapped file at reread", async () => {
     const { prefix, packageRoot } = await kegFixture();
     const source = await admitPackageChannelRelease(packageRoot, { prefix, requireVersion: null, architecture: ARCH });
