@@ -123,15 +123,18 @@ export function proposeClaudeUninstall(
   managed: ManagedByPath,
 ): ClaudeInstallProposal {
   const root = pluginRoot(context);
-  // The owner check its Codex twin already performed (`foundation.md` §12.5, adapter fix).
+  // The owner and containment checks its Codex twin already performed (`foundation.md` §12.5,
+  // adapter fix): `<root>/../x` passes a raw prefix test but normalizes outside `root`.
   // Rows without a content hash (directories) are the detach planner's, not a file removal.
   const owned = [...managed.values()]
-    .filter((artifact) => artifact.owner === "claude" && artifact.path.startsWith(`${root}/`))
     .flatMap((artifact) => {
       const hash = installedHash(artifact);
-      return hash === null ? [] : [{ artifact, hash }];
+      const targetPath = posix.normalize(artifact.path);
+      return artifact.owner !== "claude" || hash === null || !targetPath.startsWith(`${root}/`)
+        ? []
+        : [{ artifact, hash, targetPath }];
     })
-    .sort((left, right) => compareCodePoints(left.artifact.path, right.artifact.path));
+    .sort((left, right) => compareCodePoints(left.targetPath, right.targetPath));
 
   if (owned.length === 0) {
     throw new Error("refusing to propose an empty uninstall plan");
@@ -140,8 +143,8 @@ export function proposeClaudeUninstall(
   return {
     schemaVersion: 1,
     productVersion: context.productVersion,
-    operations: owned.map(({ artifact, hash }) => ({
-      targetPath: artifact.path,
+    operations: owned.map(({ artifact, hash, targetPath }) => ({
+      targetPath,
       operation: "remove" as const,
       owner: "claude" as const,
       kind: "file" as const,
