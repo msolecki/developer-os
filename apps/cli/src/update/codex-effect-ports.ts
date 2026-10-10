@@ -27,7 +27,6 @@ export function supervisedOwnerEffectRun(runner: SupervisedProcessRunner): (requ
         env: request.env,
         cwd: request.cwd,
         stdin: "ignore",
-        inheritedFds: [],
         stdoutCap: request.stdoutCap,
         stderrCap: request.stderrCap,
         idleMs: request.idleMs,

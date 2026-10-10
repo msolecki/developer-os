@@ -26,8 +26,6 @@ export interface SupervisedSpawnRequestV1 {
   readonly cwd: string;
   /** A stream is piped as it arrives, for the one bidirectional protocol child (receive-pack). */
   readonly stdin: "ignore" | { readonly bytes: Uint8Array } | { readonly stream: AsyncIterable<Uint8Array> };
-  /** Empty except for the launchd bootstrap's FD 3 plist snapshot. */
-  readonly inheritedFds: readonly { readonly childFd: 3; readonly parentFd: number }[];
   readonly stdoutCap: number;
   readonly stderrCap: number;
   readonly idleMs: number;
@@ -55,7 +53,7 @@ export interface SupervisedChildSpawnV1 {
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
   readonly cwd: string;
-  readonly stdio: readonly ["ignore" | "pipe", "pipe", "pipe", ...number[]];
+  readonly stdio: readonly ["ignore" | "pipe", "pipe", "pipe"];
   /** Written once and closed when `stdio[0]` is `"pipe"` and no stream is given. */
   readonly stdinBytes: Uint8Array | null;
   readonly stdinStream: AsyncIterable<Uint8Array> | null;
@@ -99,12 +97,6 @@ function validateRequest(request: SupervisedSpawnRequestV1): void {
   }
   if (request.stdin !== "ignore" && !("stream" in request.stdin) && !(request.stdin.bytes instanceof Uint8Array)) {
     refuse("Supervised process stdin must be bytes");
-  }
-  const fds = request.inheritedFds;
-  if (fds.length > 1) refuse("Supervised process may inherit only FD 3");
-  const fd = fds[0];
-  if (fd !== undefined && ((fd.childFd as number) !== 3 || !Number.isSafeInteger(fd.parentFd) || fd.parentFd < 0)) {
-    refuse("Supervised process may inherit only FD 3");
   }
   if (!Number.isSafeInteger(request.stdoutCap) || request.stdoutCap < 0 || !Number.isSafeInteger(request.stderrCap) || request.stderrCap < 0) {
     refuse("Supervised process output caps must be non-negative integers");
@@ -151,7 +143,7 @@ export class SupervisedProcessRunner {
       argv: [...request.argv],
       env: { ...request.env },
       cwd: request.cwd,
-      stdio: [request.stdin === "ignore" ? "ignore" : "pipe", "pipe", "pipe", ...request.inheritedFds.map((fd) => fd.parentFd)],
+      stdio: [request.stdin === "ignore" ? "ignore" : "pipe", "pipe", "pipe"],
       stdinBytes: request.stdin === "ignore" || "stream" in request.stdin ? null : request.stdin.bytes,
       stdinStream: request.stdin !== "ignore" && "stream" in request.stdin ? request.stdin.stream : null,
     });

@@ -72,7 +72,6 @@ const LAUNCHCTL_RAW = {
   env: { HOME: "/private/var/empty", LANG: "C", LC_ALL: "C", PATH: "/usr/bin:/bin:/usr/sbin:/sbin", TMPDIR: "/private/var/empty" },
   cwd: "/private/var/empty",
   stdin: "ignore",
-  inheritedFds: [],
   stdoutCap: 1048576,
   stderrCap: 1048576,
   idleMs: 30000,

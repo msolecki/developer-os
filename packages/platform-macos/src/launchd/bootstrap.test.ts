@@ -301,7 +301,6 @@ describe("LaunchdPathBootstrapper (D82)", () => {
       argv: ["bootstrap", domain, path],
       env: { ...table.environment },
       cwd: table.staging.home.path,
-      inheritedFds: [],
     });
   });
 

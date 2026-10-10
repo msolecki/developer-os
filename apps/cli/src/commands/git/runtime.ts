@@ -669,7 +669,6 @@ export async function bridgeReceivePack(input: ReceivePackBridgeV1): Promise<voi
         env: input.env,
         cwd: input.cwd,
         stdin: { stream: connectionBytes(input.rest, socket, io.stdinMaxBytes, stdin) },
-        inheritedFds: [],
         stdoutCap: io.stdoutMaxBytes,
         stderrCap: io.stderrMaxBytes,
         idleMs: io.idleDeadlineMs,

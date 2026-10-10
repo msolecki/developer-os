@@ -276,7 +276,6 @@ describe("GitProcessSupervisor permits", () => {
       env: PROBE_ENV,
       cwd: QUARANTINE,
       stdin: "ignore",
-      inheritedFds: [],
       stdoutCap: 4194304,
       stderrCap: 4194304,
       idleMs: 30000,
