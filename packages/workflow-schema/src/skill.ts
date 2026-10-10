@@ -344,6 +344,8 @@ function renderChecks(contract: WorkflowContractV1): readonly string[] {
   ];
 }
 
+const SHARED_COMMAND_NOTE = "Runs inside the command above; do not run it again.";
+
 const INPUT_PLACEHOLDER_NOTE =
   "A value written `$input.<name>` stands for the workflow input `<name>`: replace it with what the user supplied for that input.";
 
@@ -356,8 +358,12 @@ const INPUT_PLACEHOLDER_NOTE =
  */
 function renderSteps(contract: WorkflowContractV1): readonly string[] {
   const lines: string[] = ["## Steps", ""];
+  // AUD-020: three ingest verbs are one `developer-os ingest`; rendering it three times ran it three times.
+  let previousCommand: string | null = null;
   for (const step of contract.steps) {
     lines.push(`### ${screen(step.id)}`, "");
+    const sharedCommand: string | null = previousCommand;
+    previousCommand = null;
     if (step.prose !== undefined) {
       const block = boundedProse(step.prose, SKILL_FIELD_CAP);
       // Prose that screens to nothing is a heading with no body — a step that
@@ -393,8 +399,14 @@ function renderSteps(contract: WorkflowContractV1): readonly string[] {
      * to run it.
      */
     const command = lookupVerb(step.do)?.command;
+    if (command != null && step.with === undefined && command === sharedCommand) {
+      lines.push(SHARED_COMMAND_NOTE, "");
+      previousCommand = command;
+      continue;
+    }
     if (command != null) {
       lines.push(...fenced(screen(command), "text"), "");
+      if (step.with === undefined) previousCommand = command;
     }
     if (step.with !== undefined) {
       const json = JSON.stringify(step.with);
