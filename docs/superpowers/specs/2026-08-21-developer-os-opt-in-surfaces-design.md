@@ -2067,7 +2067,7 @@ a torn `K(stage)` leaves some rows at their source and some at `payloadPath`, an
 whichever moved; a torn `K(delete)` leaves a prefix of unlinked rows and resumes forward. A row absent at
 both paths in `K(stage)` or restore, a symlinked ancestor, both paths present or a wrong
 kind/owner/mode/size/link/device/inode is `lifecycle_recovery_required` (`uninstall_payload_identity`,
-`uninstall_payload_state`, `uninstall_payload_hash` or `uninstall_payload_parent`, the last for a bad `payloads/` directory or a missing parent) and is preserved. Ledger admission accepts a
+`uninstall_payload_state`, `uninstall_payload_hash` or `uninstall_payload_parent`, the last for a bad `payloads/` directory or a missing parent) and is preserved. A refusal stops compensation where it stands: restore runs in reverse ordinal order, so a swapped or vanished entry leaves every lower ordinal in `payloads/` with its identity intact; once the original file is put back, recovery restores the rest (accepted 2026-10-10, fail-closed like the key). Ledger admission accepts a
 `payloads/<ordinal>` leaf only under a published plan and only below its row count, and only as an owner-held
 `0600`/`0700` single-link regular file of at most `MAXIMUM_BUNDLE_FILE_BYTES`; otherwise `lifecycle_staging_shape`. Compaction refuses a
 non-empty `payloads/` (`lifecycle_guarded_not_empty`) before it unlinks any other piece of the coordinator staging and removes the empty directory
