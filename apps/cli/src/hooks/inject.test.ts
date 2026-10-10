@@ -17,6 +17,7 @@ import {
   MAX_INJECTED_CONTEXT_BYTES,
   VAULT_MAP_TRUNCATED_MARKER,
 } from "./inject.js";
+import { writeHookOutcome } from "./outcome.js";
 import type { HookPayloadV1 } from "./payload.js";
 import type { HookContextFactory, HookRuntime } from "./registry.js";
 
@@ -67,7 +68,7 @@ describe("composeInjection", () => {
   });
 });
 
-function projectNote(title: string): string {
+function projectNote(title: string, body = "Synthetic project body. Customer ACME-1234 owns it."): string {
   return [
     "---",
     "schemaVersion: 1",
@@ -81,7 +82,7 @@ function projectNote(title: string): string {
     "reviewed: 2026-07-01",
     "---",
     "",
-    "Synthetic project body. Customer ACME-1234 owns it.",
+    body,
     "",
   ].join("\n");
 }
@@ -103,14 +104,17 @@ interface Installed {
   readonly deepCwd: string;
 }
 
-async function installed(label: string, options: { vault: boolean; index: boolean }): Promise<Installed> {
+async function installed(
+  label: string,
+  options: { vault: boolean; index: boolean; noteBody?: string },
+): Promise<Installed> {
   const fixture = await createCommandFixture(label);
   await nodeFs.mkdir(fixture.paths.home, { recursive: true, mode: 0o700 });
   await nodeFs.writeFile(fixture.paths.configFile, serializeConfig(configFor(fixture)), { mode: 0o600 });
 
   if (options.vault) {
     const files: Record<string, string> = {
-      "content/PROJECTS/developer-os.md": projectNote("developer-os"),
+      "content/PROJECTS/developer-os.md": projectNote("developer-os", options.noteBody),
       "content/PROJECTS/deeper.md": projectNote("deeper"),
     };
     for (const [vaultPath, text] of Object.entries(files)) {
@@ -174,6 +178,18 @@ describe("injectBrainContext", () => {
     const redacted = outcome.redact?.(outcome.text) ?? "";
     expect(redacted).toContain("Synthetic project body.");
     expect(redacted).not.toContain("ACME-1234");
+  });
+
+  it("redacts before truncating, so a pattern straddling the byte cap leaves no unredacted prefix", async () => {
+    const before = bytes(`\n${VAULT_MAP_TRUNCATED_MARKER}\n\n# developer-os\n\n`) + bytes(projectNote("developer-os", "")) - 1;
+    const noteBody = `${"x".repeat(MAX_INJECTED_CONTEXT_BYTES - before - 4)}ACME-1234${"x".repeat(100)}`;
+    const { fixture, deepCwd } = await installed("inject-straddle", { vault: true, index: true, noteBody });
+    const outcome = await injectBrainContext(PAYLOAD, runtimeFor(fixture, deepCwd));
+    expect(outcome.kind).toBe("context");
+    const out: string[] = [];
+    writeHookOutcome(outcome, "claude", { stdout: (text) => out.push(text), stderr: () => undefined }, (text) => text);
+    expect(out.join("")).toContain("# developer-os");
+    expect(out.join("")).not.toContain("ACME");
   });
 
   it("derives the slug from the git root's basename, not from the deeper cwd", async () => {

@@ -46,11 +46,17 @@ async function inject(runtime: HookRuntime): Promise<HookOutcome> {
   if (config === null) return { kind: "allow", note: "brain status --inject: no configuration" };
   const service = new BrainService(dependenciesFor(context, runtimePathsFor(context, config).brain, config));
   const root = await resolveProjectRoot(runtime.cwd);
-  const text = composeInjection(await service.sessionContext(slugify(basename(root))));
-  if (text === null) return { kind: "allow", note: "brain status --inject: nothing to inject" };
   // NEW-159: the user's `[redaction] patterns`, as capture and ingest apply; read, never create, the key.
-  const redact = redactorWithoutCreatingKey(context, config.redaction?.patterns ?? []);
-  return { kind: "context", text, redact: (value) => redact(value).text };
+  const redactor = redactorWithoutCreatingKey(context, config.redaction?.patterns ?? []);
+  const redact = (value: string): string => redactor(value).text;
+  // AUD-028: redact before truncating, so a secret straddling the byte cap cannot survive as a prefix.
+  const { vaultMap, projectNote } = await service.sessionContext(slugify(basename(root)));
+  const text = composeInjection({
+    vaultMap: vaultMap === null ? null : redact(vaultMap),
+    projectNote: projectNote === null ? null : { title: redact(projectNote.title), text: redact(projectNote.text) },
+  });
+  if (text === null) return { kind: "allow", note: "brain status --inject: nothing to inject" };
+  return { kind: "context", text, redact };
 }
 
 /** A session never fails to start because of injection: every failure is `allow` with one note. */
