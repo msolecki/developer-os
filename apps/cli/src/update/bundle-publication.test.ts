@@ -45,6 +45,7 @@ import {
 import type { VerifiedScratchBundleV1 } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { createCanonicalPathEvidence } from "../bootstrap/admission.js";
 import { BUNDLE_PUBLICATION_DEATH_POINTS, BundlePublicationParticipant, type BundlePublicationDeathPointV1 } from "./bundle-publication.js";
 import { BundleSourceExecutor } from "./bundle-source.js";
 import { stageSourceConstruction, type SourceConstructionV1 } from "./rollback-testing.js";
@@ -254,7 +255,7 @@ async function verifyPlan(value: Fixture): Promise<BundlePublicationPlanV1> {
 }
 
 function participant(value: Fixture, interrupt?: (point: BundlePublicationDeathPointV1) => void): BundlePublicationParticipant {
-  return new BundlePublicationParticipant({ ...dependencies(interrupt), payloadIdentity }, value.root);
+  return new BundlePublicationParticipant({ ...dependencies(interrupt), payloadIdentity, evidence: createCanonicalPathEvidence() }, value.root);
 }
 
 function dieAt(point: BundlePublicationDeathPointV1): (reached: BundlePublicationDeathPointV1) => void {

@@ -538,7 +538,7 @@ async function dispatcherOf(dispatch: DispatchContextV1): Promise<UpdateStepDisp
 
   // Bundle, rollback payload, manifests, verifier, retirement.
   const bundleDeps = { fs, effectiveUid, now };
-  const bundle = new BundlePublicationParticipant({ ...bundleDeps, payloadIdentity }, root);
+  const bundle = new BundlePublicationParticipant({ ...bundleDeps, payloadIdentity, evidence: createCanonicalPathEvidence() }, root);
   const bundlePlan = leaf<BundlePublicationPlanV1>(execution.bundle);
   const bundleJournal = journalRef(execution, "bundle_publication", execution.bundle.id);
   const payload = new RollbackPayloadParticipant(bundleDeps, root);

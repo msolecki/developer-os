@@ -1070,7 +1070,7 @@ class UpdateComposer {
       inventoryHash,
       maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
       maximumJournalBytes: MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES,
-    }, this.#root));
+    }, this.#root, this.#deps.evidence));
   }
 
   /** `rollback_payload/verify_retained`: publishes nothing and retires the retained payload at terminal. */
@@ -1743,7 +1743,7 @@ class UpdateComposer {
       inventoryHash: bundleInventoryHash(bundleManifest.entries),
       maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
       maximumJournalBytes: MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES,
-    }, this.#root));
+    }, this.#root, this.#deps.evidence));
   }
 
   /**
