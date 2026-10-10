@@ -1,7 +1,8 @@
 import { realpath } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import { containsPath } from "@developer-os/core";
+import { canonicalizePlannedPath } from "@developer-os/security";
 
 import { excerpt } from "../outcome.js";
 import { editedPaths, HOOK_TOOL_MATCHERS } from "../payload.js";
@@ -20,9 +21,10 @@ export const guardEdit: HookVerbHandler = async (payload, runtime) => {
   for (const path of paths) {
     if (path.includes("\0")) continue;
     const lexical = isAbsolute(path) ? resolve(path) : resolve(base, path);
-    if (!containsPath(root, lexical)) continue;
     let real: string;
     try {
+      const canonicalParent = join(await canonicalizePlannedPath(dirname(lexical)), basename(lexical));
+      if (!containsPath(root, lexical) && !containsPath(root, canonicalParent)) continue;
       real = await realpath(lexical);
     } catch {
       continue;

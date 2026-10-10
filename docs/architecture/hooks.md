@@ -431,7 +431,8 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   NFC-lowercased substring test, and the `context` line names at most 3 skills. An absent file is
   `allow`; an invalid one is `allow` with a note naming the file.
 - **`edit`.** Resolves each edited path and never opens the file. It is `advise` (`shared-file`)
-  only when the lexical path is inside the root and its real path is not.
+  only when the path is inside the canonical root, spelled lexically or with its parent directory
+  canonicalized (a symlinked or `/tmp`-style root alias), and its real path is not (AUD-033).
 
 ### 3.5 Recursion
 
