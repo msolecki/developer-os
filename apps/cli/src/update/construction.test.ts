@@ -446,6 +446,16 @@ describe("UpdateConstructionStore", () => {
     expect(await exists(leftover.path)).toBe(false);
   });
 
+  it("refuses a leftover owner payload row, so its owner's compaction defect stays visible (NEW-241)", async () => {
+    const value = await fixture();
+    const target = store(value);
+    await construct(value, target);
+    const leftover = value.plan.files.find((row) => row.role.kind === "payload" && row.role.payloadKind === "owner_content") as UpdateConstructionFilePlanV1;
+    for (const row of value.plan.files.slice(3)) if (row !== leftover) await nodeFs.rm(row.path);
+    await expect(target.compact(value.plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await exists(leftover.path)).toBe(true);
+  });
+
   it("refuses compaction of a delegated row that is still present or not terminal", async () => {
     const value = await fixture();
     const target = store(value);
