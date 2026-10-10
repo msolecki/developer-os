@@ -20,6 +20,7 @@ import {
   deriveBootstrapRetentionTable,
   encodeCanonicalJson,
   EXIT_CODES,
+  foundationBindingsHash,
   SCHEDULED_JOB_IDS,
   hashBytes,
   CODEX_INGEST_AUTH_LINK,
@@ -2168,10 +2169,7 @@ export class BootstrapExecutor {
     if (manifestRef.hash !== lowerHash(manifestBytes)) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "manifest payload derivation changed");
     }
-    const foundationHash = createHash("sha256")
-      .update("developer-os/manifest-foundation-bindings/v1\0")
-      .update(JSON.stringify([forwardId]))
-      .digest("hex") as LowerHexSha256;
+    const foundationHash = foundationBindingsHash([forwardId]);
     const manifestState = {
       schemaVersion: 1,
       participantId: `mf_${input.id}`,
