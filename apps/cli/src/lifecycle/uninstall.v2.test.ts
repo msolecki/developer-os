@@ -1152,11 +1152,14 @@ describe("V2 uninstall planning refusals", () => {
   async function plantLargeRow(
     fixture: CommandFixture,
     relative: string,
-    linkedAs?: string,
+    options: { readonly linkedAs?: string | undefined; readonly staging?: boolean } = {},
   ): Promise<{ readonly path: string; readonly hash: string; readonly source: string }> {
+    const { linkedAs } = options;
     const size = 17 * 1024 * 1024;
     const real = join(fixture.paths.home, relative);
-    await nodeFs.mkdir(join(fixture.paths.home, "staging", "lifecycle"), { recursive: true, mode: 0o700 });
+    if (options.staging !== false) {
+      await nodeFs.mkdir(join(fixture.paths.home, "staging", "lifecycle"), { recursive: true, mode: 0o700 });
+    }
     await nodeFs.mkdir(join(real, ".."), { recursive: true, mode: 0o700 });
     await nodeFs.writeFile(real, "", { mode: 0o700 });
     await nodeFs.truncate(real, size);
@@ -1204,7 +1207,7 @@ describe("V2 uninstall planning refusals", () => {
     ["a non-ASCII path component", "releases/b\u00efn/large", undefined],
   ])("refuses a file larger than 16 MiB under %s before it allocates (NEW-210)", async (_label, relative, linkedAs) => {
     const { fixture, global } = await syntheticFixture("uninstall-large-unmovable");
-    const row = await plantLargeRow(fixture, relative, linkedAs);
+    const row = await plantLargeRow(fixture, relative, { linkedAs });
     await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
     await plant(fixture.paths.manifestFile, "{}\n");
     const request = await syntheticRequest(fixture, syntheticManifest([row]));
@@ -1214,6 +1217,83 @@ describe("V2 uninstall planning refusals", () => {
       reason: "uninstall_artifact_too_large",
     });
     expect(await exists(row.path)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  async function refusesTooLarge(fixture: CommandFixture, global: HeldLifecycleStableLockV1, row: { readonly path: string; readonly hash: string; readonly source: string }): Promise<void> {
+    await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
+    await plant(fixture.paths.manifestFile, "{}\n");
+    const request = await syntheticRequest(fixture, syntheticManifest([row]));
+    await expect(new LifecycleUninstaller().preview(request, global)).rejects.toMatchObject({
+      code: EXIT_CODES.recoveryRequired,
+      reason: "uninstall_artifact_too_large",
+    });
+    expect(await exists(row.path)).toBe(true);
+  }
+
+  it("carries a large file directly under the product home only while the home is owner-held 0700 (NEW-210)", async () => {
+    const { fixture, global } = await syntheticFixture("uninstall-large-top");
+    const row = await plantLargeRow(fixture, "large");
+    await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
+    await plant(fixture.paths.manifestFile, "{}\n");
+    const request = await syntheticRequest(fixture, syntheticManifest([row]));
+    const preview = await new LifecycleUninstaller().preview(request, global);
+    const ids = Array.from({ length: preview.builder.slotCount }, (_unused, index) => `tx_${"f".repeat(64)}_${String(index)}`);
+    expect(preview.builder.build(ids).plan.participants.redactionKey?.payloads.map((payload) => payload.sourcePath)).toStrictEqual([row.path]);
+
+    await nodeFs.chmod(fixture.paths.home, 0o755);
+    await refusesTooLarge(fixture, global, row);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses a large file as too large, not as a guarded parent, when the home has no staging tree (NEW-210)", async () => {
+    const { fixture, global } = await syntheticFixture("uninstall-large-no-staging");
+    const row = await plantLargeRow(fixture, "releases/bin/large", { staging: false });
+    expect(await exists(join(fixture.paths.home, "staging"))).toBe(false);
+    await refusesTooLarge(fixture, global, row);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses a large source under state/ before it allocates (NEW-210)", async () => {
+    const { fixture, global } = await syntheticFixture("uninstall-large-state-row");
+    await refusesTooLarge(fixture, global, await plantLargeRow(fixture, "state/large"));
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /** The partition preserves `staging/` (an excluded root, case-insensitively), so the payload rule's own staging check is a backstop. */
+  it.each(["staging/large", "Staging/large"])("preserves a large row at %s, never carrying it as a payload (NEW-210)", async (relative) => {
+    const { fixture, global } = await syntheticFixture("uninstall-large-staging-row");
+    const row = await plantLargeRow(fixture, relative);
+    await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
+    await plant(fixture.paths.manifestFile, "{}\n");
+    const preview = await new LifecycleUninstaller().preview(await syntheticRequest(fixture, syntheticManifest([row])), global);
+    const ids = Array.from({ length: preview.builder.slotCount }, (_unused, index) => `tx_${"f".repeat(64)}_${String(index)}`);
+
+    expect(preview.removable).not.toContain(row.path);
+    expect(preview.builder.build(ids).plan.participants.redactionKey?.payloads).toStrictEqual([]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses more large files than one K plan carries with D26's capacity verdict (NEW-210)", async () => {
+    const { fixture, global } = await syntheticFixture("uninstall-large-capacity");
+    await nodeFs.mkdir(join(fixture.paths.home, "staging", "lifecycle"), { recursive: true, mode: 0o700 });
+    const artifacts = await plantSyntheticArtifacts(fixture, MAX_UNINSTALL_ARTIFACTS + 1);
+    await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
+    await plant(fixture.paths.manifestFile, "{}\n");
+    const request = await syntheticRequest(fixture, syntheticManifest(artifacts));
+    /** Each small row reads as 16 MiB + 1 to the guarded port, so planning sees 7,937 payloads without hashing 130 GB. */
+    const directory = join(fixture.paths.home, "synthetic");
+    const base = request.lifecycle.fs;
+    const fs: typeof base = {
+      ...base,
+      lstat: async (path) => {
+        const entry = await base.lstat(path);
+        return entry?.kind === "regular_file" && path.startsWith(`${directory}/`)
+          ? { ...entry, size: String(16 * 1024 * 1024 + 1) as typeof entry.size }
+          : entry;
+      },
+      hashRegular: () => Promise.resolve("0".repeat(64) as never),
+    };
+
+    await expect(new LifecycleUninstaller().preview({ ...request, lifecycle: { ...request.lifecycle, fs } }, global)).rejects.toMatchObject({
+      code: EXIT_CODES.capabilityUnavailable,
+      reason: "uninstall_artifact_capacity_exceeded",
+    });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses an edited content artifact before it allocates", async () => {

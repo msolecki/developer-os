@@ -403,6 +403,29 @@ describe("refused and preserved", () => {
     expect(await exists(first.sourcePath)).toBe(false);
   });
 
+  it("restore through an ancestor replaced by a symlink after staging, moving nothing", async () => {
+    const value = await fixture();
+    const payload = await plant(value, 0, "a");
+    await stagePayloads(value.fs, UID, value.staging, [payload]);
+    const outside = `${value.home}/../outside`;
+    await nodeFs.mkdir(outside, { mode: 0o700 });
+    await nodeFs.rmdir(`${value.home}/bin`);
+    await nodeFs.symlink(outside, `${value.home}/bin`);
+    expect((await refusal(restorePayloads(value.fs, UID, [payload]))).reason).toBe("uninstall_payload_identity");
+    expect(await identity(payload.payloadPath)).toBe(`${payload.dev}:${payload.ino}`);
+    expect(await nodeFs.readdir(outside)).toStrictEqual([]);
+  });
+
+  it("stage through an ancestor replaced by a symlink, moving nothing", async () => {
+    const value = await fixture();
+    const payload = await plant(value, 0, "a");
+    await nodeFs.rename(`${value.home}/bin`, `${value.home}/../outside`);
+    await nodeFs.symlink(`${value.home}/../outside`, `${value.home}/bin`);
+    expect((await refusal(stagePayloads(value.fs, UID, value.staging, [payload]))).reason).toBe("uninstall_payload_identity");
+    expect(await exists(payload.payloadPath)).toBe(false);
+    expect(await identity(`${value.home}/../outside/a`)).toBe(`${payload.dev}:${payload.ino}`);
+  });
+
   it("a payloads directory that is not owner-held 0700", async () => {
     const value = await fixture();
     const payload = await plant(value, 0, "a");

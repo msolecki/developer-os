@@ -123,6 +123,39 @@ export function validateUninstallPayloads(
   return payloads;
 }
 
+/**
+ * The parent of `path`, reached from `root` with one no-follow `lstat` per component, so no
+ * symlinked ancestor below `root` is ever followed; null when any component is not a directory.
+ * `root` itself is the parent of a direct child, so its own owner and mode rules still apply.
+ */
+export async function noFollowParent(
+  fs: LifecycleGuardedFileSystemV1,
+  root: CanonicalAbsolutePathV1,
+  path: CanonicalAbsolutePathV1,
+): Promise<LifecycleGuardedEntryV1 | null> {
+  if (!path.startsWith(`${root}/`)) return null;
+  let parent = await fs.lstat(root);
+  let ancestor: string = root;
+  for (const part of path.slice(root.length + 1).split("/").slice(0, -1)) {
+    if (parent?.kind !== "directory") return null;
+    ancestor = `${ancestor}/${part}`;
+    parent = await fs.lstat(parseCanonicalAbsolutePathText(ancestor));
+  }
+  return parent?.kind === "directory" ? parent : null;
+}
+
+/** The codec fixes `payloadPath` as `<home>/staging/lifecycle/<coordinator>/payloads/<ordinal>`. */
+function productHomeOf(payload: UninstallPayloadV1): CanonicalAbsolutePathV1 {
+  return parseCanonicalAbsolutePathText(payload.payloadPath.split("/").slice(0, -5).join("/"));
+}
+
+/** Before a rename to or from the source: a symlinked ancestor would carry it outside the product home. */
+async function requireNoFollowSource(fs: LifecycleGuardedFileSystemV1, payload: UninstallPayloadV1): Promise<void> {
+  if ((await noFollowParent(fs, productHomeOf(payload), payload.sourcePath)) === null) {
+    refuse("uninstall_payload_identity", payload.sourcePath, payload.payloadPath);
+  }
+}
+
 function sameIdentity(entry: LifecycleGuardedEntryV1 | null, uid: number, payload: UninstallPayloadV1): boolean {
   return (
     entry !== null &&
@@ -228,6 +261,7 @@ export async function stagePayloads(
     if ((await fs.hashRegular(source, BigInt(MAXIMUM_BUNDLE_FILE_BYTES))) !== payload.sha256) {
       refuse("uninstall_payload_hash", payload.sourcePath);
     }
+    await requireNoFollowSource(fs, payload);
     await fs.renameNoReplace(source, payload.payloadPath);
     await syncParent(fs, payload.sourcePath);
     await syncParent(fs, payload.payloadPath);
@@ -253,6 +287,7 @@ export async function restorePayloads(
     if (source !== null || staged === null || !sameIdentity(staged, uid, payload)) {
       refuse("uninstall_payload_identity", payload.sourcePath, payload.payloadPath);
     }
+    await requireNoFollowSource(fs, payload);
     await fs.renameNoReplace(staged, payload.sourcePath);
     await syncParent(fs, payload.payloadPath);
     await syncParent(fs, payload.sourcePath);

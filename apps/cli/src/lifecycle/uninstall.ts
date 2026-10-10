@@ -159,6 +159,7 @@ import {
   MAX_MUTATION_BYTES,
   MAX_UNINSTALL_ARTIFACTS,
   deletePayloads,
+  noFollowParent,
   observePayloads,
   restorePayloads,
   stagePayloads,
@@ -1469,12 +1470,13 @@ async function deriveVariant(
 async function lifecycleStagingDevice(
   lifecycle: CliLifecycleContext,
   productHome: CanonicalAbsolutePathV1,
-): Promise<string> {
+): Promise<string | null> {
   for (const path of [lifecycle.roots.lifecycleStaging, canonical(`${productHome}/staging`)]) {
     const entry = await guardedEntry(lifecycle.fs, path);
     if (entry?.kind === "directory") return entry.dev;
   }
-  return refuse("lifecycle_guarded_parent", lifecycle.roots.lifecycleStaging);
+  /** No staging tree to rename into: the file cannot be carried, so `admitPayload` refuses it. */
+  return null;
 }
 
 /** `renameatx_np`'s basename rule (platform-macos `isAsciiBasename`): printable ASCII, no space. */
@@ -1491,7 +1493,7 @@ async function admitPayload(
   productHome: CanonicalAbsolutePathV1,
   artifactPath: string,
   observed: LifecycleGuardedEntryV1,
-  stagingDevice: string,
+  stagingDevice: string | null,
 ): Promise<Omit<UninstallPayloadV1, "payloadPath">> {
   const path = observed.path;
   const tooLarge = (): never => refuse("uninstall_artifact_too_large", path);
@@ -1499,13 +1501,7 @@ async function admitPayload(
   const components = path.slice(productHome.length + 1).split("/");
   const top = components[0]?.toLowerCase();
   if (top === "staging" || top === "state" || components.some((part) => !ASCII_COMPONENT.test(part))) tooLarge();
-  let ancestor: string = productHome;
-  let parent: LifecycleGuardedEntryV1 | null = null;
-  for (const part of components.slice(0, -1)) {
-    ancestor = `${ancestor}/${part}`;
-    parent = await guardedEntry(lifecycle.fs, canonical(ancestor));
-    if (parent?.kind !== "directory") tooLarge();
-  }
+  const parent = await noFollowParent(lifecycle.fs, productHome, path);
   const uid = lifecycle.effectiveUid;
   if (
     parent === null ||
@@ -1607,13 +1603,13 @@ export class LifecycleUninstaller {
 
     const artifacts: ArtifactMutationV1[] = [];
     const payloads: Omit<UninstallPayloadV1, "payloadPath">[] = [];
-    let stagingDevice: string | null = null;
+    let stagingDevice: string | null | undefined;
     for (const entry of ordered) {
       const path = canonical(entry.canonicalPath);
       const observed = await guardedEntry(lifecycle.fs, path);
       if (observed === null || observed.kind !== "regular_file") continue;
       if (BigInt(observed.size) > BigInt(MAX_MUTATION_BYTES)) {
-        stagingDevice ??= await lifecycleStagingDevice(lifecycle, productHome);
+        if (stagingDevice === undefined) stagingDevice = await lifecycleStagingDevice(lifecycle, productHome);
         payloads.push(await admitPayload(lifecycle, productHome, entry.artifact.path, observed, stagingDevice));
         continue;
       }
