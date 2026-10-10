@@ -372,7 +372,7 @@ stderr line.
 | `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy` and the hook-only `HOOK_PROTECTED_PATH_RULES` (D67), for every edited path |
 | `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | project-local `biome` (`biome.json` or `biome.jsonc`, D67) or `prettier` over every edited file still present; `advise` on a formatter error |
 | `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | `advise` when an edited path resolves through a symlink out of the project root |
-| `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit`; `block` with the first 40 diagnostic lines |
+| `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit` (`tsc -b --noEmit` when the config has `references`); `block` with the first 40 diagnostic lines |
 
 `normalizeShellCommand` refuses a NUL byte (`nul-byte`, block), deletes each backslash–newline
 pair, and collapses each run of LF, CR or CRLF to one LF; no rule reads the raw string. Base rules:
@@ -432,8 +432,17 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   patterns`, under the durable key when one exists (NEW-159), as capture and ingest redact. A gate refusal, a missing configuration or any error is `allow` with one
   note. The verb writes nothing but its firing record.
 - **`stop`.** Runs only when the root has `tsconfig.json` and a project-local `tsc`. It checks
-  `tsconfig.check.json` when present, else `tsconfig.json`. A non-zero exit is `block`
-  (`typecheck`) with the first 40 non-empty lines; a timeout or spawn failure is `allow`.
+  `tsconfig.check.json` when present, else `tsconfig.json`. A config without `references` runs
+  `tsc --noEmit -p <config>`; one with `references` runs `tsc -b --noEmit <config>`. A reference
+  that is missing, unresolvable or leaves the repo root skips the check (`allow` with a note), as
+  does an unreadable config. When an older `tsc` rejects build mode (`TS5094` or `TS6310`), the verb
+  checks each reference with `tsc --noEmit -p <ref>` instead; if every failing reference reports
+  only those two codes, no real check ran and the verb is `allow` with a note to run `tsc -b`
+  (NEW-194). Otherwise a non-zero exit is `block` (`typecheck`) with the first 40 non-empty lines;
+  a timeout, a missing exit code or a spawn failure is `allow`. `tsc` may write `.tsbuildinfo`
+  files (the default name beside each config, under its `outDir`, or its `tsBuildInfoFile`): the
+  verb removes those inside the root that did not exist before the run, and a failed removal is
+  `allow` with a note.
 - **`format`.** Uses `biome format --write` when `biome.json` or `biome.jsonc` exists, else
   `prettier --write` when a file in `PRETTIER_CONFIG_FILES` exists (a `package.json` key does not
   count). One run covers every edited file that exists inside the root and passes
