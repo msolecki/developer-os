@@ -198,6 +198,7 @@ export type {
   LifecycleCoordinatorOperationV1,
   LifecycleCoordinatorPhaseV1,
   LifecycleCoordinatorPlanCoreV1,
+  LifecycleRedactionKeyCoreV1,
   LifecycleCoordinatorStepV1,
   LifecycleEffectRefV1,
   LifecycleExecutionPlanV2,

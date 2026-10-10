@@ -52,10 +52,11 @@ import {
   LIFECYCLE_PLAN_BOUNDS,
   type LifecycleCoordinatorJournalV1,
   type LifecycleCoordinatorPlanCoreV1,
+  type LifecycleRedactionKeyCoreV1,
 } from "./types.js";
 import { LOWERCASE_V4_UUID } from "./fs-helpers.js";
 
-type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
+type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 
 const MAX_PLAN_BYTES = LIFECYCLE_PLAN_BOUNDS.planBytes.maximum;
 const MAX_JOURNAL_BYTES = LIFECYCLE_PLAN_BOUNDS.journalBytes.maximum;

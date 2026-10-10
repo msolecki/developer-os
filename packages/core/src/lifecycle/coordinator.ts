@@ -37,12 +37,13 @@ import type {
   LifecycleCoordinatorJournalV1,
   LifecycleCoordinatorPhaseV1,
   LifecycleCoordinatorPlanCoreV1,
+  LifecycleRedactionKeyCoreV1,
   LifecycleCoordinatorStepV1,
   LifecycleEffectRefV1,
   LifecycleTerminalOutcomeV1,
 } from "./types.js";
 
-type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
+type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 
 export type LifecycleEffectStateV1 =
   | "future"

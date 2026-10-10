@@ -507,7 +507,7 @@ async function syntheticWorld(
       launchdBeforeFiles,
       launchdAfterFiles,
       launchd: LAUNCHD_PLAN_VARIANTS.has(variant) ? { marker: "launchd" } : null,
-      redactionKey: hasKey ? { marker: "redaction-key" } : null,
+      redactionKey: hasKey ? { marker: "redaction-key", payloads: [] } : null,
     },
     push: hasPush ? PUSH : null,
     steps,

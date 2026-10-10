@@ -34,12 +34,13 @@ import type { UpdateOperationV1 } from "../update/coordinator.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type {
   LifecycleCoordinatorPlanCoreV1,
+  LifecycleRedactionKeyCoreV1,
   LifecycleJournalClosureV1,
   LifecycleJournalClosureV2,
 } from "./types.js";
 import { childOf, namesOf, syncDirectoryAt } from "./fs-helpers.js";
 
-type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
+type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 
 const STAGED_JOURNAL_LEAF = "journal.json";
 const FOUNDATION_STAGING_LEAF = "foundation";

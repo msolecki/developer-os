@@ -304,7 +304,7 @@ function expectedPointOfNoReturnIndex(variant: LifecycleOperationVariantV1): num
 interface Leaf {
   readonly marker: string;
 }
-type Plan = LifecycleCoordinatorPlanCoreV1<Leaf, Leaf, Leaf, Leaf>;
+type Plan = LifecycleCoordinatorPlanCoreV1<Leaf, Leaf, Leaf & { readonly payloads: readonly unknown[] }, Leaf>;
 
 function foundationRef(
   id: AllocatedLifecycleIdV1<"tx">,
@@ -462,7 +462,7 @@ function syntheticPlanFor(variant: LifecycleOperationVariantV1): {
         launchdBeforeFiles: allocation.launchdBeforeFiles,
         launchdAfterFiles: allocation.launchdAfterFiles,
         launchd: launchdPlan,
-        redactionKey: hasRedactionKey ? { marker: "redaction-key" } : null,
+        redactionKey: hasRedactionKey ? { marker: "redaction-key", payloads: [] } : null,
       },
       push: hasPush ? { marker: "push" } : null,
       steps,
@@ -590,7 +590,7 @@ function participantCorruptionsOf(plan: Plan): readonly Corruption[] {
   };
   withParticipants("flipped manifest arm", { manifest: participants.manifest === null ? { marker: "x" } : null });
   withParticipants("flipped redaction key arm", {
-    redactionKey: participants.redactionKey === null ? { marker: "x" } : null,
+    redactionKey: participants.redactionKey === null ? { marker: "x", payloads: [] } : null,
   });
   withParticipants("flipped launchd arm", { launchd: participants.launchd === null ? { marker: "x" } : null });
   withParticipants("flipped source Git arm", {

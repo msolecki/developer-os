@@ -98,6 +98,10 @@ export function digest(bytes: Uint8Array): LowerHexSha256 {
 export interface SyntheticLeaf {
   readonly marker: string;
 }
+/** NEW-210: core reads the `K` leaf for its `payloads` count. */
+export interface SyntheticKeyLeaf extends SyntheticLeaf {
+  readonly payloads: readonly unknown[];
+}
 export interface SyntheticPush extends SyntheticLeaf {
   readonly planHash: LowerHexSha256;
 }
@@ -105,7 +109,7 @@ export interface SyntheticPush extends SyntheticLeaf {
 export type SyntheticPlan = LifecycleCoordinatorPlanCoreV1<
   SyntheticLeaf,
   SyntheticLeaf,
-  SyntheticLeaf,
+  SyntheticKeyLeaf,
   SyntheticPush
 >;
 
@@ -124,7 +128,7 @@ export function leafCodec<T extends SyntheticLeaf>(label: string): LifecycleValu
 export const LEAVES: LifecycleLeafCodecsV1<
   SyntheticLeaf,
   SyntheticLeaf,
-  SyntheticLeaf,
+  SyntheticKeyLeaf,
   SyntheticPush,
   SyntheticLeaf,
   SyntheticLeaf,
@@ -137,7 +141,7 @@ export const LEAVES: LifecycleLeafCodecsV1<
 > = {
   manifest: leafCodec("manifest"),
   launchd: leafCodec("launchd"),
-  redactionKey: leafCodec("redactionKey"),
+  redactionKey: leafCodec<SyntheticKeyLeaf>("redactionKey"),
   push: leafCodec<SyntheticPush>("push"),
   pushPlanHash: (push) => push.planHash,
   projection: leafCodec("projection"),

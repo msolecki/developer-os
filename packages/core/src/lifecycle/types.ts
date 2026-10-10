@@ -189,7 +189,20 @@ export interface LifecycleEffectRefV1<Id> {
   readonly planHash: LowerHexSha256;
 }
 
-export interface LifecycleCoordinatorPlanCoreV1<TManifest, TLaunchd, TRedactionKey, TPush> {
+/**
+ * NEW-210: core reads the `K` participant only for its payload count (ledger admission of
+ * `staging/lifecycle/<coordinator>/payloads/<ordinal>`). A v1 plan decodes with `payloads: []`.
+ */
+export interface LifecycleRedactionKeyCoreV1 {
+  readonly payloads: readonly unknown[];
+}
+
+export interface LifecycleCoordinatorPlanCoreV1<
+  TManifest,
+  TLaunchd,
+  TRedactionKey extends LifecycleRedactionKeyCoreV1,
+  TPush,
+> {
   readonly schemaVersion: 1;
   readonly id: LifecycleCoordinatorIdV1;
   readonly previewHash: LowerHexSha256 | null;
@@ -294,7 +307,7 @@ export type LifecycleJournalClosureV1 =
  * Spec 2 §9.2: a strict schema-version-2 envelope beside, never inside, the closed V1 plan union.
  * The concrete V1 plan type stays a parameter because its leaf codecs are composed downstream.
  */
-export type LifecycleExecutionPlanV2<TPlanV1 = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>> =
+export type LifecycleExecutionPlanV2<TPlanV1 = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>> =
   | TPlanV1
   | UpdateLifecycleCoordinatorPlanV2;
 

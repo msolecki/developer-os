@@ -118,6 +118,10 @@ function hash(seed: string): LowerHexSha256 {
 interface SyntheticLeaf {
   readonly marker: string;
 }
+/** NEW-210: core reads the `K` leaf for its `payloads` count. */
+interface SyntheticKeyLeaf extends SyntheticLeaf {
+  readonly payloads: readonly unknown[];
+}
 interface SyntheticPush extends SyntheticLeaf {
   readonly planHash: LowerHexSha256;
 }
@@ -125,7 +129,7 @@ interface SyntheticPush extends SyntheticLeaf {
 type SyntheticPlan = LifecycleCoordinatorPlanCoreV1<
   SyntheticLeaf,
   SyntheticLeaf,
-  SyntheticLeaf,
+  SyntheticKeyLeaf,
   SyntheticPush
 >;
 
@@ -144,7 +148,7 @@ function leafCodec<T extends SyntheticLeaf>(label: string): LifecycleValueCodec<
 const LEAVES: LifecycleLeafCodecsV1<
   SyntheticLeaf,
   SyntheticLeaf,
-  SyntheticLeaf,
+  SyntheticKeyLeaf,
   SyntheticPush,
   SyntheticLeaf,
   SyntheticLeaf,
@@ -157,7 +161,7 @@ const LEAVES: LifecycleLeafCodecsV1<
 > = {
   manifest: leafCodec("manifest"),
   launchd: leafCodec("launchd"),
-  redactionKey: leafCodec("redactionKey"),
+  redactionKey: leafCodec<SyntheticKeyLeaf>("redactionKey"),
   push: leafCodec<SyntheticPush>("push"),
   pushPlanHash: (push) => push.planHash,
   projection: leafCodec("projection"),
@@ -328,7 +332,7 @@ function uninstallPlan(
       launchdBeforeFiles: null,
       launchdAfterFiles: null,
       launchd: null,
-      redactionKey: { marker: "redaction-key" },
+      redactionKey: { marker: "redaction-key", payloads: [] },
     },
     push: null,
     steps: UNINSTALL_STEPS,
