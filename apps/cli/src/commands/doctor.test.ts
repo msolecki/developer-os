@@ -1632,6 +1632,20 @@ describe("hooks and external-hooks", () => {
     expect(fired).not.toHaveProperty("recovery");
   });
 
+  it("reports a deselected Codex as not-selected without the trust step, though its hooks file stays installed (AUD-022)", async () => {
+    const fixture = await hooksFixture("doctor-hooks-codex-deselected");
+    await plantHooks(fixture);
+    for (const row of CLAUDE_HOOK_ROWS) await plantRecord(fixture, row.verb, "2026-09-22T11:00:00.000Z");
+    await plantCodexHooks(fixture);
+
+    const reports = await hookReports(fixture.context, fixture.paths.stateDir, { claude: true, codex: false });
+    const hooks = (await hookFindings(fixture.context, reports)).map((finding) => finding.check).find((check) => check.id === "hooks");
+
+    expect(hooks?.status).toBe("pass");
+    expect(hooks?.message.endsWith("; codex=not-selected")).toBe(true);
+    expect(hooks).not.toHaveProperty("recovery");
+  });
+
   it("warns with the trust step when Codex path never fired although command shares its event", async () => {
     const fixture = await hooksFixture("doctor-hooks-codex-path");
     await plantCodexHooks(fixture);
