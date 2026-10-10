@@ -34,6 +34,7 @@ export function createProductionScheduledHandlers(context: CliContext, lifecycle
     run: async (_job, global) => {
       try {
         const result = await createGitService(context, lifecycle).sync(global);
+        // Unrecorded while the closure stays retry_only (spec §5.1 step 8); kept so a pending push is never classed as success (AUD-051).
         return result.data.kind === "sync" && result.data.outcome !== "push_pending"
           ? { outcome: "success", reasonCode: parseSafeReasonCode("ok"), data: result.data }
           : { outcome: "handler_failed", reasonCode: parseSafeReasonCode("push_pending"), data: result.data };
