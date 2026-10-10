@@ -144,6 +144,17 @@ describe("canonical workflows", () => {
     }
   });
 
+  it("guards every single-quoted --note path against a single quote inside it", async () => {
+    const quoting: string[] = [];
+    for (const id of EXPECTED) {
+      const text = await readFile(join(WORKFLOWS, id, "workflow.yaml"), "utf8");
+      if (!text.includes("--note '<")) continue;
+      quoting.push(id);
+      expect(text.replace(/\s+/gu, " "), id).toMatch(/path contains (?:a|no) single quote/u);
+    }
+    expect(quoting.length).toBeGreaterThan(0);
+  });
+
   it("declares the edit verb its decision input advertises", () => {
     const review = canonicalContracts().find((c) => c.id === "review");
     expect(review?.steps.map((s) => s.do)).toContain("capture.edit");
