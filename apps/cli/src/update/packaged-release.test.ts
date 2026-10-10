@@ -3,7 +3,7 @@ import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   encodeCanonicalJson,
@@ -247,6 +247,49 @@ describe("admitUnsignedLocalPackagedRelease", () => {
       code: EXIT_CODES.capabilityUnavailable,
       message: "release_mismatch",
     });
+  });
+
+  /** Past one 1 MiB hash chunk, so the inventory's chunked hash crosses boundaries and ends mid-chunk. */
+  const LARGE = Array.from({ length: (1 << 21) + 7 }, (_, index) => String.fromCharCode(97 + (index % 26))).join("");
+  const withLargeReadme: UnsignedPackageOptions = {
+    mutate: (documents) => {
+      const files = documents.bundleManifest.files as { path: string; bytes: number; sha256: string }[];
+      const readme = files.find((file) => file.path === "instructions/README.md");
+      if (readme === undefined) throw new Error("fixture");
+      readme.bytes = LARGE.length;
+      readme.sha256 = hash(LARGE);
+    },
+    afterWrite: (root) => nodeFs.writeFile(join(root, "bundle/instructions/README.md"), LARGE, { mode: 0o600 }),
+  };
+
+  it("hashes a 2 MiB + 7 byte file in chunks to its sealed digest", async () => {
+    const { root } = await unsignedPackage(withLargeReadme);
+    const admitted = await inspectPackagedRelease(await admitUnsignedLocalPackagedRelease(root, "0.0.0"));
+    expect(admitted.files.find((file) => file.relativePath === "bundle/instructions/README.md")).toMatchObject({ bytes: LARGE.length, sha256: hash(LARGE) });
+  });
+
+  it("refuses a file appended to while it is hashed", async () => {
+    const { root } = await unsignedPackage(withLargeReadme);
+    const readme = join(root, "bundle/instructions/README.md");
+    const probe = await nodeFs.open(readme, "r");
+    const prototype = Object.getPrototypeOf(probe) as { read: (...args: unknown[]) => Promise<{ bytesRead: number }> };
+    await probe.close();
+    const read = prototype.read;
+    let appended = false;
+    const spy = vi.spyOn(prototype, "read").mockImplementation(async function (this: unknown, ...args: unknown[]) {
+      // The second chunk of the only multi-chunk file: the append lands mid-hash.
+      if (!appended && args[3] === 1 << 20) {
+        appended = true;
+        await nodeFs.appendFile(readme, "x");
+      }
+      return read.apply(this, args);
+    });
+    try {
+      await expect(admitUnsignedLocalPackagedRelease(root, "0.0.0")).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal, message: expect.stringContaining("changed during guarded read") as unknown });
+      expect(appended).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("refuses a file changed after admission on readFile", async () => {
