@@ -53,6 +53,7 @@ function unlinkSelf(
   const self = new Set(paths.map((path) => inVault(state, path)));
   return rewriteWikilinks(body, (occurrence) =>
     self.has(resolve(occurrence.text.trim()) ?? "") ? labelOf(occurrence) : null,
+    true,
   );
 }
 
