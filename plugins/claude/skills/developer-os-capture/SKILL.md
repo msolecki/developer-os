@@ -21,6 +21,20 @@ description: "Write an observation into quarantine, where nothing reads it as ca
 - **Refuse** (input-invalid, exit 2): A capture needs text.
 - **Refuse** (scope-violation, exit 5): A capture is written to quarantine and nowhere else.
 
+## Inputs
+
+- `text` (string, required): The observation to capture.
+
+## Scopes
+
+Read: none
+
+Write:
+
+```text
+content/_raw/quarantine/**
+```
+
 ## Steps
 
 ### write
@@ -37,6 +51,10 @@ A value written `$input.<name>` stands for the workflow input `<name>`: replace 
 {"text":"$input.text"}
 ```
 
+
+## Checks
+
+- the written path is inside the quarantine directory
 
 ## Recovery
 

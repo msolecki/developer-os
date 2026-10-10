@@ -22,6 +22,25 @@ description: "Propose a revision of one existing note as a note capture bound to
 - **Refuse** (input-invalid, exit 2): The note must be an existing canonical note, named relative to the content root.
 - **Refuse** (scope-violation, exit 5): This workflow reads the vault and writes nothing but one capture, through developer-os capture.
 
+## Inputs
+
+- `note` (path, required): The note to revise, relative to the content root.
+
+## Scopes
+
+Read:
+
+```text
+content/**
+content/_indexes/**
+```
+
+Write:
+
+```text
+content/_raw/quarantine/**
+```
+
 ## Steps
 
 ### read-target
@@ -60,6 +79,11 @@ Effect: `capture.writeNote`
 developer-os capture --note
 ```
 
+
+## Checks
+
+- the capture was written with --note naming the note being revised
+- the revision keeps the note's created date
 
 ## Recovery
 

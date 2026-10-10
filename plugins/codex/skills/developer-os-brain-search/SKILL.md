@@ -21,6 +21,22 @@ description: "Search the vault index and return ranked matches with their source
 - **Refuse** (index-missing, exit 2): The vault index has not been built. Run developer-os brain reindex first.
 - **Refuse** (input-invalid, exit 2): A query is required and must not be empty.
 
+## Inputs
+
+- `query` (string, required): The text to search for.
+- `limit` (integer, optional): Maximum number of candidates to consider.
+
+## Scopes
+
+Read:
+
+```text
+content/**
+content/_indexes/**
+```
+
+Write: none
+
 ## Steps
 
 ### load-index
@@ -49,6 +65,10 @@ Effect: `brain.readNote`
 
 Summarise why each match was returned. Name the source path for every claim; a claim without a path is not a result.
 
+
+## Checks
+
+- every reported match resolves to a canonical note path
 
 ## Recovery
 
