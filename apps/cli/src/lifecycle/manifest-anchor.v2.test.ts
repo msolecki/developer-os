@@ -313,6 +313,10 @@ describe("the manifest anchor fails safe (D54 review)", () => {
     await expectInitRefusesArchive(fixture);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("promises no self-healing a later manifest write does not perform (AUD-034)", () => {
+    expect(MANIFEST_ANCHOR_WARNING).not.toMatch(/until the next committed manifest write/u);
+  });
+
   it("admits only an anchor owned by the expected user (finding 4)", () => {
     const uid = process.getuid?.() ?? 501;
     const shape = { ownerUid: uid, mode: 0o600, nlink: 1 };

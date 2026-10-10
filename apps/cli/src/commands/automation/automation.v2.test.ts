@@ -51,6 +51,7 @@ import type { LifecycleEffectPortsV1 } from "../../lifecycle/adapters.js";
 import { lifecycleVariantFacts } from "../../lifecycle/codecs.js";
 import type { LifecycleExecutionPlanV1 } from "../../lifecycle/codecs.js";
 import type { CliLifecycleContext } from "../../lifecycle/context.js";
+import { decodeManifestAnchor, manifestAnchorPath } from "../../lifecycle/manifest-anchor.js";
 import { withLifecycleMutation } from "../../lifecycle/mutation-gate.js";
 import { automationLogSlotPath, automationRunnerLeasePath, automationStatusPath } from "../../lifecycle/runtime-records.js";
 import { hostWith, scriptedLaunchd } from "../../lifecycle/testing.js";
@@ -1120,6 +1121,48 @@ describe("automation on a real V2 home", () => {
       expect(result.data).toMatchObject({ kind: "applied", operation: "automation_enable" });
       expect(entriesOf(lastPlan(home)).map((entry) => entry.operation)).toStrictEqual(["install", "install", "install"]);
       expect(launchd.loaded.size).toBe(3);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+});
+
+describe("the manifest anchor across automation enable (AUD-034)", () => {
+  it(
+    "re-anchors the rewritten manifest before settle, so a settle failure leaves no stale anchor",
+    async () => {
+      const fixture = await createCommandFixture("automation-v2-anchor", { bootstrapAvailable: true, effectPorts });
+      await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+      const installed = await runInit(fixture.context, { dryRun: false, assumeYes: true });
+      if (!installed.ok) throw new Error(`fixture init failed: ${JSON.stringify(installed)}`);
+      await nodeFs.mkdir(join(fixture.userHome, "Library", "LaunchAgents"), { recursive: true, mode: 0o700 });
+      const lifecycle = lifecycleOf(fixture);
+      await installSyntheticEntrypoint(fixture, lifecycle);
+      const manifestBefore = await nodeFs.readFile(fixture.paths.manifestFile);
+      const failingSettle = {
+        ...fixture.context,
+        lifecycle: {
+          ...lifecycle,
+          recovery: (...args: Parameters<typeof lifecycle.recovery>) => {
+            const recovery = lifecycle.recovery(...args);
+            const recover = recovery.recover.bind(recovery);
+            Object.defineProperty(recovery, "recover", {
+              value: async (...recoverArgs: Parameters<typeof recover>) => {
+                if (!(await nodeFs.readFile(fixture.paths.manifestFile)).equals(manifestBefore)) throw new Error("injected settle failure");
+                return recover(...recoverArgs);
+              },
+            });
+            return recovery;
+          },
+        },
+      };
+
+      const failed = await runAutomation(failingSettle, { subcommand: "enable", schedules: [...BASE_SCHEDULES], apply: true });
+
+      expect(failed.ok).toBe(false);
+      const manifest = await nodeFs.readFile(fixture.paths.manifestFile);
+      expect(manifest.equals(manifestBefore)).toBe(false);
+      const anchor = decodeManifestAnchor(await nodeFs.readFile(manifestAnchorPath(fixture.paths.home)));
+      expect(anchor?.manifestHash).toBe(createHash("sha256").update(manifest).digest("hex"));
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );

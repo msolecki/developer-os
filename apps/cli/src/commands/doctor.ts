@@ -2029,7 +2029,7 @@ async function automationFindings(context: CliContext): Promise<readonly Finding
 }
 
 const MANIFEST_ANCHOR_ADVICE =
-  "a re-run init refuses a superseded bootstrap until the next committed manifest write; remove the file if it is not an owned 0600 file";
+  "a re-run init refuses a superseded bootstrap while the anchor is stale; remove the file if it is not an owned 0600 file";
 
 /**
  * D54 review, finding 3: the anchor only when it cannot do its job — not an owned `0600` file,

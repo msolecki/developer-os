@@ -145,10 +145,11 @@ export async function removeManifestAnchorOrWarn(
  * D54 review, finding 3: the anchor is evidence for a later `init`, never part of a committed
  * transaction, so a failure to record, derive or remove it is reported on `stderr` and the
  * command's result stands. The anchor is then absent or stale, which `init` reads as "not
- * proven" (exit 6) until a later committed manifest write refreshes it.
+ * proven" (exit 6). A later manifest write does not heal a stale anchor: it re-seeds the chain
+ * from its own preimage, not from the bootstrap manifest (AUD-034).
  */
 export const MANIFEST_ANCHOR_WARNING =
-  "warning: the manifest anchor could not be updated; a re-run init may refuse until the next committed manifest write (see developer-os doctor)";
+  "warning: the manifest anchor could not be updated; a re-run init may refuse with exit 6 (see developer-os doctor)";
 
 /** NEW-82: a defect in this code is not a fact about the anchor, so it is never downgraded. */
 export function isCodeDefect(error: unknown): boolean {
