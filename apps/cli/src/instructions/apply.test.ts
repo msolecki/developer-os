@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ import { createCommandFixture, removeCommandFixtures } from "../commands/testing
 import type { CommandFixture } from "../commands/testing.js";
 import { inspectPackagedRelease } from "../update/packaged-release.js";
 import type { AdmittedPackagedReleaseV1 } from "../update/packaged-release.js";
-import { applyInstructions, instructionRefusalDetails, parseAdaptersFlag, stableNodePath } from "./apply.js";
+import { applyInstructions, hashNoFollow, instructionRefusalDetails, parseAdaptersFlag, readNoFollow, stableNodePath } from "./apply.js";
 import { InstructionRefusal } from "./attach.js";
 
 afterAll(removeCommandFixtures);
@@ -127,6 +128,24 @@ async function vendorHomesUntouched(fixture: CommandFixture): Promise<void> {
     await expect(nodeFs.lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
   }
 }
+
+describe("hashNoFollow", () => {
+  it("hashes across chunk boundaries what readNoFollow reads, and refuses a symlink like it", async () => {
+    const root = await nodeFs.mkdtemp(join(tmpdir(), "dos-hash-no-follow-"));
+    try {
+      const file = join(root, "runtime");
+      const bytes = new Uint8Array((1 << 20) * 2 + 7).map((_, index) => index % 251);
+      await nodeFs.writeFile(file, bytes);
+      await nodeFs.symlink(file, join(root, "link"));
+      expect(await hashNoFollow(file)).toEqual({ bytes: bytes.byteLength, sha256: createHash("sha256").update(bytes).digest("hex") });
+      expect(await readNoFollow(file)).toEqual(bytes);
+      expect(await hashNoFollow(join(root, "missing"))).toBeNull();
+      await expect(hashNoFollow(join(root, "link"))).rejects.toThrow();
+    } finally {
+      await nodeFs.rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("parseAdaptersFlag", () => {
   it("accepts exactly the four documented spellings", () => {

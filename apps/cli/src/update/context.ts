@@ -69,7 +69,7 @@ import { inspectV2Drift } from "../commands/doctor.js";
 import { readConfigFile } from "../config-file.js";
 import { readRedactionKey } from "../context.js";
 import type { CliContext } from "../context.js";
-import { readNoFollow } from "../instructions/apply.js";
+import { hashNoFollow, readNoFollow } from "../instructions/apply.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { admitInstalledV2Home } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../lifecycle/context.js";
@@ -254,11 +254,14 @@ async function observe(
     const target = await nodeFs.readlink(row.path, { encoding: "buffer" });
     return { state: "symlink", targetBytes: target.byteLength, targetHash: hashBytes(target) as LowerHexSha256 };
   }
-  const bytes = stat?.isFile() === true ? await readNoFollow(row.path) : null;
-  if (bytes === null || stat === null) return drifted();
-  const sha256 = hashBytes(bytes) as LowerHexSha256;
+  if (stat?.isFile() !== true) return drifted();
   const mode = (stat.mode & 0o777) === 0o700 ? 448 : 384;
-  if (!withBlob) return { state: "content", mode, bytes: bytes.byteLength, sha256, blob: null };
+  if (!withBlob) {
+    const hashed = await hashNoFollow(row.path) ?? drifted();
+    return { state: "content", mode, bytes: hashed.bytes, sha256: hashed.sha256, blob: null };
+  }
+  const bytes = await readNoFollow(row.path) ?? drifted();
+  const sha256 = hashBytes(bytes) as LowerHexSha256;
   if (bytes.byteLength > MAX_BLOB_BYTES) refuse("update_owner_file_oversized", EXIT_CODES.capabilityUnavailable, [row.path]);
   const blob: PlannerInputBlobRefV1 = { stream: "input", ordinal: blobs.length, bytes: bytes.byteLength, sha256 };
   blobs.push(bytes);
@@ -392,8 +395,7 @@ async function snapshot(
 }
 
 async function currentHash(path: string): Promise<LowerHexSha256 | null> {
-  const bytes = await readNoFollow(path);
-  return bytes === null ? null : hashBytes(bytes) as LowerHexSha256;
+  return (await hashNoFollow(path))?.sha256 ?? null;
 }
 
 /**

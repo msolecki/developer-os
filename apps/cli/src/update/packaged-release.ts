@@ -208,7 +208,33 @@ function classMode(diskMode: number): 0o600 | 0o700 {
   return (diskMode & 0o100) !== 0 ? 0o700 : 0o600;
 }
 
-async function readGuardedFile(path: string, listed: BigIntStats, policy: ModePolicy): Promise<Uint8Array> {
+/** A guarded read's body: the bytes it saw and what it keeps of them. */
+type GuardedReader<T> = (handle: nodeFs.FileHandle, size: number) => Promise<{ readonly length: number; readonly value: T }>;
+
+const readWhole: GuardedReader<Uint8Array> = async (handle) => {
+  const bytes = await handle.readFile();
+  return { length: bytes.byteLength, value: bytes };
+};
+
+/**
+ * Hashes in fixed chunks: the inventory runs twice per update and the keg's runtime is ~122 MB,
+ * so reading it whole held two such buffers at once (the VM gate's ~427 MB peak RSS).
+ */
+const HASH_CHUNK_BYTES = 1 << 20;
+const hashChunked: GuardedReader<LowerHexSha256> = async (handle, size) => {
+  const hash = createHash("sha256");
+  const chunk = new Uint8Array(Math.min(HASH_CHUNK_BYTES, Math.max(size, 1)));
+  let length = 0;
+  for (;;) {
+    const { bytesRead } = await handle.read(chunk, 0, chunk.byteLength, length);
+    if (bytesRead === 0) break;
+    hash.update(chunk.subarray(0, bytesRead));
+    length += bytesRead;
+  }
+  return { length, value: hash.digest("hex") as LowerHexSha256 };
+};
+
+async function readGuardedFile<T>(path: string, listed: BigIntStats, policy: ModePolicy, reader: GuardedReader<T>): Promise<T> {
   const handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const opened = await handle.stat({ bigint: true });
@@ -221,7 +247,7 @@ async function readGuardedFile(path: string, listed: BigIntStats, policy: ModePo
     ) {
       securityRefusal("packaged release file was swapped while being read");
     }
-    const bytes = await handle.readFile();
+    const { length, value } = await reader(handle, Number(opened.size));
     const closed = await handle.stat({ bigint: true });
     const fresh = await nodeFs.lstat(path, { bigint: true });
     if (
@@ -231,11 +257,11 @@ async function readGuardedFile(path: string, listed: BigIntStats, policy: ModePo
       fresh.dev !== opened.dev ||
       fresh.ino !== opened.ino ||
       fresh.size !== opened.size ||
-      bytes.byteLength !== Number(opened.size)
+      length !== Number(opened.size)
     ) {
       securityRefusal("packaged release file changed during guarded read");
     }
-    return bytes;
+    return value;
   } finally {
     await handle.close();
   }
@@ -280,11 +306,11 @@ async function inventory(packageRoot: string, policy: ModePolicy): Promise<{
       }
       if (!entry.isFile()) securityRefusal("packaged release inventory contains a non-file entry");
       const diskMode = assertFile(stats, policy);
-      const bytes = await readGuardedFile(path, stats, policy);
+      const sha256 = await readGuardedFile(path, stats, policy, hashChunked);
       files.push({
         relativePath,
-        bytes: bytes.byteLength,
-        sha256: createHash("sha256").update(bytes).digest("hex") as LowerHexSha256,
+        bytes: Number(stats.size),
+        sha256,
         mode: classMode(diskMode),
         diskMode,
         dev: stats.dev.toString(10),
@@ -488,7 +514,7 @@ function unsignedDocument(bytes: Uint8Array, keys: readonly string[]): UnsignedD
 
 async function readListed(packageRoot: string, relativePath: string, policy: ModePolicy): Promise<Uint8Array> {
   const path = join(packageRoot, relativePath);
-  return readGuardedFile(path, await nodeFs.lstat(path, { bigint: true }), policy);
+  return readGuardedFile(path, await nodeFs.lstat(path, { bigint: true }), policy, readWhole);
 }
 
 function sha256Hex(bytes: Uint8Array | string): string {
@@ -829,7 +855,7 @@ export async function inspectPackagedRelease(
       }
       const path = join(snapshot.handoff.packageRoot, expected.relativePath);
       const stats = await assertSealedFileChain(snapshot, expected, directoriesByPath);
-      const bytes = await readGuardedFile(path, stats, policyOf(snapshot.trust));
+      const bytes = await readGuardedFile(path, stats, policyOf(snapshot.trust), readWhole);
       const digest = createHash("sha256").update(bytes).digest("hex");
       if (
         stats.dev.toString(10) !== expected.dev ||
