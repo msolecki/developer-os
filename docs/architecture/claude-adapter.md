@@ -457,7 +457,8 @@ Measured in a disposable `HOME` during the 2026-09-04 audit; each row names the 
   transcript-based capture stands; the founder's 2026-09-04 decision reopens
   `session_start_injection` for A13.
 - **Closed by A12:** `proposeClaudeUninstall` now performs the owner check its Codex twin performs
-  (`packages/adapter-claude/src/install.ts` — `proposeClaudeUninstall`).
+  (`packages/adapter-claude/src/install.ts` — `proposeClaudeUninstall`). AUD-124 added the
+  containment check as well: a managed path that normalizes outside the plugin root is ignored.
 
 ## 14. Observed for A12 against Claude Code 2.1.280 on 2026-09-22
 

@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { describe, expect, it } from "vitest";
 import { validateChangePlan } from "@developer-os/core";
 import type {
@@ -258,6 +259,19 @@ describe("proposeClaudeUninstall", () => {
       (operation) => operation.targetPath,
     );
     expect(paths).not.toContain("/synthetic/home/.claude/settings.json");
+  });
+
+  it("ignores a row whose path passes the root prefix but normalizes outside it", () => {
+    const managed = new Map(managedFor(tree));
+    const [first] = [...managedFor(tree).values()];
+    if (first === undefined) throw new Error("fixture has no rows");
+    const escaping = `${root}/../escape.md`;
+    managed.set(escaping, { ...first, path: escaping } as ManagedArtifactV2);
+    const paths = proposeClaudeUninstall(context, managed).operations.map(
+      (operation) => operation.targetPath,
+    );
+    expect(paths).toHaveLength(tree.length);
+    expect(paths.every((path) => posix.normalize(path).startsWith(`${root}/`))).toBe(true);
   });
 
   it("ignores a codex-owned row under the plugin root", () => {
