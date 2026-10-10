@@ -259,30 +259,37 @@ jobs:
     # comment recorded on 2026-09-21; (f) a local run in which the file failed,
     # scaled by current / then case count where the count has grown; (g) a
     # guess rounded up from the file's case and real-`init` count (~125 s per
-    # `init`), for a file with no usable observation. The 21 figures sum to 12594.4 s against the measured
-    # 9207.6 s, so in aggregate they overstate by ~37%.
+    # `init`), for a file with no usable observation. The 21 figures of the
+    # 2026-09-26 tree sum to 12594.4 s against the measured 9207.6 s, so in
+    # aggregate they overstate by ~37%. On 2026-10-10 (AUD-083) `rest` had
+    # grown to 13 files: `active-release` and `refresh` carry (g) figures from
+    # their real-`init` counts (9 and 5), and every case count below is
+    # `vitest list` per shard that day. No timing was re-measured.
     #
-    # - `uninstall` (`npm run test:lifecycle:uninstall`, 4 files, 51 tests):
+    # - `uninstall` (`npm run test:lifecycle:uninstall`, 4 files, 67 tests):
     #   `uninstall` 1657.9 (f), `uninstall-recovery` 1147.2 (r),
     #   `uninstall-detach` 706.2 (f), `uninstall-launchd` 600 (g) = 4111.3 s.
-    # - `core` (`npm run test:lifecycle:core`, 6 files, 68 tests):
+    # - `core` (`npm run test:lifecycle:core`, 6 files, 71 tests):
     #   `absent-manifest-uninstall` 1864.8 (r, 621.6 s for 2 cases scaled to 6),
     #   `manifest-anchor` 1251.2 (f), `mutation-gate` 586.4 (f),
     #   `manifest-rewrite` 125 (g), `mutation-gate-update` 102.7 (f),
     #   `admission` 82.2 (r) = 4012.3 s.
-    # - `rest` (`npm run test:lifecycle:rest`, 11 files, 89 tests): every
+    # - `rest` (`npm run test:lifecycle:rest`, 13 files, 158 tests): every
     #   `*.v2.test.ts` the two shards above do not name —
-    #   `init-local-release` 832.8 (f), `runner` 690.5 (f),
+    #   `active-release` 1125 (g), `init-local-release` 832.8 (f),
+    #   `runner` 690.5 (f), `refresh` 625 (g),
     #   `init-instructions` 683.8 (f), `bookkeeping` 525.2 (f),
     #   `doctor-instructions` 400 (g), `instructions-user-data` 375 (g),
     #   `git` 300 (g), `automation` 250 (g), `evidence-identity` 230.6 (f),
-    #   `fresh-layout` 124 (r), `config` 58.9 (r) = 4470.8 s.
+    #   `fresh-layout` 124 (r), `config` 58.9 (r) = 6220.8 s.
     #   (`git` and `automation` failed every case in their only observations,
     #   so those figures are guesses rather than measurements.)
     #
-    # The shards partition `test:lifecycle`'s 208 tests exactly, checked with
-    # `vitest list` per filter against the unsharded filter, by test id. The
-    # `rest` script excludes exactly the ten files the other two name, so a
+    # The shards partition `test:lifecycle`'s tests exactly (208 on 2026-09-26,
+    # checked with `vitest list` per filter against the unsharded filter, by
+    # test id; 296 on 2026-10-10, the unsharded list grouped by file), and
+    # `tests/repository/lifecycle-shards.test.ts` pins the file partition and
+    # the file counts above. The `rest` script excludes exactly the ten files the other two name, so a
     # new `*.v2.test.ts` lands in `rest` and cannot fall through — but its
     # budget then needs rechecking, and a file moved between shards must move
     # in both the include list and `rest`'s exclude list.
@@ -312,8 +319,8 @@ jobs:
             # ceil(4012.3 x 3 / 60)
             timeout: 201
           - shard: rest
-            # ceil(4470.8 x 3 / 60)
-            timeout: 224
+            # ceil(6220.8 x 3 / 60)
+            timeout: 312
     timeout-minutes: ${{ matrix.timeout }}
     steps:
       - uses: actions/checkout@v4
