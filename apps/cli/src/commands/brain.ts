@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { ConfigurationError, readConfigFile } from "../config-file.js";
+import { readConfigFile } from "../config-file.js";
 
 import {
   EXIT_CODES,
@@ -115,14 +115,9 @@ export function indexEscapeRefusal(message: string, paths: readonly string[]): B
 }
 
 /**
- * Absence and corruption are different failures with different recoveries, so
- * `readConfigFile`'s `null`-versus-throw split is preserved rather than folded
- * into one message: a missing `config.toml` means "run `init`", but a present,
- * unparseable one means `init` will refuse on drift, which is the wrong answer
- * for that user. `ConfigurationError` itself is rethrown unmodified — its
- * message already quotes nothing, and it carries the same exit code this
- * function's own `notInitialized` refusal uses, so `failureFrom` renders it
- * correctly with no extra handling here.
+ * Only absence means "run `init`". Every other failure — an unparseable file, an
+ * unreadable one, a guarded-reader refusal — propagates with its own code, because
+ * `init` refuses on drift and is the wrong answer for that user (AUD-017).
  */
 export async function readConfig(context: CliContext): Promise<DeveloperOsConfigV1> {
   const notInitialized = new BrainRefusal(
@@ -132,14 +127,7 @@ export async function readConfig(context: CliContext): Promise<DeveloperOsConfig
     "developer-os init",
   );
 
-  let config: DeveloperOsConfigV1 | null;
-  try {
-    config = await readConfigFile(context, context.paths.configFile);
-  } catch (error) {
-    if (error instanceof ConfigurationError) throw error;
-    throw notInitialized;
-  }
-
+  const config = await readConfigFile(context, context.paths.configFile);
   if (config === null) throw notInitialized;
   return config;
 }
