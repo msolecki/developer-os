@@ -714,14 +714,15 @@ behaviour described here.
   machines where reads fail, and an escaping rejection there became an unhandled top-level
   rejection with a stack trace and no report at all.
 - **The check set is whatever `collectFindings` in `apps/cli/src/commands/doctor.ts` emits; it is
-  the source of truth, and this list was re-read against it on 2026-10-06.** In emission order:
-  `platform`, `product-home`, `configuration`, `manifest`, `transactions`, `drift`, `brain`,
+  the source of truth, and this list was re-read against it on 2026-10-10.** In emission order:
+  `platform`, `lifecycle` (a row only when coordinator residue exists, below), `product-home`,
+  `configuration`, `codex-home-record` (a row only when the recorded Codex home is unreadable —
+  `doctorVendorHomes`), `manifest`, `transactions`, `drift`, `brain`,
   `redaction-key`, `release-trust`, `entrypoint`, `agents`, `claude-capabilities`,
   `codex-capabilities`, `hooks`, `external-hooks`, `vendor-config`, `instructions`,
   `codex-registration`, one `bootstrap-evidence:<id>` row per retained bootstrap envelope,
   `automation` (a row only when a failed scheduled run exists, below), and `manifest-anchor` (a
-  row only when the anchor cannot do its job). `lifecycle` (below) is added
-  ahead of them when coordinator residue exists. **Never `fail`:** `entrypoint` (informational),
+  row only when the anchor cannot do its job). **Never `fail`:** `entrypoint` (informational),
   `hooks`, `external-hooks` and `vendor-config` (each catches everything; `hooks.md` §3.7,
   `claude-adapter.md` §15), `redaction-key`, both `*-capabilities` rows and `manifest-anchor`
   (warnings at most). `transactions` skips the Foundation journals a V2 coordinator owns; the
