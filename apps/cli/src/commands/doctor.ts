@@ -855,17 +855,26 @@ export interface HookReports {
   readonly codex: VendorHooksReport;
 }
 
-/** One read of each vendor's hooks file and records, shared by `hooks` and both capability checks. */
-export async function hookReports(context: CliContext, stateDirectory: string): Promise<HookReports> {
+/**
+ * One read of each vendor's hooks file and records, shared by `hooks` and both capability checks.
+ * A deselected vendor's plugin tree stays on disk (foundation.md §12.4), so its hooks never fire
+ * and are not reported; their firing records still feed the capability checks. `adapters` is
+ * `null` when no configuration was read.
+ */
+export async function hookReports(
+  context: CliContext,
+  stateDirectory: string,
+  adapters: Readonly<Record<HookVendor, boolean>> | null = null,
+): Promise<HookReports> {
   const installed = {
     claude: await readInstalledHooks(context, "claude"),
     codex: await readInstalledHooks(context, "codex"),
   };
-  return {
-    installed,
-    claude: await reportVendorHooks(context, stateDirectory, "claude", installed.claude),
-    codex: await reportVendorHooks(context, stateDirectory, "codex", installed.codex),
+  const report = async (vendor: HookVendor): Promise<VendorHooksReport> => {
+    const full = await reportVendorHooks(context, stateDirectory, vendor, installed[vendor]);
+    return adapters?.[vendor] === false ? { text: `${vendor}=not-selected`, healthy: true, unfired: false, dead: null, firing: full.firing } : full;
   };
+  return { installed, claude: await report("claude"), codex: await report("codex") };
 }
 
 /** NEW-158: the firing keys each vendor's `hooks` verdict proves. */
@@ -1933,7 +1942,7 @@ async function collectFindings(
   });
 
   // Read once: `hooks` and both capability checks share one verdict (NEW-158); every read in it catches.
-  const hooks = await hookReports(context, paths.stateDir);
+  const hooks = await hookReports(context, paths.stateDir, config?.adapters ?? null);
   const lifecycle = await lifecycleFindings(context);
 
   return { findings: [
