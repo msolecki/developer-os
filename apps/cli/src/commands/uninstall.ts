@@ -548,7 +548,7 @@ function describePlan(removable: readonly string[]): string {
 /**
  * An `ephemeral` V2 artifact carries no hash at all — its content is expected
  * to vary after install, which is exactly why V2's own drift inspection
- * (`inspectV2Artifact`, `packages/core/src/manifest/drift.ts:243`) never
+ * (`inspectV2Artifact`, `packages/core/src/manifest/drift.ts:198`) never
  * compares one by content. The V1 shape this file's machinery still needs
  * has no such mode and always hash-compares, so downcasting with a fixed
  * empty-content hash reintroduces that comparison by accident: a lock

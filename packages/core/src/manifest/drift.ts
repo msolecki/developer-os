@@ -28,11 +28,19 @@ const MAX_DIFF_LINES = 1000;
 const MAX_DIFF_BYTES = 1024 * 1024;
 const MAX_READ_BYTES = 8 * 1024 * 1024;
 /**
- * A content-hashed `file` row (V1, or V2 `content`) may be any release bundle file, and the bundled Node runtime alone
- * is over 100 MiB, so the bound is the release format's own per-file bound, not the diff bound.
+ * A release bundle file, or a rollback payload's copy of one, may be as large as the release format
+ * admits: the bundled Node runtime alone is over 100 MiB. Only those rows get the bundle's per-file
+ * bound; every other row (instruction, schema, vendor and configuration files, and uninstall's V1
+ * downcast of them) keeps the 8 MiB read bound. Init records a bundle file as `bundle/<path>`, an
+ * update as `generated/release/<path>`, and a retained rollback file as `generated/rollback`.
  * ponytail: whole-file read; stream the hash if doctor's peak memory starts to matter.
  */
-const MAX_CONTENT_HASH_BYTES = MAXIMUM_BUNDLE_FILE_BYTES;
+const MAX_RELEASE_FILE_BYTES = MAXIMUM_BUNDLE_FILE_BYTES;
+function readBoundFor(source: string): number {
+  return source.startsWith("bundle/") || source.startsWith("generated/release/") || source === "generated/rollback"
+    ? MAX_RELEASE_FILE_BYTES
+    : MAX_READ_BYTES;
+}
 const MAX_LINK_TARGET_BYTES = 4096;
 const BINARY_NOTICE = "[binary content omitted]";
 const OVERSIZED_NOTICE = "[content too large to diff]";
@@ -134,7 +142,7 @@ async function inspectArtifact(
     return finding(artifact, "type_changed", null);
   }
 
-  const bytes = await readGuardedFile(fs, guards, artifact.path, MAX_CONTENT_HASH_BYTES);
+  const bytes = await readGuardedFile(fs, guards, artifact.path, readBoundFor(artifact.source));
   if (bytes === null) return finding(artifact, "missing", null);
   const actualHash = hashBytes(bytes);
   return actualHash === artifact.installedHash
@@ -217,7 +225,7 @@ async function inspectV2Artifact(artifact: ManagedArtifactV2, request: DriftRequ
       return null;
     } catch { return v2Finding(artifact, "schema_invalid", null); }
   }
-  const bytes = await readV2File(request, canonical, stats, artifact.kind === "file" && artifact.verification.mode === "content" ? MAX_CONTENT_HASH_BYTES : MAX_READ_BYTES);
+  const bytes = await readV2File(request, canonical, stats, artifact.kind === "file" && artifact.verification.mode === "content" ? readBoundFor(artifact.source) : MAX_READ_BYTES);
   if (bytes === null) return v2Finding(artifact, "missing", null);
   if (artifact.verification.mode === "schema") {
     try { request.schemas.validate(artifact.verification.schemaId, bytes); return null; }
