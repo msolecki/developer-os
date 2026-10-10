@@ -1,9 +1,7 @@
 import type {
-  chmod,
   lstat,
   mkdir,
   open,
-  readFile,
   readlink,
   rename,
   unlink,
@@ -143,11 +141,9 @@ export interface ConflictEvidence {
 }
 
 export interface ManifestFileSystem {
-  readonly chmod: typeof chmod;
   readonly lstat: typeof lstat;
   readonly mkdir: typeof mkdir;
   readonly open: typeof open;
-  readonly readFile: typeof readFile;
   readonly rename: typeof rename;
   readonly unlink: typeof unlink;
 }
@@ -155,7 +151,6 @@ export interface ManifestFileSystem {
 export interface DriftFileSystem {
   readonly lstat: typeof lstat;
   readonly open: typeof open;
-  readonly readFile: typeof readFile;
   readonly readlink: typeof readlink;
 }
 
