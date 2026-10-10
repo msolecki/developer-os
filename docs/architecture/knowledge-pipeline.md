@@ -247,13 +247,13 @@ accepted capture
   → status → ingested                         (ingest-ingested)
 ```
 
-The five kinds are `apps/cli/src/commands/ingest.ts:274-280`; the ladder is documented at `:1550-1563`
-and the reasons at `:257-273`. **Two independent reasons no two of them merge:**
+The five kinds are `apps/cli/src/commands/ingest.ts:276-282`; the ladder is documented at `:1552-1565`
+and the reasons at `:259-275`. **Two independent reasons no two of them merge:**
 
 1. **`BrainService.reindex()` reads the vault** (`packages/brain/src/service.ts:226`), so it cannot
    run until the apply has finalized — and it has no write channel at all, by design, so the CLI
    stages its bytes through the executor exactly as `brain reindex` does
-   (`apps/cli/src/commands/ingest.ts:1428-1463`).
+   (`apps/cli/src/commands/ingest.ts:1430-1465`).
 2. **`validateChangePlan` grants ownership from the manifest**, where the four index artifacts *are*
    owned — recorded as rows under a V1 manifest (`apps/cli/src/commands/reindex.ts:356-379`), adopted
    from disk under a V2 one, for which `recordArtifacts` returns early — and a capture deliberately
@@ -264,12 +264,12 @@ crash cannot be told from a run that never started.
 
 **The residual, accepted rather than closed.** A crash between the apply and the last transaction
 leaves a capture at `staging` with its notes already in the vault. It is **inert**: `selectCaptures`
-selects only captures whose status is `accepted` (`ingest.ts:665`), so the next run cannot
+selects only captures whose status is `accepted` (`ingest.ts:667`), so the next run cannot
 double-apply. It is visible — every run warns about each one, naming `review --status staging`, and
 `brain-pulse` reports `capture_left_at_staging` (AUD-009) — and a hand edit of the status is what moves it — which is what
-`PARTLY_APPLIED_RECOVERY` (`ingest.ts:331-332`) tells the user, in those words and no others: **the
+`PARTLY_APPLIED_RECOVERY` (`ingest.ts:333-334`) tells the user, in those words and no others: **the
 `repair` half of that advice is a different constant.**
-`INCOMPLETE_TRANSACTION_RECOVERY` (`:359-360`) is appended unconditionally by `refusedRecovery` (`:381`), so the two arrive together in
+`INCOMPLETE_TRANSACTION_RECOVERY` (`:361-362`) is appended unconditionally by `refusedRecovery` (`:383`), so the two arrive together in
 the output while neither line alone says both. **No arrangement of these transactions removes that
 window**, because no two of them can share one.
 
@@ -277,7 +277,7 @@ window**, because no two of them can share one.
 count rather than from an argument: `invokeCodex` derives `-s read-only` from `writeScopes.length === 0`
 (`packages/adapter-codex/src/invoke.ts:310`), and the Claude side now passes no tools at all —
 `--tools ""` rather than a read-only allow-list (`packages/adapter-claude/src/invoke.ts:122`; the
-reasoning is at `apps/cli/src/commands/ingest.ts:1043-1046`). The alternative, a staging-only write scope, was rejected:
+reasoning is at `apps/cli/src/commands/ingest.ts:1045-1048`). The alternative, a staging-only write scope, was rejected:
 under it "the model cannot write outside staging" is a property our validators must prove after the
 fact, and every file in staging becomes attacker-influenced content we must treat as hostile on
 read-back. Under this design it is a property the vendor's own permission system enforced **before the
@@ -285,7 +285,7 @@ model ran**.
 
 **One asymmetry a reader will otherwise assume away.** `--output-schema` reaches Codex only;
 `invokeClaude` has no such flag, so on that vendor the schema is described in the prompt and enforced
-by `parseIngestProposal` afterwards (`ingest.ts:1295-1302`, `:2071`).
+by `parseIngestProposal` afterwards (`ingest.ts:1297-1304`, `:2082`).
 
 **A note capture skips the model.** It is applied verbatim, with no vendor call, as one `create` or
 one `replace` bound to its capture-time hash; `brain.md` §6.13 has the contract.
@@ -373,7 +373,7 @@ quarantined → accepted → staging → ingested
 
 **`failed` describes a capture whose own envelope cannot be read, and nothing else.** It has exactly
 two producers: `selectCaptures`, when `parseCaptureFile` refuses a file
-(`apps/cli/src/commands/ingest.ts:657-663`), and the duplicate path in `capture`
+(`apps/cli/src/commands/ingest.ts:659-665`), and the duplicate path in `capture`
 (`apps/cli/src/commands/quarantine.ts:176-182`). **A validator refusal leaves the capture `accepted` and
 retryable**, and a review refusal writes nothing at all (`decide.ts:125-127`).
 
@@ -385,8 +385,8 @@ Two more lines key on a refusal's `reason` rather than its state: `note_changed_
 (`brain.md` §6.13) and `vault_changed_during_ingest` (§5.1), which replaces the `staging`-without-notes
 line for a capture the user edited during the call.
 
-**Evidence:** `apps/cli/src/commands/ingest.test.ts:442` (the ladder itself), `:467` (rollback to
-`accepted`, never to `failed`), `:577` and `:614` (no rollback once notes landed), `:920` (the status
+**Evidence:** `apps/cli/src/commands/ingest.test.ts:443` (the ladder itself), `:468` (rollback to
+`accepted`, never to `failed`), `:578` and `:615` (no rollback once notes landed), `:921` (the status
 is read from disk rather than inferred), and every case in `tests/security/interruption.test.ts`,
 whose `expectedStatus` is derived per transaction kind and phase rather than assumed uniform.
 
@@ -576,7 +576,7 @@ in §10 below with their owners.
 | **NEW-37** — a numeric leaf of that payload is outside the redactor's reach | **closed 2026-09-28** by contract | S. A `number` leaf is published as the number it is, always: the JSON type must not depend on `[redaction] patterns`, and no built-in class can match a finite number's decimal text. A caller-derived identifier goes into a payload as a string, where every class applies |
 | **NEW-20** — `capture` proves its quarantine root, then follows the declared path again | **closed 2026-09-28** | XS, security. `capture` reads and writes through the canonical quarantine `resolveQuarantine` now returns, and keeps the declared path for `CaptureResultV1.path` and `validateChangePlan`'s owned root, so a retarget after the proof is refused at exit 5. `import` still re-follows its declared quarantine. `threat-model.md` §5.2 describes it |
 | **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | **closed 2026-08-15** by Track R entry R1 | XS, security. `reindex` calls `resolveContainedRoot` (`apps/cli/src/commands/reindex.ts:444`) rather than joining the path textually, so a `content/_indexes` replaced by a link out of the vault is refused instead of written through. Regression tests: `tests/security/symlink-escape.test.ts:377-416,418-434`, both on `writeIndexArtifacts` |
-| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. It is called from `apps/cli/src/commands/doctor.ts:494`, `apps/cli/src/commands/ingest.ts:642` and `apps/cli/src/commands/automation/garden.ts` — `assertTrustedExecutable` (re-measured 2026-10-06). **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33, a false refusal, was closed 2026-10-06 (D83 (3)) |
+| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. It is called from `apps/cli/src/commands/doctor.ts:494`, `apps/cli/src/commands/ingest.ts:644` and `apps/cli/src/commands/automation/garden.ts` — `assertTrustedExecutable` (re-measured 2026-10-06). **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33, a false refusal, was closed 2026-10-06 (D83 (3)) |
 | **NEW-16** — user-configured redaction patterns are unreachable | **closed 2026-08-17** by Track R entry R2 | S. `configSchema` carries an optional `[redaction]` table (`packages/core/src/config/loader.ts:418`) and the three redacting commands bind the user's patterns through `createRedactor` at their composition roots. `tests/repository/redactor-entry.test.ts` refuses a new call site that reaches for `redactText` directly. Residuals NEW-25 and NEW-26 are fixed, and NEW-24 closed 2026-09-28 under D73: a `user-pattern` finding persists its row index and an over-broad row is flagged by match density (`threat-model.md` §5.7) |
 | **NEW-17** — `brain` is the one command whose config parse failure is not content-free | **closed**, removed from `BACKLOG.md` §1 | XS, security. `readConfig` now routes through `readConfigFile` (`apps/cli/src/commands/brain.ts` — `readConfig`) and propagates `ConfigurationError` unmodified, so no command parses configuration outside the wrapper |
 | **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | **closed 2026-08-15** by Track R entry R1 | XS. One case per `containsNul` site — executable, working directory, any argument, stdin (`packages/security/src/process.test.ts:107-115,117-123,125-131,133-139`; `containsNul` at `packages/security/src/process.ts:35`) |
@@ -680,7 +680,7 @@ keyword. **`ingest` could never have returned a proposal on Codex**, and every g
 because nothing in the repository had ever handed that file to the binary. The recordings are
 `observed-exec-success-stream.jsonl` and `observed-exec-schema-refusal.jsonl`. Separately and untouched by this run: the Claude scoped-permission form
 `claude-adapter.md` §14.3 names but does not specify is still unresolved; `ingest` has since
-side-stepped it by passing no tools at all (`--tools ""`, `apps/cli/src/commands/ingest.ts:1043-1046`).
+side-stepped it by passing no tools at all (`--tools ""`, `apps/cli/src/commands/ingest.ts:1045-1048`).
 
 **Task 17's diff received its own security pass before `5c56892`.** The independent review that
 covered Tasks 1–18 was therefore not used to waive review of its adapter stdout parsing and capture

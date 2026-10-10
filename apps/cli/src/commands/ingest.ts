@@ -30,6 +30,8 @@ import {
   artifactPaths,
   BrainService,
   buildIngestPrompt,
+  exceedsPromptContentBound,
+  MAX_PROMPT_CONTENT_GRAPHEMES,
   parseCaptureFile,
   parseIngestProposal,
   planIngestApply,
@@ -2031,6 +2033,15 @@ async function ingestOne(
         );
       }
       await assertNoteUnchanged(context, environment.contentRoot, note, envelope.captureId);
+    }
+    /** Before staging, so the capture stays accepted: a prompt that cut its tail would ingest half of it for good (AUD-010). */
+    if (note === null && exceedsPromptContentBound(envelope.content)) {
+      throw new IngestRefusal(
+        EXIT_CODES.operationalFailure,
+        `this capture is longer than the ${String(MAX_PROMPT_CONTENT_GRAPHEMES)} graphemes one agent call carries, so none of it was sent`,
+        [path],
+        `split it: capture its parts separately, then developer-os review --id ${envelope.captureId} --decision reject`,
+      );
     }
     staged = envelope;
 

@@ -110,6 +110,7 @@ export type {
 } from "./proposal.js";
 export {
   buildIngestPrompt,
+  exceedsPromptContentBound,
   MAX_PROMPT_CONTENT_GRAPHEMES,
   MAX_PROMPT_INDEX_GRAPHEMES,
 } from "./prompt.js";

@@ -101,6 +101,7 @@ export type { ReviewDecision, ReviewOutcome } from "./review/index.js";
 export {
   buildIngestPrompt,
   isUnsafeProposedNotePath,
+  exceedsPromptContentBound,
   MAX_PROMPT_CONTENT_GRAPHEMES,
   MAX_PROMPT_INDEX_GRAPHEMES,
   MAX_PROPOSED_NOTE_CHARS,
