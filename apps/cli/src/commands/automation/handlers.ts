@@ -33,7 +33,7 @@ export function createProductionScheduledHandlers(context: CliContext, lifecycle
   return createScheduledJobHandlers(context, {
     run: async (_job, global) => {
       try {
-        const result = await createGitService(context, lifecycle).sync("scheduled", global);
+        const result = await createGitService(context, lifecycle).sync(global);
         return result.data.kind === "sync" && result.data.outcome !== "push_pending"
           ? { outcome: "success", reasonCode: parseSafeReasonCode("ok"), data: result.data }
           : { outcome: "handler_failed", reasonCode: parseSafeReasonCode("push_pending"), data: result.data };
