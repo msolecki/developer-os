@@ -25,7 +25,7 @@ import {
   parseLifecycleIdAllocator,
   parseLifecycleInstallNonce,
 } from "./records.js";
-import { LOWERCASE_V4_UUID } from "./fs-helpers.js";
+import { LOWERCASE_V4_UUID, requireHeldGlobalLock } from "./fs-helpers.js";
 
 export interface LifecycleAllocatorStateV1 {
   readonly nonce: LifecycleInstallNonceV1;
@@ -78,13 +78,15 @@ function allocatorDigest(allocator: LifecycleIdAllocatorV1): string {
 }
 
 /** §2.4: every command that can create a lifecycle ID holds the exact global mutation lock. */
-function requireGlobalLock(
+async function requireGlobalLock(
+  fs: LifecycleGuardedFileSystemV1,
   held: HeldLifecycleStableLockV1,
   stateDirectory: CanonicalAbsolutePathV1,
-): void {
+): Promise<void> {
   if (held.path !== leafPath(stateDirectory, LOCK_LEAF)) {
     throw new LifecycleLockShapeError(held.path);
   }
+  await requireHeldGlobalLock(fs, held);
 }
 
 function ownedControlFile(
@@ -273,7 +275,7 @@ export async function cleanLifecycleAllocatorTemp(
   held: HeldLifecycleStableLockV1,
   allocatedIds: readonly string[],
 ): Promise<LifecycleAllocatorStateV1> {
-  requireGlobalLock(held, state.stateEntry.path);
+  await requireGlobalLock(fs, held, state.stateEntry.path);
   if (state.temp === null) return state;
 
   const effectiveUid = state.stateEntry.ownerUid;
@@ -311,7 +313,7 @@ export async function reserveLifecycleIdBlock(
   if (!Number.isSafeInteger(size) || size < 1) {
     throw new Error("invalid lifecycle ID block size");
   }
-  requireGlobalLock(held, stateDirectory);
+  await requireGlobalLock(fs, held, stateDirectory);
 
   const boundary = async (reached: LifecycleAllocatorBoundaryV1): Promise<void> => {
     await dependencies.afterBoundary?.(reached);

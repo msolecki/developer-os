@@ -7,7 +7,6 @@
 import type { TransactionStore } from "../transactions/store.js";
 import {
   foundationRefById,
-  requireHeldGlobalLock,
   type LifecycleCoordinatorDependenciesV1,
 } from "./coordinator.js";
 import {
@@ -31,7 +30,13 @@ import {
   type LifecycleRedactionKeyCoreV1,
   type LifecycleTerminalOutcomeV1,
 } from "./types.js";
-import { childOf, readStrictFoundationJournal, syncDirectoryAt, unlinkStagedBlob } from "./fs-helpers.js";
+import {
+  childOf,
+  readStrictFoundationJournal,
+  requireHeldGlobalLock,
+  syncDirectoryAt,
+  unlinkStagedBlob,
+} from "./fs-helpers.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 

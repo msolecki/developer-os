@@ -16,6 +16,7 @@ import {
   type UtcTimestampV1,
 } from "../update/scalars.js";
 import type { FoundationParticipantExecutor } from "./foundation-participant.js";
+import { requireHeldGlobalLock } from "./fs-helpers.js";
 import {
   LIFECYCLE_POINT_OF_NO_RETURN,
   derivedCoordinatorPhase,
@@ -199,25 +200,6 @@ export function causeOf(error: unknown): SafeReasonCodeV1 {
     }
   }
   return RESUMED_CAUSE;
-}
-
-/**
- * The global mutation lock's path alone is not the hold: §2.4 binds it to a device and inode, and
- * `discardUnstarted` deletes staged bytes without re-proving either.
- */
-export async function requireHeldGlobalLock(
-  fs: LifecycleGuardedFileSystemV1,
-  global: HeldLifecycleStableLockV1,
-): Promise<void> {
-  const observed = await fs.lstat(global.path);
-  if (
-    observed === null ||
-    observed.kind !== "regular_file" ||
-    observed.dev !== global.dev ||
-    observed.ino !== global.ino
-  ) {
-    refuseLifecycleRecovery("lifecycle_global_lock_identity", global.path);
-  }
 }
 
 export function foundationRefById(

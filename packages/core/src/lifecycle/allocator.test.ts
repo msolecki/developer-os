@@ -528,6 +528,21 @@ describe("the install-scoped ID allocator", () => {
     },
   );
 
+  it("refuses a hold whose lock file was replaced after it was acquired", async () => {
+    const home = await freshLifecycleHome({ nextCounter: "3" });
+    const lock = join(home.state, ".lifecycle.lock");
+    const state = await inspectLifecycleAllocator(home.fs, home.state, UID, []);
+    await nodeFs.rename(lock, `${lock}.old`);
+    await nodeFs.writeFile(lock, "", { mode: 0o600 });
+    await nodeFs.unlink(`${lock}.old`);
+
+    expect(await reasonOf(() => reserveLifecycleIdBlock(home.dependencies, 1))).toBe("lifecycle_global_lock_identity");
+    expect(await reasonOf(() => cleanLifecycleAllocatorTemp(home.fs, state, home.held, []))).toBe(
+      "lifecycle_global_lock_identity",
+    );
+    expect((await inspectLifecycleAllocator(home.fs, home.state, UID, [])).allocator.nextCounter).toBe("3");
+  });
+
   it("never reissues a collected ID across reservations", async () => {
     const home = await freshLifecycleHome({ nextCounter: "0" });
     const issued = new Set<string>();
