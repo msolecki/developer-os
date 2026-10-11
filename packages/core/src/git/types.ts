@@ -10,6 +10,8 @@ import { hashCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonic
 import { parseEffectiveUid, type EffectiveUidV1 } from "../lifecycle/ids.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
 import {
+  exact,
+  fail,
   parseLowerHexSha256,
   parseUInt64Decimal,
   type LowerHexSha256,
@@ -224,23 +226,6 @@ export const GIT_OBJECT_COUNT_MAX = 200001;
 const GIT_TREE_FINGERPRINT_DOMAIN = "developer-os:git-tree-fingerprint:v1";
 const MAX_UINT32 = 4_294_967_295;
 const encoder = new TextEncoder();
-
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
-function exact(
-  value: unknown,
-  keys: readonly string[],
-  label: string,
-): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
-  const input = value as Readonly<Record<string, unknown>>;
-  if (Object.keys(input).length !== keys.length || keys.some((key) => !Object.hasOwn(input, key))) {
-    fail(`${label}: keys`);
-  }
-  return input;
-}
 
 function tagOf(value: unknown, field: string, label: string): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
