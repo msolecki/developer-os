@@ -264,7 +264,9 @@ export interface LifecycleExecutionBuilderV1<TPlan> {
  * builder is about to build, so the conservative pass cannot supply one: it
  * hands `build` distinct placeholder IDs of the widest legal width and expects
  * them bound by position. The conservative plan is measured, never validated or
- * published; the real plan is validated by the codec at `publish`.
+ * published. `publish` only encodes the real plan: grammar validation happens only if the
+ * injected `executionPlanCodec.encode` performs it, as the CLI's `apps/cli/src/lifecycle/context.ts`
+ * does with `validateLifecyclePlanGrammar`.
  */
 function conservativeIds(slotCount: number): readonly string[] {
   if (!Number.isSafeInteger(slotCount) || slotCount < 1 || slotCount > MAX_RESERVATION_SLOTS) {
