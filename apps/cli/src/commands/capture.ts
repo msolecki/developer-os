@@ -12,10 +12,11 @@ import type {
 import { discoverClaude } from "@developer-os/adapter-claude";
 import { discoverCodex } from "@developer-os/adapter-codex";
 import {
-  BrainService,
   buildCapture,
   detectSourceAgent,
+  frontmatterExceeds,
   isUnsafeProposedNotePath,
+  MAX_FRONTMATTER_CHARS,
   MAX_PROPOSED_NOTE_CHARS,
   parseNote,
   PRIVATE_FOLDERS,
@@ -54,7 +55,6 @@ import {
   writeQuarantineCapture,
 } from "./quarantine.js";
 import type { ExistingCapture } from "./quarantine.js";
-import { dependenciesFor } from "./reindex.js";
 import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 /**
@@ -500,15 +500,14 @@ async function resolveNoteTarget(
 
   if (leaf === null) return { path: notePath, beforeSha256: null };
 
-  const vaultPath = `${brainConfig.contentRoot}/${notePath}`.normalize("NFC");
-  const indexed =
-    leaf.isFile() &&
-    (
-      await new BrainService(
-        dependenciesFor(context, paths.brain, config),
-      ).reindex()
-    ).build.index.notes.some((note) => note.path === vaultPath);
-  if (!indexed) {
+  /**
+   * "A canonical note" is what `buildIndex` keeps, decided for this one file: the walk above
+   * applied discovery's path rules, so what is left is its bound and its parse. Indexing the
+   * whole vault to read back one boolean cost seconds per capture (AUD-087).
+   */
+  const bytes = leaf.isFile() ? await readNoteBytes(context, destination) : null;
+  const text = bytes?.toString("utf8");
+  if (bytes === null || text === undefined || frontmatterExceeds(text, MAX_FRONTMATTER_CHARS) || !parseNote(text).ok) {
     throw new CaptureNoteInvalidError(
       "--note names an existing file that is not a canonical note",
       [destination],
@@ -516,10 +515,17 @@ async function resolveNoteTarget(
   }
 
   /** Hashed from the bytes, not the decoded text: the executor's precondition hashes bytes. */
-  const beforeSha256 = await context.guards.readText(destination, async (handle) =>
-    createHash("sha256").update(await handle.readFile()).digest("hex"),
-  );
-  return { path: notePath, beforeSha256 };
+  return { path: notePath, beforeSha256: createHash("sha256").update(bytes).digest("hex") };
+}
+
+/** Through the guard, as discovery reads a note; one read serves the parse and the hash. */
+async function readNoteBytes(context: CliContext, path: string): Promise<Buffer> {
+  let bytes = Buffer.alloc(0);
+  await context.guards.readText(path, async (handle) => {
+    bytes = await handle.readFile();
+    return "";
+  });
+  return bytes;
 }
 
 /**
