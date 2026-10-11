@@ -190,6 +190,14 @@ describe("guard path", () => {
     expect(await run("keys/authorized_keys", "Write")).toMatchObject({ kind: "block", ruleId: "protected-path" });
   });
 
+  it("resolves a project symlink before a '..' that climbs out of it into the product home", async () => {
+    await mkdir(join(home, "foo"));
+    await symlink(join(home, "foo"), join(project, "evil"));
+    await symlink("evil/../.developer-os/releases/x.js", join(project, "notes.js"));
+    expect(await run("notes.js", "Write")).toMatchObject({ kind: "block", ruleId: "product-state" });
+    expect(await run("evil/../.developer-os/config.toml", "Write")).toMatchObject({ kind: "block", ruleId: "product-state" });
+  });
+
   // CRITIC-2: `CODEX_HOME` and the home a Codex attach recorded both hold the Codex credential.
   it("blocks auth.json under CODEX_HOME and under the recorded Codex home", async () => {
     await mkdir(join(home, ".developer-os", "codex"), { recursive: true });

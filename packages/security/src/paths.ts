@@ -1,11 +1,9 @@
 import { lstat, readlink, realpath } from "node:fs/promises";
 import {
-  basename,
   dirname,
   isAbsolute,
   join,
   relative,
-  resolve,
   sep,
 } from "node:path";
 import { EXIT_CODES } from "@developer-os/core";
@@ -56,6 +54,12 @@ async function danglingLinkTarget(path: string): Promise<string | undefined> {
   }
 }
 
+/**
+ * Walks the path one component at a time, as the kernel does: an existing prefix is realpath-ed
+ * before the `..` after it applies (AUD-002 review), and a dangling symlink, missing to realpath
+ * but present to lstat, is replaced by its target's components, because a write through it lands
+ * there. Below the first missing component the rest is appended lexically.
+ */
 export async function canonicalizePlannedPath(path: string): Promise<string> {
   if (path.includes("\0")) {
     refuse("Path contains a NUL byte");
@@ -64,39 +68,41 @@ export async function canonicalizePlannedPath(path: string): Promise<string> {
     refuse("Planned path must be absolute");
   }
 
-  let existingAncestor = resolve(path);
-  const unresolvedSegments: string[] = [];
+  const pending = path.split("/");
+  let current = "/";
   let symlinkHops = 0;
 
-  for (;;) {
+  for (let component = pending.shift(); component !== undefined; component = pending.shift()) {
+    if (component === "" || component === ".") {
+      continue;
+    }
+    if (component === "..") {
+      current = dirname(current);
+      continue;
+    }
+    const candidate = join(current, component);
     try {
-      const canonicalAncestor = await realpath(existingAncestor);
-      return join(canonicalAncestor, ...unresolvedSegments);
+      current = await realpath(candidate);
     } catch (error) {
       if (!isMissingPathError(error)) {
         throw error;
       }
-
-      const parent = dirname(existingAncestor);
-      if (parent === existingAncestor) {
-        refuse("No existing ancestor could be resolved");
-      }
-
-      // A dangling symlink is missing to realpath but present to lstat; a write through it lands at its target.
-      const linkTarget = await danglingLinkTarget(existingAncestor);
-      if (linkTarget !== undefined) {
-        symlinkHops += 1;
-        if (symlinkHops > MAX_SYMLINK_HOPS) {
-          refuse("Too many symbolic links");
-        }
-        existingAncestor = resolve(await realpath(parent), linkTarget);
+      const linkTarget = await danglingLinkTarget(candidate);
+      if (linkTarget === undefined) {
+        current = candidate;
         continue;
       }
-
-      unresolvedSegments.unshift(basename(existingAncestor));
-      existingAncestor = parent;
+      symlinkHops += 1;
+      if (symlinkHops > MAX_SYMLINK_HOPS) {
+        refuse("Too many symbolic links");
+      }
+      pending.unshift(...linkTarget.split("/"));
+      if (isAbsolute(linkTarget)) {
+        current = "/";
+      }
     }
   }
+  return current;
 }
 
 export async function assertDisjointPaths(

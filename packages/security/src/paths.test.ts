@@ -69,6 +69,22 @@ describe("canonicalizePlannedPath", () => {
     );
   });
 
+  it("resolves a symlink before the '..' after it, in a dangling target and in the planned path", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const canonicalTemporaryDirectory = await realpath(temporaryDirectory);
+    await mkdir(join(temporaryDirectory, "home", "foo"), { recursive: true });
+    await mkdir(join(temporaryDirectory, "p"));
+    await symlink(join(temporaryDirectory, "home", "foo"), join(temporaryDirectory, "p", "evil"));
+    await symlink("evil/../protected/x.js", join(temporaryDirectory, "p", "notes.js"));
+
+    await expect(canonicalizePlannedPath(join(temporaryDirectory, "p", "notes.js"))).resolves.toBe(
+      join(canonicalTemporaryDirectory, "home", "protected", "x.js"),
+    );
+    await expect(canonicalizePlannedPath(`${temporaryDirectory}/p/evil/../protected/config.toml`)).resolves.toBe(
+      join(canonicalTemporaryDirectory, "home", "protected", "config.toml"),
+    );
+  });
+
   it("refuses a chain of dangling symlinks that never ends", async () => {
     const temporaryDirectory = await makeTemporaryDirectory();
     await symlink("loop-b/x", join(temporaryDirectory, "loop-a"));
