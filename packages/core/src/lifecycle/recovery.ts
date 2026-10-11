@@ -9,7 +9,6 @@ import { EXIT_CODES } from "../result.js";
 import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
 import { parseSafeReasonCode, type SafeReasonCodeV1 } from "../update/scalars.js";
 import { LifecycleCoordinator } from "./coordinator.js";
-import { requireHeldGlobalLock } from "./coordinator.js";
 import {
   compactTerminalCoordinator,
   completeCoordinatorEnvelope,
@@ -38,7 +37,7 @@ import type {
   LifecycleJournalClosureV1,
   LifecycleJournalClosureV2,
 } from "./types.js";
-import { childOf, namesOf, syncDirectoryAt } from "./fs-helpers.js";
+import { childOf, namesOf, requireHeldGlobalLock, syncDirectoryAt } from "./fs-helpers.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 

@@ -10,6 +10,7 @@ import {
   type LifecycleGuardedEntryV1,
   type LifecycleGuardedFileSystemV1,
 } from "./guarded-fs.js";
+import type { HeldLifecycleStableLockV1 } from "./locks.js";
 import { LIFECYCLE_PLAN_BOUNDS } from "./types.js";
 
 export const LOWERCASE_V4_UUID =
@@ -85,4 +86,23 @@ export async function unlinkStagedBlob(
     removed = true;
   }
   return removed;
+}
+
+/**
+ * The global mutation lock's path alone is not the hold: §2.4 binds it to a device and inode, and
+ * `discardUnstarted` deletes staged bytes without re-proving either.
+ */
+export async function requireHeldGlobalLock(
+  fs: LifecycleGuardedFileSystemV1,
+  global: HeldLifecycleStableLockV1,
+): Promise<void> {
+  const observed = await fs.lstat(global.path);
+  if (
+    observed === null ||
+    observed.kind !== "regular_file" ||
+    observed.dev !== global.dev ||
+    observed.ino !== global.ino
+  ) {
+    refuseLifecycleRecovery("lifecycle_global_lock_identity", global.path);
+  }
 }

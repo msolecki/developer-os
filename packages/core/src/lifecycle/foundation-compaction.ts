@@ -17,13 +17,12 @@ import {
 } from "./guarded-fs.js";
 import { parseFoundationTransactionId } from "./ids.js";
 import type { HeldLifecycleStableLockV1 } from "./locks.js";
-import { requireHeldGlobalLock } from "./coordinator.js";
 import {
   LIFECYCLE_PLAN_BOUNDS,
   type FoundationTerminalCompactionV1,
   type LifecycleTerminalOutcomeV1,
 } from "./types.js";
-import { childOf, LOWERCASE_V4_UUID, readStrictFoundationJournal, syncDirectoryAt } from "./fs-helpers.js";
+import { childOf, LOWERCASE_V4_UUID, readStrictFoundationJournal, requireHeldGlobalLock, syncDirectoryAt } from "./fs-helpers.js";
 
 export interface FoundationCompactionDependenciesV1 {
   readonly fs: LifecycleGuardedFileSystemV1;
