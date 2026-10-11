@@ -76,8 +76,11 @@ const BASELINES: ReadonlyMap<string, number> = new Map([
   ["docs/architecture/knowledge-pipeline.md", 70],
   ["docs/architecture/foundation-constraints.md", 3],
   ["docs/architecture/workflow-schema.md", 3],
-  /** Lowered from 8 to 6 on 2026-09-29: the closed NEW-113 (D76) and NEW-117 rows took one each. */
-  ["docs/superpowers/BACKLOG.md", 5],
+  /**
+   * Lowered from 8 to 6 on 2026-09-29: the closed NEW-113 (D76) and NEW-117 rows took one each.
+   * Lowered from 5 to 4 on 2026-10-11: the closed NEW-183 row (`809a98de`) took one.
+   */
+  ["docs/superpowers/BACKLOG.md", 4],
 ]);
 
 /**
@@ -118,7 +121,7 @@ interface Citation {
  * an extractor restricted to TypeScript rendered one whole standard-bearing document
  * invisible while reporting success.
  */
-const FULL = /(?:apps|packages|tests|workflows|docs)\/[\w./-]+\.[A-Za-z]+:(\d+)(?:-(\d+))?((?:,\d+(?:-\d+)?)*)/gu;
+const FULL = /(?:\.github\/workflows|apps|packages|tests|workflows|docs)\/[\w./-]+\.[A-Za-z]+:(\d+)(?:-(\d+))?((?:,\d+(?:-\d+)?)*)/gu;
 /** A backticked filename with no directory. */
 const BARE = /`([\w.-]+\.[A-Za-z]+):(\d+)(?:-(\d+))?((?:,\d+(?:-\d+)?)*)`/gu;
 /**
@@ -808,6 +811,13 @@ describe("the extractor and the predicate this gate is built on", () => {
       named: "workflows/capture/workflow.yaml",
       start: 5,
       end: 6,
+    });
+  });
+
+  it("keeps the .github prefix of a CI workflow citation", () => {
+    expect(first("`.github/workflows/check.yml:273`")).toMatchObject({
+      named: ".github/workflows/check.yml",
+      start: 273,
     });
   });
 
