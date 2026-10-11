@@ -1081,13 +1081,13 @@ export function validateBundlePublicationJournal(value: unknown, plan: BundlePub
   let legal: boolean;
   switch (phase) {
     case "planned":
-      legal = clean && versionDirectory === null && nextRoot === 0 && rootState === null && nextEntry === 0 && entryState === null && nextMetadata === 0 && updatedAt === createdAt;
+      legal = clean && versionDirectory === null && nextRoot === 0 && rootState === null && nextEntry === 0 && entryState === null && nextMetadata === 0 && metadataState === null && updatedAt === createdAt;
       break;
     case "root_publishing":
-      legal = clean && publish && nextRoot === 0 && nextEntry === 0 && entryState === null && nextMetadata === 0;
+      legal = clean && publish && nextRoot === 0 && nextEntry === 0 && entryState === null && nextMetadata === 0 && metadataState === null;
       break;
     case "entries_publishing":
-      legal = clean && rootDone && nextEntry < N && nextMetadata === 0;
+      legal = clean && rootDone && nextEntry < N && nextMetadata === 0 && metadataState === null;
       break;
     case "metadata_publishing":
       legal = clean && entriesDone && nextMetadata < 3;

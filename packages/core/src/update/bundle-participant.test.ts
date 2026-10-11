@@ -538,6 +538,17 @@ describe("forward created/published steps after compensation began, and rolled_b
     expect(() => validateBundlePublicationJournal({ ...journal, metadataWriteState: { ordinal: journal.nextMetadata, state: "publish_intent" } }, plan)).toThrow();
   });
 
+  it("refuses a stray metadataWriteState in planned, root_publishing and entries_publishing", () => {
+    const plan = publishPlan();
+    const stray = { ordinal: 0, state: "publish_intent" } as const;
+    const journals = [initialBundlePublicationJournal(plan, at), runPublication(plan, [...versionSteps, { kind: "root_intent" }]), runPublication(plan, rootSteps)];
+    expect(journals.map((journal) => journal.phase)).toEqual(["planned", "root_publishing", "entries_publishing"]);
+    for (const journal of journals) {
+      expect(() => validateBundlePublicationJournal(journal, plan)).not.toThrow();
+      expect(() => validateBundlePublicationJournal({ ...journal, metadataWriteState: stray }, plan)).toThrow(/phase/u);
+    }
+  });
+
   it("refuses a rolled_back source journal that kept an entry write state", () => {
     const plan = sourcePlan();
     let journal = compensateSource(plan, [...structures, ...entryCopy("30"), { kind: "entry_intent" }]);
