@@ -25,6 +25,8 @@ import {
   GIT_ZERO_OID,
   parseFullBranchRef,
   parseLowerHexSha1,
+  parseReflogEmail,
+  parseReflogName,
   type FullBranchRefV1,
   type GitHeadStateV1,
   type GitIndexStateV1,
@@ -347,6 +349,41 @@ export function parseGitConfig(text: string): readonly GitConfigEntryV1[] {
     if (text[index] === "\n") index += 1;
   }
   return entries;
+}
+
+export type GitUserIdentityReadV1 =
+  | { readonly state: "present"; readonly name: string; readonly email: string }
+  | { readonly state: "missing" }
+  | { readonly state: "unsupported" };
+
+/**
+ * The `[user]` identity Git reads from a repository's own config, admitted only when the
+ * reflog grammar can record it. An include could supply another identity, so it refuses.
+ */
+export function readGitUserIdentity(text: string): GitUserIdentityReadV1 {
+  let entries: readonly GitConfigEntryV1[];
+  try {
+    entries = parseGitConfig(text);
+  } catch (error) {
+    if (error instanceof GitMetadataRefusalError) return { state: "unsupported" };
+    throw error;
+  }
+  if (entries.some((entry) => entry.section === "include" || entry.section === "includeif")) {
+    return { state: "unsupported" };
+  }
+  const user = new Map<string, string | null>();
+  for (const entry of entries) {
+    if (entry.section === "user" && entry.subsection === null) user.set(entry.name, entry.value);
+  }
+  const name = user.get("name");
+  const email = user.get("email");
+  if (name === null || email === null) return { state: "unsupported" };
+  if (name === undefined || email === undefined || name === "" || email === "") return { state: "missing" };
+  try {
+    return { state: "present", name: parseReflogName(name), email: parseReflogEmail(email) };
+  } catch {
+    return { state: "unsupported" };
+  }
 }
 
 function gitBoolean(value: string | null): boolean {

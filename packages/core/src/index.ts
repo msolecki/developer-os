@@ -514,6 +514,7 @@ export {
   inspectGitMetadata,
   parseFullBranchRef,
   parseLowerHexSha1,
+  readGitUserIdentity,
   validateGitHeadState,
   validateGitIndexState,
   validateGitMetadataBounds,

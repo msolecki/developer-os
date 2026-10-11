@@ -2,12 +2,14 @@ export {
   GitMetadataRefusalError,
   createNodeGitMetadataStream,
   inspectGitMetadata,
+  readGitUserIdentity,
 } from "./metadata.js";
 export type {
   GitMetadataDependencies,
   GitMetadataRefusalReasonV1,
   GitMetadataRequestV1,
   GitMetadataStreamV1,
+  GitUserIdentityReadV1,
 } from "./metadata.js";
 export {
   GIT_METADATA_BOUNDS,

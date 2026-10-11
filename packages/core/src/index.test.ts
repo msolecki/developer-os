@@ -289,6 +289,7 @@ describe("the package's public door", () => {
         "inspectGitMetadata",
         "parseFullBranchRef",
         "parseLowerHexSha1",
+        "readGitUserIdentity",
         "validateGitHeadState",
         "validateGitIndexState",
         "validateGitMetadataBounds",

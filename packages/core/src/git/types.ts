@@ -404,7 +404,7 @@ function parseReflogOid(value: unknown): GitReflogOidV1 {
   return value === GIT_ZERO_OID ? GIT_ZERO_OID : parseLowerHexSha1(value);
 }
 
-function parseReflogName(value: unknown): string {
+export function parseReflogName(value: unknown): string {
   const label = "GitReflogNameV1";
   if (typeof value !== "string") fail(label);
   const bytes = byteLength(value);
@@ -419,7 +419,7 @@ function parseReflogName(value: unknown): string {
   return value;
 }
 
-function parseReflogEmail(value: unknown): string {
+export function parseReflogEmail(value: unknown): string {
   if (typeof value !== "string" || !/^[\x21-\x3b\x3d\x3f-\x7e]{1,320}$/.test(value)) fail("GitReflogEmailV1");
   return value;
 }
