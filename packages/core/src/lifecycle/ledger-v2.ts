@@ -40,7 +40,7 @@ import {
   type CanonicalAbsolutePathV1,
   type CanonicalPathEvidenceV1,
 } from "../update/paths.js";
-import { decodeCanonicalJson, encodeCanonicalJson } from "./canonical-json.js";
+import { decodeCanonicalJson } from "./canonical-json.js";
 import type { LifecycleLedgerRootsV1 } from "./foundation-ledger.js";
 import type { LifecycleGuardedEntryV1, LifecycleGuardedFileSystemV1 } from "./guarded-fs.js";
 import { parseAllocatedLifecycleId, parseLifecycleCoordinatorId } from "./ids.js";
@@ -151,12 +151,6 @@ async function ownedBytes(scan: ScanV1, path: CanonicalAbsolutePathV1 | null, ma
   } catch {
     return null;
   }
-}
-
-function canonicalValue(bytes: Uint8Array, maximumBytes: number): unknown {
-  const value = decodeCanonicalJson(bytes, maximumBytes);
-  if (encodeCanonicalJson(value) !== decoder.decode(bytes)) throw new Error("not canonical");
-  return value;
 }
 
 /**
@@ -326,7 +320,7 @@ async function readConstructionPlan(
   const bytes = await ownedBytes(scan, path, MAXIMUM_CONSTRUCTION_PLAN_BYTES);
   if (bytes === null) return null;
   try {
-    const plan = canonicalValue(bytes, MAXIMUM_CONSTRUCTION_PLAN_BYTES) as UpdateConstructionPlanV1;
+    const plan = decodeCanonicalJson(bytes, MAXIMUM_CONSTRUCTION_PLAN_BYTES) as unknown as UpdateConstructionPlanV1;
     validateConstructionBijections(plan);
     const root = updateCoordinatorStagingRoot(scan.roots.productHome, id);
     return plan.coordinatorId === id && plan.stagingRoot.path === root ? plan : null;
@@ -343,7 +337,7 @@ async function readConstructionJournal(
   const bytes = await ownedBytes(scan, path, plan.maximumJournalBytes);
   if (bytes === null) return null;
   try {
-    const journal = validateConstructionJournal(canonicalValue(bytes, plan.maximumJournalBytes), plan);
+    const journal = validateConstructionJournal(decodeCanonicalJson(bytes, plan.maximumJournalBytes), plan);
     return decoder.decode(constructionJournalBytes(journal)) === decoder.decode(bytes) ? journal : null;
   } catch {
     return null;
