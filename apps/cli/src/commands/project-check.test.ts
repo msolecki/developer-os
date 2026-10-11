@@ -216,6 +216,26 @@ describe("runProjectCheck", () => {
     expect(secrets?.paths).toEqual([join(fixture.project, "CLAUDE.md")]);
   });
 
+  it("warns, never passes clean, when an instruction file cannot be inspected (AUD-068)", async () => {
+    const fixture = await projectFixture("project-check-lstat-refused", CLEAN);
+    const agents = join(fixture.project, "AGENTS.md");
+    const base = fixture.context.fs;
+    const lstat = ((path: string, options?: unknown) =>
+      path.endsWith("AGENTS.md")
+        ? Promise.reject(Object.assign(new Error("synthetic EACCES"), { code: "EACCES" }))
+        : base.lstat(path, options as never)) as typeof base.lstat;
+    const context: CliContext = { ...fixture.context, fs: { ...base, lstat } };
+
+    const result = await fixture.check(null, context);
+
+    expect(result.code).toBe(EXIT_CODES.success);
+    if (!result.ok) return;
+    const secrets = result.data.checks.find((check) => check.id === "instruction-secrets");
+    expect(secrets?.status).toBe("warn");
+    expect(secrets?.message).toContain("AGENTS.md");
+    expect(secrets?.paths).toEqual([agents]);
+  });
+
   it("writes nothing and creates no key", async () => {
     const fixture = await projectFixture("project-check-no-write", CLEAN);
     const before = await inventoryDigest(fixture.root);

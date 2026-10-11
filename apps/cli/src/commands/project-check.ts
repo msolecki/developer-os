@@ -7,7 +7,7 @@ import type { Redactor } from "@developer-os/security";
 import { failureFrom, redactorWithoutCreatingKey, renderPath } from "../context.js";
 import type { CliContext } from "../context.js";
 import { doctorExitCode, isDirectory } from "./doctor.js";
-import { readConfigFile } from "../config-file.js";
+import { isMissingEntry, readConfigFile } from "../config-file.js";
 import type { DoctorCheck } from "./doctor.js";
 import { PROJECT_TEMPLATE } from "./project-template.js";
 import { readUntrustedText, UntrustedFileRefusal } from "./untrusted-file.js";
@@ -124,7 +124,11 @@ export async function runProjectCheck(
       let stats;
       try {
         stats = await context.fs.lstat(path, { bigint: true });
-      } catch {
+      } catch (error) {
+        // AUD-068: only absence skips a file; any other lstat failure leaves it unscanned, which warns.
+        if (!isMissingEntry(error)) {
+          unread.push({ line: `${name}: could not be inspected`, path, code: EXIT_CODES.operationalFailure });
+        }
         continue;
       }
       present.add(name);
