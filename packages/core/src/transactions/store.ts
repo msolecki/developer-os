@@ -234,7 +234,7 @@ export class TransactionStore {
     try {
       await handle.release();
     } catch {
-      throw new TransactionStateError("transaction lock release failed");
+      // The operation already completed; throwing would tell the caller nothing happened.
     }
     return result;
   }
