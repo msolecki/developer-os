@@ -9,10 +9,11 @@ import type { CliResult, ExitCode, RuntimePaths } from "@developer-os/core";
 import { buildCapture } from "@developer-os/brain";
 import type { CaptureBuildResult } from "@developer-os/brain";
 import { createRedactor, SecurityRefusalError } from "@developer-os/security";
-import type { RedactionScope, Redactor } from "@developer-os/security";
+import type { Redactor } from "@developer-os/security";
 
 import {
   failureFrom,
+  guardsWith,
   loadOrCreateRedactionKey,
   readRedactionKey,
   renderPath,
@@ -568,10 +569,7 @@ export async function runImport(
       options.dryRun ? (existingKey ?? randomBytes(32)) : loadOrCreateRedactionKey(paths.stateDir);
     const bind = (key: Uint8Array): Redactor => {
       const redact = createRedactor(key, { userPatterns: config.redaction?.patterns ?? [] });
-      guards = {
-        ...context.guards,
-        redactDiagnostic: (text: string, scope?: RedactionScope) => redact(text, scope).text,
-      };
+      guards = guardsWith(context.guards, redact);
       return redact;
     };
     const common = {
