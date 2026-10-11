@@ -62,7 +62,6 @@ function runtimeFor(cwd: string, respond: () => Promise<ProcessResult> = () => P
     },
     nodeExecutable: "/synthetic/bin/node",
     redact: (text) => text,
-    now: () => new Date(0),
     io: {
       stdout: () => undefined,
       stderr: () => undefined,

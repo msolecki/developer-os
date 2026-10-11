@@ -29,7 +29,6 @@ export interface HookRuntime {
   readonly nodeExecutable: string;
   /** Applied before a guard truncates any input it echoes: a cut secret no longer matches the redactor. */
   readonly redact: (text: string) => string;
-  readonly now: () => Date;
   readonly io: CliIo;
   readonly createContext: HookContextFactory;
 }

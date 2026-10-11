@@ -127,7 +127,6 @@ export async function runHookMode(
       runner: new NodeProcessRunner({ assertCommand: assertSafeCommand, redact }),
       nodeExecutable: environment.nodeExecutable,
       redact: redactText,
-      now: () => new Date(),
       io,
       createContext,
     };
