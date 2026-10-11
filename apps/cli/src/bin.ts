@@ -4,24 +4,43 @@ import { Buffer } from "node:buffer";
 import { userInfo } from "node:os";
 import { createInterface } from "node:readline/promises";
 
-import { parseScheduledInvocation } from "./commands/automation/index.js";
-import { MAX_CAPTURE_INPUT_BYTES } from "./commands/capture.js";
 import { resolveRuntimePaths } from "@developer-os/core";
 
 import { createProductionContext, pathEnvironmentFor, PRODUCT_VERSION } from "./context.js";
 import { hookLastResortExit, isHookInvocation } from "./hooks/argv.js";
-import { firingRecordWaitMs, settleFiringRecords } from "./hooks/entry.js";
+import { firingRecordWaitMs, runHookMode, settleFiringRecords } from "./hooks/entry.js";
 import type { HookEnvironment } from "./hooks/entry.js";
 import type { CliIo } from "./io.js";
-import { run } from "./main.js";
-import { admitInitPackageChannelKeg, admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
+import type { CliContextFactory } from "./main.js";
 import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
+
+/**
+ * AUD-088: a hook firing loads only what it runs. `main.js` is the whole command graph, and
+ * `run` sends a hook invocation straight to `runHookMode` anyway, so the graph is imported
+ * when a command needs it and never on the hook path.
+ */
+async function run(
+  argv: readonly string[],
+  commandIo: CliIo,
+  createContext: CliContextFactory,
+  hookEnvironment?: HookEnvironment,
+): Promise<number> {
+  if (isHookInvocation(argv)) return runHookMode(argv, commandIo, createContext, hookEnvironment);
+  const main = await import("./main.js");
+  return main.run(argv, commandIo, createContext, hookEnvironment);
+}
+
+async function isScheduledInvocation(argv: readonly string[]): Promise<boolean> {
+  const { parseScheduledInvocation } = await import("./commands/automation/index.js");
+  return parseScheduledInvocation(argv) !== null;
+}
 
 /**
  * D84 K2 and C2: `init` admits the keg the fixed table names, by `admitInitPackageChannelKeg`'s rules.
  * `mismatchIsAbsent` hands it the product state directory, where an installed V2 home's active release lives.
  */
-function admitPackageChannelKeg(userHome: string, mismatchIsAbsent: boolean): Promise<PackagedReleaseSourceV1 | null> {
+async function admitPackageChannelKeg(userHome: string, mismatchIsAbsent: boolean): Promise<PackagedReleaseSourceV1 | null> {
+  const { admitInitPackageChannelKeg } = await import("./update/packaged-release.js");
   return admitInitPackageChannelKeg({
     architecture: process.arch,
     requireVersion: PRODUCT_VERSION,
@@ -117,6 +136,7 @@ const io: CliIo = {
    */
   readStdin: async (): Promise<string | null> => {
     // The bound is `readStdinBytes`'s: it returns at most one byte over, which is all capture needs to refuse.
+    const { MAX_CAPTURE_INPUT_BYTES } = await import("./commands/capture.js");
     const bytes = await readStdinBytes(MAX_CAPTURE_INPUT_BYTES);
     return bytes === null ? null : Buffer.from(bytes).toString("utf8");
   },
@@ -126,7 +146,6 @@ const io: CliIo = {
 const home = process.env.HOME;
 const argv = process.argv.slice(2);
 const hookMode = isHookInvocation(argv);
-const scheduledMode = parseScheduledInvocation(argv) !== null;
 const pendingRecords: Promise<void>[] = [];
 const hookEnvironment = (userHome: string | null): HookEnvironment => ({
   env: process.env,
@@ -138,7 +157,8 @@ const hookEnvironment = (userHome: string | null): HookEnvironment => ({
   },
 });
 
-if ((home === undefined || home.length === 0) && !scheduledMode) {
+// Asked only without a home: a scheduled run is the one invocation that needs none.
+if ((home === undefined || home.length === 0) && !(await isScheduledInvocation(argv))) {
   if (hookMode) {
     try {
       process.exitCode = await run(argv, io, () => {
@@ -170,7 +190,7 @@ if ((home === undefined || home.length === 0) && !scheduledMode) {
         env: process.env,
         userHome: home,
         localRelease: request.localRelease !== null
-          ? await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION)
+          ? await (await import("./update/packaged-release.js")).admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION)
           : request.packageChannelInit
             ? await admitPackageChannelKeg(home, request.packageMismatchIsAbsent === true)
             : null,
