@@ -61,23 +61,23 @@ import {
   type BundleEntryDeathPointV1,
   type BundleParticipantDependenciesV1,
 } from "./bundle-source.js";
-import { parentPath, sha256Hex, stampAfter } from "./primitives.js";
+import { deathPoints, parentPath, sha256Hex, stampAfter } from "./primitives.js";
 import { rollbackEntryAsFile, rollbackSourceEvidenceSetHash } from "./rollback-source.js";
 
 export type RollbackPublicationDeathPointV1 = BundleEntryDeathPointV1 | "structure_made" | "metadata_created" | "metadata_written";
 
-export const ROLLBACK_PUBLICATION_DEATH_POINTS: readonly RollbackPublicationDeathPointV1[] = Object.freeze([
-  "journal_rewritten",
-  "structure_made",
-  "entry_created",
-  "entry_written",
-  "evidence_created",
-  "evidence_written",
-  "metadata_created",
-  "metadata_written",
-  "compensation_step",
-  "compaction_step",
-]);
+export const ROLLBACK_PUBLICATION_DEATH_POINTS = deathPoints<RollbackPublicationDeathPointV1>({
+  journal_rewritten: true,
+  structure_made: true,
+  entry_created: true,
+  entry_written: true,
+  evidence_created: true,
+  evidence_written: true,
+  metadata_created: true,
+  metadata_written: true,
+  compensation_step: true,
+  compaction_step: true,
+});
 
 /** What the coordinator step records after the participant returns. */
 export interface RollbackPayloadObservationV1 {

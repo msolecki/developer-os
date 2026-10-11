@@ -19,7 +19,7 @@ import {
   type UpdateRecoveryExecutorStagedFileV1,
   MAXIMUM_RECOVERY_EXECUTOR_BYTES,
 } from "@developer-os/core";
-import { parentPath } from "./primitives.js";
+import { deathPoints, parentPath } from "./primitives.js";
 
 /** Every durable boundary of the executor-record protocol a death test may stop at. */
 export type UpdateRecoveryExecutorDeathPointV1 =
@@ -29,13 +29,13 @@ export type UpdateRecoveryExecutorDeathPointV1 =
   | "terminal_synced"
   | "record_unlinked";
 
-export const UPDATE_RECOVERY_EXECUTOR_DEATH_POINTS: readonly UpdateRecoveryExecutorDeathPointV1[] = Object.freeze([
-  "initial_renamed",
-  "initial_synced",
-  "terminal_replaced",
-  "terminal_synced",
-  "record_unlinked",
-]);
+export const UPDATE_RECOVERY_EXECUTOR_DEATH_POINTS = deathPoints<UpdateRecoveryExecutorDeathPointV1>({
+  initial_renamed: true,
+  initial_synced: true,
+  terminal_replaced: true,
+  terminal_synced: true,
+  record_unlinked: true,
+});
 
 export interface UpdateRecoveryExecutorFilesDependenciesV1 {
   readonly fs: LifecycleGuardedFileSystemV1;
