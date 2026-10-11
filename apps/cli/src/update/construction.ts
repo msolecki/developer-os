@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { constants, type BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
@@ -22,7 +21,6 @@ import {
   MAXIMUM_PARTICIPANT_JOURNAL_BYTES,
   parseCanonicalAbsolutePathText,
   parseUInt64Decimal,
-  parseUtcTimestamp,
   updateConstructionEnvelopePaths,
   updateConstructionEvidencePath,
   validateConstructionBijections,
@@ -42,9 +40,9 @@ import {
   type UpdateConstructionParentV1,
   type UpdateConstructionPlanV1,
   type UpdateConstructionStepV1,
-  type UtcTimestampV1,
 } from "@developer-os/core";
 import type { RedactionScope } from "@developer-os/security";
+import { parentPath, sha256Hex, stampAfter } from "./primitives.js";
 
 /** Where a test may kill the constructing process; each point follows a durable effect. */
 export type UpdateConstructionStoreDeathPointV1 =
@@ -136,17 +134,9 @@ function refuse(reason: string, ...paths: readonly string[]): never {
   throw new LifecycleRecoveryRequiredError(reason, paths);
 }
 
-function lifecycleParentPath(path: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
-  return parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/")));
-}
-
 /** Directory link counts and sizes are bookkeeping, not identity. */
 function sameDirectory(observed: LifecycleGuardedEntryV1 | null, expected: LifecycleGuardedEntryV1): boolean {
   return observed?.kind === "directory" && observed.path === expected.path && observed.ownerUid === expected.ownerUid && observed.mode === expected.mode && observed.dev === expected.dev && observed.ino === expected.ino;
-}
-
-function sha256Hex(bytes: Uint8Array): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
 
 function entryOf(path: CanonicalAbsolutePathV1, stats: BigIntStats): LifecycleGuardedEntryV1 {
@@ -172,11 +162,6 @@ function sameInode(entry: LifecycleGuardedEntryV1, dev: string, ino: string): bo
 
 function isBoundedRegular(entry: LifecycleGuardedEntryV1, ownerUid: number, mode: number, maximumBytes: number): boolean {
   return entry.kind === "regular_file" && entry.ownerUid === ownerUid && entry.mode === mode && entry.nlink === 1 && BigInt(entry.size) <= BigInt(maximumBytes);
-}
-
-function timestamp(now: () => Date, floor: UtcTimestampV1): UtcTimestampV1 {
-  const stamp = parseUtcTimestamp(now().toISOString());
-  return stamp > floor ? stamp : floor;
 }
 
 /** Exact canonical bytes only: a torn or non-canonical file is not this file (exit 6). */
@@ -289,7 +274,7 @@ export class UpdateConstructionStore {
   async #advance(plan: UpdateConstructionPlanV1, step: UpdateConstructionStepV1): Promise<UpdateConstructionJournalV1> {
     const { fs } = this.#dependencies;
     const current = this.#plan(plan);
-    const next = advanceConstructionJournal(plan, current.journal, step, timestamp(this.#dependencies.now, current.journal.updatedAt));
+    const next = advanceConstructionJournal(plan, current.journal, step, stampAfter(this.#dependencies.now, current.journal.updatedAt));
     const bytes = constructionJournalBytes(next);
     if (bytes.byteLength > plan.maximumJournalBytes) refuse("update_construction_journal_bound", this.#paths.journal);
     const root = await this.#rootEntry(plan);
@@ -426,7 +411,7 @@ export class UpdateConstructionStore {
   }
 
   async #evidenceParent(plan: UpdateConstructionPlanV1): Promise<LifecycleGuardedEntryV1> {
-    const path = lifecycleParentPath(updateConstructionEvidencePath(plan.stagingRoot.path, 0));
+    const path = parentPath(updateConstructionEvidencePath(plan.stagingRoot.path, 0));
     const ordinal = plan.directories.findIndex((directory) => directory.path === path);
     return this.#parentEntry(plan, this.#plan(plan).journal, { kind: "created_directory", ordinal });
   }
@@ -492,7 +477,7 @@ export class UpdateConstructionStore {
       if (bytes.byteLength < 1 || bytes.byteLength > MAXIMUM_LEAF_PLAN_BYTES) refuse("update_construction_outer_bound", path);
       this.#dependencies.screen(bytes, "path");
       const file: UpdateConstructionOuterFileV1 = { path, bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384 };
-      const parent = await this.#ownedDirectory(lifecycleParentPath(path));
+      const parent = await this.#ownedDirectory(parentPath(path));
       await this.#advance(plan, { kind: "outer_intent", file });
       const created = await this.#createEmpty(path, 0o600);
       try {
@@ -540,7 +525,7 @@ export class UpdateConstructionStore {
     const entry = await this.#dependencies.fs.lstat(path);
     if (entry === null) return;
     if (!isBoundedRegular(entry, this.#dependencies.effectiveUid, mode, maximumBytes) || (identity !== null && !sameInode(entry, identity.dev, identity.ino))) refuse("update_construction_unbound", path);
-    const parent = await this.#ownedDirectory(lifecycleParentPath(path));
+    const parent = await this.#ownedDirectory(parentPath(path));
     await this.#dependencies.fs.unlinkExact(entry);
     await this.#dependencies.fs.syncDirectory(parent);
   }
@@ -724,7 +709,7 @@ export class UpdateConstructionStore {
     const observed = await fs.lstat(directory.path);
     if (observed === null) return;
     if (!sameDirectory(observed, expected)) refuse("update_construction_unbound", directory.path);
-    const parent = await this.#ownedDirectory(lifecycleParentPath(directory.path));
+    const parent = await this.#ownedDirectory(parentPath(directory.path));
     await fs.rmdirExactEmpty(observed);
     await fs.syncDirectory(parent);
   }

@@ -9,7 +9,8 @@ import {
   type RetirementLeafV1,
 } from "@developer-os/core";
 
-import { refuseBundle, sha256Hex } from "./bundle-source.js";
+import { refuseBundle } from "./bundle-source.js";
+import { sha256Hex } from "./primitives.js";
 import type { UpdateRetirementParticipantDependenciesV1 } from "./retirement-participant.js";
 
 const METADATA_STORES = ["bundles", "delegations", "indexes"] as const;

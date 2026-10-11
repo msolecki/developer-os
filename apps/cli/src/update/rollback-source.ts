@@ -52,13 +52,12 @@ import {
   refuseBundle,
   removeBundleEntryPart,
   sameInode,
-  sha256Hex,
-  stampAfter,
   writeAll,
   writeEntryEvidence,
   type BundleEntryDeathPointV1,
   type BundleParticipantDependenciesV1,
 } from "./bundle-source.js";
+import { sha256Hex, stampAfter } from "./primitives.js";
 import { resolveSourceParent } from "./construction.js";
 
 export type RollbackSourceDeathPointV1 = BundleEntryDeathPointV1 | "structure_made" | "metadata_created" | "metadata_written" | "ready_created" | "ready_written" | "ready_removed";

@@ -55,15 +55,13 @@ import {
   BundleJournalFile,
   copyBundleEntry,
   createFresh,
-  parentPath,
   refuseBundle,
   removeBundleEntryPart,
   sameInode,
-  sha256Hex,
-  stampAfter,
   type BundleEntryDeathPointV1,
   type BundleParticipantDependenciesV1,
 } from "./bundle-source.js";
+import { parentPath, sha256Hex, stampAfter } from "./primitives.js";
 import { rollbackEntryAsFile, rollbackSourceEvidenceSetHash } from "./rollback-source.js";
 
 export type RollbackPublicationDeathPointV1 = BundleEntryDeathPointV1 | "structure_made" | "metadata_created" | "metadata_written";

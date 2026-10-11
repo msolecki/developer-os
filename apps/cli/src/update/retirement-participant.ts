@@ -14,7 +14,8 @@ import {
   type UpdateTerminalRetirementPlanV1,
 } from "@developer-os/core";
 
-import { BundleGuardedIo, parentPath, refuseBundle } from "./bundle-source.js";
+import { BundleGuardedIo, refuseBundle } from "./bundle-source.js";
+import { parentPath } from "./primitives.js";
 import type { UpdateRetirementHandlerV1 } from "./coordinator.js";
 
 type RetireStepV1 = Extract<UpdateLifecycleCoordinatorStepV1, { readonly kind: "terminal_retire" }>;

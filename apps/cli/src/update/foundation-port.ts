@@ -21,6 +21,7 @@ import {
 } from "@developer-os/core";
 
 import type { UpdateFoundationPortV1 } from "./owner-participant.js";
+import { parentPath } from "./primitives.js";
 
 export interface UpdateFoundationPortDependenciesV1 {
   readonly fs: LifecycleGuardedFileSystemV1;
@@ -38,10 +39,6 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 /** A third state: preserved as found and surfaced as recovery-required (exit 6). */
 function refuse(reason: string, ...paths: readonly string[]): never {
   throw new LifecycleRecoveryRequiredError(reason, paths);
-}
-
-function parentOf(path: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
-  return parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/")));
 }
 
 /** Every construction row a ref consumes: its staged initial journal, then each content and sidecar. */
@@ -78,7 +75,7 @@ export class UpdateFoundationPort implements UpdateFoundationPortV1 {
     for (const mutation of ref.mutations) {
       payloadIdentities.push(mutation.content === null || mutation.digest === null ? null : { content: await evidence(mutation.content.ordinal), digest: await evidence(mutation.digest.ordinal) });
     }
-    const sourceParent = await this.#publicationParent(parentOf(stagedPath));
+    const sourceParent = await this.#publicationParent(parentPath(stagedPath));
     const firstPayload = ref.mutations.find((mutation) => mutation.content !== null)?.content ?? null;
     const admitted = admitUpdateFoundationInitialJournal({
       ref,
@@ -87,9 +84,9 @@ export class UpdateFoundationPort implements UpdateFoundationPortV1 {
       journalIdentity: await evidence(ref.initialJournal.staged.ordinal),
       payloadIdentities,
       // An all-remove ref consumes no payload, so its parent binding is vacuous.
-      payloadParent: firstPayload === null ? sourceParent : await this.#publicationParent(parentOf(firstPayload.path)),
+      payloadParent: firstPayload === null ? sourceParent : await this.#publicationParent(parentPath(firstPayload.path)),
       sourceParent,
-      destinationParent: await this.#publicationParent(parentOf(ref.initialJournal.finalPath)),
+      destinationParent: await this.#publicationParent(parentPath(ref.initialJournal.finalPath)),
     });
     await this.#dependencies.executor.executeUpdateFoundationParticipant(admitted);
   }
@@ -132,7 +129,7 @@ export class UpdateFoundationPort implements UpdateFoundationPortV1 {
     await compactTerminalFoundationTransaction({ fs, roots, store, global }, compaction);
     for (const entry of unconsumed) {
       await fs.unlinkExact(entry);
-      await fs.syncDirectory(await this.#directory(parentOf(entry.path)));
+      await fs.syncDirectory(await this.#directory(parentPath(entry.path)));
     }
   }
 

@@ -17,7 +17,8 @@ import {
 } from "@developer-os/core";
 
 import type { OwnerExternalEffectParticipant, OwnerExternalEffectStepV1 } from "./external-effect.js";
-import { participantPlanFileHash, participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { participantPlanFileHash, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { stampAfter } from "./primitives.js";
 
 /**
  * Spec 1's Foundation participant over a V2 update ref. It publishes the ref's evidence-bound staged
@@ -196,7 +197,7 @@ export class OwnerUpdateParticipant {
   }
 
   private async persist(step: OwnerUpdateStepV1, journal: OwnerUpdateJournalV1): Promise<OwnerUpdateJournalV1> {
-    const next = { ...journal, updatedAt: participantTimestamp(this.#dependencies.now, journal.updatedAt) };
+    const next = { ...journal, updatedAt: stampAfter(this.#dependencies.now, journal.updatedAt) };
     await this.#dependencies.journals.rewrite(step.journal.finalPath, next);
     return next;
   }

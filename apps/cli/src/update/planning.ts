@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 
 import {
@@ -82,6 +81,7 @@ import { codexVersionToken } from "./codex-effect-ports.js";
 import { requireCodexRegistered } from "./codex-refresh.js";
 import { codexRegistrationFile } from "../instructions/vendor-homes.js";
 import type { CliUpdateContext } from "./context.js";
+import { sha256Hex } from "./primitives.js";
 
 /**
  * Spec 2 §7.3. `applied` and `rolled_back` belong to `--apply` (Task 24/25); the plan-only
@@ -203,10 +203,6 @@ async function classified<T>(reason: string, code: Exclude<ExitCode, 0>, work: (
     if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "number") throw error;
     return refuse(reason, code);
   }
-}
-
-function sha256(bytes: Uint8Array): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
 
 const encoder = new TextEncoder();
@@ -473,7 +469,7 @@ function prepareInverse(
   }));
   const leafRows = leaves.map((leaf) => {
     const bytes = encoder.encode(encodeCanonicalJson(leaf.projection));
-    const row = { kind: leaf.kind, id: leaf.id, path: leafPath(leaf.kind, leaf.id), bytes: bytes.byteLength, sha256: sha256(bytes) };
+    const row = { kind: leaf.kind, id: leaf.id, path: leafPath(leaf.kind, leaf.id), bytes: bytes.byteLength, sha256: sha256Hex(bytes) };
     entries.push({ ordinal: entries.length, path: row.path, role: "inverse_plan_leaf", bytes: row.bytes, sha256: row.sha256 });
     return row;
   });
@@ -588,13 +584,13 @@ async function planUpdateAttempt(
       bundleManifest: validateBundleManifest(decodeCanonicalJson(manifestBytes, MAXIMUM_BUNDLE_MANIFEST_BYTES)),
     };
   });
-  const bundleManifestHash = sha256(manifestBytes);
+  const bundleManifestHash = sha256Hex(manifestBytes);
   const metadata: ReleaseMetadataIdentityV1 = {
     delegationSequence: parseUInt64Decimal("0"),
-    delegationHash: sha256(delegationBytes),
+    delegationHash: sha256Hex(delegationBytes),
     delegatedReleaseKeyId: PACKAGE_CHANNEL_RELEASE_KEY_ID,
     releaseIndexSequence: index.sequence,
-    releaseIndexHash: sha256(indexBytes),
+    releaseIndexHash: sha256Hex(indexBytes),
   };
 
   const selection = selectTarget(index, { version: request.version, active: current });

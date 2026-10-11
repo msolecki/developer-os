@@ -116,7 +116,8 @@ import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "../lifecycle/conte
 import { allocatedIdsFrom, cleanAllocatorTemp, gateManifestAdmission } from "../lifecycle/mutation-gate.js";
 import type { UpdateApplyPortsV1 } from "./apply.js";
 import { BundlePublicationParticipant } from "./bundle-publication.js";
-import { BundleSourceExecutor, parentPath as parentOf, sha256Hex } from "./bundle-source.js";
+import { BundleSourceExecutor } from "./bundle-source.js";
+import { parentPath as parentOf, sha256Hex } from "./primitives.js";
 import { codexExecutableResolver, codexRefreshPolicy, resolveCodexExecutable } from "./codex-refresh.js";
 import type { CodexExecutableFileSystemV1, CodexExecutableIdentityV1 } from "./codex-refresh.js";
 import { codexRegistrationObserver, supervisedOwnerEffectRun } from "./codex-effect-ports.js";
