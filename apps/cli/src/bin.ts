@@ -12,6 +12,7 @@ import { firingRecordWaitMs, runHookMode, settleFiringRecords } from "./hooks/en
 import type { HookEnvironment } from "./hooks/entry.js";
 import type { CliIo } from "./io.js";
 import type { CliContextFactory } from "./main.js";
+import { admitInitPackageChannelKeg, admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
 import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
 
 /**
@@ -39,8 +40,7 @@ async function isScheduledInvocation(argv: readonly string[]): Promise<boolean> 
  * D84 K2 and C2: `init` admits the keg the fixed table names, by `admitInitPackageChannelKeg`'s rules.
  * `mismatchIsAbsent` hands it the product state directory, where an installed V2 home's active release lives.
  */
-async function admitPackageChannelKeg(userHome: string, mismatchIsAbsent: boolean): Promise<PackagedReleaseSourceV1 | null> {
-  const { admitInitPackageChannelKeg } = await import("./update/packaged-release.js");
+function admitPackageChannelKeg(userHome: string, mismatchIsAbsent: boolean): Promise<PackagedReleaseSourceV1 | null> {
   return admitInitPackageChannelKeg({
     architecture: process.arch,
     requireVersion: PRODUCT_VERSION,
@@ -190,7 +190,7 @@ if ((home === undefined || home.length === 0) && !(await isScheduledInvocation(a
         env: process.env,
         userHome: home,
         localRelease: request.localRelease !== null
-          ? await (await import("./update/packaged-release.js")).admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION)
+          ? await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION)
           : request.packageChannelInit
             ? await admitPackageChannelKeg(home, request.packageMismatchIsAbsent === true)
             : null,
