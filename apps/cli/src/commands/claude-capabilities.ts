@@ -9,6 +9,8 @@ import { readdir } from "node:fs/promises";
 
 import type { ProcessRunner } from "@developer-os/security";
 
+import { firingOnly, summarise, withFiring } from "./capability-report.js";
+
 export interface ClaudeCapabilityRequest {
   /** From `discoverExecutable`; `null` when Claude Code is not installed. */
   readonly executablePath: string | null;
@@ -107,26 +109,6 @@ function allUnknown(): ClaudeCapabilities {
   return Object.freeze(resolved);
 }
 
-const FIRING_KEYS = ["plugin_hooks", "session_start_injection"] as const;
-
-/** NEW-65: listing is not firing, so only these two keys are taken from the records. */
-function firingOnly(
-  observations: ReadonlyMap<string, ProbeObservation> | undefined,
-): ReadonlyMap<string, ProbeObservation> {
-  const kept = new Map<string, ProbeObservation>();
-  for (const key of FIRING_KEYS) {
-    const observation = observations?.get(key);
-    if (observation !== undefined) kept.set(key, observation);
-  }
-  return kept;
-}
-
-function summarise(capabilities: ClaudeCapabilities): string {
-  return CLAUDE_CAPABILITY_KEYS.map(
-    (key) => `${key}=${capabilities[key]}`,
-  ).join(" ");
-}
-
 /**
  * The capability matrix product spec §11 asks `doctor` to print.
  *
@@ -157,7 +139,7 @@ export async function reportClaudeCapabilities(
       version: null,
       capabilities,
       captureVia: "command",
-      summary: `claude=absent ${summarise(capabilities)}`,
+      summary: `claude=absent ${summarise(CLAUDE_CAPABILITY_KEYS, capabilities)}`,
     };
   };
 
@@ -186,7 +168,7 @@ export async function reportClaudeCapabilities(
       version: null,
       capabilities,
       captureVia: "command",
-      summary: `claude=unreadable ${summarise(capabilities)}`,
+      summary: `claude=unreadable ${summarise(CLAUDE_CAPABILITY_KEYS, capabilities)}`,
     };
   };
 
@@ -213,7 +195,7 @@ export async function reportClaudeCapabilities(
       version: installation.version,
       capabilities,
       captureVia: "command",
-      summary: `claude=${installation.version} not-probed ${summarise(capabilities)}`,
+      summary: `claude=${installation.version} not-probed ${summarise(CLAUDE_CAPABILITY_KEYS, capabilities)}`,
     };
   }
 
@@ -224,10 +206,7 @@ export async function reportClaudeCapabilities(
       request.listPluginFiles ??
       (() => readdir(request.pluginDirectory, { recursive: true })),
   });
-  const merged = new Map(observations);
-  for (const key of FIRING_KEYS) merged.delete(key);
-  for (const [key, observation] of firing) merged.set(key, observation);
-  const capabilities = resolveCapabilities(installation.version, merged);
+  const capabilities = resolveCapabilities(installation.version, withFiring(observations, firing));
 
   return {
     installed: true,
@@ -237,6 +216,6 @@ export async function reportClaudeCapabilities(
     // used to name the wrapper here, chosen by `session_end_capture === "yes"`;
     // that key is `not-used` unconditionally now, so the branch was dead.
     captureVia: "command",
-    summary: `claude=${installation.version} ${summarise(capabilities)}`,
+    summary: `claude=${installation.version} ${summarise(CLAUDE_CAPABILITY_KEYS, capabilities)}`,
   };
 }
