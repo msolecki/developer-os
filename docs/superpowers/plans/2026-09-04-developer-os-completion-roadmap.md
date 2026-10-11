@@ -369,6 +369,16 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D98 (2026-10-11), founder: close Task 11b on existing evidence.** Task 14 step 1 (full suite) is
+  the green `check.yml` push run on `eaef019d`, which shards all of `npm run check`. Steps 2–5 (brew
+  gate) are NEW-210 Task 7's fresh macOS 15.7.7 VM run on 2026-10-11 with releases 0.1.0–0.1.2:
+  `brew install`, `init --adapters claude,codex`, two `brew upgrade` + `update --apply`, `brew cleanup`
+  + `update rollback --apply`, `uninstall` (also resumed after SIGKILL), every command exit 0 and
+  `doctor` clean. Not recorded there and moved to A16 Task 11 step 7, which already repeats the gate
+  on the founder machine (K6): the NEW-200 `hooks.json` byte-identity check, the Codex plugin version,
+  the `package-channel` trust grep, and step 6's F4 reinstall. The K1–K6 contract stays where it is
+  live, Spec 2's amended block and the architecture notes Task 13 amended; nothing moves. The plan is
+  deleted; A16 no longer waits on A11b.
 - **D97 (2026-10-11), founder: retire the legacy shared runtime now.** The founder used Developer OS
   as the primary runtime since steps 1–15 (2026-09-28/29) with no rollback, and the live vendor homes
   hold no reference to `<legacy-shared-repo>` (Codex hooks included, so step 19's NEW-104 wait no
@@ -619,9 +629,9 @@ NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the
 - [x] Task 26 (the lifecycle proof) on the synthetic arm64 and x64 fixture: NEW-110 Task 12
   (`b9faa189`, `e672ae1f`, `00afee8b`, `26baedd4`, `8b29e3c9`); the surviving contracts are in
   `docs/architecture/foundation.md` §11. D75: tests written, the full check is owed.
-- [ ] Task 11b: unparked by D84 and designed by D94 (Spec 2 K1–K8); code merged to `development` 2026-10-09
-  (#37, #38); only its Task 14 (VM brew gate, F4 reinstall) remains. Was: parked (D46), with NEW-111 and NEW-112. The real-release half of the gate waits for it
-  and A16, and so do the persisted-format migrations Spec 2's D72 block owes "no later than Task 11b".
+- [x] Task 11b: unparked by D84 and designed by D94 (Spec 2 K1–K8); code merged to `development` 2026-10-09
+  (#37, #38); **closed 2026-10-11 (D98)**: Task 14 on CI and NEW-210's VM gate, its founder-machine leg
+  in A16 Task 11 step 7. D72's persisted-format changes carry no migration (D94 (F5), accepted residual).
 
 Gate: `update` dry-run and apply and rollback proven on a disposable install, then once on the founder machine. The synthetic half (disposable install, both architectures) landed with NEW-110 Task 12; the real-release half and the founder machine wait on Task 11b.
 

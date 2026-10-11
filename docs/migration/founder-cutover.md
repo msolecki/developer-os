@@ -706,6 +706,20 @@ as before; `dos --version` names the new release; the Claude session checks of s
 
 **Rollback** reinstall from `<release-dir>` the same way.
 
+**Keg variant (Task 11b F4, D98; run in A16 Task 11 step 7).** The one reinstall that moves the
+founder's home onto the Homebrew package channel. Keep the "before" and "after" blocks above
+unchanged, skip the `git pull` / `pack:local-release` line, and replace the uninstall and init lines with:
+
+```sh
+brew tap msolecki/developer-os <tap-clone> && brew install msolecki/developer-os/developer-os
+dos uninstall --dry-run && dos uninstall --yes
+DEVELOPER_OS_BRAIN=<vault> developer-os init --dry-run --adapters claude,codex
+DEVELOPER_OS_BRAIN=<vault> developer-os init --yes --adapters claude,codex
+```
+
+**Verify** as above, plus `grep -c '"trust":"package-channel"' <product-home>/state/release-trust.json`
+prints `1`. From then on every release goes through `update` (K4).
+
 ## Step 16 — Gate cycle on the live machine
 
 One complete cycle, in order; the gate of roadmap Phase 10.
