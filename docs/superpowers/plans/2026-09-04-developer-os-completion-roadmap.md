@@ -369,6 +369,11 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D100 (2026-10-11), founder: cutover step 16 item 5 (Codex) is waived, not passed.** The founder no
+  longer has Codex access, so no Codex-session capture can be made. The one attempt was run by hand
+  (`sourceAgent: unknown`, `manual`, because `CODEX_THREAD_ID` is set only for model-run commands)
+  and was rejected. The Codex adapter's live behaviour stays unverified on the founder machine and
+  remains with NEW-104; A15 no longer waits on it.
 - **D99 (2026-10-11), founder: one founder-machine reinstall, not two.** Cutover step 16's items 6
   (reinstall per step 15) and 7 (uninstall with its checks) run inside A16 Task 11 step 7's
   founder-machine repeat, whose F4 keg reinstall is step 15's keg variant: the reinstall supplies item
