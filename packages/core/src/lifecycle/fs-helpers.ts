@@ -5,6 +5,7 @@
 import { encodeFoundationJournalJsonV1, validateJournal } from "../transactions/store.js";
 import type { TransactionJournalV1 } from "../transactions/types.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
+import { parseSafeReasonCode, type SafeReasonCodeV1 } from "../update/scalars.js";
 import {
   refuseLifecycleRecovery,
   type LifecycleGuardedEntryV1,
@@ -105,4 +106,80 @@ export async function requireHeldGlobalLock(
   ) {
     refuseLifecycleRecovery("lifecycle_global_lock_identity", global.path);
   }
+}
+
+/**
+ * What the read-only V1 ledger scans (`ledger.ts`, `foundation-ledger.ts`) share: the guarded
+ * filesystem, the owner every entry must carry, and the findings a shape refusal appends to.
+ */
+export interface LedgerScanGuardsV1 {
+  readonly dependencies: { readonly fs: LifecycleGuardedFileSystemV1; readonly effectiveUid: number };
+  readonly findings: { readonly reason: SafeReasonCodeV1; readonly path: CanonicalAbsolutePathV1 }[];
+}
+
+export const LOCK_SUFFIX = ".lock";
+
+export function refuseLedgerEntry(scan: LedgerScanGuardsV1, reason: string, path: CanonicalAbsolutePathV1): void {
+  scan.findings.push({ reason: parseSafeReasonCode(reason), path });
+}
+
+/** Unlike `childOf`, a name that makes no canonical path is null, so a scan records it and goes on. */
+export function childPath(directory: CanonicalAbsolutePathV1, name: string): CanonicalAbsolutePathV1 | null {
+  try {
+    return parseCanonicalAbsolutePathText(`${directory}/${name}`);
+  } catch {
+    return null;
+  }
+}
+
+export function stableLockOwner(name: string): string | null {
+  if (!name.startsWith(".") || !name.endsWith(LOCK_SUFFIX)) return null;
+  const owner = name.slice(1, name.length - LOCK_SUFFIX.length);
+  return owner.length === 0 ? null : owner;
+}
+
+export async function openRoot(
+  scan: LedgerScanGuardsV1,
+  path: CanonicalAbsolutePathV1,
+): Promise<LifecycleGuardedEntryV1 | null> {
+  return guardedDirectory(scan, path, "lifecycle_ledger_root_shape");
+}
+
+export async function guardedRegularFile(
+  scan: LedgerScanGuardsV1,
+  path: CanonicalAbsolutePathV1,
+  maximumBytes: number,
+  reason: string,
+): Promise<LifecycleGuardedEntryV1 | null> {
+  const entry = await scan.dependencies.fs.lstat(path);
+  if (
+    entry === null ||
+    entry.kind !== "regular_file" ||
+    entry.ownerUid !== scan.dependencies.effectiveUid ||
+    entry.mode !== 0o600 ||
+    entry.nlink !== 1 ||
+    BigInt(entry.size) > BigInt(maximumBytes)
+  ) {
+    refuseLedgerEntry(scan, reason, path);
+    return null;
+  }
+  return entry;
+}
+
+export async function guardedDirectory(
+  scan: LedgerScanGuardsV1,
+  path: CanonicalAbsolutePathV1,
+  reason: string,
+): Promise<LifecycleGuardedEntryV1 | null> {
+  const entry = await scan.dependencies.fs.lstat(path);
+  if (
+    entry === null ||
+    entry.kind !== "directory" ||
+    entry.ownerUid !== scan.dependencies.effectiveUid ||
+    entry.mode !== 0o700
+  ) {
+    refuseLedgerEntry(scan, reason, path);
+    return null;
+  }
+  return entry;
 }

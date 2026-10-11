@@ -16,11 +16,7 @@ import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { TransactionPhase } from "../transactions/types.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
 import { MAXIMUM_BUNDLE_FILE_BYTES } from "../update/release.js";
-import {
-  parseSafeReasonCode,
-  type LowerHexSha256,
-  type SafeReasonCodeV1,
-} from "../update/scalars.js";
+import type { LowerHexSha256, SafeReasonCodeV1 } from "../update/scalars.js";
 import { inspectLifecycleAllocator, type LifecycleAllocatorStateV1 } from "./allocator.js";
 import type { LifecycleBookkeepingResidueV1 } from "./bookkeeping.js";
 import { decodeCanonicalJson, hashCanonicalJson, type CanonicalJsonValue } from "./canonical-json.js";
@@ -72,7 +68,16 @@ import {
   type LifecycleRedactionKeyCoreV1,
   type LifecycleJournalClosureV1,
 } from "./types.js";
-import { LOWERCASE_V4_UUID } from "./fs-helpers.js";
+import {
+  LOCK_SUFFIX,
+  LOWERCASE_V4_UUID,
+  childPath,
+  guardedDirectory,
+  guardedRegularFile,
+  openRoot,
+  refuseLedgerEntry as refuse,
+  stableLockOwner,
+} from "./fs-helpers.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, LifecycleRedactionKeyCoreV1, unknown>;
 
@@ -153,15 +158,14 @@ export interface LifecycleLedgerSnapshotV1<TPlan> {
   };
 }
 
-const MAX_PLAN_BYTES = 16_777_216;
-const MAX_COORDINATOR_JOURNAL_BYTES = 1_048_576;
-const MAX_STAGED_JOURNAL_BYTES = 1_048_576;
+const MAX_PLAN_BYTES = LIFECYCLE_PLAN_BOUNDS.planBytes.maximum;
+const MAX_COORDINATOR_JOURNAL_BYTES = LIFECYCLE_PLAN_BOUNDS.journalBytes.maximum;
+const MAX_STAGED_JOURNAL_BYTES = LIFECYCLE_PLAN_BOUNDS.stagedJournalBytes.maximum;
 /** The manifest is published through a Foundation mutation, so its bytes carry that ceiling. */
 const MAX_MANIFEST_BYTES = BigInt(LIFECYCLE_PLAN_BOUNDS.mutationContentSize.maximum);
 
 const PLAN_SUFFIX = ".plan.json";
 const JOURNAL_SUFFIX = ".json";
-const LOCK_SUFFIX = ".lock";
 const PLAN_TEMP_SUFFIX = ".plan.json.tmp";
 const JOURNAL_TEMP_SUFFIX = ".json.tmp";
 const STAGED_JOURNAL_LEAF = "journal.json";
@@ -229,25 +233,6 @@ interface LedgerScanV1<TPlan extends CoordinatorPlan> {
 }
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
-
-function refuse<TPlan extends CoordinatorPlan>(
-  scan: LedgerScanV1<TPlan>,
-  reason: string,
-  path: CanonicalAbsolutePathV1,
-): void {
-  scan.findings.push({ reason: parseSafeReasonCode(reason), path });
-}
-
-function childPath(
-  directory: CanonicalAbsolutePathV1,
-  name: string,
-): CanonicalAbsolutePathV1 | null {
-  try {
-    return parseCanonicalAbsolutePathText(`${directory}/${name}`);
-  } catch {
-    return null;
-  }
-}
 
 function leafPath(directory: CanonicalAbsolutePathV1, leaf: string): CanonicalAbsolutePathV1 {
   return parseCanonicalAbsolutePathText(`${directory}/${leaf}`);
@@ -336,68 +321,6 @@ function temporaryStem(name: string, suffix: string): string | null {
   if (boundary < 1) return null;
   if (!LOWERCASE_V4_UUID.test(stem.slice(boundary + 1))) return null;
   return stem.slice(0, boundary);
-}
-
-function stableLockOwner(name: string): string | null {
-  if (!name.startsWith(".") || !name.endsWith(LOCK_SUFFIX)) return null;
-  const owner = name.slice(1, name.length - LOCK_SUFFIX.length);
-  return owner.length === 0 ? null : owner;
-}
-
-async function openRoot<TPlan extends CoordinatorPlan>(
-  scan: LedgerScanV1<TPlan>,
-  path: CanonicalAbsolutePathV1,
-): Promise<LifecycleGuardedEntryV1 | null> {
-  const entry = await scan.dependencies.fs.lstat(path);
-  if (
-    entry === null ||
-    entry.kind !== "directory" ||
-    entry.ownerUid !== scan.dependencies.effectiveUid ||
-    entry.mode !== 0o700
-  ) {
-    refuse(scan, "lifecycle_ledger_root_shape", path);
-    return null;
-  }
-  return entry;
-}
-
-async function guardedRegularFile<TPlan extends CoordinatorPlan>(
-  scan: LedgerScanV1<TPlan>,
-  path: CanonicalAbsolutePathV1,
-  maximumBytes: number,
-  reason: string,
-): Promise<LifecycleGuardedEntryV1 | null> {
-  const entry = await scan.dependencies.fs.lstat(path);
-  if (
-    entry === null ||
-    entry.kind !== "regular_file" ||
-    entry.ownerUid !== scan.dependencies.effectiveUid ||
-    entry.mode !== 0o600 ||
-    entry.nlink !== 1 ||
-    BigInt(entry.size) > BigInt(maximumBytes)
-  ) {
-    refuse(scan, reason, path);
-    return null;
-  }
-  return entry;
-}
-
-async function guardedDirectory<TPlan extends CoordinatorPlan>(
-  scan: LedgerScanV1<TPlan>,
-  path: CanonicalAbsolutePathV1,
-  reason: string,
-): Promise<LifecycleGuardedEntryV1 | null> {
-  const entry = await scan.dependencies.fs.lstat(path);
-  if (
-    entry === null ||
-    entry.kind !== "directory" ||
-    entry.ownerUid !== scan.dependencies.effectiveUid ||
-    entry.mode !== 0o700
-  ) {
-    refuse(scan, reason, path);
-    return null;
-  }
-  return entry;
 }
 
 async function guardedText<TPlan extends CoordinatorPlan>(
