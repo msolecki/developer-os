@@ -526,4 +526,18 @@ describe("runScheduledGarden", () => {
     expect(result).toMatchObject({ outcome: "success", reasonCode: "skipped_nothing_to_do" });
     expect(home.calls).toHaveLength(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("walks the vault once: lint and the note list share one build (AUD-086)", async () => {
+    const home = await garden({ linked: true });
+    const { context } = home.fixture;
+    const contentRoot = join(home.fixture.paths.brain, "content");
+    const walked: string[] = [];
+    const readdir = ((path: string, options?: unknown) => {
+      if (path === contentRoot) walked.push(path);
+      return (context.fs.readdir as (path: string, options?: unknown) => unknown)(path, options);
+    }) as CliContext["fs"]["readdir"];
+    const result = await run(home, { ...context, fs: { ...context.fs, readdir } });
+    expect(result).toMatchObject({ outcome: "success", reasonCode: "skipped_nothing_to_do" });
+    expect(walked).toHaveLength(1);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
