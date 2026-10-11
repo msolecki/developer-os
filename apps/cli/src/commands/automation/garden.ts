@@ -166,12 +166,20 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
   });
   if (selected.gaps.length === 0 && selected.isolated.length === 0) return skipped("nothing_to_do", base);
 
-  /** A path with no entry reads `null`; one the guard refuses reads as occupied, never as free. */
+  /**
+   * A path with no entry reads `null`; one the guard refuses reads as occupied, never as free, and
+   * gets no digest. The digest is of the bytes, as capture's is: decoding is lossy (AUD-064).
+   */
+  const digests = new Map<string, string>();
   const readNote = async (path: string): Promise<string | null> => {
     const absolute = join(paths.brain, brainConfig.contentRoot, path);
     if (!(await exists(context, absolute))) return null;
     try {
-      return await context.guards.readText(absolute);
+      return await context.guards.readText(absolute, async (handle) => {
+        const bytes = await handle.readFile();
+        digests.set(path, createHash("sha256").update(bytes).digest("hex"));
+        return bytes.toString("utf8");
+      });
     } catch {
       return "";
     }
@@ -186,7 +194,7 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
    */
   const redact = createRedactor(loadOrCreateRedactionKey(paths.stateDir), { userPatterns: config.redaction?.patterns ?? [] });
   const exposes = (text: string): boolean => redact(text).findings.length > 0;
-  const sendable = (path: string): boolean => !exposes(path) && !exposes(texts.get(path) ?? "");
+  const sendable = (path: string): boolean => digests.has(path) && !exposes(path) && !exposes(texts.get(path) ?? "");
   const clean = {
     gaps: selected.gaps.filter((gap) => gap.notePaths.every(sendable)),
     isolated: selected.isolated.filter(sendable),
@@ -257,11 +265,10 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
    * edited during the agent call refuses `target_changed` instead of reverting the edit.
    */
   for (const proposal of validated.accepted) {
-    const checked = files.get(proposal.target) ?? null;
     const captured = await runCapture(context, {
       text: proposal.note,
       note: proposal.target,
-      expectedBeforeSha256: proposal.kind === "hub" || checked === null ? null : createHash("sha256").update(checked, "utf8").digest("hex"),
+      expectedBeforeSha256: proposal.kind === "hub" ? null : (digests.get(proposal.target) ?? null),
       source: { sourceAgent: vendor.name, sourceAgentVersion: "unknown" },
     });
     if (!captured.ok) {
