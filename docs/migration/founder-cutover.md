@@ -751,6 +751,10 @@ One complete cycle, in order; the gate of roadmap Phase 10.
 Then continue with step 18 (exercise the rollback) while the product is uninstalled, and return with
 step 17.
 
+**Amended 2026-10-11 (D99).** Items 6 and 7 run inside A16 Task 11 step 7's founder-machine repeat:
+its reinstall is step 15's keg variant (item 6), and its `uninstall --yes` is checked against item 7.
+Step 18 is waived (D97); return with step 17.
+
 **Shadow mode: skipped (D58, 2026-09-23).** Program plan Task 8's separate shadow quarantine and
 old-versus-new capture comparison are not run. The step 7c rehearsal, the step 16 cycle for each
 adapter and the step 18 rollback replace them.

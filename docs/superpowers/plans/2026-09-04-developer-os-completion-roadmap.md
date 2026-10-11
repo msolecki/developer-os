@@ -369,6 +369,12 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D99 (2026-10-11), founder: one founder-machine reinstall, not two.** Cutover step 16's items 6
+  (reinstall per step 15) and 7 (uninstall with its checks) run inside A16 Task 11 step 7's
+  founder-machine repeat, whose F4 keg reinstall is step 15's keg variant: the reinstall supplies item
+  6's three empty `diff`s, and its `uninstall --yes` is checked against item 7's list. The product is
+  then reinstalled through step 17 (step 18 stays waived, D97). Items 1–4 (Claude) passed 2026-10-11;
+  item 5 (Codex) needs no rebuild and stays on its own.
 - **D98 (2026-10-11), founder: close Task 11b on existing evidence.** Task 14 step 1 (full suite) is
   the green `check.yml` push run on `eaef019d`, which shards all of `npm run check`. Steps 2–5 (brew
   gate) are NEW-210 Task 7's fresh macOS 15.7.7 VM run on 2026-10-11 with releases 0.1.0–0.1.2:
