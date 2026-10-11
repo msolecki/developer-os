@@ -85,9 +85,15 @@ export interface LifecycleParticipantAdaptersV1<TPlan> {
   readonly networkPush: null | {
     push(plan: TPlan, pushPlanHash: LowerHexSha256): Promise<"succeeded" | "failed">;
   };
-  /** Releases `global`, drains, reacquires; returns the reacquired handle. */
+  /**
+   * Releases `global`, drains, reacquires; returns the reacquired handle with the drain's failure,
+   * if any, so it is compensated under the held lock. Throws only when it could not reacquire.
+   */
   readonly drainRunners: null | {
-    drain(plan: TPlan, global: HeldLifecycleStableLockV1): Promise<HeldLifecycleStableLockV1>;
+    drain(
+      plan: TPlan,
+      global: HeldLifecycleStableLockV1,
+    ): Promise<{ readonly global: HeldLifecycleStableLockV1; readonly failure: Error | null }>;
   };
   /**
    * Reached for every terminal uninstall, `rolled_back` included; the adapter decides from
@@ -173,6 +179,8 @@ interface SessionV1<TPlan extends CoordinatorPlan> {
    * crossed — so the direction is chosen once, here, before any participant is called again.
    */
   resumed: boolean;
+  /** False once a drain released `global` and could not reacquire it: nothing may compensate. */
+  globalHeld: boolean;
 }
 
 type JournalPatchV1 = Partial<
@@ -336,6 +344,7 @@ export class LifecycleCoordinator<TPlan extends CoordinatorPlan> {
       global,
       cause: RESUMED_CAUSE,
       resumed: journal.phase !== "planned" && journal.phase !== "push_pending",
+      globalHeld: true,
     };
     await this.assertParticipantPositions(session);
     return session;
@@ -444,7 +453,7 @@ export class LifecycleCoordinator<TPlan extends CoordinatorPlan> {
         return { kind: "push_pending", id: plan.id, pushPlanHash };
       }
     } catch (error) {
-      if (await this.boundaryCrossed(session, cursor)) throw error;
+      if (!session.globalHeld || (await this.boundaryCrossed(session, cursor))) throw error;
       session.cause = causeOf(error);
       await this.enterCompensation(session, cursor);
       return null;
@@ -535,8 +544,12 @@ export class LifecycleCoordinator<TPlan extends CoordinatorPlan> {
         if (drain === null) {
           refuseLifecycleRecovery("lifecycle_coordinator_drain_arm", plan.authority.productHome);
         }
-        session.global = await drain.drain(plan, session.global);
+        session.globalHeld = false;
+        const drained = await drain.drain(plan, session.global);
+        session.global = drained.global;
+        session.globalHeld = true;
         await requireHeldGlobalLock(this.dependencies.fs, session.global);
+        if (drained.failure !== null) throw drained.failure;
         return null;
       }
       default: {

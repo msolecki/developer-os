@@ -313,7 +313,7 @@ async function recoveryWorld(
     drainRunners: {
       drain: async (_plan, held) => {
         await held.release();
-        return { ...held, release: () => Promise.resolve() };
+        return { global: { ...held, release: () => Promise.resolve() }, failure: null };
       },
     },
     controlFiles: {
