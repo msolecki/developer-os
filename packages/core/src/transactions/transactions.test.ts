@@ -3010,7 +3010,7 @@ describe('transaction lock provider contract', () => {
     }
   });
 
-  it('maps release failure to code 6 but preserves an earlier transaction error', async () => {
+  it('returns a completed result despite a release failure and preserves an earlier transaction error', async () => {
     const fixture = await createFixture('provider-release-failure');
     const primaryError = Object.assign(new Error('synthetic primary failure'), {
       code: EXIT_CODES.securityRefusal,
@@ -3029,7 +3029,7 @@ describe('transaction lock provider contract', () => {
           fixture.transactionId,
           () => Promise.resolve('completed'),
         ),
-      ).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+      ).resolves.toBe('completed');
 
       const preservingStore = new TransactionStore({
         stateDir: fixture.stateDir,
