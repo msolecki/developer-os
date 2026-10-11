@@ -698,7 +698,7 @@ async function syntheticWorld(
             await held.release();
             const next: HeldLifecycleStableLockV1 = { ...held, release: () => Promise.resolve() };
             reacquired.push(next);
-            return next;
+            return { global: next, failure: null };
           },
         }
       : null,
@@ -1152,6 +1152,62 @@ describe("the bounded runner drain", () => {
     expect(world.reacquired.length).toBe(1);
     expect(global).toBe(world.reacquired[0]);
     expect(global).not.toBe(before);
+  }, 120_000);
+
+  it("compensates a failed drain only under the global lock it reacquired (AUD-003)", async () => {
+    const world = await syntheticWorld("uninstall/present_manifest_without_launchd");
+    let held = true;
+    const boundariesWithoutLock: string[] = [];
+    const { outcome } = await world.execute({
+      afterBoundary: (boundary) => {
+        if (!held) boundariesWithoutLock.push(JSON.stringify(boundary));
+      },
+      wrapAdapters: (adapters) => ({
+        ...adapters,
+        drainRunners: {
+          drain: async (_plan, global) => {
+            await global.release();
+            held = false;
+            const reacquired: HeldLifecycleStableLockV1 = {
+              ...global,
+              release: () => {
+                held = false;
+                return Promise.resolve();
+              },
+            };
+            held = true;
+            return { global: reacquired, failure: new SyntheticDeath("drain deadline") };
+          },
+        },
+      }),
+    });
+
+    expect(outcome.kind).toBe("rolled_back");
+    expect(world.compensationOrder()).toContain("F(uninstall_marker)^-1");
+    expect(boundariesWithoutLock).toStrictEqual([]);
+  }, 120_000);
+
+  it("refuses without compensating when the drain cannot reacquire the global lock (AUD-003)", async () => {
+    const world = await syntheticWorld("uninstall/present_manifest_without_launchd");
+    await expect(
+      world.execute({
+        wrapAdapters: (adapters) => ({
+          ...adapters,
+          drainRunners: {
+            drain: async (_plan, global) => {
+              await global.release();
+              throw new SyntheticDeath("global lock busy");
+            },
+          },
+        }),
+      }),
+    ).rejects.toThrow(SyntheticDeath);
+
+    expect(world.compensationOrder()).toStrictEqual([]);
+    const journal = await world.journal();
+    expect(journal?.phase).not.toBe("compensating");
+    expect(journal?.phase).not.toBe("rolled_back");
+    expect(world.steps[journal?.nextStep ?? -1]?.label).toBe("R");
   }, 120_000);
 });
 

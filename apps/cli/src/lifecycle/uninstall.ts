@@ -1000,21 +1000,32 @@ export function createUninstallAdapters(input: {
    * §5.4: uninstall acquires leases only while holding no global lock, and the drain has one
    * absolute ten-minute deadline. Interactive contention on the reacquisition refuses exit 6
    * rather than waiting, so a second holder of the global lock cannot be starved by this run.
+   * A missed deadline reacquires the global lock before it is reported, so the coordinator
+   * compensates under it (AUD-003).
    */
-  const drain = async (global: HeldLifecycleStableLockV1): Promise<HeldLifecycleStableLockV1> => {
+  const drain = async (
+    global: HeldLifecycleStableLockV1,
+  ): Promise<{ readonly global: HeldLifecycleStableLockV1; readonly failure: Error | null }> => {
     await global.release();
+    holds.global = null;
     const nowMs = request.lifecycle.nowMs;
     const sleepMs = request.lifecycle.sleepMs;
-    leases = await locks.acquireExistingWithin(uninstallLeasePaths(productHome), {
-      nowMs,
-      sleepMs,
-      deadlineMs: nowMs() + LIFECYCLE_LEASE_DRAIN_MS,
-    });
+    let failure: Error | null = null;
+    try {
+      leases = await locks.acquireExistingWithin(uninstallLeasePaths(productHome), {
+        nowMs,
+        sleepMs,
+        deadlineMs: nowMs() + LIFECYCLE_LEASE_DRAIN_MS,
+      });
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      failure = error;
+    }
     record(null);
     try {
       const reacquired = await locks.acquireExisting(globalLockPath);
       record(reacquired);
-      return reacquired;
+      return { global: reacquired, failure };
     } catch (error) {
       await releaseLeases();
       throw error;

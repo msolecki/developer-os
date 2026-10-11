@@ -665,11 +665,17 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
     const contested = SCHEDULED_JOB_IDS[3];
     const held = await lifecycle.locks.acquireExisting(leasePathOf(contested));
     let markerDuringDrain = "";
+    const lockPath = globalLockPath(fixture);
+    const globalLockAtCompensation: string[] = [];
     try {
       const uninstaller = new LifecycleUninstaller({
-        afterBoundary: async () => {
+        afterBoundary: async (boundary) => {
           const observed = await nodeFs.readFile(markerPath, "utf8").catch(() => "");
           if (observed.length > 0) markerDuringDrain = observed;
+          if (boundary.kind === "participant_returned" && boundary.direction === "compensation") {
+            const last = fixture.stableLockEvents.findLast((event) => event.endsWith(` ${lockPath}`));
+            globalLockAtCompensation.push(last ?? "none");
+          }
         },
       });
 
@@ -679,7 +685,8 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
 
       expect(refusal).toMatchObject({ code: EXIT_CODES.recoveryRequired });
       expect(markerDuringDrain).toContain('"coordinatorId":"lc_');
-      const lockPath = globalLockPath(fixture);
+      expect(globalLockAtCompensation.length).toBeGreaterThan(0);
+      expect(globalLockAtCompensation.every((event) => event === `acquire ${lockPath}`)).toBe(true);
       const events = fixture.stableLockEvents;
       expect(events, events.join(" | ")).toContain(`release ${lockPath}`);
       /** The global lock is gone before any lease is taken: §5.4's no-inversion rule. */
