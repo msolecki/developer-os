@@ -49,7 +49,7 @@ import { parseUpdateArgv, renderUpdate, renderUpdateFailureData, runUpdate } fro
 import type { UpdateInvocationV1 } from "./commands/update/index.js";
 import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js";
 import { assertOrdinaryCommandAdmitted, BootstrapRecoveryRequiredError, BootstrapRootInvalidError } from "./bootstrap/report.js";
-import { exitCodeOf, failureFrom, PRODUCT_VERSION, renderPath } from "./context.js";
+import { exitCodeOf, failureFrom, kindOf, PRODUCT_VERSION, renderPath } from "./context.js";
 import type { CliContext } from "./context.js";
 import type { CliIo } from "./io.js";
 import { isHookInvocation } from "./hooks/argv.js";
@@ -635,11 +635,17 @@ function emit<T>(
   return result.code;
 }
 
-function contextFailure(error: unknown): CliResult<never> {
+/** A context build that fails without claiming a code failed on the environment it was given: invalid input. */
+function contextExitCode(error: unknown): ReturnType<typeof exitCodeOf> {
   const code = exitCodeOf(error);
+  return code === EXIT_CODES.operationalFailure ? EXIT_CODES.invalidInput : code;
+}
 
-  return failure(code === EXIT_CODES.operationalFailure ? EXIT_CODES.invalidInput : code, {
-    kind: "invalid_input",
+function contextFailure(error: unknown): CliResult<never> {
+  const code = contextExitCode(error);
+
+  return failure(code, {
+    kind: code === EXIT_CODES.invalidInput ? "invalid_input" : kindOf(error),
     message:
       error instanceof Error
         ? error.message
@@ -950,7 +956,7 @@ async function runScheduledMode(
   try {
     context = await createContext(io, { localRelease: null, packageChannelInit: false, scheduledProductHome: invocation.productHome });
   } catch (error) {
-    return exitCodeOf(error);
+    return contextExitCode(error);
   }
   return scheduledExitCode(await runScheduledAutomation(context, invocation));
 }

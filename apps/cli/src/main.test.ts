@@ -27,7 +27,7 @@ import type { UpdateFixture } from "./update/testing.js";
 import type { CliContextFactory } from "./main.js";
 import type { HookEnvironment } from "./hooks/entry.js";
 import { PRODUCT_VERSION } from "./context.js";
-import { admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
+import { admitUnsignedLocalPackagedRelease, PackagedReleaseError } from "./update/packaged-release.js";
 import type { ReviewResultV1 } from "./commands/review.js";
 import { BOOTSTRAP_MANUAL_ARCHIVE, MALFORMED_V2_MANIFEST } from "./bootstrap/report.js";
 
@@ -285,6 +285,21 @@ describe("run", () => {
 
     expect(code).toBe(2);
     expect(lines.join("\n")).toContain("must be an absolute path");
+  });
+
+  it("labels a context-build failure that carries its own exit code by its error, not as invalid input (AUD-069)", async () => {
+    const lines: string[] = [];
+
+    const code = await run(["init", "--json"], collectingIo(lines), () => {
+      throw new PackagedReleaseError(EXIT_CODES.securityRefusal, "synthetic keg refusal");
+    });
+
+    expect(code).toBe(EXIT_CODES.securityRefusal);
+    expect(JSON.parse(lines[0] ?? "null")).toMatchObject({
+      ok: false,
+      code: EXIT_CODES.securityRefusal,
+      error: { kind: "packaged_release" },
+    });
   });
 
   it("rejects a command name inherited from Object.prototype", async () => {
@@ -902,6 +917,17 @@ describe("the hidden scheduled invocation", () => {
     expect(code).toBe(EXIT_CODES.success);
     expect(requests).toStrictEqual([{ localRelease: null, packageChannelInit: false, scheduledProductHome: fixture.paths.home }]);
     expect(fixture.io.out).toStrictEqual([]);
+  });
+
+  it("exits with the interactive code when the context cannot be built (AUD-069)", async () => {
+    const fixture = await createCommandFixture("scheduled-unbuildable");
+    await nodeFs.mkdir(fixture.paths.home, { recursive: true, mode: 0o700 });
+
+    const code = await run(scheduledArgv(fixture.paths.home), fixture.io, () => {
+      throw new Error("Developer OS home must be an absolute path");
+    });
+
+    expect(code).toBe(EXIT_CODES.invalidInput);
   });
 
   it("refuses a product home that is a symbolic link before any context exists", async () => {
