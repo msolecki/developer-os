@@ -153,16 +153,30 @@ describe("the Brain repository's committer identity", () => {
   });
 
   it.each([
-    ["an inline # comment", "[user]\n\tname = Synthetic # note\n\temail = tester@example.invalid\n"],
-    ["an inline ; comment", "[user]\n\tname = Synthetic\n\temail = tester@example.invalid ; note\n"],
-    ["an escape", "[user]\n\tname = Synthetic\\tTester\n\temail = tester@example.invalid\n"],
+    ["an inline # comment", "[user]\n\tname = Synthetic Tester # note\n\temail = tester@example.invalid\n"],
+    ["an inline ; comment", "[user]\n\tname = Synthetic Tester\n\temail = tester@example.invalid ; note\n"],
     ["a line continuation", "[user]\n\tname = Synthetic \\\nTester\n\temail = tester@example.invalid\n"],
     ["a partly quoted value", '[user]\n\tname = "Synthetic" Tester\n\temail = tester@example.invalid\n'],
+    ["a commented section header", "[user]\n\tname = Synthetic Tester\n\temail = tester@example.invalid\n[core] # x\n\tname = B\n"],
+    ["a repeated key, last one winning", "[user]\n\tname = Earlier\n\tname = Synthetic Tester\n\temail = tester@example.invalid\n"],
+  ])("reads %s exactly as Git does", (_label, text) => {
+    expect(read(text)).toStrictEqual({ name: "Synthetic Tester", email: "tester@example.invalid" });
+  });
+
+  it.each([
+    ["an escape the reflog cannot record", "[user]\n\tname = Synthetic\\tTester\n\temail = tester@example.invalid\n"],
+    ["a name with angle brackets", "[user]\n\tname = A <b>\n\temail = tester@example.invalid\n"],
+    ["an email with a space", "[user]\n\tname = Synthetic\n\temail = tester @example.invalid\n"],
+    ["a bare boolean key", "[user]\n\tname\n\temail = tester@example.invalid\n"],
+    ["an unterminated quote", '[user]\n\tname = "Synthetic\n\temail = tester@example.invalid\n'],
     ["an include", "[include]\n\tpath = identity.inc\n[user]\n\tname = Synthetic\n\temail = tester@example.invalid\n"],
     ["a conditional include", '[includeIf "gitdir:~/"]\n\tpath = identity.inc\n[user]\n\tname = Synthetic\n\temail = tester@example.invalid\n'],
-    ["a commented section header", "[user]\n\tname = A\n\temail = tester@example.invalid\n[core] # x\n\tname = B\n"],
     ["a commented conditional include", '[includeIf "gitdir:~/"] # c\n\tpath = identity.inc\n[user]\n\tname = Synthetic\n\temail = tester@example.invalid\n'],
-  ])("refuses %s instead of guessing what Git reads", (_label, text) => {
+  ])("refuses %s instead of committing under it", (_label, text) => {
     expect(read(text)).toBe("git_identity_unsupported");
+  });
+
+  it("reports an absent identity as missing", () => {
+    expect(read("[core]\n\tbare = false\n")).toBe("git_identity_missing");
   });
 });

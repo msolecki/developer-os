@@ -45,6 +45,7 @@ import {
   parseUInt64Decimal,
   parseValidatedGitBranch,
   planInitialGitDirectory,
+  readGitUserIdentity,
   reserveLifecycleIdBlock,
   serializeConfig,
   validateGitEffectPlan,
@@ -1428,39 +1429,16 @@ async function committerOf(context: CliContext, gitDirectory: CanonicalAbsoluteP
   return { ...identity, unixSeconds: Math.floor(context.now().getTime() / 1000), utcOffset: "+0000" };
 }
 
-/**
- * The `[user]` name and email of a repository's own `config`. Anything this reader cannot take
- * exactly as Git would — comments after a value, escapes, continuations, partial quoting, or an
- * include that could supply another identity — refuses rather than committing under a guess.
- */
+/** The `[user]` name and email of a repository's own `config`, read by core's Git config reader. */
 export function parseGitUserIdentity(text: string, gitDirectory: string): { readonly name: string; readonly email: string } {
-  const unsupported = (): never =>
+  const identity = readGitUserIdentity(text);
+  if (identity.state === "unsupported") {
     refuse("git_identity_unsupported", EXIT_CODES.invalidInput, [gitDirectory], "set a plain user.name and user.email in the Brain repository's own .git/config");
-  let section = "";
-  const values: Record<string, string> = {};
-  for (const line of text.split("\n")) {
-    const header = /^\s*\[([^\]]+)\]\s*$/u.exec(line)?.[1];
-    if (header !== undefined) {
-      section = header.trim().toLowerCase();
-      if (section.startsWith("include")) unsupported();
-      continue;
-    }
-    // Git also reads a header with a trailing comment or an inline key; neither is parsed here.
-    if (/^\s*\[/u.test(line)) unsupported();
-    const pair = /^\s*([A-Za-z][A-Za-z0-9-]*)\s*=\s*(.*?)\s*$/u.exec(line);
-    if (section !== "user" || pair === null) continue;
-    const raw = pair[2] ?? "";
-    const quoted = /^"([^"]*)"$/u.exec(raw)?.[1];
-    const value = quoted ?? raw;
-    if (/[#;\\]/u.test(value) || (quoted === undefined && raw.includes('"'))) unsupported();
-    values[(pair[1] ?? "").toLowerCase()] = value;
   }
-  const name = values.name;
-  const email = values.email;
-  if (name === undefined || email === undefined || name === "" || email === "") {
+  if (identity.state === "missing") {
     refuse("git_identity_missing", EXIT_CODES.invalidInput, [gitDirectory], "git config user.name and user.email in the Brain repository");
   }
-  return { name, email };
+  return { name: identity.name, email: identity.email };
 }
 
 function candidateOf(draft: GitSyncPlanningDraft, committer: GitCommitterV1): GitCandidateObjectsV1 {
