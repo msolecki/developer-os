@@ -26,7 +26,7 @@ one capability vocabulary — this note says so rather than restating it as a co
 | `src/versions.ts` | the capability keys and the supported floor; `tablePermits(key, version)` closes over that table and calls `@developer-os/core`'s generic `tablePermits` |
 | `src/probe.ts` | run `codex plugin list --json` behind an injected runner and report what it observed |
 | `src/capabilities.ts` | table plus observation into the four-value model |
-| `src/render.ts` | `CodexRenderer`: contract → `SKILL.md` frontmatter (`name`, `description`) and artifact path. The body comes from `packages/workflow-schema/src/skill.ts` — see §6 |
+| `src/render.ts` | `CodexRenderer`: checks the `shared` contract and returns `renderSkillFile` — frontmatter, body and artifact path — from `packages/workflow-schema/src/skill.ts`; see §6 |
 | `src/plugin.ts` | the plugin tree, its manifest, and `PLUGIN_TREE_PREFIX` — the single re-root (§4) |
 | `src/marketplace.ts` | `.agents/plugins/marketplace.json`; `source.path` is a fixed marketplace-root-relative constant (§4), no longer built against `context.home`; never checked in because it lives at the marketplace root, outside the plugin root the checked-in `plugins/codex/` tree mirrors |
 | `src/compose.ts` | `renderCodexPlugin` (plugin-root-relative) and `renderCodexInstallTree` (marketplace-root-relative, descriptor included) |
@@ -244,7 +244,9 @@ stays declined.
 **The two adapters differ only in frontmatter, artifact path and manifest.** The body — the
 preamble, the refusals, the steps, the recovery block, the screen seam and the overlay call — comes
 from `renderSkillBody` in `packages/workflow-schema/src/skill.ts`, moved there by DOS-P5 Task 3 and
-ratified by the founder on 2026-08-12. `CodexRenderer` is under thirty lines of real code.
+ratified by the founder on 2026-08-12. **Amended 2026-10-11 (AUD-094):** the frontmatter and the
+artifact path, identical in both adapters, followed it into `renderSkillFile` in the same file, so
+`CodexRenderer` is a wrapper that checks the `shared` contract and calls it.
 
 **A Codex renderer written the obvious way would have been a byte-for-byte copy of the Claude
 one.** Codex's required frontmatter is `name` and `description` — exactly Claude's — and both write
@@ -258,8 +260,8 @@ Three consequences a reader of either spec alone would get wrong:
 
 - **A vendor renderer screens only what it renders itself.** `recovery.resume`, `id`,
   `refusals[].message` and `steps[].prose` are screened inside `renderSkillBody`, before either
-  adapter sees them. `CodexRenderer` screens `description` alone, bounded by the compiler's
-  `SKILL_FIELD_CAP` so both vendor trees truncate a long one at the same place. Re-screening in the
+  adapter sees them. `description`, the one frontmatter field from author text, is screened by
+  `renderSkillFile`, bounded by `SKILL_FIELD_CAP`, once for both vendor trees. Re-screening in the
   adapter would be a second copy of the seam the move existed to remove. Both specs carry a dated
   amendment saying so.
 - **The frontmatter is built from the pre-overlay contract and the body from the post-overlay

@@ -46,6 +46,7 @@ export {
   assertRenderableContract,
   assertUsablePreamble,
   renderSkillBody,
+  renderSkillFile,
   SHARED_WORKFLOW_ID,
   SKILL_FIELD_CAP,
 } from "./skill.js";

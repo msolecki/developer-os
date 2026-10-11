@@ -37,6 +37,7 @@ describe("the package's public door", () => {
         "assertRenderableContract",
         "assertUsablePreamble",
         "renderSkillBody",
+        "renderSkillFile",
         "SHARED_WORKFLOW_ID",
         "SKILL_FIELD_CAP",
         "validateWorkflow",

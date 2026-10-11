@@ -20,7 +20,7 @@ implementation plan was deleted when its last step closed; git history is the ar
 | `src/versions.ts` | the capability keys and the supported floor; `tablePermits(key, version)` closes over that table and calls `@developer-os/core`'s generic `tablePermits` |
 | `src/probe.ts` | run `claude plugin validate` behind an injected runner and report what it observed |
 | `src/capabilities.ts` | table plus observation into the four-value model |
-| `src/render.ts` | `ClaudeRenderer`: contract → `SKILL.md` frontmatter (`name`, `description`) and artifact path. The body — the `shared` preamble and the screen seam — moved to `packages/workflow-schema/src/skill.ts` on 2026-08-12; see §6 |
+| `src/render.ts` | `ClaudeRenderer`: checks the `shared` contract and returns `renderSkillFile` (`packages/workflow-schema/src/skill.ts`). The body — the `shared` preamble and the screen seam — moved there on 2026-08-12, the frontmatter (`name`, `description`) and artifact path on 2026-10-11 (AUD-094); see §6 |
 | `src/plugin.ts` | the plugin tree and its minimal manifest |
 | `src/compose.ts` | `renderClaudePlugin` — find `shared`, render every workflow under `workflows/`, order the tree |
 | `src/install.ts` | tree → an install *proposal* Foundation validates into a `ChangePlanV1` |
@@ -185,8 +185,10 @@ install tree".
 full, when that file held the preamble concatenation, the four rendering rules below and the
 `applyOverlay` call. All of that is now `renderSkillBody` in
 `packages/workflow-schema/src/skill.ts` — none of it was vendor behaviour, so it moved to the one
-place a Codex renderer could reuse it rather than copy it. `src/render.ts` keeps only the
-frontmatter (`name`, `description`) and the artifact path (§1). The rules below are still true of
+place a Codex renderer could reuse it rather than copy it. **Amended 2026-10-11 (AUD-094):** the
+frontmatter (`name`, `description`) and the artifact path followed it into `renderSkillFile` in the
+same file, because the Codex renderer had become a line-for-line copy of them; `src/render.ts` now
+only checks the `shared` contract and calls it (§1). The rules below are still true of
 the *product*; a reader chasing the screen seam or the overlay call should read them there rather
 than in `ClaudeRenderer`.
 
@@ -219,8 +221,8 @@ Four rendering rules, three of them written after a fresh-context review found t
 **The overlay is applied, not discarded.** `renderSkillBody` — itself part of the compiler since
 2026-08-12 — calls `applyOverlay` directly and throws when it refuses, because rendering the base
 contract instead would silently produce an artifact the caller did not ask for. `ClaudeRenderer.render`
-no longer touches the overlay at all; it passes the contract and the overlay straight through to
-`renderSkillBody` and builds frontmatter from the contract alone — safe only because
+no longer touches the overlay at all; `renderSkillFile` passes the contract and the overlay straight
+through to `renderSkillBody` and builds frontmatter from the contract alone — safe only because
 `workflowOverlaySchema` (`packages/workflow-schema/src/overlay.ts`) cannot reach `id`, `version`
 or `description`, an invariant that schema's own docblock and `overlay.test.ts` now pin.
 `OverlayOutcome.lifecycle` is deliberately unused: no hook artifact ships, so there is nothing for

@@ -1,10 +1,4 @@
-import { screenAndCap } from "@developer-os/security";
-import {
-  assertRenderableContract,
-  assertUsablePreamble,
-  renderSkillBody,
-  SKILL_FIELD_CAP,
-} from "@developer-os/workflow-schema";
+import { assertUsablePreamble, renderSkillFile } from "@developer-os/workflow-schema";
 import type {
   RenderedArtifact,
   WorkflowContractV1,
@@ -23,15 +17,9 @@ export interface CodexRendererDependencies {
   readonly shared: WorkflowContractV1;
 }
 
-function yamlScalar(value: string): string {
-  return JSON.stringify(screenAndCap(value, SKILL_FIELD_CAP));
-}
-
 /**
- * Codex's half of a skill: two frontmatter fields and one artifact path.
- * Everything else — the source marker, the shared preamble, the refusals,
- * steps and recovery — is `renderSkillBody` in the compiler; see
- * `ClaudeRenderer` for the reasoning, which is identical here.
+ * Codex's skill file is `renderSkillFile` in the compiler — frontmatter, body
+ * and path; see `ClaudeRenderer` for the reasoning, which is identical here.
  */
 export class CodexRenderer implements WorkflowRenderer {
   readonly vendor = "codex";
@@ -46,21 +34,6 @@ export class CodexRenderer implements WorkflowRenderer {
     contract: WorkflowContractV1,
     overlay: WorkflowOverlayV1 | null,
   ): readonly RenderedArtifact[] {
-    assertRenderableContract(contract);
-    const lines: string[] = [
-      "---",
-      `name: ${yamlScalar(`developer-os-${contract.id}`)}`,
-      `description: ${yamlScalar(contract.description)}`,
-      "---",
-      "",
-      ...renderSkillBody(contract, overlay, { shared: this.#shared }),
-    ];
-
-    return [
-      {
-        path: `skills/developer-os-${contract.id}/SKILL.md`,
-        contents: `${lines.join("\n")}\n`,
-      },
-    ];
+    return [renderSkillFile(contract, overlay, { shared: this.#shared })];
   }
 }

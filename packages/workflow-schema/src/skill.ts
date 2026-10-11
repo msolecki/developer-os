@@ -8,6 +8,7 @@ import {
 
 import type { WorkflowContractV1 } from "./contract.js";
 import { sourceMarker } from "./drift.js";
+import type { RenderedArtifact } from "./drift.js";
 import { applyOverlay } from "./overlay.js";
 import type { WorkflowOverlayV1 } from "./overlay.js";
 import { lookupVerb } from "./vocabulary.js";
@@ -214,6 +215,48 @@ export function renderSkillBody(
   lines.push(...renderRecovery(rendered));
 
   return lines;
+}
+
+/**
+ * A YAML plain scalar built from author text is a corruption waiting to happen.
+ * `description: capture: a learning` is a nested mapping and fails the whole
+ * frontmatter block, so the skill silently does not load;
+ * `description: {allowed-tools: [Bash]}` parses as a **map**, letting an author
+ * choose the parsed type of a frontmatter field; `description: # nothing`
+ * parses as null. Verified against `yaml@2.8.1`. `JSON.stringify` produces a
+ * valid YAML double-quoted scalar, which is why it is the fix rather than
+ * hand-rolled quoting. Found by fresh-context review, 2026-08-11.
+ */
+function yamlScalar(value: string): string {
+  return JSON.stringify(screenAndCap(value, SKILL_FIELD_CAP));
+}
+
+/**
+ * The whole `SKILL.md`, identical for every vendor: frontmatter, body and path.
+ *
+ * The frontmatter is built from the contract **before** the overlay and the
+ * body from the contract after it, which is safe by construction rather than
+ * by luck: `workflowOverlaySchema` is `.strict()` with exactly `extends`,
+ * `steps`, `lifecycle` and `notes`, and a `steps` value is `{ prose }` alone,
+ * so an overlay cannot reach `id`, `version` or `description` — the only
+ * fields read here. That schema gaining a field is what would invalidate it.
+ */
+export function renderSkillFile(
+  contract: WorkflowContractV1,
+  overlay: WorkflowOverlayV1 | null,
+  options: SkillBodyOptions,
+): RenderedArtifact {
+  // `id` reaches the artifact path built here, so it is refused before it is used.
+  assertRenderableContract(contract);
+  const lines: string[] = [
+    "---",
+    `name: ${yamlScalar(`developer-os-${contract.id}`)}`,
+    `description: ${yamlScalar(contract.description)}`,
+    "---",
+    "",
+    ...renderSkillBody(contract, overlay, options),
+  ];
+  return { path: `skills/developer-os-${contract.id}/SKILL.md`, contents: `${lines.join("\n")}\n` };
 }
 
 function applied(
