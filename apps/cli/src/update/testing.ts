@@ -96,7 +96,6 @@ import type { RetainedRollbackEvidenceV1, RollbackRecordV1, UpdateCapacityObserv
 
 /** Synthetic only: no key, host, path, or byte here belongs to a real release or person. */
 export const SYNTHETIC_HOME = parseCanonicalAbsolutePathText("/synthetic/user/.developer-os");
-export const SYNTHETIC_TEMP = "/synthetic/tmp/developer-os-release-planning-v1-501-00000000-0000-4000-8000-000000000000";
 export const PLANNED_AT = parseUtcTimestamp("2026-09-23T12:00:00.000Z");
 
 export const SYNTHETIC_EVIDENCE: CanonicalPathEvidenceV1 = {
