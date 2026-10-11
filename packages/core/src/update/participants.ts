@@ -444,7 +444,7 @@ export function validateOwnerUpdateJournal(value: unknown, plan: OwnerUpdatePlan
     ((phase === "verified" || phase === "finalized") && filesDone && effect === effectCount && compensation === null && compaction === null) ||
     (phase === "compensating" && compensation !== null && compensation < next && compaction === null) ||
     (phase === "rolled_back" && compensation === -1 && compaction === null) ||
-    (phase === "compacting" && compaction !== null);
+    (phase === "compacting" && compaction !== null && ((filesDone && effect === effectCount && compensation === null) || compensation === -1));
   if (!legal) fail(`${label}: cursors do not match the phase`);
   return { schemaVersion: 1, id: plan.id, coordinatorId: plan.coordinatorId, planHash: input.planHash as LowerHexSha256, phase, nextForwardFoundation: next, nextExternalEffect: effect, compensationNext: compensation, compactionNext: compaction, createdAt, updatedAt };
 }
