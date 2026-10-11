@@ -486,7 +486,7 @@ async function syntheticWorld(
   const base: SyntheticPlan = {
     schemaVersion: 1,
     id: coordinatorId,
-    previewHash: null,
+    previewHash: variant.startsWith("git_sync") || variant.startsWith("uninstall") ? null : parseLowerHexSha256("cd".repeat(32)),
     operation: variant.split("/")[0] as SyntheticPlan["operation"],
     maximumJournalBytes: 1,
     authority: {

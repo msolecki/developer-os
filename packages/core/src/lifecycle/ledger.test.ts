@@ -346,7 +346,7 @@ function syntheticCoordinator(
   const plan: SyntheticPlan = {
     schemaVersion: 1,
     id,
-    previewHash: null,
+    previewHash: variant.startsWith("git_sync") || variant.startsWith("uninstall") ? null : hash("5"),
     operation: variant.split("/")[0] as SyntheticPlan["operation"],
     maximumJournalBytes: 8192,
     authority: {

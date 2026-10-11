@@ -692,7 +692,7 @@ export function createLifecycleCodecs<
     const id = parseLifecycleCoordinatorId(input.id, context.nonce);
     const operation = literal(input.operation, LIFECYCLE_COORDINATOR_OPERATIONS, `${label}: operation`);
     const previewHash = nullableHash(input.previewHash);
-    if (previewHash !== null && (operation === "git_sync" || operation === "uninstall")) {
+    if ((previewHash === null) !== (operation === "git_sync" || operation === "uninstall")) {
       fail(`${label}: previewHash`);
     }
     const authorityInput = exact(input.authority, PLAN_AUTHORITY_KEYS, `${label}: authority`);
