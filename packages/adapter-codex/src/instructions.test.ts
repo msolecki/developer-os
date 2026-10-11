@@ -193,6 +193,14 @@ describe("renderInstructionTree (Codex)", () => {
     expect(paths.length).toBeGreaterThan(0);
     for (const path of paths) expect(path).not.toMatch(/AGENTS\.override\.md/u);
   });
+
+  it("refuses a skill whose id, file path or missing SKILL.md the loader should have refused", () => {
+    expect(() => renderInstructionTree(set(source("skill", "../escape", { "SKILL.md": "x\n" })), none)).toThrow(/InstructionIdV1/u);
+    expect(() => renderInstructionTree(set(source("skill", "plan", { "SKILL.md": "x\n", "../escape.md": "x\n" })), none)).toThrow(
+      /\.\.\/escape\.md/u,
+    );
+    expect(() => renderInstructionTree(set(source("skill", "plan", { "README.md": "x\n" })), none)).toThrow(/no SKILL\.md/u);
+  });
 });
 
 describe("renderCodexVendorTree", () => {
@@ -215,7 +223,14 @@ describe("renderCodexVendorTree", () => {
   });
 
   it("refuses an instruction skill that claims a workflow skill's path", () => {
-    const clash = renderInstructionTree(set(source("skill", `developer-os-${SHARED_WORKFLOW_ID}`, { "SKILL.md": "x\n" })), none);
+    const render = renderInstructionTree(defaults, none);
+    const clash: CodexInstructionRenderV1 = {
+      ...render,
+      pluginFiles: [
+        ...render.pluginFiles,
+        { path: `${PLUGIN_TREE_PREFIX}/skills/developer-os-${SHARED_WORKFLOW_ID}/SKILL.md`, contents: "x\n" } as MarketplaceRootArtifact,
+      ],
+    };
     expect(() => renderCodexVendorTree(workflows, clash, marketplace)).toThrow(/two artifacts claim one path/u);
   });
 });

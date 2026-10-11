@@ -1,9 +1,11 @@
 import { posix } from "node:path";
 import {
+  assertInstructionRelativePath,
   EXIT_CODES,
   hashBytes,
   INSTRUCTION_BOUNDS_V1,
   InstructionSourceInvalidError,
+  parseInstructionId,
   parseScopedRulePaths,
 } from "@developer-os/core";
 import type { InstructionBlockMemberV1, InstructionCategoryV1, InstructionIdV1 } from "@developer-os/core";
@@ -108,6 +110,8 @@ export function renderInstructionTree(
   overrides: InstructionSourceSetV1Like,
 ): CodexInstructionRenderV1 {
   const artifacts = merge(defaults, overrides);
+  // An id reaches the skill and agent paths below; checked here, not trusted from the loader.
+  for (const artifact of artifacts) parseInstructionId(artifact.id);
 
   const sections = [
     ...artifacts.filter((artifact) => artifact.category === "rule"),
@@ -127,15 +131,19 @@ export function renderInstructionTree(
 
   const pluginFiles = artifacts
     .filter((artifact) => artifact.category === "skill")
-    .flatMap((artifact) =>
-      artifact.files.map((file) => {
+    .flatMap((artifact) => {
+      if (!artifact.files.some((file) => file.relativePath === "SKILL.md")) {
+        throw new Error(`instruction ${sourcePath(artifact)} has no SKILL.md`);
+      }
+      return artifact.files.map((file) => {
+        assertInstructionRelativePath(file.relativePath);
         const rendered: RenderedArtifact = {
           path: posix.join(PLUGIN_TREE_PREFIX, "skills", artifact.id, file.relativePath),
           contents: strictUtf8.decode(file.bytes),
         };
         return rendered as MarketplaceRootArtifact;
-      }),
-    )
+      });
+    })
     .sort((left, right) => compareCodePoints(left.path, right.path));
 
   const agentFiles = artifacts
