@@ -816,7 +816,7 @@ None.
 
 ### AUD-060 — renderIngest prints 'Ingested 0 captures verbatim, with no agent' when only unreadable captures exist
 
-- **Kind:** flow · **Verdict:** CONFIRMED · **Location:** `apps/cli/src/commands/ingest.ts:2868`
+- **Kind:** flow · **Verdict:** CONFIRMED · **Location:** `apps/cli/src/commands/ingest.ts:2832-2833` (line 2868 at `809a98de`; fixed in NEW-218)
 - **Problem:** captures includes unreadable rows, so the 'nothing waiting' branch is skipped and a false header prints; exit 0 is intended.
 - **Impact:** Misleading header hides an unreadable capture in quarantine.
 - **Evidence:** ingest.ts:2868-2869 `Ingested ${String(result.applied.length)} capture... ${result.agent === null ? "verbatim, with no agent" : ...}`
