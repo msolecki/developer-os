@@ -125,7 +125,7 @@ interface ResolvedRoots {
   readonly canonicalExcluded: readonly string[];
 }
 
-export async function resolveRoots(
+async function resolveRoots(
   context: CliContext,
   request: RevertRequest,
 ): Promise<ResolvedRoots> {
@@ -169,7 +169,7 @@ function isRemovableAt(
   return insideOwned && !insideExcluded;
 }
 
-export async function partitionArtifacts(
+async function partitionArtifacts(
   context: CliContext,
   request: RevertRequest,
   roots: ResolvedRoots,
@@ -283,7 +283,7 @@ interface PlannedRevert {
   readonly restored: readonly string[];
 }
 
-export async function planRevert(
+async function planRevert(
   context: CliContext,
   files: readonly ManagedArtifactV1[],
   drift: ReadonlyMap<string, DriftFinding>,
@@ -527,7 +527,7 @@ export async function removeManifestFile(context: CliContext): Promise<void> {
  * happens to live next to it". Missing is success: nothing this product ever
  * shipped guarantees the key exists before `init` completes.
  */
-export async function removeRedactionKeyFile(
+async function removeRedactionKeyFile(
   context: CliContext,
 ): Promise<void> {
   try {
