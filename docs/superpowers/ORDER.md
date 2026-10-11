@@ -57,7 +57,7 @@ Strict sequence; do not start a blocked row early.
 
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
-| A15 | DOS-P8 Founder migration (D58) — `docs/migration/founder-cutover.md` | — | step 16 passes and step 19's remainder is done | steps 1–15 done 2026-09-28/29; step 18 waived and the legacy shared repository retired (D97, 2026-10-11); step 16 Claude items 1–4 passed 2026-10-11 (NEW-250 found); step 19's vault tooling removed; open: step 16 items 5–7 (Codex, reinstall, uninstall), step 19's result files |
+| A15 | DOS-P8 Founder migration (D58) — `docs/migration/founder-cutover.md` | — | step 16 passes and step 19's remainder is done | steps 1–15 done 2026-09-28/29; step 18 waived and the legacy shared repository retired (D97, 2026-10-11); step 16 Claude items 1–4 passed 2026-10-11 (NEW-250 found); step 19's vault tooling removed; open: step 16 item 5 (Codex); items 6–7 run in A16 Task 11 step 7 (D99); step 19's result files |
 | A11b | DOS-P7 remainder: Task 11b (NEW-111, NEW-112, NEW-118, NEW-163, NEW-171) — Spec 2 block "Amended 2026-10-07 (D84, Task 11b)" | — (D94 designed it) | `update` reaches a real release on a disposable install, then on the founder machine | **closed 2026-10-11 (D98)**: code 2026-10-08; full suite = green `check.yml` on `eaef019d`; disposable install = NEW-210 Task 7's VM gate; the founder-machine leg (F4 reinstall, NEW-200 checks) moved to A16 Task 11 step 7 |
 | A16 | DOS-P9 Public beta and v1 — `specs/2026-10-07-developer-os-release-publication-design.md` | L1, L2 | `v1.0.0` is published and reproducible | spec approved 2026-10-07; plan `plans/2026-10-08-a16-release-publication.md` Tasks 1–10 done 2026-10-08 (on `integrate/task-11b`); Task 11 (first tag) blocked on L1, L2 |
 
