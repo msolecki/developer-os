@@ -1910,6 +1910,47 @@ describe('TransactionExecutor durable recovery', () => {
     }
   });
 
+  it('refuses a create whose parent directory is missing before any journal exists (AUD-037)', async () => {
+    const fixture = await createFixture('create-missing-parent');
+    const targetPath = join(fixture.workspaceDir, 'absent', 'created.bin');
+
+    try {
+      await expect(
+        createExecutor(fixture).execute({
+          kind: 'create-test',
+          mutations: [{ targetPath, operation: 'create', content: CREATED_BYTES }],
+        }),
+      ).rejects.toBeInstanceOf(TransactionPlanError);
+      await expectMissing(journalPath(fixture));
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it('rolls back a create whose parent directory vanished after apply (AUD-037)', async () => {
+    const fixture = await createFixture('create-vanished-parent');
+    const parent = join(fixture.workspaceDir, 'vanishing');
+    const targetPath = join(parent, 'created.bin');
+
+    try {
+      await nodeFs.mkdir(parent, { mode: 0o700 });
+      await expect(
+        createExecutor(fixture, { afterPhase: interruptAfter(fixture, 'applied') }).execute({
+          kind: 'create-test',
+          mutations: [{ targetPath, operation: 'create', content: CREATED_BYTES }],
+        }),
+      ).rejects.toBe(PHASE_INTERRUPTION);
+      await nodeFs.rm(parent, { recursive: true });
+
+      const journal = await createExecutor(fixture).rollback(fixture.transactionId);
+
+      expect(journal.phase).toBe('rolled_back');
+      await expectMissing(parent);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it('refuses a symlink target leaf before any write, leaving the link and its target intact (AUD-012)', async () => {
     const fixture = await createFixture('symlink-leaf');
     const realPath = join(fixture.workspaceDir, 'real.bin');
