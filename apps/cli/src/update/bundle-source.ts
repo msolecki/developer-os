@@ -45,26 +45,26 @@ import {
 import type { VerifiedScratchBundleV1 } from "@developer-os/security";
 
 import { resolveSourceParent } from "./construction.js";
-import { parentPath, sha256Hex, stampAfter } from "./primitives.js";
+import { deathPoints, parentPath, sha256Hex, stampAfter } from "./primitives.js";
 
 /** Where a test may kill the process; each point follows a durable effect. */
 export type BundleEntryDeathPointV1 = "journal_rewritten" | "entry_created" | "entry_written" | "evidence_created" | "evidence_written" | "compensation_step" | "compaction_step";
 
 export type BundleSourceDeathPointV1 = BundleEntryDeathPointV1 | "structure_made" | "ready_created" | "ready_written" | "ready_removed";
 
-export const BUNDLE_SOURCE_DEATH_POINTS: readonly BundleSourceDeathPointV1[] = Object.freeze([
-  "journal_rewritten",
-  "structure_made",
-  "entry_created",
-  "entry_written",
-  "evidence_created",
-  "evidence_written",
-  "ready_created",
-  "ready_written",
-  "ready_removed",
-  "compensation_step",
-  "compaction_step",
-]);
+export const BUNDLE_SOURCE_DEATH_POINTS = deathPoints<BundleSourceDeathPointV1>({
+  journal_rewritten: true,
+  structure_made: true,
+  entry_created: true,
+  entry_written: true,
+  evidence_created: true,
+  evidence_written: true,
+  ready_created: true,
+  ready_written: true,
+  ready_removed: true,
+  compensation_step: true,
+  compaction_step: true,
+});
 
 export interface BundleParticipantDependenciesV1<TPoint extends string> {
   readonly fs: LifecycleGuardedFileSystemV1;

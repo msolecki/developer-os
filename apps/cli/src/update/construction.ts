@@ -42,7 +42,7 @@ import {
   type UpdateConstructionStepV1,
 } from "@developer-os/core";
 import type { RedactionScope } from "@developer-os/security";
-import { parentPath, sha256Hex, stampAfter } from "./primitives.js";
+import { deathPoints, parentPath, sha256Hex, stampAfter } from "./primitives.js";
 
 /** Where a test may kill the constructing process; each point follows a durable effect. */
 export type UpdateConstructionStoreDeathPointV1 =
@@ -63,24 +63,24 @@ export type UpdateConstructionStoreDeathPointV1 =
   | "compensation_step"
   | "compaction_step";
 
-export const UPDATE_CONSTRUCTION_STORE_DEATH_POINTS: readonly UpdateConstructionStoreDeathPointV1[] = Object.freeze([
-  "plan_pending_written",
-  "plan_published",
-  "journal_pending_written",
-  "journal_published",
-  "journal_rewrite_pending",
-  "journal_rewritten",
-  "directory_made",
-  "file_created",
-  "file_written",
-  "evidence_created",
-  "evidence_written",
-  "output_consumer",
-  "outer_created",
-  "outer_written",
-  "compensation_step",
-  "compaction_step",
-]);
+export const UPDATE_CONSTRUCTION_STORE_DEATH_POINTS = deathPoints<UpdateConstructionStoreDeathPointV1>({
+  plan_pending_written: true,
+  plan_published: true,
+  journal_pending_written: true,
+  journal_published: true,
+  journal_rewrite_pending: true,
+  journal_rewritten: true,
+  directory_made: true,
+  file_created: true,
+  file_written: true,
+  evidence_created: true,
+  evidence_written: true,
+  output_consumer: true,
+  outer_created: true,
+  outer_written: true,
+  compensation_step: true,
+  compaction_step: true,
+});
 
 /**
  * Tasks 19–21 own the concrete readers and the nested source journals. The store owns only the
