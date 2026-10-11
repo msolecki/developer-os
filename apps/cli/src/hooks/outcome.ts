@@ -11,7 +11,8 @@ export type HookOutcome =
 
 export const MAX_HOOK_REASON_BYTES = 2048;
 export const MAX_MATCHED_EXCERPT_BYTES = 200;
-const MAX_CONTEXT_BYTES = 16_384;
+/** Shared by the inject composer and this writer, so the vault-map truncation and the final cap agree (`hooks.md` §3.4.1). */
+export const MAX_INJECTED_CONTEXT_BYTES = 16_384;
 
 export function capUtf8Bytes(text: string, maxBytes: number): string {
   const encoded = new TextEncoder().encode(text);
@@ -61,7 +62,7 @@ export function writeHookOutcome(
       if (outcome.note !== undefined) io.stderr(line(`developer-os: ${outcome.note}`, redact, MAX_HOOK_REASON_BYTES));
       return 0;
     case "context":
-      io.stdout(block(outcome.text, outcome.redact ?? redact, MAX_CONTEXT_BYTES));
+      io.stdout(block(outcome.text, outcome.redact ?? redact, MAX_INJECTED_CONTEXT_BYTES));
       return 0;
     case "block":
     case "advise":
