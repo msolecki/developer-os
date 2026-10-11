@@ -43,7 +43,10 @@ The compiler unions those footprints and requires the result to *equal* the decl
    byte-identical for every vendor, because Codex's required frontmatter turned out to be exactly
    Claude's and a second renderer written the obvious way would have been a copy of the first.
    The package is still testable with neither agent installed, because nothing it renders names
-   one.
+   one. **Amended 2026-10-11 (AUD-094):** the frontmatter (`name`, `description`) and the artifact
+   path were also identical in both adapters, so they moved here too: `renderSkillFile` returns
+   the whole `SKILL.md`, and each adapter's renderer only checks the `shared` contract and calls
+   it. The plugin manifest stays with each adapter.
 3. **It makes no network request** and imports no networking module.
 4. **`scheduled` fires only through `developer-os automation`** (added 2026-10-01, NEW-134). It
    arrived in the same change that makes launchd fire it, as this rule required: the `brain-garden`
@@ -221,6 +224,8 @@ moved to `2.0.0`. `docs/architecture/knowledge-pipeline.md` §2 records the deci
    unscreened: `renderSkillBody` never puts it in the body, only each vendor's frontmatter does,
    so each adapter still screens its own copy, bounded by this package's exported
    `SKILL_FIELD_CAP` so two vendor trees truncate a long one at the same place. **Owner: DOS-P4/P5, narrowed to `description`; the other fields are discharged.**
+   *Amended 2026-10-11 (AUD-094):* `description` is now screened once, by `renderSkillFile` in
+   this package, for both vendor trees; the adapters no longer screen it.
 
    **Amended 2026-10-10 (AUD-021).** The preamble tells the agent to stay inside "the scopes this
    workflow declares", and the body did not show them. `renderSkillBody` now also renders an

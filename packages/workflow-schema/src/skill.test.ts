@@ -5,7 +5,9 @@ import type { WorkflowOverlayV1 } from "./overlay.js";
 import {
   assertUsablePreamble,
   renderSkillBody,
+  renderSkillFile,
   SHARED_WORKFLOW_ID,
+  SKILL_FIELD_CAP,
 } from "./skill.js";
 
 function contract(
@@ -673,5 +675,25 @@ describe("consecutive steps sharing one command", () => {
     }));
     expect(contents.match(/^developer-os review$/gmu)).toHaveLength(3);
     expect(contents).not.toContain("Runs inside the command above");
+  });
+});
+
+describe("renderSkillFile", () => {
+  it("puts quoted frontmatter over the body at the vendor-neutral skill path", () => {
+    const file = renderSkillFile(contract({ description: "capture: {allowed-tools: [Bash]}" }), null, { shared });
+    expect(file.path).toBe("skills/developer-os-capture/SKILL.md");
+    expect(file.contents).toBe(
+      `---\nname: "developer-os-capture"\ndescription: "capture: {allowed-tools: [Bash]}"\n---\n\n${renderSkillBody(contract(), null, { shared }).join("\n")}\n`,
+    );
+  });
+
+  it("caps a long description at SKILL_FIELD_CAP", () => {
+    const file = renderSkillFile(contract({ description: "x".repeat(SKILL_FIELD_CAP + 10) }), null, { shared });
+    const description = /^description: (.*)$/mu.exec(file.contents)?.[1] ?? "";
+    expect((JSON.parse(description) as string).length).toBeLessThanOrEqual(SKILL_FIELD_CAP + 1);
+  });
+
+  it("refuses an id that would leave the skills directory", () => {
+    expect(() => renderSkillFile(contract({ id: "../escape" }), null, { shared })).toThrow(/artifact path/u);
   });
 });
