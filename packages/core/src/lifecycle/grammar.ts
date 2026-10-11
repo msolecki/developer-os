@@ -577,10 +577,14 @@ export function validateCoordinatorJournalForPlan(
       requireReversibleCursor(journal, boundary, label);
       if (journal.compensationNext !== -1) fail(`${label}: rolled_back cursor`);
       return;
-    case "compacting":
-      if (journal.terminalOutcome === "finalized") requireFinalizedCursor(journal, steps.length, label);
+    case "compacting": {
+      const outcome = journal.terminalOutcome;
+      if (outcome === "finalized") requireFinalizedCursor(journal, steps.length, label);
       else requireReversibleCursor(journal, boundary, label);
+      const entries = outcome === null ? 0 : deriveTerminalCompaction(plan, outcome).entries.length;
+      if ((journal.compactionNext ?? 0) >= entries) fail(`${label}: compaction cursor`);
       return;
+    }
   }
 }
 
