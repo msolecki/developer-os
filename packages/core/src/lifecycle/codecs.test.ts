@@ -970,6 +970,15 @@ describe("the coordinator execution-plan codec", () => {
     expect(() => codecs().executionPlan.validate(withValue(plan, "previewHash", hash("c")))).toThrow();
   });
 
+  it.each([["git_enable"], ["git_reconcile"], ["git_disable"], ["automation_enable"]])(
+    "requires a previewHash for %s",
+    (operation) => {
+      const plan = withValue(syntheticGitSyncPlan(), "operation", operation);
+      expect(() => codecs().executionPlan.validate(plan)).toThrow(/previewHash/u);
+      expect(() => codecs().executionPlan.validate(withValue(plan, "previewHash", hash("c")))).not.toThrow();
+    },
+  );
+
   it.each([
     ["a foreign product home", "authority.productHome", "/elsewhere"],
     ["a wrong schemaVersion", "schemaVersion", 2],
