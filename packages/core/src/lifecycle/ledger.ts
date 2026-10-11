@@ -879,7 +879,9 @@ async function validateEffectJournals<TPlan extends CoordinatorPlan>(
   }
 }
 
-const STAGING_CHILDREN = ["foundation", "git", "launchd-process", "participants", "payloads"] as const;
+/** A planless tree admits every staging child but `payloads`, which only a published plan sizes (NEW-210). */
+export const PLANLESS_STAGING_CHILDREN = ["foundation", "git", "launchd-process", "participants"] as const;
+const STAGING_CHILDREN = [...PLANLESS_STAGING_CHILDREN, "payloads"] as const;
 
 async function scanLifecycleStaging<TPlan extends CoordinatorPlan>(
   scan: LedgerScanV1<TPlan>,

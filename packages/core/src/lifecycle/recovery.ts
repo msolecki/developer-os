@@ -26,7 +26,7 @@ import {
   type LifecycleGuardedEntryV1,
   type LifecycleGuardedFileSystemV1,
 } from "./guarded-fs.js";
-import type { LifecycleCoordinatorRecordV1, LifecycleLedgerSnapshotV1 } from "./ledger.js";
+import { PLANLESS_STAGING_CHILDREN, type LifecycleCoordinatorRecordV1, type LifecycleLedgerSnapshotV1 } from "./ledger.js";
 import type { HeldLifecycleStableLockV1 } from "./locks.js";
 import type { UpdateConstructionClosureV1 } from "../update/construction.js";
 import type { UpdateOperationV1 } from "../update/coordinator.js";
@@ -43,7 +43,7 @@ type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, Lifecycl
 
 const STAGED_JOURNAL_LEAF = "journal.json";
 const FOUNDATION_STAGING_LEAF = "foundation";
-const DERIVED_STAGING_CHILDREN: readonly string[] = ["git", "launchd-process", "participants"];
+const DERIVED_STAGING_CHILDREN: readonly string[] = PLANLESS_STAGING_CHILDREN.filter((name) => name !== FOUNDATION_STAGING_LEAF);
 
 export interface LifecycleRecoveryPolicyV1 {
   readonly resumeUninstall: boolean;
