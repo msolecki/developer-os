@@ -385,6 +385,30 @@ describe("update construction journal", () => {
     expect(journal).toMatchObject({ phase: "rolled_back", compensationNext: -1, compensationPart: null, compensationDirectoryNext: -1 });
   });
 
+  it.each([
+    { name: "directory", pending: [{ kind: "directory_intent" }], step: { kind: "directory_created", ...identity } },
+    { name: "file", pending: [{ kind: "file_intent" }], step: { kind: "file_created", ...identity } },
+  ] as const)("refuses to bind a pending $name intent once compensation has fixed its cursor", ({ pending, step }) => {
+    const plan = buildConstructionPlan(input());
+    const prefix = step.kind === "file_created" ? directorySteps(plan) : [];
+    const compensating = drive(plan, [...prefix, ...pending, { kind: "compensate" }]);
+    expect(compensating.phase).toBe("compensating");
+    expect(() => advanceConstructionJournal(plan, compensating, step, at)).toThrow();
+  });
+
+  it("reaches rolled_back with null directory and file write states and refuses one that keeps them", () => {
+    const plan = buildConstructionPlan(input());
+    const inFlight = drive(plan, [...directorySteps(plan), { kind: "file_intent" }, { kind: "file_created", ...identity }]);
+    let journal = advanceConstructionJournal(plan, inFlight, { kind: "compensate" }, at);
+    while (journal.phase === "compensating") journal = advanceConstructionJournal(plan, journal, { kind: "compensation_step" }, at);
+    expect(journal).toMatchObject({ phase: "rolled_back", directoryWriteState: null, fileWriteState: null });
+    expect(() => validateConstructionJournal({ ...journal, fileWriteState: inFlight.fileWriteState }, plan)).toThrow(/phase/u);
+    const partial = drive(plan, [{ kind: "directory_intent" }, { kind: "compensate" }, { kind: "compensation_step" }]);
+    expect(partial).toMatchObject({ phase: "rolled_back", directoryWriteState: null });
+    const directoryIntent = { ordinal: partial.nextDirectory, state: "create_intent" as const };
+    expect(() => validateConstructionJournal({ ...partial, directoryWriteState: directoryIntent }, plan)).toThrow(/phase/u);
+  });
+
   it("does not walk an unbound create intent and refuses compensation after handoff", () => {
     const plan = buildConstructionPlan(input());
     const intent = drive(plan, [{ kind: "directory_intent" }]);
