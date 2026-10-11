@@ -35,6 +35,7 @@ import {
   deriveGitSyncCardinality,
   describeGitEnablePlan,
   validateGitEffectTransition,
+  validateGitScopeSnapshot,
   validateGitSyncPlanCore,
   type GitEffectTransitionV1,
   type GitEnableRequestV1,
@@ -908,5 +909,29 @@ describe("GitSyncPlanCoreV1", () => {
     expect(() =>
       validateGitSyncPlanCore({ ...valid, commit: { ...valid.commit, message: "chore: other" } }, pushCodec),
     ).toThrow("message");
+  });
+});
+
+describe("validateGitScopeSnapshot", () => {
+  const snapshot = (topicAliases: unknown): unknown => {
+    const fields = {
+      brainPath: parseCanonicalAbsolutePathText("/synthetic-brain"),
+      contentRoot: parseVaultSegment("content"),
+      topicFolders: [parseVaultSegment("DEV")],
+      topicAliases: topicAliases as Record<string, ReturnType<typeof parseVaultSegment>>,
+      indexesDir: parseVaultSegment("_indexes"),
+    };
+    return { ...fields, fingerprint: gitScopeFingerprint(fields) };
+  };
+  const aliases = (count: number): Record<string, string> =>
+    Object.fromEntries(Array.from({ length: count }, (_, index) => [`alias-${String(index)}`, "DEV"]));
+
+  it("admits the 256 aliases the persisted scope schema admits and refuses the 257th", () => {
+    expect(Object.keys(validateGitScopeSnapshot(snapshot(aliases(256))).topicAliases)).toHaveLength(256);
+    expect(() => validateGitScopeSnapshot(snapshot(aliases(257)))).toThrow("invalid GitScopeSnapshotV1.topicAliases");
+  });
+
+  it("refuses topicAliases that are not a plain object", () => {
+    expect(() => validateGitScopeSnapshot(snapshot(["DEV"]))).toThrow("invalid GitScopeSnapshotV1.topicAliases");
   });
 });

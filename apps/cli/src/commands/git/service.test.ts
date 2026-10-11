@@ -59,6 +59,12 @@ describe("the Git scope the Brain configuration defines", () => {
   it("refuses a relative Brain path as a scope outside the repository", () => {
     expect(() => gitScopeOf({ ...CONFIG, brainPath: "relative/brain" })).toThrow(GitCommandRefusal);
   });
+
+  it("refuses more topic aliases than the persisted scope admits", () => {
+    const topicAliases = Object.fromEntries(Array.from({ length: 257 }, (_, index) => [`alias-${String(index)}`, "DEV"]));
+    const brain = { schemaVersion: 1 as const, contentRoot: "content", topicFolders: ["DEV"], topicAliases, indexesDir: "_indexes", retrieval: { maxCandidates: 10 }, staleness: { reviewAfterDays: 180 } };
+    expect(() => gitScopeOf({ ...CONFIG, brain })).toThrow(expect.objectContaining({ reason: "scope_outside_repository" }));
+  });
 });
 
 describe("GitCommandRefusal", () => {

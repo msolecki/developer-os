@@ -319,7 +319,10 @@ export function validateGitScopeSnapshot(value: unknown): GitScopeSnapshotV1 {
   const input = exact(value, ["brainPath", "contentRoot", "topicFolders", "topicAliases", "indexesDir", "fingerprint"], label);
   const topicFolders = list(input.topicFolders, 256, `${label}.topicFolders`).map(parseVaultSegment);
   if (topicFolders.length === 0) fail(`${label}.topicFolders`);
-  const aliasesInput = exact(input.topicAliases, Object.keys(input.topicAliases ?? {}), `${label}.topicAliases`);
+  const aliasesInput = input.topicAliases;
+  if (typeof aliasesInput !== "object" || aliasesInput === null || Array.isArray(aliasesInput) || Object.keys(aliasesInput).length > 256) {
+    fail(`${label}.topicAliases`);
+  }
   const topicAliases: Record<string, VaultSegmentV1> = {};
   for (const [alias, target] of Object.entries(aliasesInput)) topicAliases[parseVaultSegment(alias)] = parseVaultSegment(target);
   const scope = {
