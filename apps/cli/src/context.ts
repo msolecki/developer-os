@@ -484,7 +484,7 @@ export function exitCodeOf(error: unknown): FailureExitCode {
   return EXIT_CODES.operationalFailure;
 }
 
-function kindOf(error: unknown): string {
+export function kindOf(error: unknown): string {
   const name = error instanceof Error ? error.name : "Error";
   return name
     .replace(/Error$/u, "")
