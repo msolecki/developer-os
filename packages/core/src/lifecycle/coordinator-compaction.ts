@@ -21,6 +21,7 @@ import {
   type LifecycleGuardedFileSystemV1,
 } from "./guarded-fs.js";
 import type { HeldLifecycleStableLockV1 } from "./locks.js";
+import { ALLOCATOR_LEAF, NONCE_LEAF } from "./records.js";
 import type { LifecycleCoordinatorRecordV1 } from "./ledger.js";
 import {
   type FoundationParticipantRefV1,
@@ -56,9 +57,6 @@ export type LifecycleCoordinatorCompactionDependenciesV1<TPlan> =
      */
     readonly foundationStore: TransactionStore;
   };
-
-const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
-const NONCE_LEAF = "lifecycle-install-nonce";
 
 /**
  * `discardUnstarted` proves every mutation target at the ref's own recorded preimage, which is the

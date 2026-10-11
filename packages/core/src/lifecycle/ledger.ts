@@ -62,6 +62,7 @@ import {
   type AllocatedLifecycleIdV1,
   type FoundationTransactionIdV1,
 } from "./ids.js";
+import { ALLOCATOR_LEAF, NONCE_LEAF } from "./records.js";
 import {
   LIFECYCLE_HASH_DOMAINS,
   LIFECYCLE_PLAN_BOUNDS,
@@ -163,8 +164,6 @@ const JOURNAL_SUFFIX = ".json";
 const LOCK_SUFFIX = ".lock";
 const PLAN_TEMP_SUFFIX = ".plan.json.tmp";
 const JOURNAL_TEMP_SUFFIX = ".json.tmp";
-const NONCE_LEAF = "lifecycle-install-nonce";
-const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
 const STAGED_JOURNAL_LEAF = "journal.json";
 const ROLLBACK_RECORD_LEAF = "update-rollback.json";
 /** `MAXIMUM_ROLLBACK_DOCUMENT_BYTES` (update/rollback.ts), mirrored so the ledger imports no update graph. */

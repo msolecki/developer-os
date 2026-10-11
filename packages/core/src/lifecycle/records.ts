@@ -20,10 +20,12 @@ export interface UninstallingMarkerV1 {
   readonly createdAt: UtcTimestampV1;
 }
 
-const NONCE_FILE_BYTES = 65;
+export const NONCE_LEAF = "lifecycle-install-nonce";
+export const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
+export const NONCE_FILE_BYTES = 65;
 const NONCE_HEX_BYTES = 64;
 const LF = 0x0a;
-const MAX_ALLOCATOR_BYTES = 1_024;
+export const MAX_ALLOCATOR_BYTES = 1_024;
 const MAX_MARKER_BYTES = 1_024;
 const BOOTSTRAP_LOCK_LEAF = ".lifecycle-bootstrap.lock";
 
