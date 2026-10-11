@@ -1214,6 +1214,50 @@ describe("runCapture --note", () => {
     expect(await inventory(fixture.paths.brain)).toStrictEqual(before);
   });
 
+  it("decides an existing destination is a canonical note without walking the vault (AUD-087)", async () => {
+    const fixture = await installedFixture("note-replace-no-walk");
+    const contentRoot = join(fixture.paths.brain, "content");
+    const walked: string[] = [];
+    const { context } = fixture;
+    const readdir = ((path: string, options?: unknown) => {
+      walked.push(path);
+      return (context.fs.readdir as (path: string, options?: unknown) => unknown)(path, options);
+    }) as CliContext["fs"]["readdir"];
+
+    const result = await fixture.run(
+      { ...context, fs: { ...context.fs, readdir } },
+      { text: REVISED_EXAMPLE, note: "DEV/example-knowledge-note.md" },
+    );
+
+    expect(result.ok && result.data.note?.path).toBe("DEV/example-knowledge-note.md");
+    expect(walked.filter((path) => path === contentRoot || path.startsWith(`${contentRoot}/`) && !path.includes("/_raw/"))).toStrictEqual([]);
+  });
+
+  it("admits an existing note the indexer keeps despite a non-error issue, as the index would", async () => {
+    const fixture = await installedFixture("note-replace-unknown-key");
+    const target = join(fixture.paths.brain, "content", "DEV", "kept.md");
+    await nodeFs.writeFile(target, noteText("A kept note").replace("stage: established\n", "stage: established\nmood: calm\n"));
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: "DEV/kept.md" });
+
+    expect(result.ok && result.data.note?.beforeSha256).toBe(
+      createHash("sha256").update(await nodeFs.readFile(target)).digest("hex"),
+    );
+  });
+
+  it("refuses an existing note whose frontmatter block the indexer will not parse, at exit 2", async () => {
+    const fixture = await installedFixture("note-replace-oversized-frontmatter");
+    const padded = noteText("A padded note").replace("stage: established\n", `stage: established\npad: ${"x".repeat(64 * 1024)}\n`);
+    await nodeFs.writeFile(join(fixture.paths.brain, "content", "DEV", "padded.md"), padded);
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: "DEV/padded.md" });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.invalidInput,
+      "capture_note_invalid",
+    ]);
+  });
+
   it("refuses a note one character past MAX_PROPOSED_NOTE_CHARS once its newline is added", async () => {
     const fixture = await installedFixture("note-oversized");
     const head = noteText("An oversized synthetic note", "");
