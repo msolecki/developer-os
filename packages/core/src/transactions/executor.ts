@@ -1558,6 +1558,7 @@ export class TransactionExecutor {
         if (planned.operation === "create" ? before !== null : before === null) {
           throw new TransactionPlanError();
         }
+        if (planned.operation === "create") await this.assertParentDirectory(planned.targetPath);
         /**
          * **The caller's precondition, honoured before anything is staged.** Everything
          * between a caller's own read and this snapshot is invisible to the executor, so a
@@ -2294,6 +2295,15 @@ export class TransactionExecutor {
     }
   }
 
+  private async assertParentDirectory(targetPath: string): Promise<void> {
+    try {
+      if ((await this.dependencies.fs.stat(dirname(targetPath), { bigint: true })).isDirectory()) return;
+    } catch (error) {
+      if (!isMissing(error) && !(isRecord(error) && error.code === "ENOTDIR")) throw error;
+    }
+    throw new TransactionPlanError();
+  }
+
   private async ensureTransactionDirectories(id: string): Promise<void> {
     for (const directory of [this.stageDirectory(id), this.backupDirectory(id)]) {
       await this.dependencies.fs.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -2839,7 +2849,12 @@ export class TransactionExecutor {
   ): Promise<void> {
     if (!metadata.existed) {
       if (current !== null) throw new TransactionStateError();
-      await syncDirectory(this.dependencies.fs, dirname(targetPath));
+      try {
+        await syncDirectory(this.dependencies.fs, dirname(targetPath));
+      } catch (error) {
+        // A vanished parent holds no entry for the never-existing target to make durable.
+        if (!isMissing(error)) throw error;
+      }
       return;
     }
     if (

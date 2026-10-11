@@ -597,7 +597,7 @@ unfinished work only. **All four are closed**: Track R entry R2 built them betwe
 
 1. **and 2. An optional caller-supplied precondition on `PlannedFileMutation` — closed 2026-08-20**
    (`packages/core/src/transactions/types.ts` — `expectedBeforeHash`, enforced at
-   `packages/core/src/transactions/executor.ts:1609-1614`). `review --decision edit` now hands the
+   `packages/core/src/transactions/executor.ts` — `TransactionPreconditionError`). `review --decision edit` now hands the
    executor the digest of the bytes it read; `capture` still supplies none. Before it, the executor computed
    `expectedBeforeHash` from the snapshot it took when `execute()` ran, so a command could not
    supply one. That cost `capture` the `O_EXCL` create spec §5.2 describes — tolerable there, since
