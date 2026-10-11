@@ -1672,19 +1672,27 @@ async function checkCodexRegistration(
   outcomes: readonly AgentOutcome[],
   manifest: InstallationManifest | null,
   config: DeveloperOsConfigV1 | null,
+  configUnreadable: boolean,
   homes: VendorHomesV1,
   probe: boolean,
 ): Promise<Finding> {
-  if (manifest?.schemaVersion !== 2 || !selectedVendors(config).includes("codex")) {
-    return pass("codex-registration", "codex is not selected", []);
+  if (manifest?.schemaVersion !== 2) return pass("codex-registration", "codex is not selected", []);
+  // AUD-067: a configuration that threw selects nothing, which is not the same as codex being unselected.
+  if (configUnreadable) {
+    return warn("codex-registration", "configuration unreadable; the registration was not inspected", []);
   }
+  if (!selectedVendors(config).includes("codex")) return pass("codex-registration", "codex is not selected", []);
   const { pluginRoot, registrationFile } = codexInstructionPaths(homes);
   const files = codexTreeFiles(manifest, pluginRoot);
   if (files.length === 0) {
     return fail("codex-registration", "unregistered: no Codex plugin tree is installed", [pluginRoot], EXIT_CODES.operationalFailure, REGISTRATION_RECOVERY);
   }
   const outcome = outcomes.find((candidate) => candidate.name === "codex");
-  const executable = outcome?.discovery?.installed === true ? outcome.discovery.executablePath : null;
+  // AUD-066: a raised discovery found something it would not vouch for; `agents` grades the raise.
+  if (outcome?.discovery === null) {
+    return warn("codex-registration", "codex discovery failed; the registration was not inspected", []);
+  }
+  const executable = outcome?.discovery.installed === true ? outcome.discovery.executablePath : null;
   if (executable === null) {
     return warn("codex-registration", "codex CLI absent; the registration was not inspected", []);
   }
@@ -1867,10 +1875,12 @@ async function collectFindings(
   const platform = await checkPlatform(context);
 
   let config: DeveloperOsConfigV1 | null = null;
+  // `readConfigFile` returns null for a missing file, so a throw is a file that is there and unreadable.
+  let configUnreadable = false;
   try {
     config = await readConfigFile(context, context.paths.configFile);
   } catch {
-    config = null;
+    configUnreadable = true;
   }
   const paths = runtimePathsFor(context, config ?? undefined);
   const { homes, findings: homeFindings } = doctorVendorHomes(context, paths);
@@ -1997,7 +2007,7 @@ async function collectFindings(
       return inspection.finding;
     }),
     await guarded(context, "codex-registration", [], () =>
-      checkCodexRegistration(context, agents, inspected, config, homes, options.probe),
+      checkCodexRegistration(context, agents, inspected, config, configUnreadable, homes, options.probe),
     ),
     ...evidenceFindings,
     ...await automationFindings(context),

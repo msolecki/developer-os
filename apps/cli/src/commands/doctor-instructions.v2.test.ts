@@ -451,4 +451,30 @@ describe("doctor names every instruction artifact", () => {
     expect((await registration()).message).toMatch(/^unregistered/u);
     expect(hasBlockingFailure(await runDoctorReport(fixture.context))).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("warns, never passes or says absent, when the configuration or Codex discovery could not be read (AUD-066, AUD-067)", async () => {
+    const { fixture } = await install("doctor-instructions-registration-uninspected", { vendors: ["codex"] });
+
+    const refusing = {
+      ...fixture.context,
+      platform: {
+        ...fixture.context.platform,
+        discoverExecutable: (name: Vendor): Promise<AgentDiscovery> =>
+          name === "codex"
+            ? Promise.reject(new Error("synthetic refusal to vouch for codex"))
+            : fixture.context.platform.discoverExecutable(name),
+      },
+    };
+    const refused = check(await runDoctorReport(refusing), "codex-registration");
+    expect(refused).toMatchObject({ status: "warn", message: "codex discovery failed; the registration was not inspected" });
+
+    const configText = await nodeFs.readFile(fixture.paths.configFile);
+    await nodeFs.writeFile(fixture.paths.configFile, "[[[ not toml\n");
+    try {
+      const unreadable = check(await runDoctorReport(fixture.context), "codex-registration");
+      expect(unreadable).toMatchObject({ status: "warn", message: "configuration unreadable; the registration was not inspected" });
+    } finally {
+      await nodeFs.writeFile(fixture.paths.configFile, configText);
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
