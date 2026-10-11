@@ -181,6 +181,10 @@ describe("GitEffectPlanV1", () => {
     expect(() => validateGitEffectPlan(roundTrip(candidate), UID)).toThrow();
   });
 
+  it("refuses a plan object whose prototype is not Object's", () => {
+    expect(() => validateGitEffectPlan(Object.setPrototypeOf(roundTrip(plan), { inherited: true }), UID)).toThrow("GitEffectPlanV1");
+  });
+
   it("lists every evidence root and leaf with its parent", () => {
     const children = gitEffectStagingChildren(plan);
     expect(children.length).toBeGreaterThan(0);

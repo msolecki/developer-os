@@ -19,6 +19,8 @@ import { LIFECYCLE_HASH_DOMAINS } from "../lifecycle/types.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
 import {
+  exact,
+  fail,
   parseLowerHexSha256,
   parseUtcTimestamp,
   type LowerHexSha256,
@@ -27,6 +29,7 @@ import {
 import {
   GIT_SYNC_CARDINALITY,
   assertGitSyncSourceTransitions,
+  sameJson,
   validateGitEffectTransition,
   type GitEffectTransitionRoleV1,
   type GitEffectTransitionV1,
@@ -127,19 +130,6 @@ const WIDEST_UID = 4_294_967_295;
 const WIDEST_MODE = 4095;
 const encoder = new TextEncoder();
 
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
-function exact(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
-  const input = value as Readonly<Record<string, unknown>>;
-  if (Object.keys(input).length !== keys.length || keys.some((key) => !Object.hasOwn(input, key))) {
-    fail(`${label}: keys`);
-  }
-  return input;
-}
-
 function list(value: unknown, maximum: number, label: string): readonly unknown[] {
   if (!Array.isArray(value) || value.length > maximum) fail(label);
   return value as readonly unknown[];
@@ -161,10 +151,6 @@ function nullable<T>(value: unknown, parse: (input: unknown) => T): T | null {
 
 function json(value: unknown): CanonicalJsonValue {
   return value as CanonicalJsonValue;
-}
-
-function sameJson(left: unknown, right: unknown): boolean {
-  return encodeCanonicalJson(json(left)) === encodeCanonicalJson(json(right));
 }
 
 /** Canonical bytes without the encoder's trailing LF, for summing array members. */

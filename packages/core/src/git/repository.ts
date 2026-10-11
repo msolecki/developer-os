@@ -373,6 +373,8 @@ export function appendGitRemoteSection(config: Uint8Array, url: NormalizedRemote
   return bytes;
 }
 
+export const GIT_LOOSE_OBJECT_FAN_OUT: readonly string[] = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, "0"));
+
 /**
  * Every path of the enable-only `.git`, which carries each directory a later
  * sync publishes into: the 256 loose-object fan-outs and the reflog parents.
@@ -385,7 +387,7 @@ export function initialGitDirectoryPaths(branch: ValidatedGitBranchV1): readonly
     "HEAD",
     "config",
     "objects",
-    ...Array.from({ length: 256 }, (_unused, byte) => `objects/${byte.toString(16).padStart(2, "0")}`),
+    ...GIT_LOOSE_OBJECT_FAN_OUT.map((prefix) => `objects/${prefix}`),
     "refs",
     "refs/heads",
     ...branchParents.map((parent) => `refs/heads/${parent}`),

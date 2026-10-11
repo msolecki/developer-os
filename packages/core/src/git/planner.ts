@@ -34,11 +34,12 @@ import {
   type CanonicalAbsolutePathV1,
   type VaultRelativePathV1,
 } from "../update/paths.js";
-import { parseLowerHexSha256, type LowerHexSha256 } from "../update/scalars.js";
+import { exact, fail, parseLowerHexSha256, type LowerHexSha256 } from "../update/scalars.js";
 import { GitMetadataRefusalError, inspectGitMetadata, type GitMetadataStreamV1 } from "./metadata.js";
 import {
   GIT_EMPTY_TREE_OID,
   GIT_HISTORY_OPERATION_MARKERS,
+  GIT_LOOSE_OBJECT_FAN_OUT,
   GIT_SYNC_COMMIT_MESSAGE,
   appendGitRemoteSection,
   buildGitTree,
@@ -262,19 +263,6 @@ const REFLOG_LINE_MIN_BYTES = gitReflogAppendLine({
 const encoder = new TextEncoder();
 const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
-function fail(label: string): never {
-  throw new Error(`invalid ${label}`);
-}
-
-function exact(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
-  const input = value as Readonly<Record<string, unknown>>;
-  if (Object.keys(input).length !== keys.length || keys.some((key) => !Object.hasOwn(input, key))) {
-    fail(`${label}: keys`);
-  }
-  return input;
-}
-
 function list(value: unknown, maximum: number, label: string): readonly unknown[] {
   if (!Array.isArray(value) || value.length > maximum) fail(label);
   return value as readonly unknown[];
@@ -297,11 +285,10 @@ function json(value: unknown): CanonicalJsonValue {
   return value as CanonicalJsonValue;
 }
 
-function sameJson(left: unknown, right: unknown): boolean {
+export function sameJson(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(json(left)) === encodeCanonicalJson(json(right));
 }
 
-export const GIT_LOOSE_OBJECT_FAN_OUT: readonly string[] = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, "0"));
 const EMPTY_DIRECTORY_PREVIEW: LifecyclePreviewFileStateV1 = { state: "present", hash: sha256(new Uint8Array()), size: 0 };
 
 function child(parent: CanonicalAbsolutePathV1, relative: string): CanonicalAbsolutePathV1 {
