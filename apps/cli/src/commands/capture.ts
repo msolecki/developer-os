@@ -501,10 +501,21 @@ async function resolveNoteTarget(
   if (leaf === null) return { path: notePath, beforeSha256: null };
 
   /**
-   * "A canonical note" is what `buildIndex` keeps, decided for this one file: the walk above
-   * applied discovery's path rules, so what is left is its bound and its parse. Indexing the
-   * whole vault to read back one boolean cost seconds per capture (AUD-087).
+   * "A canonical note" is what `buildIndex` keeps, decided for this one file rather than by
+   * indexing the vault (AUD-087): discovery's name rules (`isTopicNotePath`, the symlink walk
+   * above), the names discovery would read, then the bound and the parse.
+   *
+   * The names are checked against each parent's listing because `lstat` is not: APFS is
+   * case-insensitive, so `DEV/Kept.md` finds `DEV/kept.md`, while discovery indexes the
+   * on-disk name, NFC-folded. A `--note` spelled differently would bind one file's bytes to a
+   * path no index entry carries.
    */
+  if (!(await namesAreOnDisk(context, join(paths.brain, brainConfig.contentRoot), segments))) {
+    throw new CaptureNoteInvalidError(
+      "--note names an existing file that is not a canonical note",
+      [destination],
+    );
+  }
   const bytes = leaf.isFile() ? await readNoteBytes(context, destination) : null;
   const text = bytes?.toString("utf8");
   if (bytes === null || text === undefined || frontmatterExceeds(text, MAX_FRONTMATTER_CHARS) || !parseNote(text).ok) {
@@ -516,6 +527,17 @@ async function resolveNoteTarget(
 
   /** Hashed from the bytes, not the decoded text: the executor's precondition hashes bytes. */
   return { path: notePath, beforeSha256: createHash("sha256").update(bytes).digest("hex") };
+}
+
+/** Every segment equals, after NFC, an entry name its parent lists, as discovery reads them. */
+async function namesAreOnDisk(context: CliContext, root: string, segments: readonly string[]): Promise<boolean> {
+  let parent = root;
+  for (const segment of segments) {
+    const names = await context.fs.readdir(parent);
+    if (!names.some((name) => name.normalize("NFC") === segment.normalize("NFC"))) return false;
+    parent = join(parent, segment);
+  }
+  return true;
 }
 
 /** Through the guard, as discovery reads a note; one read serves the parse and the hash. */
