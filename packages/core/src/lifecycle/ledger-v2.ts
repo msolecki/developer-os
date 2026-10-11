@@ -15,6 +15,7 @@ import {
   constructionPlanHash,
   isPreHandoffConstructionPhase,
   MAXIMUM_CONSTRUCTION_PLAN_BYTES,
+  MAXIMUM_RECOVERY_EXECUTOR_BYTES,
   updateConstructionEnvelopePaths,
   validateConstructionBijections,
   validateConstructionJournal,
@@ -85,7 +86,6 @@ const STAGING_SUBTREES: ReadonlyMap<string, readonly string[]> = new Map([
   ["update", ["construction", "plans", "initial-journals", "journals", "evidence", "source", "payloads", "recovery-executor"]],
   ["participants", ["foundation", "manifest"]],
 ]);
-const MAX_EXECUTOR_RECORD_BYTES = 16_384;
 
 interface EnvelopeFactsV1 {
   plan: UpdateLifecycleCoordinatorPlanV2 | null;
@@ -356,7 +356,7 @@ async function readExecutorRecord(
 ): Promise<LifecycleClosureV2ObservationV1["executorRecord"] | "reservation" | "malformed"> {
   const path = deriveUpdateExecutorRecordPath(scan.roots.productHome);
   if ((await scan.fs.lstat(path)) === null) return null;
-  const bytes = await ownedBytes(scan, path, MAX_EXECUTOR_RECORD_BYTES);
+  const bytes = await ownedBytes(scan, path, MAXIMUM_RECOVERY_EXECUTOR_BYTES);
   if (bytes === null) return "malformed";
   try {
     const record = decodeUpdateExecutorRecordSlot(bytes, evidence);
