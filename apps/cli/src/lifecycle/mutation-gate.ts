@@ -11,6 +11,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { join } from "node:path";
 
 import {
+  LIFECYCLE_ALLOCATOR_LEAF,
+  LIFECYCLE_INSTALL_NONCE_BYTES,
+  LIFECYCLE_INSTALL_NONCE_LEAF,
   EXIT_CODES,
   FoundationParticipantExecutor,
   TransactionExecutor,
@@ -268,8 +271,8 @@ function gateAdapters(
     networkPush: { push: () => Promise.resolve("failed") },
     drainRunners: null,
     controlFiles: {
-      removeAllocator: () => unsupported("lifecycle-id-allocator.json"),
-      removeNonce: () => unsupported("lifecycle-install-nonce"),
+      removeAllocator: () => unsupported(LIFECYCLE_ALLOCATOR_LEAF),
+      removeNonce: () => unsupported(LIFECYCLE_INSTALL_NONCE_LEAF),
     },
   };
 }
@@ -344,10 +347,10 @@ async function stagedDigest(
   );
   // identity-free stat: the guarded port's entry, read through the same port; no dev/ino is recorded.
   const entry = await lifecycle.fs.lstat(path);
-  if (entry?.kind !== "regular_file" || entry.ownerUid !== lifecycle.effectiveUid || BigInt(entry.size) !== 65n) {
+  if (entry?.kind !== "regular_file" || entry.ownerUid !== lifecycle.effectiveUid || BigInt(entry.size) !== BigInt(LIFECYCLE_INSTALL_NONCE_BYTES)) {
     return null;
   }
-  const text = new TextDecoder().decode(await lifecycle.fs.readRegular(entry, 65));
+  const text = new TextDecoder().decode(await lifecycle.fs.readRegular(entry, LIFECYCLE_INSTALL_NONCE_BYTES));
   return /^[0-9a-f]{64}\n$/u.test(text) ? text.slice(0, 64) : null;
 }
 

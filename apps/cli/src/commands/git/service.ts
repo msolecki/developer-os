@@ -10,6 +10,8 @@ import { chmod, lstat, mkdir, open, readdir, realpath, rmdir, unlink } from "nod
 import { dirname, join } from "node:path";
 
 import {
+  LIFECYCLE_ALLOCATOR_LEAF,
+  LIFECYCLE_INSTALL_NONCE_LEAF,
   foundationBindingsHash,
   EXIT_CODES,
   FoundationParticipantExecutor,
@@ -917,8 +919,8 @@ export function gitAdapters(
     networkPush,
     drainRunners: null,
     controlFiles: {
-      removeAllocator: () => unsupported("lifecycle-id-allocator.json"),
-      removeNonce: () => unsupported("lifecycle-install-nonce"),
+      removeAllocator: () => unsupported(LIFECYCLE_ALLOCATOR_LEAF),
+      removeNonce: () => unsupported(LIFECYCLE_INSTALL_NONCE_LEAF),
     },
   };
 }

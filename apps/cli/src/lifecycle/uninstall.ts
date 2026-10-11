@@ -13,6 +13,8 @@ import { lstat, open, readdir } from "node:fs/promises";
 import { CODEX_HOOK_TRUST_RESIDUE } from "@developer-os/adapter-codex";
 
 import {
+  LIFECYCLE_ALLOCATOR_LEAF,
+  LIFECYCLE_INSTALL_NONCE_LEAF,
   foundationBindingsHash,
   EXIT_CODES,
   FoundationParticipantExecutor,
@@ -170,8 +172,6 @@ import { isMissingEntry, readConfigFile } from "../config-file.js";
 
 const GLOBAL_LOCK_LEAF = ".lifecycle.lock";
 const MARKER_LEAF = "uninstalling.json";
-const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
-const NONCE_LEAF = "lifecycle-install-nonce";
 const ACTIVATION_LEAF = "lifecycle-activation.json";
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 const MAX_PLAN_BYTES = 16_777_216;
@@ -825,8 +825,8 @@ export function uninstallCollectedLeaves(productHome: CanonicalAbsolutePathV1, m
   return [
     stateLeaf(productHome, MARKER_LEAF),
     manifestPath,
-    stateLeaf(productHome, ALLOCATOR_LEAF),
-    stateLeaf(productHome, NONCE_LEAF),
+    stateLeaf(productHome, LIFECYCLE_ALLOCATOR_LEAF),
+    stateLeaf(productHome, LIFECYCLE_INSTALL_NONCE_LEAF),
     hookFiringRecordsPath(productHome),
     codexIngestHomePath(productHome),
   ];
@@ -1151,14 +1151,14 @@ export function createUninstallAdapters(input: {
       removeAllocator: async (_plan, outcome) => {
         if (outcome === "rolled_back") return;
         await removeStateLeaf(fs, productHome, MARKER_LEAF);
-        await removeStateLeaf(fs, productHome, ALLOCATOR_LEAF);
+        await removeStateLeaf(fs, productHome, LIFECYCLE_ALLOCATOR_LEAF);
       },
       removeNonce: async (_plan, outcome) => {
         if (outcome === "rolled_back") return;
         /** Before the nonce: the nonce is what makes a death here resume through this hook again. */
         await removeHookFiringRecords(fs, productHome, request.lifecycle.effectiveUid);
         await removeCodexIngestHome(fs, productHome, request.lifecycle.effectiveUid);
-        await removeStateLeaf(fs, productHome, NONCE_LEAF);
+        await removeStateLeaf(fs, productHome, LIFECYCLE_INSTALL_NONCE_LEAF);
       },
     },
     stepHooks: {
@@ -1588,8 +1588,8 @@ export class LifecycleUninstaller {
      */
     const reserved = new Set<string>([
       markerPath,
-      stateLeaf(productHome, ALLOCATOR_LEAF),
-      stateLeaf(productHome, NONCE_LEAF),
+      stateLeaf(productHome, LIFECYCLE_ALLOCATOR_LEAF),
+      stateLeaf(productHome, LIFECYCLE_INSTALL_NONCE_LEAF),
       paths.manifestFile,
     ]);
     const revertRequest: RevertRequest = {

@@ -3,6 +3,8 @@ import * as nodeFs from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import {
+  LIFECYCLE_INSTALL_NONCE_BYTES,
+  LIFECYCLE_INSTALL_NONCE_LEAF,
   containsPath,
   decodeCanonicalJson,
   detectDrift,
@@ -1361,7 +1363,7 @@ function effectiveUid(): number {
 
 async function readInstallNonce(paths: RuntimePaths): Promise<LifecycleInstallNonceV1 | null> {
   try {
-    const bytes = await readBoundedFile(join(paths.stateDir, "lifecycle-install-nonce"), 65, "the lifecycle install nonce");
+    const bytes = await readBoundedFile(join(paths.stateDir, LIFECYCLE_INSTALL_NONCE_LEAF), LIFECYCLE_INSTALL_NONCE_BYTES, "the lifecycle install nonce");
     return bytes === null ? null : parseLifecycleInstallNonce(bytes);
   } catch {
     return null;
