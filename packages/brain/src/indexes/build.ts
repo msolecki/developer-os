@@ -7,6 +7,7 @@ import {
   discoverNotes,
 } from "../discovery/index.js";
 import type { DirectoryReader, DiscoveredNote } from "../discovery/index.js";
+import { mapBounded, VAULT_IO_CONCURRENCY } from "../discovery/bounded-map.js";
 import { parseNote } from "../schema/note.js";
 import type {
   NoteAuthor,
@@ -656,8 +657,16 @@ export async function buildIndex(
   const entries: ParsedEntry[] = [];
   const parseIssues: NoteIssues[] = [];
 
-  for (const discovered of discovery.notes) {
-    const source = await request.readFile(discovered.absolutePath);
+  /**
+   * Read concurrently, parsed in discovery's order: each read is a guarded open
+   * that waits on the filesystem, and a serial loop paid every wait in turn
+   * (AUD-025). Everything below sorts its own output either way.
+   */
+  const sources = await mapBounded(discovery.notes, VAULT_IO_CONCURRENCY, (discovered) =>
+    request.readFile(discovered.absolutePath),
+  );
+  for (const [position, discovered] of discovery.notes.entries()) {
+    const source = sources[position] as string;
 
     if (frontmatterExceeds(source, maxFrontmatterChars)) {
       /**

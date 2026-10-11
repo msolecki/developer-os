@@ -4,6 +4,8 @@ import { containsPath } from "@developer-os/core";
 import type { BrainConfigV1 } from "@developer-os/core";
 import { canonicalizePlannedPath, SecurityRefusalError } from "@developer-os/security";
 
+import { mapBounded, VAULT_IO_CONCURRENCY } from "./bounded-map.js";
+
 export interface DirectoryEntry {
   readonly name: string;
   readonly isDirectory: boolean;
@@ -210,6 +212,7 @@ async function walk(
 ): Promise<void> {
   const { request } = context;
   const entries = await request.reader.readDir(directory);
+  const files: DiscoveredNote[] = [];
 
   for (const entry of entries) {
     const name = entry.name.normalize("NFC");
@@ -246,9 +249,12 @@ async function walk(
 
     if (!entry.isFile || !name.endsWith(".md")) continue;
 
-    await request.assertReadable(absolutePath);
-    notes.push({ vaultPath, absolutePath, topicFolder });
+    files.push({ vaultPath, absolutePath, topicFolder });
   }
+
+  /** Concurrently, since each guard waits on the filesystem; `discoverNotes` sorts the result (AUD-025). */
+  await mapBounded(files, VAULT_IO_CONCURRENCY, (file) => request.assertReadable(file.absolutePath));
+  notes.push(...files);
 }
 
 /**

@@ -707,6 +707,41 @@ describe("discoverNotes", () => {
   });
 });
 
+describe("discoverNotes guard concurrency (AUD-025)", () => {
+  it("guards a folder's notes concurrently, at most 16 at a time, and returns them sorted", async () => {
+    const names = Array.from({ length: 40 }, (_, i) => `n${String(i).padStart(2, "0")}.md`);
+    const tree = { "/vault": ["content/"], "/vault/content": ["DEV/"], "/vault/content/DEV": [...names].reverse() };
+    let inFlight = 0;
+    let peak = 0;
+    const result = await discoverNotes({
+      ...request,
+      reader: readerFor(tree),
+      assertReadable: async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        inFlight -= 1;
+      },
+    });
+
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(16);
+    expect(result.notes.map((note) => note.vaultPath)).toEqual(names.map((name) => `content/DEV/${name}`));
+  });
+
+  it("refuses the whole discovery when one note's guard refuses", async () => {
+    const tree = { "/vault": ["content/"], "/vault/content": ["DEV/"], "/vault/content/DEV": ["a.md", ".env.md", "b.md", "secret.md"] };
+    await expect(
+      discoverNotes({
+        ...request,
+        reader: readerFor(tree),
+        assertReadable: (path: string) =>
+          path.endsWith("secret.md") ? Promise.reject(new SecurityRefusalError("Path is protected")) : Promise.resolve(),
+      }),
+    ).rejects.toBeInstanceOf(SecurityRefusalError);
+  });
+});
+
 describe("compareCanonical", () => {
   it("orders by UTF-8 bytes, not by locale collation", () => {
     /**

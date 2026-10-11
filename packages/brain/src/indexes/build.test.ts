@@ -743,3 +743,33 @@ describe("buildIndex case-insensitive fallback", () => {
     expect(result.graph.edges).toHaveLength(2);
   });
 });
+
+describe("buildIndex reads notes concurrently (AUD-025)", () => {
+  it("keeps up to 16 reads in flight, finishing out of order, and builds what a serial read builds", async () => {
+    const files = Object.fromEntries(
+      Array.from({ length: 40 }, (_, i) => [
+        `content/DEV/n${String(i).padStart(2, "0")}.md`,
+        note({ title: `Note ${String(i)}` }, `Links to [[Note ${String((i + 1) % 40)}]].\n`),
+      ]),
+    );
+    const serial = memoryRequest(files);
+    let inFlight = 0;
+    let peak = 0;
+    const concurrent = memoryRequest(files, FROZEN, {
+      readFile: async (path: string) => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        /** Later names finish first, so completion order is not the sorted order. */
+        await new Promise((resolve) => setTimeout(resolve, 40 - Number(/n(\d+)/u.exec(path)?.[1] ?? 0) % 7));
+        inFlight -= 1;
+        return serial.readFile(path);
+      },
+    });
+
+    const result = await buildIndex(concurrent);
+
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(16);
+    expect(result).toStrictEqual(await buildIndex(serial));
+  });
+});
