@@ -9,12 +9,11 @@ import { dependenciesFor } from "../commands/brain-dependencies.js";
 import { readConfigFile } from "../config-file.js";
 import { redactorWithoutCreatingKey, runtimePathsFor } from "../context.js";
 import { slugify } from "../project-slug.js";
-import { capUtf8Bytes } from "./outcome.js";
+import { capUtf8Bytes, MAX_INJECTED_CONTEXT_BYTES } from "./outcome.js";
 import type { HookOutcome } from "./outcome.js";
 import { resolveProjectRoot } from "./project-root.js";
 import type { HookRuntime, HookVerbHandler } from "./registry.js";
 
-export const MAX_INJECTED_CONTEXT_BYTES = 16_384;
 export const VAULT_MAP_TRUNCATED_MARKER = "[developer-os: vault map truncated]";
 
 const byteLength = (text: string): number => new TextEncoder().encode(text).byteLength;

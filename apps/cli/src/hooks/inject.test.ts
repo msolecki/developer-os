@@ -11,13 +11,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { dependenciesFor } from "../commands/reindex.js";
 import { createCommandFixture, inventoryDigest, removeCommandFixtures } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
-import {
-  composeInjection,
-  injectBrainContext,
-  MAX_INJECTED_CONTEXT_BYTES,
-  VAULT_MAP_TRUNCATED_MARKER,
-} from "./inject.js";
-import { writeHookOutcome } from "./outcome.js";
+import { composeInjection, injectBrainContext, VAULT_MAP_TRUNCATED_MARKER } from "./inject.js";
+import { MAX_INJECTED_CONTEXT_BYTES, writeHookOutcome } from "./outcome.js";
 import type { HookPayloadV1 } from "./payload.js";
 import type { HookContextFactory, HookRuntime } from "./registry.js";
 
