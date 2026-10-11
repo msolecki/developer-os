@@ -16,7 +16,7 @@ import type { LifecycleInstallNonceV1 } from "../manifest/bootstrap.js";
 import { encodeFoundationJournalJsonV1, validateJournal } from "../transactions/store.js";
 import type { TransactionJournalV1 } from "../transactions/types.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
-import { parseSafeReasonCode, type SafeReasonCodeV1 } from "../update/scalars.js";
+import type { SafeReasonCodeV1 } from "../update/scalars.js";
 import type { LifecycleBookkeepingResidueV1 } from "./bookkeeping.js";
 import {
   LifecycleRecoveryRequiredError,
@@ -32,7 +32,16 @@ import {
   type FoundationTransactionIdV1,
 } from "./ids.js";
 import { maximumFoundationJournalBytes } from "./store.js";
-import { LOWERCASE_V4_UUID } from "./fs-helpers.js";
+import { LIFECYCLE_PLAN_BOUNDS } from "./types.js";
+import {
+  LOWERCASE_V4_UUID,
+  childPath,
+  guardedDirectory,
+  guardedRegularFile,
+  openRoot,
+  refuseLedgerEntry as refuse,
+  stableLockOwner,
+} from "./fs-helpers.js";
 
 export interface LifecycleLedgerRootsV1 {
   readonly productHome: CanonicalAbsolutePathV1;
@@ -80,13 +89,12 @@ export interface FoundationLedgerV1 {
   readonly overflow: boolean;
 }
 
-const MAX_JOURNAL_BYTES = 1_048_576;
-const MAX_ALLOCATED_PAYLOAD_BYTES = 16_777_216;
+const MAX_JOURNAL_BYTES = LIFECYCLE_PLAN_BOUNDS.journalBytes.maximum;
+const MAX_ALLOCATED_PAYLOAD_BYTES = LIFECYCLE_PLAN_BOUNDS.mutationContentSize.maximum;
 /** The shipped executor's legacy range: `Stats.size` up to the ECMAScript safe integer. */
 const MAX_LEGACY_PAYLOAD_BYTES = Number.MAX_SAFE_INTEGER;
 const DIGEST_FILE_BYTES = 65;
 const JOURNAL_SUFFIX = ".json";
-const LOCK_SUFFIX = ".lock";
 const TEMP_SUFFIX = ".json.tmp";
 const LOWERCASE_SHA256_LINE = /^[0-9a-f]{64}\n$/u;
 
@@ -164,10 +172,6 @@ interface LedgerScanV1 {
   stopped: boolean;
 }
 
-function refuse(scan: LedgerScanV1, reason: string, path: CanonicalAbsolutePathV1): void {
-  scan.findings.push({ reason: parseSafeReasonCode(reason), path });
-}
-
 function factsFor(scan: LedgerScanV1, id: FoundationTransactionIdV1): IdFactsV1 {
   const existing = scan.ids.get(id);
   if (existing !== undefined) return existing;
@@ -181,17 +185,6 @@ function factsFor(scan: LedgerScanV1, id: FoundationTransactionIdV1): IdFactsV1 
   };
   scan.ids.set(id, created);
   return created;
-}
-
-function childPath(
-  directory: CanonicalAbsolutePathV1,
-  name: string,
-): CanonicalAbsolutePathV1 | null {
-  try {
-    return parseCanonicalAbsolutePathText(`${directory}/${name}`);
-  } catch {
-    return null;
-  }
 }
 
 function transactionIdOf(
@@ -215,12 +208,6 @@ function isAllocatedTransactionId(
   } catch {
     return false;
   }
-}
-
-function stableLockOwner(name: string): string | null {
-  if (!name.startsWith(".") || !name.endsWith(LOCK_SUFFIX)) return null;
-  const owner = name.slice(1, name.length - LOCK_SUFFIX.length);
-  return owner.length === 0 ? null : owner;
 }
 
 /**
@@ -256,62 +243,6 @@ async function guardedRead<T>(
     }
     throw error;
   }
-}
-
-async function openRoot(
-  scan: LedgerScanV1,
-  path: CanonicalAbsolutePathV1,
-): Promise<LifecycleGuardedEntryV1 | null> {
-  const entry = await scan.dependencies.fs.lstat(path);
-  if (
-    entry === null ||
-    entry.kind !== "directory" ||
-    entry.ownerUid !== scan.dependencies.effectiveUid ||
-    entry.mode !== 0o700
-  ) {
-    refuse(scan, "lifecycle_ledger_root_shape", path);
-    return null;
-  }
-  return entry;
-}
-
-async function guardedRegularFile(
-  scan: LedgerScanV1,
-  path: CanonicalAbsolutePathV1,
-  maximumBytes: number,
-  reason: string,
-): Promise<LifecycleGuardedEntryV1 | null> {
-  const entry = await scan.dependencies.fs.lstat(path);
-  if (
-    entry === null ||
-    entry.kind !== "regular_file" ||
-    entry.ownerUid !== scan.dependencies.effectiveUid ||
-    entry.mode !== 0o600 ||
-    entry.nlink !== 1 ||
-    BigInt(entry.size) > BigInt(maximumBytes)
-  ) {
-    refuse(scan, reason, path);
-    return null;
-  }
-  return entry;
-}
-
-async function guardedDirectory(
-  scan: LedgerScanV1,
-  path: CanonicalAbsolutePathV1,
-  reason: string,
-): Promise<LifecycleGuardedEntryV1 | null> {
-  const entry = await scan.dependencies.fs.lstat(path);
-  if (
-    entry === null ||
-    entry.kind !== "directory" ||
-    entry.ownerUid !== scan.dependencies.effectiveUid ||
-    entry.mode !== 0o700
-  ) {
-    refuse(scan, reason, path);
-    return null;
-  }
-  return entry;
 }
 
 async function readText(
