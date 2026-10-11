@@ -19,7 +19,7 @@ No full-suite debt is outstanding.
 | Entry | Work still required | Blocked by |
 |---|---|---|
 | A13 · DOS-P11 | founder stops only: the Codex real-agent matrix (NEW-104, after 2026-10-22); Claude's unobserved rows and the isolated-`ingest` check (NEW-127). The plan closed 2026-09-29 | founder |
-| A15 · DOS-P8 | `docs/migration/founder-cutover.md` steps 1–15 done (2026-09-28/29); step 18 waived and the legacy shared repository retired (D97, 2026-10-11); step 16 Claude items 1–4 passed 2026-10-11 (capture `afeb7c998408f4c7`, note `DEV/retire-legacy-runtime-archive-remote-not-delete.md`; found NEW-250); vault tooling removed (vault commit `8b88d73`); open: step 16 item 5 (Codex), items 6–7 in A16 Task 11 step 7 (D99), step 19's result files, Codex hook approval after 2026-10-22 | founder, live machine |
+| A15 · DOS-P8 | `docs/migration/founder-cutover.md` steps 1–15 done (2026-09-28/29); step 18 waived and the legacy shared repository retired (D97, 2026-10-11); step 16 Claude items 1–4 passed 2026-10-11 (capture `afeb7c998408f4c7`, note `DEV/retire-legacy-runtime-archive-remote-not-delete.md`; found NEW-250); vault tooling removed (vault commit `8b88d73`); open: step 16 item 5 (Codex) waived, unverified (D100), items 6–7 in A16 Task 11 step 7 (D99), open: step 19's result files, Codex hook approval after 2026-10-22 | founder, live machine |
 | A11b · DOS-P7 remainder | **Closed 2026-10-11 (D98).** Task 11b's code landed 2026-10-08; Task 14 closed on CI and NEW-210's VM gate; the founder-machine leg moved to A16 Task 11 step 7 | — |
 | A16 · DOS-P9 | plan decision, beta, packaging, documentation, v1 publication | L1, L2 |
 

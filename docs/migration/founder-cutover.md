@@ -734,7 +734,7 @@ One complete cycle, in order; the gate of roadmap Phase 10.
    errors, and `dos review --status ingested` lists the capture.
 4. **Search.** `dos brain reindex`, then `dos brain search "<a term from the observation>"` returns the
    new note; a new Claude session's injection reflects the updated vault map.
-5. **Codex.** Repeat items 1–4 with a second, different synthetic observation, captured from a Codex
+5. **Codex.** *Waived 2026-10-11 (D100): no Codex access; unverified, tracked by NEW-104.* Repeat items 1–4 with a second, different synthetic observation, captured from a Codex
    session and ingested with `dos ingest --limit 1 --agent codex` (under D52's own `CODEX_HOME`). Every
    Verify line must hold as it did for Claude: each adapter completes the same outcome contract
    (program plan Task 8). Codex has no product hooks until NEW-104, so its injection check is the
