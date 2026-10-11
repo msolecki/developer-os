@@ -1,5 +1,6 @@
 import fsSync from "node:fs";
 import * as nodeFs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -796,33 +797,28 @@ describe("runInit", () => {
     expect(await exists(fixture.paths.backupsDir)).toBe(true);
   });
 
+  // AUD-015: a `brainPath` with a control character is no CanonicalAbsolutePathV1, so `init` refuses
+  // it, from `config.toml` or `DEVELOPER_OS_BRAIN`, before anything renders it.
   it("never renders a control character from a configured Brain path", async () => {
-    const fixture = await createCommandFixture("init-escape-render", {
-      answers: [false],
-    });
-    await nodeFs.mkdir(fixture.paths.home, { recursive: true, mode: 0o700 });
-    const hostile = join(
-      fixture.userHome,
-      `vault\u001b[2JDeveloper OS will make no changes.`,
-    );
-    await nodeFs.writeFile(
-      fixture.paths.configFile,
-      serializeConfig({
-        schemaVersion: 1,
-        brainPath: hostile,
-        adapters: { claude: false, codex: false },
-        git: { enabled: false },
-        automation: { enabled: false },
-        telemetry: false,
-      }),
-      { mode: 0o600 },
-    );
+    const root = await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "developer-os-cli-init-escape-render-")));
+    try {
+      const hostile = join(root, "home", `vault\u001b[2JDeveloper OS will make no changes.`);
+      const fixture = await createCommandFixture("init-escape-render", {
+        root,
+        env: { DEVELOPER_OS_BRAIN: hostile },
+        answers: [false],
+      });
+      await nodeFs.mkdir(fixture.paths.home, { recursive: true, mode: 0o700 });
 
-    await runInit(fixture.context, { dryRun: false, assumeYes: false });
+      const result = await runInit(fixture.context, { dryRun: false, assumeYes: false });
 
-    expect(fixture.io.questions).toHaveLength(1);
-    expect(fixture.io.questions[0]).not.toContain("\u001b");
-    expect(fixture.io.questions[0]).toContain("\uFFFD");
+      expect(result.ok).toBe(false);
+      expect(fixture.io.questions).toStrictEqual([]);
+      expect(JSON.stringify(result)).not.toContain("\\u001b");
+      expect(JSON.stringify(result)).not.toContain("\u001b");
+    } finally {
+      await nodeFs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("refuses before installing anything when a transaction is incomplete", async () => {
