@@ -372,7 +372,7 @@ stderr line.
 | `guard prompt` | `UserPromptSubmit` | `UserPromptSubmit` | open | `context` naming at most 3 skills from `.developer-os/skill-rules.json` |
 | `guard command` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `pipe-to-shell`, `pipe-to-interpreter`, `download-process-substitution`, `recursive-delete-root`, `sql-destructive` (D67) |
 | `guard commit` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `hook-bypass` (also `git -c core.hooksPath=…`, D67), `force-push` (`--force-with-lease` allowed) |
-| `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy` and the hook-only `HOOK_PROTECTED_PATH_RULES` (D67), for every edited path; `product-state` for a path in the product home or the Claude plugin root `~/.claude/skills/developer-os/` (AUD-005) |
+| `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy` and the hook-only `HOOK_PROTECTED_PATH_RULES` (D67), for every edited path; `product-state` for a path in the product home (outside `instructions/`) or the Claude plugin root `~/.claude/skills/developer-os/` (AUD-005) |
 | `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | project-local `biome` (`biome.json` or `biome.jsonc`, D67) or `prettier` over every edited file still present; `advise` on a formatter error |
 | `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | `advise` when an edited path resolves through a symlink out of the project root |
 | `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit` (`tsc -b --noEmit` when the config has `references`); `block` with the first 40 diagnostic lines |
@@ -676,7 +676,9 @@ function, `eval`, a script file); and `pipe-to-shell`'s heuristic gaps. The bull
 - **The product's own code is refused to file tools, not to the shell (AUD-005).** `guard path`
   refuses an agent write anywhere in the product home (`bin/developer-os.mjs`, `releases/`,
   `config.toml`, `codex/`, `state/`) and in the Claude plugin root, whose `hooks/hooks.json`
-  registers the guards; a sibling plugin under `~/.claude/skills/` is not covered. A `Bash` write
+  registers the guards; a sibling plugin under `~/.claude/skills/` is not covered. `instructions/`
+  stays writable: it is the user-override tree (`foundation.md` §12.1) that `detach` tells the user
+  to move edits into, and a link out of it is judged by where it lands. A `Bash` write
   there passes, as the next bullet says, and could switch every guard off for later sessions.
 - **`guard path` does not see a shell write.** `echo … > .env` through `Bash` passes it on both
   vendors (parity with Claude). On Codex an `apply_patch` invoked from the shell tool presumably

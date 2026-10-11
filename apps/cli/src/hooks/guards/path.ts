@@ -60,14 +60,25 @@ function hookProtected(path: string, home: string): boolean {
  * them directly, never through this hook, so an agent tool write there is refused: rewriting
  * `codex/codex-home` would otherwise redirect which `auth.json` is protected, and rewriting the
  * entrypoint or a hook row would switch every guard off. Both the default `~/.developer-os` and an
- * absolute `DEVELOPER_OS_HOME` count.
+ * absolute `DEVELOPER_OS_HOME` count. `instructions/` stays writable: it is the documented
+ * user-override tree (`foundation.md` §12.1) that `detach` tells the user to move edits into.
  */
-async function productStateRoots(env: Readonly<Record<string, string | undefined>>, userHome: string): Promise<readonly string[]> {
+async function productStateRoots(
+  env: Readonly<Record<string, string | undefined>>,
+  userHome: string,
+): Promise<{ readonly roots: readonly string[]; readonly overrides: readonly string[] }> {
   const productHomes = [join(userHome, ".developer-os")];
   const configured = env.DEVELOPER_OS_HOME;
   if (configured !== undefined && isAbsolute(configured)) productHomes.push(configured);
-  const roots = [...productHomes, join(userHome, ".claude", "skills", "developer-os")];
-  return [...roots, ...(await Promise.all(roots.map((root) => canonicalizePlannedPath(root))))];
+  const withCanonical = async (paths: readonly string[]) => [...paths, ...(await Promise.all(paths.map((path) => canonicalizePlannedPath(path))))];
+  return {
+    roots: await withCanonical([...productHomes, join(userHome, ".claude", "skills", "developer-os")]),
+    overrides: await withCanonical(productHomes.map((productHome) => join(productHome, "instructions"))),
+  };
+}
+
+function productState(state: Awaited<ReturnType<typeof productStateRoots>>, path: string): boolean {
+  return state.roots.some((root) => within(root, path)) && !state.overrides.some((override) => within(override, path));
 }
 
 function within(root: string, path: string): boolean {
@@ -108,7 +119,7 @@ export const guardPath: HookVerbHandler = async (payload, runtime) => {
     if ([lexical, canonical].some((candidate) => homes.some((home) => hookProtected(candidate, home)))) {
       return { kind: "block", ruleId: "protected-path", detail: excerpt(runtime.redact(path)) };
     }
-    if ([lexical, canonical].some((candidate) => stateRoots.some((root) => within(root, candidate)))) {
+    if ([lexical, canonical].some((candidate) => productState(stateRoots, candidate))) {
       return { kind: "block", ruleId: "product-state", detail: excerpt(runtime.redact(path)) };
     }
   }
