@@ -7,7 +7,9 @@ import { runtimePathsFor } from "../context.js";
 import { readConfigFile } from "./doctor.js";
 import { runInit } from "./init.js";
 import {
+  captureFileNames,
   fingerprintDirectory,
+  resolveCapturePath,
   resolveQuarantine,
   writeQuarantineCapture,
 } from "./quarantine.js";
@@ -76,6 +78,43 @@ describe("resolveQuarantine", () => {
 
     expect(refused).toBeInstanceOf(SyntheticRefusal);
     expect((refused as SyntheticRefusal).paths).toEqual([quarantine]);
+  });
+});
+
+describe("captureFileNames", () => {
+  it("lists the regular .md files in name order, and nothing for a missing directory", async () => {
+    const fixture = await installed("quarantine-listing");
+    const { config, paths } = await rootsOf(fixture);
+    const { canonicalQuarantine } = await resolveQuarantine(fixture.context, config, paths, refuse);
+    await nodeFs.writeFile(join(canonicalQuarantine, "b.md"), "b");
+    await nodeFs.writeFile(join(canonicalQuarantine, "a.md"), "a");
+    await nodeFs.writeFile(join(canonicalQuarantine, "c.txt"), "c");
+    await nodeFs.mkdir(join(canonicalQuarantine, "d.md"));
+
+    expect(await captureFileNames(fixture.context, canonicalQuarantine)).toEqual(["a.md", "b.md"]);
+    expect(await captureFileNames(fixture.context, join(fixture.root, "absent"))).toEqual([]);
+  });
+});
+
+describe("resolveCapturePath", () => {
+  it("returns a capture inside the quarantine and refuses one that resolves outside it through refuse", async () => {
+    const fixture = await installed("quarantine-capture-path");
+    const { config, paths } = await rootsOf(fixture);
+    const { canonicalQuarantine } = await resolveQuarantine(fixture.context, config, paths, refuse);
+    await nodeFs.writeFile(join(canonicalQuarantine, "inside.md"), "x");
+    const outside = join(fixture.root, "outside.md");
+    await nodeFs.writeFile(outside, "x");
+    await nodeFs.symlink(outside, join(canonicalQuarantine, "escape.md"));
+
+    expect(await resolveCapturePath(fixture.context, canonicalQuarantine, "inside.md", refuse)).toBe(
+      join(canonicalQuarantine, "inside.md"),
+    );
+    const refused = await resolveCapturePath(fixture.context, canonicalQuarantine, "escape.md", refuse).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(refused).toBeInstanceOf(SyntheticRefusal);
+    expect((refused as SyntheticRefusal).paths).toEqual([join(canonicalQuarantine, "escape.md")]);
   });
 });
 

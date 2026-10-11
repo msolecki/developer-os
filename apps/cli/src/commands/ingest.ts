@@ -8,7 +8,6 @@ import {
   CODEX_INGEST_AUTH_LINK,
   CODEX_INGEST_HOME_RELATIVE_PATH,
   CODEX_INGEST_HOME_REPAIR,
-  containsPath,
   EXIT_CODES,
   inspectCodexIngestHomeShape,
   success,
@@ -52,18 +51,19 @@ import type {
 import { launchdJob } from "@developer-os/platform-macos";
 import type { AgentName } from "@developer-os/platform-macos";
 import { createRedactor } from "@developer-os/security";
-import type { RedactionScope, Redactor } from "@developer-os/security";
+import type { Redactor } from "@developer-os/security";
 import { resolveScopeGlob } from "@developer-os/workflow-schema";
 
 import {
   exitCodeOf,
   failureFrom,
+  guardsWith,
   loadOrCreateRedactionKey,
   renderPath,
   runtimePathsFor,
 } from "../context.js";
-import { resolveQuarantine } from "./quarantine.js";
-import type { CliContext, CliGuards } from "../context.js";
+import { CAPTURE_FILE_SUFFIX, captureFileNames, resolveCapturePath, resolveQuarantine } from "./quarantine.js";
+import type { CliContext } from "../context.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { currentBytes, ingestAttemptsPath, writeMutation } from "../lifecycle/runtime-records.js";
 import { currentScheduledJob } from "./automation/scheduled-scope.js";
@@ -264,8 +264,6 @@ const INGEST_TIMEOUT_MS = 120_000;
  * nothing reads would be a probe in all but name.
  */
 const UNKNOWN_VERSION = "unknown";
-
-const CAPTURE_FILE_SUFFIX = ".md";
 
 /**
  * The four transactions one capture produces, plus the compensating fifth.
@@ -655,28 +653,6 @@ export async function selectVendor(
   );
 }
 
-/**
- * The capture files in quarantine, by name, sorted — which is `captureId` order,
- * because the id **is** the file name. `selectCaptures` then moves a capture that
- * earlier runs saw refused behind the untried ones (NEW-141); with no refusal on
- * record, two runs over the same set do the same work in the same sequence.
- */
-async function captureFileNames(
-  context: CliContext,
-  quarantine: string,
-): Promise<readonly string[]> {
-  try {
-    const entries = await context.fs.readdir(quarantine, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith(CAPTURE_FILE_SUFFIX))
-      .map((entry) => entry.name)
-      .sort();
-  } catch (error) {
-    if (isMissingEntry(error)) return [];
-    throw error;
-  }
-}
-
 interface SelectedCapture {
   readonly fileName: string;
   /** `false` for a note capture, which is applied verbatim and needs no vendor. */
@@ -835,36 +811,6 @@ async function writeAttempts(
 }
 
 /* ------------------------------------------------------- reading and writing */
-
-/**
- * The capture's own path, canonicalized and proven to still be inside
- * quarantine — `review.ts` records the argument in full. The file name comes
- * from a directory listing here rather than from `--id`, so the shape check that
- * makes the path unbuildable is upstream; this is the check that makes a
- * *symlinked* component resolving out of the vault unusable.
- *
- * **`quarantine` is the canonical root `resolveContainedRoot` returned**, which
- * is what makes this containment check absolute rather than relative to whatever
- * the quarantine path happens to resolve to today.
- */
-async function resolveCapturePath(
-  context: CliContext,
-  quarantine: string,
-  fileName: string,
-): Promise<string> {
-  const target = join(quarantine, fileName);
-  await context.guards.transaction.assertTarget(target);
-
-  const canonicalTarget = await context.guards.canonicalize(target);
-  if (!containsPath(quarantine, canonicalTarget)) {
-    throw new IngestRefusal(
-      EXIT_CODES.securityRefusal,
-      "the capture resolves outside the quarantine directory",
-      [target],
-    );
-  }
-  return canonicalTarget;
-}
 
 /**
  * One `replace` mutation against a capture file, through Foundation's
@@ -1994,7 +1940,7 @@ async function ingestOne(
   let stagedHash: string | undefined;
 
   try {
-    const path = await resolveCapturePath(context, quarantine, fileName);
+    const path = await resolveCapturePath(context, quarantine, fileName, (message, paths) => new IngestRefusal(EXIT_CODES.securityRefusal, message, paths));
     capturePath = path;
 
     let asRead = "";
@@ -2234,19 +2180,6 @@ async function ingestOne(
 }
 
 /* -------------------------------------------------------------------- entry */
-
-/**
- * Diagnostics redacted with the key this command loaded, not with whatever the
- * context closed over — `init` records the rule, and `capture` and `review`
- * follow it at the same point.
- */
-function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
-  return {
-    ...guards,
-    redactDiagnostic: (text: string, scope?: RedactionScope): string =>
-      redact(text, scope).text,
-  };
-}
 
 function isIndexNoteShape(
   value: unknown,

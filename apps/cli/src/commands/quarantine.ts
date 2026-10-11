@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { dirname, join } from "node:path";
 
-import { hashBytes, validateChangePlan } from "@developer-os/core";
+import { containsPath, hashBytes, validateChangePlan } from "@developer-os/core";
 import type {
   DeveloperOsConfigV1,
   InstallationManifestV1,
@@ -28,6 +28,51 @@ export const QUARANTINE_SEGMENTS = ["_raw", "quarantine"] as const;
 
 /** The inbox `import` drains by default, beside quarantine. Spec §5.1. */
 export const INBOX_SEGMENTS = ["_raw", "inbox"] as const;
+
+export const CAPTURE_FILE_SUFFIX = ".md";
+
+/**
+ * The capture files in quarantine, by name, sorted — which is `captureId` order, because the id
+ * **is** the file name. An absent directory holds no captures: `init` creates it, and a user who
+ * removed it has none waiting, which is an answer rather than an error.
+ */
+export async function captureFileNames(context: CliContext, quarantine: string): Promise<readonly string[]> {
+  try {
+    const entries = await context.fs.readdir(quarantine, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(CAPTURE_FILE_SUFFIX))
+      .map((entry) => entry.name)
+      .sort();
+  } catch (error) {
+    if (isMissingEntry(error)) return [];
+    throw error;
+  }
+}
+
+/**
+ * The capture's own path, canonicalized and proven to still be inside quarantine, refused through
+ * `refuse` otherwise. A shape check upstream (the `--id` pattern in `review`, a directory listing in
+ * `ingest`) makes a traversal unbuildable; this one catches a *symlinked* component resolving out
+ * of the vault. Two independent checks over one value, deliberately.
+ *
+ * **`quarantine` is the canonical root `resolveContainedRoot` returned**, which is what makes this
+ * containment check absolute rather than relative to whatever the quarantine path resolves to today.
+ */
+export async function resolveCapturePath(
+  context: CliContext,
+  quarantine: string,
+  fileName: string,
+  refuse: (message: string, paths: readonly string[]) => Error,
+): Promise<string> {
+  const target = join(quarantine, fileName);
+  await context.guards.transaction.assertTarget(target);
+
+  const canonicalTarget = await context.guards.canonicalize(target);
+  if (!containsPath(quarantine, canonicalTarget)) {
+    throw refuse("the capture resolves outside the quarantine directory", [target]);
+  }
+  return canonicalTarget;
+}
 
 /** The width every other 64-bit identifier in this subsystem already uses. */
 const FINGERPRINT_LENGTH = 16;
