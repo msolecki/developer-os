@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import {
-  containsPath,
   EXIT_CODES,
   success,
   TransactionConflictError,
@@ -30,17 +29,18 @@ import type {
   ReviewDecision,
 } from "@developer-os/brain";
 import { createRedactor } from "@developer-os/security";
-import type { RedactionScope, Redactor } from "@developer-os/security";
+import type { Redactor } from "@developer-os/security";
 
 import {
   exitCodeOf,
   failureFrom,
+  guardsWith,
   loadOrCreateRedactionKey,
   renderPath,
   runtimePathsFor,
 } from "../context.js";
-import { resolveQuarantine } from "./quarantine.js";
-import type { CliContext, CliGuards } from "../context.js";
+import { CAPTURE_FILE_SUFFIX, captureFileNames, resolveCapturePath, resolveQuarantine } from "./quarantine.js";
+import type { CliContext } from "../context.js";
 import { isDirectory } from "./doctor.js";
 import { isMissingEntry, readConfigFile } from "../config-file.js";
 
@@ -108,8 +108,6 @@ export interface ReviewOptions {
    */
   readonly status?: string;
 }
-
-const CAPTURE_FILE_SUFFIX = ".md";
 
 /**
  * What `buildCapture` writes and what `parseCaptureFile` compares a filename
@@ -226,27 +224,6 @@ async function assertVaultPresent(
   }
 }
 
-/**
- * The capture files in quarantine, by name, sorted. An absent directory is an
- * empty review rather than a failure: `init` creates it, and a user who removed
- * it has no captures waiting, which is an answer rather than an error.
- */
-async function captureFileNames(
-  context: CliContext,
-  quarantine: string,
-): Promise<readonly string[]> {
-  try {
-    const entries = await context.fs.readdir(quarantine, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith(CAPTURE_FILE_SUFFIX))
-      .map((entry) => entry.name)
-      .sort();
-  } catch (error) {
-    if (isMissingEntry(error)) return [];
-    throw error;
-  }
-}
-
 interface Listing {
   readonly captures: readonly ReviewedCaptureV1[];
   readonly warnings: readonly string[];
@@ -344,40 +321,6 @@ async function envelopesByStatus(
   }
 
   return { envelopes, warnings };
-}
-
-/**
- * The capture's own path, canonicalized and proven to still be inside
- * quarantine.
- *
- * The id is already known to be 16 hex characters, so this cannot be reached by
- * a traversal in the argument; what it does catch is a *symlinked* component
- * resolving out of the vault — a directory the user replaced, or a quarantine
- * path reached through one. Two independent checks over one value, deliberately:
- * the shape check makes the path unbuildable and this one makes the resolved
- * path unusable, and a mistake in either alone is not enough.
- *
- * **`quarantine` is the canonical root `resolveContainedRoot` returned**, which
- * is what makes this containment check absolute rather than relative to whatever
- * the quarantine path happens to resolve to today.
- */
-async function resolveCapturePath(
-  context: CliContext,
-  quarantine: string,
-  fileName: string,
-): Promise<string> {
-  const target = join(quarantine, fileName);
-  await context.guards.transaction.assertTarget(target);
-
-  const canonicalTarget = await context.guards.canonicalize(target);
-  if (!containsPath(quarantine, canonicalTarget)) {
-    throw new ReviewRefusal(
-      EXIT_CODES.securityRefusal,
-      "the capture resolves outside the quarantine directory",
-      [target],
-    );
-  }
-  return canonicalTarget;
 }
 
 async function readCapture(
@@ -604,7 +547,7 @@ async function decideOne(
   target: ReviewTarget,
 ): Promise<ReviewedCaptureV1> {
   const fileName = `${target.id}${CAPTURE_FILE_SUFFIX}`;
-  const path = await resolveCapturePath(context, quarantine, fileName);
+  const path = await resolveCapturePath(context, quarantine, fileName, (message, paths) => new ReviewRefusal(EXIT_CODES.securityRefusal, message, paths));
 
   /**
    * Read as late as possible: everything above is independent of the file. The digest is
@@ -657,21 +600,6 @@ async function decideOne(
     asRead,
   );
   return reviewedRow(outcome.envelope);
-}
-
-/**
- * Diagnostics redacted with the key this command loaded, not with whatever the
- * context closed over. `init` records the rule: redact with the key you loaded,
- * at the point you loaded it — a command that fingerprinted vault content with
- * the composition root's ephemeral key would persist fingerprints nothing can
- * ever be compared against.
- */
-function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
-  return {
-    ...guards,
-    redactDiagnostic: (text: string, scope?: RedactionScope): string =>
-      redact(text, scope).text,
-  };
 }
 
 /** Configuration, vault check, contained quarantine root and the redactor, in the order `runReview` needs them. */

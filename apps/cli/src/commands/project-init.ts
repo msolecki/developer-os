@@ -10,15 +10,16 @@ import {
   validateChangePlan,
 } from "@developer-os/core";
 import type { CliResult, ExitCode } from "@developer-os/core";
-import type { RedactionScope, Redactor } from "@developer-os/security";
+import type { Redactor } from "@developer-os/security";
 
 import {
   failureFrom,
+  guardsWith,
   redactorWithoutCreatingKey,
   renderPath,
   runtimePathsFor,
 } from "../context.js";
-import type { CliContext, CliGuards } from "../context.js";
+import type { CliContext } from "../context.js";
 import { readAdmittedManifest } from "./doctor.js";
 import {
   PROJECT_TEMPLATE,
@@ -84,14 +85,6 @@ async function lstatOrNull(context: CliContext, path: string) {
     if (isMissingEntry(error)) return null;
     throw error;
   }
-}
-
-function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
-  return {
-    ...guards,
-    redactDiagnostic: (text: string, scope?: RedactionScope): string =>
-      redact(text, scope).text,
-  };
 }
 
 interface ResolvedTemplates {

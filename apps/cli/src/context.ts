@@ -426,9 +426,22 @@ export function createTransactionGuards(
       /**
        * Built-in classes only: this diagnostic redactor is built before any configuration
        * is read. Each command rebinds its own guards with a config-bound redactor as soon
-       * as it has both — see `guardsWith` in `capture.ts`, `review.ts` and `ingest.ts`.
+       * as it has both — see `guardsWith` below.
        */
       createRedactor(redactionKey)(text).text,
+  };
+}
+
+/**
+ * Diagnostics redacted with the key a command loaded, not with whatever the context closed over.
+ * `init` records the rule: redact with the key you loaded, at the point you loaded it — a command
+ * that fingerprinted vault content with the composition root's ephemeral key would persist
+ * fingerprints nothing can ever be compared against.
+ */
+export function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
+  return {
+    ...guards,
+    redactDiagnostic: (text: string, scope?: RedactionScope): string => redact(text, scope).text,
   };
 }
 

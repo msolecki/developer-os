@@ -26,7 +26,6 @@ import {
 import type { BrainConfigV1, CaptureNoteTargetV1, CaptureStatus } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
 import { createRedactor } from "@developer-os/security";
-import type { RedactionScope, Redactor } from "@developer-os/security";
 import type {
   CliInstallation,
   DiscoverCliDependencies,
@@ -34,10 +33,11 @@ import type {
 
 import {
   failureFrom,
+  guardsWith,
   loadOrCreateRedactionKey,
   runtimePathsFor,
 } from "../context.js";
-import type { CliContext, CliGuards } from "../context.js";
+import type { CliContext } from "../context.js";
 import { isDirectory } from "./doctor.js";
 import {
   PROBE_FILE_SYSTEM,
@@ -582,21 +582,6 @@ export function overBroadWarnings(indexes: readonly number[]): readonly string[]
     (index) =>
       `[redaction] patterns[${String(index)}] in config.toml matches so much of this capture that it is over-broad; narrow it if that was not intended`,
   );
-}
-
-/**
- * Diagnostics redacted with the key this command loaded, not with whatever the
- * context closed over. `init` records the rule this follows: redact with the
- * key you loaded, at the point you loaded it — a command that fingerprinted
- * captured content with the composition root's ephemeral key would persist
- * fingerprints nothing can ever be compared against.
- */
-function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
-  return {
-    ...guards,
-    redactDiagnostic: (text: string, scope?: RedactionScope): string =>
-      redact(text, scope).text,
-  };
 }
 
 /**
