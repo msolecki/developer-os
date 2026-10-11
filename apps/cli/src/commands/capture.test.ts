@@ -1230,7 +1230,9 @@ describe("runCapture --note", () => {
     );
 
     expect(result.ok && result.data.note?.path).toBe("DEV/example-knowledge-note.md");
-    expect(walked.filter((path) => path === contentRoot || path.startsWith(`${contentRoot}/`) && !path.includes("/_raw/"))).toStrictEqual([]);
+    /** Only the note's own ancestors are listed, to check its names; no other folder is walked. */
+    const listed = new Set(walked.filter((path) => path === contentRoot || path.startsWith(`${contentRoot}/`) && !path.includes("/_raw/")));
+    expect([...listed].sort()).toStrictEqual([contentRoot, join(contentRoot, "DEV")]);
   });
 
   it("admits an existing note the indexer keeps despite a non-error issue, as the index would", async () => {
@@ -1243,6 +1245,21 @@ describe("runCapture --note", () => {
     expect(result.ok && result.data.note?.beforeSha256).toBe(
       createHash("sha256").update(await nodeFs.readFile(target)).digest("hex"),
     );
+  });
+
+  it("refuses an existing destination named in a letter case the vault does not hold, at exit 2", async () => {
+    /** APFS is case-insensitive, so lstat finds `kept.md` under `Kept.md`; discovery indexes only the on-disk name. */
+    const fixture = await installedFixture("note-replace-case-mismatch");
+    await nodeFs.writeFile(join(fixture.paths.brain, "content", "DEV", "kept.md"), noteText("A kept note"));
+    const before = await inventory(fixture.paths.brain);
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: "DEV/Kept.md" });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.invalidInput,
+      "capture_note_invalid",
+    ]);
+    expect(await inventory(fixture.paths.brain)).toStrictEqual(before);
   });
 
   it("refuses an existing note whose frontmatter block the indexer will not parse, at exit 2", async () => {
