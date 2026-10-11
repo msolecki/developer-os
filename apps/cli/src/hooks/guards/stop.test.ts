@@ -96,6 +96,23 @@ function runtimeFor(cwd: string, respond: () => Promise<ProcessResult> = () => P
   return { runtime, requests };
 }
 
+/** The guard against the repo's own TypeScript, spawned for real. */
+function realTscRuntime(root: string): HookRuntime {
+  const tsc = createRequire(import.meta.url).resolve("typescript/bin/tsc");
+  return {
+    ...runtimeFor(root).runtime,
+    nodeExecutable: process.execPath,
+    runner: {
+      run: (request) =>
+        new Promise((done) => {
+          execFile(process.execPath, [tsc, ...request.args.slice(1)], { cwd: request.cwd }, (err, stdout, stderr) => {
+            done({ stdout, stderr, exitCode: err === null ? 0 : 1, signal: null, timedOut: false });
+          });
+        }),
+    },
+  };
+}
+
 function payload(stopHookActive: boolean): HookPayloadV1 {
   return { cwd: null, toolName: null, command: null, filePath: null, prompt: null, stopHookActive };
 }
@@ -195,12 +212,14 @@ describe("guardStop", () => {
       if (call === 1) {
         return Promise.resolve({ ...OK, exitCode: 1, stdout: "error TS5094: Compiler option '--noEmit' may not be used with '--build'.\n" });
       }
+      if (call === 4) return Promise.resolve(OK);
       return Promise.resolve(call === 2 ? { ...OK, exitCode: 1, stdout: "a.ts(1,1): error TS1: one\n" } : { ...OK, exitCode: 1, stdout: "b.ts(1,1): error TS2: two\n" });
     });
     const outcome = await guardStop(payload(false), runtime);
     expect(requests.slice(1).map((r) => r.args.slice(1))).toStrictEqual([
       ["--noEmit", "-p", join(root, "packages/ui", "tsconfig.json")],
       ["--noEmit", "-p", join(root, "packages/core/tsconfig.json")],
+      ["--noEmit", "-p", join(root, "tsconfig.json")],
     ]);
     expect(outcome).toStrictEqual({ kind: "block", ruleId: "typecheck", detail: "a.ts(1,1): error TS1: one\nb.ts(1,1): error TS2: two" });
   });
@@ -259,7 +278,7 @@ describe("guardStop", () => {
       return Promise.resolve(n === 1 ? { ...OK, exitCode: 1, stdout: "error TS6310: x\n" } : OK);
     });
     await guardStop(payload(false), runtime);
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(4);
   });
 
   it("allows with a note when the -p fallback fails only with TS6310 on stale references", async () => {
@@ -275,7 +294,7 @@ describe("guardStop", () => {
       });
     });
     const outcome = await guardStop(payload(false), runtime);
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(4);
     expect(outcome.kind).toBe("allow");
     expect(outcome.kind === "allow" ? outcome.note : "").toMatch(/^typecheck could not run: /u);
   });
@@ -422,6 +441,195 @@ describe("guardStop", () => {
     const { runtime } = runtimeFor(root);
     expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
     expect((await lstat(join(root, "tsconfig.tsbuildinfo"))).isDirectory()).toBe(true);
+  });
+
+  it("checks each workspace package where the root config alone fails, and still blocks a real error (NEW-245)", async () => {
+    const tsc = createRequire(import.meta.url).resolve("typescript/bin/tsc");
+    // The km-energy shape: the root globs package sources without the package's jsx.
+    const root = await project({
+      config: '{ "compilerOptions": { "strict": true, "skipLibCheck": true, "types": [] }, "include": ["packages/*/src/**/*.ts"] }',
+    });
+    await mkdir(join(root, "packages/ui/src"), { recursive: true });
+    await writeFile(
+      join(root, "packages/ui/tsconfig.json"),
+      '{ "compilerOptions": { "jsx": "preserve", "strict": true, "skipLibCheck": true, "types": [], "noEmit": true }, "include": ["src"] }',
+    );
+    await writeFile(join(root, "packages/ui/src/a.tsx"), "export const A = 1;\n");
+    await writeFile(join(root, "packages/ui/src/b.ts"), 'import { A } from "./a";\nexport const B: number = A;\n');
+    const { runtime } = runtimeFor(root);
+    const real: HookRuntime = {
+      ...runtime,
+      nodeExecutable: process.execPath,
+      runner: {
+        run: (request) =>
+          new Promise((done) => {
+            execFile(process.execPath, [tsc, ...request.args.slice(1)], { cwd: request.cwd }, (err, stdout, stderr) => {
+              done({ stdout, stderr, exitCode: err === null ? 0 : 1, signal: null, timedOut: false });
+            });
+          }),
+      },
+    };
+    const before = await guardStop(payload(false), real);
+    expect(before.kind === "block" ? before.detail : "").toContain("TS6142");
+
+    await writeFile(join(root, "pnpm-workspace.yaml"), 'packages:\n  - "packages/*"\n');
+    expect(await guardStop(payload(false), real)).toStrictEqual({ kind: "allow" });
+
+    await writeFile(join(root, "packages/ui/src/b.ts"), 'import { A } from "./a";\nexport const B: string = A;\n');
+    const broken = await guardStop(payload(false), real);
+    expect(broken.kind).toBe("block");
+    expect(broken.kind === "block" ? broken.detail : "").toContain("packages/ui/src/b.ts");
+  }, 30_000);
+
+  it("reads package.json workspaces, skips negations and packages without a tsconfig (NEW-245)", async () => {
+    const root = await project({ tsconfig: false });
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ workspaces: { packages: ["./apps/*", "packages/core", "!packages/skipped", "tools/**"] } }),
+    );
+    for (const dir of ["apps/web", "apps/docs", "packages/core", "packages/skipped", "tools/x"]) {
+      await mkdir(join(root, dir), { recursive: true });
+      if (dir !== "apps/docs") await writeFile(join(root, dir, "tsconfig.json"), "{}\n");
+    }
+    const { runtime, requests } = runtimeFor(root);
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
+    expect(requests.map((r) => r.args.slice(1))).toStrictEqual([
+      ["--noEmit", "-p", join(root, "apps/web/tsconfig.json")],
+      ["--noEmit", "-p", join(root, "packages/core/tsconfig.json")],
+    ]);
+  });
+
+  it("keeps a solution's references and tsconfig.check.json ahead of the workspace (NEW-245)", async () => {
+    const solution = await project({ config: '{ "files": [], "references": [{ "path": "packages/ui" }] }' });
+    await mkRefs(solution);
+    await writeFile(join(solution, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
+    const one = runtimeFor(solution);
+    await guardStop(payload(false), one.runtime);
+    expect(one.requests[0]?.args.slice(1)).toStrictEqual(["-b", "--noEmit", join(solution, "tsconfig.json")]);
+
+    const checked = await project({ check: true });
+    await mkRefs(checked);
+    await writeFile(join(checked, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
+    const two = runtimeFor(checked);
+    await guardStop(payload(false), two.runtime);
+    expect(two.requests.map((r) => r.args.slice(1))).toStrictEqual([["--noEmit", "-p", join(checked, "tsconfig.check.json")]]);
+  });
+
+  it("checks a references-only package (Vite's default) and passes an unbuilt composite sibling (NEW-245 review)", async () => {
+    const root = await project({ tsconfig: false });
+    await writeFile(join(root, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
+    const opts = '"strict": true, "skipLibCheck": true, "types": []';
+    await mkdir(join(root, "packages/web/src"), { recursive: true });
+    await writeFile(join(root, "packages/web/tsconfig.json"), '{ "files": [], "references": [{ "path": "./tsconfig.app.json" }] }');
+    await writeFile(join(root, "packages/web/tsconfig.app.json"), `{ "compilerOptions": { ${opts}, "composite": true, "outDir": "dist" }, "include": ["src"] }`);
+    await writeFile(join(root, "packages/web/src/a.ts"), "export const a: number = 1;\n");
+    await mkdir(join(root, "packages/lib/src"), { recursive: true });
+    await writeFile(join(root, "packages/lib/tsconfig.json"), `{ "compilerOptions": { ${opts}, "composite": true, "outDir": "dist" }, "include": ["src"] }`);
+    await writeFile(join(root, "packages/lib/src/i.ts"), "export const i = 1;\n");
+    await mkdir(join(root, "packages/app/src"), { recursive: true });
+    await writeFile(
+      join(root, "packages/app/tsconfig.json"),
+      `{ "compilerOptions": { ${opts}, "composite": true, "outDir": "dist" }, "include": ["src"], "references": [{ "path": "../lib" }] }`,
+    );
+    await writeFile(join(root, "packages/app/src/m.ts"), 'import { i } from "../../lib/src/i";\nexport const m: number = i;\n');
+    const before = await tree(root);
+    // tsc 5.9 cannot check `app` until `lib` is built (TS6310 under -b, TS6305 under -p): no false block.
+    const unbuilt = await guardStop(payload(false), realTscRuntime(root));
+    expect(unbuilt.kind === "allow" ? unbuilt.note : "").toMatch(/^typecheck could not run: /u);
+    expect(await tree(root)).toStrictEqual(before);
+
+    await writeFile(join(root, "packages/web/src/a.ts"), 'export const a: number = "s";\n');
+    const broken = await guardStop(payload(false), realTscRuntime(root));
+    expect(broken.kind === "block" ? broken.detail : "").toContain("packages/web/src/a.ts");
+    expect(await tree(root)).toStrictEqual(before);
+  }, 60_000);
+
+  it("keeps an earlier package's errors when a later one times out (NEW-245 review)", async () => {
+    const root = await project({ tsconfig: false });
+    await writeFile(join(root, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
+    await mkRefs(root);
+    const answers: ProcessResult[] = [
+      { ...OK, exitCode: 1, stdout: "packages/core/src/a.ts(1,1): error TS2322: x\n" },
+      { ...OK, exitCode: null, signal: "SIGKILL", timedOut: true },
+    ];
+    const { runtime } = runtimeFor(root, () => Promise.resolve(answers.shift() ?? OK));
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({
+      kind: "block",
+      ruleId: "typecheck",
+      detail: "packages/core/src/a.ts(1,1): error TS2322: x",
+    });
+  });
+
+  it("keeps a reference's errors when a later -p fallback run times out (NEW-245 review)", async () => {
+    const root = await project({ config: SOLUTION });
+    await mkRefs(root);
+    const answers: ProcessResult[] = [
+      { ...OK, exitCode: 1, stdout: "tsconfig.json(1,1): error TS6310: Referenced project may not disable emit.\n" },
+      { ...OK, exitCode: 1, stdout: "packages/ui/a.ts(1,1): error TS2322: x\n" },
+      { ...OK, exitCode: null, signal: "SIGKILL", timedOut: true },
+    ];
+    const { runtime } = runtimeFor(root, () => Promise.resolve(answers.shift() ?? OK));
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({
+      kind: "block",
+      ruleId: "typecheck",
+      detail: "packages/ui/a.ts(1,1): error TS2322: x",
+    });
+  });
+
+  it("allows on a timeout after only stale-reference noise, never blocking on it (NEW-245 review)", async () => {
+    const root = await project({ config: SOLUTION });
+    await mkRefs(root);
+    const answers: ProcessResult[] = [
+      { ...OK, exitCode: 1, stdout: "tsconfig.json(1,1): error TS6310: Referenced project may not disable emit.\n" },
+      { ...OK, exitCode: 2, stdout: "packages/ui/a.ts(1,1): error TS6305: Output file has not been built\n" },
+      { ...OK, exitCode: null, signal: "SIGKILL", timedOut: true },
+    ];
+    const { runtime } = runtimeFor(root, () => Promise.resolve(answers.shift() ?? OK));
+    const outcome = await guardStop(payload(false), runtime);
+    expect(outcome.kind === "allow" ? outcome.note : "").toMatch(/^typecheck timed out/u);
+  });
+
+  it("reads diagnostic codes through colour codes, so an unbuilt reference is no block (NEW-245 review)", async () => {
+    const root = await project({ config: SOLUTION });
+    await mkRefs(root);
+    const red = (text: string) => `\u001b[91m${text}\u001b[0m`;
+    let n = 0;
+    const { runtime } = runtimeFor(root, () => {
+      n += 1;
+      if (n === 1) return Promise.resolve({ ...OK, exitCode: 1, stdout: `tsconfig.json(1,1): ${red("error")} TS6310: x\n` });
+      return Promise.resolve(n === 4 ? OK : { ...OK, exitCode: 2, stdout: `a.ts(1,1): ${red("error")} TS6305: Output file has not been built\n` });
+    });
+    const outcome = await guardStop(payload(false), runtime);
+    expect(outcome.kind === "allow" ? outcome.note : "").toMatch(/^typecheck could not run: /u);
+  });
+
+  it("leaves no build info or nested outDir behind for indirect references (NEW-245 review)", async () => {
+    const root = await project({ config: '{ "files": [], "references": [{ "path": "app" }] }' });
+    const opts = '"strict": true, "skipLibCheck": true, "types": [], "composite": true, "outDir": "build/out"';
+    const chain: [string, string | null][] = [["app", "lib"], ["lib", "core"], ["core", null]];
+    for (const [name, ref] of chain) {
+      await mkdir(join(root, name, "src"), { recursive: true });
+      const refs = ref === null ? "" : `, "references": [{ "path": "../${ref}" }]`;
+      await writeFile(join(root, name, "tsconfig.json"), `{ "compilerOptions": { ${opts} }, "include": ["src"]${refs} }`);
+      await writeFile(join(root, name, "src", "i.ts"), "export const i = 1;\n");
+    }
+    const before = await tree(root);
+    const outcome = await guardStop(payload(false), realTscRuntime(root));
+    expect(outcome.kind).toBe("allow");
+    expect(await tree(root)).toStrictEqual(before);
+  }, 60_000);
+
+  it("shortens project paths so the secret screen keeps them, and still redacts a token (NEW-246)", async () => {
+    const root = await project();
+    const token = `ghp_${"SyntheticToken0".repeat(3)}`;
+    const absolute = join(root, "apps/energy-monitoring-dashboard/src/components/wartosc-energii.tsx");
+    const stdout = `src/a.ts(1,1): error TS6142: Module './wartosc' was resolved to '${absolute}', but '--jsx' is not set.\nsrc/b.ts(2,1): error TS2322: ${token}\n`;
+    const { runtime } = runtimeFor(root, () => Promise.resolve({ ...OK, exitCode: 1, stdout }));
+    const outcome = await guardStop(payload(false), runtime);
+    const detail = outcome.kind === "block" ? outcome.detail : "";
+    expect(detail).toContain("'apps/energy-monitoring-dashboard/src/components/wartosc-energii.tsx'");
+    expect(detail).not.toContain("high-entropy");
+    expect(detail).not.toContain(token.slice(0, 8));
   });
 
   it("blocks a failing typecheck with exactly the first 40 diagnostic lines", async () => {
