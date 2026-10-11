@@ -36,6 +36,7 @@ import {
   exitCodeOf,
   failureFrom,
   loadOrCreateRedactionKey,
+  renderPath,
   runtimePathsFor,
 } from "../context.js";
 import { resolveQuarantine } from "./quarantine.js";
@@ -334,7 +335,7 @@ async function envelopesByStatus(
     const outcome = parseCaptureFile(fileName, text, redact);
     if (!outcome.ok) {
       warnings.push(
-        `${fileName} is not a readable capture (${outcome.reason}), so it is failed rather than waiting for review`,
+        `${renderPath(fileName)} is not a readable capture (${outcome.reason}), so it is failed rather than waiting for review`,
       );
       continue;
     }

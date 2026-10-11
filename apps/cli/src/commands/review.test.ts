@@ -507,6 +507,21 @@ describe("runReview", () => {
     expect(result.warnings.join(" ")).toContain("unparseable");
   });
 
+  it("screens format characters out of the unreadable-capture warning (AUD-065)", async () => {
+    const fixture = await installedFixture("review-list-broken-format-characters");
+    await fixture.seed(OBSERVATION);
+    await nodeFs.writeFile(join(fixture.quarantine, "cap‮evil.md"), "not a capture at all\n", {
+      mode: 0o600,
+    });
+
+    const result = await fixture.run(fixture.context, {});
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings.join("\n")).not.toContain("‮");
+    expect(result.warnings.join("\n")).toContain("cap�evil.md is not a readable capture");
+  });
+
   it.each([
     ["accept", "accepted"],
     ["reject", "rejected"],
