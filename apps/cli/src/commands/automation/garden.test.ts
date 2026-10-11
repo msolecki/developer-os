@@ -336,6 +336,25 @@ describe("runScheduledGarden", () => {
     expect(dataOf(result).targets.gaps).toBe(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("never sends the agent a target whose read the guard refused (AUD-064)", async () => {
+    const home = await garden({ isolated: ["DEV/alpha.md", "DEV/delta.md"] });
+    const refusing = new Proxy(home.fixture.context.guards, {
+      get: (target, property): unknown =>
+        property === "readText"
+          ? (path: string, reader?: unknown, ...rest: unknown[]) =>
+              // Only the garden's own note read passes a reader; lint's build reads alpha first and must succeed.
+              path.endsWith("DEV/alpha.md") && reader !== undefined
+                ? Promise.reject(new Error("refused"))
+                : (bound(target, property) as (...args: unknown[]) => Promise<string>)(path, reader, ...rest)
+          : bound(target, property),
+    });
+    const result = await run(home, { ...home.fixture.context, guards: refusing });
+    expect(result).toMatchObject({ outcome: "success", reasonCode: "ok" });
+    expect(home.calls).toHaveLength(1);
+    expect(home.calls[0]).toContain("delta");
+    expect(home.calls[0]).not.toContain("alpha");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("refuses before spawning when the pinned executable was replaced", async () => {
     const home = await garden({ isolated: ["DEV/alpha.md"] });
     const untrusted = new Proxy(home.fixture.context.platform, {
