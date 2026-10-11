@@ -592,12 +592,11 @@ function capabilityInput(outcome: AgentOutcome | undefined): {
  */
 async function checkClaudeCapabilities(
   context: CliContext,
+  outcomes: readonly AgentOutcome[],
   probe: boolean,
   firing: FiringVerdict,
 ): Promise<Finding> {
-  const outcome = (await discoverEachAgent(context)).find(
-    (candidate) => candidate.name === "claude",
-  );
+  const outcome = outcomes.find((candidate) => candidate.name === "claude");
   const report = await reportClaudeCapabilities({
     ...capabilityInput(outcome),
     runner: context.runner,
@@ -647,12 +646,11 @@ export function codexPluginRoot(context: CliContext): string {
 
 async function checkCodexCapabilities(
   context: CliContext,
+  outcomes: readonly AgentOutcome[],
   probe: boolean,
   firing: FiringVerdict,
 ): Promise<Finding> {
-  const outcome = (await discoverEachAgent(context)).find(
-    (candidate) => candidate.name === "codex",
-  );
+  const outcome = outcomes.find((candidate) => candidate.name === "codex");
   const report = await reportCodexCapabilities({
     ...capabilityInput(outcome),
     runner: context.runner,
@@ -1671,6 +1669,7 @@ async function isCacheStale(
 
 async function checkCodexRegistration(
   context: CliContext,
+  outcomes: readonly AgentOutcome[],
   manifest: InstallationManifest | null,
   config: DeveloperOsConfigV1 | null,
   homes: VendorHomesV1,
@@ -1684,7 +1683,7 @@ async function checkCodexRegistration(
   if (files.length === 0) {
     return fail("codex-registration", "unregistered: no Codex plugin tree is installed", [pluginRoot], EXIT_CODES.operationalFailure, REGISTRATION_RECOVERY);
   }
-  const outcome = (await discoverEachAgent(context)).find((candidate) => candidate.name === "codex");
+  const outcome = outcomes.find((candidate) => candidate.name === "codex");
   const executable = outcome?.discovery?.installed === true ? outcome.discovery.executablePath : null;
   if (executable === null) {
     return warn("codex-registration", "codex CLI absent; the registration was not inspected", []);
@@ -1721,8 +1720,7 @@ async function checkCodexRegistration(
  * meant nobody whose agent lived at such a path could install at all. `status`
  * has always degraded this to a warning; this is `doctor` agreeing with it.
  */
-async function checkAgents(context: CliContext): Promise<Finding> {
-  const outcomes = await discoverEachAgent(context);
+function checkAgents(context: CliContext, outcomes: readonly AgentOutcome[]): Finding {
   const failed = outcomes.filter(raised);
   const described = describeAgents(outcomes);
   if (failed.length === 0) return pass("agents", described, []);
@@ -1944,6 +1942,8 @@ async function collectFindings(
   // Read once: `hooks` and both capability checks share one verdict (NEW-158); every read in it catches.
   const hooks = await hookReports(context, paths.stateDir, config?.adapters ?? null);
   const lifecycle = await lifecycleFindings(context);
+  // AUD-090: one discovery per run, so every agent line in the report describes the same answer.
+  const agents = await discoverEachAgent(context);
 
   return { findings: [
     platform,
@@ -1977,12 +1977,12 @@ async function collectFindings(
     await guarded(context, "release-trust", [], () => checkReleaseTrust(paths)),
     // Not through `guarded`: an informational line, never a failure.
     await checkEntrypoint(context, paths),
-    await guarded(context, "agents", [], () => checkAgents(context)),
+    await guarded(context, "agents", [], () => Promise.resolve(checkAgents(context, agents))),
     await guarded(context, "claude-capabilities", [], () =>
-      checkClaudeCapabilities(context, options.probe, hooks.claude.firing),
+      checkClaudeCapabilities(context, agents, options.probe, hooks.claude.firing),
     ),
     await guarded(context, "codex-capabilities", [], () =>
-      checkCodexCapabilities(context, options.probe, hooks.codex.firing),
+      checkCodexCapabilities(context, agents, options.probe, hooks.codex.firing),
     ),
     // Not through `guarded`: both checks catch everything and never return "fail" (`hooks.md` §3.7).
     ...await hookFindings(context, hooks),
@@ -1997,7 +1997,7 @@ async function collectFindings(
       return inspection.finding;
     }),
     await guarded(context, "codex-registration", [], () =>
-      checkCodexRegistration(context, inspected, config, homes, options.probe),
+      checkCodexRegistration(context, agents, inspected, config, homes, options.probe),
     ),
     ...evidenceFindings,
     ...await automationFindings(context),
