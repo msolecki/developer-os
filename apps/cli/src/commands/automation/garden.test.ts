@@ -454,6 +454,22 @@ describe("runScheduledGarden", () => {
     expect(await quarantined(home)).toHaveLength(0);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("binds a related proposal to the note's bytes, so a byte that is not UTF-8 still captures (AUD-064)", async () => {
+    const home = await garden({ isolated: ["DEV/delta.md"] });
+    const path = join(home.fixture.paths.brain, "content", "DEV", "delta.md");
+    const raw = (await nodeFs.readFile(path, "utf8")).replace("holds one", "holds \u0000one");
+    await nodeFs.writeFile(path, Buffer.from(raw, "utf8").map((byte) => (byte === 0 ? 0x93 : byte)));
+    expect((await runBrain(home.fixture.context, { subcommand: "reindex", query: null, limit: null, dryRun: false })).ok).toBe(true);
+    const delta = await nodeFs.readFile(path, "utf8");
+    home.reply = { proposals: [{ kind: "related", target: "DEV/delta.md", note: related(delta, ["beta", "gamma"]) }] };
+
+    const result = await run(home);
+
+    expect(result).toMatchObject({ outcome: "success", reasonCode: "ok" });
+    expect(dataOf(result).rejected).toEqual([]);
+    expect(dataOf(result).accepted.map((entry) => entry.target)).toEqual(["DEV/delta.md"]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("never captures a hub whose target appeared during the agent call", async () => {
     const home = await garden({ isolated: ["DEV/alpha.md"], gitGap: true });
     home.reply = { proposals: [{ kind: "hub", target: "DEV/git-hub.md", note: hubNote("git", GIT_NOTES.map(baseName), GIT_NOTES) }] };
