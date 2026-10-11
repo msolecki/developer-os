@@ -1288,7 +1288,7 @@ export function validateConstructionJournal(value: unknown, plan: UpdateConstruc
       legal = noCompaction && compensation !== null && compensation <= nextFile && (compensation >= 0) === (part !== null) && (compensation >= 0 ? compensationDirectory === null : compensationDirectory !== null && compensationDirectory <= nextDirectory);
       break;
     case "rolled_back":
-      legal = noCompaction && compensation === -1 && part === null && compensationDirectory === -1;
+      legal = noCompaction && compensation === -1 && part === null && compensationDirectory === -1 && directoryState === null && fileState === null;
       break;
     case "compacting":
       legal = noCompensation && handedOff && compaction !== null && compactionDirectory !== null && (compactionDirectory === 0 || compaction === 2 * F);
@@ -1327,7 +1327,7 @@ export function advanceConstructionJournal(plan: UpdateConstructionPlanV1, journ
       next = { ...base, phase: "directories_staging", directoryWriteState: { ordinal: current.nextDirectory, state: "create_intent" } };
       break;
     case "directory_created":
-      need(current.directoryWriteState?.state === "create_intent");
+      need(current.phase === "directories_staging" && current.directoryWriteState?.state === "create_intent");
       next = { ...base, directoryWriteState: { ordinal: current.nextDirectory, state: "created", dev: step.dev, ino: step.ino } };
       break;
     case "directory_complete": {
@@ -1343,25 +1343,25 @@ export function advanceConstructionJournal(plan: UpdateConstructionPlanV1, journ
       next = { ...base, fileWriteState: { ordinal: current.nextFile, state: "create_intent" } };
       break;
     case "file_created":
-      need(current.fileWriteState?.state === "create_intent");
+      need(current.phase === "files_staging" && current.fileWriteState?.state === "create_intent");
       next = { ...base, fileWriteState: { ordinal: current.nextFile, state: "created", dev: step.dev, ino: step.ino } };
       break;
     case "evidence_intent": {
       const state = current.fileWriteState;
-      need(state?.state === "created");
+      need(current.phase === "files_staging" && state?.state === "created");
       const created = state as Extract<UpdateConstructionWriteStateV1, { readonly state: "created" }>;
       next = { ...base, fileWriteState: { ordinal: created.ordinal, state: "evidence_intent", dev: created.dev, ino: created.ino } };
       break;
     }
     case "evidence_created": {
       const state = current.fileWriteState;
-      need(state?.state === "evidence_intent");
+      need(current.phase === "files_staging" && state?.state === "evidence_intent");
       const intent = state as Extract<UpdateConstructionWriteStateV1, { readonly state: "evidence_intent" }>;
       next = { ...base, fileWriteState: { ordinal: intent.ordinal, state: "evidence_created", dev: intent.dev, ino: intent.ino, evidenceDev: step.dev, evidenceIno: step.ino } };
       break;
     }
     case "file_complete": {
-      need(current.fileWriteState?.state === "evidence_created");
+      need(current.phase === "files_staging" && current.fileWriteState?.state === "evidence_created");
       const row = plan.files[current.nextFile] as UpdateConstructionFilePlanV1;
       next = { ...base, fileWriteState: null, nextFile: current.nextFile + 1 };
       if (row.role.kind === "payload" && row.role.source.kind === "planner_output") next = advanceConsumer(plan, next);
@@ -1428,7 +1428,7 @@ export function advanceConstructionJournal(plan: UpdateConstructionPlanV1, journ
           : { ...base, compensationNext: at - 1, compensationPart: "file" };
       } else {
         const directory = current.compensationDirectoryNext as number;
-        next = directory >= 0 ? { ...base, compensationDirectoryNext: directory - 1 } : { ...base, phase: "rolled_back" };
+        next = directory >= 0 ? { ...base, compensationDirectoryNext: directory - 1 } : { ...base, phase: "rolled_back", directoryWriteState: null, fileWriteState: null };
       }
       break;
     }
