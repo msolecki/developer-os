@@ -1070,6 +1070,20 @@ describe("derived coordinator phases and journal legality", () => {
     expect(check({ phase: "compacting", nextStep: plan.steps.length })).toThrow();
   });
 
+  it.each(VARIANTS)("bounds %s's compacting cursor by the derived compaction entries", (variant) => {
+    const { plan } = syntheticPlanFor(variant);
+    const check = journalChecker(plan, variant, pushHashOf(plan));
+    const boundary = expectedPointOfNoReturnIndex(variant);
+    for (const terminalOutcome of ["finalized", "rolled_back"] as const) {
+      const nextStep = terminalOutcome === "finalized" ? plan.steps.length : boundary;
+      const last = deriveTerminalCompaction(plan, terminalOutcome).entries.length - 1;
+      expect(check({ phase: "compacting", nextStep, compactionNext: last, terminalOutcome })).not.toThrow();
+      expect(check({ phase: "compacting", nextStep, compactionNext: last + 1, terminalOutcome })).toThrow(
+        /compaction cursor/,
+      );
+    }
+  });
+
   it("refuses a compensating cursor that runs ahead of the forward cursor", () => {
     const check = journalChecker(syntheticPlanFor("uninstall/present_manifest").plan, "uninstall/present_manifest", null);
     expect(check({ phase: "compensating", nextStep: 2, compensationNext: 1 })).not.toThrow();
