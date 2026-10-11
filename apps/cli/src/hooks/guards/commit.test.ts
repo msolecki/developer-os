@@ -11,7 +11,6 @@ const runtime: HookRuntime = {
   runner: { run: () => Promise.reject(new Error("no child in a commit guard test")) },
   nodeExecutable: "/synthetic/node",
   redact: (text) => text,
-  now: () => new Date(0),
   io: {
     stdout: () => undefined,
     stderr: () => undefined,

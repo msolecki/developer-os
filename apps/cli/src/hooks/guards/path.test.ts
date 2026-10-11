@@ -30,7 +30,6 @@ function runtime(userHome: string | null, cwd = project): HookRuntime {
     runner: { run: () => Promise.reject(new Error("no child in a path guard test")) },
     nodeExecutable: "/synthetic/node",
     redact: (text) => text,
-    now: () => new Date(0),
     io: {
       stdout: () => undefined,
       stderr: () => undefined,

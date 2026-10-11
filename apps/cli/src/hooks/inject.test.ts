@@ -155,7 +155,6 @@ function runtimeFor(fixture: CommandFixture, cwd: string, createContext?: HookCo
     runner: noSpawn,
     nodeExecutable: "/usr/local/bin/node",
     redact: (text) => text,
-    now: () => new Date("2026-09-22T00:00:00.000Z"),
     io: fixture.io,
     createContext: createContext ?? (() => fixture.context),
   };
