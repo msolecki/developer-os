@@ -250,6 +250,16 @@ export class BrainService {
   }
 
   /**
+   * One build, linted and handed back, for a caller that needs the notes too.
+   * `brain-garden` called `lint()` and then `reindex()`, walking and parsing the
+   * vault twice per run (AUD-086); `status()` shares its build the same way.
+   */
+  async lintWithBuild(): Promise<{ readonly lint: LintResult; readonly build: IndexBuildResult }> {
+    const build = await buildIndex(this.buildRequest());
+    return { lint: await lintBuild(build, this.lintRequest()), build };
+  }
+
+  /**
    * Index-first, per design spec §13.5: this reads one file and never opens a
    * note. Rebuilding here would make every search cost a full vault walk and
    * would quietly hide the fact that the index was stale.

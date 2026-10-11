@@ -150,9 +150,9 @@ async function garden(context: CliContext): Promise<ScheduledHandlerResultV1> {
   if (!(await exists(context, join(paths.brain, artifactPaths(brainConfig).index)))) return skipped("index_missing");
   if (hasFailingCheck(await runScheduledDoctorReport(context))) return skipped("doctor_failed");
   const service = new BrainService(dependenciesFor(context, paths.brain, config));
-  const lint = await service.lint();
+  const { lint, build } = await service.lintWithBuild();
   if (lint.errorCount > 0) return skipped("lint_errors");
-  const { notes } = (await service.reindex()).build.index;
+  const { notes } = build.index;
   const base: GardenRunDataV1 = { ...EMPTY, structural: structuralCommands(lint.findings, notes, brainConfig.contentRoot) };
   const pending = await listCaptureSummaries(context, "quarantined");
   if (pending.length >= GARDEN_REVIEW_QUEUE_LIMIT) return skipped("review_queue_full", base);
