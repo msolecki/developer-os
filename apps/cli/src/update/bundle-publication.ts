@@ -47,15 +47,14 @@ import {
   bundleSourceEvidenceSetHash,
   copyBundleEntry,
   createFresh,
-  parentPath,
   refuseBundle,
   removeBundleEntryPart,
   sameInode,
   sourceEntryPath,
-  stampAfter,
   type BundleEntryDeathPointV1,
   type BundleParticipantDependenciesV1,
 } from "./bundle-source.js";
+import { parentPath, stampAfter } from "./primitives.js";
 import type { UpdatePayloadIdentityResolverV1 } from "./state-participant.js";
 
 export type BundlePublicationDeathPointV1 = BundleEntryDeathPointV1 | "version_directory_made" | "root_made" | "metadata_renamed";

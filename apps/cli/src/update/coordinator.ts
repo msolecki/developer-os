@@ -21,6 +21,7 @@ import {
   type UpdateLifecycleCoordinatorStoreV1,
   type UpdateParticipantObservationV1,
 } from "@developer-os/core";
+import { parentPath } from "./primitives.js";
 
 /** Where a test may kill the process; each point follows one durable effect. */
 export type UpdateCoordinatorStoreDeathPointV1 =
@@ -51,10 +52,6 @@ const decoder = new TextDecoder();
 
 function refuse(reason: string, ...paths: readonly string[]): never {
   throw new LifecycleRecoveryRequiredError(reason, paths);
-}
-
-function lifecycleParentPath(path: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
-  return parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/")));
 }
 
 /** A JavaScript defect is not a verdict on the bytes and stays exit 1. */
@@ -200,7 +197,7 @@ export class UpdateCoordinatorJournalStore implements UpdateLifecycleCoordinator
   }
 
   async #root(leaf: CanonicalAbsolutePathV1): Promise<LifecycleGuardedEntryV1> {
-    const path = lifecycleParentPath(leaf);
+    const path = parentPath(leaf);
     const entry = await this.#dependencies.fs.lstat(path);
     if (entry?.kind !== "directory" || entry.ownerUid !== this.#dependencies.effectiveUid || entry.mode !== 0o700) refuse("lifecycle_ledger_root_shape", path);
     return entry;

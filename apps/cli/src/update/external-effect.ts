@@ -20,7 +20,8 @@ import {
   type UpdateParticipantObservationV1,
 } from "@developer-os/core";
 
-import { participantPlanFileHash, participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { participantPlanFileHash, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { stampAfter } from "./primitives.js";
 
 /** The concrete child the closed policy resolves to; Security's supervised runner executes it. */
 export interface OwnerEffectProcessRequestV1 {
@@ -168,7 +169,7 @@ export class OwnerExternalEffectParticipant {
   }
 
   private async persist(step: OwnerExternalEffectStepV1, journal: OwnerExternalEffectJournalV1): Promise<OwnerExternalEffectJournalV1> {
-    const next = { ...journal, updatedAt: participantTimestamp(this.#dependencies.now, journal.updatedAt) };
+    const next = { ...journal, updatedAt: stampAfter(this.#dependencies.now, journal.updatedAt) };
     await this.#dependencies.journals.rewrite(step.journal.finalPath, next);
     return next;
   }
@@ -211,7 +212,7 @@ export class OwnerExternalEffectParticipant {
       exitCode: 0,
       redactedStdoutHash: redactedHash(result.stdout, deps.redact),
       redactedStderrHash: redactedHash(result.stderr, deps.redact),
-      completedAt: participantTimestamp(deps.now, validateOwnerExternalEffectJournal(await deps.journals.readAt(step.journal.finalPath), plan).updatedAt),
+      completedAt: stampAfter(deps.now, validateOwnerExternalEffectJournal(await deps.journals.readAt(step.journal.finalPath), plan).updatedAt),
     };
     validateOwnerExternalEffectEvidence(evidence, plan, direction, to);
     await deps.journals.writeEvidence(evidencePath, evidence, plan.maximumEvidenceBytes);

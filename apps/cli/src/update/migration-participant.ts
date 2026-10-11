@@ -14,7 +14,8 @@ import {
 } from "@developer-os/core";
 
 import { applyForwardRef, committedForwardTargets, compensateForwardRef, type UpdateFoundationPortV1, type UpdateTargetHashPortV1 } from "./owner-participant.js";
-import { participantPlanFileHash, participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { participantPlanFileHash, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
+import { stampAfter } from "./primitives.js";
 
 export interface SchemaMigrationParticipantDependenciesV1 {
   readonly journals: UpdateParticipantJournalStore;
@@ -120,7 +121,7 @@ export class SchemaMigrationParticipant {
   }
 
   private async persist(step: SchemaMigrationStepV1, journal: SchemaMigrationExecutionJournalV1): Promise<SchemaMigrationExecutionJournalV1> {
-    const next = { ...journal, updatedAt: participantTimestamp(this.#dependencies.now, journal.updatedAt) };
+    const next = { ...journal, updatedAt: stampAfter(this.#dependencies.now, journal.updatedAt) };
     await this.#dependencies.journals.rewrite(step.journal.finalPath, next);
     return next;
   }

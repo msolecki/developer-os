@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { basename, dirname } from "node:path";
 
 import {
@@ -167,6 +166,7 @@ import { codexRegistrationRow } from "./codex-refresh.js";
 import { deriveTerminalManifest } from "./manifest-handler.js";
 import { rollbackCapacityComponents, UpdatePlanningRefusal } from "./planning.js";
 import type { MaterializedUpdateV1 } from "./planning.js";
+import { sha256Hex } from "./primitives.js";
 
 /** A no-follow observation of one path; `sha256` is present exactly for a regular file. */
 export interface ObservedPathV1 {
@@ -226,10 +226,6 @@ const RETIREMENT_KINDS: readonly RetirementInventoryRefV1["kind"][] = ["bundle",
 
 function refuse(reason: string, code: Exclude<ExitCode, 0>, ...paths: readonly string[]): never {
   throw new UpdatePlanningRefusal(reason, code, paths);
-}
-
-function sha256(bytes: Uint8Array | string): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
 
 function canonical(value: unknown): CanonicalJsonV1 {
@@ -692,7 +688,7 @@ class UpdateComposer {
     const planRows = planValues.map(([kind, id, value], ordinal): UpdateConstructionFileInputV1 => {
       const bytes = updateParticipantDocumentBytes(value);
       rowBytes.set(ordinal, bytes);
-      return { role: { kind: "immutable_plan", planKind: kind, id: id as SafeReasonCodeV1 }, path: updateLeafPlanPath(this.#root, kind, id), bytes: bytes.byteLength, sha256: sha256(bytes), mode: 384 };
+      return { role: { kind: "immutable_plan", planKind: kind, id: id as SafeReasonCodeV1 }, path: updateLeafPlanPath(this.#root, kind, id), bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384 };
     });
     a.sourceJournals.forEach((journal, index) => rowBytes.set(a.plans + index, journal.bytes));
     for (const journal of a.journals) rowBytes.set(journal.ref.stagedExpected.constructionOrdinal, journal.bytes);
@@ -1014,7 +1010,7 @@ class UpdateComposer {
       if (migration.domain !== "product_state") continue;
       for (const mutation of migration.mutations) rehash(mutation.path, mutation.restoreHash);
     }
-    rehash(`${this.#deps.productHome}/state/active-release.json`, sha256(active));
+    rehash(`${this.#deps.productHome}/state/active-release.json`, sha256Hex(active));
     return composed("update_composition_manifest", () => this.#deps.admitManifest({
       schemaVersion: 2,
       productVersion: target.version,
@@ -1096,7 +1092,7 @@ class UpdateComposer {
   async #retainedRecordPlan(record: CanonicalJsonV1): Promise<CanonicalStateFilePlanV1> {
     const target = path(`${this.#deps.productHome}/state/update-rollback.json`);
     const observed = await this.#deps.observe(target);
-    if (observed?.entry.kind !== "regular_file" || observed.sha256 !== sha256(record)) return refuse("update_state_changed", EXIT_CODES.operationalFailure, target);
+    if (observed?.entry.kind !== "regular_file" || observed.sha256 !== sha256Hex(record)) return refuse("update_state_changed", EXIT_CODES.operationalFailure, target);
     return composed("update_composition_state", () => validateCanonicalStateFilePlan({
       schemaVersion: 1,
       id: parseSafeReasonCode("rollback_record"),
@@ -1255,7 +1251,7 @@ class UpdateComposer {
         if (op.content?.kind !== "registration") continue;
         const bytes = encoder.encode(op.content.value);
         const ordinal = rows.ordinal();
-        owner.contentRows.set(op.targetPath, rows.add({ payloadKind: "owner_content", path: this.#payloadPath(ordinal), bytes: bytes.byteLength, sha256: sha256(bytes), mode: 384 }, ordinal));
+        owner.contentRows.set(op.targetPath, rows.add({ payloadKind: "owner_content", path: this.#payloadPath(ordinal), bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384 }, ordinal));
       }
     }
   }
@@ -1263,7 +1259,7 @@ class UpdateComposer {
   #digestRow(content: PayloadRowV1, rows: RowLedger): PayloadRowV1 {
     const bytes = updateFoundationStagedDigestBytes(content.sha256);
     const ordinal = rows.ordinal();
-    return rows.add({ payloadKind: "foundation_digest", path: this.#payloadPath(ordinal), bytes: bytes.byteLength, sha256: sha256(bytes), mode: 384, source: { kind: "plan_derived", role: "foundation_staged_digest", contentHash: content.sha256, value: `${content.sha256}\n`, valueBytes: 64 } }, ordinal);
+    return rows.add({ payloadKind: "foundation_digest", path: this.#payloadPath(ordinal), bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384, source: { kind: "plan_derived", role: "foundation_staged_digest", contentHash: content.sha256, value: `${content.sha256}\n`, valueBytes: 64 } }, ordinal);
   }
 
   /**
@@ -1296,7 +1292,7 @@ class UpdateComposer {
       payloadKind: "foundation_initial",
       path: ref.initialJournal.staged.path,
       bytes: initialJournalBytes.byteLength,
-      sha256: sha256(initialJournalBytes),
+      sha256: sha256Hex(initialJournalBytes),
       mode: 384,
       source: { kind: "plan_derived", role: "foundation_initial_journal", participant: ref, foundationPlanHash: ref.planHash, plannedBytesHash: ref.initialJournal.plannedBytesHash, value, valueBytes: initialJournalBytes.byteLength - 1 },
     }, journalOrdinal);
@@ -1569,7 +1565,7 @@ class UpdateComposer {
       // A home whose manifest never tracked the record keeps it untracked.
       if (row === undefined) continue;
       if (row.kind !== "file" || row.verification.mode !== "schema") return refuse("update_manifest_state_row", EXIT_CODES.recoveryRequired, `${stateDir}/${file}`);
-      rows.set(row.path, { ...row, productVersion: target.version, verifiedAt: this.#plannedAt, verification: { ...row.verification, installedHash: sha256(bytes) } });
+      rows.set(row.path, { ...row, productVersion: target.version, verifiedAt: this.#plannedAt, verification: { ...row.verification, installedHash: sha256Hex(bytes) } });
     }
     const add = (row: ManagedArtifactV2): void => {
       if (!rows.has(row.path)) rows.set(row.path, row);
@@ -1624,7 +1620,7 @@ class UpdateComposer {
       id: parseSafeReasonCode("retirement"),
       coordinatorId: this.#coordinatorId,
       set,
-      transitionalManifestHash: sha256(encoder.encode(canonical(transitional))),
+      transitionalManifestHash: sha256Hex(encoder.encode(canonical(transitional))),
       entries,
       maximumLeaves: entries.reduce((sum, entry) => sum + entry.leafCount, 0),
       maximumPlanBytes: MAXIMUM_LEAF_PLAN_BYTES,
@@ -1641,7 +1637,7 @@ class UpdateComposer {
   #manifestAfterRow(id: ManifestParticipantIdV1, manifest: InstallationManifestV2, rows: RowLedger): PayloadRowV1 {
     const bytes = encoder.encode(canonical(manifest));
     if (bytes.byteLength > MANIFEST_BYTES_MAXIMUM * 4) refuse("update_manifest_oversized", EXIT_CODES.capabilityUnavailable);
-    return rows.add({ payloadKind: "state_after", path: deriveManifestPayloadPath(this.#deps.productHome, this.#coordinatorId as string as SafeReasonCodeV1, id as string as SafeReasonCodeV1), bytes: bytes.byteLength, sha256: sha256(bytes), mode: 384, value: canonical(manifest) });
+    return rows.add({ payloadKind: "state_after", path: deriveManifestPayloadPath(this.#deps.productHome, this.#coordinatorId as string as SafeReasonCodeV1, id as string as SafeReasonCodeV1), bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384, value: canonical(manifest) });
   }
 
   #rowValue(row: PayloadRowV1): CanonicalJsonV1 {
@@ -1650,7 +1646,7 @@ class UpdateComposer {
 
   #stateRow(role: "release_trust" | "active_release" | "rollback_record", id: SafeReasonCodeV1, value: CanonicalJsonV1, rows: RowLedger): PayloadRowV1 {
     const bytes = encoder.encode(value);
-    return rows.add({ payloadKind: "state_after", path: this.#statePayloadPath(role, id), bytes: bytes.byteLength, sha256: sha256(bytes), mode: 384, value });
+    return rows.add({ payloadKind: "state_after", path: this.#statePayloadPath(role, id), bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384, value });
   }
 
   #metadataRows(present: readonly (ObservedPathV1 | null)[], rows: RowLedger): readonly (PayloadRowV1 | null)[] {
@@ -1658,7 +1654,7 @@ class UpdateComposer {
       if (observed !== null) return null;
       const value = this.#input.materialized.signedMetadata[ordinal] as CanonicalJsonV1;
       const bytes = encoder.encode(value);
-      return rows.add({ payloadKind: "state_after", path: this.#statePayloadPath("release_metadata", parseSafeReasonCode(`release_metadata_${String(ordinal)}`)), bytes: bytes.byteLength, sha256: sha256(bytes), mode: 384, source: { kind: "plan_derived", role: "release_metadata_after", metadata: ordinal as 0 | 1 | 2, value, valueBytes: bytes.byteLength - 1 } });
+      return rows.add({ payloadKind: "state_after", path: this.#statePayloadPath("release_metadata", parseSafeReasonCode(`release_metadata_${String(ordinal)}`)), bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384, source: { kind: "plan_derived", role: "release_metadata_after", metadata: ordinal as 0 | 1 | 2, value, valueBytes: bytes.byteLength - 1 } });
     });
   }
 
@@ -1778,7 +1774,7 @@ class UpdateComposer {
     const { target, bundleManifest } = release ?? this.#input.inputs;
     const context = {
       release: target,
-      manifestHash: sha256(encoder.encode(canonical(transitional))),
+      manifestHash: sha256Hex(encoder.encode(canonical(transitional))),
       owners: owners.map((owner) => ({ ref: owner.ref as ImmutableUpdatePlanRefV1<"owner_update">, plan: owner.plan as OwnerUpdatePlanV1, effects: owner.effect === null ? [] : [owner.effect] })),
       migrations: migrations.map((plan, index) => ({ ref: migrationRefs[index] as ImmutableUpdatePlanRefV1<"schema_migration">, plan })),
     };
@@ -1880,7 +1876,7 @@ class UpdateComposer {
 
   #sourceJournalRow(kind: "bundle_source_staging" | "rollback_payload_source", id: SafeReasonCodeV1, bytes: Uint8Array): UpdateConstructionFileInputV1 {
     const at = updateParticipantJournalPath(this.#root, kind, id);
-    return { role: { kind: "initial_journal", journalKind: kind, id, finalPath: at }, path: at, bytes: bytes.byteLength, sha256: sha256(bytes), mode: 384 };
+    return { role: { kind: "initial_journal", journalKind: kind, id, finalPath: at }, path: at, bytes: bytes.byteLength, sha256: sha256Hex(bytes), mode: 384 };
   }
 
   #initialJournals(
@@ -1908,7 +1904,7 @@ class UpdateComposer {
       const stagedPath = path(`${this.#root}/update/initial-journals/${kind}/${id}.json`);
       const finalPath = updateParticipantJournalPath(this.#root, kind, id);
       const ordinal = rows.ordinal();
-      const hash = sha256(bytes);
+      const hash = sha256Hex(bytes);
       return {
         ref: { kind, id, planHash, finalPath, stagedPath, stagedExpected: { constructionOrdinal: ordinal, hash, bytes: bytes.byteLength, mode: 384 } } as UpdateInitialJournalRefV1,
         file: { role: { kind: "initial_journal", journalKind: kind, id: id as SafeReasonCodeV1, finalPath }, path: stagedPath, bytes: bytes.byteLength, sha256: hash, mode: 384 },
@@ -1928,7 +1924,7 @@ class UpdateComposer {
     const recordBytes = records.map((record) => encoder.encode(canonical(record))) as [Uint8Array, Uint8Array];
     const staged = records.map((record, index) => {
       const bytes = recordBytes[index] as Uint8Array;
-      return { constructionOrdinal: rows.ordinal(), path: updateRecoveryExecutorStagedPath(this.#root, record.state) as UpdateExecutionPlanV1["recoveryExecutor"]["initialStaged"]["path"], bytes: bytes.byteLength, hash: sha256(bytes), mode: 384 as const };
+      return { constructionOrdinal: rows.ordinal(), path: updateRecoveryExecutorStagedPath(this.#root, record.state) as UpdateExecutionPlanV1["recoveryExecutor"]["initialStaged"]["path"], bytes: bytes.byteLength, hash: sha256Hex(bytes), mode: 384 as const };
     });
     const [initial, terminal] = records as [UpdateRecoveryExecutorRecordV1, UpdateRecoveryExecutorRecordV1];
     const [initialStaged, terminalStaged] = staged as [UpdateExecutionPlanV1["recoveryExecutor"]["initialStaged"], UpdateExecutionPlanV1["recoveryExecutor"]["initialStaged"]];

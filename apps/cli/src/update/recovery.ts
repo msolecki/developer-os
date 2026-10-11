@@ -4,7 +4,6 @@ import {
   LifecycleRecoveryRequiredError,
   decodeUpdateExecutorRecordSlot,
   deriveUpdateExecutorRecordPath,
-  parseCanonicalAbsolutePathText,
   type CanonicalAbsolutePathV1,
   type CanonicalPathEvidenceV1,
   type LifecycleCoordinatorIdV1,
@@ -20,6 +19,7 @@ import {
   type UpdateRecoveryExecutorStagedFileV1,
   MAXIMUM_RECOVERY_EXECUTOR_BYTES,
 } from "@developer-os/core";
+import { parentPath } from "./primitives.js";
 
 /** Every durable boundary of the executor-record protocol a death test may stop at. */
 export type UpdateRecoveryExecutorDeathPointV1 =
@@ -52,10 +52,6 @@ export type UpdateExecutorReplaceV1 = (source: LifecycleGuardedEntryV1, destinat
 
 function refuse(reason: string, ...paths: readonly string[]): never {
   throw new LifecycleRecoveryRequiredError(reason, paths);
-}
-
-function parentOf(path: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
-  return parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/")));
 }
 
 /**
@@ -180,7 +176,7 @@ export class UpdateRecoveryExecutorFiles implements UpdateRecoveryExecutorPortV1
   }
 
   async #syncParents(...paths: readonly CanonicalAbsolutePathV1[]): Promise<void> {
-    for (const path of new Set(paths.map(parentOf))) {
+    for (const path of new Set(paths.map(parentPath))) {
       const parent = await this.#dependencies.fs.lstat(path);
       if (parent?.kind !== "directory") refuse("update_executor_parent", path);
       await this.#dependencies.fs.syncDirectory(parent);
@@ -228,7 +224,7 @@ export async function removeOrphanTerminalExecutorRecord(
   if (held === null) return;
   if (held.record.state !== "terminal_cleanup" || held.record.coordinatorId !== coordinatorId) refuse("update_executor_record_not_terminal", held.entry.path);
   await fs.unlinkExact(held.entry);
-  const parent = await fs.lstat(parentOf(held.entry.path));
+  const parent = await fs.lstat(parentPath(held.entry.path));
   if (parent?.kind !== "directory") refuse("update_executor_parent", held.entry.path);
   await fs.syncDirectory(parent);
 }

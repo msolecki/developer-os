@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 
@@ -10,8 +9,6 @@ import {
   LifecycleRecoveryRequiredError,
   MAXIMUM_CONSTRUCTION_EVIDENCE_BYTES,
   MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES,
-  parseCanonicalAbsolutePathText,
-  parseUtcTimestamp,
   rejectUpdateStep,
   stateLeafKindForRole,
   updateConstructionEvidencePath,
@@ -34,8 +31,8 @@ import {
   type UpdateInitialJournalRefV1,
   type UpdateParticipantObservationV1,
   type UpdateStateParticipantJournalV1,
-  type UtcTimestampV1,
 } from "@developer-os/core";
+import { parentPath, sha256Hex, stampAfter } from "./primitives.js";
 
 const encoder = new TextEncoder();
 const REWRITE_FLAGS = constants.O_WRONLY | constants.O_NOFOLLOW;
@@ -45,14 +42,6 @@ export function refuseParticipant(reason: string, ...paths: readonly string[]): 
   throw new LifecycleRecoveryRequiredError(reason, paths);
 }
 
-function parentPath(path: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
-  return parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/")));
-}
-
-function sha256Hex(bytes: Uint8Array): LowerHexSha256 {
-  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
-}
-
 /**
  * The raw file hash guarded removal compares, for a plan its ref binds. The ref hash itself is
  * leaf-domain separated (D72 P7(a)), so it never equals the file's plain SHA-256.
@@ -60,11 +49,6 @@ function sha256Hex(bytes: Uint8Array): LowerHexSha256 {
 export function participantPlanFileHash(ref: ImmutableUpdatePlanRefV1, plan: unknown): LowerHexSha256 {
   if (ref.hash !== updateParticipantDocumentHash(ref.kind, plan)) refuseParticipant("update_participant_plan_ref", ref.path);
   return sha256Hex(updateParticipantDocumentBytes(plan));
-}
-
-export function participantTimestamp(now: () => Date, floor: UtcTimestampV1): UtcTimestampV1 {
-  const stamp = parseUtcTimestamp(now().toISOString());
-  return stamp > floor ? stamp : floor;
 }
 
 export interface UpdatePayloadIdentityV1 {
@@ -434,7 +418,7 @@ export class CanonicalStateParticipant {
   }
 
   private async persist(path: CanonicalAbsolutePathV1, journal: StateJournal): Promise<StateJournal> {
-    const next = { ...journal, updatedAt: participantTimestamp(this.#dependencies.now, journal.updatedAt) };
+    const next = { ...journal, updatedAt: stampAfter(this.#dependencies.now, journal.updatedAt) };
     await this.#dependencies.journals.rewrite(path, next);
     return next;
   }
