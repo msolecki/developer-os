@@ -476,7 +476,7 @@ known exception rather than reading its own gate as violated; the row is §8 of
 `git show d72287a^:docs/superpowers/BACKLOG.md`.
 
 `doctor` reports presence, type and mode with `lstat` and never a byte of the contents, warns for each
-of the four unusable states by name, and repairs nothing (`apps/cli/src/commands/doctor.ts:1155,1157-1187`).
+of the four unusable states by name, and repairs nothing (`apps/cli/src/commands/doctor.ts` — `checkRedactionKey`).
 
 ### 8.2 Scope globs resolve at the handler boundary, and the contract keeps canonical names
 

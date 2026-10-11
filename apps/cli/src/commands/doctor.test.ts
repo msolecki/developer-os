@@ -1873,6 +1873,19 @@ describe("the scheduled-safe doctor profile", () => {
     expect(spawns.length).toBeGreaterThan(0);
   });
 
+  it("asks the platform about each agent once per report (AUD-090)", async () => {
+    const fixture = await createCommandFixture("doctor-discovers-once");
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const spawns: string[] = [];
+
+    await runDoctorReport(recordingContext(fixture.context, spawns));
+
+    expect(spawns.filter((spawn) => spawn.startsWith("platform.discoverExecutable:"))).toStrictEqual([
+      "platform.discoverExecutable:claude",
+      "platform.discoverExecutable:codex",
+    ]);
+  });
+
   it("spawns nothing in the scheduled doctor profile", async () => {
     const fixture = await createCommandFixture("doctor-scheduled");
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);

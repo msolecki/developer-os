@@ -65,13 +65,11 @@ import type { InstalledFixture, VendorCall } from "./helpers.js";
  * filtering everything.
  *
  * **Every count below was measured against this tree, not copied from a plan.**
- * Two of them differ from the numbers Task 15's brief predicted, and the
- * difference is real rather than a fixture artefact:
+ * Two of them need a word on where they come from:
  *
- * - **`doctor` is eight, not four.** `discoverEachAgent` is called three times
- *   per run — once for the Claude capability reporter (`doctor.ts:410`), once
- *   for the Codex one (`:462`), once for the `agents` check (`:775`) — so six
- *   `which` calls, plus one `--version` per installed vendor.
+ * - **`doctor` is four.** `collectFindings` calls `discoverEachAgent` once per
+ *   run (AUD-090) and threads the outcomes to every agent check, so two `which`
+ *   calls, plus one `--version` per installed vendor.
  * - **`capture` is two when an agent is detected and zero when one is not.**
  *   `discoverSourceAgent` does both halves: `discoverExecutable`, then a version
  *   probe through the runner. **Both branches are reachable for both vendors
@@ -178,17 +176,9 @@ const COMMANDS: readonly CommandCase[] = [
       }),
   },
   {
-    /**
-     * **Eight pins the triple discovery, deliberately.** `discoverEachAgent` is
-     * called three times per run — `doctor.ts:410` for the Claude capability
-     * reporter, `:462` for the Codex one, `:775` for the `agents` check — which
-     * is six `which` calls plus one `--version` per installed vendor. The task
-     * report carries that as a memoization opportunity, so whoever takes it
-     * should know **this row reddens with the fix**: memoizing discovery makes
-     * the count four, and this number is the place to change.
-     */
+    /** One discovery per run (AUD-090): two `which` calls plus one `--version` per installed vendor. */
     label: "doctor",
-    localSpawns: 8,
+    localSpawns: 4,
     run: (fixture) => runDoctor(fixture.context),
   },
   {
