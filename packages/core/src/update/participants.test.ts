@@ -303,6 +303,16 @@ describe("owner update plans", () => {
     expect(() => validateOwnerUpdateJournal({ ...base, phase: "planned", planHash: sha("other") }, plan)).toThrow();
     expect(() => validateOwnerUpdateJournal({ ...base, phase: "planned", extra: 1 }, plan)).toThrow();
   });
+
+  it("binds a compacting owner journal to its finalized or rolled_back predecessor", () => {
+    const plan = buildOwner();
+    const base = { schemaVersion: 1, id: plan.id, coordinatorId, planHash: updateParticipantDocumentHash("owner_update", plan), nextForwardFoundation: 0, nextExternalEffect: 0, compensationNext: null, compactionNext: 0, createdAt: at, updatedAt: at, phase: "compacting" };
+    expect(validateOwnerUpdateJournal({ ...base, nextForwardFoundation: 1, nextExternalEffect: 1 }, plan).phase).toBe("compacting");
+    expect(validateOwnerUpdateJournal({ ...base, compensationNext: -1 }, plan).phase).toBe("compacting");
+    expect(() => validateOwnerUpdateJournal(base, plan)).toThrow(/phase/u);
+    expect(() => validateOwnerUpdateJournal({ ...base, nextForwardFoundation: 1 }, plan)).toThrow(/phase/u);
+    expect(() => validateOwnerUpdateJournal({ ...base, nextForwardFoundation: 1, nextExternalEffect: 1, compensationNext: 0 }, plan)).toThrow(/phase/u);
+  });
 });
 
 describe("owner external effects", () => {
