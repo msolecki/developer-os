@@ -1,5 +1,5 @@
 import { lstat } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 
 import { canonicalizePlannedPath } from "@developer-os/security";
 
@@ -29,5 +29,6 @@ export async function relativePathBase(vendor: HookVendor, cwd: string, projectR
 
 export async function resolveEditedPath(base: string, filePath: string): Promise<string> {
   if (filePath.includes("\0")) throw new Error("edited path contains a NUL byte");
-  return await canonicalizePlannedPath(isAbsolute(filePath) ? filePath : resolve(base, filePath));
+  // Concatenated, not `resolve`d: a lexical `..` collapse would skip a symlink before it (AUD-002 review).
+  return await canonicalizePlannedPath(isAbsolute(filePath) ? filePath : `${base}/${filePath}`);
 }
