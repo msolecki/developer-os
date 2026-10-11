@@ -21,6 +21,10 @@ import {
 import { UINT64_MAX, allocatedCounterOf } from "./ids.js";
 import { LifecycleLockShapeError, type HeldLifecycleStableLockV1 } from "./locks.js";
 import {
+  ALLOCATOR_LEAF,
+  MAX_ALLOCATOR_BYTES,
+  NONCE_FILE_BYTES,
+  NONCE_LEAF,
   encodeLifecycleIdAllocator,
   parseLifecycleIdAllocator,
   parseLifecycleInstallNonce,
@@ -57,13 +61,9 @@ export interface LifecycleIdBlockV1 {
   readonly size: number;
 }
 
-const NONCE_LEAF = "lifecycle-install-nonce";
-const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
 const LOCK_LEAF = ".lifecycle.lock";
 const TEMP_PREFIX = ".lifecycle-id-allocator.";
 const TEMP_SUFFIX = ".json.tmp";
-const NONCE_FILE_BYTES = 65;
-const MAX_ALLOCATOR_BYTES = 1_024;
 
 const encoder = new TextEncoder();
 
