@@ -1,5 +1,5 @@
 import { SecurityRefusalError } from "@developer-os/security";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_BRAIN_CONFIG } from "../schema/config.js";
 import { compareCanonical, compareRawBytes, discoverNotes } from "./discover.js";
@@ -735,6 +735,24 @@ describe("compareCanonical", () => {
     const nfc = "caf\u00e9";
     expect(compareCanonical(nfd, nfc)).toBe(0);
     expect(compareRawBytes(nfd, nfc)).not.toBe(0);
+  });
+
+  it("allocates no buffer for two ASCII names (AUD-085)", () => {
+    /** It runs inside every term and note sort; ASCII is NFC already, and its byte order is code-unit order. */
+    const from = vi.spyOn(Buffer, "from");
+    try {
+      expect(compareCanonical("B", "a")).toBeLessThan(0);
+      expect(compareCanonical("note", "note")).toBe(0);
+      expect(from).not.toHaveBeenCalled();
+    } finally {
+      from.mockRestore();
+    }
+  });
+
+  it("keeps UTF-8 byte order where it differs from UTF-16 code-unit order", () => {
+    /** U+FF21 is one code unit above a surrogate, but U+1F600's UTF-8 lead byte is higher. */
+    expect(compareCanonical("\uFF21", "\u{1F600}")).toBeLessThan(0);
+    expect(compareCanonical("a\uFF21", "a\u{1F600}")).toBeLessThan(0);
   });
 
   it("is antisymmetric and reflexive over a mixed set", () => {
