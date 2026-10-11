@@ -64,12 +64,21 @@ export const PRIVATE_FOLDERS: readonly string[] = Object.freeze([
   "templates",
 ]);
 
+// eslint-disable-next-line no-control-regex -- the range is the definition of ASCII
+const ASCII_ONLY = /^[\x00-\x7f]*$/u;
+
 /**
  * Byte order over the NFC form, not `localeCompare`. Collation is locale- and
  * ICU-version-dependent, and the determinism gate says two machines must agree
  * on the index — including two machines with different locales.
  */
 export function compareCanonical(a: string, b: string): number {
+  /**
+   * AUD-085: ASCII is already NFC and its UTF-8 byte order is its code-unit
+   * order, so the sorts over terms and paths skip two allocations a call. Not
+   * widened past ASCII: above U+FFFF UTF-16 and UTF-8 orders disagree.
+   */
+  if (ASCII_ONLY.test(a) && ASCII_ONLY.test(b)) return a < b ? -1 : a > b ? 1 : 0;
   const left = Buffer.from(a.normalize("NFC"), "utf8");
   const right = Buffer.from(b.normalize("NFC"), "utf8");
   return Buffer.compare(left, right);
