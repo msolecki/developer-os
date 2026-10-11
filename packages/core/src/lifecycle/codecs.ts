@@ -50,6 +50,7 @@ import {
   type LifecycleSubsystemV1,
 } from "./types.js";
 
+/** `validate` admits untrusted input; `encode` serializes and is not required to validate, so a caller needing a check at encode time wraps it. */
 export interface LifecycleValueCodec<T> {
   validate(value: unknown): T;
   encode(value: T): CanonicalJsonV1;
