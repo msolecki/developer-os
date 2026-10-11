@@ -2895,7 +2895,9 @@ export function renderIngest(result: IngestResultV1): readonly string[] {
   }
 
   return [
-    `Ingested ${String(result.applied.length)} capture${result.applied.length === 1 ? "" : "s"} ${result.agent === null ? "verbatim, with no agent" : `through ${result.agent}`}:`,
+    result.applied.length === 0
+      ? `No captures were ingested; ${String(result.captures.length)} unreadable in quarantine:`
+      : `Ingested ${String(result.applied.length)} capture${result.applied.length === 1 ? "" : "s"} ${result.agent === null ? "verbatim, with no agent" : `through ${result.agent}`}:`,
     ...result.captures.map(
       (capture) =>
         /**

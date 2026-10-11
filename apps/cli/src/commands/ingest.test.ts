@@ -2690,6 +2690,21 @@ describe("renderIngest, what a human is shown", () => {
     expect(text).toContain("failed");
   });
 
+  it("does not claim zero captures were ingested when only unreadable ones are listed (AUD-060)", () => {
+    const lines = renderIngest({
+      schemaVersion: 1,
+      agent: null,
+      order: [],
+      captures: [{ captureId: "00112233445566aa", status: "failed", notes: [] }],
+      applied: [],
+    });
+
+    const text = lines.join("\n");
+    expect(text).not.toContain("Ingested 0");
+    expect(lines[0]).toBe("No captures were ingested; 1 unreadable in quarantine:");
+    expect(text).toContain("00112233445566aa");
+  });
+
   it("says nothing was waiting rather than printing an empty list", () => {
     const lines = renderIngest({
       schemaVersion: 1,
