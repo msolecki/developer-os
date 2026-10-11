@@ -297,6 +297,7 @@ export async function enumerateClaudeMemory(
       const entry = await context.fs.lstat(absolute, { bigint: true });
       if (entry.isSymbolicLink()) preset.push(row(relative, "refused", "import_source_symlink"));
       else if (entry.isFile()) candidates.push({ relative, absolute, fingerprintSource: name });
+      else preset.push(row(relative, "skipped", "unsupported_type"));
     }
   }
 

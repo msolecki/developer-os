@@ -800,6 +800,18 @@ describe("import --claude-memory", () => {
     expect(touched.filter((path) => path.includes("-synthetic-link/"))).toEqual([]);
   });
 
+  it("lists a memory entry that is neither a file nor a link as skipped unsupported_type (AUD-061)", async () => {
+    const fixture = await installed("import-memory-unsupported-type");
+    await plant(projectsOf(fixture), { "-synthetic-alpha/memory/one.md": "alpha memory one" });
+    await nodeFs.mkdir(join(projectsOf(fixture), "-synthetic-alpha", "memory", "folder.md"));
+
+    const data = dataOf(await importMemory(fixture, fixture.context));
+
+    const byName = new Map(data.files.map((file) => [file.path.split("/").pop(), file]));
+    expect(byName.get("folder.md")).toMatchObject({ outcome: "skipped", reason: "unsupported_type" });
+    expect(byName.get("one.md")).toMatchObject({ outcome: "imported" });
+  });
+
   it("imports memory files, never lists a project directory, and names no vendor path", async () => {
     const fixture = await installed("import-memory");
     await plantMemoryTree(fixture);
