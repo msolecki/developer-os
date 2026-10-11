@@ -8,6 +8,10 @@
 import { join } from "node:path";
 
 import {
+  LIFECYCLE_ALLOCATOR_LEAF,
+  LIFECYCLE_ALLOCATOR_MAX_BYTES,
+  LIFECYCLE_INSTALL_NONCE_BYTES,
+  LIFECYCLE_INSTALL_NONCE_LEAF,
   decodeCanonicalJson,
   EXIT_CODES,
   hashBytes,
@@ -37,8 +41,6 @@ import type {
 import { PULSE_REPORT_SLOTS } from "./runtime-records.js";
 
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
-const MAX_ALLOCATOR_BYTES = 1_024;
-const MAX_NONCE_BYTES = 65;
 /** `parseLifecycleActivationRecord`'s own `decodeCanonicalJson` bound, so the read refuses at the byte the parser would. */
 const MAX_ACTIVATION_BYTES = 1_048_576;
 const GLOBAL_LOCK_BYTES = 0;
@@ -108,8 +110,8 @@ export const LIFECYCLE_RESERVATION_ROWS: readonly {
   readonly kind: "file";
   readonly mode: "ephemeral" | "content" | "schema";
 }[] = [
-  { path: "state/lifecycle-install-nonce", kind: "file", mode: "content" },
-  { path: "state/lifecycle-id-allocator.json", kind: "file", mode: "schema" },
+  { path: `state/${LIFECYCLE_INSTALL_NONCE_LEAF}`, kind: "file", mode: "content" },
+  { path: `state/${LIFECYCLE_ALLOCATOR_LEAF}`, kind: "file", mode: "schema" },
   { path: "state/git-sync.json", kind: "file", mode: "ephemeral" },
   { path: "state/uninstalling.json", kind: "file", mode: "ephemeral" },
   ...SCHEDULED_JOB_IDS.flatMap((job) => [
@@ -245,7 +247,7 @@ async function ownedJournalRoot(
  * `nonce_allocator_mismatch` instead of collapsing into `allocator_invalid`.
  */
 function declaredInstallNonce(bytes: Uint8Array): LifecycleInstallNonceV1 {
-  const value = decodeCanonicalJson(bytes, MAX_ALLOCATOR_BYTES);
+  const value = decodeCanonicalJson(bytes, LIFECYCLE_ALLOCATOR_MAX_BYTES);
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("the lifecycle allocator is not a JSON object");
   }
@@ -282,14 +284,14 @@ export async function admitInstalledV2Home(input: {
     validateManifestV2(decodeCanonicalJson(observed.bytes, MAX_MANIFEST_BYTES), input.manifestAdmission));
   assertCompleteLifecycleReservations(manifest, paths.home);
 
-  const noncePath = join(paths.stateDir, "lifecycle-install-nonce");
-  const nonceEntry = await ownedRegular(fs, noncePath, effectiveUid, MAX_NONCE_BYTES, "nonce_invalid");
-  const nonceBytes = await fs.readRegular(nonceEntry, MAX_NONCE_BYTES);
+  const noncePath = join(paths.stateDir, LIFECYCLE_INSTALL_NONCE_LEAF);
+  const nonceEntry = await ownedRegular(fs, noncePath, effectiveUid, LIFECYCLE_INSTALL_NONCE_BYTES, "nonce_invalid");
+  const nonceBytes = await fs.readRegular(nonceEntry, LIFECYCLE_INSTALL_NONCE_BYTES);
   const nonce = parsing("nonce_invalid", noncePath, () => parseLifecycleInstallNonce(nonceBytes));
 
-  const allocatorPath = join(paths.stateDir, "lifecycle-id-allocator.json");
-  const allocatorEntry = await ownedRegular(fs, allocatorPath, effectiveUid, MAX_ALLOCATOR_BYTES, "allocator_invalid");
-  const allocatorBytes = await fs.readRegular(allocatorEntry, MAX_ALLOCATOR_BYTES);
+  const allocatorPath = join(paths.stateDir, LIFECYCLE_ALLOCATOR_LEAF);
+  const allocatorEntry = await ownedRegular(fs, allocatorPath, effectiveUid, LIFECYCLE_ALLOCATOR_MAX_BYTES, "allocator_invalid");
+  const allocatorBytes = await fs.readRegular(allocatorEntry, LIFECYCLE_ALLOCATOR_MAX_BYTES);
   const allocator = parsing("allocator_invalid", allocatorPath, () =>
     parseLifecycleIdAllocator(allocatorBytes, declaredInstallNonce(allocatorBytes)));
   if (allocator.installNonce !== nonce) refuse("nonce_allocator_mismatch", allocatorPath);

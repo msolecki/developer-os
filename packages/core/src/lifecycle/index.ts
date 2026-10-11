@@ -165,6 +165,10 @@ export type {
   LifecycleStableLockProviderV1,
 } from "./locks.js";
 export {
+  ALLOCATOR_LEAF as LIFECYCLE_ALLOCATOR_LEAF,
+  MAX_ALLOCATOR_BYTES as LIFECYCLE_ALLOCATOR_MAX_BYTES,
+  NONCE_FILE_BYTES as LIFECYCLE_INSTALL_NONCE_BYTES,
+  NONCE_LEAF as LIFECYCLE_INSTALL_NONCE_LEAF,
   encodeLifecycleIdAllocator,
   encodeUninstallingMarker,
   parseLifecycleBootstrapLock,

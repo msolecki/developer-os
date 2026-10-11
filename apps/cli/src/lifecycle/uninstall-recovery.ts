@@ -7,7 +7,7 @@
  */
 import { join } from "node:path";
 
-import { EXIT_CODES, parseCanonicalAbsolutePathText, success } from "@developer-os/core";
+import { LIFECYCLE_ALLOCATOR_LEAF, LIFECYCLE_INSTALL_NONCE_LEAF, EXIT_CODES, parseCanonicalAbsolutePathText, success } from "@developer-os/core";
 import type {
   CanonicalAbsolutePathV1,
   CliResult,
@@ -47,8 +47,6 @@ import {
 import type { LifecycleUninstallRequestV1, UninstallHoldsV1 } from "./uninstall.js";
 
 const GLOBAL_LOCK_LEAF = ".lifecycle.lock";
-const NONCE_LEAF = "lifecycle-install-nonce";
-const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
 const GLOBAL_LOCK_MODE = 0o600;
 
 export type UninstallDispatchV1 =
@@ -281,8 +279,8 @@ async function admitControlFileMicrostate(
   paths: RuntimePaths,
   required: "microstate" | "absent",
 ): Promise<void> {
-  const nonce = await guardedEntry(lifecycle.fs, stateLeaf(paths, NONCE_LEAF));
-  const allocator = await guardedEntry(lifecycle.fs, stateLeaf(paths, ALLOCATOR_LEAF));
+  const nonce = await guardedEntry(lifecycle.fs, stateLeaf(paths, LIFECYCLE_INSTALL_NONCE_LEAF));
+  const allocator = await guardedEntry(lifecycle.fs, stateLeaf(paths, LIFECYCLE_ALLOCATOR_LEAF));
   if (required === "absent") {
     if (nonce !== null) refuse("lifecycle_install_nonce_retained", nonce.path);
     if (allocator !== null) refuse("lifecycle_id_allocator_retained", allocator.path);

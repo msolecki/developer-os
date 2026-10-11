@@ -5,6 +5,8 @@ import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import {
+  LIFECYCLE_ALLOCATOR_LEAF,
+  LIFECYCLE_INSTALL_NONCE_LEAF,
   BOOTSTRAP_MAX_JOURNAL_BYTES,
   BOOTSTRAP_MAX_PLAN_BYTES,
   admitBootstrapFoundationInitialJournal,
@@ -1802,8 +1804,8 @@ export class BootstrapExecutor {
     const jobs = SCHEDULED_JOB_IDS;
     return [
       join(stateDir, ".lifecycle.lock"),
-      join(stateDir, "lifecycle-install-nonce"),
-      join(stateDir, "lifecycle-id-allocator.json"),
+      join(stateDir, LIFECYCLE_INSTALL_NONCE_LEAF),
+      join(stateDir, LIFECYCLE_ALLOCATOR_LEAF),
       join(stateDir, "git-sync.json"),
       join(stateDir, "uninstalling.json"),
       join(stateDir, "update-rollback.json"),
@@ -2051,8 +2053,8 @@ export class BootstrapExecutor {
     });
 
     const fileRefs = new Map<string, BootstrapExpectedPayloadRefV1>();
-    fileRefs.set(join(paths.stateDir, "lifecycle-install-nonce"), nonceRef);
-    fileRefs.set(join(paths.stateDir, "lifecycle-id-allocator.json"), allocatorRef);
+    fileRefs.set(join(paths.stateDir, LIFECYCLE_INSTALL_NONCE_LEAF), nonceRef);
+    fileRefs.set(join(paths.stateDir, LIFECYCLE_ALLOCATOR_LEAF), allocatorRef);
     for (const mutation of forwardMutations) {
       if (mutation.stagedPath !== null && mutation.content != null && mutation.digest != null) {
         fileRefs.set(mutation.stagedPath, mutation.content);
@@ -2061,8 +2063,8 @@ export class BootstrapExecutor {
     }
     for (const reservation of this.runtimeReservationPaths().filter((path) =>
       path !== join(paths.stateDir, ".lifecycle.lock") &&
-      path !== join(paths.stateDir, "lifecycle-install-nonce") &&
-      path !== join(paths.stateDir, "lifecycle-id-allocator.json"))) {
+      path !== join(paths.stateDir, LIFECYCLE_INSTALL_NONCE_LEAF) &&
+      path !== join(paths.stateDir, LIFECYCLE_ALLOCATOR_LEAF))) {
       fileRefs.set(reservation, addPayload(
         { kind: "constant_empty", role: "empty_reservation" },
         new Uint8Array(),
@@ -2471,7 +2473,7 @@ export class BootstrapExecutor {
       }
       const schemaId = path === paths.configFile
         ? "developer-os-config-v1"
-        : path === join(paths.stateDir, "lifecycle-id-allocator.json")
+        : path === join(paths.stateDir, LIFECYCLE_ALLOCATOR_LEAF)
           ? "lifecycle-id-allocator-v1"
           : path === join(paths.stateDir, "active-release.json")
             ? "active-release-record-v1"
