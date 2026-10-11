@@ -68,6 +68,15 @@ function refuse(path: string, error: unknown): never {
   throw new LifecycleLockShapeError(path);
 }
 
+/** A failing spawn or descriptor call says nothing about the lock file's shape or presence. */
+async function operational<T>(path: string, work: Promise<T>): Promise<T> {
+  try {
+    return await work;
+  } catch {
+    throw new LifecycleLockUnavailableError(path);
+  }
+}
+
 async function releaseHeld(
   locks: readonly HeldLifecycleStableLockV1[],
 ): Promise<void> {
@@ -102,9 +111,9 @@ export class MacOsStableLockProvider implements LifecycleStableLockProviderV1 {
         uid,
       );
       handle = await this.dependencies.fs.open(path, OPEN_FLAGS);
-      requireStableLockShape(await handle.stat({ bigint: true }), path, uid, identity);
+      requireStableLockShape(await operational(path, handle.stat({ bigint: true })), path, uid, identity);
 
-      const result = await this.dependencies.runner.acquire(handle.fd);
+      const result = await operational(path, this.dependencies.runner.acquire(handle.fd));
       if (result.exitCode === EX_TEMPFAIL && result.signal === null) {
         throw new LifecycleLockBusyError(path);
       }
@@ -112,7 +121,7 @@ export class MacOsStableLockProvider implements LifecycleStableLockProviderV1 {
         throw new LifecycleLockUnavailableError(path);
       }
 
-      requireStableLockShape(await handle.stat({ bigint: true }), path, uid, identity);
+      requireStableLockShape(await operational(path, handle.stat({ bigint: true })), path, uid, identity);
       requireStableLockShape(
         await this.dependencies.fs.lstat(path, { bigint: true }),
         path,

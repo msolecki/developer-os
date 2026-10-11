@@ -529,6 +529,23 @@ describe.runIf(process.platform === "darwin")("MacOsStableLockProvider", () => {
     expect(recording.opens.map((open) => open.closed)).toStrictEqual([true]);
   });
 
+  it.each(["ENOENT", "EMFILE"])("treats a lockf spawn failure (%s) as recovery-required, not tampering or absence", async (code) => {
+    const fixture = await homeWithLock(`lockf-spawn-${code}`);
+    const recording = recordingFileSystem();
+
+    const refusal = await new MacOsStableLockProvider({
+      fs: recording.fs,
+      runner: { acquire: () => Promise.reject(Object.assign(new Error(`synthetic ${code}`), { code })) },
+      getUid: currentUid,
+    })
+      .acquireExisting(fixture.lockPath)
+      .catch((error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(LifecycleLockUnavailableError);
+    expect((refusal as LifecycleLockUnavailableError).code).toBe(6);
+    expect(recording.opens.map((open) => open.closed)).toStrictEqual([true]);
+  });
+
   it("keeps an unreadable lock path a security refusal", async () => {
     const path = "/home/state/.lifecycle.lock" as CanonicalAbsolutePathV1;
 
