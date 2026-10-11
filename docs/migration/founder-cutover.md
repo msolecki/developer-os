@@ -789,6 +789,10 @@ restored from backup.
 
 ## Step 19 — Close the cutover and archive the legacy repository
 
+**Amended 2026-10-11 (D97).** Step 18 is waived, and the `<legacy-shared-repo>` bullet below is done
+differently: the remote is archived, and the local checkout was packed into an owner-only offline
+archive and deleted. The other bullets still apply.
+
 The cutover is complete when step 16 passed, step 18 was exercised once, and the founder then used
 Developer OS as the primary runtime for one stable cycle: one full week of daily use in which the
 manual weekly run of step 14 happened and no rollback was needed.
