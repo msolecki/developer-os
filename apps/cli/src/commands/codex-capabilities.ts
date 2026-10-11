@@ -8,6 +8,8 @@ import type { CodexCapabilities, ProbeObservation } from "@developer-os/adapter-
 
 import type { ProcessRunner } from "@developer-os/security";
 
+import { firingOnly, summarise, withFiring } from "./capability-report.js";
+
 export interface CodexCapabilityRequest {
   /** From `discoverExecutable`; `null` when Codex is not installed. */
   readonly executablePath: string | null;
@@ -96,26 +98,6 @@ function allUnknown(): CodexCapabilities {
   return Object.freeze(resolved);
 }
 
-const FIRING_KEYS = ["plugin_hooks", "session_start_injection"] as const;
-
-/** NEW-65: listing is not firing, so only these two keys are taken from the records. */
-function firingOnly(
-  observations: ReadonlyMap<string, ProbeObservation> | undefined,
-): ReadonlyMap<string, ProbeObservation> {
-  const kept = new Map<string, ProbeObservation>();
-  for (const key of FIRING_KEYS) {
-    const observation = observations?.get(key);
-    if (observation !== undefined) kept.set(key, observation);
-  }
-  return kept;
-}
-
-function summarise(capabilities: CodexCapabilities): string {
-  return CODEX_CAPABILITY_KEYS.map(
-    (key) => `${key}=${capabilities[key]}`,
-  ).join(" ");
-}
-
 /**
  * The capability matrix product spec §11 asks `doctor` to print, for Codex.
  *
@@ -140,7 +122,7 @@ export async function reportCodexCapabilities(
       version: null,
       capabilities,
       captureVia: "command",
-      summary: `codex=absent ${summarise(capabilities)}`,
+      summary: `codex=absent ${summarise(CODEX_CAPABILITY_KEYS, capabilities)}`,
     };
   };
 
@@ -157,7 +139,7 @@ export async function reportCodexCapabilities(
       version: null,
       capabilities,
       captureVia: "command",
-      summary: `codex=unreadable ${summarise(capabilities)}`,
+      summary: `codex=unreadable ${summarise(CODEX_CAPABILITY_KEYS, capabilities)}`,
     };
   };
 
@@ -184,7 +166,7 @@ export async function reportCodexCapabilities(
       version: installation.version,
       capabilities,
       captureVia: "command",
-      summary: `codex=${installation.version} not-probed ${summarise(capabilities)}`,
+      summary: `codex=${installation.version} not-probed ${summarise(CODEX_CAPABILITY_KEYS, capabilities)}`,
     };
   }
 
@@ -192,10 +174,7 @@ export async function reportCodexCapabilities(
     runner: request.runner,
     pluginRoot: request.pluginRoot,
   });
-  const merged = new Map(probed.observations);
-  for (const key of FIRING_KEYS) merged.delete(key);
-  for (const [key, observation] of firing) merged.set(key, observation);
-  const capabilities = resolveCapabilities(installation.version, merged);
+  const capabilities = resolveCapabilities(installation.version, withFiring(probed.observations, firing));
 
   return {
     installed: true,
@@ -205,6 +184,6 @@ export async function reportCodexCapabilities(
     // used to name the wrapper here, chosen by `session_end_capture === "yes"`;
     // that key is `not-used` unconditionally now, so the branch was dead.
     captureVia: "command",
-    summary: `codex=${installation.version} ${summarise(capabilities)}`,
+    summary: `codex=${installation.version} ${summarise(CODEX_CAPABILITY_KEYS, capabilities)}`,
   };
 }
