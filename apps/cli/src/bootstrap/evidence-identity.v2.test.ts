@@ -423,6 +423,31 @@ describe("bootstrap evidence identity on a real V2 home", () => {
     await expect(assertOrdinaryCommandAdmitted(requestFor(fixture))).resolves.toBeUndefined();
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("selects no evidence journal when a valid record sits in the other slot's file (AUD-049)", async () => {
+    const fixture = await createCommandFixture("bootstrap-evidence-swapped-slots", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_manifest_publish",
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const { text, uuid } = await decoySource(fixture);
+    const plan = await onlyPersistedPlan(fixture);
+    const [first, second] = await Promise.all(plan.journalSlots.map(async (slot) => {
+      const bytes = await nodeFs.readFile(slot.path);
+      return bytes.byteLength === 0 ? null : JSON.parse(bytes.toString("utf8")) as unknown;
+    }));
+    const admitted = admitBootstrapEvidencePlan(JSON.parse(text), {
+      productHome: fixture.paths.home as never,
+      stateDirectory: fixture.paths.stateDir as never,
+      expectedId: `fi_${uuid}` as never,
+    });
+    const odd = [first, second].find((value) => (value as { slot?: unknown } | null)?.slot === 1);
+    expect(odd).toBeDefined();
+    expect(selectBootstrapEvidenceJournal(admitted, [first, second])).not.toBeNull();
+    expect(selectBootstrapEvidenceJournal(admitted, [second, first])).toBeNull();
+    expect(selectBootstrapEvidenceJournal(admitted, [odd, null])).toBeNull();
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("admits a completed home beside a truncated plan that carries the current manifest hash (NEW-140)", async () => {
     const fixture = await createCommandFixture("bootstrap-gate-truncated-decoy", { bootstrapAvailable: true });
     await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });

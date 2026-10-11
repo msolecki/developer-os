@@ -167,16 +167,18 @@ export function selectBootstrapEvidenceJournal(
   plan: FreshV2InitPlanV1,
   values: readonly [unknown, unknown],
 ): BootstrapJournalSelectionV1 | null {
-  const admitted = values.flatMap((value) => {
+  const indexed = values.flatMap((value, index) => {
     try {
-      return [validateBootstrapJournal(plan, value)];
+      return [{ index, journal: validateBootstrapJournal(plan, value) }];
     } catch {
       return [];
     }
   });
+  if (indexed.some(({ index, journal }) => journal.slot !== index)) return null;
+  const admitted = indexed.map(({ journal }) => journal);
   admitted.sort((left, right) => BigInt(left.sequence) < BigInt(right.sequence) ? 1 : -1);
   const current = admitted[0];
-  if (current === undefined || current.slot !== Number(BigInt(current.sequence) % 2n)) return null;
+  if (current === undefined) return null;
   const previous = admitted[1];
   if (
     previous !== undefined &&
