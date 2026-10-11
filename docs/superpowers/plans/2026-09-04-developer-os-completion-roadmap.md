@@ -369,6 +369,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D97 (2026-10-11), founder: retire the legacy shared runtime now.** The founder used Developer OS
+  as the primary runtime since steps 1–15 (2026-09-28/29) with no rollback, and the live vendor homes
+  hold no reference to `<legacy-shared-repo>` (Codex hooks included, so step 19's NEW-104 wait no
+  longer applies). Cutover step 18 (the exercised rollback) is **waived**, and step 19's "archived,
+  never deleted" is amended: the last local commit was pushed, the remote repository is archived on
+  the host, the local checkout, the legacy plugin copy and the retired launchd plist backups were
+  packed into one owner-only offline archive and then deleted. A rollback now starts from the archived
+  remote. Steps 16 and 19's vault-tooling removal and result files stay open under A15.
 - **D96 (2026-10-07), founder: Task 11b plan answers.** Q1: keg-path ancestors follow D83 (3) — group
   write admitted only on a directory the current uid owns, other write always refused (Homebrew's
   `Cellar` and `opt` are `drwxrwxr-x <user>`). Q2: the packer builds both architectures in one run and
@@ -646,9 +654,9 @@ Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; s
 - [x] Steps 1–15 executed on the live machine (steps 8–10 on 2026-09-28 under D69 and D74, steps
   11–15 on 2026-09-28/29; `ORDER.md` has the evidence). The runs found NEW-114 (closed), NEW-115,
   NEW-116 and the ingest fixes `588c866d`, `cb19f7c6`, `26807aed` and `3ebc505d`.
-- [ ] Steps 16–18 (per-adapter gate cycle, exercised rollback) after one week of use; step 19 after one
-  stable cycle; Codex hook approval after 2026-10-22. Do not delete the legacy repositories; archive
-  them after one stable cycle.
+- [ ] Step 16 (per-adapter gate cycle) and step 19's remainder (vault legacy tooling, result files);
+  Codex hook approval after 2026-10-22. Step 18 is waived and the legacy shared repository is retired
+  (D97, 2026-10-11).
 
 Gate: one complete capture → review → ingest → search → reinstall → uninstall cycle on the live machine; rollback to the legacy runtime exercised.
 

@@ -57,7 +57,7 @@ Strict sequence; do not start a blocked row early.
 
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
-| A15 | DOS-P8 Founder migration (D58) — `docs/migration/founder-cutover.md` | — | rollback to the legacy runtime is exercised and one stable cycle completes | steps 1–15 done 2026-09-28/29; 16–18 after a week of use, 19 after one stable cycle |
+| A15 | DOS-P8 Founder migration (D58) — `docs/migration/founder-cutover.md` | — | step 16 passes and step 19's remainder is done | steps 1–15 done 2026-09-28/29; step 18 waived and the legacy shared repository retired (D97, 2026-10-11); open: step 16, step 19's vault tooling and result files |
 | A11b | DOS-P7 remainder: Task 11b (NEW-111, NEW-112, NEW-118, NEW-163, NEW-171) — Spec 2 block "Amended 2026-10-07 (D84, Task 11b)" | — (D94 designed it) | `update` reaches a real release on a disposable install, then on the founder machine | code complete 2026-10-08 (Tasks 1–13 reviewed, on `integrate/task-11b`); NEW-200 (K8 refresh) and NEW-202 (vendor search path) code complete the same day; Task 14 is the founder's: full `npm run check`, the brew gate in a fresh macOS VM, the F4 reinstall |
 | A16 | DOS-P9 Public beta and v1 — `specs/2026-10-07-developer-os-release-publication-design.md` | A11b, L1, L2 | `v1.0.0` is published and reproducible | spec approved 2026-10-07; plan `plans/2026-10-08-a16-release-publication.md` Tasks 1–10 done 2026-10-08 (on `integrate/task-11b`); Task 11 (first tag) blocked on A11b's Task 14, L1, L2 |
 
@@ -118,7 +118,7 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 ## Count
 
-- Product sequence: 3 open entries — A15 (steps 16–19), A11b (Task 14, founder), A16 (Task 11, with L1, L2).
+- Product sequence: 3 open entries — A15 (steps 16, 19), A11b (Task 14, founder), A16 (Task 11, with L1, L2).
 - Founder stop points: 7, listed above.
 - Startable rows: 1 (NEW-132); NEW-193 (4) waits for Codex after 2026-10-22. Founder action: NEW-183 (permission
   rule). Founder design: the distribution design (NEW-163, NEW-171). Awaiting founder numbers: NEW-116.
