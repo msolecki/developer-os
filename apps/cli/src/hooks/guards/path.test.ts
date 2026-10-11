@@ -237,6 +237,17 @@ describe("guard path", () => {
     expect(await run(join(home, ".claude", "skills", "developer-os-extra", "SKILL.md"), "Write")).toStrictEqual({ kind: "allow" });
   });
 
+  it("leaves the product home's instructions/ user-override tree writable (AUD-005 review)", async () => {
+    expect(await run(join(home, ".developer-os", "instructions", "claude", "skills", "mine", "SKILL.md"), "Write")).toStrictEqual({ kind: "allow" });
+    for (const path of ["config.toml", "releases/1.0.0/x.js", "bin/developer-os.mjs", "instructions-evil/x"]) {
+      expect(await run(join(home, ".developer-os", path), "Write")).toMatchObject({ kind: "block", ruleId: "product-state" });
+    }
+    await mkdir(join(home, ".developer-os", "instructions"), { recursive: true });
+    await mkdir(join(home, ".developer-os", "releases"));
+    await symlink(join(home, ".developer-os", "releases"), join(home, ".developer-os", "instructions", "claude"));
+    expect(await run(join(home, ".developer-os", "instructions", "claude", "x.js"), "Write")).toMatchObject({ kind: "block", ruleId: "product-state" });
+  });
+
   it("ignores a tool that is not a file matcher", async () => {
     expect(await run(".env", "Read")).toStrictEqual({ kind: "allow" });
   });
