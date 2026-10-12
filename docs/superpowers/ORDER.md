@@ -64,10 +64,9 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate (one worktree each):
 
-- NEW-213..NEW-232 (the 2026-10-10 audit, `audits/2026-10-10-full-audit.md`), one implementation session
-  each, in order: NEW-213 (S01, P1: update retirement cap, drain lock) and NEW-214 (S02, P1: dangling-symlink
-  path bypass) first, then the P2 sessions NEW-215..NEW-217, then P3. In flight: plan
-  `plans/2026-10-10-audit-fixes.md`; sessions that overlap NEW-210 wait for it.
+- NEW-213..NEW-232 (the 2026-10-10 audit, `audits/2026-10-10-full-audit.md`): all 21 sessions are fixed
+  on `integrate/audit-2026-10-10` (plan `plans/2026-10-10-audit-fixes.md`); the rows close when the founder's
+  `npm run check` passes on that branch. Their open decisions are NEW-251..NEW-258.
 - NEW-132 (the full recovery sweeps; its blockers closed 2026-10-07; needs a quiet machine, ~8 h sharded).
 
 
@@ -117,6 +116,6 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 - Product sequence: 2 open entries — A15 (steps 16, 19), A16 (Task 11, with L1, L2); A11b closed (D98).
 - Founder stop points: 6, listed above.
-- Startable rows: 21 (NEW-132, NEW-213..NEW-232); NEW-193 (4) waits for Codex after 2026-10-22. Founder decision: NEW-212.
+- Startable rows: 1 (NEW-132); NEW-213..NEW-232 await the founder's `npm run check`; NEW-251..NEW-258 await founder decisions; NEW-193 (4) waits for Codex after 2026-10-22. Founder decision: NEW-212.
   Awaiting founder numbers: NEW-116.
-- Repository backlog: 52 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
+- Repository backlog: 60 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
