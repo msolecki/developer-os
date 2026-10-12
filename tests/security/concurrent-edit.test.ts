@@ -107,7 +107,7 @@ describe("a capture that changed under the command writing it", () => {
    * is `flock(2)` and not a fixture's bookkeeping.
    *
    * "Two ingests, one lock" is deliberately **not** what this drives: `ingest`
-   * runs four transactions per capture with four ids, so two concurrent runs
+   * runs three transactions per capture and one reindex per run, each with its own id, so two concurrent runs
    * interleave and neither refuses. A case written that way would pass for the
    * wrong reason on a fast machine and fail on a slow one.
    */

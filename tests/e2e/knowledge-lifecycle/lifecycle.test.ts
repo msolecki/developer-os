@@ -244,7 +244,7 @@ describe("the knowledge pipeline, against the compiled binary", () => {
         { captureId, status: "accepted", note: null, redactionCount: 0 },
       ]);
 
-      /** 4. One agent call, nine validators, four transactions, a reindex. */
+      /** 4. One agent call, nine validators, three transactions, then the run's one reindex. */
       const ingested = await runJson<IngestResultV1>(sandbox, [
         "ingest",
         "--agent",

@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
@@ -1040,6 +1041,79 @@ describe("runIngest, the status ladder", () => {
       const text = await nodeFs.readFile(join(indexes, name), "utf8");
       for (const index of [0, 1, 2]) expect(text).toContain(`DEV/once-${String(index)}.md`);
     }
+  });
+
+  /** Makes the run's one `ingest-reindex` throw `code`, as a refused index write would. */
+  function failReindex(fixture: IngestFixture, code: number): void {
+    const execute = fixture.context.executor.execute.bind(fixture.context.executor);
+    vi.spyOn(fixture.context.executor, "execute").mockImplementation(async (plan) => {
+      if (plan.kind === "ingest-reindex") {
+        throw Object.assign(new Error("synthetic reindex failure"), { code });
+      }
+      return execute(plan);
+    });
+  }
+
+  it("names every capture ingested and only the index stale when the run's reindex fails (AUD-089)", async () => {
+    const fixture = await installedFixture("ingest-reindex-fails");
+    const seeded = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+    ].sort(byId);
+    fixture.reply((call) => {
+      const index = seeded.findIndex((capture) => call.args.join("\n").includes(`Capture ${capture.id}`));
+      return oneNote(seeded[index]?.id ?? "", `DEV/stale-${String(index)}.md`, `Stale ${String(index)}`);
+    });
+    failReindex(fixture, EXIT_CODES.recoveryRequired);
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.message).toContain("ingest ingested all 2 captures, and only the index is stale");
+    expect(result.error.message).toContain("synthetic reindex failure");
+    for (const capture of seeded) {
+      expect(result.error.message).toContain(`${capture.id} ingested`);
+      expect(await fixture.statusOf(capture.id)).toBe("ingested");
+    }
+    expect(result.error.recovery).toContain("developer-os brain reindex");
+    const report = result.error.data as unknown as {
+      readonly ingested: readonly { readonly captureId: string }[];
+      readonly refused: readonly unknown[];
+    };
+    expect(report.ingested.map((capture) => capture.captureId)).toStrictEqual(seeded.map((capture) => capture.id));
+    expect(report.refused).toStrictEqual([]);
+  });
+
+  it("keeps the refusal report when the run's reindex also fails, warns, and exits with the graver class (AUD-089)", async () => {
+    const fixture = await installedFixture("ingest-reindex-fails-beside-refusal");
+    const [landing, refusing] = [
+      await fixture.seedAccepted("an observation that lands"),
+      await fixture.seedAccepted("an observation over an existing note"),
+    ];
+    fixture.reply((call) =>
+      call.args.join("\n").includes(`Capture ${landing.id}`)
+        ? oneNote(landing.id, "DEV/lands.md", "Lands")
+        : /** `init`'s template already holds it, so `applyNotes` refuses (exit 1). */
+          oneNote(refusing.id, "DEV/example-knowledge-note.md", "Over an existing note"),
+    );
+    failReindex(fixture, EXIT_CODES.securityRefusal);
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    /** The refusal alone is exit 1; the reindex failure's class wins. */
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    expect(result.error.message).toContain("could not finish 1 of 2 captures");
+    const report = result.error.data as unknown as {
+      readonly refused: readonly { readonly captureId: string }[];
+    };
+    expect(report.refused.map((refusal) => refusal.captureId)).toStrictEqual([refusing.id]);
+    const warning = fixture.io.err.find((line) => line.includes("the vault index was not rebuilt"));
+    expect(warning).toContain("warning:");
+    expect(warning).toContain("developer-os brain reindex");
   });
 
   it("processes captures in captureId order when no refusal is on record, so two runs do the same work in the same sequence", async () => {
@@ -2484,6 +2558,34 @@ describe("runIngest, the agent call", () => {
     expect(second.indexOf("- DEV/written-first.md")).toBeLessThan(untrusted);
     /** The index excerpt is refreshed from what the run wrote, not read once. */
     expect(second).toContain("Written first");
+  });
+
+  it("keeps this run's notes in the excerpt across a hand-edit re-read of the index (NEW-116, NEW-40, AUD-089)", async () => {
+    const fixture = await installedFixture("ingest-overlay-survives-reread");
+    await writeIndex(fixture, []);
+    const [first, edited, last] = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+      await fixture.seedAccepted("the third observation"),
+    ].sort(byId);
+    if (first === undefined || edited === undefined || last === undefined) throw new Error("three captures seeded");
+    const indexPath = join(fixture.content, "_indexes", "index.json");
+    fixture.reply((call) => {
+      const prompt = call.args.join("\n");
+      if (prompt.includes(`Capture ${first.id}`)) return oneNote(first.id, "DEV/overlaid.md", "Overlaid note");
+      /** A hand edit of the index during the second call: valid JSON, different bytes. */
+      appendFileSync(indexPath, "\n");
+      return nothingProposed();
+    });
+
+    await fixture.run();
+
+    expect(fixture.calls).toHaveLength(3);
+    expect(await fixture.statusOf(edited.id)).not.toBe("ingested");
+    const third = fixture.calls[2]?.args.join("\n") ?? "";
+    expect(third).toContain(`Capture ${last.id}`);
+    /** Re-read from the hand-edited index, which predates the note, and still shown. */
+    expect(third).toContain("Overlaid note");
   });
 
   it("does not retry a refused capture within the same run (NEW-116)", async () => {

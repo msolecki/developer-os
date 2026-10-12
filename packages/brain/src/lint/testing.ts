@@ -15,7 +15,7 @@ const FIXTURES = fileURLToPath(
 );
 
 /**
- * The four artifacts a clean reindex produces. A thin alias now: `lint`, this
+ * The five artifacts a clean reindex produces. A thin alias now: `lint`, this
  * helper and `BrainService.reindex` all call one `renderArtifacts`, so the
  * claim that they agree is structural rather than a promise in a comment.
  */

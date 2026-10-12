@@ -192,7 +192,7 @@ export async function assertGitSameDevice(
   }
 }
 
-/** The enumerated notes plus the four artifacts, admitted, unique and in unsigned UTF-8 order. */
+/** The enumerated notes plus the five index artifacts, admitted, unique and in unsigned UTF-8 order. */
 export async function enumerateGitScopePaths(
   enumerator: GitScopeEnumeratorV1,
   scope: GitScopeSnapshotV1,
