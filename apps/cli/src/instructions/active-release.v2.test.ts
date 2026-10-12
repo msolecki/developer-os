@@ -20,7 +20,7 @@ afterAll(removeCommandFixtures);
 const CLAUDE = "/opt/synthetic/bin/claude";
 const encoder = new TextEncoder();
 const INSTRUCTIONS = [
-  { relativePath: "catalog.json", bytes: encoder.encode(`${JSON.stringify({ schemaVersion: 1, artifacts: [{ category: "skill", id: "triage", legacyName: "triage", vendors: ["claude"], thinCommand: false }] })}\n`), mode: 0o600 },
+  { relativePath: "catalog.json", bytes: encoder.encode(`${JSON.stringify({ schemaVersion: 1, artifacts: [{ category: "skill", id: "triage", vendors: ["claude"], thinCommand: false }] })}\n`), mode: 0o600 },
   { relativePath: "skills/triage/SKILL.md", bytes: encoder.encode("---\nname: triage\ndescription: Triage a defect.\n---\nTriage.\n"), mode: 0o600 },
 ] as const;
 const CLAUDE_ONLY = {
@@ -39,7 +39,7 @@ type Vendors = { readonly [key in "agents" | "runner"]: NonNullable<FixtureOptio
 
 const CODEX = "/opt/synthetic/bin/codex";
 const BOTH_INSTRUCTIONS = [
-  { relativePath: "catalog.json", bytes: encoder.encode(`${JSON.stringify({ schemaVersion: 1, artifacts: [{ category: "rule", id: "careful", legacyName: "careful", vendors: ["claude", "codex"], thinCommand: false }, { category: "skill", id: "triage", legacyName: "triage", vendors: ["claude", "codex"], thinCommand: false }] })}\n`), mode: 0o600 },
+  { relativePath: "catalog.json", bytes: encoder.encode(`${JSON.stringify({ schemaVersion: 1, artifacts: [{ category: "rule", id: "careful", vendors: ["claude", "codex"], thinCommand: false }, { category: "skill", id: "triage", vendors: ["claude", "codex"], thinCommand: false }] })}\n`), mode: 0o600 },
   { relativePath: "rules/careful.md", bytes: encoder.encode("Be careful.\n"), mode: 0o600 },
   INSTRUCTIONS[1],
 ] as const;

@@ -39,10 +39,10 @@ type Vendor = "claude" | "codex";
 const CATALOG = {
   schemaVersion: 1,
   artifacts: [
-    { category: "output-style", id: "terse", legacyName: "terse", vendors: ["claude", "codex"], thinCommand: false },
-    { category: "rule", id: "careful", legacyName: "careful", vendors: ["claude", "codex"], thinCommand: false },
-    { category: "scoped-rule", id: "typescript", legacyName: "typescript", vendors: ["claude", "codex"], thinCommand: false },
-    { category: "skill", id: "triage", legacyName: "triage", vendors: ["claude", "codex"], thinCommand: false },
+    { category: "output-style", id: "terse", vendors: ["claude", "codex"], thinCommand: false },
+    { category: "rule", id: "careful", vendors: ["claude", "codex"], thinCommand: false },
+    { category: "scoped-rule", id: "typescript", vendors: ["claude", "codex"], thinCommand: false },
+    { category: "skill", id: "triage", vendors: ["claude", "codex"], thinCommand: false },
   ],
 } as const;
 

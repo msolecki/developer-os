@@ -4,9 +4,9 @@ import { InstructionCatalogInvalidError, validateInstructionCatalog } from "./ca
 
 const WORKFLOWS: ReadonlySet<string> = new Set(["brain-search", "capture", "doctor", "ingest", "review"]);
 
-const skill = { category: "skill", id: "spec", legacyName: "spec", vendors: ["claude", "codex"], thinCommand: true };
-const agent = { category: "agent", id: "qa-expert", legacyName: "qa-expert", vendors: ["claude", "codex"], thinCommand: false };
-const rule = { category: "rule", id: "security", legacyName: "security.md", vendors: ["claude", "codex"], thinCommand: false };
+const skill = { category: "skill", id: "spec", vendors: ["claude", "codex"], thinCommand: true };
+const agent = { category: "agent", id: "qa-expert", vendors: ["claude", "codex"], thinCommand: false };
+const rule = { category: "rule", id: "security", vendors: ["claude", "codex"], thinCommand: false };
 
 function catalog(artifacts: readonly unknown[]): unknown {
   return { schemaVersion: 1, artifacts };
@@ -29,7 +29,7 @@ describe("validateInstructionCatalog", () => {
     refuses({ artifacts: [] });
     refuses({ schemaVersion: 2, artifacts: [] });
     refuses(catalog([{ ...rule, extra: 1 }]));
-    refuses(catalog([Object.fromEntries(Object.entries(rule).filter(([key]) => key !== "legacyName"))]));
+    refuses(catalog([Object.fromEntries(Object.entries(rule).filter(([key]) => key !== "thinCommand"))]));
     refuses(null);
     refuses([]);
   });
@@ -58,6 +58,5 @@ describe("validateInstructionCatalog", () => {
     refuses(catalog([{ ...rule, category: "vendor-file" }]));
     refuses(catalog([{ ...rule, id: "developer-os-security" }]));
     refuses(catalog([{ ...skill, id: "capture" }]));
-    refuses(catalog([{ ...rule, legacyName: "" }]));
   });
 });

@@ -350,7 +350,7 @@ const INSTRUCTIONS: readonly ReleaseFileV1[] = [
     relativePath: "catalog.json",
     bytes: encoder.encode(`${JSON.stringify({
       schemaVersion: 1,
-      artifacts: [{ category: "rule", id: "careful", legacyName: "careful", vendors: ["claude"], thinCommand: false }],
+      artifacts: [{ category: "rule", id: "careful", vendors: ["claude"], thinCommand: false }],
     })}\n`),
     mode: 0o600,
   },

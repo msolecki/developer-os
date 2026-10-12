@@ -6,7 +6,6 @@ import type { InstructionCategoryV1, InstructionIdV1 } from "./bounds.js";
 export interface InstructionCatalogRowV1 {
   readonly category: Exclude<InstructionCategoryV1, "command" | "vendor-file">;
   readonly id: InstructionIdV1;
-  readonly legacyName: string;
   readonly vendors: readonly ("claude" | "codex")[];
   readonly thinCommand: boolean;
 }
@@ -27,8 +26,7 @@ export class InstructionCatalogInvalidError extends Error {
 }
 
 const CATEGORIES: ReadonlySet<string> = new Set(["rule", "scoped-rule", "output-style", "agent", "skill"]);
-const ROW_KEYS = ["category", "id", "legacyName", "thinCommand", "vendors"];
-const encoder = new TextEncoder();
+const ROW_KEYS = ["category", "id", "thinCommand", "vendors"];
 
 function invalid(): never {
   throw new InstructionCatalogInvalidError();
@@ -40,7 +38,7 @@ function isExactRecord(value: unknown, keys: readonly string[]): value is Record
 
 function row(value: unknown, workflowIds: ReadonlySet<string>): InstructionCatalogRowV1 {
   if (!isExactRecord(value, ROW_KEYS)) invalid();
-  const { category, id, legacyName, thinCommand, vendors } = value;
+  const { category, id, thinCommand, vendors } = value;
   if (typeof category !== "string" || !CATEGORIES.has(category)) invalid();
   if (typeof id !== "string") invalid();
   let parsed: InstructionIdV1;
@@ -50,7 +48,6 @@ function row(value: unknown, workflowIds: ReadonlySet<string>): InstructionCatal
   } catch {
     invalid();
   }
-  if (typeof legacyName !== "string" || legacyName.length === 0 || encoder.encode(legacyName).byteLength > 256) invalid();
   if (typeof thinCommand !== "boolean" || (thinCommand && category !== "skill")) invalid();
   if (
     !Array.isArray(vendors) ||
@@ -64,7 +61,6 @@ function row(value: unknown, workflowIds: ReadonlySet<string>): InstructionCatal
   return {
     category: category as InstructionCatalogRowV1["category"],
     id: parsed,
-    legacyName,
     vendors: [...(vendors as ("claude" | "codex")[])],
     thinCommand,
   };
