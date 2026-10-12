@@ -101,8 +101,8 @@ our enabled tree and `skills=unknown` when it could not be read. DOS-P6 removed 
 by this product and resolve to `not-used` before either gate (`CODEX_NOT_USED_KEYS`). `subagents`
 left that list with D87 (NEW-186): the catalog agents ship as `agents/developer-os-<id>.toml`.
 `codex plugin list --json` does not list agents, so no probe settles the key and it reports
-`unknown`. A role carries only `AGENT_TOML_KEYS` (`packages/adapter-codex/src/agent-toml.ts` —
-`renderAgentToml`), so it is prompt-only: the four catalog agents that describe themselves as
+`unknown`. A role carries only `name`, `description` and `developer_instructions`
+(`packages/adapter-codex/src/agent-toml.ts` — `renderAgentToml`), so it is prompt-only: the four catalog agents that describe themselves as
 read-only (`code-reviewer`, `performance-engineer`, `research-analyst`, `security-auditor`) are
 read-only on Codex by instruction alone and run under the parent session's sandbox, so in a
 `workspace-write` session they can edit files. `sandbox_mode` is an accepted role key (§15, "agent
@@ -244,7 +244,7 @@ stays declined.
 ## 6. Rendering — the skill body is shared
 
 **The two adapters differ only in frontmatter, artifact path and manifest.** The body — the
-preamble, the refusals, the steps, the recovery block, the screen seam and the overlay call — comes
+preamble, the refusals, the steps, the recovery block, and the screen seam — comes
 from `renderSkillBody` in `packages/workflow-schema/src/skill.ts`, moved there by DOS-P5 Task 3 and
 ratified by the founder on 2026-08-12. **Amended 2026-10-11 (AUD-094):** the frontmatter and the
 artifact path, identical in both adapters, followed it into `renderSkillFile` in the same file, so
