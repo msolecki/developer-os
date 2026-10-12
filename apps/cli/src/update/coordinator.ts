@@ -21,7 +21,7 @@ import {
   type UpdateLifecycleCoordinatorStoreV1,
   type UpdateParticipantObservationV1,
 } from "@developer-os/core";
-import { deathPoints, parentPath } from "./primitives.js";
+import { parentPath } from "./primitives.js";
 
 /** Where a test may kill the process; each point follows one durable effect. */
 export type UpdateCoordinatorStoreDeathPointV1 =
@@ -30,14 +30,6 @@ export type UpdateCoordinatorStoreDeathPointV1 =
   | "envelope_journal_removed"
   | "envelope_lock_removed"
   | "envelope_plan_removed";
-
-export const UPDATE_COORDINATOR_STORE_DEATH_POINTS = deathPoints<UpdateCoordinatorStoreDeathPointV1>({
-  rewrite_temp_written: true,
-  rewrite_renamed: true,
-  envelope_journal_removed: true,
-  envelope_lock_removed: true,
-  envelope_plan_removed: true,
-});
 
 export interface UpdateCoordinatorJournalStoreDependenciesV1 {
   readonly fs: LifecycleGuardedFileSystemV1;

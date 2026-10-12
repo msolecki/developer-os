@@ -45,9 +45,23 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createCanonicalPathEvidence } from "../bootstrap/admission.js";
-import { BUNDLE_PUBLICATION_DEATH_POINTS, BundlePublicationParticipant, type BundlePublicationDeathPointV1 } from "./bundle-publication.js";
+import { BundlePublicationParticipant, type BundlePublicationDeathPointV1 } from "./bundle-publication.js";
 import { BundleSourceExecutor, type VerifiedScratchBundleV1 } from "./bundle-source.js";
 import { stageSourceConstruction, type SourceConstructionV1 } from "./rollback-testing.js";
+import { deathPoints } from "./testing.js";
+
+const BUNDLE_PUBLICATION_DEATH_POINTS = deathPoints<BundlePublicationDeathPointV1>({
+  journal_rewritten: true,
+  version_directory_made: true,
+  root_made: true,
+  entry_created: true,
+  entry_written: true,
+  evidence_created: true,
+  evidence_written: true,
+  metadata_renamed: true,
+  compensation_step: true,
+  compaction_step: true,
+});
 
 const encoder = new TextEncoder();
 const sha = (value: Uint8Array | string): LowerHexSha256 => parseLowerHexSha256(createHash("sha256").update(value).digest("hex"));

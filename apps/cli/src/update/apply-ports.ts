@@ -1318,8 +1318,8 @@ type ConstructionScreenV1 = (bytes: Uint8Array, scope: RedactionScope) => void;
  * The Security secret screen over staged construction bytes: any finding refuses before a byte
  * lands. Built from `redactorOf`, so it refuses without a key and carries the user's patterns.
  */
-export async function constructionScreen(context: CliContext, redactorFor: typeof redactorOf = redactorOf): Promise<ConstructionScreenV1> {
-  const redactor = await redactorFor(context);
+export async function constructionScreen(context: CliContext): Promise<ConstructionScreenV1> {
+  const redactor = await redactorOf(context);
   return (bytes, scope) => {
     if (redactor(decoder.decode(bytes), scope).findings.length > 0) refuse("update_construction_secret", EXIT_CODES.securityRefusal);
   };

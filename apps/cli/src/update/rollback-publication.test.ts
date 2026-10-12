@@ -20,7 +20,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { BundleGuardedIo } from "./bundle-source.js";
 import {
-  ROLLBACK_PUBLICATION_DEATH_POINTS,
   RollbackPayloadParticipant,
   verifyRetainedRollbackPayload,
   type RollbackPublicationDeathPointV1,
@@ -36,6 +35,20 @@ import {
   stageRollbackSource,
   type RollbackSourceFixtureV1,
 } from "./rollback-testing.js";
+import { deathPoints } from "./testing.js";
+
+const ROLLBACK_PUBLICATION_DEATH_POINTS = deathPoints<RollbackPublicationDeathPointV1>({
+  journal_rewritten: true,
+  structure_made: true,
+  entry_created: true,
+  entry_written: true,
+  evidence_created: true,
+  evidence_written: true,
+  metadata_created: true,
+  metadata_written: true,
+  compensation_step: true,
+  compaction_step: true,
+});
 
 const homes: string[] = [];
 const uid = process.getuid?.() ?? -1;

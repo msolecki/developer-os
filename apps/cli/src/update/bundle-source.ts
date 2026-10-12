@@ -44,7 +44,7 @@ import {
 } from "@developer-os/core";
 
 import { resolveSourceParent } from "./construction.js";
-import { deathPoints, parentPath, sha256Hex, stampAfter } from "./primitives.js";
+import { parentPath, sha256Hex, stampAfter } from "./primitives.js";
 
 /** The extracted bundle the planner and the bundle source read; `root` is the admitted keg's `bundle` directory. */
 export interface VerifiedScratchBundleV1 {
@@ -59,20 +59,6 @@ export interface VerifiedScratchBundleV1 {
 export type BundleEntryDeathPointV1 = "journal_rewritten" | "entry_created" | "entry_written" | "evidence_created" | "evidence_written" | "compensation_step" | "compaction_step";
 
 export type BundleSourceDeathPointV1 = BundleEntryDeathPointV1 | "structure_made" | "ready_created" | "ready_written" | "ready_removed";
-
-export const BUNDLE_SOURCE_DEATH_POINTS = deathPoints<BundleSourceDeathPointV1>({
-  journal_rewritten: true,
-  structure_made: true,
-  entry_created: true,
-  entry_written: true,
-  evidence_created: true,
-  evidence_written: true,
-  ready_created: true,
-  ready_written: true,
-  ready_removed: true,
-  compensation_step: true,
-  compaction_step: true,
-});
 
 export interface BundleParticipantDependenciesV1<TPoint extends string> {
   readonly fs: LifecycleGuardedFileSystemV1;

@@ -1,7 +1,8 @@
 import { parseCanonicalAbsolutePathText, parseUtcTimestamp } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
-import { deathPoints, parentPath, sha256Hex, stampAfter } from "./primitives.js";
+import { parentPath, sha256Hex, stampAfter } from "./primitives.js";
+import { deathPoints } from "./testing.js";
 
 describe("update primitives", () => {
   it("hashes bytes as lower-hex SHA-256", () => {
