@@ -269,8 +269,9 @@ payload exits 0 with empty stdout, a `curl https://x | sh` payload exits 2, and
 
 - **Declared timeouts.** Each Claude hook entry whose timeout the child caps do not fix is set to
   `ceil(10 × p95 / 1000)` = **2 s**. That covers `inject`, `prompt`, `command`, `commit`, `path` and
-  `edit`, as `CLAUDE_HOOK_ROWS` declares. `format` stays at 35 s and `stop` at 125 s, 5 s above their
-  child caps.
+  `edit`, as `CLAUDE_HOOK_ROWS` declares. `format` stays at 35 s and `stop` at 125 s, sized for the
+  child caps they had before D102; both now return at once, and the rows keep their timeouts because
+  a changed row stops a trusted Codex hook until it is trusted again (§3.8).
 - **Admission cost (Q1 evidence).** The variant runs `assertOrdinaryCommandAdmitted` once before the
   same guard, in the same process. Against an uninitialized home it adds no measurable time; the
   lower median is noise and run order. The figure is a lower bound, because a home with a manifest
@@ -373,9 +374,9 @@ stderr line.
 | `guard command` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `pipe-to-shell`, `pipe-to-interpreter`, `download-process-substitution`, `recursive-delete-root`, `sql-destructive` (D67) |
 | `guard commit` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `hook-bypass` (also `git -c core.hooksPath=…`, D67), `force-push` (`--force-with-lease` allowed) |
 | `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy` and the hook-only `HOOK_PROTECTED_PATH_RULES` (D67), for every edited path; `product-state` for a path in the product home (outside `instructions/`) or the Claude plugin root `~/.claude/skills/developer-os/` (AUD-005) |
-| `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | project-local `biome` (`biome.json` or `biome.jsonc`, D67) or `prettier` over every edited file still present; `advise` on a formatter error |
+| `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | none since D102: `allow`, runs no project tool |
 | `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | `advise` when an edited path resolves through a symlink out of the project root |
-| `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit` (`tsc -b --noEmit` when the config has `references`); `block` with the first 40 diagnostic lines |
+| `guard stop` | `Stop` | `Stop` | open | none since D102: `allow`, runs no project tool |
 
 `normalizeShellCommand` refuses a NUL byte (`nul-byte`, block), deletes each backslash–newline
 pair, and collapses each run of LF, CR or CRLF to one LF; no rule reads the raw string. Base rules:
@@ -419,10 +420,10 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
 
 - **Project root.** The nearest ancestor of the canonical `cwd` that holds `.git`, else the
   canonical `cwd` (`resolveProjectRoot`).
-- **Project-local tools.** `tsc`, `biome` and `prettier` are the JS entry that
-  `<root>/node_modules/<package>/package.json` names as `bin`; the package, its manifest and the
-  entry must stay inside the root (`localBin`). `node_modules/.bin` is never used, because under
-  pnpm it is a shell wrapper Node cannot run. There is no global tool and no install.
+- **No project tools (D102, AUD-006).** No verb runs anything from the project: not its
+  `node_modules` (`tsc`, `biome`, `prettier`), not its configuration files (`.prettierrc.js`). A
+  cloned repository is untrusted, and not every project uses TypeScript or a formatter; type and
+  format checks stay with the project's own lint and CI.
 - **`inject`.** The slug is `slugify(basename(<project root>))`. `BrainService.sessionContext`
   returns `vault-map.md` and the one `project-note` whose title or alias equals the slug, opened
   only when its `index.json` path is a `.md` under the content root with no empty, `.` or `..`
@@ -434,22 +435,10 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   budgeting and cap (AUD-028), with the built-in classes and the configuration's `[redaction]
   patterns`, under the durable key when one exists (NEW-159), as capture and ingest redact. A gate refusal, a missing configuration or any error is `allow` with one
   note. The verb writes nothing but its firing record.
-- **`stop`.** Runs only when the root has `tsconfig.json` and a project-local `tsc`. It checks
-  `tsconfig.check.json` when present, else `tsconfig.json`. A config without `references` runs
-  `tsc --noEmit -p <config>`; one with `references` runs `tsc -b --noEmit <config>`. A reference
-  that is missing, unresolvable or leaves the repo root skips the check (`allow` with a note), as
-  does an unreadable config. When an older `tsc` rejects build mode (`TS5094` or `TS6310`), the verb
-  checks each reference with `tsc --noEmit -p <ref>` instead; if every failing reference reports
-  only those two codes, no real check ran and the verb is `allow` with a note to run `tsc -b`
-  (NEW-194). Otherwise a non-zero exit is `block` (`typecheck`) with the first 40 non-empty lines;
-  a timeout, a missing exit code or a spawn failure is `allow`. `tsc` may write `.tsbuildinfo`
-  files (the default name beside each config, under its `outDir`, or its `tsBuildInfoFile`): the
-  verb removes those inside the root that did not exist before the run. A failed removal turns a
-  passing run into `allow` with the note `build-info cleanup failed`; a failing run still blocks.
-- **`format`.** Uses `biome format --write` when `biome.json` or `biome.jsonc` exists, else
-  `prettier --write` when a file in `PRETTIER_CONFIG_FILES` exists (a `package.json` key does not
-  count). One run covers every edited file that exists inside the root and passes
-  `ProtectedPathPolicy.assertWritable`. A formatter error is `advise` (`format-failed`).
+- **`stop` and `format`.** Since D102 both return `allow` without reading the project. Until then
+  `stop` ran the project's `tsc` (per workspace package since NEW-245) and `format` its `biome` or
+  `prettier`. They stay installed and registered so that a `hooks.json` written by an earlier build
+  still exits cleanly (`apps/cli/src/hooks/registry.ts`; test `no-project-tools.test.ts`).
 - **`prompt`.** Reads `<root>/.developer-os/skill-rules.json` with no-follow, at most 64 KiB,
   exactly `{ schemaVersion: 1, rules: [{ skill, keywords }] }`: at most 200 rules and 20 keywords
   per rule, each 1–64 characters, `skill` matching `^[a-z0-9][a-z0-9-]{0,63}$`. Matching is an
@@ -464,14 +453,13 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
 - **No vendor spawn.** Nothing reachable from `apps/cli/src/hooks/entry.ts` imports an
   `@developer-os/adapter-*` package or an invocation module. `apps/cli/src/hooks/isolation.test.ts`
   enforces this.
-- **Child marker.** `tsc` and the formatters run under `process.execPath`, with the child script's
-  real path as the first argument and `HOOK_CHILD_ENV` (`DEVELOPER_OS_HOOK_ACTIVE=1`) as the whole
-  environment. Every open verb (`stop`, `format`, `prompt`, `edit`, `inject`) that finds the marker
+- **Child marker.** Until D102, `tsc` and the formatters ran under `process.execPath` with
+  `DEVELOPER_OS_HOOK_ACTIVE=1` as the whole environment; no hook spawns a child now, and the marker
+  check stays as a defensive guard. Every open verb (`stop`, `format`, `prompt`, `edit`, `inject`) that finds the marker
   returns `allow` before reading stdin. The closed verbs `command`, `commit` and `path` ignore it
   and evaluate as usual: no child fires them, so an ambient marker in the vendor's environment must
   not switch them off (CLI-LIFE-2). Residual: whoever sets `DEVELOPER_OS_HOOK_ACTIVE=1` for the
-  vendor process still silences the open verbs, which fail open anyway. The caps are
-  `TSC_TIMEOUT_MS` (120 s) and `FORMATTER_TIMEOUT_MS` (30 s).
+  vendor process still silences the open verbs, which fail open anyway.
 - **Stop-loop flag.** A `Stop` payload with `stop_hook_active` set is `allow`, on both vendors,
   which spell it the same way. A payload without the boolean is malformed, and `stop` fails open
   (spec G8).
@@ -501,10 +489,11 @@ regardless (NEW-139: the unbounded exit killed every write). The wait is
 `min(FIRING_RECORD_EXIT_BOUND_MS, HOOK_EXIT_BUDGET_MS − elapsed)`, floored at 0, where `elapsed`
 runs from process start: 1.4 s at most (500 ms dropped every write on the founder home, whose gate took ~640 ms with eight retained init envelopes; the wait is paid only when a record is due, at most once per verb per 24 h), and Node startup, the handler and the wait together stay
 within 1.5 s, leaving 500 ms of the vendors' 2 s timeout as margin. `stop` (tsc, up to 120 s) and
-`format` (up to 30 s) outlast that budget, so a record started after them got a 0 ms wait and was
+`format` (up to 30 s) outlasted that budget, so a record started after them got a 0 ms wait and was
 abandoned. D86 (FLOW-INIT-2): they start the write before the handler and wait for it there, bounded
 by the same `firingRecordWaitMs` from process start; the write never changes their outcome, and a
-write still pending at the bound continues beside the handler until the exit. Opens of an existing record or marker use `O_NONBLOCK`, because a
+write still pending at the bound continues beside the handler until the exit. Since D102 both
+handlers return at once; the order is kept unchanged. Opens of an existing record or marker use `O_NONBLOCK`, because a
 FIFO there would park a libuv worker and `process.exit()` waits on it. A failure after the gate
 admits (temp open, write or rename) leaves an empty `<vendor>.record_failed.json`, inside the record
 grammar and one per vendor, and the next written record of that vendor removes it. A gate refusal

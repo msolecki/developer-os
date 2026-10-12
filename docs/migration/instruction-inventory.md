@@ -80,8 +80,8 @@ artifact (D51); the product workflow `developer-os-brain-search` covers the verb
 | `bash-danger-guard` | `PreToolUse(Bash)` / `pre_tool_use` | `developer-os guard command` over `packages/security` normalization; exit 2 plus stderr | shipped A13; real-agent firing unobserved until A13 Task 18 |
 | `secret-file-guard` | `PreToolUse(Edit\|Write)` / `pre_tool_use` | `developer-os guard path` over `packages/security/src/protected-paths.ts` | shipped A13; real-agent firing unobserved until A13 Task 18 |
 | `commit-guard` | `PreToolUse(Bash)` | `developer-os guard commit` | shipped A13; real-agent firing unobserved until A13 Task 18 |
-| `stop-gate` | `Stop` / `stop` | `developer-os guard stop` (local `tsc` only; honours a `tsconfig.check.json` beside a package `tsconfig.json`) | shipped A13; real-agent firing unobserved until A13 Task 18 |
-| `format-smart` | `PostToolUse` / `post_tool_use` | `developer-os guard format` (configured project formatter only, no network install) | shipped A13; real-agent firing unobserved until A13 Task 18 |
+| `stop-gate` | `Stop` / `stop` | `developer-os guard stop` (no-op since D102: hooks run no project tool, so no type check) | shipped A13; real-agent firing unobserved until A13 Task 18 |
+| `format-smart` | `PostToolUse` / `post_tool_use` | `developer-os guard format` (no-op since D102: hooks run no project tool, so no formatting) | shipped A13; real-agent firing unobserved until A13 Task 18 |
 | `skill-activator` | `UserPromptSubmit` / `user_prompt_submit` | `developer-os guard prompt` reading a project-local `skill-rules.json` | shipped A13; real-agent firing unobserved until A13 Task 18 |
 | `shared-file-warn` | `PostToolUse` | `developer-os guard edit` | shipped A13; real-agent firing unobserved until A13 Task 18 |
 | `instructions-check` | `InstructionsLoaded` | absorbed by `doctor` (drift of managed instruction artifacts) | shipped A12 (`doctor` check `instructions`) |

@@ -916,17 +916,17 @@ and retires the Foundation-era invariant — it records the execution and **not*
 which is why NEW-15 existed rather than a pointer to it. Stated here because the brief names `PATH` as
 a boundary this document must carry, and carrying it accurately means saying which half is enforced.
 
-**Hooks run the project's own tools, and the project is not trusted (AUD-006, open).** `guard stop`
-runs `node_modules/typescript`'s bin whenever `tsconfig.json` exists, and `guard format` runs a local
-`prettier` or `biome` (prettier also loads a `.prettierrc.js`), all under the hook's Node
-(`apps/cli/src/hooks/guards/child.ts` — `localBin`). `localBin` confines the path to the project
-root; it does not check provenance. So a cloned repository that commits `node_modules/typescript`
-runs its code as the user when the agent's first turn ends, with no tool call approved and no
-`npm install` run. **This is not an accepted residual; it awaits a founder decision.** The audit's
-two fixes each need one: refusing a git-tracked or undeclared tool needs a hook to spawn an admitted
-`git` (hooks have none, and `PATH` is not an option, `hooks.md` §3.8) inside the untrusted checkout,
-and a root `package.json` declaration is written by the same attacker; the alternative is a
-per-project opt-in, a product decision.
+**Hooks run no project code (AUD-006, closed by D102, 2026-10-12).** Until D102, `guard stop` ran
+`node_modules/typescript`'s bin whenever `tsconfig.json` existed, and `guard format` ran a local
+`prettier` or `biome` (prettier also loaded a `.prettierrc.js`), all under the hook's Node. A cloned
+repository that committed `node_modules/typescript` therefore ran its code as the user when the
+agent's first turn ended, with no tool call approved and no `npm install` run. The founder decided
+that hooks never run the project's own tools: both verbs are now no-ops that return `allow` without
+reading the project (`apps/cli/src/hooks/registry.ts`), and the project-tool resolver is deleted. The
+stop hook's type check and the edit-time formatting go with it; they stay with the project's own lint
+and CI. Evidence: `apps/cli/src/hooks/no-project-tools.test.ts` plants a recording `tsc`, `prettier`,
+`biome` and `.prettierrc.js` in a TypeScript fixture and runs `guard stop` and `guard format` through
+the hook entry for both vendors; none of them runs, and neither verb reaches the process runner.
 
 ### 5.12 Configuration
 
