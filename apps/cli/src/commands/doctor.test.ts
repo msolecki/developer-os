@@ -726,6 +726,27 @@ describe("runDoctor", () => {
     expect(result.error.paths).toContain(fixture.paths.configFile);
   });
 
+  it("reports a V1 artifact the guards refuse as recovery-required without its path, as V2 does (AUD-041)", async () => {
+    const fixture = await createCommandFixture("doctor-drift-refused");
+    await runInit(fixture.context, ACCEPTED);
+    const refusal = Object.assign(new Error(`Path is protected: ${fixture.paths.configFile}`), { code: EXIT_CODES.securityRefusal });
+    const context: CliContext = {
+      ...fixture.context,
+      guards: {
+        ...fixture.context.guards,
+        manifest: { assertReadable: (path) => path === fixture.paths.configFile ? Promise.reject(refusal) : fixture.context.guards.manifest.assertReadable(path) },
+      },
+    };
+
+    const drift = (await runDoctorReport(context)).checks.find((check) => check.id === "drift");
+    const result = await runDoctor(context);
+
+    expect(drift).toMatchObject({ status: "fail", message: "installation manifest is malformed or incomplete" });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+  });
+
   it("reports an unsupported platform as a capability failure", async () => {
     const unsupported = Object.assign(
       new Error("Developer OS supports macOS only; this host reports linux"),
