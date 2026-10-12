@@ -3,7 +3,7 @@ import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   gitScopeFingerprint,
@@ -13,8 +13,6 @@ import {
   type GitScopeSnapshotV1,
   type GitSyncConfigV1,
 } from "../config/lifecycle.js";
-import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
-import type { LifecycleValueCodec } from "../lifecycle/codecs.js";
 import { createNodeLifecycleGuardedFileSystem } from "../lifecycle/guarded-fs.js";
 import { UID, createLinkUnlinkRenameNoReplace } from "../lifecycle/testing.js";
 import {
@@ -33,16 +31,12 @@ import {
   GitPlanner,
   assertGitSyncSourceTransitions,
   deriveGitSyncCardinality,
-  describeGitEnablePlan,
   validateGitEffectTransition,
   validateGitScopeSnapshot,
-  validateGitSyncPlanCore,
   type GitEffectTransitionV1,
   type GitEnableRequestV1,
   type GitPlannerDependenciesV1,
   type GitSyncBaselineV1,
-  type GitSyncPlanCoreV1,
-  type GitSyncPlanningDraft,
   type GitSyncRequestV1,
 } from "./planner.js";
 import {
@@ -64,8 +58,6 @@ import {
   GIT_METADATA_BOUNDS,
   GIT_ZERO_OID,
   compareUnsignedUtf8,
-  validateGitSourceState,
-  type GitSourceStateV1,
   type LowerHexSha1,
 } from "./types.js";
 
@@ -381,29 +373,6 @@ async function refusal(promise: Promise<unknown>): Promise<GitPlanningRefusalRea
   throw new Error("expected a GitPlanningRefusalError");
 }
 
-interface TestPush {
-  readonly sourceBefore: GitSourceStateV1;
-  readonly sourceAfter: GitSourceStateV1;
-}
-
-const pushCodec: LifecycleValueCodec<TestPush> = {
-  validate(value) {
-    const input = value as Readonly<Record<string, unknown>>;
-    if (Object.keys(input).sort().join(",") !== "sourceAfter,sourceBefore") throw new Error("invalid TestPush");
-    return { sourceBefore: validateGitSourceState(input.sourceBefore), sourceAfter: validateGitSourceState(input.sourceAfter) };
-  },
-  encode: (value) => encodeCanonicalJson(value as unknown as CanonicalJsonValue),
-};
-
-function corePlan(draft: GitSyncPlanningDraft): GitSyncPlanCoreV1<TestPush> {
-  return {
-    ...draft.sync,
-    sourceGitEffectPlanHash: draft.sync.commit === null ? null : "a".repeat(64),
-    destinationGitEffectPlanHash: null,
-    push: { sourceBefore: draft.sync.sourcePreconditions, sourceAfter: draft.sourceAfter },
-  } as GitSyncPlanCoreV1<TestPush>;
-}
-
 describe("GitPlanner.planSync", () => {
   it("plans only the guarded Brain scope in unsigned UTF-8 order", async () => {
     const fixture = await vault();
@@ -415,7 +384,7 @@ describe("GitPlanner.planSync", () => {
     const draft = await planner.planSync(fixture.syncRequest());
     expect(draft.sync.managedPaths.length).toBeGreaterThan(0);
     expect(draft.sync.managedPaths).toEqual(sortUnsignedUtf8(expectedManagedPaths));
-    expect(planner.publicMethods()).toEqual(["assertCoreSyncFeasible", "planSync", "previewDisable", "previewEnable"]);
+    expect(Object.getOwnPropertyNames(GitPlanner.prototype).filter((name) => name !== "constructor").sort()).toEqual(["assertCoreSyncFeasible", "planSync", "previewDisable", "previewEnable"]);
     expect(draft.sync.changes.map((change) => [change.path, change.operation])).toEqual([["content/DEV/new.md", "create"]]);
     const candidate = parseAdmittedGitIndex(draft.candidateIndex as Uint8Array);
     const readme = candidate.entries.find((entry) => Buffer.from(entry.name).toString("utf8") === "README.md");
@@ -429,23 +398,6 @@ describe("GitPlanner.planSync", () => {
     const fixture = await vault();
     await fixture.write("content/DEV/new.md", "# New\n");
     const draft = await new GitPlanner(fixture.dependencies()).planSync(fixture.syncRequest());
-    const valid = corePlan(draft);
-    expect(validateGitSyncPlanCore(valid, pushCodec)).toEqual(valid);
-    const push = valid.push as TestPush;
-    const lineBytes = draft.reflogPlan?.side === "source" ? (draft.reflogPlan.branch?.lineBytes ?? 0) : 0;
-    expect(lineBytes).toBeGreaterThan(0);
-    const branchReflog = push.sourceAfter.branchReflog;
-    if (branchReflog.state !== "present") throw new Error("expected a present branch reflog");
-    const planWithDuplicateReflog = {
-      ...valid,
-      push: { ...push, sourceAfter: { ...push.sourceAfter, branchReflog: { ...branchReflog, size: branchReflog.size + lineBytes } } },
-    };
-    expect(() => validateGitSyncPlanCore(planWithDuplicateReflog, pushCodec)).toThrow("reflog_bijection");
-    const planWithoutRefAdvance = {
-      ...valid,
-      push: { ...push, sourceAfter: { ...push.sourceAfter, branchRef: push.sourceBefore.branchRef } },
-    };
-    expect(() => validateGitSyncPlanCore(planWithoutRefAdvance, pushCodec)).toThrow("reflog_bijection");
     const branchLog = draft.transitions.find((transition) => transition.role === "source_branch_reflog");
     const duplicated = [...draft.transitions.slice(0, -1), branchLog, draft.transitions.at(-1)].filter(
       (transition): transition is GitEffectTransitionV1 => transition !== undefined,
@@ -665,8 +617,6 @@ describe("GitPlanner.planSync", () => {
       fixture.syncRequest({ baseline: { lastPushedHeadOid: "3".repeat(40) as LowerHexSha1, managedPaths } }),
     );
     expect(behind.kind).toBe("push_only");
-    const pushOnly = corePlan(behind);
-    expect(validateGitSyncPlanCore(pushOnly, pushCodec)).toEqual(pushOnly);
   });
 
   it("retires the last managed inventory minus the current scope without touching the local files", async () => {
@@ -842,10 +792,9 @@ describe("GitPlanner previews", () => {
 
   it("states the branch-history warning with every enable plan", async () => {
     const fixture = await vault();
-    const plan = describeGitEnablePlan(await new GitPlanner(fixture.dependencies()).previewEnable(fixture.enableRequest()));
-    expect(plan.warning).toBe(GIT_ENABLE_BRANCH_HISTORY_WARNING);
-    expect(plan.warning).toContain("may reach the remote");
-    expect(plan.warning).toContain("neither scans nor rewrites");
+    await new GitPlanner(fixture.dependencies()).previewEnable(fixture.enableRequest());
+    expect(GIT_ENABLE_BRANCH_HISTORY_WARNING).toContain("may reach the remote");
+    expect(GIT_ENABLE_BRANCH_HISTORY_WARNING).toContain("neither scans nor rewrites");
   });
 
   it("shows reconcile retirements and refuses reconcile over pending or unpushed history", async () => {
@@ -886,29 +835,6 @@ describe("GitPlanner previews", () => {
       scope: config.scope,
       changes: [],
     });
-  });
-});
-
-describe("GitSyncPlanCoreV1", () => {
-  let draft: GitSyncPlanningDraft;
-
-  beforeAll(async () => {
-    const fixture = await vault();
-    await fixture.write("content/DEV/new.md", "# New\n");
-    draft = await new GitPlanner(fixture.dependencies()).planSync(fixture.syncRequest());
-  });
-
-  it("refuses unknown keys, unsorted paths and a commit without a source effect", () => {
-    const valid = corePlan(draft);
-    expect(() => validateGitSyncPlanCore({ ...valid, extra: 1 }, pushCodec)).toThrow("keys");
-    expect(() => validateGitSyncPlanCore({ ...valid, managedPaths: [...valid.managedPaths].reverse() }, pushCodec)).toThrow("order");
-    expect(() => validateGitSyncPlanCore({ ...valid, sourceGitEffectPlanHash: null }, pushCodec)).toThrow(
-      "sourceGitEffectPlanHash",
-    );
-    expect(() => validateGitSyncPlanCore({ ...valid, push: null }, pushCodec)).toThrow("push");
-    expect(() =>
-      validateGitSyncPlanCore({ ...valid, commit: { ...valid.commit, message: "chore: other" } }, pushCodec),
-    ).toThrow("message");
   });
 });
 

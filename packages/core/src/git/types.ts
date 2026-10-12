@@ -279,14 +279,6 @@ function parseSize(value: unknown, label: string): number {
   return integer(value, 0, Number.MAX_SAFE_INTEGER, label);
 }
 
-export function validateGitMetadataBounds(value: unknown): GitMetadataBoundsV1 {
-  const label = "GitMetadataBoundsV1";
-  const keys = Object.keys(GIT_METADATA_BOUNDS) as (keyof GitMetadataBoundsV1)[];
-  const input = exact(value, keys, label);
-  for (const key of keys) literal(input[key], GIT_METADATA_BOUNDS[key], `${label}.${key}`);
-  return GIT_METADATA_BOUNDS;
-}
-
 const PACK_READER_FIXED = {
   compressedPackMaxBytes: 2147483648,
   perObjectInflatedMaxBytes: 536870912,

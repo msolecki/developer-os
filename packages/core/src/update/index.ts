@@ -1,7 +1,6 @@
 export {
   admitCanonicalAbsolutePath,
   admitOwnerRelativePath,
-  admitRollbackPayloadRelativePath,
   admitVaultFreeRelativePath,
   deriveBootstrapPayloadPath,
   deriveCanonicalStatePayloadPath,
@@ -10,7 +9,6 @@ export {
   deriveManifestPayloadPath,
   deriveUpdatePayloadPath,
   deriveUpdateExecutorRecordPath,
-  deriveUpdateRecoveryExecutorStagedPath,
   parseCanonicalAbsolutePathText,
   parseCanonicalStatePayloadRole,
   parseVaultRelativePathText,
@@ -39,7 +37,6 @@ export {
   decodeTenDigitOrdinal,
   encodeTenDigitOrdinal,
   parseLowerHexSha256,
-  parseLowercaseKebabId,
   parsePositiveUInt32,
   parseSafeReasonCode,
   parseSchemaMigrationId,
@@ -107,7 +104,6 @@ export type {
 } from "./release.js";
 export {
   projectUpdateCapacity,
-  UPDATE_CAPACITY_COMPONENT_ORDER,
   UpdateCapacityInsufficientError,
 } from "./capacity.js";
 export type {
@@ -152,7 +148,6 @@ export {
   admitTargetUpdateDraft,
   decodePlannerInput,
   decodePlannerJson,
-  encodePlannerInput,
   encodePlannerOutput,
   materializePlannerDraft,
   parsePlannerPathToken,

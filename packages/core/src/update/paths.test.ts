@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   admitCanonicalAbsolutePath,
   admitOwnerRelativePath,
-  admitRollbackPayloadRelativePath,
   admitVaultFreeRelativePath,
   deriveBootstrapPayloadPath,
   deriveCanonicalStatePayloadPath,
@@ -12,7 +11,6 @@ import {
   deriveManifestPayloadPath,
   deriveUpdatePayloadPath,
   deriveUpdateExecutorRecordPath,
-  deriveUpdateRecoveryExecutorStagedPath,
   parseCanonicalAbsolutePathText,
   type CanonicalPathEvidenceV1,
 } from "./paths.js";
@@ -94,21 +92,6 @@ describe("strict update paths", () => {
     expect(() => admitOwnerRelativePath("safe.json", backupRoot, aliasEvidence)).toThrow();
   });
 
-  it("catches a rollback-path constructor that accepts a non-role-derived path", () => {
-    expect(admitRollbackPayloadRelativePath("blobs/0000000000.bin", backupRoot, evidence)).toBe("blobs/0000000000.bin");
-    expect(admitRollbackPayloadRelativePath("plans/owner_inverse/owner_1.plan.json", backupRoot, evidence)).toBe(
-      "plans/owner_inverse/owner_1.plan.json",
-    );
-    expect(admitRollbackPayloadRelativePath("plans/schema_migration_inverse/migration_schema-v2.plan.json", backupRoot, evidence)).toBe(
-      "plans/schema_migration_inverse/migration_schema-v2.plan.json",
-    );
-    expect(() => admitRollbackPayloadRelativePath("blobs/0.bin", backupRoot, evidence)).toThrow();
-    expect(() => admitRollbackPayloadRelativePath("plans/owner/not-a-plan.txt", backupRoot, evidence)).toThrow();
-    expect(() => admitRollbackPayloadRelativePath("plans/owner_inverse/migration_schema-v2.plan.json", backupRoot, evidence)).toThrow();
-    expect(() => admitRollbackPayloadRelativePath("plans/schema_migration_inverse/owner_1.plan.json", backupRoot, evidence)).toThrow();
-    expect(() => admitRollbackPayloadRelativePath("plans/unknown/owner_1.plan.json", backupRoot, evidence)).toThrow();
-  });
-
   it.each([
     ["lifecycle_plan", "/synthetic/product/state/lifecycle-journals/run_1.plan.json"],
     ["lifecycle_journal", "/synthetic/product/state/lifecycle-journals/run_1.json"],
@@ -140,12 +123,6 @@ describe("strict update paths", () => {
     );
     expect(deriveUpdatePayloadPath(productHome, run, 1_099_999)).toBe(
       "/synthetic/product/staging/lifecycle/run_1/update/payloads/0001099999.payload",
-    );
-    expect(deriveUpdateRecoveryExecutorStagedPath(productHome, run, "executing")).toBe(
-      "/synthetic/product/staging/lifecycle/run_1/update/recovery-executor/initial.json",
-    );
-    expect(deriveUpdateRecoveryExecutorStagedPath(productHome, run, "terminal_cleanup")).toBe(
-      "/synthetic/product/staging/lifecycle/run_1/update/recovery-executor/terminal.json",
     );
     expect(deriveUpdateExecutorRecordPath(productHome)).toBe("/synthetic/product/state/update-executor.json");
     expect(() => deriveBootstrapPayloadPath(productHome, "fresh_v2_init", run, 1_000_000)).toThrow();

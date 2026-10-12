@@ -171,10 +171,8 @@ export {
   NONCE_LEAF as LIFECYCLE_INSTALL_NONCE_LEAF,
   encodeLifecycleIdAllocator,
   encodeUninstallingMarker,
-  parseLifecycleBootstrapLock,
   parseLifecycleIdAllocator,
   parseLifecycleInstallNonce,
-  parseUninstallingMarker,
 } from "./records.js";
 export type { UninstallingMarkerV1 } from "./records.js";
 export {
@@ -242,7 +240,6 @@ export {
   LIFECYCLE_PREVIEW_EXECUTION_OPERATIONS,
   LIFECYCLE_PREVIEW_FILE_OPERATIONS,
   LIFECYCLE_PREVIEW_FILE_ROLES,
-  LIFECYCLE_PREVIEW_FILE_STATES,
   LIFECYCLE_REDACTION_KEY_STEP_TRANSITIONS,
   LIFECYCLE_SUBSYSTEMS,
   LIFECYCLE_TERMINAL_OUTCOMES,

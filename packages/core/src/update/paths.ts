@@ -1,8 +1,5 @@
 import {
   fail,
-  decodeTenDigitOrdinal,
-  parseSafeReasonCode,
-  parseSchemaMigrationId,
   type SafeReasonCodeV1,
 } from "./scalars.js";
 
@@ -161,24 +158,6 @@ export function admitOwnerRelativePath(
   return admitRelativePath(value, ownerRoot, evidence, "OwnerRelativePathV1") as OwnerRelativePathV1;
 }
 
-export function admitRollbackPayloadRelativePath(
-  value: unknown,
-  rollbackRoot: CanonicalAbsolutePathV1,
-  evidence: CanonicalPathEvidenceV1,
-): RollbackPayloadRelativePathV1 {
-  const admitted = admitRelativePath(value, rollbackRoot, evidence, "RollbackPayloadRelativePathV1") as RollbackPayloadRelativePathV1;
-  const blob = /^blobs\/([0-9]{10})\.bin$/.exec(admitted);
-  if (blob !== null) decodeTenDigitOrdinal(blob[1]);
-  else {
-    const owner = /^plans\/owner_inverse\/([a-z][a-z0-9_]*)\.plan\.json$/.exec(admitted);
-    const migration = /^plans\/schema_migration_inverse\/(migration_[a-z][a-z0-9-]*)\.plan\.json$/.exec(admitted);
-    if (owner !== null) parseSafeReasonCode(owner[1]);
-    else if (migration !== null) parseSchemaMigrationId(migration[1]);
-    else fail("RollbackPayloadRelativePathV1: not a role path");
-  }
-  return admitted;
-}
-
 function derive(productHome: CanonicalAbsolutePathV1, relative: string): CanonicalAbsolutePathV1 {
   const path = `${productHome}/${relative}`;
   assertCanonicalAbsolutePath(path);
@@ -238,16 +217,6 @@ export function deriveUpdatePayloadPath(
 ): UpdatePayloadPathV1 {
   if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal > 1_099_999) fail("update payload ordinal");
   return derive(productHome, `staging/lifecycle/${coordinatorId}/update/payloads/${ordinal.toString(10).padStart(10, "0")}.payload`) as UpdatePayloadPathV1;
-}
-
-/** §9.2: the two staged records, `initial.json` (executing) then `terminal.json` (terminal cleanup). */
-export function deriveUpdateRecoveryExecutorStagedPath(
-  productHome: CanonicalAbsolutePathV1,
-  coordinatorId: SafeReasonCodeV1,
-  state: "executing" | "terminal_cleanup",
-): UpdateRecoveryExecutorStagedPathV1 {
-  const leaf = state === "executing" ? "initial" : "terminal";
-  return derive(productHome, `staging/lifecycle/${coordinatorId}/update/recovery-executor/${leaf}.json`) as UpdateRecoveryExecutorStagedPathV1;
 }
 
 /** §3.2/§9.2: the one optional recovery-executor record, `state/update-executor.json`. */

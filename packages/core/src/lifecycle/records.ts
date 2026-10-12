@@ -1,18 +1,14 @@
 import type {
-  LifecycleBootstrapLockV1,
   LifecycleIdAllocatorV1,
   LifecycleInstallNonceV1,
 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
-import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
 import {
   parseLowerHexSha256,
   parseUInt64Decimal,
-  parseUtcTimestamp,
   type UtcTimestampV1,
 } from "../update/scalars.js";
 import { decodeCanonicalJson, encodeCanonicalJson, type CanonicalJsonV1 } from "./canonical-json.js";
-import { parseEffectiveUid, parseLifecycleCoordinatorId } from "./ids.js";
 
 export interface UninstallingMarkerV1 {
   readonly schemaVersion: 1;
@@ -26,8 +22,6 @@ export const NONCE_FILE_BYTES = 65;
 const NONCE_HEX_BYTES = 64;
 const LF = 0x0a;
 export const MAX_ALLOCATOR_BYTES = 1_024;
-const MAX_MARKER_BYTES = 1_024;
-const BOOTSTRAP_LOCK_LEAF = ".lifecycle-bootstrap.lock";
 
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
@@ -87,48 +81,6 @@ export function encodeLifecycleIdAllocator(value: LifecycleIdAllocatorV1): Canon
     installNonce: value.installNonce,
     nextCounter: value.nextCounter,
   });
-}
-
-export function parseLifecycleBootstrapLock(
-  value: unknown,
-  stateDirectory: CanonicalAbsolutePathV1,
-  effectiveUid: number,
-): LifecycleBootstrapLockV1 {
-  const input = exact(
-    value,
-    ["dev", "ino", "mode", "nlink", "ownerUid", "path", "size"],
-    "LifecycleBootstrapLockV1",
-  );
-  if (input.path !== `${stateDirectory}/${BOOTSTRAP_LOCK_LEAF}`) fail("LifecycleBootstrapLockV1: path");
-  if (input.mode !== 0o600 || input.nlink !== 1 || input.size !== 0) {
-    fail("LifecycleBootstrapLockV1: identity");
-  }
-  return {
-    path: parseCanonicalAbsolutePathText(input.path),
-    ownerUid: parseEffectiveUid(input.ownerUid, effectiveUid),
-    mode: 0o600,
-    nlink: 1,
-    size: 0,
-    dev: parseUInt64Decimal(input.dev),
-    ino: parseUInt64Decimal(input.ino),
-  };
-}
-
-export function parseUninstallingMarker(
-  bytes: Uint8Array,
-  nonce: LifecycleInstallNonceV1,
-): UninstallingMarkerV1 {
-  const input = exact(
-    decodeCanonicalJson(bytes, MAX_MARKER_BYTES),
-    ["coordinatorId", "createdAt", "schemaVersion"],
-    "UninstallingMarkerV1",
-  );
-  if (input.schemaVersion !== 1) fail("UninstallingMarkerV1: schemaVersion");
-  return {
-    schemaVersion: 1,
-    coordinatorId: parseLifecycleCoordinatorId(input.coordinatorId, nonce),
-    createdAt: parseUtcTimestamp(input.createdAt),
-  };
 }
 
 export function encodeUninstallingMarker(value: UninstallingMarkerV1): CanonicalJsonV1 {

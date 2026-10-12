@@ -85,8 +85,6 @@ export const LIFECYCLE_PREVIEW_FILE_ROLES = [
   "redaction_key",
 ] as const;
 export const LIFECYCLE_PREVIEW_FILE_OPERATIONS = ["create", "replace", "remove", "keep"] as const;
-export const LIFECYCLE_PREVIEW_FILE_STATES = ["absent", "present"] as const;
-
 
 export const LIFECYCLE_SUBSYSTEMS = ["git", "automation"] as const;
 export type LifecycleSubsystemV1 = (typeof LIFECYCLE_SUBSYSTEMS)[number];

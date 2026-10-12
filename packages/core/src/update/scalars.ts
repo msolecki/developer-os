@@ -65,7 +65,7 @@ export function parseUtcTimestamp(value: unknown): UtcTimestampV1 {
   return text as UtcTimestampV1;
 }
 
-export function parseLowercaseKebabId(value: unknown): LowercaseKebabIdV1 {
+function parseLowercaseKebabId(value: unknown): LowercaseKebabIdV1 {
   const text = requireString(value, "LowercaseKebabIdV1");
   if (encoder.encode(text).byteLength < 1 || encoder.encode(text).byteLength > 96 || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(text)) {
     throw new Error("invalid LowercaseKebabIdV1");
