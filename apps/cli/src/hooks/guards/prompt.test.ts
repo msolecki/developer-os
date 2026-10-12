@@ -47,7 +47,7 @@ function runtimeFor(cwd: string): HookRuntime {
 }
 
 function prompted(prompt: string): HookPayloadV1 {
-  return { cwd: null, toolName: null, command: null, filePath: null, prompt, stopHookActive: null };
+  return { cwd: null, toolName: null, command: null, filePath: null, prompt };
 }
 
 const rule = (skill: string, keywords: readonly string[]) => ({ skill, keywords });

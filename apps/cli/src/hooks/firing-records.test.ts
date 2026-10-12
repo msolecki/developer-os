@@ -431,7 +431,7 @@ describe("runHookMode and the firing record", () => {
   });
 
   /**
-   * D86 (FLOW-INIT-2): `stop` (tsc, up to 120 s) and `format` (up to 30 s) outlast the 1.5 s exit
+   * D86 (FLOW-INIT-2): `stop` (tsc, up to 120 s) and `format` (up to 30 s) outlasted, until D102, the 1.5 s exit
    * budget, so a record started after them got no wait and was abandoned. They write it first, inside
    * the same budget; every other verb still records after its outcome.
    */

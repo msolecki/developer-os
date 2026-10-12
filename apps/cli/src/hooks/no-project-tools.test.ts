@@ -116,11 +116,11 @@ describe("stop and format run no project tool", () => {
       },
     };
     const base = { cwd: root, command: null, prompt: null };
-    expect(await HOOK_HANDLERS.stop?.({ ...base, toolName: null, filePath: null, stopHookActive: false }, runtime)).toStrictEqual({
+    expect(await HOOK_HANDLERS.stop?.({ ...base, toolName: null, filePath: null }, runtime)).toStrictEqual({
       kind: "allow",
     });
     expect(
-      await HOOK_HANDLERS.format?.({ ...base, toolName: "Write", filePath: join(root, "a.ts"), stopHookActive: null }, runtime),
+      await HOOK_HANDLERS.format?.({ ...base, toolName: "Write", filePath: join(root, "a.ts") }, runtime),
     ).toStrictEqual({ kind: "allow" });
   });
 });

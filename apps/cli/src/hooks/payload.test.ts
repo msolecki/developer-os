@@ -17,7 +17,6 @@ describe("decodeHookPayload", () => {
         command: "echo synthetic",
         filePath: null,
         prompt: null,
-        stopHookActive: null,
       },
     });
   });
@@ -53,17 +52,13 @@ describe("decodeHookPayload", () => {
       ok: false,
       reason: "field_type",
     });
-    expect(decodeHookPayload(bytes({ cwd: "/a" }), "claude", "stop")).toStrictEqual({
-      ok: false,
-      reason: "field_type",
-    });
   });
 
-  it("refuses a non-boolean stop flag", () => {
-    expect(decodeHookPayload(bytes({ cwd: "/a", stop_hook_active: "yes" }), "claude", "stop")).toStrictEqual({
-      ok: false,
-      reason: "field_type",
-    });
+  // D102: `stop` runs no tool, so it requires and reads no stop flag.
+  it("decodes a stop payload with or without a stop flag", () => {
+    const decoded = { ok: true, payload: { cwd: "/a", toolName: null, command: null, filePath: null, prompt: null } };
+    expect(decodeHookPayload(bytes({ cwd: "/a" }), "claude", "stop")).toStrictEqual(decoded);
+    expect(decodeHookPayload(bytes({ cwd: "/a", stop_hook_active: "yes" }), "codex", "stop")).toStrictEqual(decoded);
   });
 
   it("decodes Codex with its observed spellings and never reads a file path field", () => {
@@ -75,7 +70,7 @@ describe("decodeHookPayload", () => {
     );
     expect(decoded).toStrictEqual({
       ok: true,
-      payload: { cwd: "/Users/synthetic/p", toolName: "apply_patch", command: patch, filePath: null, prompt: null, stopHookActive: null },
+      payload: { cwd: "/Users/synthetic/p", toolName: "apply_patch", command: patch, filePath: null, prompt: null },
     });
     if (decoded.ok) expect(editedPaths(decoded.payload, "codex")).toStrictEqual(["note.txt"]);
   });

@@ -143,7 +143,6 @@ const PAYLOAD: HookPayloadV1 = {
   command: null,
   filePath: null,
   prompt: null,
-  stopHookActive: null,
 };
 
 function runtimeFor(fixture: CommandFixture, cwd: string, createContext?: HookContextFactory): HookRuntime {

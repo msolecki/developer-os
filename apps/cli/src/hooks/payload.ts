@@ -9,7 +9,6 @@ export interface HookPayloadV1 {
   readonly command: string | null;
   readonly filePath: string | null;
   readonly prompt: string | null;
-  readonly stopHookActive: boolean | null;
 }
 
 export type DecodedHookPayload =
@@ -38,7 +37,6 @@ const FIELD_MAPS: Readonly<Record<HookVendor, FieldMap>> = {
     command: ["tool_input", "command"],
     filePath: ["tool_input", "file_path"],
     prompt: ["prompt"],
-    stopHookActive: ["stop_hook_active"],
   },
   codex: {
     cwd: ["cwd"],
@@ -46,7 +44,6 @@ const FIELD_MAPS: Readonly<Record<HookVendor, FieldMap>> = {
     command: ["tool_input", "command"],
     filePath: null,
     prompt: ["prompt"],
-    stopHookActive: ["stop_hook_active"],
   },
 };
 
@@ -75,7 +72,7 @@ const REQUIRED: Readonly<Record<HookVerb, readonly (keyof HookPayloadV1)[]>> = {
   format: ["toolName"],
   edit: ["toolName"],
   prompt: ["prompt"],
-  stop: ["stopHookActive"],
+  stop: [],
   inject: [],
 };
 
@@ -115,25 +112,23 @@ export function decodeHookPayload(
   if (typeof root !== "object" || root === null || Array.isArray(root)) {
     return { ok: false, reason: "not_object" };
   }
-  let wrongType = false;
+  // An object, not a `let`: the closure sets it, and TypeScript would narrow a `let` to `false`.
+  const seen = { wrongType: false };
   const str = (path: FieldPath | null): string | null => {
     const value = at(root, path);
     if (value === undefined) return null;
     if (typeof value === "string") return value;
-    wrongType = true;
+    seen.wrongType = true;
     return null;
   };
-  const flag = at(root, map.stopHookActive);
-  if (flag !== undefined && typeof flag !== "boolean") wrongType = true;
   const payload: HookPayloadV1 = {
     cwd: str(map.cwd),
     toolName: str(map.toolName),
     command: str(map.command),
     filePath: str(map.filePath),
     prompt: str(map.prompt),
-    stopHookActive: typeof flag === "boolean" ? flag : null,
   };
-  if (wrongType || REQUIRED[verb].some((field) => payload[field] === null)) {
+  if (seen.wrongType || REQUIRED[verb].some((field) => payload[field] === null)) {
     return { ok: false, reason: "field_type" };
   }
   return { ok: true, payload };

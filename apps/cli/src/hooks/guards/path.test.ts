@@ -77,7 +77,7 @@ const HOOK_ALLOWS: readonly (readonly [string, () => string])[] = [
 ];
 
 const run = (filePath: string | null, toolName = "Edit", userHome: string | null = home, cwd = project) =>
-  guardPath({ cwd, toolName, command: null, filePath, prompt: null, stopHookActive: null }, runtime(userHome, cwd));
+  guardPath({ cwd, toolName, command: null, filePath, prompt: null }, runtime(userHome, cwd));
 
 describe("guard path", () => {
   it("blocks every protected path, relative ones resolved against the project root (G7)", async () => {
@@ -203,7 +203,7 @@ describe("guard path", () => {
     await writeFile(join(home, ".developer-os", "codex", "codex-home"), `${join(home, "recorded")}\n`);
     const withCodexHome = { ...runtime(home), env: { CODEX_HOME: join(home, "ch") } };
     const guard = (filePath: string) =>
-      guardPath({ cwd: project, toolName: "Write", command: null, filePath, prompt: null, stopHookActive: null }, withCodexHome);
+      guardPath({ cwd: project, toolName: "Write", command: null, filePath, prompt: null }, withCodexHome);
     expect(await guard(join(home, "ch", "auth.json"))).toMatchObject({ kind: "block", ruleId: "protected-path" });
     expect(await guard(join(home, "recorded", "auth.json"))).toMatchObject({ kind: "block", ruleId: "protected-path" });
     expect(await guard(join(home, ".codex", "auth.json"))).toMatchObject({ kind: "block", ruleId: "protected-path" });
@@ -219,7 +219,7 @@ describe("guard path", () => {
     expect(await run("codex-link/codex-home", "Write")).toMatchObject({ kind: "block", ruleId: "product-state" });
     const custom = { ...runtime(home), env: { DEVELOPER_OS_HOME: join(home, "dos") } };
     const guard = (filePath: string) =>
-      guardPath({ cwd: project, toolName: "Write", command: null, filePath, prompt: null, stopHookActive: null }, custom);
+      guardPath({ cwd: project, toolName: "Write", command: null, filePath, prompt: null }, custom);
     expect(await guard(join(home, "dos", "codex", "codex-home"))).toMatchObject({ kind: "block", ruleId: "product-state" });
   });
 
@@ -262,7 +262,7 @@ describe("guard path", () => {
   describe("on Codex, from apply_patch headers", () => {
     const codex = (command: string, toolName = "apply_patch", cwd = project) =>
       guardPath(
-        { cwd, toolName, command, filePath: null, prompt: null, stopHookActive: null },
+        { cwd, toolName, command, filePath: null, prompt: null },
         { ...runtime(home, cwd), vendor: "codex" },
       );
     const patch = (...lines: string[]): string => ["*** Begin Patch", ...lines, "*** End Patch", ""].join("\n");
