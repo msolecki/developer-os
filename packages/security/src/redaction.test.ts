@@ -483,6 +483,71 @@ describe("redactText", () => {
     });
   });
 
+  /**
+   * NEW-258 (D102 (8)): the env-secret arms scan in linear time. The outputs below are the
+   * ones the quadratic expressions gave; the rewrite must not move any of them.
+   */
+  describe("env-secret scans in linear time (NEW-258)", () => {
+    const marker = "[REDACTED:env-secret]";
+    it.each([
+      ["a quoted shell key", `"API_TOKEN"=s3cr3t-value`, `"API_TOKEN"=${marker}`],
+      ["a single-quoted YAML key", `'DB_PASSWORD': s3cr3t-value`, `'DB_PASSWORD': ${marker}`],
+      ["export with tabs", `export\t\tGH_TOKEN =  s3cr3t-value`, `export\t\tGH_TOKEN =  ${marker}`],
+      ["indentation after blank lines", `\n\n  \n\t  MY_SECRET=s3cr3t-value`, `\n\n  \n\t  MY_SECRET=${marker}`],
+      ["the value on a later line", `API_TOKEN=\n\ns3cr3t-value`, `API_TOKEN=\n\n${marker}`],
+      ["the keyword in the middle of a name", `xPASSy=s3cr3t-value`, `xPASSy=${marker}`],
+      ["a repeated keyword", `TOKENTOKEN_TOKEN: s3cr3t-value`, `TOKENTOKEN_TOKEN: ${marker}`],
+      ["setenv after blank lines", `\r\n\r\n setenv API_KEY_PASS s3cr3t-value`, `\r\n\r\n setenv API_KEY_PASS ${marker}`],
+      [
+        "two assignments on two lines",
+        `A_TOKEN=first-value\r\nexport B_SECRET=second-value`,
+        `A_TOKEN=${marker}\r\nexport B_SECRET=${marker}`,
+      ],
+      [
+        "several JSON keys on one line",
+        `{"A_TOKEN": "first-value", "id": 1, 'B_PASS': 'second-value', "C_SECRET": bare-value}`,
+        `{"A_TOKEN": ${marker}, "id": 1, 'B_PASS': ${marker}, "C_SECRET": ${marker}}`,
+      ],
+      ["an escaped quote in a JSON value", `{"A_TOKEN": "s3cr\\"et", "x": 1}`, `{"A_TOKEN": ${marker}, "x": 1}`],
+      ["an unterminated JSON value", `{"A_TOKEN": "s3cr3t-value`, `{"A_TOKEN": ${marker}`],
+    ])("redacts %s exactly as before", (_name, input, expected) => {
+      expect(redactText(input, deterministicKey).text).toBe(expected);
+    });
+
+    it.each([
+      ["the keyword as the first character", "TOKEN=plain-value"],
+      ["a name with no keyword", "API_KEYS_ID=plain-value"],
+      ["a keyword-bearing word mid-line", "the PASSWORD=plain-value"],
+      ["a JSON key with no colon", `{"A_TOKEN" "plain-value"}`],
+      ["a JSON key with an empty value", `{"A_TOKEN": , "x": 1}`],
+      ["a keyword run with no assignment", `"${"TOKEN".repeat(20)}`],
+      ["setenv with no value", "setenv API_TOKEN"],
+    ])("leaves %s unchanged", (_name, input) => {
+      expect(redactText(input, deterministicKey)).toStrictEqual({ text: input, findings: [] });
+    });
+
+    /**
+     * Measured quadratic at 64 KB: `TOKEN…` ~435 ms, `"TOKEN…` ~850 ms, 64 K blank lines
+     * ~6.5 s; linear: every input under 25 ms at 1 MB. The bound is generous for slow CI;
+     * the quadratic forms would take minutes at 1 MB.
+     */
+    it.each([65_536, 1_048_576])("redacts adversarial %i-character inputs in linear time", (size) => {
+      const run = "TOKEN".repeat(size / 5);
+      for (const input of [
+        run,
+        `"${run}`,
+        `setenv ${run}`,
+        "\n".repeat(size),
+        `"A_TOKEN":${"\n".repeat(size)}`,
+        `"A_TOKEN" `.repeat(size / 10),
+      ]) {
+        const started = performance.now();
+        redactText(input, deterministicKey);
+        expect(performance.now() - started).toBeLessThan(2_000);
+      }
+    });
+  });
+
   describe("certificate", () => {
     it("redacts a PEM certificate block, which the private-key pattern does not match", () => {
       const source = `-----BEGIN CERTIFICATE-----\nQUJDREVGR0g=\n-----END CERTIFICATE-----`;
