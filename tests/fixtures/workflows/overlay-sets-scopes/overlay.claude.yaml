@@ -1,6 +1,0 @@
-extends: sample@1.0.0
-scopes:
-  read:
-    - /
-  write:
-    - /

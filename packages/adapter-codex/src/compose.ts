@@ -45,7 +45,7 @@ export function renderCodexPlugin(
 
   const renderer = new CodexRenderer({ shared });
   const skills = contracts.flatMap((contract) => [
-    ...renderer.render(contract, null),
+    ...renderer.render(contract),
   ]);
   // The one brand-injection point for `PluginRootArtifact`: `buildPluginTree`
   // stays root-agnostic (it only assembles and validates a tree, it does not

@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadWorkflow, workflowOverlaySchema } from "@developer-os/workflow-schema";
+import { loadWorkflow } from "@developer-os/workflow-schema";
 import type { WorkflowValidationResult } from "@developer-os/workflow-schema";
 import { describe, expect, it } from "vitest";
 
@@ -24,7 +24,6 @@ describe("negative fixtures", () => {
       "incompatible-version",
       "missing-capability",
       "over-declared",
-      "overlay-sets-scopes",
       "prompt-injection",
       "scheduled-trigger",
       "under-declared",
@@ -100,32 +99,5 @@ describe("negative fixtures", () => {
     expect(result.findings.map((f) => f.rule)).toStrictEqual(["schema"]);
     expect(result.findings[0]?.message).toContain("triggers: scheduled requires manual");
     expect(result.contract).toBeNull();
-  });
-
-  it("refuses an overlay setting scopes as an unknown field, not as a merge check", async () => {
-    const text = await readFile(
-      join(FIXTURES, "overlay-sets-scopes", "overlay.claude.yaml"),
-      "utf8",
-    );
-    const { parseWorkflowYaml } = await import("@developer-os/workflow-schema");
-    const parsed = parseWorkflowYaml(text);
-    expect(parsed.ok).toBe(true);
-    if (!parsed.ok) return;
-
-    const result = workflowOverlaySchema.safeParse(parsed.value);
-    expect(result.success).toBe(false);
-    /** Which kind of failure, not merely that it failed. */
-    expect(
-      result.error?.issues.some((issue) => issue.code === "unrecognized_keys"),
-    ).toBe(true);
-  });
-
-  it("leaves the workflow the overlay fixture extends valid on its own", async () => {
-    /**
-     * Otherwise the overlay case could pass because its base is broken, which
-     * would prove nothing about overlays at all.
-     */
-    const result = await load("overlay-sets-scopes");
-    expect(result.findings.filter((f) => f.severity === "error")).toStrictEqual([]);
   });
 });

@@ -98,7 +98,7 @@ describe("determinism", () => {
       new Map(
         contracts.flatMap((contract) =>
           stub
-            .render(contract, null)
+            .render(contract)
             .map((artifact) => [artifact.path, artifact.contents] as const),
         ),
       );
@@ -113,7 +113,7 @@ describe("determinism", () => {
 
   it("reports no drift when the rendered artifacts are what is on disk", async () => {
     const contracts = await loadAllOrFail(false);
-    const rendered = contracts.flatMap((contract) => stub.render(contract, null));
+    const rendered = contracts.flatMap((contract) => stub.render(contract));
     expect(rendered.length).toBe(contracts.length);
     const onDisk = new Map(rendered.map((artifact) => [artifact.path, artifact.contents]));
     expect(detectWorkflowDrift(rendered, onDisk)).toStrictEqual([]);
@@ -126,7 +126,7 @@ describe("determinism", () => {
      * fails when the detector stops working.
      */
     const contracts = await loadAllOrFail(false);
-    const rendered = contracts.flatMap((contract) => stub.render(contract, null));
+    const rendered = contracts.flatMap((contract) => stub.render(contract));
     const [first] = rendered;
     expect(first).toBeDefined();
     if (first === undefined) return;

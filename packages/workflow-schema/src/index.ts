@@ -5,9 +5,8 @@
  * `zod@4.4.3` strips a `__proto__` key before its own strictness check, so the
  * raw schema accepts a workflow carrying one and silently drops it. The refusal
  * lives in `validateWorkflow`, which makes that function the only door into this
- * package — structurally, rather than by convention. It is the same argument
- * Workflow architecture former §8 makes for overlays: a guarantee is better as a shape nothing can get
- * around than as a rule everyone has to remember.
+ * package — structurally, rather than by convention: a guarantee is better as a shape nothing
+ * can get around than as a rule everyone has to remember.
  */
 export {
   REFUSAL_CONDITIONS,
@@ -32,8 +31,6 @@ export type {
 } from "./drift.js";
 export { loadWorkflow } from "./load.js";
 export type { WorkflowSource } from "./load.js";
-export { applyOverlay, workflowOverlaySchema } from "./overlay.js";
-export type { OverlayOutcome, WorkflowOverlayV1 } from "./overlay.js";
 export { parseWorkflowYaml, WORKFLOW_PARSE_OPTIONS } from "./parse.js";
 export type { ParseOutcome, ParseRefusal } from "./parse.js";
 /**

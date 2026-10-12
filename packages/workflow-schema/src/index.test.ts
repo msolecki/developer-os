@@ -30,8 +30,6 @@ describe("the package's public door", () => {
         "firstDifferingLine",
         "sourceMarker",
         "loadWorkflow",
-        "applyOverlay",
-        "workflowOverlaySchema",
         "parseWorkflowYaml",
         "WORKFLOW_PARSE_OPTIONS",
         "assertRenderableContract",

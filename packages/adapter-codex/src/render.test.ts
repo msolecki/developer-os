@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
   WorkflowContractV1,
-  WorkflowOverlayV1,
 } from "@developer-os/workflow-schema";
 import { CodexRenderer, SHARED_WORKFLOW_ID } from "./render.js";
 
@@ -50,7 +49,7 @@ const shared = contract({
 function render(
   input: WorkflowContractV1 = contract(),
 ): { path: string; contents: string } {
-  const artifacts = new CodexRenderer({ shared }).render(input, null);
+  const artifacts = new CodexRenderer({ shared }).render(input);
   const first = artifacts[0];
   if (first === undefined) throw new Error("expected one artifact");
   return { path: first.path, contents: first.contents };
@@ -97,24 +96,14 @@ describe("CodexRenderer", () => {
     }
   });
 
-  it("applies an overlay rather than discarding it", () => {
-    const overlay: WorkflowOverlayV1 = {
-      extends: "capture@1.0.0",
-      steps: { explain: { prose: "the Codex wording" } },
-    };
-    const artifact = new CodexRenderer({ shared }).render(contract(), overlay)[0];
-    expect(artifact?.contents).toContain("the Codex wording");
-    expect(artifact?.contents).not.toContain("do the thing");
-  });
-
   it("is byte-identical across two renders", () => {
     const renderer = new CodexRenderer({ shared });
-    expect(renderer.render(contract(), null)).toEqual(renderer.render(contract(), null));
+    expect(renderer.render(contract())).toEqual(renderer.render(contract()));
   });
 
   it("emits exactly one artifact, and never an AGENTS.md", () => {
     for (const source of [contract(), shared]) {
-      const artifacts = new CodexRenderer({ shared }).render(source, null);
+      const artifacts = new CodexRenderer({ shared }).render(source);
       expect(artifacts).toHaveLength(1);
       expect(artifacts[0]?.path).not.toContain("AGENTS");
     }

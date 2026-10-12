@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
   WorkflowContractV1,
-  WorkflowOverlayV1,
 } from "@developer-os/workflow-schema";
 import { renderSkillBody, SKILL_FIELD_CAP } from "@developer-os/workflow-schema";
 import { ClaudeRenderer, SHARED_WORKFLOW_ID } from "./render.js";
@@ -51,7 +50,7 @@ const shared = contract({
 function render(
   input: WorkflowContractV1 = contract(),
 ): { path: string; contents: string } {
-  const artifacts = new ClaudeRenderer({ shared }).render(input, null);
+  const artifacts = new ClaudeRenderer({ shared }).render(input);
   const first = artifacts[0];
   if (first === undefined) throw new Error("expected one artifact");
   return { path: first.path, contents: first.contents };
@@ -90,8 +89,8 @@ describe("ClaudeRenderer", () => {
 
   it("is byte-identical across two renders", () => {
     const renderer = new ClaudeRenderer({ shared });
-    const first = renderer.render(contract(), null);
-    const second = renderer.render(contract(), null);
+    const first = renderer.render(contract());
+    const second = renderer.render(contract());
     expect(second).toEqual(first);
   });
 
@@ -107,7 +106,7 @@ describe("ClaudeRenderer", () => {
    * body without this failing.
    */
   it("is exactly its frontmatter, a blank line, and renderSkillBody's own output, joined", () => {
-    const body = renderSkillBody(contract(), null, { shared });
+    const body = renderSkillBody(contract(), { shared });
     const expected = `${[
       "---",
       'name: "developer-os-capture"',
@@ -117,27 +116,6 @@ describe("ClaudeRenderer", () => {
       ...body,
     ].join("\n")}\n`;
     expect(render().contents).toBe(expected);
-  });
-
-  /**
-   * `render` took an overlay and discarded it (`void overlay`), while Claude architecture former §7
-   * says the input is a contract plus its optional Claude overlay. A caller
-   * passing one lost it silently and no test failed. Kept as a door case,
-   * even though `skill.test.ts` also pins overlay application at the body
-   * level, because it is this adapter's own call into `render` that must stay
-   * wired to the overlay argument.
-   */
-  it("applies an overlay rather than discarding it", () => {
-    const overlay: WorkflowOverlayV1 = {
-      extends: "capture@1.0.0",
-      steps: { explain: { prose: "the Claude wording" } },
-    };
-    const artifact = new ClaudeRenderer({ shared }).render(
-      contract(),
-      overlay,
-    )[0];
-    expect(artifact?.contents).toContain("the Claude wording");
-    expect(artifact?.contents).not.toContain("do the thing");
   });
 
   /**
