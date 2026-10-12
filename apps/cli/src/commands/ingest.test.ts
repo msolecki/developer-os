@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 
 import {
   EXIT_CODES,
-  formatJsonResult,
   loadConfig,
+  publish,
   serializeConfig,
 } from "@developer-os/core";
 import type { CliResult, TransactionPhase } from "@developer-os/core";
@@ -48,6 +48,9 @@ import { createCommandFixture, exists, removeCommandFixtures } from "./testing.j
 import type { CommandFixture } from "./testing.js";
 import { loadOrCreateRedactionKey } from "../context.js";
 import { run } from "../main.js";
+
+/** The published `--json` bytes, as `emit` prints them. */
+const jsonText = <T>(result: CliResult<T>): string => publish(result).text;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -534,8 +537,8 @@ describe("runIngest, the status ladder", () => {
 
     expect(result.code).toBe(EXIT_CODES.securityRefusal);
     expect(await readWholeVault(fixture)).not.toContain(SECRET);
-    expect(formatJsonResult(result)).not.toContain(SECRET);
-    expect(formatJsonResult(result)).not.toContain("ghp_");
+    expect(jsonText(result)).not.toContain(SECRET);
+    expect(jsonText(result)).not.toContain("ghp_");
   });
 
   it("refuses a model note that claims human authorship and a review, writing nothing (AUD-008)", async () => {
@@ -2753,7 +2756,7 @@ describe("runIngest, the contract it is pinned against", () => {
     const result = await fixture.run();
 
     expect(result.ok).toBe(false);
-    const payload = formatJsonResult(result);
+    const payload = jsonText(result);
     expect(payload).not.toContain(BELL);
     expect(payload).not.toContain(OVERRIDE);
   });

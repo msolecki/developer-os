@@ -209,7 +209,6 @@ export type { CapabilityState, ProbeObservation } from "./capabilities/index.js"
 export {
   EXIT_CODES,
   failure,
-  formatJsonResult,
   publish,
   redactPayload,
   success,

@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EXIT_CODES, formatJsonResult } from "@developer-os/core";
+import { EXIT_CODES, publish, type CliResult } from "@developer-os/core";
 import {
   createRedactor,
   ProtectedPathPolicy,
@@ -28,6 +28,9 @@ import {
 } from "./context.js";
 import type { CliContext } from "./context.js";
 import type { CliIo } from "./io.js";
+
+/** The published `--json` bytes, as `emit` prints them. */
+const jsonText = <T>(result: CliResult<T>): string => publish(result).text;
 
 /**
  * The only seam that can observe *which* key the composition root wired in.
@@ -1068,8 +1071,8 @@ describe("failureFrom", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(() => formatJsonResult(result)).not.toThrow();
-    expect(formatJsonResult(result)).toContain(shown);
+    expect(() => jsonText(result)).not.toThrow();
+    expect(jsonText(result)).toContain(shown);
   });
 
   /**
@@ -1143,7 +1146,7 @@ describe("failureFrom", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(() => formatJsonResult(result)).not.toThrow();
+    expect(() => jsonText(result)).not.toThrow();
     expect(JSON.stringify(result.error.data)).toContain("[unserializable]");
   });
 

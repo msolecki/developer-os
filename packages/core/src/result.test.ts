@@ -8,10 +8,12 @@ import {
   EXIT_CODES,
   publish,
   failure,
-  formatJsonResult,
   redactPayload,
   success,
 } from "./result.js";
+
+/** The published `--json` bytes, as `emit` prints them. */
+const jsonText = <T>(result: CliResult<T>): string => publish(result).text;
 
 describe("CLI result contracts", () => {
   it("pins every public exit code", () => {
@@ -52,7 +54,7 @@ describe("CLI result contracts", () => {
   ])(
     "formats a successful result as deterministic JSON bytes, warnings in order",
     (warnings, bytes) => {
-      expect(formatJsonResult(success({ version: "0.0.0" }, warnings))).toBe(bytes);
+      expect(jsonText(success({ version: "0.0.0" }, warnings))).toBe(bytes);
     },
   );
 
@@ -64,7 +66,7 @@ describe("CLI result contracts", () => {
       recovery: "developer-os doctor",
     });
 
-    expect(formatJsonResult(result)).toBe(
+    expect(jsonText(result)).toBe(
       '{"ok":false,"code":5,"error":{"kind":"security_refusal","message":"Operation refused","paths":["<redacted>"],"recovery":"developer-os doctor"}}',
     );
   });
@@ -84,7 +86,7 @@ describe("CLI result contracts", () => {
    * `tsc` refuses the literal.
    *
    * What this case itself earns its place for is the serialization: the brand is type-only,
-   * so the field survives `formatJsonResult` and reaches `--json` with exactly the bytes it
+   * so the field survives `publish` and reaches `--json` with exactly the bytes it
    * was given, brand invisible.
    */
   it("carries structured detail on the failure arm", () => {
@@ -100,7 +102,7 @@ describe("CLI result contracts", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    const published: unknown = JSON.parse(formatJsonResult(result));
+    const published: unknown = JSON.parse(jsonText(result));
     expect(published).toMatchObject({
       error: { data: { ingested: ["cap-a"], refused: ["cap-b"] } },
     });
@@ -210,7 +212,7 @@ describe("CLI result contracts", () => {
       toJSON: () => ({ kind: "x", message: "m", paths: [], data: secret }),
     };
 
-    const published = formatJsonResult(failure(EXIT_CODES.invalidInput, smuggled));
+    const published = jsonText(failure(EXIT_CODES.invalidInput, smuggled));
 
     expect(published).toBe(
       '{"ok":false,"code":2,"error":{"kind":"x","message":"m","paths":[]}}',
@@ -230,7 +232,7 @@ describe("CLI result contracts", () => {
     expect(() => {
       (result.error as unknown as Record<string, unknown>).data = "leak";
     }).toThrow(TypeError);
-    expect(formatJsonResult(result)).not.toContain("leak");
+    expect(jsonText(result)).not.toContain("leak");
   });
 
   /**
@@ -246,7 +248,7 @@ describe("CLI result contracts", () => {
     });
     paths.push("sk-live-DEADBEEF");
 
-    expect(formatJsonResult(result)).toBe(
+    expect(jsonText(result)).toBe(
       '{"ok":false,"code":2,"error":{"kind":"x","message":"m","paths":["a.md"]}}',
     );
   });
@@ -395,7 +397,7 @@ describe("CLI result contracts", () => {
       toJSON: (): unknown => ({ data: { token: "sk-live-DEADBEEF" } }),
     } as CliError;
 
-    const published = formatJsonResult(reshape(real, hostile));
+    const published = jsonText(reshape(real, hostile));
 
     expect(published).not.toContain("sk-live-DEADBEEF");
     expect(published).not.toContain("data");
@@ -431,7 +433,7 @@ describe("CLI result contracts", () => {
       },
     );
 
-    expect(formatJsonResult(liar)).not.toContain("sk-live");
+    expect(jsonText(liar)).not.toContain("sk-live");
   });
 
   /**
@@ -459,7 +461,7 @@ describe("CLI result contracts", () => {
       },
     );
 
-    expect(formatJsonResult(failure(EXIT_CODES.invalidInput, hostile))).not.toContain(
+    expect(jsonText(failure(EXIT_CODES.invalidInput, hostile))).not.toContain(
       "sk-live",
     );
   });
@@ -496,7 +498,7 @@ describe("CLI result contracts", () => {
       /* frozen, which is the point */
     }
 
-    expect(formatJsonResult(result)).toBe(
+    expect(jsonText(result)).toBe(
       '{"ok":true,"code":0,"data":{"version":"0.0.0"},"warnings":[]}',
     );
   });
@@ -515,8 +517,8 @@ describe("CLI result contracts", () => {
   ])("publishes a diagnostic rather than throwing on %s", (_name, payload) => {
     const result = success(payload);
 
-    expect(() => formatJsonResult(result)).not.toThrow();
-    expect(formatJsonResult(result)).toContain("could not be published");
+    expect(() => jsonText(result)).not.toThrow();
+    expect(jsonText(result)).toContain("could not be published");
   });
 
   /**
@@ -541,13 +543,13 @@ describe("CLI result contracts", () => {
   ])("publishes a token rather than serializing %s in a coerced field", (_name, hostile) => {
     const value = hostile as unknown as string;
     const registered = [
-      formatJsonResult(
+      jsonText(
         failure(EXIT_CODES.invalidInput, { kind: value, message: "m", paths: [] }),
       ),
-      formatJsonResult(
+      jsonText(
         failure(EXIT_CODES.invalidInput, { kind: "k", message: value, paths: [] }),
       ),
-      formatJsonResult(
+      jsonText(
         failure(EXIT_CODES.invalidInput, {
           kind: "k",
           message: "m",
@@ -581,7 +583,7 @@ describe("CLI result contracts", () => {
       },
     );
 
-    const published = formatJsonResult(
+    const published = jsonText(
       failure(EXIT_CODES.invalidInput, hostile),
     );
 
@@ -610,8 +612,8 @@ describe("CLI result contracts", () => {
     }
     const reshaped: CliResult<never> = { ...real, error: new Hostile() };
 
-    expect(() => formatJsonResult(reshaped)).not.toThrow();
-    expect(formatJsonResult(reshaped)).toContain("could not be published");
+    expect(() => jsonText(reshaped)).not.toThrow();
+    expect(jsonText(reshaped)).toContain("could not be published");
   });
 
   /**
@@ -633,7 +635,7 @@ describe("CLI result contracts", () => {
       },
     };
 
-    const published = formatJsonResult(failure(EXIT_CODES.invalidInput, hostile));
+    const published = jsonText(failure(EXIT_CODES.invalidInput, hostile));
 
     expect(published).not.toContain("sk-live");
     /**
@@ -663,7 +665,7 @@ describe("CLI result contracts", () => {
    */
   it.each([
     ["failure", (paths: readonly string[]): string =>
-      formatJsonResult(failure(EXIT_CODES.invalidInput, { kind: "k", message: "m", paths })),
+      jsonText(failure(EXIT_CODES.invalidInput, { kind: "k", message: "m", paths })),
     ],
     ["publish, through an unregistered arm", (paths: readonly string[]): string =>
       publish({
@@ -711,7 +713,7 @@ describe("CLI result contracts", () => {
     } as unknown as readonly string[];
 
     const published = JSON.parse(
-      formatJsonResult(
+      jsonText(
         failure(EXIT_CODES.invalidInput, { kind: "k", message: "m", paths: hostile }),
       ),
     ) as { error: { paths: readonly string[] } };
@@ -735,7 +737,7 @@ describe("CLI result contracts", () => {
     const paths = Array.from({ length: given }, (_unused, index) => `p${String(index)}`);
 
     const published = JSON.parse(
-      formatJsonResult(
+      jsonText(
         failure(EXIT_CODES.invalidInput, { kind: "k", message: "m", paths }),
       ),
     ) as { error: { paths: readonly string[] } };
@@ -763,7 +765,7 @@ describe("CLI result contracts", () => {
     } as unknown as readonly string[];
 
     const published = JSON.parse(
-      formatJsonResult(
+      jsonText(
         failure(EXIT_CODES.invalidInput, { kind: "k", message: "m", paths: conforming }),
       ),
     ) as { error: { paths: readonly string[] } };
@@ -818,7 +820,7 @@ describe("CLI result contracts", () => {
     ],
     ["a symbol", Symbol("s")],
   ])("refuses %s as data without throwing", (_name, data) => {
-    const published = formatJsonResult(
+    const published = jsonText(
       failure(EXIT_CODES.invalidInput, {
         kind: "k",
         message: "m",
@@ -860,7 +862,7 @@ describe("CLI result contracts", () => {
       },
     };
 
-    const published = formatJsonResult(failure(EXIT_CODES.invalidInput, hostile));
+    const published = jsonText(failure(EXIT_CODES.invalidInput, hostile));
 
     expect(published).not.toContain("sk-live-DEADBEEF");
     expect(reads).toBe(1);
@@ -1120,7 +1122,7 @@ describe("CLI result contracts", () => {
 
     const result = failure(EXIT_CODES.invalidInput, unreadable);
 
-    expect(JSON.parse(formatJsonResult(result))).toStrictEqual({
+    expect(JSON.parse(jsonText(result))).toStrictEqual({
       ok: false,
       code: EXIT_CODES.invalidInput,
       error: {
@@ -1209,7 +1211,7 @@ describe("CLI result contracts", () => {
       "a diagnostic string with sk-live-TOP in it",
     );
 
-    const published = formatJsonResult(
+    const published = jsonText(
       failure(EXIT_CODES.invalidInput, {
         kind: "k",
         message: "m",
@@ -1240,7 +1242,7 @@ describe("CLI result contracts", () => {
 
     expect(
       JSON.parse(
-        formatJsonResult(
+        jsonText(
           failure(EXIT_CODES.invalidInput, {
             kind: "k",
             message: "m",
@@ -1279,7 +1281,7 @@ describe("CLI result contracts", () => {
       },
     } as unknown as readonly string[];
 
-    const published = formatJsonResult(
+    const published = jsonText(
       failure(EXIT_CODES.invalidInput, { kind: "k", message: "m", paths: hostile }),
     );
 
@@ -1321,7 +1323,7 @@ describe("CLI result contracts", () => {
     const payload = redactPayload((text) => text, {
       report: Evil.from(["a"]) as unknown,
     });
-    const published = formatJsonResult(
+    const published = jsonText(
       failure(EXIT_CODES.invalidInput, {
         kind: "k",
         message: "m",
@@ -1354,7 +1356,7 @@ describe("CLI result contracts", () => {
     ],
   ])("describes a failure rather than throwing on %s", (_name, hostile) => {
     expect(() =>
-      formatJsonResult(failure(EXIT_CODES.invalidInput, hostile as unknown as CliError)),
+      jsonText(failure(EXIT_CODES.invalidInput, hostile as unknown as CliError)),
     ).not.toThrow();
   });
 
@@ -1378,7 +1380,7 @@ describe("CLI result contracts", () => {
     if (real.ok) return;
     const reshaped = { ...real, code } as unknown as CliResult<never>;
 
-    const published = formatJsonResult(reshaped);
+    const published = jsonText(reshaped);
 
     expect(published).not.toContain("sk-live");
     expect(published).toContain('"code":1');
@@ -1397,11 +1399,11 @@ describe("CLI result contracts", () => {
       code: EXIT_CODES.securityRefusal,
     } as unknown as CliResult<never>;
 
-    expect(formatJsonResult(reshaped)).toContain('"code":5');
+    expect(jsonText(reshaped)).toContain('"code":5');
   });
 
   it("never publishes a failure document carrying the success code", () => {
-    const published = formatJsonResult(success({ n: 1n }));
+    const published = jsonText(success({ n: 1n }));
 
     expect(published).toContain("could not be published");
     expect(published).not.toContain('"code":0');
@@ -1420,14 +1422,14 @@ describe("CLI result contracts", () => {
       },
     );
 
-    expect(formatJsonResult(failure(EXIT_CODES.invalidInput, hostile))).not.toContain(
+    expect(jsonText(failure(EXIT_CODES.invalidInput, hostile))).not.toContain(
       "sk-live",
     );
   });
 
   /** And a `paths` entry that is not a string is coerced, not published as it stands. */
   it("publishes no structure through a paths entry", () => {
-    const published = formatJsonResult(
+    const published = jsonText(
       failure(EXIT_CODES.invalidInput, {
         kind: "k",
         message: "m",
@@ -1541,7 +1543,7 @@ describe("CLI result contracts", () => {
     ["the success code", 0],
     ["a number outside the set", 999],
   ])("refuses %s as a code passed to failure", (_name, code) => {
-    const published = formatJsonResult(
+    const published = jsonText(
       failure(code as unknown as 1, { kind: "k", message: "m", paths: [] }),
     );
 
@@ -1578,7 +1580,7 @@ describe("CLI result contracts", () => {
     expect(published).toContain("second");
   });
 
-  /** `formatJsonResult`'s rebuild binds `error` once, as `failure` does. */
+  /** `publish`'s rebuild binds `error` once, as `failure` does. */
   it("reads the error and its recovery exactly once on the rebuild path", () => {
     const real = failure(EXIT_CODES.invalidInput, {
       kind: "k",
@@ -1605,7 +1607,7 @@ describe("CLI result contracts", () => {
       },
     } as unknown as CliResult<never>;
 
-    formatJsonResult(counted);
+    jsonText(counted);
 
     expect(errorReads).toBe(1);
     expect(recoveryReads).toBe(1);
@@ -1628,7 +1630,7 @@ describe("CLI result contracts", () => {
       },
     } as unknown as CliResult<never>;
 
-    expect(formatJsonResult(reshaped)).not.toContain("sk-live");
+    expect(jsonText(reshaped)).not.toContain("sk-live");
   });
 
   /** A number and the string of that number are different payloads. */
@@ -1642,7 +1644,7 @@ describe("CLI result contracts", () => {
       },
     );
 
-    expect(formatJsonResult(failure(EXIT_CODES.invalidInput, hostile))).not.toContain(
+    expect(jsonText(failure(EXIT_CODES.invalidInput, hostile))).not.toContain(
       '"data"',
     );
   });
@@ -1980,7 +1982,7 @@ describe("CLI result contracts", () => {
       paths: [],
     });
 
-    expect(formatJsonResult(result)).toBe(
+    expect(jsonText(result)).toBe(
       '{"ok":false,"code":2,"error":{"kind":"invalid_input","message":"no","paths":[]}}',
     );
   });
