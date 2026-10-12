@@ -27,9 +27,9 @@ export interface HookEnvironment {
 }
 
 /**
- * D86 (FLOW-INIT-2): verbs whose handler outlasts `HOOK_EXIT_BUDGET_MS` (`stop` runs tsc for up to
- * 120 s, `format` up to 30 s). A record started after them got no wait at exit and was abandoned, so
- * they write it before the handler, bounded by the same budget.
+ * D86 (FLOW-INIT-2): verbs that write their record before the handler, bounded by `HOOK_EXIT_BUDGET_MS`.
+ * They did so because their handlers ran tsc (up to 120 s) or a formatter (up to 30 s); since D102 both
+ * are no-ops and the order is kept unchanged.
  */
 const RECORD_FIRST: ReadonlySet<HookVerb> = new Set(["stop", "format"]);
 
@@ -108,8 +108,8 @@ export async function runHookMode(
     );
   let fired: HookVerb | null = null;
   try {
-    // CLI-LIFE-2: the recursion marker silences only the open verbs; tsc and formatter children never fire
-    // `command`, `commit` or `path`, so an ambient marker must not switch those fail-closed guards off.
+    // CLI-LIFE-2: the recursion marker silences only the open verbs; an ambient marker must not switch the
+    // fail-closed `command`, `commit` or `path` guards off. Since D102 no hook spawns a child that sets it.
     const mode = parsed.ok ? HOOK_FAIL_MODE[parsed.verb] : parsed.failMode;
     if (mode === "open" && environment?.env.DEVELOPER_OS_HOOK_ACTIVE === "1") return 0;
     if (!parsed.ok) return failed(parsed.failMode, parsed.vendor, "hook argv refused");

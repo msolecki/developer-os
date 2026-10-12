@@ -10,9 +10,7 @@ import { injectBrainContext } from "./inject.js";
 import type { HookOutcome } from "./outcome.js";
 import type { HookPayloadV1 } from "./payload.js";
 import { guardEdit } from "./guards/edit.js";
-import { guardFormat } from "./guards/format.js";
 import { guardPrompt } from "./guards/prompt.js";
-import { guardStop } from "./guards/stop.js";
 
 /** Structurally `main.ts`'s `CliContextFactory`; importing it would pull the whole command graph in. */
 export type HookContextFactory = (
@@ -35,12 +33,19 @@ export interface HookRuntime {
 
 export type HookVerbHandler = (payload: HookPayloadV1, runtime: HookRuntime) => Promise<HookOutcome>;
 
+/**
+ * D102 (AUD-006, NEW-251): `stop` and `format` run no project tool, because a cloned repository's
+ * `node_modules` is untrusted code. They stay installed and registered as no-ops, so a `hooks.json`
+ * written by an earlier build keeps exiting cleanly.
+ */
+const runsNoProjectTool: HookVerbHandler = () => Promise.resolve({ kind: "allow" });
+
 export const HOOK_HANDLERS: Partial<Record<HookVerb, HookVerbHandler>> = {
   command: guardCommand,
   commit: guardCommit,
   path: guardPath,
-  stop: guardStop,
-  format: guardFormat,
+  stop: runsNoProjectTool,
+  format: runsNoProjectTool,
   prompt: guardPrompt,
   edit: guardEdit,
   inject: injectBrainContext,
