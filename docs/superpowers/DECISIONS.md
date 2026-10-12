@@ -1,16 +1,13 @@
-# Developer OS Completion Roadmap
+# Developer OS Founder Decisions
 
-> **For agentic workers:** This is a sequencing plan, not an implementation plan. Each phase below names the spec or implementation plan that must exist before code is written for it; execute those through `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:subagent-driven-development`, as `SESSION.md` requires. Phase checkboxes are ticked only when the named plan closes.
+The founder decision log, D1 onward. This file was the completion roadmap
+(`plans/2026-09-04-developer-os-completion-roadmap.md`) until D101 closed it on 2026-10-12; the
+decisions keep their text and their places, and the phase sections below are history. Open work
+lives in `ORDER.md`, `BACKLOG.md` and the A16 plan. The roadmap's last full text is in git history
+(`git log --follow -- docs/superpowers/DECISIONS.md`).
 
-**Goal:** Finish Developer OS to the point where the founder runs it as the only agent runtime and the legacy shared-instruction repository, the legacy vault tooling, and the legacy plugin are retired.
-
-**Architecture:** The engine (transactions, manifest, redaction, quarantine, ingest, Brain index, both adapters) exists. What remains is the lifecycle (Spec 2 update/release, Spec 1 config/git/launchd), the instruction layer (A12), hooks (A13), tooling verbs (A14), Brain workflows (A12b), the cutover (A15) and release (A16). The order below is dictated by hard dependencies: nothing installs instruction artifacts before the manifest V2 handoff lands, and no cutover happens before the product replaces every legacy surface the founder uses daily.
-
-Completed tasks were removed on 2026-09-23, 2026-09-24 and 2026-09-26; see git history. The phase closes of 4b, 5, 5b, 6, 7, 8 and 9 ran on 2026-09-25/26: full suite green on `bc17550`, one whole-phase review each with its findings fixed or recorded (D62–D64), PR #15 merged. What each phase still owes is listed under it.
-
-**Tech Stack:** Node.js 24.16.0, pnpm 11.3.0 workspaces, TypeScript strict mode, Vitest, ESLint, macOS `launchd`, Markdown/Obsidian vaults, GitHub Releases, and Homebrew distribution (from the program plan, closed by D89).
-
-**Spec:** `docs/superpowers/specs/2026-07-21-developer-os-design.md` (umbrella), Spec 1 and Spec 2 as named per phase, `docs/migration/instruction-inventory.md` for the A12–A14 scope.
+**Execution order (D16):** 4b → 5 → 5b → 6 → 7 → 10 → 8 → 9 → 11, all closed except 10's
+remainder and 11, which `ORDER.md` tracks.
 
 ## Founder decisions of 2026-09-04
 
@@ -112,8 +109,7 @@ than to durability.
 
 Sizes are S/M/L complexity. "Gate" is what must be true before the next phase starts.
 
-**Execution order (D16):** 4b → 5 → 5b → 6 → 7 → 10 → 8 → 9 → 11, Phases 0–4 having closed.
-Phase numbers are identifiers, not positions.
+Phase numbers are identifiers, not positions. Every section below is history (D101).
 
 ### Phase 4b — Spec 2 Tasks 10–11: launcher and offline trust, so V2 `init` runs in production · L
 
@@ -369,6 +365,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D101 (2026-10-12), founder: the completion roadmap closes as bookkeeping and becomes this decision
+  log.** Its own rule deleted it when Phase 11 closed, but it had become mainly the record of D1–D100,
+  which `ORDER.md`, `BACKLOG.md`, the specs and the code cite. Nothing open moves: Phase 10's remainder
+  (cutover step 19's result files, Codex hook approval after 2026-10-22, and the D99 items) is tracked
+  in `ORDER.md`, `BACKLOG.md` and the A16 plan's Task 11, and Phase 11 is the A16 plan, behind L1 and L2.
+  The file is renamed to `docs/superpowers/DECISIONS.md`; the risk register and the table of expected
+  documents are dropped, being stale or covered by the architecture documents. New founder decisions
+  are added here, newest first.
 - **D100 (2026-10-11), founder: cutover step 16 item 5 (Codex) is waived, not passed.** The founder no
   longer has Codex access, so no Codex-session capture can be made. The one attempt was run by hand
   (`sourceAgent: unknown`, `manual`, because `CODEX_THREAD_ID` is set only for model-run commands)
@@ -666,52 +670,13 @@ Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; s
 
 ### Phase 10 — A15: founder cutover · L
 
-- `docs/migration/founder-cutover.md` is written (`974376a`, review `3bb435e`, D58 `c613db7`) from
-  program plan Task 8 with this phase's additions and D16's: the one-off vault migration on a copy,
-  inbox import in batches, installation with the vault as Brain, product hooks replacing the legacy
-  guards (closes D3's accepted risk), legacy surfaces removed, reinstall preserving the Brain and
-  overrides, retired jobs run by hand until Phase 9, Git and launchd left disabled, rollback
-  exercised once.
-- [x] Steps 1–15 executed on the live machine (steps 8–10 on 2026-09-28 under D69 and D74, steps
-  11–15 on 2026-09-28/29; `ORDER.md` has the evidence). The runs found NEW-114 (closed), NEW-115,
-  NEW-116 and the ingest fixes `588c866d`, `cb19f7c6`, `26807aed` and `3ebc505d`.
-- [ ] Step 16 (per-adapter gate cycle) and step 19's remainder (vault legacy tooling, result files);
-  Codex hook approval after 2026-10-22. Step 18 is waived and the legacy shared repository is retired
-  (D97, 2026-10-11).
-
-Gate: one complete capture → review → ingest → search → reinstall → uninstall cycle on the live machine; rollback to the legacy runtime exercised.
+Executed under `docs/migration/founder-cutover.md`: steps 1–15 on 2026-09-28/29; step 16 items 1–4
+passed, item 5 waived (D100), items 6–7 folded into the A16 reinstall (D99); step 18 waived and the
+legacy shared repository retired (D97). Step 19's result files and the Codex hook approval after
+2026-10-22 are tracked in `ORDER.md` (D101).
 
 ### Phase 11 — A16: release · L
 
-Program plan Task 9 (`git show ae25acd9:…`), now specified by `specs/2026-10-07-developer-os-release-publication-design.md`
-(D95, approved 2026-10-07); its plan follows Task 11b's. L1 (license) and L2 (tap repository, `TAP_PR_TOKEN`,
-release permissions) still owed; L1 blocks the first beta.
-
-## Risk register
-
-| Risk | Source | Mitigation |
-|---|---|---|
-| Legacy machine without pre-tool guards and without its weekly pipeline until cutover | D3 | Phase 6 restores guards through product hooks; Phase 7 `import` drains the inbox; cutover is the first phase that touches the live machine |
-| Hand-migrated vault is not reusable by other legacy-vault users | D4 | there is one such user; the mapping is recorded in inventory §8 |
-| Legacy rules carry client references | D5 | redaction step in Phase 5 before defaults enter the repository |
-| Codex loads skills from its cache, not the hashed tree | Phase 5 | re-register on every update; assert loading, not listing |
-| Spec 1 as written contradicts approved retention and pins a stale `launchctl` row | Phase 4, 9 | NEW-67 amendment before any Spec 1 task |
-| Founder machine has no `update` or `update rollback` between cutover and Phase 8 | D16 | Phase 10 proves reinstall preserves the Brain and user overrides; cutover rollback restores the legacy runtime |
-| Legacy scheduled jobs retire at cutover; product automation arrives in Phase 9 | D16 | their verbs exist from Phase 7 and run by hand; `import` and `ingest` stay manual permanently (D47); revisit the order if manual runs lapse |
-| A regression reaches `development` before a full suite sees it | D17, D32 | push every task commit; a red CI run stops new commits; full local `check` at every plan close; D32's deferred slow suites are seen first by CI, hours after the task that broke them |
-
-## Documents this roadmap expects to exist
-
-| Phase | Document |
-|---|---|
-| 4b | baseline plan Tasks 10–11 plus the production wiring step Phase 4b adds |
-| 5 | `docs/architecture/foundation.md` §4 and §12, `claude-adapter.md` §18 and `codex-adapter.md` §16 (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md`; its plan closed and was deleted 2026-09-28) |
-| 5b | `docs/architecture/brain.md` §6.13 (the spec was deleted 2026-09-29: `git show 343f8453:docs/superpowers/specs/2026-09-22-developer-os-brain-workflows-design.md`; its plan closed 2026-09-26) |
-| 6 | `docs/architecture/hooks.md` (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md`; its plan closed and was deleted 2026-09-29) |
-| 7 | `docs/architecture/foundation.md` §13, `knowledge-pipeline.md` §3.1 and `claude-adapter.md` §15 (the spec retired 2026-09-29: `git show 59a6be11:docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`; its plan closed and was deleted 2026-09-26) |
-| 8 | `plans/2026-09-28-new-110-spec2-apply.md` from NEW-110's Spec 2 revision pass (closed 2026-09-29, D75; both earlier plans closed 2026-09-26); Task 11b is designed by Spec 2's K1–K6 block (D94); its plan is being written |
-| 9 | plan 1b (closed 2026-09-26), Spec 1's D71 amendment and `plans/2026-09-28-new-113-fixed-path-admission.md` (closed 2026-09-29, D75; Task 5 is in `BACKLOG.md` NEW-113) |
-| 10 | `docs/migration/founder-cutover.md` |
-| 11 | `specs/2026-10-07-developer-os-release-publication-design.md` (D95) and its plan, after Task 11b's |
-
-This roadmap is deleted when Phase 11 closes; until then it is the index `ORDER.md` points at for everything after the current `NOW` entry.
+Specified by `specs/2026-10-07-developer-os-release-publication-design.md` (D95) and executed by its
+plan; L1 (license) and L2 (tap repository, `TAP_PR_TOKEN`, release permissions) are owed. Tracked in
+`ORDER.md` (D101).

@@ -46,7 +46,7 @@ it; then A16 (Task 11b closed 2026-10-11, D98).
 The program plan was closed as bookkeeping on 2026-10-07 (D89; `git show ae25acd9:docs/superpowers/plans/2026-07-21-developer-os-program.md`): its
 open items — DOS-P7's remainder (Task 11b), the DOS-P8 cutover (A15) and DOS-P9's release (A16 with
 L1) — now live in `BACKLOG.md` §3–§4, and the program is complete when A16 is. Founder decisions
-D1–D96 live in `plans/2026-09-04-developer-os-completion-roadmap.md`.
+D1–D101 live in `DECISIONS.md` (the completion roadmap, closed by D101).
 
 ## Product path
 

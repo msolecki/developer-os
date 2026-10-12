@@ -26,8 +26,8 @@ No full-suite debt is outstanding.
 A11 (Phase 4b) and A14 (Phase 7) have nothing left of their own: Task 11b is tracked under A11b, and
 A14's template scan ran with A12's (0 findings, 2026-09-28).
 
-The phase order, the founder decisions of 2026-09-04 and 2026-09-16 that fixed it, and the documents each phase
-expects are in `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`.
+The phase order and the founder decisions of 2026-09-04 and 2026-09-16 that fixed it are in
+`docs/superpowers/DECISIONS.md` (the completion roadmap, closed by D101).
 
 ## 1. Open repository rows
 
@@ -103,7 +103,7 @@ Closed 2026-10-08 (merged to `development` 2026-10-09 via #37/#38; the deferred 
 
 Closed 2026-10-08 (Task 11b, code complete; merged to `development` 2026-10-09 via #37/#38), rows removed: NEW-112 (no descriptor is accepted from any parent: FD 3 deleted from the launcher and the CLI, `6269550f`, `d14b5a35`), NEW-118 ((1)/(2) journalled `releases/<version>` and reservation release (`apps/cli/src/update/state-participant.ts` — `releaseReservation`) `c7139487`, `04828e14`; (3) the Codex plugin version is the stamped release version `3fcc575d`, effective once NEW-200's planner proposes Codex changes; (4) the verifier reads a bounded home snapshot `955c6556`, `404b17df`, with K7 (e)'s residual), NEW-163 (option B: `bin/developer-os.mjs` follows the active record at run time, `f53923a3`, `8da650ed`), NEW-171 (option (b): instruction rows bypass the planner and every `installedToken` arm checks the token kind, `9536b0dc`; rollback restamps them, `ad956ecb`).
 
-Closed 2026-10-09, row removed: NEW-206 (closed by design, founder 2026-10-09: every gate entry compacts the finalized journals, so a lost anchor after a gated manifest write beyond `init`'s entrypoint write cannot be re-derived, and a re-run `init` refuses with exit 6; the residual is accepted as availability-only, and no trust is widened. It is recorded as the D54 amendment "Amended 2026-10-09 (NEW-206, founder decision)" in `plans/2026-09-04-developer-os-completion-roadmap.md` and pinned by `manifest-anchor.v2.test.ts`; the alternatives that keep journals or a hash-chain log were rejected).
+Closed 2026-10-09, row removed: NEW-206 (closed by design, founder 2026-10-09: every gate entry compacts the finalized journals, so a lost anchor after a gated manifest write beyond `init`'s entrypoint write cannot be re-derived, and a re-run `init` refuses with exit 6; the residual is accepted as availability-only, and no trust is widened. It is recorded as the D54 amendment "Amended 2026-10-09 (NEW-206, founder decision)" in `DECISIONS.md` and pinned by `manifest-anchor.v2.test.ts`; the alternatives that keep journals or a hash-chain log were rejected).
 
 Closed 2026-10-09, row removed: NEW-208 (founder option (a), 2026-10-09: the launcher's closed CLI environment and the K8 refresh environment pass `CODEX_HOME` and `CLAUDE_CONFIG_DIR` through one list, `packages/platform-macos/src/vendor-home-variables.ts` — `parseVendorHomeVariables`; empty is not passed, any other value must be canonical absolute or the run refuses exit 2, because dropping it would silently put Codex artifacts under `~/.codex`; `bf8891d8`; Spec 2 §3.1 and K8 amended, `tests/repository/vendor-home-variables.test.ts` pins the helper's readers; a keg install that recorded `~/.codex` under another `CODEX_HOME` now reaches `codex_home_mismatch`, exit 3).
 
