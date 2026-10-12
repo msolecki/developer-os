@@ -273,7 +273,7 @@ None.
 
 ### AUD-006 — Stop and format hooks run repository-controlled code from the project's node_modules, an unstated trust assumption
 
-- **Kind:** security · **Verdict:** CONFIRMED · **Location:** `apps/cli/src/hooks/guards/child.ts:23`
+- **Kind:** security · **Verdict:** CONFIRMED · **Location:** `child.ts` line 23, deleted by D102 (`git show 32e1cbe5:apps/cli/src/hooks/guards/child.ts`)
 - **Problem:** guard stop runs node_modules/typescript's bin whenever tsconfig.json exists; guard format runs a local prettier/biome (and prettier loads .prettierrc.js). localBin only confines the path to the root; it does not check provenance (git-tracked or declared). No vendor permission prompt covers the spawn.
 - **Impact:** A cloned repo that commits node_modules/typescript with a malicious bin gets code execution under the user's uid when the agent's first turn ends, even if the user approved no tool call and never ran npm install. threat-model.md has no row for it.
 - **Evidence:** child.ts:26 `const pkgDir = await realpath(join(projectRoot, "node_modules", pkg));`; stop.ts:129 `const script = await localBin(root, "tsc");`
@@ -1458,7 +1458,7 @@ None.
 
 ### AUD-122 — ReleasePlanningScratchStore/Attempt (~1,180 lines) have no production consumer since df72f4cb
 
-- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `packages/security/src/update/scratch.ts:970`
+- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `scratch.ts` line 970, deleted by D102 (`git show 32e1cbe5:packages/security/src/update/scratch.ts`)
 - **Problem:** The transport was withdrawn (D84 K1); tryLock has no production implementation; ZstdUstarAdmission is used only by tests. Retention is documented in-code, so this needs a founder decision.
 - **Impact:** ~1,600 lines of security-critical code kept and exported with no caller; its lock contract is untested in production.
 - **Evidence:** scratch.ts:664-666 "no production caller exists since D84 K1 withdrew the transport"

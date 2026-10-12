@@ -140,7 +140,7 @@ item names, the item governs, and that section's text is not rewritten.
   `guarded_signed_metadata` source needs a retained verified file with a known path and inode, but
   planning keeps only `{ value, hash }` of the delegation and index and drops the bundle-manifest body
   (`apps/cli/src/update/planning.ts:229-231,625-628`), and the planning scratch retains none of the
-  three (`packages/security/src/update/scratch.ts:52-54`). A file in system temp would also fail the
+  three (`scratch.ts` lines 52-54, deleted by D102: `git show 32e1cbe5:packages/security/src/update/scratch.ts`). A file in system temp would also fail the
   source's "reopen on every recovery" rule after a crash. **Resolution:** (a) the three documents are
   construction `plan_derived` rows with the new role `release_metadata_after`,
   `{ metadata: 0 | 1 | 2, value: CanonicalJsonV1, valueBytes }`, legal only for `state_after` rows
