@@ -260,7 +260,8 @@ edit in Obsidian leaves: `brain lint` and `brain-pulse` report `index-drift`, an
 `developer-os brain reindex` repairs it — no capture status needs a hand edit. The reindex is still
 one transaction, so the index is the previous build or the new one, never half of each. A reindex
 failure is the run's failure, raised after the attempt record is written, with every capture's
-status already true on disk. Keeping every capture at `staging` until the run's reindex, then writing
+status already true on disk; when captures were also refused, their report stays the answer, the
+reindex failure is a warning beside it, and the exit code is the more severe of the two. Keeping every capture at `staging` until the run's reindex, then writing
 N `ingested` statuses, was rejected: it turns one failed reindex into N hand edits.
 
 The kinds are `TRANSACTION_KINDS` in `apps/cli/src/commands/ingest.ts`; the ladder is documented in the
