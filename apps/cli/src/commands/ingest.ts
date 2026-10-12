@@ -2853,8 +2853,8 @@ export async function runIngest(
     }
     /**
      * A failed reindex is the run's failure. When captures were also refused, their report
-     * stays the run's answer — it is what tells the user which capture is where — and the
-     * reindex failure rides along as a warning.
+     * stays the run's answer — it is what tells the user which capture is where — the
+     * reindex failure rides along as a warning, and its exit class still counts.
      */
     if (reindexFailure !== null) {
       const unindexed = new IngestRefusal(
@@ -2881,7 +2881,9 @@ export async function runIngest(
         warnings: selection.warnings,
       };
       throw new IngestRefusal(
-        severestOf(refused),
+        reindexFailure !== null && exitCodeOf(reindexFailure) > severestOf(refused)
+          ? exitCodeOf(reindexFailure)
+          : severestOf(refused),
         reportLines(report).join("\n"),
         [...new Set(refused.flatMap((refusal) => refusal.paths))],
         refusedRecovery(refused),
