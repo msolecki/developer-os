@@ -502,8 +502,8 @@ command left in the file; each must be tooling you kept. The product's own hooks
 `hooks/hooks.json`, not here.
 
 Removing the legacy entries in the same sitting as step 9 is what keeps two copies of a mutating
-hook from running: legacy `format-smart` and the product `guard format` both edit files, and two
-injection hooks double the session context.
+hook from running: legacy `format-smart` edits files (the product `guard format` did too until D102,
+and now runs no tool), and two injection hooks double the session context.
 
 **Codex, pending A13 Task 15 (NEW-104).** The product Codex plugin renders no hooks yet (`doctor`
 reports `codex=not-rendered`). Until NEW-104 lands, the legacy Codex hooks stay installed and are the
