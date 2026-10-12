@@ -1156,9 +1156,19 @@ describe("the manifest anchor across automation enable (AUD-034)", () => {
         },
       };
 
-      const failed = await runAutomation(failingSettle, { subcommand: "enable", schedules: [...BASE_SCHEDULES], apply: true });
+      // The module's scripted launchd still holds the shared home's loaded jobs; this fresh home owns none of them,
+      // and enable would read them as launchd_live_state_third_state before it ever rewrote the manifest.
+      const sharedLoaded = new Map(launchd.loaded);
+      launchd.loaded.clear();
+      let failed: Awaited<ReturnType<typeof runAutomation>>;
+      try {
+        failed = await runAutomation(failingSettle, { subcommand: "enable", schedules: [...BASE_SCHEDULES], apply: true });
+      } finally {
+        launchd.loaded.clear();
+        for (const [job, label] of sharedLoaded) launchd.loaded.set(job, label);
+      }
 
-      expect(failed.ok).toBe(false);
+      expect(failed).toMatchObject({ ok: false, error: { message: "injected settle failure" } });
       const manifest = await nodeFs.readFile(fixture.paths.manifestFile);
       expect(manifest.equals(manifestBefore)).toBe(false);
       const anchor = decodeManifestAnchor(await nodeFs.readFile(manifestAnchorPath(fixture.paths.home)));
