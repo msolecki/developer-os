@@ -586,10 +586,20 @@ export function createRedactor(
 /**
  * AUD-007: the shell (`export`, `setenv`), compose-list (`- `), YAML (`NAME:`) and JSON
  * (`"NAME": "v"`, anywhere on the line, so only its value) spellings of one env-secret name.
+ *
+ * NEW-258 (D102 (8)): every arm scans in linear time. The name was
+ * `[A-Za-z_][A-Za-z0-9_]*(?:TOKEN|…)[A-Za-z0-9_]*`, two stars around the keyword, so a
+ * 64 KB run of `TOKENTOKEN…` tried every split (~615 ms). Every arm follows the name with a
+ * non-word character, so a match's name is always the whole identifier run; the lookahead
+ * checks that run holds a keyword after its first character, and the one star then takes it,
+ * which matches the same names in one pass. The line arms opened with `[\r\n]\s*`, and `\s`
+ * crosses lines, so every one of 64 K blank lines rescanned the rest (~2.5 s); a name still
+ * follows any blank lines and indentation, now from the last line break before it.
  */
-const ENV_SECRET_NAME = String.raw`[A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASS|API_KEY|PRIVATE_KEY|ACCESS_KEY)[A-Za-z0-9_]*`;
-const ENV_SECRET_ASSIGNMENT = new RegExp(String.raw`(?:^|[\r\n])\s*(?:(?:export|-)[ \t]+)?["']?${ENV_SECRET_NAME}["']?\s*[:=]\s*([^\r\n]+)`, "gu");
-const ENV_SECRET_SETENV = new RegExp(String.raw`(?:^|[\r\n])\s*setenv[ \t]+${ENV_SECRET_NAME}[ \t]+([^\r\n]+)`, "gu");
+const ENV_SECRET_NAME = String.raw`[A-Za-z_](?=[A-Za-z0-9_]*?(?:TOKEN|SECRET|PASSWORD|PASS|API_KEY|PRIVATE_KEY|ACCESS_KEY))[A-Za-z0-9_]*`;
+const LINE_START = String.raw`(?:^|[\r\n])[^\S\r\n]*`;
+const ENV_SECRET_ASSIGNMENT = new RegExp(String.raw`${LINE_START}(?:(?:export|-)[ \t]+)?["']?${ENV_SECRET_NAME}["']?\s*[:=]\s*([^\r\n]+)`, "gu");
+const ENV_SECRET_SETENV = new RegExp(String.raw`${LINE_START}setenv[ \t]+${ENV_SECRET_NAME}[ \t]+([^\r\n]+)`, "gu");
 const ENV_SECRET_QUOTED_KEY = new RegExp(String.raw`["']${ENV_SECRET_NAME}["']\s*:\s*("(?:[^"\\\r\n]|\\.)*"|'[^'\r\n]*'|[^\s,}\]]+)`, "gu");
 
 export function redactText(
