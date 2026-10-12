@@ -141,7 +141,7 @@ describe("brain reindex", () => {
     expect((await nodeFs.lstat(content)).isSymbolicLink()).toBe(true);
   });
 
-  it("writes the four artifacts through a transaction", async () => {
+  it("writes the five artifacts through a transaction", async () => {
     const fixture = await installed("brain-reindex");
 
     const result = await runBrain(fixture.context, {
@@ -156,6 +156,7 @@ describe("brain reindex", () => {
       "content/_indexes/catalog.md",
       "content/_indexes/graph.json",
       "content/_indexes/index.json",
+      "content/_indexes/terms.json",
       "content/_indexes/vault-map.md",
     ]);
 
@@ -180,7 +181,7 @@ describe("brain reindex", () => {
     expect(result.ok).toBe(true);
     if (!result.ok || result.data.subcommand !== "reindex") return;
     expect(result.data.transactionId).toBeNull();
-    expect(result.data.written).toHaveLength(4);
+    expect(result.data.written).toHaveLength(5);
 
     const indexes = await nodeFs.readdir(
       join(fixture.paths.brain, "content", "_indexes"),
@@ -225,7 +226,7 @@ describe("brain reindex", () => {
 
   it("recovers when the user deletes the index directory", async () => {
     /**
-     * The manifest still claims four artifacts that are gone, so a plan built
+     * The manifest still claims five artifacts that are gone, so a plan built
      * from the manifest alone says `replace` and the executor refuses — every
      * later reindex, forever, with no recovery text. Reconciling against the
      * disk first is what makes this an ordinary run.
@@ -245,7 +246,7 @@ describe("brain reindex", () => {
     expect(again.ok, again.ok ? "" : JSON.stringify(again.error)).toBe(true);
     expect(
       await nodeFs.readdir(join(fixture.paths.brain, "content", "_indexes")),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
   });
 
   it("recovers when artifacts exist that no manifest records", async () => {
@@ -253,7 +254,7 @@ describe("brain reindex", () => {
      * What a crash between the transaction and the recording leaves behind, and
      * also what `uninstall` → `init` → `reindex` produces: uninstall deletes
      * the manifest and preserves the vault by location, so the next reindex
-     * meets four files nobody owns.
+     * meets five files nobody owns.
      */
     const fixture = await installed("brain-orphaned-artifacts");
     await runBrain(fixture.context, { ...OPTIONS, subcommand: "reindex" });

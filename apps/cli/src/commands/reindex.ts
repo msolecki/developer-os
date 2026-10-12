@@ -21,8 +21,8 @@ import { readAdmittedManifest } from "./doctor.js";
 export { dependenciesFor } from "./brain-dependencies.js";
 
 /**
- * Writing Brain's four generated index artifacts, for the two commands that do
- * it: `developer-os brain reindex` and the third transaction of
+ * Writing Brain's five generated index artifacts, for the two commands that do
+ * it: `developer-os brain reindex` and the once-per-run reindex of
  * `developer-os ingest`.
  *
  * **It exists because this logic must not exist twice.** It was `brain.ts`'s
@@ -72,8 +72,8 @@ export interface IndexWriteRequest {
   readonly files: Readonly<Record<string, string>>;
   /**
    * The transaction kind, which is the caller's and not this module's.
-   * `brain reindex` journals `brain-reindex`; ingest's third transaction
-   * journals `ingest-reindex`, because that is what makes its four-transaction
+   * `brain reindex` journals `brain-reindex`; ingest's once-per-run reindex
+   * journals `ingest-reindex`, because that is what makes its transaction
    * ladder visible in the journals `repair` and `status` read. One shared kind
    * would erase a distinction those commands report on.
    */
@@ -202,7 +202,7 @@ async function stageArtifacts(
          * `false`, and that is the honest value rather than a convenient one.
          * The manifest ties `existedBefore` to a backup it can restore — the
          * validator refuses `true` without a `backupRelativePath` — and
-         * adoption takes no backup, because these four files are generated and
+         * adoption takes no backup, because these five files are generated and
          * there is no prior version worth restoring. `uninstall` preserves them
          * by location regardless of what this says.
          */
@@ -254,7 +254,7 @@ async function stageArtifacts(
       /**
        * The manifest's hash, which is what `validateChangePlan` compares
        * against — itself. That check is therefore not what stops a hand-edited
-       * artifact being overwritten, and nothing here is: these four files are
+       * artifact being overwritten, and nothing here is: these five files are
        * generated, regenerating them is the whole point of the command, and
        * `brain lint`'s `index-drift` class is where a user is told they had
        * diverged.

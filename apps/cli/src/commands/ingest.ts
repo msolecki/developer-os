@@ -29,10 +29,12 @@ import {
   artifactPaths,
   BrainService,
   buildIngestPrompt,
+  compareCanonical,
   exceedsPromptContentBound,
   MAX_PROMPT_CONTENT_GRAPHEMES,
   parseCaptureFile,
   parseIngestProposal,
+  parseNote,
   planIngestApply,
   renderCaptureFile,
   resolveBrainConfig,
@@ -266,14 +268,22 @@ const INGEST_TIMEOUT_MS = 120_000;
 const UNKNOWN_VERSION = "unknown";
 
 /**
- * The four transactions one capture produces, plus the compensating fifth.
+ * The three transactions one capture produces, the run's one reindex, and the
+ * compensating rollback.
  *
  * **They cannot be one transaction**, and the correction is the point: the
  * ladder mutates two different ownership regimes and the executor's lock is
  * per-execution. The status must be durable *before* the apply, or a crash
- * cannot be told from a run that never started; `BrainService.reindex()` reads
- * the vault, so it cannot run until the apply has finalized; and `ingested` may
- * not be claimed before the note is findable.
+ * cannot be told from a run that never started; and `BrainService.reindex()` reads
+ * the vault, so it cannot run until the apply has finalized.
+ *
+ * **The reindex is once per run, not per capture** (AUD-089, D102): `ingested`
+ * means the capture's notes are in the vault, and they are findable once the run's
+ * reindex lands after the last capture. A run that dies before it leaves an index
+ * older than its notes — `index-drift` in `brain lint` and `brain-pulse`, put right
+ * by `developer-os brain reindex` — never a capture to hand-edit. The reindex
+ * itself is still one transaction, so the index is the old build or the new one,
+ * never half of each.
  *
  * **The residual, stated rather than closed:** a crash between `apply` and
  * `ingested` leaves a capture at `staging` with its notes already written.
@@ -1542,7 +1552,7 @@ async function snapshotBeforeCall(
     [capturePath, await boundState(context, capturePath, stagedHash)],
   ]);
   const artifacts = artifactPaths(environment.brainConfig);
-  for (const artifact of [artifacts.index, artifacts.graph, artifacts.vaultMap, artifacts.catalog]) {
+  for (const artifact of [artifacts.index, artifacts.terms, artifacts.graph, artifacts.vaultMap, artifacts.catalog]) {
     const path = join(environment.paths.brain, artifact);
     /** The index is bound to the bytes the excerpt was parsed from, not to a second read. */
     files.set(
@@ -1745,12 +1755,13 @@ async function applyNotes(
 }
 
 /**
- * Transaction 3: `brain reindex`'s path, not a second one.
+ * The run's one reindex: `brain reindex`'s path, not a second one.
  *
  * `BrainService.reindex()` returns bytes and **cannot write** — its absence of a
  * write channel is the design — so the CLI stages those bytes through the
- * executor exactly as `brain reindex` does. It runs after the apply has
- * finalized, because it reads the vault it is indexing.
+ * executor exactly as `brain reindex` does. It runs once, after every capture of
+ * the run has been attempted, because it reads the vault it is indexing and a
+ * per-capture reindex cost O(captures x vault) (AUD-089, D102).
  */
 async function reindexVault(
   context: CliContext,
@@ -1862,8 +1873,9 @@ interface IngestEnvironment {
   readonly vendor: Vendor | null;
   readonly ingestContract: readonly string[];
   /**
-   * Read at run setup and re-read before each capture whose index bytes moved, so a later
-   * capture sees what an earlier one created (BACKLOG NEW-116) — see `readIndexExcerpt`.
+   * Read at run setup, re-read before each capture whose index bytes moved, with this run's
+   * notes laid over it, so a later capture sees what an earlier one created (BACKLOG NEW-116)
+   * — see `readIndexExcerpt` and `withWrittenNotes`.
    */
   readonly indexExcerpt: readonly IndexExcerptEntryV1[];
   /** The `fileState` of the index bytes `indexExcerpt` was parsed from (NEW-40). */
@@ -1873,7 +1885,8 @@ interface IngestEnvironment {
 }
 
 /**
- * One capture, one agent call, four transactions.
+ * One capture, one agent call, three transactions; the run's one reindex
+ * follows the last capture (`runIngest`, AUD-089).
  *
  * ```text
  * accepted capture
@@ -1883,8 +1896,9 @@ interface IngestEnvironment {
  *   → IngestProposal, parsed
  *   → the nine deterministic validators
  *   → one create per proposed note                      (ingest-apply)
- *   → brain reindex                                     (ingest-reindex)
  *   → status → ingested                                 (ingest-ingested)
+ * … every capture, then once per run:
+ *   → brain reindex                                     (ingest-reindex)
  * ```
  *
  * **Nothing that fails here produces `failed`.** `failed` describes a capture
@@ -1905,7 +1919,7 @@ interface IngestEnvironment {
  *   nothing applied. It is a third state, labelled and given its own recovery
  *   line rather than folded into either of the two above.
  *
- * **The apply and the reindex are skipped when the proposal proposes nothing.**
+ * **The apply is skipped when the proposal proposes nothing.**
  * An empty `notes` array is a correct answer — it means this capture is not
  * worth a note — and there is then nothing to create and nothing new to index.
  * The capture still reaches `ingested`, because it has been through the
@@ -2086,7 +2100,6 @@ async function ingestOne(
         throw outcome.reason;
       }
       applied = outcome.notes.length === 0 ? null : outcome.notes;
-      await reindexVault(context, environment.config, paths, brainConfig);
     }
 
     await writeCaptureFile(
@@ -2208,7 +2221,8 @@ function isIndexDocumentShape(
  * The vault's own index, as the bounded excerpt `buildIngestPrompt` carries in
  * place of a read scope over the vault. Read at run setup and handed down on
  * `IngestEnvironment`, then re-read before a capture only when the file's identity or
- * bytes moved — this run's own reindex, or a hand edit (NEW-40). A read-once excerpt hid
+ * bytes moved — a hand edit (NEW-40); this run's own notes are laid over it by
+ * `withWrittenNotes` until the run's one reindex (AUD-089). A read-once excerpt hid
  * every note the run created from every later capture (BACKLOG NEW-116: 35 of 106
  * refused, mostly on a path that already holds a file).
  *
@@ -2297,6 +2311,45 @@ function parseIndexExcerpt(
       title: redact(note.title).text,
       summary: redact(note.summary).text,
     }));
+}
+
+/**
+ * One note this run wrote, as the excerpt row the run's reindex will give it: the same
+ * fields, redacted the same way as `parseIndexExcerpt`. `null` when the note cannot be read
+ * or parsed back; `takenPaths` still names it.
+ */
+async function excerptEntryOf(
+  context: CliContext,
+  contentRoot: string,
+  note: string,
+  redact: Redactor,
+): Promise<IndexExcerptEntryV1 | null> {
+  try {
+    const parsed = parseNote(await context.guards.readText(join(contentRoot, note)));
+    if (!parsed.ok) return null;
+    return {
+      path: redact(note, "value").text,
+      title: redact(parsed.note.frontmatter.title).text,
+      summary: redact(parsed.note.frontmatter.summary).text,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The index excerpt with this run's notes laid over it, in index order, so a later capture
+ * sees what an earlier one created (NEW-116) without a reindex per capture (AUD-089). Kept
+ * apart from the excerpt, so a re-read after a hand edit cannot drop them.
+ */
+function withWrittenNotes(
+  entries: readonly IndexExcerptEntryV1[],
+  written: ReadonlyMap<string, IndexExcerptEntryV1>,
+): readonly IndexExcerptEntryV1[] {
+  if (written.size === 0) return entries;
+  return [...entries.filter((entry) => !written.has(entry.path)), ...written.values()].sort(
+    (left, right) => compareCanonical(left.path, right.path),
+  );
 }
 
 function compareIds(left: IngestedCaptureV1, right: IngestedCaptureV1): number {
@@ -2567,7 +2620,7 @@ function reportLines(report: RunReport): readonly string[] {
  * developer-os ingest --agent codex        through a named vendor
  * ```
  *
- * **One capture, one agent call, four transactions.** Failure isolates to a
+ * **One capture, one agent call, three transactions; one reindex per run.** Failure isolates to a
  * single capture rather than poisoning a batch, and that is containment rather
  * than a stop: the failure is recorded against its own capture and every
  * remaining capture is still attempted. The prompt stays bounded by one envelope
@@ -2727,6 +2780,8 @@ export async function runIngest(
     const refused: RefusedCaptureV1[] = [];
     const order: string[] = [];
     const takenPaths: string[] = [];
+    /** This run's notes, by excerpt path, until the run's one reindex indexes them (AUD-089). */
+    const writtenThisRun = new Map<string, IndexExcerptEntryV1>();
 
     /**
      * Each selected capture is attempted exactly once per run, so a refused one is never
@@ -2737,9 +2792,8 @@ export async function runIngest(
     for (const { fileName } of selection.accepted) {
       order.push(fileName.slice(0, -CAPTURE_FILE_SUFFIX.length));
       /**
-       * Re-read whenever the index moved since the excerpt was parsed — after this run's own
-       * reindex, after a hand edit that refused an earlier capture, or after one made before
-       * this capture began — so each prompt and each NEW-40 snapshot see the index as it is,
+       * Re-read whenever the index moved since the excerpt was parsed — after a hand edit that
+       * refused an earlier capture, or after one made before this capture began — so each prompt and each NEW-40 snapshot see the index as it is,
        * and one edit refuses one capture rather than every later one.
        */
       if ((await fileState(context, indexPath)) !== index.state) {
@@ -2747,7 +2801,12 @@ export async function runIngest(
       }
       const outcome = await ingestOne(
         context,
-        { ...environment, indexExcerpt: index.entries, indexState: index.state, takenPaths },
+        {
+          ...environment,
+          indexExcerpt: withWrittenNotes(index.entries, writtenThisRun),
+          indexState: index.state,
+          takenPaths,
+        },
         fileName,
       );
       if (outcome.ok) ingested.push(outcome.capture);
@@ -2755,6 +2814,25 @@ export async function runIngest(
       const written = outcome.ok ? outcome.capture.notes : outcome.refusal.appliedNotes;
       if (written.length > 0) {
         takenPaths.push(...written.map((note) => redact(note, "value").text));
+        for (const note of written) {
+          const entry = await excerptEntryOf(context, contentRoot, note, redact);
+          if (entry !== null) writtenThisRun.set(entry.path, entry);
+        }
+      }
+    }
+
+    /**
+     * **One reindex per run, after the last capture** (AUD-089, D102), whenever a note this
+     * run can name landed — the same notes a per-capture reindex used to follow. A failure
+     * here is the run's, not a capture's — every status is already true on disk — and is
+     * raised after the attempt record is written.
+     */
+    let reindexFailure: unknown = null;
+    if (takenPaths.length > 0) {
+      try {
+        await reindexVault(context, config, paths, brainConfig);
+      } catch (error) {
+        reindexFailure = error;
       }
     }
 
@@ -2772,6 +2850,21 @@ export async function runIngest(
     /** On stderr directly: the report's own warnings are the unreadable captures, listed as such. */
     for (const warning of [recorded.warning, unwritten, ...selection.staging]) {
       if (warning !== null) context.io.stderr(`warning: ${warning}`);
+    }
+    /**
+     * A failed reindex is the run's failure. When captures were also refused, their report
+     * stays the run's answer — it is what tells the user which capture is where — and the
+     * reindex failure rides along as a warning.
+     */
+    if (reindexFailure !== null) {
+      const unindexed = new IngestRefusal(
+        exitCodeOf(reindexFailure),
+        `the vault index was not rebuilt after this run's notes landed (${reindexFailure instanceof Error ? reindexFailure.message : "an unexpected failure occurred"})`,
+        [],
+        "developer-os brain reindex; every capture already says how far it got",
+      );
+      if (refused.length > 0) context.io.stderr(`warning: ${unindexed.message}; run developer-os brain reindex`);
+      else throw reindexFailure instanceof IngestRefusal ? reindexFailure : unindexed;
     }
 
     const captures = [...ingested, ...selection.unreadable].sort(compareIds);

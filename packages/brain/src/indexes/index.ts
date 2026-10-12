@@ -23,7 +23,10 @@ export type {
   IndexedNote,
   IndexedTag,
   IndexedTerm,
+  IndexManifestNote,
+  IndexManifestV1,
   NoteIssues,
+  TermsDocumentV1,
   UnresolvedLink,
   WikilinkOccurrence,
 } from "./build.js";
@@ -32,5 +35,5 @@ export {
   renderCatalog,
   renderVaultMap,
 } from "./render.js";
-export { serializeGraph, serializeIndex } from "./serialize.js";
+export { serializeGraph, serializeIndex, serializeTerms } from "./serialize.js";
 export { tokenize } from "./tokenize.js";

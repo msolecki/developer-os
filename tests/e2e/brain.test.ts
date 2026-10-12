@@ -65,6 +65,7 @@ const ARTIFACTS = [
   "content/_indexes/catalog.md",
   "content/_indexes/graph.json",
   "content/_indexes/index.json",
+  "content/_indexes/terms.json",
   "content/_indexes/vault-map.md",
 ] as const;
 
@@ -95,7 +96,7 @@ describe("brain, against the compiled binary under a temporary HOME", () => {
     });
   });
 
-  it("writes exactly four artifacts, and nothing under --dry-run", async () => {
+  it("writes exactly five artifacts, and nothing under --dry-run", async () => {
     await withInstalled(async (sandbox) => {
       const before = await inventory(sandbox.brain);
 
@@ -343,7 +344,7 @@ it("prints a joined emoji in a title as the author wrote it", async () => {
       ).toStrictEqual([]);
 
       /**
-       * Byte for byte, including the four generated artifacts. They are
+       * Byte for byte, including the five generated artifacts. They are
        * manifest-owned, so what preserves them is `uninstall`'s location rule
        * rather than the absence of a record — which is the half that would
        * silently stop working.
@@ -355,7 +356,7 @@ it("prints a joined emoji in a title as the author wrote it", async () => {
   it("survives uninstall, reinstall, and another reindex", async () => {
     /**
      * The sequence that used to wedge `reindex` permanently: uninstall deletes
-     * the manifest and preserves the vault, so the next reindex meets four
+     * the manifest and preserves the vault, so the next reindex meets five
      * artifacts nobody owns.
      */
     await withInstalled(async (sandbox) => {

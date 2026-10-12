@@ -344,7 +344,7 @@ check removed together. That is the strongest single statement in this document 
 seam, and it is a measurement rather than a claim.
 
 **`validateChangePlan` is deliberately absent from the note write too**
-(`apps/cli/src/commands/ingest.ts:1231-1238`), for the same reason it is absent from a capture write: a
+(`apps/cli/src/commands/ingest.ts:1241-1248`), for the same reason it is absent from a capture write: a
 note is the user's own content. The write-scope validator stands in its place, which is narrower than
 ownership and is the constraint that matters for a path a model chose.
 
@@ -354,13 +354,13 @@ The vendor CLI is the only outbound process this product makes, and the only pla
 
 | Boundary | Mechanism | Evidence |
 |---|---|---|
-| The model is invoked with zero declared write scopes | `writeScopes: []` at the call site (`invokeCodexInWorkspace`, `apps/cli/src/commands/ingest.ts:1336-1341`); Codex derives `-s read-only` **from the count and never from an argument**, which is what makes `danger-full-access` unreachable rather than merely unwritten (`invokeCodex` reads `writeScopes`: `packages/adapter-codex/src/invoke.ts:236-246`, `packages/adapter-codex/src/invoke.ts:313-314`); Claude is passed `--tools ""` — an empty tool *set*, not an allow-list — so there is no tool the vendor's own permission system could grant a write through, and no `allowedTools`-shaped field exists on `ClaudeInvocation` for a caller to widen (`packages/adapter-claude/src/invoke.ts:7-11`; the `--tools` argv is asserted by `invokeClaude`'s own test in the next column) | `apps/cli/src/commands/ingest.test.ts:2063-2073` — `gives claude no tools at all, so the read scope is the prompt and nothing else`; `packages/adapter-claude/src/invoke.test.ts:76-95` — `passes argv as an array, in print mode, with no tools and no user configuration`; `packages/adapter-codex/src/invoke.test.ts:326-334` — `uses read-only and adds no --add-dir when there are no write scopes`; `tests/security/network.test.ts:255-266` — `spawns exactly one process during ingest, and it is the discovered vendor binary` (`CLAUDE`) |
+| The model is invoked with zero declared write scopes | `writeScopes: []` at the call site (`invokeCodexInWorkspace`, `apps/cli/src/commands/ingest.ts:1346-1351`); Codex derives `-s read-only` **from the count and never from an argument**, which is what makes `danger-full-access` unreachable rather than merely unwritten (`invokeCodex` reads `writeScopes`: `packages/adapter-codex/src/invoke.ts:236-246`, `packages/adapter-codex/src/invoke.ts:313-314`); Claude is passed `--tools ""` — an empty tool *set*, not an allow-list — so there is no tool the vendor's own permission system could grant a write through, and no `allowedTools`-shaped field exists on `ClaudeInvocation` for a caller to widen (`packages/adapter-claude/src/invoke.ts:7-11`; the `--tools` argv is asserted by `invokeClaude`'s own test in the next column) | `apps/cli/src/commands/ingest.test.ts:2090-2100` — `gives claude no tools at all, so the read scope is the prompt and nothing else`; `packages/adapter-claude/src/invoke.test.ts:76-95` — `passes argv as an array, in print mode, with no tools and no user configuration`; `packages/adapter-codex/src/invoke.test.ts:326-334` — `uses read-only and adds no --add-dir when there are no write scopes`; `tests/security/network.test.ts:255-266` — `spawns exactly one process during ingest, and it is the discovered vendor binary` (`CLAUDE`) |
 | No shell is ever involved | `spawn(..., { shell: false })` (`packages/security/src/process.ts:91-97`) | `packages/security/src/process.test.ts` |
 | The executable is absolute | `assertSafeCommand` refuses a non-absolute executable (`packages/security/src/process.ts:47-54`). Separately, the request carries no `PATH`, so a child has nothing to resolve a bare name against | `packages/security/src/process.test.ts:86-103` — `rejects foreign-platform executable syntax that is not locally absolute`, an `it.skipIf` that runs wherever `C:\tools\curl.exe` is not absolute, so it executes on the supported platform; `tests/security/network.test.ts:235-249` asserts absoluteness across every classified (`isDiscoveryOrVersionProbe`) spawn |
 | The executable, `cwd`, every argument and stdin are NUL-free | four `containsNul` checks across two branches of `assertSafeCommand` — the executable (`packages/security/src/process.ts:49`), then the working directory, every argument and stdin (`:57`, `:58`, `:59`) | **Proven per branch since 2026-08-15.** `describe("assertSafeCommand")` (`packages/security/src/process.test.ts:62`) holds a case for each of the four `containsNul` sites — executable (`:107-115`), working directory (`:117-123`), any argument (`:125-131`), stdin (`:133-139`). This cell said no test exercised a NUL at all, and pointed at **NEW-18**, a row Track R closed with a regression test each and removed from `BACKLOG.md` §1 three days before this sentence was last edited. |
 | The child inherits nothing from the parent environment | the runner passes only `{...request.env}` (`packages/security/src/process.ts:95`), and both adapters pass `env: {}` — stricter than the spec asks | `tests/security/network.test.ts` — `does not pass a proxy the parent process was given`, asserted by *inheritance* rather than by an expectation that could be edited to match a leak |
 | Output cannot exhaust memory | 1 MiB per stream (`MAX_CAPTURE_BYTES`), after which the child is `SIGKILL`ed and the call is a security refusal (`packages/security/src/process.ts:7,185-220`) | `packages/security/src/process.test.ts` |
-| A run is bounded in wall clock | `SIGTERM`, then `SIGKILL` 100 ms later, to the process *group* on darwin (`signalProcessTree`, `packages/security/src/process.ts:115-132,172-183`); `INGEST_TIMEOUT_MS` is 120 s (`apps/cli/src/commands/ingest.ts:257`) | `packages/security/src/process.test.ts` |
+| A run is bounded in wall clock | `SIGTERM`, then `SIGKILL` 100 ms later, to the process *group* on darwin (`signalProcessTree`, `packages/security/src/process.ts:115-132,172-183`); `INGEST_TIMEOUT_MS` is 120 s (`apps/cli/src/commands/ingest.ts:259`) | `packages/security/src/process.test.ts` |
 | Vendor output is redacted before it is returned to any caller | the runner redacts stdout and stderr inside `finishFromClose` (`packages/security/src/process.ts:141-159`), with the user's `[redaction]` patterns once configuration is read (NEW-26, §5.7) | `tests/security/sentinel.test.ts`'s `the logs` and `the --json output` cases **(§8: neither carries a watched failure)**; `packages/security/src/process.test.ts` asserts the redaction at the runner; `apps/cli/src/context.test.ts` → "redacts vendor stdout and stderr with the configured patterns once they are bound" |
 | A refusal never echoes the rejected value | `parseAgentPromptArgs` scrubs it, because a `with` block is author-controlled and the message reaches a log (`packages/core/src/agent-prompt/index.ts:38`, its `safeParse` failure at `:83-88`) | `packages/core/src/agent-prompt/agent-prompt.test.ts` |
 | **An invocation is bounded in turns** | **partial** | see below |
@@ -369,7 +369,7 @@ The vendor CLI is the only outbound process this product makes, and the only pla
 enforced under Claude — an integer
 between 1 and 50, refused otherwise, bounded at the adapter rather than trusted from the type
 (`MAX_TURNS_CEILING`, `packages/adapter-claude/src/invoke.ts:28,74-88`) — and `CodexInvocation` (`packages/adapter-codex/src/invoke.ts` — `CodexInvocation`) has no such field, so the
-Codex arm of `invokeVendor` passes none (`invokeCodexInWorkspace`, `apps/cli/src/commands/ingest.ts:1336-1341,1352`). The shared
+Codex arm of `invokeVendor` passes none (`invokeCodexInWorkspace`, `apps/cli/src/commands/ingest.ts:1346-1351,1362`). The shared
 workflow parser does not expose those two behaviours: it refuses `maxTurns` before vendor selection.
 
 Half of it is closed and the half that is closed is worth knowing: `parseAgentPromptArgs` now
@@ -377,7 +377,7 @@ Half of it is closed and the half that is closed is worth knowing: `parseAgentPr
 vendor and dropping it on the other (`packages/core/src/agent-prompt/index.ts:68-79`, pinned by
 `packages/core/src/agent-prompt/agent-prompt.test.ts:50,63`). So a *workflow author* can no longer
 set a bound that silently applies to one vendor. What survives is `ingest`'s own direct invocation:
-it sets `DEFAULT_MAX_TURNS` for Claude (`apps/cli/src/commands/ingest.ts:1331`) and nothing for Codex,
+it sets `DEFAULT_MAX_TURNS` for Claude (`apps/cli/src/commands/ingest.ts:1341`) and nothing for Codex,
 so an ingest against Codex is bounded by `INGEST_TIMEOUT_MS` and by nothing else. **Record:
 `codex-adapter.md` §11.3.**
 
@@ -476,7 +476,7 @@ failure is content-free on that path too. NEW-17 is closed and removed from `BAC
 |---|---|---|
 | Nine redaction classes, and a tenth cannot be added unreachably | `REDACTION_CLASSES` is frozen and a test asserts membership against findings **actually produced**, not against the list (`packages/security/src/redaction.ts:57-67`) | `packages/security/src/redaction.test.ts` |
 | A user-supplied pattern cannot backtrack | user patterns are literal, case-insensitive substrings over NFC-normalized text — never regular expressions, because this codebase bounds no expression anywhere and a pathological pattern would hang the one operation that must not fail quietly (`packages/security/src/redaction.ts` — `RedactionOptions`) | `packages/security/src/redaction.test.ts:869-893` — `.*` and `(a+)+$` passed as `userPatterns` and asserted to behave as literals |
-| Redaction is a heuristic and is not the only thing standing — **on every command that reads configuration** | the worked example is configuration: a `loadConfig` throw becomes a content-free `ConfigurationError` rather than being handed to the redactor, because `smol-toml` embeds three raw source lines in `TomlError.message` (`apps/cli/src/config-file.ts:15-22,54-58`). `status`, `doctor`, `init`, `capture`, `uninstall`, `review` and `ingest` all reach configuration through that wrapper, `readConfigFile` (`status.ts:47`, `apps/cli/src/commands/doctor.ts` — `readConfigFile`, `init.ts:372,469,975`, `apps/cli/src/commands/capture.ts:310`, `apps/cli/src/commands/uninstall.ts:730`, `apps/cli/src/commands/review.ts` — `readConfigFile`, `ingest.ts:552`) | `tests/e2e/foundation.test.ts:1337-1372` — `never quotes the configuration it failed to parse`, planting a `SENTINEL` |
+| Redaction is a heuristic and is not the only thing standing — **on every command that reads configuration** | the worked example is configuration: a `loadConfig` throw becomes a content-free `ConfigurationError` rather than being handed to the redactor, because `smol-toml` embeds three raw source lines in `TomlError.message` (`apps/cli/src/config-file.ts:15-22,54-58`). `status`, `doctor`, `init`, `capture`, `uninstall`, `review` and `ingest` all reach configuration through that wrapper, `readConfigFile` (`status.ts:47`, `apps/cli/src/commands/doctor.ts` — `readConfigFile`, `init.ts:372,469,975`, `apps/cli/src/commands/capture.ts:310`, `apps/cli/src/commands/uninstall.ts:730`, `apps/cli/src/commands/review.ts` — `readConfigFile`, `ingest.ts:562`) | `tests/e2e/foundation.test.ts:1337-1372` — `never quotes the configuration it failed to parse`, planting a `SENTINEL` |
 | The same, on a `brain` run | **holds since NEW-17 closed.** `readConfig` calls `readConfigFile` (`apps/cli/src/commands/brain.ts` — `readConfig`) rather than parsing for itself, and propagates `ConfigurationError` unmodified — its message quotes nothing and it carries the exit code `BrainRefusal` uses, so `failureFrom` renders it with no special handling. Every other read failure propagates with its own code too; only an absent `config.toml` becomes "not initialized" (AUD-017). This row read **partial** for two days after the fix | `packages/core/src/config/config.test.ts`; `apps/cli/src/commands/brain.test.ts` |
 
 **A gap found while writing this document — closed 2026-08-17, and this paragraph asserted the
@@ -829,7 +829,7 @@ the "every managed mutation is transactional" sentence has a stated exception.
 | Where the search path comes from (**amended 2026-10-08, NEW-202**) | under the launcher the CLI has no `PATH`; the launcher hands its own `PATH` over as `DEVELOPER_OS_VENDOR_SEARCH_PATH` (`packages/platform-macos/src/vendor-search-path.ts`), which the K8 refresh passes on. A direct CLI run uses that variable when set, otherwise `PATH`. It decides which binary is `claude` or `codex` and nothing else; its readers are pinned by a name-based tripwire, not a proof | `tests/repository/vendor-search-path.test.ts`; `apps/launcher/src/environment.test.ts` |
 | An empty `PATH` does not become an unbounded search | a fixed fallback of the four system directories (`FALLBACK_SEARCH_PATH`, `packages/platform-macos/src/macos.ts:22,209-211`); an empty, NUL-carrying or over-32-KiB vendor search path is dropped, never refused, which under the launcher means that fallback | `packages/platform-macos/src/macos.test.ts`; `packages/platform-macos/src/vendor-search-path.test.ts` |
 | The *platform boundary* never executes what it found | `AgentDiscovery.version` is permanently `null` there, because determining it requires running the binary (the `AgentDiscovery` interface, `packages/platform-macos/src/types.ts:10-26`, `foundation.md` §7). **A layer above does execute it**: `discoverCli` runs `<exe> --version` (`packages/security/src/cli.ts:54-80`) and `doctor` calls it on every invocation, which retired the Foundation-era invariant — `claude-adapter.md` §9 residual 10 records exactly that | `packages/platform-macos/src/macos.test.ts`; `tests/security/network.test.ts` classifies the version probe rather than forbidding it |
-| A hostile entry for one vendor does not cost the user the other | a discovery that refuses is treated as "not this one" and the next vendor is tried (`apps/cli/src/commands/ingest.ts:484-493`) | `apps/cli/src/commands/ingest.test.ts` |
+| A hostile entry for one vendor does not cost the user the other | a discovery that refuses is treated as "not this one" and the next vendor is tried (`apps/cli/src/commands/ingest.ts:494-503`) | `apps/cli/src/commands/ingest.test.ts` |
 | **The executed binary is vouched for by something** | `assertTrustedExecutable` resolves the path one component at a time, refuses anything that is not a regular file, and checks every real directory the resolution enters — including the one holding each intermediate link — refusing an owner that is neither the current uid nor root, any other-writable directory, a group-writable one the current uid does not own, and a root-owned group-writable one whoever runs the check (D83 (3), `BACKLOG.md` NEW-33, closed 2026-10-06) (`packages/platform-macos/src/macos.ts:353-420`) | `packages/platform-macos/src/macos.test.ts`; `tests/helpers/temp-home.ts` runs the real check against every planted binary |
 
 **A gap found while writing this document — paid on 2026-08-17, and this section read "absent" for
@@ -1112,20 +1112,20 @@ only returns JSON proposals; the product validates every one and writes accepted
 **A failure at any point leaves the capture `accepted`, never `ingested`, and always retryable —
 unless its notes are already in the vault, in which case it is left at `staging` and says so.**
 That is the gate's own wording in `BACKLOG.md` §3 plus the one qualification the ladder forces, and
-it holds by refusal (`apps/cli/src/commands/ingest.ts:1715-1754`) and by interruption
+it holds by refusal (`apps/cli/src/commands/ingest.ts:1725-1765`) and by interruption
 (`tests/security/interruption.test.ts`, 52 cases by static count, not collected — 42 driven interruptions (six targets at seven phases), the derived coverage case and the stranding floor, seven `brain refactor` phases, and the refactor's own coverage case). `accepted` beside this run's own notes
 would be the one answer that is *not* retryable: `applyNotes` refuses an occupied path, so the next
 run would refuse the capture permanently.
 
 **It holds with one stated residual, accepted rather than closed.** `ingest` runs as four transactions
 per capture plus a compensating rollback — `ingest-stage`, `ingest-apply`, `ingest-reindex`,
-`ingest-ingested`, `ingest-rollback` (`apps/cli/src/commands/ingest.ts:274-280`), plus one
+`ingest-ingested`, `ingest-rollback` (`apps/cli/src/commands/ingest.ts:297-305`), plus one
 per-run `ingest-attempts` write of the reserved `state/ingest-attempts.json` after the capture loop,
 which records order only and touches neither a capture nor the vault (NEW-141) — because
 `BrainService.reindex()` reads the vault and cannot run until the apply has finalized, and because
 `validateChangePlan` grants ownership from a manifest a capture is deliberately absent from. **A crash
 after the apply has written its mutations leaves a capture at `staging` with its notes already
-applied** (`apps/cli/src/commands/ingest.ts:1607-1613,1685-1695`) — from the moment they are written,
+applied** (`apps/cli/src/commands/ingest.ts:1617-1623,1695-1705`) — from the moment they are written,
 not from the moment the transaction finalizes, which is the distinction the fix round after Task 19's
 review corrected: `verifyDesired` runs after the bytes are on disk and can raise, and a rollback to
 `accepted` there is what makes the residual unrecoverable rather than inert. It is inert — the next
@@ -1304,4 +1304,4 @@ and possibly still live. The measurement record is "Two gate-integrity residuals
 (`foundation.md` §6). Flattening a refusal into an operational failure would erase the one signal
 that says a guard fired, which is why the `doctor` warn/fail demotion is narrow and why
 `refusalFrom` picks `5` only when a security validator is among the findings
-(`apps/cli/src/commands/ingest.ts:1135-1161`).
+(`apps/cli/src/commands/ingest.ts:1145-1171`).
