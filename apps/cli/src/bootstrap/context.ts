@@ -2,7 +2,7 @@ import { constants, type BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-import { sortUtf8 } from "@developer-os/core";
+import { selectBootstrapEvidenceJournal, sortUtf8 } from "@developer-os/core";
 import type { BootstrapRetentionPostimageV1, CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
 
 import type { BootstrapExecutor } from "./executor.js";
@@ -12,11 +12,7 @@ import type {
   BootstrapEvidenceGuardedReaderV1,
   BootstrapEvidenceInspectionRequestV1,
 } from "./report.js";
-import {
-  admitBootstrapEvidencePlan,
-  BootstrapRootInvalidError,
-  selectBootstrapEvidenceJournal,
-} from "./report.js";
+import { admitBootstrapEvidencePlan, BootstrapRootInvalidError } from "./report.js";
 import { projectBootstrapRetentionPostimage } from "./retention.js";
 import type { PackagedReleaseSourceV1 } from "../update/packaged-release.js";
 

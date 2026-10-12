@@ -26,7 +26,6 @@ import {
   inspectPackagedRelease,
   PackagedReleaseError,
   resolvePackageChannelSource,
-  unavailablePackagedReleaseSource,
   UNSIGNED_LOCAL_LAYOUT,
 } from "./packaged-release.js";
 
@@ -63,7 +62,7 @@ describe("PackagedReleaseSourceV1", () => {
   });
 
   it("fails closed when production has no packaged handoff", async () => {
-    await expect(inspectPackagedRelease(unavailablePackagedReleaseSource())).rejects.toMatchObject({
+    await expect(inspectPackagedRelease(undefined)).rejects.toMatchObject({
       code: EXIT_CODES.capabilityUnavailable,
     });
   });

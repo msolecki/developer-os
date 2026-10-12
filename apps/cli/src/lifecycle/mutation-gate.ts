@@ -122,11 +122,6 @@ interface HeldAuthorityV1 {
 }
 
 const HELD_AUTHORITY = new AsyncLocalStorage<HeldAuthorityV1>();
-const GATED = new WeakSet<object>();
-
-export function isGatedTransactionExecutor(value: unknown): boolean {
-  return typeof value === "object" && value !== null && GATED.has(value);
-}
 
 export function globalLockPath(paths: RuntimePaths): CanonicalAbsolutePathV1 {
   return join(paths.stateDir, GLOBAL_LOCK_LEAF) as CanonicalAbsolutePathV1;
@@ -712,6 +707,5 @@ export function createGatedTransactionExecutor(input: {
     rollback: (id) =>
       gated({ standaloneFoundationId: id }, () => input.legacy.rollback(id), () => input.legacy.rollback(id)),
   };
-  GATED.add(executor);
   return executor;
 }

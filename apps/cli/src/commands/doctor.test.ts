@@ -40,7 +40,6 @@ import {
   describeInstructions,
   hasBlockingFailure,
   hookFindings,
-  hookFiringVerdicts,
   hookReports,
   listIncompleteTransactions,
   MAX_CLAUDE_SETTINGS_BYTES,
@@ -1614,10 +1613,10 @@ describe("hooks and external-hooks", () => {
     await plantRecord(fixture, "inject", lastSeen, "codex");
     if (failed) await nodeFs.writeFile(join(fixture.paths.stateDir, "hooks", "codex.record_failed.json"), "", { mode: 0o600 });
 
-    const verdicts = await hookFiringVerdicts(fixture.context, fixture.paths.stateDir);
+    const { claude, codex } = await hookReports(fixture.context, fixture.paths.stateDir);
 
-    expect([...verdicts.codex]).toStrictEqual(expected);
-    expect([...verdicts.claude]).toStrictEqual([]);
+    expect([...codex.firing]).toStrictEqual(expected);
+    expect([...claude.firing]).toStrictEqual([]);
   });
 
   it("warns with record=failed while the vendor's failure marker is present, so a failed write never reads as unfired (NEW-139)", async () => {

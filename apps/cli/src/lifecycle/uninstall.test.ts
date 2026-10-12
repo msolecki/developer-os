@@ -27,7 +27,7 @@ import { createCommandFixture, inventoryDigest, removeCommandFixtures } from "..
 import type { CommandFixture } from "../commands/testing.js";
 import type { LifecycleEffectPortsV1 } from "./adapters.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
-import { createLifecycleExecutionPlanCodec, lifecycleVariantFacts, uninstallLeasePaths } from "./codecs.js";
+import { createLifecycleExecutionCodecs, lifecycleVariantFacts, uninstallLeasePaths } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import type { CliLifecycleContext } from "./context.js";
 import { hostWith, scriptedLaunchd, syntheticInstalledPlist, syntheticUninstall } from "./testing.js";
@@ -313,7 +313,7 @@ describe("uninstall/present_manifest (P)", () => {
     const productHome = parseCanonicalAbsolutePathText("/product");
     const nonce = parseLowerHexSha256("7a".repeat(32));
     const synthetic = syntheticUninstall(productHome, nonce, 1n, undefined, { withLaunchd: true });
-    const codec = createLifecycleExecutionPlanCodec({ productHome, nonce });
+    const codec = createLifecycleExecutionCodecs({ productHome, nonce }).executionPlan;
 
     expect(codec.validate(JSON.parse(codec.encode(synthetic.plan)) as unknown)).toStrictEqual(synthetic.plan);
     expect(validateLifecyclePlanGrammar(synthetic.plan, lifecycleVariantFacts(synthetic.plan))).toBe("uninstall/present_manifest");

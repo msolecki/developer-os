@@ -127,7 +127,7 @@ interface SealedPackagedRelease {
   readonly ancestorPrefix: string | null;
 }
 
-const sealed = new WeakMap<PackagedReleaseSourceV1, SealedPackagedRelease | null>();
+const sealed = new WeakMap<PackagedReleaseSourceV1, SealedPackagedRelease>();
 
 function securityRefusal(message: string): never {
   throw new PackagedReleaseError(EXIT_CODES.securityRefusal, message);
@@ -814,17 +814,11 @@ export async function resolvePackageChannelSource(
   }
 }
 
-export function unavailablePackagedReleaseSource(): PackagedReleaseSourceV1 {
-  const source: PackagedReleaseSourceV1 = Object.freeze({ kind: "packaged_release_source_v1" });
-  sealed.set(source, null);
-  return source;
-}
-
 export async function inspectPackagedRelease(
   source: PackagedReleaseSourceV1 | undefined,
 ): Promise<AdmittedPackagedReleaseV1> {
   const snapshot = source === undefined ? undefined : sealed.get(source);
-  if (snapshot === undefined || snapshot === null) {
+  if (snapshot === undefined) {
     throw new PackagedReleaseError(
       EXIT_CODES.capabilityUnavailable,
       "this build has no packaged release handoff",

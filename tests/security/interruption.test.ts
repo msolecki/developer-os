@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { EXIT_CODES, parseStableSemver } from "@developer-os/core";
@@ -12,7 +12,6 @@ import { runRefactor } from "@developer-os/cli/dist/commands/refactor.js";
 import { runRepair } from "@developer-os/cli/dist/commands/repair.js";
 import {
   listIncompleteTransactions,
-  listRetainedBackups,
   runDoctor,
   runDoctorReport,
 } from "@developer-os/cli/dist/commands/doctor.js";
@@ -167,6 +166,17 @@ async function statusesInQuarantine(
  */
 let strandedAtFinalized = 0;
 
+/** Transactions whose backup payloads (`<index>.bin`, `.bin.tmp`) are still on disk. */
+async function retainedBackupIds(fixture: InstalledFixture): Promise<readonly string[]> {
+  const root = join(fixture.context.paths.backupsDir, "transactions");
+  const retained: string[] = [];
+  for (const id of (await readdir(root).catch(() => [] as string[])).sort()) {
+    const names = await readdir(join(root, id)).catch(() => [] as string[]);
+    if (names.some((name) => /^[0-9]+\.bin(\.tmp)?$/u.test(name))) retained.push(id);
+  }
+  return retained;
+}
+
 /**
  * What `doctor` owes after an interruption, and it differs by exactly one
  * phase. Both branches assert something; neither can be satisfied by an empty
@@ -195,7 +205,7 @@ async function assertDoctorReports(
      * `doctor` now reports it, so the branch splits on whether this transaction had a
      * payload to strand instead of assuming none did.
      */
-    const retained = await listRetainedBackups(fixture.context);
+    const retained = await retainedBackupIds(fixture);
     if (retained.length === 0) {
       expect(report.code).not.toBe(EXIT_CODES.recoveryRequired);
       return;
@@ -218,7 +228,7 @@ async function assertDoctorReports(
     );
     expect([...(failing.get("drift")?.paths ?? [])].sort()).toStrictEqual([...expectedDrift].sort());
     expect(failing.get("transactions")?.recovery).toBe(
-      `developer-os repair --resume ${retained[0]?.id ?? ""}`,
+      `developer-os repair --resume ${retained[0] ?? ""}`,
     );
     return;
   }
