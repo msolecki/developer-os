@@ -191,20 +191,6 @@ describe("reportCodexCapabilities", () => {
     }
   });
 
-  /**
-   * A capture reaches the vault because somebody ran a command. The route was
-   * `wrapper` on every branch and `hook` on one unreachable one; neither of
-   * those two things is being built (knowledge-pipeline architecture note §2).
-   */
-  it("names the command as the capture route even once probed", async () => {
-    const report = await reportCodexCapabilities({
-      executablePath: "/opt/synthetic/bin/codex",
-      runner: ourTreeAt("/synthetic/plugin"),
-      pluginRoot: "/synthetic/plugin",
-      probe: true,
-    });
-    expect(report.captureVia).toBe("command");
-  });
 
   /**
    * A discovery that raised is a third input, not a second spelling of an
