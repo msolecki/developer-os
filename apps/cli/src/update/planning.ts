@@ -74,13 +74,14 @@ import type {
   UtcTimestampV1,
   CanonicalProductStatePathV1,
 } from "@developer-os/core";
-import type { TargetPlannerRunResultV1, VerifiedScratchBundleV1 } from "@developer-os/security";
+import type { TargetPlannerRunResultV1 } from "@developer-os/security";
 
 import { compareManifestRows } from "../instructions/attach.js";
 import { codexVersionToken } from "./codex-effect-ports.js";
 import { requireCodexRegistered } from "./codex-refresh.js";
 import { codexRegistrationFile } from "../instructions/vendor-homes.js";
 import type { CliUpdateContext } from "./context.js";
+import type { VerifiedScratchBundleV1 } from "./bundle-source.js";
 import { sha256Hex } from "./primitives.js";
 
 /**

@@ -30,10 +30,9 @@ import {
   type UpdateConstructionJournalV1,
   type UpdateConstructionPlanV1,
 } from "@developer-os/core";
-import type { VerifiedScratchBundleV1 } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BUNDLE_SOURCE_DEATH_POINTS, BundleGuardedIo, BundleJournalFile, BundleSourceExecutor, type BundleSourceDeathPointV1 } from "./bundle-source.js";
+import { BUNDLE_SOURCE_DEATH_POINTS, BundleGuardedIo, BundleJournalFile, BundleSourceExecutor, type BundleSourceDeathPointV1, type VerifiedScratchBundleV1 } from "./bundle-source.js";
 import { resolveSourceParent } from "./construction.js";
 import { readConstructionJournal, stageSourceConstruction } from "./rollback-testing.js";
 

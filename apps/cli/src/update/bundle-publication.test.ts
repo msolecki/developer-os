@@ -42,12 +42,11 @@ import {
   type ReleaseIdentityV1,
   type SafeReasonCodeV1,
 } from "@developer-os/core";
-import type { VerifiedScratchBundleV1 } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createCanonicalPathEvidence } from "../bootstrap/admission.js";
 import { BUNDLE_PUBLICATION_DEATH_POINTS, BundlePublicationParticipant, type BundlePublicationDeathPointV1 } from "./bundle-publication.js";
-import { BundleSourceExecutor } from "./bundle-source.js";
+import { BundleSourceExecutor, type VerifiedScratchBundleV1 } from "./bundle-source.js";
 import { stageSourceConstruction, type SourceConstructionV1 } from "./rollback-testing.js";
 
 const encoder = new TextEncoder();

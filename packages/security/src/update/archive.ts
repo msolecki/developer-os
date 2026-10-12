@@ -29,9 +29,8 @@ const BLOCK = 512;
 const encoder = new TextEncoder();
 
 /**
- * Where admitted entries go. The scratch store implements it with journaled
- * exclusive creates; `begin` precedes the first content byte, `end` follows
- * the last byte and the verified hash. Nothing else learns an archive name.
+ * Where admitted entries go; `begin` precedes the first content byte, `end`
+ * follows the last byte and the verified hash. Nothing else learns an archive name.
  */
 export interface ArchiveEntrySinkV1 {
   begin(ordinal: number, entry: ReleaseBundleEntryV1): Promise<void>;
