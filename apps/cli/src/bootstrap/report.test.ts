@@ -25,7 +25,6 @@ import {
   assertOrdinaryCommandAdmitted,
   BootstrapRootInvalidError,
   buildBootstrapRetentionEvidence,
-  inspectBootstrapEvidence,
   inspectBootstrapEvidenceAdmission,
   NON_REGULAR_BOOTSTRAP_LEAF,
 } from "./report.js";
@@ -56,7 +55,7 @@ async function firstExternalRegularFile(
   return null;
 }
 
-describe("inspectBootstrapEvidence", () => {
+describe("inspectBootstrapEvidenceAdmission", () => {
   it("reports a retained envelope as altered without reading its contents into the report", async () => {
     const fixture = await createCommandFixture("bootstrap-report-verified", {
       bootstrapAvailable: true,
@@ -70,7 +69,7 @@ describe("inspectBootstrapEvidence", () => {
     if (target === null) throw new Error("fixture retained no regular-file tombstone");
     await nodeFs.writeFile(target, RETAINED_SECRET, { mode: 0o600 });
 
-    const report = await inspectBootstrapEvidence(requestFor(fixture));
+    const report = (await inspectBootstrapEvidenceAdmission(requestFor(fixture))).report;
 
     expect(report.schemaVersion).toBe(1);
     expect(report.ids).toHaveLength(1);
@@ -100,7 +99,7 @@ describe("inspectBootstrapEvidence", () => {
     expect(interrupted.ok).toBe(false);
     const before = await inventoryDigest(fixture.root);
 
-    const report = await inspectBootstrapEvidence(requestFor(fixture));
+    const report = (await inspectBootstrapEvidenceAdmission(requestFor(fixture))).report;
 
     expect(report.ids).toHaveLength(1);
     expect(report.ids[0]).toMatchObject({
@@ -175,7 +174,7 @@ describe("inspectBootstrapEvidence", () => {
     const hidden = `${target}.synthetic-missing`;
     await nodeFs.rename(target, hidden);
 
-    const missing = await inspectBootstrapEvidence(requestFor(fixture));
+    const missing = (await inspectBootstrapEvidenceAdmission(requestFor(fixture))).report;
 
     expect(missing.ids[0]?.status).toBe("altered");
     await nodeFs.rename(hidden, target);
@@ -184,7 +183,7 @@ describe("inspectBootstrapEvidence", () => {
     const extra = join(dirname(target), `.developer-os-retained.${id}.9999999999.tombstone`);
     await nodeFs.writeFile(extra, RETAINED_SECRET, { mode: 0o600 });
 
-    const added = await inspectBootstrapEvidence(requestFor(fixture));
+    const added = (await inspectBootstrapEvidenceAdmission(requestFor(fixture))).report;
 
     expect(added.ids[0]?.status).toBe("altered");
     expect(JSON.stringify(added)).not.toContain(RETAINED_SECRET);
@@ -292,7 +291,7 @@ describe("inspectBootstrapEvidence", () => {
     expect(interrupted.ok).toBe(false);
     const before = await inventoryDigest(fixture.root);
 
-    const report = await inspectBootstrapEvidence(requestFor(fixture));
+    const report = (await inspectBootstrapEvidenceAdmission(requestFor(fixture))).report;
 
     expect(report.ids).toHaveLength(1);
     expect(report.ids[0]).toMatchObject({
@@ -310,7 +309,7 @@ describe("inspectBootstrapEvidence", () => {
     });
     await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
-    const report = await inspectBootstrapEvidence(requestFor(fixture));
+    const report = (await inspectBootstrapEvidenceAdmission(requestFor(fixture))).report;
     const id = report.ids[0];
     if (id === undefined) throw new Error("fixture retained no envelope");
     const admission = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
@@ -375,7 +374,7 @@ describe("inspectBootstrapEvidence", () => {
     await nodeFs.rm(fixture.paths.manifestFile);
     await nodeFs.symlink("/nonexistent-manifest-target", fixture.paths.manifestFile);
 
-    const report = await inspectBootstrapEvidence(requestFor(fixture));
+    const report = (await inspectBootstrapEvidenceAdmission(requestFor(fixture))).report;
 
     expect(report.ids[0]?.status).toBe("verified");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
@@ -477,9 +476,8 @@ describe("inspectBootstrapEvidence", () => {
     }, envelope.plan, envelope.terminalJournal);
 
     expect(walks).toBe(1);
-    /** Parity: memoizing changes the cost, not the evidence. */
-    const unmemoized = await buildBootstrapRetentionEvidence(base, envelope.plan, envelope.terminalJournal, false);
-    expect(memoized).toEqual(unmemoized);
+    /** Parity: the executor's build carries the same evidence the inspection derived. */
+    expect(memoized).toEqual(envelope.evidence);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("walks a plan's retention roots and row parents in a single inventory call", async () => {

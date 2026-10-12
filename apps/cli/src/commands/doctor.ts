@@ -387,12 +387,6 @@ async function readSurveyedJournal(
  * payloads on disk — that is what a rollback restores from — and `listIncompleteTransactions`
  * already reports the transaction itself.
  */
-export async function listRetainedBackups(
-  context: CliContext,
-): Promise<readonly RetainedBackup[]> {
-  return (await surveyTransactions(context, { retained: true })).retained;
-}
-
 async function retainedPayload(
   context: CliContext,
   id: string,
@@ -875,12 +869,6 @@ export async function hookReports(
     return adapters?.[vendor] === false ? { text: `${vendor}=not-selected`, healthy: true, unfired: false, dead: null, firing: full.firing } : full;
   };
   return { installed, claude: await report("claude"), codex: await report("codex") };
-}
-
-/** NEW-158: the firing keys each vendor's `hooks` verdict proves. */
-export async function hookFiringVerdicts(context: CliContext, stateDirectory: string): Promise<Readonly<Record<HookVendor, FiringVerdict>>> {
-  const { claude, codex } = await hookReports(context, stateDirectory);
-  return { claude: claude.firing, codex: codex.firing };
 }
 
 function checkProductHooks({ installed, claude, codex }: HookReports): Finding {

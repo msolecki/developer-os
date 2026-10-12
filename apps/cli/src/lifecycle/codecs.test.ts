@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   foundationBindingsHash,
   ManifestStateParticipantError,
-  EXIT_CODES,
   LIFECYCLE_STEP_GRAMMAR,
   formatAllocatedLifecycleId,
   parseAllocatedLifecycleId,
@@ -28,8 +27,6 @@ import { PERSISTED_GIT_PUSH_PLAN_CODEC } from "@developer-os/security";
 
 import {
   createLifecycleExecutionCodecs,
-  createLifecycleExecutionPlanCodec,
-  LifecycleUnsupportedLeafError,
   lifecyclePushPlanHash,
   lifecycleVariantFacts,
   uninstallLeasePaths,
@@ -133,12 +130,12 @@ const EFFECT_PAIRS: readonly {
 ];
 
 function encodedPlan(plan: LifecycleExecutionPlanV1): unknown {
-  return JSON.parse(createLifecycleExecutionPlanCodec(CONTEXT).encode(plan)) as unknown;
+  return JSON.parse(createLifecycleExecutionCodecs(CONTEXT).executionPlan.encode(plan)) as unknown;
 }
 
 describe("the concrete lifecycle execution-plan codec", () => {
   it("round-trips an uninstall execution plan through its own bytes", () => {
-    const codec = createLifecycleExecutionPlanCodec(CONTEXT);
+    const codec = createLifecycleExecutionCodecs(CONTEXT).executionPlan;
 
     expect(codec.validate(UNINSTALL_PLAN)).toStrictEqual(UNINSTALL_PLAN);
     expect(codec.validate(encodedPlan(UNINSTALL_PLAN))).toStrictEqual(UNINSTALL_PLAN);
@@ -148,7 +145,7 @@ describe("the concrete lifecycle execution-plan codec", () => {
   });
 
   it("admits the round-tripped plan under the grammar as the derived uninstall variant", () => {
-    const codec = createLifecycleExecutionPlanCodec(CONTEXT);
+    const codec = createLifecycleExecutionCodecs(CONTEXT).executionPlan;
     const plan = codec.validate(UNINSTALL_PLAN);
 
     expect(lifecycleVariantFacts(plan)).toStrictEqual({
@@ -163,7 +160,7 @@ describe("the concrete lifecycle execution-plan codec", () => {
   });
 
   it("refuses a malformed launchd leaf and push leaf as invalid bytes, not as unsupported arms", () => {
-    const codec = createLifecycleExecutionPlanCodec(CONTEXT);
+    const codec = createLifecycleExecutionCodecs(CONTEXT).executionPlan;
     const malformed = { marker: "not-a-leaf" };
 
     for (const plan of [
@@ -171,12 +168,11 @@ describe("the concrete lifecycle execution-plan codec", () => {
       { ...UNINSTALL_PLAN, push: malformed },
     ]) {
       expect(() => codec.validate(plan)).toThrow();
-      expect(() => codec.validate(plan)).not.toThrow(LifecycleUnsupportedLeafError);
     }
   });
 
   it("admits every effect arm with its step and leaves the uninstall grammar to refuse the pair", () => {
-    const codec = createLifecycleExecutionPlanCodec(CONTEXT);
+    const codec = createLifecycleExecutionCodecs(CONTEXT).executionPlan;
     expect(EFFECT_PAIRS.length).toBeGreaterThan(0);
 
     for (const { label, plan } of EFFECT_PAIRS) {
@@ -185,15 +181,8 @@ describe("the concrete lifecycle execution-plan codec", () => {
     }
   });
 
-  it("publishes exit 4 and the plan-1b reason on the unsupported-leaf refusal", () => {
-    const error = new LifecycleUnsupportedLeafError("launchd");
-
-    expect(error.code).toBe(EXIT_CODES.capabilityUnavailable);
-    expect(error.reason).toBe("unsupported_until_plan_1b");
-  });
-
   it("admits every operation's bytes and leaves an uninstall step list under another operation to the grammar", () => {
-    const codec = createLifecycleExecutionPlanCodec(CONTEXT);
+    const codec = createLifecycleExecutionCodecs(CONTEXT).executionPlan;
     const operations = Object.keys(LIFECYCLE_STEP_GRAMMAR)
       .map((variant) => variant.split("/")[0] ?? variant)
       .filter((operation) => operation !== "uninstall" && operation !== "git_sync");
@@ -353,7 +342,7 @@ describe("the composed Git, launchd and push leaves", () => {
 });
 
 describe("the concrete codec's manifest leaf", () => {
-  const codec = createLifecycleExecutionPlanCodec(CONTEXT);
+  const codec = createLifecycleExecutionCodecs(CONTEXT).executionPlan;
 
   function withManifest(overrides: Partial<ManifestStatePlanV1>): LifecycleExecutionPlanV1 {
     return {

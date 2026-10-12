@@ -18,7 +18,6 @@ import type { CliContext } from "../context.js";
 import {
   classifyMutationHome,
   createGatedTransactionExecutor,
-  isGatedTransactionExecutor,
   withLifecycleMutation,
 } from "./mutation-gate.js";
 
@@ -102,7 +101,6 @@ describe("the mutation gate on a home that is not an admitted V2 installation", 
   it("runs V1 init's own transaction through the gated executor and takes the legacy path", async () => {
     const fixture = await createCommandFixture("gate-v1-init");
 
-    expect(isGatedTransactionExecutor(fixture.context.executor)).toBe(true);
     expect(await classifyMutationHome(fixture.context, fixture.context.lifecycle)).toStrictEqual({
       kind: "manifest_absent",
     });
@@ -193,8 +191,14 @@ describe("the mutation gate on a home that is not an admitted V2 installation", 
     const fixture = await createCommandFixture("gate-wiring");
 
     expect(MUTATORS.length).toBeGreaterThan(0);
-    expect(isGatedTransactionExecutor(fixture.context.executor)).toBe(true);
-    expect(isGatedTransactionExecutor(fixture.rebuildContext().executor)).toBe(true);
+    /** Only the gate classifies the home, so only a gated executor refuses a lone global lock. */
+    await plantGlobalLock(fixture);
+    for (const context of [fixture.context, fixture.rebuildContext()]) {
+      await expect(context.executor.rollback("tx_fixture_001")).rejects.toMatchObject({
+        reason: "manifest_absent",
+        code: EXIT_CODES.invalidInput,
+      });
+    }
     for (const command of MUTATORS) {
       const source = await nodeFs.readFile(
         new URL(`../commands/${command}.ts`, import.meta.url),

@@ -19,7 +19,6 @@ import {
   hashBytes,
   lifecycleBookkeepingPaths,
   ManifestStateError,
-  selectBootstrapEvidenceJournal,
   selectBootstrapJournal,
   validateBootstrapPayloadEvidence,
   validateCreatedPathEvidence,
@@ -294,8 +293,6 @@ export function admitBootstrapEvidencePlan(
   return admitCoreBootstrapEvidencePlan(value, input, createCanonicalPathEvidence());
 }
 
-export { selectBootstrapEvidenceJournal };
-
 async function guardedValue<T>(
   request: BootstrapEvidenceInspectionRequestV1,
   path: CanonicalAbsolutePathV1,
@@ -332,18 +329,14 @@ class RetentionParentIdentityChangedError extends Error {
  * Complete retained-table projection shared by reporting and executor recovery. Memoized per
  * call (D84): the executor calls this directly, not through the inspection's memoizer, and walked
  * `state/` once per row otherwise (NEW-197). No rename is authorized by these projections; the
- * retain loop's `observeAll` re-projects the live tree. `memoize: false` exists only for the
- * NEW-197 parity test.
+ * retain loop's `observeAll` re-projects the live tree.
  */
 export async function buildBootstrapRetentionEvidence(
   outerRequest: BootstrapEvidenceInspectionRequestV1,
   plan: FreshV2InitPlanV1,
   terminal: BootstrapJournalRecordV1,
-  memoize = true,
 ): Promise<BootstrapRetentionEvidenceProjectionV1> {
-  const request = memoize
-    ? { ...outerRequest, projectPostimage: memoizePostimageProjector(outerRequest.projectPostimage) }
-    : outerRequest;
+  const request = { ...outerRequest, projectPostimage: memoizePostimageProjector(outerRequest.projectPostimage) };
   const locations = deriveBootstrapRetentionLocations(plan, terminal);
   const physicalPath = async (logicalPath: CanonicalAbsolutePathV1): Promise<CanonicalAbsolutePathV1> => {
     const exact = locations.find((location) => location.sourcePath === logicalPath);
@@ -1453,12 +1446,6 @@ export async function inspectBootstrapEvidenceAdmission(
     bootstrapLeaf,
     retainedEnvelopes,
   };
-}
-
-export async function inspectBootstrapEvidence(
-  request: BootstrapEvidenceInspectionRequestV1,
-): Promise<BootstrapEvidenceReportV1> {
-  return (await inspectBootstrapEvidenceAdmission(request)).report;
 }
 
 export function assertCombinedBootstrapCapacity(

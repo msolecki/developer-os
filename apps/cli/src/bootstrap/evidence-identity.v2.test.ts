@@ -9,6 +9,7 @@ import {
   deriveBootstrapRetentionLocations,
   encodeCanonicalJson,
   lifecycleBookkeepingPaths,
+  selectBootstrapEvidenceJournal,
 } from "@developer-os/core";
 import type { CanonicalJsonValue } from "@developer-os/core";
 
@@ -27,7 +28,6 @@ import {
   assertOrdinaryCommandAdmitted,
   BOOTSTRAP_MANUAL_ARCHIVE,
   inspectBootstrapEvidenceAdmission,
-  selectBootstrapEvidenceJournal,
 } from "./report.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
