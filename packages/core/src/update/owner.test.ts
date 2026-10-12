@@ -6,7 +6,6 @@ import {
   keepOwnerUpdateProvider,
   ownerContentDependencies,
   validateOwnerDraft,
-  type OwnerTargetEntryV1,
   type OwnerUpdateProviderV1,
   type OwnerUpdateRegistryV1,
 } from "./owner.js";
@@ -95,7 +94,7 @@ function requestValue(): Record<string, unknown> {
 const request = (): UpdatePlannerRequestV1 => validateUpdatePlannerRequest(requestValue());
 const snapshot = () => request().manifest;
 const rel = (path: string): OwnerRelativePathV1 => path as OwnerRelativePathV1;
-const bundle = (path: string, size = 3): OwnerTargetEntryV1["content"] => ({ kind: "target_bundle", path: parseBundleRelativePath(path), bytes: size, sha256: sha(path) });
+const bundle = (path: string, size = 3): Extract<PlannerChangePlanOperationV1, { readonly operation: "create" }>["content"] => ({ kind: "target_bundle", path: parseBundleRelativePath(path), bytes: size, sha256: sha(path) });
 const installed = (ordinal: number) => ({ kind: "installed" as const, token: t(ordinal) });
 const create = (path: string, size = 3): PlannerChangePlanOperationV1 => ({ operation: "create", target: { kind: "owner_relative", owner: "codex", path: rel(path) }, content: bundle(`payload/${path}`, size) });
 const codexPartition = [t(3), t(4), t(5), t(6), t(7)];

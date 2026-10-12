@@ -203,8 +203,6 @@ export {
   validateOwnerDraft,
 } from "./owner.js";
 export type {
-  OwnerTargetContentRefV1,
-  OwnerTargetEntryV1,
   OwnerUpdateProviderV1,
   OwnerUpdateRegistryV1,
 } from "./owner.js";

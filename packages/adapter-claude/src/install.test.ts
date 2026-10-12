@@ -1,4 +1,3 @@
-import { posix } from "node:path";
 import { describe, expect, it } from "vitest";
 import { validateChangePlan } from "@developer-os/core";
 import type {
@@ -7,7 +6,7 @@ import type {
   ManagedArtifactV2,
 } from "@developer-os/core";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
-import { proposeClaudeInstall, proposeClaudeUninstall } from "./install.js";
+import { proposeClaudeInstall } from "./install.js";
 
 const tree: readonly RenderedArtifact[] = [
   {
@@ -212,94 +211,3 @@ describe("proposeClaudeInstall over V2 rows", () => {
   });
 });
 
-describe("proposeClaudeUninstall", () => {
-  /**
-   * The version this replaces proposed a single `remove` of the plugin
-   * *directory*, with `expectedBeforeHash: null` and a non-empty `source`. The
-   * validator refuses that three separate ways — `hash_expectation`,
-   * `malformed`, and `unmanaged_target` — and the executor cannot remove a
-   * non-file at all. It was not merely unvalidated; it was unimplementable, and
-   * the test that guarded it asserted field values rather than calling the
-   * validator. Found by fresh-context review, 2026-08-11.
-   */
-  it("proposes an uninstall plan the real validator accepts", async () => {
-    const managed = managedFor(tree);
-    const plan = await validateChangePlan(
-      proposeClaudeUninstall(context, managed),
-      planContext(manifestWith(asV1(managed.values()))),
-    );
-    expect(plan.operations).toHaveLength(tree.length);
-    for (const operation of plan.operations) {
-      expect(operation.operation).toBe("remove");
-      expect(operation.source).toBe("");
-      expect(operation.proposedHash).toBeNull();
-      expect(operation.expectedBeforeHash).toMatch(/^[0-9a-f]{64}$/u);
-    }
-  });
-
-  it("removes one operation per managed file, never the directory itself", () => {
-    const managed = managedFor(tree);
-    const paths = proposeClaudeUninstall(context, managed).operations.map(
-      (operation) => operation.targetPath,
-    );
-    expect(paths).not.toContain(root);
-    expect(paths.every((path) => path.startsWith(`${root}/`))).toBe(true);
-  });
-
-  it("ignores artifacts outside the plugin root", () => {
-    const managed = new Map(managedFor(tree));
-    const foreign = [...managedFor(tree).values()][0];
-    if (foreign !== undefined) {
-      managed.set("/synthetic/home/.claude/settings.json", {
-        ...foreign,
-        path: "/synthetic/home/.claude/settings.json",
-      } as ManagedArtifactV2);
-    }
-    const paths = proposeClaudeUninstall(context, managed).operations.map(
-      (operation) => operation.targetPath,
-    );
-    expect(paths).not.toContain("/synthetic/home/.claude/settings.json");
-  });
-
-  it("ignores a row whose path passes the root prefix but normalizes outside it", () => {
-    const managed = new Map(managedFor(tree));
-    const [first] = [...managedFor(tree).values()];
-    if (first === undefined) throw new Error("fixture has no rows");
-    const escaping = `${root}/../escape.md`;
-    managed.set(escaping, { ...first, path: escaping } as ManagedArtifactV2);
-    const paths = proposeClaudeUninstall(context, managed).operations.map(
-      (operation) => operation.targetPath,
-    );
-    expect(paths).toHaveLength(tree.length);
-    expect(paths.every((path) => posix.normalize(path).startsWith(`${root}/`))).toBe(true);
-  });
-
-  it("ignores a codex-owned row under the plugin root", () => {
-    const managed = new Map(managedFor(tree));
-    const [first] = [...managedFor(tree).values()];
-    if (first === undefined) throw new Error("fixture has no rows");
-    const foreignPath = `${root}/skills/foreign/SKILL.md`;
-    managed.set(foreignPath, { ...first, owner: "codex", path: foreignPath } as ManagedArtifactV2);
-    const operations = proposeClaudeUninstall(context, managed).operations;
-    expect(operations.length).toBeGreaterThan(0);
-    expect(operations.map((operation) => operation.targetPath)).not.toContain(foreignPath);
-    expect(operations.every((operation) => operation.owner === "claude")).toBe(true);
-  });
-
-  it("removes an instruction content row as a file with its recorded hash", () => {
-    const path = `${root}/skills/review/SKILL.md`;
-    const row = {
-      ...[...managedFor(tree).values()][0],
-      kind: "instruction",
-      path,
-      instruction: { category: "skill", id: "review", source: "default" },
-      verification: { mode: "content", installedHash: "b".repeat(64) },
-    } as unknown as ManagedArtifactV2;
-    const [operation] = proposeClaudeUninstall(context, new Map([[path, row]])).operations;
-    expect(operation).toMatchObject({ targetPath: path, kind: "file", expectedBeforeHash: "b".repeat(64) });
-  });
-
-  it("refuses when nothing is managed, rather than proposing a no-op", () => {
-    expect(() => proposeClaudeUninstall(context, new Map())).toThrow(/empty/iu);
-  });
-});

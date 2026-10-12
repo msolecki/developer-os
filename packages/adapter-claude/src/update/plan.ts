@@ -1,32 +1,5 @@
-import { Buffer } from "node:buffer";
-import { createHash } from "node:crypto";
-
-import { compareUtf8, isChangeableOwnerArtifact, parseBundleRelativePath, parseLowerHexSha256, parseVaultRelativePathText } from "@developer-os/core/planner-protocol";
-import type {
-  BundleRelativePathV1,
-  OwnerRelativePathV1,
-  OwnerTargetEntryV1,
-  OwnerUpdateProviderV1,
-  PlannerManifestSnapshotV1,
-  PlannerPathTokenV1,
-} from "@developer-os/core";
-import type { RenderedArtifact } from "@developer-os/workflow-schema";
-
-/**
- * The target release's rendered plugin tree as target-bundle data: each file lands at its
- * plugin-root-relative path and is supplied by `<bundlePrefix>/<path>` in the signed bundle.
- */
-export function claudeTargetEntries(tree: readonly RenderedArtifact[], bundlePrefix: BundleRelativePathV1): readonly OwnerTargetEntryV1[] {
-  return [...tree]
-    .sort((left, right) => compareUtf8(left.path, right.path))
-    .map((artifact): OwnerTargetEntryV1 => {
-      const bytes = Buffer.from(artifact.contents, "utf8");
-      return {
-        path: parseVaultRelativePathText(artifact.path) as string as OwnerRelativePathV1,
-        content: { kind: "target_bundle", path: parseBundleRelativePath(`${bundlePrefix}/${artifact.path}`), bytes: bytes.byteLength, sha256: parseLowerHexSha256(createHash("sha256").update(bytes).digest("hex")) },
-      };
-    });
-}
+import { isChangeableOwnerArtifact } from "@developer-os/core/planner-protocol";
+import type { OwnerUpdateProviderV1, PlannerManifestSnapshotV1, PlannerPathTokenV1 } from "@developer-os/core";
 
 /** Every replaceable Claude file, so a replace or remove carries the bytes its inverse needs. */
 function claudeContentDependencies(snapshot: PlannerManifestSnapshotV1): readonly PlannerPathTokenV1[] {

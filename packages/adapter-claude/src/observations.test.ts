@@ -1,42 +1,33 @@
+import { parseStableSemver } from "@developer-os/core";
 import { PROTECTED_PATH_RULES } from "@developer-os/security";
 import { describe, expect, it } from "vitest";
 import {
   CLAUDE_DENY_RULES,
   CLAUDE_MEMORY_LAYOUT,
-  isValidClaudeObservation,
   type ClaudeObservationV1,
 } from "./observations.js";
 
-const SYNTHETIC: ClaudeObservationV1 = {
-  claudeVersion: "2.1.142",
-  observedOn: "2026-01-15",
-  observedIn: "A disposable home, a synthetic command, a synthetic result.",
-};
+function isPastOrTodayIsoDate(text: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const parsed = new Date(`${text}T00:00:00.000Z`);
+  // Date rolls 2026-02-30 over to March; the round trip rejects it.
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== text) return false;
+  return text <= new Date().toISOString().slice(0, 10);
+}
+
+/** A recorded observation names a stable Claude version, a real past date and where it was seen. */
+function isValidClaudeObservation(row: ClaudeObservationV1): boolean {
+  try {
+    parseStableSemver(row.claudeVersion);
+  } catch {
+    return false;
+  }
+  return isPastOrTodayIsoDate(row.observedOn) && row.observedIn.trim().length > 0;
+}
 
 function isSingleSegment(name: string): boolean {
   return name.length > 0 && !name.includes("/") && name !== "." && name !== "..";
 }
-
-describe("isValidClaudeObservation", () => {
-  it("accepts a well-formed synthetic row", () => {
-    expect(isValidClaudeObservation(SYNTHETIC)).toBe(true);
-  });
-
-  it("rejects a version that is not semver", () => {
-    expect(isValidClaudeObservation({ ...SYNTHETIC, claudeVersion: "latest" })).toBe(false);
-  });
-
-  it("rejects a malformed, impossible or future date", () => {
-    expect(isValidClaudeObservation({ ...SYNTHETIC, observedOn: "15-01-2026" })).toBe(false);
-    expect(isValidClaudeObservation({ ...SYNTHETIC, observedOn: "2026-02-30" })).toBe(false);
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-    expect(isValidClaudeObservation({ ...SYNTHETIC, observedOn: tomorrow })).toBe(false);
-  });
-
-  it("rejects an empty observedIn", () => {
-    expect(isValidClaudeObservation({ ...SYNTHETIC, observedIn: " " })).toBe(false);
-  });
-});
 
 describe("CLAUDE_MEMORY_LAYOUT", () => {
   it("is a recorded, valid observation of single-segment names", () => {

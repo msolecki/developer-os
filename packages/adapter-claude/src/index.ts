@@ -63,7 +63,7 @@ export type {
   InstructionSourceSetV1Like,
   InstructionSourceV1Like,
 } from "./instructions.js";
-export { proposeClaudeInstall, proposeClaudeUninstall } from "./install.js";
+export { proposeClaudeInstall } from "./install.js";
 export type {
   ClaudeInstallProposal,
   InstallContext,
@@ -78,7 +78,6 @@ export type {
 export {
   CLAUDE_DENY_RULES,
   CLAUDE_MEMORY_LAYOUT,
-  isValidClaudeObservation,
 } from "./observations.js";
 export type {
   ClaudeDenyRulesV1,
@@ -87,5 +86,4 @@ export type {
 } from "./observations.js";
 export {
   claudeOwnerUpdateProvider,
-  claudeTargetEntries,
 } from "./update/plan.js";

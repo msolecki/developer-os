@@ -19,17 +19,6 @@ export const OWNER_UPDATE_ORDER: readonly ArtifactOwner[] = Object.freeze(["core
 /** Spec 2 §8.2: a changed file travels as one blob, so no create or replace may exceed one blob. */
 export const MAX_OWNER_CHANGED_FILE_BYTES = 16_777_216;
 
-export type OwnerTargetContentRefV1 = Extract<PlannerContentRefV1, { readonly kind: "target_bundle" }>;
-
-/**
- * One file the target release ships for an owner: where it lands relative to that owner's
- * closed root, and the public signed bundle entry that supplies its bytes.
- */
-export interface OwnerTargetEntryV1 {
-  readonly path: OwnerRelativePathV1;
-  readonly content: OwnerTargetContentRefV1;
-}
-
 export interface OwnerUpdateProviderV1 {
   readonly owner: ArtifactOwner;
   readonly contentDependencies: (snapshot: PlannerManifestSnapshotV1) => readonly PlannerPathTokenV1[];
