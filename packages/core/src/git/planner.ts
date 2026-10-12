@@ -119,7 +119,7 @@ export const GIT_SYNC_CARDINALITY: GitSyncCardinalityV1 = Object.freeze({
   maxSourceReflogTransitions: 2,
   maxDestinationControlTransitions: 2,
   maxGitEffectTransitions: 200005,
-  maxNewGitTreeEntries: 511,
+  maxNewGitTreeEntries: GIT_TREE_FINGERPRINT_MAX_ENTRIES,
 });
 
 export interface GitSyncCountsV1 {
