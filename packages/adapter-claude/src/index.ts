@@ -88,5 +88,4 @@ export type {
 export {
   claudeOwnerUpdateProvider,
   claudeTargetEntries,
-  planClaudeOwner,
 } from "./update/plan.js";

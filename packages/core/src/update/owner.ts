@@ -1,16 +1,14 @@
-import { compareUtf8, encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { ArtifactOwner } from "../manifest/types.js";
-import { admitOwnerRelativePath, parseCanonicalAbsolutePathText, parseVaultRelativePathText, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1, type OwnerRelativePathV1 } from "./paths.js";
+import { parseVaultRelativePathText, type OwnerRelativePathV1 } from "./paths.js";
 import type {
   OwnerExternalEffectDraftV1,
   OwnerUpdateDraftV1,
-  PlannerArtifactInputV1,
   PlannerChangePlanOperationV1,
   PlannerContentRefV1,
   PlannerManifestArtifactV1,
   PlannerManifestSnapshotV1,
   PlannerPathTokenV1,
-  UpdatePlannerRequestV1,
 } from "./planner.js";
 import { parseBundleRelativePath } from "./release.js";
 import { fail, parseLowerHexSha256 } from "./scalars.js";
@@ -32,37 +30,15 @@ export interface OwnerTargetEntryV1 {
   readonly content: OwnerTargetContentRefV1;
 }
 
-/** Everything one provider sees: its own partition and target tree, never a root or another owner's rows. */
-export interface OwnerUpdateProviderRequestV1 {
-  readonly owner: ArtifactOwner;
-  readonly manifest: PlannerManifestSnapshotV1;
-  readonly artifacts: readonly PlannerArtifactInputV1[];
-  readonly target: readonly OwnerTargetEntryV1[];
-}
-
 export interface OwnerUpdateProviderV1 {
   readonly owner: ArtifactOwner;
   readonly contentDependencies: (snapshot: PlannerManifestSnapshotV1) => readonly PlannerPathTokenV1[];
-  readonly plan: (request: OwnerUpdateProviderRequestV1) => OwnerUpdateDraftV1;
 }
 
 declare const ownerUpdateRegistryV1: unique symbol;
 
 /** Exactly one provider per closed owner, in owner order. Only `createOwnerUpdateRegistry` mints it. */
 export type OwnerUpdateRegistryV1 = readonly OwnerUpdateProviderV1[] & { readonly [ownerUpdateRegistryV1]: true };
-
-/** The planner request plus each installed owner's target tree, as the target bundle inventories it. */
-export interface OwnerPlanningSnapshotV1 {
-  readonly request: UpdatePlannerRequestV1;
-  readonly targets: Readonly<Partial<Record<ArtifactOwner, readonly OwnerTargetEntryV1[]>>>;
-}
-
-/** The current executor's in-memory authority for one owner; it never crosses the wire. */
-export interface OwnerRehydrationContextV1 {
-  readonly ownerRoot: CanonicalAbsolutePathV1;
-  readonly tokenPaths: ReadonlyMap<PlannerPathTokenV1, CanonicalAbsolutePathV1>;
-  readonly evidence: CanonicalPathEvidenceV1;
-}
 
 function same(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(left as CanonicalJsonValue) === encodeCanonicalJson(right as CanonicalJsonValue);
@@ -204,125 +180,7 @@ export function ownerContentDependencies(registry: OwnerUpdateRegistryV1, snapsh
   return snapshot.artifacts.map((row) => row.token).filter((token) => tokens.has(token));
 }
 
-/**
- * Calls exactly one provider per installed owner, in owner order, and validates each draft.
- * A token may change only when its provider declared it a content dependency and the request
- * carries its bytes; at most one external effect exists across the whole update.
- */
-export function planOwners(registry: OwnerUpdateRegistryV1, snapshot: OwnerPlanningSnapshotV1): readonly OwnerUpdateDraftV1[] {
-  const { request } = snapshot;
-  if (!same(installedOwnersOf(request.manifest), request.installedOwners)) fail("planOwners: installed owners differ from the manifest");
-  const inputs = new Map(request.artifactInputs.map((input) => [input.token as string, input]));
-  let effects = 0;
-  const drafts = request.installedOwners.map((owner): OwnerUpdateDraftV1 => {
-    const provider = providerFor(registry, owner);
-    const dependencies = dependenciesOf(provider, request.manifest);
-    const draft = validateOwnerDraft(
-      provider.plan({ owner, manifest: request.manifest, artifacts: request.artifactInputs.filter((input) => input.owner === owner), target: snapshot.targets[owner] ?? [] }),
-      request.manifest,
-    );
-    if (draft.owner !== owner) fail("planOwners: a provider answered for another owner");
-    for (const operation of draft.proposedOperations) {
-      if (operation.operation === "create" || operation.operation === "keep") continue;
-      const input = inputs.get(operation.target.token);
-      if (!dependencies.has(operation.target.token) || input?.observed.state !== "content" || input.observed.blob === null) {
-        fail("planOwners: a changed artifact is not a declared content dependency with bytes");
-      }
-    }
-    effects += draft.externalEffects.length;
-    if (effects > 1) fail("planOwners: a second external effect");
-    return draft;
-  });
-  return drafts;
-}
-
-/**
- * Spec 2 §8.3's first-party diff for owners that ship whole files: an installed content file
- * whose `source` names a target entry is kept on an equal hash and replaced otherwise, one the
- * target no longer ships is removed, and a new entry is created. Every other row is kept.
- */
-export function planOwnedFileTree(request: OwnerUpdateProviderRequestV1): readonly PlannerChangePlanOperationV1[] {
-  const target = new Map<string, OwnerTargetEntryV1>();
-  let prior: string | undefined;
-  for (const entry of request.target) {
-    const path = parseVaultRelativePathText(entry.path);
-    if (prior !== undefined && compareUtf8(prior, path) >= 0) fail("OwnerTargetEntryV1.path: not unique and sorted");
-    prior = path;
-    const key = folded(path);
-    if (target.has(key)) fail("OwnerTargetEntryV1.path: folded duplicate");
-    checkContent(entry.content, "OwnerTargetEntryV1.content");
-    target.set(key, entry);
-  }
-  const manifest = new Map(request.manifest.artifacts.map((row) => [row.token as string, row]));
-  const operations: PlannerChangePlanOperationV1[] = [];
-  const matched = new Set<string>();
-  for (const row of request.artifacts) {
-    const key = folded(row.source);
-    const entry = target.get(key);
-    if (entry !== undefined) matched.add(key);
-    if (!isChangeableOwnerArtifact(row)) {
-      if (entry !== undefined) fail("OwnerTargetEntryV1.path: collides with a keep-only artifact");
-      continue;
-    }
-    const expectedHash = manifest.get(row.token)?.currentHash ?? fail("OwnerUpdateProviderRequestV1: a changeable artifact pins no manifest hash");
-    const targetRef = { kind: "installed" as const, token: row.token };
-    if (entry === undefined) operations.push({ operation: "remove", target: targetRef, expectedHash });
-    else if (entry.content.sha256 !== expectedHash) operations.push({ operation: "replace", target: targetRef, expectedHash, content: entry.content });
-  }
-  for (const entry of request.target) {
-    if (matched.has(folded(entry.path))) continue;
-    operations.push({ operation: "create", target: { kind: "owner_relative", owner: request.owner, path: entry.path }, content: entry.content });
-  }
-  return operations;
-}
-
-/**
- * After root-free validation, rehydrates one owner's creates under its closed root. Each must be
- * canonically contained, alias no installed or other created path, and sit only under ancestors
- * that are kept directories — never under an installed file or a removed row.
- */
-export function rehydrateOwnerCreates(
-  draft: OwnerUpdateDraftV1,
-  snapshot: PlannerManifestSnapshotV1,
-  context: OwnerRehydrationContextV1,
-): readonly CanonicalAbsolutePathV1[] {
-  const validated = validateOwnerDraft(draft, snapshot);
-  const removed = new Set(validated.proposedOperations.flatMap((operation) => (operation.operation === "remove" ? [operation.target.token as string] : [])));
-  const installed = new Map<string, PlannerManifestArtifactV1>();
-  for (const row of snapshot.artifacts) {
-    const path = context.tokenPaths.get(row.token);
-    if (path === undefined) fail("rehydrateOwnerCreates: token has no current path");
-    const key = folded(path);
-    if (installed.has(key)) fail("rehydrateOwnerCreates: two tokens alias one path");
-    installed.set(key, row);
-  }
-  const created = new Set<string>();
-  return validated.proposedOperations.flatMap((operation): CanonicalAbsolutePathV1[] => {
-    if (operation.operation !== "create") return [];
-    const relative = admitOwnerRelativePath(operation.target.path, context.ownerRoot, context.evidence);
-    const absolute = parseCanonicalAbsolutePathText(`${context.ownerRoot}/${relative}`);
-    const key = folded(absolute);
-    if (installed.has(key) || created.has(key)) fail("rehydrateOwnerCreates: create collides with an existing path");
-    created.add(key);
-    const components = relative.split("/");
-    for (let depth = 1; depth < components.length; depth += 1) {
-      const ancestor = installed.get(folded(`${context.ownerRoot}/${components.slice(0, depth).join("/")}`));
-      if (ancestor === undefined) continue;
-      if (ancestor.kind !== "directory" || removed.has(ancestor.token)) fail("rehydrateOwnerCreates: parent is not a kept directory");
-    }
-    return [absolute];
-  });
-}
-
-/** For owners whose target adds no file change: every current artifact stays byte-identical. */
+/** For owners that declare no content dependency. */
 export function keepOwnerUpdateProvider(owner: ArtifactOwner): OwnerUpdateProviderV1 {
-  return Object.freeze({
-    owner,
-    contentDependencies: () => [],
-    plan: (request: OwnerUpdateProviderRequestV1): OwnerUpdateDraftV1 => {
-      // Dropping a shipped file silently would leave the target release incomplete.
-      if (request.target.length > 0) fail(`${owner} provider: the target ships files this owner cannot plan`);
-      return { owner, currentArtifacts: request.artifacts.map((artifact) => artifact.token), proposedOperations: [], externalEffects: [] };
-    },
-  });
+  return Object.freeze({ owner, contentDependencies: () => [] });
 }

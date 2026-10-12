@@ -200,17 +200,11 @@ export {
   MAX_OWNER_CHANGED_FILE_BYTES,
   OWNER_UPDATE_ORDER,
   ownerContentDependencies,
-  planOwnedFileTree,
-  planOwners,
-  rehydrateOwnerCreates,
   validateOwnerDraft,
 } from "./owner.js";
 export type {
-  OwnerPlanningSnapshotV1,
-  OwnerRehydrationContextV1,
   OwnerTargetContentRefV1,
   OwnerTargetEntryV1,
-  OwnerUpdateProviderRequestV1,
   OwnerUpdateProviderV1,
   OwnerUpdateRegistryV1,
 } from "./owner.js";

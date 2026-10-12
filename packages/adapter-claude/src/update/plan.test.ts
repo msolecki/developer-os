@@ -6,16 +6,13 @@ import {
   keepOwnerUpdateProvider,
   ownerContentDependencies,
   parseBundleRelativePath,
-  planOwners,
   plannerPathToken,
-  validateOwnerDraft,
   validateReleaseIdentity,
   validateUpdatePlannerRequest,
 } from "@developer-os/core";
-import type { OwnerTargetEntryV1, OwnerUpdateProviderRequestV1, UpdatePlannerRequestV1 } from "@developer-os/core";
-import { claudeOwnerUpdateProvider, claudeTargetEntries, planClaudeOwner } from "./plan.js";
+import type { UpdatePlannerRequestV1 } from "@developer-os/core";
+import { claudeOwnerUpdateProvider, claudeTargetEntries } from "./plan.js";
 
-const productHome = "/synthetic/home";
 const sha = (value: string): string => createHash("sha256").update(value).digest("hex");
 const t = plannerPathToken;
 const evidence = { reopenCanonicalAbsolutePath: (path: string) => path, containsCanonicalPath: () => true, hasFoldedAlias: () => false };
@@ -67,10 +64,6 @@ const target = claudeTargetEntries([
   { path: "SKILL.md", contents: "shared v2\n" },
 ], bundlePrefix);
 
-function providerRequest(request: UpdatePlannerRequestV1, entries: readonly OwnerTargetEntryV1[] = target): OwnerUpdateProviderRequestV1 {
-  return { owner: "claude", manifest: request.manifest, artifacts: request.artifactInputs.filter((row) => row.owner === "claude"), target: entries };
-}
-
 function registry() {
   return createOwnerUpdateRegistry([keepOwnerUpdateProvider("core"), claudeOwnerUpdateProvider, keepOwnerUpdateProvider("codex"), keepOwnerUpdateProvider("macos")]);
 }
@@ -88,48 +81,8 @@ describe("claudeTargetEntries", () => {
   });
 });
 
-describe("planClaudeOwner", () => {
-  it("plans files only, with no external effect", () => {
-    const request = requestFor(claudeRows);
-    const draft = validateOwnerDraft(planClaudeOwner(providerRequest(request)), request.manifest);
-    expect(draft.proposedOperations).toEqual([
-      { operation: "replace", target: { kind: "installed", token: t(0) }, expectedHash: sha("shared v1\n"), content: target[0]?.content },
-      { operation: "remove", target: { kind: "installed", token: t(2) }, expectedHash: sha("retired\n") },
-      { operation: "create", target: { kind: "owner_relative", owner: "claude", path: "skills/new/SKILL.md" }, content: target[1]?.content },
-    ]);
-    expect(draft.externalEffects).toEqual([]);
-  });
-
-  it("keeps adapter drafts root-free", () => {
-    expect(JSON.stringify(planClaudeOwner(providerRequest(requestFor(claudeRows))))).not.toContain(productHome);
-  });
-
-  it("plans only the claude owner", () => {
-    expect(() => planClaudeOwner({ ...providerRequest(requestFor(claudeRows)), owner: "codex" })).toThrow(/only the claude owner/u);
-  });
-
+describe("claudeOwnerUpdateProvider", () => {
   it("declares every replaceable Claude file as a content dependency", () => {
     expect(ownerContentDependencies(registry(), requestFor(claudeRows).manifest)).toEqual([t(0), t(2)]);
-  });
-});
-
-describe("owner matrices", () => {
-  it("plans a Claude-only installation", () => {
-    const drafts = planOwners(registry(), { request: requestFor(claudeRows), targets: { claude: target } });
-    expect(drafts.map((draft) => draft.owner)).toEqual(["claude"]);
-    expect(drafts[0]?.proposedOperations).toHaveLength(3);
-  });
-
-  it("plans a dual installation without touching the Codex partition", () => {
-    const rows: readonly Row[] = [...claudeRows, { owner: "codex", kind: "file", source: "plugins/developer-os/SKILL.md", contents: "codex\n" }];
-    const drafts = planOwners(registry(), { request: requestFor(rows), targets: { claude: target } });
-    expect(drafts.map((draft) => draft.owner)).toEqual(["claude", "codex"]);
-    expect(drafts[1]).toEqual({ owner: "codex", currentArtifacts: [t(3)], proposedOperations: [], externalEffects: [] });
-  });
-
-  it("leaves an absent Claude owner absent", () => {
-    const rows: readonly Row[] = [{ owner: "codex", kind: "file", source: "plugins/developer-os/SKILL.md", contents: "codex\n" }];
-    const drafts = planOwners(registry(), { request: requestFor(rows), targets: { claude: target } });
-    expect(drafts.map((draft) => draft.owner)).toEqual(["codex"]);
   });
 });

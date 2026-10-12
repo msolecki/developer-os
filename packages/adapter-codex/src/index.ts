@@ -88,7 +88,6 @@ export type {
 export {
   codexOwnerUpdateProvider,
   codexTargetEntries,
-  planCodexOwner,
 } from "./update/plan.js";
 
 import { resolveCapabilities } from "./capabilities.js";

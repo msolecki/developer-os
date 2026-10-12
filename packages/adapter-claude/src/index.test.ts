@@ -55,7 +55,6 @@ describe("the public door", () => {
       "discoverClaude",
       "invokeClaude",
       "isValidClaudeObservation",
-      "planClaudeOwner",
       "probeClaude",
       "proposeClaudeInstall",
       "proposeClaudeUninstall",

@@ -6,19 +6,16 @@ import {
   keepOwnerUpdateProvider,
   ownerContentDependencies,
   parseBundleRelativePath,
-  planOwners,
   plannerPathToken,
-  validateOwnerDraft,
   validateReleaseIdentity,
   validateUpdatePlannerRequest,
 } from "@developer-os/core";
-import type { OwnerTargetEntryV1, OwnerUpdateProviderRequestV1, UpdatePlannerRequestV1 } from "@developer-os/core";
+import type { UpdatePlannerRequestV1 } from "@developer-os/core";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { MARKETPLACE_RELATIVE_PATH, PLUGIN_TREE_PREFIX } from "../plugin.js";
 import type { MarketplaceRootArtifact } from "../plugin.js";
-import { codexOwnerUpdateProvider, codexTargetEntries, planCodexOwner } from "./plan.js";
+import { codexOwnerUpdateProvider, codexTargetEntries } from "./plan.js";
 
-const productHome = "/synthetic/home/.developer-os";
 const sha = (value: string): string => createHash("sha256").update(value).digest("hex");
 const t = plannerPathToken;
 const evidence = { reopenCanonicalAbsolutePath: (path: string) => path, containsCanonicalPath: () => true, hasFoldedAlias: () => false };
@@ -81,10 +78,6 @@ const targetTree = asInstallTree([
 const bundlePrefix = parseBundleRelativePath("payload/codex");
 const target = codexTargetEntries(targetTree, bundlePrefix);
 
-function providerRequest(request: UpdatePlannerRequestV1, entries: readonly OwnerTargetEntryV1[] = target): OwnerUpdateProviderRequestV1 {
-  return { owner: "codex", manifest: request.manifest, artifacts: request.artifactInputs.filter((row) => row.owner === "codex"), target: entries };
-}
-
 function registry() {
   return createOwnerUpdateRegistry([keepOwnerUpdateProvider("core"), keepOwnerUpdateProvider("claude"), codexOwnerUpdateProvider, keepOwnerUpdateProvider("macos")]);
 }
@@ -100,60 +93,9 @@ describe("codexTargetEntries", () => {
   });
 });
 
-describe("planCodexOwner", () => {
-  it("plans files plus exactly one registration refresh over the exact Codex partition", () => {
-    const request = requestFor(codexRows);
-    const draft = validateOwnerDraft(planCodexOwner(providerRequest(request)), request.manifest);
-    expect(draft.proposedOperations.map((operation) => operation.operation)).toEqual(["replace", "remove", "create"]);
-    expect(draft.externalEffects).toEqual([{ kind: "codex_registration_refresh", owner: "codex", artifactTokens: [t(0), t(1), t(2), t(3)] }]);
-  });
-
-  it("requests no refresh when every file is byte-identical", () => {
-    const request = requestFor(codexRows);
-    const unchanged = codexTargetEntries(asInstallTree([
-      { path: MARKETPLACE_RELATIVE_PATH, contents: marketplace },
-      { path: `${PLUGIN_TREE_PREFIX}/skills/a.md`, contents: skill },
-      { path: `${PLUGIN_TREE_PREFIX}/skills/old.md`, contents: retired },
-    ]), bundlePrefix);
-    expect(planCodexOwner(providerRequest(request, unchanged))).toEqual({ owner: "codex", currentArtifacts: [t(0), t(1), t(2), t(3)], proposedOperations: [], externalEffects: [] });
-  });
-
-  it("keeps adapter drafts root-free", () => {
-    const request = requestFor(codexRows);
-    expect(JSON.stringify(planCodexOwner(providerRequest(request)))).not.toContain(productHome);
-    expect(JSON.stringify(planCodexOwner(providerRequest(request)))).not.toContain("/synthetic");
-  });
-
-  it("plans only the codex owner", () => {
-    const request = requestFor(codexRows);
-    expect(() => planCodexOwner({ ...providerRequest(request), owner: "claude" })).toThrow(/only the codex owner/u);
-  });
-
+describe("codexOwnerUpdateProvider", () => {
   it("declares every replaceable Codex file as a content dependency", () => {
     const request = requestFor([{ owner: "core", kind: "file", source: "state/config.json", contents: "{}\n" }, ...codexRows]);
     expect(ownerContentDependencies(registry(), request.manifest)).toEqual([t(1), t(3), t(4)]);
-  });
-});
-
-describe("owner matrices", () => {
-  it("plans a Codex-only installation", () => {
-    const drafts = planOwners(registry(), { request: requestFor(codexRows), targets: { codex: target } });
-    expect(drafts.map((draft) => draft.owner)).toEqual(["codex"]);
-    expect(drafts[0]?.externalEffects).toHaveLength(1);
-  });
-
-  it("plans a dual installation without touching the Claude partition", () => {
-    const rows: readonly Row[] = [{ owner: "claude", kind: "file", source: "SKILL.md", contents: "claude skill\n" }, ...codexRows];
-    const drafts = planOwners(registry(), { request: requestFor(rows), targets: { codex: target } });
-    expect(drafts.map((draft) => draft.owner)).toEqual(["claude", "codex"]);
-    expect(drafts[0]?.proposedOperations).toEqual([]);
-    expect(drafts[1]?.currentArtifacts).toEqual([t(1), t(2), t(3), t(4)]);
-    expect(drafts.flatMap((draft) => draft.externalEffects)).toHaveLength(1);
-  });
-
-  it("leaves an absent Codex owner absent", () => {
-    const rows: readonly Row[] = [{ owner: "claude", kind: "file", source: "SKILL.md", contents: "claude skill\n" }];
-    const drafts = planOwners(registry(), { request: requestFor(rows), targets: { codex: target } });
-    expect(drafts.map((draft) => draft.owner)).toEqual(["claude"]);
   });
 });

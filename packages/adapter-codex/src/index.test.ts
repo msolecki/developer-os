@@ -56,7 +56,6 @@ describe("the package's public door", () => {
         "discoverCodex",
         "invocationFromAgentPrompt",
         "invokeCodex",
-        "planCodexOwner",
         "probeCodex",
         "proposeCodexInstall",
         "proposeCodexUninstall",

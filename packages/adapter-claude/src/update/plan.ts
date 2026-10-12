@@ -1,13 +1,11 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
-import { compareUtf8, isChangeableOwnerArtifact, parseBundleRelativePath, parseLowerHexSha256, parseVaultRelativePathText, planOwnedFileTree } from "@developer-os/core/planner-protocol";
+import { compareUtf8, isChangeableOwnerArtifact, parseBundleRelativePath, parseLowerHexSha256, parseVaultRelativePathText } from "@developer-os/core/planner-protocol";
 import type {
   BundleRelativePathV1,
   OwnerRelativePathV1,
   OwnerTargetEntryV1,
-  OwnerUpdateDraftV1,
-  OwnerUpdateProviderRequestV1,
   OwnerUpdateProviderV1,
   PlannerManifestSnapshotV1,
   PlannerPathTokenV1,
@@ -30,17 +28,6 @@ export function claudeTargetEntries(tree: readonly RenderedArtifact[], bundlePre
     });
 }
 
-/** Claude owns whole files under its plugin root and registers nothing, so it plans files only. */
-export function planClaudeOwner(request: OwnerUpdateProviderRequestV1): OwnerUpdateDraftV1 {
-  if (request.owner !== "claude") throw new Error("the Claude provider plans only the claude owner");
-  return {
-    owner: "claude",
-    currentArtifacts: request.artifacts.map((artifact) => artifact.token),
-    proposedOperations: planOwnedFileTree(request),
-    externalEffects: [],
-  };
-}
-
 /** Every replaceable Claude file, so a replace or remove carries the bytes its inverse needs. */
 function claudeContentDependencies(snapshot: PlannerManifestSnapshotV1): readonly PlannerPathTokenV1[] {
   return snapshot.artifacts.filter((row) => row.owner === "claude" && isChangeableOwnerArtifact(row)).map((row) => row.token);
@@ -49,5 +36,4 @@ function claudeContentDependencies(snapshot: PlannerManifestSnapshotV1): readonl
 export const claudeOwnerUpdateProvider: OwnerUpdateProviderV1 = Object.freeze({
   owner: "claude",
   contentDependencies: claudeContentDependencies,
-  plan: planClaudeOwner,
 });
