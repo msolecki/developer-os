@@ -894,7 +894,7 @@ const SYNTHETIC_CODEX = "/synthetic/opt/bin/codex";
 
 /** One skill for both vendors the first keg carries, so `init --adapters claude,codex` attaches instruction rows (NEW-171). */
 const SYNTHETIC_INSTRUCTIONS = [
-  { relativePath: "catalog.json", bytes: encoder.encode(`${JSON.stringify({ schemaVersion: 1, artifacts: [{ category: "skill", id: "triage", legacyName: "triage", vendors: ["claude", "codex"], thinCommand: false }] })}\n`), mode: 0o600 },
+  { relativePath: "catalog.json", bytes: encoder.encode(`${JSON.stringify({ schemaVersion: 1, artifacts: [{ category: "skill", id: "triage", vendors: ["claude", "codex"], thinCommand: false }] })}\n`), mode: 0o600 },
   { relativePath: "skills/triage/SKILL.md", bytes: encoder.encode("---\nname: triage\ndescription: Triage a defect.\n---\nTriage.\n"), mode: 0o600 },
 ] as const;
 

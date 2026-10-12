@@ -1528,7 +1528,7 @@ the other adapter nor the CLI.
   (`apps/cli/src/instructions/sources.ts` — `loadInstructionDefaults`); the working tree is never
   read. The catalog is strict
   (`packages/core/src/instructions/catalog.ts` — `validateInstructionCatalog`): `schemaVersion: 1`,
-  rows `{ category, id, legacyName, vendors, thinCommand }` sorted and unique, `thinCommand` only
+  rows `{ category, id, vendors, thinCommand }` sorted and unique, `thinCommand` only
   on a `skill`. A file no row claims, or a row with no file, refuses `instruction_catalog_invalid`,
   exit 2. `plugins/claude/` and `plugins/codex/` are rendered from the defaults alone.
 - **Overrides** live under `<product-home>/instructions/<vendor>/`, in the category directories

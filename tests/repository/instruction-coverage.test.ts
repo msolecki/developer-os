@@ -11,6 +11,21 @@ const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
 const INVENTORY = readFileSync(join(ROOT, "docs/migration/instruction-inventory.md"), "utf8");
 const BARE_NAME = /^[a-z][a-z0-9-]*$/u;
 
+/** The rows whose inventory name is not their catalog id: the source file each rule came from. */
+const INVENTORY_NAME_OF: Readonly<Record<string, string>> = {
+  communication: "rules/communication.md",
+  security: "rules/security.md",
+  "stack-preferences": "knowledge/stack-preferences.md",
+  workflow: "rules/workflow.md",
+  comments: "rules-lazy/comments.md",
+  "error-handling": "rules-lazy/error-handling.md",
+  "lessons-code": "rules-lazy/lessons-code.md",
+  monitoring: "rules-lazy/monitoring.md",
+  nextjs: "rules-lazy/nextjs.md",
+  testing: "rules-lazy/testing.md",
+  typescript: "rules-lazy/typescript.md",
+};
+
 function section(number: number): string {
   const start = INVENTORY.indexOf(`\n## ${String(number)}. `);
   expect(start, `inventory §${String(number)}`).toBeGreaterThanOrEqual(0);
@@ -107,8 +122,8 @@ describe("the catalog covers the inventory (instruction-inventory.md §1–§3)"
   it("lists every inventoried artifact exactly once", () => {
     const catalog = JSON.parse(
       readFileSync(join(ROOT, "instructions/catalog.json"), "utf8"),
-    ) as { readonly artifacts: readonly { readonly legacyName: string }[] };
-    const names = catalog.artifacts.map((row) => row.legacyName);
+    ) as { readonly artifacts: readonly { readonly id: string }[] };
+    const names = catalog.artifacts.map((row) => INVENTORY_NAME_OF[row.id] ?? row.id);
     expect(new Set(names).size).toBe(names.length);
     expect([...names].sort()).toStrictEqual([...expectedLegacyNames()].sort());
   });

@@ -38,10 +38,10 @@ const UID = getuid?.() ?? 0;
 
 const CATALOG = {
   artifacts: [
-    { category: "output-style", id: "terse", legacyName: "terse", thinCommand: false, vendors: ["claude", "codex"] },
-    { category: "rule", id: "honesty", legacyName: "honesty", thinCommand: false, vendors: ["claude", "codex"] },
-    { category: "rule", id: "pnpm-first", legacyName: "pnpm-first", thinCommand: false, vendors: ["claude"] },
-    { category: "skill", id: "triage", legacyName: "bug-triage", thinCommand: true, vendors: ["claude", "codex"] },
+    { category: "output-style", id: "terse", thinCommand: false, vendors: ["claude", "codex"] },
+    { category: "rule", id: "honesty", thinCommand: false, vendors: ["claude", "codex"] },
+    { category: "rule", id: "pnpm-first", thinCommand: false, vendors: ["claude"] },
+    { category: "skill", id: "triage", thinCommand: true, vendors: ["claude", "codex"] },
   ],
   schemaVersion: 1,
 };
@@ -160,7 +160,7 @@ describe("loadInstructionDefaults", () => {
 
   it("refuses a catalog row named after a workflow", async () => {
     const catalog = {
-      artifacts: [{ category: "rule", id: "capture", legacyName: "capture", thinCommand: false, vendors: ["claude"] }],
+      artifacts: [{ category: "rule", id: "capture", thinCommand: false, vendors: ["claude"] }],
       schemaVersion: 1,
     };
     const admitted = await release({ "rules/capture.md": "x\n" }, catalog);
