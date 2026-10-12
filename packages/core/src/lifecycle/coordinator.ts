@@ -191,7 +191,7 @@ type JournalPatchV1 = Partial<
   >
 >;
 
-export function causeOf(error: unknown): SafeReasonCodeV1 {
+function causeOf(error: unknown): SafeReasonCodeV1 {
   if (error !== null && typeof error === "object" && "reason" in error) {
     try {
       return parseSafeReasonCode(error.reason);
@@ -213,7 +213,7 @@ export function foundationRefById(
   return ref;
 }
 
-export function effectRefOf(
+function effectRefOf(
   plan: CoordinatorPlan,
   step: LifecycleCoordinatorStepV1,
 ): LifecycleEffectRefV1<string> {
