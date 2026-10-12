@@ -40,7 +40,6 @@ import {
   LIFECYCLE_PREVIEW_EXECUTION_OPERATIONS,
   LIFECYCLE_PREVIEW_FILE_OPERATIONS,
   LIFECYCLE_PREVIEW_FILE_ROLES,
-  LIFECYCLE_PREVIEW_FILE_STATES,
   LIFECYCLE_REDACTION_KEY_STEP_TRANSITIONS,
   LIFECYCLE_SUBSYSTEMS,
   LIFECYCLE_TERMINAL_OUTCOMES,
@@ -602,7 +601,6 @@ describe("the closed lifecycle tables", () => {
       "redaction_key",
     ]);
     expect(LIFECYCLE_PREVIEW_FILE_OPERATIONS).toEqual(["create", "replace", "remove", "keep"]);
-    expect(LIFECYCLE_PREVIEW_FILE_STATES).toEqual(["absent", "present"]);
     expect(LIFECYCLE_TERMINAL_OUTCOMES).toEqual(["finalized", "rolled_back"]);
     expect(LIFECYCLE_SUBSYSTEMS).toEqual(["git", "automation"]);
   });

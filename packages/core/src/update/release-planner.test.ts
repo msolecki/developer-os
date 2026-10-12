@@ -1,11 +1,18 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { admitTargetUpdateDraft, decodePlannerInput, encodePlannerInput, plannerPathToken, validateUpdatePlannerRequest } from "./planner.js";
+import { admitTargetUpdateDraft, decodePlannerInput, plannerJsonBytes, plannerPathToken, PlannerWireEncoder, validateUpdatePlannerRequest } from "./planner.js";
 import type { UpdatePlannerRequestV1 } from "./planner.js";
 import { planKeepAllRelease } from "./release-planner.js";
 import { validateReleaseIdentity } from "./release.js";
 import { parseLowerHexSha256 } from "./scalars.js";
+
+/** The source side's stdin transcript, framed as production frames it: request, blobs, end. */
+function encodeInput(request: UpdatePlannerRequestV1, blobs: readonly Uint8Array[]): Uint8Array {
+  const wire = new PlannerWireEncoder("input");
+  const json = plannerJsonBytes(request);
+  return new Uint8Array(Buffer.concat([wire.magic(), wire.json(json), json, ...blobs.flatMap((blob) => [wire.blob(blob), blob]), wire.end()]));
+}
 
 const sha = (value: string) => parseLowerHexSha256(createHash("sha256").update(value).digest("hex"));
 const evidence = {
@@ -64,6 +71,6 @@ describe("planKeepAllRelease (Task 11b, Q3)", () => {
   });
   it("round-trips through the wire the shim speaks", () => {
     const request = plannerRequest();
-    expect(decodePlannerInput(encodePlannerInput(request, [])).request).toEqual(request);
+    expect(decodePlannerInput(encodeInput(request, [])).request).toEqual(request);
   });
 });

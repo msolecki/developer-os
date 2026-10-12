@@ -4,7 +4,6 @@ import {
   decodeTenDigitOrdinal,
   encodeTenDigitOrdinal,
   parseLowerHexSha256,
-  parseLowercaseKebabId,
   parsePositiveUInt32,
   parseSafeReasonCode,
   parseSchemaMigrationId,
@@ -72,8 +71,8 @@ describe("stable update scalars", () => {
     expect(() => parseLowerHexSha256("A".repeat(64))).toThrow();
     expect(parseUtcTimestamp("2026-08-29T12:34:56.789Z")).toBe("2026-08-29T12:34:56.789Z");
     expect(() => parseUtcTimestamp("2026-02-29T12:34:56.789Z")).toThrow();
-    expect(parseLowercaseKebabId("a9-z0")).toBe("a9-z0");
-    expect(() => parseLowercaseKebabId("a--z")).toThrow();
+    expect(parseSchemaMigrationId("migration_a9-z0")).toBe("migration_a9-z0");
+    expect(() => parseSchemaMigrationId("migration_a--z")).toThrow();
     expect(parseSafeReasonCode("plan_refused_2")).toBe("plan_refused_2");
     expect(() => parseSafeReasonCode("Plan-refused")).toThrow();
     expect(parseSchemaMigrationId("migration_schema-v2")).toBe("migration_schema-v2");
@@ -81,7 +80,7 @@ describe("stable update scalars", () => {
   });
 
   it("catches a kebab-ID parser that loses the exact UTF-8 byte boundary", () => {
-    expect(parseLowercaseKebabId(`a${"0".repeat(95)}`)).toBe(`a${"0".repeat(95)}`);
-    expect(() => parseLowercaseKebabId(`a${"0".repeat(96)}`)).toThrow();
+    expect(parseSchemaMigrationId(`migration_a${"0".repeat(95)}`)).toBe(`migration_a${"0".repeat(95)}`);
+    expect(() => parseSchemaMigrationId(`migration_a${"0".repeat(96)}`)).toThrow();
   });
 });

@@ -30,7 +30,6 @@ import {
 } from "../lifecycle/types.js";
 import {
   parseCanonicalAbsolutePathText,
-  parseVaultRelativePathText,
   type CanonicalAbsolutePathV1,
   type VaultRelativePathV1,
 } from "../update/paths.js";
@@ -80,7 +79,6 @@ import {
   GIT_ZERO_OID,
   compareUnsignedUtf8,
   gitReflogAppendLine,
-  parseLowerHexSha1,
   validateGitReflogAppend,
   validateGitReflogPlan,
   validateGitSourceState,
@@ -241,25 +239,7 @@ export const GIT_ENABLE_BRANCH_HISTORY_WARNING =
   "Commits made before enable or by hand on this branch, including out-of-scope paths, may reach the remote; " +
   "Developer OS neither scans nor rewrites that history.";
 
-/** The CLI display names spec §4.1 gives the Git preview member. */
-export interface GitEnablePlan {
-  readonly preview: GitPlanPreviewV1;
-  readonly warning: typeof GIT_ENABLE_BRANCH_HISTORY_WARNING;
-}
-export interface GitDisablePlan {
-  readonly preview: GitPlanPreviewV1;
-}
-
-export function describeGitEnablePlan(preview: GitPlanPreviewV1): GitEnablePlan {
-  return { preview, warning: GIT_ENABLE_BRANCH_HISTORY_WARNING };
-}
-
 const MAX_GIT_EFFECT_TRANSITIONS = GIT_SYNC_CARDINALITY.maxGitEffectTransitions;
-const REFLOG_LINE_MIN_BYTES = gitReflogAppendLine({
-  oldOid: GIT_ZERO_OID,
-  newOid: GIT_ZERO_OID as LowerHexSha1,
-  committer: { name: "n", email: "e", unixSeconds: 0, utcOffset: "+0000" },
-}).length;
 const encoder = new TextEncoder();
 const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
@@ -293,12 +273,6 @@ const EMPTY_DIRECTORY_PREVIEW: LifecyclePreviewFileStateV1 = { state: "present",
 
 function child(parent: CanonicalAbsolutePathV1, relative: string): CanonicalAbsolutePathV1 {
   return parseCanonicalAbsolutePathText(`${parent}/${relative}`);
-}
-
-function assertSortedUnique(paths: readonly string[], label: string): void {
-  for (let index = 1; index < paths.length; index += 1) {
-    if (compareUnsignedUtf8(paths[index - 1] as string, paths[index] as string) >= 0) fail(`${label}: order`);
-  }
 }
 
 export function validateGitScopeSnapshot(value: unknown): GitScopeSnapshotV1 {
@@ -478,138 +452,6 @@ export function assertGitSyncSourceTransitions(
   }
 }
 
-function reflogSize(state: GitReflogStateV1): number {
-  return state.state === "absent" ? 0 : state.size;
-}
-
-/**
- * Spec §4.4: with a commit, both reflogs grow by exactly one identical
- * append and the branch ref lands on `commitOid`; without one, `sourceAfter`
- * is byte-identical to `sourceBefore`.
- */
-function assertSourceProjection(
-  label: string,
-  before: GitSourceStateV1,
-  after: GitSourceStateV1,
-  commit: GitSyncPlanCoreV1<unknown>["commit"],
-): void {
-  if (commit === null) {
-    if (!sameJson(before, after)) fail(`${label}: sourceAfter`);
-    return;
-  }
-  if (after.configHash !== before.configHash || !sameJson(before.head, after.head) || after.index.state !== "present") {
-    fail(`${label}: sourceAfter`);
-  }
-  if (after.headReflog.state !== "present" || after.branchReflog.state !== "present") fail(`${label}: reflog_bijection`);
-  const headDelta = after.headReflog.size - reflogSize(before.headReflog);
-  const branchDelta = after.branchReflog.size - reflogSize(before.branchReflog);
-  if (
-    headDelta !== branchDelta ||
-    headDelta < REFLOG_LINE_MIN_BYTES ||
-    headDelta > GIT_METADATA_BOUNDS.reflogAppendMaxBytes
-  ) {
-    fail(`${label}: reflog_bijection`);
-  }
-  if (after.branchRef.state !== "present" || after.branchRef.oid !== commit.commitOid) fail(`${label}: reflog_bijection`);
-}
-
-function validateChange(value: unknown): GitSyncChangeV1 {
-  const label = "GitSyncChangeV1";
-  const input = exact(value, ["path", "operation", "sourceHash", "blobOid"], label);
-  const operation = literal(input.operation, ["create", "replace", "remove"] as const, `${label}.operation`);
-  const sourceHash = nullable(input.sourceHash, parseLowerHexSha256);
-  const blobOid = nullable(input.blobOid, parseLowerHexSha1);
-  if ((operation === "remove") !== (sourceHash === null) || (sourceHash === null) !== (blobOid === null)) {
-    fail(`${label}: hashes`);
-  }
-  return { path: parseVaultRelativePathText(input.path), operation, sourceHash, blobOid };
-}
-
-/**
- * The strict Core half of `GitSyncPlanV1`. The push record is the codec's;
- * Core checks only the two source projections spec §4.4 binds to its own
- * fields (`sourceBefore` and `sourceAfter`).
- */
-export function validateGitSyncPlanCore<T>(value: unknown, push: LifecycleValueCodec<T>): GitSyncPlanCoreV1<T> {
-  const label = "GitSyncPlanCoreV1";
-  const input = exact(
-    value,
-    [
-      "schemaVersion",
-      "repositoryRoot",
-      "scope",
-      "sourcePreconditions",
-      "changes",
-      "managedPaths",
-      "candidateTreeOid",
-      "commit",
-      "sourceGitEffectPlanHash",
-      "destinationGitEffectPlanHash",
-      "push",
-    ],
-    label,
-  );
-  if (input.schemaVersion !== 1) fail(`${label}.schemaVersion`);
-  const scope = validateGitScopeSnapshot(input.scope);
-  const repositoryRoot = parseCanonicalAbsolutePathText(input.repositoryRoot);
-  if (repositoryRoot !== scope.brainPath) fail(`${label}.repositoryRoot`);
-  const sourcePreconditions = validateGitSourceState(input.sourcePreconditions);
-  const changes = list(input.changes, GIT_SYNC_CARDINALITY.maxChanges, `${label}.changes`).map(validateChange);
-  assertSortedUnique(
-    changes.map((change) => change.path),
-    `${label}.changes`,
-  );
-  const managedPaths = list(input.managedPaths, GIT_SYNC_CARDINALITY.maxChanges, `${label}.managedPaths`).map(
-    parseVaultRelativePathText,
-  );
-  assertSortedUnique(managedPaths, `${label}.managedPaths`);
-  const managed = new Set(managedPaths);
-  if (changes.some((change) => (change.operation === "remove") === managed.has(change.path))) {
-    fail(`${label}.changes: managed paths`);
-  }
-  const commit =
-    input.commit === null
-      ? null
-      : (() => {
-          const commitInput = exact(input.commit, ["parentOid", "commitOid", "message"], `${label}.commit`);
-          if (commitInput.message !== GIT_SYNC_COMMIT_MESSAGE) fail(`${label}.commit.message`);
-          return {
-            parentOid: nullable(commitInput.parentOid, parseLowerHexSha1),
-            commitOid: parseLowerHexSha1(commitInput.commitOid),
-            message: GIT_SYNC_COMMIT_MESSAGE,
-          };
-        })();
-  const expectedParent = sourcePreconditions.branchRef.state === "present" ? sourcePreconditions.branchRef.oid : null;
-  if (commit !== null && commit.parentOid !== expectedParent) fail(`${label}.commit.parentOid`);
-  if ((commit === null) !== (changes.length === 0)) fail(`${label}.commit`);
-  const sourceGitEffectPlanHash = nullable(input.sourceGitEffectPlanHash, parseLowerHexSha256);
-  const destinationGitEffectPlanHash = nullable(input.destinationGitEffectPlanHash, parseLowerHexSha256);
-  if ((commit === null) !== (sourceGitEffectPlanHash === null)) fail(`${label}.sourceGitEffectPlanHash`);
-  const pushPlan = input.push === null ? null : push.validate(input.push);
-  if (pushPlan === null) {
-    if (commit !== null || destinationGitEffectPlanHash !== null) fail(`${label}.push`);
-  } else {
-    const projection = exact(input.push, Object.keys(input.push as object), `${label}.push`);
-    const sourceBefore = validateGitSourceState(projection.sourceBefore);
-    const sourceAfter = validateGitSourceState(projection.sourceAfter);
-    if (!sameJson(sourceBefore, sourcePreconditions)) fail(`${label}.sourcePreconditions`);
-    assertSourceProjection(label, sourceBefore, sourceAfter, commit);
-  }
-  return {
-    schemaVersion: 1,
-    repositoryRoot,
-    scope,
-    sourcePreconditions,
-    changes,
-    managedPaths,
-    candidateTreeOid: parseLowerHexSha1(input.candidateTreeOid),
-    commit,
-    sourceGitEffectPlanHash,
-    destinationGitEffectPlanHash,
-    push: pushPlan,
-  };
-}
-
 /** The last successful `SyncRecordV1` facts planning needs; Task 15 owns the record itself. */
 export interface GitSyncBaselineV1 {
   readonly lastPushedHeadOid: LowerHexSha1;
@@ -732,13 +574,6 @@ export class GitPlanner {
 
   constructor(dependencies: GitPlannerDependenciesV1) {
     this.#dependencies = dependencies;
-  }
-
-  /** The exact public surface, for the exhaustive method-set test. */
-  publicMethods(): readonly string[] {
-    return Object.getOwnPropertyNames(GitPlanner.prototype)
-      .filter((name) => name !== "constructor" && name !== "publicMethods")
-      .sort();
   }
 
   async previewEnable(request: GitEnableRequestV1): Promise<GitPlanPreviewV1> {

@@ -2,11 +2,10 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import type { UpdateCapacityInputV1 } from "./capacity.js";
-import { admitRollbackPayloadRelativePath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1 } from "./paths.js";
+import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1, type RollbackPayloadRelativePathV1 } from "./paths.js";
 import {
   admitTargetUpdateDraft,
   decodePlannerInput,
-  encodePlannerInput,
   encodePlannerOutput,
   materializePlannerDraft,
   parsePlannerPathToken,
@@ -29,6 +28,13 @@ import {
 import { parseRollbackPayloadId, type PlannerTranscriptIdentityV1, type RollbackPayloadEntryV1 } from "./preview.js";
 import { validateReleaseIdentity, type ReleaseIdentityV1 } from "./release.js";
 import { parseLowerHexSha256, parseSafeReasonCode, parseUInt64Decimal, type LowerHexSha256 } from "./scalars.js";
+
+/** The source side's stdin transcript, framed as production frames it: request, blobs, end. */
+function encodeInput(request: UpdatePlannerRequestV1, blobs: readonly Uint8Array[]): Uint8Array {
+  const wire = new PlannerWireEncoder("input");
+  const json = plannerJsonBytes(request);
+  return new Uint8Array(Buffer.concat([wire.magic(), wire.json(json), json, ...blobs.flatMap((blob) => [wire.blob(blob), blob]), wire.end()]));
+}
 
 const encoder = new TextEncoder();
 const bytes = (text: string): Uint8Array => encoder.encode(text);
@@ -349,7 +355,7 @@ describe("target draft admission", () => {
 
 describe("planner wire framing", () => {
   it("round-trips one request, contiguous blobs, and end frame", () => {
-    expect(decodePlannerInput(encodePlannerInput(request(), inputBlobs))).toEqual({ request: request(), blobs: inputBlobs });
+    expect(decodePlannerInput(encodeInput(request(), inputBlobs))).toEqual({ request: request(), blobs: inputBlobs });
   });
 
   it("decodes identically when the stream arrives one byte at a time", () => {
@@ -363,7 +369,7 @@ describe("planner wire framing", () => {
   });
 
   it("frames the request as its exact no-LF canonical JSON", () => {
-    const wire = encodePlannerInput(request(), inputBlobs);
+    const wire = encodeInput(request(), inputBlobs);
     const json = plannerJsonBytes(request());
     expect(wire.subarray(0, 8)).toEqual(MAGIC);
     expect(wire.subarray(8, 17)).toEqual(header(0x01, json.byteLength));
@@ -416,8 +422,8 @@ describe("planner wire framing", () => {
   });
 
   it("refuses input blobs that differ from their references", () => {
-    expect(() => encodePlannerInput(request(), [codexBytes, configBytes, noteBytes])).toThrow();
-    const wire = encodePlannerInput(request(), inputBlobs);
+    expect(() => decodePlannerInput(encodeInput(request(), [codexBytes, configBytes, noteBytes]))).toThrow();
+    const wire = encodeInput(request(), inputBlobs);
     const last = wire.byteLength - 10;
     wire[last] = (wire[last] as number) ^ 0xff;
     expect(() => decodePlannerInput(wire)).toThrow();
@@ -475,10 +481,9 @@ describe("planner draft materialization", () => {
   }
 
   function context(overrides: Partial<PlannerDraftMaterializationContextV1> = {}): PlannerDraftMaterializationContextV1 {
-    const rollbackRoot = parseCanonicalAbsolutePathText("/product/rollback/payload");
     const entries: RollbackPayloadEntryV1[] = [
-      { ordinal: 0, path: admitRollbackPayloadRelativePath("blobs/0000000000.bin", rollbackRoot, evidence), role: "owner_preimage", bytes: codexBytes.byteLength, sha256: sha(codexBytes) },
-      { ordinal: 1, path: admitRollbackPayloadRelativePath("plans/owner_inverse/codex.plan.json", rollbackRoot, evidence), role: "inverse_plan_leaf", bytes: 20, sha256: sha("leaf") },
+      { ordinal: 0, path: "blobs/0000000000.bin" as RollbackPayloadRelativePathV1, role: "owner_preimage", bytes: codexBytes.byteLength, sha256: sha(codexBytes) },
+      { ordinal: 1, path: "plans/owner_inverse/codex.plan.json" as RollbackPayloadRelativePathV1, role: "inverse_plan_leaf", bytes: 20, sha256: sha("leaf") },
     ];
     const capacity: UpdateCapacityInputV1 = {
       operation: "update",

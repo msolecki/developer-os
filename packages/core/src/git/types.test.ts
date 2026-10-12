@@ -12,7 +12,6 @@ import {
   parseLowerHexSha1,
   validateGitHeadState,
   validateGitIndexState,
-  validateGitMetadataBounds,
   validateGitPackReaderBudget,
   validateGitRefState,
   validateGitReflogAppend,
@@ -129,16 +128,6 @@ describe("GitMetadataBoundsV1 and GitPackReaderBudgetV1", () => {
     expect(boundKeys.length).toBe(12);
     expect(GIT_METADATA_BOUNDS.reflogPostimageMaxBytes).toBe(67112960);
     expect(GIT_METADATA_BOUNDS.sourceHeadReflogMaxBytes + GIT_METADATA_BOUNDS.reflogAppendMaxBytes).toBe(67112960);
-    expect(validateGitMetadataBounds({ ...GIT_METADATA_BOUNDS })).toEqual(GIT_METADATA_BOUNDS);
-  });
-
-  it.each(boundKeys)("refuses %s moved by one byte", (key) => {
-    const bounds = GIT_METADATA_BOUNDS as unknown as Record<string, number>;
-    expect(() => validateGitMetadataBounds({ ...bounds, [key]: (bounds[key] as number) + 1 })).toThrow(key);
-  });
-
-  it("refuses an unknown bound key", () => {
-    expect(() => validateGitMetadataBounds({ ...GIT_METADATA_BOUNDS, extra: 1 })).toThrow("keys");
   });
 
   it("admits equal counts through 200001 and refuses 200002", () => {

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   projectUpdateCapacity,
-  UPDATE_CAPACITY_COMPONENT_ORDER,
   UpdateCapacityInsufficientError,
   type UpdateCapacityComponentKindV1,
   type UpdateCapacityInputV1,
@@ -10,6 +9,19 @@ import {
 import { parseUInt64Decimal } from "./scalars.js";
 
 const u = parseUInt64Decimal;
+/** Spec 2 §7.2's shown order. */
+const ORDER: readonly UpdateCapacityComponentKindV1[] = [
+  "active",
+  "retained_rollback",
+  "verified_scratch",
+  "durable_bundle_source",
+  "target_bundle",
+  "transaction_staging",
+  "backups",
+  "inverse_payload",
+  "journals",
+  "terminal_compaction_headroom",
+];
 
 function component(kind: UpdateCapacityComponentKindV1, bytes: string, entries: string) {
   return { kind, bytes: u(bytes), entries: u(entries) };
@@ -50,9 +62,9 @@ describe("update capacity projection", () => {
   it("emits components uniquely in the canonical order whatever the input order", () => {
     const reversed = input({ components: [...input().components].reverse() });
     expect(projectUpdateCapacity(reversed)).toEqual(projectUpdateCapacity(input()));
-    const all = UPDATE_CAPACITY_COMPONENT_ORDER.map((kind) => component(kind, "1", "1")).reverse();
+    const all = ORDER.map((kind) => component(kind, "1", "1")).reverse();
     const projected = projectUpdateCapacity(input({ components: all, availableBytes: u("100000"), availableEntries: u("100") }));
-    expect(projected.components.map((entry) => entry.kind)).toEqual(UPDATE_CAPACITY_COMPONENT_ORDER);
+    expect(projected.components.map((entry) => entry.kind)).toEqual(ORDER);
     expect(() => projectUpdateCapacity(input({ components: [component("active", "1", "1"), component("active", "1", "1")] }))).toThrow();
   });
 

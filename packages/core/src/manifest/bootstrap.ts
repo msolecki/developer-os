@@ -530,14 +530,6 @@ function deriveAbsolute(productHome: CanonicalAbsolutePathV1, relative: string):
   return `${productHome}/${relative}` as CanonicalAbsolutePathV1;
 }
 
-export function validateBootstrapFoundationOrdinal(value: unknown):
-  | { readonly ok: true; readonly ordinal: number }
-  | { readonly ok: false } {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value < MAX_FOUNDATION_FORWARD_PARTICIPANTS
-    ? { ok: true, ordinal: value }
-    : { ok: false };
-}
-
 export function deriveBootstrapEnvelopePaths(
   productHome: CanonicalAbsolutePathV1,
   id: FreshV2InitIdV1,

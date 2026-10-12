@@ -39,7 +39,7 @@ export interface UpdateCapacityInputV1 {
 }
 
 /** Spec 2 §7.2's shown order, which is also the projection's canonical order. */
-export const UPDATE_CAPACITY_COMPONENT_ORDER: readonly UpdateCapacityComponentKindV1[] = [
+const UPDATE_CAPACITY_COMPONENT_ORDER: readonly UpdateCapacityComponentKindV1[] = [
   "active",
   "retained_rollback",
   "verified_scratch",

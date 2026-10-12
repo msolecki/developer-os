@@ -309,7 +309,6 @@ function same(left: unknown, right: unknown): boolean {
   return canonical(left) === canonical(right);
 }
 
-
 export function plannerPathToken(ordinal: number): PlannerPathTokenV1 {
   return `artifact_${encodeTenDigitOrdinal(integer(ordinal, 0, MAX_TOKEN_ORDINAL, "PlannerPathTokenV1"))}`;
 }
@@ -1092,13 +1091,6 @@ function checkInputBlobs(request: UpdatePlannerRequestV1, blobs: readonly Uint8A
     const blob = blobs[ordinal] as Uint8Array;
     if (blob.byteLength !== ref.bytes || sha256Hex(blob) !== ref.sha256) fail("planner input: blob differs from its reference");
   });
-}
-
-/** The whole stdin transcript in one buffer: for tests and the target side's small helpers. */
-export function encodePlannerInput(request: UpdatePlannerRequestV1, blobs: readonly Uint8Array[]): Uint8Array {
-  const validated = validateUpdatePlannerRequest(request);
-  checkInputBlobs(validated, blobs);
-  return encodeDirection("input", plannerJsonBytes(validated), blobs);
 }
 
 export function decodePlannerInput(bytes: Uint8Array): { readonly request: UpdatePlannerRequestV1; readonly blobs: readonly Uint8Array[] } {

@@ -34,7 +34,6 @@ export {
   deriveBootstrapEnvelopePaths,
   deriveBootstrapPayloadEvidencePaths,
   validateBootstrapExternalShapeProjection,
-  validateBootstrapFoundationOrdinal,
   validateBootstrapJournal,
   validateBootstrapPayloadEvidence,
   validateBootstrapPlan,

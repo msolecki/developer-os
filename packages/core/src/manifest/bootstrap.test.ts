@@ -17,7 +17,6 @@ import {
   deriveBootstrapEnvelopePaths,
   deriveBootstrapPayloadEvidencePaths,
   validateBootstrapExternalShapeProjection,
-  validateBootstrapFoundationOrdinal,
   validateBootstrapJournal,
   validateBootstrapPlan,
   validateBootstrapPayloadEvidence,
@@ -87,19 +86,6 @@ function externalProjection(): BootstrapExternalShapeProjectionV1 {
 }
 
 describe("bootstrap deterministic names and external-shape authority", () => {
-  it.each([
-    [0, true],
-    [255, true],
-    [256, false],
-    [-1, false],
-    [0.5, false],
-  ] as const)(
-    "catches an ordinal validator that accepts the wrong Foundation pair boundary %s",
-    (ordinal, accepted) => {
-      expect(validateBootstrapFoundationOrdinal(ordinal).ok).toBe(accepted);
-    },
-  );
-
   it("catches a prefix or envelope-kind branch that derives caller-selected bootstrap paths", () => {
     expect(deriveBootstrapEnvelopePaths(productHome, freshId)).toEqual({
       plan: "/product/state/fresh-v2-init.fi_123e4567-e89b-42d3-a456-426614174000.plan.json",

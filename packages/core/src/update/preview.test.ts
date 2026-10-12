@@ -4,12 +4,11 @@ import { describe, expect, it } from "vitest";
 import { encodeCanonicalJson, hashCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { UpdateCapacityInsufficientError, type UpdateCapacityInputV1 } from "./capacity.js";
 import {
-  admitCanonicalAbsolutePath,
-  admitRollbackPayloadRelativePath,
   parseCanonicalAbsolutePathText,
   parseVaultRelativePathText,
   type CanonicalPathEvidenceV1,
   type CanonicalProductStatePathV1,
+  type RollbackPayloadRelativePathV1,
 } from "./paths.js";
 import {
   buildPreparedUpdateCandidate,
@@ -38,8 +37,7 @@ const evidence: CanonicalPathEvidenceV1 = {
   containsCanonicalPath: (root, candidate) => candidate === root || candidate.startsWith(`${root}/`),
   hasFoldedAlias: () => false,
 };
-const rollbackRoot = admitCanonicalAbsolutePath("/product/rollback/payload", evidence);
-const payloadPath = (value: string) => admitRollbackPayloadRelativePath(value, rollbackRoot, evidence);
+const payloadPath = (value: string) => value as RollbackPayloadRelativePathV1;
 const payloadId = parseRollbackPayloadId(`rb_${hex("nonce")}_7`);
 
 function release(version: string, sequence: string): ReleaseIdentityV1 {
