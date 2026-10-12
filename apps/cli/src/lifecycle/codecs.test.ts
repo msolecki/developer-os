@@ -200,7 +200,7 @@ describe("the concrete lifecycle execution-plan codec", () => {
     expect(operations.length).toBeGreaterThan(0);
 
     for (const operation of new Set(operations)) {
-      const plan = codec.validate({ ...UNINSTALL_PLAN, operation });
+      const plan = codec.validate({ ...UNINSTALL_PLAN, operation, previewHash: "c".repeat(64) });
       expect(() => validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan)), operation).toThrow();
     }
   });
