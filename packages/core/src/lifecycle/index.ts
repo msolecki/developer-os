@@ -203,7 +203,6 @@ export type {
   LifecycleRedactionKeyCoreV1,
   LifecycleCoordinatorStepV1,
   LifecycleEffectRefV1,
-  LifecycleExecutionPlanV2,
   LifecycleJournalClosureV1,
   LifecycleJournalClosureV2,
   LifecyclePlanPreviewCoreV1,

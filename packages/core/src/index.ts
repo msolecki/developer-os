@@ -142,7 +142,6 @@ export type {
   LifecycleIdBlockV1,
   LifecycleIdPrefixV1,
   LifecycleClosureV2ObservationV1,
-  LifecycleExecutionPlanV2,
   LifecycleJournalClosureV1,
   LifecycleJournalClosureV2,
   LifecycleLeafCodecsV1,
