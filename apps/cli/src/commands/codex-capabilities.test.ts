@@ -56,7 +56,7 @@ describe("reportCodexCapabilities", () => {
   it("reports rather than refusing when nothing is installed", async () => {
     const report = await reportCodexCapabilities({
       executablePath: null,
-      runner: version("codex-cli 0.147.0"),
+      runner: version("codex-cli 0.155.1"),
       pluginRoot: "/synthetic/plugin",
     });
     expect(report.installed).toBe(false);
@@ -78,7 +78,7 @@ describe("reportCodexCapabilities", () => {
   it("reports every capability key, so the matrix is complete", async () => {
     const report = await reportCodexCapabilities({
       executablePath: null,
-      runner: version("codex-cli 0.147.0"),
+      runner: version("codex-cli 0.155.1"),
       pluginRoot: "/synthetic/plugin",
     });
     expect(Object.keys(report.capabilities)).toHaveLength(9);
@@ -90,7 +90,7 @@ describe("reportCodexCapabilities", () => {
       executablePath: "/opt/synthetic/bin/codex",
       runner: runner((request) => {
         if (request.args[0] === "plugin") spawned = true;
-        return { stdout: "codex-cli 0.147.0" };
+        return { stdout: "codex-cli 0.155.1" };
       }),
       pluginRoot: "/synthetic/plugin",
     });
@@ -100,11 +100,11 @@ describe("reportCodexCapabilities", () => {
   it("reads the version from a real executable path", async () => {
     const report = await reportCodexCapabilities({
       executablePath: "/opt/synthetic/bin/codex",
-      runner: version("codex-cli 0.147.0"),
+      runner: version("codex-cli 0.155.1"),
       pluginRoot: "/synthetic/plugin",
     });
     expect(report.installed).toBe(true);
-    expect(report.version).toBe("0.147.0");
+    expect(report.version).toBe("0.155.1");
   });
 
   it("reports unreadable rather than absent when the version cannot be parsed", async () => {
@@ -135,7 +135,7 @@ describe("reportCodexCapabilities", () => {
   it("reports every capability as unknown when it did not probe", async () => {
     const report = await reportCodexCapabilities({
       executablePath: "/opt/synthetic/bin/codex",
-      runner: version("codex-cli 0.147.0"),
+      runner: version("codex-cli 0.155.1"),
       pluginRoot: "/synthetic/plugin",
     });
     expect(report.summary).toContain("not-probed");
@@ -183,7 +183,7 @@ describe("reportCodexCapabilities", () => {
   it("renders a matrix line naming every key", async () => {
     const report = await reportCodexCapabilities({
       executablePath: "/opt/synthetic/bin/codex",
-      runner: version("codex-cli 0.147.0"),
+      runner: version("codex-cli 0.155.1"),
       pluginRoot: "/synthetic/plugin",
     });
     for (const key of CODEX_CAPABILITY_KEYS) {
@@ -215,7 +215,7 @@ describe("reportCodexCapabilities", () => {
     const report = await reportCodexCapabilities({
       executablePath: null,
       discoveryFailed: true,
-      runner: version("codex-cli 0.147.0"),
+      runner: version("codex-cli 0.155.1"),
       pluginRoot: "/synthetic/plugin",
     });
     expect(report.installed).toBe(true);
@@ -233,14 +233,14 @@ describe("reportCodexCapabilities", () => {
  */
 describe("the hook-trust advice", () => {
   const branches = {
-    absent: { executablePath: null, runner: version("codex-cli 0.147.0") },
+    absent: { executablePath: null, runner: version("codex-cli 0.155.1") },
     unreadable: {
       executablePath: "/opt/synthetic/bin/codex",
       runner: runner(() => ({ exitCode: 97 })),
     },
     "not-probed": {
       executablePath: "/opt/synthetic/bin/codex",
-      runner: version("codex-cli 0.147.0"),
+      runner: version("codex-cli 0.155.1"),
     },
     probed: {
       executablePath: "/opt/synthetic/bin/codex",
@@ -331,7 +331,7 @@ describe("the probe is opt-in", () => {
         run(request: ProcessRequest): Promise<ProcessResult> {
           seen.push([...request.args]);
           return Promise.resolve({
-            stdout: "codex-cli 0.147.0",
+            stdout: "codex-cli 0.155.1",
             stderr: "",
             exitCode: 0,
             signal: null,
@@ -353,7 +353,7 @@ describe("the probe is opt-in", () => {
           seen.push([...request.args]);
           return Promise.resolve({
             stdout: request.args[0] === "--version"
-              ? "codex-cli 0.147.0"
+              ? "codex-cli 0.155.1"
               : '{"installed":[],"available":[]}',
             stderr: "",
             exitCode: 0,

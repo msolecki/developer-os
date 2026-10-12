@@ -13,7 +13,7 @@ function observed(
 describe("resolveCapabilities", () => {
   it("reports yes only when the table permits and the probe observed", () => {
     const resolved = resolveCapabilities(
-      "2.1.216",
+      "2.1.280",
       observed([["skills", "observed"]]),
     );
     expect(resolved.skills).toBe("yes");
@@ -25,7 +25,7 @@ describe("resolveCapabilities", () => {
    */
   it("reports no when the probe asked and did not observe", () => {
     const resolved = resolveCapabilities(
-      "2.1.216",
+      "2.1.280",
       observed([["skills", "absent"]]),
     );
     expect(resolved.skills).toBe("no");
@@ -40,7 +40,7 @@ describe("resolveCapabilities", () => {
   });
 
   it("never reports no for a key the probe never mentioned", () => {
-    const resolved = resolveCapabilities("2.1.216", observed([]));
+    const resolved = resolveCapabilities("2.1.280", observed([]));
     expect(Object.values(resolved)).not.toContain("no");
   });
 
@@ -52,7 +52,7 @@ describe("resolveCapabilities", () => {
    */
   it("reports unknown when the probe could not run", () => {
     const resolved = resolveCapabilities(
-      "2.1.216",
+      "2.1.280",
       observed([["skills", "unavailable"]]),
     );
     expect(resolved.skills).toBe("unknown");
@@ -67,7 +67,7 @@ describe("resolveCapabilities", () => {
   });
 
   it("reports unknown for a probe-settled key the probe never mentioned", () => {
-    const resolved = resolveCapabilities("2.1.216", observed([]));
+    const resolved = resolveCapabilities("2.1.280", observed([]));
     expect(resolved.non_interactive_run).toBe("unknown");
   });
 
@@ -80,7 +80,7 @@ describe("resolveCapabilities", () => {
   });
 
   it("returns a value for every key and no others", () => {
-    const resolved = resolveCapabilities("2.1.216", observed([]));
+    const resolved = resolveCapabilities("2.1.280", observed([]));
     for (const key of CLAUDE_CAPABILITY_KEYS) {
       expect(resolved[key], `${key} must be reported`).toBeDefined();
     }
@@ -94,7 +94,7 @@ describe("resolveCapabilities", () => {
    */
   it("ignores an observation for a key that is not a capability", () => {
     const resolved = resolveCapabilities(
-      "2.1.216",
+      "2.1.280",
       observed([
         ["toString", "observed"],
         ["__proto__", "observed"],
@@ -105,7 +105,7 @@ describe("resolveCapabilities", () => {
   });
 
   it("never reports yes for anything the probe cannot settle", () => {
-    const resolved = resolveCapabilities("2.1.216", observed([]));
+    const resolved = resolveCapabilities("2.1.280", observed([]));
     expect(Object.values(resolved)).not.toContain("yes");
   });
 
@@ -132,9 +132,9 @@ describe("the hook keys", () => {
   });
 
   it.each(HOOK_KEYS)("reports %s as unknown without a firing observation", (key) => {
-    expect(resolveCapabilities("2.1.216", observed([]))[key]).toBe("unknown");
-    expect(resolveCapabilities("2.1.216", observed([[key, "absent"]]))[key]).toBe("unknown");
-    expect(resolveCapabilities("2.1.216", observed([[key, "unavailable"]]))[key]).toBe("unknown");
+    expect(resolveCapabilities("2.1.280", observed([]))[key]).toBe("unknown");
+    expect(resolveCapabilities("2.1.280", observed([[key, "absent"]]))[key]).toBe("unknown");
+    expect(resolveCapabilities("2.1.280", observed([[key, "unavailable"]]))[key]).toBe("unknown");
   });
 
   it.each(HOOK_KEYS)("reports %s as unknown below the minimum version, whatever fired", (key) => {
@@ -155,7 +155,7 @@ describe("the hook keys", () => {
 
   it("keeps the two capture keys not-used when every hook key fired", () => {
     const resolved = resolveCapabilities(
-      "2.1.216",
+      "2.1.280",
       observed(HOOK_KEYS.map((key) => [key, "observed"] as const)),
     );
     expect(resolved.session_end_capture).toBe("not-used");
@@ -173,9 +173,9 @@ describe("the hook keys", () => {
 /** D87 (NEW-186): the catalog agents ship, so `subagents` is settled by the probe like `skills`. */
 describe("subagents", () => {
   it("is yes when observed, no when the probe saw no agent, unknown when nobody asked", () => {
-    expect(resolveCapabilities("2.1.216", new Map([["subagents", "observed"]])).subagents).toBe("yes");
-    expect(resolveCapabilities("2.1.216", new Map([["subagents", "absent"]])).subagents).toBe("no");
-    expect(resolveCapabilities("2.1.216", new Map()).subagents).toBe("unknown");
+    expect(resolveCapabilities("2.1.280", new Map([["subagents", "observed"]])).subagents).toBe("yes");
+    expect(resolveCapabilities("2.1.280", new Map([["subagents", "absent"]])).subagents).toBe("no");
+    expect(resolveCapabilities("2.1.280", new Map()).subagents).toBe("unknown");
   });
 });
 

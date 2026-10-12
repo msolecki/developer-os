@@ -28,36 +28,25 @@ export const CODEX_CAPABILITY_KEYS = [
 export type CodexCapabilityKey = (typeof CODEX_CAPABILITY_KEYS)[number];
 
 /**
- * Raised to `0.147.0` by Task 17, 2026-08-12 — the integration test run
- * against a real installation, as this docblock always said would settle it.
+ * Raised to `0.155.1` by D102 (6), 2026-10-12 (AUD-071, NEW-256): the lowest
+ * version the installed hooks were observed firing on (`hooks.md` §1 question
+ * 10). `init` writes the hooks into the plugin tree for every supported
+ * version, so the floor is the hook observation rather than the older install
+ * observation.
  *
- * One version was available on this machine and one was tested; this is not
- * a range, and Codex architecture former §15 item 2 says so in as many words. It is a **raise**,
- * not a confirmation, of the prior provisional `0.144.6`: Task 17 also fixed
- * two real bugs in this adapter's own CLI argv (`install.ts`) and marketplace
- * document (`marketplace.ts`) that made every install step fail against the
- * real 0.147.0 binary before the fix — `codex plugin marketplace add` with a
- * separate name argument refused with a clap usage error, `codex plugin
- * remove` with an unqualified plugin name refused, and an absolute
- * `source.path` in the marketplace document was silently dropped from the
- * listing. Nothing establishes that those specific, corrected commands ever
- * worked on `0.144.6` — that version predates this observation entirely, and
- * may not even carry the `plugin`/`marketplace` subcommands this design
- * depends on. `0.147.0` is the only version this adapter's actual install
- * path has been proven against; see Codex architecture former §14.4 and §15 for the full record.
+ * The previous floor, `0.147.0`, was the version DOS-P5's Task 17 proved the
+ * install path against (Codex architecture §3); what `0.147.0`–`0.155.0` does
+ * with the manifest's `"hooks"` key was never observed, so those versions are
+ * now refused rather than installed into. One observed version, not a range.
  */
-export const CODEX_MINIMUM_VERSION = "0.147.0";
-
-/** The only version hooks were observed firing on (`hooks.md` §1 question 10), not a range. */
-const CODEX_HOOKS_OBSERVED_VERSION = "0.155.1";
-const HOOK_FLOOR_KEYS: ReadonlySet<CodexCapabilityKey> = new Set(["plugin_hooks", "session_start_injection"]);
+export const CODEX_MINIMUM_VERSION = "0.155.1";
 
 /**
  * A documented floor per key, or `null` meaning "no documented floor above the
  * minimum; the probe decides".
  *
- * Deliberately sparse: only the two hook keys have a floor above
- * `CODEX_MINIMUM_VERSION`, the version A13 observed hooks firing on.
+ * Every key is `null`: the hook keys' floor, `0.155.1`, is now the minimum
+ * itself.
  *
  * A `Map`, not an object literal. `workflow-schema`'s architecture note §9
  * records four modules in one package that shipped `table[key] !== undefined`
@@ -66,7 +55,7 @@ const HOOK_FLOOR_KEYS: ReadonlySet<CodexCapabilityKey> = new Set(["plugin_hooks"
  * refusal. A lookup table is not a lookup unless it cannot inherit.
  */
 const DOCUMENTED_FLOORS: ReadonlyMap<CodexCapabilityKey, string | null> = new Map(
-  CODEX_CAPABILITY_KEYS.map((key) => [key, HOOK_FLOOR_KEYS.has(key) ? CODEX_HOOKS_OBSERVED_VERSION : null]),
+  CODEX_CAPABILITY_KEYS.map((key) => [key, null]),
 );
 
 const TABLE: CapabilityVersionTable<CodexCapabilityKey> = {

@@ -87,7 +87,8 @@ their only observation.** `plugin_hooks` is observed by any Claude record under
 `doctor` and `doctor --probe` read those records, so the two keys can be `yes` without a probe run.
 Neither `claude plugin validate` nor a listing counts: those prove the hooks were loaded, not that
 they fired (NEW-65). Without a record both keys stay `unknown`, never `no`. Their documented floors
-stay `null` until Task 1 observes a version (`hooks.md` §3.6).
+are `null` because the hook observation, `2.1.280` (`hooks.md` §1 question 10), is now the minimum
+itself (D102).
 
 **The probe settles `skills` and `subagents`, each from a listed file, and that is the second
 correction the model needed.** `claude plugin validate` used to settle `skills`, `plugin_hooks` and
@@ -118,9 +119,12 @@ Two things worth knowing before changing this:
   granted on a version string nobody could parse. A comparison that cannot answer must say so;
   a number that fails every inequality fails open. It moved to `@developer-os/core/src/versions/`
   on Task 3.5, verbatim, so Codex shares this fix rather than risking its own copy.
-- **The floor is deliberately low — `2.1.142`.** The manifest depends on none of `displayName`
-  (2.1.143), `defaultEnabled` (2.1.154) or an object `metadata` (2.1.222). That absence is what
-  keeps the floor low, and it is a design choice rather than an omission. A version above
+- **The floor is `2.1.280`, the lowest version the installed hooks were observed firing on**
+  (D102 (6), 2026-10-12, AUD-071, NEW-256; `hooks.md` §1 question 10). `init` writes the hooks for
+  every supported version, so a version on which they were never observed is refused
+  (`adapter_unavailable`, exit 4). It was `2.1.142`, kept low because the manifest depends on none
+  of `displayName` (2.1.143), `defaultEnabled` (2.1.154) or an object `metadata` (2.1.222); the
+  manifest stays that minimal, though the floor now lies above all three. A version above
   everything the table knows is permitted rather than refused, so a Claude release does not break
   the adapter by existing.
 

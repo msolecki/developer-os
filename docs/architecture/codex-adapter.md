@@ -138,12 +138,14 @@ another — so neither package can assert the property about itself. The asserti
 at once. Before it, both files carried prose claiming the lists were identical and nothing checked
 it. **Owner of keeping them so: DOS-P6**, as the consumer the parity exists for.
 
-**The floor is `0.147.0`, and it is one observed version, not a range.** DOS-P5's Task 17 ran the real
-install path against the one Codex available and raised the floor to it. This is a *raise* rather
-than a confirmation of the prior `0.144.6`: that same task fixed three real bugs in this adapter's
-own CLI argv and marketplace document (§7) without which no install step succeeded at all, so
-nothing establishes those corrected commands ever worked below `0.147.0` — that version predates
-the observation entirely and may not carry the `plugin` subcommands this design depends on.
+**The floor is `0.155.1`, and it is one observed version, not a range (D102 (6), 2026-10-12,
+AUD-071, NEW-256).** It is the lowest version the installed hooks were observed firing on
+(`hooks.md` §1 question 10). `init` writes the hooks into the plugin tree for every supported
+version, so the floor follows the hook observation, and `0.147.0`–`0.155.0` — where nobody observed
+what the manifest's `"hooks"` key does — is refused (`adapter_unavailable`, exit 4) rather than
+installed into. The previous floor, `0.147.0`, was DOS-P5's Task 17 install-path observation, itself a
+*raise* over the provisional `0.144.6`: that task fixed three real bugs in this adapter's own CLI argv
+and marketplace document (§7) without which no install step succeeded at all.
 **Owner: DOS-P9**, whose supported-version matrix is where a range is established or narrowed.
 
 ## 4. The install shape — a local marketplace, and what it buys over a cache copy
@@ -432,7 +434,7 @@ The completed design's table, updated with the implemented DOS-P6 outcome.
 | manifest | `{ name }` | `name`, `version`, `description`, `skills` |
 | skill body | `renderSkillBody`, shared | `renderSkillBody`, shared |
 | direct invocation `maxTurns` | bounded and enforced | no field; the shared `agent.prompt` parser refuses the key (§7) |
-| supported floor | `2.1.142`, kept low by design | `0.147.0`, one observed version |
+| supported floor | `2.1.280`, the hook observation (D102) | `0.155.1`, the hook observation (D102) |
 
 The capability vocabulary, the four-value model, the exit codes, the skill body and the
 `agent.prompt` argument schema are **identical by construction**, and three of those five became so
@@ -486,7 +488,7 @@ rather than performed; and the provisional JSONL reduction was replaced after a 
 7. **CLOSED by DOS-P6: `allUnknown` and both capability resolvers are typed key by key.** Each
    returns the named capability object explicitly, so renaming or dropping a required key is a
    compile error rather than an unsound `Record<string, CapabilityState>` cast.
-8. **The floor `0.147.0` is one observed version, not a range** — §3. **Owner: DOS-P9.**
+8. **The floor `0.155.1` is one observed version, not a range** — §3. **Owner: DOS-P9.**
 9. **CLOSED 2026-09-22 by A12: `buildConflictEvidence` has its consumer.** The marked instruction
    block in `C/AGENTS.md` (and `H/.claude/CLAUDE.md`) is the first real three-way merge; a block
    conflict uses the new block arm of `ConflictEvidenceRequest`: three hashes plus a redacted
@@ -519,16 +521,15 @@ rather than performed; and the provisional JSONL reduction was replaced after a 
     `doctor` reports `stale` when the recorded hash no longer matches the tree, and `--probe` reports
     `cache-stale` when prompt-input bytes differ; re-running `init` recovers both
     (`apps/cli/src/instructions/codex-registration.ts`).
-15. **Hooks are installed on every supported version, but observed only on one** (AUD-071). `init`
-    binds `withCodexHooks` into the install tree unconditionally
-    (`apps/cli/src/instructions/attach.ts` — `withCodexHooks`), while hooks were observed firing
-    only on `0.155.1` and the floor is `0.147.0` (`packages/adapter-codex/src/versions.ts` —
-    `CODEX_HOOKS_OBSERVED_VERSION`); Claude has the same gap between `2.1.142` and `2.1.280`. What
-    `0.147.0`–`0.155.0` does with the manifest's `"hooks"` key is unobserved: it may load the hooks,
-    ignore them, or refuse the plugin. The version table already reports `plugin_hooks` below the
-    observed version as not permitted. Not fixed here, deliberately: gating the hooks on the version
-    would remove the file guards from those installs, and raising the floor is item 8's decision.
-    Settling it needs an old-binary load observation. **Owner: DOS-P9**, with item 8.
+15. **CLOSED 2026-10-12 by D102 (6) (AUD-071, NEW-256): hooks are no longer installed on an
+    unobserved version.** `init` still binds `withCodexHooks` unconditionally
+    (`apps/cli/src/instructions/attach.ts`), and the floor now equals the version the hooks were
+    observed firing on: `CODEX_MINIMUM_VERSION` is `0.155.1` and `CLAUDE_MINIMUM_VERSION` is
+    `2.1.280` (`hooks.md` §1 question 10, the only versions tested for hooks). A vendor below its
+    floor is refused with `adapter_unavailable`, exit 4, before any mutation
+    (`apps/cli/src/instructions/apply.ts` — `assertAdapterAvailable`), and the capability table
+    grants nothing below it. Gating the hooks by version was rejected because it would remove the
+    file guards from those installs.
 
 ## 12. What DOS-P8 must know
 

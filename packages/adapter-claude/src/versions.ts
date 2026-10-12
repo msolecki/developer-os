@@ -25,27 +25,27 @@ export const CLAUDE_CAPABILITY_KEYS = [
 export type ClaudeCapabilityKey = (typeof CLAUDE_CAPABILITY_KEYS)[number];
 
 /**
- * Provisional; the integration test confirms or raises it.
+ * Raised to `2.1.280` by D102 (6), 2026-10-12 (AUD-071, NEW-256), by the rule
+ * that set Codex's floor: the lowest version the installed hooks were observed
+ * firing on (`hooks.md` §1 question 10, the only Claude version tested for
+ * hooks). `init` writes the hooks for every supported version, so a version on
+ * which they were never observed is refused rather than installed into.
  *
- * Claude architecture former §15.1: the skills-directory-plugin floor is not documented on the page
- * read on 2026-08-11, so it is established by probe. `2.1.142` is the oldest
- * documented plugin-skill gate in Claude architecture former §14.1 and is the floor below which
- * nothing here is worth attempting.
- *
- * `baseline-capabilities.json` records `2.1.216`. That is a historical
- * observation of one machine on 2026-07-21 and is deliberately **not** this
- * floor — Claude architecture former §5.2 says so in as many words.
+ * The previous floor, `2.1.142`, was the oldest documented plugin-skill gate
+ * (Claude architecture former §14.1). `baseline-capabilities.json`'s `2.1.216`
+ * records the founder's hand-made hooks before this product existed, not the
+ * installed ones, so it is no observation of them.
  */
-export const CLAUDE_MINIMUM_VERSION = "2.1.142";
+export const CLAUDE_MINIMUM_VERSION = "2.1.280";
 
 /**
  * A documented floor per key, or `null` meaning "no documented floor above the
  * minimum; the probe decides".
  *
- * Deliberately sparse. Claude architecture former §5.2 keeps the floor low by refusing to depend on
- * `metadata` (2.1.222), `displayName` (2.1.143) or `defaultEnabled` (2.1.154),
- * so none of them appears here — that absence is the mechanism, not an
- * oversight.
+ * Every key is `null`: the hook keys' floor, `2.1.280`, is now the minimum
+ * itself. The manifest still depends on none of `metadata` (2.1.222),
+ * `displayName` (2.1.143) or `defaultEnabled` (2.1.154); all three gates now
+ * lie below the minimum.
  *
  * A `Map`, not an object literal. `workflow-schema`'s architecture note §9
  * records four modules in one package that shipped `table[key] !== undefined`
@@ -53,19 +53,9 @@ export const CLAUDE_MINIMUM_VERSION = "2.1.142";
  * pass the guard, and crash a line later — twice while hiding a missing
  * refusal. A lookup table is not a lookup unless it cannot inherit.
  */
-const DOCUMENTED_FLOORS: ReadonlyMap<ClaudeCapabilityKey, string | null> =
-  new Map([
-    ["skills", null],
-    // The only version hooks were observed firing on (`hooks.md` §1 question 10), not a range.
-    ["plugin_hooks", "2.1.280"],
-    ["session_start_injection", "2.1.280"],
-    ["session_end_capture", null],
-    ["pre_compact_backup", null],
-    ["non_interactive_run", null],
-    ["structured_result", null],
-    ["subagents", null],
-    ["durable_project_guidance", null],
-  ]);
+const DOCUMENTED_FLOORS: ReadonlyMap<ClaudeCapabilityKey, string | null> = new Map(
+  CLAUDE_CAPABILITY_KEYS.map((key) => [key, null]),
+);
 
 const TABLE: CapabilityVersionTable<ClaudeCapabilityKey> = {
   minimum: CLAUDE_MINIMUM_VERSION,

@@ -469,7 +469,7 @@ describe("runDoctor", () => {
     const runner: ProcessRunner = {
       run(request): Promise<ProcessResult> {
         return Promise.resolve({
-          stdout: request.args[0] === "--version" ? "codex-cli 0.147.0" : "",
+          stdout: request.args[0] === "--version" ? "codex-cli 0.155.1" : "",
           stderr: "",
           exitCode: 0,
           signal: null,
@@ -498,7 +498,7 @@ describe("runDoctor", () => {
     const codex = result.data.checks.find(
       (check) => check.id === "codex-capabilities",
     );
-    expect(codex?.message).toContain("codex=0.147.0");
+    expect(codex?.message).toContain("codex=0.155.1");
     expect(codex?.message).not.toContain("recovery=");
     expect(codex?.message).not.toContain("/hooks");
   });
@@ -880,7 +880,7 @@ describe("runDoctor --probe", () => {
     label: string,
     options: ProbeFixtureOptions = {},
   ): Promise<ProbeFixture> {
-    const claudeVersion = options.claudeVersion ?? "2.1.216";
+    const claudeVersion = options.claudeVersion ?? "2.1.280";
     const spawned: Spawn[] = [];
     const runner: ProcessRunner = {
       run(request): Promise<ProcessResult> {
@@ -890,7 +890,7 @@ describe("runDoctor --probe", () => {
         });
         const version =
           request.executable === CODEX
-            ? "codex-cli 0.147.0"
+            ? "codex-cli 0.155.1"
             : `${claudeVersion} (Claude Code)`;
         return Promise.resolve({
           stdout: request.args[0] === "--version" ? version : "",
@@ -1216,7 +1216,7 @@ describe("discovery that throws for one agent", () => {
   const versionRunner: ProcessRunner = {
     run(request): Promise<ProcessResult> {
       return Promise.resolve({
-        stdout: request.args[0] === "--version" ? "codex-cli 0.147.0" : "",
+        stdout: request.args[0] === "--version" ? "codex-cli 0.155.1" : "",
         stderr: "",
         exitCode: 0,
         signal: null,
@@ -1286,7 +1286,7 @@ describe("discovery that throws for one agent", () => {
     );
 
     expect(byId.get("agents")).toContain("codex=present");
-    expect(byId.get("codex-capabilities")).toContain("codex=0.147.0");
+    expect(byId.get("codex-capabilities")).toContain("codex=0.155.1");
     expect(byId.get("codex-capabilities")).not.toContain("codex=absent");
   });
 });

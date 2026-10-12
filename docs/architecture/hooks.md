@@ -247,8 +247,9 @@ dummy key (the A12 *request* method), killed by an alarm.
    **do not fire** under the ingest argv.
 10. **Versions observed.** `claude --version` → `2.1.280 (Claude Code)`; `codex --version` →
     `codex-cli 0.155.1`, on 2026-09-22 and again on 2026-09-23. Each is the only version tested, so
-    it is the documented floor (`DOCUMENTED_FLOORS`) for `plugin_hooks` and
-    `session_start_injection` on its vendor. It is not a range.
+    it is the supported floor (`CLAUDE_MINIMUM_VERSION`, `CODEX_MINIMUM_VERSION`) on its vendor
+    since D102 (6), 2026-10-12, because `init` installs the hooks on every supported version. It is
+    not a range.
 
 ## 2. Measurements
 

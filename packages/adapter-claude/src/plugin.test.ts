@@ -23,10 +23,10 @@ function find(
 describe("buildPluginTree", () => {
   /**
    * Claude architecture former §14.1: `name` is the only required manifest field, and unrecognized
-   * fields are ignored at load. Claude architecture former §5.2 keeps the version floor low by
-   * depending on none of `displayName` (2.1.143), `defaultEnabled` (2.1.154) or
-   * `metadata` (2.1.222) — so the minimal manifest is the mechanism, and this
-   * test is what stops a later convenience field raising the floor unnoticed.
+   * fields are ignored at load. Claude architecture former §5.2 depends on none of
+   * `displayName` (2.1.143), `defaultEnabled` (2.1.154) or `metadata` (2.1.222);
+   * the floor (2.1.280, D102) now lies above all three, and the manifest stays
+   * minimal so nothing it needs is a gate this test did not see added.
    */
   it("emits a manifest carrying only the required field", () => {
     const manifest = find(

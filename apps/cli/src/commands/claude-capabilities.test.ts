@@ -49,7 +49,7 @@ describe("reportClaudeCapabilities", () => {
   it("reports rather than refusing when nothing is installed", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: null,
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
     });
     expect(report.installed).toBe(false);
@@ -62,7 +62,7 @@ describe("reportClaudeCapabilities", () => {
   it("reports every capability key even with nothing installed", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: null,
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
     });
     expect(Object.keys(report.capabilities)).toHaveLength(
@@ -77,7 +77,7 @@ describe("reportClaudeCapabilities", () => {
   it("reports unknown, not absence, when there is nothing to probe", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: null,
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
     });
     expect(new Set(Object.values(report.capabilities))).toEqual(
@@ -117,17 +117,17 @@ describe("reportClaudeCapabilities", () => {
   it("reads the version from a real executable path", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216 (Claude Code)"),
+      runner: version("2.1.280 (Claude Code)"),
       pluginDirectory: "/synthetic/plugin",
     });
     expect(report.installed).toBe(true);
-    expect(report.version).toBe("2.1.216");
+    expect(report.version).toBe("2.1.280");
   });
 
   it("earns yes only where the probe observed and the table permits", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
       listPluginFiles: skillsPresent,
@@ -139,7 +139,7 @@ describe("reportClaudeCapabilities", () => {
   it("never reports a lifecycle capability as yes", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
       listPluginFiles: skillsPresent,
@@ -164,7 +164,7 @@ describe("reportClaudeCapabilities", () => {
   it("reports yes for exactly the capabilities the tree ships", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
       listPluginFiles: skillsPresent,
@@ -183,7 +183,7 @@ describe("reportClaudeCapabilities", () => {
   it("names the command as the capture route", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
       listPluginFiles: skillsPresent,
@@ -223,7 +223,7 @@ describe("reportClaudeCapabilities", () => {
   it("does not report skills as yes over a directory that ships none", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
       listPluginFiles: () =>
@@ -238,7 +238,7 @@ describe("reportClaudeCapabilities", () => {
   it("reports unknown when the plugin directory cannot be listed at all", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
       listPluginFiles: () => Promise.reject(new Error("ENOENT")),
@@ -256,7 +256,7 @@ describe("reportClaudeCapabilities", () => {
     const report = await reportClaudeCapabilities({
       executablePath: null,
       discoveryFailed: true,
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
     });
     expect(report.installed).toBe(true);
@@ -267,7 +267,7 @@ describe("reportClaudeCapabilities", () => {
   it("renders a matrix line naming every key", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
     });
     for (const key of CLAUDE_CAPABILITY_KEYS) {
@@ -381,7 +381,7 @@ describe("the probe is opt-in", () => {
         run(request: ProcessRequest): Promise<ProcessResult> {
           seen.push([...request.args]);
           return Promise.resolve({
-            stdout: "2.1.216",
+            stdout: "2.1.280",
             stderr: "",
             exitCode: 0,
             signal: null,
@@ -402,7 +402,7 @@ describe("the probe is opt-in", () => {
         run(request: ProcessRequest): Promise<ProcessResult> {
           seen.push([...request.args]);
           return Promise.resolve({
-            stdout: "2.1.216",
+            stdout: "2.1.280",
             stderr: "",
             exitCode: 0,
             signal: null,
@@ -421,7 +421,7 @@ describe("the probe is opt-in", () => {
   it("reports every capability as unknown when it did not probe", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
     });
     expect(report.summary).toContain("not-probed");

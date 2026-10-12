@@ -39,12 +39,13 @@ describe("tablePermits", () => {
     expect(tablePermits("skills", "not a version")).toBe(false);
   });
 
-  it("floors both hook keys at the observed 0.155.1 and nothing else above the minimum", () => {
-    expect(tablePermits("plugin_hooks", "0.155.0")).toBe(false);
-    expect(tablePermits("session_start_injection", "0.155.0")).toBe(false);
-    expect(tablePermits("plugin_hooks", "0.155.1")).toBe(true);
-    expect(tablePermits("session_start_injection", "0.155.1")).toBe(true);
-    expect(tablePermits("skills", CODEX_MINIMUM_VERSION)).toBe(true);
+  it("refuses every key below the 0.155.1 floor and accepts every key at it (D102)", () => {
+    expect(CODEX_MINIMUM_VERSION).toBe("0.155.1");
+    for (const key of CODEX_CAPABILITY_KEYS) {
+      expect(tablePermits(key, "0.155.0"), key).toBe(false);
+      expect(tablePermits(key, "0.147.0"), key).toBe(false);
+      expect(tablePermits(key, "0.155.1"), key).toBe(true);
+    }
   });
 
   it("never grants a capability by itself, which is the probe's job", () => {
