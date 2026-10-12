@@ -365,6 +365,17 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D102 (2026-10-12), founder: the eight open decisions of the 2026-10-10 audit.** (1) NEW-251
+  (AUD-006): hooks never run the project's own tools; `guard stop` and `guard format` stop running a
+  project's `tsc`, prettier or biome, because not every project uses them and a cloned repository's
+  `node_modules` is untrusted. The stop hook's type check (NEW-245) goes with it. (2) NEW-252
+  (AUD-122): delete the dormant release-planning scratch store. (3) NEW-253 (AUD-025, realpath part):
+  keep the per-note realpath; the row closes. (4) NEW-254 (AUD-026, AUD-089): amend `brain.md` §6.3
+  and `knowledge-pipeline.md` §5/§5.1 now, splitting the term tables out of the index readers load and
+  reindexing once per `ingest` run. (5) NEW-255 (AUD-041): V1 `detectDrift` wraps guard errors in
+  `ManifestStateError`. (6) NEW-256 (AUD-071): raise the Codex floor to 0.155.1, and Claude's floor by
+  the same rule. (7) NEW-257: delete all thirteen kept medium/low dead-code items, overriding the
+  high-confidence-only rule for these. (8) NEW-258: make env-secret redaction linear, with a timing test.
 - **D101 (2026-10-12), founder: the completion roadmap closes as bookkeeping and becomes this decision
   log.** Its own rule deleted it when Phase 11 closed, but it had become mainly the record of D1–D100,
   which `ORDER.md`, `BACKLOG.md`, the specs and the code cite. Nothing open moves: Phase 10's remainder
