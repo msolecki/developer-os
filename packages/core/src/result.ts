@@ -983,7 +983,6 @@ const primitivePayloads = new Set<string>();
  * checked at one read and consumed at another — relocated across a module boundary, and it
  * cannot be fixed inside a function that does not decide both.
  *
- * `formatJsonResult` delegates here for the bytes and has no production caller of its own;
  * `emit` calls this for both halves, so there is no second read to disagree with.
  */
 export function publish<T>(result: CliResult<T>): {
@@ -1112,22 +1111,9 @@ export function publish<T>(result: CliResult<T>): {
 }
 
 /**
- * The published bytes alone. **No production code calls this** — `emit` calls `publish`,
- * which is the seam — and it survives as exported API exercised by tests, which is worth
- * saying plainly rather than leaving a docblock claiming callers that do not exist. It
- * delegates, so there is one implementation of what gets published and it cannot drift from
- * the one that decides the exit code, which is how the body and the status came to disagree
- * twice.
- */
-export function formatJsonResult<T>(result: CliResult<T>): string {
-  return publish(result).text;
-}
-
-/**
  * The published bytes for a value this module did not construct, from a code already
  * decided. Its one caller passes the code it decided, so no read of `result.code` can differ from
- * the status the process exits with. (`formatJsonResult` delegates to `publish` and does not
- * call this — an earlier version of this sentence said "both callers".)
+ * the status the process exits with.
  */
 function rebuild(result: { readonly error: CliError }, code: FailureExitCode): string {
   try {

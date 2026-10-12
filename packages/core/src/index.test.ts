@@ -41,7 +41,6 @@ describe("the package's public door", () => {
         "inspectCodexIngestHomeShape",
         "EXIT_CODES",
         "failure",
-        "formatJsonResult",
         "success",
         "loadConfig",
         "pathSegmentViolation",

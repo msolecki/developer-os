@@ -1,7 +1,7 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { formatJsonResult, parseStableSemver } from "@developer-os/core";
+import { parseStableSemver, publish } from "@developer-os/core";
 import type { CliResult, TransactionJournalV1 } from "@developer-os/core";
 import { runImport } from "@developer-os/cli/dist/commands/import.js";
 import type { ImportResultV1 } from "@developer-os/cli/dist/commands/import.js";
@@ -25,6 +25,9 @@ import {
   SENTINEL,
 } from "./helpers.js";
 import type { InstalledFixture } from "./helpers.js";
+
+/** The published `--json` bytes, as `emit` prints them. */
+const jsonText = <T>(result: CliResult<T>): string => publish(result).text;
 
 /**
  * **One planted secret, traced through every artifact it could reach.** Design
@@ -204,7 +207,7 @@ async function collect(): Promise<Evidence> {
       ...humanErr,
       ...(await readFilesUnder(fixture.paths.logsDir)),
     ],
-    "the --json output": [...jsonOut, formatJsonResult(refusal)],
+    "the --json output": [...jsonOut, jsonText(refusal)],
     /**
      * The two content-derived identifiers a capture carries. Both are computed
      * from the *redacted* body, so a product that hashed before redacting would
@@ -339,7 +342,7 @@ describe("a planted sentinel, through import", () => {
     jsonOutput = [
       ...io.out.slice(outBefore),
       ...io.err.slice(errBefore),
-      formatJsonResult(imported),
+      jsonText(imported),
     ];
 
     staging.push(...(await readFilesUnder(importFixture.paths.stagingDir)));
@@ -435,7 +438,7 @@ describe("a planted sentinel, through update and rollback", () => {
       if (invocation.kind === "update" && invocation.version === null) await home.world.install("1.2.0");
       const result = await runUpdate(context, invocation);
       succeeded.push(result.ok);
-      outputs.push(formatJsonResult(result));
+      outputs.push(jsonText(result));
     }
     product = await readFilesUnder(home.fixture.paths.home);
   }, 900_000);
