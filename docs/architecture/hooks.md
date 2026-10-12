@@ -460,9 +460,9 @@ for it the extra lines change nothing; its D67 token half reads each candidate l
   and evaluate as usual: no child fires them, so an ambient marker in the vendor's environment must
   not switch them off (CLI-LIFE-2). Residual: whoever sets `DEVELOPER_OS_HOOK_ACTIVE=1` for the
   vendor process still silences the open verbs, which fail open anyway.
-- **Stop-loop flag.** A `Stop` payload with `stop_hook_active` set is `allow`, on both vendors,
-  which spell it the same way. A payload without the boolean is malformed, and `stop` fails open
-  (spec G8).
+- **Stop-loop flag.** Since D102 `stop` never blocks, so it cannot loop, and the decoder no longer
+  reads `stop_hook_active` (spec G8 required it while `stop` ran tsc). A malformed `Stop` payload
+  still fails open.
 - **Isolated `ingest`.** Planted plugin hooks did not fire under either vendor's ingest argv (§1
   question 9): Claude's safe mode skips plugin hooks, and Codex's `--ignore-user-config` drops the
   config that enables the plugin and holds its trust. Repeating this with the product's own hooks

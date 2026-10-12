@@ -23,7 +23,7 @@ const runtime: HookRuntime = {
 };
 
 const run = (command: string | null, toolName = "Bash") =>
-  guardCommit({ cwd: "/Users/synthetic/p", toolName, command, filePath: null, prompt: null, stopHookActive: null }, runtime);
+  guardCommit({ cwd: "/Users/synthetic/p", toolName, command, filePath: null, prompt: null }, runtime);
 
 const BLOCKS: readonly (readonly [string, string])[] = [
   ["hook-bypass", "git commit --no-verify -m x"],

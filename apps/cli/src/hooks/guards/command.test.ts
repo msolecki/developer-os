@@ -33,7 +33,6 @@ const payload = (toolName: string, command: string | null): HookPayloadV1 => ({
   command,
   filePath: null,
   prompt: null,
-  stopHookActive: null,
 });
 
 const run = (command: string) => guardCommand(payload("Bash", command), runtime("claude"));

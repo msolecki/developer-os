@@ -53,7 +53,7 @@ function runtimeFor(cwd: string): HookRuntime {
 }
 
 function edited(filePath: string): HookPayloadV1 {
-  return { cwd: null, toolName: "Edit", command: null, filePath, prompt: null, stopHookActive: null };
+  return { cwd: null, toolName: "Edit", command: null, filePath, prompt: null };
 }
 
 describe("guardEdit", () => {
@@ -126,7 +126,7 @@ describe("guardEdit", () => {
     await writeFile(join(root, "a.md"), "a\n");
     await symlink(join(outside, "shared.md"), join(root, "AGENTS.md"));
     const command = ["*** Begin Patch", "*** Update File: a.md", "@@", "-a", "+b", "*** Update File: AGENTS.md", "@@", "-x", "+y", "*** End Patch", ""].join("\n");
-    const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command, filePath: null, prompt: null, stopHookActive: null };
+    const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command, filePath: null, prompt: null };
     const outcome = await guardEdit(payload, { ...runtimeFor(root), vendor: "codex" });
     expect(outcome.kind === "advise" ? outcome.detail : "").toContain("AGENTS.md");
     const malformed = { ...payload, command: "not a patch" };
@@ -140,7 +140,7 @@ describe("guardEdit", () => {
     await mkdir(join(root, "sub"));
     await symlink(outside, join(root, "sub", "link"));
     const command = ["*** Begin Patch", "*** Update File: link/shared.md", "@@", "-x", "+y", "*** End Patch", ""].join("\n");
-    const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command, filePath: null, prompt: null, stopHookActive: null };
+    const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command, filePath: null, prompt: null };
     const outcome = await guardEdit(payload, { ...runtimeFor(join(root, "sub")), vendor: "codex" });
     expect(outcome).toMatchObject({ kind: "advise", ruleId: "shared-file" });
   });
