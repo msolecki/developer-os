@@ -5,7 +5,6 @@ import type {
   ChangePlanOperationV1,
   ManagedArtifactV2,
 } from "@developer-os/core";
-import { compareCodePoints } from "@developer-os/workflow-schema";
 import { MARKETPLACE_NAME } from "./marketplace.js";
 import {
   CODEX_ROOT_SEGMENT,
@@ -83,12 +82,9 @@ function marketplaceRoot(context: InstallContext): string {
 }
 
 /**
- * Shared by both `resolveWithin` (install: joins a relative artifact path
- * onto `root` first) and `proposeCodexUninstall` (uninstall: called directly
- * on an already-absolute manifest path). Normalizing before the prefix check
- * matters on the uninstall side: a manifest path of `<root>/../evil` starts
- * with `${root}/` as a raw string, but normalizes to a directory *outside*
- * `root` — the same class of escape `resolveWithin` refuses here.
+ * Normalizing before the prefix check matters: a path of `<root>/../evil`
+ * starts with `${root}/` as a raw string, but normalizes to a directory
+ * *outside* `root` — the escape `resolveWithin` refuses here.
  */
 function containedWithin(root: string, candidate: string): string | undefined {
   const resolved = posix.normalize(candidate);
@@ -176,31 +172,6 @@ function installRegistration(context: InstallContext): readonly CodexCliStep[] {
 }
 
 /**
- * Codex architecture former §4.2: uninstall reverses the install order — plugin-remove then
- * marketplace-remove — and runs *before* the tree is deleted, because a
- * marketplace registered against a directory we already removed is worse than
- * leaving both in place.
- *
- * `codex plugin remove <PLUGIN[@MARKETPLACE]>` refuses a bare plugin name with
- * more than one marketplace configured: Task 17 observed `codex plugin remove
- * developer-os` exit 1 with `plugin requires --marketplace unless passed as
- * <plugin>@<marketplace>`, the same qualified form `plugin add` already uses.
- * Amends Codex architecture former §14.4, dated 2026-08-12.
- */
-function uninstallRegistration(): readonly CodexCliStep[] {
-  return [
-    {
-      args: ["plugin", "remove", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`],
-      description: `remove the ${PLUGIN_NAME} plugin from Codex`,
-    },
-    {
-      args: ["plugin", "marketplace", "remove", MARKETPLACE_NAME],
-      description: `unregister the ${MARKETPLACE_NAME} marketplace from Codex`,
-    },
-  ];
-}
-
-/**
  * `tree` is `readonly MarketplaceRootArtifact[]`, not `RenderedArtifact[]` —
  * the nominal fix for `BACKLOG.md` §1 NEW-13. `RenderedArtifact` used to
  * describe paths relative to both this root and the plugin root
@@ -257,57 +228,3 @@ export function proposeCodexInstall(
   };
 }
 
-/**
- * Codex architecture former §4.2: the tree is deleted file by file, one `remove` operation per
- * managed artifact, matching `proposeClaudeUninstall`. `registration` runs
- * first — see `uninstallRegistration` — so by the time these removes apply,
- * Codex no longer knows about the plugin or the marketplace pointing at it.
- */
-export function proposeCodexUninstall(
-  context: InstallContext,
-  managed: ManagedByPath,
-): CodexInstallProposal {
-  const root = marketplaceRoot(context);
-  // Two checks, both closing the same gap the install side already refuses
-  // via `resolveWithin`: `owner !== "codex"` refuses a foreign-owned artifact
-  // parked under our root (copied verbatim from the manifest entry, so
-  // `validateChangePlan` cannot catch it — it compares the operation against
-  // that same entry); `containedWithin` refuses a manifest path that passes a
-  // raw string-prefix test but normalizes outside `root`.
-  const owned = [...managed.values()]
-    .flatMap((artifact) => {
-      const installedHash = installedHashOf(artifact);
-      if (artifact.owner !== "codex" || installedHash === null) {
-        return [];
-      }
-      const targetPath = containedWithin(root, artifact.path);
-      return targetPath === undefined ? [] : [{ artifact, installedHash, targetPath }];
-    })
-    .sort((left, right) => compareCodePoints(left.targetPath, right.targetPath));
-
-  if (owned.length === 0) {
-    throw new Error("refusing to propose an empty uninstall plan");
-  }
-
-  return {
-    schemaVersion: 1,
-    productVersion: context.productVersion,
-    registrationPhase: "before-operations",
-    operations: owned.map(({ artifact, installedHash, targetPath }) => ({
-      targetPath,
-      operation: "remove" as const,
-      owner: artifact.owner,
-      // Drift treats an `instruction` content row as a regular file (spec
-      // §2.1), and `ChangePlanOperationV1` has no `instruction` kind.
-      kind: artifact.kind === "instruction" ? ("file" as const) : artifact.kind,
-      // `validateChangePlan` requires a real prior hash for any non-`create`
-      // operation, `source === ""` and `proposedHash === null` for a
-      // `remove`, and a matching managed artifact.
-      expectedBeforeHash: installedHash,
-      source: "",
-      mergeStrategy: artifact.mergeStrategy,
-      proposedHash: null,
-    })),
-    registration: uninstallRegistration(),
-  };
-}

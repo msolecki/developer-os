@@ -5,13 +5,12 @@ import {
   createOwnerUpdateRegistry,
   keepOwnerUpdateProvider,
   ownerContentDependencies,
-  parseBundleRelativePath,
   plannerPathToken,
   validateReleaseIdentity,
   validateUpdatePlannerRequest,
 } from "@developer-os/core";
 import type { UpdatePlannerRequestV1 } from "@developer-os/core";
-import { claudeOwnerUpdateProvider, claudeTargetEntries } from "./plan.js";
+import { claudeOwnerUpdateProvider } from "./plan.js";
 
 const sha = (value: string): string => createHash("sha256").update(value).digest("hex");
 const t = plannerPathToken;
@@ -58,28 +57,10 @@ const claudeRows: readonly Row[] = [
   { owner: "claude", kind: "file", source: "skills/old/SKILL.md", contents: "retired\n" },
 ];
 
-const bundlePrefix = parseBundleRelativePath("payload/claude");
-const target = claudeTargetEntries([
-  { path: "skills/new/SKILL.md", contents: "new\n" },
-  { path: "SKILL.md", contents: "shared v2\n" },
-], bundlePrefix);
 
 function registry() {
   return createOwnerUpdateRegistry([keepOwnerUpdateProvider("core"), claudeOwnerUpdateProvider, keepOwnerUpdateProvider("codex"), keepOwnerUpdateProvider("macos")]);
 }
-
-describe("claudeTargetEntries", () => {
-  it("maps the rendered plugin tree onto sorted, hashed target-bundle entries", () => {
-    expect(target).toEqual([
-      { path: "SKILL.md", content: { kind: "target_bundle", path: "payload/claude/SKILL.md", bytes: Buffer.byteLength("shared v2\n"), sha256: sha("shared v2\n") } },
-      { path: "skills/new/SKILL.md", content: { kind: "target_bundle", path: "payload/claude/skills/new/SKILL.md", bytes: 4, sha256: sha("new\n") } },
-    ]);
-  });
-
-  it("refuses an escaping rendered path", () => {
-    expect(() => claudeTargetEntries([{ path: "../escape.md", contents: "x" }], bundlePrefix)).toThrow();
-  });
-});
 
 describe("claudeOwnerUpdateProvider", () => {
   it("declares every replaceable Claude file as a content dependency", () => {

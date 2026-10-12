@@ -5,7 +5,6 @@ import type {
   ChangePlanOperationV1,
   ManagedArtifactV2,
 } from "@developer-os/core";
-import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { PLUGIN_INSTALL_SEGMENTS } from "./plugin.js";
 
@@ -112,52 +111,3 @@ export function proposeClaudeInstall(
   };
 }
 
-/**
- * Claude architecture former §4.2: there is no uninstall step, because nothing was installed from a
- * marketplace. Removing the directory is the whole operation, and Foundation
- * refuses if any file under it has drifted — a drifted file is a user edit, and
- * Foundation never overwrites one.
- */
-export function proposeClaudeUninstall(
-  context: InstallContext,
-  managed: ManagedByPath,
-): ClaudeInstallProposal {
-  const root = pluginRoot(context);
-  // The owner and containment checks its Codex twin already performed (`foundation.md` §12.5,
-  // adapter fix): `<root>/../x` passes a raw prefix test but normalizes outside `root`.
-  // Rows without a content hash (directories) are the detach planner's, not a file removal.
-  const owned = [...managed.values()]
-    .flatMap((artifact) => {
-      const hash = installedHash(artifact);
-      const targetPath = posix.normalize(artifact.path);
-      return artifact.owner !== "claude" || hash === null || !targetPath.startsWith(`${root}/`)
-        ? []
-        : [{ artifact, hash, targetPath }];
-    })
-    .sort((left, right) => compareCodePoints(left.targetPath, right.targetPath));
-
-  if (owned.length === 0) {
-    throw new Error("refusing to propose an empty uninstall plan");
-  }
-
-  return {
-    schemaVersion: 1,
-    productVersion: context.productVersion,
-    operations: owned.map(({ artifact, hash, targetPath }) => ({
-      targetPath,
-      operation: "remove" as const,
-      owner: "claude" as const,
-      kind: "file" as const,
-      // `validateChangePlan` requires a real prior hash for any non-`create`
-      // operation, `source === ""` and `proposedHash === null` for a `remove`,
-      // and a matching managed artifact. The first version of this function
-      // violated all three at once and could never have been applied — and the
-      // test that guarded it asserted field values instead of calling the
-      // validator, so it stayed green. Found by fresh-context review.
-      expectedBeforeHash: hash,
-      source: "",
-      mergeStrategy: artifact.mergeStrategy,
-      proposedHash: null,
-    })),
-  };
-}

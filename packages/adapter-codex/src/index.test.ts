@@ -1,6 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { CodexAdapter } from "./index.js";
 import * as door from "./index.js";
 
 /**
@@ -32,7 +31,6 @@ describe("the package's public door", () => {
   it("exports exactly what Codex architecture former §11 names, and nothing else", () => {
     expect(Object.keys(door).sort()).toEqual(
       [
-        "AGENT_TOML_KEYS",
         "CODEX_CAPABILITY_KEYS",
         "CODEX_HOOKS_PATH",
         "CODEX_HOOK_ROWS",
@@ -41,7 +39,6 @@ describe("the package's public door", () => {
         "CODEX_MINIMUM_VERSION",
         "CODEX_NOT_USED_KEYS",
         "CODEX_ROOT_SEGMENT",
-        "CodexAdapter",
         "CodexRenderer",
         "InstructionBlockTooLargeError",
         "MARKETPLACE_NAME",
@@ -52,13 +49,11 @@ describe("the package's public door", () => {
         "SHARED_WORKFLOW_ID",
         "buildPluginTree",
         "codexOwnerUpdateProvider",
-        "codexTargetEntries",
         "discoverCodex",
         "invocationFromAgentPrompt",
         "invokeCodex",
         "probeCodex",
         "proposeCodexInstall",
-        "proposeCodexUninstall",
         "renderAgentToml",
         "renderCodexHooks",
         "renderCodexInstallTree",
@@ -70,51 +65,6 @@ describe("the package's public door", () => {
         "withCodexHooks",
       ].sort(),
     );
-  });
-
-  it("binds the façade to the functions, so DOS-P6 consumes one object", () => {
-    expect(CodexAdapter.vendor).toBe("codex");
-    expect(typeof CodexAdapter.discover).toBe("function");
-    expect(typeof CodexAdapter.capabilities).toBe("function");
-    expect(typeof CodexAdapter.renderPlugin).toBe("function");
-    expect(typeof CodexAdapter.proposeInstall).toBe("function");
-    expect(typeof CodexAdapter.invoke).toBe("function");
-  });
-
-  /**
-   * The test above is `typeof` checks, which stay green if a member is added
-   * — exactly the widening the module-level door test above already refuses
-   * to allow for `index.ts` itself. `CodexAdapter` is the same kind of door
-   * and gets the same exact-list guard, plus the immutability the frozen
-   * object promises but nothing else here checks.
-   */
-  it("binds exactly this member list on the façade, frozen", () => {
-    expect(Object.keys(CodexAdapter).sort()).toEqual(
-      [
-        "vendor",
-        "discover",
-        "probe",
-        "capabilities",
-        "renderPlugin",
-        "renderInstallTree",
-        "proposeInstall",
-        "proposeUninstall",
-        "invoke",
-      ].sort(),
-    );
-    expect(Object.isFrozen(CodexAdapter)).toBe(true);
-  });
-
-  /**
-   * `renderPlugin` (plugin-root-relative) and `proposeInstall`
-   * (marketplace-root-relative) are one root apart — see `compose.ts`'s
-   * `renderCodexInstallTree` doc comment. Feeding one into the other directly
-   * is the exact silent under-nesting that function exists to prevent;
-   * `renderInstallTree` is the only façade member that re-roots first. This
-   * guards the pairing, not just each member's presence.
-   */
-  it("renderInstallTree, not renderPlugin, is the correct feed for proposeInstall", () => {
-    expect(CodexAdapter.renderInstallTree).not.toBe(CodexAdapter.renderPlugin);
   });
 
   /**

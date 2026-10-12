@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 import { InstructionSourceInvalidError } from "@developer-os/core";
-import { AGENT_TOML_KEYS, renderAgentToml } from "./agent-toml.js";
+import { renderAgentToml } from "./agent-toml.js";
 
 /**
  * `smol-toml` is `@developer-os/core`'s dependency, not this package's; resolving it from core's
@@ -27,8 +27,7 @@ const agent = [
 describe("renderAgentToml", () => {
   it("emits exactly the key set Codex 0.155.1 was observed to load, and round-trips through smol-toml", () => {
     const parsed = parse(renderAgentToml(agent, "reviewer"));
-    expect(AGENT_TOML_KEYS.length).toBeGreaterThan(0);
-    expect(Object.keys(parsed).sort()).toEqual([...AGENT_TOML_KEYS].sort());
+    expect(Object.keys(parsed).sort()).toEqual(["description", "developer_instructions", "name"]);
     expect(parsed).toEqual({
       name: "developer-os-reviewer",
       description: "Reviews a diff for correctness.",

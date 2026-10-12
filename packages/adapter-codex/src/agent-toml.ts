@@ -1,13 +1,5 @@
 import { InstructionSourceInvalidError } from "@developer-os/core";
 
-/**
- * `docs/architecture/codex-adapter.md` §15, "agent TOML key set" (Codex 0.155.1): `name`,
- * `description` and `developer_instructions` are required, and any unrecognised key drops the
- * whole file without a refusal. So exactly these three keys are emitted; the Markdown source's
- * other frontmatter (`tools`, a Claude `model`) has no Codex meaning and is not carried.
- */
-export const AGENT_TOML_KEYS = ["name", "description", "developer_instructions"] as const;
-
 // TOML basic strings forbid raw U+007F; JSON.stringify escapes every other character TOML
 // requires escaped, with escapes TOML shares (`\n`, `\"`, `\\`, `\uXXXX`).
 function tomlString(value: string): string {

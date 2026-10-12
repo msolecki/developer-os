@@ -5,16 +5,13 @@ import {
   createOwnerUpdateRegistry,
   keepOwnerUpdateProvider,
   ownerContentDependencies,
-  parseBundleRelativePath,
   plannerPathToken,
   validateReleaseIdentity,
   validateUpdatePlannerRequest,
 } from "@developer-os/core";
 import type { UpdatePlannerRequestV1 } from "@developer-os/core";
-import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { MARKETPLACE_RELATIVE_PATH, PLUGIN_TREE_PREFIX } from "../plugin.js";
-import type { MarketplaceRootArtifact } from "../plugin.js";
-import { codexOwnerUpdateProvider, codexTargetEntries } from "./plan.js";
+import { codexOwnerUpdateProvider } from "./plan.js";
 
 const sha = (value: string): string => createHash("sha256").update(value).digest("hex");
 const t = plannerPathToken;
@@ -26,9 +23,6 @@ const release = (version: string, sequence: string) => validateReleaseIdentity({
   platform: "darwin", architecture: "arm64", launcherProtocol: 1, updateProtocol: 1,
 }, evidence);
 
-function asInstallTree(tree: readonly RenderedArtifact[]): readonly MarketplaceRootArtifact[] {
-  return tree as readonly MarketplaceRootArtifact[];
-}
 
 const marketplace = '{"name":"developer-os"}\n';
 const skill = "codex skill v1\n";
@@ -70,28 +64,10 @@ const codexRows: readonly Row[] = [
   { owner: "codex", kind: "file", source: `${PLUGIN_TREE_PREFIX}/skills/old.md`, contents: retired },
 ];
 
-const targetTree = asInstallTree([
-  { path: `${PLUGIN_TREE_PREFIX}/skills/b.md`, contents: "new skill\n" },
-  { path: MARKETPLACE_RELATIVE_PATH, contents: marketplace },
-  { path: `${PLUGIN_TREE_PREFIX}/skills/a.md`, contents: "codex skill v2\n" },
-]);
-const bundlePrefix = parseBundleRelativePath("payload/codex");
-const target = codexTargetEntries(targetTree, bundlePrefix);
 
 function registry() {
   return createOwnerUpdateRegistry([keepOwnerUpdateProvider("core"), keepOwnerUpdateProvider("claude"), codexOwnerUpdateProvider, keepOwnerUpdateProvider("macos")]);
 }
-
-describe("codexTargetEntries", () => {
-  it("maps the marketplace-root tree onto sorted, hashed target-bundle entries", () => {
-    expect(target.map((entry) => entry.path)).toEqual([MARKETPLACE_RELATIVE_PATH, `${PLUGIN_TREE_PREFIX}/skills/a.md`, `${PLUGIN_TREE_PREFIX}/skills/b.md`]);
-    expect(target[1]?.content).toEqual({ kind: "target_bundle", path: `payload/codex/${PLUGIN_TREE_PREFIX}/skills/a.md`, bytes: Buffer.byteLength("codex skill v2\n"), sha256: sha("codex skill v2\n") });
-  });
-
-  it("refuses a path outside the plugin tree, which would under-nest silently", () => {
-    expect(() => codexTargetEntries(asInstallTree([{ path: ".codex-plugin/plugin.json", contents: "{}\n" }]), bundlePrefix)).toThrow(/PLUGIN_TREE_PREFIX/u);
-  });
-});
 
 describe("codexOwnerUpdateProvider", () => {
   it("declares every replaceable Codex file as a content dependency", () => {

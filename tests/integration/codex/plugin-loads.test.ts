@@ -5,18 +5,16 @@ import { env as processEnv } from "node:process";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { insertInstructionBlock, renderInstructionBlock } from "@developer-os/core";
-import type { ManagedArtifactV2 } from "@developer-os/core";
 import {
   CODEX_ROOT_SEGMENT,
+  MARKETPLACE_NAME,
   PLUGIN_NAME,
   PLUGIN_TREE_SEGMENTS,
   proposeCodexInstall,
-  proposeCodexUninstall,
-  renderCodexInstallTree,
   renderCodexVendorTree,
   renderInstructionTree,
 } from "@developer-os/adapter-codex";
-import type { CodexInstructionRenderV1, ManagedByPath } from "@developer-os/adapter-codex";
+import type { CodexInstructionRenderV1 } from "@developer-os/adapter-codex";
 import { registerCodexPlugin } from "@developer-os/cli/dist/instructions/codex-registration.js";
 import type { ProcessRunner } from "@developer-os/security";
 import { loadWorkflow } from "@developer-os/workflow-schema";
@@ -469,35 +467,9 @@ describe("the generated install tree against a real Codex installation", () => {
       const beforeUninstall = await inventory(productHome);
       expect(beforeUninstall.size).toBeGreaterThan(0);
 
-      const contracts = await loadContracts();
-      const tree = renderCodexInstallTree(contracts, { home: productHome });
-      const proposal = proposeCodexInstall(tree, { home: productHome, productVersion: "0.0.0" });
-      const managed: ManagedByPath = new Map(
-        proposal.operations.map((operation): [string, ManagedArtifactV2] => [
-          operation.targetPath,
-          {
-            owner: "codex",
-            path: operation.targetPath,
-            kind: "file",
-            productVersion: "0.0.0",
-            existedBefore: false,
-            beforeHash: null,
-            backupRelativePath: null,
-            source: operation.source,
-            mergeStrategy: operation.mergeStrategy,
-            verifiedAt: new Date().toISOString(),
-            verification: { mode: "content", installedHash: operation.proposedHash ?? "" },
-          } as ManagedArtifactV2,
-        ]),
-      );
-      const uninstall = proposeCodexUninstall(
-        { home: productHome, productVersion: "0.0.0" },
-        managed,
-      );
-      const [removeStep, unregisterStep] = uninstall.registration;
-      if (removeStep === undefined || unregisterStep === undefined) {
-        throw new Error("proposeCodexUninstall produced fewer than two registration steps");
-      }
+      // The two steps production's unregister runs (`codex-registration.ts`), in its order.
+      const removeStep = { args: ["plugin", "remove", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`] };
+      const unregisterStep = { args: ["plugin", "marketplace", "remove", MARKETPLACE_NAME] };
 
       // Step one, real and correct: succeeds. `runCodex` rejects on a
       // non-zero exit, so the `await` completing without throwing is the
