@@ -406,7 +406,7 @@ export async function assertReadableArtifactPath(
   return resolved;
 }
 
-export function createManifestGuards(
+function createManifestGuards(
   policy: ProtectedPathPolicy,
 ): ManifestGuards {
   return {
@@ -414,7 +414,7 @@ export function createManifestGuards(
   };
 }
 
-export function createTransactionGuards(
+function createTransactionGuards(
   policy: ProtectedPathPolicy,
   redactionKey: Uint8Array,
 ): TransactionGuards {

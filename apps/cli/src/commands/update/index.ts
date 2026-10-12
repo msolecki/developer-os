@@ -137,7 +137,7 @@ async function runRollbackApply(update: CliUpdateContext): Promise<CliResult<Upd
   });
 }
 
-export const WORKFLOWS_NOT_REFRESHED = "workflows not refreshed: run developer-os init";
+const WORKFLOWS_NOT_REFRESHED = "workflows not refreshed: run developer-os init";
 
 /**
  * K8: runs after `runApply` or `runRollbackApply` returned, so the swap's global lock is released and

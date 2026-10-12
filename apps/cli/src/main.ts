@@ -12,7 +12,7 @@ import { parseScheduleFlag } from "@developer-os/platform-macos";
 import type { RefactorRequestV1 } from "@developer-os/brain";
 
 import { renderBrain, runBrain } from "./commands/brain.js";
-import type { BrainOptions, BrainResultV1, BrainSubcommand } from "./commands/brain.js";
+import type { BrainOptions, BrainSubcommand } from "./commands/brain.js";
 import {
   admitScheduledProductHome,
   parseScheduledInvocation,
@@ -423,10 +423,6 @@ export function parse(argv: readonly string[]): Invocation | null {
   if (limit === "invalid") return null;
 
   return { command: positional, values, positionals: rest, limit };
-}
-
-function renderBrainResult(result: BrainResultV1): readonly string[] {
-  return renderBrain(result);
 }
 
 function renderInit(result: InitResultV1): readonly string[] {
@@ -933,7 +929,7 @@ async function dispatch(
         io,
         await runBrain(context, brainOptionsFor(invocation, invocation.limit)),
         json,
-        renderBrainResult,
+        renderBrain,
       );
     default:
       return emit(io, usageFailure(), json, () => []);
