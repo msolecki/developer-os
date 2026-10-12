@@ -186,14 +186,13 @@ install tree".
 ## 6. Rendering
 
 **Amended 2026-08-12: the body moved.** This section originally described `src/render.ts` in
-full, when that file held the preamble concatenation, the four rendering rules below and the
-`applyOverlay` call. All of that is now `renderSkillBody` in
+full, when that file held the preamble concatenation and the four rendering rules below. All of that is now `renderSkillBody` in
 `packages/workflow-schema/src/skill.ts` — none of it was vendor behaviour, so it moved to the one
 place a Codex renderer could reuse it rather than copy it. **Amended 2026-10-11 (AUD-094):** the
 frontmatter (`name`, `description`) and the artifact path followed it into `renderSkillFile` in the
 same file, because the Codex renderer had become a line-for-line copy of them; `src/render.ts` now
 only checks the `shared` contract and calls it (§1). The rules below are still true of
-the *product*; a reader chasing the screen seam or the overlay call should read them there rather
+the *product*; a reader chasing the screen seam should read them there rather
 than in `ClaudeRenderer`.
 
 **The `shared` preamble is concatenated into every other artifact**, five times, by the founder's
@@ -297,6 +296,8 @@ capture cannot faithfully obtain agent-authored observation text without reading
    package's own half of the residual is not discharged by that — but the open half is now
    *symmetry between two adapters that both lack a façade class*, not an absence with no
    precedent to weigh against. `codex-adapter.md` §9 records the same fact from the other side.
+   **Amended 2026-10-12 (AUD-124, D102):** `CodexAdapter` had no consumer and was deleted, so
+   neither adapter has a façade.
 7. **CLOSED by DOS-P6: `durable_project_guidance` is used by nothing and reports `not-used`.**
    Relying on it would first require revisiting §6's concatenation decision.
 8. **CLOSED 2026-09-22 by A12: `buildConflictEvidence` has its consumer.** The marked instruction
@@ -527,8 +528,8 @@ as `env -i PATH="$PATH" TMPDIR="$TMPDIR" HOME="$T" CLAUDE_CODE_OAUTH_TOKEN=<toke
 A14 (`import --claude-memory` and the `doctor` check `vendor-config`) depends on two vendor facts. Both
 are rows in `packages/adapter-claude/src/observations.ts`. Each stayed `null` until an observation on a
 disposable home recorded it (A14 plan Task 14). Both were recorded on 2026-09-23 (below). Neither is ever written from
-memory or documentation, the rule `AGENT_DETECTION_ROWS` set. `isValidClaudeObservation` checks each
-row's version, date and one-sentence provenance.
+memory or documentation, the rule `AGENT_DETECTION_ROWS` set. The adapter's
+`observations.test.ts` checks each row's version, date and one-sentence provenance.
 
 - **`CLAUDE_MEMORY_LAYOUT`** names the projects directory, the per-project memory directory, the
   extension and the index file to exclude, relative to `<user-home>/.claude`. While it is `null`,

@@ -20,7 +20,6 @@ The compiler unions those footprints and requires the result to *equal* the decl
 | `src/vocabulary.ts` | the closed verb table and each verb's effect footprint |
 | `src/derive.ts` | scope derivation and the equality rule |
 | `src/validate.ts` | `WorkflowValidationResult`, the finding shape, and the redaction seam |
-| `src/overlay.ts` | `WorkflowOverlayV1` and the presentation-only merge |
 | `src/load.ts` | file text → parse → validate, without ever throwing |
 | `src/drift.ts` | `WorkflowRenderer`, `RenderedArtifact`, source markers, the drift check |
 | `src/skill.ts` | the vendor-neutral skill body: source marker, `shared` preamble, refusals, steps, recovery, and the screen seam every adapter shares (added 2026-08-12 — see §2.2) |
@@ -57,8 +56,7 @@ The compiler unions those footprints and requires the result to *equal* the decl
    `tests/contracts/workflows/canonical.test.ts` asserts it; automation jobs with no workflow
    (`brain-reindex`, `brain-lint`, `git-sync`, `brain-pulse`) are outside the check.
 5. **Pre-release and build metadata are not valid workflow versions.** `MAJOR.MINOR.PATCH` only,
-   no leading zeros. An overlay pins `id@version` exactly, and comparing `1.2.3-rc.1` against
-   `1.2.3` there would mean nothing. This deliberately narrows the original design's bare word
+   no leading zeros. This deliberately narrows the original design's bare word
    "semver".
    A prose-only change to a workflow bumps PATCH; a contract change (inputs, steps, triggers) bumps MINOR.
 
@@ -82,18 +80,14 @@ Two properties the sets depend on:
   reverse order made the function a bag rather than a set: two spellings of the same accented
   name survived de-duplication and only then became identical.
 
-## 4. The overlay's four fields, and what that costs
+## 4. No vendor overlays
 
-A vendor overlay has exactly `extends`, `steps`, `lifecycle`, `notes`. There is **no** field for
-a scope, a refusal, a capability, or an effect verb. The guarantee that an overlay can never
-weaken a canonical refusal or widen a write scope is therefore the *absence of a field* rather
-than a merge rule that has to be correct — an overlay setting `scopes` fails as an unknown key.
+A vendor overlay (`extends`, `steps`, `lifecycle`, `notes`) was designed and built but had no
+loader and no production caller, so it was deleted (AUD-125, D102, 2026-10-12). Rendering consumes
+the validated contract alone; a per-vendor difference is a contract change.
 
-The price, accepted: an overlay may only replace the prose of a step that already exists and is
-already prose. A genuine per-vendor structural difference costs a schema version bump, which is
-a visible cost rather than a subset check that fails open.
-
-`validateWorkflow` is the only door into this package for the same reason. `workflowContractSchema`
+`validateWorkflow` is the only door into this package because a guarantee is better as a shape
+nothing can get around. `workflowContractSchema`
 is deliberately not exported: `zod@4.4.3` strips a `__proto__` key *before* its own strictness
 check, so the raw schema accepts a workflow carrying one and silently drops it. The refusal lives
 in `validateWorkflow`, which makes the guarantee structural rather than a rule everyone has to
@@ -242,8 +236,7 @@ moved to `2.0.0`. `docs/architecture/knowledge-pipeline.md` §2 records the deci
    **Amended 2026-08-12.** `src/skill.test.ts` now covers this for the vendor-neutral body: 38
    cases render hostile free text — forged Markdown headings, fence runs that would swallow the
    recovery warning, an RTL override, oversized prose and preamble — through `renderSkillBody`
-   into the actual joined artifact and assert what a reader would see, plus overlay cases covering
-   a mismatched `extends`, a hostile `extends`, and an overlay on `shared`. The claim is proved for
+   into the actual joined artifact and assert what a reader would see. The claim is proved for
    the body that is byte-identical across vendors; a vendor's own frontmatter (`description`) is
    each adapter's to prove, and `packages/adapter-claude/src/render.test.ts` covers Claude's.
 9. **Over-declaring a capability is not an error, though over-declaring a scope is.**
@@ -263,7 +256,7 @@ hostile name never reached the unknown-verb branch at all.
 
 Three of the four were found by review rather than by any test, in three separate rounds. The
 defences are now structural: a null prototype on the vocabulary, a `Map` for the retired-trigger
-table and for the overlay's patches, a `ReadonlyMap` parameter on the drift check, and a single
+table, a `ReadonlyMap` parameter on the drift check, and a single
 `lookupVerb` accessor that every consumer goes through. `validateWorkflow` is total for any
 `unknown` input — a cycle, twenty thousand levels of nesting, and a throwing getter all return a
 finding — because a validator that aborts on the first hostile file cannot report on the other
@@ -298,7 +291,7 @@ are rejected by strict schemas at every level.
 
 Author-ordered arrays are never resorted. Compiler-derived sets sort by code point after NFC
 normalization. The workflow id must equal its containing directory, and duplicate step ids are
-errors because overlays key by them.
+errors.
 
 ### 10.3 Steps and effect vocabulary
 

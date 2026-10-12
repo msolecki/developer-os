@@ -1294,8 +1294,8 @@ record.
   instead of recovery-required `launchd_process_table_changed`, which still covers a changed staging
   identity. The field changes `maximumLaunchdEffectJournalBytes` and therefore every launchd effect
   plan hash; no migration exists because no production launchd effect journal was ever written
-  (automation had never been enabled on any install). `LifecycleUnsupportedLeafError` is still defined in
-  `codecs.ts` but nothing throws it, so `unsupported_until_plan_1b` is no longer a reachable reason.
+  (automation had never been enabled on any install). `LifecycleUnsupportedLeafError`, which nothing threw,
+  was deleted (AUD-108, D102), so `unsupported_until_plan_1b` is no longer a reachable reason.
   - **Commands.** `git enable|disable|status|sync` (`createGitService`,
     `apps/cli/src/commands/git/service.ts`) and `automation enable|disable|status`
     (`createAutomationService`, `apps/cli/src/commands/automation/service.ts`), each a byte-inert,
