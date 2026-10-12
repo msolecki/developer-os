@@ -618,7 +618,7 @@ async function checkClaudeCapabilities(
   });
   return pass(
     "claude-capabilities",
-    `${report.summary} capture-via=${report.captureVia}`,
+    `${report.summary} capture-via=command`,
     [],
   );
 }
@@ -670,7 +670,7 @@ async function checkCodexCapabilities(
    */
   return pass(
     "codex-capabilities",
-    `${report.summary} capture-via=${report.captureVia}`,
+    `${report.summary} capture-via=command`,
     [],
   );
 }

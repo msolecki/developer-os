@@ -57,13 +57,6 @@ export interface CodexCapabilityReport {
   readonly installed: boolean;
   readonly version: string | null;
   readonly capabilities: CodexCapabilities;
-  /**
-   * How capture reaches the vault on this machine, today: a command the user
-   * ran, and nothing else. `ClaudeCapabilityReport.captureVia` carries the
-   * reasoning; the two must say the same thing, because one `doctor` report
-   * prints both.
-   */
-  readonly captureVia: "command";
   /** One line, for a `DoctorCheck.message`. */
   readonly summary: string;
 }
@@ -121,7 +114,6 @@ export async function reportCodexCapabilities(
       installed: false,
       version: null,
       capabilities,
-      captureVia: "command",
       summary: `codex=absent ${summarise(CODEX_CAPABILITY_KEYS, capabilities)}`,
     };
   };
@@ -138,7 +130,6 @@ export async function reportCodexCapabilities(
       installed: true,
       version: null,
       capabilities,
-      captureVia: "command",
       summary: `codex=unreadable ${summarise(CODEX_CAPABILITY_KEYS, capabilities)}`,
     };
   };
@@ -165,7 +156,6 @@ export async function reportCodexCapabilities(
       installed: true,
       version: installation.version,
       capabilities,
-      captureVia: "command",
       summary: `codex=${installation.version} not-probed ${summarise(CODEX_CAPABILITY_KEYS, capabilities)}`,
     };
   }
@@ -183,7 +173,6 @@ export async function reportCodexCapabilities(
     // A capture reaches the vault because somebody ran a command. Codex architecture former §5.3
     // used to name the wrapper here, chosen by `session_end_capture === "yes"`;
     // that key is `not-used` unconditionally now, so the branch was dead.
-    captureVia: "command",
     summary: `codex=${installation.version} ${summarise(CODEX_CAPABILITY_KEYS, capabilities)}`,
   };
 }

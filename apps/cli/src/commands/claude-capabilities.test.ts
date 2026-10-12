@@ -175,21 +175,6 @@ describe("reportClaudeCapabilities", () => {
     expect(granted).toEqual(["skills", "subagents"]);
   });
 
-  /**
-   * A capture reaches the vault because somebody ran a command. The knowledge-pipeline architecture note §2's
-   * fallback to the wrapper, and the `hook` branch beside it, both name paths
-   * this product is not building (knowledge-pipeline architecture note §2).
-   */
-  it("names the command as the capture route", async () => {
-    const report = await reportClaudeCapabilities({
-      executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.280"),
-      pluginDirectory: "/synthetic/plugin",
-      probe: true,
-      listPluginFiles: skillsPresent,
-    });
-    expect(report.captureVia).toBe("command");
-  });
 
   it("never throws when the runner fails outright", async () => {
     const report = await reportClaudeCapabilities({

@@ -64,17 +64,6 @@ export interface ClaudeCapabilityReport {
   readonly installed: boolean;
   readonly version: string | null;
   readonly capabilities: ClaudeCapabilities;
-  /**
-   * How capture reaches the vault on this machine, today: a command the user
-   * ran, and nothing else.
-   *
-   * A single-member union rather than a dropped field, because the line
-   * `doctor` prints still has to say it. It was `"hook" | "wrapper"`, chosen by
-   * `session_end_capture === "yes"`; that key is `not-used` unconditionally now
-   * (knowledge-pipeline architecture note §2 declines both automatic paths), so the
-   * ternary was dead code that read as a live possibility.
-   */
-  readonly captureVia: "command";
   /** One line, for a `DoctorCheck.message`. */
   readonly summary: string;
 }
@@ -138,7 +127,6 @@ export async function reportClaudeCapabilities(
       installed: false,
       version: null,
       capabilities,
-      captureVia: "command",
       summary: `claude=absent ${summarise(CLAUDE_CAPABILITY_KEYS, capabilities)}`,
     };
   };
@@ -167,7 +155,6 @@ export async function reportClaudeCapabilities(
       installed: true,
       version: null,
       capabilities,
-      captureVia: "command",
       summary: `claude=unreadable ${summarise(CLAUDE_CAPABILITY_KEYS, capabilities)}`,
     };
   };
@@ -194,7 +181,6 @@ export async function reportClaudeCapabilities(
       installed: true,
       version: installation.version,
       capabilities,
-      captureVia: "command",
       summary: `claude=${installation.version} not-probed ${summarise(CLAUDE_CAPABILITY_KEYS, capabilities)}`,
     };
   }
@@ -215,7 +201,6 @@ export async function reportClaudeCapabilities(
     // A capture reaches the vault because somebody ran a command. Claude architecture former §8.2
     // used to name the wrapper here, chosen by `session_end_capture === "yes"`;
     // that key is `not-used` unconditionally now, so the branch was dead.
-    captureVia: "command",
     summary: `claude=${installation.version} ${summarise(CLAUDE_CAPABILITY_KEYS, capabilities)}`,
   };
 }
