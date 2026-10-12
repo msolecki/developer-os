@@ -17,7 +17,7 @@ agent adapter present and no network call.
 |---|---|
 | `src/schema/` | `NoteFrontmatterV1`, strict parse, reserved vocabulary, byte-identical rewrite; `CaptureEnvelopeV1` as a type only; brain config defaults |
 | `src/discovery/` | deny-by-default enumeration, folder policy, symlink refusal |
-| `src/indexes/` | `index.json`, `graph.json`, and the two Markdown views; one `renderArtifacts` produces all four |
+| `src/indexes/` | `index.json`, `terms.json`, `graph.json`, and the two Markdown views; one `renderArtifacts` produces all five |
 | `src/lint/` | the eight classes below, and canonical-form drift |
 | `src/retrieval/` | the two-stage funnel and its integer scorer |
 | `src/migrations/` | `BrainMigration` and a deliberately empty registry |
@@ -104,7 +104,7 @@ symlink carry `key: null`.
 | `links` | wikilink resolving to nothing, into an excluded folder, or outside the vault (`error`); link text matching more than one note (`warn`) |
 | `duplicates` | identical screened, normalized title within one topic folder (`warn`); identical content hash anywhere (`warn`); case-insensitive path collision (`error`) |
 | `staleness` | `reviewed` older than `staleness.reviewAfterDays` (`warn`); `stage: emerging` with `occurrences >= 3` and `reviewed: null` (`warn`) |
-| `index-drift` | any of the four artifacts whose canonical form differs from a fresh in-memory build, or an artifact missing entirely (`error`) |
+| `index-drift` | any of the five artifacts whose canonical form differs from a fresh in-memory build, or an artifact missing entirely (`error`) |
 | `isolated` | a canonical note that is neither the source nor the target of any `graph.json` edge, self-edges excluded (`info`) |
 | `gap` | an index tag carried by at least three canonical notes, none of them of type `compiled-note`; `path` is the lowest such note, `key` `tags` (`info`) |
 
@@ -161,7 +161,7 @@ that seam so a future divergence fails instead of merely looking wrong.
 The escaping in `indexes/render.ts` is a *different* rule from the screening, and having only
 the first is how a RIGHT-TO-LEFT OVERRIDE reached `catalog.md`: escaping stops text becoming
 Markdown structure, screening stops characters reordering a line. Both now run, in that
-order. `index.json` and `graph.json` are deliberately unscreened — they are data, the
+order. `index.json`, `terms.json` and `graph.json` are deliberately unscreened — they are data, the
 retrieval layer screens on the way out, and an index that disagrees with the vault it indexes
 is worse than one that is faithful.
 
@@ -206,9 +206,21 @@ changes only the logical read-time folder; it never renames a directory or mutat
 
 ### 6.3 Canonical data and rendered artifacts
 
-One reindex build produces four artifacts: canonical machine data in `index.json` and `graph.json`,
-and human views in `vault-map.md` and `catalog.md`. Retrieval, lint and drift read the JSON data;
-Markdown is never parsed back into the model.
+One reindex build produces five artifacts: canonical machine data in `index.json`, `terms.json` and
+`graph.json`, and human views in `vault-map.md` and `catalog.md`. Retrieval, lint and drift read the
+JSON data; Markdown is never parsed back into the model.
+
+**The term tables live apart from the index (D102, NEW-254, AUD-026).** `index.json` carries every
+note field except its body-term table; `terms.json` carries those tables, one `{ path, terms }` entry
+per `index.json` note in the same order, under the same `generatedAt`. Search is the only reader of
+`terms.json`, and it joins the two only when `generatedAt`, the entry count and every path agree;
+otherwise it reports the index unreadable and asks for a reindex. Session-start inject, pulse, ingest's
+excerpt and every listing read `index.json` alone, which on a vault of 1,000 notes of 300 terms each is
+0.6 MB instead of 22 MB (session-start inject 39 ms → 1 ms). The in-memory build keeps the terms on each note; only serialization splits
+them, so retrieval scores exactly what it scored before the split. Both files keep `schemaVersion: 1`,
+following NEW-185's precedent (§6.14): an `index.json` written before the split still carries its
+terms inline, every reader ignores them, and search reports the missing `terms.json` until one
+`developer-os brain reindex`.
 
 Time enters only through the injected `generatedAt`. Arrays have an explicit byte-wise total order
 over NFC UTF-8, paths are vault-relative POSIX and NFC, persisted numeric values are integers, and
@@ -303,7 +315,7 @@ does not touch an existing vault.
 
 The surface is `developer-os brain reindex [--dry-run] [--json]`, `brain lint [--json]`,
 `brain search <query> [--limit N] [--json]`, `brain status [--json]`, plus `developer-os search` as
-the search alias. Reindex is the only mutating command and stages exactly the four §6.3 artifacts
+the search alias. Reindex is the only mutating command and stages exactly the five §6.3 artifacts
 through a Foundation transaction; dry-run writes nothing. Lint, search and status are read-only.
 
 It also carries `brain retire <note> [--dry-run] [--json]` and `brain refactor --rename <note>
@@ -491,7 +503,10 @@ Added 2026-09-28 by NEW-110 Task 12 (D72); `foundation.md` §11 has the update c
 - **An update never reindexes, so an index-format change needs one manual `developer-os brain
   reindex`.** Neither `update` nor `init` regenerates `content/_indexes/`. Since NEW-185 (BRAIN-5,
   2026-10-06) a note without `occurrences` is indexed as `1`, not `0`, so every vault indexed before
-  it reports `index-drift` until its owner runs `developer-os brain reindex` once.
+  it reports `index-drift` until its owner runs `developer-os brain reindex` once. The same holds
+  for the D102 split (NEW-254, 2026-10-12): a vault indexed before it has no `terms.json`, so `brain
+  lint` reports `index-drift` and `brain search` answers `index-unavailable` (`missing`) until one
+  reindex; inject, pulse and ingest keep reading the older `index.json` meanwhile.
 
 ### 6.15 The scheduled gardener writes only captures (NEW-134)
 

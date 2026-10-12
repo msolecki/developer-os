@@ -455,7 +455,7 @@ way back is, which is what §5.4's secret scan is for.
 **Two deliberate exemptions, both load-bearing.** Paths are unscreened in data and screened at the
 terminal, as above. **U+200D is preserved** in both the Brain and the CLI, because a joiner is part of
 a grapheme cluster rather than an attack on one — the two layers held opposite policies for one review
-round and the output was worse than either. `index.json` and `graph.json` are deliberately unscreened:
+round and the output was worse than either. `index.json`, `terms.json` and `graph.json` are deliberately unscreened:
 they are data, the retrieval layer screens on the way out, and an index that disagrees with the vault
 it indexes is worse than one that is faithful (`brain.md` §5).
 
@@ -1117,9 +1117,10 @@ it holds by refusal (`apps/cli/src/commands/ingest.ts:1725-1765`) and by interru
 would be the one answer that is *not* retryable: `applyNotes` refuses an occupied path, so the next
 run would refuse the capture permanently.
 
-**It holds with one stated residual, accepted rather than closed.** `ingest` runs as four transactions
-per capture plus a compensating rollback — `ingest-stage`, `ingest-apply`, `ingest-reindex`,
-`ingest-ingested`, `ingest-rollback` (`apps/cli/src/commands/ingest.ts:297-305`), plus one
+**It holds with one stated residual, accepted rather than closed.** `ingest` runs as three transactions
+per capture plus a compensating rollback — `ingest-stage`, `ingest-apply`, `ingest-ingested`,
+`ingest-rollback` — and one `ingest-reindex` per run after the last capture (D102, AUD-089)
+(`apps/cli/src/commands/ingest.ts:297-305`), plus one
 per-run `ingest-attempts` write of the reserved `state/ingest-attempts.json` after the capture loop,
 which records order only and touches neither a capture nor the vault (NEW-141) — because
 `BrainService.reindex()` reads the vault and cannot run until the apply has finalized, and because
