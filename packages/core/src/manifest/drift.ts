@@ -120,7 +120,9 @@ async function inspectArtifact(
   if (artifact.kind === "config-entry") {
     throw new ManifestUnsupportedArtifactError();
   }
-  const canonical = await guards.assertReadable(artifact.path);
+  // A guard refusal is a ManifestStateError, as in guardedRead and guardedV2Path (AUD-041): the raw error may quote the path.
+  let canonical: string;
+  try { canonical = await guards.assertReadable(artifact.path); } catch { throw new ManifestStateError(); }
 
   let stats;
   try {

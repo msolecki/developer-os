@@ -12,6 +12,7 @@ import {
   containsPath,
   containsPathLoosely,
   detectDrift,
+  inspectDrift,
   ManifestMissingError,
   ManifestStateError,
   ManifestStore,
@@ -127,7 +128,7 @@ function denyingGuards(denied: string): {
   return {
     assertReadable: (path: string) =>
       path === denied
-        ? Promise.reject(new Error("synthetic read refusal"))
+        ? Promise.reject(Object.assign(new Error(`synthetic read refusal of ${path}`), { code: EXIT_CODES.securityRefusal }))
         : Promise.resolve(path),
   };
 }
@@ -788,20 +789,28 @@ describe("detectDrift", () => {
     }
   });
 
-  it("refuses to read an artifact the guards deny", async () => {
+  it("refuses an artifact the guards deny with a ManifestStateError, as V2 does (AUD-041)", async () => {
     const fixture = await createFixture("drift-denied");
     const filePath = join(fixture.homeDir, "settings.json");
 
     try {
       await nodeFs.writeFile(filePath, CURRENT_TEXT, { mode: 0o600 });
 
-      await expect(
-        detectDrift({
-          manifest: manifestOf([artifact({ path: filePath })]),
+      for (const refusal of [
+        detectDrift({ manifest: manifestOf([artifact({ path: filePath })]), fs: nodeFs, guards: denyingGuards(filePath) }),
+        inspectDrift({
+          manifest: { schemaVersion: 2, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts: [{ ...artifact({ path: filePath }), verification: { mode: "content", installedHash: hashOf(filePath) } }] } as unknown as InstallationManifestV2,
           fs: nodeFs,
           guards: denyingGuards(filePath),
+          schemas: { validate: () => undefined },
+          ephemerals: { validate: () => undefined },
         }),
-      ).rejects.toThrow("synthetic read refusal");
+      ]) {
+        const error: unknown = await refusal.then(() => null, (thrown: unknown) => thrown);
+        expect(error).toBeInstanceOf(ManifestStateError);
+        expect(error).toMatchObject({ code: EXIT_CODES.recoveryRequired, message: new ManifestStateError().message });
+        expect((error as Error).message).not.toContain(filePath);
+      }
     } finally {
       await removeFixture(fixture);
     }
