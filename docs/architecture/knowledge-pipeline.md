@@ -230,7 +230,7 @@ that verb in DOS-P6: the workflow's `decision` input offered `edit` while its on
 
 ---
 
-## 5. Ingest is four transactions per capture, plus a compensating fifth
+## 5. Ingest is three transactions per capture, one reindex per run, plus a compensating rollback
 
 **The retired design's headline sentence — "one capture, one agent call, one transaction" — is false
 and cannot be made true.** This section is the surviving correction.
@@ -243,9 +243,25 @@ accepted capture
   → IngestProposal, parsed
   → the nine deterministic validators
   → one create per proposed note              (ingest-apply)
-  → brain reindex                             (ingest-reindex)
   → status → ingested                         (ingest-ingested)
+… every selected capture, then once per run:
+  → brain reindex                             (ingest-reindex)
 ```
+
+**One reindex per run, not per capture (D102, NEW-254, AUD-089, amended 2026-10-12).** Until D102 the
+reindex sat between each capture's apply and its `ingested` write, so a run of N captures rebuilt the
+whole vault N times. It now runs once, after the last capture, whenever a note may have landed — a
+written path, or a capture left at `staging` (an apply that wrote and then failed to attribute). A
+later capture in the same run still sees what an earlier one created (NEW-116): the run lays the
+notes it wrote over the index excerpt (`withWrittenNotes`), and `takenPaths` still lists their paths.
+`ingested` now means the capture's notes are in the vault; they become findable when the run's
+reindex lands. A run that dies before it leaves an index older than its notes, the same state a hand
+edit in Obsidian leaves: `brain lint` and `brain-pulse` report `index-drift`, and
+`developer-os brain reindex` repairs it — no capture status needs a hand edit. The reindex is still
+one transaction, so the index is the previous build or the new one, never half of each. A reindex
+failure is the run's failure, raised after the attempt record is written, with every capture's
+status already true on disk. Keeping every capture at `staging` until the run's reindex, then writing
+N `ingested` statuses, was rejected: it turns one failed reindex into N hand edits.
 
 The kinds are `TRANSACTION_KINDS` in `apps/cli/src/commands/ingest.ts`; the ladder is documented in the
 docblock of `ingestOne` and the reasons in the docblock of `apps/cli/src/commands/ingest.ts` — `TRANSACTION_KINDS`. **Two independent reasons no two of them merge:**
@@ -254,7 +270,7 @@ docblock of `ingestOne` and the reasons in the docblock of `apps/cli/src/command
    run until the apply has finalized — and it has no write channel at all, by design, so the CLI
    stages its bytes through the executor exactly as `brain reindex` does
    (`apps/cli/src/commands/ingest.ts:1386-1421`).
-2. **`validateChangePlan` grants ownership from the manifest**, where the four index artifacts *are*
+2. **`validateChangePlan` grants ownership from the manifest**, where the five index artifacts *are*
    owned — recorded as rows under a V1 manifest (`apps/cli/src/commands/reindex.ts:356-379`), adopted
    from disk under a V2 one, for which `recordArtifacts` returns early — and a capture deliberately
    **is not** (`apps/cli/src/commands/quarantine.ts:302-307`). One transaction cannot hold both regimes.
@@ -262,7 +278,7 @@ docblock of `ingestOne` and the reasons in the docblock of `apps/cli/src/command
 A third reason applies to the first pair alone: the status must be durable *before* the apply, or a
 crash cannot be told from a run that never started.
 
-**The residual, accepted rather than closed.** A crash between the apply and the last transaction
+**The residual, accepted rather than closed.** A crash between the apply and the `ingested` write
 leaves a capture at `staging` with its notes already in the vault. It is **inert**: `selectCaptures`
 selects only captures whose status is `accepted` (`apps/cli/src/commands/ingest.ts` — `selectCaptures`), so the next run cannot
 double-apply. It is visible — every run warns about each one, naming `review --status staging`, and
@@ -298,10 +314,12 @@ writes nothing, and the user reruns it.**
 
 - **What is bound, and when.** For a plain capture, after the staging write and before the call,
   `snapshotBeforeCall` records the identity (`dev`, `ino`) and SHA-256 of every file the ingest
-  will write: the capture, bound to the exact bytes the staging write put down, and the four index
-  artifacts `ingest-reindex` replaces. `index.json` is bound to the bytes the prompt's excerpt was
-  parsed from (`readIndexExcerpt`), not to a second read; the run re-reads that excerpt before each
-  capture whose index bytes moved, so one edit refuses one capture, not every later one. A missing
+  will write: the capture, bound to the exact bytes the staging write put down, and the five index
+  artifacts the run's `ingest-reindex` replaces. `index.json` is bound to the bytes the prompt's
+  excerpt was parsed from (`readIndexExcerpt`), not to a second read; the run re-reads that excerpt
+  before each capture whose index bytes moved — since D102 only a hand edit moves them mid-run, as
+  the run's own reindex comes after its last capture — so one edit refuses one capture, not every
+  later one. A missing
   file is recorded as absent. The proposal's destinations are unknown until the call returns, so
   the content root's names are listed instead. Timestamps are never compared.
 - **The check.** `assertVaultUnchanged` runs after validation and before `applyNotes`, so before
