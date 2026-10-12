@@ -1164,3 +1164,12 @@ export function syntheticUpdateCoordinator(
   });
   return { execution, plan, owners, fallback, current, target };
 }
+
+/**
+ * A recovery sweep's death points, exhaustive by construction: `Record<T, true>` makes a union
+ * member the list omits a build error, so a new crash window cannot ship unswept (AUD-107).
+ * Each sweep's list lives in its test, its only reader.
+ */
+export function deathPoints<T extends string>(points: Record<T, true>): readonly T[] {
+  return Object.freeze(Object.keys(points) as T[]);
+}

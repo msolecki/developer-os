@@ -32,9 +32,24 @@ import {
 } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BUNDLE_SOURCE_DEATH_POINTS, BundleGuardedIo, BundleJournalFile, BundleSourceExecutor, type BundleSourceDeathPointV1, type VerifiedScratchBundleV1 } from "./bundle-source.js";
+import { BundleGuardedIo, BundleJournalFile, BundleSourceExecutor, type BundleSourceDeathPointV1, type VerifiedScratchBundleV1 } from "./bundle-source.js";
 import { resolveSourceParent } from "./construction.js";
 import { readConstructionJournal, stageSourceConstruction } from "./rollback-testing.js";
+import { deathPoints } from "./testing.js";
+
+const BUNDLE_SOURCE_DEATH_POINTS = deathPoints<BundleSourceDeathPointV1>({
+  journal_rewritten: true,
+  structure_made: true,
+  entry_created: true,
+  entry_written: true,
+  evidence_created: true,
+  evidence_written: true,
+  ready_created: true,
+  ready_written: true,
+  ready_removed: true,
+  compensation_step: true,
+  compaction_step: true,
+});
 
 const encoder = new TextEncoder();
 const sha = (value: Uint8Array | string): LowerHexSha256 => parseLowerHexSha256(createHash("sha256").update(value).digest("hex"));

@@ -15,7 +15,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import { resolveSourceParent } from "./construction.js";
-import { ROLLBACK_SOURCE_DEATH_POINTS, RollbackPayloadSourceExecutor, type RollbackSourceDeathPointV1 } from "./rollback-source.js";
+import { RollbackPayloadSourceExecutor, type RollbackSourceDeathPointV1 } from "./rollback-source.js";
 import {
   BRAIN_BEFORE,
   createRollbackSourceFixture,
@@ -29,6 +29,23 @@ import {
   stageRollbackSource,
   type RollbackSourceFixtureV1,
 } from "./rollback-testing.js";
+import { deathPoints } from "./testing.js";
+
+const ROLLBACK_SOURCE_DEATH_POINTS = deathPoints<RollbackSourceDeathPointV1>({
+  journal_rewritten: true,
+  structure_made: true,
+  metadata_created: true,
+  metadata_written: true,
+  entry_created: true,
+  entry_written: true,
+  evidence_created: true,
+  evidence_written: true,
+  ready_created: true,
+  ready_written: true,
+  ready_removed: true,
+  compensation_step: true,
+  compaction_step: true,
+});
 
 const homes: string[] = [];
 

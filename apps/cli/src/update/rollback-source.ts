@@ -57,26 +57,10 @@ import {
   type BundleEntryDeathPointV1,
   type BundleParticipantDependenciesV1,
 } from "./bundle-source.js";
-import { deathPoints, sha256Hex, stampAfter } from "./primitives.js";
+import { sha256Hex, stampAfter } from "./primitives.js";
 import { resolveSourceParent } from "./construction.js";
 
 export type RollbackSourceDeathPointV1 = BundleEntryDeathPointV1 | "structure_made" | "metadata_created" | "metadata_written" | "ready_created" | "ready_written" | "ready_removed";
-
-export const ROLLBACK_SOURCE_DEATH_POINTS = deathPoints<RollbackSourceDeathPointV1>({
-  journal_rewritten: true,
-  structure_made: true,
-  metadata_created: true,
-  metadata_written: true,
-  entry_created: true,
-  entry_written: true,
-  evidence_created: true,
-  evidence_written: true,
-  ready_created: true,
-  ready_written: true,
-  ready_removed: true,
-  compensation_step: true,
-  compaction_step: true,
-});
 
 /** The bound inverse-plan and inventory bytes the originating process derived for this payload. */
 export interface RollbackSourceDocumentsV1 {

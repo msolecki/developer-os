@@ -40,11 +40,30 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   resolveSourceParent,
-  UPDATE_CONSTRUCTION_STORE_DEATH_POINTS,
   UpdateConstructionStore,
   type UpdateConstructionSourcePortV1,
   type UpdateConstructionStoreDeathPointV1,
 } from "./construction.js";
+import { deathPoints } from "./testing.js";
+
+const UPDATE_CONSTRUCTION_STORE_DEATH_POINTS = deathPoints<UpdateConstructionStoreDeathPointV1>({
+  plan_pending_written: true,
+  plan_published: true,
+  journal_pending_written: true,
+  journal_published: true,
+  journal_rewrite_pending: true,
+  journal_rewritten: true,
+  directory_made: true,
+  file_created: true,
+  file_written: true,
+  evidence_created: true,
+  evidence_written: true,
+  output_consumer: true,
+  outer_created: true,
+  outer_written: true,
+  compensation_step: true,
+  compaction_step: true,
+});
 
 const encoder = new TextEncoder();
 const sha = (value: Uint8Array | string): LowerHexSha256 => parseLowerHexSha256(createHash("sha256").update(value).digest("hex"));

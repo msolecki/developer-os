@@ -23,7 +23,6 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  UPDATE_COORDINATOR_STORE_DEATH_POINTS,
   UpdateCoordinatorJournalStore,
   UpdateStepDispatcher,
   type UpdateCoordinatorStoreDeathPointV1,
@@ -194,7 +193,6 @@ describe("UpdateCoordinatorJournalStore", () => {
     expect(await store().completeEnvelopeSuffix(plan.id)).toBe(plan.executionBindingHash);
     expect(await exists(lock)).toBe(false);
     expect(await exists(paths.plan)).toBe(false);
-    expect(UPDATE_COORDINATOR_STORE_DEATH_POINTS).toContain("envelope_plan_removed");
   });
 });
 

@@ -23,7 +23,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { UpdateCoordinatorJournalStore, UpdateStepDispatcher, type UpdateStepHandlerV1, type UpdateStepHandlersV1 } from "./coordinator.js";
 import {
-  UPDATE_RECOVERY_EXECUTOR_DEATH_POINTS,
   UpdateRecoveryExecutorFiles,
   readUpdateExecutorRecord,
   removeOrphanTerminalExecutorRecord,
@@ -31,7 +30,15 @@ import {
   type UpdateRecoveryExecutorDeathPointV1,
   type UpdateRecoveryRoutesV1,
 } from "./recovery.js";
-import { PLANNED_AT, SYNTHETIC_COORDINATOR_ID, SYNTHETIC_EVIDENCE, syntheticUpdateCoordinator, type SyntheticUpdateCoordinatorV1 } from "./testing.js";
+import { deathPoints, PLANNED_AT, SYNTHETIC_COORDINATOR_ID, SYNTHETIC_EVIDENCE, syntheticUpdateCoordinator, type SyntheticUpdateCoordinatorV1 } from "./testing.js";
+
+const UPDATE_RECOVERY_EXECUTOR_DEATH_POINTS = deathPoints<UpdateRecoveryExecutorDeathPointV1>({
+  initial_renamed: true,
+  initial_synced: true,
+  terminal_replaced: true,
+  terminal_synced: true,
+  record_unlinked: true,
+});
 
 const uid = process.getuid?.() ?? -1;
 const homes: string[] = [];

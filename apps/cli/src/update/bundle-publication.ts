@@ -54,23 +54,10 @@ import {
   type BundleEntryDeathPointV1,
   type BundleParticipantDependenciesV1,
 } from "./bundle-source.js";
-import { deathPoints, parentPath, stampAfter } from "./primitives.js";
+import { parentPath, stampAfter } from "./primitives.js";
 import type { UpdatePayloadIdentityResolverV1 } from "./state-participant.js";
 
 export type BundlePublicationDeathPointV1 = BundleEntryDeathPointV1 | "version_directory_made" | "root_made" | "metadata_renamed";
-
-export const BUNDLE_PUBLICATION_DEATH_POINTS = deathPoints<BundlePublicationDeathPointV1>({
-  journal_rewritten: true,
-  version_directory_made: true,
-  root_made: true,
-  entry_created: true,
-  entry_written: true,
-  evidence_created: true,
-  evidence_written: true,
-  metadata_renamed: true,
-  compensation_step: true,
-  compaction_step: true,
-});
 
 /** What the coordinator step records after the participant returns. */
 export interface BundlePublicationObservationV1 {

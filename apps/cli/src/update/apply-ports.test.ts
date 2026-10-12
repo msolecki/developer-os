@@ -2,17 +2,16 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
-import { createNodeLifecycleGuardedFileSystem, encodeCanonicalJson, EXIT_CODES, LifecycleRecoveryRequiredError, parseCanonicalAbsolutePathText, parseLowerHexSha256, parseUInt64Decimal } from "@developer-os/core";
+import { createNodeLifecycleGuardedFileSystem, encodeCanonicalJson, EXIT_CODES, serializeConfig, LifecycleRecoveryRequiredError, parseCanonicalAbsolutePathText, parseLowerHexSha256, parseUInt64Decimal } from "@developer-os/core";
 import type { LifecycleGuardedEntryV1, ManifestBytesStateV1, ManifestStatePlanV1, UpdateExpectedPayloadRefV1 } from "@developer-os/core";
-import { createRedactor } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runDoctorReport } from "../commands/doctor.js";
-import { removeCommandFixtures } from "../commands/testing.js";
+import { createCommandFixture, removeCommandFixtures } from "../commands/testing.js";
 
-import type { CliContext } from "../context.js";
+import { loadOrCreateRedactionKey, type CliContext } from "../context.js";
 import { codexPlanningInputs, constructionScreen, verifierSnapshot, manifestPayloadIdentities, matchesManifestFileIdentity, runCleanups } from "./apply-ports.js";
 import { planRollback } from "./planning.js";
 import { recoverUpdate } from "./apply.js";
@@ -161,6 +160,7 @@ describe("matchesManifestFileIdentity", () => {
 });
 
 describe("constructionScreen (W2-PORTS-1)", () => {
+  afterEach(removeCommandFixtures);
   const encoder = new TextEncoder();
 
   it("refuses without a redaction key instead of silently disabling itself", async () => {
@@ -170,8 +170,13 @@ describe("constructionScreen (W2-PORTS-1)", () => {
   });
 
   it("refuses staged bytes that match a user pattern", async () => {
-    const context = { paths: { stateDir: "/unused", configFile: "/unused" } } as unknown as CliContext;
-    const screen = await constructionScreen(context, () => Promise.resolve(createRedactor(new Uint8Array(32).fill(7), { userPatterns: ["Acme Corp"] })));
+    const fixture = await createCommandFixture("construction-screen");
+    await nodeFs.mkdir(fixture.paths.stateDir, { recursive: true, mode: 0o700 });
+    await nodeFs.mkdir(dirname(fixture.paths.configFile), { recursive: true, mode: 0o700 });
+    loadOrCreateRedactionKey(fixture.paths.stateDir);
+    const config = { schemaVersion: 1, brainPath: fixture.paths.brain, adapters: { claude: false, codex: false }, git: { enabled: false }, automation: { enabled: false }, telemetry: false, redaction: { patterns: ["Acme Corp"] } } as const;
+    await nodeFs.writeFile(fixture.paths.configFile, serializeConfig(config), { mode: 0o600 });
+    const screen = await constructionScreen(fixture.context);
     expect(() => { screen(encoder.encode("note about Acme Corp\n"), "text"); }).toThrow(expect.objectContaining({ reason: "update_construction_secret", code: EXIT_CODES.securityRefusal }) as Error);
     expect(() => { screen(encoder.encode("plain note\n"), "text"); }).not.toThrow();
   });
