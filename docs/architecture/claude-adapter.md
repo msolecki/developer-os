@@ -222,15 +222,8 @@ Four rendering rules, three of them written after a fresh-context review found t
 - **`recovery.resume` is inert text.** Fenced as `text` rather than `bash`, screened at the render
   seam, and never emitted into a command position.
 
-**The overlay is applied, not discarded.** `renderSkillBody` — itself part of the compiler since
-2026-08-12 — calls `applyOverlay` directly and throws when it refuses, because rendering the base
-contract instead would silently produce an artifact the caller did not ask for. `ClaudeRenderer.render`
-no longer touches the overlay at all; `renderSkillFile` passes the contract and the overlay straight
-through to `renderSkillBody` and builds frontmatter from the contract alone — safe only because
-`workflowOverlaySchema` (`packages/workflow-schema/src/overlay.ts`) cannot reach `id`, `version`
-or `description`, an invariant that schema's own docblock and `overlay.test.ts` now pin.
-`OverlayOutcome.lifecycle` is deliberately unused: no hook artifact ships, so there is nothing for
-a lifecycle binding to bind to.
+**No overlays.** Rendering consumes the contract alone: the overlay schema and its merge had no
+production caller and were deleted (AUD-125, D102).
 
 **Determinism.** `buildPluginTree` sorts by code point, so every workflow under `workflows/`
 produces the same bytes in any directory order. This is the byte-identity debt `workflow-schema.md` §6 assigned to
@@ -462,9 +455,8 @@ Measured in a disposable `HOME` during the 2026-09-04 audit; each row names the 
   `docs/migration/instruction-inventory.md` §4 maps onto one of these. §5's decline of
   transcript-based capture stands; the founder's 2026-09-04 decision reopens
   `session_start_injection` for A13.
-- **Closed by A12:** `proposeClaudeUninstall` now performs the owner check its Codex twin performs
-  (`packages/adapter-claude/src/install.ts` — `proposeClaudeUninstall`). AUD-124 added the
-  containment check as well: a managed path that normalizes outside the plugin root is ignored.
+- **Closed by deletion:** `proposeClaudeUninstall`, which A12 gave its Codex twin's owner check and
+  AUD-124 its containment check, had no production caller and was deleted (AUD-124, D102).
 
 ## 14. Observed for A12 against Claude Code 2.1.280 on 2026-09-22
 
@@ -625,12 +617,10 @@ and never reviews its content.
 
 **Added 2026-09-28** by NEW-110 Task 12 (D72); `foundation.md` §11 has the update contract.
 
-- **The provider is a pure file-tree diff.** `claudeOwnerUpdateProvider`
-  (`packages/adapter-claude/src/update/plan.ts`) plans the `claude` partition with
-  `planOwnedFileTree`: an installed content file whose source the target ships is kept on an equal
-  hash and replaced otherwise, one the target stops shipping is removed, and a new entry is created.
-  Directories, symlinks, ephemeral and block rows are keep-only. It declares every replaceable
-  Claude file a content dependency, so each replace or remove carries the bytes its inverse needs.
+- **The provider declares content dependencies only.** `claudeOwnerUpdateProvider`
+  (`packages/adapter-claude/src/update/plan.ts`) declares every replaceable Claude file a content
+  dependency, so the update request carries those bytes. The per-owner file-tree diff it once
+  planned was unreachable after the keep-all planner and was deleted (AUD-121, D102).
 - **No external effect.** Claude discovers the installed tree in place (§4), so an update requests
   no registration refresh for this owner; a second effect or any non-Codex effect refuses the whole
   plan.
