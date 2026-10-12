@@ -5,12 +5,14 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import {
   EXIT_CODES,
+  loadConfig,
   parseCanonicalAbsolutePathText,
   parseEffectiveUid,
   parseLowerHexSha256,
   parseSafeReasonCode,
   parseUInt64Decimal,
   parseUtcTimestamp,
+  serializeConfig,
 } from "@developer-os/core";
 import type { CanonicalAbsolutePathV1, HeldLifecycleStableLockV1, ScheduledJobIdV1 } from "@developer-os/core";
 import { launchdGuiDomain } from "@developer-os/platform-macos";
@@ -278,6 +280,7 @@ describe("runtime records through the real gate", () => {
     const leases = new Map<ScheduledJobIdV1, Awaited<ReturnType<typeof lifecycle.locks.acquireExisting>>>();
     for (const job of jobs) leases.set(job, await lifecycle.locks.acquireExisting(automationRunnerLeasePath(productHome, job)));
     const { held, borrowed } = await heldGlobal(home);
+    const configBefore = await nodeFs.readFile(home.paths.configFile, "utf8");
     const write = async (job: ScheduledJobIdV1, outcome: "success" | "handler_refused", reasonCode: string, data: BoundedRedactedJsonV1 = null) => {
       const lock = leases.get(job);
       if (lock === undefined) throw new Error(`no lease for ${job}`);
@@ -303,10 +306,27 @@ describe("runtime records through the real gate", () => {
       // Ruling 39 I1: the gardener refused twice in a row reads as failed twice, not as "other".
       await write("brain-garden", "handler_refused", "garden_agent_unsupported", { message: "refused" });
       await write("brain-garden", "handler_refused", "garden_agent_unsupported", { message: "refused" });
+      // AUD-018: pulse reads garden logs only while brain-garden is scheduled; the shared home schedules nothing.
+      const config = loadConfig(configBefore);
+      const schedule = { cadence: "daily", hour: 3, minute: 0 } as const;
+      await nodeFs.writeFile(
+        home.paths.configFile,
+        serializeConfig({
+          ...config,
+          automation: {
+            ...config.automation,
+            lifecycle: {
+              schemaVersion: 1,
+              schedules: (["brain-reindex", "brain-lint", "doctor", "brain-garden"] as const).map((job) => ({ job, schedule })),
+            },
+          },
+        }),
+      );
       const pulse = await runScheduledPulse(home.context, borrowed);
       expect(pulse).toMatchObject({ outcome: "success", reasonCode: "pulse_failure" });
       expect(await nodeFs.readFile(join(home.paths.stateDir, "pulse.0.md"), "utf8")).toContain("- garden_failed_twice");
     } finally {
+      await nodeFs.writeFile(home.paths.configFile, configBefore);
       await held.release();
       for (const lease of leases.values()) await lease.release();
     }
