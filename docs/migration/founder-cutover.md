@@ -644,8 +644,8 @@ Git and launchd automation stay disabled until Phase 9, whose registry holds `br
 | `repo-audit-weekly`, `git-history-secrets` | refused (D47); the founder runs `gh` or a dedicated history scanner directly if wanted | as wanted |
 | any other label found in step 1 | record it in the founder's own log (never in this repository) before booting it out, with its manual equivalent or "none" | — |
 
-Record each manual run's date in the founder's own log; if runs lapse, the roadmap risk register says
-to revisit the phase order.
+Record each manual run's date in the founder's own log; if runs lapse, the founder revisits the phase order
+D16 fixed (`docs/superpowers/DECISIONS.md`).
 
 **Changes** nothing by itself; each manual run changes what its verb changes.
 
