@@ -845,7 +845,7 @@ function generatedOutputConsistency(
     /**
      * The resolved destination too, so a link named innocently but pointing at
      * the indexes directory is refused on the same terms as a path that spells
-     * it out. `reindex` owns those four artifacts; a proposal that writes one
+     * it out. `reindex` owns those five artifacts; a proposal that writes one
      * makes the index disagree with the vault it indexes.
      */
     const resolves =

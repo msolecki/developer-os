@@ -2852,19 +2852,31 @@ export async function runIngest(
       if (warning !== null) context.io.stderr(`warning: ${warning}`);
     }
     /**
-     * A failed reindex is the run's failure. When captures were also refused, their report
-     * stays the run's answer — it is what tells the user which capture is where — the
-     * reindex failure rides along as a warning, and its exit class still counts.
+     * A failed reindex is the run's failure, and only the index's: every capture's status is
+     * already true on disk. With no refusal, the report says each capture was ingested and
+     * the index alone is stale. With refusals, their report stays the run's answer — it is
+     * what tells the user which capture is where — the reindex failure rides along as a
+     * warning, and its exit class still counts.
      */
     if (reindexFailure !== null) {
-      const unindexed = new IngestRefusal(
-        exitCodeOf(reindexFailure),
-        `the vault index was not rebuilt after this run's notes landed (${reindexFailure instanceof Error ? reindexFailure.message : "an unexpected failure occurred"})`,
-        [],
-        "developer-os brain reindex; every capture already says how far it got",
-      );
-      if (refused.length > 0) context.io.stderr(`warning: ${unindexed.message}; run developer-os brain reindex`);
-      else throw reindexFailure instanceof IngestRefusal ? reindexFailure : unindexed;
+      const detail = `the vault index was not rebuilt after this run's notes landed (${reindexFailure instanceof Error ? reindexFailure.message : "an unexpected failure occurred"})`;
+      if (refused.length > 0) {
+        context.io.stderr(`warning: ${detail}; run developer-os brain reindex`);
+      } else {
+        const report: RunReport = { order, ingested, refused, warnings: selection.warnings };
+        const [, ...captureLines] = reportLines(report);
+        const own = reindexFailure instanceof IngestRefusal ? reindexFailure : null;
+        throw new IngestRefusal(
+          exitCodeOf(reindexFailure),
+          [
+            `ingest ingested all ${String(ingested.length)} capture${ingested.length === 1 ? "" : "s"}, and only the index is stale: ${detail}`,
+            ...captureLines,
+          ].join("\n"),
+          own?.paths ?? [],
+          own?.recovery ?? `developer-os brain reindex; ${INCOMPLETE_TRANSACTION_RECOVERY}`,
+          reportFields(report, vendor?.name ?? null, selection.unreadable),
+        );
+      }
     }
 
     const captures = [...ingested, ...selection.unreadable].sort(compareIds);

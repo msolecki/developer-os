@@ -16,7 +16,7 @@ occurrences: 1
 A reference note is something you look up rather than reason about.
 
 - `developer-os brain reindex` is the only `brain` subcommand that regenerates `content/_indexes/`
-  (the four generated files).
+  (the five generated files).
 - `developer-os brain refactor` and `developer-os brain retire` change notes through a
   reviewed plan; `developer-os ingest` writes the notes a review accepted.
 - `developer-os brain lint` reports what is wrong and exits non-zero on errors.
