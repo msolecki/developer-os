@@ -4,7 +4,7 @@
  * transaction modules reach `node:fs` (Spec 2 §2's capability-absence gate scans this graph).
  */
 export { planSchemaMigrations } from "./update/migration-planning.js";
-export { isChangeableOwnerArtifact, planOwnedFileTree } from "./update/owner.js";
+export { isChangeableOwnerArtifact } from "./update/owner.js";
 export { parseVaultRelativePathText } from "./update/paths.js";
 export { compareUtf8 } from "./lifecycle/canonical-json.js";
 export { parseBundleRelativePath } from "./update/release.js";

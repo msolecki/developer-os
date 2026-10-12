@@ -1,13 +1,11 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
-import { compareUtf8, isChangeableOwnerArtifact, parseBundleRelativePath, parseLowerHexSha256, parseVaultRelativePathText, planOwnedFileTree } from "@developer-os/core/planner-protocol";
+import { compareUtf8, isChangeableOwnerArtifact, parseBundleRelativePath, parseLowerHexSha256, parseVaultRelativePathText } from "@developer-os/core/planner-protocol";
 import type {
   BundleRelativePathV1,
   OwnerRelativePathV1,
   OwnerTargetEntryV1,
-  OwnerUpdateDraftV1,
-  OwnerUpdateProviderRequestV1,
   OwnerUpdateProviderV1,
   PlannerManifestSnapshotV1,
   PlannerPathTokenV1,
@@ -39,23 +37,6 @@ export function codexTargetEntries(tree: readonly MarketplaceRootArtifact[], bun
     });
 }
 
-/**
- * Codex caches an installed plugin, so any file change requests the one closed registration
- * refresh over the exact Codex partition; the current provider observes and executes it.
- */
-export function planCodexOwner(request: OwnerUpdateProviderRequestV1): OwnerUpdateDraftV1 {
-  if (request.owner !== "codex") throw new Error("the Codex provider plans only the codex owner");
-  for (const entry of request.target) marketplaceRelative(entry.path);
-  const currentArtifacts = request.artifacts.map((artifact) => artifact.token);
-  const proposedOperations = planOwnedFileTree(request);
-  return {
-    owner: "codex",
-    currentArtifacts,
-    proposedOperations,
-    externalEffects: proposedOperations.length === 0 ? [] : [{ kind: "codex_registration_refresh", owner: "codex", artifactTokens: currentArtifacts }],
-  };
-}
-
 /** Every replaceable Codex file, so a replace or remove carries the bytes its inverse needs. */
 function codexContentDependencies(snapshot: PlannerManifestSnapshotV1): readonly PlannerPathTokenV1[] {
   return snapshot.artifacts.filter((row) => row.owner === "codex" && isChangeableOwnerArtifact(row)).map((row) => row.token);
@@ -64,5 +45,4 @@ function codexContentDependencies(snapshot: PlannerManifestSnapshotV1): readonly
 export const codexOwnerUpdateProvider: OwnerUpdateProviderV1 = Object.freeze({
   owner: "codex",
   contentDependencies: codexContentDependencies,
-  plan: planCodexOwner,
 });
