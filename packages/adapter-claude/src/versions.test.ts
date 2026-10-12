@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { compareVersions } from "@developer-os/core";
 import { CLAUDE_CAPABILITY_KEYS, CLAUDE_MINIMUM_VERSION, tablePermits } from "./versions.js";
 
 /**
@@ -7,7 +6,7 @@ import { CLAUDE_CAPABILITY_KEYS, CLAUDE_MINIMUM_VERSION, tablePermits } from "./
  * `packages/core/src/versions/index.ts` (Task 3.5) — see `packages/core/src/versions/index.test.ts`
  * for that battery. What remains here is specific to Claude's own table: that
  * every documented capability key is actually reachable through it, and that
- * the minimum stays below the version gates Claude architecture former §5.2 deliberately avoids.
+ * the minimum is D102's hook-observation floor.
  */
 describe("tablePermits", () => {
   it("covers every capability key, so no key is silently unreachable", () => {
@@ -20,13 +19,17 @@ describe("tablePermits", () => {
   });
 
   /**
-   * Claude architecture former §5.2 keeps the floor low on purpose by depending on none of the
-   * documented version gates — `displayName` 2.1.143, `defaultEnabled` 2.1.154,
-   * `metadata` 2.1.222. If the floor ever rises above the oldest of those, a
-   * dependency crept in and Claude architecture former §14.1 needs revisiting.
+   * D102 (6): the floor is the lowest version the installed hooks were
+   * observed firing on (`hooks.md` §1 question 10), so every key is refused
+   * one patch below it and permitted at it.
    */
-  it("keeps the minimum below every documented gate we deliberately avoid", () => {
-    expect(compareVersions(CLAUDE_MINIMUM_VERSION, "2.1.143")).toBeLessThan(0);
+  it("refuses every key below the 2.1.280 floor and accepts every key at it (D102)", () => {
+    expect(CLAUDE_MINIMUM_VERSION).toBe("2.1.280");
+    for (const key of CLAUDE_CAPABILITY_KEYS) {
+      expect(tablePermits(key, "2.1.279"), key).toBe(false);
+      expect(tablePermits(key, "2.1.142"), key).toBe(false);
+      expect(tablePermits(key, "2.1.280"), key).toBe(true);
+    }
   });
 
   /**

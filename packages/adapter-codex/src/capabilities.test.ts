@@ -8,24 +8,24 @@ const observed = new Map<string, ProbeObservation>([["skills", "observed"]]);
 
 describe("resolveCapabilities", () => {
   it("earns yes only where the table permits and a probe observed", () => {
-    expect(resolveCapabilities("0.147.0", observed).skills).toBe("yes");
+    expect(resolveCapabilities("0.155.1", observed).skills).toBe("yes");
   });
 
   it("reports yes for exactly the capabilities that were observed", () => {
-    const granted = Object.entries(resolveCapabilities("0.147.0", observed))
+    const granted = Object.entries(resolveCapabilities("0.155.1", observed))
       .filter(([, state]) => state === "yes")
       .map(([key]) => key);
     expect(granted).toEqual(["skills"]);
   });
 
   it("degrades an unmentioned key to unknown, never toward yes", () => {
-    expect(resolveCapabilities("0.147.0", observed).non_interactive_run).toBe("unknown");
+    expect(resolveCapabilities("0.155.1", observed).non_interactive_run).toBe("unknown");
   });
 
   /** `hooks.md` §3.6: without a Codex firing record the hook keys are `unknown`, never `no`. */
   it("reports the hook keys as unknown without a firing observation", () => {
-    expect(resolveCapabilities("0.147.0", observed).plugin_hooks).toBe("unknown");
-    expect(resolveCapabilities("0.147.0", observed).session_start_injection).toBe("unknown");
+    expect(resolveCapabilities("0.155.1", observed).plugin_hooks).toBe("unknown");
+    expect(resolveCapabilities("0.155.1", observed).session_start_injection).toBe("unknown");
   });
 
   /**
@@ -35,12 +35,12 @@ describe("resolveCapabilities", () => {
    */
   it("reports no when the probe asked and did not observe, at any version", () => {
     const absent = new Map<string, ProbeObservation>([["skills", "absent"]]);
-    expect(resolveCapabilities("0.147.0", absent).skills).toBe("no");
+    expect(resolveCapabilities("0.155.1", absent).skills).toBe("no");
     expect(resolveCapabilities("0.1.0", absent).skills).toBe("no");
   });
 
   it("never reports no for a key the probe never mentioned", () => {
-    expect(Object.values(resolveCapabilities("0.147.0", new Map()))).not.toContain("no");
+    expect(Object.values(resolveCapabilities("0.155.1", new Map()))).not.toContain("no");
   });
 
   it("never reports either hook key as no, because a firing record cannot witness absence", () => {
@@ -52,7 +52,7 @@ describe("resolveCapabilities", () => {
 
   it("reports unknown, never no, for a probe that could not run", () => {
     const resolved = resolveCapabilities(
-      "0.147.0",
+      "0.155.1",
       new Map<string, ProbeObservation>([["skills", "unavailable"]]),
     );
     expect(resolved.skills).toBe("unknown");
@@ -63,14 +63,14 @@ describe("resolveCapabilities", () => {
   });
 
   it("reports every key, so doctor prints a full matrix", () => {
-    expect(Object.keys(resolveCapabilities("0.147.0", observed))).toHaveLength(
+    expect(Object.keys(resolveCapabilities("0.155.1", observed))).toHaveLength(
       CODEX_CAPABILITY_KEYS.length,
     );
   });
 
   it("ignores a key the probe invented", () => {
     const resolved = resolveCapabilities(
-      "0.147.0",
+      "0.155.1",
       new Map<string, ProbeObservation>([["skills", "observed"], ["invented", "observed"]]),
     );
     expect(Object.keys(resolved)).not.toContain("invented");
@@ -83,7 +83,7 @@ describe("resolveCapabilities", () => {
    */
   it("returns not-used for those keys even if the probe reported observed", () => {
     expect(
-      resolveCapabilities("0.147.0", new Map<string, ProbeObservation>([["session_end_capture", "observed"]]))
+      resolveCapabilities("0.155.1", new Map<string, ProbeObservation>([["session_end_capture", "observed"]]))
         .session_end_capture,
     ).toBe("not-used");
   });
@@ -95,9 +95,9 @@ describe("resolveCapabilities", () => {
       expect(resolveCapabilities("0.155.1", fired)[key]).toBe("yes");
       expect(resolveCapabilities("0.155.0", fired)[key]).toBe("unknown");
       expect(resolveCapabilities("0.1.0", fired)[key]).toBe("unknown");
-      expect(resolveCapabilities("0.147.0", new Map<string, ProbeObservation>([[key, "unavailable"]]))[key]).toBe("unknown");
-      expect(resolveCapabilities("0.147.0", fired).session_end_capture).toBe("not-used");
-      expect(resolveCapabilities("0.147.0", fired).pre_compact_backup).toBe("not-used");
+      expect(resolveCapabilities("0.155.1", new Map<string, ProbeObservation>([[key, "unavailable"]]))[key]).toBe("unknown");
+      expect(resolveCapabilities("0.155.1", fired).session_end_capture).toBe("not-used");
+      expect(resolveCapabilities("0.155.1", fired).pre_compact_backup).toBe("not-used");
     },
   );
 

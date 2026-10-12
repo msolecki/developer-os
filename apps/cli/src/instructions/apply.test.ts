@@ -208,6 +208,9 @@ describe("applyInstructions: refusals before any mutation", () => {
       { label: "apply-absent", installed: ["claude"], versions: { [CLAUDE]: "2.1.280" }, selection: ["claude", "codex"] },
       { label: "apply-unreadable", installed: ["claude", "codex"], versions: { [CLAUDE]: "2.1.280", [CODEX]: null }, selection: ["claude", "codex"] },
       { label: "apply-below-floor", installed: ["claude"], versions: { [CLAUDE]: "1.0.0" }, selection: ["claude"] },
+      // D102 (6): one patch below each hook-observation floor is refused.
+      { label: "apply-claude-below-floor", installed: ["claude"], versions: { [CLAUDE]: "2.1.279" }, selection: ["claude"] },
+      { label: "apply-codex-below-floor", installed: ["codex"], versions: { [CODEX]: "0.155.0" }, selection: ["codex"] },
     ];
     expect(cases.length).toBeGreaterThan(0);
     for (const entry of cases) {
@@ -242,6 +245,21 @@ describe("applyInstructions: refusals before any mutation", () => {
     expect(await planted.snapshot()).toStrictEqual(before);
     expect(planted.fixture.stableLockEvents).toStrictEqual([]);
     await vendorHomesUntouched(planted.fixture);
+  });
+
+  it("accepts each vendor at its D102 floor, so the refusal is the next gate's, not adapter_unavailable", async () => {
+    const cases = [
+      { label: "apply-claude-at-floor", vendor: "claude", executable: CLAUDE, version: "2.1.280" },
+      { label: "apply-codex-at-floor", vendor: "codex", executable: CODEX, version: "0.155.1" },
+    ] as const;
+    for (const entry of cases) {
+      const planted = await plant(entry.label, { installed: [entry.vendor], versions: { [entry.executable]: entry.version } });
+      await refused(
+        applyInstructions(planted.fixture.context, { selection: [entry.vendor], release: null }),
+        "packaged_release_unavailable",
+        EXIT_CODES.capabilityUnavailable,
+      );
+    }
   });
 
   it("refuses release_mismatch, exit 4, when the version or the release identity differs from the installed one", async () => {

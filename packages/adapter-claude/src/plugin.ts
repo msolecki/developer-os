@@ -23,7 +23,8 @@ export const PLUGIN_INSTALL_SEGMENTS: readonly string[] = [
  *
  * Minimal on purpose. `displayName` requires 2.1.143, `defaultEnabled` requires
  * 2.1.154 and an object `metadata` requires 2.1.222; depending on none of them
- * is what keeps the supported floor at `CLAUDE_MINIMUM_VERSION` (Claude architecture former §5.2).
+ * kept the supported floor low (Claude architecture former §5.2). D102 (6) has since raised
+ * `CLAUDE_MINIMUM_VERSION` above all three for the hooks, and the manifest stays minimal anyway.
  */
 function manifest(): RenderedArtifact {
   return {
