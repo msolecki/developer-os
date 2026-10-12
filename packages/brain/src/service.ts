@@ -11,6 +11,8 @@ import type {
   IndexBuildRequest,
   IndexBuildResult,
   IndexDocumentV1,
+  IndexedTerm,
+  IndexManifestV1,
 } from "./indexes/index.js";
 import { lintBuild, lintVault } from "./lint/index.js";
 import type { LintFinding, LintRequest, LintResult } from "./lint/index.js";
@@ -141,15 +143,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Structural validation of an index read off disk, because it is a file in the
  * user's vault that a text editor can reach. Retrieval reads `path`, `title`,
- * `summary`, `stage`, `reviewed`, `tags`, `aliases`, `type`, `topicFolder` and
- * `terms`, so those are what is checked — a half-valid document would otherwise
+ * `summary`, `stage`, `reviewed`, `tags`, `aliases`, `type` and `topicFolder`
+ * from it, so those are what is checked — a half-valid document would otherwise
  * produce matches with `undefined` fields and a `--json` consumer downstream.
+ *
+ * The term tables are not here: they live in `terms.json`, which only `search`
+ * reads (D102, AUD-026). An index written before that split still carries a
+ * `terms` key per note; it is ignored, so session-start inject keeps working on
+ * a vault nobody has reindexed since, and search reports the missing
+ * `terms.json` until one `brain reindex` (`brain.md` §6.14).
  *
  * This is not the full schema: `lint` rebuilds the index from the notes and
  * compares, which is the check that catches a *plausible* but wrong index. This
  * only has to stop a corrupt one being searched.
  */
-function parseIndexDocument(text: string): IndexDocumentV1 | null {
+function parseIndexDocument(text: string): IndexManifestV1 | null {
   let raw: unknown;
   try {
     raw = JSON.parse(text) as unknown;
@@ -178,23 +186,63 @@ function parseIndexDocument(text: string): IndexDocumentV1 | null {
      * Elements, not just containers. `Array.isArray` alone let
      * `tags: [123]` through, and `search` then called `.normalize()` on a
      * number — an unhandled `TypeError` and a stack trace where the whole
-     * point of this function is to return `index-unavailable`. A
-     * `terms` entry with a string `count` was worse: it coerced silently
-     * into the score arithmetic and changed the ranking.
+     * point of this function is to return `index-unavailable`.
      */
     if (!isStringArray(note["tags"]) || !isStringArray(note["aliases"])) {
       return null;
     }
-    const terms = note["terms"];
+  }
+
+  return raw as unknown as IndexManifestV1;
+}
+
+/**
+ * `terms.json` joined onto the index it was built with: the same `generatedAt`,
+ * and one entry per note in the same order with the same path. Anything else —
+ * a terms file from another build, a hand edit, a sync that carried one file
+ * and not the other — is `null`, and search says the index is unreadable rather
+ * than scoring notes against another build's terms. A `count` that is not an
+ * integer is refused too: it coerced silently into the score arithmetic and
+ * changed the ranking.
+ */
+function joinTerms(index: IndexManifestV1, text: string): IndexDocumentV1 | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+  if (!isRecord(raw) || raw["schemaVersion"] !== 1) return null;
+  if (raw["generatedAt"] !== index.generatedAt) return null;
+  const entries = raw["notes"];
+  if (!Array.isArray(entries) || entries.length !== index.notes.length) return null;
+
+  const notes = [];
+  for (const [position, note] of index.notes.entries()) {
+    const entry: unknown = entries[position];
+    if (!isRecord(entry) || entry["path"] !== note.path) return null;
+    const terms = entry["terms"];
     if (!Array.isArray(terms)) return null;
     for (const term of terms as unknown[]) {
       if (!isRecord(term)) return null;
       if (typeof term["term"] !== "string") return null;
       if (!Number.isInteger(term["count"])) return null;
     }
+    notes.push({ ...note, terms: terms as IndexedTerm[] });
   }
+  return { ...index, notes };
+}
 
-  return raw as unknown as IndexDocumentV1;
+function missingArtifact(path: string): BrainIndexUnavailable {
+  return { kind: "index-unavailable", reason: "missing", message: `${path} is missing; run developer-os brain reindex` };
+}
+
+function unreadableArtifact(path: string): BrainIndexUnavailable {
+  return {
+    kind: "index-unavailable",
+    reason: "unreadable",
+    message: `${path} is not a readable index; run developer-os brain reindex`,
+  };
 }
 
 export class BrainService {
@@ -260,8 +308,8 @@ export class BrainService {
   }
 
   /**
-   * Index-first, per design spec §13.5: this reads one file and never opens a
-   * note. Rebuilding here would make every search cost a full vault walk and
+   * Index-first, per design spec §13.5: this reads the index and its term
+   * tables and never opens a note. Rebuilding here would make every search cost a full vault walk and
    * would quietly hide the fact that the index was stale.
    */
   /**
@@ -271,25 +319,16 @@ export class BrainService {
    * 9 needs a `try`/`catch` mapping it to the invalid-input exit code.
    */
   async search(query: RetrievalQuery): Promise<BrainSearchOutcome> {
-    const path = artifactPaths(this.deps.config).index;
-    const text = await this.readArtifact(path);
-    if (text === null) {
-      return {
-        kind: "index-unavailable",
-        reason: "missing",
-        message: `${path} is missing; run developer-os brain reindex`,
-      };
-    }
-
-    const index = parseIndexDocument(text);
-    if (index === null) {
-      return {
-        kind: "index-unavailable",
-        reason: "unreadable",
-        message: `${path} is not a readable index; run developer-os brain reindex`,
-      };
-    }
-
+    const paths = artifactPaths(this.deps.config);
+    const indexText = await this.readArtifact(paths.index);
+    if (indexText === null) return missingArtifact(paths.index);
+    const manifest = parseIndexDocument(indexText);
+    if (manifest === null) return unreadableArtifact(paths.index);
+    /** Search alone reads the term tables (D102, AUD-026). */
+    const termsText = await this.readArtifact(paths.terms);
+    if (termsText === null) return missingArtifact(paths.terms);
+    const index = joinTerms(manifest, termsText);
+    if (index === null) return unreadableArtifact(paths.terms);
     return search(index, query);
   }
 

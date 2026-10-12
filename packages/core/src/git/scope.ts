@@ -81,9 +81,14 @@ export const GIT_SCOPE_BOUNDS = Object.freeze({
   aggregateMaxBytes: 1_073_741_824,
 });
 
-/** Spec §4.3's four index artifacts, the only non-note members of the universe. */
+/**
+ * The Brain's index artifacts (`brain.md` §6.3), the only non-note members of the universe. Spec
+ * §4.3 named four; D102 (NEW-254) split the term tables out of `index.json` into `terms.json`,
+ * which syncs with it so a pulled vault's search and drift check see one build.
+ */
 export const GIT_SCOPE_INDEX_ARTIFACTS: readonly string[] = Object.freeze([
   "index.json",
+  "terms.json",
   "graph.json",
   "vault-map.md",
   "catalog.md",

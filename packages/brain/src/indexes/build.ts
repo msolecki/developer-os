@@ -76,6 +76,30 @@ export interface IndexDocumentV1 {
   readonly tags: readonly IndexedTag[];
 }
 
+/**
+ * What `index.json` persists: every note field but the term table (D102, AUD-026). The
+ * term tables go to `terms.json`, which only search reads, so session-start inject,
+ * pulse and ingest parse a file without them. The in-memory `IndexDocumentV1` keeps
+ * `terms` on each note; only serialization splits them.
+ */
+export type IndexManifestNote = Omit<IndexedNote, "terms">;
+
+export interface IndexManifestV1 {
+  readonly schemaVersion: 1;
+  readonly generatedAt: string;
+  readonly contentRoot: string;
+  readonly notes: readonly IndexManifestNote[];
+  readonly folders: readonly IndexedFolder[];
+  readonly tags: readonly IndexedTag[];
+}
+
+/** One entry per `index.json` note, in the same order, with the same path. */
+export interface TermsDocumentV1 {
+  readonly schemaVersion: 1;
+  readonly generatedAt: string;
+  readonly notes: readonly { readonly path: string; readonly terms: readonly IndexedTerm[] }[];
+}
+
 export interface GraphNode {
   readonly path: string;
   readonly title: string;

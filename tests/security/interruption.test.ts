@@ -110,8 +110,9 @@ type Target = keyof typeof TARGETS;
  *   in progress therefore cannot prove that no mutation landed; preserving
  *   `staging` is the deterministic recoverable state that never promises an
  *   unsafe automatic retry.
- * - **`ingest-reindex`**: the notes landed before this transaction began, so
- *   every phase leaves `staging`.
+ * - **`ingest-reindex`**: once per run, after the last capture's `ingested`
+ *   write (AUD-089, D102), so every phase leaves `ingested`; an interrupted
+ *   reindex leaves the index behind its notes, not the capture.
  * - **`ingest-ingested`**: the same, until this transaction's own write lands —
  *   from `applied` on the capture says `ingested`, which is the truth: the work
  *   finished and only the exit code says otherwise.
@@ -126,7 +127,7 @@ function expectedStatus(target: Target, phase: TransactionPhase): string {
     case "the ingest apply":
       return "staging";
     case "the ingest reindex":
-      return "staging";
+      return "ingested";
     case "the ingest ingested write":
       return written ? "ingested" : "staging";
     default:

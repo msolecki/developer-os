@@ -155,8 +155,8 @@ async function runReindex(
   /**
    * Every step of the write — the directory, the ownership validation, the
    * transaction, the manifest record — lives in `reindex.ts`, because
-   * `developer-os ingest` performs the identical sequence as the third of its
-   * four transactions. What stays here is what differs: this command's
+   * `developer-os ingest` performs the identical sequence once per run, after its
+   * last capture. What stays here is what differs: this command's
    * transaction kind and its own refusal classes — one for an internal
    * invariant failure, one for the index directory resolving outside the
    * content root, which is a security refusal and must carry recovery text in

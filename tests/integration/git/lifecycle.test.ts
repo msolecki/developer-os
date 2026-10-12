@@ -198,7 +198,7 @@ const GATE_COVERAGE: readonly GateCoverageV1[] = [
   {
     gate: "scoped staging",
     tests: [
-      ["packages/core/src/git/scope.test.ts", "adds the four index artifacts and orders every path by unsigned UTF-8 bytes"],
+      ["packages/core/src/git/scope.test.ts", "adds the five index artifacts and orders every path by unsigned UTF-8 bytes"],
       ["packages/core/src/git/planner.test.ts", "plans only the guarded Brain scope in unsigned UTF-8 order"],
       ["packages/core/src/git/scope.test.ts", "admits the artifacts and the injected predicate only"],
     ],

@@ -67,16 +67,16 @@ const BELL = "\u0007";
 const OVERRIDE = "\u202E";
 
 /**
- * The four transactions one capture produces, in the order the four-transaction
- * ladder fixes them in. Transcribed rather than imported: the point of the
- * assertion is that the command's ladder matches a list written down
- * independently of it.
+ * The transactions a one-capture run produces, in the order the ladder fixes
+ * them in: three for the capture, then the run's one reindex (AUD-089).
+ * Transcribed rather than imported: the point of the assertion is that the
+ * command's ladder matches a list written down independently of it.
  */
 const LADDER = [
   "ingest-stage",
   "ingest-apply",
-  "ingest-reindex",
   "ingest-ingested",
+  "ingest-reindex",
 ] as const;
 
 interface VendorCall {
@@ -591,11 +591,12 @@ describe("runIngest, the status ladder", () => {
 
     expect(result.ok).toBe(false);
     expect(await fixture.statusOf(seeded.id)).toBe("staging");
+    /** The run's one reindex still follows, because the note landed (AUD-089). */
     expect(await ladderOf(fixture)).toStrictEqual([
       "ingest-stage",
       "ingest-apply",
-      "ingest-reindex",
       "ingest-ingested",
+      "ingest-reindex",
     ]);
     /** The note it did write is still there, which is why `accepted` is wrong. */
     expect(await vaultNotes(fixture)).toContain("DEV/stuck.md");
@@ -1013,6 +1014,32 @@ describe("runIngest, the status ladder", () => {
       "utf8",
     );
     expect(index).toContain("DEV/findable.md");
+  });
+
+  it("reindexes once per run, after the last capture, however many landed (AUD-089, D102)", async () => {
+    const fixture = await installedFixture("ingest-reindexes-once");
+    const seeded = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+      await fixture.seedAccepted("the third observation"),
+    ];
+    fixture.reply((call) => {
+      const index = seeded.findIndex((capture) => call.args.join("\n").includes(`Capture ${capture.id}`));
+      return oneNote(seeded[index]?.id ?? "", `DEV/once-${String(index)}.md`, `Once ${String(index)}`);
+    });
+
+    const result = await fixture.run();
+
+    expect(dataOf(result).applied).toHaveLength(3);
+    const ladder = await ladderOf(fixture);
+    expect(ladder.filter((kind) => kind === "ingest-reindex")).toHaveLength(1);
+    expect(ladder.at(-1)).toBe("ingest-reindex");
+    expect(ladder.filter((kind) => kind === "ingest-ingested")).toHaveLength(3);
+    const indexes = join(fixture.content, "_indexes");
+    for (const name of ["index.json", "terms.json"]) {
+      const text = await nodeFs.readFile(join(indexes, name), "utf8");
+      for (const index of [0, 1, 2]) expect(text).toContain(`DEV/once-${String(index)}.md`);
+    }
   });
 
   it("processes captures in captureId order when no refusal is on record, so two runs do the same work in the same sequence", async () => {

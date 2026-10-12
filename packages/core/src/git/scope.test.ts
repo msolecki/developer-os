@@ -127,7 +127,7 @@ async function reason(promise: Promise<unknown>): Promise<GitPlanningRefusalReas
 const paths = (values: readonly string[]) => values.map(parseVaultRelativePathText);
 
 describe("enumerateGitScopePaths", () => {
-  it("adds the four index artifacts and orders every path by unsigned UTF-8 bytes", async () => {
+  it("adds the five index artifacts and orders every path by unsigned UTF-8 bytes", async () => {
     const notes = ["content/DEV/é.md", "content/DEV/a.md", "content/DEV/Z.md", "content/DEV/b c.md"];
     const enumerated: readonly string[] = await enumerateGitScopePaths(enumerator(notes), scope());
     expect(enumerated.length).toBeGreaterThan(0);
@@ -138,6 +138,7 @@ describe("enumerateGitScopePaths", () => {
     expect(enumerated.indexOf("content/DEV/a.md")).toBeLessThan(enumerated.indexOf("content/DEV/é.md"));
     expect(gitScopeIndexArtifactPaths(scope())).toEqual([
       "content/_indexes/index.json",
+      "content/_indexes/terms.json",
       "content/_indexes/graph.json",
       "content/_indexes/vault-map.md",
       "content/_indexes/catalog.md",

@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { DirectoryEntry, DirectoryReader } from "./discovery/index.js";
-import { artifactPaths } from "./indexes/index.js";
+import { artifactPaths, buildIndex } from "./indexes/index.js";
+import { search } from "./retrieval/index.js";
 import { DEFAULT_BRAIN_CONFIG } from "./schema/config.js";
 import { BrainService } from "./service.js";
 import type { BrainServiceDependencies } from "./service.js";
@@ -38,7 +39,7 @@ interface Harness {
 
 /**
  * An in-memory vault. `files` is keyed by vault-relative path, so a test can
- * seed the four artifacts exactly as a reindex would have written them.
+ * seed the five artifacts exactly as a reindex would have written them.
  */
 function harness(files: Record<string, string>): Harness {
   const reads: string[] = [];
@@ -94,13 +95,13 @@ const VAULT = {
 };
 
 describe("BrainService.reindex", () => {
-  it("returns the four artifacts and writes nothing", async () => {
+  it("returns the five artifacts and writes nothing", async () => {
     const { deps } = harness(VAULT);
     const service = new BrainService(deps);
     const artifacts = await service.reindex();
 
     expect(Object.keys(artifacts.files).sort()).toEqual(
-      [PATHS.catalog, PATHS.graph, PATHS.index, PATHS.vaultMap].sort(),
+      [PATHS.catalog, PATHS.graph, PATHS.index, PATHS.terms, PATHS.vaultMap].sort(),
     );
     expect(artifacts.build.index.notes).toHaveLength(2);
   });
@@ -141,8 +142,20 @@ describe("BrainService.reindex", () => {
       "content/_idx/catalog.md",
       "content/_idx/graph.json",
       "content/_idx/index.json",
+      "content/_idx/terms.json",
       "content/_idx/vault-map.md",
     ]);
+  });
+
+  it("keeps the term tables out of index.json and in terms.json alone (D102, AUD-026)", async () => {
+    const { files, build } = await new BrainService(harness(VAULT).deps).reindex();
+    const index = JSON.parse(files[PATHS.index] as string) as { notes: Record<string, unknown>[] };
+    expect(index.notes.map((entry) => "terms" in entry)).toEqual([false, false]);
+    expect(JSON.parse(files[PATHS.terms] as string)).toStrictEqual({
+      schemaVersion: 1,
+      generatedAt: NOW.toISOString(),
+      notes: build.index.notes.map((entry) => ({ path: entry.path, terms: entry.terms })),
+    });
   });
 
   it("takes its timestamp from the injected clock only", async () => {
@@ -167,7 +180,7 @@ describe("BrainService.lint", () => {
     const result = await new BrainService(deps).lint();
     expect(
       result.findings.filter((f) => f.class === "index-drift"),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
     expect(result.errorCount).toBeGreaterThan(0);
   });
 
@@ -188,6 +201,13 @@ describe("BrainService.lint", () => {
   });
 });
 
+const HEAD = '"schemaVersion":1,"contentRoot":"content","generatedAt":"2026-01-01T00:00:00.000Z"';
+
+/** A `terms.json` for the one-note index the corruption cases use, with `table` as its terms. */
+function terms(table: string): string {
+  return `{"schemaVersion":1,"generatedAt":"2026-01-01T00:00:00.000Z","notes":[{"path":"content/DEV/a.md","terms":${table}}]}`;
+}
+
 describe("BrainService.search", () => {
   it("reads the index from disk and never rebuilds it", async () => {
     const { deps } = harness(VAULT);
@@ -204,7 +224,46 @@ describe("BrainService.search", () => {
      * Index-first, per design spec §13.5: the notes themselves are never
      * opened, so a search cannot be slower than reading one file.
      */
-    expect(seeded.reads).toEqual([`/vault/${PATHS.index}`]);
+    expect(seeded.reads).toEqual([`/vault/${PATHS.index}`, `/vault/${PATHS.terms}`]);
+  });
+
+  it("returns exactly what retrieval returns over the in-memory build", async () => {
+    /**
+     * The split must not move a result (D102): search over the two files on disk equals
+     * `search` over the build that carries its terms in memory, for every query shape.
+     */
+    const vault = {
+      ...VAULT,
+      "content/DEV/c.md": note({ title: "Cache eviction", tags: "[dev, cache]", aliases: "[lru]" }, "caching caching eviction policy\n"),
+      "content/INFRA/d.md": note({ title: "Backups", type: "reference-note", tags: "[infra]" }, "restore drills caching\n"),
+    };
+    const { deps } = harness(vault);
+    const fresh = await new BrainService(deps).reindex();
+    const build = await buildIndex({ ...deps, now: () => NOW.toISOString() });
+    const seeded = harness({ ...vault, ...fresh.files });
+    for (const query of [
+      { text: "caching", maxCandidates: 10 },
+      { text: "cache eviction", maxCandidates: 1 },
+      { text: "lru", maxCandidates: 10 },
+      { text: "backups", filters: { types: ["reference-note"] }, maxCandidates: 10 },
+      { text: "caching", filters: { tags: ["dev"], folders: ["DEV"] }, maxCandidates: 10 },
+      { text: "zzzz", maxCandidates: 10 },
+    ]) {
+      expect(await new BrainService(seeded.deps).search(query)).toStrictEqual(search(build.index, query));
+    }
+  });
+
+  it("asks for a reindex when index.json predates terms.json, and does not throw", async () => {
+    /** The pre-D102 shape: the term tables inline, no terms.json beside it. */
+    const { files, build } = await new BrainService(harness(VAULT).deps).reindex();
+    const old = `${JSON.stringify(build.index, null, 2)}\n`;
+    const seeded = harness({ ...VAULT, [PATHS.index]: old, [PATHS.vaultMap]: files[PATHS.vaultMap] as string });
+    const result = await new BrainService(seeded.deps).search({ text: "caching", maxCandidates: 10 });
+    expect(result).toStrictEqual({
+      kind: "index-unavailable",
+      reason: "missing",
+      message: `${PATHS.terms} is missing; run developer-os brain reindex`,
+    });
   });
 
   it("says the index is unavailable rather than silently finding nothing", async () => {
@@ -233,9 +292,9 @@ describe("BrainService.search", () => {
      * once omitted `contentRoot` and were rejected three lines earlier, so
      * deleting the whole `notes` validation left the test green.
      */
-    const head = '"schemaVersion":1,"contentRoot":"content","generatedAt":"2026-01-01T00:00:00.000Z"';
+    const head = HEAD;
     const note = (extra: string) =>
-      `{${head},"notes":[{"path":"content/DEV/a.md","title":"t","summary":"s","stage":"established","type":"knowledge-note","topicFolder":"DEV","reviewed":null,"tags":[],"aliases":[],"terms":[],${extra}}]}`;
+      `{${head},"notes":[{"path":"content/DEV/a.md","title":"t","summary":"s","stage":"established","type":"knowledge-note","topicFolder":"DEV","reviewed":null,"tags":[],"aliases":[],${extra}}]}`;
 
     for (const corrupt of [
       "{ not json",
@@ -246,20 +305,42 @@ describe("BrainService.search", () => {
       /** Containers of the right type holding the wrong elements. */
       note('"tags":[123]'),
       note('"aliases":[{}]'),
-      note('"terms":[null]'),
-      note('"terms":["nope"]'),
-      note('"terms":[{"term":"x","count":"9"}]'),
-      /** A record with the wrong field type: `isRecord` alone waves it past. */
-      note('"terms":[{"term":123,"count":1}]'),
       note('"stage":"totally-not-a-stage"'),
     ]) {
-      const seeded = harness({ ...VAULT, [PATHS.index]: corrupt });
+      const seeded = harness({ ...VAULT, [PATHS.index]: corrupt, [PATHS.terms]: terms("[]") });
       const result = await new BrainService(seeded.deps).search({
         text: "caching",
         maxCandidates: 10,
       });
-      expect(result.kind).toBe("index-unavailable");
+      expect(result).toMatchObject({ kind: "index-unavailable", reason: "unreadable" });
+      if (result.kind === "index-unavailable") expect(result.message).toContain(PATHS.index);
     }
+  });
+
+  it("refuses term tables that are corrupt or from another build", async () => {
+    const index = `{${HEAD},"notes":[{"path":"content/DEV/a.md","title":"t","summary":"s","stage":"established","type":"knowledge-note","topicFolder":"DEV","reviewed":null,"tags":[],"aliases":[]}]}`;
+    for (const corrupt of [
+      "{ not json",
+      '{"schemaVersion":2,"generatedAt":"2026-01-01T00:00:00.000Z","notes":[]}',
+      /** Another build's terms: a different clock, a different note, a different count. */
+      '{"schemaVersion":1,"generatedAt":"2026-01-02T00:00:00.000Z","notes":[{"path":"content/DEV/a.md","terms":[]}]}',
+      terms("[]").replace("content/DEV/a.md", "content/DEV/b.md"),
+      '{"schemaVersion":1,"generatedAt":"2026-01-01T00:00:00.000Z","notes":[]}',
+      terms("null"),
+      terms("[null]"),
+      terms('["nope"]'),
+      terms('[{"term":"x","count":"9"}]'),
+      /** A record with the wrong field type: `isRecord` alone waves it past. */
+      terms('[{"term":123,"count":1}]'),
+    ]) {
+      const seeded = harness({ ...VAULT, [PATHS.index]: index, [PATHS.terms]: corrupt });
+      const result = await new BrainService(seeded.deps).search({ text: "t", maxCandidates: 10 });
+      expect(result).toMatchObject({ kind: "index-unavailable", reason: "unreadable" });
+      if (result.kind === "index-unavailable") expect(result.message).toContain(PATHS.terms);
+    }
+    /** The same index with well-formed terms searches, so each case above failed on its own defect. */
+    const valid = harness({ ...VAULT, [PATHS.index]: index, [PATHS.terms]: terms('[{"term":"x","count":9}]') });
+    expect((await new BrainService(valid.deps).search({ text: "t", maxCandidates: 10 })).kind).toBe("results");
   });
 
   it("returns no-candidates for a genuine miss against a present index", async () => {
@@ -417,6 +498,23 @@ describe("BrainService.sessionContext", () => {
       title: "developer-os",
       text: PROJECT_VAULT["content/PROJECTS/os.md"],
     });
+  });
+
+  it("never reads terms.json, which only search loads (D102, AUD-026)", async () => {
+    const vault = await seeded(PROJECT_VAULT);
+    const context = await new BrainService(vault.deps).sessionContext("developer-os");
+    expect(context.projectNote?.title).toBe("developer-os");
+    expect(vault.reads).not.toContain(`/vault/${PATHS.terms}`);
+    expect(vault.reads).toContain(`/vault/${PATHS.index}`);
+  });
+
+  it("still injects from an index written before terms.json existed", async () => {
+    const fresh = await new BrainService(harness(PROJECT_VAULT).deps).reindex();
+    const old = `${JSON.stringify(fresh.build.index, null, 2)}\n`;
+    const vault = harness({ ...PROJECT_VAULT, [PATHS.index]: old, [PATHS.vaultMap]: fresh.files[PATHS.vaultMap] as string });
+    const context = await new BrainService(vault.deps).sessionContext("developer-os");
+    expect(context.projectNote?.title).toBe("developer-os");
+    expect(context.vaultMap).toBe(fresh.files[PATHS.vaultMap]);
   });
 
   it("matches a project note by alias", async () => {
