@@ -9,8 +9,6 @@ import {
 import type { WorkflowContractV1 } from "./contract.js";
 import { sourceMarker } from "./drift.js";
 import type { RenderedArtifact } from "./drift.js";
-import { applyOverlay } from "./overlay.js";
-import type { WorkflowOverlayV1 } from "./overlay.js";
 import { lookupVerb } from "./vocabulary.js";
 
 export const SHARED_WORKFLOW_ID = "shared";
@@ -152,8 +150,7 @@ export function assertUsablePreamble(shared: WorkflowContractV1): void {
  *
  * Claude architecture former §7.1 and Codex architecture former §6.1. `shared` carries the entire
  * prompt-injection defence, and
- * `WorkflowContractV1` has no composition field — `WorkflowOverlayV1.extends`
- * pins an overlay to its base, which is a different relation — so nothing in
+ * `WorkflowContractV1` has no composition field, so nothing in
  * the contract delivers that preamble to the other five workflows. The
  * renderer does.
  *
@@ -166,30 +163,12 @@ export function assertUsablePreamble(shared: WorkflowContractV1): void {
  * behaviour: it comes from one contract and renders identically for every
  * vendor. What stays with each adapter is its frontmatter fields, its artifact
  * path and its plugin manifest.
- *
- * The overlay is **applied**, not discarded. It used to be `void overlay`, so a
- * caller who passed one lost it silently and no test failed — while workflow architecture §4 says
- * rendering consumes a contract plus its optional vendor overlay. `applyOverlay` is
- * the compiler's own merge and the only thing that knows an overlay is
- * presentation-only; re-implementing the rule here is how the two come to
- * disagree. A refused overlay throws, because rendering the base contract
- * instead would silently produce an artifact the caller did not ask for.
- *
- * `OverlayOutcome.lifecycle` is deliberately unused: DOS-P4 emits no hook
- * artifact at all (both adapter architecture notes §5), so there is nothing for a lifecycle
- * binding to bind to. Shipped workflows are manual-only; a future non-manual trigger belongs to
- * DOS-P11 and must be observed firing.
+
  */
 export function renderSkillBody(
-  contract: WorkflowContractV1,
-  overlay: WorkflowOverlayV1 | null,
+  rendered: WorkflowContractV1,
   options: SkillBodyOptions,
 ): readonly string[] {
-  assertRenderableContract(contract);
-  const rendered = applied(contract, overlay);
-  // Again, on the object the marker is actually built from. `applyOverlay`
-  // cannot move `id` or `version` today; the assertion is local to the value
-  // it protects rather than to the one that preceded it.
   assertRenderableContract(rendered);
 
   /**
@@ -231,19 +210,9 @@ function yamlScalar(value: string): string {
   return JSON.stringify(screenAndCap(value, SKILL_FIELD_CAP));
 }
 
-/**
- * The whole `SKILL.md`, identical for every vendor: frontmatter, body and path.
- *
- * The frontmatter is built from the contract **before** the overlay and the
- * body from the contract after it, which is safe by construction rather than
- * by luck: `workflowOverlaySchema` is `.strict()` with exactly `extends`,
- * `steps`, `lifecycle` and `notes`, and a `steps` value is `{ prose }` alone,
- * so an overlay cannot reach `id`, `version` or `description` — the only
- * fields read here. That schema gaining a field is what would invalidate it.
- */
+/** The whole `SKILL.md`, identical for every vendor: frontmatter, body and path. */
 export function renderSkillFile(
   contract: WorkflowContractV1,
-  overlay: WorkflowOverlayV1 | null,
   options: SkillBodyOptions,
 ): RenderedArtifact {
   // `id` reaches the artifact path built here, so it is refused before it is used.
@@ -254,36 +223,9 @@ export function renderSkillFile(
     `description: ${yamlScalar(contract.description)}`,
     "---",
     "",
-    ...renderSkillBody(contract, overlay, options),
+    ...renderSkillBody(contract, options),
   ];
   return { path: `skills/developer-os-${contract.id}/SKILL.md`, contents: `${lines.join("\n")}\n` };
-}
-
-function applied(
-  contract: WorkflowContractV1,
-  overlay: WorkflowOverlayV1 | null,
-): WorkflowContractV1 {
-  if (overlay === null) return contract;
-  /**
-   * An overlay on `shared` is refused rather than applied. The preamble has
-   * one reviewable home and is concatenated into five other artifacts from
-   * the injected dependency, which no overlay reaches — so an overlaid
-   * `shared` skill would state one defence while the five copies stated
-   * another. Second review, 2026-08-11.
-   */
-  if (contract.id === SHARED_WORKFLOW_ID) {
-    throw new Error(
-      "the overlay was refused: the shared workflow carries the prompt-injection defence concatenated into every other artifact, and an overlay would make the copies disagree",
-    );
-  }
-  const outcome = applyOverlay(contract, overlay);
-  if (!outcome.ok) {
-    // Screened: `applyOverlay` screens a step id but leaves `extends`
-    // unscreened, because its schema constrains it — and this seam is typed
-    // rather than parsed, so nothing here has run that schema.
-    throw new Error(`the overlay was refused: ${screen(outcome.reason)}`);
-  }
-  return outcome.contract;
 }
 
 function preamble(

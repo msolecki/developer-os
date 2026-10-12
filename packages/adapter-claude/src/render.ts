@@ -2,7 +2,6 @@ import { assertUsablePreamble, renderSkillFile } from "@developer-os/workflow-sc
 import type {
   RenderedArtifact,
   WorkflowContractV1,
-  WorkflowOverlayV1,
   WorkflowRenderer,
 } from "@developer-os/workflow-schema";
 
@@ -40,8 +39,7 @@ export class ClaudeRenderer implements WorkflowRenderer {
 
   render(
     contract: WorkflowContractV1,
-    overlay: WorkflowOverlayV1 | null,
   ): readonly RenderedArtifact[] {
-    return [renderSkillFile(contract, overlay, { shared: this.#shared })];
+    return [renderSkillFile(contract, { shared: this.#shared })];
   }
 }

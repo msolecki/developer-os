@@ -38,7 +38,7 @@ export function renderClaudePlugin(
 
   const renderer = new ClaudeRenderer({ shared });
   const skills = contracts.flatMap((contract) => [
-    ...renderer.render(contract, null),
+    ...renderer.render(contract),
   ]);
   return buildPluginTree(skills);
 }

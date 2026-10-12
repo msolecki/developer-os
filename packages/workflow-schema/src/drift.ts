@@ -1,5 +1,4 @@
 import type { WorkflowContractV1 } from "./contract.js";
-import type { WorkflowOverlayV1 } from "./overlay.js";
 
 export interface RenderedArtifact {
   readonly path: string;
@@ -14,10 +13,7 @@ export interface RenderedArtifact {
  */
 export interface WorkflowRenderer {
   readonly vendor: string;
-  render(
-    contract: WorkflowContractV1,
-    overlay: WorkflowOverlayV1 | null,
-  ): readonly RenderedArtifact[];
+  render(contract: WorkflowContractV1): readonly RenderedArtifact[];
 }
 
 export interface WorkflowDriftFinding {
