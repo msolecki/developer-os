@@ -78,8 +78,6 @@ export {
   sampleNodePlannerProcess,
   spawnNodePlannerChild,
   TargetPlannerSupervisor,
-  ReleasePlanningScratchAttempt,
-  ReleasePlanningScratchStore,
   ZstdUstarAdmission,
 } from "./update/index.js";
 export type {
@@ -91,12 +89,6 @@ export type {
   PlannerSpawnRequestV1,
   PlannerTranscriptIdentityV1,
   PlannerWireBoundsV1,
-  ReleasePlanningAttemptIdV1,
-  ReleasePlanningScratchJournalV1,
-  ReleasePlanningScratchRequestV1,
-  ReleasePlanningScratchStoreDependencies,
-  ReleasePlanningScratchV1,
-  VerifiedScratchBundleV1,
   TargetPlannerRunRequestV1,
   TargetPlannerRunResultV1,
   TargetPlannerSupervisorDependencies,

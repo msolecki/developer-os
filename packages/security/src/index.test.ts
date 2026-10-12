@@ -63,8 +63,6 @@ describe("the package's public door", () => {
         "prepareLocalReceive",
         "validateShadowConfigTemplate",
         "GitProcessSupervisor",
-        "ReleasePlanningScratchAttempt",
-        "ReleasePlanningScratchStore",
         "TargetPlannerSupervisor",
         "ZstdUstarAdmission",
         "admittingGitIdentityProbe",

@@ -42,10 +42,18 @@ import {
   type UpdateEntryStepV1,
   type UpdateEntryWriteStateV1,
 } from "@developer-os/core";
-import type { VerifiedScratchBundleV1 } from "@developer-os/security";
 
 import { resolveSourceParent } from "./construction.js";
 import { deathPoints, parentPath, sha256Hex, stampAfter } from "./primitives.js";
+
+/** The extracted bundle the planner and the bundle source read; `root` is the admitted keg's `bundle` directory. */
+export interface VerifiedScratchBundleV1 {
+  readonly id: `rp_${string}`;
+  readonly planHash: LowerHexSha256;
+  readonly manifestHash: LowerHexSha256;
+  readonly root: CanonicalAbsolutePathV1;
+  readonly entries: number;
+}
 
 /** Where a test may kill the process; each point follows a durable effect. */
 export type BundleEntryDeathPointV1 = "journal_rewritten" | "entry_created" | "entry_written" | "evidence_created" | "evidence_written" | "compensation_step" | "compaction_step";
