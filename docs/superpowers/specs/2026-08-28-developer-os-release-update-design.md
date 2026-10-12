@@ -187,7 +187,7 @@ item names, the item governs, and that section's text is not rewritten.
   Codex `replace`, and the under-lock re-derivation stays byte-equal. §9.3 already orders owner files (step 3) before owner
   external effects (step 4), so a failed refresh compensates the record with the tree. (e) Every
   update whose Codex owner plan changes any file emits exactly one `codex_registration_refresh`,
-  as the planner already drafts (`packages/adapter-codex/src/update/plan.ts:55`).
+  as the planner already drafts (`plan.ts` line 55 before D102 (`git show 32e1cbe5:packages/adapter-codex/src/update/plan.ts`)).
 
 - **P7 — minor items found with the six.** (a) **Leaf-plan hashes:** §9.2's
   `developer-os/update-leaf/<kind>/v1\0` domain governs every leaf ref; the owner, state, migration and

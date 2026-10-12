@@ -535,7 +535,7 @@ None.
 
 ### AUD-032 — Codex agent roles drop the read-only intent the Claude agents declare, though sandbox_mode is an observed accepted key
 
-- **Kind:** inconsistency · **Verdict:** PLAUSIBLE · **Location:** `packages/adapter-codex/src/agent-toml.ts:57`
+- **Kind:** inconsistency · **Verdict:** PLAUSIBLE · **Location:** `agent-toml.ts` line 57 before D102 (`git show 32e1cbe5:packages/adapter-codex/src/agent-toml.ts`)
 - **Problem:** renderAgentToml emits only name/description/developer_instructions. Four catalog agents describe themselves as read-only; on Codex nothing narrows them. Claude's tools list is weak too (three keep Bash).
 - **Impact:** A Codex user delegating to developer-os-security-auditor in a workspace-write session gets a role that can edit files.
 - **Evidence:** agent-toml.ts:4-9 `AGENT_TOML_KEYS = ["name", "description", "developer_instructions"]`; codex-adapter.md:654 lists sandbox_mode as accepted
@@ -1370,7 +1370,7 @@ None.
 
 ### AUD-114 — Core barrel exports validators and constants only tests use
 
-- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `packages/core/src/lifecycle/records.ts:115`
+- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `records.ts` line 115 before D102 (`git show 32e1cbe5:packages/core/src/lifecycle/records.ts`)
 - **Problem:** Test-only: parseUninstallingMarker, parseLifecycleBootstrapLock, validateBootstrapFoundationOrdinal, validateGitMetadataBounds, describeGitEnablePlan/GitEnablePlan/GitDisablePlan/GitPlanner.publicMethods, validateGitSyncPlanCore (+assertSourceProjection/validateChange/reflogSize), LIFECYCLE_PREVIEW_FILE_STATES (self-equality test), admitRollbackPayloadRelativePath, deriveUpdateRecoveryExecutorStagedPath (duplicate of construction.ts's helper; backlog Task 18 row is stale), parseLowercaseKebabId, encodePlannerInput, UPDATE_CAPACITY_COMPONENT_ORDER; PROBE_OBSERVATIONS should only be un-exported (it derives a type). The uninstall marker is never parsed in production.
 - **Impact:** Large pinned public surface; unexercised parsers look authoritative.
 - **Evidence:** records.ts:115 `export function parseUninstallingMarker(bytes, nonce)`; git/planner.ts:543 `export function validateGitSyncPlanCore<T>(...)`
@@ -1381,7 +1381,7 @@ None.
 
 ### AUD-115 — Core barrel re-exports ~40 values and ~80 types that nothing outside core imports
 
-- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `packages/core/src/index.ts:505`
+- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `index.ts` line 505 before D102 (`git show 32e1cbe5:packages/core/src/index.ts`)
 - **Problem:** git, config and capabilities internals (e.g. inspectGitMetadata, readGitScopeSnapshot, CONFIG_*_KEYS, CAPABILITY_STATES) are reachable only through the barrel and pinned by index.test.ts. Over-exported, not dead.
 - **Impact:** A frozen API with no consumer; any rename is a package-contract change.
 - **Evidence:** index.ts:205 `export { CAPABILITY_STATES, PROBE_OBSERVATIONS } from './capabilities/index.js';`
@@ -1447,7 +1447,7 @@ None.
 
 ### AUD-121 — planOwners and rehydrateOwnerCreates are unreachable in production after the keep-all planner
 
-- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `packages/core/src/update/owner.ts:212`
+- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `owner.ts` line 212 before D102 (`git show 32e1cbe5:packages/core/src/update/owner.ts`)
 - **Problem:** Owner providers are used only to choose which blobs to read; adapter plan() functions run only in tests. Spec treats them as scaffolding for a future owner diff.
 - **Impact:** ~120 lines plus two adapter planners drift while guarding nothing.
 - **Evidence:** owner.ts:212 `export function planOwners(registry, snapshot)`
@@ -1480,7 +1480,7 @@ None.
 
 ### AUD-124 — Adapter packages export test-only helpers through their barrels
 
-- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `packages/adapter-claude/src/install.ts:121`
+- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `install.ts` line 121 before D102 (`git show 32e1cbe5:packages/adapter-claude/src/install.ts`)
 - **Problem:** proposeClaudeUninstall, proposeCodexUninstall, the CodexAdapter facade, isValidClaudeObservation, claudeTargetEntries, codexTargetEntries and AGENT_TOML_KEYS have no production caller (NEW-111 shipped without the *TargetEntries). proposeClaudeUninstall also lacks Codex's containedWithin normalize check.
 - **Impact:** Dead surface kept in step with core shapes; a future caller of the Claude proposer inherits a path-escape gap.
 - **Evidence:** install.ts:121 `export function proposeClaudeUninstall(context, managed)`; update/plan.ts:21/30 *TargetEntries
@@ -1491,7 +1491,7 @@ None.
 
 ### AUD-125 — Overlay machinery has no production caller
 
-- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `packages/workflow-schema/src/overlay.ts:47`
+- **Kind:** dead-code · **Verdict:** CONFIRMED · **Location:** `overlay.ts` line 47 before D102 (`git show 32e1cbe5:packages/workflow-schema/src/overlay.ts`)
 - **Problem:** Both compose paths call render(contract, null); notes is never read and lifecycle is discarded. Documented as a designed feature with no loader.
 - **Impact:** Carried complexity and a security invariant with no consumer.
 - **Evidence:** overlay.ts:47 `workflowOverlaySchema = z.object({ extends, steps, lifecycle: ..., notes: ... })`
@@ -1544,7 +1544,7 @@ Refuted by the verifiers:
 - core-update-b: postimages.ts adds a fifth canonical/same copy (`packages/core/src/update/postimages.ts:15`) — One-line wrappers over a single shared encoder.
 - core-update-b: Preview builder does not bind metadata to target identity (`packages/core/src/update/preview.ts:377`) — Single caller builds both from the same locals; speculative.
 - core-transactions: Helper duplicates between store.ts and executor.ts (`packages/core/src/transactions/executor.ts:171`) — Small identical bodies; hasKeys differs on purpose; founder decision (NEW-182) keeps mirrors.
-- adapters-schema: proposeCodexInstall replaces any managed row regardless of owner (`packages/adapter-codex/src/install.ts:233`) — Production never passes `managed`; unreachable.
+- adapters-schema: proposeCodexInstall replaces any managed row regardless of owner (`install.ts` line 233 before D102 (`git show 32e1cbe5:packages/adapter-codex/src/install.ts`)) — Production never passes `managed`; unreachable.
 - adapters-schema: Claude/Codex renderers, hooks and resolvers are byte duplicates (`packages/adapter-claude/src/capabilities.ts:82`) — Recorded deliberate residual (codex-adapter.md residual 11); remainder immaterial.
 - adapters-schema: capabilities entries accepted but nothing requires them (`packages/workflow-schema/src/contract.ts:19`) — Documented reserved vocabulary (workflow-schema.md §8 item 9).
 - contracts-parity: AGENT_TOML_KEYS not used by the emitter (`packages/adapter-codex/src/agent-toml.ts:10`) — agent-toml.test.ts asserts emitted keys equal the constant.
