@@ -2670,8 +2670,9 @@ export async function runIngest(
      * **Read for its refusal, before any capture is touched** (AUD-089, NEW-254, D102). The
      * run's one reindex reads the installation manifest, but only after every capture has been
      * marked `ingested`; an unreadable or forged manifest refused there would leave captures
-     * claiming a run the product could not finish. Refusing here, as `capture` does, writes
-     * nothing to the vault or the quarantine and leaves the manifest bytes as they are.
+     * claiming a run the product could not finish. Refused here, with the refusal `capture`
+     * reaches, the run writes nothing to the vault or the quarantine and leaves the manifest
+     * bytes as they are.
      */
     await readAdmittedManifest(context, paths);
 
