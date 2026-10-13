@@ -113,6 +113,6 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 - Product sequence: 2 open entries — A15 (steps 16, 19), A16 (Task 11, with L1, L2); A11b closed (D98).
 - Founder stop points: 6, listed above.
-- Startable rows: 8 (NEW-132; NEW-251, NEW-252, NEW-254..NEW-258 under D102, NEW-253 closed by it; plan `plans/2026-10-12-d102-decisions.md`); NEW-193 (4) waits for Codex after 2026-10-22. Founder decision: NEW-212.
+- Startable rows: 1 (NEW-132); NEW-259 waits for the first update planner that emits creates; NEW-193 (4) waits for Codex after 2026-10-22. Founder decision: NEW-212.
   Awaiting founder numbers: NEW-116.
-- Repository backlog: 39 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
+- Repository backlog: 33 open numbered rows (`BACKLOG.md` §1), plus the §6 phase-close deferrals.
