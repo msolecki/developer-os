@@ -70,7 +70,7 @@ import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { currentBytes, ingestAttemptsPath, writeMutation } from "../lifecycle/runtime-records.js";
 import { currentScheduledJob } from "./automation/scheduled-scope.js";
 import { isTopicNotePath } from "./capture.js";
-import { isDirectory } from "./doctor.js";
+import { isDirectory, readAdmittedManifest } from "./doctor.js";
 import {
   encodeIngestAttempts,
   MAX_INGEST_ATTEMPTS_BYTES,
@@ -2666,6 +2666,14 @@ export async function runIngest(
     const config = await readConfiguration(context);
     const paths = runtimePathsFor(context, config);
     await assertVaultPresent(context, paths);
+    /**
+     * **Read for its refusal, before any capture is touched** (AUD-089, NEW-254, D102). The
+     * run's one reindex reads the installation manifest, but only after every capture has been
+     * marked `ingested`; an unreadable or forged manifest refused there would leave captures
+     * claiming a run the product could not finish. Refusing here, as `capture` does, writes
+     * nothing to the vault or the quarantine and leaves the manifest bytes as they are.
+     */
+    await readAdmittedManifest(context, paths);
 
     const brainConfig = resolveBrainConfig(config);
     const { contentRoot, canonicalQuarantine: quarantine } = await resolveQuarantine(
