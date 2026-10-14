@@ -1,8 +1,9 @@
 name: tap
 
-# A16 §2 step 7: the founder published a draft release (approval 1). Update the
-# formula in the tap from the published SHA256SUMS and open a pull request.
-# Merging it (approval 2) is the release.
+# A16 §2 step 7, amended by D104: called by check.yml on main right after
+# release.yml published the tag. Update the formula in the tap from the
+# published SHA256SUMS, open a pull request and merge it; the merge reaches users.
+# There is no manual approval (D104).
 #
 # Trust split, as in release.yml:
 #   edit  runs repository code: the one edit script, fetched at the event commit
@@ -14,8 +15,8 @@ name: tap
 #         job bound to the `tap` environment and the only one that can see
 #         `TAP_PR_TOKEN`. It clones the tap fresh, accepts exactly one regular
 #         file from the artifact, copies it in, re-checks that the diff is exactly
-#         five changed lines of `Formula/developer-os.rb`, then pushes and opens
-#         the pull request. git and gh are called by absolute path and git hooks
+#         five changed lines of `Formula/developer-os.rb`, then pushes, opens the
+#         pull request and merges it. git and gh are called by absolute path and git hooks
 #         are disabled, so nothing an earlier step could plant runs with the token.
 #         gh is the runner image's Homebrew install: macos-15 is arm64, so
 #         `/opt/homebrew/bin/gh`; the job fails if it is not there.
@@ -27,14 +28,19 @@ name: tap
 #      and refuses a formula of any other shape.
 #   2. Create `TAP_PR_TOKEN` as an Environment secret of the `tap` environment
 #      (not a repository secret) and give the environment a deployment rule that
-#      admits only `v*` tags. The token is then reachable by no other job, no
-#      other ref, and only by the final step of `push`.
+#      admits only branch `main` (D104). The token is then reachable by no other
+#      job, no other ref, and only by the final step of `push`. It needs contents
+#      and pull-request write on the tap, to merge.
 #
 # Action SHAs were read with `gh api repos/actions/<repo>/git/ref/tags/<tag>`
 # from the actions organisation's own repositories on 2026-10-08.
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: vX.Y.Z, a release release.yml has just published
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -53,7 +59,7 @@ jobs:
       - name: Fetch SHA256SUMS from the release and the edit script at the event commit
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
           mkdir "$RUNNER_TEMP/in"
@@ -62,7 +68,7 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/contents/.github/release/update-formula.sh?ref=${GITHUB_SHA}" > "$RUNNER_TEMP/in/update-formula.sh"
       - name: Clone the tap and edit the formula
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
           /usr/bin/git clone --depth 1 https://github.com/msolecki/homebrew-developer-os.git "$RUNNER_TEMP/tap"
@@ -88,7 +94,7 @@ jobs:
           path: ${{ runner.temp }}/formula
       - name: Clone the tap fresh, take the edited formula and commit
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
@@ -110,7 +116,7 @@ jobs:
       - name: Push the branch and open the tap pull request
         env:
           GH_TOKEN: ${{ secrets.TAP_PR_TOKEN }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing tag: $TAG" >&2; exit 1; }
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
@@ -121,3 +127,10 @@ jobs:
           "$gh" pr create --repo msolecki/homebrew-developer-os --head "release/${TAG}" \
             --title "developer-os ${TAG#v}" \
             --body "Release ${TAG}: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          # GitHub computes mergeability asynchronously after the pull request opens.
+          for _ in 1 2 3 4 5 6; do
+            "$gh" pr merge --repo msolecki/homebrew-developer-os "release/${TAG}" --squash --delete-branch && exit 0
+            sleep 10
+          done
+          echo "the tap pull request for ${TAG} is open but did not merge" >&2
+          exit 1

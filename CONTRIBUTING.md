@@ -19,19 +19,17 @@ Use synthetic fixtures only. Never commit a real vault or a credential.
 
 ## Releasing
 
-A release is a tag on a `development` commit that has already passed CI.
+A release is a merged pull request from `development` into `main`. Nothing else is manual.
 
-1. Add a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`.
-2. Land it on `development`. Wait for the `check.yml` run of that push to finish green. A run that a later push cancelled does not count. A pull-request run does not count.
-3. Tag that exact commit and push the tag:
-   ```sh
-   git tag vX.Y.Z <commit>
-   git push origin vX.Y.Z
-   ```
-4. Review the draft release: its notes, the two tarballs, `SHA256SUMS` and the SBOM. Then publish it (approval 1).
-5. Review and merge the tap pull request (approval 2).
+1. Add a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`, above every older version.
+2. Land it on `development`.
+3. Open a pull request from `development` into `main` and merge it.
 
-To withdraw a release, delete the draft or close the tap pull request. To roll back a merged formula, revert the tap commit.
+The `check.yml` run on `main` runs the whole suite on the merged commit. When every test job passes and the tag `vX.Y.Z` does not exist yet, the same run builds, verifies and publishes the release, then opens and merges the tap pull request. A merge whose `CHANGELOG.md` version already has a tag releases nothing.
+
+If the run fails after the release is published (for example in `tap`), use **Re-run failed jobs** on that run. A full re-run, or a later merge, sees the tag and skips both `release` and `tap`. If the tap branch `release/vX.Y.Z` was already pushed, delete it in the tap first.
+
+To withdraw a release, revert the tap commit and delete the GitHub release. The tag stays: the `release-tags` ruleset forbids deleting or moving a `v*` tag, so the fix ships as the next version.
 
 Never use Homebrew's `revision`. The launcher admits only `Cellar/developer-os/<X.Y.Z>`.
 

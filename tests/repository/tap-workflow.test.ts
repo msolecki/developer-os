@@ -29,7 +29,7 @@ const violations = (text: string): string[] => {
   const body = code(text);
   const edit = jobs["edit"] ?? "";
   const push = jobs["push"] ?? "";
-  if (!/^on:\n {2}release:\n {4}types: \[published\]\n\n/mu.test(text) || body.includes("pull_request_target")) found.push("trigger");
+  if (!/^on:\n {2}workflow_call:\n {4}inputs:\n {6}tag:\n(?: {8}.*\n)+\n/mu.test(text) || /^ {2}(?:push|pull_request\w*|release|workflow_dispatch):/mu.test(text.split(/^permissions:/mu)[0] ?? "")) found.push("trigger");
   if (!/^permissions:\n {2}contents: read\n/mu.test(text)) found.push("top-level permissions");
   if (/["']?contents["']?\s*:\s*["']?write/u.test(body) || /permissions:\s*(?:write-all|\{)/u.test(body)) found.push("contents write");
   if (Object.keys(jobs).join() !== "edit,push") found.push("jobs");
@@ -57,13 +57,14 @@ const violations = (text: string): string[] => {
   if (text.match(TOKEN)?.length !== 1 || edit.match(TOKEN) !== null) found.push("token count");
   const steps = stepsOf(push);
   const withToken = steps.filter((step) => step.includes("secrets.TAP_PR_TOKEN"));
-  if (withToken.length !== 1 || steps.at(-1) !== withToken[0] || !/ push origin/u.test(withToken[0] ?? "") || !/ pr create/u.test(withToken[0] ?? "")) found.push("token step");
-  if ([...stepsOf(edit), ...steps.slice(0, -1)].some((step) => /\bpr create\b| push origin/u.test(step))) found.push("push before the token step");
+  if (withToken.length !== 1 || steps.at(-1) !== withToken[0] || !/ push origin/u.test(withToken[0] ?? "") || !/ pr create/u.test(withToken[0] ?? "") || !/"\$gh" pr merge --repo msolecki\/homebrew-developer-os "release\/\$\{TAG\}" --squash/u.test(withToken[0] ?? "")) found.push("token step");
+  if ([...stepsOf(edit), ...steps.slice(0, -1)].some((step) => /\bpr (?:create|merge)\b| push origin/u.test(step))) found.push("push before the token step");
 
   if (/(?<![/\w.$-])git\s/u.test(body)) found.push("bare git");
   const usesRows = text.split("\n").filter((row) => /^\s+(?:- )?uses:/u.test(row));
   if (usesRows.some((row) => !/uses: [\w-]+\/[\w-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/u.test(row))) found.push("action pins");
-  for (const line of text.split("\n").filter((row) => row.includes("github.event.release"))) if (!/^\s+TAG: \$\{\{ github\.event\.release\.tag_name \}\}$/u.test(line)) found.push("event data outside env");
+  if (/github\.event\./u.test(body)) found.push("event data outside env");
+  for (const line of text.split("\n").filter((row) => row.includes("inputs.tag"))) if (!/^\s+TAG: \$\{\{ inputs\.tag \}\}$/u.test(line)) found.push("event data outside env");
   for (const run of text.split(/^\s+run: \|\n/mu).slice(1)) if ((run.split(/\n {6}(?:- |#)/u)[0] ?? "").includes("${{")) found.push("expression in run");
   if (!/\^v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\$/u.test(text)) found.push("tag validation");
   return found;
@@ -75,7 +76,7 @@ const inPush = (line: string) => (t: string): string => t.replace(PUSH_RUN, `${l
 const PUSH_STEPS = "    environment: tap\n    permissions:\n      contents: read\n    steps:\n";
 const atPushSteps = (step: string) => (t: string): string => t.replace(PUSH_STEPS, `${PUSH_STEPS}${step}`);
 const mutations: Record<string, [string, (t: string) => string]> = {
-  "extra trigger": ["trigger", (t) => t.replace("types: [published]", "types: [published, created]")],
+  "release trigger": ["trigger", (t) => t.replace("on:\n", "on:\n  release:\n    types: [published]\n")],
   pull_request_target: ["trigger", (t) => t.replace("on:\n", "on:\n  pull_request_target:\n")],
   "top-level write": ["top-level permissions", (t) => t.replace(/^permissions:\n {2}contents: read/mu, "permissions:\n  contents: write")],
   "job write, quoted": ["contents write", (t) => t.replace("    environment: tap\n", '    environment: tap\n    permissions:\n      "contents": write\n')],
@@ -105,12 +106,15 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "bare git": ["bare git", (t) => t.replace('/usr/bin/git clone --depth 1 https://github.com/msolecki/homebrew-developer-os.git "$RUNNER_TEMP/tap"\n          cd', 'git clone --depth 1 https://github.com/msolecki/homebrew-developer-os.git "$RUNNER_TEMP/tap"\n          cd')],
   "unpinned action": ["action pins", (t) => t.replace("    steps:\n", "    steps:\n      - uses: actions/cache@v4 # v4.0.0\n")],
   "pin without version comment": ["action pins", (t) => t.replace("    steps:\n", `    steps:\n      - uses: actions/cache@${SHA}\n`)],
-  "event data in run": ["expression in run", (t) => t.replace('mkdir "$RUNNER_TEMP/in"', 'echo ${{ github.event.release.name }}; mkdir "$RUNNER_TEMP/in"')],
-  "event data off TAG": ["event data outside env", (t) => t.replace("          GH_TOKEN: ${{ github.token }}", "          GH_TOKEN: ${{ github.token }}\n          NAME: ${{ github.event.release.name }}")],
+  "input in run": ["expression in run", (t) => t.replace('mkdir "$RUNNER_TEMP/in"', 'echo ${{ inputs.tag }}; mkdir "$RUNNER_TEMP/in"')],
+  "input off TAG": ["event data outside env", (t) => t.replace("          GH_TOKEN: ${{ github.token }}", "          GH_TOKEN: ${{ github.token }}\n          NAME: ${{ inputs.tag }}")],
+  "event data": ["event data outside env", (t) => t.replace("          GH_TOKEN: ${{ github.token }}", "          GH_TOKEN: ${{ github.token }}\n          NAME: ${{ github.event.release.name }}")],
+  "no merge": ["token step", (t) => t.replace(/"\$gh" pr merge [^\n]*/u, "true")],
+  "merge before the token step": ["push before the token step", (t) => t.replace("/usr/bin/git -c core.hooksPath=/dev/null add Formula/developer-os.rb", "/opt/homebrew/bin/gh pr merge x\n          /usr/bin/git -c core.hooksPath=/dev/null add Formula/developer-os.rb")],
   "no tag validation": ["tag validation", (t) => t.replaceAll("^v[0-9]+\\.[0-9]+\\.[0-9]+$", "^v.*$")],
 };
 
-describe("tap.yml (A16 §2 step 7)", () => {
+describe("tap.yml (A16 §2 step 7, D104)", () => {
   it("is sound as committed: edit runs the script without the token, push holds the token and runs no repository code", () => {
     expect(Object.keys(jobsOf(workflow))).toEqual(["edit", "push"]);
     expect(stepsOf(jobsOf(workflow)["push"] ?? "").length).toBe(3);
@@ -131,6 +135,7 @@ describe("tap.yml (A16 §2 step 7)", () => {
     expect(edit).toContain("path: ${{ runner.temp }}/tap/Formula/developer-os.rb");
     expect(push).toContain(`[ "$(/usr/bin/git -c core.hooksPath=/dev/null diff --numstat)" = "$(printf '5\\t5\\tFormula/developer-os.rb')" ]`);
     expect(push).toContain('"$gh" pr create --repo msolecki/homebrew-developer-os');
+    expect(push).toContain('"$gh" pr merge --repo msolecki/homebrew-developer-os "release/${TAG}" --squash --delete-branch');
   });
 
   it("keeps the edit script away from runner state and git configuration", async () => {
