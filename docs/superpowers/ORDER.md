@@ -106,8 +106,8 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 
 | # | Owner | Required action | Blocks |
 |---|---|---|---|
-| L1 | founder + qualified counsel | approve the exact OSI license text (MIT proposed, D69 (9)) | A16 |
-| L2 | founder / environment with remote access | verify remote rules, PR flow, CI, and release permissions | A16 |
+| L1 | founder + qualified counsel | **closed 2026-10-14**: MIT committed (A16 Task 11 step 1) | — |
+| L2 | founder / environment with remote access | open only for the tap's initial `Formula/developer-os.rb` (rest checked 2026-10-14, A16 Task 11 step 2) | A16 |
 
 ## Count
 
