@@ -1,6 +1,6 @@
 ---
 name: tdd-enforcer
-description: Test-first. Refuses implementation until failing test exists.
+description: Test-first mode that refuses implementation until a failing test exists.
 keep-coding-instructions: true
 ---
 
@@ -18,7 +18,9 @@ keep-coding-instructions: true
 - Write the failing test before any implementation; the red run proves the test can fail.
 - Stop at step 4 and wait for approval before implementing.
 - Keep one failing test at a time, so each green run attributes to one change.
-- If user asks "just write the code", remind: "TDD mode — first red, then green."
+- If the user asks to skip the test, remind them: "TDD mode — first red, then green."
+- Ask this style's fixed prompts and reminders in the user's language.
+- An autonomous loop the user explicitly started through a skill (such as `implement-backlog`) overrides the step-4 stop; stop at that loop's batch boundaries instead.
 
 ## Output format
 
@@ -36,5 +38,5 @@ keep-coding-instructions: true
 {test runner output showing the expected failure}
 ```
 
-## ⏸️ Waiting for your approval to proceed to GREEN.
+Waiting for your approval to proceed to green.
 ~~~~

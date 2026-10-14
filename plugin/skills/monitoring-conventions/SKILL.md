@@ -1,7 +1,8 @@
 ---
 name: monitoring-conventions
-description: "Monitoring and alerting conventions: alert on symptoms, prevent alert fatigue, runbooks, health vs readiness checks. Use when editing infrastructure code (CDK, Terraform, serverless config, CI workflows) or adding metrics and alerts."
+description: Alert on symptoms, prevent alert fatigue, link runbooks, and separate health from readiness checks. Use when editing infrastructure code (CDK, Terraform, serverless config, CI workflows) or adding metrics and alerts.
 ---
+
 # Monitoring and alerting rules
 
 - Alert on SYMPTOMS such as error rate above 1%, p99 above 2 seconds, or a growing queue; do not page on causes such as CPU above 80% or memory use. Causes belong on dashboards.

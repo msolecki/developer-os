@@ -1,7 +1,8 @@
 ---
 name: defensive-coding-conventions
-description: "Checks for defect classes that commonly ship past review: persistence vs validation conditions, webhook side effects, every writer and reader of shared state, multi-valued statuses, unvalidated external JSON, silent build artifacts. Use when writing or reviewing a non-trivial code change, especially a bug fix or a security fix."
+description: Check a change for defect classes that commonly ship past review, such as mismatched persistence and validation conditions, unisolated webhook side effects, missed writers or readers of shared state, collapsed multi-valued statuses, unvalidated external JSON, and silent build artifacts. Use when writing or reviewing code that handles external input, authentication, money, concurrency, persistence, or error paths.
 ---
+
 # Defensive coding — defect classes to check
 
 Each rule below names a defect class that commonly ships past review. Treat them as checks to run against the change in front of you, not as background reading.

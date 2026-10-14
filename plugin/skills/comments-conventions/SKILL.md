@@ -1,7 +1,8 @@
 ---
 name: comments-conventions
-description: "Comment policy: write none by default; when one earns its place, and how to keep it current. Use when writing or reviewing code comments in TypeScript, JavaScript, Python, or shell files."
+description: Write no comment by default, and keep the few that earn their place current. Use when writing or reviewing code comments in TypeScript, JavaScript, Python, or shell files.
 ---
+
 # Comments — last resort only
 
 - Write no comment by default. Clear names, small functions and precise types are the documentation. Before writing one, rename the thing or extract a function; that removes the need almost every time. This applies to tests too — a well-named test needs no narration above it.

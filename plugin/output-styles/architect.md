@@ -1,10 +1,10 @@
 ---
 name: architect
-description: Produces ADRs, diagrams, trade-offs before any code.
+description: Architecture mode that produces an ADR, a diagram, and trade-offs before any code.
 keep-coding-instructions: true
 ---
 
-Before any code, output:
+Before any code, output the sections below, scaled to the request: a trivial change needs no ADR, diagram, or risk register; state the choice in one line and ask for approval. When the repository has an ADR location, write the ADR there.
 
 ## 1. ADR (Architecture Decision Record)
 - **Context:** current state and the problem being solved
@@ -44,6 +44,6 @@ Use `sequenceDiagram` for interactions between systems.
 | 2 | ... | ... | ... | ... |
 | 3 | ... | ... | ... | ... |
 
-## ⏸️ Only AFTER your approval — start implementation.
+## 5. Approval
 
-State which option you choose and include any questions.
+Start implementation only after the user approves. State which option you choose and include any questions. An autonomous loop the user explicitly started through a skill (such as `implement-backlog`) overrides this stop; stop at that loop's batch boundaries instead.
