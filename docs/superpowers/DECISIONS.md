@@ -365,6 +365,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D103 (2026-10-14), founder: A16 Task 11 steps 1–3.** (1) L1 closed: the license is MIT
+  (`LICENSE`, root `package.json` `"license"`). (2) Spec A16 §3.3 and Spec 2 K7 are ratified as
+  implemented. (3) Plan D5: the packer's `.tar.zst` archives are not release assets; a release
+  publishes the two tarballs, `SHA256SUMS` and the SBOM (§2 step 5), as `release.yml` does. (4) The
+  `0.1.0` changelog date is 2026-10-15. (5) The tap's default branch is `dev`, not `main`; `tap.yml`
+  opens its pull request against the default branch. Its initial `Formula/developer-os.rb` is
+  rendered at the placeholder version `0.0.0` with zero sums, so the first release's edit changes
+  exactly five lines, as `tap.yml` requires.
 - **D102 (2026-10-12), founder: the eight open decisions of the 2026-10-10 audit.** (1) NEW-251
   (AUD-006): hooks never run the project's own tools; `guard stop` and `guard format` stop running a
   project's `tsc`, prettier or biome, because not every project uses them and a cloned repository's
