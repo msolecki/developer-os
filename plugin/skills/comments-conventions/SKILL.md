@@ -1,11 +1,6 @@
 ---
-paths:
-  - "**/*.ts"
-  - "**/*.tsx"
-  - "**/*.js"
-  - "**/*.jsx"
-  - "**/*.py"
-  - "**/*.sh"
+name: comments-conventions
+description: "Comment policy: write none by default; when one earns its place, and how to keep it current. Use when writing or reviewing code comments in TypeScript, JavaScript, Python, or shell files."
 ---
 # Comments — last resort only
 

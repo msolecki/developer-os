@@ -1,10 +1,6 @@
 ---
-paths:
-  - "**/*.ts"
-  - "**/*.tsx"
-  - "**/*.js"
-  - "**/*.jsx"
-  - "**/*.py"
+name: lessons-code-conventions
+description: "Checks distilled from real defects: persistence vs validation conditions, webhook side effects, every writer and reader of shared state, multi-valued statuses, unvalidated external JSON, silent build artifacts. Use when writing or reviewing a non-trivial code change, especially a bug fix or a security fix."
 ---
 # Incident lessons — verified defect classes
 

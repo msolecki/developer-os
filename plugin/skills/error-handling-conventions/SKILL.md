@@ -1,7 +1,6 @@
 ---
-paths:
-  - "**/*.ts"
-  - "**/*.tsx"
+name: error-handling-conventions
+description: "Error-handling conventions: cause chains, typed results, one API error envelope, no log-and-throw, no empty catch. Use when writing or reviewing error handling in TypeScript files."
 ---
 # Error-handling rules
 
