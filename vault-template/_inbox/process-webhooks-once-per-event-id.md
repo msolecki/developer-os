@@ -5,7 +5,7 @@ created: 2026-10-10
 updated: 2026-10-10
 project: example-shop
 tags: [webhooks, payments]
-summary: Payment webhooks are processed once per event ID, because the provider retries for up to three days.
+summary: "Payment webhooks are processed once per event ID, because the provider retries for up to three days."
 ---
 
 ## Context

@@ -5,7 +5,7 @@ created: 2026-08-10
 updated: 2026-08-10
 project:
 tags: [writing]
-summary: A note earns its place by answering a question you will ask again.
+summary: "A note earns its place by answering a question you will ask again."
 ---
 
 ## Context

@@ -1,11 +1,11 @@
 ---
 type: knowledge
-status: inbox
+status: active
 created: {{date:YYYY-MM-DD}}
 updated: {{date:YYYY-MM-DD}}
 project:
 tags: []
-summary:
+summary: ""
 ---
 
 <!-- type: decision | knowledge | reference | project
