@@ -33,7 +33,7 @@ For project repositories, start from the files in [`templates/project/`](templat
 
 The plugin has one hook. On every `SessionStart` (startup, resume, `/clear` and compaction), in every
 project, it runs `cat` on [`plugin/rules/core.md`](plugin/rules/core.md) and the output becomes
-session context. That file (~8 KB) holds the core working rules, so installing the plugin changes how
+session context. That file (~7 KB) holds the core working rules, so installing the plugin changes how
 the agent behaves everywhere, not only when you call a skill. Among other things, the agent will:
 
 - ask before running a dependency install, and never delete or skip tests to make a build pass;
