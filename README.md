@@ -24,6 +24,11 @@ developer-os init --adapters claude,codex
 
 ## Documentation
 
+Start at the [documentation map](docs/README.md). The most used pages:
+
+- [Product overview](docs/product/overview.md) and [functional specification](docs/product/functional-spec.md)
+- [CLI reference](docs/reference/cli.md) and [configuration](docs/reference/configuration.md)
+- [Architecture overview](docs/architecture/overview.md) and [development guide](docs/development.md)
 - [Install and upgrade](docs/install/README.md)
 - Tutorials: [Claude only](docs/tutorials/claude-only.md), [Codex only](docs/tutorials/codex-only.md), [both agents](docs/tutorials/dual-agent.md)
 - [Troubleshooting](docs/troubleshooting/README.md)

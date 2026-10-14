@@ -21,6 +21,17 @@ const DOCS = [
   "docs/tutorials/codex-only.md",
   "docs/tutorials/dual-agent.md",
   "docs/troubleshooting/README.md",
+  "docs/README.md",
+  "docs/glossary.md",
+  "docs/development.md",
+  "docs/product/overview.md",
+  "docs/product/functional-spec.md",
+  "docs/product/assumptions-and-decisions.md",
+  "docs/reference/cli.md",
+  "docs/reference/configuration.md",
+  "docs/reference/brain-format.md",
+  "docs/reference/agent-integration.md",
+  "docs/architecture/overview.md",
 ] as const;
 
 const text = new Map<string, string>();

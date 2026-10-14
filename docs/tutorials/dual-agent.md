@@ -10,6 +10,9 @@ Install the product first ([Install and upgrade](../install/README.md)).
 developer-os init --adapters claude,codex
 ```
 
+Codex runs plugin hooks only after you approve them once in Codex; until then `developer-os doctor`
+prints the approval step under its `hooks` check.
+
 ## 2. Capture an observation
 
 A capture is quarantined and redacted before it is written. Nothing reads it as a note yet.
@@ -31,7 +34,7 @@ developer-os review --id <capture-id> --decision accept
 
 `ingest` turns accepted captures into notes, one agent call each.
 
-Run it once with each agent.
+Pick the agent with `--agent`. Each run takes the accepted captures that are still waiting, so to try both agents, capture and accept a second observation before the second run.
 
 ```sh
 developer-os ingest --agent claude
