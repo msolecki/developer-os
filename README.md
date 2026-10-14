@@ -27,27 +27,19 @@ Brain vault: /absolute/path/to/your/vault
 and the vault path in `permissions.additionalDirectories` in `~/.claude/settings.json`, so Claude Code
 may read and write it from any project.
 
-For project repositories, start from the files in [`templates/project/`](templates/project/).
+For project repositories, start from the files in [`templates/project/`](templates/project/). The
+full setup, with Obsidian settings and a first test, is in [docs/workflow.md](docs/workflow.md#setup-in-5-minutes).
 
 ## What the SessionStart hook does
 
-The plugin has one hook. On every `SessionStart` (startup, resume, `/clear` and compaction), in every
-project, it runs `cat` on [`plugin/rules/core.md`](plugin/rules/core.md) and the output becomes
-session context. That file (~7 KB) holds the core working rules, so installing the plugin changes how
-the agent behaves everywhere, not only when you call a skill. Among other things, the agent will:
+The plugin has one hook. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
+every project, it runs `cat` on [`plugin/rules/core.md`](plugin/rules/core.md) and the output becomes
+session context. Installing the plugin therefore changes how the agent behaves everywhere, not only
+when you call a skill; read [`core.md`](plugin/rules/core.md) for the rules themselves.
 
-- ask before running a dependency install, and never delete or skip tests to make a build pass;
-- run the repository's declared validation before it commits, and refuse to commit when none exists;
-- write a plan before changes larger than about 50 lines, and keep it in the repository;
-- change authentication or middleware only when you ask for it explicitly;
-- search the vault with brain-search before a large task;
-- back claims such as "fixed" with evidence, and have a fresh subagent review agent-written code;
-- answer directly, in your language, and write repository content in English.
-
-Read the file for the full list. To turn it off, disable the plugin (`/plugin`, then disable
-developer-os). To keep the plugin but change a rule, override it explicitly in your user-level
-`~/.claude/CLAUDE.md` (for example, "Ignore the developer-os rule on plan files; I do not keep
-plans"); that file loads alongside the core rules in every session.
+To turn it off, disable the plugin (`/plugin`, then disable developer-os). To keep the plugin but
+change a rule, override it explicitly in your user-level `~/.claude/CLAUDE.md` (for example, "Ignore
+the developer-os rule on plan files"); that file loads alongside the core rules in every session.
 
 ## What's inside
 
@@ -68,7 +60,8 @@ plans"); that file loads alongside the core rules in every session.
 There is no Codex manifest. The skills need only file read, write and search tools, so you can use
 them by hand:
 
-1. Symlink or copy each directory in `plugin/skills/` into `~/.codex/skills/`.
+1. Symlink or copy each directory in `plugin/skills/` into `~/.agents/skills/` (older Codex versions
+   read `~/.codex/skills/`).
 2. Paste the content of `plugin/rules/core.md` into `~/.codex/AGENTS.md`.
 3. Add the `Brain vault: /absolute/path/to/your/vault` line to `~/.codex/AGENTS.md`.
 
