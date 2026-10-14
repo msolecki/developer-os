@@ -25,8 +25,8 @@ arrive in parallel.
 
 ## Links
 
-- [[PROJECTS/example-shop]]
-- [[DEV/write-the-note-you-wanted-to-find]]
+- [[example-shop]]
+- [[write-the-note-you-wanted-to-find]]
 
 <!-- An agent wrote this note with brain-capture. It stays in _inbox/ with status: inbox until you
      review it: set status to active and move it to a topic folder, or delete it. -->

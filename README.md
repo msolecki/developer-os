@@ -23,6 +23,9 @@ follow [`vault-template/README.md`](vault-template/README.md). The key step is o
 Brain vault: /absolute/path/to/your/vault
 ```
 
+and the vault path in `permissions.additionalDirectories` in `~/.claude/settings.json`, so Claude Code
+may read and write it from any project.
+
 For project repositories, start from the files in [`templates/project/`](templates/project/).
 
 ## Codex (best-effort)
