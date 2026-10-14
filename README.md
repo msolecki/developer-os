@@ -1,43 +1,49 @@
 # developer-os
 
-Shared workflows and a local-first knowledge base for Claude Code and Codex.
+A Claude Code plugin for working with an AI coding agent and an Obsidian vault as its long-term
+memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
+your vault before it starts, capture decisions into an inbox while it works, and help you review and
+tidy what was captured. You approve what becomes knowledge. The plugin is Markdown only: skills,
+agents and rules, with no server, no database and no runtime to install. Codex support is best-effort.
 
-**Status:** Public beta (0.Y.Z). Interfaces may change before 1.0.0.
+## Install (Claude Code)
 
-## Requirements
-
-- macOS on Apple Silicon or Intel.
-- Homebrew.
-- Claude Code or Codex, or both.
-
-You do not need a separate Node install. The runtime ships inside the package.
-
-## Install
-
-```sh
-brew tap msolecki/developer-os
-brew install developer-os
-developer-os init --adapters claude,codex
+```
+/plugin marketplace add msolecki/developer-os
+/plugin install developer-os@developer-os
 ```
 
-`init` installs the product state, a Brain skeleton and the workflows for the adapters you name.
+## Set up the vault
+
+Copy [`vault-template/`](vault-template/) as your Obsidian vault (or merge it into an existing one) and
+follow [`vault-template/README.md`](vault-template/README.md). The key step is one line in
+`~/.claude/CLAUDE.md`:
+
+```
+Brain vault: /absolute/path/to/your/vault
+```
+
+For project repositories, start from the files in [`templates/project/`](templates/project/).
+
+## Codex (best-effort)
+
+The repository ships `plugin/.codex-plugin/plugin.json`, which points at the same skills. Codex
+loading is not tested on every release. For manual use, add the `Brain vault:` line to
+`~/.codex/AGENTS.md` and see [docs/workflow.md](docs/workflow.md).
+
+## What's inside
+
+- **Brain skills:** brain-search, brain-capture, brain-review, brain-garden, brain-compile. They read
+  and write the vault with the agent's own file tools.
+- **Engineering skills:** code-review, spec, implementator, analizer, fix-pr, bug-triage,
+  deploy-checklist, instruction-review.
+- **Agents:** independent reviewers for code, security, performance, QA and research.
+- **One `SessionStart` hook** that loads the core working rules from `plugin/rules/core.md`.
 
 ## Documentation
 
-Start at the [documentation map](docs/README.md). The most used pages:
-
-- [Product overview](docs/product/overview.md) and [functional specification](docs/product/functional-spec.md)
-- [CLI reference](docs/reference/cli.md) and [configuration](docs/reference/configuration.md)
-- [Architecture overview](docs/architecture/overview.md) and [development guide](docs/development.md)
-- [Install and upgrade](docs/install/README.md)
-- Tutorials: [Claude only](docs/tutorials/claude-only.md), [Codex only](docs/tutorials/codex-only.md), [both agents](docs/tutorials/dual-agent.md)
-- [Troubleshooting](docs/troubleshooting/README.md)
-- [Privacy](docs/privacy.md)
-- [Security](SECURITY.md)
+- [How to work: brain + code](docs/workflow.md): the workflow, the vault layout, privacy.
 - [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
-- [Compatibility matrix](docs/releases/compatibility-matrix.md)
-
-## License
-
-See [LICENSE](LICENSE).
+- [License](LICENSE)

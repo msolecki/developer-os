@@ -1,0 +1,19 @@
+filters:
+  and:
+    - file.ext == "md"
+    - status == "active"
+    - updated < today() - "180d"
+    - not:
+        - file.inFolder("templates")
+properties:
+  file.name:
+    displayName: Note
+views:
+  - type: table
+    name: Stale
+    order:
+      - file.name
+      - type
+      - project
+      - updated
+      - summary

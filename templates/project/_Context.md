@@ -7,6 +7,8 @@
 
 **Purpose:** <One or two sentences: what it does, for whom, stack, domain, and UI language when relevant.>
 
+**Vault project slug:** `<project-slug>` (the `project:` value of this project's notes in the Brain vault)
+
 **Read first:**
 - The instruction file (<exact section, for example Key Business Rules>)
 - <path to the core, glossary, or key module>
