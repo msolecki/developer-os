@@ -114,7 +114,7 @@ It increases strictly with semver and needs no stored state. `releaseIndexSequen
 releases are `0.Y.Z` in the same tap, and every beta after the first reaches its testers through
 `update`. `1.0.0` is tagged when the beta has no open release blocker and L1 and L2 are closed.
 
-### 3.3 Amended 2026-10-08 (Task 11b implementation; awaiting founder ratification)
+### 3.3 Amended 2026-10-08 (Task 11b implementation; ratified 2026-10-14, D103)
 
 The packer that Task 11b built (`npm run pack:release`, `tests/tools/pack-release.ts`) changes three
 details of §2 and §3.1:
@@ -145,6 +145,26 @@ details of §2 and §3.1:
 - A tag is released only from a `development` commit that has its own successful `check.yml` push run.
 - Known risk, proven only by the VM gate: Homebrew's install-time relocation or re-signing must leave
   `libexec/fallback` byte- and mode-identical, or K2 admission refuses every real install.
+
+### 3.5 Amended 2026-10-14 (D104: release on merge to `main`)
+
+This block governs where it disagrees with §2, §5 and §3.4.
+
+- **Trigger.** A release is a merged pull request from `development` into `main`. No one pushes a
+  tag. `check.yml` runs on a push to `main`; after every test job of that run passes, its job
+  `release-version` takes the version from the first `## [X.Y.Z]` heading of `CHANGELOG.md`. If tag
+  `vX.Y.Z` exists, nothing is released. Otherwise its jobs `release` and `tap` call `release.yml`
+  and `tap.yml` as reusable workflows with that tag.
+- **Preflight.** The suite is the calling run's own `needs:`, on the same commit, so the
+  `check.yml` run query and the "tag is on `development`" check are gone. Preflight refuses an
+  existing tag and keeps the history secret scan.
+- **No approvals.** `release.yml` publishes the release at the merged commit (`--target
+  $GITHUB_SHA`, which creates the tag) instead of a draft. `tap.yml` opens the tap pull request and
+  merges it. Both founder approvals of §2 are removed, and with them the VM gate between them
+  (waived for `0.1.0`, D104).
+- **Why one run.** A release or tag created with `GITHUB_TOKEN` triggers no other workflow, and a
+  merge creates a new commit, so the chain cannot be split across workflows triggered by events.
+- **Environments.** `release` and `tap` admit branch `main`.
 
 ## 4. Documentation set
 

@@ -365,6 +365,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   live machine until the founder enables them, and the first enable on any Mac is their first real run.
   (2) Delivery: the work goes to the one existing branch, `development`, with no new branch; a direct
   push is rejected by the `baseline` ruleset (GH013) unless the founder pushes with bypass.
+- **D104 (2026-10-14), founder: release on merge to `main`, fully automatic.** (1) A merged pull
+  request from `development` into `main` is the release: `check.yml` runs the suite on `main`, then
+  publishes the version of the first `CHANGELOG.md` heading and merges the tap pull request, with no
+  manual tag and no manual approval (spec A16 §3.5; plan `plans/2026-10-14-release-on-main.md`).
+  (2) Pull requests into `main` are not run by `check.yml`. (3) The VM gate (A16 Task 11 step 7) is
+  waived for `0.1.0`; the first install from the tap on the founder machine replaces it.
+  (4) Cleanup: `~/dos-gate`, `~/dos-f4`, `~/dos-f5` (including the pre-F5 home archive), the empty retired
+  shared-repository directory and worktree directory, and the audit-session transcripts are deleted.
 - **D103 (2026-10-14), founder: A16 Task 11 steps 1–3.** (1) L1 closed: the license is MIT
   (`LICENSE`, root `package.json` `"license"`). (2) Spec A16 §3.3 and Spec 2 K7 are ratified as
   implemented. (3) Plan D5: the packer's `.tar.zst` archives are not release assets; a release
