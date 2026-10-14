@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest `0.Y.Z` beta receives security fixes.
+Only the latest release receives security fixes.
 
 ## Reporting a vulnerability
 
@@ -13,8 +13,7 @@ Never report a vulnerability in a public issue.
 
 Include:
 
-- the product version (`developer-os --version`),
-- the macOS version and the architecture (Apple Silicon or Intel),
+- the plugin version (from `plugin/.claude-plugin/plugin.json`),
 - the steps that reproduce the problem,
 - the expected result and the actual result.
 
