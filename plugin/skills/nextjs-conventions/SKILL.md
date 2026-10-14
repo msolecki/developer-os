@@ -1,8 +1,6 @@
 ---
-paths:
-  - "**/next.config.*"
-  - "**/app/**"
-  - "**/src/app/**"
+name: nextjs-conventions
+description: "Next.js and web conventions: schema-validated input, Server Components by default, Server Actions with typed results, forward-only migrations, consented analytics. Use when writing or reviewing Next.js app code or next.config files."
 ---
 # Shared Next.js and web conventions
 

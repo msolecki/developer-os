@@ -1,10 +1,6 @@
 ---
-paths:
-  - "**/*.test.*"
-  - "**/*.spec.*"
-  - "**/tests/**"
-  - "**/__tests__/**"
-  - "**/e2e/**"
+name: testing-conventions
+description: "Testing conventions: pin the contract, absolute-instant fixtures, partial module mocks, never delete a test to go green. Use when writing or reviewing test files (*.test.*, *.spec.*, tests/, e2e/)."
 ---
 # Tests — pin the contract, remove the ambient dependency
 

@@ -1,6 +1,6 @@
 ---
-name: przeglad-claudemd
-description: Review a project's instruction file (CLAUDE.md or AGENTS.md) against recent work and propose a minimal evidence-backed diff without applying it. Use when the user asks to improve or review project instructions or invokes przeglad-claudemd.
+name: instruction-review
+description: Review a project's instruction file (CLAUDE.md or AGENTS.md) against recent work and propose a minimal evidence-backed diff without applying it. Use when the user asks to improve or review project instructions or invokes instruction-review.
 ---
 
 # Improve project instructions from evidence

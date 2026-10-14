@@ -1,12 +1,6 @@
 ---
-paths:
-  - "**/cdk/**"
-  - "**/infra/**"
-  - "**/terraform/**"
-  - "**/*.tf"
-  - "**/serverless*.yml"
-  - "**/.github/workflows/**"
-  - "**/cloudwatch/**"
+name: monitoring-conventions
+description: "Monitoring and alerting conventions: alert on symptoms, prevent alert fatigue, runbooks, health vs readiness checks. Use when editing infrastructure code (CDK, Terraform, serverless config, CI workflows) or adding metrics and alerts."
 ---
 # Monitoring and alerting rules
 
