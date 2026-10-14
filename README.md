@@ -59,7 +59,8 @@ plans"); that file loads alongside the core rules in every session.
   error-handling-conventions, defensive-coding-conventions, monitoring-conventions,
   nextjs-conventions, testing-conventions, typescript-conventions.
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor.
-- **Output styles:** architect, debug, direct-objective, tdd-enforcer.
+- **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
+  `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
 - **One `SessionStart` hook** that loads `plugin/rules/core.md` (see above).
 
 ## Codex (manual, best-effort)
