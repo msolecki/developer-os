@@ -26,7 +26,7 @@ const scriptsOf = (text: string): string[] => text.split(/^\s+run: /mu).slice(1)
 
 const withoutComments = (text: string): string => text.replace(/(?:^|\s)#.*$/gmu, "");
 
-const TAG_CHECK = '[[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]';
+const TAG_CHECK = '[[ "$TAG" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]';
 
 /** Every release property as a list of violations; empty means the workflow is sound. */
 const violations = (text: string): string[] => {
@@ -35,12 +35,13 @@ const violations = (text: string): string[] => {
   const jobs = jobsOf(text);
   const { preflight = "", build = "", sbom = "", publish = "" } = jobs;
 
-  if (!/^on:\n {2}push:\n {4}tags:\n {6}- 'v\*'\n(?=\n|\S)/mu.test(text)) found.push("trigger");
+  if (!/^on:\n {2}workflow_call:\n {4}inputs:\n {6}tag:\n(?: {8}.*\n)+(?=\n|\S)/mu.test(text) || /^ {2}(?:push|pull_request\w*|release|workflow_dispatch):/mu.test(text.split(/^permissions:/mu)[0] ?? "")) found.push("trigger");
+  if (!/^env:\n {2}TAG: \$\{\{ inputs\.tag \}\}\n(?=\n|\S)/mu.test(text) || /GITHUB_REF/u.test(code)) found.push("tag source");
 
   // 1. Least privilege; the write-token job runs no repository or dependency code and re-verifies.
   if (!/^permissions:\n {2}contents: read\n(?=\n|\S)/mu.test(text)) found.push("top-level permissions");
   const allowed: Record<string, string[]> = {
-    preflight: ["actions: read", "contents: read"],
+    preflight: ["contents: read"],
     build: ["contents: read"],
     sbom: ["contents: read"],
     publish: ["contents: write"],
@@ -60,7 +61,7 @@ const violations = (text: string): string[] => {
   const listed = publish.indexOf(releaseList);
   const sbomListed = publish.indexOf(sbomList);
   if (listed < 0 || sbomListed < 0 || Math.max(listed, sbomListed) > publish.indexOf("shasum -a 256") || !publish.includes("expected=$(printf '%s\\n' SHA256SUMS \"developer-os-${version}-darwin-arm64.tar.gz\" \"developer-os-${version}-darwin-x64.tar.gz\" notes.md | LC_ALL=C sort)")) found.push("accept list");
-  if (!publish.includes('gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag')) found.push("draft");
+  if (!publish.includes('gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"') || /--draft/u.test(code)) found.push("publish at the commit");
 
   // 2. Every action pinned by full commit SHA with its version.
   const uses = text.split("\n").filter((row) => /^\s+(?:- )?uses:/u.test(row));
@@ -91,11 +92,8 @@ const violations = (text: string): string[] => {
   if (!/gitleaks\["darwin-arm64"\]' \.github\/release\/pins\.json/u.test(preflight) || !preflight.includes('echo "${sum}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -')) found.push("gitleaks checksum");
   if (!preflight.includes('"$RUNNER_TEMP/gitleaks/gitleaks" git --config .gitleaks.toml --log-opts=--all --redact --exit-code 1 .')) found.push("gitleaks scan");
 
-  // 8. A completed, successful check.yml push run on the tag's commit.
-  const query = /actions\/workflows\/check\.yml\/runs\?head_sha=\$\{sha\}&branch=development&event=push&status=success/u.test(preflight);
-  const filter = preflight.includes('select(.head_sha == $sha and .event == "push" and .head_branch == "development" and .status == "completed" and .conclusion == "success")');
-  if (!query || !filter) found.push("check.yml run");
-  if (!preflight.includes("git merge-base --is-ancestor HEAD origin/development")) found.push("on development");
+  // 8. The suite is the caller's (check.yml needs:); here only a refusal of an existing tag.
+  if (!preflight.includes('if git rev-parse -q --verify "refs/tags/${TAG}" > /dev/null; then') || !/fetch-depth: 0/u.test(preflight)) found.push("existing tag");
 
   // 9. Pinned cdxgen in a read-only job.
   const pinned = sbom.includes('cdxgen=$(jq -r \'.cdxgen.version\' .github/release/pins.json)') && sbom.includes('[ "$installed" = "$cdxgen" ] ||');
@@ -112,6 +110,9 @@ const CHECKOUT = "actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
 const mutations: Record<string, [string, (t: string) => string]> = {
   "pull_request trigger": ["trigger", (t) => t.replace("on:\n", "on:\n  pull_request:\n")],
+  "tag push trigger": ["trigger", (t) => t.replace("on:\n", "on:\n  push:\n    tags:\n      - 'v*'\n")],
+  "tag from the ref": ["tag source", (t) => t.replace("  TAG: ${{ inputs.tag }}", "  TAG: ${{ github.ref_name }}")],
+  "ref name in a script": ["tag source", (t) => t.replace('version="${TAG#v}"', 'version="${GITHUB_REF_NAME#v}"')],
   "top-level write": ["top-level permissions", (t) => t.replace(/^permissions:\n {2}contents: read/mu, "permissions:\n  contents: write")],
   "build widened": ["permissions", (t) => t.replace(/(\n {2}build:\n(?:.*\n)*? {4}permissions:\n {6})contents: read/u, "$1contents: write")],
   "publish widened": ["permissions", (t) => t.replace("      contents: write\n", "      contents: write\n      packages: write\n")],
@@ -119,7 +120,7 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "write-all": ["permissions", (t) => t.replace(/^permissions:\n {2}contents: read/mu, "permissions: write-all")],
   "publish checkout": ["publish runs repo code", (t) => t.replace(/( {2}publish:\n(?:.*\n)*? {4}steps:\n)/u, `$1      - uses: ${CHECKOUT}\n`)],
   "publish node": ["publish runs repo code", (t) => t.replace('cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"', 'node x.js; cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"')],
-  "publish pnpm": ["publish runs repo code", (t) => t.replace('gh release create "$GITHUB_REF_NAME"', 'pnpm exec x; gh release create "$GITHUB_REF_NAME"')],
+  "publish pnpm": ["publish runs repo code", (t) => t.replace('gh release create "$TAG"', 'pnpm exec x; gh release create "$TAG"')],
   "publish without re-verify": ["publish re-verifies", (t) => t.replace('cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"', "true")],
   "publish before sbom": ["publish needs", (t) => t.replace("needs: [build, sbom]", "needs: build")],
   "publish without environment": ["publish environment", (t) => t.replace("    environment: release\n", "")],
@@ -127,14 +128,15 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "no release accept list": ["accept list", (t) => t.replace(/\[ "\$actual" = "\$expected" \] && \[ -z "\$\(find "\$release" -mindepth 1 ! -type f\)" \] \|\| /u, "")],
   "no sbom accept list": ["accept list", (t) => t.replace(/\[ "\$actual" = "developer-os-\$\{version\}\.cdx\.json" \] && \[ -z "\$\(find "\$sbom" -mindepth 1 ! -type f\)" \] \|\| /u, "")],
   "sbom admitted to release list": ["accept list", (t) => t.replace('"developer-os-${version}-darwin-x64.tar.gz" notes.md | LC_ALL=C sort)', '"developer-os-${version}-darwin-x64.tar.gz" "developer-os-${version}.cdx.json" notes.md | LC_ALL=C sort)')],
-  "not a draft": ["draft", (t) => t.replace(" --draft --verify-tag", " --verify-tag")],
+  "a draft": ["publish at the commit", (t) => t.replace(' --target "$GITHUB_SHA"', ' --target "$GITHUB_SHA" --draft')],
+  "no target": ["publish at the commit", (t) => t.replace(' --target "$GITHUB_SHA"', "")],
   "tag pin": ["action pins", (t) => t.replace("# v4.6.2", "# v4")],
   "branch pin": ["action pins", (t) => t.replace(/@d3f86a106a0bac45b974a628896c90dbdf5c8093/u, "@v4")],
   "third-party action": ["action pins", (t) => t.replace("actions/upload-artifact@", "someone/upload-artifact@")],
   "persisted credentials": ["persist-credentials", (t) => t.replace("persist-credentials: false", "persist-credentials: true")],
-  "expression in run": ["expression in run", (t) => t.replace('version="${GITHUB_REF_NAME#v}"', 'version="${{ github.ref_name }}"')],
-  "tag check dropped": ["tag check publish", (t) => t.replace(/(\n {2}publish:\n(?:.*\n)*?) +\[\[ "\$GITHUB_REF_NAME" =~ [^\n]*\n/u, "$1")],
-  "loose tag check": ["tag check preflight", (t) => t.replace(TAG_CHECK, '[[ "$GITHUB_REF_NAME" =~ ^v ]]')],
+  "expression in run": ["expression in run", (t) => t.replace('version="${TAG#v}"', 'version="${{ inputs.tag }}"')],
+  "tag check dropped": ["tag check publish", (t) => t.replace(/(\n {2}publish:\n(?:.*\n)*?) +\[\[ "\$TAG" =~ [^\n]*\n/u, "$1")],
+  "loose tag check": ["tag check preflight", (t) => t.replace(TAG_CHECK, '[[ "$TAG" =~ ^v ]]')],
   "allow-dirty": ["allow-dirty", (t) => t.replace('--node-x64-version "$NODE_VERSION"', '--node-x64-version "$NODE_VERSION" --allow-dirty')],
   "second runner type": ["runner", (t) => t.replace(/(\n {2}sbom:\n(?:.*\n)*? {4})runs-on: macos-15/u, "$1runs-on: macos-15-intel")],
   "single pack": ["determinism", (t) => t.replace("for run in 1 2; do", "for run in 1; do")],
@@ -144,12 +146,7 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "gitleaks without --all": ["gitleaks scan", (t) => t.replace(" --log-opts=--all", "")],
   "gitleaks without config": ["gitleaks scan", (t) => t.replace(" --config .gitleaks.toml", "")],
   "gitleaks exit 0": ["gitleaks scan", (t) => t.replace("--exit-code 1", "--exit-code 0")],
-  "any event": ["check.yml run", (t) => t.replace("&event=push", "")],
-  "any status": ["check.yml run", (t) => t.replace("&status=success", "")],
-  "any conclusion": ["check.yml run", (t) => t.replace(' and .conclusion == "success"', "")],
-  "in progress": ["check.yml run", (t) => t.replace(' and .status == "completed"', "")],
-  "other commit": ["check.yml run", (t) => t.replace("select(.head_sha == $sha and ", "select(")],
-  "off development": ["on development", (t) => t.replace("git merge-base --is-ancestor HEAD origin/development", "true")],
+  "existing tag allowed": ["existing tag", (t) => t.replace('if git rev-parse -q --verify "refs/tags/${TAG}" > /dev/null; then', "if false; then")],
   "cdxgen unlocked": ["cdxgen", (t) => t.replace("pnpm exec cdxgen ", 'pnpm dlx "@cyclonedx/cdxgen@latest" ')],
   "cdxgen version unchecked": ["cdxgen", (t) => t.replace('[ "$installed" = "$cdxgen" ] ||', "true ||")],
   "cdxgen lockfile ignored": ["cdxgen", (t) => t.replace("pnpm install --frozen-lockfile --ignore-scripts", "pnpm install")],
@@ -157,7 +154,7 @@ const mutations: Record<string, [string, (t: string) => string]> = {
   "notes dropped": ["notes", (t) => t.replace("release-metadata.js notes", "release-metadata.js sequence")],
 };
 
-describe("release.yml (A16 §2 steps 2-5)", () => {
+describe("release.yml (A16 §2 steps 2-5, D104)", () => {
   it("is sound as committed, with a non-empty set of jobs, scripts and actions", () => {
     expect(Object.keys(jobsOf(workflow))).toEqual(["preflight", "build", "sbom", "publish"]);
     expect(scriptsOf(workflow).length).toBeGreaterThan(0);

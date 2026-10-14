@@ -1,9 +1,10 @@
 name: release
 
-# A16 (docs/superpowers/specs/2026-10-07-developer-os-release-publication-design.md):
-# a pushed tag vX.Y.Z on development becomes a DRAFT release. Publishing the draft
-# is the founder's first approval; tap.yml then opens the tap pull request, and
-# merging it is the second. Nothing here reaches a user.
+# A16 (docs/superpowers/specs/2026-10-07-developer-os-release-publication-design.md,
+# amended by D104): called by check.yml on a push to main, only after every test
+# job of that same run passed on this exact commit. It builds, verifies and
+# PUBLISHES release `inputs.tag` at GITHUB_SHA; check.yml then calls tap.yml.
+# There is no manual approval (D104).
 #
 # Action SHAs were read with `gh api repos/actions/<repo>/git/ref/tags/<tag>`
 # from the actions organisation's own repositories on 2026-10-08.
@@ -11,12 +12,11 @@ name: release
 # Trust split: preflight, build and sbom run repository and dependency code with
 # a read-only token. publish holds `contents: write` and runs no repository or
 # dependency code: it downloads the assets, re-verifies them with the runner's
-# own tools, and drafts the release with gh.
+# own tools, and publishes the release with gh.
 #
-# publish is bound to the `release` Environment. L2 (founder action): create the
-# `release` Environment with a deployment rule that admits only `v*` tags. The
-# rule gates only this job's run; it does not make a write token unreachable
-# from other refs or workflows.
+# publish is bound to the `release` Environment, whose deployment rule admits
+# branch `main` (D104). The rule gates only this job's run; it does not make a
+# write token unreachable from other refs or workflows.
 #
 # cdxgen is an exact root devDependency, so the lockfile pins its whole tree
 # (NEW-201, founder decision 2026-10-09); the job refuses if the installed
@@ -24,16 +24,18 @@ name: release
 # directory and publish accepts exactly one regular file from it, so that code
 # can affect only the SBOM file, never the tarballs or SHA256SUMS.
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: vX.Y.Z, from the first released CHANGELOG.md heading
+        required: true
+        type: string
 
 permissions:
   contents: read
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+env:
+  TAG: ${{ inputs.tag }}
 
 defaults:
   run:
@@ -44,33 +46,22 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     permissions:
-      actions: read
       contents: read
     steps:
       - name: Tag is a stable version
         run: |
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME (want vX.Y.Z)"; exit 1; }
-          [ "$GITHUB_REF" = "refs/tags/$GITHUB_REF_NAME" ] || { echo "::error::not a tag push: $GITHUB_REF"; exit 1; }
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $TAG (want vX.Y.Z)"; exit 1; }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # The history scan reads every fetched ref, and the ancestry check
-          # needs origin/development.
+          # The history scan reads every fetched ref, and the tag check needs tags.
           fetch-depth: 0
           persist-credentials: false
-      - name: Tag is on development
-        run: git merge-base --is-ancestor HEAD origin/development
-      - name: check.yml passed on this commit
-        # Never rerun the ~4 h suite here. A pull_request run tests a merge ref,
-        # not this tree, and a cancelled run proves nothing, so only a completed,
-        # successful push run on development counts (CONTRIBUTING, Releasing).
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Tag does not exist yet
+        # The suite already passed on this commit in the calling check.yml run
+        # (its needs:), so nothing here reruns or queries it.
         run: |
-          sha=$(git rev-parse 'HEAD^{commit}')
-          count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/check.yml/runs?head_sha=${sha}&branch=development&event=push&status=success&per_page=100" \
-            | jq --arg sha "$sha" '[.workflow_runs[] | select(.head_sha == $sha and .event == "push" and .head_branch == "development" and .status == "completed" and .conclusion == "success")] | length')
-          if [ "$count" -lt 1 ]; then
-            echo "::error::no completed, successful check.yml push run on development for ${sha}. Land the commit on development, wait for its check.yml push run to finish green (a cancelled run or a pull-request run does not count), then tag that exact commit."
+          if git rev-parse -q --verify "refs/tags/${TAG}" > /dev/null; then
+            echo "::error::${TAG} already exists; bump the CHANGELOG.md version"
             exit 1
           fi
       - name: History secret scan
@@ -96,8 +87,8 @@ jobs:
     steps:
       - name: Tag is a stable version
         run: |
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME"; exit 1; }
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $TAG"; exit 1; }
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 1
@@ -169,8 +160,8 @@ jobs:
     steps:
       - name: Tag is a stable version
         run: |
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME"; exit 1; }
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $TAG"; exit 1; }
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 1
@@ -216,8 +207,8 @@ jobs:
           path: ${{ runner.temp }}/sbom
       - name: Re-verify the assets
         run: |
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME"; exit 1; }
-          version="${GITHUB_REF_NAME#v}"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $TAG"; exit 1; }
+          version="${TAG#v}"
           # Accept lists, checked before anything else reads the assets: the
           # release artifact holds exactly these four regular files, the sbom
           # artifact exactly one. A subdirectory, link or extra file refuses.
@@ -236,15 +227,15 @@ jobs:
           cmp SHA256SUMS "$RUNNER_TEMP/SHA256SUMS.recomputed"
           jq -e '.bomFormat == "CycloneDX"' "$sbom/developer-os-${version}.cdx.json" > /dev/null
           [ -s notes.md ] || { echo "::error::empty release notes"; exit 1; }
-      - name: Draft release
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $GITHUB_REF_NAME"; exit 1; }
-          version="${GITHUB_REF_NAME#v}"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::refusing tag: $TAG"; exit 1; }
+          version="${TAG#v}"
           cd "$RUNNER_TEMP/release"
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
-            --title "$GITHUB_REF_NAME" --notes-file notes.md \
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$TAG" --notes-file notes.md \
             "developer-os-${version}-darwin-arm64.tar.gz" \
             "developer-os-${version}-darwin-x64.tar.gz" \
             SHA256SUMS \
