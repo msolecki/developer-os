@@ -59,9 +59,8 @@ To record your own defaults (a preferred package manager, UI kit, backend, or te
 - Every plan step must state What (deliverable), Where (files), How (approach), and **Test** (verification). The system must remain deployable after every step. Use S/M/L complexity instead of time estimates.
 - A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
 - An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, and expected output format. Exclude debugging history, rejected approaches, and full conversation dumps.
-- Before a large task, look for earlier decisions instead of starting from zero: search the knowledge base first with the `brain-search` skill, then read the project's active plan. Raw session transcripts are a last resort; search them only when the knowledge base has no answer.
+- Before a large task, look for earlier decisions instead of starting from zero: search the vault with the `brain-search` skill and read the selected note, then read the project's active plan. Raw session transcripts are a last resort; search them only when the vault has no answer.
 - During compaction, preserve the modified-file list, the project's test commands, and the current objective.
-- Search the vault with the `brain-search` skill and read the selected note before deriving an answer from scratch.
 - Show only failures from tests and builds, never a full passing log.
 - Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence.
 

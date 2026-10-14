@@ -208,7 +208,8 @@ Link from the vault to the repository by path or URL; do not copy repository con
   **nextjs-conventions**, **testing-conventions**, **typescript-conventions**.
 - Agents: **code-reviewer**, **performance-engineer**, **qa-expert**, **research-analyst**,
   **security-auditor**.
-- Output styles: **architect**, **debug**, **direct-objective**, **tdd-enforcer**.
+- Output styles: **architect**, **debug**, **direct-objective**, **tdd-enforcer** (in settings:
+  `"outputStyle": "developer-os:architect"`).
 - A `SessionStart` hook that loads the core working rules (`plugin/rules/core.md`) into every
   session; the [README](../README.md#what-the-sessionstart-hook-does) says what they change and how
   to turn them off.
