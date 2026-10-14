@@ -23,4 +23,4 @@ reusable workflows, gated by `needs:` on every test job of the same run.
 | 5 | Remote (founder-approved) | GitHub settings | create `main`; ruleset on `main` (PR only, no deletion, no force push); allow branch `main` in environments `release` and `tap` | `gh api` reads | S |
 | 6 | Release `0.1.0` | PR `development` → `main` | merge; watch `check.yml` on `main` | `brew info msolecki/developer-os/developer-os` shows `0.1.0` | — |
 
-**Next action:** step 1.
+**Status 2026-10-14:** steps 1–5 done (`cf9bc63c`, `058ef5b1`; remote: branch `main`, ruleset `main`, environments admit `main`). **Next action:** merge PR #62 into `development`, then open and merge the PR `development` → `main` (step 6).
