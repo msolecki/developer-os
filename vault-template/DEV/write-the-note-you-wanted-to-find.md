@@ -15,6 +15,6 @@ title you would search for, not a title that describes where it came from.
 - The `summary` line is what a search result shows; write it so it stands on its own.
 - Write down the why. The what is usually in the code; the reason almost never is.
 
-Links are how the graph gets built. This note points at [[TOOLS/obsidian-bases-cheat-sheet]].
+Links are how the graph gets built. This note points at [[obsidian-bases-cheat-sheet]].
 
 Delete the example notes whenever you like; nothing depends on them.

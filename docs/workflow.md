@@ -30,7 +30,13 @@ tells you when to use them and where each piece of knowledge belongs.
    ```
    Brain vault: /absolute/path/to/your/vault
    ```
-5. Start a session and ask: "brain-search webhooks". It should find the example inbox note.
+5. Let Claude Code read and write the vault outside your project folders. Add it to
+   `~/.claude/settings.json`:
+   ```json
+   { "permissions": { "additionalDirectories": ["/absolute/path/to/your/vault"] } }
+   ```
+   (or start a session with `claude --add-dir /absolute/path/to/your/vault`).
+6. Start a session and ask: "brain-search webhooks". It should find the example inbox note.
 
 For each project repository, copy `templates/project/` (`CLAUDE.md`, `AGENTS.md`, `_Context.md`) into
 its root and fill them in. `_Context.md` carries the project's vault slug.
@@ -161,8 +167,8 @@ Link from the vault to the repository by path or URL; do not copy repository con
 - **Write the why, not just the what.** "We use a unique constraint" is a fact; "because an
   in-app check races under parallel retries" is the knowledge.
 - **Name the rejected options** in decision notes, so nobody reopens them without new information.
-- **Link.** Use `[[folder/note]]` links to related notes and the project hub. Unlinked notes are
-  hard to find and easy to duplicate.
+- **Link.** Use `[[note-name]]` links (no folder) to related notes and the project hub, so links
+  survive moving a note out of `_inbox/`. Unlinked notes are hard to find and easy to duplicate.
 - **Keep it short.** If a note needs headings beyond Context, Decision, Why and Links, it is
   probably two notes.
 - **Update `updated`** whenever you change what a note says.
