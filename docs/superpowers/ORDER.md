@@ -56,7 +56,7 @@ Strict sequence; do not start a blocked row early.
 |---|---|---|---|---|
 | A15 | DOS-P8 Founder migration (D58) — `docs/migration/founder-cutover.md` | — | step 16 passes and step 19's remainder is done | steps 1–15 done 2026-09-28/29; step 18 waived and the legacy shared repository retired (D97, 2026-10-11); step 16 Claude items 1–4 passed 2026-10-11 (NEW-250 found); step 19's vault tooling removed; open: step 16 item 5 (Codex) waived, unverified (D100); items 6–7 run in A16 Task 11 step 7 (D99); open: step 19's result files |
 | A11b | DOS-P7 remainder: Task 11b (NEW-111, NEW-112, NEW-118, NEW-163, NEW-171) — Spec 2 block "Amended 2026-10-07 (D84, Task 11b)" | — (D94 designed it) | `update` reaches a real release on a disposable install, then on the founder machine | **closed 2026-10-11 (D98)**: code 2026-10-08; full suite = green `check.yml` on `eaef019d`; disposable install = NEW-210 Task 7's VM gate; the founder-machine leg (F4 reinstall, NEW-200 checks) moved to A16 Task 11 step 7 |
-| A16 | DOS-P9 Public beta and v1 — `specs/2026-10-07-developer-os-release-publication-design.md` | L1, L2 | `v1.0.0` is published and reproducible | spec approved 2026-10-07; plan `plans/2026-10-08-a16-release-publication.md` Tasks 1–10 done 2026-10-08 (on `integrate/task-11b`); Task 11 steps 1 and 3 done 2026-10-14 (D103); step 2 waits on the tap formula push; then steps 4–9 (full check, PR, tag `v0.1.0`, two approvals, VM gate) |
+| A16 | DOS-P9 Public beta and v1 — `specs/2026-10-07-developer-os-release-publication-design.md` | — | `v1.0.0` is published and reproducible | spec approved 2026-10-07; plan `plans/2026-10-08-a16-release-publication.md` Tasks 1–10 done 2026-10-08 (on `integrate/task-11b`); Task 11 steps 1–3 done 2026-10-14 (D103; L1 and L2 closed); next: steps 4–9 (full check, PR, tag `v0.1.0`, two approvals, VM gate) |
 
 ## Repository work not owned by the product sequence
 
@@ -107,11 +107,11 @@ retained screening refusal, NEW-100's round trip after A16 (D42).
 | # | Owner | Required action | Blocks |
 |---|---|---|---|
 | L1 | founder + qualified counsel | **closed 2026-10-14**: MIT committed (A16 Task 11 step 1) | — |
-| L2 | founder / environment with remote access | open only for pushing the tap's initial `Formula/developer-os.rb` (rendered and dry-run 2026-10-14; rest checked; A16 Task 11 step 2) | A16 |
+| L2 | founder / environment with remote access | **closed 2026-10-14**: tap formula merged (tap PR #1), secret, environments, rulesets checked (A16 Task 11 step 2) | — |
 
 ## Count
 
-- Product sequence: 2 open entries — A15 (steps 16, 19), A16 (Task 11 steps 2, 4–9, with L2); A11b closed (D98).
+- Product sequence: 2 open entries — A15 (steps 16, 19), A16 (Task 11 steps 4–9); A11b closed (D98).
 - Founder stop points: 6, listed above.
 - Startable rows: 1 (NEW-132); NEW-259 waits for the first update planner that emits creates; NEW-193 (4) waits for Codex after 2026-10-22. Founder decision: NEW-212.
   Awaiting founder numbers: NEW-116.
