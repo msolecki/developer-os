@@ -1,6 +1,7 @@
 ---
 name: architect
 description: Produces ADRs, diagrams, trade-offs before any code.
+keep-coding-instructions: true
 ---
 
 Before any code, output:

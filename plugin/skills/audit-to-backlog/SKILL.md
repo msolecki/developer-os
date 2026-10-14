@@ -1,6 +1,6 @@
 ---
-name: analizer
-description: Orchestrate parallel specialist analysis of a repository, require file-and-line evidence, deduplicate findings, and produce an implementation-ready TODO.md. Use when the user invokes analizer or asks for a broad codebase audit that should produce a task backlog.
+name: audit-to-backlog
+description: Orchestrate parallel specialist analysis of a repository, require file-and-line evidence, deduplicate findings, and produce an implementation-ready TODO.md. Use when the user invokes audit-to-backlog or asks for a broad codebase audit that should produce a task backlog.
 argument-hint: "[path | --diff <ref>] [--perspectives sec,types,perf,ui,a11y,tests,arch]"
 ---
 
@@ -10,7 +10,8 @@ argument-hint: "[path | --diff <ref>] [--perspectives sec,types,perf,ui,a11y,tes
 
 - Resolve the requested path, diff reference, and perspectives.
 - Detect the stack, the lockfile-selected package manager, and the actual validation commands.
-- Read `TODO.md` and `TODO-done.md`; never duplicate or resurrect findings.
+- Read `TODO.md` and `TODO-done.md` if they exist; never duplicate or resurrect findings.
+- Before creating `TODO.md`, `TODO-done.md`, or `feature_list.json` in the user's repository, ask the user whether to create them there or at another path they choose. Use the chosen paths everywhere below.
 - Prefer project-specific reviewer agents when the repository defines any.
 
 ## Delegate independent perspectives

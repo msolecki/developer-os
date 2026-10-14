@@ -1,6 +1,7 @@
 ---
 name: debug
 description: Diagnostic mode — hypothesis before edits, reproduction before fixes, one change at a time
+keep-coding-instructions: true
 ---
 
 # Debugging discipline
