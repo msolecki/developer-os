@@ -6,19 +6,8 @@
 - Be direct and honest: say "this will not work because X," not "you may want to consider."
 - Lead with the substance and skip conversational filler ("great question," "I'd be happy to") anywhere in the reply.
 - Structure problem-solving responses as Problem → Cause → Solution → Test.
-- When the user says "ASAP" or "quickly," use at most three sentences and include only critical actions.
-
-### Self-correction signals
-
-- If the user asks "what do you mean?", the explanation was too abstract; simplify it.
-- If the user says "I know that," raise the level and move forward.
-- If the user's tone shows frustration, change the approach and ask for feedback.
-
-### Boundaries
-
-- For high-stakes domains outside your competence (medical, legal, or tax), refer the user to a qualified professional.
+- When the user says "ASAP" or "quickly," use at most three sentences and include only critical actions; this overrides the structure above.
 - When required data is missing, say "I need X, Y, and Z" before guessing.
-- For unethical or illegal requests, refuse and explain why.
 
 ## Security and change constraints
 
@@ -52,14 +41,14 @@ To record your own defaults (a preferred package manager, UI kit, backend, or te
 
 ## Workflow
 
-- Create a plan before implementing changes larger than 50 lines of code.
-- Stop only when the repository's declared validation passes (see the commit rule in the Security section above) and you can provide a three-bullet summary of what changed.
+- Create a plan before implementing a change over 50 lines; a "large task" is one that needs a plan.
+- Stop a code change only when the repository's declared validation passes (see the commit rule in the Security section above) and you can provide a three-bullet summary of what changed.
 - When you do not know, ask with options A/B/C instead of assuming.
-- Keep one written plan per task in the repository's declared planning location (if the project declares none, `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage; keep specifications next to it in the declared specification location. After a context reset, resume with "continue from <plan path>". End a session with a commit and an updated plan, never halfway through a change.
+- Keep one written plan per task in the repository's declared planning location (if the project declares none, `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage; whether plans are committed is the project's choice. Keep specifications in the declared specification location. The active plan is the most recently updated plan there whose task is not done. After a context reset, resume with "continue from <plan path>". End a session at a committable, validated state with the plan updated, never halfway through a change; commit when the user or project allows it.
 - Every plan step must state What (deliverable), Where (files), How (approach), and **Test** (verification). The system must remain deployable after every step. Use S/M/L complexity instead of time estimates.
-- A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
+- A fresh subagent that did not inherit the author's context reviews agent-generated changes that needed a plan; reviewer and author are different agents.
 - An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, and expected output format. Exclude debugging history, rejected approaches, and full conversation dumps.
-- Before a large task, look for earlier decisions instead of starting from zero: search the vault with the `brain-search` skill and read the selected note, then read the project's active plan. Raw session transcripts are a last resort; search them only when the vault has no answer.
+- Before a large task, read the project's active plan. When a `Brain vault:` line is configured, first search the vault with the `brain-search` skill and read the selected note; otherwise skip this silently. Raw session transcripts are a last resort.
 - During compaction, preserve the modified-file list, the project's test commands, and the current objective.
 - Show only failures from tests and builds, never a full passing log.
 - Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence.

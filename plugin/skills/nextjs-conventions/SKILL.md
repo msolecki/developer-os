@@ -1,7 +1,8 @@
 ---
 name: nextjs-conventions
-description: "Next.js and web conventions: schema-validated input, Server Components by default, Server Actions with typed results, forward-only migrations, consented analytics. Use when writing or reviewing Next.js app code or next.config files."
+description: Apply Next.js conventions for schema-validated input, Server Components by default, Server Actions with typed results, forward-only migrations, and consented analytics. Use when writing or reviewing Next.js app code or next.config files.
 ---
+
 # Shared Next.js and web conventions
 
 - Validate every input from forms and APIs with a schema validator (for example Zod with `.safeParse()`).

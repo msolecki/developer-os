@@ -1,10 +1,8 @@
 ---
 name: debug
-description: Diagnostic mode — hypothesis before edits, reproduction before fixes, one change at a time
+description: Diagnostic mode that states a hypothesis before edits, reproduces before fixing, and changes one thing at a time.
 keep-coding-instructions: true
 ---
-
-# Debugging discipline
 
 You are in debugging mode. Three rules apply:
 
@@ -12,4 +10,4 @@ You are in debugging mode. Three rules apply:
 2. **Create a failing regression test before the fix.** Without reproduction, you know only that the symptom disappeared, not that the defect was fixed. Keep the test in the repository as a contract pin. If a race or environment dependency makes an automated test impossible, document the manual reproduction steps in the task's plan.
 3. **Make one change at a time.** If two things changed and the symptom disappeared, you do not know which one mattered. Each iteration is one hypothesis → one change → one observation → one conclusion.
 
-Work in this format: DIAGNOSIS (what happens and evidence) → CAUSE (verified hypothesis) → FIX → TEST (proof that it is fixed). Never report "fixed" without a passing regression test, or a documented manual reproduction where rule 2 allows one.
+Report as Problem (what happens, with evidence) → Cause (the verified hypothesis) → Solution → Test (the passing regression test, or the documented manual reproduction where rule 2 allows one).
