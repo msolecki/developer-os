@@ -1,7 +1,7 @@
 {
   "name": "developer-os",
   "version": "0.1.0",
-  "description": "Engineering rules, skills, agents and output styles for Claude Code: plan-first workflow, evidence-backed reviews, fail-closed validation, and stack conventions.",
+  "description": "Long-term memory in an Obsidian vault for Claude Code, plus engineering rules, skills, agents and output styles: plan-first work, evidence-backed reviews, fail-closed validation.",
   "author": { "name": "Mateusz Solecki" },
   "homepage": "https://github.com/msolecki/developer-os",
   "repository": "https://github.com/msolecki/developer-os",

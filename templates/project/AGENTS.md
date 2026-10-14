@@ -1,13 +1,19 @@
 # <Project name>
 
 <!-- Include ONLY project-specific information. Communication style, shared code style,
-     workflow, and negative constraints come from the user-level rules; do not repeat them.
+     workflow, and negative constraints come from the developer-os core rules (plugin) or your
+     global instructions (~/.claude/CLAUDE.md); do not repeat them.
      Test every line: "Would deleting this make the agent produce errors?" If not, remove it.
      Domain knowledge needed only sometimes belongs in a project skill, not in this file.
      Target: fewer than 100 lines. Keep _Context.md as the short navigation signpost.
      CLAUDE.md only imports this file (`@AGENTS.md`), so edit here. -->
 
 Read `_Context.md` first: it says where to look and holds the project's vault slug.
+
+<!-- Optional: where audit-to-backlog writes and implement-backlog reads the backlog.
+     Without this line they use TODO.md and TODO-done.md.
+Backlog: docs/backlog/TODO.md docs/backlog/TODO-done.md
+-->
 
 ## Project purpose
 

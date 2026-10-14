@@ -25,4 +25,5 @@ Prerequisites on `PATH`:
 
 - Use synthetic examples only. Never commit a real vault note, a client name or a credential.
 - A skill does one job, says when to use it in its `description`, and fits on one screen where possible.
+- This repository keeps its plans local: `docs/plans/` is gitignored.
 - Test a changed skill by running it: `claude --plugin-dir plugin`, then invoke it on a scratch vault.
