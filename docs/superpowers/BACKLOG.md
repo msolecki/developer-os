@@ -413,6 +413,7 @@ This is an inbound-reference index, not completed backlog history. Current sourc
 - Adapter capability and hook constraints: `claude-adapter.md` and `codex-adapter.md`.
 - Remote/publication boundary: `docs/migration/exclusion-policy.md`, `SESSION.md`, and §7 above.
 - Task 11b (A11b): closed 2026-10-11 (D98); the plan is deleted, `git show eaef019d:docs/superpowers/plans/2026-10-07-task-11b-package-channel.md`.
-- A16 plan: `plans/2026-10-08-a16-release-publication.md` (approved 2026-10-08; T1–T10 done, trimmed; T11 founder with L1/L2).
+- A16 plan: `plans/2026-10-08-a16-release-publication.md` (approved 2026-10-08; T1–T10 done, trimmed; T11 steps 1–3 done, D103).
+- Release on merge to `main` (D104): `plans/2026-10-14-release-on-main.md`; spec A16 §3.5.
 - Release publication (A16): `specs/2026-10-07-developer-os-release-publication-design.md` (approved by the founder
   2026-10-07); the update side is Spec 2's Task 11b block (K1–K6).

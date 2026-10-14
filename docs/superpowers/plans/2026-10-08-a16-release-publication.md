@@ -89,27 +89,14 @@ git add CHANGELOG.md
 git commit -m "docs(changelog): date 0.1.0"
 ```
 
-- [ ] **Step 4: Plan close (D32).** On a quiet machine, run `npm run check` once. Push to `development` (through a pull request, because of GH013) and wait for the `check.yml` push run on the resulting `development` head to complete green. Tick the deferred steps.
-- [ ] **Step 5: Tag the first beta.** Run `git tag v0.1.0 <that green development head>` and `git push origin v0.1.0`. Watch `release.yml`: preflight, build (two packs, `cmp` equal, both verifies print `verified …`), publish. Locally, reproduce the bytes as §6 promises: check out the tag in a scratch clone, run `release.yml`'s build job steps with the same `.node-version` and pins, and confirm `cmp` against the draft's `SHA256SUMS`.
-- [ ] **Step 6: Approval 1 (Blocked by: L1, L2).** Draft assets have no public URL, so the VM gate runs between the two approvals. Publish the draft `v0.1.0`. Watch `tap.yml` open the pull request. A published release whose tap pull request is unmerged reaches no user (§2).
-- [ ] **Step 7: VM gate (D96 Q5).** In a fresh macOS VM whose only user owns `/opt/homebrew`, clone the tap, check out the pull request's branch `release/v0.1.0`, and `brew tap msolecki/developer-os <that local clone>`. Then:
+> **Amended 2026-10-14 (D104):** steps 4–8 below replace the tag-and-two-approvals flow. A merge
+> into `main` releases automatically (spec §3.5, plan `plans/2026-10-14-release-on-main.md`).
 
-```sh
-brew install developer-os
-brew test developer-os
-mkdir "$TMPDIR/x" && tar -xzf developer-os-0.1.0-darwin-arm64.tar.gz -C "$TMPDIR/x"
-diff -r "$TMPDIR/x/libexec" "$(brew --prefix)/opt/developer-os/libexec"
-diff <(cd "$TMPDIR/x/libexec" && find . -exec stat -f '%Lp %N' {} + | sort) <(cd "$(brew --prefix)/opt/developer-os/libexec" && find . -exec stat -f '%Lp %N' {} + | sort)
-developer-os init --adapters claude,codex
-developer-os capture --text "Decision: VM gate"
-developer-os review
-developer-os review --id <capture-id> --decision accept
-developer-os ingest --agent claude
-developer-os search "VM gate"
-```
-
-Record the SHA-256 of every Brain file (`find <vault> -type f -exec shasum -a 256 {} + | sort > before.txt`). Then build a second version locally for the upgrade leg. In a scratch clone at a later green commit, run `release.yml`'s build job steps for `0.1.1`, then point the local tap's formula at `file://` URLs of those tarballs with `node tests/dist/tools/render-formula.js --version 0.1.1 --sums <its SHA256SUMS>`, editing only the two `url` lines. Run `brew upgrade developer-os`, `developer-os update --apply`, `developer-os update rollback --apply` and `developer-os uninstall --yes`. Recompute the hash list and confirm `diff before.txt after.txt` is empty. Both `diff -r` and the mode diff must print nothing (Review Focus 1). `brew test` must pass (Review Focus 2). Repeat once on the founder machine (K6); that run is also Task 11b's founder-machine leg (D98): install from the tap per `docs/migration/founder-cutover.md` step 15's keg variant, and after `update --apply` and after `update rollback --apply` confirm that `~/.claude/skills/developer-os/hooks/hooks.json` is byte-identical to its copy before the command and names `/opt/homebrew/opt/developer-os/libexec/fallback/bundle/bin/node`, that the Codex plugin manifest's `version` is the active release, that `doctor` prints no `workflows not refreshed` warning, that the `update` preview's `packageSource` names the new Cellar keg with no download block, that `init --adapters claude,codex` found both vendors through the user's `PATH` under the launcher (NEW-202), and that `grep -c '"trust":"package-channel"' <product-home>/state/release-trust.json` prints `1`. The same founder-machine run is cutover step 16's items 6–7 (D99): take step 15's "before" hashes before the reinstall and require its three `diff`s empty, check the `uninstall --yes` against step 16 item 7's list, then reinstall through cutover step 17. Store the evidence (commands, outputs, hashes) in the A16 record. A failure here is a release blocker: close the tap pull request, and the published release reaches no user.
-- [ ] **Step 8: Approval 2.** Review the formula diff in the tap pull request and merge it. Confirm that `brew update && brew info developer-os` shows `0.1.0`.
+- [ ] **Step 4: Release on `main` wiring.** `plans/2026-10-14-release-on-main.md` steps 1–5 integrated on `development`: reusable `release.yml` and `tap.yml`, release jobs in `check.yml`, branch `main` with a pull-request ruleset, environments `release` and `tap` admitting `main`.
+- [ ] **Step 5: Plan close (D32).** The full suite is the `check.yml` run on `main` in step 6; it must be green before anything is published, by construction (`needs:`).
+- [ ] **Step 6: Release `0.1.0`.** Open a pull request from `development` into `main` and merge it. Watch `check.yml` on `main`: every test job, then `release-version` (`tag=v0.1.0`), `release` (preflight, two packs `cmp` equal, both verifies print `verified …`, publish), `tap` (pull request opened and merged). Confirm `brew update && brew info msolecki/developer-os/developer-os` shows `0.1.0`.
+- [x] **Step 7: VM gate.** Waived for `0.1.0` (D104).
+- [ ] **Step 8: Founder machine.** Install from the tap and run `brew test developer-os` (K6). That run is also Task 11b's founder-machine leg (D98): install from the tap per `docs/migration/founder-cutover.md` step 15's keg variant, and after `update --apply` and after `update rollback --apply` confirm that `~/.claude/skills/developer-os/hooks/hooks.json` is byte-identical to its copy before the command and names `/opt/homebrew/opt/developer-os/libexec/fallback/bundle/bin/node`, that the Codex plugin manifest's `version` is the active release, that `doctor` prints no `workflows not refreshed` warning, that the `update` preview's `packageSource` names the new Cellar keg with no download block, that `init --adapters claude,codex` found both vendors through the user's `PATH` under the launcher (NEW-202), and that `grep -c '"trust":"package-channel"' <product-home>/state/release-trust.json` prints `1`. The same founder-machine run is cutover step 16's items 6–7 (D99): take step 15's "before" hashes before the reinstall and require its three `diff`s empty, check the `uninstall --yes` against step 16 item 7's list, then reinstall through cutover step 17. Store the evidence (commands, outputs, hashes) in the A16 record.
 - [ ] **Step 9: Beta and close.** Invite participants with synthetic or their own vaults. Route each release blocker through the normal spec and plan flow, and rerun step 6 per beta. `1.0.0` needs no open release blocker, NEW-200 closed (D96 Q3), and L1 and L2 closed (§3.2). Orchestrator: update `ORDER.md` (A16 progress line) and `BACKLOG.md`, then commit with exact paths:
 
 ```bash
