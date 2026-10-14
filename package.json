@@ -2,6 +2,7 @@
   "name": "developer-os",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "description": "Local-first workflows and an Obsidian-compatible Brain for Claude Code and Codex",
   "type": "module",
   "packageManager": "pnpm@11.3.0",
