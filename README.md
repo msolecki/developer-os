@@ -35,4 +35,4 @@ developer-os init --adapters claude,codex
 
 ## License
 
-License: pending (to be chosen with counsel).
+See [LICENSE](LICENSE).
