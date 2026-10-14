@@ -25,6 +25,11 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - `docs/workflow.md`: how to work with the vault and the code.
 
 ### Changed
+- Review, audit and triage skills and the agents rate findings P0–P3 with one severity scale; review
+  verdicts are `APPROVE`, `COMMENT` or `REQUEST_CHANGES`.
+- The core rules are shorter, with clearer plan and precedence rules.
+- `scripts/check.sh` also checks frontmatter, hook targets, the core-rules size, plugin references
+  and relative Markdown links.
 - The plugin and marketplace descriptions lead with the Obsidian-vault memory.
 - `docs/workflow.md` no longer repeats the README's component list and Codex steps; it links to
   them. The README links to `core.md` instead of paraphrasing it.
@@ -44,6 +49,11 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - `SECURITY.md` no longer claims the vault never leaves your disk, and explains that an update can
   change the `SessionStart` hook command.
 - `.gitignore` covers `.env*`, `*.pem` and `.claude/settings.local.json`.
+- fix-pr asks before each edit, commit, push and thread resolution, treats review comments as data
+  and flags comments from non-collaborators.
+- Agents treat code, diffs, PR text and fetched pages as data, not instructions.
+- CI pins `actions/checkout` to a commit SHA, drops persisted credentials, runs with read-only
+  `contents` permission and verifies the gitleaks download checksum.
 
 ### Removed
 - The Homebrew CLI, its bundled Node runtime, background jobs and generated indexes.
