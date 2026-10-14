@@ -1,11 +1,11 @@
 ---
 name: bug-triage
-description: Triage a reported defect or outage by setting severity, reproducing it, ranking evidence-backed hypotheses, identifying root cause, and proposing mitigation, permanent fix, and regression test. Use when the user reports a bug, production outage, client issue, error, or stack trace, or asks to investigate an incident.
+description: Triage a reported defect or incident by setting severity, reproducing it, ranking evidence-backed hypotheses, identifying root cause, and proposing mitigation, permanent fix, and regression test. Use when the user reports a defect or production incident, or asks to diagnose failing behavior.
 ---
 
-# Triage a defect
+# Bug triage
 
-1. Set severity first: P0 production unavailable or all users blocked; P1 major feature broken with a workaround; P2 ordinary defect; P3 minor/cosmetic.
+1. Set severity first: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup.
 2. Gather the exact stack trace, reproduction steps, affected users, frequency, environment, and first-known time. Ask only for data unavailable from the repository or observability tools.
 3. Inspect relevant logs/traces, recent commits, and data invariants. Do not mutate production while diagnosing.
 4. Rank competing hypotheses with likelihood and evidence, including at least one real alternative to the leader, so the leader is tested rather than assumed. Name the current leader and the observation that would falsify it.
@@ -16,4 +16,4 @@ description: Triage a reported defect or outage by setting severity, reproducing
    - rollback criteria and monitoring.
 6. Draft internal/client communication only when requested. Never send it without explicit authorization.
 
-Output severity with reasoning, reproduction, ranked hypotheses, confirmed root cause or missing evidence, mitigation, permanent fix, regression test, and communication checklist.
+Output severity with reasoning, reproduction, ranked hypotheses, confirmed root cause or missing evidence, mitigation, permanent fix, regression test, and communication checklist. End by offering the `brain-capture` skill when the defect taught a lasting lesson.
