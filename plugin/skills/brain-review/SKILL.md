@@ -1,6 +1,6 @@
 ---
 name: brain-review
-description: Review the inbox of the user's Obsidian knowledge vault - summarize each captured note, suggest a topic folder and duplicates, and promote only the notes the user approves. Use when the user asks to review, triage, or clean up the brain/vault inbox or captured notes.
+description: Review the inbox of the user's Obsidian knowledge vault — summarize each captured note, suggest a topic folder and duplicates, and promote, merge, or reject only the notes the user names. Use when the user asks to review or triage the brain/vault inbox or captured notes.
 ---
 
 # Brain review
@@ -9,7 +9,7 @@ Proposes first; moves a note only after the user approves that note in this conv
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>` in the user's `CLAUDE.md` or `AGENTS.md`. If there is none, ask the user once and tell them to add that line. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>` in the user's `CLAUDE.md` or `AGENTS.md` (already in your context, or in `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the project's file). If there is none, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. List the inbox
 
@@ -24,7 +24,7 @@ ls -d "$V"/*/ # topic folders: every top-level folder not starting with "_", exc
 Read each inbox note. For each, give: its `summary`, the topic folder that fits best (`PROJECTS/`, `DEV/`, `TOOLS/`, `INFRA/`, `QA/`, or a folder the user added), and any likely duplicate:
 
 ```bash
-rg -il -g '*.md' -g '!_inbox/**' -g '!templates/**' -e 'changelog' "$V"
+rg -il -g '*.md' -g '!_inbox/**' -g '!_archive/**' -g '!templates/**' -e 'changelog' "$V"
 ```
 
 Flag missing frontmatter keys and any secret that slipped through (propose `[REDACTED]`).
@@ -40,21 +40,33 @@ Example:
 2. _inbox/docker-cache-flag.md — knowledge
    "Use --mount=type=cache for pnpm store in Dockerfiles."
    → INFRA/ no duplicate
-Approve which ones? (e.g. "promote 1 and 2", "promote 1 to TOOLS/", "skip 2")
+Approve which ones? (e.g. "promote 1 and 2", "promote 1 to TOOLS/", "merge 1 into DEV/release-process.md", "reject 2")
 ```
 
 ## 4. Promote only approved notes
 
-For each note the user explicitly approved:
+For each note the user explicitly approved, in this order:
 
-1. Set `status: active` and `updated:` to today in its frontmatter (Edit).
-2. Move it: `mv "$V/_inbox/<name>.md" "$V/<FOLDER>/<name>.md"`. Do not overwrite an existing file; ask instead.
-3. Keep the file name, so `[[name]]` links still resolve.
+1. Check the note name matches `^[a-z0-9-]+$`. If not, ask the user for a name; do not move it.
+2. Check `<FOLDER>/<name>.md` does not exist. If it does, ask the user and change nothing.
+3. Move it, paths single-quoted: `mv '/path/to/vault/_inbox/<name>.md' '/path/to/vault/<FOLDER>/<name>.md'`. Keep the file name, so `[[name]]` links still resolve.
+4. Only then set `status: active` and `updated:` to today (Edit). If the note has no frontmatter, first write the full frontmatter from `templates/note.md`.
 
-Do not merge, delete, or archive anything unless the user asks for that specific note. Silence or "looks good" on the list is not approval for every note; ask which ones.
+If the note is a compiled note (`tags` contains `compiled`), offer to archive its `sources` as in step 5.
 
-## 5. Report
+## 5. Merge or reject only named notes
 
-List what moved where and what stayed in `_inbox/`.
+Only for notes the user explicitly named. Never delete a note.
+
+- **Merge**: fold the new content and its links into the surviving note first (show the merged text, set its `updated`), then archive the inbox note.
+- **Reject**: archive the note.
+
+To archive: set `status: archived` and `updated:` to today, then move the note to `_archive/` with the same name (same name and destination checks as step 4).
+
+Silence or "looks good" on the list is not approval for every note; ask which ones.
+
+## 6. Report
+
+List what moved where, what was merged or archived, and what stayed in `_inbox/`.
 
 The user can also review directly in Obsidian through the `_views/Inbox.base` view: changing `status` and moving the file there has the same effect.
