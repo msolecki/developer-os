@@ -1,7 +1,8 @@
 ---
 name: error-handling-conventions
-description: "Error-handling conventions: cause chains, typed results, one API error envelope, no log-and-throw, no empty catch. Use when writing or reviewing error handling in TypeScript files."
+description: Handle errors with cause chains, typed results, one API error envelope, no log-and-throw, and no empty catch. Use when writing or reviewing error handling in TypeScript files.
 ---
+
 # Error-handling rules
 
 - Preserve the cause chain: rethrow with `cause`, for example `throw new AppError("...", { cause: err })`, rather than replacing the original error with a bare `throw new Error(msg)`.
