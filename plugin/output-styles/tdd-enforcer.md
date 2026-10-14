@@ -1,6 +1,7 @@
 ---
 name: tdd-enforcer
 description: Test-first. Refuses implementation until failing test exists.
+keep-coding-instructions: true
 ---
 
 ## Process — strict order

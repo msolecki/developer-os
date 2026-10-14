@@ -26,7 +26,7 @@ Before writing, replace with `[REDACTED]`: API keys, tokens, passwords, private 
 
 ## 4. Write the note
 
-Path: `<vault>/_inbox/<kebab-case-topic>.md`. If the file exists, add a suffix (`-2`). One topic per note; link related notes as `[[note-name]]`.
+Path: `<vault>/_inbox/<kebab-case-topic>.md`. If the file exists, add a suffix (`-2`). One topic per note. The body uses exactly these headings, in this order: `## Context`, `## Decision`, `## Why`, `## Links`. For a lesson, the `## Decision` section states the lesson. Link related notes as `[[note-name]]` under `## Links`.
 
 ```markdown
 ---
@@ -39,13 +39,21 @@ tags: [release, changelog]
 summary: "Release notes live in CHANGELOG.md at the repository root."
 ---
 
-# Release notes live in CHANGELOG.md
+## Context
 
-**Decision:** release notes are kept in `CHANGELOG.md`, one section per version.
+Decided while preparing the 1.2 release.
 
-**Why:** one file next to the code, reviewed in the same PR.
+## Decision
 
-**Context:** decided while preparing the 1.2 release. Related: [[release-process]].
+Release notes are kept in `CHANGELOG.md` at the repository root, one section per version.
+
+## Why
+
+One file next to the code, reviewed in the same PR.
+
+## Links
+
+- [[release-process]]
 ```
 
 - `type`: `decision`, `knowledge` (a lesson or how-to), `reference`, or `project`.

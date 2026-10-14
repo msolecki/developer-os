@@ -1,6 +1,6 @@
 ---
-name: implementator
-description: Implement evidence-backed TODO.md items in small batches, validate every item and the full batch, obtain fresh independent review, update the backlog and plan, and commit only green work. Use when the user invokes implementator or asks to execute a TODO.md audit backlog.
+name: implement-backlog
+description: Implement evidence-backed TODO.md items in small batches, validate every item and the full batch, obtain fresh independent review, update the backlog and plan, and commit only green work. Use when the user invokes implement-backlog or asks to execute a TODO.md audit backlog.
 argument-hint: "[category | task ID | --batch N]"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "[category | task ID | --batch N]"
 
 ## Initialize
 
-- Read `TODO.md`, `TODO-done.md`, the project's active plan, and recent history.
+- Read `TODO.md`, `TODO-done.md` (or the paths the user chose when the backlog was created), the project's active plan, and recent history.
 - Detect the repository's real validation commands and require a green baseline build.
 - Select the highest-priority related tasks; default five and maximum ten.
 - If `feature_list.json` exists, change only its `passes` field, and only after end-to-end verification.
