@@ -8,12 +8,23 @@ tags: [project]
 summary: Hub note for example-shop; its code, plans and ADRs live in the repository.
 ---
 
-The `project:` slug above matches the slug in the repository's `_Context.md`. Every note about this
-project carries the same slug, so the `By project` view groups them and brain-search can filter on it.
+## Context
 
 - Repository: `example-shop` (plans in `docs/plans/`, ADRs in `docs/adr/`).
-- Decisions: [[process-webhooks-once-per-event-id]] (waiting for review).
+- The `project:` slug above matches the slug in the repository's `_Context.md`.
 
-Keep here only what outlives the repository: who decides what, lessons that apply to other projects,
-and links to decision notes. When the project ends, set `status: archived` and move this note to
-`_archive/`.
+## Decision
+
+Every note about this project carries the same slug, so the `By project` view groups them and
+brain-search can filter on it. This hub keeps only what outlives the repository: who decides what,
+lessons that apply to other projects, and links to decision notes.
+
+## Why
+
+Code facts change with the code and belong in the repository; the hub would drift from them.
+
+## Links
+
+- [[process-webhooks-once-per-event-id]] (waiting for review)
+
+When the project ends, set `status: archived` and move this note to `_archive/`.

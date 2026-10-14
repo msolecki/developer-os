@@ -22,11 +22,12 @@ tells you when to use them and where each piece of knowledge belongs.
    /plugin install developer-os@developer-os
    ```
 2. Copy `vault-template/` to where you keep your vault (or merge its folders into an existing vault)
-   and open it in Obsidian.
+   and open it in Obsidian. When merging, do not overwrite your own `.obsidian/` folder; see
+   `vault-template/README.md`.
 3. In Obsidian, Settings, Core plugins: enable **Bases** and **Templates**; set the Templates folder
    to `templates`.
 4. Tell the agent where the vault is. Add one line to `~/.claude/CLAUDE.md` (and `~/.codex/AGENTS.md`
-   if you also use Codex):
+   if you also use Codex; see [Codex](#codex)):
    ```
    Brain vault: /absolute/path/to/your/vault
    ```
@@ -38,8 +39,9 @@ tells you when to use them and where each piece of knowledge belongs.
    (or start a session with `claude --add-dir /absolute/path/to/your/vault`).
 6. Start a session and ask: "brain-search webhooks". It should find the example inbox note.
 
-For each project repository, copy `templates/project/` (`CLAUDE.md`, `AGENTS.md`, `_Context.md`) into
-its root and fill them in. `_Context.md` carries the project's vault slug.
+For each project repository, copy `templates/project/` (`AGENTS.md`, `CLAUDE.md`, `_Context.md`) into
+its root and fill in `AGENTS.md` and `_Context.md`. `CLAUDE.md` is one line, `@AGENTS.md`, so both
+agents read the same file. `_Context.md` carries the project's vault slug.
 
 ## Vault layout
 
@@ -51,7 +53,7 @@ its root and fill them in. `_Context.md` carries the project's vault slug.
 | `TOOLS/` | References for tools, services and APIs you use. |
 | `INFRA/` | Hosting, deploys, networking, databases, CI. |
 | `QA/` | Testing approaches and lessons from defects. |
-| `_archive/` | Notes that are no longer true or no longer relevant, `status: archived`. |
+| `_archive/` | Notes that are no longer true, no longer relevant, merged or rejected, `status: archived`. Nothing is deleted. |
 | `templates/` | The note template for Obsidian's Templates plugin. |
 | `_views/` | Bases views: `Inbox`, `Stale`, `By project`. |
 
@@ -73,6 +75,9 @@ summary: <one sentence>
 - `knowledge`: something you learned that will be true next time.
 - `reference`: something you look up: commands, limits, contacts by role, settings.
 - `project`: the hub note of a project.
+
+The body uses four headings: `## Context`, `## Decision`, `## Why`, `## Links`. In a decision note,
+`## Decision` is what you chose; in a lesson, it states the lesson.
 
 ## The daily loop
 
@@ -109,8 +114,13 @@ Open `_views/Inbox.base` in Obsidian, or ask for **brain-review** to summarize t
 what to keep. For each note:
 
 - **Keep**: fix the summary if needed, set `status: active`, move it to its topic folder.
-- **Merge**: if an active note already covers it, add the new part there and delete the inbox note.
-- **Delete**: if it was only true for that afternoon.
+- **Merge**: if an active note already covers it, add the new part there, then move the inbox note
+  to `_archive/` with `status: archived`.
+- **Reject**: if it was only true for that afternoon, move it to `_archive/` with
+  `status: archived`.
+
+The policy is archive, never delete: a merged or rejected note stays in `_archive/`, out of search
+and the views, but recoverable. brain-garden follows the same rule.
 
 brain-review proposes; it never promotes a note without you. Approval is the one step that keeps the
 vault trustworthy, so it stays human.
@@ -188,17 +198,26 @@ Link from the vault to the repository by path or URL; do not copy repository con
 
 ## What else the plugin ships
 
-Brain skills: **brain-search**, **brain-capture**, **brain-review**, **brain-garden**,
-**brain-compile**.
-
-Engineering skills for the code side of the loop: **code-review**, **spec**, **implementator**,
-**analizer**, **fix-pr**, **bug-triage**, **deploy-checklist**, **instruction-review**, plus agents
-for independent review, security, performance, QA and research. A `SessionStart` hook loads the core
-working rules (`plugin/rules/core.md`) into every session.
+- Brain skills: **brain-search**, **brain-capture**, **brain-review**, **brain-garden**,
+  **brain-compile**.
+- Engineering skills for the code side of the loop: **code-review**, **spec**,
+  **audit-to-backlog**, **implement-backlog**, **fix-pr**, **bug-triage**, **deploy-checklist**,
+  **instruction-review**.
+- Conventions skills that load only when relevant: **comments-conventions**,
+  **error-handling-conventions**, **defensive-coding-conventions**, **monitoring-conventions**,
+  **nextjs-conventions**, **testing-conventions**, **typescript-conventions**.
+- Agents: **code-reviewer**, **performance-engineer**, **qa-expert**, **research-analyst**,
+  **security-auditor**.
+- Output styles: **architect**, **debug**, **direct-objective**, **tdd-enforcer**.
+- A `SessionStart` hook that loads the core working rules (`plugin/rules/core.md`) into every
+  session; the [README](../README.md#what-the-sessionstart-hook-does) says what they change and how
+  to turn them off.
 
 ## Codex
 
-Codex support is best-effort. The repository ships `plugin/.codex-plugin/plugin.json` pointing at the
-same `skills/` directory. If your Codex version does not load it, point Codex at the skill files
-manually and add the `Brain vault:` line to `~/.codex/AGENTS.md`; the skills only need file read,
-write and search tools, so the workflow above stays the same.
+Codex support is manual and best-effort; there is no Codex manifest. The skills only need file read,
+write and search tools, so the workflow above stays the same:
+
+1. Symlink or copy each directory in `plugin/skills/` into `~/.codex/skills/`.
+2. Paste the content of `plugin/rules/core.md` into `~/.codex/AGENTS.md`.
+3. Add the `Brain vault: /absolute/path/to/your/vault` line to `~/.codex/AGENTS.md`.

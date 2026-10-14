@@ -10,7 +10,16 @@ Run before every commit:
 scripts/check.sh
 ```
 
-It needs `claude` (Claude Code), `jq` and `gitleaks` on `PATH`. CI runs the same script.
+It parses every JSON file and every YAML frontmatter and `.base` file, validates the plugin and the
+marketplace, and scans tracked files for secrets. CI runs the same script.
+
+Prerequisites on `PATH`:
+
+- `claude` (Claude Code)
+- `jq`
+- `gitleaks`
+- `rsync`
+- `ruby` (for its bundled YAML parser)
 
 ## Rules
 

@@ -1,0 +1,7 @@
+{
+  "types": {
+    "created": "date",
+    "updated": "date",
+    "tags": "tags"
+  }
+}
