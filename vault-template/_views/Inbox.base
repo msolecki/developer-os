@@ -1,0 +1,18 @@
+filters:
+  and:
+    - file.ext == "md"
+    - status == "inbox"
+    - not:
+        - file.inFolder("templates")
+properties:
+  file.name:
+    displayName: Note
+views:
+  - type: table
+    name: Inbox
+    order:
+      - file.name
+      - type
+      - project
+      - created
+      - summary

@@ -6,6 +6,8 @@
      Domain knowledge needed only sometimes belongs in a project skill, not in this file.
      Target: fewer than 100 lines. Keep _Context.md as the short navigation signpost. -->
 
+Read `_Context.md` first: it says where to look and holds the project's vault slug.
+
 ## Project purpose
 
 <!-- Two to four sentences: what it does, who it serves, UI language, and domain. -->
@@ -40,9 +42,8 @@
 ## Decisions (ADR-lite)
 
 <!-- | date | decision | reason | — at most ten rows. Move older decisions to the
-     knowledge base with `developer-os capture`, and find them again with
-     `developer-os brain search`. This is the short "why"; full history lives in the
-     project's plans. -->
+     vault with the brain-capture skill, and find them again with brain-search.
+     This is the short "why"; full history lives in the project's plans. -->
 
 ## Anti-patterns (do NOT)
 
