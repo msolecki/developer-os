@@ -11,11 +11,12 @@ summary:
 <!-- type: decision | knowledge | reference | project
      status: inbox (not reviewed yet) | active (approved knowledge) | archived
      project: the project slug from the repository's _Context.md, or empty for a cross-project note
-     summary: one sentence that a search result can show on its own -->
+     summary: one sentence that a search result can show on its own
+     Decision: what you chose; in a lesson, the lesson itself -->
 
 ## Context
 
-## What I learned or decided
+## Decision
 
 ## Why
 

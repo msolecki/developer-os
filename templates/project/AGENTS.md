@@ -4,8 +4,8 @@
      workflow, and negative constraints come from the user-level rules; do not repeat them.
      Test every line: "Would deleting this make the agent produce errors?" If not, remove it.
      Domain knowledge needed only sometimes belongs in a project skill, not in this file.
-     Target: fewer than 100 lines. Keep _Context.md as the short navigation signpost, and
-     keep this file and CLAUDE.md in step when both exist. -->
+     Target: fewer than 100 lines. Keep _Context.md as the short navigation signpost.
+     CLAUDE.md only imports this file (`@AGENTS.md`), so edit here. -->
 
 Read `_Context.md` first: it says where to look and holds the project's vault slug.
 

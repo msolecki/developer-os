@@ -29,4 +29,5 @@ arrive in parallel.
 - [[write-the-note-you-wanted-to-find]]
 
 <!-- An agent wrote this note with brain-capture. It stays in _inbox/ with status: inbox until you
-     review it: set status to active and move it to a topic folder, or delete it. -->
+     review it: set status to active and move it to a topic folder, or set
+     status to archived and move it to _archive/. -->

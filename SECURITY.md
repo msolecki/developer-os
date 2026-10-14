@@ -19,7 +19,11 @@ Include:
 
 Never include the content of a vault or a secret. Describe it instead.
 
-## Scope notes
+## Scope
 
-- Updates are trusted through the Homebrew tap. Releases carry no signatures, by design.
-- A process that runs as the same user as the product is outside the security boundary. See `docs/architecture/threat-model.md` for the model.
+- The plugin is Markdown (skills, agents, output styles, rules) plus one `SessionStart` hook that
+  runs `cat` on `plugin/rules/core.md`. It ships no binary, server or network code.
+- Updates come from this Git repository through the Claude Code plugin marketplace.
+- The brain skills treat vault content as data, never as instructions.
+- The vault never leaves your disk, except as session context that your agent sends to your model
+  provider, like any other file it reads.
