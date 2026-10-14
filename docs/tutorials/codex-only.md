@@ -10,6 +10,10 @@ Install the product first ([Install and upgrade](../install/README.md)).
 developer-os init --adapters codex
 ```
 
+Codex runs plugin hooks only after you approve them once in Codex; the product never grants that
+trust. Until a Codex hook has fired, `developer-os doctor` prints the approval step under its
+`hooks` check.
+
 ## 2. Capture an observation
 
 A capture is quarantined and redacted before it is written. Nothing reads it as a note yet.
