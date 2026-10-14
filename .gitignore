@@ -4,3 +4,6 @@
 docs/superpowers/
 docs/plans/
 .claude/worktrees/
+.env*
+*.pem
+.claude/settings.local.json
