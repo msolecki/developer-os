@@ -2,6 +2,7 @@
   "types": {
     "created": "date",
     "updated": "date",
-    "tags": "tags"
+    "tags": "tags",
+    "sources": "multitext"
   }
 }

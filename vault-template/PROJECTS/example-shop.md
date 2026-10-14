@@ -5,7 +5,7 @@ created: 2026-08-10
 updated: 2026-10-10
 project: example-shop
 tags: [project]
-summary: Hub note for example-shop; its code, plans and ADRs live in the repository.
+summary: "Hub note for example-shop; its code, plans and ADRs live in the repository."
 ---
 
 ## Context
