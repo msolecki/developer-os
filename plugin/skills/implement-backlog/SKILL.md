@@ -8,7 +8,7 @@ argument-hint: "[category | task ID | --batch N]"
 
 ## Initialize
 
-- Find the backlog paths: a `Backlog:` line in the project's `AGENTS.md` or `CLAUDE.md`, otherwise `TODO.md` and `TODO-done.md`. Read them, the project's active plan, and recent history.
+- Find the backlog paths: a `Backlog: <todo path>, <done path>` line in the project's `AGENTS.md` or `CLAUDE.md`, otherwise `TODO.md` and `TODO-done.md`. Read them, the project's active plan, and recent history.
 - Detect the repository's real validation commands and run them. If the baseline is red, stop, report the failures, and ask how to proceed.
 - Default batch: the next implementation session listed in the backlog. Without one, select the highest-priority related tasks; default five, maximum ten.
 - List the batch items that touch authentication or security boundaries and ask once, up front, whether to include them.

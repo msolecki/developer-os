@@ -50,7 +50,7 @@ For each note the user explicitly approved, in this order:
 1. Check the note name matches `^[a-z0-9-]+$`. If not, ask the user for a name; do not move it.
 2. Check `<FOLDER>/<name>.md` does not exist. If it does, ask the user and change nothing.
 3. Move it, paths single-quoted: `mv '/path/to/vault/_inbox/<name>.md' '/path/to/vault/<FOLDER>/<name>.md'`. Keep the file name, so `[[name]]` links still resolve.
-4. Only then set `status: active` and `updated:` to today (Edit). If the note has no frontmatter, first write the full frontmatter from `templates/note.md`.
+4. Only then set `status: active` and `updated:` to today (Edit). If the note has no frontmatter, first write the full frontmatter from `templates/note.md` with today's date in `created` and `updated` (not the `{{date:...}}` placeholders) and a one-sentence `summary`.
 
 If the note is a compiled note (`tags` contains `compiled`), offer to archive its `sources` as in step 5.
 

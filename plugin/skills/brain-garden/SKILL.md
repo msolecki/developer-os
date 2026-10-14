@@ -13,7 +13,7 @@ Find the line `Brain vault: <absolute path>` in the user's `CLAUDE.md` or `AGENT
 
 ## 2. Run the checks
 
-Scope: every `.md` outside `templates/` and `_views/`. Notes in `_archive/` are checked only for `status: archived`. The script prints only offending files.
+Scope: every `.md` outside `templates/`, `_views/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. The script prints only offending files.
 
 ```bash
 V="/path/to/vault"
@@ -22,7 +22,7 @@ inbox_cut=$(date -v-7d +%F 2>/dev/null || date -d '7 days ago' +%F)
 stale_cut=$(date -v-180d +%F 2>/dev/null || date -d '180 days ago' +%F)
 
 # Frontmatter: read only the block between the first two --- lines; print only offending files
-rg --files -g '*.md' -g '!templates/**' -g '!_views/**' . | while IFS= read -r f; do
+rg --files -g '*.md' -g '!templates/**' -g '!_views/**' -g '!/README.md' . | while IFS= read -r f; do
   fm=$(awk 'NR==1{if($0!="---")exit;next} /^---$/{exit} {print}' "$f")
   st=$(printf '%s\n' "$fm" | sed -n 's/^status: *//p')
   case "$f" in
@@ -46,20 +46,24 @@ rg --files -g '*.md' -g '!templates/**' -g '!_views/**' . | while IFS= read -r f
   esac
 done
 
-# Links: each [[target]] (alias and heading stripped) must name a note outside _archive/
-rg -o --no-heading -g '*.md' -g '!templates/**' -g '!_views/**' -g '!_archive/**' '\[\[[^]|#]+' . | sort -u |
-while IFS= read -r l; do
-  src=${l%%:\[\[*}; t=${l#*\[\[}
+# Links: each [[target]] (alias, heading, and folder stripped) must name a note outside _archive/
+links=$(rg -o --no-heading -g '*.md' -g '!templates/**' -g '!_views/**' -g '!_archive/**' '\[\[[^]|#]+' . | sort -u)
+printf '%s\n' "$links" | while IFS= read -r l; do
+  [ -n "$l" ] || continue
+  src=${l%%:\[\[*}; t=${l#*\[\[}; t=${t##*/}
+  case "$t" in *.md) t=${t%.md} ;; *.*) continue ;; esac  # attachments
   hit=$(find . -name "$t.md" -not -path './templates/*')
   if [ -z "$hit" ]; then echo "$src → [[$t]]: no such note"
   elif ! printf '%s\n' "$hit" | grep -vq '^\./_archive/'; then echo "$src → [[$t]]: only in _archive/"
   fi
 done
 
-# Orphans: notes whose name no other note links to
+# Orphans: notes whose name no link targets (_inbox/ notes are not reviewed yet)
+targets=$(printf '%s\n' "$links" | sed 's/.*\[\[//; s#.*/##; s/\.md$//' | sort -u)
+rg --files -g '*.md' -g '!templates/**' -g '!_views/**' -g '!_archive/**' -g '!_inbox/**' -g '!/README.md' . | while IFS= read -r f; do
+  printf '%s\n' "$targets" | grep -Fxq -- "$(basename "$f" .md)" || echo "$f: orphan"
+done
 ```
-
-For orphans, compare the list of note names with the set of link targets. Ignore `_inbox/` notes for orphans; they are not reviewed yet.
 
 For likely duplicates, compare file names and `summary` lines: same key words, or one name contained in another.
 
