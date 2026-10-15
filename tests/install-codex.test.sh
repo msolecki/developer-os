@@ -25,10 +25,17 @@ run --dry-run
 check "dry run exits 0" "$code" 0
 check "dry run leaves AGENTS.md alone" "$(cat "$agents")" "My own rule."
 check "dry run installs no skill" "$(find "$skills" -name .developer-os-codex | wc -l | tr -d ' ')" 0
-mkdir -p "$skills/old-skill" && : > "$skills/old-skill/.developer-os-codex" && printf 'old\n' > "$skills/old-skill/SKILL.md"
+mkdir -p "$skills/old-skill" && printf 'developer-os Codex copy of %s\n' "$(pwd -P)/plugin/skills/old-skill" > "$skills/old-skill/.developer-os-codex" && printf 'old\n' > "$skills/old-skill/SKILL.md"
+mkdir -p "$skills/my-team-review" && printf 'developer-os Codex copy of %s\n' "$(pwd -P)/plugin/skills/code-review" > "$skills/my-team-review/.developer-os-codex" && printf 'mine\n' > "$skills/my-team-review/SKILL.md"
+mkdir -p "$skills/old-edited" && printf 'developer-os Codex copy of %s\n' "$(pwd -P)/plugin/skills/old-edited" > "$skills/old-edited/.developer-os-codex" && printf 'old\n' > "$skills/old-edited/SKILL.md" && : > "$skills/old-edited/notes.md"
 
 run
 check "install exits 0" "$code" 0
+[ -e "$skills/my-team-review/SKILL.md" ] && r=yes || r=no
+check "a marked copy renamed by the user is kept" "$r" yes
+[ -e "$skills/old-edited/notes.md" ] && r=yes || r=no
+check "a marked copy with extra files is kept" "$r" yes
+rm -rf "$skills/my-team-review" "$skills/old-edited"
 grep -qxF '<!-- developer-os-core START -->' "$agents" && r=yes || r=no
 check "AGENTS.md gets the block" "$r" yes
 check "text outside the markers survives" "$(head -n 1 "$agents")" "My own rule."

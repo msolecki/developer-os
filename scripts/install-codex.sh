@@ -79,7 +79,10 @@ fi
 outside=$( [ -f "$agents_md" ] && awk -v s="$start" -v e="$end" '$0==s{b=1} !b{print} $0==e{b=0}' "$agents_md" || true)
 if [ -z "$vault" ] && ! printf '%s\n' "$outside" | grep -q '^Brain vault:'; then
   vault=$( [ -f "$agents_md" ] && awk -v s="$start" -v e="$end" '$0==s{b=1} b && sub(/^Brain vault:[[:space:]]*/, "") {print; exit} $0==e{b=0}' "$agents_md" || true)
-  [ -n "$vault" ] || vault=$(sed -n 's/^Brain vault:[[:space:]]*//p' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md" 2>/dev/null | head -n 1)
+  claude_vault=$(sed -n 's/^Brain vault:[[:space:]]*//p' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md" 2>/dev/null | head -n 1)
+  [ -z "$vault" ] || [ -z "$claude_vault" ] || [ "$vault" = "$claude_vault" ] ||
+    echo "warning: keeping Brain vault $vault; CLAUDE.md says $claude_vault (pass --vault to change it)" >&2
+  [ -n "$vault" ] || vault=$claude_vault
 fi
 
 {
@@ -196,7 +199,13 @@ done
 for m in "$skills_dir"/*/"$marker"; do
   [ -f "$m" ] || continue
   dest=${m%/*}
+  [ ! -L "$dest" ] || continue
   [ ! -d "$plugin/skills/${dest##*/}" ] || continue
+  # Only an untouched copy made from this checkout: a renamed or edited copy, or another checkout's, stays.
+  if [ "$(cat "$m")" != "developer-os Codex copy of $plugin/skills/${dest##*/}" ] ||
+    [ -n "$(ls -A "$dest" | grep -vxF -e SKILL.md -e "$marker")" ]; then
+    echo "warning: kept $dest: not an untouched copy from this checkout" >&2; continue
+  fi
   say "remove $dest"; [ "$dry" -eq 1 ] || rm -rf "$dest"; removed=$((removed + 1))
 done
 

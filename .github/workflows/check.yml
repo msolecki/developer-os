@@ -39,5 +39,10 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
-        run: gitleaks git --no-banner --redact --log-opts="$BASE..$HEAD" .
+        run: |
+          # A pull request must not loosen its own scan.
+          if git diff --name-only "$BASE" "$HEAD" | grep -E '(^|/)\.gitleaks(\.toml|ignore)$'; then
+            echo "gitleaks configuration changed in this pull request; a maintainer reviews it by hand" >&2; exit 1
+          fi
+          gitleaks git --no-banner --redact --log-opts="$BASE..$HEAD" .
       - run: scripts/check.sh

@@ -180,16 +180,20 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   `status: active`.
 - Codex setup uses `~/.agents/skills/` (older Codex versions read `~/.codex/skills/`).
 - The README lists fork among the `SessionStart` triggers.
-- The guard splits commands on newlines, skips the value after `--filter`, `--prefix`, `--dir` and
-  similar flags, ignores package-manager script arguments (`run`, `exec`, `dlx`, `--`), and catches
-  bypass forms (`--no-verify` prefixes, `HUSKY=0`, `core.hooksPath=`), npm aliases and binaries called
-  by full path.
+- The guard splits commands on newlines while still catching a git flag after a multi-line quoted
+  message, skips the value after `--filter`, `--prefix`, `--dir` and similar flags, and catches
+  bypass forms (`--no-verify` prefixes, `HUSKY=0`, `core.hooksPath` in any form), npm aliases and
+  binaries called by full path.
+- pr-cycle and fix-pr read a PR's trust inputs before checking it out, and check out and commit an
+  untrusted head with git hooks off until the user approves; code-review passes the `Untrusted head`
+  line to its verifiers and to inline review.
 - The state card works from a subdirectory of the repository, never names a plan that git tracks,
   and prints the branch and plan lines with `printf`.
 - capture-nudge falls back to a per-user `/tmp` directory when `CLAUDE_PLUGIN_DATA` and `TMPDIR` are
-  unset.
-- The Codex installer removes copies of skills the plugin no longer has, keeps the vault line already
-  in the block when `--vault` is not given, writes clone paths verbatim, and counts the description
+  unset, and uses it only when it is the user's own directory and not a symlink.
+- The Codex installer removes untouched copies, made from the same checkout, of skills the plugin no
+  longer has; keeps the vault line already in the block when `--vault` is not given and warns when
+  CLAUDE.md names another; writes clone paths verbatim, and counts the description
   budget in bytes.
 - brain-setup touches `.gitignore` only in a git vault, keeps its paths across Bash calls, previews a
   missing `settings.json` cleanly, and writes a vault path with `&`, a pipe or a backslash intact.
