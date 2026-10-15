@@ -34,17 +34,18 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never` (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
-| Local paths | A file under `plugin/skills/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
+| Local paths | A file under `plugin/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
-| Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
-| Counts | A count written as digits in the README, `docs/` or `evals/README.md` ("N skills", "N eval cases") differs from the disk |
-| Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or the state-card cap in `session-start.sh` no longer fits under the 10,000-character hook output limit |
-| References | A `developer-os:<name>` string in `plugin/`, `docs/`, `templates/` or `README.md` names no skill, agent or output style |
-| Links | A relative Markdown link outside `plugin/skills/` (and outside fenced or inline code) does not resolve |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
+| Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
+| Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` (in git history or the uncommitted diff) still appears, bare or prefixed, in `plugin/`, `templates/` or `README.md`; a shallow clone has no history, so there only the uncommitted diff counts |
+| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` ("N skills", "N eval cases"; not "N cases of") differs from the disk |
+| Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or the state-card cap in `session-start.sh` no longer fits under the 10,000-character hook output limit |
+| References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style; a changelog entry names a removed skill without the prefix |
+| Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no heading slug in the target Markdown file |
 | Script tests | Any `tests/*.test.sh` exits non-zero |
-| Plugin validation | `claude plugin validate .` or `claude plugin validate plugin` fails |
+| Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails on an error or on any warning (such as an unknown manifest key) other than a missing plugin `version` |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
 
 The file set is tracked plus untracked-not-ignored files, so a new doc is checked before it is
@@ -65,6 +66,8 @@ release verified by SHA-256.
 that the rules come first, the card appears only after `compact`/`resume`, and the card is cut to its
 cap; `tests/guard.test.sh` feeds command fixtures to `guard.sh` and expects `ask` or silence;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code and message;
+`tests/check.test.sh` breaks a fresh copy of the repository once per stage it covers and expects that
+stage's message;
 `tests/install-codex.test.sh` runs the Codex installer against a temporary `HOME` (dry run,
 idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the 8000-character
 budget).
@@ -85,15 +88,16 @@ the README lists the mutation checks that prove it.
 2. If it can write, send or change git state, end with `## Stop point` and `## Never`. If it is
    read-only and should be exempt, add it to `read_only` in `scripts/check.sh`.
 3. Use synthetic examples only; no local paths, client names or real vault notes.
-4. Reference other parts as `developer-os:<name>`; the check resolves them.
+4. Reference other parts as `developer-os:<name>`; the check resolves them. A bare name in `plugin/` is
+   checked only after a rename: the Stale names stage fails on any name removed from `SURFACE.txt`.
 5. A brain skill copies the shared "Locate the vault" paragraph verbatim.
 6. Add an eval case when the skill has a behavior worth protecting (a gate, a refusal, a trigger).
 7. Add the name to `plugin/SURFACE.txt` (the check prints the line), and update the README component list,
    `CHANGELOG.md`, and [product/functional-spec.md](product/functional-spec.md). Counts written as digits are
    checked; fix any the check reports.
 
-Changing `plugin/rules/core.md`: it has 44 bytes of headroom under the cap. Every added line must
-replace or shorten another; run `instruction-review --prune` on it inside this repository.
+Changing `plugin/rules/core.md`: it sits just under the 8192-byte cap (`wc -c < plugin/rules/core.md`).
+Every added line must replace or shorten another; run `instruction-review --prune` on it inside this repository.
 
 ## Codex installer
 

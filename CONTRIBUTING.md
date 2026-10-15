@@ -12,9 +12,10 @@ scripts/check.sh
 
 It parses every JSON file and every YAML frontmatter and `.base` file, requires `status`, `owner` and
 `last-verified` frontmatter in every `docs/*.md`, validates skills (name
-matches the folder, description 80–1024 characters and at most 12000 in total, no local paths such
-as `/Users/`, `## Stop point` and `## Never` in action skills), caps `plugin/rules/core.md` at 8192
-bytes, runs every `tests/*.test.sh`, validates the plugin and the marketplace, and scans tracked
+matches the folder, description 80–1024 characters and at most 12000 in total, `## Stop point` and
+`## Never` in action skills), rejects local paths such as `/Users/` anywhere in `plugin/`, caps
+`plugin/rules/core.md` at 8192 bytes, runs every `tests/*.test.sh`, validates the plugin and the
+marketplace with `--strict`, and scans tracked
 files for secrets. CI runs the same script.
 
 Hook tests live in `tests/*.test.sh` and run with `sh`; after changing a hook script, run its test

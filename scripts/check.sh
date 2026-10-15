@@ -60,9 +60,9 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
   end
   abort "skills: descriptions total #{total} characters, limit 12000" if total > 12000'
 
-# Skills ship to other machines; a local path leaks the author's layout and breaks elsewhere.
-if files 'plugin/skills' | xargs -0 grep -nE '/Users/|/home/|~/www|\.claude2' >&2; then
-  fail skills plugin/skills "local path (/Users/, /home/, ~/www or .claude2) above"
+# The plugin ships to other machines; a local path leaks the author's layout and breaks elsewhere.
+if files 'plugin' | xargs -0 grep -nE '/Users/|/home/|~/www|\.claude2' >&2; then
+  fail paths plugin "local path (/Users/, /home/, ~/www or .claude2) above"
 fi
 
 files '*.base' 'evals/*.yaml' | while IFS= read -r -d '' f; do
@@ -97,12 +97,33 @@ if ! surface | LC_ALL=C sort | diff -u plugin/SURFACE.txt - >&2; then
   fail surface plugin/SURFACE.txt "differs from the plugin above; update SURFACE.txt and CHANGELOG.md"
 fi
 
-# Counts written as digits in the README and docs ("28 skills", "13 eval cases") must match the disk.
+# A name removed from SURFACE.txt (in history or in the uncommitted diff) must not survive in what ships,
+# bare or prefixed, so a rename cannot leave the rules or a skill pointing at a skill that no longer exists.
+# A shallow clone has no history, so there only the uncommitted diff counts.
+{ git log -p --format= -- plugin/SURFACE.txt; git diff HEAD -- plugin/SURFACE.txt; } |
+  sed -nE 's/^-(skill|agent|output-style) //p' | LC_ALL=C sort -u |
+  { files 'plugin' README.md 'templates/*.md'; printf '\n'; cat; } | ruby -e '
+  files, gone = $stdin.read.split("\n", 2)
+  gone = gone.to_s.split - File.readlines("plugin/SURFACE.txt").map { |l| l.split[1] }
+  exit if gone.empty?
+  re = /(?<![\w:\/-])(#{gone.map { |n| Regexp.escape(n) }.join("|")})(?![\w-])/
+  files.split("\0").each do |f|
+    File.foreach(f).with_index(1) do |l, i|
+      abort "stale names: #{f}:#{i}: #{$1} was removed from plugin/SURFACE.txt" if l.valid_encoding? && l =~ re
+    end
+  end'
+
+# Counts written as digits in the README and docs ("28 skills", "13 eval cases") must match the disk;
+# "3 cases of" and "2 hooks of" are prose, not counts.
 skills=$(surface | grep -c '^skill '); agents=$(surface | grep -c '^agent ')
 styles=$(surface | grep -c '^output-style '); hooks=$(jq '[.hooks[][].hooks[]] | length' plugin/hooks/hooks.json)
 cases=$(find evals -mindepth 2 -maxdepth 2 -name case.yaml | wc -l | tr -d ' ')
-files README.md 'docs/*.md' evals/README.md |
-  xargs -0 grep -noE '\b[0-9]+ (skills|agents|output styles|hooks|eval cases|cases)\b' |
+files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md | ruby -e '
+  $stdin.read.split("\0").each do |f|
+    File.foreach(f).with_index(1) do |l, i|
+      l.scan(/\b[0-9]+ (?:skills|agents|output styles|hooks|eval cases|cases)\b(?! of\b)/) { |m| puts "#{f}:#{i}:#{m}" }
+    end
+  end' |
   while IFS= read -r hit; do
     n=${hit##*:}; kind=${n#* }; n=${n%% *}
     case $kind in
@@ -118,7 +139,7 @@ size=$(wc -c < plugin/rules/core.md | tr -d " ")
 cap=$(sed -n 's/^cap=//p' plugin/hooks/session-start.sh)
 [ -n "$cap" ] && [ $((8192 + cap + 64)) -le 10000 ] || fail size plugin/hooks/session-start.sh "state card cap ${cap:-unset} leaves no room under 10000"
 
-files 'plugin/*.md' 'docs/*.md' README.md 'templates/*.md' | ruby -e '
+files 'plugin/*.md' 'plugin/*.sh' 'docs/*.md' README.md 'templates/*.md' 'evals/*' CHANGELOG.md CONTRIBUTING.md SECURITY.md | ruby -e '
   $stdin.read.split("\0").each do |f|
     File.read(f).scan(/developer-os:([A-Za-z0-9_-]+)/).flatten.uniq.each do |n|
       next if ["plugin/skills/#{n}/SKILL.md", "plugin/agents/#{n}.md", "plugin/output-styles/#{n}.md"].any? { |p| File.exist?(p) }
@@ -126,18 +147,28 @@ files 'plugin/*.md' 'docs/*.md' README.md 'templates/*.md' | ruby -e '
     end
   end'
 
-# Relative Markdown links outside fenced code and inline code; skills are checked by plugin validate.
-files '*.md' ':!plugin/skills' | ruby -e '
+# Relative Markdown links outside fenced code and inline code, each relative to its own file; a #fragment
+# into a Markdown file must match a GitHub heading slug there.
+files '*.md' | ruby -e '
+  slugs = Hash.new do |h, f|
+    fence = false
+    h[f] = File.foreach(f).filter_map do |l|
+      fence = !fence if l =~ /\A\s*(```|~~~)/
+      l[/\A#+\s+(.*?)\s*\z/, 1]&.downcase&.gsub(/[^\w\s-]/, "")&.tr(" ", "-") unless fence
+    end
+  end
   $stdin.read.split("\0").each do |f|
     fence = false
     File.foreach(f) do |line|
       fence = !fence if line =~ /\A\s*(```|~~~)/
       next if fence
       line.gsub(/`[^`]*`/, "").scan(/\[[^\]]*\]\(([^)\s]+)[^)]*\)/).flatten.each do |t|
-        next if t =~ /\A([a-z][a-z0-9+.-]*:|#)/i
-        path = t.sub(/#.*/, "")
-        dest = path.start_with?("/") ? path[1..] : File.join(File.dirname(f), path)
+        next if t =~ /\A[a-z][a-z0-9+.-]*:/i
+        path, frag = t.split("#", 2)
+        dest = path.empty? ? f : path.start_with?("/") ? path[1..] : File.join(File.dirname(f), path)
         abort "links: #{f}: #{t} does not resolve" unless File.exist?(dest)
+        next unless frag && dest.end_with?(".md") && File.file?(dest)
+        abort "links: #{f}: #{t} names no heading in #{dest}" unless slugs[dest].include?(frag)
       end
     end
   end'
@@ -147,8 +178,16 @@ for t in tests/*.test.sh; do
   sh "$t" || fail tests "$t" "exited non-zero"
 done
 
-claude plugin validate .
-claude plugin validate plugin
+# --strict fails on unknown or misspelled manifest keys. The one warning allowed is a missing plugin version:
+# without one, Claude Code versions the plugin by its git commit.
+for d in . plugin; do
+  out=$(claude plugin validate "$d" --strict 2>&1) && continue
+  echo "$out" >&2
+  claude plugin validate "$d" >/dev/null 2>&1 || fail validate "$d" "claude plugin validate failed"
+  if printf '%s\n' "$out" | grep '❯' | grep -v 'version: No version specified' >/dev/null; then
+    fail validate "$d" "warning above"
+  fi
+done
 
 # Scan only what git tracks (or stages), not ignored local files.
 tmp=$(mktemp -d)
