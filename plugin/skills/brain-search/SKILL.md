@@ -15,18 +15,18 @@ Find the line `Brain vault: <absolute path>`. Look in this order and stop at the
 
 ## 2. Search content and frontmatter
 
-Pick 2–4 keywords and synonyms from the request. Search case-insensitively, skipping `_archive/`, `templates/`, `_views/`, and `_reports/` (logs, not notes) unless the user asked for archived notes:
+Pick 2–4 keywords and synonyms from the request. Search case-insensitively, skipping `_archive/`, `templates/`, `_views/`, and `_reports/` (logs, not notes), and the vault-root `README.md` (it describes the template, it is not a note), unless the user asked for archived notes:
 
 ```bash
-V="/path/to/vault"
-rg -il -g '*.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e 'release' -e 'changelog' "$V"
-rg -i -g '*.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e '^(summary|tags|project):.*(release|changelog)' "$V"
+V="/path/to/vault"; cd "$V"
+rg -il -g '*.md' -g '!/README.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e 'release' -e 'changelog' .
+rg -i -g '*.md' -g '!/README.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e '^(summary|tags|project):.*(release|changelog)' .
 ```
 
 Drop notes with `status: archived` unless the user asked for them:
 
 ```bash
-rg -l '^status: archived' -g '*.md' -g '!_archive/' "$V"
+rg -l '^status: archived' -g '*.md' -g '!_archive/' .
 ```
 
 ## 3. Rank

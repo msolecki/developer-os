@@ -50,7 +50,7 @@ Approve which ones? (e.g. "promote 1 and 2", "promote 1 to TOOLS/", "merge 1 int
 For each note the user explicitly approved, in this order:
 
 1. Check the note name matches `^[a-z0-9-]+$`. If not, ask the user for a name; do not move it.
-2. Check `<FOLDER>/<name>.md` does not exist. If it does, ask the user and change nothing.
+2. Check no other file in the vault has that name, because `[[name]]` links resolve by name: `find "$V" -name '<name>.md' -not -path '*/templates/*' -not -path '*/_inbox/*'` must print nothing (this also covers `<FOLDER>/<name>.md`). If it prints a path, ask the user and change nothing.
 3. Move it, paths single-quoted: `mv '/path/to/vault/_inbox/<name>.md' '/path/to/vault/<FOLDER>/<name>.md'`. Keep the file name, so `[[name]]` links still resolve.
 4. Only then set `status: active` and `updated:` to today (Edit). If the note has no frontmatter, first write the full frontmatter from `templates/note.md` with today's date in `created` and `updated` (not the `{{date:...}}` placeholders) and a one-sentence `summary`.
 
@@ -63,7 +63,7 @@ Only for notes the user explicitly named. Never delete a note.
 - **Merge**: fold the new content and its links into the surviving note first (show the merged text, set its `updated`), then archive the inbox note.
 - **Reject**: archive the note.
 
-To archive, in this order: run step 4's checks 1 and 2 with `_archive/` as the folder (the name rule applies, because archiving keeps the file name), move the note to `_archive/<name>.md`, and only then set `status: archived` and `updated:` to today. A failed check changes nothing.
+To archive, in this order: run step 4's checks 1 and 2 (archiving keeps the file name), move the note to `_archive/<name>.md`, and only then set `status: archived` and `updated:` to today. A failed check changes nothing.
 
 Silence or "looks good" on the list is not approval for every note; ask which ones.
 
