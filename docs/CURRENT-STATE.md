@@ -66,7 +66,7 @@ audit-to-backlog, deploy-checklist, docs-sync, skill-usage and the pr-cycle fork
 order, and for the seven `*-conventions` skills and the five agents (passive reference, no gate;
 [development.md](development.md) step 6). The trigger-typescript-conventions case is not written.
 
-The findings of the 2026-10-16 audit are fixed on `feat/audit-fixes-2026-10-15`; what still needs
+The findings of the follow-up audit (decisions answered 2026-10-16) are fixed on `feat/audit-fixes-2026-10-15`; what still needs
 the user:
 
 - Eval re-runs by hand (`claude plugin eval`, paid): brain-garden-no-apply once, implement-backlog-owner

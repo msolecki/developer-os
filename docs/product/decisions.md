@@ -163,7 +163,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   it past the cap; a card over the cap is cut at a whole line with a marker; a state file not changed
   in 7 days is left over from a finished run and is not shown. The card's `Newest plan:` line comes
   from the plan files only; the state file's own `Plan:` line prints inside the state section.
-- **Amended 2026-10-15:** the state-file path is fixed at `docs/plans/.devos-state.md` even when a
+- **Amended 2026-10-16:** the state-file path is fixed at `docs/plans/.devos-state.md` even when a
   project overrides its planning location; skills and core rules name that path. A project that moves
   its plans still git-ignores `docs/plans/` (or that file) so the card shows it — the one extra
   `.gitignore` entry D16 rejected `.claude/devos-state.md` for.
