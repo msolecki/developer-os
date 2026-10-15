@@ -93,7 +93,8 @@ the README lists the mutation checks that prove it.
 4. Reference other parts as `developer-os:<name>`; the check resolves them. A bare name in `plugin/` is
    checked only during a rename: the Stale names stage fails, before the rename is committed, on any
    name removed from `SURFACE.txt`.
-5. A brain skill copies the shared "Locate the vault" paragraph verbatim; the check compares the copies.
+5. A brain skill starts with the shared vault lookup: the check compares the first paragraph under
+   `## 1. Locate the vault` across the five brain skills that have it, so change all five together.
 6. Add an eval case when the skill has a behavior worth protecting (a gate, a refusal, a trigger).
 7. Add the name to `plugin/SURFACE.txt` (the check prints the line), and update the README component list,
    `CHANGELOG.md`, and [product/functional-spec.md](product/functional-spec.md). Counts written as digits are

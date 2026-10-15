@@ -105,7 +105,8 @@ cannot process produces no output.
 | `transcript_path` is not a file | Nothing to count |
 | A marker for this `session_id` exists | Already nudged in this session |
 | Fewer than `DEVELOPER_OS_CAPTURE_NUDGE_MIN` (default 30) `"type":"tool_use"` entries | Short session |
-| A background agent or command launched in this session has no `<task-notification>` yet and its output file changed in the last 30 minutes | The turn ended to wait for it; the marker stays unspent, so the nudge comes later |
+| A background agent or command launched in this session has no `<task-notification>` yet and its output file changed in the last 30 minutes; only an absolute output path under a `tasks/` directory counts | The turn ended to wait for it; the marker stays unspent, so the nudge comes later |
+| A Monitor started in the last 30 minutes has no terminal `<task-notification>` (one carrying its `<tool-use-id>`; event notices carry only `<task-id>`) | The turn ended to wait for it; the marker stays unspent. The 30-minute bound also covers a Monitor that expires without a notice |
 | The marker cannot be written | Fail open |
 
 **Otherwise:** writes the marker, removes markers older than 7 days, prints to stderr
@@ -118,7 +119,11 @@ and exits 2, which makes Claude Code feed the message back to the agent instead 
 
 **State:** one empty file per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}}/capture-nudge/`.
 
-**Privacy:** counts matches of one fixed string and extracts background-task ids and output-file paths (to check their notifications and modification times); never reads or prints message content.
+**Privacy:** counts matches of one fixed string and extracts background-task and Monitor ids, output-file paths and Monitor start timestamps (to check their notifications and modification times); never reads or prints message content.
+
+The output path comes from tool output that anything can print, so it is never trusted as is: a
+relative path or an option such as `-delete` never reaches `find`, and a path outside `tasks/` such as
+`/tmp` cannot defer the nudge.
 
 ## Environment variables
 

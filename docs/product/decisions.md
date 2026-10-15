@@ -151,12 +151,16 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 
 - **Date:** 2026-10-15 · Sources proposal #2, Q10
 - **Decision:** after a compaction or resume, the `SessionStart` hook appends a state card (branch,
-  worktrees, active plan, `docs/plans/.devos-state.md`) of at most 1024 bytes. Orchestrating skills
+  newest plan, `docs/plans/.devos-state.md`, worktrees) of at most 1024 bytes. Orchestrating skills
   keep the state file current. It lives in `docs/plans/`, already git-ignored.
 - **Why:** the compaction summary drops which item, worktree and unverified claim belong to which
   agent; the hook already re-runs on compaction, so no new event is needed.
 - **Hardened after review:** the state file is shown only when untracked, git-ignored and reached
   without a symlink, so a repository cannot inject instructions or point it at a local secret.
+- **Amended 2026-10-15:** the state file prints before the worktree list, so a long list cannot push
+  it past the cap; a card over the cap is cut at a whole line with a marker; a state file not changed
+  in 7 days is left over from a finished run and is not shown. The card's `Newest plan:` line comes
+  from the plan files only; the state file's own `Plan:` line prints inside the state section.
 - **Rejected:** a `PreCompact` hook (its input and output are undocumented); `.claude/devos-state.md`
   (one more `.gitignore` entry per project).
 

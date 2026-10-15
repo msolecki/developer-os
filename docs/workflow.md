@@ -159,9 +159,14 @@ vault trustworthy, so it stays human.
 
 Ask for **brain-garden**. It reports stale notes (also visible in `_views/Stale.base`: active notes
 not updated in 180 days), `_inbox/` notes older than 7 days, notes whose folder and `status`
-disagree, broken links, links into `_archive/`, duplicates and notes without a summary. It proposes
-changes and applies them only after you approve. A stale note gets re-read and then updated,
-archived, or confirmed by bumping `updated`.
+disagree, broken links, duplicates and notes without a summary. It proposes changes and applies
+them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
+bumping `updated`.
+
+Links resolve by note name, case-insensitively. A link to an archived note (in `_archive/` or with
+`status: archived`) is an info line with no fix: archiving keeps the name on purpose. Links in a
+note's `sources:` frontmatter and in a compiled note's `## Links` section are provenance and get no
+such info line, but a source that exists nowhere is still reported as `no such note`.
 
 The report opens with `Vault health — N notes, orphans X (Y%), inbox Z, date`. Every proposed link
 is tagged FOUND (both notes state the connection) or GUESSED (inferred); GUESSED links are applied
@@ -307,8 +312,8 @@ Claude Code also keeps its own auto-memory. To keep one fact in one place:
 - Each project has a slug, for example `example-shop`. It is written once in the repository's
   `_Context.md` (`Vault project slug:`) and used as `project:` in every vault note about it.
 - `PROJECTS/<slug>.md` is the hub note: what the project is, who decides, links to its decision notes.
-- Ask the agent to read `_Context.md` first in that repository (the template `CLAUDE.md` and
-  `AGENTS.md` point to it), so brain-search and brain-capture use the slug without you typing it.
+- brain-search and brain-capture read the `Vault project slug:` line from `_Context.md` at the
+  repository root themselves, never from the directory name, so you do not type the slug.
 - `_views/By project.base` groups active notes by slug: a project's whole memory on one screen.
 - Cross-project notes leave `project:` empty.
 
@@ -385,6 +390,6 @@ do not:
 | `SessionStart` hook | loads `plugin/rules/core.md` every session | no | paste `core.md` into `~/.codex/AGENTS.md` |
 | `Stop` hook | offers session-retro once per long session | no | run session-retro by hand at the end |
 | `PreToolUse` guard | asks before installs, force pushes, `--no-verify`, `commit -n` | no | none |
-| Agents (`plugin/agents/`) | code-reviewer and four others, delegated by skills | no | none |
+| Agents (`plugin/agents/`) | code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog) | no | none |
 | Output styles | `/output-style` | no | none |
 | `Skill` tool | the agent loads a skill by name | no | `scripts/install-codex.sh` writes a Codex copy of each skill to `~/.agents/skills/` |

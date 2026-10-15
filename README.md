@@ -41,9 +41,10 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 The plugin has three hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it runs [`plugin/hooks/session-start.sh`](plugin/hooks/session-start.sh), which prints
 [`plugin/rules/core.md`](plugin/rules/core.md); the output becomes session context. After a compaction
-or a resume inside a git repository it adds a state card of at most 1 KB: the branch, up to 10
-worktrees, the active plan and `docs/plans/.devos-state.md`, the task state that implement-backlog,
-pr-cycle and audit-to-backlog keep there. Installing the plugin therefore changes how the agent behaves everywhere, not only
+or a resume inside a git repository it adds a state card of at most 1 KB: the branch, a
+`Newest plan:` line, `docs/plans/.devos-state.md` (the task state that implement-backlog, pr-cycle
+and audit-to-backlog keep there; hidden once it is older than 7 days), then up to 10 worktrees. A
+longer card is cut at a whole line and ends with a cut marker. Installing the plugin therefore changes how the agent behaves everywhere, not only
 when you call a skill; read [`core.md`](plugin/rules/core.md) for the rules themselves.
 
 To turn it off, disable the plugin (`/plugin`, then disable developer-os). To keep the plugin but
@@ -102,12 +103,16 @@ scripts/install-codex.sh             # install or update
 
 - It writes a Codex copy of every skill to `~/.agents/skills/<name>` (set `CODEX_SKILLS_DIR` for
   another location, such as `~/.codex/skills/` on older Codex versions). Each copy keeps only `name`
-  and a short description (the first sentence and the trigger phrases), so all of them fit Codex's
-  8000-character skill list, and has its Claude-only references rewritten.
+  and a short description (the first sentence and the quoted trigger phrases, or the "Use when"
+  sentence when there are none), so all of them fit Codex's 8000-character skill list, and has its
+  Claude-only references rewritten. A skill `description` must be one plain line; the installer
+  refuses any other form before it writes anything.
 - It puts `plugin/rules/core.md` and your `Brain vault:` line (from `~/.claude/CLAUDE.md`, or
-  `--vault <path>`) between `developer-os-core` markers in `~/.codex/AGENTS.md` (`--project <dir>`
-  for a project's `AGENTS.md`). Text outside the markers stays; a changed file is backed up first.
-- Run it again after each plugin update. `--uninstall` removes only what it installed. A skill
+  `--vault <path>`) between `developer-os-core` markers in `~/.codex/AGENTS.md` (`$CODEX_HOME/AGENTS.md`
+  when `CODEX_HOME` is set; `--project <dir>` for a project's `AGENTS.md`). Text outside the markers
+  stays; a changed file is backed up first.
+- Run it again after each plugin update. `--uninstall` removes only what it installed;
+  `--project <dir> --uninstall` removes only that project's block and keeps the skills. A skill
   directory it did not create, including an older hand-made symlink into another clone, is skipped
   and reported; remove it first to let the installer manage it.
 

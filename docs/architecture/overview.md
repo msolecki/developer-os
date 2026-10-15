@@ -71,13 +71,15 @@ sequenceDiagram
 ```
 
 - `session-start.sh` prints `core.md`, then, for `source` `compact` or `resume` inside a git
-  repository, the branch, worktrees, active plan and `docs/plans/.devos-state.md`, cut to 1024 bytes.
+  repository, the branch, the newest plan, `docs/plans/.devos-state.md` (skipped when older than
+  7 days) and the worktrees, cut to whole lines within 1024 bytes.
 - `guard.sh` extracts `tool_input.command` with `sed`, unescapes JSON, joins line continuations,
   drops quotes, splits on semicolons, ampersands, pipes, parentheses and backticks, and scans each segment with `awk`. Quotes are stripped on
   purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.
 - `capture-nudge.sh` reads `session_id` and `transcript_path` from the input, counts
   `"type":"tool_use"` occurrences in the transcript file with `grep`, defers while a background task
-  launched in the session has no `<task-notification>` and a fresh output file, and records a per-session
+  launched in the session has no `<task-notification>` and a fresh output file under a `tasks/`
+  directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session
   marker in `${CLAUDE_PLUGIN_DATA:-$TMPDIR}/capture-nudge/` so it fires once. Markers older than
   7 days are removed.
 
@@ -98,7 +100,8 @@ flowchart LR
   audit-to-backlog --> qa-expert[[qa-expert]]
   audit-to-backlog --> code-reviewer
   audit-to-backlog --> verifier
-  implement-backlog --> code-reviewer
+  implement-backlog --> code-review
+  bug-triage --> research-analyst[[research-analyst]]
   spec -. backlog items .-> implement-backlog
   audit-to-backlog -. backlog .-> implement-backlog
   project-baseline -. BASE items .-> implement-backlog
@@ -107,6 +110,7 @@ flowchart LR
   bug-triage -. offers .-> brain-capture
   deploy-checklist -. offers .-> brain-capture
   code-reviewer -. checks .-> defensive-coding-conventions
+  qa-expert -. loads .-> testing-conventions
 ```
 
 Every dispatched agent answers with a final status (`DONE`, `REVIEW`, `BLOCKED`, `CONTINUING`) that
