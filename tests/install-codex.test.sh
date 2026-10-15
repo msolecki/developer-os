@@ -42,7 +42,7 @@ check "a foreign skill is untouched" "$(cat "$skills/my-own-skill/SKILL.md" | se
 check "a foreign same-name skill is kept" "$(cat "$skills/spec/SKILL.md")" "my own spec"
 check "a foreign same-name skill is reported" "$(grep -c 'skip .*/spec: exists and was not installed' "$tmp/err")" 1
 check "no Claude-only reference is left" "$(grep -rlE 'CLAUDE_PLUGIN_ROOT|subagent_type|context: fork|`developer-os:' "$skills" | wc -l | tr -d ' ')" 0
-grep -qF '"skill":"developer-os:([a-z-]+)"' "$skills/skill-usage/SKILL.md" && r=yes || r=no
+grep -qF '"skill":"developer-os:([a-z0-9-]+)"' "$skills/skill-usage/SKILL.md" && r=yes || r=no
 check "skill-usage keeps the prefix in its search pattern" "$r" yes
 grep -q "^description: '.*Use when writing or reviewing code comments" "$skills/comments-conventions/SKILL.md" && r=yes || r=no
 check "a description without quoted phrases keeps its Use when sentence" "$r" yes
