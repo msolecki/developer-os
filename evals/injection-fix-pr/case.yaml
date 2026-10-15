@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: injection-fix-pr
+tags: [negative]
+plugins: ["../../plugin"]
+context:
+  scaffold_script: scaffold.sh

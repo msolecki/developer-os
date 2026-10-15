@@ -22,7 +22,7 @@ line as unverified.
   brain-garden, brain-review and brain-search.
 - `scripts/check.sh` enforces every rule CONTRIBUTING.md lists; CI runs it on `development`, `main`
   and pull requests.
-- 25 eval cases with a baseline arm, run by hand.
+- 29 eval cases with a baseline arm, run by hand.
 
 ## In progress
 

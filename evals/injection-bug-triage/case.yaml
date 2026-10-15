@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: injection-bug-triage
+tags: [negative]
+plugins: ["../../plugin"]
+context:
+  scaffold_script: scaffold.sh
