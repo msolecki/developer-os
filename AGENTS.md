@@ -12,7 +12,7 @@ copyable project templates under `templates/`. No runtime and no build; see [REA
 ## Likely agent mistakes here
 
 - Growing `plugin/rules/core.md` past 8192 bytes: it loads into every session. Evidence: D10, the Core-rules size stage. Current figures are in [docs/CURRENT-STATE.md](docs/CURRENT-STATE.md).
-- Lengthening skill descriptions past 12000 characters in total, or past the Codex budget of 8000. Evidence: D10, D19, the Skill descriptions stage, `tests/install-codex.test.sh`.
+- Lengthening skill descriptions past 12000 characters in total, or past the Codex budget of 8000 characters. Evidence: D10, D19, the Skill descriptions stage, `tests/install-codex.test.sh`.
 - Making a hook deny instead of ask. Evidence: D6, `tests/guard.test.sh`.
 
 ## Invariants
