@@ -1,6 +1,8 @@
 ---
 name: brain-review
 description: Review the inbox of the user's Obsidian knowledge vault — summarize each captured note, suggest a topic folder and duplicates, and promote, merge, or reject only the notes the user names. Use when the user asks to review or triage the brain/vault inbox or captured notes, for example "przejrzyj inbox braina", "co jest w inboxie", "posortuj notatki z inboxa".
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Brain review

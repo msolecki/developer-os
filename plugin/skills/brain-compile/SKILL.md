@@ -1,6 +1,8 @@
 ---
 name: brain-compile
 description: Synthesize several notes on one topic from the user's Obsidian knowledge vault into one compiled note in the inbox, listing its sources and leaving the original notes untouched. Use when the user asks to compile, consolidate, or summarize what the brain/vault knows about a topic into a single note, for example "zbierz wszystko o X w jedną notatkę", "skompiluj notatki o X".
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Brain compile

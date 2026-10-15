@@ -1,6 +1,8 @@
 ---
 name: testing-conventions
 description: Pin the contract in tests with absolute-instant fixtures and partial module mocks. Use when writing or reviewing test files (*.test.*, *.spec.*, tests/, e2e/).
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Tests — pin the contract, remove the ambient dependency

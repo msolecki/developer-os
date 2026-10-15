@@ -1,6 +1,8 @@
 ---
 name: plan-status
 description: Report measured open, done, and blocked counts from the project's active plan and backlog, then list the open decisions as numbered A/B/C questions with a recommended option, answerable in one line. Read-only. Use when the user asks where the work stands or what is left, for example "jaki status", "co zostało", "pokaż status planu", "na czym stoimy".
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Plan status

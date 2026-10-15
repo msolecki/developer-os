@@ -10,6 +10,9 @@
 
 Read `_Context.md` first: it says where to look and holds the project's vault slug.
 
+<!-- Projects with a UI keep DESIGN.md next to this file; delete the line below otherwise. -->
+UI work: read `DESIGN.md` first; take every value from its tokens.
+
 <!-- Optional: where audit-to-backlog writes and implement-backlog reads the backlog.
      Without this line they use TODO.md and TODO-done.md.
      e.g. Backlog: docs/backlog/TODO.md, docs/backlog/TODO-done.md -->

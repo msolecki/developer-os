@@ -17,6 +17,7 @@ done
 
 # Frontmatter (plugin, templates, evals, docs) must parse. Skills, agents and output styles need name (matching the folder or file) and description;
 # docs/*.md need status (current, draft or deprecated), owner and a last-verified date; other files only need parseable frontmatter.
+# Skills also carry the portable Agent Skills fields license and compatibility, and a name matching ^[a-z0-9-]{1,64}$.
 # Skill descriptions are 80-1024 characters and together at most 12000: every description loads into every session.
 # Every skill has a ## Stop point and a ## Never section, except the read-only ones: *-conventions,
 # brain-search, code-review, plan-status and skill-usage (they never write files, send anything or change git state).
@@ -48,6 +49,8 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
     %w[name description].each { |k| bad.("#{k} is empty") if y[k].to_s.strip.empty? }
     bad.("name #{y["name"].inspect} does not match #{want.inspect}") unless y["name"] == want
     next unless f.start_with?("plugin/skills/")
+    bad.("name must match ^[a-z0-9-]{1,64}$") unless want.match?(/\A[a-z0-9-]{1,64}\z/)
+    %w[license compatibility].each { |k| bad.("#{k} is empty") if y[k].to_s.strip.empty? }
     n = y["description"].to_s.size
     bad.("description is #{n} characters, allowed 80-1024") unless (80..1024).cover?(n)
     total += n

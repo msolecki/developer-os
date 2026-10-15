@@ -1,6 +1,8 @@
 ---
 name: error-handling-conventions
 description: Handle errors with cause chains, typed results, one API error envelope, no log-and-throw, and no empty catch. Use when writing or reviewing error handling in TypeScript files.
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Error-handling rules

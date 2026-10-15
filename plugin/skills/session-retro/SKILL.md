@@ -1,6 +1,8 @@
 ---
 name: session-retro
-description: Wrap up a session - check for uncommitted, unpushed or unmerged work, open PRs and running background tasks, propose cleanup, give a Done / Not done / Needs you status, update or close the plan, and propose at most a few lessons, rules or skill ideas to keep, applying only what the user approves. Use at the end of a session, when the Stop hook asks for it, or when the user says "podsumuj sesję", "czy wszystko zrobione", "posprzątaj", "kończymy".
+description: Wrap up a session - check for uncommitted, unpushed or unmerged work, open PRs and running background tasks, propose cleanup, give a Done / Not done / Needs you status, update or close the plan, and propose at most a few lessons, rules or skill ideas to keep, applying only what the user approves. Use at the end of a session, when the Stop hook asks for it, or when the user says "podsumuj sesję", "czy wszystko zrobione", "posprzątaj", "kończymy". Unlike the built-in /recap one-line summary, it checks git state and routes lessons to their destination.
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Session retro

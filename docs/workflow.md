@@ -355,6 +355,21 @@ line DELETE/KEEP/REWRITE with a source, flags hedges and contradictions, never c
 rules, lists what it did NOT RUN, and applies nothing without approval. Inside the developer-os
 repository it also reviews `plugin/rules/core.md`.
 
+## Built-in commands with similar names
+
+Claude Code ships commands that overlap with some developer-os skills. The names never collide
+(plugin skills are invoked as `developer-os:<name>`), but the choice matters:
+
+| Built-in | What it does | developer-os | Use developer-os when |
+|---|---|---|---|
+| `/code-review` (`/review`) | Reviews the current diff, a PR, branch or path for correctness | code-review, pr-cycle | The project's conventions, the P0–P3 scale, an independent reviewer for your own code, or a merge-ready PR cycle matter |
+| `/security-review` | Reviews the branch's changes against `origin` for vulnerabilities | `security-auditor` agent (through audit-to-backlog) | You want findings with attack paths merged into a backlog |
+| `/recap` | One-line summary of the session | session-retro | You want git state, cleanup, the status block, and lessons routed to the vault or the instructions |
+| `/insights` | HTML report on recent sessions | skill-usage | You want call counts for developer-os skills and keep/merge/remove suggestions |
+| `/goal` | Keeps working across turns until a condition holds | implement-backlog | The work is a backlog of evidence-backed items with per-item checks, worktrees and review |
+| `/skill-doctor` | Context cost and usage of every skill | skill-usage | You want the developer-os verdicts; use `/skill-doctor` for the context cost |
+| `/doctor` | Checks installation, settings and `CLAUDE.md` | instruction-review | You want an evidence-backed diff or a line-by-line prune of a project's instruction file |
+
 ## Claude-only features
 
 The skills work in Codex by hand (see [Codex](../README.md#codex-manual-best-effort)); these parts

@@ -1,6 +1,8 @@
 ---
 name: brain-capture
 description: Save a decision, a lesson that applies beyond the current task, or a reference from the current session as a new note in the inbox of the user's Obsidian knowledge vault, with secrets redacted. Use when the user says "capture", "remember this", "save this to the brain/vault", "zapisz to do braina", "zapamiętaj to", "zanotuj w vaulcie", or when a session produced a decision or lesson worth keeping.
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Brain capture

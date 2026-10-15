@@ -1,6 +1,8 @@
 ---
 name: audit-to-backlog
 description: Run parallel specialist reviews of a repository, require file-and-line evidence, deduplicate findings, and write an implementation-ready backlog. Use when the user invokes audit-to-backlog or asks for a broad codebase audit that should produce a task backlog, for example "zrób audyt tego repo", "zrób audyt kodu", "przeskanuj repo i zrób backlog".
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 argument-hint: "[path | --diff <ref>] [--perspectives security,correctness,types,performance,tests,arch,ui,a11y]"
 ---
 

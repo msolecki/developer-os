@@ -1,6 +1,8 @@
 ---
 name: brain-garden
 description: Produce a health report for the user's Obsidian knowledge vault — stale notes, old inbox notes, broken or archived wiki links, missing or invalid frontmatter, likely duplicates, and orphan notes — with proposed fixes, changing nothing without approval. Use when the user asks to garden, lint, audit, or check the health of the brain/vault, for example "sprawdź stan braina", "zrób porządki w vaulcie", "znajdź zepsute linki w brainie".
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Brain garden

@@ -71,6 +71,8 @@ or any error they exit silently and the normal permission flow applies.
 - **Conventions skills** (load only when relevant): comments-conventions,
   error-handling-conventions, defensive-coding-conventions, monitoring-conventions,
   nextjs-conventions, testing-conventions, typescript-conventions.
+- **Built-in overlaps:** `/code-review`, `/security-review`, `/recap`, `/insights`, `/goal`,
+  `/skill-doctor` and `/doctor` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).

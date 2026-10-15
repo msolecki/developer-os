@@ -1,6 +1,8 @@
 ---
 name: brain-setup
 description: Create the user's Obsidian knowledge vault from the developer-os template, or connect an existing vault by adding only the missing pieces, then point Claude Code at it (`Brain vault:` line and `permissions.additionalDirectories`) after the user approves the diff. Use when the user sets up developer-os, has no `Brain vault:` line yet, or says "skonfiguruj vault", "załóż vault", "podłącz mój vault", "setup brain".
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Brain setup

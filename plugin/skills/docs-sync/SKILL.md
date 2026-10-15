@@ -1,6 +1,8 @@
 ---
 name: docs-sync
 description: Check a repository's docs against its code and the project docs standard — scaffold missing pieces, refresh docs/CURRENT-STATE.md, report docs-vs-code drift, and propose the "Likely agent mistakes here" section from git history — writing nothing until the user approves. Use when docs may be stale, after a large change, or when setting up docs in a project; for example "odśwież dokumentację", "czy docsy są aktualne", "zsynchronizuj docs z kodem".
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 argument-hint: "[path]"
 ---
 
@@ -41,6 +43,7 @@ Check claims against the code. Each finding names the doc `path:line`, the claim
 - `docs/CURRENT-STATE.md`: its commit is not an ancestor of HEAD (`git merge-base --is-ancestor`), or more than 50 commits behind; claims under "Works" whose entry point is gone.
 - `_Context.md` "State as of" date older than the last commit touching the code it describes.
 - Docs whose `last-verified` is older than the last change to the code they cite.
+- `DESIGN.md` older than the last change to the styling sources (`tailwind.config.*`, global stylesheets such as `globals.css`, theme files): the tokens may no longer match the code.
 
 Report only what you checked; say which probes did not apply.
 
