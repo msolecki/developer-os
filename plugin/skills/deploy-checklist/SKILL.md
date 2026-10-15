@@ -1,6 +1,6 @@
 ---
 name: deploy-checklist
-description: Produce a repository-specific deployment checklist with a pre-deploy GO/NO-GO verdict and post-deploy checks covering validation, migrations, feature flags, monitoring, communication, and rollback. Use when the user plans a deployment, release to production, or shipping event.
+description: Produce a repository-specific deployment checklist with a pre-deploy GO/NO-GO verdict and post-deploy checks covering validation, migrations, feature flags, monitoring, communication, and rollback. Use when the user plans a deployment, release to production, or shipping event, for example "wdrażamy na produkcję", "checklista deployu", "czy możemy deployować".
 ---
 
 # Deploy checklist
@@ -28,3 +28,14 @@ Mark an item UNVERIFIED when its evidence is unavailable (no CI status, no dashb
 Never invent provider-specific commands. Derive them from repository configuration or ask for the missing deployment target.
 
 End by offering the `brain-capture` skill when the deployment taught a lasting lesson.
+
+## Stop point
+
+Stop at the `GO`/`NO-GO` verdict before the deployment; after it, stop at the recorded result. The user runs the deployment.
+
+## Never
+
+- Deploy, run a production migration, or change a feature flag.
+- Send deployment, client, or status communication without explicit authorization.
+- Mark an item passed without evidence.
+- Invent provider-specific commands.

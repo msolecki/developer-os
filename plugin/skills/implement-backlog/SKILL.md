@@ -1,6 +1,6 @@
 ---
 name: implement-backlog
-description: Implement evidence-backed backlog items in small batches, validate every item and the full batch, get an independent review, update the backlog and plan, and commit only green work. Use when the user invokes implement-backlog or asks to execute an audit backlog.
+description: Implement evidence-backed backlog items in small batches, validate every item and the full batch, get an independent review, update the backlog and plan, and commit only green work. Use when the user invokes implement-backlog or asks to execute an audit backlog, for example "napraw wszystko wieloma agentami", "zrealizuj backlog", "wdróż poprawki z audytu".
 argument-hint: "[category | task ID | --batch N]"
 ---
 
@@ -28,3 +28,15 @@ argument-hint: "[category | task ID | --batch N]"
 - Move completed items to the done file and update the project's active plan.
 - Stage only batch-owned files and commit only after all validation and review pass.
 - Report evidence, review additions, and the next batch.
+
+## Stop point
+
+Stop after the batch is committed locally, or earlier at a red baseline or after three failed repair cycles. Return the validation evidence, review additions, and the next batch.
+
+## Never
+
+- Push or force-push, merge or rebase a shared branch, or open a PR.
+- Include authentication or security items the user did not approve up front.
+- Delete or skip tests, or change assertions for a contract that did not change.
+- Commit red work or files outside the batch.
+- Change any `feature_list.json` field other than `passes`.

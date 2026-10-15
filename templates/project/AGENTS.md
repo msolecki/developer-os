@@ -24,6 +24,13 @@ Read `_Context.md` first: it says where to look and holds the project's vault sl
 # Real dev, build, lint, type-check, test, and migration commands from the project manifest.
 ```
 
+## Likely agent mistakes here
+
+<!-- At most three mistakes an agent has actually made in this repository, each with its
+     evidence. The docs-sync skill proposes them from history. Delete an item once a check
+     or a rule prevents it.
+     - <mistake and the correct action> — evidence: commit <sha> or session <YYYY-MM-DD> -->
+
 ## Stack
 
 <!-- Technologies with versions, non-negotiable choices, and rejected tools with reasons. -->
@@ -56,6 +63,13 @@ Read `_Context.md` first: it says where to look and holds the project's vault sl
 <!-- Concrete project prohibitions with reasons. Record deliberate deferrals explicitly,
      for example "X is a deliberate DEFER, not a defect," so audits do not reopen them. -->
 
+## Invariants
+
+<!-- Properties that must hold after every change (prices computed server-side, a
+     platform-free core), each with the check or test that enforces it. -->
+
 ## Documentation
 
-<!-- Link to docs/index.md or the equivalent. Sync rule: behavior change = docs update. -->
+<!-- Docs map: docs/index.md routes a task to its doc; docs/CURRENT-STATE.md (verified at a
+     commit), docs/pitfalls.md, docs/decisions/, docs/runbooks/. Sync rule: behavior change =
+     docs update; the docs-sync skill reports drift. -->

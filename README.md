@@ -3,8 +3,9 @@
 A Claude Code plugin for working with an AI coding agent and an Obsidian vault as its long-term
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
-tidy what was captured. You approve what becomes knowledge. The plugin is Markdown only: skills,
-agents, output styles and rules, with no server, no database and no runtime to install. Codex
+tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
+agents, output styles and rules) plus two small POSIX `sh` scripts, with no server, no database and
+no runtime to install. Codex
 support is manual and best-effort.
 
 ## Install (Claude Code)
@@ -16,9 +17,9 @@ support is manual and best-effort.
 
 ## Set up the vault
 
-Copy [`vault-template/`](vault-template/) as your Obsidian vault (or merge it into an existing one) and
-follow [`vault-template/README.md`](vault-template/README.md). The key step is one line in
-`~/.claude/CLAUDE.md`:
+Run the `brain-setup` skill in Claude Code: it copies [`plugin/vault-template/`](plugin/vault-template/)
+(or connects an existing vault), shows the two config edits as a diff and applies them after you
+approve. The two edits are one line in `~/.claude/CLAUDE.md`:
 
 ```
 Brain vault: /absolute/path/to/your/vault
@@ -27,12 +28,13 @@ Brain vault: /absolute/path/to/your/vault
 and the vault path in `permissions.additionalDirectories` in `~/.claude/settings.json`, so Claude Code
 may read and write it from any project.
 
-For project repositories, start from the files in [`templates/project/`](templates/project/). The
+For project repositories, start from the files in [`templates/project/`](templates/project/).
+They include a `docs/` skeleton; run the docs-sync skill to fill and check it. The
 full setup, with Obsidian settings and a first test, is in [docs/workflow.md](docs/workflow.md#setup-in-5-minutes).
 
-## What the SessionStart hook does
+## What the hooks do
 
-The plugin has one hook. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
+The plugin has three hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it runs `cat` on [`plugin/rules/core.md`](plugin/rules/core.md) and the output becomes
 session context. Installing the plugin therefore changes how the agent behaves everywhere, not only
 when you call a skill; read [`core.md`](plugin/rules/core.md) for the rules themselves.
@@ -41,19 +43,42 @@ To turn it off, disable the plugin (`/plugin`, then disable developer-os). To ke
 change a rule, override it explicitly in your user-level `~/.claude/CLAUDE.md` (for example, "Ignore
 the developer-os rule on plan files"); that file loads alongside the core rules in every session.
 
+A `Stop` hook ([`plugin/hooks/capture-nudge.sh`](plugin/hooks/capture-nudge.sh)) counts tool calls
+in the session transcript; it never reads their content. Once per session, after 30 tool calls, it
+asks the agent to run the session-retro skill, which proposes a wrap-up and applies only what you
+approve. Set `DEVELOPER_OS_CAPTURE_NUDGE=off` to turn it off, or `DEVELOPER_OS_CAPTURE_NUDGE_MIN=<n>`
+to change the threshold.
+
+A `PreToolUse` hook on Bash ([`plugin/hooks/guard.sh`](plugin/hooks/guard.sh)) asks for confirmation
+(it never blocks) before a dependency install with a package argument
+(`npm|pnpm|yarn|bun install|add|i <pkg>`), a `git push --force`/`-f`/`+refspec` without
+`--force-with-lease`, and any `--no-verify` or `git commit -n`. In `claude -p` an ask resolves to a denial.
+
+Both are POSIX `sh`, need no `jq`, make no network calls and fail open: on input they cannot parse
+or any error they exit silently and the normal permission flow applies.
+
 ## What's inside
 
-- **Brain skills:** brain-search, brain-capture, brain-review, brain-garden, brain-compile. They read
-  and write the vault with the agent's own file tools.
-- **Engineering skills:** code-review, spec, audit-to-backlog, implement-backlog, fix-pr,
-  bug-triage, deploy-checklist, instruction-review.
+- **Brain skills:** brain-setup, brain-search, brain-capture, brain-review, brain-garden,
+  brain-compile. They read and write the vault with the agent's own file tools.
+- **Engineering skills:** code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
+  bug-triage, deploy-checklist, instruction-review (add `--prune` for a periodic cut), plan-status,
+  client-reply, docs-sync, project-baseline.
+- **Session skills:** session-retro (end-of-session wrap-up: state check, cleanup proposals,
+  Done / Not done / Needs you, plan update or close, approval-gated capture) and skill-usage
+  (read-only report of how often each developer-os skill fired locally, with
+  keep/merge/rewrite-description/remove suggestions).
 - **Conventions skills** (load only when relevant): comments-conventions,
   error-handling-conventions, defensive-coding-conventions, monitoring-conventions,
   nextjs-conventions, testing-conventions, typescript-conventions.
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
-- **One `SessionStart` hook** that loads `plugin/rules/core.md` (see above).
+- **Three hooks:** `SessionStart` loads `plugin/rules/core.md`, `Stop` suggests a session wrap-up
+  once per long session, `PreToolUse` asks before installs, force pushes and `--no-verify`/`commit -n` (see above).
+- **Evals:** behavior checks for the brain skills, code-review, session-retro and the Polish
+  triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
+  plugin payload.
 
 ## Codex (manual, best-effort)
 
@@ -65,11 +90,14 @@ them by hand:
 2. Paste the content of `plugin/rules/core.md` into `~/.codex/AGENTS.md`.
 3. Add the `Brain vault: /absolute/path/to/your/vault` line to `~/.codex/AGENTS.md`.
 
-This setup is not tested on releases.
+This setup is not tested on releases. The hooks, agents and output styles have no Codex equivalent;
+see [Claude-only features](docs/workflow.md#claude-only-features).
 
 ## Documentation
 
 - [How to work: brain + code](docs/workflow.md): the workflow, the vault layout, privacy.
+- [Away from the desk](docs/workflow.md#away-from-the-desk-optional): capture from your phone and a
+  weekly vault brief with Claude Code routines.
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
