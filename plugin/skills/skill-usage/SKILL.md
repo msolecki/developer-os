@@ -19,14 +19,14 @@ A model-invoked skill call is a `tool_use` line `"name":"Skill","input":{"skill"
 
 ```bash
 from=$(date -u -v-30d +%F 2>/dev/null || date -u -d '30 days ago' +%F)
-rg -o --no-filename -g '*.jsonl' -r '$1 $2' \
-  '"name":"Skill","input":\{"skill":"developer-os:([a-z-]+)".*"timestamp":"(\d{4}-\d{2}-\d{2})' \
+rg -o --no-filename -g '*.jsonl' -r '${1}${2} ${3} ${4}' \
+  '(?:"name":"Skill","input":\{"skill":"developer-os:([a-z0-9-]+)"|<command-name>/developer-os:([a-z0-9-]+)</command-name>).*"uuid":"([0-9a-f-]+)","timestamp":"(\d{4}-\d{2}-\d{2})' \
   "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects" 2>/dev/null |  # append <dir>/projects per extra config dir
-  sort | awk -v from="$from" '{ all[$1]++; if ($2 >= from) m[$1]++; last[$1] = $2 }
+  sort -u -k2,2 | sort -k1,1 -k3,3 | awk -v from="$from" '{ all[$1]++; if ($3 >= from) m[$1]++; last[$1] = $3 }
     END { for (k in all) printf "%s %d %d %s\n", k, m[k], all[k], last[k] }'
 ```
 
-Output per line: name, calls in the last 30 days, calls ever, last date. A user-typed slash command (`<command-name>/developer-os:<name>`) is not a model call; count it separately with `rg -o --no-filename -g '*.jsonl' '<command-name>/developer-os:[a-z-]+'` and add it to the total. A missing directory is not an error. If reading the transcript directories is denied, ask the user to grant access (`--add-dir` with each `projects` directory above) or to run the command and paste the output; never work around the denial.
+Output per line: name, calls in the last 30 days, calls ever, last date. The pattern counts a model call and a user-typed `/developer-os:<name>` alike; `sort -u` on the message uuid drops lines that a resumed or forked transcript repeats. A missing directory is not an error. If reading the transcript directories is denied, ask the user to grant access (`--add-dir` with each `projects` directory above) or to run the command and paste the output; never work around the denial.
 
 ## 3. Report
 
@@ -38,7 +38,7 @@ spec  | 0         | 0          | never     | rewrite-description
 ```
 
 Verdicts are suggestions, not actions:
-- `keep`: called in the last 30 days.
+- `keep`: called (by the model or typed) in the last 30 days.
 - `rewrite-description`: never called, or not in the last 30 days; the description likely does not match how the user asks (check for missing Polish trigger phrases).
 - `merge`: two skills cover the same request; name the pair.
 - `remove`: never called and another skill already does the job; name it.

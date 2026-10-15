@@ -55,12 +55,6 @@ UI work: read `DESIGN.md` first; take every value from its tokens.
      applications pin exact versions, where a new dependency's rationale is recorded,
      and which licenses need review before adding. -->
 
-## Decisions (ADR-lite)
-
-<!-- | date | decision | reason | — at most ten rows. Move older decisions to the
-     vault with the brain-capture skill, and find them again with brain-search.
-     This is the short "why"; full history lives in the project's plans. -->
-
 ## Anti-patterns (do NOT)
 
 <!-- Concrete project prohibitions with reasons. Record deliberate deferrals explicitly,
@@ -74,5 +68,5 @@ UI work: read `DESIGN.md` first; take every value from its tokens.
 ## Documentation
 
 <!-- Docs map: docs/index.md routes a task to its doc; docs/CURRENT-STATE.md (verified at a
-     commit), docs/pitfalls.md, docs/decisions/, docs/runbooks/. Sync rule: behavior change =
-     docs update; the docs-sync skill reports drift. -->
+     commit), docs/pitfalls.md, docs/decisions/, docs/runbooks/. -->
+Behavior change = docs update in the same commit; the docs-sync skill reports drift.

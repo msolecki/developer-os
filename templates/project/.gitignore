@@ -1,2 +1,4 @@
 # Plans and the agent state file stay local; the SessionStart hook shows the state file only when it is ignored.
 docs/plans/
+# Keep the backlog tracked even when a global gitignore lists TODO.md.
+!TODO.md
