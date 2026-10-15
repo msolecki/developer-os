@@ -25,6 +25,7 @@ run --dry-run
 check "dry run exits 0" "$code" 0
 check "dry run leaves AGENTS.md alone" "$(cat "$agents")" "My own rule."
 check "dry run installs no skill" "$(find "$skills" -name .developer-os-codex | wc -l | tr -d ' ')" 0
+mkdir -p "$skills/old-skill" && : > "$skills/old-skill/.developer-os-codex" && printf 'old\n' > "$skills/old-skill/SKILL.md"
 
 run
 check "install exits 0" "$code" 0
@@ -34,6 +35,8 @@ check "text outside the markers survives" "$(head -n 1 "$agents")" "My own rule.
 grep -qx 'Brain vault: /vaults/test vault' "$agents" && r=yes || r=no
 check "the Brain vault line comes from CLAUDE.md" "$r" yes
 check "every skill but the foreign same-name one is installed" "$(find "$skills" -name .developer-os-codex | wc -l | tr -d ' ')" "$((n - 1))"
+[ -e "$skills/old-skill" ] && r=yes || r=no
+check "a marked copy of a removed skill is removed" "$r" no
 check "the first change backs AGENTS.md up" "$(ls "$h/.codex" | grep -c bak || true)" 1
 check "a foreign skill is untouched" "$(cat "$skills/my-own-skill/SKILL.md" | sed -n 3p)" "description: mine"
 check "a foreign same-name skill is kept" "$(cat "$skills/spec/SKILL.md")" "my own spec"
@@ -47,9 +50,9 @@ grep -q "Use for \"Likely agent mistakes here\"" "$skills/docs-sync/SKILL.md" &&
 check "a quoted name before the Use sentence is not a trigger phrase" "$r" no
 fm_keys=$(awk 'FNR==1{fm=1;next} fm&&/^---$/{fm=0} fm{sub(/:.*/,"");print}' "$skills"/*/SKILL.md | sort -u | tr '\n' ' ')
 check "frontmatter holds only name and description" "$fm_keys" "description name "
-total=$(sed -n "s/^description: '\(.*\)'$/\1/p" "$skills"/*/SKILL.md | awk '{ t += length($0) } END { print t }')
+total=$(sed -n "s/^description: '\(.*\)'$/\1/p" "$skills"/*/SKILL.md | tr -d '\n' | wc -c | tr -d ' ')
 [ "$total" -le 8000 ] && r=yes || r=no
-check "descriptions fit 8000 characters ($total)" "$r" yes
+check "descriptions fit 8000 (bytes, $total)" "$r" yes
 
 cp "$agents" "$tmp/first"
 backups=$(ls "$h/.codex" | grep -c bak || true)
@@ -83,6 +86,9 @@ check "--project exits 0" "$code" 0
 grep -qx 'Brain vault: /vaults/flag' "$tmp/proj2/AGENTS.md" && r=yes || r=no
 check "--project writes the block with the --vault line" "$r" yes
 check "--project names the backup it leaves in the project" "$(grep -c '^backup: .*proj2/AGENTS.md.bak-' "$tmp/out")" 1
+run --project "$tmp/proj2"
+grep -qx 'Brain vault: /vaults/flag' "$tmp/proj2/AGENTS.md" && r=yes || r=no
+check "a re-run without --vault keeps the --vault line" "$r" yes
 run --project "$tmp/proj2" --uninstall
 check "--project --uninstall exits 0" "$code" 0
 check "--project --uninstall removes the project block" "$(cat "$tmp/proj2/AGENTS.md")" "Project rule."
@@ -106,6 +112,16 @@ check "a folded description fails" "$code" 1
 check "a folded description is named" "$(grep -c 'one-line plain description in: .*spec/SKILL.md' "$tmp/err")" 1
 check "a folded description writes no AGENTS.md" "$(cat "$h2/.codex/AGENTS.md")" "My own rule."
 check "a folded description installs no skill" "$(find "$h2" -name .developer-os-codex | wc -l | tr -d ' ')" 0
+
+# pwd -P: the installer writes the resolved path, and the temp dir may sit behind a symlink.
+clone="$(cd "$tmp" && pwd -P)/a&b\\c"
+mkdir -p "$clone"
+cp -R "$(pwd)/scripts" "$(pwd)/plugin" "$clone/"
+h4="$tmp/home4"
+mkdir -p "$h4"
+env -i PATH="$PATH" HOME="$h4" sh "$clone/scripts/install-codex.sh" >"$tmp/out" 2>&1
+grep -qF "$clone/plugin/vault-template" "$h4/.agents/skills/brain-setup/SKILL.md" && r=yes || r=no
+check "a clone path with & and a backslash is written verbatim" "$r" yes
 
 cp "$tmp/first" "$agents"
 run --uninstall

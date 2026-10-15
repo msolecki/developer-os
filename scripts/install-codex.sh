@@ -13,8 +13,8 @@
 #   frontmatter reduced to name and a short description (first sentence and the quoted trigger
 #   phrases, or the "Use when" sentence if there are none), so all descriptions fit Codex's
 #   8000-character skill list; Claude-only references rewritten. Each copy carries a
-#   .developer-os-codex marker; a directory without it is never touched. --project --uninstall
-#   leaves the skills in place. A description must be one plain line.
+#   .developer-os-codex marker; a directory without it is never touched. A marked copy whose skill
+#   is gone from the plugin is removed. --project --uninstall leaves the skills in place. A description must be one plain line.
 # - Hooks, agents and output styles have no Codex equivalent and are not installed.
 set -eu
 
@@ -56,7 +56,7 @@ fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-say() { if [ "$dry" -eq 1 ]; then echo "would $*"; else echo "$*"; fi; }
+say() { if [ "$dry" -eq 1 ]; then printf 'would %s\n' "$*"; else printf '%s\n' "$*"; fi; }
 
 # --- AGENTS.md block ---------------------------------------------------------------------------
 
@@ -75,10 +75,11 @@ if [ -f "$agents_md" ]; then
   fi
 fi
 
-# The vault line goes into the block unless AGENTS.md already has one outside it.
+# An explicit --vault always goes into the block. Otherwise the line comes from the block, then CLAUDE.md, unless AGENTS.md already has one outside the block.
 outside=$( [ -f "$agents_md" ] && awk -v s="$start" -v e="$end" '$0==s{b=1} !b{print} $0==e{b=0}' "$agents_md" || true)
 if [ -z "$vault" ] && ! printf '%s\n' "$outside" | grep -q '^Brain vault:'; then
-  vault=$(sed -n 's/^Brain vault:[[:space:]]*//p' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md" 2>/dev/null | head -n 1)
+  vault=$( [ -f "$agents_md" ] && awk -v s="$start" -v e="$end" '$0==s{b=1} b && sub(/^Brain vault:[[:space:]]*/, "") {print; exit} $0==e{b=0}' "$agents_md" || true)
+  [ -n "$vault" ] || vault=$(sed -n 's/^Brain vault:[[:space:]]*//p' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md" 2>/dev/null | head -n 1)
 fi
 
 {
@@ -145,7 +146,8 @@ for src in "$plugin"/skills/*/; do
 
   # Codex copy: short description, Claude-only references rewritten.
   mkdir -p "$tmp/skill/$name"
-  awk -v plugin="$plugin" -v name="$name" '
+  DEVOS_PLUGIN="$plugin" awk -v name="$name" '
+    BEGIN { p = ENVIRON["DEVOS_PLUGIN"] }
     function short(d,   first, i, j, rest, q, out) {
       i = index(d, ". "); first = i ? substr(d, 1, i) : d
       # Trigger phrases follow "Use when/before/..."; a quoted span before it is a name, not a trigger.
@@ -163,11 +165,13 @@ for src in "$plugin"/skills/*/; do
       next
     }
     fm { if (sub(/^description: /, "")) print "description: " short($0); next }
-    { gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, plugin); gsub(/CLAUDE_PLUGIN_ROOT/, "plugin root"); gsub(/`developer-os:/, "`"); print }
+    # index/substr, not gsub: the clone path goes in verbatim, & and backslashes included.
+    { while ((i = index($0, "${CLAUDE_PLUGIN_ROOT}")) > 0) $0 = substr($0, 1, i - 1) p substr($0, i + 21)
+      gsub(/CLAUDE_PLUGIN_ROOT/, "plugin root"); gsub(/`developer-os:/, "`"); print }
   ' "$src/SKILL.md" > "$tmp/skill/$name/SKILL.md"
-  echo "developer-os Codex copy of $plugin/skills/$name" > "$tmp/skill/$name/$marker"
+  printf 'developer-os Codex copy of %s\n' "$plugin/skills/$name" > "$tmp/skill/$name/$marker"
   d=$(sed -n "s/^description: '\(.*\)'$/\1/p" "$tmp/skill/$name/SKILL.md")
-  total=$((total + ${#d}))
+  total=$((total + $(printf '%s' "$d" | wc -c)))
 
   if [ -e "$dest" ] || [ -L "$dest" ]; then
     if ! ours "$dest"; then
@@ -188,10 +192,18 @@ for src in "$plugin"/skills/*/; do
   fi
 done
 
+# Copies of skills the plugin no longer has (renamed or removed).
+for m in "$skills_dir"/*/"$marker"; do
+  [ -f "$m" ] || continue
+  dest=${m%/*}
+  [ ! -d "$plugin/skills/${dest##*/}" ] || continue
+  say "remove $dest"; [ "$dry" -eq 1 ] || rm -rf "$dest"; removed=$((removed + 1))
+done
+
 if [ "$uninstall" -eq 1 ]; then
   echo "skills: removed $removed"
 else
-  echo "skills: installed $installed, updated $updated, unchanged $unchanged, skipped $skipped"
-  echo "descriptions: $total characters, Codex budget $budget"
+  echo "skills: installed $installed, updated $updated, unchanged $unchanged, skipped $skipped, removed $removed"
+  echo "descriptions: $total bytes, Codex budget $budget characters"
   [ "$total" -le "$budget" ] || echo "warning: descriptions exceed the budget; raise skills.max_context_tokens in Codex" >&2
 fi
