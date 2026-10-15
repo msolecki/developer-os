@@ -46,7 +46,7 @@ At most 3 items per heading; omit empty headings. Route each item by this table:
 
 - **Lessons**: a decision or lesson that outlives the task, with its destination.
 - **Rule candidates**: a correction the user made (e.g. "no, use pnpm"), as a minimal diff to the destination file in instruction-review style.
-- **Plan update**: for the active plan (declared planning location, default `docs/plans/`). Finished: propose deleting it and moving open items to `TODO.md` or the backlog. Not finished: the new status line and a Next action ending with `Next session: 3 notes` (what to do first, what to avoid, what is still unverified).
+- **Plan update**: for the active plan (declared planning location, default `docs/plans/`). Finished: propose deleting it and `.devos-state.md` next to it, and moving open items to `TODO.md` or the backlog. Not finished: the new status line and a Next action ending with `Next session: 3 notes` (what to do first, what to avoid, what is still unverified).
 - **developer-os feedback**: a skill, hook or rule of this plugin that misfired. Draft the issue title and body without client or project names, and the command for the user to run: `gh issue create --repo msolecki/developer-os --title "…" --body-file <file>`.
 - **Skill / hook candidates**: a request the user made at least twice, in this session or across sessions you know of. Give a proposed name, the trigger phrases (including the user's Polish wording), and the type (skill or hook).
 

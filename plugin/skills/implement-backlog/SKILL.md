@@ -43,6 +43,16 @@ argument-hint: "[category | task ID | --batch N]"
 - Classify test failures before editing. Fix source code when a test reveals a real defect; change assertions only for an explicitly changed contract.
 - Stop after three failed repair cycles, preserve a deployable state, update the plan, and report concrete options.
 
+Keep the task state in `<planning location>/.devos-state.md` (default `docs/plans/.devos-state.md`, git-ignored with the plans): overwrite it at every stage change, so the `SessionStart` hook can show it after a compaction. At most 15 lines:
+
+```
+Plan: docs/plans/2026-10-15-checkout-retry.md
+Item: CART-12 (in progress)
+Agents: .worktrees/cart-13 → CART-13, .worktrees/cart-14 → CART-14
+Unverified: <claims without evidence yet>
+Next: <one line>
+```
+
 ## Review and record
 
 - Get a review from `developer-os:code-reviewer`. Fix P0/P1 findings; add P2/P3 to the backlog.

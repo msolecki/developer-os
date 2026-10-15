@@ -19,6 +19,8 @@ argument-hint: "[PR number]"
 9. Draft the PR body update (what the PR does, what changed in this cycle, how it was verified), show it, and apply it with `gh pr edit <n> --body-file <file>` after the user approves.
 10. Give the merge verdict in code-review's terms: `APPROVE` (ready to merge), `REQUEST_CHANGES` (with the open P0/P1 items), or `COMMENT` (a question blocks the verdict).
 
+Keep `Plan:` (the PR number and branch), `Item:` (the current step), `Unverified:` and `Next:` in `<planning location>/.devos-state.md` (default `docs/plans/.devos-state.md`), overwritten at every step, so the `SessionStart` hook can show them after a compaction.
+
 Every dispatch brief (the reviewer, a verifier, a fix delegate) ends with the final-status contract: the report's first line is `DONE`, `REVIEW`, `BLOCKED` (with `Unblock owner`) or `CONTINUING`; a report without one goes back once. While a delegate runs, do not edit the files it owns.
 
 ## Stop point

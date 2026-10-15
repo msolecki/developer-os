@@ -4,7 +4,7 @@ A Claude Code plugin for working with an AI coding agent and an Obsidian vault a
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
-agents, output styles and rules) plus two small POSIX `sh` scripts, with no server, no database and
+agents, output styles and rules) plus three small POSIX `sh` hook scripts, with no server, no database and
 no runtime to install. Codex
 support is manual and best-effort.
 
@@ -35,8 +35,11 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 ## What the hooks do
 
 The plugin has three hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
-every project, it runs `cat` on [`plugin/rules/core.md`](plugin/rules/core.md) and the output becomes
-session context. Installing the plugin therefore changes how the agent behaves everywhere, not only
+every project, it runs [`plugin/hooks/session-start.sh`](plugin/hooks/session-start.sh), which prints
+[`plugin/rules/core.md`](plugin/rules/core.md); the output becomes session context. After a compaction
+or a resume inside a git repository it adds a state card of at most 1 KB: the branch, up to 10
+worktrees, the active plan and `docs/plans/.devos-state.md`, the task state that implement-backlog,
+pr-cycle and audit-to-backlog keep there. Installing the plugin therefore changes how the agent behaves everywhere, not only
 when you call a skill; read [`core.md`](plugin/rules/core.md) for the rules themselves.
 
 To turn it off, disable the plugin (`/plugin`, then disable developer-os). To keep the plugin but
@@ -54,7 +57,7 @@ A `PreToolUse` hook on Bash ([`plugin/hooks/guard.sh`](plugin/hooks/guard.sh)) a
 (`npm|pnpm|yarn|bun install|add|i <pkg>`), a `git push --force`/`-f`/`+refspec` without
 `--force-with-lease`, and any `--no-verify` or `git commit -n`. In `claude -p` an ask resolves to a denial.
 
-Both are POSIX `sh`, need no `jq`, make no network calls and fail open: on input they cannot parse
+All three are POSIX `sh`, need no `jq`, make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies.
 
 ## What's inside
@@ -76,7 +79,7 @@ or any error they exit silently and the normal permission flow applies.
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
-- **Three hooks:** `SessionStart` loads `plugin/rules/core.md`, `Stop` suggests a session wrap-up
+- **Three hooks:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction), `Stop` suggests a session wrap-up
   once per long session, `PreToolUse` asks before installs, force pushes and `--no-verify`/`commit -n` (see above).
 - **Evals:** behavior checks for the brain skills, code-review, session-retro and the Polish
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the

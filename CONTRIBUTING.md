@@ -1,6 +1,6 @@
 # Contributing
 
-The plugin is Markdown and JSON plus two POSIX `sh` hook scripts. There is no build step and no runtime.
+The plugin is Markdown and JSON plus three POSIX `sh` hook scripts. There is no build step and no runtime.
 
 ## Check
 
@@ -18,8 +18,8 @@ bytes, runs every `tests/*.test.sh`, validates the plugin and the marketplace, a
 files for secrets. CI runs the same script.
 
 Hook tests live in `tests/*.test.sh` and run with `sh`; after changing a hook script, run its test
-directly from the repository root, for example `sh tests/guard.test.sh` or
-`sh tests/capture-nudge.test.sh`.
+directly from the repository root, for example `sh tests/guard.test.sh`,
+`sh tests/capture-nudge.test.sh` or `sh tests/session-start.test.sh`.
 
 Prerequisites on `PATH`:
 

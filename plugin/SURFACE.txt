@@ -8,6 +8,7 @@ hook SessionStart
 hook Stop
 hook-script capture-nudge.sh
 hook-script guard.sh
+hook-script session-start.sh
 output-style architect
 output-style debug
 output-style direct-objective

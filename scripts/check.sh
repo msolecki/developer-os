@@ -112,9 +112,11 @@ files README.md 'docs/*.md' evals/README.md |
     [ "$n" = "$want" ] || fail counts "${hit%:*}" "says $n $kind, the repository has $want"
   done
 
-# SessionStart hook output is capped at 10,000 characters.
+# SessionStart hook output is capped at 10,000 characters: the core rules plus the state card must fit.
 size=$(wc -c < plugin/rules/core.md | tr -d " ")
 [ "$size" -le 8192 ] || fail size plugin/rules/core.md "$size bytes, limit 8192"
+cap=$(sed -n 's/^cap=//p' plugin/hooks/session-start.sh)
+[ -n "$cap" ] && [ $((8192 + cap + 64)) -le 10000 ] || fail size plugin/hooks/session-start.sh "state card cap ${cap:-unset} leaves no room under 10000"
 
 files 'plugin/*.md' 'docs/*.md' README.md 'templates/*.md' | ruby -e '
   $stdin.read.split("\0").each do |f|

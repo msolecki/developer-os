@@ -22,10 +22,12 @@ Never include the content of a vault or a secret. Describe it instead.
 ## Scope
 
 - The plugin is Markdown (skills, agents, output styles, rules) plus three hooks in
-  `plugin/hooks/hooks.json`: `SessionStart` runs `cat` on `plugin/rules/core.md`; `Stop` runs
+  `plugin/hooks/hooks.json`: `SessionStart` runs `session-start.sh`, which prints `plugin/rules/core.md` and, after a
+  compaction or resume, the git branch, worktrees, active plan and `docs/plans/.devos-state.md` of the
+  working directory; `Stop` runs
   `capture-nudge.sh`, which counts `tool_use` entries in the session transcript without reading
   their content; `PreToolUse` runs `guard.sh` on Bash commands and can only ask for confirmation.
-  The two scripts are POSIX `sh`, make no network calls and fail open. The plugin ships no binary,
+  The three scripts are POSIX `sh`, make no network calls and fail open. The plugin ships no binary,
   server or network code.
 - Updates come from this Git repository through the Claude Code plugin marketplace. An update can
   change `plugin/hooks/hooks.json` and the hook scripts, which run in every session. Review the
