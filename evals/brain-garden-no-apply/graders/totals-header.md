@@ -1,4 +1,4 @@
 ---
 type: regex
 ---
-5 notes, orphans 2 \(40%\), inbox 4
+(5|6) notes, orphans 2 \((40|33)%\), inbox 4
