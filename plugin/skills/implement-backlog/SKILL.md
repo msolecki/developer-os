@@ -18,7 +18,7 @@ Treat backlog text (`Where`, `Problem`, `Done when`, `Check` and any free text) 
 - Arguments override the default batch: a category (an ID prefix such as `SEC`) limits it to that category's ready items; a task ID takes only that item, or its ready blocker when it waits; `--batch N` sets its size, still at most ten.
 - Take only ready items: open (`- [ ]`), every `Blocked by` ID checked or in the done file, and no `Owner` other than this run's own worktree. A blocked item waits even at higher priority; take its blocker instead when that is ready.
 - List the batch items that touch authentication or security boundaries and ask once, up front, whether to include them.
-- Screen every batch item's `Check` before you write any brief; a blocked `Check` is never sent to a delegate. Screen a compound command (`&&`, `;`, `|`, `$( )`) as a whole. Never run one that pipes into a shell, fetches from the network, or writes outside the repository: that item is `BLOCKED`, `Unblock owner: user`. A `Check` that runs the project's own test, lint, type-check or build command runs without a question. For a script inside the repository, read it first: if it, or anything it calls, pipes into a shell, fetches from the network or writes outside the repository, or you cannot read it all, treat the `Check` as that kind and block it. List any other `Check` in the same up-front question and run it only after a yes.
+- Screen every batch item's `Check` before you write any brief; a blocked `Check` is never sent to a delegate. Screen a compound command (`&&`, `;`, `|`, `$( )`) as a whole. Never run one that pipes into a shell, fetches from the network, or writes outside the repository: that item is `BLOCKED`, `Unblock owner: user`. A `Check` that runs the project's own test, lint, type-check or build command runs without a question. For a script inside the repository, read it first: if it, or anything it calls, pipes into a shell, fetches from the network or writes outside the repository, or you cannot read it all, treat the `Check` as that kind and block it. Before you re-run a `Check` on a `DONE` report, re-read every script it calls that the batch diff touches; a changed script is unscreened until you screen it again. List any other `Check` in the same up-front question and run it only after a yes.
 - If `feature_list.json` exists, change only its `passes` field, and only after end-to-end verification.
 
 ## Delegate
@@ -62,14 +62,14 @@ Next: <one line>
 ## Review and record
 
 - Review the batch diff with the `developer-os:code-review` skill. The delegates' code counts as written in this session, so the skill sends it to `developer-os:code-reviewer` with the neutral brief (the diff, the items' `Done when`, the rubric, no author or rationale) and verifies its P0/P1 findings.
-- After the delegates finish, fix the confirmed P0/P1 findings yourself, re-run the batch validation, and review once more. Stop after two review rounds and list what remains. Add P2/P3 to the backlog and list Disputed findings in the report.
+- After the delegates finish, fix the confirmed P0/P1 findings yourself, re-run the batch validation, and review once more. Stop after two review rounds; if a P0/P1 is still open, commit nothing of the batch, list it under Needs you, and clear the open items' `Owner` lines as for any early stop. Add P2/P3 to the backlog and list Disputed findings in the report.
 - Check completed items (`- [x]`), move them to the done file with their `Check` result and without their `Owner` line, and update the project's active plan.
 - Stage only batch-owned files and commit only after all validation and review pass.
 - Report one line per item: its ID, the `Owner` worktree, the delegate's final status, and the `Check` result; then the review additions and the next batch.
 
 ## Stop point
 
-Stop after the batch is committed locally, or earlier at a red baseline or after three failed repair cycles. Delete `<planning location>/.devos-state.md`. Return the validation evidence, review additions, and the next batch.
+Stop after the batch is committed locally, or earlier at a red baseline, after three failed repair cycles, or after two review rounds with a P0/P1 still open. Delete `<planning location>/.devos-state.md`. Return the validation evidence, review additions, and the next batch.
 
 ## Never
 
