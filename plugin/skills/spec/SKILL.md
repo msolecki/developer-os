@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Interview the user, inspect the repository, write a feature specification and implementation plan, then hand implementation to a fresh session. Use when the user asks to define or plan a feature before implementation or invokes the spec workflow.
+description: Interview the user, inspect the repository, write a feature specification and implementation plan, then hand implementation to a fresh session. Use when the user asks to define or plan a feature before implementation or invokes the spec workflow, for example "zaplanujmy nową funkcję", "napisz specyfikację", "zróbmy speca".
 argument-hint: "[feature description]"
 ---
 
@@ -12,3 +12,13 @@ argument-hint: "[feature description]"
 4. Write the implementation plan to the repository's documented plan location as `<YYYY-MM-DD-feature>.md`. Give every step What, Where, How, Test, complexity (S/M/L), and a deployable invariant.
 5. Offer to add the plan's steps to the project backlog as items the `implement-backlog` skill can execute.
 6. Stop and hand implementation to a fresh session using the plan path.
+
+## Stop point
+
+Stop after the specification and plan are written and the backlog offer is answered. Return both paths and the handoff prompt for a fresh session.
+
+## Never
+
+- Implement any part of the feature.
+- Overwrite an existing plan or specification.
+- Add items to the backlog without the user's yes.

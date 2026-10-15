@@ -1,6 +1,6 @@
 ---
 name: audit-to-backlog
-description: Run parallel specialist reviews of a repository, require file-and-line evidence, deduplicate findings, and write an implementation-ready backlog. Use when the user invokes audit-to-backlog or asks for a broad codebase audit that should produce a task backlog.
+description: Run parallel specialist reviews of a repository, require file-and-line evidence, deduplicate findings, and write an implementation-ready backlog. Use when the user invokes audit-to-backlog or asks for a broad codebase audit that should produce a task backlog, for example "zrób audyt tego repo", "zrób audyt kodu", "przeskanuj repo i zrób backlog".
 argument-hint: "[path | --diff <ref>] [--perspectives security,correctness,types,performance,tests,arch,ui,a11y]"
 ---
 
@@ -37,6 +37,12 @@ Severity: P0 = exploitable security defect, data loss, or production down; P1 = 
 
 For dead code, require zero references, invariant flags, old unreferenced code, or long commented blocks; classify removal confidence.
 
+## Verify blocking findings
+
+Before writing the backlog, send every P0 and P1 finding to a fresh verifier that did not produce it: Codex when the Codex plugin (`openai/codex-plugin-cc`) is installed, otherwise a `general-purpose` subagent. Codex is optional; never install it or fail without it. Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause) and the repository path, without the reviewer's evidence or reasoning, and prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
+
+Keep CONFIRMED findings, and mark a finding unverified when the verifier cannot decide. Leave REFUTED findings out of the backlog and list them, with the verifier's evidence, under Disputed in the report.
+
 ## Merge the backlog
 
 - Write or merge into the backlog with P0–P3 sections followed by an implementation-sessions section.
@@ -47,3 +53,14 @@ For dead code, require zero references, invariant flags, old unreferenced code, 
 - For multi-session work, create `feature_list.json`: a JSON array with one object per task (its ID, a short description, and `"passes": false`). Implementation may change only `passes`, and only after end-to-end verification.
 
 Validate that every item is evidence-backed, actionable, unique, and absent from the done file. Report priority counts and the three highest-impact findings.
+
+## Stop point
+
+Stop after the backlog is written and validated. Return the priority counts and the three highest-impact findings; implementation belongs to the `implement-backlog` skill.
+
+## Never
+
+- Fix a finding or edit code outside the backlog files, `feature_list.json`, and the `Backlog:` line.
+- Create the backlog files before the user chooses their paths.
+- Record a finding without `file:line` evidence, or resurrect one from the done file.
+- Let a reviewer write code or tests.

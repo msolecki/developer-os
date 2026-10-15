@@ -1,0 +1,5 @@
+# Obsidian UI state: changes on every click, not worth syncing. Settings and plugins stay tracked.
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/graph.json
+.trash/

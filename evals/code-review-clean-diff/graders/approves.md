@@ -1,0 +1,4 @@
+---
+type: regex
+---
+\bAPPROVE\b

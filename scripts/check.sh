@@ -15,9 +15,14 @@ files '*.json' | while IFS= read -r -d '' f; do
   jq empty "$f" || fail json "$f" "invalid JSON"
 done
 
-# Skills, agents and output styles need name (matching the folder or file) and description; other files only need parseable frontmatter.
-files 'plugin/*.md' 'vault-template/*.md' 'templates/*.md' | ruby -e '
+# Frontmatter (plugin, templates, evals) must parse. Skills, agents and output styles need name (matching the folder or file) and description; other files only need parseable frontmatter.
+# Skill descriptions are 80-1024 characters and together at most 12000: every description loads into every session.
+# Every skill has a ## Stop point and a ## Never section, except the read-only ones: *-conventions,
+# brain-search, code-review, plan-status and skill-usage (they never write files, send anything or change git state).
+files 'plugin/*.md' 'templates/*.md' 'evals/*.md' | ruby -e '
   require "date"; require "yaml"
+  read_only = %w[brain-search code-review plan-status skill-usage]
+  total = 0
   $stdin.read.split("\0").each do |f|
     bad = ->(why) { abort "frontmatter: #{f}: #{why}" }
     want = f[%r{\Aplugin/skills/([^/]+)/SKILL\.md\z}, 1] || f[%r{\Aplugin/(?:agents|output-styles)/([^/]+)\.md\z}, 1]
@@ -35,9 +40,22 @@ files 'plugin/*.md' 'vault-template/*.md' 'templates/*.md' | ruby -e '
     bad.("not a mapping") unless y.is_a?(Hash)
     %w[name description].each { |k| bad.("#{k} is empty") if y[k].to_s.strip.empty? }
     bad.("name #{y["name"].inspect} does not match #{want.inspect}") unless y["name"] == want
-  end'
+    next unless f.start_with?("plugin/skills/")
+    n = y["description"].to_s.size
+    bad.("description is #{n} characters, allowed 80-1024") unless (80..1024).cover?(n)
+    total += n
+    next if read_only.include?(want) || want.end_with?("-conventions")
+    body = lines[close..].join("\n")
+    ["## Stop point", "## Never"].each { |h| bad.("skill has no #{h} section") unless body =~ /^#{h}$/ }
+  end
+  abort "skills: descriptions total #{total} characters, limit 12000" if total > 12000'
 
-files '*.base' | while IFS= read -r -d '' f; do
+# Skills ship to other machines; a local path leaks the author's layout and breaks elsewhere.
+if files 'plugin/skills' | xargs -0 grep -nE '/Users/|/home/|~/www|\.claude2' >&2; then
+  fail skills plugin/skills "local path (/Users/, /home/, ~/www or .claude2) above"
+fi
+
+files '*.base' 'evals/*.yaml' | while IFS= read -r -d '' f; do
   ruby -e 'require "date"; require "yaml"; YAML.safe_load($stdin.read, permitted_classes: [Date], aliases: true)' < "$f" \
     || fail yaml "$f" "invalid YAML"
 done
@@ -50,7 +68,7 @@ done
 
 # SessionStart hook output is capped at 10,000 characters.
 size=$(wc -c < plugin/rules/core.md | tr -d " ")
-[ "$size" -le 9000 ] || fail size plugin/rules/core.md "$size bytes, limit 9000"
+[ "$size" -le 8192 ] || fail size plugin/rules/core.md "$size bytes, limit 8192"
 
 files 'plugin/*.md' 'docs/*.md' README.md 'templates/*.md' | ruby -e '
   $stdin.read.split("\0").each do |f|
@@ -75,6 +93,11 @@ files '*.md' ':!plugin/skills' | ruby -e '
       end
     end
   end'
+
+for t in tests/*.test.sh; do
+  [ -e "$t" ] || continue
+  sh "$t" || fail tests "$t" "exited non-zero"
+done
 
 claude plugin validate .
 claude plugin validate plugin

