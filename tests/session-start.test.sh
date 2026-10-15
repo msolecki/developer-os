@@ -33,21 +33,50 @@ run compact "$repo"
 check "compact keeps the core rules first" "$(printf '%s\n' "$out" | head -n 1)" "$(head -n 1 "$core")"
 printf '%s' "$out" | grep -q '^## developer-os state card$' && r=yes || r=no
 check "compact adds the state card" "$r" yes
-printf '%s' "$out" | grep -q '^Active plan: docs/plans/2026-10-15-checkout-retry.md$' && r=yes || r=no
+printf '%s' "$out" | grep -q '^Newest plan: docs/plans/2026-10-15-checkout-retry.md$' && r=yes || r=no
 check "card names the newest plan" "$r" yes
 
 printf 'Plan: docs/plans/other.md\nItem: CART-12 (in progress)\nNext: run the check\n' > "$repo/docs/plans/.devos-state.md"
 run resume "$repo"
-printf '%s' "$out" | grep -q '^Active plan: docs/plans/other.md$' && r=yes || r=no
-check "the state file's Plan line wins" "$r" yes
+printf '%s' "$out" | grep -q '^Newest plan: docs/plans/2026-10-15-checkout-retry.md$' && r=yes || r=no
+check "the state file's Plan line does not hide the newest plan" "$r" yes
 printf '%s' "$out" | grep -q '^Item: CART-12 (in progress)$' && r=yes || r=no
 check "card includes the state file" "$r" yes
+
+# A state file left over from a finished run (older than 7 days) is not shown.
+touch -t 202609010000 "$repo/docs/plans/.devos-state.md"
+run compact "$repo"
+printf '%s' "$out" | grep -q '^Item: CART-12' && r=yes || r=no
+check "a state file older than 7 days is not shown" "$r" no
+touch "$repo/docs/plans/.devos-state.md"
 
 awk 'BEGIN { for (i = 0; i < 200; i++) print "Unverified: claim number " i " still needs its evidence" }' >> "$repo/docs/plans/.devos-state.md"
 run compact "$repo"
 card=$(( $(printf '%s\n' "$out" | wc -c) - $(wc -c < "$core") ))
 [ "$card" -le 1026 ] && r=yes || r=no
 check "a 5 KB state file is cut to the cap ($card bytes)" "$r" yes
+check "a cut card ends with a whole line and a marker" "$(printf '%s\n' "$out" | tail -n 2 | head -n 1 | grep -c 'evidence$')$(printf '%s\n' "$out" | tail -n 1)" "1[state card cut at 1024 bytes]"
+
+# A cut never leaves a partial multibyte character behind: with a one-byte shift, one of two runs
+# lands inside a two-byte character of a long line.
+r=yes
+for pad in x xy; do
+  { printf 'Item: %s\n' "$pad"; awk 'BEGIN { for (i = 0; i < 1500; i++) printf "ż"; print "" }'; } > "$repo/docs/plans/.devos-state.md"
+  run compact "$repo"
+  printf '%s\n' "$out" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 || r=no
+done
+check "a cut card is valid UTF-8" "$r" yes
+printf 'Plan: docs/plans/other.md\nItem: CART-12 (in progress)\nNext: run the check\n' > "$repo/docs/plans/.devos-state.md"
+
+# Worktrees with long paths must not push the state file past the cap.
+git -C "$repo" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init >/dev/null 2>&1
+for i in 1 2 3 4 5 6 7 8; do
+  git -C "$repo" worktree add -q -b "agent-$i" "$tmp/worktrees/a-very-long-agent-worktree-directory-name-for-parallel-work-number-$i" 2>/dev/null
+done
+run compact "$repo"
+printf '%s' "$out" | grep -q '^Next: run the check$' && r=yes || r=no
+check "the state file survives eight long worktree paths" "$r" yes
+for i in 1 2 3 4 5 6 7 8; do git -C "$repo" worktree remove "$tmp/worktrees/a-very-long-agent-worktree-directory-name-for-parallel-work-number-$i" >/dev/null 2>&1; done
 
 # A cloned repository must not reach the model through the state card.
 git -C "$repo" add -f docs/plans/.devos-state.md 2>/dev/null
