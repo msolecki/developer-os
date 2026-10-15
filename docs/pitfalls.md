@@ -28,7 +28,7 @@ promise it makes.
 
 ## `core.md` is at its size cap
 
-- **Where:** `plugin/rules/core.md` (8145 of 8192 bytes)
+- **Where:** `plugin/rules/core.md` (just under its 8192-byte cap, enforced by `scripts/check.sh`; current figure in [CURRENT-STATE](CURRENT-STATE.md))
 - **Looks like:** an arbitrary limit blocking a useful rule.
 - **Why it is deliberate:** the file loads into every session; the cap keeps the fixed cost bounded
   and, with the state card, under the 10,000-character hook output limit.
