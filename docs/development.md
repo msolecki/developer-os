@@ -30,7 +30,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Stage | Fails when |
 |---|---|
 | JSON | Any `*.json` does not parse (`jq empty`) |
-| Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name |
+| Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name; a line inside the frontmatter of an `evals/` file contains `---` (the eval loader ends frontmatter there) |
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never` (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |

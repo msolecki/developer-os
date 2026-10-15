@@ -33,6 +33,9 @@ run "a renamed skill leaves its old bare name" fail "implement-backlog was remov
 edit plugin/skills/brain-garden/SKILL.md '/^Find the line `Brain vault:/s/ once / twice /'
 run "a brain skill drifts from the shared vault paragraph" fail "vault: plugin/skills/brain-garden/SKILL.md"
 
+edit evals/injection-fix-pr/graders/no-curl.md 's/^input_match: "curl"$/input_match: "curl(?!---)"/'
+run "--- inside an eval grader's frontmatter" fail "frontmatter: evals/injection-fix-pr/graders/no-curl.md: line 4"
+
 echo 'See /Users/bob/x.' >> "$r/plugin/agents/qa-expert.md"
 run "a local path in an agent" fail "local path"
 

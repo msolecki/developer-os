@@ -36,6 +36,10 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
       want || doc ? bad.("line 1 is not ---") : next
     end
     close = (1...lines.size).find { |i| lines[i] == "---" } or bad.("no closing ---")
+    # claude plugin eval ends frontmatter at the first line containing --- anywhere, not only a bare --- line.
+    if f.start_with?("evals/") && (i = (1...close).find { |j| lines[j].include?("---") })
+      bad.("line #{i + 1} inside the frontmatter contains ---")
+    end
     begin
       y = YAML.safe_load(lines[1...close].join("\n"), permitted_classes: [Date], aliases: true)
     rescue Psych::Exception => e
