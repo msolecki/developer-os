@@ -36,7 +36,11 @@ Needs you: <decisions, credentials, manual steps, approvals>
 
 ## 4. Findings
 
-At most 3 items per heading; omit empty headings. Route each item by this table:
+At most 3 items per heading; omit empty headings.
+
+Label every candidate `persistent` (true in the next task) or `this-task` (a temporary path, a limit of this task, a one-off workaround). Only `persistent` items go to the vault, auto-memory or instruction files; a `this-task` item goes at most to the plan.
+
+Route each item by this table:
 
 | What | Where |
 |---|---|
@@ -45,14 +49,15 @@ At most 3 items per heading; omit empty headings. Route each item by this table:
 | facts about this project (commands, stack, conventions) | the project's `AGENTS.md`/`CLAUDE.md` or an ADR |
 
 - **Lessons**: a decision or lesson that outlives the task, with its destination.
-- **Rule candidates**: a correction the user made (e.g. "no, use pnpm"), as a minimal diff to the destination file in instruction-review style.
+- **Rule candidates**: a correction the user made (e.g. "no, use pnpm"), as a minimal diff to the destination file in instruction-review style. Before proposing one, search the destination's history for its key phrase (`git log -p -S '<phrase>' -- <file>`; in the developer-os repository, `plugin/rules` and `plugin/skills`). If the change reverses an earlier commit, show that commit and ask whether to reverse it.
+- **Check candidates**: the same mistake made at least twice that a lint rule, a test, a `check.sh`-style script or a hook can detect. Propose the check, not a rule; prose does not stop a repeated mechanical mistake.
 - **Plan update**: for the active plan (declared planning location, default `docs/plans/`). Finished: propose deleting it and `.devos-state.md` next to it, and moving open items to `TODO.md` or the backlog. Not finished: the new status line and a Next action ending with `Next session: 3 notes` (what to do first, what to avoid, what is still unverified).
 - **developer-os feedback**: a skill, hook or rule of this plugin that misfired. Draft the issue title and body without client or project names, and the command for the user to run: `gh issue create --repo msolecki/developer-os --title "…" --body-file <file>`.
 - **Skill / hook candidates**: a request the user made at least twice, in this session or across sessions you know of. Give a proposed name, the trigger phrases (including the user's Polish wording), and the type (skill or hook).
 
 ## 5. Apply
 
-Ask which items to apply, by number. Apply only those: lessons through brain-capture, rule and plan changes as a shown diff, auto-memory as one fact per file.
+Ask which items to apply, by number. Apply only those: lessons through brain-capture, rule and plan changes as a shown diff, auto-memory as one fact per file. When the destination repository keeps a rules history (in developer-os, the Rules history table in `docs/product/decisions.md`), add one row for each approved rule change: `date | change | target | reason`.
 
 ## Stop point
 

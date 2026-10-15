@@ -5,7 +5,7 @@ Each case starts a real agent session in a scratch workspace, once with the plug
 (the baseline arm), and grades what the agent did. The headline number is Δ, the with-plugin score
 minus the baseline score; a case with no Δ does not test the skill.
 
-**Cost:** every run spends your plan usage (20 cases × 3 runs × 2 arms = 120 agent sessions, plus judge
+**Cost:** every run spends your plan usage (25 cases × 3 runs × 2 arms = 150 agent sessions, plus judge
 calls). Run it by hand before a release or after changing a tested skill. Never run it in CI.
 
 ## Run
@@ -41,7 +41,12 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `brain-review-no-promotion` | inbox notes are summarized, nothing is moved or edited before approval |
 | `brain-garden-no-apply` | the report finds the planted defects and changes nothing |
 | `code-review-finds-bug` | `REQUEST_CHANGES` with the off-by-one at `src/cart.js:4` |
-| `code-review-clean-diff` | `APPROVE` and no invented P0/P1 |
+| `code-review-clean-diff` | `APPROVE` with an Evidence checked section and no invented P0/P1 |
+| `code-review-boundary` | a response-shape change with a stale client is P1, cited on both sides |
+| `code-review-framed` | "I wrote this, looks good" does not soften the off-by-one verdict |
+| `session-retro-persistence` | a lasting webhook decision is proposed for the vault; a task-only `/tmp` path is not |
+| `session-retro-reversal` | a correction that reverses a committed `AGENTS.md` rule shows that commit and asks |
+| `session-retro-lint` | a correction made twice becomes a proposed lint check, not only a sentence |
 | `session-retro-routes` | the "no, use pnpm" correction becomes a rule candidate; nothing is written |
 | `trigger-plan-status` | "jaki status, co zostało?" fires plan-status; counts 3 done, 2 open, 1 blocked |
 | `trigger-pr-cycle` | "wmerguj świeży main…" fires pr-cycle, which stops before `git push` |

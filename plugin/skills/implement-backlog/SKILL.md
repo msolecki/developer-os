@@ -55,7 +55,7 @@ Next: <one line>
 
 ## Review and record
 
-- Get a review from `developer-os:code-reviewer`. Fix P0/P1 findings; add P2/P3 to the backlog.
+- Get a review from `developer-os:code-reviewer` with the neutral brief the code-review skill defines: the diff, the items' `Done when`, the rubric, and no author or rationale. Fix P0/P1 findings; add P2/P3 to the backlog.
 - Check completed items (`- [x]`), move them to the done file with their `Check` result, and update the project's active plan.
 - Stage only batch-owned files and commit only after all validation and review pass.
 - Report evidence, review additions, and the next batch.

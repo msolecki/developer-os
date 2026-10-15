@@ -129,6 +129,16 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   repository's default branch. `main` is not the release channel today.
 - **Open:** a release and pinning procedure; see [CURRENT-STATE.md](../CURRENT-STATE.md).
 
+## Rules history
+
+One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change
+(session-retro and instruction-review do this). Check here before reversing a rule.
+
+| Date | Change | Target | Reason |
+|---|---|---|---|
+| 2026-10-15 | Task state that must survive compaction lives in `docs/plans/.devos-state.md` | `plugin/rules/core.md` | The state card after compaction (sources proposal #2) |
+| 2026-10-15 | Hook normalization rule shortened to the `tr` call and one example | `plugin/rules/core.md` | Room for the state-card line under the 8192-byte cap |
+
 ## D15. Language split
 
 - **Date:** 2026-10-14
