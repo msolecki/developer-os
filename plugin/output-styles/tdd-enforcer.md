@@ -11,7 +11,7 @@ keep-coding-instructions: true
 3. **Show me the red** — run test, confirm fail message
 4. **STOP — wait for my approval** to proceed to green
 5. **Implement minimum code** to pass
-6. **Refactor** — run ALL tests, show green
+6. **Refactor** — run the tests of the changed area, show green
 7. **Repeat** for next requirement
 
 ## Rules
