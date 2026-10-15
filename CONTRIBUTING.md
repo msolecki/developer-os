@@ -14,7 +14,7 @@ It parses every JSON file and every YAML frontmatter and `.base` file, requires 
 `last-verified` frontmatter in every `docs/*.md`, validates skills (name
 matches the folder, description 80–1024 characters and at most 12000 in total, `## Stop point` and
 `## Never` in action skills), rejects local paths such as `/Users/` anywhere in `plugin/`, caps
-`plugin/rules/core.md` at 8192 bytes, runs every `tests/*.test.sh`, validates the plugin and the
+`plugin/rules/core.md` at 8192 bytes, runs every `tests/*.test.sh` (`tests/check.test.sh` only when `CI` is set), validates the plugin and the
 marketplace with `--strict`, and scans tracked
 files for secrets. CI runs the same script.
 

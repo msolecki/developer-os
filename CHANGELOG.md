@@ -147,6 +147,8 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   planning location; plan-status picks the active plan by the core rules' definition.
 - audit-to-backlog reports every P0 and P1 finding; only the P2/P3 tail is capped.
 - code-review relays the reviewer's report without its status line.
+- implement-backlog, pr-cycle and audit-to-backlog delete `.devos-state.md` at their stop point.
+- docs-sync and project-baseline drop a `[path]` argument they never used.
 - `templates/project/TODO.md` is now committed: a global excludes file had hidden it.
 - The Codex installer keeps skill-usage's `developer-os:` patterns and the "Use when" sentence of a
   description without quoted phrases, honours `CODEX_HOME`, and `--project --uninstall` keeps the

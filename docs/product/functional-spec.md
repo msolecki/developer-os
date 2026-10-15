@@ -116,7 +116,7 @@ Dispatched by skills or by the main agent. All treat code, diffs, PR text and fe
 
 | Agent | Model | Tools | Edits files | Used by |
 |---|---|---|---|---|
-| [code-reviewer](../../plugin/agents/code-reviewer.md) | sonnet | Read, Bash, Glob, Grep, Skill | No | code-review, implement-backlog, pr-cycle (through code-review), audit-to-backlog (correctness) |
+| [code-reviewer](../../plugin/agents/code-reviewer.md) | sonnet | Read, Bash, Glob, Grep, Skill | No | code-review, implement-backlog and pr-cycle (through code-review), audit-to-backlog (correctness) |
 | [security-auditor](../../plugin/agents/security-auditor.md) | opus | Read, Grep, Glob, Bash | No | audit-to-backlog (security) |
 | [performance-engineer](../../plugin/agents/performance-engineer.md) | sonnet | Read, Bash, Glob, Grep | No | audit-to-backlog (performance) |
 | [qa-expert](../../plugin/agents/qa-expert.md) | sonnet | Read, Grep, Glob, Bash, Write, Edit, Skill | Tests only, and only when asked | audit-to-backlog (tests, assessment only) |
