@@ -19,14 +19,14 @@ Pick 2–4 keywords and synonyms from the request. Search case-insensitively, sk
 
 ```bash
 V="/path/to/vault"; cd "$V"
-rg -il -g '*.md' -g '!/README.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e 'release' -e 'changelog' .
-rg -i -g '*.md' -g '!/README.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e '^(summary|tags|project):.*(release|changelog)' .
+rg -il -g '*.md' -g '!/README.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e 'release' -e 'changelog'
+rg -i -g '*.md' -g '!/README.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e '^(summary|tags|project):.*(release|changelog)'
 ```
 
 Drop notes with `status: archived` unless the user asked for them:
 
 ```bash
-rg -l '^status: archived' -g '*.md' -g '!_archive/' .
+rg -l '^status: archived' -g '*.md' -g '!_archive/'
 ```
 
 ## 3. Rank

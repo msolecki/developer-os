@@ -39,7 +39,7 @@ if [ -e "$V/.git" ] || [ -e "$V/.gitignore" ]; then
 fi
 ```
 
-`.obsidian/types.json`: add only the keys from the template's file that are absent; never change an existing value. If the file is missing, copy the template's. Show the change and apply it after approval, written back with `cat new > file` as in step 3 (existing values win: `jq -s '.[0] * {types: (.[1].types + .[0].types)}' "$V/.obsidian/types.json" "$TPL/.obsidian/types.json"`); ask the user to close Obsidian first, because it rewrites the file while open. Without `jq`, tell the user to set the property types in Obsidian's properties panel.
+`.obsidian/types.json`: add only the keys from the template's file that are absent; never change an existing value. If the file is missing, copy the template's. Show the change and apply it after approval, written back with `cat new > file` as in step 3 (set `TPL` and `V` in the same Bash call; existing values win: `jq -s '.[0] * {types: (.[1].types + .[0].types)}' "$V/.obsidian/types.json" "$TPL/.obsidian/types.json"`); ask the user to close Obsidian first, because it rewrites the file while open. Without `jq`, tell the user to set the property types in Obsidian's properties panel.
 
 ## 3. Point Claude Code at the vault
 
