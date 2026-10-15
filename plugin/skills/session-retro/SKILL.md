@@ -24,7 +24,7 @@ If `gh` is missing or unauthenticated, say the PR check was skipped. List backgr
 
 ## 2. Cleanup proposals
 
-From `git worktree list`, `git branch --merged` and `git stash list`, propose removing worktrees and branches whose work is merged, and stashes this session created. Proposals only; show the exact commands.
+From `git worktree list`, `git branch --merged "$base"` and `git stash list`, propose removing worktrees and branches whose work is merged into the base branch, and stashes this session created. Never propose the current branch or the base branch itself, and name the base you compared against. A bare `git branch --merged` compares against HEAD and lists an unmerged parent branch; when `origin/HEAD` is unset (`$base` empty), say so, suggest `git remote set-head origin -a`, and propose no branch removal. Proposals only; show the exact commands.
 
 ## 3. Status block
 
