@@ -98,7 +98,7 @@ if ! surface | LC_ALL=C sort | diff -u plugin/SURFACE.txt - >&2; then
 fi
 
 # A name removed from SURFACE.txt (in history or in the uncommitted diff) must not survive in what ships,
-# bare or prefixed, so a rename cannot leave the rules or a skill pointing at a skill that no longer exists.
+# as a bare word (the prefixed form fails in References), so a rename cannot leave the rules or a skill pointing at a skill that no longer exists.
 # A shallow clone has no history, so there only the uncommitted diff counts.
 { git log -p --format= -- plugin/SURFACE.txt; git diff HEAD -- plugin/SURFACE.txt; } |
   sed -nE 's/^-(skill|agent|output-style) //p' | LC_ALL=C sort -u |
@@ -178,14 +178,13 @@ for t in tests/*.test.sh; do
   sh "$t" || fail tests "$t" "exited non-zero"
 done
 
-# --strict fails on unknown or misspelled manifest keys. The one warning allowed is a missing plugin version:
-# without one, Claude Code versions the plugin by its git commit.
+# --strict fails on unknown or misspelled manifest keys. The one warning allowed is a missing plugin version,
+# which the plugin drops on purpose.
 for d in . plugin; do
   out=$(claude plugin validate "$d" --strict 2>&1) && continue
-  echo "$out" >&2
-  claude plugin validate "$d" >/dev/null 2>&1 || fail validate "$d" "claude plugin validate failed"
-  if printf '%s\n' "$out" | grep '❯' | grep -v 'version: No version specified' >/dev/null; then
-    fail validate "$d" "warning above"
+  if ! claude plugin validate "$d" >/dev/null 2>&1 ||
+    printf '%s\n' "$out" | grep '❯' | grep -v 'version: No version specified' >/dev/null; then
+    echo "$out" >&2; fail validate "$d" "claude plugin validate --strict failed above"
   fi
 done
 

@@ -39,7 +39,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
-| Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` (in git history or the uncommitted diff) still appears, bare or prefixed, in `plugin/`, `templates/` or `README.md`; a shallow clone has no history, so there only the uncommitted diff counts |
+| Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` (in git history or the uncommitted diff) still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; a shallow clone has no history, so there only the uncommitted diff counts |
 | Counts | A count written as digits in the README, `docs/`, `evals/README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` ("N skills", "N eval cases"; not "N cases of") differs from the disk |
 | Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or the state-card cap in `session-start.sh` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style; a changelog entry names a removed skill without the prefix |
