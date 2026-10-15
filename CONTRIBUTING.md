@@ -10,7 +10,8 @@ Run before every commit:
 scripts/check.sh
 ```
 
-It parses every JSON file and every YAML frontmatter and `.base` file, validates skills (name
+It parses every JSON file and every YAML frontmatter and `.base` file, requires `status`, `owner` and
+`last-verified` frontmatter in every `docs/*.md`, validates skills (name
 matches the folder, description 80–1024 characters and at most 12000 in total, no local paths such
 as `/Users/`, `## Stop point` and `## Never` in action skills), caps `plugin/rules/core.md` at 8192
 bytes, runs every `tests/*.test.sh`, validates the plugin and the marketplace, and scans tracked

@@ -15,26 +15,33 @@ files '*.json' | while IFS= read -r -d '' f; do
   jq empty "$f" || fail json "$f" "invalid JSON"
 done
 
-# Frontmatter (plugin, templates, evals) must parse. Skills, agents and output styles need name (matching the folder or file) and description; other files only need parseable frontmatter.
+# Frontmatter (plugin, templates, evals, docs) must parse. Skills, agents and output styles need name (matching the folder or file) and description;
+# docs/*.md need status (current, draft or deprecated), owner and a last-verified date; other files only need parseable frontmatter.
 # Skill descriptions are 80-1024 characters and together at most 12000: every description loads into every session.
 # Every skill has a ## Stop point and a ## Never section, except the read-only ones: *-conventions,
 # brain-search, code-review, plan-status and skill-usage (they never write files, send anything or change git state).
-files 'plugin/*.md' 'templates/*.md' 'evals/*.md' | ruby -e '
+files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
   require "date"; require "yaml"
   read_only = %w[brain-search code-review plan-status skill-usage]
   total = 0
   $stdin.read.split("\0").each do |f|
     bad = ->(why) { abort "frontmatter: #{f}: #{why}" }
     want = f[%r{\Aplugin/skills/([^/]+)/SKILL\.md\z}, 1] || f[%r{\Aplugin/(?:agents|output-styles)/([^/]+)\.md\z}, 1]
+    doc = f.start_with?("docs/")
     lines = File.read(f).lines(chomp: true)
     if lines[0] != "---"
-      want ? bad.("line 1 is not ---") : next
+      want || doc ? bad.("line 1 is not ---") : next
     end
     close = (1...lines.size).find { |i| lines[i] == "---" } or bad.("no closing ---")
     begin
       y = YAML.safe_load(lines[1...close].join("\n"), permitted_classes: [Date], aliases: true)
     rescue Psych::Exception => e
       bad.("invalid YAML: #{e.message}")
+    end
+    if doc
+      bad.("status must be current, draft or deprecated") unless y.is_a?(Hash) && %w[current draft deprecated].include?(y["status"])
+      bad.("owner is empty") if y["owner"].to_s.strip.empty?
+      bad.("last-verified is not a YYYY-MM-DD date") unless y["last-verified"].is_a?(Date)
     end
     next unless want
     bad.("not a mapping") unless y.is_a?(Hash)
