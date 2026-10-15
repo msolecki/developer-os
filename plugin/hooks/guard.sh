@@ -1,9 +1,10 @@
 #!/bin/sh
 # PreToolUse guard for Bash. Answers "ask" (never "deny") before a dependency
 # install with a package argument, a force push (--force, -f or a +refspec; a
-# --force-with-lease alone passes), `git commit -n`, or any --no-verify. Branch
-# deletion (`git push --delete`, `git push origin :branch`) passes. Fail-open: anything it cannot parse produces no output and
-# exit 0, so the normal permission flow applies.
+# --force-with-lease alone passes), `git commit -n`, or any --no-verify, HUSKY=0 or
+# core.hooksPath=. Newlines separate commands like `;`. Branch deletion
+# (`git push --delete`, `git push origin :branch`) passes. Fail-open: anything it
+# cannot parse produces no output and exit 0, so the normal permission flow applies.
 #
 # Quotes are stripped before matching, so `sh -c "pnpm add zod"` asks, and so
 # does a mention such as `git commit -m "pnpm add zod"`. An extra prompt costs
@@ -19,9 +20,9 @@ cmd=$(printf '%s\n' "$input" |
   sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p' 2>/dev/null)
 [ -n "$cmd" ] || exit 0
 
-# JSON-unescape, then join backslash-newline continuations and drop quotes.
+# JSON-unescape (join backslash-newline continuations, turn a newline into `;`), drop quotes.
 cmd=$(printf '%s\n' "$cmd" |
-  sed -e 's/\\[nrt]/ /g' -e 's/\\"/"/g' -e 's/\\\\/\\/g' -e 's/\\ / /g' 2>/dev/null |
+  sed -e 's/\\\\\\n/ /g' -e 's/\\n/;/g' -e 's/\\[rt]/ /g' -e 's/\\"/"/g' -e 's/\\\\/\\/g' -e 's/\\ / /g' 2>/dev/null |
   tr "\"'" '  ')
 
 hit=$(printf '%s\n' "$cmd" | awk '{
@@ -29,14 +30,17 @@ hit=$(printf '%s\n' "$cmd" | awk '{
   n = split($0, seg, "\n")
   for (s = 1; s <= n; s++) {
     m = split(seg[s], w)
-    pm = 0; sub_ = 0; git = 0; push = 0; commit = 0; force = 0
+    pm = 0; sub_ = 0; git = 0; push = 0; commit = 0; force = 0; skip = 0
     for (i = 1; i <= m; i++) {
       x = w[i]
-      if (x == "--no-verify") { print "noverify"; exit }
+      if (x ~ /^--no-veri(f|fy)?$/ || x == "HUSKY=0" || tolower(x) ~ /^core\.hookspath=/) { print "noverify"; exit }
+      if (skip) { skip = 0; continue }
+      if (pm && x ~ /^(--filter|-F|--prefix|--dir|-C)$/) { skip = 1; continue }
       if (sub_ && x !~ /^-/) { print "install"; exit }
-      if (pm && (x == "install" || x == "add" || x == "i")) sub_ = 1
-      if (x ~ /^(npm|pnpm|yarn|bun)$/) pm = 1
-      if (x == "git") git = 1
+      if (pm && (x == "run" || x == "exec" || x == "dlx" || x == "--")) pm = 0
+      if (pm && x ~ /^(i|in|ins|inst|insta|instal|install|add)$/) sub_ = 1
+      if (x ~ /(^|\/)(npm|pnpm|yarn|bun)$/) pm = 1
+      if (x ~ /(^|\/)git$/) git = 1
       if (git && x == "push") push = 1
       else if (git && x == "commit") commit = 1
       else if (push && (x == "--force" || x ~ /^-[a-zA-Z]*f[a-zA-Z]*$/ || x ~ /^\+/)) force = 1
@@ -49,7 +53,7 @@ hit=$(printf '%s\n' "$cmd" | awk '{
 case $hit in
   install) reason="Dependency install rewrites dependencies and the lockfile." ;;
   push) reason="Force push can overwrite others' commits; use --force-with-lease alone." ;;
-  noverify) reason="--no-verify (commit -n) skips the repository's hooks." ;;
+  noverify) reason="This skips the repository's git hooks (--no-verify, commit -n, HUSKY=0, core.hooksPath)." ;;
   *) exit 0 ;;
 esac
 
