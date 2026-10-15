@@ -25,8 +25,8 @@ Never include the content of a vault or a secret. Describe it instead.
   `plugin/hooks/hooks.json`: `SessionStart` runs `session-start.sh`, which prints `plugin/rules/core.md` and, after a
   compaction or resume, the git branch, worktrees, active plan and `docs/plans/.devos-state.md` of the
   working directory; `Stop` runs
-  `capture-nudge.sh`, which counts `tool_use` entries in the session transcript without reading
-  their content; `PreToolUse` runs `guard.sh` on Bash commands and can only ask for confirmation.
+  `capture-nudge.sh`, which counts `tool_use` entries in the session transcript and reads only
+  background-task ids and output-file paths from it, never message content; `PreToolUse` runs `guard.sh` on Bash commands and can only ask for confirmation.
   The three scripts are POSIX `sh`, make no network calls and fail open. The plugin ships no binary,
   server or network code.
 - Updates come from this Git repository through the Claude Code plugin marketplace. An update can
