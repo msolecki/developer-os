@@ -36,6 +36,11 @@ State (docs/plans/.devos-state.md):
 <the file, when it exists>
 ```
 
+The state file appears only when a local agent could have written it: a regular file, with no
+symlink on its path (`docs`, `docs/plans`, the file), not tracked by git, and git-ignored. A cloned
+repository therefore cannot plant instructions or a link to a local secret there. The card says it
+is data, not instructions, and control characters are stripped.
+
 `docs/plans/.devos-state.md` is written by implement-backlog, pr-cycle and audit-to-backlog at every
 stage change (plan, current item, agents and their worktrees, unverified claims, next step) and is
 git-ignored with the plans. session-retro proposes deleting it with a finished plan. The hook reads

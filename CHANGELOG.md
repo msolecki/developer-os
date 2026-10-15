@@ -60,7 +60,7 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - `scripts/check.sh` validates skills (name matches the folder and `^[a-z0-9-]{1,64}$`, `license` and
   `compatibility` present, description length and total, no local paths, `## Stop point` and
   `## Never` in action skills), agents' final statuses, `plugin/SURFACE.txt` and counts written as
-  digits, and runs `tests/*.test.sh`. CI also runs agnix, pinned, with `.agnix.toml`.
+  digits, and runs `tests/*.test.sh`. CI also runs agnix, its binary pinned by SHA-256, with `.agnix.toml`.
 
 ### Changed
 - code-review and code-reviewer list Evidence checked under an `APPROVE` with no P0–P2, read both

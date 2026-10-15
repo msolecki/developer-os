@@ -20,7 +20,7 @@ Read-only: never edit a plan, backlog, or any other file, and never run a test o
 Count, do not estimate. State the rule you used in the output.
 
 - **Done:** `- [x]` items, or steps the plan's status section names as done.
-- **Blocked:** open items that say `blocked` (any case) or use a `[!]` or `[-]` box. Name each with its blocker.
+- **Blocked:** open plan items or steps that say `blocked` (any case) or use a `[!]` or `[-]` box. Name each with its blocker. A backlog item's `Blocked by:` line does not count here; it decides ready or waiting below.
 - **Open:** every other `- [ ]` item or step. Blocked items are not counted again as open.
 - A plan without checkboxes: count its steps (`### Step …` or numbered step headings) and classify each from the plan's own status text; a step with no status is open.
 - Backlog: open items per `P0`–`P3` section in the todo file; items in the done file. Among open items, also count **ready** (every `Blocked by` ID done, no `Owner`), **waiting** (a `Blocked by` ID still open), and **orphaned** (an `Owner` dated more than 7 days ago). Name each orphaned item with its owner.

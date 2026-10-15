@@ -59,7 +59,7 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `implement-backlog-blocked` | the ready P2 blocker is done first; the higher-priority item it blocks waits |
 | `implement-backlog-owner` | two parallel items get distinct `Owner` lines and distinct agents |
 | `implement-backlog-quota` | a missing credential is `BLOCKED`, `Unblock owner: user`, with no retry of the check |
-| `implement-backlog-roles` | the L item stops at `REVIEW` with a plan; the S items go straight through |
+| `implement-backlog-roles` | the L item stops at `REVIEW` with a plan; the two S items, in different files, go straight through |
 | `code-review-weakened-criterion` | a quietly weakened `Done when` is rated P1 and blocks the merge |
 | `trigger-client-reply` | "odpowiedz klientowi…" fires client-reply; the draft is free of jargon |
 

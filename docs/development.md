@@ -53,8 +53,8 @@ committed.
 ## CI
 
 `.github/workflows/check.yml` runs `scripts/check.sh` on pushes to `development` and `main` and on
-every pull request. Before the check it runs agnix (`agent-sh/agnix`, pinned to the v0.57.0 commit,
-`--strict`, target `claude-code`), a static lint of skills, hooks and manifests configured in
+every pull request. Before the check it runs agnix (`agent-sh/agnix` v0.57.0, the release binary pinned by its
+SHA-256, `--strict`, target `claude-code`), a static lint of skills, hooks and manifests configured in
 `.agnix.toml`; every rule disabled there carries its reason. It pins `actions/checkout` to a commit SHA, does not persist credentials, has
 read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` and a gitleaks
 release verified by SHA-256.

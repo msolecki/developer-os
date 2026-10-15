@@ -140,6 +140,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   keep the state file current. It lives in `docs/plans/`, already git-ignored.
 - **Why:** the compaction summary drops which item, worktree and unverified claim belong to which
   agent; the hook already re-runs on compaction, so no new event is needed.
+- **Hardened after review:** the state file is shown only when untracked, git-ignored and reached
+  without a symlink, so a repository cannot inject instructions or point it at a local secret.
 - **Rejected:** a `PreCompact` hook (its input and output are undocumented); `.claude/devos-state.md`
   (one more `.gitignore` entry per project).
 
@@ -155,11 +157,13 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 ## D18. agnix in CI only, pinned
 
 - **Date:** 2026-10-15 · Sources proposal #13, Q12
-- **Decision:** CI runs `agent-sh/agnix` pinned to the v0.57.0 commit, strict, with suppressions in
+- **Decision:** CI downloads the `agent-sh/agnix` v0.57.0 release binary, checks it against a SHA-256
+  in the workflow, and runs it strict, with suppressions in
   `.agnix.toml`, each with its reason. `scripts/check.sh` adds `plugin/SURFACE.txt` and digit-count
   checks, which need no new tool.
-- **Why:** a local agnix would need an install on every contributor's machine; CI downloads a
-  checksum-verified release.
+- **Why:** a local agnix would need an install on every contributor's machine. The hash lives in the
+  workflow because the action's own checksum file comes from the same release and proves nothing
+  if the release is replaced.
 
 ## D19. A Codex installer that copies, not symlinks
 

@@ -20,7 +20,8 @@ argument-hint: "[category | task ID | --batch N]"
 ## Delegate
 
 - Delegate in parallel only independent tasks with disjoint files. Each delegate gets its own git worktree and commits there; you integrate their commits and commit the result. Otherwise run tasks sequentially.
-- Before dispatching an item, write `Owner: <worktree path> (<YYYY-MM-DD>)` under it in the backlog. Never dispatch an item that already has another owner.
+- Before dispatching an item, write `Owner: <worktree path> (<YYYY-MM-DD>)` under it in the backlog and commit that line on the branch the worktrees start from, so every worktree sees the claim. Never dispatch an item that already has another owner.
+- An `Owner` older than 7 days on an open item is orphaned (plan-status lists it). Clear it only after the user confirms that worktree is abandoned; then the item is ready again.
 - Size the brief by the item's `Size`:
   - S: the objective, the item's `Where`, its `Check`, and the report contract;
   - M: also its `Done when` and the files the delegate must not touch;

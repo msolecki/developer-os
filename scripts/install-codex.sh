@@ -6,6 +6,7 @@
 # - Rules: replaces only the block between the developer-os-core markers in ~/.codex/AGENTS.md
 #   (or <dir>/AGENTS.md with --project) with plugin/rules/core.md and the Brain vault line. Text
 #   outside the markers is kept; a changed file is backed up first; an unchanged file is not touched.
+#   --project changes only which AGENTS.md is written; skills always go to the skills directory.
 # - Skills: writes a Codex copy of every skill to ${CODEX_SKILLS_DIR:-~/.agents/skills}/<name>:
 #   frontmatter reduced to name and a short description (first sentence and the quoted trigger
 #   phrases), so all descriptions fit Codex's 8000-character skill list; Claude-only references
@@ -41,6 +42,10 @@ say() { if [ "$dry" -eq 1 ]; then echo "would $*"; else echo "$*"; fi; }
 
 # --- AGENTS.md block ---------------------------------------------------------------------------
 
+if [ -L "$agents_md" ]; then
+  echo "error: $agents_md is a symlink; the installer writes only regular files. Nothing was changed." >&2
+  exit 1
+fi
 if [ -f "$agents_md" ]; then
   ns=$(grep -cxF "$start" "$agents_md" || true)
   ne=$(grep -cxF "$end" "$agents_md" || true)
@@ -68,10 +73,15 @@ fi
 } > "$tmp/block"
 
 if [ -f "$agents_md" ] && grep -qxF "$start" "$agents_md"; then
-  awk -v s="$start" -v e="$end" -v f="$tmp/block" '
+  # On uninstall, the blank line the install put before the block goes with it.
+  awk -v s="$start" -v e="$end" -v f="$tmp/block" -v un="$uninstall" '
+    held { if (!(un && $0 == s)) print ""; held = 0 }
     $0 == s { while ((getline l < f) > 0) print l; skip = 1; next }
     $0 == e { skip = 0; next }
-    !skip' "$agents_md" > "$tmp/agents"
+    skip { next }
+    $0 == "" { held = 1; next }
+    { print }
+    END { if (held) print "" }' "$agents_md" > "$tmp/agents"
 elif [ "$uninstall" -eq 0 ]; then
   { if [ -s "$agents_md" ]; then cat "$agents_md"; echo; fi; cat "$tmp/block"; } > "$tmp/agents"
 else

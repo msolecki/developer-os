@@ -69,7 +69,7 @@ While reviewers run, keep `Plan:` (the backlog path), `Agents:` (perspective →
 - **Size:** S, M or L, as in plan steps.
 - **Check:** a command that exits non-zero while `Done when` does not hold. `Manual: <steps> — <why no command can check it>` only when no command can.
 - **Blocked by:** optional item IDs; the item is ready when each is checked or in the done file.
-- **Owner:** absent when the item is written; only implement-backlog writes it, before dispatch.
+- **Owner:** absent when the item is written; only implement-backlog writes it, before dispatch, and clears an orphaned one after the user confirms.
 - **Done when:** never edited or deleted. A change is appended as `Amended YYYY-MM-DD: <new criterion> — <reason and evidence>`, with the user's approval.
 
 - Deduplicate by file and root cause; keep the higher severity.

@@ -21,6 +21,8 @@ run() {
 repo="$tmp/repo dir"
 mkdir -p "$repo/docs/plans"
 git -C "$repo" init -q -b main 2>/dev/null
+git -C "$repo" config core.excludesFile /dev/null
+printf 'docs/plans/\n' > "$repo/.gitignore"
 printf '# Checkout retry\n' > "$repo/docs/plans/2026-10-15-checkout-retry.md"
 
 run startup "$repo"
@@ -46,6 +48,35 @@ run compact "$repo"
 card=$(( $(printf '%s\n' "$out" | wc -c) - $(wc -c < "$core") ))
 [ "$card" -le 1026 ] && r=yes || r=no
 check "a 5 KB state file is cut to the cap ($card bytes)" "$r" yes
+
+# A cloned repository must not reach the model through the state card.
+git -C "$repo" add -f docs/plans/.devos-state.md 2>/dev/null
+run compact "$repo"
+printf '%s' "$out" | grep -q '^Item: CART-12' && r=yes || r=no
+check "a tracked state file is not shown" "$r" no
+git -C "$repo" rm -q --cached docs/plans/.devos-state.md 2>/dev/null
+
+rm "$repo/docs/plans/.devos-state.md"
+printf 'FAKE_SECRET=not-a-real-value\n' > "$tmp/secret.txt"
+ln -s "$tmp/secret.txt" "$repo/docs/plans/.devos-state.md"
+run compact "$repo"
+printf '%s' "$out" | grep -q 'FAKE_SECRET' && r=yes || r=no
+check "a symlinked state file is not shown" "$r" no
+rm "$repo/docs/plans/.devos-state.md"
+
+mkdir -p "$tmp/elsewhere"
+printf 'Item: from elsewhere\n' > "$tmp/elsewhere/.devos-state.md"
+mv "$repo/docs/plans" "$tmp/plans-real"
+ln -s "$tmp/elsewhere" "$repo/docs/plans"
+run compact "$repo"
+printf '%s' "$out" | grep -q 'from elsewhere' && r=yes || r=no
+check "a symlinked docs/plans is not followed for state" "$r" no
+rm "$repo/docs/plans"; mv "$tmp/plans-real" "$repo/docs/plans"
+
+printf 'Item: bell\007here\n' > "$repo/docs/plans/.devos-state.md"
+run compact "$repo"
+printf '%s' "$out" | grep -q '^Item: bellhere$' && r=yes || r=no
+check "control characters are stripped" "$r" yes
 
 mkdir -p "$tmp/plain"
 run compact "$tmp/plain"

@@ -60,12 +60,23 @@ check "START without END fails" "$code" 1
 cmp -s "$agents" "$tmp/broken" && r=yes || r=no
 check "START without END writes nothing" "$r" yes
 
+printf 'export SAFE=1\n' > "$tmp/rc"
+mkdir -p "$tmp/proj"
+ln -s "$tmp/rc" "$tmp/proj/AGENTS.md"
+run --project "$tmp/proj"
+check "a symlinked AGENTS.md fails" "$code" 1
+check "a symlinked AGENTS.md target is untouched" "$(cat "$tmp/rc")" "export SAFE=1"
+check "no backup is copied next to the link" "$(ls "$tmp/proj" | grep -c bak || true)" 0
+
 cp "$tmp/first" "$agents"
 run --uninstall
 check "uninstall exits 0" "$code" 0
 grep -q 'developer-os-core' "$agents" && r=yes || r=no
 check "uninstall removes the block" "$r" no
 check "uninstall keeps the user's text" "$(head -n 1 "$agents")" "My own rule."
+printf 'My own rule.\n' > "$tmp/original"
+cmp -s "$agents" "$tmp/original" && r=yes || r=no
+check "uninstall restores AGENTS.md byte for byte" "$r" yes
 check "uninstall removes the copies" "$(find "$skills" -name .developer-os-codex | wc -l | tr -d ' ')" 0
 [ -f "$skills/my-own-skill/SKILL.md" ] && r=yes || r=no
 check "uninstall keeps a foreign skill" "$r" yes

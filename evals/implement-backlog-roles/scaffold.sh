@@ -1,9 +1,15 @@
 #!/bin/sh
-# Two S items and one L item.
+# Two S items in different files and one L item.
 set -eu
 d=${1:-$PWD}
 here=$(cd "$(dirname "$0")" && pwd -P)
 sh "$here/../fixtures/backlog.sh" "$d"
+cat > "$d/src/format.js" <<'JS'
+// Formats cents as a price string.
+export function formatPrice(cents) {
+  return String(cents / 100);
+}
+JS
 cat > "$d/TODO.md" <<'MD'
 # Backlog
 
@@ -15,10 +21,10 @@ cat > "$d/TODO.md" <<'MD'
   - Done when: `cartTotal` throws a RangeError for any negative quantity.
   - Check: `node --test`
 
-- [ ] CART-32 · P2 · Reject a non-array cart
-  - Where: `src/cart.js:2`
+- [ ] FMT-02 · P2 · Always show two decimals
+  - Where: `src/format.js:3`
   - Size: S
-  - Done when: `cartTotal` throws a TypeError when `lines` is not an array.
+  - Done when: `formatPrice(500)` returns `5.00`.
   - Check: `node --test`
 
 - [ ] CART-40 · P2 · Discount codes with expiry and per-customer limits
