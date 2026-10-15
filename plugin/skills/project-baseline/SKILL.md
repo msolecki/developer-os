@@ -26,7 +26,7 @@ A presence check, not a code review: each practice has a probe, and a missing pr
 | Additive-only migration guard | CI fails on destructive migrations (drop/rename) without an explicit marker | P2; skip without a database |
 | Dependency/boundary rules | dependency-cruiser, eslint boundaries, or a layer test that fails CI | P3 |
 | Real-database test tier | tests run against a real database (Docker or a CI service), not only mocks | P2; skip without a database |
-| Safe error responses | API errors return a message and a correlation id only; no stack traces or internal fields | P1 when a stack trace or internal error reaches a response, otherwise P2; skip without an API |
+| Safe error responses | API errors return one envelope with a code and a message (`details` optional), as error-handling-conventions defines; no stack traces or internal fields | P1 when a stack trace or internal error reaches a response, otherwise P2; skip without an API |
 | CHANGELOG | `CHANGELOG.md` in Keep a Changelog format | P3 |
 | Docs-vs-code consistency check | a script or CI step checks docs against code (commands, paths, versions) | P3 |
 | Design system file | a project with a UI (components, pages or stylesheets in app code) has a root `DESIGN.md` in the DESIGN.md format (YAML tokens, then Overview … Do's and Don'ts) | P3; skip without a UI. When present, suggest `npx @google/design.md lint DESIGN.md` for the user to run; never run or install it |
