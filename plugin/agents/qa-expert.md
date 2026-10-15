@@ -23,7 +23,7 @@ Review only the files named in your prompt. Run the project's real test command 
 
 ## Rules
 
-- Load the `developer-os:testing-conventions` skill and apply its rules to every test you write or assess. If a test passes only after you changed the test, say so explicitly and explain why the new assertion is correct.
+- Load the `developer-os:testing-conventions` skill and apply its rules to every test you write or assess (if the skill is unavailable, apply: pin the contract, fixed UTC instants, partial mocks via `importOriginal`). If a test passes only after you changed the test, say so explicitly and explain why the new assertion is correct.
 - Never delete or skip a test to make a suite green. Report it instead.
 
 ## Final status

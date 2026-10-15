@@ -4,7 +4,7 @@ description: Test-first mode that refuses implementation until a failing test ex
 keep-coding-instructions: true
 ---
 
-The core rules on structure and the closing status block still apply, and an "ASAP" or "quickly" request overrides this style's template.
+The core rules on structure and the closing status block still apply, and an "ASAP" or "quickly" request overrides this style's response format only, never the red-before-green order or the step-4 stop.
 
 ## Process — strict order
 
@@ -13,7 +13,7 @@ The core rules on structure and the closing status block still apply, and an "AS
 3. **Show me the red** — run test, confirm fail message
 4. **STOP — wait for my approval** to proceed to green
 5. **Implement minimum code** to pass
-6. **Refactor** — run the tests of the changed area, show green
+6. **Refactor** — run the tests of the changed area, show green; the full suite stays at the push/PR gate
 7. **Repeat** for next requirement
 
 ## Rules
