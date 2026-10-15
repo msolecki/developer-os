@@ -1,0 +1,54 @@
+---
+status: current
+owner: Mateusz Solecki
+last-verified: 2026-10-15
+---
+
+# Configuration reference
+
+The plugin has no configuration file of its own. It is configured through lines and keys in files
+the user already has, which the skills read. This page lists every one of them.
+
+## User level
+
+| Setting | Where | Read by | Written by |
+|---|---|---|---|
+| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`/`AGENTS.md`; `~/.codex/AGENTS.md` for Codex) | All brain skills; the core rule that runs brain-search before large tasks | brain-setup, after approval (Claude Code only; for Codex it prints the line) |
+| Vault in `permissions.additionalDirectories` | `~/.claude/settings.json` | Claude Code, so the vault can be read from any project | brain-setup, after approval |
+| `"outputStyle": "developer-os:<name>"` | Claude Code settings | Claude Code; a bare name silently falls back to the default style | The user |
+| Rule overrides | `~/.claude/CLAUDE.md` | The model, alongside the core rules | The user |
+| `DEVELOPER_OS_CAPTURE_NUDGE`, `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | Shell environment | The `Stop` hook ([hooks.md](hooks.md#environment-variables)) | The user |
+
+brain-setup resolves the config directory as `${CLAUDE_CONFIG_DIR:-$HOME/.claude}` and edits files
+in place, so symlinked config files stay symlinks.
+
+## Project level
+
+| Setting | Where | Read by | Default without it |
+|---|---|---|---|
+| `Backlog: <todo path>, <done path>` | Project `AGENTS.md` or `CLAUDE.md` | audit-to-backlog, implement-backlog, plan-status, project-baseline | `TODO.md`, `TODO-done.md`; audit-to-backlog and project-baseline ask before creating them and write the line |
+| Planning location | Project `AGENTS.md` or `CLAUDE.md` | Core rules, plan-status, spec, session-retro | `docs/plans/<YYYY-MM-DD-task>.md`, git-ignored |
+| Specification location | Project `AGENTS.md` or `CLAUDE.md` | spec | spec proposes `docs/specs/` and asks |
+| Fast check and full suite commands | Project `AGENTS.md` or `CLAUDE.md` | Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist | Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing |
+| `Vault project slug:` | `_Context.md` | brain-search and brain-capture through the session context | Empty `project:` |
+| Docs root | `AGENTS.md` | docs-sync | `docs/` |
+| `feature_list.json` | Repository root | implement-backlog (only `passes` changes) | Created by audit-to-backlog for multi-session work |
+
+## Vault
+
+| Item | Meaning |
+|---|---|
+| `_inbox/` | The only folder agents create notes in |
+| `_archive/` | Retired notes, `status: archived` |
+| `_views/*.base` | Obsidian Bases views: Inbox, Stale (active, `updated` older than 180 days), By project |
+| `_reports/garden-log.md` | One line per brain-garden run, appended with consent |
+| `templates/note.md` | The note template (`status: active` for notes the user writes) |
+| `.obsidian/types.json` | Property types: `created`, `updated` as date, `tags` as tags, `sources` as multitext |
+
+Note frontmatter, folders and the four body headings: [workflow.md, Vault layout](../workflow.md#vault-layout).
+
+## Codex
+
+No manifest. Copy or symlink `plugin/skills/*` into `~/.agents/skills/` (older Codex:
+`~/.codex/skills/`), paste `plugin/rules/core.md` and the `Brain vault:` line into
+`~/.codex/AGENTS.md` ([README](../../README.md#codex-manual-best-effort)).

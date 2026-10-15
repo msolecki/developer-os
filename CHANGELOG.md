@@ -38,6 +38,9 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - `docs/workflow.md`: how to work with the vault and the code, where each kind of knowledge belongs,
   which features are Claude-only, and an optional routines recipe for mobile capture and a weekly
   vault brief.
+- `docs/`: an index with task routing, product overview, functional specification, decision
+  register, architecture overview, hooks and configuration reference, development guide, pitfalls,
+  current state and glossary, written for the plugin (the CLI documentation was removed with the CLI).
 - `evals/`: behaviour cases for `claude plugin eval`, run by hand and never in CI.
 - `scripts/check.sh` validates skills (name matches the folder, description length and total, no
   local paths, `## Stop point` and `## Never` in action skills) and runs `tests/*.test.sh`.

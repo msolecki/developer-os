@@ -95,6 +95,8 @@ see [Claude-only features](docs/workflow.md#claude-only-features).
 
 ## Documentation
 
+- [Documentation index](docs/index.md): product overview, functional specification, decisions,
+  architecture, hooks and configuration reference, development guide, pitfalls, current state.
 - [How to work: brain + code](docs/workflow.md): the workflow, the vault layout, privacy.
 - [Away from the desk](docs/workflow.md#away-from-the-desk-optional): capture from your phone and a
   weekly vault brief with Claude Code routines.

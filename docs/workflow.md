@@ -1,3 +1,9 @@
+---
+status: current
+owner: Mateusz Solecki
+last-verified: 2026-10-15
+---
+
 # How to work: brain + code
 
 This is the workflow developer-os is built for. The plugin gives the agent skills; this document
