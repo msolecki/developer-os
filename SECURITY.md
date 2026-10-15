@@ -23,8 +23,8 @@ Never include the content of a vault or a secret. Describe it instead.
 
 - The plugin is Markdown (skills, agents, output styles, rules) plus three hooks in
   `plugin/hooks/hooks.json`: `SessionStart` runs `cat` on `plugin/rules/core.md`; `Stop` runs
-  `capture-nudge.sh`, which counts `tool_use` entries in the session transcript without reading
-  their content; `PreToolUse` runs `guard.sh` on Bash commands and can only ask for confirmation.
+  `capture-nudge.sh`, which counts `tool_use` entries in the session transcript and reads only
+  background-task ids and output-file paths from it, never message content; `PreToolUse` runs `guard.sh` on Bash commands and can only ask for confirmation.
   The two scripts are POSIX `sh`, make no network calls and fail open. The plugin ships no binary,
   server or network code.
 - Updates come from this Git repository through the Claude Code plugin marketplace. An update can
