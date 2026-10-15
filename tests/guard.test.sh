@@ -41,6 +41,27 @@ check ask "$(fx 'sh -c \"pnpm add zod\"')"
 # Quotes are stripped: a quoted mention without a package passes, with one asks.
 check pass "$(fx 'echo \"pnpm add\"')"
 check ask "$(fx 'git commit -m \"pnpm add zod\"')"
+check ask "$(fx 'git push --force')"
+check ask "$(fx 'git push --no-verify')"
+check ask "$(fx 'ls; pnpm add zod')"
+check ask "$(fx 'cat x | npm i zod')"
+check ask "$(fx 'echo $(bun add zod)')"
+# #38: run/exec/dlx/-- end the package-manager words; a workspace prefix still asks.
+check pass "$(fx 'pnpm run build -- add foo')"
+check ask "$(fx 'yarn workspace web add zod')"
+# R1: a JSON newline separates commands.
+check ask "$(fx 'ls\npnpm add zod')"
+check pass "$(fx 'pnpm install\ngit status')"
+# R2: the value of --filter, -F, --prefix, --dir or -C is not a package.
+check pass "$(fx 'pnpm install --filter web')"
+check pass "$(fx 'npm install --prefix dir')"
+# R13: full paths, npm aliases and other hook-bypass forms.
+check ask "$(fx '/usr/bin/git push -f')"
+check ask "$(fx 'npm in zod')"
+check ask "$(fx 'git commit --no-veri -m x')"
+check ask "$(fx 'HUSKY=0 git commit -m x')"
+check ask "$(fx 'git -c core.hooksPath=/dev/null commit -m x')"
+check ask "$(fx 'git -C dir push -f')"
 check pass '{"tool_input":{"command":"pnpm add zod"'
 check pass 'not json'
 check pass ''

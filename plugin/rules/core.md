@@ -35,7 +35,7 @@ A guard that greps a command first joins its lines (`tr '\n\r' '  '`): line patt
 - A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
 - An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, and expected output format. Exclude debugging history, rejected approaches, and full conversation dumps.
 - Before a large task, look for earlier decisions: when a `Brain vault:` line is configured, search the vault with the `brain-search` skill and read the selected note (otherwise skip this silently), then read the project's active plan. Search raw session transcripts only when the user asks.
-- During compaction, preserve the modified-file list, the project's test commands, the current objective, and the user's language. Task state that must survive it lives in `.devos-state.md` in the planning location, not only in chat.
+- During compaction, preserve the modified-file list, the project's test commands, the current objective, and the user's language. Task state that must survive it lives in `docs/plans/.devos-state.md`, not only in chat.
 - Show only failures from tests and builds, never a full passing log.
 - Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence.
 - Before saying done, list the background shells and tasks you started and stop those no longer needed.
