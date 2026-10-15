@@ -10,6 +10,8 @@ Run before every commit:
 scripts/check.sh
 ```
 
+It is a bash script: run it directly or with `bash`, not `sh`.
+
 It parses every JSON file and every YAML frontmatter and `.base` file, requires `status`, `owner` and
 `last-verified` frontmatter in every `docs/*.md`, validates skills (name
 matches the folder, description 80–1024 characters and at most 12000 in total, `## Stop point` and

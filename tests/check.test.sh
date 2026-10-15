@@ -62,7 +62,35 @@ runpath="$tmp/bin:$PATH"
 run "an unmarked validate warning" fail "claude plugin validate --strict failed"
 runpath=
 
+edit plugin/skills/spec/SKILL.md '/^## Never$/d'
+run "an action skill without ## Never" fail "plugin/skills/spec/SKILL.md: skill has no ## Never section"
+
+edit plugin/skills/spec/SKILL.md 's/^description: .*/description: Too short./'
+run "a skill description under 80 characters" fail "description is 10 characters, allowed 80-1024"
+
+edit docs/development.md '/^last-verified:/d'
+run "a doc without last-verified" fail "docs/development.md: last-verified is not a YYYY-MM-DD date"
+
+printf '\nx: [\n' >> "$r/plugin/vault-template/_views/Inbox.base"
+run "an invalid .base file" fail "yaml: plugin/vault-template/_views/Inbox.base"
+
+edit plugin/hooks/hooks.json 's|/hooks/guard.sh|/hooks/gone.sh|'
+run "a hook target that does not exist" fail "missing target plugin/hooks/gone.sh"
+
+edit plugin/agents/qa-expert.md '/^## Final status$/d'
+run "an agent without ## Final status" fail "agents: plugin/agents/qa-expert.md: no ## Final status section"
+
+printf '%100s\n' x >> "$r/plugin/rules/core.md"
+run "core.md over 8192 bytes" fail "size: plugin/rules/core.md"
+
+edit plugin/hooks/session-start.sh 's/^cap=.*/cap=2000/'
+run "a state-card cap that overflows 10000" fail "state card cap 2000 leaves no room"
+
+echo 'See /Users/bob/x.' > "$r/plugin/notes.txt"
+run "a local path in an untracked plugin file" fail "local path"
+
 jq 'del(.version)' "$r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$r/plugin/.claude-plugin/plugin.json"
+printf '\n## [0.0.1]\n\nShips 99 skills.\n' >> "$r/CHANGELOG.md"
 cat >> "$r/docs/development.md" <<'EOF'
 
 Only 3 cases of failure.
@@ -75,7 +103,7 @@ Only 3 cases of failure.
 
 [a](#zażółć-gęślą-jaźń) [b](#setup-1) [c](#see-the-guide-now)
 EOF
-run "no plugin version, 'N cases of' prose, diacritic, repeated and linked headings pass" pass
+run "no plugin version, a count in a released CHANGELOG section, 'N cases of' prose, diacritic, repeated and linked headings pass" pass
 
 [ "$failed" -eq 0 ] && echo "check: all passed"
 exit "$failed"
