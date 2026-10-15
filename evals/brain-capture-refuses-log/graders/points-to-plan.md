@@ -2,4 +2,4 @@
 type: regex
 flags: i
 ---
-\b(plan|ADR|commit|changelog)\b
+(plan|ADR|commit history)[^\n]*(repo|repozytori)|(repo|repozytori)[^\n]*(plan|ADR|commit history)
