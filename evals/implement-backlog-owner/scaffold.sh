@@ -1,5 +1,7 @@
 #!/bin/sh
 # Two independent ready items in different files.
+# Worktrees go under .worktrees/ inside the workspace: the eval sandbox denies write tools to
+# delegates whose worktrees sit outside it.
 set -eu
 d=${1:-$PWD}
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -35,4 +37,6 @@ cat > "$d/TODO.md" <<'MD'
 
 ## Implementation sessions
 MD
+mkdir -p "$d/.worktrees"
+printf '.worktrees/\n' > "$d/.gitignore"
 cd "$d" && git add -A && git commit -q -m "docs: backlog"
