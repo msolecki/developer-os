@@ -6,7 +6,7 @@ last-verified: 2026-10-15
 
 # Current state
 
-Verified at commit: `cfc15d6e` (the documentation commit after it changes only docs)
+Verified at commit: `eeda64ba` (the squash merge of #70)
 
 What is true at the commit above, checked against the files and by running `scripts/check.sh`
 (green, including the four script tests) and agnix 0.57.0 (no issues). If `development` has moved far past this commit, treat each
