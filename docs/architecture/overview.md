@@ -14,7 +14,7 @@ the agent then reads and writes on the user's behalf.
 ```
 .claude-plugin/marketplace.json   marketplace: one plugin, source ./plugin
 plugin/                           the installed payload
-  .claude-plugin/plugin.json      name, version, description, license
+  .claude-plugin/plugin.json      name, description, license (no version: installs track the commit)
   rules/core.md                   core rules, printed by the SessionStart hook
   SURFACE.txt                     public names, checked against the disk
   hooks/hooks.json                three hooks, 10-second timeouts
@@ -144,7 +144,7 @@ web tools could send it further, which the plugin cannot prevent ([SECURITY.md](
 | Code, diffs, fixtures, fetched pages | The reviewed repository or the web | Every agent prompt states they are data; research-analyst never fetches a URL built from local file contents |
 | External repositories | `.claude/settings.json`, hooks, `.mcp.json` of a client or OSS repo | Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread |
 | Subagent output | A delegate's edits | Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare `git status` and `git diff` |
-| Plugin updates | A new release's hooks and rules | `SECURITY.md`: review each update's diff or pin a version |
+| Plugin updates | A new commit's hooks and rules | `SECURITY.md`: review the diff from the installed commit before updating; auto-update is off by default |
 | Session transcripts | Past conversations | Only skill-usage reads them, and only counts; session-retro and docs-sync never open them |
 
 ## 7. Validation

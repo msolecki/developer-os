@@ -28,7 +28,8 @@ A user overrides any rule by stating the override in `~/.claude/CLAUDE.md`, whic
 ## 2. Skills
 
 Legend: **Writes** is everything the skill may change. **Gate** is what needs the user's explicit
-answer first. Read-only skills change nothing.
+answer first. Read-only skills ([glossary](../glossary.md)) change nothing; a skill whose Writes is
+"Nothing" can still be an action skill.
 
 ### 2.1 Brain skills
 

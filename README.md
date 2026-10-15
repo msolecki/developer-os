@@ -15,6 +15,10 @@ support is manual and best-effort.
 /plugin install developer-os@developer-os
 ```
 
+The plugin has no version number. An install takes the latest commit of `development`, and
+`claude plugin update developer-os@developer-os` picks up every later commit. Auto-update is off for
+this marketplace unless you turn it on under `/plugin` → Marketplaces.
+
 ## Set up the vault
 
 Run the `brain-setup` skill in Claude Code: it copies [`plugin/vault-template/`](plugin/vault-template/)
@@ -55,8 +59,8 @@ to change the threshold.
 
 A `PreToolUse` hook on Bash ([`plugin/hooks/guard.sh`](plugin/hooks/guard.sh)) asks for confirmation
 (it never blocks) before a dependency install with a package argument
-(`npm|pnpm|yarn|bun install|add|i <pkg>`), a `git push --force`/`-f`/`+refspec` without
-`--force-with-lease`, and any `--no-verify` or `git commit -n`. In `claude -p` an ask resolves to a denial.
+(`npm|pnpm|yarn|bun install|add|i <pkg>`), a `git push` with `--force`, `-f` or a `+refspec` (even next
+to `--force-with-lease`; a lone `--force-with-lease` passes), and any `--no-verify` or `git commit -n`. In `claude -p` an ask resolves to a denial.
 
 All three are POSIX `sh`, need no `jq`, make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies.
