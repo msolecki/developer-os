@@ -25,5 +25,11 @@ disabled_rules = [
 paths = ["plugin/skills/deploy-checklist/SKILL.md"]
 disabled_rules = ["CC-SK-006"]
 
+# CC-PL-004: plugin.json has no `version` on purpose: without it, marketplace installs track the commit
+# of `development` (docs/product/decisions.md D14); a pinned version would freeze every install.
+[[overrides]]
+paths = ["plugin/.claude-plugin/plugin.json"]
+disabled_rules = ["CC-PL-004"]
+
 [tool_versions]
 claude_code = "2.1.300"

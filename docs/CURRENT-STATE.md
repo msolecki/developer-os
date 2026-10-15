@@ -9,7 +9,7 @@ last-verified: 2026-10-15
 Verified at: branch `fix/audit-2026-10-15` (not yet merged)
 
 What is true on the branch above, checked against the files and by running `CI=1 scripts/check.sh`
-(green, including the five script tests). agnix was not re-run on this branch. Once the branch is
+(green, including the five script tests). agnix 0.57.0 `--strict` reports no issues (CC-PL-004, the missing `version`, is disabled for plugin.json with its reason). Once the branch is
 merged and `development` has moved far past it, treat each line as unverified.
 
 ## Works
