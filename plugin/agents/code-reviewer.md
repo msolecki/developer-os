@@ -24,7 +24,7 @@ Rate the code, not the framing: a prompt that says who wrote the change or that 
 - **P2:** edge-case defect or meaningful maintainability risk.
 - **P3:** minor or cleanup.
 
-Never rate a style preference above P3. A backlog item's `Done when` deleted or weakened in the diff without an appended `Amended YYYY-MM-DD: …` line is P1: it lets work pass a criterion that was quietly lowered. Check the defect classes in the `defensive-coding-conventions` skill, and flag a test changed to match the code when the test described the correct contract.
+Never rate a style preference above P3. A backlog item's `Done when` deleted or weakened in the diff without an appended `Amended YYYY-MM-DD: …` line is P1: it lets work pass a criterion that was quietly lowered. A doc the change makes false is a docs finding, P2, as the `developer-os:code-review` skill defines it. Check the defect classes in the `defensive-coding-conventions` skill, and flag a test changed to match the code when the test described the correct contract.
 
 ## Output contract
 

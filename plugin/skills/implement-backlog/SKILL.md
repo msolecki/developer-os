@@ -62,9 +62,9 @@ Next: <one line>
 ## Review and record
 
 - Review the batch diff with the `developer-os:code-review` skill. The delegates' code counts as written in this session, so the skill sends it to `developer-os:code-reviewer` with the neutral brief (the diff, the items' `Done when`, the rubric, no author or rationale) and verifies its P0/P1 findings.
-- After the delegates finish, fix the confirmed P0/P1 findings yourself, re-run the batch validation, and review once more. Stop after two review rounds; if a P0/P1 is still open, commit nothing of the batch, list it under Needs you, and clear the open items' `Owner` lines as for any early stop. Add P2/P3 to the backlog and list Disputed findings in the report.
+- After the delegates finish, fix the confirmed P0/P1 findings and the docs findings (a doc the batch makes false) yourself, re-run the batch validation, and review once more. Stop after two review rounds; if a P0/P1 is still open, commit nothing of the batch, list it under Needs you, and clear the open items' `Owner` lines as for any early stop. Add the other P2/P3 to the backlog and list Disputed findings in the report.
 - Check completed items (`- [x]`), move them to the done file with their `Check` result and without their `Owner` line, and update the project's active plan.
-- Stage only batch-owned files and commit only after all validation and review pass.
+- Stage only batch-owned files and the docs those findings named, and commit only after all validation and review pass.
 - Report one line per item: its ID, the `Owner` worktree, the delegate's final status, and the `Check` result; then the review additions and the next batch.
 
 ## Stop point
@@ -76,7 +76,7 @@ Stop after the batch is committed locally, or earlier at a red baseline, after t
 - Push or force-push, merge or rebase a shared branch, or open a PR.
 - Include authentication or security items the user did not approve up front.
 - Delete or skip tests, or change assertions for a contract that did not change.
-- Commit red work or files outside the batch.
+- Commit red work or files outside the batch, other than the docs a docs finding named.
 - Change any `feature_list.json` field other than `passes`.
 - Edit or delete a `Done when`, or take an item another worktree owns.
 - Implement a backlog item yourself while a delegate is running.

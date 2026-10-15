@@ -34,6 +34,8 @@ Check tenant scoping, soft-delete filters, query ownership, breaking API changes
 
 A backlog item's `Done when` deleted or weakened in the diff without an appended `Amended YYYY-MM-DD: …` line is P1: it lets work pass a criterion that was quietly lowered.
 
+A doc the diff makes false is a docs finding, P2: a README, `AGENTS.md`/`CLAUDE.md`, `DESIGN.md` or `docs/` line that describes a command, path, flag, config key, `path:line`, version or behavior the diff changes or removes. Search the docs for each one the diff touches, as in the command, path and version probes of `developer-os:docs-sync` step 3; the age probes there are not docs findings. Cite the doc's `file:line` and the diff line that contradicts it, and give the doc edit as the fix. Docs findings do not change the verdict.
+
 For tests, cover happy path, edge cases, and failure path; reject flaky or over-mocked assertions. A test pins the intended contract, not accidental current behavior.
 
 ## Verify blocking findings

@@ -69,6 +69,9 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   digits, and runs `tests/*.test.sh`. CI also runs agnix, its binary pinned by SHA-256, with `.agnix.toml`.
 
 ### Changed
+- code-review and code-reviewer rate a doc the diff makes false as a P2 docs finding; pr-cycle fixes
+  docs findings under its recommended answer and reports any left in the PR body; implement-backlog
+  fixes them in the batch commit.
 - code-review and code-reviewer list Evidence checked under an `APPROVE` with no P0–P2, read both
   sides of every changed contract, and brief the reviewer without the author or their rationale.
 - session-retro labels findings `persistent` or `this-task`, shows the commit a rule change would

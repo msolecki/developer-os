@@ -208,3 +208,4 @@ here before reversing a rule.
 |---|---|---|---|
 | 2026-10-15 | Task state that must survive compaction lives in `docs/plans/.devos-state.md` | `plugin/rules/core.md` | The state card after compaction (sources proposal #2) |
 | 2026-10-15 | Hook normalization rule shortened to the `tr` call and one example | `plugin/rules/core.md` | Room for the state-card line under the 8192-byte cap |
+| 2026-10-15 | A doc the diff makes false is a P2 docs finding; pr-cycle and implement-backlog fix it before the commit or PR | `code-review`, `code-reviewer`, `pr-cycle`, `implement-backlog` | Project docs were kept current only when the user ran docs-sync; review is the step every merge path already runs |
