@@ -77,6 +77,34 @@ check "malformed input" "$code" 0
 run "$(input s8 "$tmp/long.jsonl" | tr ',' '\n')"
 check "input split across lines" "$code" 2
 
+# Background launches in Claude Code's transcript format; a <task-notification> marks one finished.
+touch "$tmp/a1.output" "$tmp/b1.output"
+agent_launch='{"type":"user","message":{"content":[{"tool_use_id":"toolu_A1","type":"tool_result","content":[{"type":"text","text":"Async agent launched successfully. (internal)\nagentId: a1 (use \"to: a1\")\noutput_file: '"$tmp"'/a1.output\nIf asked..."}]}]}}'
+bash_launch='{"type":"user","message":{"content":[{"tool_use_id":"toolu_B1","type":"tool_result","content":"Command running in background with ID: b1. Output is being written to: '"$tmp"'/b1.output. You will be notified."}]}}'
+notified() { printf '{"type":"user","message":{"content":"<task-notification>\\n<task-id>x</task-id>\\n<tool-use-id>%s</tool-use-id>\\n<status>completed</status>"}}\n' "$1"; }
+
+{ cat "$tmp/long.jsonl"; printf '%s\n' "$agent_launch"; } > "$tmp/bg-agent.jsonl"
+run "$(input s12 "$tmp/bg-agent.jsonl")"
+check "background agent still running" "$code" 0
+[ -e "$tmp/data/capture-nudge/s12" ] && r=yes || r=no
+check "deferral keeps the marker unspent" "$r" no
+
+{ cat "$tmp/bg-agent.jsonl"; notified toolu_A1; } > "$tmp/bg-agent-done.jsonl"
+run "$(input s12 "$tmp/bg-agent-done.jsonl")"
+check "fires once the background agent is notified" "$code" 2
+
+{ cat "$tmp/bg-agent-done.jsonl"; printf '%s\n' "$bash_launch"; } > "$tmp/bg-bash.jsonl"
+run "$(input s13 "$tmp/bg-bash.jsonl")"
+check "background command still running" "$code" 0
+
+{ cat "$tmp/bg-bash.jsonl"; notified toolu_B1; } > "$tmp/bg-bash-done.jsonl"
+run "$(input s13 "$tmp/bg-bash-done.jsonl")"
+check "fires once every background task is notified" "$code" 2
+
+touch -t 202001010000 "$tmp/a1.output"
+run "$(input s14 "$tmp/bg-agent.jsonl")"
+check "un-notified task with a stale output file does not block" "$code" 2
+
 touch -t 202001010000 "$tmp/data/capture-nudge/old"
 run "$(input s9 "$tmp/long.jsonl")"
 [ -e "$tmp/data/capture-nudge/old" ] && r=yes || r=no

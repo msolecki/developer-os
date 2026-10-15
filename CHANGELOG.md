@@ -27,7 +27,8 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - Agents: code-reviewer, performance-engineer, qa-expert, research-analyst and security-auditor.
 - Output styles: architect, debug, direct-objective and tdd-enforcer.
 - Three hooks: `SessionStart` loads `plugin/rules/core.md`; `Stop` offers session-retro once per
-  session after 30 tool calls (`DEVELOPER_OS_CAPTURE_NUDGE=off` disables it); `PreToolUse` on Bash
+  session after 30 tool calls, deferred while background agents or commands are still running
+  (`DEVELOPER_OS_CAPTURE_NUDGE=off` disables it); `PreToolUse` on Bash
   asks before dependency installs, force pushes and `--no-verify` or `git commit -n`. The two scripts are POSIX `sh`,
   make no network calls, fail open and have tests in `tests/*.test.sh`.
 - `plugin/vault-template/`: folders, a note template, example notes, Bases views (Inbox, Stale,
