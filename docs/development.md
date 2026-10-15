@@ -34,18 +34,19 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never` (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
+| Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden` or `brain-review` differs from `brain-search`'s |
 | Local paths | A file under `plugin/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
-| Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` (in git history or the uncommitted diff) still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; a shallow clone has no history, so there only the uncommitted diff counts |
+| Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
 | Counts | A count written as digits in the README, `docs/`, `evals/README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` ("N skills", "N eval cases"; not "N cases of") differs from the disk |
 | Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or the state-card cap in `session-start.sh` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style; a changelog entry names a removed skill without the prefix |
-| Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no heading slug in the target Markdown file |
-| Script tests | Any `tests/*.test.sh` exits non-zero |
-| Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails on an error or on any warning (such as an unknown manifest key) other than a missing plugin `version` |
+| Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
+| Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
+| Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails on an error or on any warning (such as an unknown manifest key) other than a missing plugin `version`; the `Found N warnings` count must match the tolerated lines |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
 
 The file set is tracked plus untracked-not-ignored files, so a new doc is checked before it is
@@ -66,8 +67,9 @@ release verified by SHA-256.
 that the rules come first, the card appears only after `compact`/`resume`, and the card is cut to its
 cap; `tests/guard.test.sh` feeds command fixtures to `guard.sh` and expects `ask` or silence;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code and message;
-`tests/check.test.sh` breaks a fresh copy of the repository once per stage it covers and expects that
-stage's message;
+`tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
+stage's message; it runs the whole check about ten times (around 20 s), so `scripts/check.sh` runs it
+only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
 `tests/install-codex.test.sh` runs the Codex installer against a temporary `HOME` (dry run,
 idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the 8000-character
 budget).
@@ -89,8 +91,9 @@ the README lists the mutation checks that prove it.
    read-only and should be exempt, add it to `read_only` in `scripts/check.sh`.
 3. Use synthetic examples only; no local paths, client names or real vault notes.
 4. Reference other parts as `developer-os:<name>`; the check resolves them. A bare name in `plugin/` is
-   checked only after a rename: the Stale names stage fails on any name removed from `SURFACE.txt`.
-5. A brain skill copies the shared "Locate the vault" paragraph verbatim.
+   checked only during a rename: the Stale names stage fails, before the rename is committed, on any
+   name removed from `SURFACE.txt`.
+5. A brain skill copies the shared "Locate the vault" paragraph verbatim; the check compares the copies.
 6. Add an eval case when the skill has a behavior worth protecting (a gate, a refusal, a trigger).
 7. Add the name to `plugin/SURFACE.txt` (the check prints the line), and update the README component list,
    `CHANGELOG.md`, and [product/functional-spec.md](product/functional-spec.md). Counts written as digits are
@@ -104,16 +107,20 @@ Every added line must replace or shorten another; run `instruction-review --prun
 `scripts/install-codex.sh` is not part of the plugin; users run it from a clone. After changing a skill
 in a way that adds a Claude-only reference (a new `${CLAUDE_*}` variable, a new agent dispatch), check
 that the rewrite in the script still covers it: `sh tests/install-codex.test.sh` greps the copies.
+A skill `description` must be one plain line: no `>` or `|` block scalar, no quotes, no continuation
+line; the script refuses any other form.
 
 ## Branches and releases
 
 - `development` is the default branch and what the marketplace installs. Work lands there through
   pull requests; the repository disallows merge commits.
 - `main` is not kept in step with `development` and is not a release channel today.
-- `plugin/.claude-plugin/plugin.json` carries the version (0.1.0). `CHANGELOG.md` follows Keep a
-  Changelog; 0.1.0 is still "Unreleased" and no release tag exists yet.
-- There is no release automation. A release procedure (tag, version bump, changelog date, what users
-  pin) is an open decision; see [CURRENT-STATE.md](CURRENT-STATE.md).
+- `plugin/.claude-plugin/plugin.json` carries no `version` (decided 2026-10-15): an install tracks the
+  latest `development` commit. A user pins a version by marketplace ref or tag:
+  `/plugin marketplace add msolecki/developer-os#<ref>`.
+- `CHANGELOG.md` follows Keep a Changelog; no release tag exists yet. There is no release automation,
+  and the release procedure (tags, changelog date) is an open decision; see
+  [CURRENT-STATE.md](CURRENT-STATE.md).
 
 ## Plans
 

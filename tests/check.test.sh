@@ -1,58 +1,78 @@
 #!/bin/sh
-# Tests for scripts/check.sh: each case breaks a fresh copy of the repository and expects the stage's message.
+# Tests for scripts/check.sh: each case breaks a copy of the repository and expects the stage's message.
 # Run from the repository root: sh tests/check.test.sh
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
 failed=0
-g() { git -C "$tmp/r" -c user.name=t -c user.email=t@example.com -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+r="$tmp/r"
+g() { git -C "$r" -c user.name=t -c user.email=t@example.com -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
 
-# fresh: a committed copy of the working tree in $tmp/r, without this test (check.sh would run it again).
-fresh() {
-  rm -rf "$tmp/r" && mkdir "$tmp/r"
-  git ls-files -z --cached --others --exclude-standard | rsync -a --from0 --files-from=- . "$tmp/r" 2>/dev/null
-  rm -f "$tmp/r/tests/check.test.sh"
-  g init -q && g add -A && g commit -qm base
-}
+# One committed copy of the working tree, without this test (check.sh would run it again); reset before each case.
+mkdir "$r"
+git ls-files -z --cached --others --exclude-standard | rsync -a --from0 --files-from=- . "$r" 2>/dev/null
+rm -f "$r/tests/check.test.sh"
+g init -q && g add -A && g commit -qm base
+reset() { g checkout -q . && g clean -fdq; }
 
 # run NAME WANT [TEXT]: runs check.sh in the copy; WANT is fail or pass, TEXT must appear in its output.
 run() {
-  out=$(cd "$tmp/r" && sh scripts/check.sh 2>&1) && got=pass || got=fail
+  out=$(cd "$r" && PATH="${runpath:-$PATH}" bash scripts/check.sh 2>&1) && got=pass || got=fail
   case $out in *"${3:-}"*) ;; *) got="$got without '${3:-}'" ;; esac
   if [ "$got" = "$2" ]; then echo "ok   $1"; else echo "FAIL $1: expected $2, got $got" >&2; printf '%s\n' "$out" | tail -5 >&2; failed=1; fi
+  reset
 }
+# edit FILE SED: rewrites FILE in the copy through sed.
+edit() { sed "$2" "$r/$1" > "$tmp/x" && mv "$tmp/x" "$r/$1"; }
 
-rename_skill() {
-  mv "$tmp/r/plugin/skills/brain-review" "$tmp/r/plugin/skills/brain-triage"
-  sed 's/^name: brain-review$/name: brain-triage/' "$tmp/r/plugin/skills/brain-triage/SKILL.md" > "$tmp/x" && mv "$tmp/x" "$tmp/r/plugin/skills/brain-triage/SKILL.md"
-  sed 's/^skill brain-review$/skill brain-triage/' "$tmp/r/plugin/SURFACE.txt" | LC_ALL=C sort > "$tmp/x" && mv "$tmp/x" "$tmp/r/plugin/SURFACE.txt"
-}
+mv "$r/plugin/skills/implement-backlog" "$r/plugin/skills/backlog-run"
+edit plugin/skills/backlog-run/SKILL.md 's/^name: implement-backlog$/name: backlog-run/'
+edit plugin/SURFACE.txt 's/^skill implement-backlog$/skill backlog-run/'
+LC_ALL=C sort "$r/plugin/SURFACE.txt" > "$tmp/x" && mv "$tmp/x" "$r/plugin/SURFACE.txt"
+run "a renamed skill leaves its old bare name" fail "implement-backlog was removed from plugin/SURFACE.txt"
 
-fresh; rename_skill
-run "a skill renamed in the working tree leaves its old bare name" fail "stale names: "
-g add -A && g commit -qm rename
-run "a skill renamed in history leaves its old bare name" fail "brain-review was removed from plugin/SURFACE.txt"
+edit plugin/skills/brain-garden/SKILL.md '/^Find the line `Brain vault:/s/ once / twice /'
+run "a brain skill drifts from the shared vault paragraph" fail "vault: plugin/skills/brain-garden/SKILL.md"
 
-fresh; echo 'See /Users/bob/x.' >> "$tmp/r/plugin/agents/qa-expert.md"
+echo 'See /Users/bob/x.' >> "$r/plugin/agents/qa-expert.md"
 run "a local path in an agent" fail "local path"
 
-fresh; echo '[bad](references/none.md)' >> "$tmp/r/plugin/skills/spec/SKILL.md"
+echo '[bad](references/none.md)' >> "$r/plugin/skills/spec/SKILL.md"
 run "a broken relative link in a skill" fail "links: plugin/skills/spec/SKILL.md"
 
-fresh; echo '[bad](#no-such-heading)' >> "$tmp/r/docs/development.md"
+echo '[bad](#no-such-heading)' >> "$r/docs/development.md"
 run "a link to a missing heading" fail "names no heading"
 
-fresh; echo '# developer-os:nonexistent' >> "$tmp/r/plugin/hooks/guard.sh"
+echo '# developer-os:nonexistent' >> "$r/plugin/hooks/guard.sh"
 run "a dangling reference in a hook" fail "references: plugin/hooks/guard.sh"
 
-fresh; echo 'Ships 99 skills.' >> "$tmp/r/CHANGELOG.md"
+echo 'Ships 99 skills.' >> "$r/CHANGELOG.md"
 run "a stale count in CHANGELOG.md" fail "counts: CHANGELOG.md"
 
-fresh; jq '.hook = {}' "$tmp/r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$tmp/r/plugin/.claude-plugin/plugin.json"
+jq '.hook = {}' "$r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$r/plugin/.claude-plugin/plugin.json"
 run "a misspelled plugin.json key" fail "Unknown field 'hook'"
 
-fresh; jq 'del(.version)' "$tmp/r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$tmp/r/plugin/.claude-plugin/plugin.json"
-echo 'Only 3 cases of failure.' >> "$tmp/r/docs/development.md"
-run "no plugin version and a digit before 'cases of' pass" pass
+# A validate output whose warning line lacks the usual marker still fails through the "Found N" count.
+mkdir "$tmp/bin"
+printf '%s\n' '#!/bin/sh' 'case "$*" in *--strict*) printf "Found 1 warning:\n  - hook: Unknown field\n"; exit 1 ;; esac' > "$tmp/bin/claude"
+chmod +x "$tmp/bin/claude"
+runpath="$tmp/bin:$PATH"
+run "an unmarked validate warning" fail "claude plugin validate --strict failed"
+runpath=
+
+jq 'del(.version)' "$r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$r/plugin/.claude-plugin/plugin.json"
+cat >> "$r/docs/development.md" <<'EOF'
+
+Only 3 cases of failure.
+
+## Zażółć gęślą jaźń
+
+## Setup
+
+## See [the guide](development.md) now
+
+[a](#zażółć-gęślą-jaźń) [b](#setup-1) [c](#see-the-guide-now)
+EOF
+run "no plugin version, 'N cases of' prose, diacritic, repeated and linked headings pass" pass
 
 [ "$failed" -eq 0 ] && echo "check: all passed"
 exit "$failed"

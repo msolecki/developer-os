@@ -3,6 +3,8 @@
 # the plugin and marketplace validate, no secrets in tracked files.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The ruby stages read UTF-8 files; under LC_ALL=C they would default to ASCII and die.
+export RUBYOPT=-Eutf-8
 
 # Tracked plus untracked-not-ignored files, null-delimited, minus deleted-but-unstaged ones.
 files() {
@@ -60,6 +62,15 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
   end
   abort "skills: descriptions total #{total} characters, limit 12000" if total > 12000'
 
+# The brain skills share one "Locate the vault" paragraph (the first after that heading); it must stay identical.
+para() { awk '/^## 1\. Locate the vault$/ { f = 1; next } f && NF { p = 1; print; next } p { exit }' "$1"; }
+for s in brain-capture brain-compile brain-garden brain-review; do
+  if ! para plugin/skills/brain-search/SKILL.md | diff -u - <(para "plugin/skills/$s/SKILL.md") >&2; then
+    fail vault "plugin/skills/$s/SKILL.md" "\"Locate the vault\" paragraph differs from brain-search's above"
+  fi
+done
+[ -n "$(para plugin/skills/brain-search/SKILL.md)" ] || fail vault plugin/skills/brain-search/SKILL.md "no \"## 1. Locate the vault\" paragraph"
+
 # The plugin ships to other machines; a local path leaks the author's layout and breaks elsewhere.
 if files 'plugin' | xargs -0 grep -nE '/Users/|/home/|~/www|\.claude2' >&2; then
   fail paths plugin "local path (/Users/, /home/, ~/www or .claude2) above"
@@ -97,10 +108,9 @@ if ! surface | LC_ALL=C sort | diff -u plugin/SURFACE.txt - >&2; then
   fail surface plugin/SURFACE.txt "differs from the plugin above; update SURFACE.txt and CHANGELOG.md"
 fi
 
-# A name removed from SURFACE.txt (in history or in the uncommitted diff) must not survive in what ships,
-# as a bare word (the prefixed form fails in References), so a rename cannot leave the rules or a skill pointing at a skill that no longer exists.
-# A shallow clone has no history, so there only the uncommitted diff counts.
-{ git log -p --format= -- plugin/SURFACE.txt; git diff HEAD -- plugin/SURFACE.txt; } |
+# A name removed from SURFACE.txt in the uncommitted diff must not survive in what ships as a bare word
+# (the prefixed form fails in References), so a rename cannot leave the rules or a skill pointing at a missing skill.
+git diff HEAD -- plugin/SURFACE.txt |
   sed -nE 's/^-(skill|agent|output-style) //p' | LC_ALL=C sort -u |
   { files 'plugin' README.md 'templates/*.md'; printf '\n'; cat; } | ruby -e '
   files, gone = $stdin.read.split("\n", 2)
@@ -148,13 +158,16 @@ files 'plugin/*.md' 'plugin/*.sh' 'docs/*.md' README.md 'templates/*.md' 'evals/
   end'
 
 # Relative Markdown links outside fenced code and inline code, each relative to its own file; a #fragment
-# into a Markdown file must match a GitHub heading slug there.
+# into a Markdown file must match a GitHub heading slug there (link text only, any script, -1/-2 for repeats).
 files '*.md' | ruby -e '
   slugs = Hash.new do |h, f|
-    fence = false
+    fence = false; seen = Hash.new(0)
     h[f] = File.foreach(f).filter_map do |l|
       fence = !fence if l =~ /\A\s*(```|~~~)/
-      l[/\A#+\s+(.*?)\s*\z/, 1]&.downcase&.gsub(/[^\w\s-]/, "")&.tr(" ", "-") unless fence
+      next if fence || l !~ /\A#+\s+(.*?)\s*\z/
+      s = $1.gsub(/\[(.*?)\]\(.*?\)/, "\\1").downcase.gsub(/[^\p{L}\p{N}\p{M}_\s-]/u, "").tr(" ", "-")
+      n = (seen[s] += 1) - 1
+      n.zero? ? s : "#{s}-#{n}"
     end
   end
   $stdin.read.split("\0").each do |f|
@@ -173,16 +186,21 @@ files '*.md' | ruby -e '
     end
   end'
 
+# tests/check.test.sh runs the whole check several times (about 20 s), so it runs only in CI or with CI=1.
 for t in tests/*.test.sh; do
   [ -e "$t" ] || continue
+  [ "$t" != tests/check.test.sh ] || [ -n "${CI:-}" ] || continue
   sh "$t" || fail tests "$t" "exited non-zero"
 done
 
 # --strict fails on unknown or misspelled manifest keys. The one warning allowed is a missing plugin version,
 # which the plugin drops on purpose.
+# Both the warning lines and the "Found N warning(s)" count are compared, so a format change cannot hide one.
 for d in . plugin; do
   out=$(claude plugin validate "$d" --strict 2>&1) && continue
-  if ! claude plugin validate "$d" >/dev/null 2>&1 ||
+  found=$(printf '%s\n' "$out" | sed -nE 's/.*Found ([0-9]+) warnings?.*/\1/p')
+  ok=$(printf '%s\n' "$out" | grep -c '❯.*version: No version specified' || true)
+  if ! claude plugin validate "$d" >/dev/null 2>&1 || [ -z "$found" ] || [ "$found" -gt "$ok" ] ||
     printf '%s\n' "$out" | grep '❯' | grep -v 'version: No version specified' >/dev/null; then
     echo "$out" >&2; fail validate "$d" "claude plugin validate --strict failed above"
   fi
