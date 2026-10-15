@@ -141,5 +141,11 @@ run "$(input s9 "$tmp/long.jsonl")"
 [ -e "$tmp/data/capture-nudge/old" ] && r=yes || r=no
 check "markers older than 7 days removed" "$r" no
 
+transcript "$tmp/t29.jsonl" 29; transcript "$tmp/t30.jsonl" 30
+run "$(input b29 "$tmp/t29.jsonl")"; check "29 tool calls stay below the default threshold" "$code" 0
+run "$(input b30 "$tmp/t30.jsonl")"; check "30 tool calls reach the default threshold" "$code" 2
+run "$(input b31 "$tmp/t30.jsonl")" DEVELOPER_OS_CAPTURE_NUDGE_MIN=abc; check "a non-numeric threshold falls back to 30" "$code" 2
+printf '%s' "$(input b32 "$tmp/long.jsonl")" | env -i PATH="$PATH" TMPDIR="$tmp/t" sh "$hook" 2>/dev/null; [ -f "$tmp/t/capture-nudge/b32" ] && r=yes || r=no; check "without CLAUDE_PLUGIN_DATA the marker goes under TMPDIR" "$r" yes
+
 [ "$failed" -eq 0 ] && echo "capture-nudge: all passed"
 exit "$failed"
