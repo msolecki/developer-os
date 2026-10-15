@@ -76,6 +76,34 @@ for p in $targets; do
   [ -e "plugin/$p" ] || fail hooks plugin/hooks/hooks.json "missing target plugin/$p"
 done
 
+# The public surface (skill, agent and output-style names, hook events and scripts) is listed in plugin/SURFACE.txt,
+# so a rename or removal is a deliberate change recorded in the changelog.
+surface() {
+  for f in plugin/skills/*/SKILL.md; do f=${f#plugin/skills/}; echo "skill ${f%/SKILL.md}"; done
+  for f in plugin/agents/*.md; do f=${f##*/}; echo "agent ${f%.md}"; done
+  for f in plugin/output-styles/*.md; do f=${f##*/}; echo "output-style ${f%.md}"; done
+  jq -r '.hooks | keys[] | "hook " + .' plugin/hooks/hooks.json
+  for f in plugin/hooks/*.sh; do echo "hook-script ${f##*/}"; done
+}
+if ! surface | LC_ALL=C sort | diff -u plugin/SURFACE.txt - >&2; then
+  fail surface plugin/SURFACE.txt "differs from the plugin above; update SURFACE.txt and CHANGELOG.md"
+fi
+
+# Counts written as digits in the README and docs ("28 skills", "13 eval cases") must match the disk.
+skills=$(surface | grep -c '^skill '); agents=$(surface | grep -c '^agent ')
+styles=$(surface | grep -c '^output-style '); hooks=$(jq '[.hooks[][].hooks[]] | length' plugin/hooks/hooks.json)
+cases=$(find evals -mindepth 2 -maxdepth 2 -name case.yaml | wc -l | tr -d ' ')
+files README.md 'docs/*.md' evals/README.md |
+  xargs -0 grep -noE '\b[0-9]+ (skills|agents|output styles|hooks|eval cases|cases)\b' |
+  while IFS= read -r hit; do
+    n=${hit##*:}; kind=${n#* }; n=${n%% *}
+    case $kind in
+      skills) want=$skills ;; agents) want=$agents ;; "output styles") want=$styles ;;
+      hooks) want=$hooks ;; *cases) want=$cases ;;
+    esac
+    [ "$n" = "$want" ] || fail counts "${hit%:*}" "says $n $kind, the repository has $want"
+  done
+
 # SessionStart hook output is capped at 10,000 characters.
 size=$(wc -c < plugin/rules/core.md | tr -d " ")
 [ "$size" -le 8192 ] || fail size plugin/rules/core.md "$size bytes, limit 8192"

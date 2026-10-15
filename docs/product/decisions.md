@@ -120,7 +120,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Date:** 2026-10-15 · **Commit:** `1c324a89`
 - **Decision:** `evals/` holds `claude plugin eval` cases with a with-plugin and a baseline arm; they
   run by hand before a release or after changing a tested skill.
-- **Why:** every run spends real plan usage (78 agent sessions for the full suite).
+- **Why:** every run spends real plan usage (two agent sessions per case and run, plus judge calls).
 
 ## D14. `development` is the default and install branch
 

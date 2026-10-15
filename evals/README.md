@@ -5,7 +5,7 @@ Each case starts a real agent session in a scratch workspace, once with the plug
 (the baseline arm), and grades what the agent did. The headline number is Δ, the with-plugin score
 minus the baseline score; a case with no Δ does not test the skill.
 
-**Cost:** every run spends your plan usage (13 cases × 3 runs × 2 arms = 78 agent sessions, plus judge
+**Cost:** every run spends your plan usage (15 cases × 3 runs × 2 arms = 90 agent sessions, plus judge
 calls). Run it by hand before a release or after changing a tested skill. Never run it in CI.
 
 ## Run
@@ -45,6 +45,8 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `session-retro-routes` | the "no, use pnpm" correction becomes a rule candidate; nothing is written |
 | `trigger-plan-status` | "jaki status, co zostało?" fires plan-status; counts 3 done, 2 open, 1 blocked |
 | `trigger-pr-cycle` | "wmerguj świeży main…" fires pr-cycle, which stops before `git push` |
+| `trigger-code-review` | the Polish "review zgodnie z konwencjami projektu" fires developer-os:code-review, not the built-in |
+| `project-baseline-design` | a repository with a UI and no `DESIGN.md` gets it proposed as a backlog item; nothing is written |
 | `trigger-client-reply` | "odpowiedz klientowi…" fires client-reply; the draft is free of jargon |
 
 A `tool_used: Skill` grader only shows whether the skill fired; it never counts toward the score.

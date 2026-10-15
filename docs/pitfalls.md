@@ -63,7 +63,7 @@ promise it makes.
 
 - **Where:** `.github/workflows/check.yml`, `evals/README.md`
 - **Looks like:** missing test coverage in CI.
-- **Why it is deliberate:** one full run is 78 agent sessions of real plan usage
+- **Why it is deliberate:** every case runs two agent sessions (with and without the plugin) per run, all on real plan usage
   ([decisions D13](product/decisions.md#d13-evals-run-by-hand-never-in-ci)).
 - **Breaks if changed:** every push spends plan usage and CI needs credentials.
 

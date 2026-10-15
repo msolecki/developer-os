@@ -74,7 +74,7 @@ In scope, version 0.1.0:
 | Core rules | 1 file | `plugin/rules/core.md` |
 | Vault template | 1 | `plugin/vault-template/` |
 | Project template | 1 | `templates/project/` (in the repository, not in the installed plugin) |
-| Eval cases | 13 | `evals/` (in the repository, not in the installed plugin) |
+| Eval cases | one directory per case | `evals/` (in the repository, not in the installed plugin) |
 
 The README lists every component by name ([What's inside](../../README.md#whats-inside)); the
 [functional specification](functional-spec.md) gives each one's contract.

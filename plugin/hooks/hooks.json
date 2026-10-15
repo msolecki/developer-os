@@ -5,7 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat \"${CLAUDE_PLUGIN_ROOT}/rules/core.md\""
+            "command": "cat \"${CLAUDE_PLUGIN_ROOT}/rules/core.md\"",
+            "timeout": 10
           }
         ]
       }
@@ -16,7 +17,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh\""
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh\"",
+            "timeout": 10
           }
         ]
       }
@@ -26,7 +28,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/capture-nudge.sh\""
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/capture-nudge.sh\"",
+            "timeout": 10
           }
         ]
       }
