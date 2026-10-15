@@ -16,7 +16,7 @@ The developer-os repository keeps copyable versions in `templates/project/`; the
 - Root `AGENTS.md` (under 100 lines): purpose, commands, `## Likely agent mistakes here`, stack, non-obvious architecture, conventions, do NOT, `## Invariants`, docs map. `CLAUDE.md` is one line, `@AGENTS.md`. `_Context.md`: a signpost of at most 25 lines with a `Vault project slug:` line and a dated "State as of".
 - Root `DESIGN.md` for a project with a UI: YAML tokens, then Overview … Do's and Don'ts.
 - The backlog (`TODO.md` and `TODO-done.md`, or the `Backlog:` paths) in the audit-to-backlog item format; audit-to-backlog or project-baseline creates it, not this skill.
-- `.gitignore` ignores the planning location (default `docs/plans/`): the SessionStart hook shows `.devos-state.md` only when it is git-ignored.
+- `.gitignore` ignores the planning location: `git check-ignore -q <planning location>/.devos-state.md` exits 0 (default `docs/plans/.devos-state.md`); otherwise list it under Missing. The SessionStart hook shows `.devos-state.md` only when it is git-ignored.
 - Every doc under `docs/` starts with frontmatter `status` (`current`, `draft`, or `deprecated`), `owner`, and `last-verified` (`YYYY-MM-DD`, the day it was checked against the code).
 - `docs/index.md`: a `| Task | Read first |` table routing each common task to one doc.
 - `docs/CURRENT-STATE.md`: a `Verified at commit: <short sha>` line, then `## Works` (with entry points as `path:line`), `## In progress`, `## Known broken or missing`.

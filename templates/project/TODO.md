@@ -3,7 +3,8 @@
 <!-- audit-to-backlog and project-baseline write items here, implement-backlog executes them and
      plan-status counts them. Finished items move to TODO-done.md. Item IDs are a category prefix
      and a number, unique across both files and never reused. Only implement-backlog writes an
-     `Owner:` line. Never edit `Done when`; append `Amended YYYY-MM-DD: <criterion> — <reason>`.
+     `Owner:` line. `Blocked by: <IDs>` is optional and lists items that must be done first.
+     Never edit `Done when`; append `Amended YYYY-MM-DD: <criterion> — <reason>`.
      Replace the example item below with real ones. -->
 
 ## P0
@@ -18,7 +19,6 @@
   - Size: S
   - Done when: a failed delivery is retried 3 times with exponential backoff, then marked failed.
   - Check: `pnpm vitest run src/webhooks/deliver.test.ts`
-  - Blocked by: SEC-01
 
 ## P2
 
