@@ -38,7 +38,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
-| Counts | A count written as digits in the README, `docs/` or `evals/README.md` ("28 skills", "15 eval cases") differs from the disk |
+| Counts | A count written as digits in the README, `docs/` or `evals/README.md` ("N skills", "N eval cases") differs from the disk |
 | Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes |
 | References | A `developer-os:<name>` string in `plugin/`, `docs/`, `templates/` or `README.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside `plugin/skills/` (and outside fenced or inline code) does not resolve |

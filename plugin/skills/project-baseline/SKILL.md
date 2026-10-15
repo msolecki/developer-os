@@ -50,12 +50,14 @@ Never propose a default for these; when the repository is inconsistent (two lock
 One item per missing practice, in audit-to-backlog's shape, filed under its severity section and deduplicated against both backlog files:
 
 ```markdown
-### BASE-03 · P1 · Secret scanning in CI
-- **Where:** `.github/workflows/ci.yml:1`
-- **Problem:** no CI step scans for committed secrets.
-- **Evidence:** `rg -l 'gitleaks|trufflehog' .github/` → no match.
-- **Fix:** add a gitleaks step to the CI workflow that fails the job on a finding.
-- **Validation:** a commit with a fake key in a test branch fails CI.
+- [ ] BASE-03 · P1 · Secret scanning in CI
+  - Where: `.github/workflows/ci.yml:1`
+  - Problem: no CI step scans for committed secrets.
+  - Evidence: `rg -l 'gitleaks|trufflehog' .github/` → no match.
+  - Fix: add a gitleaks step to the CI workflow that fails the job on a finding.
+  - Size: S
+  - Done when: CI fails on a commit that contains a secret.
+  - Check: `rg -q 'gitleaks' .github/workflows/`
 ```
 
 ## 5. Report and ask

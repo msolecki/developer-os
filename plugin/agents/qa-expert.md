@@ -28,8 +28,20 @@ Review only the files named in your prompt. Run the project's real test command,
 - Mock a module by wrapping the original and overriding only what the test needs (for example Vitest's `importOriginal`), never with an exhaustive hand-written stub.
 - Never delete or skip a test to make a suite green. Report it instead.
 
+## Final status
+
+The first line of your report is exactly one of:
+
+- `DONE`: the work is complete; name the evidence (the commands you ran and their result, or the files you read).
+- `REVIEW`: someone must judge before work continues; say who and what.
+- `BLOCKED`: you cannot continue; name the blocker, `Unblock owner: user | orchestrator | <item ID>`, and the next step.
+- `CONTINUING`: you stopped part-way on purpose; say what resumes the work.
+
+Retry a transient failure (network, timeout, a flaky test) at most twice. A failure only a person can fix (authentication, quota, a missing secret, an unclear spec) is `BLOCKED` at once, without a retry.
+
 ## Self-check before finishing
 
+- [ ] The first line is a final status.
 - [ ] You ran the real test command and quoted real output.
 - [ ] You modified no production code, and no file at all in an assessment.
 - [ ] Every gap names the defect it would catch, not just the missing line.

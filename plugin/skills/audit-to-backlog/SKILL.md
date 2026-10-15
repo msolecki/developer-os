@@ -33,7 +33,9 @@ Run the requested perspectives in parallel:
 
 Give each reviewer the objective, an explicit scope (directories or a file list), constraints, stack, output format, and a cap of 15 findings ordered by impact.
 
-Require each finding to include a unique category ID, `file:line`, severity, problem, current-code evidence, actionable fix, and validation. Reject unsupported claims.
+Require each finding to include a unique category ID, `file:line`, severity, problem, current-code evidence, actionable fix, size, a `Done when` criterion, and a runnable `Check` command. Reject unsupported claims.
+
+Every brief ends with the final-status contract: the report's first line is `DONE`, `REVIEW`, `BLOCKED` (with `Unblock owner: user | orchestrator | <item ID>`) or `CONTINUING`. Send a report without one back once; a second miss is `BLOCKED`, `Unblock owner: orchestrator`.
 
 Severity: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup.
 
@@ -47,7 +49,27 @@ Keep CONFIRMED findings, and mark a finding unverified when the verifier cannot 
 
 ## Merge the backlog
 
-- Write or merge into the backlog with P0–P3 sections followed by an implementation-sessions section.
+- Write or merge into the backlog with P0–P3 sections followed by an implementation-sessions section. Every item uses this format:
+
+```markdown
+- [ ] SEC-03 · P1 · Retry webhook deliveries with backoff
+  - Where: `src/webhooks/deliver.ts:40`
+  - Problem: a failed delivery is dropped without a retry.
+  - Evidence: `deliver()` returns after the first non-2xx response (`src/webhooks/deliver.ts:52`).
+  - Fix: retry with exponential backoff, then mark the delivery failed.
+  - Size: S
+  - Done when: a failed delivery is retried 3 times with exponential backoff, then marked failed.
+  - Check: `pnpm vitest run src/webhooks/deliver.test.ts`
+  - Blocked by: SEC-01
+```
+
+- **ID:** category prefix and number, unique across the todo and done files, never reused.
+- **Size:** S, M or L, as in plan steps.
+- **Check:** a command that exits non-zero while `Done when` does not hold. `Manual: <steps> — <why no command can check it>` only when no command can.
+- **Blocked by:** optional item IDs; the item is ready when each is checked or in the done file.
+- **Owner:** absent when the item is written; only implement-backlog writes it, before dispatch.
+- **Done when:** never edited or deleted. A change is appended as `Amended YYYY-MM-DD: <new criterion> — <reason and evidence>`, with the user's approval.
+
 - Deduplicate by file and root cause; keep the higher severity.
 - Continue existing category numbering.
 - Group 5–7 related tasks per implementation session without mixing P0 and P3.

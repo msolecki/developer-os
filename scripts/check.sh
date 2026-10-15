@@ -76,6 +76,14 @@ for p in $targets; do
   [ -e "plugin/$p" ] || fail hooks plugin/hooks/hooks.json "missing target plugin/$p"
 done
 
+# Every agent ends its report contract with the four final statuses that orchestrating skills read.
+for f in plugin/agents/*.md; do
+  grep -q '^## Final status$' "$f" || fail agents "$f" "no ## Final status section"
+  for s in DONE REVIEW BLOCKED CONTINUING; do
+    grep -q "^- \`$s\`" "$f" || fail agents "$f" "final status $s missing"
+  done
+done
+
 # The public surface (skill, agent and output-style names, hook events and scripts) is listed in plugin/SURFACE.txt,
 # so a rename or removal is a deliberate change recorded in the changelog.
 surface() {

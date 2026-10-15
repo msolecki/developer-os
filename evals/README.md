@@ -5,7 +5,7 @@ Each case starts a real agent session in a scratch workspace, once with the plug
 (the baseline arm), and grades what the agent did. The headline number is Δ, the with-plugin score
 minus the baseline score; a case with no Δ does not test the skill.
 
-**Cost:** every run spends your plan usage (15 cases × 3 runs × 2 arms = 90 agent sessions, plus judge
+**Cost:** every run spends your plan usage (20 cases × 3 runs × 2 arms = 120 agent sessions, plus judge
 calls). Run it by hand before a release or after changing a tested skill. Never run it in CI.
 
 ## Run
@@ -26,7 +26,7 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 - `--scaffold` runs each case's `scaffold.sh`; `--allow-tools` grants the gated tools the cases use.
 - The first run asks you to trust the plugin directory.
 - One case: add `--case brain-search-no-match`. One group: `--tag brain` (tags: `brain`, `review`,
-  `retro`, `trigger`, `negative`).
+  `retro`, `trigger`, `backlog`, `negative`).
 - Results and the HTML report go to `evals/results/` (git-ignored).
 
 ## Cases
@@ -47,6 +47,11 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `trigger-pr-cycle` | "wmerguj świeży main…" fires pr-cycle, which stops before `git push` |
 | `trigger-code-review` | the Polish "review zgodnie z konwencjami projektu" fires developer-os:code-review, not the built-in |
 | `project-baseline-design` | a repository with a UI and no `DESIGN.md` gets it proposed as a backlog item; nothing is written |
+| `implement-backlog-blocked` | the ready P2 blocker is done first; the higher-priority item it blocks waits |
+| `implement-backlog-owner` | two parallel items get distinct `Owner` lines and distinct agents |
+| `implement-backlog-quota` | a missing credential is `BLOCKED`, `Unblock owner: user`, with no retry of the check |
+| `implement-backlog-roles` | the L item stops at `REVIEW` with a plan; the S items go straight through |
+| `code-review-weakened-criterion` | a quietly weakened `Done when` is rated P1 and blocks the merge |
 | `trigger-client-reply` | "odpowiedz klientowi…" fires client-reply; the draft is free of jargon |
 
 A `tool_used: Skill` grader only shows whether the skill fired; it never counts toward the score.
@@ -67,6 +72,7 @@ evals/
     │                    plus planted defects (a broken link, an orphan without a summary)
     ├── vault.sh         copies the vault into a workspace and writes CLAUDE.md with `Brain vault:`
     ├── repo.sh          a one-commit pnpm project in git
+    ├── backlog.sh       repo.sh plus a passing test suite, for backlog cases
     └── cart-discount.sh the reviewed commit, with or without the off-by-one
 ```
 

@@ -112,7 +112,9 @@ each step. Plans are local and gitignored by default; when the task is finished,
 move unfinished items to `TODO.md` or the backlog. A project may override this in its `AGENTS.md`.
 A spec from the **spec** skill is named `<date>-<feature>-spec.md`. Before each commit run the fast
 check (lint, types, tests of the changed area); before a push or PR run the full suite. End a
-session at its last green commit, with the rest recorded in the plan.
+session at its last green commit, with the rest recorded in the plan. When implement-backlog runs
+several agents, the main session only orchestrates: it integrates, reviews and updates the plan, and
+leaves the backlog items to the agents.
 
 Do not write the plan in the vault. A plan in the vault drifts away from the code it describes.
 

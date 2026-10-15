@@ -14,7 +14,7 @@ Read `_Context.md` first: it says where to look and holds the project's vault sl
 UI work: read `DESIGN.md` first; take every value from its tokens.
 
 <!-- Optional: where audit-to-backlog writes and implement-backlog reads the backlog.
-     Without this line they use TODO.md and TODO-done.md.
+     Without this line they use TODO.md and TODO-done.md; TODO.md in this template shows the item format.
      e.g. Backlog: docs/backlog/TODO.md, docs/backlog/TODO-done.md -->
 
 ## Project purpose
