@@ -85,15 +85,26 @@ or any error they exit silently and the normal permission flow applies.
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
   plugin payload.
 
-## Codex (manual, best-effort)
+## Codex (installer, best-effort)
 
-There is no Codex manifest. The skills need only file read, write and search tools, so you can use
-them by hand:
+There is no Codex manifest. From a clone of this repository (or the marketplace copy in
+`~/.claude/plugins/marketplaces/developer-os`), run:
 
-1. Symlink or copy each directory in `plugin/skills/` into `~/.agents/skills/` (older Codex versions
-   read `~/.codex/skills/`).
-2. Paste the content of `plugin/rules/core.md` into `~/.codex/AGENTS.md`.
-3. Add the `Brain vault: /absolute/path/to/your/vault` line to `~/.codex/AGENTS.md`.
+```sh
+scripts/install-codex.sh --dry-run   # show what would change
+scripts/install-codex.sh             # install or update
+```
+
+- It writes a Codex copy of every skill to `~/.agents/skills/<name>` (set `CODEX_SKILLS_DIR` for
+  another location, such as `~/.codex/skills/` on older Codex versions). Each copy keeps only `name`
+  and a short description (the first sentence and the trigger phrases), so all of them fit Codex's
+  8000-character skill list, and has its Claude-only references rewritten.
+- It puts `plugin/rules/core.md` and your `Brain vault:` line (from `~/.claude/CLAUDE.md`, or
+  `--vault <path>`) between `developer-os-core` markers in `~/.codex/AGENTS.md` (`--project <dir>`
+  for a project's `AGENTS.md`). Text outside the markers stays; a changed file is backed up first.
+- Run it again after each plugin update. `--uninstall` removes only what it installed. A skill
+  directory it did not create, including an older hand-made symlink into another clone, is skipped
+  and reported; remove it first to let the installer manage it.
 
 This setup is not tested on releases. The hooks, agents and output styles have no Codex equivalent;
 see [Claude-only features](docs/workflow.md#claude-only-features).

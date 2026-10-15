@@ -107,7 +107,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Why:** a committed plan goes stale the day the task ends; a plan in the vault drifts from the
   code.
 
-## D12. Codex is manual and best-effort
+## D12. Codex is manual and best-effort (superseded by D19)
 
 - **Date:** 2026-10-14 · **Commit:** `369028cc`
 - **Decision:** no Codex manifest. Users copy skills to `~/.agents/skills/` and paste the core rules
@@ -128,6 +128,20 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Decision:** `/plugin marketplace add msolecki/developer-os` installs from `development`, the
   repository's default branch. `main` is not the release channel today.
 - **Open:** a release and pinning procedure; see [CURRENT-STATE.md](../CURRENT-STATE.md).
+
+## D19. A Codex installer that copies, not symlinks
+
+- **Date:** 2026-10-15 · Sources proposal #15, Q13
+- **Decision:** `scripts/install-codex.sh`, run by hand, writes a Codex copy of every skill (name and
+  a short description only, Claude-only references rewritten, a `.developer-os-codex` marker) and
+  keeps the core rules and the `Brain vault:` line between markers in `~/.codex/AGENTS.md`. No Codex
+  hooks.
+- **Why:** Codex lists skills within 8000 characters by default; the full descriptions are over
+  10,000, so a symlink cannot fit and a copy must carry a shorter description. Pasting `core.md` by
+  hand went stale silently; a marked block is replaced in place and backed up. Codex's documentation
+  does not confirm the hook events the guard needs.
+- **Rejected:** symlinks for skills without Claude-only references (the budget still overflows);
+  installing `guard.sh` for Codex.
 
 ## Rules history
 

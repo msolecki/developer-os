@@ -34,9 +34,9 @@ index, binary, background job or network call in the plugin itself.
 
 - The primary user is a developer working alone or in a small team on several client and product
   repositories with Claude Code, who wants decisions to outlive sessions and repositories.
-- A secondary user runs Codex: the skills can be copied by hand and the core rules pasted into
-  `~/.codex/AGENTS.md`. This path is best-effort and untested on releases
-  ([README, Codex](../../README.md#codex-manual-best-effort)).
+- A secondary user runs Codex: `scripts/install-codex.sh` copies the skills and the core rules into
+  Codex's locations. This path is best-effort and untested on releases
+  ([README, Codex](../../README.md#codex-installer-best-effort)).
 
 ## Product principles
 

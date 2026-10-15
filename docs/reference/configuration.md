@@ -49,6 +49,7 @@ Note frontmatter, folders and the four body headings: [workflow.md, Vault layout
 
 ## Codex
 
-No manifest. Copy or symlink `plugin/skills/*` into `~/.agents/skills/` (older Codex:
-`~/.codex/skills/`), paste `plugin/rules/core.md` and the `Brain vault:` line into
-`~/.codex/AGENTS.md` ([README](../../README.md#codex-manual-best-effort)).
+No manifest. `scripts/install-codex.sh` (run by hand, `--dry-run` first) writes a Codex copy of each skill
+to `${CODEX_SKILLS_DIR:-~/.agents/skills}` with a `.developer-os-codex` marker, and puts the core rules and
+the `Brain vault:` line between `developer-os-core` markers in `~/.codex/AGENTS.md`
+([README](../../README.md#codex-installer-best-effort)).

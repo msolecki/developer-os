@@ -35,7 +35,7 @@ The [README](../README.md) has the short version; this is the full one.
    adds the `Brain vault:` line to `~/.claude/CLAUDE.md` and the vault path to
    `permissions.additionalDirectories` in `~/.claude/settings.json`. Connecting an existing vault adds
    only the missing pieces and never overwrites your `.obsidian/` folder. For Codex it prints the
-   line to add to `~/.codex/AGENTS.md` (see [Codex](../README.md#codex-manual-best-effort)). Brain
+   line to add to `~/.codex/AGENTS.md` (see [Codex](../README.md#codex-installer-best-effort)). Brain
    skills ask once for the vault path when the line is missing, and stop if you have none; the core
    rules run brain-search only when the line exists.
 3. In Obsidian, Settings, Core plugins: enable **Bases** and **Templates**; set the Templates folder
@@ -345,7 +345,7 @@ Link from the vault to the repository by path or URL; do not copy repository con
 
 ## What else the plugin ships
 
-The full list of skills, agents and output styles, and the manual Codex setup, are in the
+The full list of skills, agents and output styles, and the Codex installer, are in the
 [README](../README.md#whats-inside).
 
 code-review and audit-to-backlog send every P0/P1 finding to a fresh verifier that sees only the
@@ -374,7 +374,7 @@ Claude Code ships commands that overlap with some developer-os skills. The names
 
 ## Claude-only features
 
-The skills work in Codex by hand (see [Codex](../README.md#codex-manual-best-effort)); these parts
+The skills work in Codex through an installer (see [Codex](../README.md#codex-installer-best-effort)); these parts
 do not:
 
 | Feature | Claude Code | Codex | Equivalent |
@@ -384,4 +384,4 @@ do not:
 | `PreToolUse` guard | asks before installs, force pushes, `--no-verify`, `commit -n` | no | none |
 | Agents (`plugin/agents/`) | code-reviewer and four others, delegated by skills | no | none |
 | Output styles | `/output-style` | no | none |
-| `Skill` tool | the agent loads a skill by name | no | copy each skill to `~/.agents/skills/`, where Codex discovers skills |
+| `Skill` tool | the agent loads a skill by name | no | `scripts/install-codex.sh` writes a Codex copy of each skill to `~/.agents/skills/` |
