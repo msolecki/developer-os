@@ -43,6 +43,8 @@ grep -qF '"skill":"developer-os:([a-z-]+)"' "$skills/skill-usage/SKILL.md" && r=
 check "skill-usage keeps the prefix in its search pattern" "$r" yes
 grep -q "^description: '.*Use when writing or reviewing code comments" "$skills/comments-conventions/SKILL.md" && r=yes || r=no
 check "a description without quoted phrases keeps its Use when sentence" "$r" yes
+grep -q "Use for \"Likely agent mistakes here\"" "$skills/docs-sync/SKILL.md" && r=yes || r=no
+check "a quoted name before the Use sentence is not a trigger phrase" "$r" no
 fm_keys=$(awk 'FNR==1{fm=1;next} fm&&/^---$/{fm=0} fm{sub(/:.*/,"");print}' "$skills"/*/SKILL.md | sort -u | tr '\n' ' ')
 check "frontmatter holds only name and description" "$fm_keys" "description name "
 total=$(sed -n "s/^description: '\(.*\)'$/\1/p" "$skills"/*/SKILL.md | awk '{ t += length($0) } END { print t }')
@@ -95,12 +97,15 @@ mkdir -p "$tmp/repo"
 cp -R "$(pwd)/scripts" "$(pwd)/plugin" "$tmp/repo/"
 f="$tmp/repo/plugin/skills/spec/SKILL.md"
 awk '/^description:/ && !done { print "description: >"; print "  Folded text."; done = 1; next } { print }' "$f" > "$tmp/folded" && cat "$tmp/folded" > "$f"
-cp "$agents" "$tmp/before"
-env -i PATH="$PATH" HOME="$h" sh "$tmp/repo/scripts/install-codex.sh" >"$tmp/out" 2>"$tmp/err"; code=$?
+# A fresh HOME without the foreign spec, so only the folded description can make the run fail.
+h2="$tmp/home2"
+mkdir -p "$h2/.codex"
+printf 'My own rule.\n' > "$h2/.codex/AGENTS.md"
+env -i PATH="$PATH" HOME="$h2" sh "$tmp/repo/scripts/install-codex.sh" >"$tmp/out" 2>"$tmp/err"; code=$?
 check "a folded description fails" "$code" 1
 check "a folded description is named" "$(grep -c 'one-line plain description in: .*spec/SKILL.md' "$tmp/err")" 1
-cmp -s "$agents" "$tmp/before" && r=yes || r=no
-check "a folded description writes nothing" "$r" yes
+check "a folded description writes no AGENTS.md" "$(cat "$h2/.codex/AGENTS.md")" "My own rule."
+check "a folded description installs no skill" "$(find "$h2" -name .developer-os-codex | wc -l | tr -d ' ')" 0
 
 cp "$tmp/first" "$agents"
 run --uninstall

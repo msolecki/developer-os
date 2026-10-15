@@ -49,7 +49,7 @@ if [ "$uninstall" -eq 0 ]; then
     fm { d = 0 }
     fm && /^description:/ { d = 1; if ($0 !~ /^description: [^>|"'"'"'[:space:]]/) { print FILENAME; fm = 0 } }' "$plugin"/skills/*/SKILL.md)
   if [ -n "$bad" ]; then
-    echo "error: the Codex copy needs a one-line plain description in: $bad. Nothing was changed." >&2
+    echo "error: the Codex copy needs a one-line plain description in: $bad (use \`description: text\` on a single line, no \`>\`, \`|\`, quotes or continuation). Nothing was changed." >&2
     exit 1
   fi
 fi
@@ -146,9 +146,10 @@ for src in "$plugin"/skills/*/; do
   # Codex copy: short description, Claude-only references rewritten.
   mkdir -p "$tmp/skill/$name"
   awk -v plugin="$plugin" -v name="$name" '
-    function short(d,   first, i, rest, q, out) {
+    function short(d,   first, i, j, rest, q, out) {
       i = index(d, ". "); first = i ? substr(d, 1, i) : d
-      rest = d; q = ""
+      # Trigger phrases follow "Use when/before/..."; a quoted span before it is a name, not a trigger.
+      j = index(d, " Use "); rest = j ? substr(d, j) : d; q = ""
       while (match(rest, /"[^"]+"/)) { q = q (q == "" ? "" : ", ") substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH) }
       i = index(d, "Use when ")
       out = q != "" ? first " Use for " q "." : i > length(first) ? first " " substr(d, i) : first
