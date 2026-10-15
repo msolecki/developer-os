@@ -1,0 +1,2 @@
+# Plans and the agent state file stay local; the SessionStart hook shows the state file only when it is ignored.
+docs/plans/

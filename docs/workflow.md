@@ -42,9 +42,12 @@ The [README](../README.md) has the short version; this is the full one.
    to `templates`.
 4. Start a session and ask: "brain-search webhooks". It should find the example inbox note.
 
-For each project repository, copy `templates/project/` (`AGENTS.md`, `CLAUDE.md`, `_Context.md`,
-`docs/`) into its root and fill in `AGENTS.md` and `_Context.md`. `CLAUDE.md` is one line,
-`@AGENTS.md`, so both agents read the same file. `_Context.md` carries the project's vault slug.
+For each project repository, copy the whole of `templates/project/` (`AGENTS.md`, `CLAUDE.md`,
+`_Context.md`, `DESIGN.md`, `TODO.md`, `.gitignore`, `docs/`) into its root and fill in `AGENTS.md`
+and `_Context.md`. `CLAUDE.md` is one line, `@AGENTS.md`, so both agents read the same file.
+`_Context.md` carries the project's vault slug. Delete `DESIGN.md` and its line in `AGENTS.md` when
+the project has no UI. `TODO.md` shows the backlog item format with one example item to replace.
+`.gitignore` keeps `docs/plans/` out of git; merge it into an existing one.
 `docs/` holds the index (task → doc routing), `CURRENT-STATE.md` (verified at a commit),
 `pitfalls.md`, `decisions/` and `runbooks/`. The docs-sync skill scaffolds missing pieces, refreshes
 `CURRENT-STATE.md` and reports docs-vs-code drift; project-baseline proposes missing engineering
