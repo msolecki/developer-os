@@ -4,8 +4,8 @@ The `brain-setup` skill does steps 1, 3 and 4 for you. By hand:
 
 1. Copy this folder as your Obsidian vault, or merge its folders into an existing vault.
    **Merging into an existing vault: do not overwrite your own `.obsidian/` folder**; it holds your
-   settings, plugins and themes. Instead, add the three entries from this template's
-   `.obsidian/types.json` (`created` and `updated` as `date`, `tags` as `tags`) to your own
+   settings, plugins and themes. Instead, add the four entries from this template's
+   `.obsidian/types.json` (`created` and `updated` as `date`, `tags` as `tags`, `sources` as `multitext`) to your own
    `.obsidian/types.json`, or set those property types in Obsidian's properties panel. Without them,
    `_views/Stale.base` may not compare `updated` as a date.
    If you sync the vault with git, append the lines of this template's `.gitignore` that your own
@@ -18,4 +18,4 @@ The `brain-setup` skill does steps 1, 3 and 4 for you. By hand:
 5. Open `_views/Inbox.base` to review what agents captured. The full workflow is in
    [docs/workflow.md](https://github.com/msolecki/developer-os/blob/main/docs/workflow.md).
 6. When you no longer need the example notes, delete them, or archive each one: set `status: archived`
-   and move it to `_archive/`. The inbox example links the other two, so review or delete it with them.
+   and move it to `_archive/`. The four example notes (`_inbox/`, `PROJECTS/`, `DEV/`, `TOOLS/`) link each other, so delete or archive all four together.
