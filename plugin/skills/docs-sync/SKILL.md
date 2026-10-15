@@ -3,7 +3,6 @@ name: docs-sync
 description: Check a repository's docs against its code and the project docs standard — scaffold missing pieces, refresh docs/CURRENT-STATE.md, report docs-vs-code drift, and propose the "Likely agent mistakes here" section from git history — writing nothing until the user approves. Use when docs may be stale, after a large change, or when setting up docs in a project; for example "odśwież dokumentację", "czy docsy są aktualne", "zsynchronizuj docs z kodem".
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
-argument-hint: "[path]"
 ---
 
 # Docs sync
@@ -14,12 +13,15 @@ Read-only until the user approves a numbered list of changes.
 
 The developer-os repository keeps copyable versions in `templates/project/`; the installed plugin does not ship them, so scaffold from this list:
 
-- Root `AGENTS.md` (under 100 lines): purpose, commands, `## Likely agent mistakes here`, stack, non-obvious architecture, conventions, do NOT, `## Invariants`, docs map. `CLAUDE.md` is one line, `@AGENTS.md`. `_Context.md`: a signpost of at most 25 lines with a dated "State as of".
+- Root `AGENTS.md` (under 100 lines): purpose, commands, `## Likely agent mistakes here`, stack, non-obvious architecture, conventions, do NOT, `## Invariants`, docs map. `CLAUDE.md` is one line, `@AGENTS.md`. `_Context.md`: a signpost of at most 25 lines with a `Vault project slug:` line and a dated "State as of".
+- Root `DESIGN.md` for a project with a UI: YAML tokens, then Overview … Do's and Don'ts.
+- The backlog (`TODO.md` and `TODO-done.md`, or the `Backlog:` paths) in the audit-to-backlog item format; audit-to-backlog or project-baseline creates it, not this skill.
+- `.gitignore` ignores the planning location (default `docs/plans/`): the SessionStart hook shows `.devos-state.md` only when it is git-ignored.
 - Every doc under `docs/` starts with frontmatter `status` (`current`, `draft`, or `deprecated`), `owner`, and `last-verified` (`YYYY-MM-DD`, the day it was checked against the code).
 - `docs/index.md`: a `| Task | Read first |` table routing each common task to one doc.
 - `docs/CURRENT-STATE.md`: a `Verified at commit: <short sha>` line, then `## Works` (with entry points as `path:line`), `## In progress`, `## Known broken or missing`.
 - `docs/pitfalls.md`: deliberate settings that look like defects; per entry Where, Looks like, Why it is deliberate, Breaks if changed.
-- `docs/decisions/NNNN-slug.md`: Date, Context, Decision, Consequences, Alternatives rejected. One decision register with IDs is an accepted alternative.
+- `docs/decisions/NNNN-slug.md`, numbered from `0001`: Date, Context, Decision, Consequences, Alternatives rejected. The template's `0001-template.md` is a copy source, not a decision; it is never kept. One decision register with IDs is an accepted alternative.
 - `docs/runbooks/`: deploy, rollback, incident procedures.
 
 Propose only pieces that would carry real content now; say which you skip as empty.
