@@ -9,7 +9,7 @@ Proposes first; moves a note only after the user names it.
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>` in the user's `CLAUDE.md` or `AGENTS.md` (already in your context, or in `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the project's file). If there is none, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `~/.claude/CLAUDE.md`; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. List the inbox
 
@@ -24,7 +24,7 @@ ls -d "$V"/*/ # topic folders: every top-level folder not starting with "_", exc
 Read each inbox note. For each, give: its `summary`, the topic folder that fits best (`PROJECTS/`, `DEV/`, `TOOLS/`, `INFRA/`, `QA/`, or a folder the user added), and any likely duplicate:
 
 ```bash
-rg -il -g '*.md' -g '!_inbox/**' -g '!_archive/**' -g '!templates/**' -e 'changelog' "$V"
+rg -il -g '*.md' -g '!_inbox/' -g '!_archive/' -g '!templates/' -e 'changelog' "$V"
 ```
 
 Flag missing frontmatter keys and any secret that slipped through (propose `[REDACTED]`).
