@@ -15,7 +15,7 @@ Find the line `Brain vault: <absolute path>`. Look in this order and stop at the
 
 ## 2. Run the checks
 
-Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Link targets resolve case-insensitively by note name. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance and are not reported at all. The script prints only offending files, then one `totals:` line for the report header.
+Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Link targets resolve case-insensitively by note name. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance: they are exempt from the archived-link info line, but a missing source is still `no such note`. Links inside fenced code blocks are ignored. The script prints only offending files, then one `totals:` line for the report header.
 
 ```bash
 V="/path/to/vault"
@@ -29,9 +29,9 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
 {
   f = $0; name = f; sub(/.*\//, "", name); sub(/\.md$/, "", name); k = tolower(name)
   if (f ~ /^\.\/(_views|_reports)\//) { live[k] = 1; next }   # link targets only
-  fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; key = ""; comp = 0; sec = ""; ln = 0
+  fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; key = ""; comp = 0; sec = ""; ln = 0; code = 0
   while ((getline line < f) > 0) {
-    ln++
+    ln++; sub(/\r$/, "", line)
     if (ln == 1 && line == "---") { fm = 1; continue }
     if (fm == 1 && line == "---") { fm = 2; continue }
     if (fm == 1) {
@@ -43,17 +43,20 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
           else if (key == "updated") up = v; else if (key == "summary") sm = v }
       }
       if (key == "tags" && line ~ /(^|[^a-z-])compiled([^a-z-]|$)/) comp = 1
-    } else if (line ~ /^## /) sec = line
+    } else if (line ~ /^(```|~~~)/) { code = !code; continue }
+    else if (code) continue
+    else if (line ~ /^## /) sec = line
     if (f ~ /^\.\/_archive\//) continue
     # Links: [[target]] with alias, heading, and folder stripped; provenance = frontmatter or ## Links of a compiled note
     s = line
     while ((i = index(s, "[[")) > 0) {
       s = substr(s, i + 2); t = s
       for (j = 1; j <= length(t); j++) { c = substr(t, j, 1); if (c == "]" || c == "|" || c == "#") break }
-      t = substr(t, 1, j - 1); sub(/.*\//, "", t); sub(/[ \t]+$/, "", t); sub(/\.md$/, "", t)
-      if (t == "" || (f, tolower(t)) in seen) continue
-      seen[f, tolower(t)] = 1; nl++; src[nl] = f; lt[nl] = t
-      lp[nl] = ((fm == 1 && key == "sources") || (comp && sec ~ /^## Links[ \t]*$/)); tgt[tolower(t)] = 1
+      t = substr(t, 1, j - 1); sub(/.*\//, "", t); sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); sub(/\.md$/, "", t)
+      if (t == "") continue
+      p = ((fm == 1 && key == "sources") || (comp && sec ~ /^## Links[ \t]*$/))
+      if ((f, tolower(t)) in seen) { if (!p) lp[seen[f, tolower(t)]] = 0; continue }   # one body link makes it reportable
+      nl++; seen[f, tolower(t)] = nl; src[nl] = f; lt[nl] = t; lp[nl] = p; tgt[tolower(t)] = 1
     }
   }
   close(f)
