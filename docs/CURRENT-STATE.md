@@ -6,11 +6,11 @@ last-verified: 2026-10-15
 
 # Current state
 
-Verified at: branch `fix/audit-2026-10-15` (not yet merged)
+Verified at commit: `933b0008` (the squash merge of #72)
 
-What is true on the branch above, checked against the files and by running `CI=1 scripts/check.sh`
-(green, including the five script tests). agnix 0.57.0 `--strict` reports no issues (CC-PL-004, the missing `version`, is disabled for plugin.json with its reason). Once the branch is
-merged and `development` has moved far past it, treat each line as unverified.
+What is true at the commit above, checked against the files and by running `CI=1 scripts/check.sh`
+(green, including the five script tests). agnix 0.57.0 `--strict` reports no issues (CC-PL-004, the missing `version`, is disabled for plugin.json with its reason). If `development` has moved far past
+this commit, treat each line as unverified.
 
 ## Works
 
@@ -33,7 +33,7 @@ merged and `development` has moved far past it, treat each line as unverified.
   implement-backlog-roles, session-retro-persistence, -reversal, -lint; Δ 0 (the baseline passes
   too): implement-backlog-blocked, injection-fix-pr, -pr-cycle, -bug-triage. One run per case, so
   these are a first signal, not a stable score.
-- The 14 new or changed cases ran once each on 2026-10-15 on this branch (agent Sonnet 5.5, judge
+- The 14 new or changed cases ran once each on 2026-10-15 before the merge (agent Sonnet 5.5, judge
   Opus 5.5, 3.80 USD over two rounds). The first round caught two defects, fixed before the second:
   brain-garden missed notes with an upper-case `.MD` extension, and a grader with `---` in its frontmatter
   did not load. After the fixes all 14 pass at 0.8 with the plugin. Δ +1.00: implement-backlog-owner,
@@ -58,7 +58,7 @@ merged and `development` has moved far past it, treat each line as unverified.
 
 Found in the review of 2026-10-15 (independent code-reviewer and security-auditor passes, each finding reproduced or read in the code). Severity on the plugin's P0–P3 scale; none is P0 or P1.
 
-The findings of the 2026-10-15 audit are fixed on this branch, except what was deliberately not
+The findings of the 2026-10-15 audit are fixed in #72, except what was deliberately not
 done: #23 (qa-expert's assessment mode stays prose-only), #49 (capture-nudge keeps its transcript
 scan, about 0.3 s on a 52 MB transcript), and eval cases still missing for brain-setup,
 audit-to-backlog, deploy-checklist, docs-sync, skill-usage and the pr-cycle fork gate and thread
@@ -73,7 +73,7 @@ order.
 | R7 | P3 | No release procedure | Pinning by marketplace ref is documented and `SECURITY.md` supports only the latest commit, but there is no release tag or procedure (tags, changelog date); `main` is not kept in step with `development`, yet `vault-template/README.md` links the workflow guide on `main`. |
 | R8 | P3 | `plugin/vault-template/README.md` | Says to add three entries from `.obsidian/types.json`; the file has four (`sources` as multitext). |
 | R9 | P3 | `plugin/.claude-plugin/plugin.json` | The description says "fail-closed validation" while both hooks fail open. The phrase most likely means the core rule that stops a commit when no validation command is known; the wording invites the wrong reading. |
-| R10 | P3 | `tests/*.test.sh` | The hook branches added on this branch (state-card order, cut and age; Monitor deferral; `tasks/` output paths) have tests. Still untested: bare `--force`, `git push --no-verify`, `;`, pipe and `$( )` separators, newline-separated commands, `bun`; the 29/30 nudge boundary, non-numeric threshold, `TMPDIR` fallback. |
+| R10 | P3 | `tests/*.test.sh` | The hook branches added in #72 (state-card order, cut and age; Monitor deferral; `tasks/` output paths) have tests. Still untested: bare `--force`, `git push --no-verify`, `;`, pipe and `$( )` separators, newline-separated commands, `bun`; the 29/30 nudge boundary, non-numeric threshold, `TMPDIR` fallback. |
 | R11 | P3 | `plugin/skills/skill-usage/SKILL.md` | The name pattern `[a-z-]+` misses names with digits; resumed or forked transcripts can repeat history and double-count. |
 | R12 | P3 | Repository root | The repository tracks no `AGENTS.md`/`CLAUDE.md` of its own (`_Context.md` is local and git-ignored), so it does not follow the `templates/project/` standard it ships. |
 | R18 | P2 | `plugin/skills/implement-backlog/SKILL.md`, eval `implement-backlog-owner` | In one of two runs the orchestrator dispatched without writing the `Owner` lines; the case scored 0 in both runs, partly because the eval sandbox denied write tools to delegates whose worktrees sat outside the workspace. |
