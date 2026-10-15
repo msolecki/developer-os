@@ -7,18 +7,42 @@ last-verified: 2026-10-15
 # Hooks reference
 
 Defined in `plugin/hooks/hooks.json`. Commands run with `${CLAUDE_PLUGIN_ROOT}` set to the installed
-`plugin/` directory. Both scripts run under `sh` (POSIX apart from `grep -o`, which macOS and Linux provide), need no `jq`, make no network call, and fail open.
-Tests: `tests/guard.test.sh`, `tests/capture-nudge.test.sh`.
+`plugin/` directory; each has a 10-second timeout. All three scripts run under `sh` (POSIX apart from `grep -o`, which macOS and Linux provide), need no `jq`, make no network call, and fail open.
+Tests: `tests/session-start.test.sh`, `tests/guard.test.sh`, `tests/capture-nudge.test.sh`.
 
-## SessionStart — core rules
+## SessionStart — core rules and state card
 
 | | |
 |---|---|
 | Matcher | none: every source (startup, resume, clear, compact, fork) |
-| Command | `cat "${CLAUDE_PLUGIN_ROOT}/rules/core.md"` |
+| Command | `sh "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"`, timeout 10 s |
+| Input | the hook JSON on stdin; uses `source` and `cwd` |
 | Output | stdout becomes session context |
-| Limit | Claude Code caps hook output at 10,000 characters; `scripts/check.sh` caps the file at 8192 bytes |
+| Limit | Claude Code caps hook output at 10,000 characters; `scripts/check.sh` caps `core.md` at 8192 bytes and checks that the card cap still fits |
 | Off switch | disable the plugin; override single rules in `~/.claude/CLAUDE.md` |
+
+**Always:** prints `plugin/rules/core.md` first.
+
+**After `source` `compact` or `resume`**, when `cwd` is inside a git repository, it appends a state
+card, cut to 1024 bytes:
+
+```
+## developer-os state card
+Branch: <git branch --show-current>
+Active plan: <Plan: line of the state file, else the newest docs/plans/*.md changed in 7 days, else "none found">
+Worktrees:
+<git worktree list, at most 10 lines>
+State (docs/plans/.devos-state.md):
+<the file, when it exists>
+```
+
+`docs/plans/.devos-state.md` is written by implement-backlog, pr-cycle and audit-to-backlog at every
+stage change (plan, current item, agents and their worktrees, unverified claims, next step) and is
+git-ignored with the plans. session-retro proposes deleting it with a finished plan. The hook reads
+only the default `docs/plans/` location.
+
+**Failure:** after the rules print, every error exits 0 with whatever was printed; malformed input,
+a missing `cwd` or a directory outside git produce the rules alone.
 
 ## PreToolUse on Bash — `guard.sh`
 

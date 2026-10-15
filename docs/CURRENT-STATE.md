@@ -6,10 +6,10 @@ last-verified: 2026-10-15
 
 # Current state
 
-Verified at commit: `bca1c90e`
+Verified at commit: `cfc15d6e` (the documentation commit after it changes only docs)
 
 What is true at the commit above, checked against the files and by running `scripts/check.sh`
-(green) and both hook tests (green). If `development` has moved far past this commit, treat each
+(green, including the four script tests) and agnix 0.57.0 (no issues). If `development` has moved far past this commit, treat each
 line as unverified.
 
 ## Works
@@ -17,12 +17,16 @@ line as unverified.
 - Install from the marketplace on `development`: `.claude-plugin/marketplace.json` → `plugin/`.
 - 28 skills, 5 agents, 4 output styles, 3 hooks, as listed in
   [product/functional-spec.md](product/functional-spec.md).
-- Per-session cost: core rules 8148 of 8192 bytes; skill descriptions 9864 of 12000 characters.
+- Per-session cost: core rules 8145 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
+  state card of at most 1024 bytes after compaction or resume.
+- The Codex installer fits all 28 skills in 7321 description characters of Codex's 8000.
 - The shared "Locate the vault" paragraph is identical in brain-capture, brain-compile,
   brain-garden, brain-review and brain-search.
 - `scripts/check.sh` enforces every rule CONTRIBUTING.md lists; CI runs it on `development`, `main`
   and pull requests.
-- 29 eval cases with a baseline arm, run by hand.
+- 29 eval cases with a baseline arm, run by hand. The 16 added on 2026-10-15 (backlog, review
+  framing and boundaries, retro guards, injection, two triggers) have scaffolds that build and pass
+  their baseline, but have not been run with `claude plugin eval` yet.
 
 ## In progress
 
@@ -30,8 +34,10 @@ line as unverified.
 - Proposals under consideration, not implemented (kept in a local, git-ignored plan): the vault path
   through plugin `userConfig`; `paths:` for conventions skills; `context: fork` for report skills;
   `allowed-tools` for read-only commands; `${CLAUDE_SKILL_DIR}` in brain-setup; one budget for all
-  fixed context; a `DESIGN.md` in the project template; trigger evals for every action skill; a
-  short subagent report contract; `effort` per skill.
+  fixed context; trigger evals for every action skill; a report-length contract for subagents beyond
+  the final status; `effort` per skill.
+- Not done by hand yet: listing on awesome-claude-code (eligible 14 days after the repository is
+  public) and agentskill.sh, and checking the claude-plugins-official submission rules before 0.1.0.
 
 ## Known broken or missing
 

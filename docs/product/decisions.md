@@ -27,6 +27,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Why:** anything that runs in every session of every user must be small enough to read in full
   and must not add dependencies.
 
+- **Amended 2026-10-15:** a third script, `session-start.sh`, replaces the inline `cat` (D16), and
+  `scripts/install-codex.sh` runs only by hand, outside the plugin (D19).
+
 ## D3. The vault is read and written with the agent's own file tools
 
 - **Date:** 2026-10-14 · **Commit:** `255c798e`
@@ -128,6 +131,35 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Decision:** `/plugin marketplace add msolecki/developer-os` installs from `development`, the
   repository's default branch. `main` is not the release channel today.
 - **Open:** a release and pinning procedure; see [CURRENT-STATE.md](../CURRENT-STATE.md).
+
+## D16. Task state survives compaction in the plans directory
+
+- **Date:** 2026-10-15 · Sources proposal #2, Q10
+- **Decision:** after a compaction or resume, the `SessionStart` hook appends a state card (branch,
+  worktrees, active plan, `docs/plans/.devos-state.md`) of at most 1024 bytes. Orchestrating skills
+  keep the state file current. It lives in `docs/plans/`, already git-ignored.
+- **Why:** the compaction summary drops which item, worktree and unverified claim belong to which
+  agent; the hook already re-runs on compaction, so no new event is needed.
+- **Rejected:** a `PreCompact` hook (its input and output are undocumented); `.claude/devos-state.md`
+  (one more `.gitignore` entry per project).
+
+## D17. One backlog item format, defined in the skills only
+
+- **Date:** 2026-10-15 · Sources proposal #3, Q11
+- **Decision:** backlog items carry `Size`, `Done when`, a runnable `Check`, `Blocked by` and `Owner`;
+  `Done when` changes only by an appended `Amended` line. The skills write and read the format; no
+  lint is proposed to projects yet.
+- **Why:** parallel agents took the same or blocked items, and implementers could lower a criterion
+  to pass. A project lint waits until plan-status shows the format drifting.
+
+## D18. agnix in CI only, pinned
+
+- **Date:** 2026-10-15 · Sources proposal #13, Q12
+- **Decision:** CI runs `agent-sh/agnix` pinned to the v0.57.0 commit, strict, with suppressions in
+  `.agnix.toml`, each with its reason. `scripts/check.sh` adds `plugin/SURFACE.txt` and digit-count
+  checks, which need no new tool.
+- **Why:** a local agnix would need an install on every contributor's machine; CI downloads a
+  checksum-verified release.
 
 ## D19. A Codex installer that copies, not symlinks
 

@@ -28,10 +28,10 @@ promise it makes.
 
 ## `core.md` is at its size cap
 
-- **Where:** `plugin/rules/core.md` (8148 of 8192 bytes)
+- **Where:** `plugin/rules/core.md` (8145 of 8192 bytes)
 - **Looks like:** an arbitrary limit blocking a useful rule.
 - **Why it is deliberate:** the file loads into every session; the cap keeps the fixed cost bounded
-  and under the 10,000-character hook output limit.
+  and, with the state card, under the 10,000-character hook output limit.
 - **Breaks if changed:** raising the cap without a matching cut grows every session's context.
 
 ## Templates and evals are outside `plugin/`
@@ -58,6 +58,23 @@ promise it makes.
 - **Why it is deliberate:** `${CLAUDE_PLUGIN_ROOT}` may be substituted in the skill text, but it is
   not set in the Bash environment, so commands must use an absolute path.
 - **Breaks if changed:** `cp -R "$CLAUDE_PLUGIN_ROOT/vault-template/."` copies from `/vault-template`.
+
+## The Codex installer copies skills instead of symlinking them
+
+- **Where:** `scripts/install-codex.sh`
+- **Looks like:** stale copies that a symlink would avoid.
+- **Why it is deliberate:** Codex lists skills within 8000 characters by default and the full
+  descriptions are over 10,000; a copy carries a short description, a symlink cannot
+  ([decisions D19](product/decisions.md#d19-a-codex-installer-that-copies-not-symlinks)).
+- **Breaks if changed:** some skills silently drop out of Codex's skill list.
+
+## Eval fixtures switch off the global excludes file
+
+- **Where:** `evals/fixtures/backlog.sh`
+- **Looks like:** an unneeded `core.excludesFile /dev/null`.
+- **Why it is deliberate:** a host's global excludes may ignore `TODO.md`; the backlog would then never
+  be committed and the case would test nothing.
+- **Breaks if changed:** backlog evals pass or fail depending on the machine.
 
 ## Evals are not in CI
 

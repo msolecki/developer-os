@@ -39,10 +39,11 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
 | Counts | A count written as digits in the README, `docs/` or `evals/README.md` ("N skills", "N eval cases") differs from the disk |
-| Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes |
+| Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or the state-card cap in `session-start.sh` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/`, `docs/`, `templates/` or `README.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside `plugin/skills/` (and outside fenced or inline code) does not resolve |
-| Hook tests | Any `tests/*.test.sh` exits non-zero |
+| Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
+| Script tests | Any `tests/*.test.sh` exits non-zero |
 | Plugin validation | `claude plugin validate .` or `claude plugin validate plugin` fails |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
 
@@ -58,10 +59,15 @@ every pull request. Before the check it runs agnix (`agent-sh/agnix`, pinned to 
 read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` and a gitleaks
 release verified by SHA-256.
 
-## Hook tests
+## Script tests
 
-`tests/guard.test.sh` feeds command fixtures to `guard.sh` and expects `ask` or silence;
-`tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code and message.
+`tests/session-start.test.sh` runs the SessionStart hook in a temporary git repository and checks
+that the rules come first, the card appears only after `compact`/`resume`, and the card is cut to its
+cap; `tests/guard.test.sh` feeds command fixtures to `guard.sh` and expects `ask` or silence;
+`tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code and message;
+`tests/install-codex.test.sh` runs the Codex installer against a temporary `HOME` (dry run,
+idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the 8000-character
+budget).
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 
@@ -88,6 +94,12 @@ the README lists the mutation checks that prove it.
 
 Changing `plugin/rules/core.md`: it has 44 bytes of headroom under the cap. Every added line must
 replace or shorten another; run `instruction-review --prune` on it inside this repository.
+
+## Codex installer
+
+`scripts/install-codex.sh` is not part of the plugin; users run it from a clone. After changing a skill
+in a way that adds a Claude-only reference (a new `${CLAUDE_*}` variable, a new agent dispatch), check
+that the rewrite in the script still covers it: `sh tests/install-codex.test.sh` greps the copies.
 
 ## Branches and releases
 

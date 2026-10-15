@@ -31,6 +31,15 @@ last-verified: 2026-10-15
 | Status block | The closing **Done / Not done / Needs you** block the core rules require. |
 | Backlog | The todo and done files named by the `Backlog:` line (default `TODO.md`, `TODO-done.md`), with P0–P3 sections and implementation sessions. |
 | `BASE-NN` | A backlog item ID created by project-baseline. |
+| Item ID | A backlog item's category prefix and number (`SEC-03`), unique across the todo and done files. |
+| Done when | A backlog item's acceptance criterion; never edited, only amended by an appended dated line. |
+| Check | A backlog item's command that fails while its `Done when` does not hold. |
+| Owner | The worktree an item was dispatched to, with the date; written only by implement-backlog. |
+| Ready / waiting / orphaned | An open backlog item with no open blocker and no owner / with an open `Blocked by` / with an owner older than 7 days. |
+| Final status | The first line of every agent report: `DONE`, `REVIEW`, `BLOCKED` (with an unblock owner) or `CONTINUING`. |
+| Evidence checked | The files read and commands run that a reviewer lists under an `APPROVE` with no P0–P2. |
+| State card | The task state the `SessionStart` hook prints after a compaction or resume, from `docs/plans/.devos-state.md` and git. |
+| Surface | The public names in `plugin/SURFACE.txt`: skills, agents, output styles, hook events and scripts. |
 | Active plan | The most recently updated plan in the planning location whose task is not done. |
 | Nudge | The `Stop` hook's one-time request to run session-retro after 30 tool calls. |
 | Routine | A Claude Code cloud session on a schedule or API trigger; used optionally for phone capture and a weekly vault brief. |
