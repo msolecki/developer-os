@@ -1,5 +1,6 @@
 #!/bin/sh
-# A git repository with one active plan: 3 done, 2 open, 1 blocked item and one open question.
+# A git repository with one active plan (3 done, 2 open, 1 blocked item, one open question) and a
+# backlog with one ready, one waiting (Blocked by) and one orphaned (Owner from 2020) item.
 set -eu
 d=${1:-$PWD}
 sh "$(dirname "$0")/../fixtures/repo.sh" "$d"
@@ -26,4 +27,23 @@ cat > "$d/docs/plans/2026-10-01-cart-discounts.md" <<'MD'
 
 In progress.
 MD
-cd "$d" && git add -A && git commit -q -m "docs: cart discounts plan"
+cat > "$d/TODO.md" <<'MD'
+# Backlog
+
+## P2
+
+- [ ] CART-30 · P2 · Round line totals to whole cents
+  - Size: S
+  - Check: `node --test`
+
+- [ ] CART-31 · P2 · Show the rounded total on the receipt
+  - Blocked by: CART-30
+  - Size: S
+  - Check: `node --test`
+
+- [ ] DOCS-04 · P2 · Document the discount rules
+  - Owner: .worktrees/docs-04 (2020-01-01)
+  - Size: S
+  - Check: `test -f docs/discounts.md`
+MD
+cd "$d" && git add -A && git commit -q -m "docs: cart discounts plan and backlog"

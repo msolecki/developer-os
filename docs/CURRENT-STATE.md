@@ -24,7 +24,7 @@ line as unverified.
   brain-garden, brain-review and brain-search.
 - `scripts/check.sh` enforces every rule CONTRIBUTING.md lists; CI runs it on `development`, `main`
   and pull requests.
-- 29 eval cases with a baseline arm, run by hand. The 16 added on 2026-10-15 ran once each on
+- 34 eval cases with a baseline arm, run by hand. The 16 added on 2026-10-15 ran once each on
   2026-10-15 (agent Sonnet 5.5, judge Opus 5.5, about 7.6 USD with two reruns after grader fixes):
   15 pass at 0.8. Δ +1.00: trigger-code-review, code-review-weakened-criterion, -boundary, -framed;
   Δ +0.67: implement-backlog-quota; Δ +0.50: injection-code-review, project-baseline-design,
