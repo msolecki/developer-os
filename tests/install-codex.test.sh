@@ -14,10 +14,11 @@ check() {
 }
 run() { env -i PATH="$PATH" HOME="$h" sh "$script" "$@" >"$tmp/out" 2>"$tmp/err"; code=$?; }
 
-mkdir -p "$h/.codex" "$h/.claude" "$skills/my-own-skill"
+mkdir -p "$h/.codex" "$h/.claude" "$skills/my-own-skill" "$skills/spec"
 printf 'My own rule.\n' > "$agents"
 printf 'Brain vault: /vaults/test vault\n' > "$h/.claude/CLAUDE.md"
 printf -- '---\nname: my-own-skill\ndescription: mine\n---\n' > "$skills/my-own-skill/SKILL.md"
+printf 'my own spec\n' > "$skills/spec/SKILL.md"
 n=$(find "$(pwd)/plugin/skills" -name SKILL.md | wc -l | tr -d ' ')
 
 run --dry-run
@@ -32,11 +33,16 @@ check "AGENTS.md gets the block" "$r" yes
 check "text outside the markers survives" "$(head -n 1 "$agents")" "My own rule."
 grep -qx 'Brain vault: /vaults/test vault' "$agents" && r=yes || r=no
 check "the Brain vault line comes from CLAUDE.md" "$r" yes
-check "every skill is installed" "$(find "$skills" -name .developer-os-codex | wc -l | tr -d ' ')" "$n"
+check "every skill but the foreign same-name one is installed" "$(find "$skills" -name .developer-os-codex | wc -l | tr -d ' ')" "$((n - 1))"
+check "the first change backs AGENTS.md up" "$(ls "$h/.codex" | grep -c bak || true)" 1
 check "a foreign skill is untouched" "$(cat "$skills/my-own-skill/SKILL.md" | sed -n 3p)" "description: mine"
-grep -q 'exists and was not installed' "$tmp/err" && r=yes || r=no
-check "no skill is skipped as foreign" "$r" no
-check "no Claude-only reference is left" "$(grep -rlE 'CLAUDE_PLUGIN_ROOT|subagent_type|context: fork|developer-os:' "$skills" | wc -l | tr -d ' ')" 0
+check "a foreign same-name skill is kept" "$(cat "$skills/spec/SKILL.md")" "my own spec"
+check "a foreign same-name skill is reported" "$(grep -c 'skip .*/spec: exists and was not installed' "$tmp/err")" 1
+check "no Claude-only reference is left" "$(grep -rlE 'CLAUDE_PLUGIN_ROOT|subagent_type|context: fork|`developer-os:' "$skills" | wc -l | tr -d ' ')" 0
+grep -qF '"skill":"developer-os:([a-z-]+)"' "$skills/skill-usage/SKILL.md" && r=yes || r=no
+check "skill-usage keeps the prefix in its search pattern" "$r" yes
+grep -q "^description: '.*Use when writing or reviewing code comments" "$skills/comments-conventions/SKILL.md" && r=yes || r=no
+check "a description without quoted phrases keeps its Use when sentence" "$r" yes
 fm_keys=$(awk 'FNR==1{fm=1;next} fm&&/^---$/{fm=0} fm{sub(/:.*/,"");print}' "$skills"/*/SKILL.md | sort -u | tr '\n' ' ')
 check "frontmatter holds only name and description" "$fm_keys" "description name "
 total=$(sed -n "s/^description: '\(.*\)'$/\1/p" "$skills"/*/SKILL.md | awk '{ t += length($0) } END { print t }')
@@ -68,6 +74,34 @@ check "a symlinked AGENTS.md fails" "$code" 1
 check "a symlinked AGENTS.md target is untouched" "$(cat "$tmp/rc")" "export SAFE=1"
 check "no backup is copied next to the link" "$(ls "$tmp/proj" | grep -c bak || true)" 0
 
+mkdir -p "$tmp/proj2"
+printf 'Project rule.\n' > "$tmp/proj2/AGENTS.md"
+run --project "$tmp/proj2" --vault /vaults/flag
+check "--project exits 0" "$code" 0
+grep -qx 'Brain vault: /vaults/flag' "$tmp/proj2/AGENTS.md" && r=yes || r=no
+check "--project writes the block with the --vault line" "$r" yes
+check "--project names the backup it leaves in the project" "$(grep -c '^backup: .*proj2/AGENTS.md.bak-' "$tmp/out")" 1
+run --project "$tmp/proj2" --uninstall
+check "--project --uninstall exits 0" "$code" 0
+check "--project --uninstall removes the project block" "$(cat "$tmp/proj2/AGENTS.md")" "Project rule."
+check "--project --uninstall keeps the global skills" "$(find "$skills" -name .developer-os-codex | wc -l | tr -d ' ')" "$((n - 1))"
+
+env -i PATH="$PATH" HOME="$h" CODEX_HOME="$tmp/codex-home" sh "$script" --dry-run >"$tmp/out" 2>&1
+check "CODEX_HOME sets the AGENTS.md path" "$(grep -c "would write $tmp/codex-home/AGENTS.md" "$tmp/out")" 1
+
+check "--help stops before the code" "$(sh "$script" --help | grep -c 'set -eu')" 0
+
+mkdir -p "$tmp/repo"
+cp -R "$(pwd)/scripts" "$(pwd)/plugin" "$tmp/repo/"
+f="$tmp/repo/plugin/skills/spec/SKILL.md"
+awk '/^description:/ && !done { print "description: >"; print "  Folded text."; done = 1; next } { print }' "$f" > "$tmp/folded" && cat "$tmp/folded" > "$f"
+cp "$agents" "$tmp/before"
+env -i PATH="$PATH" HOME="$h" sh "$tmp/repo/scripts/install-codex.sh" >"$tmp/out" 2>"$tmp/err"; code=$?
+check "a folded description fails" "$code" 1
+check "a folded description is named" "$(grep -c 'one-line plain description in: .*spec/SKILL.md' "$tmp/err")" 1
+cmp -s "$agents" "$tmp/before" && r=yes || r=no
+check "a folded description writes nothing" "$r" yes
+
 cp "$tmp/first" "$agents"
 run --uninstall
 check "uninstall exits 0" "$code" 0
@@ -80,6 +114,7 @@ check "uninstall restores AGENTS.md byte for byte" "$r" yes
 check "uninstall removes the copies" "$(find "$skills" -name .developer-os-codex | wc -l | tr -d ' ')" 0
 [ -f "$skills/my-own-skill/SKILL.md" ] && r=yes || r=no
 check "uninstall keeps a foreign skill" "$r" yes
+check "uninstall keeps a foreign same-name skill" "$(cat "$skills/spec/SKILL.md")" "my own spec"
 
 [ "$failed" -eq 0 ] && echo "install-codex: all passed"
 exit "$failed"

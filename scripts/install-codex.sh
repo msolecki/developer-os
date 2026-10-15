@@ -7,17 +7,22 @@
 #   (or <dir>/AGENTS.md with --project) with plugin/rules/core.md and the Brain vault line. Text
 #   outside the markers is kept; a changed file is backed up first; an unchanged file is not touched.
 #   --project changes only which AGENTS.md is written; skills always go to the skills directory.
+#   The Codex directory is ${CODEX_HOME:-~/.codex}. A changed project AGENTS.md leaves its backup in
+#   the project; the installer prints its path.
 # - Skills: writes a Codex copy of every skill to ${CODEX_SKILLS_DIR:-~/.agents/skills}/<name>:
 #   frontmatter reduced to name and a short description (first sentence and the quoted trigger
-#   phrases), so all descriptions fit Codex's 8000-character skill list; Claude-only references
-#   rewritten. Each copy carries a .developer-os-codex marker; a directory without it is never touched.
+#   phrases, or the "Use when" sentence if there are none), so all descriptions fit Codex's
+#   8000-character skill list; Claude-only references rewritten. Each copy carries a
+#   .developer-os-codex marker; a directory without it is never touched. --project --uninstall
+#   leaves the skills in place. A description must be one plain line.
 # - Hooks, agents and output styles have no Codex equivalent and are not installed.
 set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd -P)
 plugin="$root/plugin"
 skills_dir=${CODEX_SKILLS_DIR:-$HOME/.agents/skills}
-agents_md="$HOME/.codex/AGENTS.md"
+agents_md="${CODEX_HOME:-$HOME/.codex}/AGENTS.md"
+project=0
 marker=.developer-os-codex
 start='<!-- developer-os-core START -->'
 end='<!-- developer-os-core END -->'
@@ -28,13 +33,26 @@ while [ $# -gt 0 ]; do
   case $1 in
     --dry-run) dry=1 ;;
     --uninstall) uninstall=1 ;;
-    --project) [ $# -ge 2 ] || { echo "--project needs a directory" >&2; exit 2; }; agents_md="$2/AGENTS.md"; shift ;;
+    --project) [ $# -ge 2 ] || { echo "--project needs a directory" >&2; exit 2; }; agents_md="$2/AGENTS.md"; project=1; shift ;;
     --vault) [ $# -ge 2 ] || { echo "--vault needs a path" >&2; exit 2; }; vault=$2; shift ;;
-    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h | --help) sed -n '/^set -eu$/q;2,$p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
 done
+
+if [ "$uninstall" -eq 0 ]; then
+  # short() reads one plain line; a folded, quoted or continued description would be mangled.
+  bad=$(awk 'FNR == 1 { fm = ($0 == "---"); d = 0; next }
+    fm && $0 == "---" { fm = 0 }
+    fm && d && /^[[:space:]]/ { print FILENAME; fm = 0 }
+    fm { d = 0 }
+    fm && /^description:/ { d = 1; if ($0 !~ /^description: [^>|"'"'"'[:space:]]/) { print FILENAME; fm = 0 } }' "$plugin"/skills/*/SKILL.md)
+  if [ -n "$bad" ]; then
+    echo "error: the Codex copy needs a one-line plain description in: $bad. Nothing was changed." >&2
+    exit 1
+  fi
+fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -96,7 +114,11 @@ else
   say "write $agents_md"
   if [ "$dry" -eq 0 ]; then
     mkdir -p "$(dirname "$agents_md")"
-    [ -f "$agents_md" ] && cp "$agents_md" "$agents_md.bak-$(date +%Y%m%d%H%M%S)"
+    if [ -f "$agents_md" ]; then
+      bak="$agents_md.bak-$(date +%Y%m%d%H%M%S)"
+      cp "$agents_md" "$bak"
+      [ "$project" -eq 0 ] || echo "backup: $bak (inside the project; delete it or git-ignore it)"
+    fi
     cat "$tmp/agents" > "$agents_md"
   fi
 fi
@@ -104,6 +126,11 @@ fi
 # --- Skills ------------------------------------------------------------------------------------
 
 ours() { [ -f "$1/$marker" ] || { [ -L "$1" ] && case $(readlink "$1") in "$plugin"/skills/*) true ;; *) false ;; esac; }; }
+
+if [ "$uninstall" -eq 1 ] && [ "$project" -eq 1 ]; then
+  echo "skills: kept; other projects use them (run --uninstall without --project to remove them)"
+  exit 0
+fi
 
 installed=0 updated=0 unchanged=0 skipped=0 removed=0 total=0
 for src in "$plugin"/skills/*/; do
@@ -123,7 +150,8 @@ for src in "$plugin"/skills/*/; do
       i = index(d, ". "); first = i ? substr(d, 1, i) : d
       rest = d; q = ""
       while (match(rest, /"[^"]+"/)) { q = q (q == "" ? "" : ", ") substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH) }
-      out = q == "" ? first : first " Use for " q "."
+      i = index(d, "Use when ")
+      out = q != "" ? first " Use for " q "." : i > length(first) ? first " " substr(d, i) : first
       gsub(/'"'"'/, "'"'"''"'"'", out)
       return "'"'"'" out "'"'"'"
     }
@@ -134,7 +162,7 @@ for src in "$plugin"/skills/*/; do
       next
     }
     fm { if (sub(/^description: /, "")) print "description: " short($0); next }
-    { gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, plugin); gsub(/CLAUDE_PLUGIN_ROOT/, "plugin root"); gsub(/developer-os:/, ""); print }
+    { gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, plugin); gsub(/CLAUDE_PLUGIN_ROOT/, "plugin root"); gsub(/`developer-os:/, "`"); print }
   ' "$src/SKILL.md" > "$tmp/skill/$name/SKILL.md"
   echo "developer-os Codex copy of $plugin/skills/$name" > "$tmp/skill/$name/$marker"
   d=$(sed -n "s/^description: '\(.*\)'$/\1/p" "$tmp/skill/$name/SKILL.md")
