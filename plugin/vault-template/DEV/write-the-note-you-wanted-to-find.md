@@ -29,4 +29,5 @@ question from those two lines gets skipped, then rewritten.
 
 - [[obsidian-bases-cheat-sheet]]
 
-Move the example notes to `_archive/` whenever you like; nothing depends on them.
+To retire the example notes, delete them, or set `status: archived` and move them to `_archive/`.
+The inbox example links to this note and to `example-shop`, so retire the three together.
