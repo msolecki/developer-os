@@ -9,7 +9,7 @@ Read-only. Answer from the vault, never from general knowledge.
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>` in the user's `CLAUDE.md` or `AGENTS.md` (already in your context, or in `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the project's file). If there is none, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `~/.claude/CLAUDE.md`; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. Search content and frontmatter
 
@@ -17,14 +17,14 @@ Pick 2–4 keywords and synonyms from the request. Search case-insensitively, sk
 
 ```bash
 V="/path/to/vault"
-rg -il -g '*.md' -g '!_archive/**' -g '!templates/**' -g '!_views/**' -e 'release' -e 'changelog' "$V"
-rg -i -g '*.md' -g '!_archive/**' -g '!templates/**' -g '!_views/**' -e '^(summary|tags|project):.*(release|changelog)' "$V"
+rg -il -g '*.md' -g '!_archive/' -g '!templates/' -g '!_views/' -e 'release' -e 'changelog' "$V"
+rg -i -g '*.md' -g '!_archive/' -g '!templates/' -g '!_views/' -e '^(summary|tags|project):.*(release|changelog)' "$V"
 ```
 
 Drop notes with `status: archived` unless the user asked for them:
 
 ```bash
-rg -l '^status: archived' -g '*.md' "$V"
+rg -l '^status: archived' -g '*.md' -g '!_archive/' "$V"
 ```
 
 ## 3. Rank

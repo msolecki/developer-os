@@ -38,6 +38,6 @@ Before the output, send every P0 and P1 finding, including those relayed from `d
 
 ## Output
 
-Start with the verdict: `REQUEST_CHANGES` when any P0 or P1 not moved to Disputed exists, `COMMENT` when an open question blocks judgment, otherwise `APPROVE`. Then list findings under P0, P1, P2, and P3 headings, `None` for an empty one, followed by a Disputed heading when any finding was refuted. Every finding has `file:line`, evidence, impact, and a concrete fix. End with open questions only when they materially affect the verdict.
+Start with the verdict: `REQUEST_CHANGES` when any P0 or P1 not moved to Disputed exists, `COMMENT` when an open question decides whether a finding is P0 or P1, otherwise `APPROVE`. Then list findings under P0, P1, P2, and P3 headings, `None` for an empty one, followed by a Disputed heading when any finding was refuted. Every finding has `file:line`, evidence, impact, and a concrete fix. End with open questions only when they materially affect the verdict.
 
 Do not comment on formatting enforced automatically or propose unrelated refactors.
