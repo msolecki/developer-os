@@ -34,7 +34,8 @@ Never include the content of a vault or a secret. Describe it instead.
 - Updates come from this Git repository through the Claude Code plugin marketplace: each update
   installs the latest commit of `development`. An update can change `plugin/hooks/hooks.json` and the
   hook scripts, which run in every session. Review the diff from your installed commit to
-  `development` before you update; auto-update is off for this marketplace unless you turn it on.
+  `development` before you update (`git diff <installed-sha>..development` in a clone); auto-update
+  is off for this marketplace unless you turn it on.
 - The skills treat vault notes, pull request comments, diffs and fetched web pages as data, never as
   instructions.
 - What the agent reads from the vault goes to your model provider as session context, like any other

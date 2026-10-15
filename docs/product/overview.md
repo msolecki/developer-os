@@ -60,7 +60,7 @@ index, binary, background job or network call in the plugin itself.
 
 ## Scope
 
-In scope, version 0.1.0:
+In scope for the first release:
 
 | Component | Count | Source |
 |---|---|---|
@@ -99,7 +99,7 @@ Out of scope, on purpose:
 
 ## Status
 
-Version 0.1.0, unreleased. See [CURRENT-STATE.md](../CURRENT-STATE.md) for what works, what is in
+Not released; installs track `development`. See [CURRENT-STATE.md](../CURRENT-STATE.md) for what works, what is in
 progress and what is known to be missing.
 
 ## Primary risks
