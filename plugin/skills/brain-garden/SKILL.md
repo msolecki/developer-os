@@ -68,7 +68,7 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
   split("type status created updated project tags summary", req, " ")
   for (r = 1; r <= 7; r++) if (!(req[r] in has)) print f ": missing " req[r]
   if ("summary" in has && sm == "") print f ": empty summary"
-  if (ty !~ /^(decision|knowledge|reference|project)$/) print f ": invalid type"
+  if ("type" in has && ty !~ /^(decision|knowledge|reference|project)$/) print f ": invalid type"
   if (f ~ /^\.\/_inbox\//) {
     if (st != "inbox") print f ": status: " st " in _inbox/"
     else if (cr != "" && cr < inbox_cut) print f ": in _inbox/ since " cr " (> 7 days)"
