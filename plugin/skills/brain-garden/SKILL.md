@@ -15,7 +15,7 @@ Find the line `Brain vault: <absolute path>`. Look in this order and stop at the
 
 ## 2. Run the checks
 
-Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. The script prints only offending files, then one `totals:` line for the report header.
+Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Link targets resolve case-insensitively by note name. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance and are not reported at all. The script prints only offending files, then one `totals:` line for the report header.
 
 ```bash
 V="/path/to/vault"
@@ -23,56 +23,65 @@ cd "$V"
 inbox_cut=$(date -v-7d +%F 2>/dev/null || date -d '7 days ago' +%F)
 stale_cut=$(date -v-180d +%F 2>/dev/null || date -d '180 days ago' +%F)
 
-# Frontmatter: read only the block between the first two --- lines; print only offending files
-rg --files -g '*.md' -g '!templates/**' -g '!_views/**' -g '!_reports/**' -g '!/README.md' . | while IFS= read -r f; do
-  fm=$(awk 'NR==1{if($0!="---")exit;next} /^---$/{exit} {print}' "$f")
-  st=$(printf '%s\n' "$fm" | sed -n 's/^status: *//p')
-  case "$f" in
-    ./_archive/*) [ "$st" = archived ] || echo "$f: status: $st in _archive/"; continue ;;
-  esac
-  [ -z "$fm" ] && { echo "$f: no frontmatter"; continue; }
-  for k in type status created updated project tags summary; do
-    printf '%s\n' "$fm" | grep -q "^$k:" || echo "$f: missing $k"
-  done
-  printf '%s\n' "$fm" | grep -Eq '^summary:[[:space:]]*("")?[[:space:]]*$' && echo "$f: empty summary"
-  printf '%s\n' "$fm" | grep -Eq '^type: (decision|knowledge|reference|project)$' || echo "$f: invalid type"
-  created=$(printf '%s\n' "$fm" | sed -n 's/^created: *//p')
-  updated=$(printf '%s\n' "$fm" | sed -n 's/^updated: *//p')
-  case "$f:$st" in
-    ./_inbox/*:inbox) [[ "$created" < "$inbox_cut" ]] && echo "$f: in _inbox/ since $created (> 7 days)" ;;
-    ./_inbox/*:*) echo "$f: status: $st in _inbox/" ;;
-    *:active) [[ "$updated" < "$stale_cut" ]] && echo "$f: stale, updated $updated" ;;
-    *:inbox) echo "$f: status: inbox outside _inbox/" ;;
-    *:archived) echo "$f: status: archived outside _archive/" ;;
-    *) echo "$f: invalid status: $st" ;;
-  esac
-done
-
-# Links: each [[target]] (alias, heading, and folder stripped) must name a note outside _archive/
-links=$(rg -o --no-heading -g '*.md' -g '!templates/**' -g '!_views/**' -g '!_reports/**' -g '!_archive/**' '\[\[[^]|#]+' . | sort -u)
-printf '%s\n' "$links" | while IFS= read -r l; do
-  [ -n "$l" ] || continue
-  src=${l%%:\[\[*}; t=${l#*\[\[}; t=${t##*/}
-  case "$t" in *.md) t=${t%.md} ;; *.*) continue ;; esac  # attachments
-  hit=$(find . -name "$t.md" -not -path './templates/*')
-  if [ -z "$hit" ]; then echo "$src → [[$t]]: no such note"
-  elif ! printf '%s\n' "$hit" | grep -vq '^\./_archive/'; then echo "$src → [[$t]]: only in _archive/"
-  fi
-done
-
-# Orphans: notes whose name no link targets (_inbox/ notes are not reviewed yet)
-targets=$(printf '%s\n' "$links" | sed 's/.*\[\[//; s#.*/##; s/\.md$//' | sort -u)
-notes=$(rg --files -g '*.md' -g '!templates/**' -g '!_views/**' -g '!_reports/**' -g '!_archive/**' -g '!_inbox/**' -g '!/README.md' .)
-orphans=$(printf '%s\n' "$notes" | while IFS= read -r f; do
-  [ -n "$f" ] || continue
-  printf '%s\n' "$targets" | grep -Fxq -- "$(basename "$f" .md)" || echo "$f"
-done)
-printf '%s\n' "$orphans" | sed '/^$/d; s/$/: orphan/'
-
-# Totals for the report header: notes outside _inbox/ and _archive/, orphans among them, inbox notes
-n=$(printf '%s\n' "$notes" | grep -c .); o=$(printf '%s\n' "$orphans" | grep -c .)
-inbox=$(rg --files -g '*.md' _inbox 2>/dev/null | grep -c .)
-echo "totals: notes $n, orphans $o ($(( n ? o * 100 / n : 0 ))%), inbox $inbox"
+# One awk pass over every note: frontmatter, links, orphans, totals; prints only offending files
+rg --files --sort path -g '*.md' -g '!templates/**' . | awk -v inbox_cut="$inbox_cut" -v stale_cut="$stale_cut" '
+function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\047]|["\047]$/, "", s); return s }
+{
+  f = $0; name = f; sub(/.*\//, "", name); sub(/\.md$/, "", name); k = tolower(name)
+  if (f ~ /^\.\/(_views|_reports)\// || f == "./README.md") { live[k] = 1; next }   # link targets only
+  fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; key = ""; comp = 0; sec = ""; ln = 0
+  while ((getline line < f) > 0) {
+    ln++
+    if (ln == 1 && line == "---") { fm = 1; continue }
+    if (fm == 1 && line == "---") { fm = 2; continue }
+    if (fm == 1) {
+      nfm++
+      if (match(line, /^[A-Za-z_]+:/)) {
+        key = substr(line, 1, RLENGTH - 1)
+        if (!(key in has)) { has[key] = 1; v = val(line)
+          if (key == "status") st = v; else if (key == "type") ty = v; else if (key == "created") cr = v
+          else if (key == "updated") up = v; else if (key == "summary") sm = v }
+      }
+      if (key == "tags" && line ~ /(^|[^a-z-])compiled([^a-z-]|$)/) comp = 1
+    } else if (line ~ /^## /) sec = line
+    if (f ~ /^\.\/_archive\//) continue
+    # Links: [[target]] with alias, heading, and folder stripped; provenance = frontmatter or ## Links of a compiled note
+    s = line
+    while ((i = index(s, "[[")) > 0) {
+      s = substr(s, i + 2); t = s
+      for (j = 1; j <= length(t); j++) { c = substr(t, j, 1); if (c == "]" || c == "|" || c == "#") break }
+      t = substr(t, 1, j - 1); sub(/.*\//, "", t); sub(/[ \t]+$/, "", t); sub(/\.md$/, "", t)
+      if (t == "" || (f, tolower(t)) in seen) continue
+      seen[f, tolower(t)] = 1; nl++; src[nl] = f; lt[nl] = t
+      lp[nl] = (fm == 1 || (comp && sec ~ /^## Links[ \t]*$/)); tgt[tolower(t)] = 1
+    }
+  }
+  close(f)
+  if (f ~ /^\.\/_archive\//) { arch[k] = 1; if (st != "archived") print f ": status: " st " in _archive/"; next }
+  if (st == "archived") arch[k] = 1; else live[k] = 1
+  if (f ~ /^\.\/_inbox\//) inbox++; else { nn++; notes[nn] = f; nk[nn] = k }
+  if (!nfm) { print f ": no frontmatter"; next }
+  split("type status created updated project tags summary", req, " ")
+  for (r = 1; r <= 7; r++) if (!(req[r] in has)) print f ": missing " req[r]
+  if ("summary" in has && sm == "") print f ": empty summary"
+  if (ty !~ /^(decision|knowledge|reference|project)$/) print f ": invalid type"
+  if (f ~ /^\.\/_inbox\//) {
+    if (st != "inbox") print f ": status: " st " in _inbox/"
+    else if (cr != "" && cr < inbox_cut) print f ": in _inbox/ since " cr " (> 7 days)"
+  } else if (st == "active") { if (up != "" && up < stale_cut) print f ": stale, updated " up }
+  else if (st == "inbox") print f ": status: inbox outside _inbox/"
+  else if (st == "archived") print f ": status: archived outside _archive/"
+  else print f ": invalid status: " st
+}
+END {
+  for (x = 1; x <= nl; x++) { t = tolower(lt[x])
+    if (t in live) continue
+    if (t in arch) { if (!lp[x]) print src[x] " → [[" lt[x] "]]: links to archived note (info)" }
+    else if (lt[x] !~ /\./) print src[x] " → [[" lt[x] "]]: no such note"   # a dotted name with no note is an attachment
+  }
+  for (x = 1; x <= nn; x++) if (!(nk[x] in tgt)) { print notes[x] ": orphan"; o++ }
+  printf "totals: notes %d, orphans %d (%d%%), inbox %d\n", nn, o, (nn ? int(o * 100 / nn) : 0), inbox
+}'
 ```
 
 For likely duplicates, compare file names and `summary` lines: same key words, or one name contained in another.
@@ -94,7 +103,8 @@ Inbox older than 7 days:
   _inbox/docker-cache-flag.md (2026-09-30) → review with brain-review
 Broken links:
   DEV/release-process.md → [[changelog-format]] (no such note) → create it or fix the link
-  DEV/ci.md → [[old-runner]] (only in _archive/) → remove the link or restore the note
+Links to archived notes (info, no fix needed):
+  DEV/ci.md → [[old-runner]]
 Frontmatter:
   QA/flaky-tests.md: missing summary → propose: "Retry policy for flaky e2e tests."
   INFRA/dns.md: status: draft (invalid) → active
