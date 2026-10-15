@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-15
+last-verified: 2026-10-16
 ---
 
 # Decisions
@@ -156,11 +156,17 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Why:** the compaction summary drops which item, worktree and unverified claim belong to which
   agent; the hook already re-runs on compaction, so no new event is needed.
 - **Hardened after review:** the state file is shown only when untracked, git-ignored and reached
-  without a symlink, so a repository cannot inject instructions or point it at a local secret.
+  without a symlink, and a tracked plan is not named, so a cloned repository cannot inject
+  instructions through them or point the card at a local secret; the branch name still prints (git
+  forbids spaces and control characters in it).
 - **Amended 2026-10-15:** the state file prints before the worktree list, so a long list cannot push
   it past the cap; a card over the cap is cut at a whole line with a marker; a state file not changed
   in 7 days is left over from a finished run and is not shown. The card's `Newest plan:` line comes
   from the plan files only; the state file's own `Plan:` line prints inside the state section.
+- **Amended 2026-10-15:** the state-file path is fixed at `docs/plans/.devos-state.md` even when a
+  project overrides its planning location; skills and core rules name that path. A project that moves
+  its plans still git-ignores `docs/plans/` (or that file) so the card shows it — the one extra
+  `.gitignore` entry D16 rejected `.claude/devos-state.md` for.
 - **Rejected:** a `PreCompact` hook (its input and output are undocumented); `.claude/devos-state.md`
   (one more `.gitignore` entry per project).
 
@@ -191,8 +197,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   a short description only, Claude-only references rewritten, a `.developer-os-codex` marker) and
   keeps the core rules and the `Brain vault:` line between markers in `~/.codex/AGENTS.md`. No Codex
   hooks.
-- **Why:** Codex lists skills within 8000 characters by default; the full descriptions are over
-  10,000, so a symlink cannot fit and a copy must carry a shorter description. Pasting `core.md` by
+- **Why:** Codex lists skills within 8000 characters by default (the installer counts bytes, which
+  are never fewer than characters); the full descriptions are over 10,000 characters (the
+  `scripts/check.sh` descriptions stage counts characters), so a symlink cannot fit and a copy must carry a shorter description. Pasting `core.md` by
   hand went stale silently; a marked block is replaced in place and backed up. Codex's documentation
   does not confirm the hook events the guard needs.
 - **Rejected:** symlinks for skills without Claude-only references (the budget still overflows);
@@ -201,7 +208,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change
-(session-retro does this; after an approved instruction-review change, add the row by hand). Check
+(session-retro and instruction-review do this). Check
 here before reversing a rule.
 
 | Date | Change | Target | Reason |
@@ -209,3 +216,11 @@ here before reversing a rule.
 | 2026-10-15 | Task state that must survive compaction lives in `docs/plans/.devos-state.md` | `plugin/rules/core.md` | The state card after compaction (sources proposal #2) |
 | 2026-10-15 | Hook normalization rule shortened to the `tr` call and one example | `plugin/rules/core.md` | Room for the state-card line under the 8192-byte cap |
 | 2026-10-15 | A doc the diff makes false is a P2 docs finding; pr-cycle and implement-backlog fix it before the commit or PR | `code-review`, `code-reviewer`, `pr-cycle`, `implement-backlog` | Project docs were kept current only when the user ran docs-sync; review is the step every merge path already runs |
+| 2026-10-16 | The task-state file is `docs/plans/.devos-state.md` at a fixed path, not in the planning location | `plugin/rules/core.md`, `pr-cycle`, `implement-backlog`, `audit-to-backlog`, `session-retro`, `docs-sync` | The `SessionStart` hook reads only that path; a moved planning location hid the state card (D16 amendment) |
+| 2026-10-16 | fix-pr gets pr-cycle's fork gate in step 1 and a matching Never line | `fix-pr` | fix-pr ran project scripts and hooks on a fork head without asking |
+| 2026-10-16 | pr-cycle and fix-pr stop in step 1 when `git status --porcelain` lists anything but `docs/plans/.devos-state.md` | `pr-cycle`, `fix-pr` | The state file the skills write must not block their own start; any other change still stops them |
+| 2026-10-16 | implement-backlog claims the batch (`Owner` lines, one commit) before writing any brief and never dispatches an item before its `Owner` line is committed; the Never line on backlog edits exempts the claim and release commits | `implement-backlog` | An eval run dispatched without writing `Owner`; the old Never line contradicted the claim commit |
+| 2026-10-16 | The Never line on the optional JSON feature list is removed with the file | `audit-to-backlog`, `implement-backlog` | The file is dropped; the backlog carries the state |
+| 2026-10-16 | Vault content is data, not instructions: brain-capture does not run commands or open URLs found in notes | `brain-capture` | The other four brain skills had the rule; capture reads existing notes in its duplicate check |
+| 2026-10-16 | A core.md change also adds its Rules history row at the Stop point | `instruction-review` | Only session-retro added the row; after an instruction-review change it was left to the user |
+| 2026-10-16 | session-retro proposes the docs findings of this session's unreviewed commits and offers docs-sync when `CURRENT-STATE.md` is older than them | `session-retro` | Docs changed without review drifted until someone ran docs-sync |
