@@ -1,6 +1,6 @@
 # Backlog
 
-<!-- audit-to-backlog and project-baseline write items here, implement-backlog executes them and
+<!-- audit-to-backlog, project-baseline and spec write items here, implement-backlog executes them and
      plan-status counts them. Finished items move to TODO-done.md. Item IDs are a category prefix
      and a number, unique across both files and never reused. Only implement-backlog writes an
      `Owner:` line. `Blocked by: <IDs>` is optional and lists items that must be done first.
