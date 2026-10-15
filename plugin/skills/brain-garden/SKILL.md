@@ -15,7 +15,7 @@ Find the line `Brain vault: <absolute path>`. Look in this order and stop at the
 
 ## 2. Run the checks
 
-Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Link targets resolve case-insensitively by note name. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance: they are exempt from the archived-link info line, but a missing source is still `no such note`. Links inside fenced code blocks are ignored. The script prints only offending files, then one `totals:` line for the report header.
+Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Note names, link targets and the `.md` extension match case-insensitively, as in Obsidian. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance: they are exempt from the archived-link info line, but a missing source is still `no such note`. Links inside fenced code blocks are ignored. The script prints only offending files, then one `totals:` line for the report header.
 
 ```bash
 V="/path/to/vault"
@@ -24,10 +24,10 @@ inbox_cut=$(date -v-7d +%F 2>/dev/null || date -d '7 days ago' +%F)
 stale_cut=$(date -v-180d +%F 2>/dev/null || date -d '180 days ago' +%F)
 
 # One awk pass over every note: frontmatter, links, orphans, totals; prints only offending files
-rg --files --sort path -g '*.md' -g '!templates/**' . | awk -v inbox_cut="$inbox_cut" -v stale_cut="$stale_cut" '
+rg --files --sort path -g '*.[mM][dD]' -g '!templates/**' . | awk -v inbox_cut="$inbox_cut" -v stale_cut="$stale_cut" '
 function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\047]|["\047]$/, "", s); return s }
 {
-  f = $0; name = f; sub(/.*\//, "", name); sub(/\.md$/, "", name); k = tolower(name)
+  f = $0; name = f; sub(/.*\//, "", name); sub(/\.[mM][dD]$/, "", name); k = tolower(name)
   if (f ~ /^\.\/(_views|_reports)\//) { live[k] = 1; next }   # link targets only
   fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; key = ""; comp = 0; sec = ""; ln = 0; code = 0
   while ((getline line < f) > 0) {
@@ -52,7 +52,7 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
     while ((i = index(s, "[[")) > 0) {
       s = substr(s, i + 2); t = s
       for (j = 1; j <= length(t); j++) { c = substr(t, j, 1); if (c == "]" || c == "|" || c == "#") break }
-      t = substr(t, 1, j - 1); sub(/.*\//, "", t); sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); sub(/\.md$/, "", t)
+      t = substr(t, 1, j - 1); sub(/.*\//, "", t); sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); sub(/\.[mM][dD]$/, "", t)
       if (t == "") continue
       p = ((fm == 1 && key == "sources") || (comp && sec ~ /^## Links[ \t]*$/))
       if ((f, tolower(t)) in seen) { if (!p) lp[seen[f, tolower(t)]] = 0; continue }   # one body link makes it reportable
