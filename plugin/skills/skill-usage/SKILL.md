@@ -1,6 +1,8 @@
 ---
 name: skill-usage
-description: Report how often each developer-os skill has fired in local Claude Code session history (calls in the last 30 days, last use) with a keep/merge/rewrite-description/remove verdict per skill. Read-only; changes nothing. Use when the user asks which skills are used, which never trigger, or before adding or pruning skills ("ile razy użyłem skilli", "które skille działają", "statystyki skilli").
+description: Report how often each developer-os skill has fired in local Claude Code session history (calls in the last 30 days, last use) with a keep/merge/rewrite-description/remove verdict per skill. Read-only; changes nothing. Use when the user asks which skills are used, which never trigger, or before adding or pruning skills ("ile razy użyłem skilli", "które skille działają", "statystyki skilli"). For the context cost of each skill, use the built-in /skill-doctor.
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Skill usage
@@ -41,4 +43,4 @@ Verdicts are suggestions, not actions:
 - `merge`: two skills cover the same request; name the pair.
 - `remove`: never called and another skill already does the job; name it.
 
-Below the table, list names found in the transcripts that are not current skills (renamed or removed) with their counts, and state the date range covered. End with: "Nothing was changed."
+Below the table, list names found in the transcripts that are not current skills (renamed or removed) with their counts, and state the date range covered. For what each skill costs in context, point the user to the built-in `/skill-doctor` (Claude Code 2.1.252 or later) instead of estimating it. End with: "Nothing was changed."

@@ -1,3 +1,9 @@
+---
+status: current
+owner: Mateusz Solecki
+last-verified: 2026-10-15
+---
+
 # How to work: brain + code
 
 This is the workflow developer-os is built for. The plugin gives the agent skills; this document
@@ -29,7 +35,7 @@ The [README](../README.md) has the short version; this is the full one.
    adds the `Brain vault:` line to `~/.claude/CLAUDE.md` and the vault path to
    `permissions.additionalDirectories` in `~/.claude/settings.json`. Connecting an existing vault adds
    only the missing pieces and never overwrites your `.obsidian/` folder. For Codex it prints the
-   line to add to `~/.codex/AGENTS.md` (see [Codex](../README.md#codex-manual-best-effort)). Brain
+   line to add to `~/.codex/AGENTS.md` (see [Codex](../README.md#codex-installer-best-effort)). Brain
    skills ask once for the vault path when the line is missing, and stop if you have none; the core
    rules run brain-search only when the line exists.
 3. In Obsidian, Settings, Core plugins: enable **Bases** and **Templates**; set the Templates folder
@@ -106,7 +112,9 @@ each step. Plans are local and gitignored by default; when the task is finished,
 move unfinished items to `TODO.md` or the backlog. A project may override this in its `AGENTS.md`.
 A spec from the **spec** skill is named `<date>-<feature>-spec.md`. Before each commit run the fast
 check (lint, types, tests of the changed area); before a push or PR run the full suite. End a
-session at its last green commit, with the rest recorded in the plan.
+session at its last green commit, with the rest recorded in the plan. When implement-backlog runs
+several agents, the main session only orchestrates: it integrates, reviews and updates the plan, and
+leaves the backlog items to the agents.
 
 Do not write the plan in the vault. A plan in the vault drifts away from the code it describes.
 
@@ -337,7 +345,7 @@ Link from the vault to the repository by path or URL; do not copy repository con
 
 ## What else the plugin ships
 
-The full list of skills, agents and output styles, and the manual Codex setup, are in the
+The full list of skills, agents and output styles, and the Codex installer, are in the
 [README](../README.md#whats-inside).
 
 code-review and audit-to-backlog send every P0/P1 finding to a fresh verifier that sees only the
@@ -349,9 +357,24 @@ line DELETE/KEEP/REWRITE with a source, flags hedges and contradictions, never c
 rules, lists what it did NOT RUN, and applies nothing without approval. Inside the developer-os
 repository it also reviews `plugin/rules/core.md`.
 
+## Built-in commands with similar names
+
+Claude Code ships commands that overlap with some developer-os skills. The names never collide
+(plugin skills are invoked as `developer-os:<name>`), but the choice matters:
+
+| Built-in | What it does | developer-os | Use developer-os when |
+|---|---|---|---|
+| `/code-review` (`/review`) | Reviews the current diff, a PR, branch or path for correctness | code-review, pr-cycle | The project's conventions, the P0–P3 scale, an independent reviewer for your own code, or a merge-ready PR cycle matter |
+| `/security-review` | Reviews the branch's changes against `origin` for vulnerabilities | `security-auditor` agent (through audit-to-backlog) | You want findings with attack paths merged into a backlog |
+| `/recap` | One-line summary of the session | session-retro | You want git state, cleanup, the status block, and lessons routed to the vault or the instructions |
+| `/insights` | HTML report on recent sessions | skill-usage | You want call counts for developer-os skills and keep/merge/remove suggestions |
+| `/goal` | Keeps working across turns until a condition holds | implement-backlog | The work is a backlog of evidence-backed items with per-item checks, worktrees and review |
+| `/skill-doctor` | Context cost and usage of every skill | skill-usage | You want the developer-os verdicts; use `/skill-doctor` for the context cost |
+| `/doctor` | Checks installation, settings and `CLAUDE.md` | instruction-review | You want an evidence-backed diff or a line-by-line prune of a project's instruction file |
+
 ## Claude-only features
 
-The skills work in Codex by hand (see [Codex](../README.md#codex-manual-best-effort)); these parts
+The skills work in Codex through an installer (see [Codex](../README.md#codex-installer-best-effort)); these parts
 do not:
 
 | Feature | Claude Code | Codex | Equivalent |
@@ -361,4 +384,4 @@ do not:
 | `PreToolUse` guard | asks before installs, force pushes, `--no-verify`, `commit -n` | no | none |
 | Agents (`plugin/agents/`) | code-reviewer and four others, delegated by skills | no | none |
 | Output styles | `/output-style` | no | none |
-| `Skill` tool | the agent loads a skill by name | no | copy each skill to `~/.agents/skills/`, where Codex discovers skills |
+| `Skill` tool | the agent loads a skill by name | no | `scripts/install-codex.sh` writes a Codex copy of each skill to `~/.agents/skills/` |

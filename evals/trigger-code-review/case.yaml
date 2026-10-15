@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: trigger-code-review
+tags: [trigger, review]
+plugins: ["../../plugin"]
+context:
+  scaffold_script: scaffold.sh

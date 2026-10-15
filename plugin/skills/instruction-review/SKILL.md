@@ -1,6 +1,8 @@
 ---
 name: instruction-review
 description: Review a project's instruction file (CLAUDE.md or AGENTS.md) against recent work and propose a minimal evidence-backed diff without applying it. Use when the user asks to improve or review project instructions or invokes instruction-review, for example "popraw CLAUDE.md", "przejrzyj instrukcje projektu", "co dodać do CLAUDE.md".
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # Instruction review
@@ -9,8 +11,9 @@ description: Review a project's instruction file (CLAUDE.md or AGENTS.md) agains
 2. Keep only durable instructions supported by repeated work, a concrete defect, or an explicit user correction.
 3. Exclude code-discoverable facts, one-off debugging history, rules already present in the developer-os core rules or the user's global instructions, and unsupported preferences.
    Flag existing entries that are stale or contradict the current code for removal, each with its reason. Keep the resulting file under 100 lines, the target the project templates set; when it would exceed that, propose moving the excess to project documentation with a one-line pointer.
-4. Propose a minimal unified diff. Apply nothing without explicit approval.
-5. Give three bullets linking each proposal to evidence and naming removed duplication.
+4. Before proposing a line, search the file's history for its key phrase (`git log -p -S '<phrase>' -- <file>`). If the change reverses an earlier commit, show that commit and ask whether to reverse it. A mistake made at least twice that a lint rule, test or script can detect is proposed as that check, not as a line.
+5. Propose a minimal unified diff. Apply nothing without explicit approval.
+6. Give three bullets linking each proposal to evidence and naming removed duplication.
 
 If no durable improvement exists, output exactly: `NO CHANGES`.
 

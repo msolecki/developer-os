@@ -1,6 +1,6 @@
 # Contributing
 
-The plugin is Markdown and JSON plus two POSIX `sh` hook scripts. There is no build step and no runtime.
+The plugin is Markdown and JSON plus three POSIX `sh` hook scripts. There is no build step and no runtime.
 
 ## Check
 
@@ -10,15 +10,16 @@ Run before every commit:
 scripts/check.sh
 ```
 
-It parses every JSON file and every YAML frontmatter and `.base` file, validates skills (name
+It parses every JSON file and every YAML frontmatter and `.base` file, requires `status`, `owner` and
+`last-verified` frontmatter in every `docs/*.md`, validates skills (name
 matches the folder, description 80–1024 characters and at most 12000 in total, no local paths such
 as `/Users/`, `## Stop point` and `## Never` in action skills), caps `plugin/rules/core.md` at 8192
 bytes, runs every `tests/*.test.sh`, validates the plugin and the marketplace, and scans tracked
 files for secrets. CI runs the same script.
 
 Hook tests live in `tests/*.test.sh` and run with `sh`; after changing a hook script, run its test
-directly from the repository root, for example `sh tests/guard.test.sh` or
-`sh tests/capture-nudge.test.sh`.
+directly from the repository root, for example `sh tests/guard.test.sh`,
+`sh tests/capture-nudge.test.sh` or `sh tests/session-start.test.sh`.
 
 Prerequisites on `PATH`:
 

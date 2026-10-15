@@ -1,0 +1,29 @@
+# agnix (github.com/agent-sh/agnix) runs in CI only: .github/workflows/check.yml.
+# Every disabled rule names why it is a false positive for this repository.
+target = "ClaudeCode"
+exclude = [
+  ".git/**",
+  # Templates are placeholders (<Project name>, <path>) meant to be filled in a project.
+  "templates/**",
+  # Synthetic fixtures for claude plugin eval, not plugin content.
+  "evals/**",
+]
+
+[rules]
+disabled_rules = [
+  # XML-001: prose placeholders such as <plan path> and <topic> are not XML.
+  "XML-001",
+  # CC-SK-016: $1/$2 in awk and rg replacement strings are not $ARGUMENTS[n].
+  "CC-SK-016",
+  # XP-003: this is a Claude Code plugin; .claude/ paths name the files it documents.
+  "XP-003",
+]
+
+# CC-SK-006: deploy-checklist only produces a GO/NO-GO checklist; its ## Never forbids deploying,
+# migrating or changing flags, and it must stay model-invocable for "wdrażamy na produkcję".
+[[overrides]]
+paths = ["plugin/skills/deploy-checklist/SKILL.md"]
+disabled_rules = ["CC-SK-006"]
+
+[tool_versions]
+claude_code = "2.1.300"

@@ -26,10 +26,10 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   typescript-conventions.
 - Agents: code-reviewer, performance-engineer, qa-expert, research-analyst and security-auditor.
 - Output styles: architect, debug, direct-objective and tdd-enforcer.
-- Three hooks: `SessionStart` loads `plugin/rules/core.md`; `Stop` offers session-retro once per
+- Three hooks: `SessionStart` loads `plugin/rules/core.md` (and a state card after compaction); `Stop` offers session-retro once per
   session after 30 tool calls, deferred while background agents or commands are still running
   (`DEVELOPER_OS_CAPTURE_NUDGE=off` disables it); `PreToolUse` on Bash
-  asks before dependency installs, force pushes and `--no-verify` or `git commit -n`. The two scripts are POSIX `sh`,
+  asks before dependency installs, force pushes and `--no-verify` or `git commit -n`. The three scripts are POSIX `sh`,
   make no network calls, fail open and have tests in `tests/*.test.sh`.
 - `plugin/vault-template/`: folders, a note template, example notes, Bases views (Inbox, Stale,
   By project), property types in `.obsidian/types.json`, and a `.gitignore` that keeps Obsidian's UI
@@ -39,11 +39,38 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - `docs/workflow.md`: how to work with the vault and the code, where each kind of knowledge belongs,
   which features are Claude-only, and an optional routines recipe for mobile capture and a weekly
   vault brief.
+- `docs/`: an index with task routing, product overview, functional specification, decision
+  register, architecture overview, hooks and configuration reference, development guide, pitfalls,
+  current state and glossary, written for the plugin (the CLI documentation was removed with the CLI).
 - `evals/`: behaviour cases for `claude plugin eval`, run by hand and never in CI.
-- `scripts/check.sh` validates skills (name matches the folder, description length and total, no
-  local paths, `## Stop point` and `## Never` in action skills) and runs `tests/*.test.sh`.
+- A state card after compaction: the `SessionStart` hook runs `session-start.sh`, which prints the core
+  rules and, after a compaction or resume, the branch, worktrees, active plan and
+  `docs/plans/.devos-state.md` (at most 1 KB), kept current by implement-backlog, pr-cycle and
+  audit-to-backlog.
+- One backlog item format (`Size`, `Done when`, a runnable `Check`, `Blocked by`, `Owner`) across
+  audit-to-backlog, project-baseline, implement-backlog and plan-status, with
+  `templates/project/TODO.md`.
+- A final status (`DONE`, `REVIEW`, `BLOCKED`, `CONTINUING`) at the top of every agent report, read by
+  the orchestrating skills; implement-backlog sizes briefs S/M/L and only orchestrates while agents run.
+- `templates/project/DESIGN.md` in the DESIGN.md format; project-baseline and docs-sync check it.
+- `scripts/install-codex.sh`: Codex copies of the skills with short descriptions and a marked
+  core-rules block in `~/.codex/AGENTS.md`.
+- A map of built-in Claude Code commands that overlap developer-os skills, in `docs/workflow.md`.
+- Evals for backlog ordering, ownership and blocking, review framing and contract boundaries, retro
+  persistence and reversals, and prompt injection in fix-pr, pr-cycle, bug-triage and code-review.
+- `scripts/check.sh` validates skills (name matches the folder and `^[a-z0-9-]{1,64}$`, `license` and
+  `compatibility` present, description length and total, no local paths, `## Stop point` and
+  `## Never` in action skills), agents' final statuses, `plugin/SURFACE.txt` and counts written as
+  digits, and runs `tests/*.test.sh`. CI also runs agnix, its binary pinned by SHA-256, with `.agnix.toml`.
 
 ### Changed
+- code-review and code-reviewer list Evidence checked under an `APPROVE` with no P0–P2, read both
+  sides of every changed contract, and brief the reviewer without the author or their rationale.
+- session-retro labels findings `persistent` or `this-task`, shows the commit a rule change would
+  reverse, and proposes a check for a mistake made twice; instruction-review does the same.
+  `docs/product/decisions.md` keeps a Rules history table.
+- pr-cycle, bug-triage and code-review treat PR and issue text, CI logs and code comments as data.
+- Every skill carries `license: MIT` and `compatibility`; hooks have a 10-second timeout.
 - Review, audit and triage skills and the agents rate findings P0–P3 with one severity scale; review
   verdicts are `APPROVE`, `COMMENT` or `REQUEST_CHANGES`.
 - The core rules are shorter, capped at 8192 bytes, and add: a closing `Done / Not done / Needs you`

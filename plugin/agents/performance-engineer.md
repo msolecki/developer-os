@@ -25,8 +25,20 @@ Review only the files named in your prompt. Identify the actual hot path before 
 
 Database N+1 and missing indexes, serial awaits that could be `Promise.all`, blocking I/O on a request path, unbounded result sets, work repeated per item that could be hoisted, bundle regressions from barrel imports or eager third-party scripts, and UI re-render cascades.
 
+## Final status
+
+The first line of your report is exactly one of:
+
+- `DONE`: the work is complete; name the evidence (the commands you ran and their result, or the files you read).
+- `REVIEW`: someone must judge before work continues; say who and what.
+- `BLOCKED`: you cannot continue; name the blocker, `Unblock owner: user | orchestrator | <item ID>`, and the next step.
+- `CONTINUING`: you stopped part-way on purpose; say what resumes the work.
+
+Retry a transient failure (network, timeout, a flaky test) at most twice. A failure only a person can fix (authentication, quota, a missing secret, an unclear spec) is `BLOCKED` at once, without a retry.
+
 ## Self-check before finishing
 
+- [ ] The first line is a final status.
 - [ ] Every finding is labelled MEASURED or INFERRED and has a severity.
 - [ ] Every proposal names how to verify the gain.
 - [ ] No micro-optimisation outside a hot path.

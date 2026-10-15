@@ -1,6 +1,8 @@
 ---
 name: project-baseline
-description: Check a repository against a baseline of engineering practices (validated env module, secret deny-list and scanning, coverage ratchet, migration and boundary guards, real-database tests, safe error responses, changelog, docs consistency, gate exit codes) and propose each missing one as a backlog item in the audit-to-backlog format, after approval. Use when starting work in a repository or when the user asks what the project is missing; for example "czego brakuje w repo", "sprawdź standard projektu", "baseline projektu".
+description: Check a repository against a baseline of engineering practices (validated env module, secret deny-list and scanning, coverage ratchet, migration and boundary guards, real-database tests, safe error responses, changelog, docs consistency, design system file, gate exit codes) and propose each missing one as a backlog item in the audit-to-backlog format, after approval. Use when starting work in a repository or when the user asks what the project is missing; for example "czego brakuje w repo", "sprawdź standard projektu", "baseline projektu".
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 argument-hint: "[path]"
 ---
 
@@ -28,6 +30,7 @@ A presence check, not a code review: each practice has a probe, and a missing pr
 | Safe error responses | API errors return a message and a correlation id only; no stack traces or internal fields | P1 when a stack trace or internal error reaches a response, otherwise P2; skip without an API |
 | CHANGELOG | `CHANGELOG.md` in Keep a Changelog format | P3 |
 | Docs-vs-code consistency check | a script or CI step checks docs against code (commands, paths, versions) | P3 |
+| Design system file | a project with a UI (components, pages or stylesheets in app code) has a root `DESIGN.md` in the DESIGN.md format (YAML tokens, then Overview … Do's and Don'ts) | P3; skip without a UI. When present, suggest `npx @google/design.md lint DESIGN.md` for the user to run; never run or install it |
 | Gate verdict in the exit code | every CI and validation script exits non-zero on failure (no `\|\| true`, no `continue-on-error` on gates) | P2 |
 
 Record each probe and its result as the evidence: the command or file checked, and what it found. Unsure counts as unsure, not missing: list it under questions.
@@ -47,12 +50,14 @@ Never propose a default for these; when the repository is inconsistent (two lock
 One item per missing practice, in audit-to-backlog's shape, filed under its severity section and deduplicated against both backlog files:
 
 ```markdown
-### BASE-03 · P1 · Secret scanning in CI
-- **Where:** `.github/workflows/ci.yml:1`
-- **Problem:** no CI step scans for committed secrets.
-- **Evidence:** `rg -l 'gitleaks|trufflehog' .github/` → no match.
-- **Fix:** add a gitleaks step to the CI workflow that fails the job on a finding.
-- **Validation:** a commit with a fake key in a test branch fails CI.
+- [ ] BASE-03 · P1 · Secret scanning in CI
+  - Where: `.github/workflows/ci.yml:1`
+  - Problem: no CI step scans for committed secrets.
+  - Evidence: `rg -l 'gitleaks|trufflehog' .github/` → no match.
+  - Fix: add a gitleaks step to the CI workflow that fails the job on a finding.
+  - Size: S
+  - Done when: CI fails on a commit that contains a secret.
+  - Check: `rg -q 'gitleaks' .github/workflows/`
 ```
 
 ## 5. Report and ask

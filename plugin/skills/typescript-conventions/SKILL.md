@@ -1,6 +1,8 @@
 ---
 name: typescript-conventions
 description: Apply TypeScript conventions for composition, small single-purpose functions, tests for new functions, and formatter and import-alias discipline. Use when writing or reviewing TypeScript files.
+license: MIT
+compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
 
 # TypeScript rules

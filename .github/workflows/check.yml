@@ -15,6 +15,16 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
+      # Static lint of skills, hooks and plugin manifests; settings and suppressions in .agnix.toml.
+      # The binary is pinned by its own hash, not by a checksum file from the same release.
+      - name: agnix
+        run: |
+          curl -sSfL -o agnix.tar.gz https://github.com/agent-sh/agnix/releases/download/v0.57.0/agnix-x86_64-unknown-linux-gnu.tar.gz
+          echo "c72bf5ff1f45900055c353cc1bd6bbea6389506a3ba3197db000340066c78098  agnix.tar.gz" | sha256sum -c -
+          tar -xzf agnix.tar.gz agnix
+          rm agnix.tar.gz
+          ./agnix --target claude-code --strict --config .agnix.toml .
+          rm agnix
       - run: npm install -g @anthropic-ai/claude-code@2.1.300
       - name: Install gitleaks
         run: |
