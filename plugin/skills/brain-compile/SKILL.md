@@ -11,17 +11,17 @@ Reads the vault; writes exactly one new file in `_inbox/`.
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `~/.claude/CLAUDE.md`; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. Find the source notes
 
-If `_inbox/` already holds a compiled note for this topic (`[ -e "$V/_inbox/<topic>-compiled.md" ]`), stop and tell the user to review it first.
+Look for an earlier compiled note on this topic anywhere in the vault (`find "$V" -name '<topic>-compiled*.md' -not -path '*/templates/*'`). If one is in `_inbox/`, stop and tell the user to review it first. If one is elsewhere, continue, and name it in the report as `Earlier compile: <path>` so the user can merge the two in review.
 
-Sources are only `status: active` notes in topic folders: skip `_inbox/`, `_archive/`, `templates/`, `_views/`, `*-compiled*` files, and notes tagged `compiled`.
+Sources are only `status: active` notes in topic folders: skip `_inbox/`, `_archive/`, `templates/`, `_views/`, `_reports/`, and notes tagged `compiled`.
 
 ```bash
 V="/path/to/vault"
-rg -il0 -g '*.md' -g '!_inbox/' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!*-compiled*' -e 'release' -e 'changelog' "$V" |
+rg -il0 -g '*.md' -g '!_inbox/' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e 'release' -e 'changelog' "$V" |
   xargs -0 -r rg -l0 '^status: active' | xargs -0 -r rg --files-without-match '^tags:.*\bcompiled\b'
 ```
 
@@ -83,11 +83,12 @@ Compiled from four active notes on releases.
 Compiled 4 notes into _inbox/releases-compiled.md (status: inbox).
 Sources: [[release-process]], [[release-notes-location]], [[changelog-pr-links]], [[releasing]]
 1 open conflict. Originals unchanged. Review it with the brain-review skill.
+Earlier compile: DEV/releases-compiled.md
 ```
 
 ## Stop point
 
-Stops after the report: the compiled note's path, its sources, and the open conflicts. With an existing compiled note for the topic or fewer than two sources, stops having written nothing.
+Stops after the report: the compiled note's path, its sources, the open conflicts, and any earlier compile. With a compiled note for the topic already in `_inbox/` or fewer than two sources, stops having written nothing.
 
 ## Never
 

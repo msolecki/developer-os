@@ -11,16 +11,16 @@ Read-only. Answer from the vault, never from general knowledge.
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `~/.claude/CLAUDE.md`; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. Search content and frontmatter
 
-Pick 2–4 keywords and synonyms from the request. Search case-insensitively, skipping `_archive/`, `templates/`, and `_views/` unless the user asked for archived notes:
+Pick 2–4 keywords and synonyms from the request. Search case-insensitively, skipping `_archive/`, `templates/`, `_views/`, and `_reports/` (logs, not notes) unless the user asked for archived notes:
 
 ```bash
 V="/path/to/vault"
-rg -il -g '*.md' -g '!_archive/' -g '!templates/' -g '!_views/' -e 'release' -e 'changelog' "$V"
-rg -i -g '*.md' -g '!_archive/' -g '!templates/' -g '!_views/' -e '^(summary|tags|project):.*(release|changelog)' "$V"
+rg -il -g '*.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e 'release' -e 'changelog' "$V"
+rg -i -g '*.md' -g '!_archive/' -g '!templates/' -g '!_views/' -g '!_reports/' -e '^(summary|tags|project):.*(release|changelog)' "$V"
 ```
 
 Drop notes with `status: archived` unless the user asked for them:
@@ -31,7 +31,7 @@ rg -l '^status: archived' -g '*.md' -g '!_archive/' "$V"
 
 ## 3. Rank
 
-Rank higher: a match in `summary`, `tags`, or the file name; a `project` equal to the current project; more distinct keywords matched; `status: active` over `inbox`; a newer `updated`. Keep the top 5.
+Rank higher: a match in `summary`, `tags`, or the file name; a `project` equal to the current project's slug (the `Vault project slug:` line in `_Context.md` at the repository root; read the file if the line is not in your context); more distinct keywords matched; `status: active` over `inbox`; a newer `updated`. Keep the top 5.
 
 ## 4. Read and answer
 
