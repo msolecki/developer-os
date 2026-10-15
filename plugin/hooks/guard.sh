@@ -2,7 +2,8 @@
 # PreToolUse guard for Bash. Answers "ask" (never "deny") before a dependency
 # install with a package argument, a force push (--force, -f or a +refspec; a
 # --force-with-lease alone passes), `git commit -n`, or any --no-verify, HUSKY=0 or
-# core.hooksPath=. Newlines separate commands like `;`. Branch deletion
+# core.hooksPath. A newline is read both as `;` and as a space, so a newline inside a
+# quoted argument cannot hide a later flag. Branch deletion
 # (`git push --delete`, `git push origin :branch`) passes. Fail-open: anything it
 # cannot parse produces no output and exit 0, so the normal permission flow applies.
 #
@@ -20,10 +21,14 @@ cmd=$(printf '%s\n' "$input" |
   sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p' 2>/dev/null)
 [ -n "$cmd" ] || exit 0
 
-# JSON-unescape (join backslash-newline continuations, turn a newline into `;`), drop quotes.
-cmd=$(printf '%s\n' "$cmd" |
-  sed -e 's/\\\\\\n/ /g' -e 's/\\n/;/g' -e 's/\\[rt]/ /g' -e 's/\\"/"/g' -e 's/\\\\/\\/g' -e 's/\\ / /g' 2>/dev/null |
-  tr "\"'" '  ')
+# JSON-unescape (join backslash-newline continuations), drop quotes. The command is checked twice:
+# with a newline as `;` (a new command), then as a space (inside a quoted argument; git flags only).
+unescape() {
+  printf '%s\n' "$cmd" |
+    sed -e 's/\\\\\\n/ /g' -e "s/\\\\n/$1/g" -e 's/\\[rt]/ /g' -e 's/\\"/"/g' -e 's/\\\\/\\/g' -e 's/\\ / /g' 2>/dev/null |
+    tr "\"'" '  '
+}
+cmd=$(unescape ';'; unescape ' ')
 
 hit=$(printf '%s\n' "$cmd" | awk '{
   gsub(/[;&|()`]/, "\n")
@@ -33,13 +38,12 @@ hit=$(printf '%s\n' "$cmd" | awk '{
     pm = 0; sub_ = 0; git = 0; push = 0; commit = 0; force = 0; skip = 0
     for (i = 1; i <= m; i++) {
       x = w[i]
-      if (x ~ /^--no-veri(f|fy)?$/ || x == "HUSKY=0" || tolower(x) ~ /^core\.hookspath=/) { print "noverify"; exit }
+      if (x ~ /^--no-veri(f|fy)?$/ || x == "HUSKY=0" || tolower(x) ~ /^(git_config_key_[0-9]+=)?core\.hookspath(=|$)/) { print "noverify"; exit }
       if (skip) { skip = 0; continue }
       if (pm && x ~ /^(--filter|-F|--prefix|--dir|-C)$/) { skip = 1; continue }
       if (sub_ && x !~ /^-/) { print "install"; exit }
-      if (pm && (x == "run" || x == "exec" || x == "dlx" || x == "--")) pm = 0
-      if (pm && x ~ /^(i|in|ins|inst|insta|instal|install|add)$/) sub_ = 1
-      if (x ~ /(^|\/)(npm|pnpm|yarn|bun)$/) pm = 1
+      if (pm && x ~ /^(i|in|ins|inst|insta|instal|install|isnt|isnta|isntal|isntall|it|add)$/) sub_ = 1
+      if (NR == 1 && x ~ /(^|\/)(npm|pnpm|yarn|bun)$/) pm = 1
       if (x ~ /(^|\/)git$/) git = 1
       if (git && x == "push") push = 1
       else if (git && x == "commit") commit = 1

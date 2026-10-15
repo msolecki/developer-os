@@ -69,8 +69,10 @@ if [ -n "$monitors" ]; then
   fi
 fi
 
-mkdir -p "$dir" 2>/dev/null && : > "$dir/$sid" 2>/dev/null || exit 0
-find "$dir" -type f -mtime +7 -exec rm -f {} + 2>/dev/null
+# The marker directory must be ours and not a link, or another local user could steer the cleanup.
+(umask 077; mkdir -p "$dir") 2>/dev/null && [ -O "$dir" ] && [ ! -L "$dir" ] && [ ! -L "${dir%/*}" ] || exit 0
+: > "$dir/$sid" 2>/dev/null || exit 0
+find "$dir" -maxdepth 1 -type f -mtime +7 -exec rm -f {} + 2>/dev/null
 
 echo "developer-os: this session made $n tool calls. Run the developer-os:session-retro skill: propose the wrap-up to the user and apply only what they approve. If nothing qualifies, end your turn with no output." >&2
 exit 2

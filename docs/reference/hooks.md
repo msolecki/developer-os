@@ -72,18 +72,21 @@ answers `deny`. In `claude -p`, an `ask` resolves to a denial (per the README; n
 
 | Category | Asks for | Passes |
 |---|---|---|
-| Dependency install | `npm`, `pnpm`, `yarn` or `bun` (also by full path) followed by `install`, `add`, `i` or an npm alias (`in`, `inst`…) and then any non-dash word (`pnpm add zod`, `npm i -D vitest`, `pnpm --filter web add zod`) | `pnpm install`, `pnpm install --frozen-lockfile`, `npm ci`, `pnpm add -D` with flags only |
+| Dependency install | `npm`, `pnpm`, `yarn` or `bun` (also by full path) followed by `install`, `add`, `i` or an npm alias (`in`, `inst`…, `isntall`, `it`) and then any non-dash word (`pnpm add zod`, `npm i -D vitest`, `pnpm --filter web add zod`) | `pnpm install`, `pnpm install --frozen-lockfile`, `npm ci`, `pnpm add -D` with flags only |
 | Force push | `git push` (git also by full path) with `--force`, a short-flag cluster containing `f`, or a `+refspec`, even next to `--force-with-lease` | `--force-with-lease` alone (including `=ref:sha`), `git push --delete`, `git push origin :branch`, `git push -n` |
-| Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `core.hooksPath=`; `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`) | `git commit -am` |
+| Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `core.hooksPath` (with `=`, as a `git config` key or as `GIT_CONFIG_KEY_<n>=core.hooksPath`); `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`) | `git commit -am` |
 
-**Parsing:** JSON-unescape (`\n` separates commands, `\r`, `\t` become spaces), join backslash-newline
-continuations, drop all quotes, split segments on `; & | ( )`, backtick and newline, scan words per
-segment. Because quotes
+**Parsing:** JSON-unescape (`\r`, `\t` become spaces), join backslash-newline continuations, drop
+all quotes, split segments on `; & | ( )` and backtick, scan words per segment. The command is
+scanned twice: once with `\n` as a command separator, once with `\n` as a space for the git checks
+only, so a newline inside a quoted `-m` message cannot hide a later `-n` or `-f`. Because quotes
 are dropped, a mention such as `git commit -m "pnpm add zod"` also asks; this is deliberate.
 
 **Known false positives** (an extra prompt, never a missed category): `git` stays armed for the
 whole segment, so `git log --grep push -f` asks; a non-dash word after `install` other than a
-`--filter`, `-F`, `--prefix`, `--dir` or `-C` value asks.
+`--filter`, `-F`, `--prefix`, `--dir` or `-C` value asks; an install word anywhere after the package
+manager asks, even as a script argument (`pnpm run build -- add foo`), because an option value such
+as `npm --cache run install zod` must not end the check.
 
 **Failure:** `trap 'exit 0' EXIT`; input without `{…}`, without a `command` string, or that `sed`/`awk`
 cannot process produces no output.
@@ -117,7 +120,7 @@ developer-os: this session made <n> tool calls. Run the developer-os:session-ret
 
 and exits 2, which makes Claude Code feed the message back to the agent instead of stopping.
 
-**State:** one empty file per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp/<uid>}}/capture-nudge/`.
+**State:** one empty file per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp/<uid>}}/capture-nudge/`, created with mode 700; the hook fails open when that directory or its parent is a symlink or owned by another user.
 
 **Privacy:** counts matches of one fixed string and extracts background-task and Monitor ids, output-file paths and Monitor start timestamps (to check their notifications and modification times); never reads or prints message content.
 

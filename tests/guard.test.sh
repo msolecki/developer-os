@@ -46,12 +46,21 @@ check ask "$(fx 'git push --no-verify')"
 check ask "$(fx 'ls; pnpm add zod')"
 check ask "$(fx 'cat x | npm i zod')"
 check ask "$(fx 'echo $(bun add zod)')"
-# #38: run/exec/dlx/-- end the package-manager words; a workspace prefix still asks.
-check pass "$(fx 'pnpm run build -- add foo')"
+# A value that looks like a subcommand does not end the package-manager words (an extra ask is accepted).
+check ask "$(fx 'pnpm run build -- add foo')"
+check ask "$(fx 'npm --cache run install zod')"
+check ask "$(fx 'npm -- install zod')"
+check ask "$(fx 'yarn --cwd exec add zod')"
+check ask "$(fx 'npm isntall zod')"
+check ask "$(fx 'npm it zod')"
 check ask "$(fx 'yarn workspace web add zod')"
 # R1: a JSON newline separates commands.
 check ask "$(fx 'ls\npnpm add zod')"
 check pass "$(fx 'pnpm install\ngit status')"
+# A newline inside a quoted argument does not end the git command.
+check ask "$(fx 'git commit -m \"a\nb\" -n')"
+check ask "$(fx 'git push origin \"a\nb\" -f')"
+check pass "$(fx 'git commit -m \"a\nb\"')"
 # R2: the value of --filter, -F, --prefix, --dir or -C is not a package.
 check pass "$(fx 'pnpm install --filter web')"
 check pass "$(fx 'npm install --prefix dir')"
@@ -62,6 +71,8 @@ check ask "$(fx 'git commit --no-veri -m x')"
 check ask "$(fx 'HUSKY=0 git commit -m x')"
 check ask "$(fx 'git -c core.hooksPath=/dev/null commit -m x')"
 check ask "$(fx 'git -C dir push -f')"
+check ask "$(fx 'git config core.hooksPath /dev/null')"
+check ask "$(fx 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit')"
 check pass '{"tool_input":{"command":"pnpm add zod"'
 check pass 'not json'
 check pass ''

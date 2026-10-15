@@ -389,7 +389,7 @@ do not:
 |---|---|---|---|
 | `SessionStart` hook | loads `plugin/rules/core.md` every session | no | `scripts/install-codex.sh` keeps it in a marked block of `~/.codex/AGENTS.md` (D19) |
 | `Stop` hook | offers session-retro once per long session | no | run session-retro by hand at the end |
-| `PreToolUse` guard | asks before installs (also `npm` aliases such as `in`, and full paths), force pushes, hook bypasses (`--no-verify` and its abbreviations, `commit -n`, `HUSKY=0`, `core.hooksPath=`) | no | none |
+| `PreToolUse` guard | asks before installs (also `npm` aliases such as `in`, and full paths), force pushes, hook bypasses (`--no-verify` and its abbreviations, `commit -n`, `HUSKY=0`, `core.hooksPath` (any form)) | no | none |
 | Agents (`plugin/agents/`) | code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog) | no | none |
 | Output styles | `/output-style` | no | none |
 | `Skill` tool | the agent loads a skill by name | no | `scripts/install-codex.sh` writes a Codex copy of each skill to `~/.agents/skills/` |
