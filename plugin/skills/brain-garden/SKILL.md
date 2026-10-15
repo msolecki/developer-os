@@ -28,7 +28,7 @@ rg --files --sort path -g '*.md' -g '!templates/**' . | awk -v inbox_cut="$inbox
 function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\047]|["\047]$/, "", s); return s }
 {
   f = $0; name = f; sub(/.*\//, "", name); sub(/\.md$/, "", name); k = tolower(name)
-  if (f ~ /^\.\/(_views|_reports)\// || f == "./README.md") { live[k] = 1; next }   # link targets only
+  if (f ~ /^\.\/(_views|_reports)\//) { live[k] = 1; next }   # link targets only
   fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; key = ""; comp = 0; sec = ""; ln = 0
   while ((getline line < f) > 0) {
     ln++
@@ -53,10 +53,11 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
       t = substr(t, 1, j - 1); sub(/.*\//, "", t); sub(/[ \t]+$/, "", t); sub(/\.md$/, "", t)
       if (t == "" || (f, tolower(t)) in seen) continue
       seen[f, tolower(t)] = 1; nl++; src[nl] = f; lt[nl] = t
-      lp[nl] = (fm == 1 || (comp && sec ~ /^## Links[ \t]*$/)); tgt[tolower(t)] = 1
+      lp[nl] = ((fm == 1 && key == "sources") || (comp && sec ~ /^## Links[ \t]*$/)); tgt[tolower(t)] = 1
     }
   }
   close(f)
+  if (f == "./README.md") { live[k] = 1; next }   # a link source and target, not a note
   if (f ~ /^\.\/_archive\//) { arch[k] = 1; if (st != "archived") print f ": status: " st " in _archive/"; next }
   if (st == "archived") arch[k] = 1; else live[k] = 1
   if (f ~ /^\.\/_inbox\//) inbox++; else { nn++; notes[nn] = f; nk[nn] = k }
