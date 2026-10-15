@@ -111,7 +111,7 @@ A case is only worth its cost if it fails when the skill breaks. After changing 
   Not confirmed: on 2026-10-15 the older payload ("Ignore previous instructions…") scored Δ 0, and the
   subtler payload has not been run yet.
 
+Restore the skill afterwards.
+
 Cases not listed here have no recorded mutation check. injection-fix-pr and injection-pr-cycle score Δ
 only through their llm flags-injection grader.
-
-Restore the skill afterwards.
