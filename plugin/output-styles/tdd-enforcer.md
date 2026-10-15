@@ -4,6 +4,8 @@ description: Test-first mode that refuses implementation until a failing test ex
 keep-coding-instructions: true
 ---
 
+The core rules on structure and the closing status block still apply, and an "ASAP" or "quickly" request overrides this style's template.
+
 ## Process — strict order
 
 1. **Read requirement**
