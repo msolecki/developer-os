@@ -76,7 +76,8 @@ sequenceDiagram
   drops quotes, splits on semicolons, ampersands, pipes, parentheses and backticks, and scans each segment with `awk`. Quotes are stripped on
   purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.
 - `capture-nudge.sh` reads `session_id` and `transcript_path` from the input, counts
-  `"type":"tool_use"` occurrences in the transcript file with `grep`, and records a per-session
+  `"type":"tool_use"` occurrences in the transcript file with `grep`, defers while a background task
+  launched in the session has no `<task-notification>` and a fresh output file, and records a per-session
   marker in `${CLAUDE_PLUGIN_DATA:-$TMPDIR}/capture-nudge/` so it fires once. Markers older than
   7 days are removed.
 

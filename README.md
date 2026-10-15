@@ -47,8 +47,9 @@ change a rule, override it explicitly in your user-level `~/.claude/CLAUDE.md` (
 the developer-os rule on plan files"); that file loads alongside the core rules in every session.
 
 A `Stop` hook ([`plugin/hooks/capture-nudge.sh`](plugin/hooks/capture-nudge.sh)) counts tool calls
-in the session transcript; it never reads their content. Once per session, after 30 tool calls, it
-asks the agent to run the session-retro skill, which proposes a wrap-up and applies only what you
+in the session transcript and reads only background-task ids and output-file paths from it, never
+message content. Once per session, after 30 tool calls, and not while a background agent or command
+it can see is still running, it asks the agent to run the session-retro skill, which proposes a wrap-up and applies only what you
 approve. Set `DEVELOPER_OS_CAPTURE_NUDGE=off` to turn it off, or `DEVELOPER_OS_CAPTURE_NUDGE_MIN=<n>`
 to change the threshold.
 

@@ -70,7 +70,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 
 - **Date:** 2026-10-15 · **Commit:** `1c324a89`
 - **Decision:** the `Stop` hook asks for session-retro once per session after 30 tool calls,
-  skipping headless/SDK runs and subagents. It counts entries and never reads their content.
+  skipping headless/SDK runs and subagents, and deferring while a background task it launched is
+  still running (PR #69). It counts entries and reads background-task ids and output paths, never
+  message content.
 - **Why:** lessons are lost at the end of long sessions, but a nudge on every stop is noise.
 - **Superseded draft:** the first design nudged brain-capture directly; session-retro replaced it
   because it routes each finding to its destination, the vault being only one of them.
