@@ -24,9 +24,13 @@ line as unverified.
   brain-garden, brain-review and brain-search.
 - `scripts/check.sh` enforces every rule CONTRIBUTING.md lists; CI runs it on `development`, `main`
   and pull requests.
-- 29 eval cases with a baseline arm, run by hand. The 16 added on 2026-10-15 (backlog, review
-  framing and boundaries, retro guards, injection, two triggers) have scaffolds that build and pass
-  their baseline, but have not been run with `claude plugin eval` yet.
+- 29 eval cases with a baseline arm, run by hand. The 16 added on 2026-10-15 ran once each on
+  2026-10-15 (agent Sonnet 5.5, judge Opus 5.5, about 7.6 USD with two reruns after grader fixes):
+  15 pass at 0.8. Δ +1.00: trigger-code-review, code-review-weakened-criterion, -boundary, -framed;
+  Δ +0.67: implement-backlog-quota; Δ +0.50: injection-code-review, project-baseline-design,
+  implement-backlog-roles, session-retro-persistence, -reversal, -lint; Δ 0 (the baseline passes
+  too): implement-backlog-blocked, injection-fix-pr, -pr-cycle, -bug-triage. One run per case, so
+  these are a first signal, not a stable score.
 
 ## In progress
 
@@ -57,6 +61,7 @@ Found in the review of 2026-10-15 (independent code-reviewer and security-audito
 | R10 | P3 | `tests/*.test.sh` | Untested branches: bare `--force`, `git push --no-verify`, `;`, pipe and `$( )` separators, newline-separated commands, `bun`; the 29/30 nudge boundary, non-numeric threshold, `TMPDIR` fallback. |
 | R11 | P3 | `plugin/skills/skill-usage/SKILL.md` | The name pattern `[a-z-]+` misses names with digits; resumed or forked transcripts can repeat history and double-count. |
 | R12 | P3 | Repository root | The repository tracks no `AGENTS.md`/`CLAUDE.md` of its own (`_Context.md` is local and git-ignored), so it does not follow the `templates/project/` standard it ships. |
+| R18 | P2 | `plugin/skills/implement-backlog/SKILL.md`, eval `implement-backlog-owner` | In one of two runs the orchestrator dispatched without writing the `Owner` lines; the case scored 0 in both runs, partly because the eval sandbox denied write tools to delegates whose worktrees sat outside the workspace. |
 | R17 | P3 | README, `SECURITY.md` | Both call the hook scripts POSIX `sh`; `capture-nudge.sh` uses `grep -o`, which POSIX does not define (macOS and Linux provide it). The README claim that an `ask` becomes a denial in `claude -p` was not re-verified. |
 | R13 | P3 | `plugin/hooks/guard.sh` | Forms that pass without a prompt (reproduced): a full binary path (`/usr/bin/git push -f`), npm aliases (`npm in zod`), abbreviated `--no-veri`, and hook bypasses via `HUSKY=0` or `core.hooksPath=`. Lockfile-changing `update`/`remove` are outside the stated categories. The normal permission flow still applies. |
 | R14 | P3 | `plugin/hooks/capture-nudge.sh` | When `CLAUDE_PLUGIN_DATA` and `TMPDIR` are both unset, markers go to a shared `/tmp/capture-nudge`; on a multi-user Linux host another user can own it and race the 7-day cleanup. Claude Code 2.1.300 sets `CLAUDE_PLUGIN_DATA`. |

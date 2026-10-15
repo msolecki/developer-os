@@ -25,6 +25,10 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
   `plugins: ["../../plugin"]`.
 - `--scaffold` runs each case's `scaffold.sh`; `--allow-tools` grants the gated tools the cases use.
 - The first run asks you to trust the plugin directory.
+- A `credential_process` or `credential_source` in `~/.aws/config` (or a similar entry in a GCP, kube
+  or Anthropic profile config) stops every case that grants Bash: the sandbox cannot cut that file off.
+  Move the file aside for the run and restore it afterwards; pointing `AWS_CONFIG_FILE` elsewhere
+  does not help.
 - One case: add `--case brain-search-no-match`. One group: `--tag brain` (tags: `brain`, `review`,
   `retro`, `trigger`, `backlog`, `negative`).
 - Results and the HTML report go to `evals/results/` (git-ignored).

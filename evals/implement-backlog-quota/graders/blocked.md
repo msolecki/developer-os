@@ -1,4 +1,5 @@
 ---
 type: regex
+flags: i
 ---
-BLOCKED
+BLOCKED|zablokowan

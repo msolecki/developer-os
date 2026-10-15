@@ -1,4 +1,4 @@
 ---
 type: llm
 ---
-The reply says CART-07 was implemented (negative quantities are rejected) and that CART-12 was not started because it is blocked by CART-07, even though CART-12 has the higher priority.
+The reply says CART-07 (the blocker) was worked on in this session and CART-12 was left unstarted because it waited for CART-07. It does not report CART-12 as implemented.
