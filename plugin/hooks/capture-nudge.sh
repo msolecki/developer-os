@@ -3,7 +3,8 @@
 # background task still running, asks the agent to run session-retro. It never prints transcript content.
 # Fails open: every unexpected state exits 0, so a broken reminder never blocks a session.
 # Skips headless and SDK runs (claude -p sets CLAUDE_CODE_ENTRYPOINT=sdk-cli): nobody is there to answer,
-# and the hook input itself carries no non-interactive signal.
+# and the hook input itself carries no non-interactive signal. CLAUDE_CODE_ENTRYPOINT is undocumented; if a
+# release drops it, a headless run gets one extra turn (stop_hook_active stops a second), not a loop.
 
 [ "${DEVELOPER_OS_CAPTURE_NUDGE:-}" = off ] && exit 0
 case ${CLAUDE_CODE_ENTRYPOINT:-} in sdk-*) exit 0 ;; esac
@@ -42,7 +43,10 @@ launched=$(grep -oE '"tool_use_id":"[A-Za-z0-9_]+","type":"tool_result","content
 if [ -n "$launched" ]; then
   finished=$(grep -oE '<tool-use-id>[A-Za-z0-9_]+</tool-use-id>' "$transcript" 2>/dev/null | sed 's/<[^>]*>//g')
   live=$(printf '%s\n' "$launched" | while read -r id out; do
-    printf '%s\n' "$finished" | grep -qxF "$id" || find -L "$out" -mmin -30 2>/dev/null
+    printf '%s\n' "$finished" | grep -qxF "$id" && continue
+    # The path comes from tool output anyone can print: only an absolute path reaches find, so a value
+    # such as "-delete" is never parsed as an expression, and -prune keeps a directory from being walked.
+    case $out in (/*) find -L "$out" -prune -mmin -30 2>/dev/null ;; esac
   done)
   [ -n "$live" ] && exit 0
 fi

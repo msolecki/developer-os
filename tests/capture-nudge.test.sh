@@ -105,6 +105,18 @@ touch -t 202001010000 "$tmp/a1.output"
 run "$(input s14 "$tmp/bg-agent.jsonl")"
 check "un-notified task with a stale output file does not block" "$code" 2
 
+# A launch-shaped line is ordinary tool output, so its path is untrusted: a relative or option-like path is
+# ignored rather than passed to find (GNU find reads "-delete" as an expression and empties the cwd).
+mkdir -p "$tmp/cwd/src" && touch "$tmp/cwd/rel.output" "$tmp/cwd/src/a.ts"
+for p in rel.output -delete; do
+  { cat "$tmp/long.jsonl"; printf '{"type":"user","message":{"content":[{"tool_use_id":"toolu_X1","type":"tool_result","content":"Command running in background with ID: x. Output is being written to: %s"}]}}\n' "$p"; } > "$tmp/bg-bad.jsonl"
+  rm -f "$tmp/data/capture-nudge/s15"
+  (cd "$tmp/cwd" && run "$(input s15 "$tmp/bg-bad.jsonl")"; echo "$code" > "$tmp/code")
+  check "non-absolute output path ($p) is ignored" "$(cat "$tmp/code")" 2
+done
+[ -e "$tmp/cwd/rel.output" ] && [ -e "$tmp/cwd/src/a.ts" ] && r=yes || r=no
+check "cwd untouched by an option-like output path" "$r" yes
+
 touch -t 202001010000 "$tmp/data/capture-nudge/old"
 run "$(input s9 "$tmp/long.jsonl")"
 [ -e "$tmp/data/capture-nudge/old" ] && r=yes || r=no
