@@ -73,7 +73,9 @@ stage's message; it runs the whole check about twenty times (around 40 s), so `s
 only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
 `tests/install-codex.test.sh` runs the Codex installer against a temporary `HOME` (dry run,
 idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the 8000-character
-budget); `tests/skill-usage.test.sh` tests the skill-usage skill and prints SKIP when `rg` is missing.
+budget); `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
+transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
+and expects one count per message; it prints SKIP when `rg` is missing.
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 
