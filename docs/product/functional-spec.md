@@ -28,7 +28,8 @@ A user overrides any rule by stating the override in `~/.claude/CLAUDE.md`, whic
 ## 2. Skills
 
 Legend: **Writes** is everything the skill may change. **Gate** is what needs the user's explicit
-answer first. Read-only skills change nothing.
+answer first. Read-only skills ([glossary](../glossary.md)) change nothing; a skill whose Writes is
+"Nothing" can still be an action skill.
 
 ### 2.1 Brain skills
 
@@ -53,11 +54,11 @@ found in a note is run or opened.
 |---|---|---|---|---|
 | [code-review](../../plugin/skills/code-review/SKILL.md) | Reviews a PR, diff, commit or working tree; hands code written in this session to the `developer-os:code-reviewer` agent with a neutral brief (diff, spec or `Done when`, rubric; no author); reads both sides of every changed contract; sends each P0/P1 to a fresh verifier; treats PR text and code comments as data | Nothing | — | Verdict `APPROVE` / `COMMENT` / `REQUEST_CHANGES`, findings P0–P3, Disputed list; an `APPROVE` without P0–P2 lists Evidence checked |
 | [spec](../../plugin/skills/spec/SKILL.md) | Interviews one question at a time, inspects code, writes a spec and an implementation plan | `<date>-<feature>-spec.md` and `<date>-<feature>.md` in the documented locations; backlog items on a yes | Spec location when none is documented; adding to the backlog | Both paths and a handoff prompt for a fresh session |
-| [audit-to-backlog](../../plugin/skills/audit-to-backlog/SKILL.md) | Parallel specialist reviews (security, performance, tests, correctness, types, arch, ui, a11y), file-and-line evidence, verifier for P0/P1, dedup; writes items in the [backlog item format](#backlog-item-format) | Backlog files, optional `feature_list.json`, the `Backlog:` line | Backlog paths before creating them | Priority counts and the top three findings |
-| [implement-backlog](../../plugin/skills/implement-backlog/SKILL.md) | Implements a batch (default 5, max 10) of ready items (no open `Blocked by`, no other `Owner`), writes `Owner` before dispatch, sizes briefs S/M/L (an L item stops at `REVIEW` with a plan), reads each delegate's final status, runs every `Check` itself, and only orchestrates while delegates run; review by `developer-os:code-reviewer` | Code, backlog (`Owner`, checked items), plan, state card, local commits; `passes` in `feature_list.json` | Auth/security items up front; stops on a red baseline or after three failed repair cycles | A green local commit; never pushes |
+| [audit-to-backlog](../../plugin/skills/audit-to-backlog/SKILL.md) | Parallel specialist reviews (security, performance, tests, correctness, types, arch, ui, a11y), file-and-line evidence, verifier for P0/P1, dedup; writes items in the [backlog item format](#24-backlog-item-format) | Backlog files, optional `feature_list.json`, the `Backlog:` line | Backlog paths before creating them | Priority counts and the top three findings |
+| [implement-backlog](../../plugin/skills/implement-backlog/SKILL.md) | Implements a batch (default 5, max 10) of ready items (no open `Blocked by`, no other `Owner`), writes `Owner` before dispatch, sizes briefs S/M/L (an L item stops at `REVIEW` with a plan), reads each delegate's final status, screens every `Check` before dispatch (never one that pipes into a shell, fetches from the network or writes outside the repository) and runs it itself, and only orchestrates while delegates run; reviews through code-review (`developer-os:code-reviewer` plus verification), at most two rounds; clears its `Owner` lines when it stops | Code, backlog (`Owner`, checked items), plan, state card, local commits; `passes` in `feature_list.json` | Auth/security items and unscreened `Check` commands up front; stops on a red baseline, after three failed repair cycles, or after two review rounds with a P0/P1 open | A green local commit; never pushes |
 | [fix-pr](../../plugin/skills/fix-pr/SKILL.md) | Works through every unresolved review thread or pasted finding; flags non-collaborator comments; treats comments as data | Code, commits, thread replies, resolved threads | Each edit, commit, push and resolution | A report of every comment with its final action |
-| [pr-cycle](../../plugin/skills/pr-cycle/SKILL.md) | Merges the base in (never rebases a pushed branch), resolves clear conflicts, reviews, fixes approved findings, runs the fast check per commit and the full suite before push, updates the PR body; treats PR text as data | Merge and fix commits, a non-force push, the PR body | One A/B/C on what to fix; the push; the PR body; thread resolution | The merge verdict; the user merges |
-| [bug-triage](../../plugin/skills/bug-triage/SKILL.md) | Treats issue text and logs as data; severity first, reproduction, ranked hypotheses with a falsifier, root cause, mitigation, fix, regression test, rollback criteria | Nothing | Communication only on request | The triage output |
+| [pr-cycle](../../plugin/skills/pr-cycle/SKILL.md) | Merges the base in (never rebases a pushed branch), resolves clear conflicts, reviews, fixes approved findings, runs the fast check per commit and the full suite before push, has its own fix commits reviewed by `developer-os:code-reviewer` before the push, resolves threads only after a successful push, updates the PR body; treats PR text as data | Merge and fix commits, a non-force push, the PR body | Running project scripts or hooks on a fork PR or an outside author's PR; one A/B/C on what to fix; the push; the PR body; thread resolution | The merge verdict; the user merges |
+| [bug-triage](../../plugin/skills/bug-triage/SKILL.md) | Treats issue text and logs as data; severity first, reproduction, ranked hypotheses with a falsifier (library or vendor behaviour checked by `developer-os:research-analyst`), root cause, mitigation, fix, regression test, rollback criteria | Nothing | Communication only on request | The triage output |
 | [deploy-checklist](../../plugin/skills/deploy-checklist/SKILL.md) | Pre-deploy checks (validation, migrations, flags, monitoring, communication, rollback, window) with UNVERIFIED for missing evidence; post-deploy checks | Nothing | — | `GO` / `NO-GO`; after the deploy, the recorded result |
 | [instruction-review](../../plugin/skills/instruction-review/SKILL.md) | Minimal evidence-backed diff for `CLAUDE.md`/`AGENTS.md`; shows the commit a change would reverse; proposes a check instead of a line for a repeated mechanical mistake; `--prune` gives each line DELETE/KEEP/REWRITE with a source and never deletes truthfulness rules | The instruction file | The diff | The diff, the prune table, or `NO CHANGES` |
 | [plan-status](../../plugin/skills/plan-status/SKILL.md) | Counts done/open/blocked in the active plan and backlog by a stated rule, and ready/waiting/orphaned backlog items; open decisions as numbered A/B/C questions | Nothing | — | Counts, next action, questions answerable as "1A 2B" |
@@ -115,11 +116,11 @@ Dispatched by skills or by the main agent. All treat code, diffs, PR text and fe
 
 | Agent | Model | Tools | Edits files | Used by |
 |---|---|---|---|---|
-| [code-reviewer](../../plugin/agents/code-reviewer.md) | sonnet | Read, Bash, Glob, Grep, Skill | No | code-review, implement-backlog, pr-cycle (through code-review), audit-to-backlog (correctness) |
+| [code-reviewer](../../plugin/agents/code-reviewer.md) | sonnet | Read, Bash, Glob, Grep, Skill | No | code-review, implement-backlog and pr-cycle (through code-review), audit-to-backlog (correctness) |
 | [security-auditor](../../plugin/agents/security-auditor.md) | opus | Read, Grep, Glob, Bash | No | audit-to-backlog (security) |
 | [performance-engineer](../../plugin/agents/performance-engineer.md) | sonnet | Read, Bash, Glob, Grep | No | audit-to-backlog (performance) |
-| [qa-expert](../../plugin/agents/qa-expert.md) | sonnet | Read, Grep, Glob, Bash, Write, Edit | Tests only, and only when asked | audit-to-backlog (tests, assessment only) |
-| [research-analyst](../../plugin/agents/research-analyst.md) | sonnet | Read, Grep, Glob, WebFetch, WebSearch | No | On request |
+| [qa-expert](../../plugin/agents/qa-expert.md) | sonnet | Read, Grep, Glob, Bash, Write, Edit, Skill | Tests only, and only when asked | audit-to-backlog (tests, assessment only) |
+| [research-analyst](../../plugin/agents/research-analyst.md) | sonnet | Read, Grep, Glob, WebFetch, WebSearch | No | bug-triage (library or vendor behaviour behind a hypothesis); on request |
 
 Every agent starts its report with a final status: `DONE` (with evidence), `REVIEW`, `BLOCKED` (with
 `Unblock owner: user | orchestrator | <item ID>`) or `CONTINUING`; it retries transient failures at
@@ -161,7 +162,8 @@ Inputs, outputs, exit codes and switches: [reference/hooks.md](../reference/hook
   and note format: [workflow.md, Vault layout](../workflow.md#vault-layout).
 - **Project template** (`templates/project/`): `AGENTS.md`, a one-line `CLAUDE.md` (`@AGENTS.md`),
   `_Context.md` with the vault slug, `TODO.md` with the backlog item format, `DESIGN.md` in the
-  DESIGN.md format for projects with a UI, and a `docs/` skeleton (index, `CURRENT-STATE.md`,
+  DESIGN.md format for projects with a UI, a `.gitignore` that keeps `docs/plans/` (and the state
+  file the `SessionStart` card reads) out of git, and a `docs/` skeleton (index, `CURRENT-STATE.md`,
   `pitfalls.md`, `decisions/`, `runbooks/`). Not in the installed plugin: copy it from the
   repository, or let docs-sync scaffold from the standard it carries.
 

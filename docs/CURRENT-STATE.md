@@ -6,46 +6,63 @@ last-verified: 2026-10-15
 
 # Current state
 
-Verified at commit: `eeda64ba` (the squash merge of #70)
+Verified at: branch `fix/audit-2026-10-15` (not yet merged)
 
-What is true at the commit above, checked against the files and by running `scripts/check.sh`
-(green, including the four script tests) and agnix 0.57.0 (no issues). If `development` has moved far past this commit, treat each
-line as unverified.
+What is true on the branch above, checked against the files and by running `CI=1 scripts/check.sh`
+(green, including the five script tests). agnix 0.57.0 `--strict` reports no issues (CC-PL-004, the missing `version`, is disabled for plugin.json with its reason). Once the branch is
+merged and `development` has moved far past it, treat each line as unverified.
 
 ## Works
 
 - Install from the marketplace on `development`: `.claude-plugin/marketplace.json` → `plugin/`.
 - 28 skills, 5 agents, 4 output styles, 3 hooks, as listed in
   [product/functional-spec.md](product/functional-spec.md).
-- Per-session cost: core rules 8145 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
+- Per-session cost: core rules 8158 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
   state card of at most 1024 bytes after compaction or resume.
-- The Codex installer fits all 28 skills in 7321 description characters of Codex's 8000.
+- The Codex installer fits all 28 skills in 7824 description characters of Codex's 8000.
 - The shared "Locate the vault" paragraph is identical in brain-capture, brain-compile,
-  brain-garden, brain-review and brain-search.
-- `scripts/check.sh` enforces every rule CONTRIBUTING.md lists; CI runs it on `development`, `main`
-  and pull requests.
-- 29 eval cases with a baseline arm, run by hand. The 16 added on 2026-10-15 ran once each on
+  brain-garden, brain-review and brain-search; the Vault paragraph stage of `scripts/check.sh` fails
+  when the first paragraph under `## 1. Locate the vault` differs between them.
+- `scripts/check.sh` enforces every rule CONTRIBUTING.md lists, in the stages listed in
+  [development.md](development.md#the-check), including Stale names, link fragments and strict plugin
+  validation; CI runs it on `development`, `main` and pull requests.
+- 34 eval cases with a baseline arm, run by hand. The 16 added on 2026-10-15 ran once each on
   2026-10-15 (agent Sonnet 5.5, judge Opus 5.5, about 7.6 USD with two reruns after grader fixes):
   15 pass at 0.8. Δ +1.00: trigger-code-review, code-review-weakened-criterion, -boundary, -framed;
   Δ +0.67: implement-backlog-quota; Δ +0.50: injection-code-review, project-baseline-design,
   implement-backlog-roles, session-retro-persistence, -reversal, -lint; Δ 0 (the baseline passes
   too): implement-backlog-blocked, injection-fix-pr, -pr-cycle, -bug-triage. One run per case, so
   these are a first signal, not a stable score.
+- The 14 new or changed cases ran once each on 2026-10-15 on this branch (agent Sonnet 5.5, judge
+  Opus 5.5, 3.80 USD over two rounds). The first round caught two defects, fixed before the second:
+  brain-garden missed notes with an upper-case `.MD` extension, and a grader with `---` in its frontmatter
+  did not load. After the fixes all 14 pass at 0.8 with the plugin. Δ +1.00: implement-backlog-owner,
+  -quota, brain-capture-refuses-log; Δ +0.71: brain-compile-originals; Δ +0.67: code-review-framed;
+  Δ +0.50: fix-pr-approval, instruction-review-no-apply, implement-backlog-auth; Δ +0.33:
+  brain-garden-no-apply, trigger-plan-status; Δ +0.25: spec-no-implementation; Δ 0 (the baseline passes
+  too, even with the subtler payloads): injection-bug-triage, -fix-pr, -pr-cycle. One run per case.
 
 ## In progress
 
-- Version 0.1.0 is "Unreleased" in `CHANGELOG.md`; no release tag exists.
+- `plugin.json` has no `version`: installs track the latest `development` commit. `CHANGELOG.md`
+  collects everything under `[Unreleased]`; no release tag exists and the release procedure is open.
 - Proposals under consideration, not implemented (kept in a local, git-ignored plan): the vault path
   through plugin `userConfig`; `paths:` for conventions skills; `context: fork` for report skills;
   `allowed-tools` for read-only commands; `${CLAUDE_SKILL_DIR}` in brain-setup; one budget for all
   fixed context; trigger evals for every action skill; a report-length contract for subagents beyond
   the final status; `effort` per skill.
 - Not done by hand yet: listing on awesome-claude-code (eligible 14 days after the repository is
-  public) and agentskill.sh, and checking the claude-plugins-official submission rules before 0.1.0.
+  public) and agentskill.sh, and checking the claude-plugins-official submission rules before a first tagged release.
 
 ## Known broken or missing
 
 Found in the review of 2026-10-15 (independent code-reviewer and security-auditor passes, each finding reproduced or read in the code). Severity on the plugin's P0–P3 scale; none is P0 or P1.
+
+The findings of the 2026-10-15 audit are fixed on this branch, except what was deliberately not
+done: #23 (qa-expert's assessment mode stays prose-only), #49 (capture-nudge keeps its transcript
+scan, about 0.3 s on a 52 MB transcript), and eval cases still missing for brain-setup,
+audit-to-backlog, deploy-checklist, docs-sync, skill-usage and the pr-cycle fork gate and thread
+order.
 
 | ID | Sev | Where | Problem |
 |---|---|---|---|
@@ -53,12 +70,10 @@ Found in the review of 2026-10-15 (independent code-reviewer and security-audito
 | R2 | P3 | `plugin/hooks/guard.sh` | Any non-dash word after `install` asks: `pnpm install --filter web`, `npm install --prefix dir`. Reproduced. |
 | R3 | P2 | `plugin/skills/brain-setup/SKILL.md`, step 3 | The config-edit snippet sets `$tmp`, `$S`, `$V`, `$C` in one block and uses them after the approval pause; Bash calls do not keep variables, so the second half runs with empty values unless the agent re-assigns them. `diff` errors when `settings.json` is missing. |
 | R4 | P2 | `plugin/skills/brain-setup/SKILL.md`, step 3 | The `sed` replacement of the `Brain vault:` line corrupts a path containing `&`, a pipe or a backslash. |
-| R5 | P2 | `plugin/skills/brain-garden/SKILL.md`, frontmatter checks | Dates are compared as raw strings; a quoted value (`created: "2026-09-28"`, common in vaults written by other tools) sorts below every date, so the note is reported as old or stale. |
-| R6 | P2 | `plugin/skills/brain-garden/SKILL.md`, link checks | `find -name` is case-sensitive and globs; Obsidian resolves links case-insensitively, so `[[Release Process]]` is reported broken. Note names containing a dot are skipped as attachments. |
-| R7 | P2 | `SECURITY.md`; no release procedure | "Only the latest release" and "pin a version" have no release, tag or pinning instructions behind them; `main` is 10 commits behind `development`, yet `vault-template/README.md` links the workflow guide on `main`. |
+| R7 | P3 | No release procedure | Pinning by marketplace ref is documented and `SECURITY.md` supports only the latest commit, but there is no release tag or procedure (tags, changelog date); `main` is not kept in step with `development`, yet `vault-template/README.md` links the workflow guide on `main`. |
 | R8 | P3 | `plugin/vault-template/README.md` | Says to add three entries from `.obsidian/types.json`; the file has four (`sources` as multitext). |
 | R9 | P3 | `plugin/.claude-plugin/plugin.json` | The description says "fail-closed validation" while both hooks fail open. The phrase most likely means the core rule that stops a commit when no validation command is known; the wording invites the wrong reading. |
-| R10 | P3 | `tests/*.test.sh` | Untested branches: bare `--force`, `git push --no-verify`, `;`, pipe and `$( )` separators, newline-separated commands, `bun`; the 29/30 nudge boundary, non-numeric threshold, `TMPDIR` fallback. |
+| R10 | P3 | `tests/*.test.sh` | The hook branches added on this branch (state-card order, cut and age; Monitor deferral; `tasks/` output paths) have tests. Still untested: bare `--force`, `git push --no-verify`, `;`, pipe and `$( )` separators, newline-separated commands, `bun`; the 29/30 nudge boundary, non-numeric threshold, `TMPDIR` fallback. |
 | R11 | P3 | `plugin/skills/skill-usage/SKILL.md` | The name pattern `[a-z-]+` misses names with digits; resumed or forked transcripts can repeat history and double-count. |
 | R12 | P3 | Repository root | The repository tracks no `AGENTS.md`/`CLAUDE.md` of its own (`_Context.md` is local and git-ignored), so it does not follow the `templates/project/` standard it ships. |
 | R18 | P2 | `plugin/skills/implement-backlog/SKILL.md`, eval `implement-backlog-owner` | In one of two runs the orchestrator dispatched without writing the `Owner` lines; the case scored 0 in both runs, partly because the eval sandbox denied write tools to delegates whose worktrees sat outside the workspace. |

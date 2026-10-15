@@ -17,4 +17,5 @@ The `brain-setup` skill does steps 1, 3 and 4 for you. By hand:
 4. Let Claude Code reach the vault: add its path to `permissions.additionalDirectories` in `~/.claude/settings.json`.
 5. Open `_views/Inbox.base` to review what agents captured. The full workflow is in
    [docs/workflow.md](https://github.com/msolecki/developer-os/blob/main/docs/workflow.md).
-6. Move the example notes to `_archive/` (or delete them) when you no longer need them.
+6. When you no longer need the example notes, delete them, or archive each one: set `status: archived`
+   and move it to `_archive/`. The inbox example links the other two, so review or delete it with them.

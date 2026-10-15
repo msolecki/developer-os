@@ -76,6 +76,16 @@ promise it makes.
   be committed and the case would test nothing.
 - **Breaks if changed:** backlog evals pass or fail depending on the machine.
 
+## The root `.gitignore` negates `templates/project/TODO.md`
+
+- **Where:** `.gitignore` (`!/templates/project/TODO.md`)
+- **Looks like:** a redundant line; nothing in the repository ignores `TODO.md`.
+- **Why it is deliberate:** a global excludes file (for example `~/.gitignore_global` with `TODO.md`)
+  also hid `templates/project/TODO.md`, so the template file was referenced by the docs but never
+  committed. The negation overrides the global pattern for this one path.
+- **Breaks if changed:** on a machine with that global pattern, a change to the template `TODO.md`
+  is silently left out of commits.
+
 ## Evals are not in CI
 
 - **Where:** `.github/workflows/check.yml`, `evals/README.md`

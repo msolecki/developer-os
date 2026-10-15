@@ -11,7 +11,7 @@ Writes exactly one new file, inside `_inbox/`.
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `~/.claude/CLAUDE.md`; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. Check that it outlives the task
 
@@ -29,7 +29,7 @@ Ask three questions before writing:
 
 ```bash
 V="/path/to/vault"
-rg -il -g '*.md' -g '!templates/' -g '!_archive/' -e '<keyword>' -e '<synonym>' "$V"
+rg -il -g '*.md' -g '!templates/' -g '!_archive/' -g '!_reports/' -e '<keyword>' -e '<synonym>' "$V"
 ```
 
 If a note already covers the topic, name its path to the user and say the new note may duplicate it (the review step can merge them). Still write the capture unless the user says not to.
@@ -71,7 +71,7 @@ One file next to the code, reviewed in the same PR.
 ```
 
 - `type`: `decision`, `knowledge` (a lesson or how-to), `reference`, or `project`.
-- `created` and `updated`: today. `project`: the current project's slug, or empty.
+- `created` and `updated`: today. `project`: the slug from the `Vault project slug:` line in `_Context.md` at the repository root (read the file if the line is not in your context), otherwise empty. Never derive it from the directory name.
 - `summary`: one sentence in double quotes (a bare colon breaks YAML).
 
 ## 6. Report

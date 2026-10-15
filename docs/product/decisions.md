@@ -19,7 +19,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Why:** the CLI had grown to roughly 125k lines and a multi-hour validation gate to deliver what
   skills, rules and the agent's own file tools already do.
 
-## D2. No runtime; two POSIX `sh` scripts at most
+## D2. No runtime; hook scripts in POSIX `sh` only
 
 - **Date:** 2026-10-14, extended 2026-10-15 · **Commits:** `53504f88`, `1c324a89`
 - **Decision:** the only executable code is the hook layer: `cat` of the core rules, plus
@@ -132,18 +132,35 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Date:** 2026-10-14
 - **Decision:** `/plugin marketplace add msolecki/developer-os` installs from `development`, the
   repository's default branch. `main` is not the release channel today.
-- **Open:** a release and pinning procedure; see [CURRENT-STATE.md](../CURRENT-STATE.md).
+- **Pinning:** a user holds one version by adding the marketplace at a branch or tag
+  (`/plugin marketplace add msolecki/developer-os#<ref>`); no release tag exists yet.
+- **Open:** a release procedure (tags, changelog date); see [CURRENT-STATE.md](../CURRENT-STATE.md).
+- **Amended 2026-10-15:** `plugin.json` carries no `version`. Claude Code then versions an install by
+  the commit SHA, so `claude plugin update` picks up every commit on `development`, docs-only ones
+  too. The pinned `0.1.0` kept every install on its first cached copy, whatever was pushed later.
+
+## D15. Language split
+
+- **Date:** 2026-10-14
+- **Decision:** the agent converses in the user's language and keeps it after English input,
+  subagent reports and compaction; everything that lands in a repository is English unless the
+  project says otherwise. Skill descriptions carry Polish trigger phrases next to English ones.
+- **Why:** the primary user works in Polish; repositories and the public plugin are English.
 
 ## D16. Task state survives compaction in the plans directory
 
 - **Date:** 2026-10-15 · Sources proposal #2, Q10
 - **Decision:** after a compaction or resume, the `SessionStart` hook appends a state card (branch,
-  worktrees, active plan, `docs/plans/.devos-state.md`) of at most 1024 bytes. Orchestrating skills
+  newest plan, `docs/plans/.devos-state.md`, worktrees) of at most 1024 bytes. Orchestrating skills
   keep the state file current. It lives in `docs/plans/`, already git-ignored.
 - **Why:** the compaction summary drops which item, worktree and unverified claim belong to which
   agent; the hook already re-runs on compaction, so no new event is needed.
 - **Hardened after review:** the state file is shown only when untracked, git-ignored and reached
   without a symlink, so a repository cannot inject instructions or point it at a local secret.
+- **Amended 2026-10-15:** the state file prints before the worktree list, so a long list cannot push
+  it past the cap; a card over the cap is cut at a whole line with a marker; a state file not changed
+  in 7 days is left over from a finished run and is not shown. The card's `Newest plan:` line comes
+  from the plan files only; the state file's own `Plan:` line prints inside the state section.
 - **Rejected:** a `PreCompact` hook (its input and output are undocumented); `.claude/devos-state.md`
   (one more `.gitignore` entry per project).
 
@@ -184,17 +201,10 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 ## Rules history
 
 One row per approved change to `plugin/rules/core.md` or a skill's rules, added with the change
-(session-retro and instruction-review do this). Check here before reversing a rule.
+(session-retro does this; after an approved instruction-review change, add the row by hand). Check
+here before reversing a rule.
 
 | Date | Change | Target | Reason |
 |---|---|---|---|
 | 2026-10-15 | Task state that must survive compaction lives in `docs/plans/.devos-state.md` | `plugin/rules/core.md` | The state card after compaction (sources proposal #2) |
 | 2026-10-15 | Hook normalization rule shortened to the `tr` call and one example | `plugin/rules/core.md` | Room for the state-card line under the 8192-byte cap |
-
-## D15. Language split
-
-- **Date:** 2026-10-14
-- **Decision:** the agent converses in the user's language and keeps it after English input,
-  subagent reports and compaction; everything that lands in a repository is English unless the
-  project says otherwise. Skill descriptions carry Polish trigger phrases next to English ones.
-- **Why:** the primary user works in Polish; repositories and the public plugin are English.

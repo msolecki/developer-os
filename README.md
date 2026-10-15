@@ -15,6 +15,10 @@ support is manual and best-effort.
 /plugin install developer-os@developer-os
 ```
 
+The plugin has no version number. An install takes the latest commit of `development`, and
+`claude plugin update developer-os@developer-os` picks up every later commit. Auto-update is off for
+this marketplace unless you turn it on under `/plugin` → Marketplaces.
+
 ## Set up the vault
 
 Run the `brain-setup` skill in Claude Code: it copies [`plugin/vault-template/`](plugin/vault-template/)
@@ -37,9 +41,10 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 The plugin has three hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it runs [`plugin/hooks/session-start.sh`](plugin/hooks/session-start.sh), which prints
 [`plugin/rules/core.md`](plugin/rules/core.md); the output becomes session context. After a compaction
-or a resume inside a git repository it adds a state card of at most 1 KB: the branch, up to 10
-worktrees, the active plan and `docs/plans/.devos-state.md`, the task state that implement-backlog,
-pr-cycle and audit-to-backlog keep there. Installing the plugin therefore changes how the agent behaves everywhere, not only
+or a resume inside a git repository it adds a state card of at most 1 KB: the branch, a
+`Newest plan:` line, `docs/plans/.devos-state.md` (the task state that implement-backlog, pr-cycle
+and audit-to-backlog keep there; hidden once it is older than 7 days), then up to 10 worktrees. A
+longer card is cut at a whole line and ends with a cut marker. Installing the plugin therefore changes how the agent behaves everywhere, not only
 when you call a skill; read [`core.md`](plugin/rules/core.md) for the rules themselves.
 
 To turn it off, disable the plugin (`/plugin`, then disable developer-os). To keep the plugin but
@@ -47,16 +52,16 @@ change a rule, override it explicitly in your user-level `~/.claude/CLAUDE.md` (
 the developer-os rule on plan files"); that file loads alongside the core rules in every session.
 
 A `Stop` hook ([`plugin/hooks/capture-nudge.sh`](plugin/hooks/capture-nudge.sh)) counts tool calls
-in the session transcript and reads only background-task ids and output-file paths from it, never
-message content. Once per session, after 30 tool calls, and not while a background agent or command
-it can see is still running, it asks the agent to run the session-retro skill, which proposes a wrap-up and applies only what you
+in the session transcript and reads only background-task and Monitor ids, output-file paths and
+Monitor start times from it, never message content. Once per session, after 30 tool calls, and not
+while a background agent, command or Monitor it can see is still running, it asks the agent to run the session-retro skill, which proposes a wrap-up and applies only what you
 approve. Set `DEVELOPER_OS_CAPTURE_NUDGE=off` to turn it off, or `DEVELOPER_OS_CAPTURE_NUDGE_MIN=<n>`
 to change the threshold.
 
 A `PreToolUse` hook on Bash ([`plugin/hooks/guard.sh`](plugin/hooks/guard.sh)) asks for confirmation
 (it never blocks) before a dependency install with a package argument
-(`npm|pnpm|yarn|bun install|add|i <pkg>`), a `git push --force`/`-f`/`+refspec` without
-`--force-with-lease`, and any `--no-verify` or `git commit -n`. In `claude -p` an ask resolves to a denial.
+(`npm|pnpm|yarn|bun install|add|i <pkg>`), a `git push` with `--force`, `-f` or a `+refspec` (even next
+to `--force-with-lease`; a lone `--force-with-lease` passes), and any `--no-verify` or `git commit -n`. In `claude -p` an ask resolves to a denial.
 
 All three are POSIX `sh`, need no `jq`, make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies.
@@ -98,12 +103,16 @@ scripts/install-codex.sh             # install or update
 
 - It writes a Codex copy of every skill to `~/.agents/skills/<name>` (set `CODEX_SKILLS_DIR` for
   another location, such as `~/.codex/skills/` on older Codex versions). Each copy keeps only `name`
-  and a short description (the first sentence and the trigger phrases), so all of them fit Codex's
-  8000-character skill list, and has its Claude-only references rewritten.
+  and a short description (the first sentence and the quoted trigger phrases, or the "Use when"
+  sentence when there are none), so all of them fit Codex's 8000-character skill list, and has its
+  Claude-only references rewritten. A skill `description` must be one plain line; the installer
+  refuses any other form before it writes anything.
 - It puts `plugin/rules/core.md` and your `Brain vault:` line (from `~/.claude/CLAUDE.md`, or
-  `--vault <path>`) between `developer-os-core` markers in `~/.codex/AGENTS.md` (`--project <dir>`
-  for a project's `AGENTS.md`). Text outside the markers stays; a changed file is backed up first.
-- Run it again after each plugin update. `--uninstall` removes only what it installed. A skill
+  `--vault <path>`) between `developer-os-core` markers in `~/.codex/AGENTS.md` (`$CODEX_HOME/AGENTS.md`
+  when `CODEX_HOME` is set; `--project <dir>` for a project's `AGENTS.md`). Text outside the markers
+  stays; a changed file is backed up first.
+- Run it again after each plugin update. `--uninstall` removes only what it installed;
+  `--project <dir> --uninstall` removes only that project's block and keeps the skills. A skill
   directory it did not create, including an older hand-made symlink into another clone, is skipped
   and reported; remove it first to let the installer manage it.
 

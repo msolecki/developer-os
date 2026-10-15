@@ -31,7 +31,7 @@ in place, so symlinked config files stay symlinks.
 | Planning location | Project `AGENTS.md` or `CLAUDE.md` | Core rules, plan-status, spec, session-retro | `docs/plans/<YYYY-MM-DD-task>.md`, git-ignored |
 | Specification location | Project `AGENTS.md` or `CLAUDE.md` | spec | spec proposes `docs/specs/` and asks |
 | Fast check and full suite commands | Project `AGENTS.md` or `CLAUDE.md` | Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist | Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing |
-| `Vault project slug:` | `_Context.md` | brain-search and brain-capture through the session context | Empty `project:` |
+| `Vault project slug:` | `_Context.md` | brain-search and brain-capture, which read `_Context.md` at the repository root when the line is not in context | Empty `project:` |
 | Docs root | `AGENTS.md` | docs-sync | `docs/` |
 | Task state | `<planning location>/.devos-state.md` (default `docs/plans/.devos-state.md`) | The `SessionStart` hook after compaction (default location only) | Written by implement-backlog, pr-cycle and audit-to-backlog; none |
 | `TODO.md` item format | The backlog todo file | audit-to-backlog, project-baseline, implement-backlog, plan-status | `templates/project/TODO.md` shows it |

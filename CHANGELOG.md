@@ -2,7 +2,7 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.1.0] - Unreleased
+## [Unreleased]
 
 First public release. developer-os is now a Markdown-only plugin for Claude Code, installed from
 this repository as a plugin marketplace. It replaces the earlier Homebrew CLI, which was never
@@ -28,14 +28,14 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - Output styles: architect, debug, direct-objective and tdd-enforcer.
 - Three hooks: `SessionStart` loads `plugin/rules/core.md` (and a state card after compaction); `Stop` offers session-retro once per
   session after 30 tool calls, deferred while background agents or commands are still running
-  (`DEVELOPER_OS_CAPTURE_NUDGE=off` disables it); `PreToolUse` on Bash
+  or a Monitor is still armed (`DEVELOPER_OS_CAPTURE_NUDGE=off` disables it); `PreToolUse` on Bash
   asks before dependency installs, force pushes and `--no-verify` or `git commit -n`. The three scripts are POSIX `sh`,
   make no network calls, fail open and have tests in `tests/*.test.sh`.
 - `plugin/vault-template/`: folders, a note template, example notes, Bases views (Inbox, Stale,
   By project), property types in `.obsidian/types.json`, and a `.gitignore` that keeps Obsidian's UI
   state out of a git-synced vault. It ships inside the plugin, so brain-setup can copy it.
-- `templates/project/`: `AGENTS.md`, a `CLAUDE.md` that imports it, `_Context.md`, and a `docs/`
-  standard (index with task routing, `CURRENT-STATE.md`, `pitfalls.md`, `decisions/`, `runbooks/`).
+- `templates/project/`: `AGENTS.md`, a `CLAUDE.md` that imports it, `_Context.md`, `TODO.md`, a
+  `.gitignore` that keeps `docs/plans/` local, and a `docs/` standard (index with task routing, `CURRENT-STATE.md`, `pitfalls.md`, `decisions/`, `runbooks/`).
 - `docs/workflow.md`: how to work with the vault and the code, where each kind of knowledge belongs,
   which features are Claude-only, and an optional routines recipe for mobile capture and a weekly
   vault brief.
@@ -44,9 +44,9 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   current state and glossary, written for the plugin (the CLI documentation was removed with the CLI).
 - `evals/`: behaviour cases for `claude plugin eval`, run by hand and never in CI.
 - A state card after compaction: the `SessionStart` hook runs `session-start.sh`, which prints the core
-  rules and, after a compaction or resume, the branch, worktrees, active plan and
-  `docs/plans/.devos-state.md` (at most 1 KB), kept current by implement-backlog, pr-cycle and
-  audit-to-backlog.
+  rules and, after a compaction or resume, the branch, the newest plan, `docs/plans/.devos-state.md`
+  and the worktrees (at most 1 KB, cut at a whole line with a marker; a state file older than 7 days
+  is not shown), kept current by implement-backlog, pr-cycle and audit-to-backlog.
 - One backlog item format (`Size`, `Done when`, a runnable `Check`, `Blocked by`, `Owner`) across
   audit-to-backlog, project-baseline, implement-backlog and plan-status, with
   `templates/project/TODO.md`.
@@ -58,6 +58,11 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - A map of built-in Claude Code commands that overlap developer-os skills, in `docs/workflow.md`.
 - Evals for backlog ordering, ownership and blocking, review framing and contract boundaries, retro
   persistence and reversals, and prompt injection in fix-pr, pr-cycle, bug-triage and code-review.
+- bug-triage sends a hypothesis that turns on library or vendor behaviour to research-analyst for a
+  sourced answer.
+- Eval cases for the gates of brain-compile, fix-pr, instruction-review and spec, and for
+  authentication items in implement-backlog; the plan-status and brain-garden fixtures plant waiting,
+  orphaned, stale, archived and duplicate cases.
 - `scripts/check.sh` validates skills (name matches the folder and `^[a-z0-9-]{1,64}$`, `license` and
   `compatibility` present, description length and total, no local paths, `## Stop point` and
   `## Never` in action skills), agents' final statuses, `plugin/SURFACE.txt` and counts written as
@@ -67,8 +72,10 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - code-review and code-reviewer list Evidence checked under an `APPROVE` with no P0–P2, read both
   sides of every changed contract, and brief the reviewer without the author or their rationale.
 - session-retro labels findings `persistent` or `this-task`, shows the commit a rule change would
-  reverse, and proposes a check for a mistake made twice; instruction-review does the same.
-  `docs/product/decisions.md` keeps a Rules history table.
+  reverse, proposes a check for a mistake made twice, and adds a Rules history row in
+  `docs/product/decisions.md` for each approved rule change. instruction-review also shows the commit
+  a proposed line would reverse and proposes a check for a mistake made twice; it adds no Rules
+  history row and no labels.
 - pr-cycle, bug-triage and code-review treat PR and issue text, CI logs and code comments as data.
 - Every skill carries `license: MIT` and `compatibility`; hooks have a 10-second timeout.
 - Review, audit and triage skills and the agents rate findings P0–P3 with one severity scale; review
@@ -92,8 +99,60 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   them. The README links to `core.md` instead of paraphrasing it.
 - `templates/project/AGENTS.md` names the core rules as the source of shared rules and shows an
   optional `Backlog:` line.
+- `plugin.json` carries no `version`: an install tracks the latest `development` commit, and
+  `claude plugin update` picks up every commit. Pin by marketplace ref:
+  `/plugin marketplace add msolecki/developer-os#<ref>`.
+- The core rules put specifications in `docs/specs/` (or the project's spec location), not next to
+  the plan, and name the planning location for the task-state file.
+- implement-backlog reviews through the code-review skill, so P0/P1 findings are verified, fixes
+  them and reviews again for at most two rounds, then stops with nothing of the batch committed.
+- pr-cycle has its own fix commits reviewed by code-reviewer before the push and derives the verdict
+  from that review.
+- qa-expert runs only the tests that cover the named files and loads testing-conventions;
+  tdd-enforcer runs the tests of the changed area, not the full suite, on every cycle.
+- The architect, debug and tdd-enforcer output styles say the core rules on structure and the
+  status block still apply; "ASAP" or "quickly" overrides only their template.
+- Conventions skills: a Server Action error uses error-handling-conventions' `{ code, message,
+  details? }`; the deploy/migration-ordering rule moves to defensive-coding-conventions; "paging
+  alert" replaces "P1 alert".
+- brain-garden checks the vault in one `awk` pass (a 300-note vault went from 18 s to 0.05 s).
+- The docs-sync standard includes the `Vault project slug:` line, `DESIGN.md`, the backlog file and
+  a git-ignored planning location.
+- `scripts/check.sh` also fails on a name removed from `SURFACE.txt` still in use, a broken link
+  `#fragment`, a broken link inside a skill, any plugin validation warning but a missing `version`, and brain
+  skills whose "Locate the vault" paragraphs differ.
 
 ### Fixed
+- brain-garden reports a link to an archived note as an info line, not a broken link, and no longer
+  proposes removing provenance; links in `sources:` are exempt from that line, but a missing source is
+  still `no such note`. It resolves links case-insensitively, reads dotted note names as notes,
+  unquotes dates, checks vault-root `README.md` links, parses CRLF notes and skips code fences.
+- The brain skills read `$CLAUDE_CONFIG_DIR/CLAUDE.md` for the `Brain vault:` line (falling back to
+  `~/.claude/CLAUDE.md`) and skip `_reports/`; brain-search and brain-capture take the project slug
+  from the `Vault project slug:` line in `_Context.md`, never from the directory name.
+- brain-compile finds an earlier compile of the topic anywhere in the vault; brain-review checks the
+  name and destination before archiving; the vault template's example notes are archived with
+  `status: archived`.
+- The state card keeps the state file when many worktrees are listed and never ends inside a UTF-8
+  character; the state file's `Plan:` line no longer hides the newest plan.
+- capture-nudge no longer nudges while a Monitor is armed.
+- implement-backlog removes its `Owner` line from an item still open when it stops, so the next run
+  can take it, and records the current checkout as owner for a sequential item.
+- pr-cycle replies to and resolves review threads only after a successful push, reruns its gates after
+  re-review fixes, and skips the re-review when you stop.
+- fix-pr stops on uncommitted changes and stages only the files it edited for the approved threads.
+- session-retro proposes removing only branches merged into the base branch, never the base or the
+  current branch.
+- spec writes a plan that plan-status and session-retro can read, and never writes the spec into the
+  planning location; plan-status picks the active plan by the core rules' definition.
+- audit-to-backlog reports every P0 and P1 finding; only the P2/P3 tail is capped.
+- code-review relays the reviewer's report without its status line.
+- implement-backlog, pr-cycle and audit-to-backlog delete `.devos-state.md` at their stop point.
+- docs-sync and project-baseline drop a `[path]` argument they never used.
+- `templates/project/TODO.md` is now committed: a global excludes file had hidden it.
+- The Codex installer keeps skill-usage's `developer-os:` patterns and the "Use when" sentence of a
+  description without quoted phrases, honours `CODEX_HOME`, and `--project --uninstall` keeps the
+  global skills; it refuses a description that is not one plain line.
 - The docs say the agent creates notes only in `_inbox/` and edits or moves other notes only after
   approval; brain-garden reports inbox notes older than 7 days.
 - The docs cover the compiled-note `sources:` list, the quoted `summary` and the template's default
@@ -102,6 +161,13 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - The README lists fork among the `SessionStart` triggers.
 
 ### Security
+- capture-nudge passes only an absolute output path under a `tasks/` directory to `find`; a path such
+  as `-delete` printed by any tool could empty the working tree with GNU `find`.
+- pr-cycle asks before running project scripts or commit hooks on a fork PR or a PR from an outside
+  author.
+- implement-backlog and audit-to-backlog treat backlog text as data; implement-backlog screens every
+  `Check` before dispatch, never runs one that pipes into a shell, fetches from the network or writes
+  outside the repository, and screens a changed repository script again before re-running it.
 - `SECURITY.md` no longer claims the vault never leaves your disk, describes what each hook reads,
   and explains that an update can change the hook commands.
 - `.gitignore` covers `.env*`, `*.pem` and `.claude/settings.local.json`.

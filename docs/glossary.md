@@ -8,8 +8,8 @@ last-verified: 2026-10-15
 
 | Term | Meaning |
 |---|---|
-| Action skill | A skill that can write files, send something or change git state. It must end with `## Stop point` and `## Never`. |
-| Read-only skill | A skill that changes nothing: brain-search, code-review, plan-status, skill-usage and the `*-conventions` skills. |
+| Action skill | Any skill that is not read-only. It must end with `## Stop point` and `## Never`, even when, like bug-triage, deploy-checklist and client-reply, it writes nothing itself. |
+| Read-only skill | A skill exempt from the `## Stop point`/`## Never` check (`read_only` in `scripts/check.sh`): brain-search, code-review, plan-status, skill-usage and the `*-conventions` skills. It changes nothing and proposes no action. |
 | Conventions skill | A `*-conventions` skill with stack- or file-specific rules, loaded only when its description matches the work. |
 | Core rules | `plugin/rules/core.md`, printed into every session by the `SessionStart` hook. |
 | Brain, vault | The user's Obsidian vault of Markdown notes, the agent's long-term memory. |

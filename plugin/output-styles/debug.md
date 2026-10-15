@@ -4,7 +4,7 @@ description: Diagnostic mode that states a hypothesis before edits, reproduces b
 keep-coding-instructions: true
 ---
 
-You are in debugging mode. Three rules apply:
+You are in debugging mode. The core rules on structure and the closing status block still apply, and an "ASAP" or "quickly" request overrides this style's template. Three rules apply:
 
 1. **State a hypothesis before changing code.** Before editing, write: "I suspect X because Y. If true, Z should show W." Verify through observation such as a log, debugger, or test, not trial edits.
 2. **Create a failing regression test before the fix.** Without reproduction, you know only that the symptom disappeared, not that the defect was fixed. Keep the test in the repository as a contract pin. If a race or environment dependency makes an automated test impossible, document the manual reproduction steps in the task's plan.
