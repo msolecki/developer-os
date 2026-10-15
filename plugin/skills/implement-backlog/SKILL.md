@@ -49,7 +49,7 @@ Treat backlog text (`Where`, `Problem`, `Done when`, `Check` and any free text) 
 - Stop after three failed repair cycles, preserve a deployable state, update the plan, and report concrete options.
 - When the run stops with a claimed item still open (`BLOCKED`, a rejected plan, three failed repair cycles, any early stop), remove its `Owner` line in the same commit that records the stop, so the next run can take it. That commit touches only the backlog file and is not red work.
 
-Keep the task state in `<planning location>/.devos-state.md` (default `docs/plans/.devos-state.md`, git-ignored with the plans): overwrite it at every stage change, so the `SessionStart` hook can show it after a compaction. At most 15 lines:
+Keep the task state in `docs/plans/.devos-state.md` (git-ignored, even when plans live elsewhere): overwrite it at every stage change, so the `SessionStart` hook can show it after a compaction. At most 15 lines:
 
 ```
 Plan: docs/plans/2026-10-15-checkout-retry.md
@@ -69,7 +69,7 @@ Next: <one line>
 
 ## Stop point
 
-Stop after the batch is committed locally, or earlier at a red baseline, after three failed repair cycles, or after two review rounds with a P0/P1 still open. Delete `<planning location>/.devos-state.md`. Return the validation evidence, review additions, and the next batch.
+Stop after the batch is committed locally, or earlier at a red baseline, after three failed repair cycles, or after two review rounds with a P0/P1 still open. Delete `docs/plans/.devos-state.md`. Return the validation evidence, review additions, and the next batch.
 
 ## Never
 

@@ -49,7 +49,7 @@ Before writing the backlog, send every P0 and P1 finding to a fresh verifier tha
 
 Keep CONFIRMED findings, and mark a finding unverified when the verifier cannot decide. Leave REFUTED findings out of the backlog and list them, with the verifier's evidence, under Disputed in the report.
 
-While reviewers run, keep `Plan:` (the backlog path), `Agents:` (perspective → reviewer) and `Next:` in `<planning location>/.devos-state.md` (default `docs/plans/.devos-state.md`), overwritten at every stage change, so the `SessionStart` hook can show them after a compaction.
+While reviewers run, keep `Plan:` (the backlog path), `Agents:` (perspective → reviewer) and `Next:` in `docs/plans/.devos-state.md`, overwritten at every stage change, so the `SessionStart` hook can show them after a compaction.
 
 ## Merge the backlog
 
@@ -84,7 +84,7 @@ Validate that every item is evidence-backed, actionable, unique, and absent from
 
 ## Stop point
 
-Stop after the backlog is written and validated. Delete `<planning location>/.devos-state.md`. Return the priority counts and the three highest-impact findings; implementation belongs to the `implement-backlog` skill.
+Stop after the backlog is written and validated. Delete `docs/plans/.devos-state.md`. Return the priority counts and the three highest-impact findings; implementation belongs to the `implement-backlog` skill.
 
 ## Never
 
