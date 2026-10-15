@@ -48,7 +48,7 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
     else if (line ~ /^## /) sec = line
     if (f ~ /^\.\/_archive\//) continue
     # Links: [[target]] with alias, heading, and folder stripped; provenance = frontmatter or ## Links of a compiled note
-    s = line
+    s = line; gsub(/`[^`]*`/, "", s)   # inline code is an example, not a link
     while ((i = index(s, "[[")) > 0) {
       s = substr(s, i + 2); t = s
       for (j = 1; j <= length(t); j++) { c = substr(t, j, 1); if (c == "]" || c == "|" || c == "#") break }
