@@ -7,7 +7,7 @@ last-verified: 2026-10-16
 # Hooks reference
 
 Defined in `plugin/hooks/hooks.json`. Commands run with `${CLAUDE_PLUGIN_ROOT}` set to the installed
-`plugin/` directory; each has a 10-second timeout. All three scripts run under `sh` (POSIX apart from `grep -o` and `head -c`, which macOS and Linux provide), need no `jq`, make no network call, and fail open.
+`plugin/` directory; each has a 10-second timeout. Each command names its script by a literal `${CLAUDE_PLUGIN_ROOT}` path, so the scripts keep their executable bit and `#!/bin/sh` line. All three are `sh` (POSIX apart from `grep -o` and `head -c`, which macOS and Linux provide), need no `jq`, make no network call, and fail open.
 Tests: `tests/session-start.test.sh`, `tests/guard.test.sh`, `tests/capture-nudge.test.sh`.
 
 ## SessionStart — core rules and state card
@@ -15,7 +15,7 @@ Tests: `tests/session-start.test.sh`, `tests/guard.test.sh`, `tests/capture-nudg
 | | |
 |---|---|
 | Matcher | none: every source (startup, resume, clear, compact, fork) |
-| Command | `sh "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"`, timeout 10 s |
+| Command | `"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"`, timeout 10 s |
 | Input | the hook JSON on stdin; uses `source` and `cwd` |
 | Output | stdout becomes session context |
 | Limit | Claude Code caps hook output at 10,000 characters; `scripts/check.sh` caps `core.md` at 8192 bytes and checks that the card cap still fits |
