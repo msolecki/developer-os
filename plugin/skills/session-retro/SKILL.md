@@ -1,6 +1,6 @@
 ---
 name: session-retro
-description: Wrap up a session - check for uncommitted, unpushed or unmerged work, open PRs and running background tasks, propose cleanup, give a Done / Not done / Needs you status, update or close the plan, and propose at most a few lessons, rules or skill ideas to keep, applying only what the user approves. Use at the end of a session, when the Stop hook asks for it, or when the user says "podsumuj sesję", "czy wszystko zrobione", "posprzątaj", "kończymy". Unlike the built-in /recap one-line summary, it checks git state and routes lessons to their destination.
+description: Wrap up a session - check for uncommitted, unpushed or unmerged work, open PRs and running background tasks, propose cleanup, give a Done / Not done / Needs you status, update or close the plan, and propose at most a few lessons, rules or skill ideas to keep, applying only what the user approves. Use at the end of a session, when the Stop hook asks for it, or when the user says "wrap up the session", "is everything done", "clean up", "we are done". Unlike the built-in /recap one-line summary, it checks git state and routes lessons to their destination.
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
@@ -54,7 +54,7 @@ Route each item by this table:
 - **Plan update**: for the active plan (declared planning location, default `docs/plans/`). Finished: propose deleting it and `docs/plans/.devos-state.md`, and moving open items to the backlog (the todo path of the project's `Backlog:` line, default `TODO.md`). Not finished: the new status line and a Next action ending with `Next session: 3 notes` (what to do first, what to avoid, what is still unverified).
 - **Docs**: for this session's commits that pr-cycle or implement-backlog did not review, the docs findings `developer-os:code-review` defines (a doc the diff makes false), each as a doc edit; when `docs/CURRENT-STATE.md` `Verified at commit:` or `_Context.md` "State as of" predates them, offer `developer-os:docs-sync`.
 - **developer-os feedback**: a skill, hook or rule of this plugin that misfired. Draft the issue title and body without client or project names, and the command for the user to run: `gh issue create --repo msolecki/developer-os --title "…" --body-file <file>`.
-- **Skill / hook candidates**: a request the user made at least twice, in this session or across sessions you know of. Give a proposed name, the trigger phrases (including the user's Polish wording), and the type (skill or hook).
+- **Skill / hook candidates**: a request the user made at least twice, in this session or across sessions you know of. Give a proposed name, the trigger phrases (in the user's own wording), and the type (skill or hook).
 
 ## 5. Apply
 

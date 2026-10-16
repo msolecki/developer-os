@@ -1,6 +1,6 @@
 ---
 name: bug-triage
-description: Triage a reported defect or incident by setting severity, reproducing it, ranking evidence-backed hypotheses, identifying root cause, and proposing mitigation, permanent fix, and regression test. Use when the user reports a defect or production incident, or asks to diagnose failing behavior, for example "mamy błąd na produkcji", "zdiagnozuj ten błąd", "dlaczego to się wywala".
+description: Triage a reported defect or incident by setting severity, reproducing it, ranking evidence-backed hypotheses, identifying root cause, and proposing mitigation, permanent fix, and regression test. Use when the user reports a defect or production incident, or asks to diagnose failing behavior, for example "we have a bug in production", "diagnose this bug", "why does this crash".
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---

@@ -1,6 +1,6 @@
 ---
 name: implement-backlog
-description: Implement evidence-backed backlog items in small batches, validate every item and the full batch, get an independent review, update the backlog and plan, and commit only green work. Use when the user invokes implement-backlog or asks to execute an audit backlog, for example "napraw wszystko wieloma agentami", "zrealizuj backlog", "wdróż poprawki z audytu".
+description: Implement evidence-backed backlog items in small batches, validate every item and the full batch, get an independent review, update the backlog and plan, and commit only green work. Use when the user invokes implement-backlog or asks to execute an audit backlog, for example "fix everything with multiple agents", "implement the backlog", "apply the audit fixes".
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 argument-hint: "[category | task ID | --batch N]"

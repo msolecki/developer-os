@@ -1,6 +1,6 @@
 ---
 name: deploy-checklist
-description: Produce a repository-specific deployment checklist with a pre-deploy GO/NO-GO verdict and post-deploy checks covering validation, migrations, feature flags, monitoring, communication, and rollback. Use when the user plans a deployment, release to production, or shipping event, for example "wdrażamy na produkcję", "checklista deployu", "czy możemy deployować".
+description: Produce a repository-specific deployment checklist with a pre-deploy GO/NO-GO verdict and post-deploy checks covering validation, migrations, feature flags, monitoring, communication, and rollback. Use when the user plans a deployment, release to production, or shipping event, for example "we are deploying to production", "deploy checklist", "can we deploy".
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
