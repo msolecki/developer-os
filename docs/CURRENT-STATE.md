@@ -6,7 +6,7 @@ last-verified: 2026-10-16
 
 # Current state
 
-Verified at tag: `v0.2.1` (2026-10-16)
+Verified at tag: `v0.2.2` (2026-10-16)
 
 What is true at the tag above, checked against the files and by running `CI=1 scripts/check.sh`
 (green, including the six script tests). agnix 0.57.0 `--strict` reports no issues. If `development` has moved far past
@@ -14,7 +14,7 @@ this tag, treat each line as unverified.
 
 ## Works
 
-- Release `0.2.1`, tagged `v0.2.1`. Install from the marketplace on `main`, which moves only on a
+- Release `0.2.2`, tagged `v0.2.2`. Install from the marketplace on `main`, which moves only on a
   release (D20): `.claude-plugin/marketplace.json` → `plugin/`.
 - 28 skills, 6 agents, 4 output styles, 3 hooks, as listed in
   [product/functional-spec.md](product/functional-spec.md).
