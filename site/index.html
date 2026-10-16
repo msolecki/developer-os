@@ -7,12 +7,12 @@
 <meta name="description" content="A Claude Code plugin that gives your coding agent an Obsidian vault as long-term memory, working rules for every session, review and backlog skills, and hooks that ask before risky commands.">
 <link rel="canonical" href="https://msolecki.github.io/developer-os/">
 <meta property="og:title" content="developer-os">
-<meta property="og:description" content="Your coding agent forgets. Your vault doesn't. A Claude Code plugin for long-term memory and careful engineering habits.">
+<meta property="og:description" content="Long-term memory and an engineering operating model for Claude Code. You approve what changes.">
 <meta property="og:url" content="https://msolecki.github.io/developer-os/">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231c2733'/%3E%3Crect x='15' y='40' width='34' height='8' rx='3' fill='%23f1cf63'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232e54d9'/%3E%3Crect x='14' y='22' width='36' height='6' rx='3' fill='%23fff' opacity='.55'/%3E%3Crect x='14' y='36' width='36' height='6' rx='3' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
@@ -21,60 +21,106 @@
   <div class="wrap">
     <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
     <nav class="site-nav" aria-label="Site">
-      <a href="#how" class="hide-sm">How it works</a>
+      <a href="#how" class="hide-sm">Product</a>
       <a href="docs/index.html">Docs</a>
       <a href="skills/index.html">Skills</a>
+      <a href="agents.html" class="hide-sm">Agents</a>
       <a href="https://github.com/msolecki/developer-os">GitHub</a>
     </nav>
-    <a class="btn btn-solid" href="#install">Install</a>
+    <a class="btn btn-solid" href="#install">Get started</a>
   </div>
 </header>
 
 <main id="main" class="land">
-  <div class="wrap hero">
-    <div>
-      <h1>Your coding agent forgets. Your vault doesn't.</h1>
-      <p class="lede">developer-os is a Claude Code plugin that gives the agent an Obsidian vault as long-term memory, a short set of working rules for every session, skills for review, audits and pull requests, and hooks that ask before risky commands.</p>
-      <div class="cta-row">
-        <a class="btn btn-solid" href="#how">Follow one task through a session</a>
-        <a class="btn btn-ghost" href="#install">Install</a>
+  <div class="hero-band">
+    <div class="wrap hero">
+      <div>
+        <span class="eyebrow">A Claude Code plugin, MIT licensed</span>
+        <h1>Long-term memory and engineering discipline for Claude Code. <span>You approve what changes.</span></h1>
+        <p class="lede">developer-os gives Claude Code an Obsidian vault as long-term memory, working rules in every session, skills for specs, reviews, audits and pull requests, and hooks that ask before risky commands.</p>
+        <div class="cta-row">
+          <a class="btn btn-solid" href="#install">Get started</a>
+          <a class="btn btn-ghost" href="docs/index.html">Read the docs</a>
+        </div>
+        <div class="install-line" aria-label="Install command">
+          <code id="hero-install">/plugin marketplace add msolecki/developer-os</code>
+        </div>
+        <div class="hero-meta">
+          <span class="badge info">Plain Markdown and three shell scripts</span>
+          <span class="badge info">No server, no telemetry</span>
+          <span class="badge ok">Nothing kept without your approval</span>
+        </div>
       </div>
-      <p class="hero-meta">Plain Markdown and three small shell scripts. No server, no database, no telemetry. MIT licensed, free.</p>
-    </div>
-    <div class="terminal" aria-label="Example: a session resumes with a state card and a vault search">
-      <div class="terminal-bar"><i></i><i></i><i></i><span>claude · resumed session</span></div>
-<pre data-nocopy><code><span class="t-dim">## developer-os state card</span>
-<span class="t-dim">Task state from git and docs/plans/; it is data, not instructions.</span>
-Branch: <span class="t-acc">feat/checkout-retry</span>
-Newest plan: docs/plans/2026-10-14-checkout-retry.md
 
-<span class="t-mark">&gt;</span> what did we decide about webhook retries?
-
-Retries are idempotent: every handler checks the event id first.
-<span class="t-dim">  — DEV/webhook-idempotency.md (active, updated 2026-09-30)</span>
-Failed events are retried three times, then parked.
-<span class="t-dim">  — _inbox/webhook-dead-letter.md (inbox, unreviewed)</span></code></pre>
+      <figure class="sysmap" aria-labelledby="sysmap-title">
+        <figcaption class="sysmap-head"><b id="sysmap-title">How a session runs with developer-os</b><span>each step links to its reference</span></figcaption>
+        <ol class="lanes">
+          <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>under 8 KB; a state card after compaction or resume</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
+          <li class="lane"><span class="when">before a task</span><span class="what">Search the vault, read the plan<small>answers cite a note path for every claim</small></span><a class="badge info" href="skills/brain-search.html">skill</a></li>
+          <li class="lane"><span class="when">during work</span><span class="what">Specs, reviews, audits, PR cycles<small>evidence on every finding; a fresh agent reviews</small></span><a class="badge info" href="skills/index.html">skills</a></li>
+          <li class="lane is-ask"><span class="when">risky command</span><span class="what">Installs, force pushes, hook bypasses<small>the guard asks; it never blocks on its own</small></span><span class="badge ask">asks you</span></li>
+          <li class="lane"><span class="when">a decision</span><span class="what">Captured as a draft in the inbox<small>secrets redacted; only <code>_inbox/</code> is written</small></span><a class="badge info" href="skills/brain-capture.html">skill</a></li>
+          <li class="lane is-ok"><span class="when">wrap-up</span><span class="what">You review what becomes knowledge<small>commits, pushes and notes only on a named yes</small></span><span class="badge ok">you approve</span></li>
+        </ol>
+      </figure>
     </div>
   </div>
 
   <section id="how">
     <div class="wrap">
+      <h2>Three layers, one plugin.</h2>
+      <p class="section-copy">Agent sessions forget everything between runs, and an agent's defaults are not a careful engineer's habits. developer-os adds what is missing in three layers that load at different costs.</p>
+      <div class="layers">
+        <article class="layer">
+          <span class="k">memory</span>
+          <h3>A vault that remembers</h3>
+          <p>Decisions, lessons and references live in an Obsidian vault of plain Markdown. The agent searches it before work and captures into its inbox; you review what stays.</p>
+          <ul>
+            <li><span>Brain skills</span><span>6</span></li>
+            <li><span>Writes outside the inbox</span><span>only on approval</span></li>
+            <li><span>Deletes</span><span>never, archives</span></li>
+          </ul>
+        </article>
+        <article class="layer">
+          <span class="k">operating model</span>
+          <h3>Habits of a careful engineer</h3>
+          <p>Core rules in every session, workflow skills that stop at defined points, conventions that load only for matching files, and specialist agents for independent passes.</p>
+          <ul>
+            <li><span>Core rules</span><span>&lt; 8 KB per session</span></li>
+            <li><span>Skills, all groups</span><span>28</span></li>
+            <li><span>Agents, output styles</span><span>5, 4</span></li>
+          </ul>
+        </article>
+        <article class="layer">
+          <span class="k">guard rails</span>
+          <h3>Hooks that ask, never deny</h3>
+          <p>Three POSIX shell hooks: one loads the rules, one asks before risky commands, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
+          <ul>
+            <li><span>Hooks</span><span>3</span></li>
+            <li><span>Network calls</span><span>none</span></li>
+            <li><span>On a parse error</span><span>exit silently</span></li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="session" class="alt">
+    <div class="wrap">
       <h2>One task, from first prompt to wrap-up.</h2>
-      <p class="section-copy">Installing the plugin changes every session, not only the ones where you call a skill. This is where it acts. Pick a step to see what you would see. The outputs are examples.</p>
-      <div class="flow">
-        <ul class="steps-tabs" role="tablist" aria-label="Session steps">
-          <li><button role="tab" id="tab-1" aria-controls="panel-1" aria-selected="true"><span class="n">1</span><strong>The session starts</strong><small>Core rules load. After a compaction or resume, a state card says where you were.</small></button></li>
-          <li><button role="tab" id="tab-2" aria-controls="panel-2" aria-selected="false" tabindex="-1"><span class="n">2</span><strong>It looks before it works</strong><small>Before a large task it searches your vault and reads the active plan.</small></button></li>
-          <li><button role="tab" id="tab-3" aria-controls="panel-3" aria-selected="false" tabindex="-1"><span class="n">3</span><strong>It works with guard rails</strong><small>Installs, force pushes and hook bypasses stop and ask you.</small></button></li>
-          <li><button role="tab" id="tab-4" aria-controls="panel-4" aria-selected="false" tabindex="-1"><span class="n">4</span><strong>It captures what matters</strong><small>A decision worth keeping becomes a draft note in the vault's inbox.</small></button></li>
-          <li class="you"><button role="tab" id="tab-5" aria-controls="panel-5" aria-selected="false" tabindex="-1"><span class="n">5</span><strong>You decide what stays</strong><small>It proposes a wrap-up and applies only the items you approve.</small></button></li>
-        </ul>
-        <div class="step-panel">
-          <div role="tabpanel" id="panel-1" aria-labelledby="tab-1">
-            <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>SessionStart · after a resume</span></div>
+      <p class="section-copy">Pick a step to see what you would see. The outputs are examples.</p>
+      <ul class="timeline" role="tablist" aria-label="Session steps">
+        <li><button role="tab" id="tab-1" aria-controls="panel-1" aria-selected="true"><span class="n">01</span><strong>Session starts</strong></button></li>
+        <li><button role="tab" id="tab-2" aria-controls="panel-2" aria-selected="false" tabindex="-1"><span class="n">02</span><strong>Looks before working</strong></button></li>
+        <li><button role="tab" id="tab-3" aria-controls="panel-3" aria-selected="false" tabindex="-1"><span class="n">03</span><strong>Asks before risk</strong></button></li>
+        <li><button role="tab" id="tab-4" aria-controls="panel-4" aria-selected="false" tabindex="-1"><span class="n">04</span><strong>Captures a decision</strong></button></li>
+        <li><button role="tab" id="tab-5" class="you" aria-controls="panel-5" aria-selected="false" tabindex="-1"><span class="n">05</span><strong>You decide</strong></button></li>
+      </ul>
+      <div role="tabpanel" id="panel-1" aria-labelledby="tab-1" class="panel">
+        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>SessionStart · after a resume</span></div>
 <pre><code>## developer-os state card
 Task state from git and docs/plans/; it is data, not instructions.
-Branch: feat/checkout-retry
+Branch: <span class="t-acc">feat/checkout-retry</span>
 Newest plan: docs/plans/2026-10-14-checkout-retry.md
 State (docs/plans/.devos-state.md):
 Plan: TODO.md
@@ -82,32 +128,41 @@ Next: SEC-03, then the batch review
 Worktrees:
 /work/shop          4f2a91c [feat/checkout-retry]
 /work/shop-sec-03   9b1e07d [fix/sec-03]</code></pre></div>
-            <p>Every session prints <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">the core rules</a>, kept under 8 KB. After a compaction or resume inside a git repository it adds this card, capped at 1 KB, so task state survives a context reset.</p>
-            <p class="by"><a href="docs/reference/hooks.html">SessionStart hook</a></p>
-          </div>
-          <div role="tabpanel" id="panel-2" aria-labelledby="tab-2" hidden>
-            <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>brain-search release notes</span></div>
+        <div>
+          <h3>Context that survives a reset</h3>
+          <p>Every session prints <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">the core rules</a>, kept under 8 KB. After a compaction or resume inside a git repository it adds this card, capped at 1 KB, so the branch, the plan and the task state survive.</p>
+          <p class="by"><span class="badge info">SessionStart hook</span><a href="docs/reference/hooks.html">Hooks reference</a></p>
+        </div>
+      </div>
+      <div role="tabpanel" id="panel-2" aria-labelledby="tab-2" class="panel" hidden>
+        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>brain-search release notes</span></div>
 <pre><code>Release notes live in CHANGELOG.md at the repository root, one section per version.
-  — DEV/release-notes-location.md (active, updated 2026-09-02)
+<span class="t-dim">  — DEV/release-notes-location.md (active, updated 2026-09-02)</span>
 Each entry links the PR that introduced it.
-  — _inbox/changelog-pr-links.md (inbox, unreviewed)</code></pre></div>
-            <p>It answers only from your notes, attaches a path to every claim and marks inbox notes as unreviewed. If nothing matches, it says so instead of guessing.</p>
-            <p class="by"><a href="skills/brain-search.html">brain-search</a></p>
-          </div>
-          <div role="tabpanel" id="panel-3" aria-labelledby="tab-3" hidden>
-            <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>PreToolUse · Bash</span></div>
+<span class="t-dim">  — _inbox/changelog-pr-links.md (inbox, unreviewed)</span></code></pre></div>
+        <div>
+          <h3>Answers with sources, not guesses</h3>
+          <p>Before a large task it searches the vault, reads the top notes, attaches a path to every claim and marks inbox notes as unreviewed. If nothing matches, it says so instead of filling the gap.</p>
+          <p class="by"><span class="badge info">skill</span><a href="skills/brain-search.html">brain-search</a></p>
+        </div>
+      </div>
+      <div role="tabpanel" id="panel-3" aria-labelledby="tab-3" class="panel" hidden>
+        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>PreToolUse · Bash</span></div>
 <pre><code>$ pnpm add zod
 
-Permission requested by the developer-os hook:
+<span class="t-mark">Permission requested by the developer-os hook:</span>
 Dependency install rewrites dependencies and the lockfile.</code></pre></div>
-            <p>The guard never blocks on its own: it hands the decision to you. It also asks before <code>git push --force</code> and before skipping git hooks with <code>--no-verify</code>, <code>HUSKY=0</code> or <code>core.hooksPath</code>. On input it cannot parse it stays silent.</p>
-            <p class="by"><a href="docs/reference/hooks.html">PreToolUse hook</a></p>
-          </div>
-          <div role="tabpanel" id="panel-4" aria-labelledby="tab-4" hidden>
-            <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>_inbox/release-notes-location.md</span></div>
+        <div>
+          <h3>A prompt, not a wall</h3>
+          <p>The guard hands the decision to you before a dependency install with a package argument, a <code>git push --force</code>, or a bypass of git hooks with <code>--no-verify</code>, <code>HUSKY=0</code> or <code>core.hooksPath</code>. On input it cannot parse it stays silent.</p>
+          <p class="by"><span class="badge ask">asks you</span><a href="docs/reference/hooks.html">PreToolUse hook</a></p>
+        </div>
+      </div>
+      <div role="tabpanel" id="panel-4" aria-labelledby="tab-4" class="panel" hidden>
+        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>_inbox/release-notes-location.md</span></div>
 <pre><code>---
 type: decision
-status: inbox
+status: <span class="t-mark">inbox</span>
 created: 2026-10-14
 updated: 2026-10-14
 project: my-app
@@ -119,59 +174,28 @@ summary: "Release notes live in CHANGELOG.md at the repository root."
 ## Decision
 ## Why
 ## Links</code></pre></div>
-            <p>One topic per note, with the reasons while they are still on screen. Secrets are redacted before writing, and the agent writes only into <code>_inbox/</code>.</p>
-            <p class="by"><a href="skills/brain-capture.html">brain-capture</a></p>
-          </div>
-          <div role="tabpanel" id="panel-5" aria-labelledby="tab-5" hidden>
-            <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>session-retro</span></div>
-<pre><code>Done: checkout retry with backoff; fast check green (lint, types, 14 tests)
-Not done: the e2e retry test, blocked on a staging key
-Needs you: approve the push of feat/checkout-retry
+        <div>
+          <h3>Captured while the reasons are fresh</h3>
+          <p>One topic per note, with context, decision and why. Secrets are redacted before writing, and the agent writes only into <code>_inbox/</code>: a draft, not yet a fact.</p>
+          <p class="by"><span class="badge info">skill</span><a href="skills/brain-capture.html">brain-capture</a></p>
+        </div>
+      </div>
+      <div role="tabpanel" id="panel-5" aria-labelledby="tab-5" class="panel" hidden>
+        <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>session-retro</span></div>
+<pre><code><span class="t-ok">Done:</span> checkout retry with backoff; fast check green (lint, types, 14 tests)
+<span class="t-mark">Not done:</span> the e2e retry test, blocked on a staging key
+<span class="t-acc">Needs you:</span> approve the push of feat/checkout-retry
 
 1. Capture "retry budget is 3 attempts" to the vault
 2. Delete the finished plan, move the e2e test to TODO.md
 
 Which items should I apply?</code></pre></div>
-            <p>After a long session the Stop hook suggests this once. Nothing is committed, pushed, captured or deleted until you name the item.</p>
-            <p class="by"><a href="skills/session-retro.html">session-retro</a>, then <a href="skills/brain-review.html">brain-review</a> for the inbox</p>
-          </div>
+        <div>
+          <h3>Nothing changes until you name it</h3>
+          <p>After a long session the Stop hook suggests this wrap-up once. Nothing is committed, pushed, captured or deleted until you name the item; brain-review later promotes inbox notes you approve.</p>
+          <p class="by"><span class="badge ok">you approve</span><a href="skills/session-retro.html">session-retro</a><a href="skills/brain-review.html">brain-review</a></p>
         </div>
       </div>
-    </div>
-  </section>
-
-  <section id="say">
-    <div class="wrap">
-      <h2>Say what you need. In English or Polish.</h2>
-      <p class="section-copy">Skills load only when a task calls for them. You can name one, or just describe the situation; their descriptions carry the phrasing people actually use.</p>
-      <ul class="say">
-        <li><a href="skills/brain-search.html"><q>What did we decide about webhooks?</q><span class="pl">co ustaliliśmy w sprawie webhooków</span><span class="skill">brain-search</span></a></li>
-        <li><a href="skills/brain-capture.html"><q>Remember this.</q><span class="pl">zapamiętaj to</span><span class="skill">brain-capture</span></a></li>
-        <li><a href="skills/code-review.html"><q>Review my changes.</q><span class="pl">przejrzyj moje zmiany</span><span class="skill">code-review</span></a></li>
-        <li><a href="skills/audit-to-backlog.html"><q>Audit this repo and give me a backlog.</q><span class="pl">zrób audyt tego repo</span><span class="skill">audit-to-backlog</span></a></li>
-        <li><a href="skills/fix-pr.html"><q>Fix the review comments on the PR.</q><span class="pl">popraw uwagi z PR-a</span><span class="skill">fix-pr</span></a></li>
-        <li><a href="skills/bug-triage.html"><q>We have a bug in production.</q><span class="pl">mamy błąd na produkcji</span><span class="skill">bug-triage</span></a></li>
-        <li><a href="skills/deploy-checklist.html"><q>We are deploying to production.</q><span class="pl">wdrażamy na produkcję</span><span class="skill">deploy-checklist</span></a></li>
-        <li><a href="skills/plan-status.html"><q>Where do we stand?</q><span class="pl">na czym stoimy</span><span class="skill">plan-status</span></a></li>
-        <li><a href="skills/client-reply.html"><q>Answer the client.</q><span class="pl">odpowiedz klientowi</span><span class="skill">client-reply</span></a></li>
-        <li><a href="skills/session-retro.html"><q>Let's wrap up.</q><span class="pl">podsumuj sesję</span><span class="skill">session-retro</span></a></li>
-      </ul>
-      <p class="small" style="margin-top:1.5rem"><a href="skills/index.html">Browse every skill</a></p>
-    </div>
-  </section>
-
-  <section id="week">
-    <div class="wrap">
-      <h2>A rhythm, not another tool to babysit.</h2>
-      <p class="section-copy">The plugin connects moments where you already make decisions. The full loop, with what goes where, is in <a href="docs/workflow.html#the-daily-loop">How to work: brain + code</a>.</p>
-      <ol class="rhythm">
-        <li><span class="when">Start a task</span><h3>Search first</h3><p>Two minutes of brain-search routinely saves an hour of rediscovering a decision you already made. Finding nothing is useful too: you are in new territory.</p><code>brain-search</code></li>
-        <li><span class="when">During work</span><h3>The plan lives in the repository</h3><p>Goal, decisions, steps, next action, updated after each step and git-ignored. Fast check before each commit, full suite before a push.</p><code>docs/plans/</code></li>
-        <li><span class="when">A decision is made</span><h3>Capture it then</h3><p>The reasons are sharpest while the rejected options are still on screen. One note, one topic, into the inbox.</p><code>brain-capture</code></li>
-        <li><span class="when">End of session</span><h3>Wrap up</h3><p>Unpushed work, running tasks, the status block, the plan, and up to three things worth keeping.</p><code>session-retro</code></li>
-        <li><span class="when">End of day or week</span><h3>Review the inbox</h3><p>Keep, merge or reject each note. Nothing is promoted without you, and nothing is deleted: retired notes move to <code>_archive/</code>.</p><code>brain-review</code></li>
-        <li><span class="when">Monthly</span><h3>Garden</h3><p>Stale notes, old inbox notes, broken links, duplicates and missing summaries, with fixes applied only after you approve.</p><code>brain-garden</code></li>
-      </ol>
     </div>
   </section>
 
@@ -181,33 +205,33 @@ Which items should I apply?</code></pre></div>
       <p class="section-copy">Every skill that changes files, git state or anything outside your machine stops at a defined point and asks. Silence or "looks good" is not approval. The main rows are below; the full list is the <a href="docs/product/functional-spec.html#8-approval-model">approval model</a>.</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th scope="col">Action</th><th scope="col">What happens</th></tr></thead>
+          <thead><tr><th scope="col">Action</th><th scope="col">Policy</th><th scope="col">Where it is enforced</th></tr></thead>
           <tbody>
-            <tr><td>Write in the vault outside <code>_inbox/</code>, move, merge or archive a note</td><td>Only for the notes you name in brain-review or brain-garden</td></tr>
-            <tr><td>Delete a note</td><td>No skill deletes; notes retire to <code>_archive/</code></td></tr>
-            <tr><td>Edit <code>~/.claude/CLAUDE.md</code> or <code>settings.json</code></td><td>brain-setup shows the diff first</td></tr>
-            <tr><td>Edit an instruction file, create backlog files or add backlog items</td><td>instruction-review and session-retro show the diff first; audit-to-backlog, project-baseline and spec write the backlog after you approve</td></tr>
-            <tr><td>Edit code for review findings, commit, push</td><td>fix-pr asks per edit, per commit and before each push; pr-cycle commits the base merge after a green fast check and fixes after one A/B/C answer, then asks before pushing; implement-backlog commits only green batch work and never pushes</td></tr>
-            <tr><td>Merge a PR, push to a base branch, force-push, rebase a pushed branch</td><td>No skill does this</td></tr>
-            <tr><td>Send email, chat messages or issues</td><td>No skill does this; client-reply drafts, session-retro prints a command for you</td></tr>
-            <tr><td>Install a dependency</td><td>A core rule, and the guard hook asks</td></tr>
+            <tr><td>Write in the vault outside <code>_inbox/</code>, move, merge or archive a note</td><td><span class="badge ok">only what you name</span></td><td>brain-review, brain-garden</td></tr>
+            <tr><td>Delete a note</td><td><span class="badge never">never</span></td><td>No skill deletes; notes retire to <code>_archive/</code></td></tr>
+            <tr><td>Edit <code>~/.claude/CLAUDE.md</code> or <code>settings.json</code></td><td><span class="badge ok">diff first</span></td><td>brain-setup</td></tr>
+            <tr><td>Edit an instruction file, create backlog files or add backlog items</td><td><span class="badge ok">after approval</span></td><td>instruction-review and session-retro show the diff; audit-to-backlog, project-baseline and spec write the backlog</td></tr>
+            <tr><td>Edit code for review findings, commit, push</td><td><span class="badge ask">asks you</span></td><td>fix-pr asks per edit, per commit and before each push; pr-cycle commits the base merge after a green fast check and fixes after one A/B/C answer, then asks before pushing; implement-backlog commits only green batch work and never pushes</td></tr>
+            <tr><td>Merge a PR, push to a base branch, force-push, rebase a pushed branch</td><td><span class="badge never">never</span></td><td>No skill does this</td></tr>
+            <tr><td>Send email, chat messages or issues</td><td><span class="badge never">never</span></td><td>client-reply drafts; session-retro prints a command for you</td></tr>
+            <tr><td>Install a dependency</td><td><span class="badge ask">asks you</span></td><td>A core rule, and the guard hook</td></tr>
           </tbody>
         </table>
       </div>
       <div class="hooks">
-        <div class="hook"><span class="event">SessionStart</span><p>Prints the core rules; after a compaction or resume, adds the state card of at most 1 KB.</p></div>
-        <div class="hook"><span class="event">PreToolUse on Bash</span><p>Asks before installs with a package argument, force pushes and git-hook bypasses. It never denies; in headless <code>claude -p</code> an ask becomes a denial.</p></div>
-        <div class="hook"><span class="event">Stop</span><p>Once per long session, suggests session-retro. Reads tool-call counts and background-task ids, paths and times, never message content.</p></div>
+        <div class="hook"><span class="event">SessionStart <span class="badge info">loads</span></span><p>Prints the core rules; after a compaction or resume, adds the state card of at most 1 KB.</p></div>
+        <div class="hook"><span class="event">PreToolUse · Bash <span class="badge ask">asks</span></span><p>Asks before installs with a package argument, force pushes and git-hook bypasses. It never denies; in headless <code>claude -p</code> an ask becomes a denial.</p></div>
+        <div class="hook"><span class="event">Stop <span class="badge info">suggests</span></span><p>Once per long session, suggests session-retro. Reads tool-call counts and background-task ids, paths and times, never message content.</p></div>
       </div>
       <p class="small" style="margin-top:1.25rem">All three are POSIX <code>sh</code> with no <code>jq</code> and no network calls, and they fail open: on an error they exit silently and the normal permission flow applies. <a href="docs/reference/hooks.html">Hooks reference</a>, <a href="docs/workflow.html#privacy">privacy</a>, <a href="docs/security.html">security policy</a>.</p>
     </div>
   </section>
 
-  <section id="rules">
+  <section id="rules" class="alt">
     <div class="wrap two">
       <div>
-        <h2>Habits of a careful engineer, in every session.</h2>
-        <p class="section-copy">An agent's defaults are not a careful engineer's. It commits without the right checks, claims "fixed" without evidence and reviews its own code. The core rules load at session start and stay under 8 KB, so they do not crowd out your own context.</p>
+        <h2>Engineering rules in every session.</h2>
+        <p class="section-copy">An agent commits without the right checks, claims "fixed" without evidence and reviews its own code. The core rules load at session start and stay under 8 KB, so they do not crowd out your own context.</p>
         <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">Read core.md</a>. Disagree with a rule? Override it in your own <code>~/.claude/CLAUDE.md</code>, which loads alongside it.</p>
       </div>
       <ul class="checklist">
@@ -223,10 +247,29 @@ Which items should I apply?</code></pre></div>
     </div>
   </section>
 
-  <section id="library">
+  <section id="say">
+    <div class="wrap">
+      <h2>Ask the way you would ask a colleague.</h2>
+      <p class="section-copy">Skills load only when a task calls for them. Name one, or describe the situation in English or Polish; their descriptions carry the phrasing people actually use.</p>
+      <ul class="say">
+        <li><a href="skills/brain-search.html"><q>What did we decide about webhooks?</q><span class="pl">co ustaliliśmy w sprawie webhooków</span><span class="skill">brain-search</span></a></li>
+        <li><a href="skills/brain-capture.html"><q>Remember this.</q><span class="pl">zapamiętaj to</span><span class="skill">brain-capture</span></a></li>
+        <li><a href="skills/code-review.html"><q>Review my changes.</q><span class="pl">przejrzyj moje zmiany</span><span class="skill">code-review</span></a></li>
+        <li><a href="skills/audit-to-backlog.html"><q>Audit this repo and give me a backlog.</q><span class="pl">zrób audyt tego repo</span><span class="skill">audit-to-backlog</span></a></li>
+        <li><a href="skills/fix-pr.html"><q>Fix the review comments on the PR.</q><span class="pl">popraw uwagi z PR-a</span><span class="skill">fix-pr</span></a></li>
+        <li><a href="skills/bug-triage.html"><q>We have a bug in production.</q><span class="pl">mamy błąd na produkcji</span><span class="skill">bug-triage</span></a></li>
+        <li><a href="skills/deploy-checklist.html"><q>We are deploying to production.</q><span class="pl">wdrażamy na produkcję</span><span class="skill">deploy-checklist</span></a></li>
+        <li><a href="skills/plan-status.html"><q>Where do we stand?</q><span class="pl">na czym stoimy</span><span class="skill">plan-status</span></a></li>
+        <li><a href="skills/client-reply.html"><q>Answer the client.</q><span class="pl">odpowiedz klientowi</span><span class="skill">client-reply</span></a></li>
+        <li><a href="skills/session-retro.html"><q>Let's wrap up.</q><span class="pl">podsumuj sesję</span><span class="skill">session-retro</span></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="library" class="alt">
     <div class="wrap">
       <h2>The skill library.</h2>
-      <p class="section-copy">Grouped by the job in front of you. Each page says when the skill runs, what it does, what it writes, where it stops and what it never does.</p>
+      <p class="section-copy">Grouped by the job in front of you. Each page states when the skill runs, what it does, what it writes, where it stops and what it never does.</p>
       <div class="lib-group">
         <h3>Memory</h3>
         <p>Read and write the vault with the agent's own file tools.</p>
@@ -266,14 +309,14 @@ Which items should I apply?</code></pre></div>
           <li><a href="skills/client-reply.html"><b>client-reply</b><span>A plain-language reply to a client. Drafts only, never sends.</span></a></li>
         </ul>
       </div>
-      <p>Plus conventions skills for TypeScript, Next.js, tests, error handling, monitoring, comments and defensive coding, which load only when the work matches. <a href="skills/index.html">All skills</a></p>
+      <p>Plus conventions skills for TypeScript, Next.js, tests, error handling, monitoring, comments and defensive coding, which load only when the work matches. <a href="skills/index.html">Browse all skills</a></p>
     </div>
   </section>
 
   <section id="agents">
     <div class="wrap">
-      <h2>Specialists that report, and a second pair of eyes.</h2>
-      <p class="section-copy">Skills dispatch these agents for independent passes, and you can call them yourself. A reviewer that did not write the code is a core rule, not a nice-to-have.</p>
+      <h2>Independent passes by agents that did not write the code.</h2>
+      <p class="section-copy">Skills dispatch these agents, and you can call them yourself. Every report starts with one final status, DONE, REVIEW, BLOCKED or CONTINUING, so the orchestrating skill knows what to do next.</p>
       <ul class="doc-grid">
         <li><a href="agents.html#code-reviewer"><b>code-reviewer</b><span>Correctness, security, data safety and maintainability, rated P0–P3 with a merge verdict.</span></a></li>
         <li><a href="agents.html#security-auditor"><b>security-auditor</b><span>Exploitable defects: auth, injection, secrets, SSRF, insecure defaults.</span></a></li>
@@ -285,24 +328,24 @@ Which items should I apply?</code></pre></div>
     </div>
   </section>
 
-  <section id="vault">
+  <section id="cadence" class="alt">
     <div class="wrap two">
       <div>
-        <h2>The vault is plain Markdown you own.</h2>
-        <p class="section-copy">Folders by topic, one frontmatter shape for every note, and Bases views for the inbox and stale notes. Nothing is ever deleted. brain-setup creates it from the template or connects your existing vault without touching your <code>.obsidian/</code> folder.</p>
-        <p><a href="docs/workflow.html#vault-layout">Vault layout and note format</a>, <a href="docs/workflow.html#writing-a-note-that-will-be-found">writing a note that will be found</a>.</p>
+        <h2>A rhythm, not another tool to babysit.</h2>
+        <p class="section-copy">The plugin connects moments where you already make decisions. The full loop, with what goes where, is in <a href="docs/workflow.html#the-daily-loop">How to work: brain + code</a>.</p>
+        <h3 style="margin-top:2rem">The vault is plain Markdown you own</h3>
+        <p class="small">Folders by topic (<code>_inbox/</code>, <code>PROJECTS/</code>, <code>DEV/</code>, <code>TOOLS/</code>, <code>INFRA/</code>, <code>QA/</code>, <code>_archive/</code>), one frontmatter shape for every note, and Bases views for the inbox and stale notes. brain-setup connects your existing vault without touching its <code>.obsidian/</code> folder. <a href="docs/workflow.html#vault-layout">Vault layout</a></p>
       </div>
       <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">Folder</th><th scope="col">Holds</th></tr></thead>
+        <table class="cadence">
+          <thead><tr><th scope="col">When</th><th scope="col">What happens</th><th scope="col">Skill</th></tr></thead>
           <tbody>
-            <tr><td><code>_inbox/</code></td><td>New notes the agent captured, waiting for your review</td></tr>
-            <tr><td><code>PROJECTS/</code></td><td>One hub note per project, plus notes that outlive the repository</td></tr>
-            <tr><td><code>DEV/</code></td><td>Patterns, language and framework lessons</td></tr>
-            <tr><td><code>TOOLS/</code></td><td>References for tools, services and APIs</td></tr>
-            <tr><td><code>INFRA/</code></td><td>Hosting, deploys, networking, databases, CI</td></tr>
-            <tr><td><code>QA/</code></td><td>Testing approaches and lessons from defects</td></tr>
-            <tr><td><code>_archive/</code></td><td>Notes no longer true, merged or rejected</td></tr>
+            <tr><td>Start a task</td><td>Search first; finding nothing tells you that you are in new territory.</td><td><code>brain-search</code></td></tr>
+            <tr><td>During work</td><td>The plan lives in the repository, git-ignored, updated after each step; fast check before each commit.</td><td><code>docs/plans/</code></td></tr>
+            <tr><td>A decision</td><td>Capture it while the rejected options are still on screen.</td><td><code>brain-capture</code></td></tr>
+            <tr><td>End of session</td><td>Unpushed work, running tasks, the status block, up to three things worth keeping.</td><td><code>session-retro</code></td></tr>
+            <tr><td>Day or week</td><td>Keep, merge or reject inbox notes; nothing is deleted.</td><td><code>brain-review</code></td></tr>
+            <tr><td>Monthly</td><td>Stale notes, broken links, duplicates, fixes only after approval.</td><td><code>brain-garden</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -310,32 +353,35 @@ Which items should I apply?</code></pre></div>
   </section>
 
   <section id="fit">
-    <div class="wrap two">
-      <div>
-        <h2>It fits if…</h2>
-        <ul class="checklist">
-          <li>you work with Claude Code across several client or product repositories, alone or in a small team;</li>
-          <li>you want decisions and lessons to outlive a session and a repository;</li>
-          <li>you are happy to review what the agent captures before it counts as knowledge;</li>
-          <li>you want the agent to plan, check and ask the way a careful engineer would.</li>
-        </ul>
-      </div>
-      <div>
-        <h2>Look elsewhere if…</h2>
-        <ul class="checklist no">
-          <li>you want memory that writes itself with no review: approval is the point;</li>
-          <li>you need a server, a search index or a shared team knowledge base: there is no runtime;</li>
-          <li>you want agents to merge, push to a base branch or send messages on their own: no skill does;</li>
-          <li>you work mainly in Codex: support there is a best-effort installer without hooks, agents or output styles.</li>
-        </ul>
+    <div class="wrap">
+      <h2>Is it for you?</h2>
+      <div class="two" style="margin-top:2rem">
+        <div class="fit-card">
+          <h3>A good fit if</h3>
+          <ul class="checklist">
+            <li>you work with Claude Code across several client or product repositories, alone or in a small team;</li>
+            <li>you want decisions and lessons to outlive a session and a repository;</li>
+            <li>you are happy to review what the agent captures before it counts as knowledge;</li>
+            <li>you want the agent to plan, check and ask the way a careful engineer would.</li>
+          </ul>
+        </div>
+        <div class="fit-card">
+          <h3>Look elsewhere if</h3>
+          <ul class="checklist no">
+            <li>you want memory that writes itself with no review: approval is the point;</li>
+            <li>you need a server, a search index or a shared team knowledge base: there is no runtime;</li>
+            <li>you want agents to merge, push to a base branch or send messages on their own: no skill does;</li>
+            <li>you work mainly in Codex: support there is a best-effort installer without hooks, agents or output styles.</li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>
 
-  <section id="install">
+  <section id="install" class="alt">
     <div class="wrap install-cols">
       <div>
-        <h2>Get started in about five minutes.</h2>
+        <h2>Running in about five minutes.</h2>
         <ol class="steps">
           <li>
             <h3>Install the plugin in Claude Code</h3>
@@ -359,7 +405,7 @@ Which items should I apply?</code></pre></div>
         <p>For each project, copy <a href="https://github.com/msolecki/developer-os/tree/development/templates/project">templates/project/</a> into its root. <a href="docs/workflow.html#setup-in-5-minutes">Full setup guide</a></p>
       </div>
       <div>
-        <h3>What you need</h3>
+        <h3>Requirements</h3>
         <div class="table-wrap">
           <table>
             <tbody>
@@ -371,49 +417,51 @@ Which items should I apply?</code></pre></div>
             </tbody>
           </table>
         </div>
-        <h3 style="margin-top:1.5rem">Using Codex?</h3>
-        <p>From a clone, <code>scripts/install-codex.sh --dry-run</code> shows what would change; without the flag it copies the skills and the core rules into your Codex setup. Best-effort and untested on releases. <a href="docs/readme.html#codex-installer-best-effort">Details</a></p>
+        <h3 style="margin-top:1.75rem">Using Codex?</h3>
+        <p class="small">From a clone, <code>scripts/install-codex.sh --dry-run</code> shows what would change; without the flag it copies the skills and the core rules into your Codex setup. Best-effort and untested on releases. <a href="docs/readme.html#codex-installer-best-effort">Details</a></p>
       </div>
     </div>
   </section>
 
   <section id="faq">
-    <div class="wrap faq">
+    <div class="wrap">
       <h2>Before you install.</h2>
-      <details>
-        <summary>Does it send my code or notes anywhere?</summary>
-        <p>The plugin sends nothing by itself and its hooks make no network calls. What the agent reads from the vault goes to your model provider as part of the session, like any file it reads. brain-capture redacts secrets before writing; review inbox notes for client names and personal data before you promote them. <a href="docs/workflow.html#privacy">Privacy</a></p>
-      </details>
-      <details>
-        <summary>Does it change how Claude behaves in all my projects?</summary>
-        <p>Yes. The core rules load into every session in every project. Override a rule in your <code>~/.claude/CLAUDE.md</code>, or disable the plugin under <code>/plugin</code>.</p>
-      </details>
-      <details>
-        <summary>Can I use it without a vault?</summary>
-        <p>Yes. The engineering and session skills, the agents and the hooks work on their own. The brain skills ask once for the vault path and stop if you have none, and the core rules run brain-search only when a <code>Brain vault:</code> line exists.</p>
-      </details>
-      <details>
-        <summary>Can a hook block a command?</summary>
-        <p>No. The guard only asks, and on input it cannot parse it stays silent. In headless <code>claude -p</code> there is no one to ask, so an ask resolves to a denial.</p>
-      </details>
-      <details>
-        <summary>How much context does it cost per session?</summary>
-        <p>The core rules are capped at 8192 bytes and all skill descriptions at 12000 characters in total; <code>scripts/check.sh</code> fails a change that grows past either. Skill bodies load only when a skill runs.</p>
-      </details>
-      <details>
-        <summary>Is it stable?</summary>
-        <p>It is not released yet: installs track the <code>development</code> branch, with no version number. <a href="docs/CURRENT-STATE.html">Current state</a> lists what works and what is known to be missing, and the <a href="docs/changelog.html">changelog</a> lists every change.</p>
-      </details>
-      <details>
-        <summary>Which languages does it understand?</summary>
-        <p>The brain, engineering and session skills carry English and Polish trigger phrasings in their descriptions, so they fire however you ask in either language; conventions skills load by the files you work on. The core rules keep the conversation in your language, whatever it is, and keep everything written to a repository in English unless the project says otherwise.</p>
-      </details>
+      <div class="faq" style="margin-top:2rem">
+        <details>
+          <summary>Does it send my code or notes anywhere?</summary>
+          <p>The plugin sends nothing by itself and its hooks make no network calls. What the agent reads from the vault goes to your model provider as part of the session, like any file it reads. brain-capture redacts secrets before writing; review inbox notes for client names and personal data before you promote them. <a href="docs/workflow.html#privacy">Privacy</a></p>
+        </details>
+        <details>
+          <summary>Does it change how Claude behaves in all my projects?</summary>
+          <p>Yes. The core rules load into every session in every project. Override a rule in your <code>~/.claude/CLAUDE.md</code>, or disable the plugin under <code>/plugin</code>.</p>
+        </details>
+        <details>
+          <summary>Can I use it without a vault?</summary>
+          <p>Yes. The engineering and session skills, the agents and the hooks work on their own. The brain skills ask once for the vault path and stop if you have none, and the core rules run brain-search only when a <code>Brain vault:</code> line exists.</p>
+        </details>
+        <details>
+          <summary>Can a hook block a command?</summary>
+          <p>No. The guard only asks, and on input it cannot parse it stays silent. In headless <code>claude -p</code> there is no one to ask, so an ask resolves to a denial.</p>
+        </details>
+        <details>
+          <summary>How much context does it cost per session?</summary>
+          <p>The core rules are capped at 8192 bytes and all skill descriptions at 12000 characters in total; <code>scripts/check.sh</code> fails a change that grows past either. Skill bodies load only when a skill runs.</p>
+        </details>
+        <details>
+          <summary>Is it stable?</summary>
+          <p>It is not released yet: installs track the <code>development</code> branch, with no version number. <a href="docs/CURRENT-STATE.html">Current state</a> lists what works and what is known to be missing, and the <a href="docs/changelog.html">changelog</a> lists every change.</p>
+        </details>
+        <details>
+          <summary>Which languages does it understand?</summary>
+          <p>The brain, engineering and session skills carry English and Polish trigger phrasings in their descriptions, so they fire however you ask in either language; conventions skills load by the files you work on. The core rules keep the conversation in your language, whatever it is, and keep everything written to a repository in English unless the project says otherwise.</p>
+        </details>
+      </div>
     </div>
   </section>
 
-  <section id="docs">
+  <section id="docs" class="alt">
     <div class="wrap">
-      <h2>Read the documentation.</h2>
+      <h2>Go deeper.</h2>
       <p class="section-copy">Everything on this site restates the repository's documents. A check fails when a doc, skill, agent or output-style page falls behind its source; this landing page and the skills index are kept current by hand.</p>
       <ul class="doc-grid">
         <li><a href="docs/workflow.html"><b>How to work: brain + code</b><span>The daily loop, the vault layout, where knowledge belongs, privacy.</span></a></li>

@@ -51,7 +51,7 @@
     NAV.forEach(function (group) {
       html += '<h2>' + group[0] + '</h2><ul>';
       group[1].forEach(function (item) {
-        var cur = isCurrent(item[0]) ? ' aria-current="page"' : '';
+        var cur = isCurrent(item[0]) || (item[0] === 'skills/index.html' && /\/skills\/[^/]+$/.test(location.pathname)) ? ' aria-current="page"' : '';
         html += '<li><a href="' + root + item[0] + '"' + cur + '>' + item[1] + '</a></li>';
       });
       html += '</ul>';
@@ -101,7 +101,7 @@
     toc.remove();
   }
 
-  document.querySelectorAll('pre').forEach(function (pre) {
+  document.querySelectorAll('pre, .install-line').forEach(function (pre) {
     if (!pre.hasAttribute('tabindex')) pre.setAttribute('tabindex', '0');
     if (pre.hasAttribute('data-nocopy')) return;
     var btn = document.createElement('button');
