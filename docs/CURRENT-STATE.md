@@ -77,7 +77,8 @@ the user:
 | ID | Sev | Where | Problem |
 |---|---|---|---|
 | R7 | P3 | No release procedure | Pinning by marketplace ref is documented and `SECURITY.md` supports only the latest commit, but there is no release tag or procedure (tags, changelog date); `main` is not kept in step with `development`, yet `vault-template/README.md` links the workflow guide on `main`. |
-| R13 | P3 | `plugin/hooks/guard.sh` | Lockfile-changing `update`/`remove` stay outside the guard's categories, by decision (Q3 A); the normal permission flow still applies. |
+| R1 | P3 | `plugin/hooks/guard.sh` | Accepted (D6): a command on the line after an install without a package asks, because the guard also reads newlines as spaces so a quoted multi-line argument cannot hide a flag or a package. |
+| R13 | P3 | `plugin/hooks/guard.sh` | Lockfile-changing `update`/`remove` stay outside the guard's categories, by decision (Q3 A); the normal permission flow still applies. A word built at run time (`$(command -v npm) install x`) is not resolved and passes. |
 | R15 | P3 | `.github/workflows/check.yml` | Fixed, not yet confirmed: the pinned Claude Code installs with `--ignore-scripts`. Until a pull-request CI run shows `claude --version` printing, it is unverified; if it fails, revert and accept the fresh dependency resolution. |
 | R16 | P3 | `.github/workflows/check.yml` | Fixed, not yet confirmed: a gitleaks step scans the pull request's commits, so a secret added and removed within one PR fails CI. It has run only locally. |
 | R17 | P3 | README | The claim that an `ask` becomes a denial in `claude -p` was not re-verified; proving it needs a live `claude -p` run. |

@@ -180,12 +180,12 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   `status: active`.
 - Codex setup uses `~/.agents/skills/` (older Codex versions read `~/.codex/skills/`).
 - The README lists fork among the `SessionStart` triggers.
-- The guard splits commands on newlines outside quotes only, reads words split by quotes or a
-  backslash (`np""m`, `\git`) as the word they run, asks on `git push --mirror`, skips the value after `--filter`, `--prefix`, `--dir` and similar flags, and catches
+- The guard splits commands on newlines and also reads them joined, deletes quotes, backslashes and
+  `$` so split words (`np""m`, `\git`, `$'-f'`) read as the word they run, asks on `git push --mirror`, skips the value after `--filter`, `--prefix`, `--dir` and similar flags, and catches
   bypass forms (`--no-verify` prefixes, `HUSKY=0`, `core.hooksPath` in any form), npm aliases and
   binaries called by full path.
-- pr-cycle and fix-pr read a PR's trust inputs before checking it out, and turn git hooks off for the
-  whole cycle on an untrusted head (restored at the end) until the user approves them; code-review passes the `Untrusted head`
+- pr-cycle and fix-pr read a PR's trust inputs first and never check out an untrusted head before the
+  user approves running its code; without approval they review the fetched ref only; code-review passes the `Untrusted head`
   line to its verifiers and to inline review.
 - The state card works from a subdirectory of the repository, never names a plan that git tracks,
   and prints the branch and plan lines with `printf`.

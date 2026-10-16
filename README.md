@@ -63,7 +63,7 @@ A `PreToolUse` hook on Bash ([`plugin/hooks/guard.sh`](plugin/hooks/guard.sh)) a
 (`npm|pnpm|yarn|bun install|add|i <pkg>`, an npm alias such as `npm in`, or the binary by full path), a
 `git push` with `--force`, `-f` or a `+refspec` (even next to `--force-with-lease`; a lone
 `--force-with-lease` passes; git also by full path), and a hook bypass: `--no-verify` or a prefix of it
-such as `--no-veri`, `git commit -n`, `HUSKY=0` or `core.hooksPath` (with `=`, via `git config` or `GIT_CONFIG_KEY_<n>`). In `claude -p` an ask resolves to a denial.
+such as `--no-veri`, `git commit -n`, `HUSKY=0` or `core.hooksPath` in any form. In `claude -p` an ask resolves to a denial.
 
 All three are POSIX `sh` (plus `grep -o` and `head -c`, which macOS and Linux provide), need no `jq`, make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies.
