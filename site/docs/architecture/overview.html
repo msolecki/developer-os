@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Architecture overview · developer-os</title>
 <meta name="description" content="How developer-os is laid out, what Claude Code loads into a session and when, and how its hooks, skills and data flows fit together.">
-<meta name="dos-source" content="docs/architecture/overview.md@ebe60201dede">
+<meta name="dos-source" content="docs/architecture/overview.md@f9101a20a349">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -39,7 +39,7 @@
     <h2 id="1-repository-layout">1. Repository layout</h2>
 <pre><code>.claude-plugin/marketplace.json   marketplace: one plugin, source ./plugin
 plugin/                           the installed payload
-  .claude-plugin/plugin.json      name, description, license (no version: installs track the commit)
+  .claude-plugin/plugin.json      name, version, description, license, keywords
   rules/core.md                   core rules, printed by the SessionStart hook
   SURFACE.txt                     public names, checked against the disk
   hooks/hooks.json                three hooks, 10-second timeouts

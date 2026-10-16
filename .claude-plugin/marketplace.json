@@ -1,12 +1,15 @@
 {
   "name": "developer-os",
-  "owner": { "name": "Mateusz Solecki" },
+  "owner": {
+    "name": "Mateusz Solecki"
+  },
   "description": "The developer-os plugin marketplace.",
   "plugins": [
     {
       "name": "developer-os",
       "source": "./plugin",
-      "description": "Long-term memory in an Obsidian vault, plus engineering rules, skills, agents and output styles for Claude Code."
+      "description": "Long-term memory in an Obsidian vault, plus engineering rules, skills, agents and output styles for Claude Code.",
+      "version": "0.1.0"
     }
   ]
 }

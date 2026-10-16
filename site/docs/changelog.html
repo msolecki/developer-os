@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@304d943d9708">
+<meta name="dos-source" content="CHANGELOG.md@4dbf108d0203">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -36,11 +36,16 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h2 id="010---2026-10-16">[0.1.0] - 2026-10-16</h2>
     <p>First public release. developer-os is now a Markdown-only plugin for Claude Code, installed from
 this repository as a plugin marketplace. It replaces the earlier Homebrew CLI, which was never
 released; the CLI history is archived at the git tag <code>archive/cli-v0</code>.</p>
     <h3 id="added">Added</h3>
     <ul>
+<li><code>plugin/README.md</code> and <code>plugin/LICENSE</code>, which Anthropic's plugin directory requires in the plugin
+folder, and <code>keywords</code> in <code>plugin.json</code>.</li>
+<li>Issue forms (report a problem, propose a change) and links to Discussions and private security
+advisories.</li>
 <li>A public documentation site in <code>site/</code>, published to GitHub Pages by <code>.github/workflows/pages.yml</code>:
 a landing page, one page per document, skill, agent and output style, and a Site stage in
 <code>scripts/check.sh</code> that fails when a page falls behind its source.</li>
@@ -144,9 +149,10 @@ and relative Markdown links.</li>
 them. The README links to <code>core.md</code> instead of paraphrasing it.</li>
 <li><code>templates/project/AGENTS.md</code> names the core rules as the source of shared rules and shows an
 optional <code>Backlog:</code> line.</li>
-<li><code>plugin.json</code> carries no <code>version</code>: an install tracks the latest <code>development</code> commit, and
-<code>claude plugin update</code> picks up every commit. Pin by marketplace ref:
-<code>/plugin marketplace add msolecki/developer-os#&lt;ref&gt;</code>.</li>
+<li>Versioned releases (D20): both manifests carry <code>version</code> <code>0.1.0</code>, <code>main</code> is the default branch and
+the marketplace channel and moves only on a release, and each release is tagged <code>v&lt;version&gt;</code>. Pin
+one by tag: <code>/plugin marketplace add msolecki/developer-os#v0.1.0</code>. The Validate stage now allows no
+<code>claude plugin validate --strict</code> warning and fails when the two manifest versions differ.</li>
 <li>The core rules put specifications in <code>docs/specs/</code> (or the project's spec location), not next to
 the plan. The task-state file is <code>docs/plans/.devos-state.md</code> at a fixed path, even when a project
 moves its planning location; the core rules and every skill that writes it name that path.</li>

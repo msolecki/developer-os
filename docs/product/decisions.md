@@ -127,7 +127,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   run by hand before a release or after changing a tested skill.
 - **Why:** every run spends real plan usage (two agent sessions per case and run, plus judge calls).
 
-## D14. `development` is the default and install branch
+## D14. `development` is the default and install branch (superseded by D20)
 
 - **Date:** 2026-10-14
 - **Decision:** `/plugin marketplace add msolecki/developer-os` installs from `development`, the
@@ -138,6 +138,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-10-15:** `plugin.json` carries no `version`. Claude Code then versions an install by
   the commit SHA, so `claude plugin update` picks up every commit on `development`, docs-only ones
   too. The pinned `0.1.0` kept every install on its first cached copy, whatever was pushed later.
+- **Superseded 2026-10-16** by D20.
 
 ## D15. Language split
 
@@ -207,6 +208,17 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   does not confirm the hook events the guard needs.
 - **Rejected:** symlinks for skills without Claude-only references (the budget still overflows);
   installing `guard.sh` for Codex.
+
+## D20. Versioned releases from `main`
+
+- **Date:** 2026-10-16
+- **Decision:** `main` is the default branch and the marketplace channel; it moves only on a release,
+  a fast-forward from `development`. Both manifests carry the same `version`, bumped on every release
+  and tagged `v<version>`. The first release is `0.1.0`.
+- **Why:** with the public launch, an install should change only when a release does, not on every
+  docs commit; the cached-copy problem of D14 is the intended behaviour once `main` moves only on a
+  release. Anthropic's plugin directory warns on a missing `version`. Same model as founder-os.
+- **Alternatives:** a tag on `development` without a `version` (installs keep tracking every commit).
 
 ## Rules history
 

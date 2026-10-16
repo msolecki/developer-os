@@ -6,15 +6,16 @@ last-verified: 2026-10-16
 
 # Current state
 
-Verified at commit: `a4c66e96` (branch `feat/audit-fixes-2026-10-15`, the audit fixes of 2026-10-16 after the independent and security reviews)
+Verified at tag: `v0.1.0` (the first release, 2026-10-16)
 
-What is true at the commit above, checked against the files and by running `CI=1 scripts/check.sh`
-(green, including the six script tests). agnix 0.57.0 `--strict` reports no issues (CC-PL-004, the missing `version`, is disabled for plugin.json with its reason). If `development` has moved far past
-this commit, treat each line as unverified.
+What is true at the tag above, checked against the files and by running `CI=1 scripts/check.sh`
+(green, including the six script tests). agnix 0.57.0 `--strict` reports no issues. If `development` has moved far past
+this tag, treat each line as unverified.
 
 ## Works
 
-- Install from the marketplace on `development`: `.claude-plugin/marketplace.json` → `plugin/`.
+- Release `0.1.0`, tagged `v0.1.0`. Install from the marketplace on `main`, which moves only on a
+  release (D20): `.claude-plugin/marketplace.json` → `plugin/`.
 - 28 skills, 5 agents, 4 output styles, 3 hooks, as listed in
   [product/functional-spec.md](product/functional-spec.md).
 - Per-session cost: core rules 8144 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
@@ -45,15 +46,13 @@ this commit, treat each line as unverified.
 
 ## In progress
 
-- `plugin.json` has no `version`: installs track the latest `development` commit. `CHANGELOG.md`
-  collects everything under `[Unreleased]`; no release tag exists and the release procedure is open.
 - Proposals under consideration, not implemented (kept in a local, git-ignored plan): the vault path
   through plugin `userConfig`; `paths:` for conventions skills; `context: fork` for report skills;
   `allowed-tools` for read-only commands; `${CLAUDE_SKILL_DIR}` in brain-setup; one budget for all
   fixed context; trigger evals for every action skill; a report-length contract for subagents beyond
   the final status; `effort` per skill.
-- Not done by hand yet: listing on awesome-claude-code (eligible 14 days after the repository is
-  public) and agentskill.sh, and checking the claude-plugins-official submission rules before a first tagged release.
+- Not done by hand yet: submission to Anthropic's plugin directory (claude.ai/directory/manage), listing
+  on awesome-claude-code (its issue form, 14 days after the first commit) and agentskill.sh.
 
 ## Known broken or missing
 
@@ -76,13 +75,11 @@ the user:
   review and the merge), but its `distinct-owners` judge read only the final reply. That grader now
   reads the trace, and a run at `e8da1f7b` passes: 1.00 with the plugin against 0.00 without
   (Δ +1.00, one run, 1.06 USD). code-review-clean-diff once is optional.
-- A pull-request CI run to confirm R15 and R16 (below).
 
 | ID | Sev | Where | Problem |
 |---|---|---|---|
-| R7 | P3 | No release procedure | Pinning by marketplace ref is documented and `SECURITY.md` supports only the latest commit, but there is no release tag or procedure (tags, changelog date); `main` is not kept in step with `development`, yet `vault-template/README.md` links the workflow guide on `main`. |
 | R1 | P3 | `plugin/hooks/guard.sh` | Accepted (D6): a command on the line after an install without a package asks, because the guard also reads newlines as spaces so a quoted multi-line argument cannot hide a flag or a package. |
 | R13 | P3 | `plugin/hooks/guard.sh` | Lockfile-changing `update`/`remove` stay outside the guard's categories, by decision (Q3 A); the normal permission flow still applies. Known silent passes, all present before the 2026-10-16 fixes too: a word built at run time (`$(command -v npm) install x`), JSON `\u` escapes and ANSI-C escapes (`$'\x2d\x2dforce'`), digits in a flag cluster (`-4f`), abbreviated `--mirr`, a force refspec from config (`remote.origin.push=+main`), unquoted or environment-defined git aliases, and install aliases outside the list (`bun a`, `npm install-test`). The guard is a first prompt, not a sandbox. |
 | R15 | P3 | `.github/workflows/check.yml` | Fixed and confirmed in the #76 CI run: the pinned Claude Code installs with `--ignore-scripts`, then runs only its own `install.cjs`; `claude --version` prints `2.1.300`. |
-| R16 | P3 | `.github/workflows/check.yml` | Fixed, not yet confirmed: a gitleaks step scans the pull request's commits, so a secret added and removed within one PR fails CI. It has run only locally. |
+| R16 | P3 | `.github/workflows/check.yml` | Fixed and confirmed in the #78 pull-request CI run: the step "gitleaks over the pull request's commits" passed. |
 | R17 | P3 | README | The claim that an `ask` becomes a denial in `claude -p` was not re-verified; proving it needs a live `claude -p` run. |

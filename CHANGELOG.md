@@ -4,11 +4,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-16
+
 First public release. developer-os is now a Markdown-only plugin for Claude Code, installed from
 this repository as a plugin marketplace. It replaces the earlier Homebrew CLI, which was never
 released; the CLI history is archived at the git tag `archive/cli-v0`.
 
 ### Added
+- `plugin/README.md` and `plugin/LICENSE`, which Anthropic's plugin directory requires in the plugin
+  folder, and `keywords` in `plugin.json`.
+- Issue forms (report a problem, propose a change) and links to Discussions and private security
+  advisories.
 - A public documentation site in `site/`, published to GitHub Pages by `.github/workflows/pages.yml`:
   a landing page, one page per document, skill, agent and output style, and a Site stage in
   `scripts/check.sh` that fails when a page falls behind its source.
@@ -111,9 +117,10 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   them. The README links to `core.md` instead of paraphrasing it.
 - `templates/project/AGENTS.md` names the core rules as the source of shared rules and shows an
   optional `Backlog:` line.
-- `plugin.json` carries no `version`: an install tracks the latest `development` commit, and
-  `claude plugin update` picks up every commit. Pin by marketplace ref:
-  `/plugin marketplace add msolecki/developer-os#<ref>`.
+- Versioned releases (D20): both manifests carry `version` `0.1.0`, `main` is the default branch and
+  the marketplace channel and moves only on a release, and each release is tagged `v<version>`. Pin
+  one by tag: `/plugin marketplace add msolecki/developer-os#v0.1.0`. The Validate stage now allows no
+  `claude plugin validate --strict` warning and fails when the two manifest versions differ.
 - The core rules put specifications in `docs/specs/` (or the project's spec location), not next to
   the plan. The task-state file is `docs/plans/.devos-state.md` at a fixed path, even when a project
   moves its planning location; the core rules and every skill that writes it name that path.

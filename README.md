@@ -15,9 +15,10 @@ support is manual and best-effort.
 /plugin install developer-os@developer-os
 ```
 
-The plugin has no version number. An install takes the latest commit of `development`, and
-`claude plugin update developer-os@developer-os` picks up every later commit. Auto-update is off for
-this marketplace unless you turn it on under `/plugin` → Marketplaces.
+The marketplace serves `main`, which moves only on a release; `claude plugin update
+developer-os@developer-os` installs the next one. Releases are listed in [CHANGELOG.md](CHANGELOG.md).
+Auto-update is off for this marketplace unless you turn it on under `/plugin` → Marketplaces. To hold
+one release, add the marketplace at its tag: `/plugin marketplace add msolecki/developer-os#v0.1.0`.
 
 ## Set up the vault
 

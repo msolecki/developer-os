@@ -247,17 +247,10 @@ for t in tests/*.test.sh; do
   sh "$t" || fail tests "$t" "exited non-zero"
 done
 
-# --strict fails on unknown or misspelled manifest keys. The one warning allowed is a missing plugin version,
-# which the plugin drops on purpose.
-# Both the warning lines and the "Found N warning(s)" count are compared, so a format change cannot hide one.
+# --strict fails on unknown or misspelled manifest keys and on any warning: a missing version, or a marketplace
+# entry whose version differs from plugin.json.
 for d in . plugin; do
-  out=$(claude plugin validate "$d" --strict 2>&1) && continue
-  found=$(printf '%s\n' "$out" | sed -nE 's/.*Found ([0-9]+) warnings?.*/\1/p')
-  ok=$(printf '%s\n' "$out" | grep -c '❯.*version: No version specified' || true)
-  if ! claude plugin validate "$d" >/dev/null 2>&1 || [ -z "$found" ] || [ "$found" -gt "$ok" ] ||
-    printf '%s\n' "$out" | grep '❯' | grep -v 'version: No version specified' >/dev/null; then
-    echo "$out" >&2; fail validate "$d" "claude plugin validate --strict failed above"
-  fi
+  out=$(claude plugin validate "$d" --strict 2>&1) || { echo "$out" >&2; fail validate "$d" "claude plugin validate --strict failed above"; }
 done
 
 # Scan only what git tracks (or stages), not ignored local files.

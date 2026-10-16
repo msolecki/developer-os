@@ -1,0 +1,46 @@
+name: Report a problem
+description: A skill, agent, hook or rule did the wrong thing, or did nothing
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form is public. **Do not paste vault notes, client data or secrets.** Name a path or
+        describe the content instead.
+  - type: input
+    id: component
+    attributes:
+      label: Which skill, agent, hook or rule
+      placeholder: "e.g. brain-capture, guard.sh, core rules"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      description: >-
+        `version` of `developer-os@developer-os` in `~/.claude/plugins/installed_plugins.json`,
+        and `claude --version`.
+      placeholder: "0.1.0, Claude Code 2.1.300"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you asked or ran
+      description: The prompt or command that triggered it, and the project type if it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+    validations:
+      required: true

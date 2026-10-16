@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea that is not yet a proposal
+    url: https://github.com/msolecki/developer-os/discussions
+    about: Q&A, setups worth showing, and ideas still looking for a concrete change.
+  - name: Report a security issue privately
+    url: https://github.com/msolecki/developer-os/security/advisories/new
+    about: >-
+      A hook that lets through what it should ask about, a skill that follows instructions found in
+      data, or anything else in SECURITY.md's scope. Never paste vault contents or secrets.
