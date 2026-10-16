@@ -99,7 +99,7 @@ Out of scope, on purpose:
 
 ## Status
 
-Release 0.2.0; installs follow `main`, which moves only on a release. See [CURRENT-STATE.md](../CURRENT-STATE.md) for what works, what is in
+Release 0.2.1; installs follow `main`, which moves only on a release. See [CURRENT-STATE.md](../CURRENT-STATE.md) for what works, what is in
 progress and what is known to be missing.
 
 ## Primary risks

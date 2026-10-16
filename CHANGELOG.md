@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-16
+
 ### Changed
 - Hooks for the plugin-directory validator (COMMAND_PATH_COMPUTED): `session-start.sh` reads the core
   rules from `${CLAUDE_PLUGIN_ROOT}/rules/core.md` instead of a path built from `$0`, `guard.sh` runs its
