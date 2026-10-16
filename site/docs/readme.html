@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>developer-os · developer-os</title>
 <meta name="description" content="The developer-os README: install, vault setup, what the hooks do, what the plugin ships and the Codex installer.">
-<meta name="dos-source" content="README.md@e3b595f2da71">
+<meta name="dos-source" content="README.md@4f124e877b88">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -44,9 +44,10 @@ support is manual and best-effort.</p>
     <h2 id="install-claude-code">Install (Claude Code)</h2>
     <pre><code>/plugin marketplace add msolecki/developer-os
 /plugin install developer-os@developer-os</code></pre>
-    <p>The plugin has no version number. An install takes the latest commit of <code>development</code>, and
-<code>claude plugin update developer-os@developer-os</code> picks up every later commit. Auto-update is off for
-this marketplace unless you turn it on under <code>/plugin</code> → Marketplaces.</p>
+    <p>The marketplace serves <code>main</code>, which moves only on a release; <code>claude plugin update
+developer-os@developer-os</code> installs the next one. Releases are listed in <a href="changelog.html">CHANGELOG.md</a>.
+Auto-update is off for this marketplace unless you turn it on under <code>/plugin</code> → Marketplaces. To hold
+one release, add the marketplace at its tag: <code>/plugin marketplace add msolecki/developer-os#v0.1.0</code>.</p>
     <h2 id="set-up-the-vault">Set up the vault</h2>
     <p>Run the <code>brain-setup</code> skill in Claude Code: it copies <a href="https://github.com/msolecki/developer-os/tree/development/plugin/vault-template"><code>plugin/vault-template/</code></a>
 (or connects an existing vault), shows the two config edits as a diff and applies them after you

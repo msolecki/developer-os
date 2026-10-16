@@ -1,0 +1,30 @@
+name: Propose a change
+description: A skill, rule, hook or check that should exist or work differently
+title: "[idea] "
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every session pays for the core rules and the skill descriptions (docs/product/decisions.md,
+        D10), so a proposal that adds to them should replace or remove something too.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What goes wrong today
+      description: The mistake the agent makes or the step you repeat by hand, with an example.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should change
+    validations:
+      required: true
+  - type: input
+    id: existing
+    attributes:
+      label: Which existing skill or rule is closest
+      placeholder: "none, or e.g. code-review"
+    validations:
+      required: true

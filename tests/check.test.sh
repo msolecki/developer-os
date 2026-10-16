@@ -48,8 +48,8 @@ run "a link to a missing heading" fail "names no heading"
 echo '# developer-os:nonexistent' >> "$r/plugin/hooks/guard.sh"
 run "a dangling reference in a hook" fail "references: plugin/hooks/guard.sh"
 
-echo 'Ships 99 skills.' >> "$r/CHANGELOG.md"
-run "a stale count in CHANGELOG.md" fail "counts: CHANGELOG.md"
+perl -pi -e 's/^## \[Unreleased\]$/$&\n\nShips 99 skills./' "$r/CHANGELOG.md"
+run "a stale count in the Unreleased section of CHANGELOG.md" fail "counts: CHANGELOG.md"
 
 jq '.hook = {}' "$r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$r/plugin/.claude-plugin/plugin.json"
 run "a misspelled plugin.json key" fail "Unknown field 'hook'"
@@ -59,7 +59,7 @@ mkdir "$tmp/bin"
 printf '%s\n' '#!/bin/sh' 'case "$*" in *--strict*) printf "Found 1 warning:\n  - hook: Unknown field\n"; exit 1 ;; esac' > "$tmp/bin/claude"
 chmod +x "$tmp/bin/claude"
 runpath="$tmp/bin:$PATH"
-run "an unmarked validate warning" fail "claude plugin validate --strict failed"
+run "a validate warning" fail "claude plugin validate --strict failed"
 runpath=
 
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'
@@ -120,7 +120,6 @@ run "a page naming another page's source" fail "site: site/docs/glossary.html: n
 edit site/index.html 's|<h2>The skill library.</h2>|<h2>The 99 skills.</h2>|'
 run "a wrong count on the site" fail "says 99 skills"
 
-jq 'del(.version)' "$r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$r/plugin/.claude-plugin/plugin.json"
 printf '\n## [0.0.1]\n\nShips 99 skills.\n' >> "$r/CHANGELOG.md"
 cat >> "$r/docs/development.md" <<'EOF'
 
@@ -136,7 +135,10 @@ Only 3 cases of failure.
 EOF
 rehash CHANGELOG.md site/docs/changelog.html
 rehash docs/development.md site/docs/development.html
-run "no plugin version, a count in a released CHANGELOG section, 'N cases of' prose, diacritic, repeated and linked headings pass" pass
+run "a count in a released CHANGELOG section, 'N cases of' prose, diacritic, repeated and linked headings pass" pass
+
+jq '.plugins[0].version = "9.9.9"' "$r/.claude-plugin/marketplace.json" > "$tmp/x" && mv "$tmp/x" "$r/.claude-plugin/marketplace.json"
+run "marketplace and plugin versions differ" fail 'Entry declares version "9.9.9"'
 
 [ "$failed" -eq 0 ] && echo "check: all passed"
 exit "$failed"

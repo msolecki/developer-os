@@ -3,7 +3,7 @@ name: pages
 # Publishes site/ (the public landing page) to GitHub Pages. Needs Settings → Pages → Source: GitHub Actions.
 on:
   push:
-    branches: [development]
+    branches: [main]
     paths: [site/**, .github/workflows/pages.yml]
   workflow_dispatch:
 

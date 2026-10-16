@@ -94,12 +94,12 @@ Out of scope, on purpose:
 - Install: `/plugin marketplace add msolecki/developer-os`, then
   `/plugin install developer-os@developer-os`. The marketplace (`.claude-plugin/marketplace.json`)
   points at `./plugin`.
-- The marketplace serves the repository's default branch, `development`.
+- The marketplace serves the repository's default branch, `main`, which moves only on a release.
 - License: MIT. No paid tier, no telemetry.
 
 ## Status
 
-Not released; installs track `development`. See [CURRENT-STATE.md](../CURRENT-STATE.md) for what works, what is in
+Release 0.1.0; installs follow `main`, which moves only on a release. See [CURRENT-STATE.md](../CURRENT-STATE.md) for what works, what is in
 progress and what is known to be missing.
 
 ## Primary risks

@@ -14,7 +14,7 @@ the agent then reads and writes on the user's behalf.
 ```
 .claude-plugin/marketplace.json   marketplace: one plugin, source ./plugin
 plugin/                           the installed payload
-  .claude-plugin/plugin.json      name, description, license (no version: installs track the commit)
+  .claude-plugin/plugin.json      name, version, description, license, keywords
   rules/core.md                   core rules, printed by the SessionStart hook
   SURFACE.txt                     public names, checked against the disk
   hooks/hooks.json                three hooks, 10-second timeouts

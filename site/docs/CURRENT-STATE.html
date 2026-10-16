@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Current state · developer-os</title>
 <meta name="description" content="What works in developer-os today, what is in progress, and what is known to be broken or missing.">
-<meta name="dos-source" content="docs/CURRENT-STATE.md@f9f9423a7544">
+<meta name="dos-source" content="docs/CURRENT-STATE.md@2c1c6673779d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -34,13 +34,14 @@
   <main id="main" class="prose">
     <h1 id="current-state">Current state</h1>
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/CURRENT-STATE.md">docs/CURRENT-STATE.md</a></span><span>Verified 2026-10-16</span></p>
-    <p>Verified at commit: <code>a4c66e96</code> (branch <code>feat/audit-fixes-2026-10-15</code>, the audit fixes of 2026-10-16 after the independent and security reviews)</p>
-    <p>What is true at the commit above, checked against the files and by running <code>CI=1 scripts/check.sh</code>
-(green, including the six script tests). agnix 0.57.0 <code>--strict</code> reports no issues (CC-PL-004, the missing <code>version</code>, is disabled for plugin.json with its reason). If <code>development</code> has moved far past
+    <p>Verified at tag: <code>v0.1.0</code> (the first release, 2026-10-16)</p>
+    <p>What is true at the tag above, checked against the files and by running <code>CI=1 scripts/check.sh</code>
+(green, including the six script tests). agnix 0.57.0 <code>--strict</code> reports no issues. If <code>development</code> has moved far past
 this commit, treat each line as unverified.</p>
     <h2 id="works">Works</h2>
     <ul>
-<li>Install from the marketplace on <code>development</code>: <code>.claude-plugin/marketplace.json</code> → <code>plugin/</code>.</li>
+<li>Release <code>0.1.0</code>, tagged <code>v0.1.0</code>. Install from the marketplace on <code>main</code>, which moves only on a
+release (D20): <code>.claude-plugin/marketplace.json</code> → <code>plugin/</code>.</li>
 <li>28 skills, 5 agents, 4 output styles, 3 hooks, as listed in
 <a href="product/functional-spec.html">product/functional-spec.md</a>.</li>
 <li>Per-session cost: core rules 8144 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
@@ -71,15 +72,13 @@ too, even with the subtler payloads): injection-bug-triage, -fix-pr, -pr-cycle. 
 </ul>
     <h2 id="in-progress">In progress</h2>
     <ul>
-<li><code>plugin.json</code> has no <code>version</code>: installs track the latest <code>development</code> commit. <code>CHANGELOG.md</code>
-collects everything under <code>[Unreleased]</code>; no release tag exists and the release procedure is open.</li>
 <li>Proposals under consideration, not implemented (kept in a local, git-ignored plan): the vault path
 through plugin <code>userConfig</code>; <code>paths:</code> for conventions skills; <code>context: fork</code> for report skills;
 <code>allowed-tools</code> for read-only commands; <code>${CLAUDE_SKILL_DIR}</code> in brain-setup; one budget for all
 fixed context; trigger evals for every action skill; a report-length contract for subagents beyond
 the final status; <code>effort</code> per skill.</li>
-<li>Not done by hand yet: listing on awesome-claude-code (eligible 14 days after the repository is
-public) and agentskill.sh, and checking the claude-plugins-official submission rules before a first tagged release.</li>
+<li>Not done by hand yet: submission to Anthropic's plugin directory (claude.ai/directory/manage), listing
+on awesome-claude-code (its issue form, 14 days after the first commit) and agentskill.sh.</li>
 </ul>
     <h2 id="known-broken-or-missing">Known broken or missing</h2>
     <p>Found in the review of 2026-10-15 (independent code-reviewer and security-auditor passes, each finding reproduced or read in the code). Severity on the plugin's P0–P3 scale; none is P0 or P1.</p>
@@ -99,17 +98,15 @@ trigger-plan-status passes, 1.00 against 0.67 (Δ +0.33, one run); implement-bac
 review and the merge), but its <code>distinct-owners</code> judge read only the final reply. That grader now
 reads the trace, and a run at <code>e8da1f7b</code> passes: 1.00 with the plugin against 0.00 without
 (Δ +1.00, one run, 1.06 USD). code-review-clean-diff once is optional.</li>
-<li>A pull-request CI run to confirm R15 and R16 (below).</li>
 </ul>
     <div class="table-wrap">
 <table>
 <thead><tr><th scope="col">ID</th><th scope="col">Sev</th><th scope="col">Where</th><th scope="col">Problem</th></tr></thead>
 <tbody>
-<tr><td>R7</td><td>P3</td><td>No release procedure</td><td>Pinning by marketplace ref is documented and <code>SECURITY.md</code> supports only the latest commit, but there is no release tag or procedure (tags, changelog date); <code>main</code> is not kept in step with <code>development</code>, yet <code>vault-template/README.md</code> links the workflow guide on <code>main</code>.</td></tr>
 <tr><td>R1</td><td>P3</td><td><code>plugin/hooks/guard.sh</code></td><td>Accepted (D6): a command on the line after an install without a package asks, because the guard also reads newlines as spaces so a quoted multi-line argument cannot hide a flag or a package.</td></tr>
 <tr><td>R13</td><td>P3</td><td><code>plugin/hooks/guard.sh</code></td><td>Lockfile-changing <code>update</code>/<code>remove</code> stay outside the guard's categories, by decision (Q3 A); the normal permission flow still applies. Known silent passes, all present before the 2026-10-16 fixes too: a word built at run time (<code>$(command -v npm) install x</code>), JSON <code>\u</code> escapes and ANSI-C escapes (<code>$'\x2d\x2dforce'</code>), digits in a flag cluster (<code>-4f</code>), abbreviated <code>--mirr</code>, a force refspec from config (<code>remote.origin.push=+main</code>), unquoted or environment-defined git aliases, and install aliases outside the list (<code>bun a</code>, <code>npm install-test</code>). The guard is a first prompt, not a sandbox.</td></tr>
 <tr><td>R15</td><td>P3</td><td><code>.github/workflows/check.yml</code></td><td>Fixed and confirmed in the #76 CI run: the pinned Claude Code installs with <code>--ignore-scripts</code>, then runs only its own <code>install.cjs</code>; <code>claude --version</code> prints <code>2.1.300</code>.</td></tr>
-<tr><td>R16</td><td>P3</td><td><code>.github/workflows/check.yml</code></td><td>Fixed, not yet confirmed: a gitleaks step scans the pull request's commits, so a secret added and removed within one PR fails CI. It has run only locally.</td></tr>
+<tr><td>R16</td><td>P3</td><td><code>.github/workflows/check.yml</code></td><td>Fixed and confirmed in the #78 pull-request CI run: the step "gitleaks over the pull request's commits" passed.</td></tr>
 <tr><td>R17</td><td>P3</td><td>README</td><td>The claim that an <code>ask</code> becomes a denial in <code>claude -p</code> was not re-verified; proving it needs a live <code>claude -p</code> run.</td></tr>
 </tbody>
 </table>

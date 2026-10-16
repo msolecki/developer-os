@@ -144,15 +144,27 @@ line; the script refuses any other form.
 
 ## Branches and releases
 
-- `development` is the default branch and what the marketplace installs. Work lands there through
-  pull requests; the repository disallows merge commits.
-- `main` is not kept in step with `development` and is not a release channel today.
-- `plugin/.claude-plugin/plugin.json` carries no `version` (decided 2026-10-15): an install tracks the
-  latest `development` commit. A user pins a version by marketplace ref or tag:
-  `/plugin marketplace add msolecki/developer-os#<ref>`.
-- `CHANGELOG.md` follows Keep a Changelog; no release tag exists yet. There is no release automation,
-  and the release procedure (tags, changelog date) is an open decision; see
-  [CURRENT-STATE.md](CURRENT-STATE.md).
+- `main` is the default branch and what the marketplace installs; it moves only on a release (D20).
+- `development` is the work branch. Work lands there through pull requests; the repository disallows
+  merge commits.
+- `plugin/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` carry the same `version`;
+  the Validate stage fails when they differ. Claude Code caches an install by that version, so an
+  update reaches users only when it changes.
+- `CHANGELOG.md` follows Keep a Changelog. A user pins a release by its tag:
+  `/plugin marketplace add msolecki/developer-os#v<version>`.
+
+Release, by hand:
+
+1. On a branch from `development`: bump `version` in both manifests, rename `[Unreleased]` in
+   `CHANGELOG.md` to `[<version>] - <date>` under a new empty `[Unreleased]`, refresh the site pages
+   the Site stage names, run `bash scripts/check.sh`, and merge the pull request.
+2. When `check` is green on `development`: `git push origin origin/development:main`. Only a fast-forward
+   is accepted; the `main` ruleset lets the repository admin push without a pull request, so `main`
+   keeps the same SHAs as `development`.
+3. `git tag v<version> origin/main && git push origin v<version>` at once (a fetch prunes an unpushed
+   tag), then `gh release create v<version> --notes-file <the changelog section>`. The `release-tags`
+   ruleset forbids moving or deleting a `v*` tag.
+4. Pushing `main` publishes `site/` to GitHub Pages.
 
 ## Plans
 

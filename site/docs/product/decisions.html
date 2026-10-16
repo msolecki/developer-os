@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Decisions · developer-os</title>
 <meta name="description" content="The register of developer-os plugin-era decisions, with dates, reasons, commits and the rules history.">
-<meta name="dos-source" content="docs/product/decisions.md@a06067b11294">
+<meta name="dos-source" content="docs/product/decisions.md@bd55503ed6da">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -116,13 +116,14 @@
 <li><strong>Decision:</strong> <code>evals/</code> holds <code>claude plugin eval</code> cases with a with-plugin and a baseline arm; they run by hand before a release or after changing a tested skill.</li>
 <li><strong>Why:</strong> every run spends real plan usage (two agent sessions per case and run, plus judge calls).</li>
 </ul>
-<h2 id="d14-development-is-the-default-and-install-branch">D14. <code>development</code> is the default and install branch</h2>
+<h2 id="d14-development-is-the-default-and-install-branch-superseded-by-d20">D14. <code>development</code> is the default and install branch (superseded by D20)</h2>
 <ul>
 <li><strong>Date:</strong> 2026-10-14</li>
 <li><strong>Decision:</strong> <code>/plugin marketplace add msolecki/developer-os</code> installs from <code>development</code>, the repository's default branch. <code>main</code> is not the release channel today.</li>
 <li><strong>Pinning:</strong> a user holds one version by adding the marketplace at a branch or tag (<code>/plugin marketplace add msolecki/developer-os#&lt;ref&gt;</code>); no release tag exists yet.</li>
 <li><strong>Open:</strong> a release procedure (tags, changelog date); see <a href="../CURRENT-STATE.html">CURRENT-STATE.md</a>.</li>
 <li><strong>Amended 2026-10-15:</strong> <code>plugin.json</code> carries no <code>version</code>. Claude Code then versions an install by the commit SHA, so <code>claude plugin update</code> picks up every commit on <code>development</code>, docs-only ones too. The pinned <code>0.1.0</code> kept every install on its first cached copy, whatever was pushed later.</li>
+<li><strong>Superseded 2026-10-16</strong> by D20.</li>
 </ul>
 <h2 id="d15-language-split">D15. Language split</h2>
 <ul>
@@ -159,6 +160,13 @@
 <li><strong>Decision:</strong> <code>scripts/install-codex.sh</code>, run by hand, writes a Codex copy of every skill (name and a short description only, Claude-only references rewritten, a <code>.developer-os-codex</code> marker) and keeps the core rules and the <code>Brain vault:</code> line between markers in <code>~/.codex/AGENTS.md</code>. No Codex hooks.</li>
 <li><strong>Why:</strong> Codex lists skills within 8000 characters by default (the installer counts bytes, which are never fewer than characters); the full descriptions are over 10,000 characters (the <code>scripts/check.sh</code> descriptions stage counts characters), so a symlink cannot fit and a copy must carry a shorter description. Pasting <code>core.md</code> by hand went stale silently; a marked block is replaced in place and backed up. Codex's documentation does not confirm the hook events the guard needs.</li>
 <li><strong>Rejected:</strong> symlinks for skills without Claude-only references (the budget still overflows); installing <code>guard.sh</code> for Codex.</li>
+</ul>
+<h2 id="d20-versioned-releases-from-main">D20. Versioned releases from <code>main</code></h2>
+<ul>
+<li><strong>Date:</strong> 2026-10-16</li>
+<li><strong>Decision:</strong> <code>main</code> is the default branch and the marketplace channel; it moves only on a release, a fast-forward from <code>development</code>. Both manifests carry the same <code>version</code>, bumped on every release and tagged <code>v&lt;version&gt;</code>. The first release is <code>0.1.0</code>.</li>
+<li><strong>Why:</strong> with the public launch, an install should change only when a release does, not on every docs commit; the cached-copy problem of D14 is the intended behaviour once <code>main</code> moves only on a release. Anthropic's plugin directory warns on a missing <code>version</code>. Same model as founder-os.</li>
+<li><strong>Alternatives:</strong> a tag on <code>development</code> without a <code>version</code> (installs keep tracking every commit).</li>
 </ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>
