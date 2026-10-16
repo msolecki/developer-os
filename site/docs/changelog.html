@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@4d8d99fa6cf5">
+<meta name="dos-source" content="CHANGELOG.md@7a878b06455d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -36,6 +36,16 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h3 id="unreleased-changed">Changed</h3>
+    <ul>
+<li>The hooks are Python 3 scripts (standard library only, no network), because the plugin-directory
+validator refuses shell scripts whose commands use computed paths: <code>guard.py</code> replaces <code>guard.sh</code> and
+<code>guard.awk</code>, <code>capture-nudge.py</code> replaces <code>capture-nudge.sh</code>, and <code>state-card.py</code> prints the state
+card. They need <code>python3</code> (3.8+) on <code>PATH</code>; without it they fail open. Behavior is unchanged.</li>
+<li><code>SessionStart</code> is split in two: a <code>cat</code> of <code>rules/core.md</code> on every source, so the core rules load
+without Python, and <code>state-card.py</code> on <code>compact|resume</code>. <code>session-start.sh</code> is removed, and the card
+is no longer guaranteed to print after the rules.</li>
+    </ul>
     <h2 id="022---2026-10-16">[0.2.2] - 2026-10-16</h2>
     <h3 id="022-fixed">Fixed</h3>
     <ul>

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pitfalls · developer-os</title>
 <meta name="description" content="Deliberate settings in the developer-os repository that look like defects, and what breaks if they change.">
-<meta name="dos-source" content="docs/pitfalls.md@1a8fd2ec55bc">
+<meta name="dos-source" content="docs/pitfalls.md@e5bd472cbaac">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -33,19 +33,19 @@
 
   <main id="main" class="prose">
     <h1 id="pitfalls">Pitfalls</h1>
-    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/pitfalls.md">docs/pitfalls.md</a></span><span>Verified 2026-10-15</span></p>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/pitfalls.md">docs/pitfalls.md</a></span><span>Verified 2026-10-16</span></p>
     <p>Deliberate settings in this repository that look like defects. Changing one breaks the plugin or a
     promise it makes.</p>
     <h2 id="hooks-fail-open">Hooks fail open</h2>
     <ul>
-      <li><strong>Where:</strong> <code>plugin/hooks/guard.sh</code>, <code>plugin/hooks/capture-nudge.sh</code></li>
+      <li><strong>Where:</strong> <code>plugin/hooks/guard.py</code>, <code>plugin/hooks/capture-nudge.py</code>, <code>plugin/hooks/state-card.py</code></li>
       <li><strong>Looks like:</strong> a guard that silently lets through anything it cannot parse.</li>
       <li><strong>Why it is deliberate:</strong> the hooks run in every session of every user; a parse bug must never block work. The guard is a reminder, not a security boundary (<a href="product/decisions.html#d6-hooks-ask-never-deny-and-fail-open">decisions D6</a>).</li>
-      <li><strong>Breaks if changed:</strong> a malformed hook input or a <code>sed</code> difference on one platform blocks every Bash call.</li>
+      <li><strong>Breaks if changed:</strong> a malformed hook input or an unexpected exception blocks every Bash call.</li>
     </ul>
     <h2 id="the-guard-strips-quotes-before-matching">The guard strips quotes before matching</h2>
     <ul>
-      <li><strong>Where:</strong> <code>plugin/hooks/guard.sh</code>, the unescape step</li>
+      <li><strong>Where:</strong> <code>plugin/hooks/guard.py</code>, the <code>view</code> step</li>
       <li><strong>Looks like:</strong> a false positive when a commit message mentions <code>pnpm add</code>.</li>
       <li><strong>Why it is deliberate:</strong> without it, <code>sh -c "pnpm add zod"</code> would pass. An extra prompt costs one click; a missed install rewrites the lockfile.</li>
       <li><strong>Breaks if changed:</strong> installs wrapped in <code>sh -c</code> or <code>bash -lc</code> slip through.</li>

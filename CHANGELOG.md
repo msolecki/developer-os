@@ -4,6 +4,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- The hooks are Python 3 scripts (standard library only, no network), because the plugin-directory
+  validator refuses shell scripts whose commands use computed paths: `guard.py` replaces `guard.sh` and
+  `guard.awk`, `capture-nudge.py` replaces `capture-nudge.sh`, and `state-card.py` prints the state
+  card. They need `python3` (3.8+) on `PATH`; without it they fail open. Behavior is unchanged.
+- `SessionStart` is split in two: a `cat` of `rules/core.md` on every source, so the core rules load
+  without Python, and `state-card.py` on `compact|resume`. `session-start.sh` is removed, and the card
+  is no longer guaranteed to print after the rules.
+
 ## [0.2.2] - 2026-10-16
 
 ### Fixed

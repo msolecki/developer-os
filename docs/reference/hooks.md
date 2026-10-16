@@ -7,24 +7,31 @@ last-verified: 2026-10-16
 # Hooks reference
 
 Defined in `plugin/hooks/hooks.json`. Commands run with `${CLAUDE_PLUGIN_ROOT}` set to the installed
-`plugin/` directory; each has a 10-second timeout. Each command names its script by a literal `${CLAUDE_PLUGIN_ROOT}` path, so the scripts keep their executable bit and `#!/bin/sh` line. All three are `sh` (POSIX apart from `grep -o` and `head -c`, which macOS and Linux provide), need no `jq`, make no network call, and fail open.
-Tests: `tests/session-start.test.sh`, `tests/guard.test.sh`, `tests/capture-nudge.test.sh`.
+`plugin/` directory; each has a 10-second timeout. There are 4 hooks: one `cat` and three
+Python 3 scripts run as `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.py"`. The scripts use the
+standard library only, need `python3` 3.8 or later on `PATH`, make no network call, and fail open.
+Without `python3` the core rules still load; the state card, guard and nudge fail with a
+non-blocking hook error and the session goes on as if they were absent. Why Python and not `sh`:
+[decisions D2](../product/decisions.md#d2-no-runtime-small-hook-scripts-without-dependencies).
+Tests: `tests/state-card.test.sh`, `tests/guard.test.sh`, `tests/capture-nudge.test.sh`.
 
 ## SessionStart — core rules and state card
 
-| | |
-|---|---|
-| Matcher | none: every source (startup, resume, clear, compact, fork) |
-| Command | `"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"`, timeout 10 s |
-| Input | the hook JSON on stdin; uses `source` and `cwd` |
-| Output | stdout becomes session context |
-| Limit | Claude Code caps hook output at 10,000 characters; `scripts/check.sh` caps `core.md` at 8192 bytes and checks that the card cap still fits |
-| Off switch | disable the plugin; override single rules in `~/.claude/CLAUDE.md` |
+Two hooks on the same event, run independently, so the card is not guaranteed to follow the rules.
 
-**Always:** prints `plugin/rules/core.md` first.
+| | Core rules | State card |
+|---|---|---|
+| Matcher | none: every source (startup, resume, clear, compact, fork) | `compact\|resume` |
+| Command | `cat "${CLAUDE_PLUGIN_ROOT}/rules/core.md"`, timeout 10 s | `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state-card.py"`, timeout 10 s |
+| Input | none | the hook JSON on stdin; uses `source` and `cwd` |
+| Output | stdout becomes session context | stdout becomes session context |
+| Limit | Claude Code caps hook output at 10,000 characters; `scripts/check.sh` caps `core.md` at 8192 bytes and checks that `CAP` in `state-card.py` still fits beside it | |
+| Off switch | disable the plugin; override single rules in `~/.claude/CLAUDE.md` | disable the plugin |
 
-**After `source` `compact` or `resume`**, when `cwd` is inside a git repository, it reads from the repository root and appends a state
-card of at most 1024 bytes:
+**Core rules:** prints `plugin/rules/core.md` on every source; it does not depend on Python.
+
+**State card:** for `source` `compact` or `resume`, when `cwd` is inside a git repository,
+`state-card.py` reads from the repository root and prints a state card of at most 1024 bytes:
 
 ```
 ## developer-os state card
@@ -55,10 +62,10 @@ stage change (plan, current item, agents and their worktrees, unverified claims,
 git-ignored with the plans. session-retro proposes deleting it with a finished plan. Its path is fixed,
 even when a project moves its plans; `Newest plan` reads only `docs/plans/` too.
 
-**Failure:** after the rules print, every error exits 0 with whatever was printed; malformed input,
-a missing `cwd` or a directory outside git produce the rules alone.
+**Failure:** every error exits 0; malformed input, another `source`, a missing `cwd` or a directory
+outside git print nothing, so the session has the rules alone.
 
-## PreToolUse on Bash — `guard.sh`
+## PreToolUse on Bash — `guard.py`
 
 **Input:** the hook JSON on stdin; only `tool_input.command` is used.
 
@@ -95,10 +102,10 @@ whole segment, so `git log --grep push -f` asks; a non-dash word after `install`
 manager asks, even as a script argument (`pnpm run build -- add foo`), because an option value such
 as `npm --cache run install zod` must not end the check.
 
-**Failure:** `trap 'exit 0' EXIT`; input without `{…}`, without a `command` string, or that `sed`/`awk`
-cannot process produces no output.
+**Failure:** any exception exits 0; input without `{…}` or without a `command` string produces no
+output.
 
-## Stop — `capture-nudge.sh`
+## Stop — `capture-nudge.py`
 
 **Input:** the hook JSON on stdin; uses `stop_hook_active`, `agent_id`, `session_id`,
 `transcript_path`.
@@ -132,8 +139,8 @@ and exits 2, which makes Claude Code feed the message back to the agent instead 
 **Privacy:** counts matches of one fixed string and extracts background-task and Monitor ids, output-file paths and Monitor start timestamps (to check their notifications and modification times); never reads or prints message content.
 
 The output path comes from tool output that anything can print, so it is never trusted as is: a
-relative path or an option such as `-delete` never reaches `find`, and a path outside `tasks/` such as
-`/tmp` cannot defer the nudge.
+relative path is never checked, and a path outside `tasks/` such as `/tmp` cannot defer the nudge. The
+script reads the file's modification time with `stat` and runs no other program on it.
 
 ## Environment variables
 

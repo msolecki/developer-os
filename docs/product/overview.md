@@ -27,7 +27,7 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
    conventions skills, five specialist agents, four output styles and a small Bash guard.
 
-The plugin is Markdown and JSON plus three POSIX `sh` hook scripts. There is no server, database,
+The plugin is Markdown and JSON plus three Python 3 hook scripts (standard library only). There is no server, database,
 index, binary, background job or network call in the plugin itself.
 
 ## Who it is for
@@ -108,6 +108,6 @@ progress and what is known to be missing.
 |---|---|---|
 | Rules and descriptions grow until they crowd the context | Every session pays for them | Byte and character caps in `scripts/check.sh` |
 | A skill's description does not match how the user asks | The skill never fires | Trigger phrases in descriptions, `trigger-*` evals, the `skill-usage` report |
-| An update changes the hooks, which run in every session | Unreviewed code runs in the user's shell | Hooks are short POSIX `sh` with tests; `SECURITY.md` asks users to review each update's diff |
+| An update changes the hooks, which run in every session | Unreviewed code runs in the user's shell | Hooks are short Python 3 scripts, standard library only, with tests; `SECURITY.md` asks users to review each update's diff |
 | An unreviewed agent note is treated as fact | Wrong knowledge spreads | `status: inbox` until approved; brain-search marks inbox claims as unreviewed |
 | Vault content reaches the model provider | Client context leaves the disk | Redaction in brain-capture; privacy rules in [workflow.md](../workflow.md#privacy) |

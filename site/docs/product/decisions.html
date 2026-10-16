@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Decisions · developer-os</title>
 <meta name="description" content="The register of developer-os plugin-era decisions, with dates, reasons, commits and the rules history.">
-<meta name="dos-source" content="docs/product/decisions.md@d9a932b0a182">
+<meta name="dos-source" content="docs/product/decisions.md@7caa64fe1505">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -41,12 +41,13 @@
 <li><strong>Decision:</strong> developer-os is a Claude Code plugin of Markdown and JSON. The CLI, its bundled Node runtime, background jobs, generated indexes and Homebrew tap are removed.</li>
 <li><strong>Why:</strong> the CLI had grown to roughly 125k lines and a multi-hour validation gate to deliver what skills, rules and the agent's own file tools already do.</li>
 </ul>
-<h2 id="d2-no-runtime-hook-scripts-in-posix-sh-only">D2. No runtime; hook scripts in POSIX <code>sh</code> only</h2>
+<h2 id="d2-no-runtime-small-hook-scripts-without-dependencies">D2. No runtime; small hook scripts without dependencies</h2>
 <ul>
-<li><strong>Date:</strong> 2026-10-14, extended 2026-10-15 · <strong>Commits:</strong> <code>53504f88</code>, <code>1c324a89</code></li>
+<li><strong>Date:</strong> 2026-10-14, extended 2026-10-15 and 2026-10-16 · <strong>Commits:</strong> <code>53504f88</code>, <code>1c324a89</code></li>
 <li><strong>Decision:</strong> the only executable code is the hook layer: <code>cat</code> of the core rules, plus <code>capture-nudge.sh</code> and <code>guard.sh</code> in POSIX <code>sh</code>, without <code>jq</code>, without network calls.</li>
 <li><strong>Why:</strong> anything that runs in every session of every user must be small enough to read in full and must not add dependencies.</li>
 <li><strong>Amended 2026-10-15:</strong> a third script, <code>session-start.sh</code>, replaces the inline <code>cat</code> (D16), and <code>scripts/install-codex.sh</code> runs only by hand, outside the plugin (D19).</li>
+<li><strong>Amended 2026-10-16:</strong> the hook scripts are Python 3 (3.8+, standard library only, no network): <code>state-card.py</code>, <code>guard.py</code> and <code>capture-nudge.py</code> replace the <code>sh</code> scripts and <code>guard.awk</code>. The Claude plugin directory's validator reads the shell scripts a hook runs and refuses any command whose path the shell computes (a variable other than <code>${CLAUDE_PLUGIN_ROOT}</code>, a command substitution, a glob) or any inline program; the hooks need paths outside the plugin (the project's <code>cwd</code>, the transcript, a temporary directory). Scripts in other languages are held for a human reviewer instead of refused. The core rules load through a literal <code>cat</code> hook again, so they never depend on Python; without <code>python3</code> the other three hooks fail open.</li>
 </ul>
 <h2 id="d3-the-vault-is-read-and-written-with-the-agents-own-file-tools">D3. The vault is read and written with the agent's own file tools</h2>
 <ul>
@@ -70,7 +71,7 @@
 <h2 id="d6-hooks-ask-never-deny-and-fail-open">D6. Hooks ask, never deny, and fail open</h2>
 <ul>
 <li><strong>Date:</strong> 2026-10-15 · <strong>Commit:</strong> <code>1c324a89</code></li>
-<li><strong>Decision:</strong> <code>guard.sh</code> answers <code>ask</code> for its three categories and nothing else; both scripts exit silently on input they cannot parse or on any error.</li>
+<li><strong>Decision:</strong> the guard answers <code>ask</code> for its three categories and nothing else; both scripts exit silently on input they cannot parse or on any error.</li>
 <li><strong>Why:</strong> a broken guard must not block a session; an extra confirmation costs one click, while a missed install rewrites a lockfile. Per the README, an ask resolves to a denial in <code>claude -p</code>, the safe default for headless runs.</li>
 </ul>
 <h2 id="d7-one-wrap-up-nudge-per-long-session">D7. One wrap-up nudge per long session</h2>
@@ -140,6 +141,7 @@
 <li><strong>Hardened after review:</strong> the state file is shown only when untracked, git-ignored and reached without a symlink, and a tracked plan is not named, so a cloned repository cannot inject instructions through them or point the card at a local secret; the branch name still prints (git forbids spaces and control characters in it).</li>
 <li><strong>Amended 2026-10-15:</strong> the state file prints before the worktree list, so a long list cannot push it past the cap; a card over the cap is cut at a whole line with a marker; a state file not changed in 7 days is left over from a finished run and is not shown. The card's <code>Newest plan:</code> line comes from the plan files only; the state file's own <code>Plan:</code> line prints inside the state section.</li>
 <li><strong>Amended 2026-10-16:</strong> the state-file path is fixed at <code>docs/plans/.devos-state.md</code> even when a project overrides its planning location; skills and core rules name that path. A project that moves its plans still git-ignores <code>docs/plans/</code> (or that file) so the card shows it — the one extra <code>.gitignore</code> entry D16 rejected <code>.claude/devos-state.md</code> for.</li>
+<li><strong>Amended 2026-10-16:</strong> the card comes from its own hook, <code>state-card.py</code>, matched to <code>compact</code> and <code>resume</code>; the core rules print from a separate <code>cat</code> hook (D2), so the card is no longer guaranteed to follow them.</li>
 <li><strong>Rejected:</strong> a <code>PreCompact</code> hook (its input and output are undocumented); <code>.claude/devos-state.md</code> (one more <code>.gitignore</code> entry per project).</li>
 </ul>
 <h2 id="d17-one-backlog-item-format-defined-in-the-skills-only">D17. One backlog item format, defined in the skills only</h2>

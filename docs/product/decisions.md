@@ -19,9 +19,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Why:** the CLI had grown to roughly 125k lines and a multi-hour validation gate to deliver what
   skills, rules and the agent's own file tools already do.
 
-## D2. No runtime; hook scripts in POSIX `sh` only
+## D2. No runtime; small hook scripts without dependencies
 
-- **Date:** 2026-10-14, extended 2026-10-15 · **Commits:** `53504f88`, `1c324a89`
+- **Date:** 2026-10-14, extended 2026-10-15 and 2026-10-16 · **Commits:** `53504f88`, `1c324a89`
 - **Decision:** the only executable code is the hook layer: `cat` of the core rules, plus
   `capture-nudge.sh` and `guard.sh` in POSIX `sh`, without `jq`, without network calls.
 - **Why:** anything that runs in every session of every user must be small enough to read in full
@@ -29,6 +29,14 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 
 - **Amended 2026-10-15:** a third script, `session-start.sh`, replaces the inline `cat` (D16), and
   `scripts/install-codex.sh` runs only by hand, outside the plugin (D19).
+- **Amended 2026-10-16:** the hook scripts are Python 3 (3.8+, standard library only, no network):
+  `state-card.py`, `guard.py` and `capture-nudge.py` replace the `sh` scripts and `guard.awk`. The
+  Claude plugin directory's validator reads the shell scripts a hook runs and refuses any command
+  whose path the shell computes (a variable other than `${CLAUDE_PLUGIN_ROOT}`, a command
+  substitution, a glob) or any inline program; the hooks need paths outside the plugin (the project's
+  `cwd`, the transcript, a temporary directory). Scripts in other languages are held for a human
+  reviewer instead of refused. The core rules load through a literal `cat` hook again, so they never
+  depend on Python; without `python3` the other three hooks fail open.
 
 ## D3. The vault is read and written with the agent's own file tools
 
@@ -60,7 +68,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 ## D6. Hooks ask, never deny, and fail open
 
 - **Date:** 2026-10-15 · **Commit:** `1c324a89`
-- **Decision:** `guard.sh` answers `ask` for its three categories and nothing else; both scripts exit
+- **Decision:** the guard answers `ask` for its three categories and nothing else; both scripts exit
   silently on input they cannot parse or on any error.
 - **Why:** a broken guard must not block a session; an extra confirmation costs one click, while a
   missed install rewrites a lockfile. Per the README, an ask resolves to a denial in `claude -p`, the safe
@@ -171,6 +179,9 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   project overrides its planning location; skills and core rules name that path. A project that moves
   its plans still git-ignores `docs/plans/` (or that file) so the card shows it — the one extra
   `.gitignore` entry D16 rejected `.claude/devos-state.md` for.
+- **Amended 2026-10-16:** the card comes from its own hook, `state-card.py`, matched to `compact` and
+  `resume`; the core rules print from a separate `cat` hook (D2), so the card is no longer guaranteed
+  to follow them.
 - **Rejected:** a `PreCompact` hook (its input and output are undocumented); `.claude/devos-state.md`
   (one more `.gitignore` entry per project).
 

@@ -23,13 +23,13 @@ Never include the content of a vault or a secret. Describe it instead.
 
 ## Scope
 
-- The plugin is Markdown (skills, agents, output styles, rules) plus three hooks in
-  `plugin/hooks/hooks.json`: `SessionStart` runs `session-start.sh`, which prints `plugin/rules/core.md` and, after a
-  compaction or resume, the git branch, newest plan, `docs/plans/.devos-state.md` and worktrees of the
+- The plugin is Markdown (skills, agents, output styles, rules) plus 4 hooks in
+  `plugin/hooks/hooks.json`: `SessionStart` runs `cat` on `plugin/rules/core.md` and, after a
+  compaction or resume, `state-card.py`, which prints the git branch, newest plan, `docs/plans/.devos-state.md` and worktrees of the
   working directory; `Stop` runs
-  `capture-nudge.sh`, which counts `tool_use` entries in the session transcript and reads only
-  background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; `PreToolUse` runs `guard.sh` on Bash commands and can only ask for confirmation.
-  The three scripts are POSIX `sh` (plus `grep -o` and `head -c`), make no network calls and fail open. The plugin ships no binary,
+  `capture-nudge.py`, which counts `tool_use` entries in the session transcript and reads only
+  background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; `PreToolUse` runs `guard.py` on Bash commands and can only ask for confirmation.
+  The three scripts are Python 3 with the standard library only, make no network calls and fail open. The plugin ships no binary,
   server or network code.
 - Updates come from this Git repository through the Claude Code plugin marketplace: each update
   installs the latest release from `main`. An update can change `plugin/hooks/hooks.json` and the

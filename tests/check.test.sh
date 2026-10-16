@@ -66,8 +66,8 @@ run "a broken relative link in a skill" fail "links: plugin/skills/spec/SKILL.md
 echo '[bad](#no-such-heading)' >> "$r/docs/development.md"
 run "a link to a missing heading" fail "names no heading"
 
-echo '# developer-os:nonexistent' >> "$r/plugin/hooks/guard.sh"
-run "a dangling reference in a hook" fail "references: plugin/hooks/guard.sh"
+echo '# developer-os:nonexistent' >> "$r/plugin/hooks/guard.py"
+run "a dangling reference in a hook" fail "references: plugin/hooks/guard.py"
 
 perl -pi -e 's/^## \[Unreleased\]$/$&\n\nShips 99 skills./' "$r/CHANGELOG.md"
 run "a stale count in the Unreleased section of CHANGELOG.md" fail "counts: CHANGELOG.md"
@@ -95,8 +95,8 @@ run "a doc without last-verified" fail "docs/development.md: last-verified is no
 printf '\nx: [\n' >> "$r/plugin/vault-template/_views/Inbox.base"
 run "an invalid .base file" fail "yaml: plugin/vault-template/_views/Inbox.base"
 
-edit plugin/hooks/hooks.json 's|/hooks/guard.sh|/hooks/gone.sh|'
-run "a hook target that does not exist" fail "missing target plugin/hooks/gone.sh"
+edit plugin/hooks/hooks.json 's|/hooks/guard.py|/hooks/gone.py|'
+run "a hook target that does not exist" fail "missing target plugin/hooks/gone.py"
 
 edit plugin/agents/qa-expert.md '/^## Final status$/d'
 run "an agent without ## Final status" fail "agents: plugin/agents/qa-expert.md: no ## Final status section"
@@ -104,7 +104,7 @@ run "an agent without ## Final status" fail "agents: plugin/agents/qa-expert.md:
 printf '%300s\n' x >> "$r/plugin/rules/core.md"
 run "core.md over 8192 bytes" fail "size: plugin/rules/core.md"
 
-edit plugin/hooks/session-start.sh 's/^cap=.*/cap=2000/'
+edit plugin/hooks/state-card.py 's/^CAP = .*/CAP = 2000/'
 run "a state-card cap that overflows 10000" fail "state card cap 2000 leaves no room"
 
 echo 'See /Users/bob/x.' > "$r/plugin/notes.txt"
