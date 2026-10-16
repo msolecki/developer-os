@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>project-baseline · developer-os skills</title>
 <meta name="description" content="Check a repository against a baseline of engineering practices and propose each missing one as a backlog item, written only after your approval.">
-<meta name="dos-source" content="plugin/skills/project-baseline/SKILL.md@a8e6cfaa3a15">
+<meta name="dos-source" content="plugin/skills/project-baseline/SKILL.md@d867dd97a5d3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -73,7 +73,7 @@
       </li>
       <li><strong>Leaves decisions to you.</strong> It never proposes a default for the package manager, the test runner, the authentication library, the monitoring stack or the commit message language. When the repository is inconsistent (two lockfiles, two test runners), it lists the evidence and asks you to choose.</li>
       <li><strong>Drafts the backlog items.</strong> One item per missing practice in the audit-to-backlog shape, filed under its severity and deduplicated against both backlog files.</li>
-      <li><strong>Reports and asks.</strong> A summary of present, missing, deliberate and not-applicable practices, the decisions it needs from you, and one question about writing the items. If no backlog files exist yet, it asks for their paths and records them as a <code>Backlog:</code> line in <code>AGENTS.md</code> or <code>CLAUDE.md</code>.</li>
+      <li><strong>Reports and asks.</strong> A summary of present, missing, deliberate and not-applicable practices, the decisions it needs from you, and one question about writing the items. If no backlog files exist yet, it asks for their paths and records them as a <code>Backlog:</code> line in <code>AGENTS.md</code> or <code>CLAUDE.md</code>, warning when the path is git-ignored.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>
@@ -101,7 +101,7 @@ Needs your decision: test runner — package.json has both jest and vitest
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>It has shown the report and asked its question. After your approval it merges the approved items into the backlog file, shows <code>git diff --stat</code> and stops; implementation is implement-backlog's job.</p>
+      <p>It has shown the report and asked its question. After your approval it merges the approved items into the backlog file with an implementation-session line for them, shows <code>git diff --stat</code> and stops; implementation is implement-backlog's job.</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>

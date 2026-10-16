@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>spec · developer-os skills</title>
 <meta name="description" content="Interview you about a feature, inspect the repository, write a specification and an implementation plan, then hand the work to a fresh session.">
-<meta name="dos-source" content="plugin/skills/spec/SKILL.md@37f13a1b0ff9">
+<meta name="dos-source" content="plugin/skills/spec/SKILL.md@dbe247f2fa85">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -57,7 +57,7 @@
       <li><strong>Inspects the code.</strong> It reads the relevant code before it locks any decision.</li>
       <li><strong>Writes the specification.</strong> To the repository's documented specification location as <code>&lt;YYYY-MM-DD-feature&gt;-spec.md</code>; if none is documented it proposes <code>docs/specs/</code> and asks you to confirm. Never into the planning location, where a spec would be read as the active plan. It covers goals, non-goals, flows, technical design, decisions with their rejected alternatives, contracts, failure handling, acceptance criteria, tests and unresolved decisions.</li>
       <li><strong>Writes the implementation plan.</strong> To the documented plan location as <code>&lt;YYYY-MM-DD-feature&gt;.md</code>: the goal, the decisions and a <code>Status: in progress | done</code> line, then every step as a <code>- [ ]</code> checkbox with What, Where, How, Test, a complexity (S/M/L) and a deployable invariant, ending with <code>## Open questions</code> and a <code>Next action:</code> line. plan-status and session-retro read this shape.</li>
-      <li><strong>Offers the backlog.</strong> It offers to add the plan's steps to the project backlog in the audit-to-backlog item format (next free ID; complexity becomes <code>Size</code>, the acceptance criterion <code>Done when</code>, the step's test a runnable <code>Check</code>), so implement-backlog can execute them.</li>
+      <li><strong>Offers the backlog.</strong> It offers to add the plan's steps to the project backlog in the audit-to-backlog item format (next free ID; complexity becomes <code>Size</code>, the acceptance criterion <code>Done when</code>, the step's test a runnable <code>Check</code>) with an implementation-session line for them, so implement-backlog can execute them.</li>
       <li><strong>Hands off.</strong> It stops and gives you the plan path for a fresh session to implement from.</li>
     </ol>
 

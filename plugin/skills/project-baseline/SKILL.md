@@ -69,11 +69,11 @@ Needs your decision: test runner — package.json has both jest and vitest
 Write the 4 items to TODO.md? A: all (recommended)  B: list IDs  C: none
 ```
 
-If the backlog files do not exist yet, ask for the paths and record them as a `Backlog: <todo path>, <done path>` line in `AGENTS.md` (or `CLAUDE.md`), as audit-to-backlog does.
+If the backlog files do not exist yet, ask for the paths and record them as a `Backlog: <todo path>, <done path>` line in `AGENTS.md` (or `CLAUDE.md`), with its git-ignored path warning, as audit-to-backlog does.
 
 ## Stop point
 
-Stop after the report and the question. After approval, merge the approved items into the backlog file, show `git diff --stat`, and stop; implementation is implement-backlog's job.
+Stop after the report and the question. After approval, merge the approved items into the backlog file with a `Session N: <ID>, …` line for them under `## Implementation sessions`, show `git diff --stat`, and stop; implementation is implement-backlog's job.
 
 ## Never
 

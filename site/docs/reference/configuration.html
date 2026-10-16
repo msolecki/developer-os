@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Configuration reference · developer-os</title>
 <meta name="description" content="Every line, key and environment variable that configures developer-os at user, project, vault and Codex level.">
-<meta name="dos-source" content="docs/reference/configuration.md@f0135f1e2d2e">
+<meta name="dos-source" content="docs/reference/configuration.md@c3c0a900ac4c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -59,7 +59,7 @@
       <table>
         <thead><tr><th scope="col">Setting</th><th scope="col">Where</th><th scope="col">Read by</th><th scope="col">Default without it</th></tr></thead>
         <tbody>
-          <tr><td><code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code></td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>audit-to-backlog, implement-backlog, plan-status, project-baseline, spec</td><td><code>TODO.md</code>, <code>TODO-done.md</code>; audit-to-backlog and project-baseline ask before creating them and write the line</td></tr>
+          <tr><td><code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code></td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>audit-to-backlog, implement-backlog, plan-status, project-baseline, spec, session-retro, the <code>SessionStart</code> hook (skips them as plans)</td><td><code>TODO.md</code>, <code>TODO-done.md</code>; audit-to-backlog and project-baseline ask before creating them and write the line</td></tr>
           <tr><td>Planning location</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>Core rules, plan-status, spec, session-retro</td><td><code>docs/plans/&lt;YYYY-MM-DD-task&gt;.md</code>, git-ignored</td></tr>
           <tr><td>Specification location</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>spec</td><td>spec proposes <code>docs/specs/</code> and asks</td></tr>
           <tr><td>Fast check and full suite commands</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist</td><td>Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing</td></tr>

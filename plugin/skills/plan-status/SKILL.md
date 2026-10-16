@@ -11,7 +11,7 @@ Read-only: never edit a plan, backlog, or any other file, and never run a test o
 
 ## 1. Find the sources
 
-- Plans: the planning location the project's `AGENTS.md` or `CLAUDE.md` declares, otherwise `docs/plans/`. The active plan is the most recently updated one whose task is not done (not marked done in its status section); list the other not-done plans by name.
+- Plans: the planning location the project's `AGENTS.md` or `CLAUDE.md` declares, otherwise `docs/plans/`. The files the `Backlog:` line names are not plans. The active plan is the most recently updated one whose task is not done (not marked done in its status section); list the other not-done plans by name.
 - Backlog: a `Backlog: <todo path>, <done path>` line in the project's `AGENTS.md` or `CLAUDE.md`, otherwise `TODO.md` and `TODO-done.md`. A missing backlog is `none found`, not an error.
 - If no plan exists, say so and report the backlog alone.
 

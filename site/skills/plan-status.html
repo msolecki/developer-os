@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>plan-status · developer-os skills</title>
 <meta name="description" content="Report measured open, done and blocked counts from the active plan and backlog, and the open decisions as A/B/C questions you can answer in one line.">
-<meta name="dos-source" content="plugin/skills/plan-status/SKILL.md@e754b8af8721">
+<meta name="dos-source" content="plugin/skills/plan-status/SKILL.md@7abd7baa8d27">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,7 +54,7 @@
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
-      <li><strong>Finds the sources.</strong> Plans live where the project's <code>AGENTS.md</code> or <code>CLAUDE.md</code> says, otherwise in <code>docs/plans/</code>; the active plan is the most recently updated one that is not done, and other open plans are listed by name. The backlog comes from a <code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code> line, otherwise <code>TODO.md</code> and <code>TODO-done.md</code>. A missing backlog is reported as <code>none found</code>; with no plan it reports the backlog alone.</li>
+      <li><strong>Finds the sources.</strong> Plans live where the project's <code>AGENTS.md</code> or <code>CLAUDE.md</code> says, otherwise in <code>docs/plans/</code>; the files the <code>Backlog:</code> line names are not plans; the active plan is the most recently updated one that is not done, and other open plans are listed by name. The backlog comes from a <code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code> line, otherwise <code>TODO.md</code> and <code>TODO-done.md</code>. A missing backlog is reported as <code>none found</code>; with no plan it reports the backlog alone.</li>
       <li><strong>Counts, never estimates.</strong> It states the rule it used. Done is <code>- [x]</code> items or steps the plan marks done; blocked is open items that say <code>blocked</code> or use a <code>[!]</code> or <code>[-]</code> box, each named with its blocker; open is every other <code>- [ ]</code> item. A plan without checkboxes is counted by its step headings. Backlog items are counted per <code>P0</code>–<code>P3</code> section, and each open item lands in exactly one bucket, first match wins: orphaned (an <code>Owner</code> dated more than 7 days ago), waiting (a <code>Blocked by</code> ID still open), claimed (any other <code>Owner</code>) or ready.</li>
       <li><strong>Turns open questions into decisions.</strong> From the plan's open questions, <code>Q</code>/<code>D</code> items without an outcome and items that wait on you. Each gets two or three lettered options with a one-line consequence and a recommended option with its reason. At most five, the most blocking first.</li>
       <li><strong>Prints the status.</strong> In the format below. Without open decisions it ends with the next action instead of questions.</li>
