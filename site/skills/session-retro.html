@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>session-retro · developer-os skills</title>
+<meta name="description" content="Wrap up a session: check git state and running tasks, give a Done / Not done / Needs you status, and propose a few lessons, rules or skill ideas, applying only what you approve.">
+<meta name="dos-source" content="plugin/skills/session-retro/SKILL.md@30fb2046071a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Session and communication</p>
+    <h1 id="session-retro">session-retro</h1>
+    <p class="lede">Wraps up a session: checks for uncommitted, unpushed or unmerged work, open PRs and running tasks, gives a Done / Not done / Needs you status, and proposes a few lessons, rules or skill ideas to keep, applying only what you approve.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Session and communication</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Approved items only: brain notes, rule diffs, the plan, auto-memory</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Each item, by number; every cleanup command</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>At the end of a session, when the <code>Stop</code> hook asks for it, or when you ask to wrap up. Unlike the built-in <code>/recap</code> one-line summary, it checks git state and routes each lesson to where it belongs. Say it in English or Polish:</p>
+    <ul class="chips">
+      <li class="chip">wrap up the session</li>
+      <li class="chip">is everything done</li>
+      <li class="chip" lang="pl">podsumuj sesję</li>
+      <li class="chip" lang="pl">czy wszystko zrobione</li>
+      <li class="chip" lang="pl">posprzątaj</li>
+      <li class="chip" lang="pl">kończymy</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <p>It works from the conversation in context and from read-only commands, and writes nothing until you approve a specific item.</p>
+    <ol>
+      <li><strong>Checks the state.</strong> Uncommitted changes, commits not pushed upstream, branches not merged into the base, your open PRs (skipped, and said so, without a working <code>gh</code>), and the background shells and agents it started that are still running. Outside a git repository it skips the git checks and says so.</li>
+      <li><strong>Proposes cleanup.</strong> Worktrees and branches whose work is merged into the base branch, and stashes this session created, with the exact commands. It never proposes the current branch or the local base branch, and names the base it compared against; when <code>origin/HEAD</code> is unset it proposes no branch removal and suggests <code>git remote set-head origin -a</code>.</li>
+      <li><strong>Prints the status block.</strong> Done (with evidence), Not done (and why), Needs you (decisions, credentials, manual steps, approvals).</li>
+      <li><strong>Proposes findings.</strong> At most three per heading, each labelled <code>persistent</code> (true in the next task) or <code>this-task</code>; only persistent ones go to the vault, auto-memory or instruction files. Preferences go to auto-memory or the user-level <code>CLAUDE.md</code>, lessons beyond the project to the vault through brain-capture, project facts to the project's <code>AGENTS.md</code>/<code>CLAUDE.md</code> or an ADR. The headings:
+        <ul>
+          <li><strong>Lessons</strong> that outlive the task, with their destination.</li>
+          <li><strong>Rule candidates</strong> from corrections you made, as a minimal diff; it first searches the file's history and, if the change reverses an earlier commit, shows that commit and asks.</li>
+          <li><strong>Check candidates</strong>: a mistake made at least twice that a lint rule, test, script or hook can detect.</li>
+          <li><strong>Plan update</strong>: delete a finished plan and move its open items to the backlog, or a new status line and a <code>Next session: 3 notes</code> action.</li>
+          <li><strong>Docs</strong>: doc edits for this session's unreviewed commits that made a doc false, and an offer of docs-sync when the state docs predate them.</li>
+          <li><strong>developer-os feedback</strong>: a misfiring skill, hook or rule as a drafted issue, without client or project names, with the <code>gh issue create</code> command for you to run.</li>
+          <li><strong>Skill or hook candidates</strong>: a request you made at least twice, with a name, trigger phrases (including your Polish wording) and the type.</li>
+        </ul>
+      </li>
+      <li><strong>Applies what you choose.</strong> You answer by number. Lessons go through brain-capture, rule and plan changes as a shown diff, auto-memory as one fact per file. Where the repository keeps a rules history table, each approved rule change gets a row.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>session-retro</span></div>
+    <pre><code>Done: &lt;what was finished and verified, with evidence&gt;
+Not done: &lt;what remains, and why&gt;
+Needs you: &lt;decisions, credentials, manual steps, approvals&gt;
+
+<span class="t-acc">Which items should I apply?</span></code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>It has shown the status block and findings and asked "Which items should I apply?". Started by the <code>Stop</code> hook, that question ends the turn; with nothing to report (clean git state, nothing running, no findings) it ends the turn with no output at all. After you answer, it applies the approved items and reports each file it changed.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Open or search session transcript files.</li>
+        <li>Write, edit or delete any file before you approve that item.</li>
+        <li>Commit, push, merge, or delete a branch, worktree or stash without your explicit approval of that command.</li>
+        <li>Run <code>gh issue create</code> or file anything outside the machine.</li>
+        <li>Build a proposed skill or hook.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="brain-capture.html">brain-capture</a> saves the approved lessons to the vault.</li>
+      <li><a href="instruction-review.html">instruction-review</a> uses the same diff style for instruction files.</li>
+      <li><a href="plan-status.html">plan-status</a> reports where the plan stands mid-session.</li>
+      <li><a href="../docs/workflow.html#4-end-of-session-wrap-up">The daily loop: end of session</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+    <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/session-retro/SKILL.md">Read SKILL.md on GitHub</a>
+    <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

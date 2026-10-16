@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitfalls · developer-os</title>
+<meta name="description" content="Deliberate settings in the developer-os repository that look like defects, and what breaks if they change.">
+<meta name="dos-source" content="docs/pitfalls.md@1a8fd2ec55bc">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="pitfalls">Pitfalls</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/pitfalls.md">docs/pitfalls.md</a></span><span>Verified 2026-10-15</span></p>
+    <p>Deliberate settings in this repository that look like defects. Changing one breaks the plugin or a
+    promise it makes.</p>
+    <h2 id="hooks-fail-open">Hooks fail open</h2>
+    <ul>
+      <li><strong>Where:</strong> <code>plugin/hooks/guard.sh</code>, <code>plugin/hooks/capture-nudge.sh</code></li>
+      <li><strong>Looks like:</strong> a guard that silently lets through anything it cannot parse.</li>
+      <li><strong>Why it is deliberate:</strong> the hooks run in every session of every user; a parse bug must never block work. The guard is a reminder, not a security boundary (<a href="product/decisions.html#d6-hooks-ask-never-deny-and-fail-open">decisions D6</a>).</li>
+      <li><strong>Breaks if changed:</strong> a malformed hook input or a <code>sed</code> difference on one platform blocks every Bash call.</li>
+    </ul>
+    <h2 id="the-guard-strips-quotes-before-matching">The guard strips quotes before matching</h2>
+    <ul>
+      <li><strong>Where:</strong> <code>plugin/hooks/guard.sh</code>, the unescape step</li>
+      <li><strong>Looks like:</strong> a false positive when a commit message mentions <code>pnpm add</code>.</li>
+      <li><strong>Why it is deliberate:</strong> without it, <code>sh -c "pnpm add zod"</code> would pass. An extra prompt costs one click; a missed install rewrites the lockfile.</li>
+      <li><strong>Breaks if changed:</strong> installs wrapped in <code>sh -c</code> or <code>bash -lc</code> slip through.</li>
+    </ul>
+    <h2 id="coremd-is-at-its-size-cap"><code>core.md</code> is at its size cap</h2>
+    <ul>
+      <li><strong>Where:</strong> <code>plugin/rules/core.md</code> (just under its 8192-byte cap, enforced by <code>scripts/check.sh</code>; current figure in <a href="CURRENT-STATE.html">CURRENT-STATE</a>)</li>
+      <li><strong>Looks like:</strong> an arbitrary limit blocking a useful rule.</li>
+      <li><strong>Why it is deliberate:</strong> the file loads into every session; the cap keeps the fixed cost bounded and, with the state card, under the 10,000-character hook output limit.</li>
+      <li><strong>Breaks if changed:</strong> raising the cap without a matching cut grows every session's context.</li>
+    </ul>
+    <h2 id="templates-and-evals-are-outside-plugin">Templates and evals are outside <code>plugin/</code></h2>
+    <ul>
+      <li><strong>Where:</strong> <code>templates/project/</code>, <code>evals/</code></li>
+      <li><strong>Looks like:</strong> files missing from the installed plugin; docs-sync says it scaffolds "from this list" instead of copying files.</li>
+      <li><strong>Why it is deliberate:</strong> the marketplace installs only <code>plugin/</code>; evals must not ship, and <code>claude plugin eval</code> needs <code>--eval-dir</code> inside its target, which is the repository root.</li>
+      <li><strong>Breaks if changed:</strong> moving evals into <code>plugin/</code> ships them to every user.</li>
+    </ul>
+    <h2 id="output-styles-need-the-plugin-prefix">Output styles need the plugin prefix</h2>
+    <ul>
+      <li><strong>Where:</strong> Claude Code settings, <code>outputStyle</code></li>
+      <li><strong>Looks like:</strong> <code>"outputStyle": "architect"</code> should work.</li>
+      <li><strong>Why it is deliberate:</strong> plugin styles are namespaced; the bare name silently falls back to the default style.</li>
+      <li><strong>Breaks if changed:</strong> nothing in this repository; documentation that drops the prefix misleads.</li>
+    </ul>
+    <h2 id="brain-setup-resolves-the-template-path-itself">brain-setup resolves the template path itself</h2>
+    <ul>
+      <li><strong>Where:</strong> <code>plugin/skills/brain-setup/SKILL.md</code>, the "Template" paragraph</li>
+      <li><strong>Looks like:</strong> a needless fallback to <code>../../vault-template</code>.</li>
+      <li><strong>Why it is deliberate:</strong> <code>${CLAUDE_PLUGIN_ROOT}</code> may be substituted in the skill text, but it is not set in the Bash environment, so commands must use an absolute path.</li>
+      <li><strong>Breaks if changed:</strong> <code>cp -R "$CLAUDE_PLUGIN_ROOT/vault-template/."</code> copies from <code>/vault-template</code>.</li>
+    </ul>
+    <h2 id="the-codex-installer-copies-skills-instead-of-symlinking-them">The Codex installer copies skills instead of symlinking them</h2>
+    <ul>
+      <li><strong>Where:</strong> <code>scripts/install-codex.sh</code></li>
+      <li><strong>Looks like:</strong> stale copies that a symlink would avoid.</li>
+      <li><strong>Why it is deliberate:</strong> Codex lists skills within 8000 characters by default and the full descriptions are over 10,000; a copy carries a short description, a symlink cannot (<a href="product/decisions.html#d19-a-codex-installer-that-copies-not-symlinks">decisions D19</a>).</li>
+      <li><strong>Breaks if changed:</strong> some skills silently drop out of Codex's skill list.</li>
+    </ul>
+    <h2 id="eval-fixtures-switch-off-the-global-excludes-file">Eval fixtures switch off the global excludes file</h2>
+    <ul>
+      <li><strong>Where:</strong> <code>evals/fixtures/backlog.sh</code></li>
+      <li><strong>Looks like:</strong> an unneeded <code>core.excludesFile /dev/null</code>.</li>
+      <li><strong>Why it is deliberate:</strong> a host's global excludes may ignore <code>TODO.md</code>; the backlog would then never be committed and the case would test nothing.</li>
+      <li><strong>Breaks if changed:</strong> backlog evals pass or fail depending on the machine.</li>
+    </ul>
+    <h2 id="the-root-gitignore-negates-templatesprojecttodomd">The root <code>.gitignore</code> negates <code>templates/project/TODO.md</code></h2>
+    <ul>
+      <li><strong>Where:</strong> <code>.gitignore</code> (<code>!/templates/project/TODO.md</code>)</li>
+      <li><strong>Looks like:</strong> a redundant line; nothing in the repository ignores <code>TODO.md</code>.</li>
+      <li><strong>Why it is deliberate:</strong> a global excludes file (for example <code>~/.gitignore_global</code> with <code>TODO.md</code>) also hid <code>templates/project/TODO.md</code>, so the template file was referenced by the docs but never committed. The negation overrides the global pattern for this one path.</li>
+      <li><strong>Breaks if changed:</strong> on a machine with that global pattern, a change to the template <code>TODO.md</code> is silently left out of commits.</li>
+    </ul>
+    <h2 id="evals-are-not-in-ci">Evals are not in CI</h2>
+    <ul>
+      <li><strong>Where:</strong> <code>.github/workflows/check.yml</code>, <code>evals/README.md</code></li>
+      <li><strong>Looks like:</strong> missing test coverage in CI.</li>
+      <li><strong>Why it is deliberate:</strong> every case runs two agent sessions (with and without the plugin) per run, all on real plan usage (<a href="product/decisions.html#d13-evals-run-by-hand-never-in-ci">decisions D13</a>).</li>
+      <li><strong>Breaks if changed:</strong> every push spends plan usage and CI needs credentials.</li>
+    </ul>
+    <h2 id="skill-usage-reads-transcripts-session-retro-must-not">skill-usage reads transcripts; session-retro must not</h2>
+    <ul>
+      <li><strong>Where:</strong> <code>plugin/skills/skill-usage/SKILL.md</code>, <code>plugin/skills/session-retro/SKILL.md</code></li>
+      <li><strong>Looks like:</strong> a contradiction between two skills.</li>
+      <li><strong>Why it is deliberate:</strong> skill-usage is invoked by the user, counts one fixed pattern with <code>--no-filename</code>, and prints no content. session-retro runs on a hook nudge and works from the conversation in context.</li>
+      <li><strong>Breaks if changed:</strong> session-retro reading transcripts would pull other projects' content into the session unasked.</li>
+    </ul>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="development.html">Development guide</a>
+      <a href="contributing.html">Contributing</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

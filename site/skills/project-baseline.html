@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>project-baseline · developer-os skills</title>
+<meta name="description" content="Check a repository against a baseline of engineering practices and propose each missing one as a backlog item, written only after your approval.">
+<meta name="dos-source" content="plugin/skills/project-baseline/SKILL.md@af387fd7ecfb">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Project hygiene</p>
+    <h1 id="project-baseline">project-baseline</h1>
+    <p class="lede">Checks a repository against a baseline of engineering practices and proposes each missing one as a backlog item, written only after you approve.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Project hygiene</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Approved items in the backlog; a <code>Backlog:</code> line in AGENTS.md or CLAUDE.md when none exists</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Writing the items; it never picks a default for a decision</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you start work in a repository, or ask what the project is missing. Say it in English or Polish:</p>
+    <ul class="chips">
+      <li class="chip">what is this project missing</li>
+      <li class="chip">check the project baseline</li>
+      <li class="chip" lang="pl">czego brakuje w repo</li>
+      <li class="chip" lang="pl">sprawdź standard projektu</li>
+      <li class="chip" lang="pl">baseline projektu</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <p>It is a presence check, not a code review: each practice has a probe, and a missing practice becomes a backlog item.</p>
+    <ol>
+      <li><strong>Reads the context.</strong> The stack, the package manager the lockfile selects, the CI workflows and the validation commands. It finds the backlog files the way audit-to-backlog does and continues their numbering under the ID prefix <code>BASE</code>. It reads <code>AGENTS.md</code>, <code>docs/pitfalls.md</code> and the decision records: a practice the project rejected or deferred on purpose is reported as <code>deliberate</code>, never proposed.</li>
+      <li><strong>Probes each practice.</strong> Each probe and its result is recorded as evidence; an unsure result is listed as a question, not as missing. Missing practices get these severities:
+        <ul>
+          <li>Env read through one schema-validated module, with no direct env reads elsewhere: P2.</li>
+          <li>An agent deny-list for <code>.env*</code> and key files in <code>.claude/settings.json</code>: P1.</li>
+          <li>Secret scanning in CI (gitleaks, trufflehog or the host's scanning): P1.</li>
+          <li>A coverage floor that CI enforces and that only rises: P2.</li>
+          <li>A guard that fails CI on destructive migrations without an explicit marker: P2, skipped without a database.</li>
+          <li>Dependency or boundary rules that fail CI: P3.</li>
+          <li>Tests against a real database, not only mocks: P2, skipped without a database.</li>
+          <li>Safe error responses in one envelope, with no stack traces or internal fields: P1 when a stack trace reaches a response, otherwise P2; skipped without an API.</li>
+          <li>A <code>CHANGELOG.md</code> in Keep a Changelog format: P3.</li>
+          <li>A script or CI step that checks docs against code: P3.</li>
+          <li>A root <code>DESIGN.md</code> for a project with a UI: P3, skipped without a UI. When it exists, the skill suggests a lint command for you to run; it never runs or installs it.</li>
+          <li>Every CI and validation gate exits non-zero on failure: P2.</li>
+        </ul>
+      </li>
+      <li><strong>Leaves decisions to you.</strong> It never proposes a default for the package manager, the test runner, the authentication library, the monitoring stack or the commit message language. When the repository is inconsistent (two lockfiles, two test runners), it lists the evidence and asks you to choose.</li>
+      <li><strong>Drafts the backlog items.</strong> One item per missing practice in the audit-to-backlog shape, filed under its severity and deduplicated against both backlog files.</li>
+      <li><strong>Reports and asks.</strong> A summary of present, missing, deliberate and not-applicable practices, the decisions it needs from you, and one question about writing the items. If no backlog files exist yet, it asks for their paths and records them as a <code>Backlog:</code> line in <code>AGENTS.md</code> or <code>CLAUDE.md</code>.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>project-baseline</span></div>
+    <pre><code>Project baseline — &lt;repo&gt;
+Present: 6   Missing: 4 (P1 1, P2 2, P3 1)   Deliberate: 1   Not applicable: 1
+Needs your decision: test runner — package.json has both jest and vitest
+
+<span class="t-acc">Write the 4 items to TODO.md? A: all (recommended)  B: list IDs  C: none</span></code></pre>
+    </div>
+    <p>Each proposed item looks like this:</p>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>TODO.md</span></div>
+    <pre><code>- [ ] BASE-03 · P1 · Secret scanning in CI
+  - Where: `.github/workflows/ci.yml:1`
+  - Problem: no CI step scans for committed secrets.
+  - Evidence: `rg -l 'gitleaks|trufflehog' .github/` → no match.
+  - Fix: add a gitleaks step to the CI workflow that fails the job on a finding.
+  - Size: S
+  - Done when: CI fails on a commit that contains a secret.
+  - Check: `rg -q 'gitleaks' .github/workflows/`</code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>It has shown the report and asked its question. After your approval it merges the approved items into the backlog file, shows <code>git diff --stat</code> and stops; implementation is implement-backlog's job.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Write or create any file before you approve.</li>
+        <li>Pick a default for a "needs your decision" item.</li>
+        <li>Install dependencies, add CI steps or change configuration; it only proposes.</li>
+        <li>Commit, push or open a pull request.</li>
+        <li>Propose a practice the project rejected on purpose.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="audit-to-backlog.html">audit-to-backlog</a> runs the deeper code audit and defines the item format.</li>
+      <li><a href="implement-backlog.html">implement-backlog</a> implements the items once they are in the backlog.</li>
+      <li><a href="error-handling-conventions.html">error-handling-conventions</a> defines the safe error envelope it probes for.</li>
+      <li><a href="../docs/product/functional-spec.html#24-backlog-item-format">The backlog item format</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+    <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/project-baseline/SKILL.md">Read SKILL.md on GitHub</a>
+    <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>brain-review · developer-os skills</title>
+<meta name="description" content="Review your Obsidian vault's inbox: summarize each captured note, suggest a topic folder and duplicates, and move only the notes you name.">
+<meta name="dos-source" content="plugin/skills/brain-review/SKILL.md@6292cba17ee4">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Memory</p>
+    <h1 id="brain-review">brain-review</h1>
+    <p class="lede">Reviews your Obsidian vault's inbox: summarizes each captured note, suggests a topic folder and likely duplicates, and promotes, merges or rejects only the notes you name.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Memory</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Moves named notes to a topic folder or <code>_archive/</code>; edits the surviving note in a merge</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Each note, by name; "looks good" is not approval</dd></div>
+      <div class="fact"><dt>Needs</dt><dd><code>Brain vault:</code> line</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you ask to review or triage the vault's inbox or the notes captured lately, for example at the end of a day or week:</p>
+    <ul class="chips">
+      <li class="chip">review the brain inbox</li>
+      <li class="chip" lang="pl">przejrzyj inbox braina</li>
+      <li class="chip" lang="pl">co jest w inboxie</li>
+      <li class="chip" lang="pl">posortuj notatki z inboxa</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Finds the vault</strong> from the <code>Brain vault:</code> line, in the same order as the other brain skills, and asks once if there is none.</li>
+      <li><strong>Lists the inbox</strong> and the topic folders: every top-level folder not starting with <code>_</code>, except <code>templates/</code>.</li>
+      <li><strong>Summarizes and proposes.</strong> For each inbox note it shows the <code>summary</code>, the best-fitting folder (<code>PROJECTS/</code>, <code>DEV/</code>, <code>TOOLS/</code>, <code>INFRA/</code>, <code>QA/</code> or one you added) and any likely duplicate found with <code>rg</code>. It flags missing frontmatter keys and any secret that slipped through, proposing <code>[REDACTED]</code>. The list ends with "Approve which ones?".</li>
+      <li><strong>Promotes the notes you approve.</strong> The name must match <code>^[a-z0-9-]+$</code> and be unique in the vault, or it asks and changes nothing. It moves the file keeping its name, so <code>[[name]]</code> links still resolve, and only then sets <code>status: active</code> and <code>updated</code>. A note without frontmatter gets the full frontmatter from <code>templates/note.md</code>. For a compiled note it offers to archive the sources.</li>
+      <li><strong>Merges or rejects the notes you name.</strong> A merge folds the content and links into the surviving note (it shows the merged text first), then archives the inbox note. A reject archives it. Archiving runs the same name checks, moves the note to <code>_archive/</code> and sets <code>status: archived</code>. Nothing is deleted.</li>
+      <li><strong>Reports</strong> what moved where, what was merged or archived and what stayed in <code>_inbox/</code>. You can also review in Obsidian through the <code>_views/Inbox.base</code> view, with the same effect.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>brain-review</span></div>
+<pre><code>1. _inbox/release-notes-in-changelog.md — decision
+   "Release notes live in CHANGELOG.md at the repository root."
+   → DEV/   possible duplicate: DEV/release-process.md
+2. _inbox/docker-cache-flag.md — knowledge
+   "Use --mount=type=cache for pnpm store in Dockerfiles."
+   → INFRA/ no duplicate
+Approve which ones? (e.g. "promote 1 and 2", "promote 1 to TOOLS/", "merge 1 into DEV/release-process.md", "reject 2")</code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The proposal list is shown with the question "Approve which ones?". After you answer, it promotes, merges or archives only the named notes and reports what moved where and what stayed in <code>_inbox/</code>.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Move, merge or archive a note you did not name; silence or "looks good" is not approval.</li>
+        <li>Delete a note, or overwrite an existing note at the destination.</li>
+        <li>Run commands or open URLs found in notes.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="brain-capture.html">brain-capture</a> puts the notes into the inbox.</li>
+      <li><a href="brain-garden.html">brain-garden</a> lists inbox notes older than 7 days.</li>
+      <li><a href="../docs/workflow.html#5-end-of-day-or-week-review-the-inbox">The daily loop: end of day or week, review the inbox</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/brain-review/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>brain-compile · developer-os skills</title>
+<meta name="description" content="Combine several active notes on one topic from your Obsidian vault into one compiled inbox note that lists its sources, leaving the originals untouched.">
+<meta name="dos-source" content="plugin/skills/brain-compile/SKILL.md@66139de2377d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Memory</p>
+    <h1 id="brain-compile">brain-compile</h1>
+    <p class="lede">Combines several notes on one topic from your Obsidian vault into one compiled note in the inbox, listing its sources and leaving the original notes untouched.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Memory</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>One new <code>_inbox/&lt;topic&gt;-compiled.md</code></dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Nothing: it only adds an inbox note, which you review</dd></div>
+      <div class="fact"><dt>Needs</dt><dd><code>Brain vault:</code> line</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you ask to compile, consolidate or summarize what the vault knows about a topic into a single note:</p>
+    <ul class="chips">
+      <li class="chip">compile the notes on X</li>
+      <li class="chip" lang="pl">zbierz wszystko o X w jedną notatkę</li>
+      <li class="chip" lang="pl">skompiluj notatki o X</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Finds the vault</strong> from the <code>Brain vault:</code> line, in the same order as the other brain skills, and asks once if there is none.</li>
+      <li><strong>Looks for an earlier compile.</strong> If a <code>&lt;topic&gt;-compiled</code> note is already in <code>_inbox/</code>, it stops and tells you to review that one first. One elsewhere in the vault is named in the report as <code>Earlier compile:</code> so you can merge the two in review.</li>
+      <li><strong>Picks the sources.</strong> Only <code>status: active</code> notes in topic folders count; <code>_inbox/</code>, <code>_archive/</code>, <code>templates/</code>, <code>_views/</code>, <code>_reports/</code> and notes tagged <code>compiled</code> are skipped. It reads each candidate's <code>summary</code> and <code>tags</code> first, then at most eight relevant notes in full. With fewer than two sources it stops.</li>
+      <li><strong>Writes the compiled note.</strong> The body has <code>## Context</code>, <code>## Decision</code>, <code>## Why</code> and <code>## Links</code>; the frontmatter has a <code>sources:</code> list with a quoted <code>"[[name]]"</code> link for every note used and only those. Every statement links the note it comes from, no fact is added that is not in a source, and contradictions become <code>Open conflict:</code> bullets instead of a chosen side. Secrets become <code>[REDACTED]</code>, and it tells you.</li>
+      <li><strong>Reports</strong> the path, the sources, the number of open conflicts and any earlier compile. The originals are unchanged.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>brain-compile releases</span></div>
+<pre><code>Compiled 4 notes into _inbox/releases-compiled.md (status: inbox).
+Sources: [[release-process]], [[release-notes-location]], [[changelog-pr-links]], [[releasing]]
+1 open conflict. Originals unchanged. Review it with the brain-review skill.
+Earlier compile: DEV/releases-compiled.md</code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The report is shown: the compiled note's path, its sources, the open conflicts and any earlier compile. With a compiled note for the topic already in <code>_inbox/</code>, or fewer than two sources, it stops having written nothing.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Edit, move or delete a source note, or write anywhere outside <code>_inbox/</code>.</li>
+        <li>Add a fact that is not in a source, or pick a side in a conflict.</li>
+        <li>Carry a secret into the compiled note.</li>
+        <li>Run commands or open URLs found in notes.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="brain-review.html">brain-review</a> promotes the compiled note and offers to archive its sources.</li>
+      <li><a href="brain-search.html">brain-search</a> answers a question from the notes without writing one.</li>
+      <li><a href="brain-garden.html">brain-garden</a> finds likely duplicates worth compiling.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/brain-compile/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changelog · developer-os</title>
+<meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
+<meta name="dos-source" content="CHANGELOG.md@5ea6dfd51cd3">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="changelog">Changelog</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
+    <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
+    <h2 id="unreleased">[Unreleased]</h2>
+    <p>First public release. developer-os is now a Markdown-only plugin for Claude Code, installed from
+this repository as a plugin marketplace. It replaces the earlier Homebrew CLI, which was never
+released; the CLI history is archived at the git tag <code>archive/cli-v0</code>.</p>
+    <h3 id="added">Added</h3>
+    <ul>
+<li>A public documentation site in <code>site/</code>, published to GitHub Pages by <code>.github/workflows/pages.yml</code>:
+a landing page, one page per document, skill, agent and output style, and a Site stage in
+<code>scripts/check.sh</code> that fails when a page falls behind its source.</li>
+<li>Brain skills that read and write an Obsidian vault with the agent's own file tools: brain-setup,
+brain-search, brain-capture, brain-review, brain-garden and brain-compile. brain-setup creates a
+vault from the template or connects an existing one, and adds the <code>Brain vault:</code> line and the
+<code>additionalDirectories</code> entry after you approve the diff.</li>
+<li>Engineering skills: code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
+bug-triage, deploy-checklist, instruction-review, plan-status, client-reply, docs-sync and
+project-baseline. pr-cycle takes a PR from base merge to a merge verdict; plan-status reports
+measured plan and backlog counts with A/B/C decisions; client-reply drafts plain-language client
+replies and never sends them; docs-sync scaffolds and checks a project's <code>docs/</code>; project-baseline
+proposes missing engineering practices as backlog items.</li>
+<li>Session skills: session-retro, an end-of-session wrap-up (state check, cleanup, status block, plan
+close, approval-gated capture), and skill-usage, a read-only report of how often each skill fired.</li>
+<li>Conventions skills: comments-conventions, error-handling-conventions,
+defensive-coding-conventions, monitoring-conventions, nextjs-conventions, testing-conventions and
+typescript-conventions.</li>
+<li>Agents: code-reviewer, performance-engineer, qa-expert, research-analyst and security-auditor.</li>
+<li>Output styles: architect, debug, direct-objective and tdd-enforcer.</li>
+<li>Three hooks: <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (and a state card after compaction); <code>Stop</code> offers session-retro once per
+session after 30 tool calls, deferred while background agents or commands are still running
+or a Monitor is still armed (<code>DEVELOPER_OS_CAPTURE_NUDGE=off</code> disables it); <code>PreToolUse</code> on Bash
+asks before dependency installs, force pushes and <code>--no-verify</code> or <code>git commit -n</code>. The three scripts are POSIX <code>sh</code>,
+make no network calls, fail open and have tests in <code>tests/*.test.sh</code>.</li>
+<li><code>plugin/vault-template/</code>: folders, a note template, example notes, Bases views (Inbox, Stale,
+By project), property types in <code>.obsidian/types.json</code>, and a <code>.gitignore</code> that keeps Obsidian's UI
+state out of a git-synced vault. It ships inside the plugin, so brain-setup can copy it.</li>
+<li><code>templates/project/</code>: <code>AGENTS.md</code>, a <code>CLAUDE.md</code> that imports it, <code>_Context.md</code>, <code>TODO.md</code>, a
+<code>.gitignore</code> that keeps <code>docs/plans/</code> local, and a <code>docs/</code> standard (index with task routing, <code>CURRENT-STATE.md</code>, <code>pitfalls.md</code>, <code>decisions/</code>, <code>runbooks/</code>).</li>
+<li><code>docs/workflow.md</code>: how to work with the vault and the code, where each kind of knowledge belongs,
+which features are Claude-only, and an optional routines recipe for mobile capture and a weekly
+vault brief.</li>
+<li><code>docs/</code>: an index with task routing, product overview, functional specification, decision
+register, architecture overview, hooks and configuration reference, development guide, pitfalls,
+current state and glossary, written for the plugin (the CLI documentation was removed with the CLI).</li>
+<li><code>evals/</code>: behaviour cases for <code>claude plugin eval</code>, run by hand and never in CI.</li>
+<li>A state card after compaction: the <code>SessionStart</code> hook runs <code>session-start.sh</code>, which prints the core
+rules and, after a compaction or resume, the branch, the newest plan, <code>docs/plans/.devos-state.md</code>
+and the worktrees (at most 1 KB, cut at a whole line with a marker; a state file older than 7 days
+is not shown), kept current by implement-backlog, pr-cycle and audit-to-backlog.</li>
+<li>One backlog item format (<code>Size</code>, <code>Done when</code>, a runnable <code>Check</code>, <code>Blocked by</code>, <code>Owner</code>) across
+audit-to-backlog, project-baseline, implement-backlog and plan-status, with
+<code>templates/project/TODO.md</code>.</li>
+<li>A final status (<code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code>) at the top of every agent report, read by
+the orchestrating skills; implement-backlog sizes briefs S/M/L and only orchestrates while agents run.</li>
+<li><code>templates/project/DESIGN.md</code> in the DESIGN.md format; project-baseline and docs-sync check it.</li>
+<li><code>scripts/install-codex.sh</code>: Codex copies of the skills with short descriptions and a marked
+core-rules block in <code>~/.codex/AGENTS.md</code>.</li>
+<li>A map of built-in Claude Code commands that overlap developer-os skills, in <code>docs/workflow.md</code>.</li>
+<li>Evals for backlog ordering, ownership and blocking, review framing and contract boundaries, retro
+persistence and reversals, and prompt injection in fix-pr, pr-cycle, bug-triage and code-review.</li>
+<li>bug-triage sends a hypothesis that turns on library or vendor behaviour to research-analyst for a
+sourced answer.</li>
+<li>Eval cases for the gates of brain-compile, fix-pr, instruction-review and spec, and for
+authentication items in implement-backlog; the plan-status and brain-garden fixtures plant waiting,
+orphaned, stale, archived and duplicate cases.</li>
+<li><code>scripts/check.sh</code> validates skills (name matches the folder and <code>^[a-z0-9-]{1,64}$</code>, <code>license</code> and
+<code>compatibility</code> present, description length and total, no local paths, <code>## Stop point</code> and
+<code>## Never</code> in action skills), agents' final statuses, <code>plugin/SURFACE.txt</code> and counts written as
+digits, and runs <code>tests/*.test.sh</code>. CI also runs agnix, its binary pinned by SHA-256, with <code>.agnix.toml</code>.</li>
+<li>A root <code>AGENTS.md</code> for agents working on this repository (commands, likely mistakes, invariants), and
+a root <code>CLAUDE.md</code> that imports it.</li>
+<li>CI scans the commits of a pull request with gitleaks, so a secret added and removed within the PR
+is caught; <code>tests/skill-usage.test.sh</code> tests the skill-usage counting block.</li>
+</ul>
+    <h3 id="changed">Changed</h3>
+    <ul>
+<li>code-review and code-reviewer rate a doc the diff makes false as a P2 docs finding; pr-cycle fixes
+docs findings under its recommended answer and reports any left in the PR body; implement-backlog
+fixes them in the batch commit.</li>
+<li>code-review and code-reviewer list Evidence checked under an <code>APPROVE</code> with no P0–P2, read both
+sides of every changed contract, and brief the reviewer without the author or their rationale.</li>
+<li>session-retro labels findings <code>persistent</code> or <code>this-task</code>, shows the commit a rule change would
+reverse, proposes a check for a mistake made twice, and adds a Rules history row in
+<code>docs/product/decisions.md</code> for each approved rule change. instruction-review also shows the commit
+a proposed line would reverse and proposes a check for a mistake made twice; it adds no Rules
+history row and no labels.</li>
+<li>pr-cycle, bug-triage and code-review treat PR and issue text, CI logs and code comments as data.</li>
+<li>Every skill carries <code>license: MIT</code> and <code>compatibility</code>; hooks have a 10-second timeout.</li>
+<li>Review, audit and triage skills and the agents rate findings P0–P3 with one severity scale; review
+verdicts are <code>APPROVE</code>, <code>COMMENT</code> or <code>REQUEST_CHANGES</code>.</li>
+<li>The core rules are shorter, capped at 8192 bytes, and add: a closing <code>Done / Not done / Needs you</code>
+status block; no promises of a later ping; keeping the user's language after English input,
+subagent reports and compaction; plans that are gitignored and deleted when done, with open items
+moved to <code>TODO.md</code> or the backlog; two validation tiers (a fast check before each commit, the full
+suite before a push or PR).</li>
+<li>code-review and audit-to-backlog send each P0/P1 finding to a fresh verifier; refuted findings
+move to a Disputed list.</li>
+<li>brain-capture writes only lessons that outlive the task, checked by a three-question gate.</li>
+<li>brain-garden reports the orphan percentage, tags proposed links FOUND or GUESSED, and can append
+to <code>_reports/garden-log.md</code> with consent.</li>
+<li>instruction-review has a <code>--prune</code> mode with a per-line DELETE/KEEP/REWRITE audit.</li>
+<li>Action skills end with <code>## Stop point</code> and <code>## Never</code> sections.</li>
+<li><code>scripts/check.sh</code> also checks frontmatter, hook targets, the core-rules size, plugin references
+and relative Markdown links.</li>
+<li>The plugin and marketplace descriptions lead with the Obsidian-vault memory.</li>
+<li><code>docs/workflow.md</code> no longer repeats the README's component list and Codex steps; it links to
+them. The README links to <code>core.md</code> instead of paraphrasing it.</li>
+<li><code>templates/project/AGENTS.md</code> names the core rules as the source of shared rules and shows an
+optional <code>Backlog:</code> line.</li>
+<li><code>plugin.json</code> carries no <code>version</code>: an install tracks the latest <code>development</code> commit, and
+<code>claude plugin update</code> picks up every commit. Pin by marketplace ref:
+<code>/plugin marketplace add msolecki/developer-os#&lt;ref&gt;</code>.</li>
+<li>The core rules put specifications in <code>docs/specs/</code> (or the project's spec location), not next to
+the plan. The task-state file is <code>docs/plans/.devos-state.md</code> at a fixed path, even when a project
+moves its planning location; the core rules and every skill that writes it name that path.</li>
+<li>implement-backlog reviews through the code-review skill, so P0/P1 findings are verified, fixes
+them and reviews again for at most two rounds, then stops with nothing of the batch committed.</li>
+<li>pr-cycle has its own fix commits reviewed by code-reviewer before the push and derives the verdict
+from that review.</li>
+<li>qa-expert runs only the tests that cover the named files and loads testing-conventions;
+tdd-enforcer runs the tests of the changed area, not the full suite, on every cycle.</li>
+<li>The architect, debug and tdd-enforcer output styles say the core rules on structure and the
+status block still apply; "ASAP" or "quickly" overrides only their template.</li>
+<li>Conventions skills: a Server Action error uses error-handling-conventions' <code>{ code, message,
+details? }</code>; the deploy/migration-ordering rule moves to defensive-coding-conventions; "paging
+alert" replaces "P1 alert".</li>
+<li>brain-garden checks the vault in one <code>awk</code> pass (a 300-note vault went from 18 s to 0.05 s).</li>
+<li>The docs-sync standard includes the <code>Vault project slug:</code> line, <code>DESIGN.md</code>, the backlog file and
+a git-ignored planning location.</li>
+<li><code>scripts/check.sh</code> also fails on a name removed from <code>SURFACE.txt</code> still in use, a broken link
+<code>#fragment</code>, a broken link inside a skill, any plugin validation warning but a missing <code>version</code>, and brain
+skills whose "Locate the vault" paragraphs differ.</li>
+<li>plan-status counts each open backlog item in exactly one of ready, waiting, claimed and orphaned
+(first match wins), so the buckets add up to the open count.</li>
+<li><code>templates/project/AGENTS.md</code> drops the ADR-lite decision section (decisions live in
+<code>docs/decisions/</code>) and states the sync rule: a behavior change updates the docs in the same commit.
+docs-sync checks for that line and the dependency policy.</li>
+<li>session-retro proposes doc edits for this session's unreviewed commits and offers docs-sync when
+<code>CURRENT-STATE.md</code> is older than them; instruction-review adds the Rules history row for a core
+rules change.</li>
+<li>spec can add its plan's items to the backlog in the backlog item format; implement-backlog claims
+the batch in one commit before writing any brief, and its default batch is the first unfinished
+implementation session audit-to-backlog defined.</li>
+<li>code-review relays the reviewer's report only on <code>DONE</code> and names fix-pr as the next step;
+project-baseline asks for the error-handling-conventions envelope.</li>
+</ul>
+    <h3 id="fixed">Fixed</h3>
+    <ul>
+<li>brain-garden reports a link to an archived note as an info line, not a broken link, and no longer
+proposes removing provenance; links in <code>sources:</code> are exempt from that line, but a missing source is
+still <code>no such note</code>. It resolves links case-insensitively, reads dotted note names as notes,
+unquotes dates, checks vault-root <code>README.md</code> links, parses CRLF notes and skips code fences.</li>
+<li>The brain skills read <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code> for the <code>Brain vault:</code> line (falling back to
+<code>~/.claude/CLAUDE.md</code>) and skip <code>_reports/</code>; brain-search and brain-capture take the project slug
+from the <code>Vault project slug:</code> line in <code>_Context.md</code>, never from the directory name.</li>
+<li>brain-compile finds an earlier compile of the topic anywhere in the vault; brain-review checks the
+name and destination before archiving; the vault template's example notes are archived with
+<code>status: archived</code>.</li>
+<li>The state card keeps the state file when many worktrees are listed and never ends inside a UTF-8
+character; the state file's <code>Plan:</code> line no longer hides the newest plan.</li>
+<li>capture-nudge no longer nudges while a Monitor is armed.</li>
+<li>implement-backlog removes its <code>Owner</code> line from an item still open when it stops, so the next run
+can take it, and records the current checkout as owner for a sequential item.</li>
+<li>pr-cycle replies to and resolves review threads only after a successful push, reruns its gates after
+re-review fixes, and skips the re-review when you stop.</li>
+<li>fix-pr stops on uncommitted changes and stages only the files it edited for the approved threads.</li>
+<li>session-retro proposes removing only branches merged into the base branch, never the base or the
+current branch.</li>
+<li>spec writes a plan that plan-status and session-retro can read, and never writes the spec into the
+planning location; plan-status picks the active plan by the core rules' definition.</li>
+<li>audit-to-backlog reports every P0 and P1 finding; only the P2/P3 tail is capped.</li>
+<li>code-review relays the reviewer's report without its status line.</li>
+<li>implement-backlog, pr-cycle and audit-to-backlog delete <code>.devos-state.md</code> at their stop point.</li>
+<li>docs-sync and project-baseline drop a <code>[path]</code> argument they never used.</li>
+<li><code>templates/project/TODO.md</code> is now committed: a global excludes file had hidden it.</li>
+<li>The Codex installer keeps skill-usage's <code>developer-os:</code> patterns and the "Use when" sentence of a
+description without quoted phrases, honours <code>CODEX_HOME</code>, and <code>--project --uninstall</code> keeps the
+global skills; it refuses a description that is not one plain line.</li>
+<li>The docs say the agent creates notes only in <code>_inbox/</code> and edits or moves other notes only after
+approval; brain-garden reports inbox notes older than 7 days.</li>
+<li>The docs cover the compiled-note <code>sources:</code> list, the quoted <code>summary</code> and the template's default
+<code>status: active</code>.</li>
+<li>Codex setup uses <code>~/.agents/skills/</code> (older Codex versions read <code>~/.codex/skills/</code>).</li>
+<li>The README lists fork among the <code>SessionStart</code> triggers.</li>
+<li>The guard splits commands on newlines and also reads them joined, deletes quotes, backslashes and
+<code>$</code> so split words (<code>np""m</code>, <code>\git</code>, <code>$'-f'</code>) read as the word they run, asks on <code>git push --mirror</code>, skips the value after <code>--filter</code>, <code>--prefix</code>, <code>--dir</code> and similar flags, and catches
+bypass forms (<code>--no-verify</code> prefixes, <code>HUSKY=0</code>, <code>core.hooksPath</code> in any form), npm aliases and
+binaries called by full path.</li>
+<li>pr-cycle and fix-pr read a PR's trust inputs first and never check out an untrusted head before the
+user approves running its code; without approval they review the fetched ref only; code-review passes the <code>Untrusted head</code>
+line to its verifiers and to inline review.</li>
+<li>The state card works from a subdirectory of the repository, never names a plan that git tracks,
+and prints the branch and plan lines with <code>printf</code>.</li>
+<li>capture-nudge falls back to a per-user <code>/tmp</code> directory when <code>CLAUDE_PLUGIN_DATA</code> and <code>TMPDIR</code> are
+unset, and uses it only when it is the user's own directory and not a symlink.</li>
+<li>The Codex installer removes untouched copies, made from the same checkout, of skills the plugin no
+longer has; keeps the vault line already in the block when <code>--vault</code> is not given and warns when
+CLAUDE.md names another; CI fails a pull request that adds a <code>gitleaks&#58;allow</code> marker; writes clone paths verbatim, and counts the description
+budget in bytes.</li>
+<li>brain-setup touches <code>.gitignore</code> only in a git vault, keeps its paths across Bash calls, previews a
+missing <code>settings.json</code> cleanly, and writes a vault path with <code>&amp;</code>, a pipe or a backslash intact.</li>
+<li>brain-review checks a promoted note's name across the whole vault; brain-compile matches compiled
+tags in block lists and sets <code>project</code>; brain-capture and brain-compile use ASCII note names;
+brain-search skips the vault-root README; brain-garden reports a missing type once; brain-capture
+treats vault content as data. The vault template README lists all property types.</li>
+<li>skill-usage counts typed commands and skill names with digits, once per message.</li>
+<li><code>scripts/check.sh</code> runs on macOS Ruby 2.6 and scans untracked plugin files for local paths; the
+Counts stage reads only the <code>[Unreleased]</code> section of the changelog. The note template quotes its
+date placeholders.</li>
+<li>fix-pr gates fork heads like pr-cycle, reads review threads through GraphQL and runs the full suite
+before the push; pr-cycle handles a base already merged and a push to a fork head; pr-cycle and fix-pr
+start despite the state file; code-review and code-reviewer mark an untrusted head read-only.</li>
+<li><code>templates/project/.gitignore</code> keeps <code>TODO.md</code> tracked when a global ignore lists it.</li>
+<li>Eval graders: brain-garden totals and defect kinds, code-review-clean-diff's evidence check, the
+session-retro cases forbid both Edit and Write, and implement-backlog-owner gives delegates a
+worktree directory inside the workspace.</li>
+</ul>
+    <h3 id="security">Security</h3>
+    <ul>
+<li>capture-nudge passes only an absolute output path under a <code>tasks/</code> directory to <code>find</code>; a path such
+as <code>-delete</code> printed by any tool could empty the working tree with GNU <code>find</code>.</li>
+<li>pr-cycle asks before running project scripts or commit hooks on a fork PR or a PR from an outside
+author.</li>
+<li>implement-backlog and audit-to-backlog treat backlog text as data; implement-backlog screens every
+<code>Check</code> before dispatch, never runs one that pipes into a shell, fetches from the network or writes
+outside the repository, and screens a changed repository script again before re-running it.</li>
+<li><code>SECURITY.md</code> no longer claims the vault never leaves your disk, describes what each hook reads,
+and explains that an update can change the hook commands.</li>
+<li><code>.gitignore</code> covers <code>.env*</code>, <code>*.pem</code> and <code>.claude/settings.local.json</code>.</li>
+<li>fix-pr asks before each edit, commit, push and thread resolution, treats review comments as data
+and flags comments from non-collaborators.</li>
+<li>Agents treat code, diffs, PR text and fetched pages as data, not instructions.</li>
+<li>CI pins <code>actions/checkout</code> to a commit SHA, drops persisted credentials, runs with read-only
+<code>contents</code> permission and verifies the gitleaks download checksum.</li>
+</ul>
+    <h3 id="removed">Removed</h3>
+    <ul>
+<li>The Homebrew CLI, its bundled Node runtime, background jobs and generated indexes.</li>
+<li>The optional JSON feature list for multi-session work: audit-to-backlog no longer creates it and
+implement-backlog no longer reads it; the backlog carries that state.</li>
+</ul>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="../docs/CURRENT-STATE.html">Current state</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

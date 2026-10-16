@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en" data-root="../../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture overview · developer-os</title>
+<meta name="description" content="How developer-os is laid out, what Claude Code loads into a session and when, and how its hooks, skills and data flows fit together.">
+<meta name="dos-source" content="docs/architecture/overview.md@ebe60201dede">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../../docs/index.html">Docs</a>
+      <a href="../../skills/index.html">Skills</a>
+      <a href="../../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="architecture-overview">Architecture overview</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/architecture/overview.md">docs/architecture/overview.md</a></span><span>Verified 2026-10-16</span></p>
+    <p>developer-os has no process of its own. Its architecture is what Claude Code loads, when, and what
+    the agent then reads and writes on the user's behalf.</p>
+    <h2 id="1-repository-layout">1. Repository layout</h2>
+<pre><code>.claude-plugin/marketplace.json   marketplace: one plugin, source ./plugin
+plugin/                           the installed payload
+  .claude-plugin/plugin.json      name, description, license (no version: installs track the commit)
+  rules/core.md                   core rules, printed by the SessionStart hook
+  SURFACE.txt                     public names, checked against the disk
+  hooks/hooks.json                three hooks, 10-second timeouts
+  hooks/session-start.sh          SessionStart: core rules, state card after compaction
+  hooks/guard.sh                  PreToolUse guard for Bash
+  hooks/capture-nudge.sh          Stop hook: session wrap-up nudge
+  skills/&lt;name&gt;/SKILL.md          28 skills
+  agents/&lt;name&gt;.md                5 agents
+  output-styles/&lt;name&gt;.md         4 output styles
+  vault-template/                 copied by brain-setup
+templates/project/                project template (not installed)
+scripts/install-codex.sh          Codex installer, run by hand (not installed)
+evals/                            claude plugin eval cases (not installed)
+tests/*.test.sh                   hook tests
+.agnix.toml                       agnix lint settings for CI
+scripts/check.sh                  the repository suite, also run by CI
+docs/                             this documentation; docs/plans/ is git-ignored
+site/                             public documentation site, published by .github/workflows/pages.yml</code></pre>
+    <p>Only <code>plugin/</code> reaches a user's machine through the marketplace. <code>templates/</code> and <code>evals/</code> stay in
+    the repository; skills that mention them say so.</p>
+    <h2 id="2-load-model">2. Load model</h2>
+    <p>What occupies the context of a session, and when:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Part</th><th scope="col">When it loads</th><th scope="col">Size today</th><th scope="col">Limit</th></tr></thead>
+        <tbody>
+          <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>Just under the limit (figure in <a href="../CURRENT-STATE.html">CURRENT-STATE</a>)</td><td>8192 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
+          <tr><td>State card</td><td>After a compaction or resume inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>cap</code> in <code>session-start.sh</code>; the check keeps rules plus card under 10,000</td></tr>
+          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing</td><td>10183 characters for 28 skills</td><td>80–1024 each, 12000 total</td></tr>
+          <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
+          <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.7–8.8 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
+          <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–3.9 KB per file</td><td>—</td></tr>
+          <tr><td>An output style</td><td>When selected; replaces the default style but keeps coding instructions</td><td>0.6–1.8 KB</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The fixed cost per session is the core rules plus the listings. Everything else is paid only on
+    use, which is why conventions live in skills and not in the core rules.</p>
+    <h2 id="3-hook-pipeline">3. Hook pipeline</h2>
+        <style>
+      .arch-svg { font: 500 13px "IBM Plex Sans", system-ui, sans-serif; color: var(--ink); }
+      .arch-svg text { fill: currentColor; }
+      .arch-svg .box { fill: var(--sheet); stroke: var(--rule); stroke-width: 1.5; }
+      .arch-svg .agent { fill: var(--sheet); stroke: var(--pine); stroke-width: 1.5; }
+      .arch-svg .life { stroke: var(--rule); stroke-width: 1.5; stroke-dasharray: 4 4; }
+      .arch-svg .edge { stroke: currentColor; stroke-width: 1.3; fill: none; }
+      .arch-svg .dash { stroke-dasharray: 5 4; }
+      .arch-svg .lbl { fill: var(--sheet); }
+      .arch-svg .head { fill: currentColor; }
+      .arch-svg .sm { font-size: 12px; }
+    </style>
+<div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-seq-title" viewBox="0 0 920 460" style="display:block;width:100%;min-width:720px;height:auto">
+<title id="arch-seq-title">Hook pipeline: Claude Code runs session-start.sh on SessionStart, guard.sh on PreToolUse for every Bash call, and capture-nudge.sh on Stop</title>
+<defs><marker id="arch-seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
+<line class="life" x1="100" y1="64" x2="100" y2="450"/>
+<rect class="box" x="5" y="14" width="190" height="50" rx="6"/>
+<text x="100" y="44" text-anchor="middle">Claude Code</text>
+<line class="life" x1="340" y1="64" x2="340" y2="450"/>
+<rect class="box" x="245" y="14" width="190" height="50" rx="6"/>
+<text x="340" y="35" text-anchor="middle">SessionStart:</text>
+<text x="340" y="53" text-anchor="middle">session-start.sh</text>
+<line class="life" x1="580" y1="64" x2="580" y2="450"/>
+<rect class="box" x="485" y="14" width="190" height="50" rx="6"/>
+<text x="580" y="35" text-anchor="middle">PreToolUse:</text>
+<text x="580" y="53" text-anchor="middle">guard.sh</text>
+<line class="life" x1="820" y1="64" x2="820" y2="450"/>
+<rect class="box" x="725" y="14" width="190" height="50" rx="6"/>
+<text x="820" y="35" text-anchor="middle">Stop:</text>
+<text x="820" y="53" text-anchor="middle">capture-nudge.sh</text>
+<line class="edge" x1="100" y1="125" x2="336" y2="125" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="220" y="117" text-anchor="middle">session starts / resumes / compacts</text>
+<line class="edge dash" x1="340" y1="185" x2="104" y2="185" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="220" y="177" text-anchor="middle">after compact/resume</text>
+<text class="sm" x="220" y="161" text-anchor="middle">stdout = core rules, plus a state card</text>
+<line class="edge" x1="100" y1="245" x2="576" y2="245" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="340" y="237" text-anchor="middle">every Bash call, JSON on stdin</text>
+<line class="edge dash" x1="580" y1="305" x2="104" y2="305" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="340" y="297" text-anchor="middle">{"permissionDecision":"ask", reason}</text>
+<text class="sm" x="340" y="281" text-anchor="middle">nothing (allow normal flow) or</text>
+<line class="edge" x1="100" y1="365" x2="816" y2="365" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="460" y="357" text-anchor="middle">agent finishes a turn, JSON on stdin</text>
+<line class="edge dash" x1="820" y1="425" x2="104" y2="425" marker-end="url(#arch-seq-arrow)"/>
+<text class="sm" x="460" y="417" text-anchor="middle">"Run the developer-os:session-retro skill..."</text>
+<text class="sm" x="460" y="401" text-anchor="middle">exit 0 (nothing) or exit 2 + stderr</text>
+</svg></div>
+    <ul>
+      <li><code>session-start.sh</code> prints <code>core.md</code>, then, for <code>source</code> <code>compact</code> or <code>resume</code> inside a git repository, the branch, the newest plan, <code>docs/plans/.devos-state.md</code> (skipped when older than 7 days) and the worktrees, cut to whole lines within 1024 bytes.</li>
+      <li><code>guard.sh</code> extracts <code>tool_input.command</code> with <code>sed</code>, unescapes JSON, joins line continuations, drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans each segment with <code>awk</code>. Quotes are stripped on purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.</li>
+      <li><code>capture-nudge.sh</code> reads <code>session_id</code> and <code>transcript_path</code> from the input, counts <code>"type":"tool_use"</code> occurrences in the transcript file with <code>grep</code>, defers while a background task launched in the session has no <code>&lt;task-notification&gt;</code> and a fresh output file under a <code>tasks/</code> directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp/&lt;uid&gt;}}/capture-nudge/</code> so it fires once. Markers older than 7 days are removed.</li>
+    </ul>
+    <p>Exact inputs, outputs and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
+    <h2 id="4-skill-composition">4. Skill composition</h2>
+    <p>Skills call each other by name and dispatch agents. The dependencies that exist today:</p>
+    <div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-flow-title" viewBox="0 0 1040 940" style="display:block;width:100%;min-width:860px;height:auto">
+<title id="arch-flow-title">Skill composition: which skills invoke other skills and agents (solid arrows) and which hand off through the backlog or an offer (dotted arrows)</title>
+<defs><marker id="arch-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
+<line class="edge" x1="210" y1="77" x2="296" y2="107" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="210" y1="77" x2="296" y2="27" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="500" y1="107" x2="556" y2="117" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="500" y1="107" x2="556" y2="197" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="210" y1="337" x2="556" y2="277" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="210" y1="337" x2="556" y2="337" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="210" y1="337" x2="556" y2="397" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="210" y1="337" x2="556" y2="117" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="210" y1="337" x2="556" y2="197" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="400" y1="470" x2="400" y2="128" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="210" y1="657" x2="296" y2="657" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge dash" x1="210" y1="487" x2="296" y2="487" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge dash" x1="210" y1="337" x2="296" y2="487" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge dash" x1="210" y1="577" x2="296" y2="487" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="210" y1="817" x2="296" y2="757" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge" x1="210" y1="897" x2="296" y2="897" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge dash" x1="210" y1="657" x2="296" y2="757" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge dash" x1="210" y1="737" x2="296" y2="757" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge dash" x1="760" y1="117" x2="826" y2="117" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge dash" x1="760" y1="397" x2="826" y2="397" marker-end="url(#arch-flow-arrow)"/>
+<rect class="lbl" x="206.1" y="478.0" width="93.8" height="17" rx="3"/>
+<text class="sm" x="253.0" y="491.0" text-anchor="middle">backlog items</text>
+<rect class="lbl" x="225.9" y="403.0" width="54.2" height="17" rx="3"/>
+<text class="sm" x="253.0" y="416.0" text-anchor="middle">backlog</text>
+<rect class="lbl" x="216.0" y="523.0" width="74.0" height="17" rx="3"/>
+<text class="sm" x="253.0" y="536.0" text-anchor="middle">BASE items</text>
+<rect class="lbl" x="220.6" y="688.0" width="47.6" height="17" rx="3"/>
+<text class="sm" x="244.4" y="701.0" text-anchor="middle">offers</text>
+<rect class="lbl" x="229.2" y="738.0" width="47.6" height="17" rx="3"/>
+<text class="sm" x="253.0" y="751.0" text-anchor="middle">offers</text>
+<rect class="lbl" x="769.2" y="108.0" width="47.6" height="17" rx="3"/>
+<text class="sm" x="793.0" y="121.0" text-anchor="middle">checks</text>
+<rect class="lbl" x="772.5" y="388.0" width="41.0" height="17" rx="3"/>
+<text class="sm" x="793.0" y="401.0" text-anchor="middle">loads</text>
+<rect class="box" x="10" y="60" width="200" height="34" rx="6"/>
+<text x="110" y="82" text-anchor="middle">pr-cycle</text>
+<rect class="box" x="10" y="320" width="200" height="34" rx="6"/>
+<text x="110" y="342" text-anchor="middle">audit-to-backlog</text>
+<rect class="box" x="10" y="470" width="200" height="34" rx="6"/>
+<text x="110" y="492" text-anchor="middle">spec</text>
+<rect class="box" x="10" y="560" width="200" height="34" rx="6"/>
+<text x="110" y="582" text-anchor="middle">project-baseline</text>
+<rect class="box" x="300" y="10" width="200" height="34" rx="6"/>
+<text x="400" y="32" text-anchor="middle">fix-pr</text>
+<rect class="box" x="300" y="90" width="200" height="34" rx="6"/>
+<text x="400" y="112" text-anchor="middle">code-review</text>
+<rect class="box" x="300" y="470" width="200" height="34" rx="6"/>
+<text x="400" y="492" text-anchor="middle">implement-backlog</text>
+<rect class="agent" x="560" y="100" width="200" height="34" rx="2"/>
+<line class="agent" x1="569" y1="100" x2="569" y2="134"/><line class="agent" x1="751" y1="100" x2="751" y2="134"/>
+<text x="660" y="122" text-anchor="middle">code-reviewer</text>
+<rect class="agent" x="560" y="175" width="200" height="44" rx="2"/>
+<line class="agent" x1="569" y1="175" x2="569" y2="219"/><line class="agent" x1="751" y1="175" x2="751" y2="219"/>
+<text x="660" y="193" text-anchor="middle">fresh verifier:</text>
+<text x="660" y="209" text-anchor="middle">Codex or subagent</text>
+<rect class="agent" x="560" y="260" width="200" height="34" rx="2"/>
+<line class="agent" x1="569" y1="260" x2="569" y2="294"/><line class="agent" x1="751" y1="260" x2="751" y2="294"/>
+<text x="660" y="282" text-anchor="middle">security-auditor</text>
+<rect class="agent" x="560" y="320" width="200" height="34" rx="2"/>
+<line class="agent" x1="569" y1="320" x2="569" y2="354"/><line class="agent" x1="751" y1="320" x2="751" y2="354"/>
+<text x="660" y="342" text-anchor="middle">performance-engineer</text>
+<rect class="agent" x="560" y="380" width="200" height="34" rx="2"/>
+<line class="agent" x1="569" y1="380" x2="569" y2="414"/><line class="agent" x1="751" y1="380" x2="751" y2="414"/>
+<text x="660" y="402" text-anchor="middle">qa-expert</text>
+<rect class="box" x="830" y="100" width="200" height="34" rx="6"/>
+<text x="930" y="122" text-anchor="middle">defensive-coding-conventions</text>
+<rect class="box" x="830" y="380" width="200" height="34" rx="6"/>
+<text x="930" y="402" text-anchor="middle">testing-conventions</text>
+<rect class="box" x="10" y="640" width="200" height="34" rx="6"/>
+<text x="110" y="662" text-anchor="middle">bug-triage</text>
+<rect class="box" x="10" y="720" width="200" height="34" rx="6"/>
+<text x="110" y="742" text-anchor="middle">deploy-checklist</text>
+<rect class="box" x="10" y="800" width="200" height="34" rx="6"/>
+<text x="110" y="822" text-anchor="middle">session-retro</text>
+<rect class="box" x="10" y="880" width="200" height="34" rx="6"/>
+<text x="110" y="902" text-anchor="middle">brain-setup</text>
+<rect class="agent" x="300" y="640" width="200" height="34" rx="2"/>
+<line class="agent" x1="309" y1="640" x2="309" y2="674"/><line class="agent" x1="491" y1="640" x2="491" y2="674"/>
+<text x="400" y="662" text-anchor="middle">research-analyst</text>
+<rect class="box" x="300" y="740" width="200" height="34" rx="6"/>
+<text x="400" y="762" text-anchor="middle">brain-capture</text>
+<rect class="box" x="300" y="880" width="200" height="34" rx="6"/>
+<text x="400" y="902" text-anchor="middle">brain-search</text>
+</svg></div>
+    <p>Every dispatched agent answers with a final status (<code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code>) that
+    the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog) or an offer
+    the user accepts. The backlog contract shared by audit-to-backlog, project-baseline and
+    implement-backlog is the <code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code> line, defaulting to <code>TODO.md</code> and
+    <code>TODO-done.md</code> (<a href="../reference/configuration.html">reference/configuration.md</a>).</p>
+    <h2 id="5-data-flows">5. Data flows</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Flow</th><th scope="col">Reads</th><th scope="col">Writes</th><th scope="col">Leaves the machine?</th></tr></thead>
+        <tbody>
+          <tr><td>Session start</td><td><code>rules/core.md</code>; after compaction or resume, <code>git</code> state and <code>docs/plans/.devos-state.md</code> of the repository root</td><td>—</td><td>As context to the model provider</td></tr>
+          <tr><td>Task state</td><td>—</td><td><code>docs/plans/.devos-state.md</code> (implement-backlog, pr-cycle, audit-to-backlog)</td><td>No</td></tr>
+          <tr><td>Brain search</td><td>Vault Markdown (<code>rg</code>), skipping <code>_archive/</code>, <code>templates/</code>, <code>_views/</code></td><td>—</td><td>Notes read go to the model provider</td></tr>
+          <tr><td>Capture / compile</td><td>Session context; vault for duplicates</td><td>One file in <code>_inbox/</code></td><td>Only as context</td></tr>
+          <tr><td>Review / garden</td><td>Vault</td><td>Named moves and edits; <code>_reports/garden-log.md</code></td><td>Only as context</td></tr>
+          <tr><td>Setup</td><td><code>vault-template/</code>, <code>~/.claude/CLAUDE.md</code>, <code>~/.claude/settings.json</code></td><td>Vault files; the two config edits</td><td>No</td></tr>
+          <tr><td>Skill usage</td><td><code>~/.claude/projects/**/*.jsonl</code> (counts only, <code>--no-filename</code>)</td><td>—</td><td>Counts only, as context</td></tr>
+          <tr><td>Session retro</td><td><code>git</code>, <code>gh pr list</code> (read-only)</td><td>Approved items only</td><td><code>gh</code> queries GitHub</td></tr>
+          <tr><td>PR skills</td><td><code>git</code>, <code>gh</code></td><td>Commits, pushes, PR body, thread replies after approval</td><td>Yes, to GitHub, after approval</td></tr>
+          <tr><td>Verifier</td><td>The claim and the repository path</td><td>—</td><td>To Codex's provider when the Codex plugin is used</td></tr>
+          <tr><td>Codex installer (by hand)</td><td><code>plugin/skills/</code>, <code>core.md</code>, <code>~/.claude/CLAUDE.md</code></td><td><code>~/.agents/skills/&lt;name&gt;</code>, a marked block in <code>~/.codex/AGENTS.md</code> and its backup</td><td>No</td></tr>
+          <tr><td>Routines (optional, user-built)</td><td>The vault repository in Anthropic's cloud</td><td><code>_inbox/</code> notes, an issue comment</td><td>Yes; see <a href="../workflow.html#away-from-the-desk-optional">workflow.md</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The plugin makes no network call itself. What the agent reads becomes model context; an agent with
+    web tools could send it further, which the plugin cannot prevent (<a href="../security.html">SECURITY.md</a>).</p>
+    <h2 id="6-trust-boundaries">6. Trust boundaries</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Boundary</th><th scope="col">Untrusted input</th><th scope="col">Control</th></tr></thead>
+        <tbody>
+          <tr><td>Vault notes</td><td>Text a past session or a phone capture wrote</td><td>Skills treat notes as data and never run commands or open URLs from them; phone captures arrive in <code>_inbox/</code></td></tr>
+          <tr><td>PR review comments, issues, CI logs, code comments</td><td>Anyone who can comment, file an issue or push code</td><td>fix-pr, pr-cycle, bug-triage and code-review treat them as data and flag text that tries to instruct the agent; fix-pr flags non-collaborators; four <code>injection-*</code> evals check it</td></tr>
+          <tr><td>Code, diffs, fixtures, fetched pages</td><td>The reviewed repository or the web</td><td>Every agent prompt states they are data; research-analyst never fetches a URL built from local file contents</td></tr>
+          <tr><td>External repositories</td><td><code>.claude/settings.json</code>, hooks, <code>.mcp.json</code> of a client or OSS repo</td><td>Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread</td></tr>
+          <tr><td>Subagent output</td><td>A delegate's edits</td><td>Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare <code>git status</code> and <code>git diff</code></td></tr>
+          <tr><td>Plugin updates</td><td>A new commit's hooks and rules</td><td><code>SECURITY.md</code>: review the diff from the installed commit before updating; auto-update is off by default</td></tr>
+          <tr><td>Session transcripts</td><td>Past conversations</td><td>Only skill-usage reads them, and only counts; session-retro and docs-sync never open them</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h2 id="7-validation">7. Validation</h2>
+    <p><code>scripts/check.sh</code> is the single local gate, run before every commit and by
+    <code>.github/workflows/check.yml</code> (after an agnix lint step) on pushes to <code>development</code> and <code>main</code> and on pull requests. Its stages
+    and prerequisites are in <a href="../development.html#the-check">development.md</a>. Behavior is checked
+    separately by the evals, by hand (<a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md">evals/README.md</a>).</p>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="../product/decisions.html">Decisions</a>
+      <a href="../reference/hooks.html">Hooks reference</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../../docs/changelog.html">Changelog</a>
+      <a href="../../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../../assets/site.js"></script>
+</body>
+</html>

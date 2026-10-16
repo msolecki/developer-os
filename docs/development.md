@@ -35,16 +35,17 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never` (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden` or `brain-review` differs from `brain-search`'s |
-| Local paths | A file under `plugin/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
+| Local paths | A file under `plugin/` or `site/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
 | Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
-| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` ("N skills", "N eval cases"; not "N cases of") differs from the disk |
+| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` or a page under `site/` ("N skills", "N eval cases"; not "N cases of") differs from the disk |
 | Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or the state-card cap in `session-start.sh` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
+| Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page. It reports every failure at once |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails on an error or on any warning (such as an unknown manifest key) other than a missing plugin `version`; the `Found N warnings` count must match the tolerated lines |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
@@ -64,9 +65,30 @@ removed inside one PR still fails. The same step fails a PR that changes `.gitle
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
 only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
 
+## The site
+
+`site/` is the public documentation site, hand-written HTML with no build:
+
+- `index.html`, the landing page;
+- `docs/`, one page per `docs/*.md` at the same path, plus `readme.html`, `changelog.html`,
+  `contributing.html` and `security.html` for the root documents;
+- `skills/`, an index and one page per skill; `agents.html` and `output-styles.html`;
+- `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons).
+
+Each page that restates a source carries `<meta name="dos-source" content="<source>@<hash>">`: the
+first 12 hex digits of the source's SHA-256 with any `last-verified:` line removed, so re-verifying a
+doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style,
+the Site stage names the page to refresh: update its text, then its hash
+(`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). A new doc or skill needs a new
+page, and a new doc an entry in `NAV`. The landing page and the skills index restate many sources
+and carry no hash; update them by hand when the hooks, rules or skills they describe change.
+`CURRENT-STATE.md` and `CHANGELOG.md` change on most pull requests, so their pages usually do too.
+The Local paths stage scans `site/`, so a page that quotes its patterns writes the slash as `&#47;`,
+as `development.html` and `contributing.html` do. CI rejects a pull request that adds the
+gitleaks allow marker, so a page that quotes it writes its colon as `&#58;`.
+
 `.github/workflows/pages.yml` publishes `site/` to GitHub Pages on a push to `development` that
-changes it, or by hand. The repository's Pages source must be "GitHub Actions". The page restates
-the README, so a change to the hooks, rules or skills it describes updates `site/index.html` too.
+changes it, or by hand. The repository's Pages source must be "GitHub Actions".
 
 ## Script tests
 

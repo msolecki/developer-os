@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>comments-conventions · developer-os skills</title>
+<meta name="description" content="Write no comment by default, and keep the few that earn their place current.">
+<meta name="dos-source" content="plugin/skills/comments-conventions/SKILL.md@d8df4d5f23ff">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Conventions</p>
+    <h1 id="comments-conventions">comments-conventions</h1>
+    <p class="lede">Write no comment by default, and keep the few that earn their place current.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Conventions</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Read-only</dd></div>
+      <div class="fact"><dt>Loads when</dt><dd>Writing or reviewing code comments</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When code comments are being written or reviewed in TypeScript, JavaScript, Python or shell files. Claude loads it on its own when the description matches the file or the task; it never writes anything itself. It matches:</p>
+    <ul class="chips">
+      <li class="chip">TypeScript</li>
+      <li class="chip">JavaScript</li>
+      <li class="chip">Python</li>
+      <li class="chip">Shell scripts</li>
+      <li class="chip">writing comments</li>
+      <li class="chip">reviewing comments</li>
+    </ul>
+
+    <h2 id="the-conventions">The conventions</h2>
+    <ul>
+      <li><strong>No comment by default.</strong> Clear names, small functions and precise types are the documentation. Before writing a comment, rename the thing or extract a function; that removes the need almost every time. Tests too: a well-named test needs no narration.</li>
+      <li><strong>No restating.</strong> Never restate what the next line does, repeat the function name in a header, or explain the change itself; that belongs in the commit message or the PR description.</li>
+      <li><strong>When a comment earns its place.</strong> Only when the reader cannot recover it from the code: a past bug with its date or ticket, a directive (<code>eslint-disable</code>, <code>@ts-expect-error</code>, <code>biome-ignore</code>), or a genuinely non-obvious fact about a library or platform. One line, not a paragraph.</li>
+      <li><strong>WHY is not a licence.</strong> Reserve a why-comment for a rejected alternative someone would otherwise "fix" back. If it needs more than a line, it belongs in the project's <code>CLAUDE.md</code>/<code>AGENTS.md</code> or <code>docs/</code>.</li>
+      <li><strong>Keep them current.</strong> When you change code, update or delete its comment in the same edit. Leave a project's existing comments alone unless asked; they are often load-bearing. The rule governs only the comments you add.</li>
+    </ul>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="typescript-conventions.html">typescript-conventions</a>: small, single-purpose functions that need no narration.</li>
+      <li><a href="code-review.html">code-review</a> applies the project's conventions when it rates a change.</li>
+      <li><a href="../docs/product/functional-spec.html#26-conventions-skills">Conventions skills in the functional specification</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/comments-conventions/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

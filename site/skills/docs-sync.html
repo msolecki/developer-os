@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docs-sync · developer-os skills</title>
+<meta name="description" content="Check a repository's docs against its code and the project docs standard, report drift and missing pieces, and write only what you approve.">
+<meta name="dos-source" content="plugin/skills/docs-sync/SKILL.md@6c2201fd2f4f">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Project hygiene</p>
+    <h1 id="docs-sync">docs-sync</h1>
+    <p class="lede">Checks a repository's docs against its code and the project docs standard: proposes missing pieces, a refreshed <code>docs/CURRENT-STATE.md</code>, the drift it found and "Likely agent mistakes" from git history, and writes nothing until you approve.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Project hygiene</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Approved doc edits</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Any write: a numbered list, answered A, B or C</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When the docs may be stale, after a large change, or when setting up docs in a project:</p>
+    <ul class="chips">
+      <li class="chip">are the docs up to date?</li>
+      <li class="chip" lang="pl">odśwież dokumentację</li>
+      <li class="chip" lang="pl">czy docsy są aktualne</li>
+      <li class="chip" lang="pl">zsynchronizuj docs z kodem</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Applies the standard.</strong> A root <code>AGENTS.md</code> under 100 lines (purpose, commands, likely agent mistakes, stack, architecture, conventions, invariants, a docs map and the sync rule), a one-line <code>CLAUDE.md</code> that imports it, a short <code>_Context.md</code> signpost, <code>DESIGN.md</code> for a project with a UI, a git-ignored state file, <code>status</code>/<code>owner</code>/<code>last-verified</code> frontmatter on every doc, a <code>docs/index.md</code> task table, <code>docs/CURRENT-STATE.md</code>, <code>docs/pitfalls.md</code>, numbered decision records and runbooks. It proposes only pieces that would carry real content now, and respects an existing layout that serves the same purpose.</li>
+      <li><strong>Takes inventory</strong> of the instruction files and the docs root, the last 30 commits and the current short SHA.</li>
+      <li><strong>Lists missing pieces</strong>, each with the content it would start with.</li>
+      <li><strong>Finds drift.</strong> Commands in the docs that are not scripts in the manifest or <code>Makefile</code>, CI scripts no doc mentions, paths and <code>path:line</code> references that no longer exist, stack versions that differ from the lockfile, a <code>CURRENT-STATE.md</code> commit that is not an ancestor of HEAD or is more than 50 commits behind, claims under "Works" whose entry point is gone, a stale "State as of" date, <code>last-verified</code> dates older than the code they cite, and a <code>DESIGN.md</code> older than the styling sources. Each finding names the doc's <code>path:line</code>, the claim and the contradicting evidence; probes that did not apply are named too.</li>
+      <li><strong>Drafts a new CURRENT-STATE</strong> as a diff: every line checked against the code, shipped work added from the commits since, <code>Verified at commit:</code> set to HEAD.</li>
+      <li><strong>Proposes likely agent mistakes.</strong> At most three, from reverts and repeated fix commits in git history and from your corrections in the current conversation, each with its evidence as a commit or session date. Without evidence it proposes nothing.</li>
+      <li><strong>Reports and asks.</strong> One numbered list with A (all, recommended), B (a list of numbers) or C (none). After approval it applies exactly those items and shows <code>git diff --stat</code>.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>docs-sync</span></div>
+<pre><code>Docs sync — &lt;repo&gt; at &lt;short sha&gt;
+Missing: 3   Drift: 5   CURRENT-STATE: 41 commits behind   Mistake candidates: 2
+
+1. [missing] docs/pitfalls.md — two entries: the disabled lint rule in eslint.config.js:12, the retry cap
+2. [drift] AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
+...
+Apply which? A: all (recommended)  B: list numbers  C: none</code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The report and the question are shown. After approval it applies exactly the approved items, shows <code>git diff --stat</code> and stops; you commit.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Write, create or delete any file before you approve the numbered items.</li>
+        <li>Overwrite an existing doc wholesale; it edits only the approved lines.</li>
+        <li>Commit, push or open a pull request.</li>
+        <li>Invent evidence for a mistake item or a drift finding.</li>
+        <li>Read session transcripts or files outside the repository.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="instruction-review.html">instruction-review</a> trims and extends <code>CLAUDE.md</code> or <code>AGENTS.md</code>.</li>
+      <li><a href="project-baseline.html">project-baseline</a> checks the engineering practices around the docs.</li>
+      <li><a href="../docs/product/functional-spec.html#22-engineering-skills">Engineering skills in the functional specification</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/docs-sync/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

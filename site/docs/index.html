@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>developer-os — documentation index · developer-os</title>
+<meta name="description" content="The developer-os documentation index: which document to read first for each task.">
+<meta name="dos-source" content="docs/index.md@5f1073ed1553">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="developer-os--documentation-index">developer-os — documentation index</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/index.md">docs/index.md</a></span><span>Verified 2026-10-15</span></p>
+    <p>developer-os is a Markdown-only Claude Code plugin. These documents describe the plugin as it is in
+this repository; they replace the documentation of the earlier CLI product, which was removed on
+2026-10-14 (history at the git tag <code>archive/cli-v0</code>).</p>
+    <p>Each row routes a task to the one document to read first. Documents link to the source file that
+owns a behavior (a <code>SKILL.md</code>, a hook script, <code>scripts/check.sh</code>) instead of restating it; when a
+document and the source disagree, the source wins and the document is a defect.</p>
+    <div class="table-wrap">
+<table>
+<thead><tr><th scope="col">Task</th><th scope="col">Read first</th></tr></thead>
+<tbody>
+<tr><td>Understand what developer-os is, for whom, and what it deliberately does not do</td><td><a href="product/overview.html">product/overview.md</a></td></tr>
+<tr><td>Know what each skill, agent, hook and output style does, and what it never does without approval</td><td><a href="product/functional-spec.html">product/functional-spec.md</a></td></tr>
+<tr><td>Know why something is the way it is</td><td><a href="product/decisions.html">product/decisions.md</a></td></tr>
+<tr><td>Understand how the plugin loads into a session and where data flows</td><td><a href="architecture/overview.html">architecture/overview.md</a></td></tr>
+<tr><td>Look up a hook's input, output, exit code or environment variable</td><td><a href="reference/hooks.html">reference/hooks.md</a></td></tr>
+<tr><td>Look up a setting, a line the skills read, or a path they write</td><td><a href="reference/configuration.html">reference/configuration.md</a></td></tr>
+<tr><td>Install and use it day to day with an Obsidian vault</td><td><a href="workflow.html">workflow.md</a> (the README has the short install)</td></tr>
+<tr><td>Change the plugin, run the checks, run the evals, release</td><td><a href="development.html">development.md</a></td></tr>
+<tr><td>A setting or pattern in this repository looks wrong</td><td><a href="pitfalls.html">pitfalls.md</a></td></tr>
+<tr><td>See what works today and what is known to be missing</td><td><a href="CURRENT-STATE.html">CURRENT-STATE.md</a></td></tr>
+<tr><td>Decode a term such as "action skill", "fresh verifier" or "inbox note"</td><td><a href="glossary.html">glossary.md</a></td></tr>
+</tbody>
+</table>
+</div>
+    <p>Outside <code>docs/</code>: <a href="readme.html">README</a> (install, component list, Codex setup),
+<a href="contributing.html">CONTRIBUTING</a>, <a href="security.html">SECURITY</a>, <a href="changelog.html">CHANGELOG</a>,
+<a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md">evals/README.md</a>.</p>
+    <h2 id="document-rules">Document rules</h2>
+    <ul>
+<li>Technical documentation is in English. Every document under <code>docs/</code> starts with the frontmatter
+above: <code>status</code> (<code>current</code>, <code>draft</code> or <code>deprecated</code>), <code>owner</code>, and <code>last-verified</code>, the day it was
+checked against the code.</li>
+<li>Cite files and section headings, not line numbers; line numbers move with every edit.</li>
+<li>Plans live in <code>docs/plans/</code>, which is git-ignored, and are deleted when the task is done.</li>
+<li><code>scripts/check.sh</code> enforces this frontmatter, and checks every relative link in these files and every <code>developer-os:&lt;name&gt;</code>
+reference, so a renamed skill or moved file fails the check.</li>
+</ul>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="../index.html">Home</a>
+      <a href="../docs/readme.html">README</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>developer-os · developer-os</title>
+<meta name="description" content="The developer-os README: install, vault setup, what the hooks do, what the plugin ships and the Codex installer.">
+<meta name="dos-source" content="README.md@def2615fd4bf">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="developer-os">developer-os</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/README.md">README.md</a></span></p>
+    <p>A Claude Code plugin for working with an AI coding agent and an Obsidian vault as its long-term
+memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
+your vault before it starts, capture decisions into an inbox while it works, and help you review and
+tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
+agents, output styles and rules) plus three small POSIX <code>sh</code> hook scripts, with no server, no database and
+no runtime to install. Codex
+support is manual and best-effort.</p>
+    <h2 id="install-claude-code">Install (Claude Code)</h2>
+    <pre><code>/plugin marketplace add msolecki/developer-os
+/plugin install developer-os@developer-os</code></pre>
+    <p>The plugin has no version number. An install takes the latest commit of <code>development</code>, and
+<code>claude plugin update developer-os@developer-os</code> picks up every later commit. Auto-update is off for
+this marketplace unless you turn it on under <code>/plugin</code> → Marketplaces.</p>
+    <h2 id="set-up-the-vault">Set up the vault</h2>
+    <p>Run the <code>brain-setup</code> skill in Claude Code: it copies <a href="https://github.com/msolecki/developer-os/tree/development/plugin/vault-template"><code>plugin/vault-template/</code></a>
+(or connects an existing vault), shows the two config edits as a diff and applies them after you
+approve. The two edits are one line in <code>~/.claude/CLAUDE.md</code>:</p>
+    <pre><code>Brain vault: /absolute/path/to/your/vault</code></pre>
+    <p>and the vault path in <code>permissions.additionalDirectories</code> in <code>~/.claude/settings.json</code>, so Claude Code
+may read and write it from any project.</p>
+    <p>For project repositories, start from the files in <a href="https://github.com/msolecki/developer-os/tree/development/templates/project"><code>templates/project/</code></a>.
+They include a <code>docs/</code> skeleton; run the docs-sync skill to fill and check it. The
+full setup, with Obsidian settings and a first test, is in <a href="workflow.html#setup-in-5-minutes">docs/workflow.md</a>.</p>
+    <h2 id="what-the-hooks-do">What the hooks do</h2>
+    <p>The plugin has three hooks. On every <code>SessionStart</code> (startup, resume, <code>/clear</code>, compaction and fork), in
+every project, it runs <a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/session-start.sh"><code>plugin/hooks/session-start.sh</code></a>, which prints
+<a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md"><code>plugin/rules/core.md</code></a>; the output becomes session context. After a compaction
+or a resume inside a git repository it adds a state card of at most 1 KB: the branch, a
+<code>Newest plan:</code> line, <code>docs/plans/.devos-state.md</code> (the task state that implement-backlog, pr-cycle
+and audit-to-backlog keep there; hidden once it is older than 7 days), then up to 10 worktrees. A
+longer card is cut at a whole line and ends with a cut marker. Installing the plugin therefore changes how the agent behaves everywhere, not only
+when you call a skill; read <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md"><code>core.md</code></a> for the rules themselves.</p>
+    <p>To turn it off, disable the plugin (<code>/plugin</code>, then disable developer-os). To keep the plugin but
+change a rule, override it explicitly in your user-level <code>~/.claude/CLAUDE.md</code> (for example, "Ignore
+the developer-os rule on plan files"); that file loads alongside the core rules in every session.</p>
+    <p>A <code>Stop</code> hook (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/capture-nudge.sh"><code>plugin/hooks/capture-nudge.sh</code></a>) counts tool calls
+in the session transcript and reads only background-task and Monitor ids, output-file paths and
+Monitor start times from it, never message content. Once per session, after 30 tool calls, and not
+while a background agent, command or Monitor it can see is still running, it asks the agent to run the session-retro skill, which proposes a wrap-up and applies only what you
+approve. Set <code>DEVELOPER_OS_CAPTURE_NUDGE=off</code> to turn it off, or <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN=&lt;n&gt;</code>
+to change the threshold.</p>
+    <p>A <code>PreToolUse</code> hook on Bash (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/guard.sh"><code>plugin/hooks/guard.sh</code></a>) asks for confirmation
+(it never blocks) before a dependency install with a package argument
+(<code>npm|pnpm|yarn|bun install|add|i &lt;pkg&gt;</code>, an npm alias such as <code>npm in</code>, or the binary by full path), a
+<code>git push</code> with <code>--force</code>, <code>-f</code> or a <code>+refspec</code> (even next to <code>--force-with-lease</code>; a lone
+<code>--force-with-lease</code> passes; git also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of it
+such as <code>--no-veri</code>, <code>git commit -n</code>, <code>HUSKY=0</code> or <code>core.hooksPath</code> in any form. In <code>claude -p</code> an ask resolves to a denial.</p>
+    <p>All three are POSIX <code>sh</code> (plus <code>grep -o</code> and <code>head -c</code>, which macOS and Linux provide), need no <code>jq</code>, make no network calls and fail open: on input they cannot parse
+or any error they exit silently and the normal permission flow applies.</p>
+    <h2 id="whats-inside">What's inside</h2>
+    <ul>
+<li><strong>Brain skills:</strong> brain-setup, brain-search, brain-capture, brain-review, brain-garden,
+brain-compile. They read and write the vault with the agent's own file tools.</li>
+<li><strong>Engineering skills:</strong> code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
+bug-triage, deploy-checklist, instruction-review (add <code>--prune</code> for a periodic cut), plan-status,
+client-reply, docs-sync, project-baseline.</li>
+<li><strong>Session skills:</strong> session-retro (end-of-session wrap-up: state check, cleanup proposals,
+Done / Not done / Needs you, plan update or close, approval-gated capture) and skill-usage
+(read-only report of how often each developer-os skill fired locally, with
+keep/merge/rewrite-description/remove suggestions).</li>
+<li><strong>Conventions skills</strong> (load only when relevant): comments-conventions,
+error-handling-conventions, defensive-coding-conventions, monitoring-conventions,
+nextjs-conventions, testing-conventions, typescript-conventions.</li>
+<li><strong>Built-in overlaps:</strong> <code>/code-review</code>, <code>/security-review</code>, <code>/recap</code>, <code>/insights</code>, <code>/goal</code>,
+<code>/skill-doctor</code> and <code>/doctor</code> cover similar ground; <a href="workflow.html#built-in-commands-with-similar-names">when to use which</a>.</li>
+<li><strong>Agents:</strong> code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor.</li>
+<li><strong>Output styles:</strong> architect, debug, direct-objective, tdd-enforcer. Select one with
+<code>/output-style</code>, or set <code>"outputStyle": "developer-os:architect"</code> in settings (the plugin prefix is required).</li>
+<li><strong>Three hooks:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction), <code>Stop</code> suggests a session wrap-up
+once per long session, <code>PreToolUse</code> asks before installs, force pushes and hook bypasses (see above).</li>
+<li><strong>Evals:</strong> behavior checks for the brain skills, code-review, session-retro and the Polish
+triggers in <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md"><code>evals/</code></a>, run by hand with <code>claude plugin eval</code>. Not part of the
+plugin payload.</li>
+</ul>
+    <h2 id="codex-installer-best-effort">Codex (installer, best-effort)</h2>
+    <p>There is no Codex manifest. From a clone of this repository (or the marketplace copy in
+<code>~/.claude/plugins/marketplaces/developer-os</code>), run:</p>
+    <pre><code>scripts/install-codex.sh --dry-run   # show what would change
+scripts/install-codex.sh             # install or update</code></pre>
+    <ul>
+<li>It writes a Codex copy of every skill to <code>~/.agents/skills/&lt;name&gt;</code> (set <code>CODEX_SKILLS_DIR</code> for
+another location, such as <code>~/.codex/skills/</code> on older Codex versions). Each copy keeps only <code>name</code>
+and a short description (the first sentence and the quoted trigger phrases, or the "Use when"
+sentence when there are none), so all of them fit Codex's 8000-character skill list, and has its
+Claude-only references rewritten. A skill <code>description</code> must be one plain line; the installer
+refuses any other form before it writes anything.</li>
+<li>It puts <code>plugin/rules/core.md</code> and your <code>Brain vault:</code> line (<code>--vault &lt;path&gt;</code>, else the line already in the
+block, else <code>~/.claude/CLAUDE.md</code>; pass <code>--vault</code> again to change it) between <code>developer-os-core</code> markers in <code>~/.codex/AGENTS.md</code> (<code>$CODEX_HOME/AGENTS.md</code>
+when <code>CODEX_HOME</code> is set; <code>--project &lt;dir&gt;</code> for a project's <code>AGENTS.md</code>). Text outside the markers
+stays; a changed file is backed up first.</li>
+<li>Run it again after each plugin update. An untouched copy of a skill the plugin no longer has, made from this checkout, is removed. <code>--uninstall</code> removes only what it installed;
+<code>--project &lt;dir&gt; --uninstall</code> removes only that project's block and keeps the skills. A skill
+directory it did not create, including an older hand-made symlink into another clone, is skipped
+and reported; remove it first to let the installer manage it.</li>
+</ul>
+    <p>This setup is not tested on releases. The hooks, agents and output styles have no Codex equivalent;
+see <a href="workflow.html#claude-only-features">Claude-only features</a>.</p>
+    <h2 id="documentation">Documentation</h2>
+    <ul>
+<li><a href="https://msolecki.github.io/developer-os/">Landing page</a>: the public documentation site (<a href="https://github.com/msolecki/developer-os/blob/development/site/index.html">source</a>), published to GitHub Pages by <code>.github/workflows/pages.yml</code>.</li>
+<li><a href="index.html">Documentation index</a>: product overview, functional specification, decisions,
+architecture, hooks and configuration reference, development guide, pitfalls, current state.</li>
+<li><a href="workflow.html">How to work: brain + code</a>: the workflow, the vault layout, privacy.</li>
+<li><a href="workflow.html#away-from-the-desk-optional">Away from the desk</a>: capture from your phone and a
+weekly vault brief with Claude Code routines.</li>
+<li><a href="contributing.html">Contributing</a></li>
+<li><a href="security.html">Security</a></li>
+<li><a href="changelog.html">Changelog</a></li>
+<li><a href="https://github.com/msolecki/developer-os/blob/development/LICENSE">License</a></li>
+</ul>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="../docs/index.html">Documentation index</a>
+      <a href="../docs/workflow.html">How to work: brain + code</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

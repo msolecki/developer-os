@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en" data-root="../../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuration reference · developer-os</title>
+<meta name="description" content="Every line, key and environment variable that configures developer-os at user, project, vault and Codex level.">
+<meta name="dos-source" content="docs/reference/configuration.md@f0135f1e2d2e">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../../docs/index.html">Docs</a>
+      <a href="../../skills/index.html">Skills</a>
+      <a href="../../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="configuration-reference">Configuration reference</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/configuration.md">docs/reference/configuration.md</a></span><span>Verified 2026-10-16</span></p>
+    <p>The plugin has no configuration file of its own. It is configured through lines and keys in files
+    the user already has, which the skills read. This page lists every one of them.</p>
+    <h2 id="user-level">User level</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Setting</th><th scope="col">Where</th><th scope="col">Read by</th><th scope="col">Written by</th></tr></thead>
+        <tbody>
+          <tr><td><code>Brain vault: &lt;absolute path&gt;</code></td><td><code>~/.claude/CLAUDE.md</code> (or a project's <code>CLAUDE.md</code>/<code>AGENTS.md</code>; <code>~/.codex/AGENTS.md</code> for Codex)</td><td>All brain skills; the core rule that runs brain-search before large tasks</td><td>brain-setup, after approval (Claude Code only; for Codex it prints the line)</td></tr>
+          <tr><td>Vault in <code>permissions.additionalDirectories</code></td><td><code>~/.claude/settings.json</code></td><td>Claude Code, so the vault can be read from any project</td><td>brain-setup, after approval</td></tr>
+          <tr><td><code>"outputStyle": "developer-os:&lt;name&gt;"</code></td><td>Claude Code settings</td><td>Claude Code; a bare name silently falls back to the default style</td><td>The user</td></tr>
+          <tr><td>Rule overrides</td><td><code>~/.claude/CLAUDE.md</code></td><td>The model, alongside the core rules</td><td>The user</td></tr>
+          <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code></td><td>Shell environment</td><td>The <code>Stop</code> hook (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
+          <tr><td><code>CODEX_SKILLS_DIR</code></td><td>Shell environment</td><td><code>scripts/install-codex.sh</code> (default <code>~/.agents/skills</code>)</td><td>The user</td></tr>
+          <tr><td><code>CODEX_HOME</code></td><td>Shell environment</td><td><code>scripts/install-codex.sh</code>, which writes <code>$CODEX_HOME/AGENTS.md</code> (default <code>~/.codex</code>)</td><td>The user</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>brain-setup, the brain skills' vault lookup and <code>scripts/install-codex.sh</code> resolve the config directory
+    as <code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}</code>; brain-setup edits files in place, so symlinked config files
+    stay symlinks.</p>
+    <h2 id="project-level">Project level</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Setting</th><th scope="col">Where</th><th scope="col">Read by</th><th scope="col">Default without it</th></tr></thead>
+        <tbody>
+          <tr><td><code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code></td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>audit-to-backlog, implement-backlog, plan-status, project-baseline, spec</td><td><code>TODO.md</code>, <code>TODO-done.md</code>; audit-to-backlog and project-baseline ask before creating them and write the line</td></tr>
+          <tr><td>Planning location</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>Core rules, plan-status, spec, session-retro</td><td><code>docs/plans/&lt;YYYY-MM-DD-task&gt;.md</code>, git-ignored</td></tr>
+          <tr><td>Specification location</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>spec</td><td>spec proposes <code>docs/specs/</code> and asks</td></tr>
+          <tr><td>Fast check and full suite commands</td><td>Project <code>AGENTS.md</code> or <code>CLAUDE.md</code></td><td>Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist</td><td>Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing</td></tr>
+          <tr><td><code>Vault project slug:</code></td><td><code>_Context.md</code></td><td>brain-search and brain-capture, which read <code>_Context.md</code> at the repository root when the line is not in context</td><td>Empty <code>project:</code></td></tr>
+          <tr><td>Docs root</td><td><code>AGENTS.md</code></td><td>docs-sync</td><td><code>docs/</code></td></tr>
+          <tr><td>Task state</td><td><code>docs/plans/.devos-state.md</code> (fixed, even when the planning location is overridden)</td><td>The <code>SessionStart</code> hook after compaction</td><td>Written by implement-backlog, pr-cycle and audit-to-backlog; none</td></tr>
+          <tr><td><code>TODO.md</code> item format</td><td>The backlog todo file</td><td>audit-to-backlog, project-baseline, implement-backlog, plan-status</td><td><code>templates/project/TODO.md</code> shows it</td></tr>
+          <tr><td><code>DESIGN.md</code></td><td>Repository root, for projects with a UI</td><td>Agents doing UI work (the template <code>AGENTS.md</code> line), project-baseline, docs-sync</td><td>project-baseline proposes it as a backlog item</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h2 id="vault">Vault</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Item</th><th scope="col">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>_inbox/</code></td><td>The only folder agents create notes in</td></tr>
+          <tr><td><code>_archive/</code></td><td>Retired notes, <code>status: archived</code></td></tr>
+          <tr><td><code>_views/*.base</code></td><td>Obsidian Bases views: Inbox, Stale (active, <code>updated</code> older than 180 days), By project</td></tr>
+          <tr><td><code>_reports/garden-log.md</code></td><td>One line per brain-garden run, appended with consent</td></tr>
+          <tr><td><code>templates/note.md</code></td><td>The note template (<code>status: active</code> for notes the user writes)</td></tr>
+          <tr><td><code>.obsidian/types.json</code></td><td>Property types: <code>created</code>, <code>updated</code> as date, <code>tags</code> as tags, <code>sources</code> as multitext</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Note frontmatter, folders and the four body headings: <a href="../workflow.html#vault-layout">workflow.md, Vault layout</a>.</p>
+    <h2 id="codex">Codex</h2>
+    <p>No manifest. <code>scripts/install-codex.sh</code> (run by hand, <code>--dry-run</code> first) writes a Codex copy of each skill
+    to <code>${CODEX_SKILLS_DIR:-~/.agents/skills}</code> with a <code>.developer-os-codex</code> marker, and puts the core rules and
+    the <code>Brain vault:</code> line between <code>developer-os-core</code> markers in <code>${CODEX_HOME:-~/.codex}/AGENTS.md</code>
+    (<a href="../readme.html#codex-installer-best-effort">README</a>).</p>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="hooks.html">Hooks reference</a>
+      <a href="../glossary.html">Glossary</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../../docs/changelog.html">Changelog</a>
+      <a href="../../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../../assets/site.js"></script>
+</body>
+</html>

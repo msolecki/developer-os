@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nextjs-conventions · developer-os skills</title>
+<meta name="description" content="Apply Next.js conventions: schema-validated input, Server Components by default, Server Actions with typed results, forward-only migrations and consented analytics.">
+<meta name="dos-source" content="plugin/skills/nextjs-conventions/SKILL.md@85d4383be16f">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Conventions</p>
+    <h1 id="nextjs-conventions">nextjs-conventions</h1>
+    <p class="lede">Applies Next.js conventions: schema-validated input, Server Components by default, Server Actions with typed results, forward-only migrations and consented analytics.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Conventions</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Read-only</dd></div>
+      <div class="fact"><dt>Loads when</dt><dd>Writing or reviewing Next.js app code or <code>next.config</code> files</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When Next.js app code or <code>next.config</code> files are being written or reviewed. Claude loads it on its own when the description matches the file or the task; it never writes anything itself. It matches:</p>
+    <ul class="chips">
+      <li class="chip">Next.js app code</li>
+      <li class="chip">next.config files</li>
+    </ul>
+
+    <h2 id="the-conventions">The conventions</h2>
+    <ul>
+      <li><strong>Validate every input.</strong> Form and API input goes through a schema validator, for example Zod with <code>.safeParse()</code>.</li>
+      <li><strong>Server Components by default.</strong> <code>'use client'</code> only for state or event handling.</li>
+      <li><strong>Server Actions with typed results.</strong> Preferred over API routes when possible, returning a typed result whose <code>error</code> is the <code>{ code, message, details? }</code> object from error-handling-conventions.</li>
+      <li><strong>Forward-only migrations.</strong> Follow the project's migration policy; without one, write forward-only migrations.</li>
+      <li><strong>One source of truth for tokens.</strong> When the project has a <code>DESIGN.md</code>, record in <code>docs/decisions/</code> whether it generates the Tailwind theme or the reverse, and keep the other side in sync.</li>
+      <li><strong>Analytics through the wrapper.</strong> Route analytics calls through the project's tracking wrapper when one exists, behind a consent gate where the platform requires consent.</li>
+    </ul>
+    <pre><code>{ ok: true, data? } | { ok: false, error }</code></pre>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="error-handling-conventions.html">error-handling-conventions</a> defines the error object.</li>
+      <li><a href="typescript-conventions.html">typescript-conventions</a>: TypeScript rules that apply alongside.</li>
+      <li><a href="testing-conventions.html">testing-conventions</a>: how to test the new code.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/nextjs-conventions/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

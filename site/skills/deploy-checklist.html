@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>deploy-checklist · developer-os skills</title>
+<meta name="description" content="Produce a repository-specific deployment checklist with a GO or NO-GO verdict before the deploy and checks after it.">
+<meta name="dos-source" content="plugin/skills/deploy-checklist/SKILL.md@1d51cdf6b7cc">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Engineering</p>
+    <h1 id="deploy-checklist">deploy-checklist</h1>
+    <p class="lede">Produces a deployment checklist specific to the repository, with a <code>GO</code>/<code>NO-GO</code> verdict before the deploy and checks after it, covering validation, migrations, feature flags, monitoring, communication and rollback.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Engineering</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Nothing</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Sending any communication: it only drafts it</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you plan a deployment, a release to production or another shipping event:</p>
+    <ul class="chips">
+      <li class="chip">can we deploy to production?</li>
+      <li class="chip" lang="pl">wdrażamy na produkcję</li>
+      <li class="chip" lang="pl">checklista deployu</li>
+      <li class="chip" lang="pl">czy możemy deployować</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <p>An item whose evidence is unavailable (no CI status, no dashboard access) is marked <strong>UNVERIFIED</strong>, never assumed to pass.</p>
+    <ol>
+      <li><strong>Validation.</strong> It detects the package manager from the lockfile and runs the repository's real test, lint, type-check and build commands, and requires green CI on the intended release branch.</li>
+      <li><strong>Migrations.</strong> It checks that they ran locally or on staging, are backward compatible, have a backup, an expected lock time and runtime, and a tested rollback.</li>
+      <li><strong>Feature flags.</strong> It checks defaults and rollout percentages for risky behavior.</li>
+      <li><strong>Monitoring.</strong> It confirms dashboards, error tracking, alerts and explicit abort thresholds.</li>
+      <li><strong>Communication.</strong> It drafts deployment, client or status messages when needed, without sending them.</li>
+      <li><strong>Rollback.</strong> It writes the exact rollback command, the recovery steps and the metrics that trigger it. Provider-specific commands come from the repository's configuration; if the target is unknown, it asks.</li>
+      <li><strong>Window and owner.</strong> It confirms a suitable deployment window and an owner available for at least an hour of monitoring.</li>
+      <li><strong>Verdict.</strong> <code>GO</code>, or <code>NO-GO</code> when any item above failed or is UNVERIFIED, with what would turn it into <code>GO</code>.</li>
+      <li><strong>After the deploy.</strong> It monitors error rate and latency against the abort thresholds, inspects new exceptions, runs a smoke test of the critical flow, and records the result: stable, or rolled back with the trigger. It offers <a href="brain-capture.html">brain-capture</a> when the deployment taught a lasting lesson.</li>
+    </ol>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>Before the deployment, at the <code>GO</code>/<code>NO-GO</code> verdict; after it, at the recorded result. You run the deployment.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Deploy, run a production migration, or change a feature flag.</li>
+        <li>Send deployment, client or status communication without your explicit authorization.</li>
+        <li>Mark an item passed without evidence.</li>
+        <li>Invent provider-specific commands.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="bug-triage.html">bug-triage</a> takes over when the deploy goes wrong.</li>
+      <li><a href="pr-cycle.html">pr-cycle</a> gets the change to a merge verdict first.</li>
+      <li><a href="monitoring-conventions.html">monitoring-conventions</a> covers what the abort thresholds watch.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/deploy-checklist/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

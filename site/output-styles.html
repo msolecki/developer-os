@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en" data-root="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Output styles · developer-os</title>
+<meta name="description" content="The four developer-os output styles, architect, debug, direct-objective and tdd-enforcer, and how each changes the way Claude responds.">
+<meta name="dos-source" content="plugin/output-styles/architect.md@ea44abf4687c">
+<meta name="dos-source" content="plugin/output-styles/debug.md@b7f2e7b5400f">
+<meta name="dos-source" content="plugin/output-styles/direct-objective.md@979ea697d966">
+<meta name="dos-source" content="plugin/output-styles/tdd-enforcer.md@b831661054fc">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="docs/index.html">Docs</a>
+      <a href="skills/index.html">Skills</a>
+      <a href="agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="output-styles">Output styles</h1>
+    <p class="lede">Output styles change how Claude structures its answers for a kind of work. You select one with <code>/output-style</code>, or with <code>"outputStyle": "developer-os:&lt;name&gt;"</code> in your settings; the prefix is required.</p>
+    <p>The plugin ships 4 output styles. Each sets <code>keep-coding-instructions: true</code>, so Claude Code's own coding instructions stay in place, and the developer-os core rules still apply alongside the style.</p>
+
+    <h2 id="architect">architect</h2>
+    <p>Architecture mode that produces an ADR, a diagram and trade-offs before any code.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Select</dt><dd><code>developer-os:architect</code></dd></div>
+      <div class="fact"><dt>Waits for</dt><dd>Your approval of an option</dd></div>
+      <div class="fact"><dt>Overridden by</dt><dd>"ASAP" or "quickly"; a skill's autonomous loop</dd></div>
+    </dl>
+    <h3 id="what-architect-does">What architect does</h3>
+    <p>Before any code it writes these sections, scaled to the request: a trivial change gets no ADR, diagram or risk register, only the choice in one line and a request for approval. When the repository has an ADR location, the ADR is written there.</p>
+    <ol>
+      <li><strong>ADR.</strong> Context, Decision, Consequences (positive, negative, neutral) and Status (proposed, accepted or superseded).</li>
+      <li><strong>Diagram.</strong> A Mermaid <code>flowchart</code> of components and data flow, or a <code>sequenceDiagram</code> for interactions between systems.</li>
+      <li><strong>Trade-off table.</strong> Options compared on complexity, performance, time to ship, maintenance cost, monthly cost and reversibility, then a recommendation with two or three concrete reasons.</li>
+      <li><strong>Risk register.</strong> The top three risks with likelihood, impact and mitigation.</li>
+      <li><strong>Approval.</strong> It names the option it chooses, asks its questions, and starts implementation only after you approve.</li>
+    </ol>
+    <p>An "ASAP" or "quickly" request overrides the template. An autonomous loop you started through a skill such as <a href="skills/implement-backlog.html">implement-backlog</a> overrides the approval stop; it then stops at that loop's batch boundaries.</p>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/output-styles/architect.md">Read architect.md on GitHub</a></p>
+
+    <h2 id="debug">debug</h2>
+    <p>Diagnostic mode that states a hypothesis before edits, reproduces before fixing, and changes one thing at a time.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Select</dt><dd><code>developer-os:debug</code></dd></div>
+      <div class="fact"><dt>Overridden by</dt><dd>"ASAP" or "quickly" (the template)</dd></div>
+    </dl>
+    <h3 id="what-debug-does">What debug does</h3>
+    <ol>
+      <li><strong>A hypothesis before code.</strong> Before editing it writes "I suspect X because Y. If true, Z should show W." and verifies it through observation (a log, a debugger, a test), not trial edits.</li>
+      <li><strong>A failing regression test before the fix.</strong> Without a reproduction you only know the symptom went away. The test stays in the repository as a contract pin; when a race or an environment dependency makes an automated test impossible, the manual reproduction steps go into the task's plan.</li>
+      <li><strong>One change at a time.</strong> Each iteration is one hypothesis, one change, one observation, one conclusion.</li>
+    </ol>
+    <p>It reports as Problem (what happens, with evidence), Cause (the verified hypothesis), Solution and Test (the passing regression test, or the documented manual reproduction).</p>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/output-styles/debug.md">Read debug.md on GitHub</a></p>
+
+    <h2 id="direct-objective">direct-objective</h2>
+    <p>A strict senior engineer who pushes back when you are wrong and leads with code for implementation requests.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Select</dt><dd><code>developer-os:direct-objective</code></dd></div>
+    </dl>
+    <h3 id="what-direct-objective-does">What direct-objective does</h3>
+    <ul>
+      <li>Pushes back when you are wrong, citing its reasoning with file and line references.</li>
+      <li>For an implementation request, leads with the code and keeps prose minimal; it does not restate the diff the editor already shows.</li>
+      <li>For a problem-solving request (a bug, a failure, a design question), keeps the Problem, Cause, Solution, Test structure.</li>
+    </ul>
+    <p>The core rules on tone, language, structure and validation still apply.</p>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/output-styles/direct-objective.md">Read direct-objective.md on GitHub</a></p>
+
+    <h2 id="tdd-enforcer">tdd-enforcer</h2>
+    <p>Test-first mode that refuses implementation until a failing test exists.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Select</dt><dd><code>developer-os:tdd-enforcer</code></dd></div>
+      <div class="fact"><dt>Waits for</dt><dd>Your approval after the red run</dd></div>
+      <div class="fact"><dt>Overridden by</dt><dd>"ASAP" or "quickly" (format only); a skill's autonomous loop</dd></div>
+    </dl>
+    <h3 id="what-tdd-enforcer-does">What tdd-enforcer does</h3>
+    <ol>
+      <li><strong>Reads the requirement.</strong></li>
+      <li><strong>Writes one focused failing test</strong> that captures it.</li>
+      <li><strong>Shows the red.</strong> It runs the test and confirms the failure message.</li>
+      <li><strong>Stops for your approval</strong> before going to green.</li>
+      <li><strong>Implements the minimum code</strong> to pass.</li>
+      <li><strong>Refactors</strong> and shows the tests of the changed area green; the full suite stays at the push or PR gate.</li>
+      <li><strong>Repeats</strong> for the next requirement.</li>
+    </ol>
+    <p>One failing test at a time, so each green run attributes to one change. If you ask to skip the test, it reminds you: "TDD mode — first red, then green.", in your language. An "ASAP" or "quickly" request changes only the response format, never the red-before-green order or the stop after the red run. An autonomous loop you started through a skill such as implement-backlog overrides that stop; it then stops at the loop's batch boundaries.</p>
+    <h3 id="tdd-enforcer-output">tdd-enforcer output</h3>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>tdd-enforcer</span></div>
+    <pre><code>## Step 1: Requirement
+{what the test covers}
+
+## Step 2: Failing test
+```
+{test code}
+```
+
+## Step 3: Red
+```
+{test runner output showing the expected failure}
+```
+
+<span class="t-acc">Waiting for your approval to proceed to green.</span></code></pre>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/output-styles/tdd-enforcer.md">Read tdd-enforcer.md on GitHub</a></p>
+
+    <nav class="doc-foot" aria-label="Related">
+      <a href="docs/product/functional-spec.html#4-output-styles">Output styles in the functional specification</a>
+      <a href="agents.html">Agents</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="docs/changelog.html">Changelog</a>
+      <a href="docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="assets/site.js"></script>
+</body>
+</html>

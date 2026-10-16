@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" data-root="../../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product overview · developer-os</title>
+<meta name="description" content="What developer-os is, who it is for, its principles, scope, distribution, status and primary risks.">
+<meta name="dos-source" content="docs/product/overview.md@aadf9fe38234">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../../docs/index.html">Docs</a>
+      <a href="../../skills/index.html">Skills</a>
+      <a href="../../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+<h1 id="product-overview">Product overview</h1>
+<p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/product/overview.md">docs/product/overview.md</a></span><span>Verified 2026-10-15</span></p>
+<h2 id="the-problem">The problem</h2>
+<p>An AI coding agent starts every session from zero. Decisions made last week, the reason one library was rejected, the bug that took an afternoon: none of it survives the session unless someone writes it down where the next session will look. At the same time, the agent's defaults are not the habits of a careful engineer: it commits without running the right checks, claims "fixed" without evidence, reviews its own code, installs dependencies unasked and forgets the user's language after compaction.</p>
+<h2 id="what-developer-os-is">What developer-os is</h2>
+<p>A Claude Code plugin, installed from this repository as a plugin marketplace, that adds two things:</p>
+<ol>
+<li><strong>Long-term memory in an Obsidian vault.</strong> Six <code>brain-*</code> skills let the agent search the vault before a task, capture decisions and lessons into the vault's <code>_inbox/</code> while it works, and help the user review, garden and consolidate what was captured. The vault is plain Markdown; the agent reads and writes it with its own file tools. The user approves everything that becomes knowledge.</li>
+<li><strong>An engineering operating model.</strong> Core rules loaded into every session, workflow skills (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up), conventions skills, five specialist agents, four output styles and a small Bash guard.</li>
+</ol>
+<p>The plugin is Markdown and JSON plus three POSIX <code>sh</code> hook scripts. There is no server, database, index, binary, background job or network call in the plugin itself.</p>
+<h2 id="who-it-is-for">Who it is for</h2>
+<ul>
+<li>The primary user is a developer working alone or in a small team on several client and product repositories with Claude Code, who wants decisions to outlive sessions and repositories.</li>
+<li>A secondary user runs Codex: <code>scripts/install-codex.sh</code> copies the skills and the core rules into Codex's locations. This path is best-effort and untested on releases (<a href="../readme.html#codex-installer-best-effort">README, Codex</a>).</li>
+</ul>
+<h2 id="product-principles">Product principles</h2>
+<ol>
+<li><strong>The human approves what becomes knowledge.</strong> The agent creates notes only in <code>_inbox/</code> with <code>status: inbox</code>; it edits, moves or archives any other note only after the user names it.</li>
+<li><strong>Archive, never delete.</strong> Retired, merged and rejected notes move to <code>_archive/</code> with <code>status: archived</code>.</li>
+<li><strong>Propose, then act on a named yes.</strong> Every skill that changes files, git state or anything outside the machine stops at a defined point and asks; silence or "looks good" is not approval. Each action skill states its <code>## Stop point</code> and <code>## Never</code> sections, and <code>scripts/check.sh</code> fails without them.</li>
+<li><strong>Evidence over declaration.</strong> Findings carry a file and line, reviews rate on one P0–P3 scale, blocking findings go to a fresh verifier, and "works" needs test output.</li>
+<li><strong>One fact in one place.</strong> Code facts and plans stay in the repository; lessons that outlive a repository go to the vault; user preferences go to auto-memory or <code>~/.claude/CLAUDE.md</code> (<a href="../workflow.html#where-knowledge-belongs">workflow.md, Where knowledge belongs</a>).</li>
+<li><strong>Small fixed cost per session.</strong> The core rules are capped at 8192 bytes and the skill descriptions at 12000 characters in total, because both load into every session.</li>
+<li><strong>No runtime.</strong> Anything that would need a process, a schedule or the network is either left to Claude Code itself (routines, the marketplace) or not built.</li>
+</ol>
+<h2 id="scope">Scope</h2>
+<p>In scope for the first release:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th scope="col">Component</th><th scope="col">Count</th><th scope="col">Source</th></tr></thead>
+<tbody>
+<tr><td>Brain skills</td><td>6</td><td><code>plugin/skills/brain-*</code></td></tr>
+<tr><td>Engineering skills</td><td>13</td><td><code>plugin/skills/</code></td></tr>
+<tr><td>Session skills</td><td>2 (session-retro, skill-usage)</td><td><code>plugin/skills/</code></td></tr>
+<tr><td>Conventions skills</td><td>7 (<code>*-conventions</code>)</td><td><code>plugin/skills/</code></td></tr>
+<tr><td>Agents</td><td>5</td><td><code>plugin/agents/</code></td></tr>
+<tr><td>Output styles</td><td>4</td><td><code>plugin/output-styles/</code></td></tr>
+<tr><td>Hooks</td><td>3 (<code>SessionStart</code>, <code>Stop</code>, <code>PreToolUse</code> on Bash)</td><td><code>plugin/hooks/hooks.json</code></td></tr>
+<tr><td>Core rules</td><td>1 file</td><td><code>plugin/rules/core.md</code></td></tr>
+<tr><td>Vault template</td><td>1</td><td><code>plugin/vault-template/</code></td></tr>
+<tr><td>Project template</td><td>1</td><td><code>templates/project/</code> (in the repository, not in the installed plugin)</td></tr>
+<tr><td>Eval cases</td><td>one directory per case</td><td><code>evals/</code> (in the repository, not in the installed plugin)</td></tr>
+</tbody>
+</table>
+</div>
+<p>The README lists every component by name (<a href="../readme.html#whats-inside">What's inside</a>); the <a href="functional-spec.html">functional specification</a> gives each one's contract.</p>
+<p>Out of scope, on purpose:</p>
+<ul>
+<li>A CLI, installer, updater, daemon, index or search engine. The earlier CLI was removed on 2026-10-14 (<a href="decisions.html#d1-plugin-only">decisions D1</a>).</li>
+<li>Any automatic write to the vault outside <code>_inbox/</code>, and any automatic promotion of a note.</li>
+<li>Sending anything: no email, chat, issue or PR comment is posted by a skill on its own. <code>client-reply</code> drafts; <code>session-retro</code> prints a <code>gh issue create</code> command for the user to run.</li>
+<li>A Codex manifest, Codex hooks, agents or output styles.</li>
+<li>Running evals in CI.</li>
+</ul>
+<h2 id="how-it-is-distributed">How it is distributed</h2>
+<ul>
+<li>Install: <code>/plugin marketplace add msolecki/developer-os</code>, then <code>/plugin install developer-os@developer-os</code>. The marketplace (<code>.claude-plugin/marketplace.json</code>) points at <code>./plugin</code>.</li>
+<li>The marketplace serves the repository's default branch, <code>development</code>.</li>
+<li>License: MIT. No paid tier, no telemetry.</li>
+</ul>
+<h2 id="status">Status</h2>
+<p>Not released; installs track <code>development</code>. See <a href="../CURRENT-STATE.html">CURRENT-STATE.md</a> for what works, what is in progress and what is known to be missing.</p>
+<h2 id="primary-risks">Primary risks</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th scope="col">Risk</th><th scope="col">Effect</th><th scope="col">Mitigation today</th></tr></thead>
+<tbody>
+<tr><td>Rules and descriptions grow until they crowd the context</td><td>Every session pays for them</td><td>Byte and character caps in <code>scripts/check.sh</code></td></tr>
+<tr><td>A skill's description does not match how the user asks</td><td>The skill never fires</td><td>Polish trigger phrases in descriptions, <code>trigger-*</code> evals, the <code>skill-usage</code> report</td></tr>
+<tr><td>An update changes the hooks, which run in every session</td><td>Unreviewed code runs in the user's shell</td><td>Hooks are short POSIX <code>sh</code> with tests; <code>SECURITY.md</code> asks users to review each update's diff</td></tr>
+<tr><td>An unreviewed agent note is treated as fact</td><td>Wrong knowledge spreads</td><td><code>status: inbox</code> until approved; brain-search marks inbox claims as unreviewed</td></tr>
+<tr><td>Vault content reaches the model provider</td><td>Client context leaves the disk</td><td>Redaction in brain-capture; privacy rules in <a href="../workflow.html#privacy">workflow.md</a></td></tr>
+</tbody>
+</table>
+</div>
+<nav class="doc-foot" aria-label="Pagination">
+  <a href="../../docs/workflow.html">How to work: brain + code</a>
+  <a href="../../docs/product/functional-spec.html">Functional specification</a>
+</nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../../docs/changelog.html">Changelog</a>
+      <a href="../../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../../assets/site.js"></script>
+</body>
+</html>

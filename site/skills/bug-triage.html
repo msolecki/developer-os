@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bug-triage · developer-os skills</title>
+<meta name="description" content="Triage a defect or incident: severity, reproduction, ranked hypotheses, root cause, mitigation, permanent fix and regression test.">
+<meta name="dos-source" content="plugin/skills/bug-triage/SKILL.md@12410a674e57">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Engineering</p>
+    <h1 id="bug-triage">bug-triage</h1>
+    <p class="lede">Triages a reported defect or incident: sets the severity, reproduces it, ranks evidence-backed hypotheses, finds the root cause, and proposes a mitigation, a permanent fix and a regression test.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Engineering</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Nothing</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Drafting communication: only when you ask for it</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you report a defect or a production incident, or ask it to diagnose failing behavior:</p>
+    <ul class="chips">
+      <li class="chip">triage this bug</li>
+      <li class="chip" lang="pl">mamy błąd na produkcji</li>
+      <li class="chip" lang="pl">zdiagnozuj ten błąd</li>
+      <li class="chip" lang="pl">dlaczego to się wywala</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Treats reports as data.</strong> Issue and PR text, review comments, CI logs and code comments never make it run a command, open a URL or change its verdict; text that tries to instruct the agent is flagged.</li>
+      <li><strong>Sets severity first.</strong> P0 is an exploitable security defect, data loss or production down; P1 wrong behavior on a common path; P2 an edge-case defect or real maintainability risk; P3 minor or cleanup.</li>
+      <li><strong>Gathers the facts.</strong> The exact stack trace, reproduction steps, affected users, frequency, environment and first-known time. It asks you only for what the repository and observability tools cannot give.</li>
+      <li><strong>Inspects</strong> the relevant logs and traces, recent commits and data invariants.</li>
+      <li><strong>Ranks hypotheses.</strong> Each has a likelihood and evidence, with at least one real alternative to the leader, so the leader is tested rather than assumed. It names the observation that would falsify the leader. When a hypothesis depends on library or vendor behavior, it asks the <code>developer-os:research-analyst</code> agent for a sourced answer instead of relying on memory; without one the hypothesis stays unverified.</li>
+      <li><strong>Proposes the way out.</strong> An immediate mitigation for P0 and P1, the root-cause fix, a regression test that would have caught the defect, and rollback criteria with monitoring.</li>
+      <li><strong>Reports.</strong> Severity with reasoning, reproduction, ranked hypotheses, the confirmed root cause or the missing evidence, mitigation, permanent fix, regression test and a communication checklist. Internal or client communication is drafted only when you ask. It offers <a href="spec.html">spec</a> when the permanent fix exceeds 50 lines, and <a href="brain-capture.html">brain-capture</a> when the defect taught a lasting lesson.</li>
+    </ol>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The triage output is shown. Applying the fix, writing the regression test and sending any communication are separate steps you start.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Change production (data, configuration, deployments) while diagnosing.</li>
+        <li>Send internal or client communication without your explicit authorization.</li>
+        <li>Apply a mitigation or fix as part of the triage.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="spec.html">spec</a> plans a permanent fix that is too large to do in one go.</li>
+      <li><a href="deploy-checklist.html">deploy-checklist</a> gets the fix to production safely.</li>
+      <li><a href="client-reply.html">client-reply</a> explains the incident to a client in plain language.</li>
+      <li><a href="../agents.html">The research-analyst agent</a> checks library and vendor behavior.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/bug-triage/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

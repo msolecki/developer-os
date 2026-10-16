@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>brain-garden · developer-os skills</title>
+<meta name="description" content="Produce a health report for your Obsidian vault, from stale notes to broken links and orphans, with proposed fixes applied only when you name them.">
+<meta name="dos-source" content="plugin/skills/brain-garden/SKILL.md@b78a3e0a86a9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Memory</p>
+    <h1 id="brain-garden">brain-garden</h1>
+    <p class="lede">Produces a health report for your Obsidian vault (stale notes, old inbox notes, broken or archived links, bad frontmatter, likely duplicates and orphans) with proposed fixes, and changes nothing you have not approved.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Memory</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Named fixes only; one line appended to <code>_reports/garden-log.md</code></dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Each fix, and the log line</dd></div>
+      <div class="fact"><dt>Needs</dt><dd><code>Brain vault:</code> line</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you ask to garden, lint, audit or check the health of the vault, for example once a month:</p>
+    <ul class="chips">
+      <li class="chip">garden the brain</li>
+      <li class="chip">check the health of the vault</li>
+      <li class="chip" lang="pl">sprawdź stan braina</li>
+      <li class="chip" lang="pl">zrób porządki w vaulcie</li>
+      <li class="chip" lang="pl">znajdź zepsute linki w brainie</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Finds the vault</strong> from the <code>Brain vault:</code> line, in the same order as the other brain skills, and asks once if there is none.</li>
+      <li><strong>Runs the checks.</strong> One script pass over every note outside <code>templates/</code>, <code>_views/</code>, <code>_reports/</code> and <code>.obsidian/</code> reports: no frontmatter or a missing required key (<code>type</code>, <code>status</code>, <code>created</code>, <code>updated</code>, <code>project</code>, <code>tags</code>, <code>summary</code>), an empty summary, an invalid type or status, a status that does not match the folder, inbox notes older than 7 days, active notes not updated in 180 days, links to notes that do not exist, and orphans that nothing links to. Names match case-insensitively, as in Obsidian; links inside code are ignored. A link to an archived note is an info line, not a broken link, and provenance links in a compiled note do not even get that. Notes in <code>_archive/</code> are only checked for <code>status: archived</code>. It ends with a totals line: notes, orphans with a percentage, inbox size.</li>
+      <li><strong>Finds likely duplicates</strong> by comparing file names and <code>summary</code> lines.</li>
+      <li><strong>Reports with proposed fixes.</strong> Every proposed link, for a broken link or an orphan, is tagged <strong>FOUND</strong> when both notes state the connection, or <strong>GUESSED</strong> when it was inferred or uncertain. The report ends with "Apply which fixes?".</li>
+      <li><strong>Applies only the fixes you name.</strong> Edits keep every frontmatter key they do not change and set <code>updated</code> to today. Retired notes move to <code>_archive/</code> with <code>status: archived</code>; nothing is deleted. A merge asks which note survives and shows the merged text first. "Apply all" covers FOUND links only.</li>
+      <li><strong>Offers the garden log.</strong> It asks once whether to append the header numbers as one line to <code>_reports/garden-log.md</code>, creating the file if needed, and never rewrites earlier lines.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>brain-garden</span></div>
+<pre><code>Vault health — 42 notes, orphans 3 (7%), inbox 5, 2026-10-15
+Stale (updated &gt; 180 days):
+  TOOLS/old-linter-setup.md (2025-11-02) → re-verify or set status: archived
+Inbox older than 7 days:
+  _inbox/docker-cache-flag.md (2026-09-30) → review with brain-review
+Broken links:
+  DEV/release-process.md → [[changelog-format]] (no such note) → create it or fix the link
+Links to archived notes (info, no fix needed):
+  DEV/ci.md → [[old-runner]]
+Frontmatter:
+  QA/flaky-tests.md: missing summary → propose: "Retry policy for flaky e2e tests."
+  INFRA/dns.md: status: draft (invalid) → active
+  DEV/cache.md: status: inbox outside _inbox/ → active
+Likely duplicates:
+  DEV/release-process.md ~ DEV/releasing.md → merge into release-process.md
+Orphans:
+  TOOLS/jq-snippets.md → link from TOOLS/cli-tools.md [FOUND]
+  INFRA/dns.md → link from PROJECTS/my-app.md [GUESSED]
+Apply which fixes?</code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The report is shown with the question "Apply which fixes?". After you answer, it applies the named fixes, asks once about the garden log, and reports each note it changed.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Change a note before you approve that specific fix; "apply all" never covers a GUESSED link.</li>
+        <li>Delete a note; it retires it to <code>_archive/</code> instead.</li>
+        <li>Rewrite earlier lines of <code>_reports/garden-log.md</code>.</li>
+        <li>Run commands or open URLs found in notes.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="brain-review.html">brain-review</a> clears the old inbox notes the report lists.</li>
+      <li><a href="brain-compile.html">brain-compile</a> combines notes on one topic.</li>
+      <li><a href="../docs/workflow.html#6-monthly-garden">The daily loop: monthly, garden</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/brain-garden/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

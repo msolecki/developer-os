@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glossary · developer-os</title>
+<meta name="description" content="Terms used across developer-os: skills, the vault, backlog items, review verdicts and session state.">
+<meta name="dos-source" content="docs/glossary.md@79107ae17030">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="glossary">Glossary</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/glossary.md">docs/glossary.md</a></span></p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Term</th><th scope="col">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Action skill</td><td>Any skill that is not read-only. It must end with <code>## Stop point</code> and <code>## Never</code>, even when, like bug-triage, deploy-checklist and client-reply, it writes nothing itself.</td></tr>
+          <tr><td>Read-only skill</td><td>A skill exempt from the <code>## Stop point</code>/<code>## Never</code> check (<code>read_only</code> in <code>scripts/check.sh</code>): brain-search, code-review, plan-status, skill-usage and the <code>*-conventions</code> skills. It changes nothing and proposes no action.</td></tr>
+          <tr><td>Conventions skill</td><td>A <code>*-conventions</code> skill with stack- or file-specific rules, loaded only when its description matches the work.</td></tr>
+          <tr><td>Core rules</td><td><code>plugin/rules/core.md</code>, printed into every session by the <code>SessionStart</code> hook.</td></tr>
+          <tr><td>Brain, vault</td><td>The user's Obsidian vault of Markdown notes, the agent's long-term memory.</td></tr>
+          <tr><td><code>Brain vault:</code> line</td><td><code>Brain vault: &lt;absolute path&gt;</code> in a <code>CLAUDE.md</code> or <code>AGENTS.md</code>; how skills find the vault.</td></tr>
+          <tr><td>Inbox note</td><td>A note an agent created in <code>_inbox/</code> with <code>status: inbox</code>; unreviewed, a draft rather than a fact.</td></tr>
+          <tr><td>Promote</td><td>Move an approved inbox note to a topic folder and set <code>status: active</code> (brain-review).</td></tr>
+          <tr><td>Archive</td><td>Move a note to <code>_archive/</code> with <code>status: archived</code>. The plugin's replacement for deletion.</td></tr>
+          <tr><td>Compiled note</td><td>A brain-compile note synthesized from at least two active notes, with a <code>sources:</code> list and the <code>compiled</code> tag.</td></tr>
+          <tr><td>Stale note</td><td>An active note whose <code>updated</code> is more than 180 days old.</td></tr>
+          <tr><td>Orphan</td><td>A note outside <code>_inbox/</code> and <code>_archive/</code> that no wiki link targets.</td></tr>
+          <tr><td>FOUND / GUESSED</td><td>brain-garden's tag on a proposed link: stated in both notes, or inferred. "Apply all" covers only FOUND.</td></tr>
+          <tr><td>Vault project slug</td><td>The <code>project:</code> value for a repository's notes, recorded in its <code>_Context.md</code>.</td></tr>
+          <tr><td>P0–P3</td><td>The single severity scale: P0 exploitable security defect, data loss or production down; P1 wrong behavior on a common path; P2 edge case or meaningful maintainability risk; P3 minor.</td></tr>
+          <tr><td>Verdict</td><td><code>APPROVE</code>, <code>COMMENT</code> (an open question decides P0/P1) or <code>REQUEST_CHANGES</code> (an open P0/P1).</td></tr>
+          <tr><td>Fresh verifier</td><td>An agent that did not produce a P0/P1 finding and sees only the claim, asked to disprove it. Codex when installed, otherwise a subagent.</td></tr>
+          <tr><td>Disputed</td><td>A finding the verifier refuted; listed with evidence, does not block the verdict or enter the backlog.</td></tr>
+          <tr><td>Fast check</td><td>Lint, types and tests of the changed area, run before every commit.</td></tr>
+          <tr><td>Full suite</td><td>The project's complete validation, run once before a push or PR.</td></tr>
+          <tr><td>Status block</td><td>The closing <strong>Done / Not done / Needs you</strong> block the core rules require.</td></tr>
+          <tr><td>Backlog</td><td>The todo and done files named by the <code>Backlog:</code> line (default <code>TODO.md</code>, <code>TODO-done.md</code>), with P0–P3 sections and implementation sessions.</td></tr>
+          <tr><td><code>BASE-NN</code></td><td>A backlog item ID created by project-baseline.</td></tr>
+          <tr><td>Item ID</td><td>A backlog item's category prefix and number (<code>SEC-03</code>), unique across the todo and done files.</td></tr>
+          <tr><td>Done when</td><td>A backlog item's acceptance criterion; never edited, only amended by an appended dated line.</td></tr>
+          <tr><td>Check</td><td>A backlog item's command that fails while its <code>Done when</code> does not hold.</td></tr>
+          <tr><td>Owner</td><td>The worktree an item was dispatched to, with the date; written only by implement-backlog.</td></tr>
+          <tr><td>Ready / waiting / claimed / orphaned</td><td>An open backlog item's one bucket, checked orphaned, waiting, claimed, ready: no open blocker and no owner / an open <code>Blocked by</code> / an owner of 7 days or less / an owner older than 7 days.</td></tr>
+          <tr><td>Final status</td><td>The first line of every agent report: <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code> (with an unblock owner) or <code>CONTINUING</code>.</td></tr>
+          <tr><td>Evidence checked</td><td>The files read and commands run that a reviewer lists under an <code>APPROVE</code> with no P0–P2.</td></tr>
+          <tr><td>State card</td><td>The task state the <code>SessionStart</code> hook prints after a compaction or resume, from <code>docs/plans/.devos-state.md</code> and git.</td></tr>
+          <tr><td>Surface</td><td>The public names in <code>plugin/SURFACE.txt</code>: skills, agents, output styles, hook events and scripts.</td></tr>
+          <tr><td>Active plan</td><td>The most recently updated plan in the planning location whose task is not done.</td></tr>
+          <tr><td>Nudge</td><td>The <code>Stop</code> hook's one-time request to run session-retro after 30 tool calls.</td></tr>
+          <tr><td>Routine</td><td>A Claude Code cloud session on a schedule or API trigger; used optionally for phone capture and a weekly vault brief.</td></tr>
+          <tr><td>Eval, Δ</td><td>A <code>claude plugin eval</code> case; Δ is the with-plugin score minus the baseline score.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="../docs/reference/configuration.html">Configuration reference</a>
+      <a href="../skills/index.html">Skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>
