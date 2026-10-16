@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Architecture overview · developer-os</title>
 <meta name="description" content="How developer-os is laid out, what Claude Code loads into a session and when, and how its hooks, skills and data flows fit together.">
-<meta name="dos-source" content="docs/architecture/overview.md@e59827b35fac">
+<meta name="dos-source" content="docs/architecture/overview.md@ebe60201dede">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -57,7 +57,7 @@ tests/*.test.sh                   hook tests
 .agnix.toml                       agnix lint settings for CI
 scripts/check.sh                  the repository suite, also run by CI
 docs/                             this documentation; docs/plans/ is git-ignored
-site/index.html                   public landing page, published by .github/workflows/pages.yml</code></pre>
+site/                             public documentation site, published by .github/workflows/pages.yml</code></pre>
     <p>Only <code>plugin/</code> reaches a user's machine through the marketplace. <code>templates/</code> and <code>evals/</code> stay in
     the repository; skills that mention them say so.</p>
     <h2 id="2-load-model">2. Load model</h2>

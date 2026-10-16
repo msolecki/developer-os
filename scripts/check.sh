@@ -214,8 +214,8 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
     else
       s.scan(/<meta name="dos-source" content="([^"@]+)@([^"]*)">/) do |src, h|
         (errs << "site: #{p}: dos-source #{src} does not exist"; next) unless File.file?(src)
-        (errs << "site: #{p}: #{src} changed since the page was written (page #{h}, source #{sha[src]}); update the page, then its dos-source hash"; next) unless h == sha[src]
         named[src] = p
+        (errs << "site: #{p}: #{src} changed since the page was written (page #{h}, source #{sha[src]}); update the page, then its dos-source hash"; next) unless h == sha[src]
       end
       targets = s.gsub(/<pre.*?<\/pre>/m, "").scan(/\s(?:href|src)="([^"]+)"/).flatten
       base = File.dirname(p)

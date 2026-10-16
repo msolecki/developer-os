@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Development guide · developer-os</title>
 <meta name="description" content="How to change the developer-os plugin, check it with scripts/check.sh and ship it.">
-<meta name="dos-source" content="docs/development.md@129ff4efaa86">
+<meta name="dos-source" content="docs/development.md@a70c20494b47">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -55,16 +55,17 @@
           <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or all together exceed 12000</td></tr>
           <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code> (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>)</td></tr>
           <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>
-          <tr><td>Local paths</td><td>A file under <code>plugin/</code> contains <code>/Users&#47;</code>, <code>/home&#47;</code>, <code>~&#47;www</code> or <code>.claude&#50;</code></td></tr>
+          <tr><td>Local paths</td><td>A file under <code>plugin/</code> or <code>site/</code> contains <code>/Users&#47;</code>, <code>/home&#47;</code>, <code>~&#47;www</code> or <code>.claude&#50;</code></td></tr>
           <tr><td>YAML</td><td>A <code>*.base</code> or <code>evals/*.yaml</code> file does not parse</td></tr>
           <tr><td>Hook targets</td><td>A <code>${CLAUDE_PLUGIN_ROOT}/…</code> path in <code>hooks.json</code> does not exist</td></tr>
           <tr><td>Agents</td><td>An agent lacks <code>## Final status</code> or one of <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code></td></tr>
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>
           <tr><td>Stale names</td><td>A skill, agent or output-style name removed from <code>plugin/SURFACE.txt</code> in the uncommitted diff still appears as a bare word (the prefixed form fails in References) in <code>plugin/</code>, <code>templates/</code> or <code>README.md</code>; the check runs before the rename is committed</td></tr>
-          <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code> or <code>SECURITY.md</code> ("N skills", "N eval cases"; not "N cases of") differs from the disk</td></tr>
+          <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code> or a page under <code>site/</code> ("N skills", "N eval cases"; not "N cases of") differs from the disk</td></tr>
           <tr><td>Core-rules size</td><td><code>plugin/rules/core.md</code> exceeds 8192 bytes, or the state-card cap in <code>session-start.sh</code> no longer fits under the 10,000-character hook output limit</td></tr>
           <tr><td>References</td><td>A <code>developer-os:&lt;name&gt;</code> string in <code>plugin/</code> (Markdown and hook scripts), <code>docs/</code>, <code>templates/</code>, <code>evals/</code>, <code>README.md</code>, <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code> or <code>SECURITY.md</code> names no skill, agent or output style</td></tr>
           <tr><td>Links</td><td>A relative Markdown link outside fenced or inline code does not resolve from its own file, or its <code>#fragment</code> matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, <code>-1</code>, <code>-2</code> for repeated headings)</td></tr>
+          <tr><td>Site</td><td>A doc, root document, skill, agent or output style has no page under <code>site/</code> that names it in a <code>dos-source</code> meta; a page's hash differs from its source's; a relative <code>href</code> or <code>src</code> in <code>site/</code>, or a page in <code>NAV</code> in <code>site/assets/site.js</code>, does not resolve or names no <code>id</code> in the target page. It reports every failure at once</td></tr>
           <tr><td>Script tests</td><td>Any <code>tests/*.test.sh</code> exits non-zero; <code>tests/check.test.sh</code> runs only when <code>CI</code> is set</td></tr>
           <tr><td>Plugin validation</td><td><code>claude plugin validate . --strict</code> or <code>claude plugin validate plugin --strict</code> fails on an error or on any warning (such as an unknown manifest key) other than a missing plugin <code>version</code>; the <code>Found N warnings</code> count must match the tolerated lines</td></tr>
           <tr><td>Secrets</td><td><code>gitleaks dir</code> finds a secret in tracked or untracked-not-ignored files</td></tr>
@@ -78,14 +79,21 @@
     every pull request. Before the check it runs agnix (<code>agent-sh/agnix</code> v0.57.0, the release binary pinned by its
     SHA-256, <code>--strict</code>, target <code>claude-code</code>), a static lint of skills, hooks and manifests configured in
     <code>.agnix.toml</code>; every rule disabled there carries its reason. It pins <code>actions/checkout</code> to a commit SHA, does not persist credentials, has
-    read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.300</code> (with <code>--ignore-scripts</code>, then <code>claude --version</code>) and a gitleaks
+    read-only <code>contents</code> permission, installs <code>@anthropic-ai/claude-code@2.1.300</code> (with <code>--ignore-scripts</code>, then only its own <code>install.cjs</code>, which links the native binary, then <code>claude --version</code>) and a gitleaks
     release verified by SHA-256, and, on a pull request, <code>gitleaks git</code> over the PR's commits, so a secret added and
     removed inside one PR still fails. The same step fails a PR that changes <code>.gitleaks.toml</code> or
     <code>.gitleaksignore</code> or adds a <code>gitleaks:allow</code> marker; the workflow file itself comes from the PR, so
     only a branch ruleset that requires review of <code>.github/</code> stops a PR that edits the step away.</p>
-    <p><code>.github/workflows/pages.yml</code> publishes <code>site/</code> to GitHub Pages on a push to <code>development</code> that
-    changes it, or by hand. The repository's Pages source must be "GitHub Actions". The page restates
-    the README, so a change to the hooks, rules or skills it describes updates <code>site/index.html</code> too.</p>
+    <h2 id="the-site">The site</h2>
+    <p><code>site/</code> is the public documentation site, hand-written HTML with no build:</p>
+    <ul>
+      <li><code>index.html</code>, the landing page;</li>
+      <li><code>docs/</code>, one page per <code>docs/*.md</code> at the same path, plus <code>readme.html</code>, <code>changelog.html</code>, <code>contributing.html</code> and <code>security.html</code> for the root documents;</li>
+      <li><code>skills/</code>, an index and one page per skill; <code>agents.html</code> and <code>output-styles.html</code>;</li>
+      <li><code>assets/site.css</code> and <code>assets/site.js</code> (the sidebar order in <code>NAV</code>, on-page contents, copy buttons).</li>
+    </ul>
+    <p>Each page that restates a source carries <code>&lt;meta name="dos-source" content="&lt;source&gt;@&lt;hash&gt;"&gt;</code>: the first 12 hex digits of the source's SHA-256 with any <code>last-verified:</code> line removed, so re-verifying a doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style, the Site stage names the page to refresh: update its text, then its hash (<code>sed '/^last-verified: /d' &lt;source&gt; | shasum -a 256 | cut -c1-12</code>). A new doc or skill needs a new page, and a new doc an entry in <code>NAV</code>. The landing page and the skills index restate many sources and carry no hash; update them by hand when the hooks, rules or skills they describe change. <code>CURRENT-STATE.md</code> and <code>CHANGELOG.md</code> change on most pull requests, so their pages usually do too.</p>
+    <p><code>.github/workflows/pages.yml</code> publishes <code>site/</code> to GitHub Pages on a push to <code>development</code> that changes it, or by hand. The repository's Pages source must be "GitHub Actions".</p>
     <h2 id="script-tests">Script tests</h2>
     <p><code>tests/session-start.test.sh</code> runs the SessionStart hook in a temporary git repository and checks
     that the rules come first, the card appears only after <code>compact</code>/<code>resume</code>, and the card is cut to its

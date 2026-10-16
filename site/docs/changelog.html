@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@64eb416c78b3">
+<meta name="dos-source" content="CHANGELOG.md@5ea6dfd51cd3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -41,8 +41,9 @@ this repository as a plugin marketplace. It replaces the earlier Homebrew CLI, w
 released; the CLI history is archived at the git tag <code>archive/cli-v0</code>.</p>
     <h3 id="added">Added</h3>
     <ul>
-<li>A public landing page, <code>site/index.html</code>, published to GitHub Pages by
-<code>.github/workflows/pages.yml</code>.</li>
+<li>A public documentation site in <code>site/</code>, published to GitHub Pages by <code>.github/workflows/pages.yml</code>:
+a landing page, one page per document, skill, agent and output style, and a Site stage in
+<code>scripts/check.sh</code> that fails when a page falls behind its source.</li>
 <li>Brain skills that read and write an Obsidian vault with the agent's own file tools: brain-setup,
 brain-search, brain-capture, brain-review, brain-garden and brain-compile. brain-setup creates a
 vault from the template or connects an existing one, and adds the <code>Brain vault:</code> line and the

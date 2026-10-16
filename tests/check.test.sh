@@ -89,6 +89,30 @@ run "a state-card cap that overflows 10000" fail "state card cap 2000 leaves no 
 echo 'See /Users/bob/x.' > "$r/plugin/notes.txt"
 run "a local path in an untracked plugin file" fail "local path"
 
+# rehash SOURCE PAGE: rewrites PAGE's dos-source hash for SOURCE, as a maintainer does after refreshing the page.
+rehash() {
+  h=$(sed '/^last-verified: /d' "$r/$1" | shasum -a 256 | cut -c1-12)
+  edit "$2" "s|content=\"$1@[0-9a-f]*\"|content=\"$1@$h\"|"
+}
+
+echo 'A new term.' >> "$r/docs/glossary.md"
+run "a doc changed without its site page" fail "site: site/docs/glossary.html: docs/glossary.md changed since the page was written"
+
+edit docs/glossary.md 's/^last-verified: .*/last-verified: 2030-01-01/'
+run "a re-verified doc keeps its site page current" pass
+
+rm "$r/site/skills/spec.html"
+run "a skill without a site page" fail "site: site/skills/spec.html: missing"
+
+edit site/docs/glossary.html 's|"../skills/index.html">Skills</a>|"../skills/nope.html">Skills</a>|'
+run "a site link to a missing page" fail "site: site/docs/glossary.html: ../skills/nope.html does not resolve"
+
+edit site/docs/glossary.html 's|"../docs/index.html">Docs</a>|"../docs/index.html#nope">Docs</a>|'
+run "a site link to a missing id" fail "names no id in site/docs/index.html"
+
+edit site/index.html 's|<h2>The skill library.</h2>|<h2>The 99 skills.</h2>|'
+run "a wrong count on the site" fail "says 99 skills"
+
 jq 'del(.version)' "$r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$r/plugin/.claude-plugin/plugin.json"
 printf '\n## [0.0.1]\n\nShips 99 skills.\n' >> "$r/CHANGELOG.md"
 cat >> "$r/docs/development.md" <<'EOF'
@@ -103,6 +127,8 @@ Only 3 cases of failure.
 
 [a](#zażółć-gęślą-jaźń) [b](#setup-1) [c](#see-the-guide-now)
 EOF
+rehash CHANGELOG.md site/docs/changelog.html
+rehash docs/development.md site/docs/development.html
 run "no plugin version, a count in a released CHANGELOG section, 'N cases of' prose, diacritic, repeated and linked headings pass" pass
 
 [ "$failed" -eq 0 ] && echo "check: all passed"

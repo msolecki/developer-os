@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Current state · developer-os</title>
 <meta name="description" content="What works in developer-os today, what is in progress, and what is known to be broken or missing.">
-<meta name="dos-source" content="docs/CURRENT-STATE.md@991573989e8a">
+<meta name="dos-source" content="docs/CURRENT-STATE.md@f9f9423a7544">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -108,7 +108,7 @@ reads the trace, and a run at <code>e8da1f7b</code> passes: 1.00 with the plugin
 <tr><td>R7</td><td>P3</td><td>No release procedure</td><td>Pinning by marketplace ref is documented and <code>SECURITY.md</code> supports only the latest commit, but there is no release tag or procedure (tags, changelog date); <code>main</code> is not kept in step with <code>development</code>, yet <code>vault-template/README.md</code> links the workflow guide on <code>main</code>.</td></tr>
 <tr><td>R1</td><td>P3</td><td><code>plugin/hooks/guard.sh</code></td><td>Accepted (D6): a command on the line after an install without a package asks, because the guard also reads newlines as spaces so a quoted multi-line argument cannot hide a flag or a package.</td></tr>
 <tr><td>R13</td><td>P3</td><td><code>plugin/hooks/guard.sh</code></td><td>Lockfile-changing <code>update</code>/<code>remove</code> stay outside the guard's categories, by decision (Q3 A); the normal permission flow still applies. Known silent passes, all present before the 2026-10-16 fixes too: a word built at run time (<code>$(command -v npm) install x</code>), JSON <code>\u</code> escapes and ANSI-C escapes (<code>$'\x2d\x2dforce'</code>), digits in a flag cluster (<code>-4f</code>), abbreviated <code>--mirr</code>, a force refspec from config (<code>remote.origin.push=+main</code>), unquoted or environment-defined git aliases, and install aliases outside the list (<code>bun a</code>, <code>npm install-test</code>). The guard is a first prompt, not a sandbox.</td></tr>
-<tr><td>R15</td><td>P3</td><td><code>.github/workflows/check.yml</code></td><td>Fixed, not yet confirmed: the pinned Claude Code installs with <code>--ignore-scripts</code>. Until a pull-request CI run shows <code>claude --version</code> printing, it is unverified; if it fails, revert and accept the fresh dependency resolution.</td></tr>
+<tr><td>R15</td><td>P3</td><td><code>.github/workflows/check.yml</code></td><td>Fixed and confirmed in the #76 CI run: the pinned Claude Code installs with <code>--ignore-scripts</code>, then runs only its own <code>install.cjs</code>; <code>claude --version</code> prints <code>2.1.300</code>.</td></tr>
 <tr><td>R16</td><td>P3</td><td><code>.github/workflows/check.yml</code></td><td>Fixed, not yet confirmed: a gitleaks step scans the pull request's commits, so a secret added and removed within one PR fails CI. It has run only locally.</td></tr>
 <tr><td>R17</td><td>P3</td><td>README</td><td>The claim that an <code>ask</code> becomes a denial in <code>claude -p</code> was not re-verified; proving it needs a live <code>claude -p</code> run.</td></tr>
 </tbody>

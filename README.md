@@ -123,7 +123,7 @@ see [Claude-only features](docs/workflow.md#claude-only-features).
 
 ## Documentation
 
-- [Landing page](https://msolecki.github.io/developer-os/): the public overview ([source](site/index.html)), published to GitHub Pages by `.github/workflows/pages.yml`.
+- [Landing page](https://msolecki.github.io/developer-os/): the public documentation site ([source](site/index.html)), published to GitHub Pages by `.github/workflows/pages.yml`.
 - [Documentation index](docs/index.md): product overview, functional specification, decisions,
   architecture, hooks and configuration reference, development guide, pitfalls, current state.
 - [How to work: brain + code](docs/workflow.md): the workflow, the vault layout, privacy.
