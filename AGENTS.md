@@ -26,6 +26,8 @@ copyable project templates under `templates/`. No runtime and no build; see [REA
 
 The records are in [docs/product/decisions.md](docs/product/decisions.md); the stages in [docs/development.md](docs/development.md#the-check).
 
+Backlog: docs/plans/backlog.md, docs/plans/backlog-done.md
+
 ## Documentation
 
 [docs/index.md](docs/index.md) routes a task to its doc; [docs/development.md](docs/development.md), [docs/product/decisions.md](docs/product/decisions.md), [CONTRIBUTING.md](CONTRIBUTING.md).

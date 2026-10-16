@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-16
+
 ### Added
 - A 1024×1024 plugin icon at `plugin/.claude-plugin/icon.png` for the Claude plugin directory listing.
 - Four negative eval cases: deploy-checklist-no-provider-cli, docs-sync-no-write,
@@ -23,8 +25,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `tests/skill-usage.test.sh` fails in CI instead of skipping when `rg` is missing; CI installs
   ripgrep. The Pages workflow deploys only from `main`.
 - The docs match the check: plugin validation fails on any `--strict` warning, Pages publishes from
-  `main`, and CURRENT-STATE carries the measured budgets. The README tells pre-release `0.1.0`
-  installs to reinstall once.
+  `main`, and CURRENT-STATE carries the measured budgets.
 - install-codex creates its `AGENTS.md` backup with `mktemp`, so a planted symlink at the backup name
   can no longer redirect the write.
 - The guard sees through brace expansion: `git push origin {-f,}` and `-{,f}` now ask.
