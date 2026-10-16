@@ -163,9 +163,9 @@ Release, by hand:
 2. When `check` is green on `development`: `git push origin origin/development:main`. Only a fast-forward
    is accepted; the `main` ruleset lets the repository admin push without a pull request (bypass mode "Always"), so `main`
    keeps the same SHAs as `development`.
-3. `git tag v<version> origin/main && git push origin v<version>` at once (a fetch prunes an unpushed
-   tag), then `gh release create v<version> --notes-file <the changelog section>`. The `release-tags`
-   ruleset forbids moving or deleting a `v*` tag.
+3. `git tag -a v<version> -m v<version> origin/main && git push origin v<version>` at once (a fetch
+   prunes an unpushed tag; a lightweight `git tag` stops with "no tag message?" where `tag.gpgSign` is set),
+   then `gh release create v<version> --notes-file <the changelog section>`. The `release-tags` ruleset forbids moving or deleting a `v*` tag.
 4. Pushing `main` publishes `site/` to GitHub Pages.
 
 ## Plans
