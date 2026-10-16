@@ -60,7 +60,9 @@ SHA-256, `--strict`, target `claude-code`), a static lint of skills, hooks and m
 `.agnix.toml`; every rule disabled there carries its reason. It pins `actions/checkout` to a commit SHA, does not persist credentials, has
 read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then `claude --version`) and a gitleaks
 release verified by SHA-256, and, on a pull request, `gitleaks git` over the PR's commits, so a secret added and
-removed inside one PR still fails.
+removed inside one PR still fails. The same step fails a PR that changes `.gitleaks.toml` or
+`.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
+only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
 
 ## Script tests
 

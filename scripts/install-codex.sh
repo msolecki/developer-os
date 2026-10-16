@@ -201,7 +201,8 @@ for m in "$skills_dir"/*/"$marker"; do
   dest=${m%/*}
   [ ! -L "$dest" ] || continue
   [ ! -d "$plugin/skills/${dest##*/}" ] || continue
-  # Only an untouched copy made from this checkout: a renamed or edited copy, or another checkout's, stays.
+  # Only a copy made from this checkout with no added files: a renamed copy, one with extra files, or
+  # another checkout's copy stays. An edited SKILL.md is not detected and is removed with the copy.
   if [ "$(cat "$m")" != "developer-os Codex copy of $plugin/skills/${dest##*/}" ] ||
     [ -n "$(ls -A "$dest" | grep -vxF -e SKILL.md -e "$marker")" ]; then
     echo "warning: kept $dest: not an untouched copy from this checkout" >&2; continue
