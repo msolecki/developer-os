@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: docs-sync-no-write
+tags: [negative]
+plugins: ["../../plugin"]
+context:
+  scaffold_script: scaffold.sh

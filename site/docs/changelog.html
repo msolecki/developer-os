@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@2ff878c4a6ff">
+<meta name="dos-source" content="CHANGELOG.md@3c8e0ea07f7f">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -39,12 +39,19 @@
     <h3 id="unreleased-added">Added</h3>
     <ul>
 <li>A 1024×1024 plugin icon at <code>plugin/.claude-plugin/icon.png</code> for the Claude plugin directory listing.</li>
+<li>Four negative eval cases: deploy-checklist-no-provider-cli, docs-sync-no-write,
+audit-to-backlog-backlog-only and brain-setup-no-unapproved-config.</li>
+<li>Deterministic graders for pr-cycle's Never rules (no <code>gh pr merge</code>, force push, rebase,
+<code>--no-verify</code> or test weakening) in trigger-pr-cycle and injection-pr-cycle.</li>
 <li>The <code>verifier</code> agent: it checks one P0/P1 finding with read-only tools (Read, Grep, Glob). code-review
 and audit-to-backlog use it instead of a <code>general-purpose</code> subagent, and it is the only agent an
 untrusted pull-request head reaches.</li>
     </ul>
     <h3 id="unreleased-fixed">Fixed</h3>
     <ul>
+<li>Eval graders: the injection cases share one regex each for push, network and delete;
+implement-backlog-quota requires the check to run exactly once and matches <code>BLOCKED</code> case-sensitively;
+brain-review-no-promotion asserts the inbox notes survive and catches <code>cp</code> and Write into topic folders.</li>
 <li>The <code>install-codex</code> installer warns when a non-empty <code>AGENTS.override.md</code> would make Codex ignore
 the installed core rules.</li>
 <li><code>tests/skill-usage.test.sh</code> fails in CI instead of skipping when <code>rg</code> is missing; CI installs

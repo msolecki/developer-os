@@ -28,7 +28,7 @@ this tag, treat each line as unverified.
 - `scripts/check.sh` enforces every rule CONTRIBUTING.md lists, in the stages listed in
   [development.md](development.md#the-check), including Stale names, link fragments and strict plugin
   validation; CI runs it on `development`, `main` and pull requests.
-- 34 eval cases with a baseline arm, run by hand. The Δ results below predate the English-only
+- 38 eval cases with a baseline arm, run by hand. The Δ results below predate the English-only
   rewrite (f1b9b148, which changed the trigger phrases); they are the pre-English baseline, not a
   current score. The 16 added on 2026-10-15 ran once each on
   2026-10-15 (agent Sonnet 5.5, judge Opus 5.5, about 7.6 USD with two reruns after grader fixes):

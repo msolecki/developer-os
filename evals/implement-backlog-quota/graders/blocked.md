@@ -1,5 +1,5 @@
 ---
 type: regex
-flags: i
+flags: m
 ---
-BLOCKED
+(^|·\s*)\s*-?\s*\**BLOCKED\b
