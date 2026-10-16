@@ -12,7 +12,7 @@ argument-hint: "[feature description]"
 2. Inspect relevant code before locking decisions.
 3. Write the specification to the repository's documented specification location as `<YYYY-MM-DD-feature>-spec.md`; if none is documented, propose `docs/specs/` and confirm. Never write it into the planning location: a spec there is read as the active plan. Cover goals, non-goals, flows, technical design, decisions with rejected alternatives (one line each), contracts, failure handling, acceptance criteria, tests, and unresolved decisions.
 4. Write the implementation plan to the repository's documented plan location as `<YYYY-MM-DD-feature>.md`. Start it with the goal, the decisions, and a `Status: in progress | done` line; write every step as a `- [ ]` checkbox with What, Where, How, Test, complexity (S/M/L), and a deployable invariant; end with `## Open questions` and a `Next action:` line. plan-status and session-retro read these.
-5. Offer to add the plan's steps to the project backlog: find or create its files and write each step as an item, both exactly as `developer-os:audit-to-backlog` does (next free category ID; complexity becomes `Size`; the step's acceptance criterion `Done when`; its Test a runnable `Check`), so `implement-backlog` can execute them.
+5. Offer to add the plan's steps to the project backlog: find or create its files and write each step as an item, both exactly as `developer-os:audit-to-backlog` does (next free category ID; complexity becomes `Size`; the step's acceptance criterion `Done when`; its Test a runnable `Check`), and add a `Session N: <ID>, …` line for them under `## Implementation sessions`, so `implement-backlog` can execute them.
 6. Stop and hand implementation to a fresh session using the plan path.
 
 ## Stop point

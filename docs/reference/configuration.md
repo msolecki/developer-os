@@ -29,7 +29,7 @@ stay symlinks.
 
 | Setting | Where | Read by | Default without it |
 |---|---|---|---|
-| `Backlog: <todo path>, <done path>` | Project `AGENTS.md` or `CLAUDE.md` | audit-to-backlog, implement-backlog, plan-status, project-baseline, spec | `TODO.md`, `TODO-done.md`; audit-to-backlog and project-baseline ask before creating them and write the line |
+| `Backlog: <todo path>, <done path>` | Project `AGENTS.md` or `CLAUDE.md` | audit-to-backlog, implement-backlog, plan-status, project-baseline, spec, session-retro, the `SessionStart` hook (skips them as plans) | `TODO.md`, `TODO-done.md`; audit-to-backlog and project-baseline ask before creating them and write the line |
 | Planning location | Project `AGENTS.md` or `CLAUDE.md` | Core rules, plan-status, spec, session-retro | `docs/plans/<YYYY-MM-DD-task>.md`, git-ignored |
 | Specification location | Project `AGENTS.md` or `CLAUDE.md` | spec | spec proposes `docs/specs/` and asks |
 | Fast check and full suite commands | Project `AGENTS.md` or `CLAUDE.md` | Core rules, pr-cycle, fix-pr, implement-backlog, deploy-checklist | Derived from the package manifest, README, CONTRIBUTING or Makefile; otherwise the agent asks before committing |

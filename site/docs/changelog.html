@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@4dbf108d0203">
+<meta name="dos-source" content="CHANGELOG.md@c3583be056f9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -36,6 +36,19 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h3 id="unreleased-changed">Changed</h3>
+    <ul>
+<li>implement-backlog integrates on a local batch branch and fast-forwards the base only after the
+review passes (<code>APPROVE</code>, or a <code>COMMENT</code> the user answered); a reviewer that ended <code>BLOCKED</code> is not
+a pass. It runs a delegate's <code>Check</code> in its worktree, leaves <code>Manual:</code> items open for the user to confirm, skips
+lines outside the backlog format as <code>unformatted</code>, falls through to the next session with ready
+items, and proposes review findings as backlog items instead of writing them.</li>
+<li>A git-ignored backlog keeps its <code>Owner</code> claims uncommitted and runs the batch sequentially;
+audit-to-backlog and project-baseline warn before choosing such a path.</li>
+<li>The <code>SessionStart</code> state card, plan-status and session-retro no longer treat the <code>Backlog:</code> files
+as plans. code-review relays the reviewer's report after verifying its P0/P1 findings.</li>
+<li>project-baseline and spec add an implementation-session line for the items they write.</li>
+    </ul>
     <h2 id="010---2026-10-16">[0.1.0] - 2026-10-16</h2>
     <p>First public release. developer-os is now a Markdown-only plugin for Claude Code, installed from
 this repository as a plugin marketplace. It replaces the earlier Homebrew CLI, which was never

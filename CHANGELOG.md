@@ -4,6 +4,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- implement-backlog integrates on a local batch branch and fast-forwards the base only after the
+  review passes (`APPROVE`, or a `COMMENT` the user answered); a reviewer that ended `BLOCKED` is not
+  a pass. It runs a delegate's `Check` in its worktree, leaves `Manual:` items open for the user to confirm, skips
+  lines outside the backlog format as `unformatted`, falls through to the next session with ready
+  items, and proposes review findings as backlog items instead of writing them.
+- A git-ignored backlog keeps its `Owner` claims uncommitted and runs the batch sequentially;
+  audit-to-backlog and project-baseline warn before choosing such a path.
+- The `SessionStart` state card, plan-status and session-retro no longer treat the `Backlog:` files
+  as plans. code-review relays the reviewer's report after verifying its P0/P1 findings.
+- project-baseline and spec add an implementation-session line for the items they write.
+
 ## [0.1.0] - 2026-10-16
 
 First public release. developer-os is now a Markdown-only plugin for Claude Code, installed from
