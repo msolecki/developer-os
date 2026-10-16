@@ -1,15 +1,15 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-15
+last-verified: 2026-10-16
 ---
 
 # Current state
 
-Verified at commit: `933b0008` (the squash merge of #72)
+Verified at commit: `a4c66e96` (branch `feat/audit-fixes-2026-10-15`, the audit fixes of 2026-10-16 after the independent and security reviews)
 
 What is true at the commit above, checked against the files and by running `CI=1 scripts/check.sh`
-(green, including the five script tests). agnix 0.57.0 `--strict` reports no issues (CC-PL-004, the missing `version`, is disabled for plugin.json with its reason). If `development` has moved far past
+(green, including the six script tests). agnix 0.57.0 `--strict` reports no issues (CC-PL-004, the missing `version`, is disabled for plugin.json with its reason). If `development` has moved far past
 this commit, treat each line as unverified.
 
 ## Works
@@ -17,9 +17,10 @@ this commit, treat each line as unverified.
 - Install from the marketplace on `development`: `.claude-plugin/marketplace.json` → `plugin/`.
 - 28 skills, 5 agents, 4 output styles, 3 hooks, as listed in
   [product/functional-spec.md](product/functional-spec.md).
-- Per-session cost: core rules 8158 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
+- Per-session cost: core rules 8144 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
   state card of at most 1024 bytes after compaction or resume.
-- The Codex installer fits all 28 skills in 7824 description characters of Codex's 8000.
+- The Codex installer fits all 28 skills in 7892 bytes of descriptions, within Codex's 8000-character
+  budget (it counts bytes, which are never fewer than characters).
 - The shared "Locate the vault" paragraph is identical in brain-capture, brain-compile,
   brain-garden, brain-review and brain-search; the Vault paragraph stage of `scripts/check.sh` fails
   when the first paragraph under `## 1. Locate the vault` differs between them.
@@ -62,23 +63,23 @@ The findings of the 2026-10-15 audit are fixed in #72, except what was deliberat
 done: #23 (qa-expert's assessment mode stays prose-only), #49 (capture-nudge keeps its transcript
 scan, about 0.3 s on a 52 MB transcript), and eval cases still missing for brain-setup,
 audit-to-backlog, deploy-checklist, docs-sync, skill-usage and the pr-cycle fork gate and thread
-order.
+order, and for the seven `*-conventions` skills and the five agents (passive reference, no gate;
+[development.md](development.md) step 6). The trigger-typescript-conventions case is not written.
+
+The findings of the follow-up audit (decisions answered 2026-10-16) are fixed on `feat/audit-fixes-2026-10-15`; what still needs
+the user:
+
+- Eval re-runs by hand (`claude plugin eval`, paid): brain-garden-no-apply once, implement-backlog-owner
+  twice, trigger-plan-status once, and optionally code-review-clean-diff once. The graders and
+  scaffolds changed; the scores above predate the change.
+- A pull-request CI run to confirm R15 and R16 (below).
 
 | ID | Sev | Where | Problem |
 |---|---|---|---|
-| R1 | P2 | `plugin/hooks/guard.sh` | Newlines are not segment separators, so `pnpm install` followed by another command on the next line asks. Reproduced. |
-| R2 | P3 | `plugin/hooks/guard.sh` | Any non-dash word after `install` asks: `pnpm install --filter web`, `npm install --prefix dir`. Reproduced. |
-| R3 | P2 | `plugin/skills/brain-setup/SKILL.md`, step 3 | The config-edit snippet sets `$tmp`, `$S`, `$V`, `$C` in one block and uses them after the approval pause; Bash calls do not keep variables, so the second half runs with empty values unless the agent re-assigns them. `diff` errors when `settings.json` is missing. |
-| R4 | P2 | `plugin/skills/brain-setup/SKILL.md`, step 3 | The `sed` replacement of the `Brain vault:` line corrupts a path containing `&`, a pipe or a backslash. |
 | R7 | P3 | No release procedure | Pinning by marketplace ref is documented and `SECURITY.md` supports only the latest commit, but there is no release tag or procedure (tags, changelog date); `main` is not kept in step with `development`, yet `vault-template/README.md` links the workflow guide on `main`. |
-| R8 | P3 | `plugin/vault-template/README.md` | Says to add three entries from `.obsidian/types.json`; the file has four (`sources` as multitext). |
-| R9 | P3 | `plugin/.claude-plugin/plugin.json` | The description says "fail-closed validation" while both hooks fail open. The phrase most likely means the core rule that stops a commit when no validation command is known; the wording invites the wrong reading. |
-| R10 | P3 | `tests/*.test.sh` | The hook branches added in #72 (state-card order, cut and age; Monitor deferral; `tasks/` output paths) have tests. Still untested: bare `--force`, `git push --no-verify`, `;`, pipe and `$( )` separators, newline-separated commands, `bun`; the 29/30 nudge boundary, non-numeric threshold, `TMPDIR` fallback. |
-| R11 | P3 | `plugin/skills/skill-usage/SKILL.md` | The name pattern `[a-z-]+` misses names with digits; resumed or forked transcripts can repeat history and double-count. |
-| R12 | P3 | Repository root | The repository tracks no `AGENTS.md`/`CLAUDE.md` of its own (`_Context.md` is local and git-ignored), so it does not follow the `templates/project/` standard it ships. |
-| R18 | P2 | `plugin/skills/implement-backlog/SKILL.md`, eval `implement-backlog-owner` | In one of two runs the orchestrator dispatched without writing the `Owner` lines; the case scored 0 in both runs, partly because the eval sandbox denied write tools to delegates whose worktrees sat outside the workspace. |
-| R17 | P3 | README, `SECURITY.md` | Both call the hook scripts POSIX `sh`; `capture-nudge.sh` uses `grep -o`, which POSIX does not define (macOS and Linux provide it). The README claim that an `ask` becomes a denial in `claude -p` was not re-verified. |
-| R13 | P3 | `plugin/hooks/guard.sh` | Forms that pass without a prompt (reproduced): a full binary path (`/usr/bin/git push -f`), npm aliases (`npm in zod`), abbreviated `--no-veri`, and hook bypasses via `HUSKY=0` or `core.hooksPath=`. Lockfile-changing `update`/`remove` are outside the stated categories. The normal permission flow still applies. |
-| R14 | P3 | `plugin/hooks/capture-nudge.sh` | When `CLAUDE_PLUGIN_DATA` and `TMPDIR` are both unset, markers go to a shared `/tmp/capture-nudge`; on a multi-user Linux host another user can own it and race the 7-day cleanup. Claude Code 2.1.300 sets `CLAUDE_PLUGIN_DATA`. |
-| R15 | P3 | `.github/workflows/check.yml` | `npm install -g` of the pinned Claude Code still resolves its dependencies fresh and runs their install scripts; the job has a read-only token and no secrets. |
-| R16 | P3 | `scripts/check.sh` | gitleaks scans files, not history, so a secret added and removed within one PR passes CI. |
+| R1 | P3 | `plugin/hooks/guard.sh` | Accepted (D6): a command on the line after an install without a package asks, because the guard also reads newlines as spaces so a quoted multi-line argument cannot hide a flag or a package. |
+| R13 | P3 | `plugin/hooks/guard.sh` | Lockfile-changing `update`/`remove` stay outside the guard's categories, by decision (Q3 A); the normal permission flow still applies. Known silent passes, all present before the 2026-10-16 fixes too: a word built at run time (`$(command -v npm) install x`), JSON `\u` escapes and ANSI-C escapes (`$'\x2d\x2dforce'`), digits in a flag cluster (`-4f`), abbreviated `--mirr`, a force refspec from config (`remote.origin.push=+main`), unquoted or environment-defined git aliases, and install aliases outside the list (`bun a`, `npm install-test`). The guard is a first prompt, not a sandbox. |
+| R15 | P3 | `.github/workflows/check.yml` | Fixed, not yet confirmed: the pinned Claude Code installs with `--ignore-scripts`. Until a pull-request CI run shows `claude --version` printing, it is unverified; if it fails, revert and accept the fresh dependency resolution. |
+| R16 | P3 | `.github/workflows/check.yml` | Fixed, not yet confirmed: a gitleaks step scans the pull request's commits, so a secret added and removed within one PR fails CI. It has run only locally. |
+| R17 | P3 | README | The claim that an `ask` becomes a denial in `claude -p` was not re-verified; proving it needs a live `claude -p` run. |
+| R18 | P2 | Eval `implement-backlog-owner` | The skill now claims the batch (`Owner` lines, one commit) before writing any brief, and the eval scaffold gives delegates an ignored `.worktrees/` inside the workspace. The two by-hand re-runs that would show the case passing are pending. |

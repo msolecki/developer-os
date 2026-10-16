@@ -67,8 +67,15 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   `compatibility` present, description length and total, no local paths, `## Stop point` and
   `## Never` in action skills), agents' final statuses, `plugin/SURFACE.txt` and counts written as
   digits, and runs `tests/*.test.sh`. CI also runs agnix, its binary pinned by SHA-256, with `.agnix.toml`.
+- A root `AGENTS.md` for agents working on this repository (commands, likely mistakes, invariants), and
+  a root `CLAUDE.md` that imports it.
+- CI scans the commits of a pull request with gitleaks, so a secret added and removed within the PR
+  is caught; `tests/skill-usage.test.sh` tests the skill-usage counting block.
 
 ### Changed
+- code-review and code-reviewer rate a doc the diff makes false as a P2 docs finding; pr-cycle fixes
+  docs findings under its recommended answer and reports any left in the PR body; implement-backlog
+  fixes them in the batch commit.
 - code-review and code-reviewer list Evidence checked under an `APPROVE` with no P0–P2, read both
   sides of every changed contract, and brief the reviewer without the author or their rationale.
 - session-retro labels findings `persistent` or `this-task`, shows the commit a rule change would
@@ -103,7 +110,8 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   `claude plugin update` picks up every commit. Pin by marketplace ref:
   `/plugin marketplace add msolecki/developer-os#<ref>`.
 - The core rules put specifications in `docs/specs/` (or the project's spec location), not next to
-  the plan, and name the planning location for the task-state file.
+  the plan. The task-state file is `docs/plans/.devos-state.md` at a fixed path, even when a project
+  moves its planning location; the core rules and every skill that writes it name that path.
 - implement-backlog reviews through the code-review skill, so P0/P1 findings are verified, fixes
   them and reviews again for at most two rounds, then stops with nothing of the batch committed.
 - pr-cycle has its own fix commits reviewed by code-reviewer before the push and derives the verdict
@@ -121,6 +129,19 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 - `scripts/check.sh` also fails on a name removed from `SURFACE.txt` still in use, a broken link
   `#fragment`, a broken link inside a skill, any plugin validation warning but a missing `version`, and brain
   skills whose "Locate the vault" paragraphs differ.
+- plan-status counts each open backlog item in exactly one of ready, waiting, claimed and orphaned
+  (first match wins), so the buckets add up to the open count.
+- `templates/project/AGENTS.md` drops the ADR-lite decision section (decisions live in
+  `docs/decisions/`) and states the sync rule: a behavior change updates the docs in the same commit.
+  docs-sync checks for that line and the dependency policy.
+- session-retro proposes doc edits for this session's unreviewed commits and offers docs-sync when
+  `CURRENT-STATE.md` is older than them; instruction-review adds the Rules history row for a core
+  rules change.
+- spec can add its plan's items to the backlog in the backlog item format; implement-backlog claims
+  the batch in one commit before writing any brief, and its default batch is the first unfinished
+  implementation session audit-to-backlog defined.
+- code-review relays the reviewer's report only on `DONE` and names fix-pr as the next step;
+  project-baseline asks for the error-handling-conventions envelope.
 
 ### Fixed
 - brain-garden reports a link to an archived note as an info line, not a broken link, and no longer
@@ -159,6 +180,38 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   `status: active`.
 - Codex setup uses `~/.agents/skills/` (older Codex versions read `~/.codex/skills/`).
 - The README lists fork among the `SessionStart` triggers.
+- The guard splits commands on newlines and also reads them joined, deletes quotes, backslashes and
+  `$` so split words (`np""m`, `\git`, `$'-f'`) read as the word they run, asks on `git push --mirror`, skips the value after `--filter`, `--prefix`, `--dir` and similar flags, and catches
+  bypass forms (`--no-verify` prefixes, `HUSKY=0`, `core.hooksPath` in any form), npm aliases and
+  binaries called by full path.
+- pr-cycle and fix-pr read a PR's trust inputs first and never check out an untrusted head before the
+  user approves running its code; without approval they review the fetched ref only; code-review passes the `Untrusted head`
+  line to its verifiers and to inline review.
+- The state card works from a subdirectory of the repository, never names a plan that git tracks,
+  and prints the branch and plan lines with `printf`.
+- capture-nudge falls back to a per-user `/tmp` directory when `CLAUDE_PLUGIN_DATA` and `TMPDIR` are
+  unset, and uses it only when it is the user's own directory and not a symlink.
+- The Codex installer removes untouched copies, made from the same checkout, of skills the plugin no
+  longer has; keeps the vault line already in the block when `--vault` is not given and warns when
+  CLAUDE.md names another; CI fails a pull request that adds a `gitleaks:allow` marker; writes clone paths verbatim, and counts the description
+  budget in bytes.
+- brain-setup touches `.gitignore` only in a git vault, keeps its paths across Bash calls, previews a
+  missing `settings.json` cleanly, and writes a vault path with `&`, a pipe or a backslash intact.
+- brain-review checks a promoted note's name across the whole vault; brain-compile matches compiled
+  tags in block lists and sets `project`; brain-capture and brain-compile use ASCII note names;
+  brain-search skips the vault-root README; brain-garden reports a missing type once; brain-capture
+  treats vault content as data. The vault template README lists all property types.
+- skill-usage counts typed commands and skill names with digits, once per message.
+- `scripts/check.sh` runs on macOS Ruby 2.6 and scans untracked plugin files for local paths; the
+  Counts stage reads only the `[Unreleased]` section of the changelog. The note template quotes its
+  date placeholders.
+- fix-pr gates fork heads like pr-cycle, reads review threads through GraphQL and runs the full suite
+  before the push; pr-cycle handles a base already merged and a push to a fork head; pr-cycle and fix-pr
+  start despite the state file; code-review and code-reviewer mark an untrusted head read-only.
+- `templates/project/.gitignore` keeps `TODO.md` tracked when a global ignore lists it.
+- Eval graders: brain-garden totals and defect kinds, code-review-clean-diff's evidence check, the
+  session-retro cases forbid both Edit and Write, and implement-backlog-owner gives delegates a
+  worktree directory inside the workspace.
 
 ### Security
 - capture-nudge passes only an absolute output path under a `tasks/` directory to `find`; a path such
@@ -179,3 +232,5 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
 
 ### Removed
 - The Homebrew CLI, its bundled Node runtime, background jobs and generated indexes.
+- The optional JSON feature list for multi-session work: audit-to-backlog no longer creates it and
+  implement-backlog no longer reads it; the backlog carries that state.

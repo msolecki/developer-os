@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-15
+last-verified: 2026-10-16
 ---
 
 # Development guide
@@ -41,9 +41,9 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
 | Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
-| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` ("N skills", "N eval cases"; not "N cases of") differs from the disk |
+| Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` ("N skills", "N eval cases"; not "N cases of") differs from the disk |
 | Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or the state-card cap in `session-start.sh` no longer fits under the 10,000-character hook output limit |
-| References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style; a changelog entry names a removed skill without the prefix |
+| References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails on an error or on any warning (such as an unknown manifest key) other than a missing plugin `version`; the `Found N warnings` count must match the tolerated lines |
@@ -58,8 +58,11 @@ committed.
 every pull request. Before the check it runs agnix (`agent-sh/agnix` v0.57.0, the release binary pinned by its
 SHA-256, `--strict`, target `claude-code`), a static lint of skills, hooks and manifests configured in
 `.agnix.toml`; every rule disabled there carries its reason. It pins `actions/checkout` to a commit SHA, does not persist credentials, has
-read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` and a gitleaks
-release verified by SHA-256.
+read-only `contents` permission, installs `@anthropic-ai/claude-code@2.1.300` (with `--ignore-scripts`, then `claude --version`) and a gitleaks
+release verified by SHA-256, and, on a pull request, `gitleaks git` over the PR's commits, so a secret added and
+removed inside one PR still fails. The same step fails a PR that changes `.gitleaks.toml` or
+`.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
+only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
 
 ## Script tests
 
@@ -68,11 +71,13 @@ that the rules come first, the card appears only after `compact`/`resume`, and t
 cap; `tests/guard.test.sh` feeds command fixtures to `guard.sh` and expects `ask` or silence;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code and message;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
-stage's message; it runs the whole check about ten times (around 20 s), so `scripts/check.sh` runs it
+stage's message; it runs the whole check about twenty times (around 40 s), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
 `tests/install-codex.test.sh` runs the Codex installer against a temporary `HOME` (dry run,
-idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the 8000-character
-budget).
+idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the Codex
+budget of 8000 characters, counted in bytes); `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
+transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
+and expects one count per message; it prints SKIP when `rg` is missing.
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 

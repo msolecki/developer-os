@@ -60,10 +60,12 @@ to change the threshold.
 
 A `PreToolUse` hook on Bash ([`plugin/hooks/guard.sh`](plugin/hooks/guard.sh)) asks for confirmation
 (it never blocks) before a dependency install with a package argument
-(`npm|pnpm|yarn|bun install|add|i <pkg>`), a `git push` with `--force`, `-f` or a `+refspec` (even next
-to `--force-with-lease`; a lone `--force-with-lease` passes), and any `--no-verify` or `git commit -n`. In `claude -p` an ask resolves to a denial.
+(`npm|pnpm|yarn|bun install|add|i <pkg>`, an npm alias such as `npm in`, or the binary by full path), a
+`git push` with `--force`, `-f` or a `+refspec` (even next to `--force-with-lease`; a lone
+`--force-with-lease` passes; git also by full path), and a hook bypass: `--no-verify` or a prefix of it
+such as `--no-veri`, `git commit -n`, `HUSKY=0` or `core.hooksPath` in any form. In `claude -p` an ask resolves to a denial.
 
-All three are POSIX `sh`, need no `jq`, make no network calls and fail open: on input they cannot parse
+All three are POSIX `sh` (plus `grep -o` and `head -c`, which macOS and Linux provide), need no `jq`, make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies.
 
 ## What's inside
@@ -86,7 +88,7 @@ or any error they exit silently and the normal permission flow applies.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
 - **Three hooks:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction), `Stop` suggests a session wrap-up
-  once per long session, `PreToolUse` asks before installs, force pushes and `--no-verify`/`commit -n` (see above).
+  once per long session, `PreToolUse` asks before installs, force pushes and hook bypasses (see above).
 - **Evals:** behavior checks for the brain skills, code-review, session-retro and the Polish
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
   plugin payload.
@@ -107,11 +109,11 @@ scripts/install-codex.sh             # install or update
   sentence when there are none), so all of them fit Codex's 8000-character skill list, and has its
   Claude-only references rewritten. A skill `description` must be one plain line; the installer
   refuses any other form before it writes anything.
-- It puts `plugin/rules/core.md` and your `Brain vault:` line (from `~/.claude/CLAUDE.md`, or
-  `--vault <path>`) between `developer-os-core` markers in `~/.codex/AGENTS.md` (`$CODEX_HOME/AGENTS.md`
+- It puts `plugin/rules/core.md` and your `Brain vault:` line (`--vault <path>`, else the line already in the
+  block, else `~/.claude/CLAUDE.md`; pass `--vault` again to change it) between `developer-os-core` markers in `~/.codex/AGENTS.md` (`$CODEX_HOME/AGENTS.md`
   when `CODEX_HOME` is set; `--project <dir>` for a project's `AGENTS.md`). Text outside the markers
   stays; a changed file is backed up first.
-- Run it again after each plugin update. `--uninstall` removes only what it installed;
+- Run it again after each plugin update. An untouched copy of a skill the plugin no longer has, made from this checkout, is removed. `--uninstall` removes only what it installed;
   `--project <dir> --uninstall` removes only that project's block and keeps the skills. A skill
   directory it did not create, including an older hand-made symlink into another clone, is skipped
   and reported; remove it first to let the installer manage it.

@@ -29,7 +29,7 @@ Never include the content of a vault or a secret. Describe it instead.
   working directory; `Stop` runs
   `capture-nudge.sh`, which counts `tool_use` entries in the session transcript and reads only
   background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; `PreToolUse` runs `guard.sh` on Bash commands and can only ask for confirmation.
-  The three scripts are POSIX `sh`, make no network calls and fail open. The plugin ships no binary,
+  The three scripts are POSIX `sh` (plus `grep -o` and `head -c`), make no network calls and fail open. The plugin ships no binary,
   server or network code.
 - Updates come from this Git repository through the Claude Code plugin marketplace: each update
   installs the latest commit of `development`. An update can change `plugin/hooks/hooks.json` and the

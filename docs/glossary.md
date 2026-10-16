@@ -35,7 +35,7 @@ last-verified: 2026-10-15
 | Done when | A backlog item's acceptance criterion; never edited, only amended by an appended dated line. |
 | Check | A backlog item's command that fails while its `Done when` does not hold. |
 | Owner | The worktree an item was dispatched to, with the date; written only by implement-backlog. |
-| Ready / waiting / orphaned | An open backlog item with no open blocker and no owner / with an open `Blocked by` / with an owner older than 7 days. |
+| Ready / waiting / claimed / orphaned | An open backlog item's one bucket, checked orphaned, waiting, claimed, ready: no open blocker and no owner / an open `Blocked by` / an owner of 7 days or less / an owner older than 7 days. |
 | Final status | The first line of every agent report: `DONE`, `REVIEW`, `BLOCKED` (with an unblock owner) or `CONTINUING`. |
 | Evidence checked | The files read and commands run that a reviewer lists under an `APPROVE` with no P0–P2. |
 | State card | The task state the `SessionStart` hook prints after a compaction or resume, from `docs/plans/.devos-state.md` and git. |

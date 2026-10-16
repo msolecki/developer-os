@@ -13,7 +13,7 @@ Config directory: `C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"`. Edit `$C/CLAUDE.md`
 
 ## 1. Ask for the path and pick the mode
 
-Ask for the vault's absolute path (expand `~`). If `$C/CLAUDE.md` already has a `Brain vault:` line with another path, show it and ask which one to keep.
+Ask for the vault's absolute path (expand `~`). If `$C/CLAUDE.md` already has a `Brain vault:` line with another path, show it and ask which one to keep. If the user picks the new path, remember the old one for the report.
 
 - Path missing or an empty directory: **new vault**.
 - Path non-empty: ask whether to **connect an existing vault**. If not, stop; never copy into a non-empty directory.
@@ -27,16 +27,19 @@ mkdir -p "$V" && cp -R "$TPL/." "$V/"
 
 ## 2b. Connect an existing vault
 
-Add only what is missing; never overwrite, move or delete a file. Do not copy the example notes.
+Add only what is missing; never overwrite, move or delete a file. Do not copy the example notes. The `.gitignore` lines are added only to a vault that is a git repository or already has a `.gitignore`.
 
 ```bash
+TPL="/abs/path/to/plugin/vault-template"; V="/abs/path/to/vault"
 for d in DEV INFRA PROJECTS QA TOOLS _archive _inbox _views templates; do mkdir -p "$V/$d"; done
 (cd "$TPL" && for f in _views/*.base templates/note.md; do [ -e "$V/$f" ] || cp "$f" "$V/$f"; done)
-touch "$V/.gitignore"
-while IFS= read -r l; do case "$l" in ''|'#'*) continue;; esac; grep -qxF "$l" "$V/.gitignore" || printf '%s\n' "$l" >> "$V/.gitignore"; done < "$TPL/.gitignore"
+if [ -e "$V/.git" ] || [ -e "$V/.gitignore" ]; then
+  touch "$V/.gitignore"
+  while IFS= read -r l; do case "$l" in ''|'#'*) continue;; esac; grep -qxF "$l" "$V/.gitignore" || printf '%s\n' "$l" >> "$V/.gitignore"; done < "$TPL/.gitignore"
+fi
 ```
 
-`.obsidian/types.json`: add only the keys from the template's file that are absent; never change an existing value. If the file is missing, copy the template's. Show the change and apply it after approval, written back with `cat "$tmp" > file` as in step 3 (existing values win: `jq -s '.[0] * {types: (.[1].types + .[0].types)}' "$V/.obsidian/types.json" "$TPL/.obsidian/types.json"`); ask the user to close Obsidian first, because it rewrites the file while open. Without `jq`, tell the user to set the property types in Obsidian's properties panel.
+`.obsidian/types.json`: add only the keys from the template's file that are absent; never change an existing value. If the file is missing, copy the template's. Show the change and apply it after approval, written back with `cat new > file` as in step 3 (set `TPL` and `V` in the same Bash call; existing values win: `jq -s '.[0] * {types: (.[1].types + .[0].types)}' "$V/.obsidian/types.json" "$TPL/.obsidian/types.json"`); ask the user to close Obsidian first, because it rewrites the file while open. Without `jq`, tell the user to set the property types in Obsidian's properties panel.
 
 ## 3. Point Claude Code at the vault
 
@@ -45,16 +48,25 @@ Show both edits as a diff and apply them only after the user approves:
 - `$C/CLAUDE.md`: append `Brain vault: <V>` (skip if the line is already there).
 - `$C/settings.json`: add `<V>` to `permissions.additionalDirectories` (skip if present).
 
+Bash calls do not keep variables: set `C`, `S` and `V` at the top of each call. Preview:
+
 ```bash
-S="$C/settings.json"; tmp=$(mktemp)
-{ cat "$S" 2>/dev/null || echo '{}'; } | jq --arg p "$V" '.permissions.additionalDirectories //= [] | if any(.permissions.additionalDirectories[]; . == $p) then . else .permissions.additionalDirectories += [$p] end' > "$tmp" && diff "$S" "$tmp"
-# after approval:
-cat "$tmp" > "$S" && rm "$tmp"
-# replace an existing Brain vault: line (the user chose the new path in step 1), else append
-if grep -q '^Brain vault:' "$C/CLAUDE.md" 2>/dev/null; then t=$(mktemp); sed "s|^Brain vault:.*|Brain vault: $V|" "$C/CLAUDE.md" > "$t" && cat "$t" > "$C/CLAUDE.md"; rm -f "$t"; else printf '\nBrain vault: %s\n' "$V" >> "$C/CLAUDE.md"; fi
+C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; S="$C/settings.json"; V="/abs/path/to/vault"
+{ cat "$S" 2>/dev/null || echo '{}'; } | jq --arg p "$V" '.permissions.additionalDirectories //= [] | if any(.permissions.additionalDirectories[]; . == $p) then . else .permissions.additionalDirectories += [$p] end' > "$S.brain-setup" && diff -N "$S" "$S.brain-setup"
 ```
 
-If `jq` is missing or `settings.json` is not valid JSON, change nothing and show the user the key to add by hand.
+After approval, in a new call:
+
+```bash
+C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; S="$C/settings.json"; V="/abs/path/to/vault"
+cat "$S.brain-setup" > "$S" && rm "$S.brain-setup"
+# replace an existing Brain vault: line (the user chose the new path in step 1), else append
+if grep -q '^Brain vault:' "$C/CLAUDE.md" 2>/dev/null; then t=$(mktemp); V="$V" awk '/^Brain vault:/ { print "Brain vault: " ENVIRON["V"]; next } 1' "$C/CLAUDE.md" > "$t" && cat "$t" > "$C/CLAUDE.md"; rm -f "$t"; else printf '\nBrain vault: %s\n' "$V" >> "$C/CLAUDE.md"; fi
+```
+
+On decline: `rm "$S.brain-setup"`.
+
+If `jq` is missing or `settings.json` is not valid JSON, remove `$S.brain-setup`, change nothing else, and show the user the key to add by hand.
 
 Codex: if the user uses Codex, print the line `Brain vault: <V>` for `~/.codex/AGENTS.md` and let them add it.
 
@@ -64,7 +76,7 @@ Run the `developer-os:brain-search` skill and give it the vault path `<V>` expli
 
 ## Stop point
 
-Stop after the smoke test. Report the mode, the vault path, what was created or appended, which config edits were applied or declined, the Codex line if printed, and the smoke-test result.
+Stop after the smoke test. Report the mode, the vault path, what was created or appended, which config edits were applied or declined, the old vault path still in `permissions.additionalDirectories` (if the path changed; the user removes it by hand), the Codex line if printed, and the smoke-test result.
 
 ## Never
 

@@ -76,7 +76,7 @@ done
 [ -n "$(para plugin/skills/brain-search/SKILL.md)" ] || fail vault plugin/skills/brain-search/SKILL.md "no \"## 1. Locate the vault\" paragraph"
 
 # The plugin ships to other machines; a local path leaks the author's layout and breaks elsewhere.
-if files 'plugin' | xargs -0 grep -nE '/Users/|/home/|~/www|\.claude2' >&2; then
+if git grep --untracked -nE '/Users/|/home/|~/www|\.claude2' -- plugin >&2; then
   fail paths plugin "local path (/Users/, /home/, ~/www or .claude2) above"
 fi
 
@@ -135,6 +135,7 @@ cases=$(find evals -mindepth 2 -maxdepth 2 -name case.yaml | wc -l | tr -d ' ')
 files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md | ruby -e '
   $stdin.read.split("\0").each do |f|
     File.foreach(f).with_index(1) do |l, i|
+      break if f == "CHANGELOG.md" && l.start_with?("## [") && !l.start_with?("## [Unreleased]")
       l.scan(/\b[0-9]+ (?:skills|agents|output styles|hooks|eval cases|cases)\b(?! of\b)/) { |m| puts "#{f}:#{i}:#{m}" }
     end
   end' |
@@ -166,13 +167,13 @@ files 'plugin/*.md' 'plugin/*.sh' 'docs/*.md' README.md 'templates/*.md' 'evals/
 files '*.md' | ruby -e '
   slugs = Hash.new do |h, f|
     fence = false; seen = Hash.new(0)
-    h[f] = File.foreach(f).filter_map do |l|
+    h[f] = File.foreach(f).map do |l|
       fence = !fence if l =~ /\A\s*(```|~~~)/
       next if fence || l !~ /\A#+\s+(.*?)\s*\z/
       s = $1.gsub(/\[(.*?)\]\(.*?\)/, "\\1").downcase.gsub(/[^\p{L}\p{N}\p{M}_\s-]/u, "").tr(" ", "-")
       n = (seen[s] += 1) - 1
       n.zero? ? s : "#{s}-#{n}"
-    end
+    end.compact
   end
   $stdin.read.split("\0").each do |f|
     fence = false
@@ -190,7 +191,7 @@ files '*.md' | ruby -e '
     end
   end'
 
-# tests/check.test.sh runs the whole check several times (about 20 s), so it runs only in CI or with CI=1.
+# tests/check.test.sh runs the whole check about twenty times (about 40 s), so it runs only in CI or with CI=1.
 for t in tests/*.test.sh; do
   [ -e "$t" ] || continue
   [ "$t" != tests/check.test.sh ] || [ -n "${CI:-}" ] || continue

@@ -46,7 +46,7 @@ Show the table and the resulting diff; apply nothing without explicit approval. 
 
 ## Stop point
 
-Stops after the proposed diff (or the `--prune` table and diff) and its evidence, or after `NO CHANGES`. Applies the diff only after the user approves it, then reports the changed file.
+Stops after the proposed diff (or the `--prune` table and diff) and its evidence, or after `NO CHANGES`. Applies the diff only after the user approves it, then reports the changed file. Inside the developer-os repository, a change to `plugin/rules/core.md` also adds its row (date | change | target | reason) to the Rules history in `docs/product/decisions.md`, in the same approved diff.
 
 ## Never
 

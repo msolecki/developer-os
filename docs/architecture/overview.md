@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-15
+last-verified: 2026-10-16
 ---
 
 # Architecture overview
@@ -43,13 +43,13 @@ What occupies the context of a session, and when:
 
 | Part | When it loads | Size today | Limit |
 |---|---|---|---|
-| `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | 8145 bytes | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
+| `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit (figure in [CURRENT-STATE](../CURRENT-STATE.md)) | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction or resume inside a git repository | Up to 1024 bytes | The `cap` in `session-start.sh`; the check keeps rules plus card under 10,000 |
 | Skill names and descriptions | Every session, by Claude Code's skill listing | 10183 characters for 28 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
-| A skill's body | When the model or the user invokes it | 0.6–7.2 KB per skill | One screen where possible (CONTRIBUTING) |
-| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 1.3–2.4 KB | — |
-| An output style | When selected; replaces the default style but keeps coding instructions | 0.6–1.7 KB | — |
+| A skill's body | When the model or the user invokes it | 0.7–8.8 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
+| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–3.9 KB per file | — |
+| An output style | When selected; replaces the default style but keeps coding instructions | 0.6–1.8 KB | — |
 
 The fixed cost per session is the core rules plus the listings. Everything else is paid only on
 use, which is why conventions live in skills and not in the core rules.
@@ -74,13 +74,13 @@ sequenceDiagram
   repository, the branch, the newest plan, `docs/plans/.devos-state.md` (skipped when older than
   7 days) and the worktrees, cut to whole lines within 1024 bytes.
 - `guard.sh` extracts `tool_input.command` with `sed`, unescapes JSON, joins line continuations,
-  drops quotes, splits on semicolons, ampersands, pipes, parentheses and backticks, and scans each segment with `awk`. Quotes are stripped on
+  drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans each segment with `awk`. Quotes are stripped on
   purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.
 - `capture-nudge.sh` reads `session_id` and `transcript_path` from the input, counts
   `"type":"tool_use"` occurrences in the transcript file with `grep`, defers while a background task
   launched in the session has no `<task-notification>` and a fresh output file under a `tasks/`
   directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session
-  marker in `${CLAUDE_PLUGIN_DATA:-$TMPDIR}/capture-nudge/` so it fires once. Markers older than
+  marker in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp/<uid>}}/capture-nudge/` so it fires once. Markers older than
   7 days are removed.
 
 Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
@@ -123,7 +123,7 @@ implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to
 
 | Flow | Reads | Writes | Leaves the machine? |
 |---|---|---|---|
-| Session start | `rules/core.md`; after compaction or resume, `git` state and `docs/plans/.devos-state.md` of the working directory | — | As context to the model provider |
+| Session start | `rules/core.md`; after compaction or resume, `git` state and `docs/plans/.devos-state.md` of the repository root | — | As context to the model provider |
 | Task state | — | `docs/plans/.devos-state.md` (implement-backlog, pr-cycle, audit-to-backlog) | No |
 | Brain search | Vault Markdown (`rg`), skipping `_archive/`, `templates/`, `_views/` | — | Notes read go to the model provider |
 | Capture / compile | Session context; vault for duplicates | One file in `_inbox/` | Only as context |

@@ -1,6 +1,6 @@
 {
   "name": "developer-os",
-  "description": "Long-term memory in an Obsidian vault for Claude Code, plus engineering rules, skills, agents and output styles: plan-first work, evidence-backed reviews, fail-closed validation.",
+  "description": "Long-term memory in an Obsidian vault for Claude Code, plus engineering rules, skills, agents and output styles: plan-first work, evidence-backed reviews, no commit without a known validation command.",
   "author": { "name": "Mateusz Solecki" },
   "homepage": "https://github.com/msolecki/developer-os",
   "repository": "https://github.com/msolecki/developer-os",
