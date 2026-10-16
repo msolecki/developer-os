@@ -63,7 +63,7 @@
 
   document.querySelectorAll('.site-nav a').forEach(function (a) {
     var h = a.getAttribute('href');
-    if (h && h.indexOf(':') < 0 && isCurrent(h.slice(root.length))) a.setAttribute('aria-current', 'page');
+    if (h && h.charAt(0) !== '#' && h.indexOf(':') < 0 && isCurrent(h.slice(root.length))) a.setAttribute('aria-current', 'page');
   });
 
   var article = document.querySelector('.prose');
