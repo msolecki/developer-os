@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-16
+
 ### Changed
 - The hooks are Python 3 scripts (standard library only, no network), because the plugin-directory
   validator refuses shell scripts whose commands use computed paths: `guard.py` replaces `guard.sh` and
