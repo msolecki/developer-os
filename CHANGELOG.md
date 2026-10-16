@@ -4,6 +4,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Hook commands name their script directly, `"${CLAUDE_PLUGIN_ROOT}/hooks/<script>.sh"`, instead of
+  `sh "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.sh"`: the plugin-directory validator still reported
+  COMMAND_PATH_COMPUTED for a command that runs `sh` with the script as an argument.
+
 ## [0.2.1] - 2026-10-16
 
 ### Changed

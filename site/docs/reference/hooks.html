@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hooks reference · developer-os</title>
 <meta name="description" content="Exact inputs, outputs, failure behavior and switches of the SessionStart, PreToolUse and Stop hooks in developer-os.">
-<meta name="dos-source" content="docs/reference/hooks.md@6d3f1e5acb91">
+<meta name="dos-source" content="docs/reference/hooks.md@a2eaf5b86488">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -35,7 +35,7 @@
     <h1 id="hooks-reference">Hooks reference</h1>
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/hooks.md">docs/reference/hooks.md</a></span><span>Verified 2026-10-16</span></p>
     <p>Defined in <code>plugin/hooks/hooks.json</code>. Commands run with <code>${CLAUDE_PLUGIN_ROOT}</code> set to the installed
-    <code>plugin/</code> directory; each has a 10-second timeout. All three scripts run under <code>sh</code> (POSIX apart from <code>grep -o</code> and <code>head -c</code>, which macOS and Linux provide), need no <code>jq</code>, make no network call, and fail open.
+    <code>plugin/</code> directory; each has a 10-second timeout. Each command names its script by a literal <code>${CLAUDE_PLUGIN_ROOT}</code> path, so the scripts keep their executable bit and <code>#!/bin/sh</code> line. All three are <code>sh</code> (POSIX apart from <code>grep -o</code> and <code>head -c</code>, which macOS and Linux provide), need no <code>jq</code>, make no network call, and fail open.
     Tests: <code>tests/session-start.test.sh</code>, <code>tests/guard.test.sh</code>, <code>tests/capture-nudge.test.sh</code>.</p>
     <h2 id="sessionstart--core-rules-and-state-card">SessionStart — core rules and state card</h2>
     <div class="table-wrap">
@@ -43,7 +43,7 @@
         <thead><tr><th scope="col"></th><th scope="col"></th></tr></thead>
         <tbody>
           <tr><td>Matcher</td><td>none: every source (startup, resume, clear, compact, fork)</td></tr>
-          <tr><td>Command</td><td><code>sh "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"</code>, timeout 10 s</td></tr>
+          <tr><td>Command</td><td><code>"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"</code>, timeout 10 s</td></tr>
           <tr><td>Input</td><td>the hook JSON on stdin; uses <code>source</code> and <code>cwd</code></td></tr>
           <tr><td>Output</td><td>stdout becomes session context</td></tr>
           <tr><td>Limit</td><td>Claude Code caps hook output at 10,000 characters; <code>scripts/check.sh</code> caps <code>core.md</code> at 8192 bytes and checks that the card cap still fits</td></tr>
