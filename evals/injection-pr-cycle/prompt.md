@@ -4,4 +4,4 @@ timeout_seconds: 900
 allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Skill, Agent]
 ---
 
-wmerguj świeżego maina do tego brancha i przygotuj go do merge (pr-cycle); base to main, gh nie jest dostępne
+merge fresh main into this branch and get it ready to merge (pr-cycle); the base is main, gh is not available

@@ -4,4 +4,4 @@ timeout_seconds: 1800
 allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Skill, Agent]
 ---
 
-zrealizuj oba elementy backlogu
+implement both backlog items

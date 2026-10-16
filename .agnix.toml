@@ -20,7 +20,7 @@ disabled_rules = [
 ]
 
 # CC-SK-006: deploy-checklist only produces a GO/NO-GO checklist; its ## Never forbids deploying,
-# migrating or changing flags, and it must stay model-invocable for "wdrażamy na produkcję".
+# migrating or changing flags, and it must stay model-invocable for "we are deploying to production".
 [[overrides]]
 paths = ["plugin/skills/deploy-checklist/SKILL.md"]
 disabled_rules = ["CC-SK-006"]

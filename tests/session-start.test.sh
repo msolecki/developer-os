@@ -65,7 +65,7 @@ check "a cut card ends with a whole line and a marker" "$(printf '%s\n' "$out" |
 # lands inside a two-byte character of a long line.
 r=yes
 for pad in x xy; do
-  { printf 'Item: %s\n' "$pad"; awk 'BEGIN { for (i = 0; i < 1500; i++) printf "ż"; print "" }'; } > "$repo/docs/plans/.devos-state.md"
+  { printf 'Item: %s\n' "$pad"; awk 'BEGIN { for (i = 0; i < 1500; i++) printf "é"; print "" }'; } > "$repo/docs/plans/.devos-state.md"
   run compact "$repo"
   printf '%s\n' "$out" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 || r=no
 done
