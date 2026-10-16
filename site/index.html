@@ -388,22 +388,24 @@ Which items should I apply?</code></pre></div>
             <h3>Install the plugin in Claude Code</h3>
 <pre><code>/plugin marketplace add msolecki/developer-os
 /plugin install developer-os@developer-os</code></pre>
-            <p class="small">An install takes the latest commit; <code>claude plugin update developer-os@developer-os</code> picks up later ones. Auto-update is off unless you turn it on under <code>/plugin</code>.</p>
+            <p class="small">An install takes the latest release, from <code>main</code>; <code>claude plugin update developer-os@developer-os</code> picks up later ones. Auto-update is off unless you turn it on under <code>/plugin</code>.</p>
           </li>
           <li>
             <h3>Set up the vault</h3>
             <p>Ask Claude Code to run <code>brain-setup</code>. After you approve the diff it adds a <code>Brain vault: /path/to/vault</code> line to <code>~/.claude/CLAUDE.md</code> and the vault path to <code>permissions.additionalDirectories</code>.</p>
           </li>
           <li>
-            <h3>Enable two Obsidian core plugins</h3>
-            <p>Settings, Core plugins: <strong>Bases</strong> and <strong>Templates</strong>, with the Templates folder set to <code>templates</code>.</p>
+            <h3>Open the vault in Obsidian</h3>
+            <p>Open the vault folder with &ldquo;Open folder as vault&rdquo; (Obsidian 1.9.10 or later). Then Settings, Core plugins: <strong>Bases</strong> and <strong>Templates</strong>, with the Templates folder set to <code>templates</code>.</p>
           </li>
           <li>
             <h3>Try it</h3>
             <p>Start a session and ask: <code>brain-search webhooks</code>. It should find the example note in the inbox.</p>
           </li>
         </ol>
-        <p>For each project, copy <a href="https://github.com/msolecki/developer-os/tree/development/templates/project">templates/project/</a> into its root. <a href="docs/workflow.html#setup-in-5-minutes">Full setup guide</a></p>
+        <p>For each project, copy <a href="https://github.com/msolecki/developer-os/tree/main/templates/project">templates/project/</a> into its root; the install keeps a copy on disk, and <code>-n</code> skips files the project already has:</p>
+<pre><code>cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/</code></pre>
+        <p><a href="docs/workflow.html#setup-in-5-minutes">Full setup guide</a></p>
       </div>
       <div>
         <h3>Requirements</h3>
@@ -411,8 +413,9 @@ Which items should I apply?</code></pre></div>
           <table>
             <tbody>
               <tr><td>Claude Code</td><td>The plugin host. The hooks, agents and output styles are Claude Code features.</td></tr>
-              <tr><td>An Obsidian vault</td><td>Plain Markdown on your disk; Obsidian gives you the views. The engineering skills work without one.</td></tr>
+              <tr><td>An Obsidian vault</td><td>Plain Markdown on your disk; Obsidian 1.9.10 or later gives you the Bases views. The engineering skills work without one.</td></tr>
               <tr><td>ripgrep (<code>rg</code>)</td><td>The brain skills search the vault with it.</td></tr>
+              <tr><td><code>jq</code></td><td>brain-setup edits <code>settings.json</code> with it; without it, it shows the key to add by hand.</td></tr>
               <tr><td>GitHub CLI (<code>gh</code>)</td><td>For fix-pr, pr-cycle and the open-PR check in session-retro.</td></tr>
               <tr><td>macOS or Linux</td><td>The core rules load with <code>cat</code>.</td></tr>
               <tr><td>Python 3.8+ (<code>python3</code>)</td><td>The state card, the guard and the wrap-up nudge are Python scripts; without it they do not run, and the core rules still load.</td></tr>

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>developer-os · developer-os</title>
 <meta name="description" content="The developer-os README: install, vault setup, what the hooks do, what the plugin ships and the Codex installer.">
-<meta name="dos-source" content="README.md@07ca7a5bdbe2">
+<meta name="dos-source" content="README.md@eb3915baec82">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -48,15 +48,29 @@ support is manual and best-effort.</p>
 developer-os@developer-os</code> installs the next one. Releases are listed in <a href="changelog.html">CHANGELOG.md</a>.
 Auto-update is off for this marketplace unless you turn it on under <code>/plugin</code> → Marketplaces. To hold
 one release, add the marketplace at its tag: <code>/plugin marketplace add msolecki/developer-os#v0.2.3</code>.</p>
+    <h2 id="requirements">Requirements</h2>
+    <ul>
+<li>Claude Code on macOS or Linux, with Python 3.8+ on <code>PATH</code> for the hooks.</li>
+<li>ripgrep (<code>rg</code>): the brain skills search the vault with it.</li>
+<li><code>jq</code>: brain-setup edits <code>settings.json</code> with it; without it, it shows the key to add by hand.</li>
+<li>GitHub CLI (<code>gh</code>): for fix-pr, pr-cycle and the open-PR check in session-retro.</li>
+<li>Obsidian 1.9.10 or later for the vault's Bases views. The vault itself is plain Markdown, and the
+engineering skills work without one.</li>
+</ul>
     <h2 id="set-up-the-vault">Set up the vault</h2>
     <p>Run the <code>brain-setup</code> skill in Claude Code: it copies <a href="https://github.com/msolecki/developer-os/tree/development/plugin/vault-template"><code>plugin/vault-template/</code></a>
 (or connects an existing vault), shows the two config edits as a diff and applies them after you
 approve. The two edits are one line in <code>~/.claude/CLAUDE.md</code>:</p>
     <pre><code>Brain vault: /absolute/path/to/your/vault</code></pre>
     <p>and the vault path in <code>permissions.additionalDirectories</code> in <code>~/.claude/settings.json</code>, so Claude Code
-may read and write it from any project.</p>
-    <p>For project repositories, start from the files in <a href="https://github.com/msolecki/developer-os/tree/development/templates/project"><code>templates/project/</code></a>.
-They include a <code>docs/</code> skeleton; run the docs-sync skill to fill and check it. The
+may read and write it from any project. Then open the vault folder in Obsidian (&ldquo;Open folder as
+vault&rdquo;) and enable the <strong>Bases</strong> and <strong>Templates</strong> core plugins, with <code>templates</code> as the Templates
+folder.</p>
+    <p>For project repositories, start from the files in <a href="https://github.com/msolecki/developer-os/tree/development/templates/project"><code>templates/project/</code></a>. The
+marketplace install keeps a copy on disk; <code>-n</code> skips files the project already has, so merge those
+by hand:</p>
+    <pre><code>cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/</code></pre>
+    <p>They include a <code>docs/</code> skeleton; run the docs-sync skill to fill and check it. The
 full setup, with Obsidian settings and a first test, is in <a href="workflow.html#setup-in-5-minutes">docs/workflow.md</a>.</p>
     <h2 id="what-the-hooks-do">What the hooks do</h2>
     <p>The plugin has 4 hooks. On every <code>SessionStart</code> (startup, resume, <code>/clear</code>, compaction and fork), in

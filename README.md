@@ -20,6 +20,15 @@ developer-os@developer-os` installs the next one. Releases are listed in [CHANGE
 Auto-update is off for this marketplace unless you turn it on under `/plugin` → Marketplaces. To hold
 one release, add the marketplace at its tag: `/plugin marketplace add msolecki/developer-os#v0.2.3`.
 
+## Requirements
+
+- Claude Code on macOS or Linux, with Python 3.8+ on `PATH` for the hooks.
+- ripgrep (`rg`): the brain skills search the vault with it.
+- `jq`: brain-setup edits `settings.json` with it; without it, it shows the key to add by hand.
+- GitHub CLI (`gh`): for fix-pr, pr-cycle and the open-PR check in session-retro.
+- Obsidian 1.9.10 or later for the vault's Bases views. The vault itself is plain Markdown, and the
+  engineering skills work without one.
+
 ## Set up the vault
 
 Run the `brain-setup` skill in Claude Code: it copies [`plugin/vault-template/`](plugin/vault-template/)
@@ -31,9 +40,18 @@ Brain vault: /absolute/path/to/your/vault
 ```
 
 and the vault path in `permissions.additionalDirectories` in `~/.claude/settings.json`, so Claude Code
-may read and write it from any project.
+may read and write it from any project. Then open the vault folder in Obsidian ("Open folder as
+vault") and enable the **Bases** and **Templates** core plugins, with `templates` as the Templates
+folder.
 
-For project repositories, start from the files in [`templates/project/`](templates/project/).
+For project repositories, start from the files in [`templates/project/`](templates/project/). The
+marketplace install keeps a copy on disk; `-n` skips files the project already has, so merge those
+by hand:
+
+```sh
+cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/
+```
+
 They include a `docs/` skeleton; run the docs-sync skill to fill and check it. The
 full setup, with Obsidian settings and a first test, is in [docs/workflow.md](docs/workflow.md#setup-in-5-minutes).
 

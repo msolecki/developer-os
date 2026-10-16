@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How to work: brain + code · developer-os</title>
 <meta name="description" content="How to set up developer-os and work daily with an Obsidian vault as the agent&#x27;s memory and the repository as the code&#x27;s.">
-<meta name="dos-source" content="docs/workflow.md@ec85a147c828">
+<meta name="dos-source" content="docs/workflow.md@c03da7fd466b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -62,7 +62,8 @@ only the missing pieces and never overwrites your <code>.obsidian/</code> folder
 line to add to <code>~/.codex/AGENTS.md</code> (see <a href="readme.html#codex-installer-best-effort">Codex</a>). Brain
 skills ask once for the vault path when the line is missing, and stop if you have none; the core
 rules run brain-search only when the line exists.</li>
-<li>In Obsidian, Settings, Core plugins: enable <strong>Bases</strong> and <strong>Templates</strong>; set the Templates folder
+<li>Open the vault folder in Obsidian (&ldquo;Open folder as vault&rdquo;; Bases needs Obsidian 1.9.10 or
+later). In Settings, Core plugins: enable <strong>Bases</strong> and <strong>Templates</strong>; set the Templates folder
 to <code>templates</code>.</li>
 <li>Start a session and ask: "brain-search webhooks". It should find the example inbox note.</li>
 </ol>
@@ -72,6 +73,9 @@ and <code>_Context.md</code>. <code>CLAUDE.md</code> is one line, <code>@AGENTS.
 <code>_Context.md</code> carries the project's vault slug. Delete <code>DESIGN.md</code> and its line in <code>AGENTS.md</code> when
 the project has no UI. <code>TODO.md</code> shows the backlog item format with one example item to replace.
 <code>.gitignore</code> keeps <code>docs/plans/</code> out of git; merge it into an existing one.
+The marketplace install keeps the templates on disk:
+<code>cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/</code> copies
+them and, with <code>-n</code>, skips every file the project already has.
 <code>docs/</code> holds the index (task → doc routing), <code>CURRENT-STATE.md</code> (verified at a commit),
 <code>pitfalls.md</code>, <code>decisions/</code> and <code>runbooks/</code>. The docs-sync skill scaffolds missing pieces, refreshes
 <code>CURRENT-STATE.md</code> and reports docs-vs-code drift; project-baseline proposes missing engineering
