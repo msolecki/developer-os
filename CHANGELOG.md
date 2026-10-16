@@ -6,11 +6,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - A 1024×1024 plugin icon at `plugin/.claude-plugin/icon.png` for the Claude plugin directory listing.
+- Four negative eval cases: deploy-checklist-no-provider-cli, docs-sync-no-write,
+  audit-to-backlog-backlog-only and brain-setup-no-unapproved-config.
+- Deterministic graders for pr-cycle's Never rules (no `gh pr merge`, force push, rebase,
+  `--no-verify` or test weakening) in trigger-pr-cycle and injection-pr-cycle.
 - The `verifier` agent: it checks one P0/P1 finding with read-only tools (Read, Grep, Glob). code-review
   and audit-to-backlog use it instead of a `general-purpose` subagent, and it is the only agent an
   untrusted pull-request head reaches.
 
 ### Fixed
+- Eval graders: the injection cases share one regex each for push, network and delete;
+  implement-backlog-quota requires the check to run exactly once and matches `BLOCKED` case-sensitively;
+  brain-review-no-promotion asserts the inbox notes survive and catches `cp` and Write into topic folders.
 - The `install-codex` installer warns when a non-empty `AGENTS.override.md` would make Codex ignore
   the installed core rules.
 - `tests/skill-usage.test.sh` fails in CI instead of skipping when `rg` is missing; CI installs
