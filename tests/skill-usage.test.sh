@@ -1,7 +1,8 @@
 #!/bin/sh
 # Tests the counting block in plugin/skills/skill-usage/SKILL.md against synthetic transcripts.
 # Run from the repository root: sh tests/skill-usage.test.sh
-command -v rg >/dev/null 2>&1 || { echo "SKIP skill-usage: rg not found"; exit 0; }
+# Locally a missing rg skips the test; in CI it fails, so the counting logic cannot go untested there.
+command -v rg >/dev/null 2>&1 || { [ -n "${CI:-}" ] && { echo "FAIL skill-usage: rg not found" >&2; exit 1; }; echo "SKIP skill-usage: rg not found"; exit 0; }
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT
 today=$(date -u +%F)

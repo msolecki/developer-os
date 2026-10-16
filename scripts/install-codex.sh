@@ -110,6 +110,10 @@ else
   cp "$agents_md" "$tmp/agents" 2>/dev/null || : > "$tmp/agents"
 fi
 
+# Codex reads only the first non-empty file at each level, and AGENTS.override.md comes first.
+[ "$uninstall" -eq 1 ] || [ ! -s "$(dirname "$agents_md")/AGENTS.override.md" ] ||
+  echo "warning: $(dirname "$agents_md")/AGENTS.override.md is not empty, so Codex reads it instead of AGENTS.md and ignores the core rules" >&2
+
 if [ -f "$agents_md" ] && cmp -s "$tmp/agents" "$agents_md"; then
   echo "AGENTS.md: unchanged ($agents_md)"
 elif [ "$uninstall" -eq 1 ] && [ ! -f "$agents_md" ]; then

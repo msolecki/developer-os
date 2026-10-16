@@ -93,6 +93,15 @@ check "--project exits 0" "$code" 0
 grep -qx 'Brain vault: /vaults/flag' "$tmp/proj2/AGENTS.md" && r=yes || r=no
 check "--project writes the block with the --vault line" "$r" yes
 check "--project names the backup it leaves in the project" "$(grep -c '^backup: .*proj2/AGENTS.md.bak-' "$tmp/out")" 1
+printf 'Override.\n' > "$tmp/proj2/AGENTS.override.md"
+run --project "$tmp/proj2"
+check "a non-empty AGENTS.override.md is warned about" "$(grep -c 'AGENTS.override.md is not empty' "$tmp/err")" 1
+rm "$tmp/proj2/AGENTS.override.md"
+mkdir -p "$tmp/h2/.codex"; printf 'Override.\n' > "$tmp/h2/.codex/AGENTS.override.md"
+env -i PATH="$PATH" HOME="$tmp/h2" sh "$script" >/dev/null 2>"$tmp/err"
+check "a global AGENTS.override.md is warned about" "$(grep -c 'AGENTS.override.md is not empty' "$tmp/err")" 1
+env -i PATH="$PATH" HOME="$tmp/h2" sh "$script" --uninstall >/dev/null 2>"$tmp/err"
+check "--uninstall does not warn about AGENTS.override.md" "$(grep -c 'AGENTS.override.md is not empty' "$tmp/err")" 0
 # A backup name the repository planted as a symlink must not carry the write to its target.
 printf 'export SAFE=1\n' > "$tmp/canary"
 mkdir -p "$tmp/proj3"

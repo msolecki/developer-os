@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Development guide · developer-os</title>
 <meta name="description" content="How to change the developer-os plugin, check it with scripts/check.sh and ship it.">
-<meta name="dos-source" content="docs/development.md@ae4ea316eda8">
+<meta name="dos-source" content="docs/development.md@e29d0550790d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -67,7 +67,7 @@
           <tr><td>Links</td><td>A relative Markdown link outside fenced or inline code does not resolve from its own file, or its <code>#fragment</code> matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, <code>-1</code>, <code>-2</code> for repeated headings)</td></tr>
           <tr><td>Site</td><td>A doc, root document, skill, agent or output style has no page under <code>site/</code> that names it in a <code>dos-source</code> meta; a page's hash differs from its source's; a relative <code>href</code> or <code>src</code> in <code>site/</code>, or a page in <code>NAV</code> in <code>site/assets/site.js</code>, does not resolve to a file inside <code>site/</code> (in exact case) or names no <code>id</code> in the target page; a page names a source that belongs to another page. It reports every failure at once</td></tr>
           <tr><td>Script tests</td><td>Any <code>tests/*.test.sh</code> exits non-zero; <code>tests/check.test.sh</code> runs only when <code>CI</code> is set</td></tr>
-          <tr><td>Plugin validation</td><td><code>claude plugin validate . --strict</code> or <code>claude plugin validate plugin --strict</code> fails on an error or on any warning (such as an unknown manifest key) other than a missing plugin <code>version</code>; the <code>Found N warnings</code> count must match the tolerated lines</td></tr>
+          <tr><td>Plugin validation</td><td><code>claude plugin validate . --strict</code> or <code>claude plugin validate plugin --strict</code> fails when <code>--strict</code> exits non-zero, that is on any error or warning (such as an unknown manifest key)</td></tr>
           <tr><td>Secrets</td><td><code>gitleaks dir</code> finds a secret in tracked or untracked-not-ignored files</td></tr>
         </tbody>
       </table>
@@ -93,7 +93,7 @@
       <li><code>assets/site.css</code> and <code>assets/site.js</code> (the sidebar order in <code>NAV</code>, on-page contents, copy buttons).</li>
     </ul>
     <p>Each page that restates a source carries <code>&lt;meta name="dos-source" content="&lt;source&gt;@&lt;hash&gt;"&gt;</code>: the first 12 hex digits of the source's SHA-256 with any <code>last-verified:</code> line removed, so re-verifying a doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style, the Site stage names the page to refresh: update its text, then its hash (<code>sed '/^last-verified: /d' &lt;source&gt; | shasum -a 256 | cut -c1-12</code>). A new doc or skill needs a new page, and a new doc an entry in <code>NAV</code>. The landing page and the skills index restate many sources and carry no hash; update them by hand when the hooks, rules or skills they describe change. <code>CURRENT-STATE.md</code> and <code>CHANGELOG.md</code> change on most pull requests, so their pages usually do too. The Local paths stage scans <code>site/</code>, so a page that quotes its patterns writes the slash as <code>&amp;#47;</code>, as <code>development.html</code> and <code>contributing.html</code> do. CI rejects a pull request that adds the gitleaks allow marker, so a page that quotes it writes its colon as <code>&amp;#58;</code>.</p>
-    <p><code>.github/workflows/pages.yml</code> publishes <code>site/</code> to GitHub Pages on a push to <code>development</code> that changes it, or by hand. The repository's Pages source must be "GitHub Actions".</p>
+    <p><code>.github/workflows/pages.yml</code> publishes <code>site/</code> to GitHub Pages on a push to <code>main</code> that changes it, or by hand (dispatch it from <code>main</code> only, or it publishes unreleased docs). The repository's Pages source must be "GitHub Actions".</p>
     <h2 id="script-tests">Script tests</h2>
     <p><code>tests/session-start.test.sh</code> runs the SessionStart hook in a temporary git repository and checks
     that the rules come first, the card appears only after <code>compact</code>/<code>resume</code>, and the card is cut to its
@@ -106,7 +106,7 @@
     idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the Codex
     budget of 8000 characters, counted in bytes); <code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
     transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
-    and expects one count per message; it prints SKIP when <code>rg</code> is missing.
+    and expects one count per message; when <code>rg</code> is missing it prints SKIP locally and fails in CI, which installs ripgrep.
     After changing a hook, run its test from the repository root, for example <code>sh tests/guard.test.sh</code>,
     and add a fixture for the case you changed.</p>
     <h2 id="evals">Evals</h2>
