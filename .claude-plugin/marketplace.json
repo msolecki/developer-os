@@ -9,7 +9,7 @@
       "name": "developer-os",
       "source": "./plugin",
       "description": "Long-term memory in an Obsidian vault, plus engineering rules, skills, agents and output styles for Claude Code.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }
