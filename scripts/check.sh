@@ -228,6 +228,8 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
   ids = Hash.new { |h, f| h[f] = File.read(f).scan(/\sid="([^"]+)"/).flatten }
   named = {}
   errs = []
+  site_url = "https://msolecki.github.io/developer-os/"
+  locs = []
   $stdin.read.split("\0").each do |p|
     s = File.read(p)
     if p.end_with?(".js")
@@ -239,6 +241,12 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
         (named[src] ||= []) << p
         (errs << "site: #{p}: #{src} changed since the page was written (page #{h}, source #{sha[src]}); update the page, then its dos-source hash"; next) unless h == sha[src]
       end
+      # Search and link previews: the canonical URL of the page, an og:image that exists, and a sitemap entry.
+      canon = "#{site_url}#{p.delete_prefix("site/").sub(/(\A|\/)index\.html\z/, "\\1")}"
+      locs << canon
+      errs << "site: #{p}: needs <link rel=\"canonical\" href=\"#{canon}\">" unless s.include?(%(<link rel="canonical" href="#{canon}">))
+      img = s[/<meta property="og:image" content="#{Regexp.escape(site_url)}([^"]+)">/, 1]
+      errs << "site: #{p}: needs an og:image under #{site_url} that exists in site/" unless img && !img.include?("..") && File.file?("site/#{img}")
       targets = s.gsub(/<pre[\s>].*?<\/pre>/m, "").scan(/\s(?:href|src)="([^"]+)"/).flatten
       base = File.dirname(p)
     end
@@ -259,6 +267,10 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
     errs << "site: #{p}: missing, or has no dos-source meta for #{src}" unless pages.include?(p)
     (pages - [p]).each { |o| errs << "site: #{o}: names #{src}, which belongs to #{p}" }
   end
+  sitemap = File.file?("site/sitemap.xml") ? File.read("site/sitemap.xml").scan(%r{<loc>([^<]+)</loc>}).flatten : []
+  (locs - sitemap).each { |u| errs << "site: site/sitemap.xml: missing #{u}" }
+  (sitemap - locs).each { |u| errs << "site: site/sitemap.xml: #{u} is not a page" }
+  sitemap.tally.each { |u, n| errs << "site: site/sitemap.xml: #{u} is listed #{n} times" if n > 1 }
   abort errs.uniq.join("\n") unless errs.empty?'
 
 # tests/check.test.sh runs the whole check about twenty times (about 40 s), so it runs only in CI or with CI=1.
