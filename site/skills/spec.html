@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>spec · developer-os skills</title>
+<meta name="description" content="Interview you about a feature, inspect the repository, write a specification and an implementation plan, then hand the work to a fresh session.">
+<meta name="dos-source" content="plugin/skills/spec/SKILL.md@59e5040cae09">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Engineering</p>
+    <h1 id="spec">spec</h1>
+    <p class="lede">Interviews you about a feature, inspects the repository, writes a specification and an implementation plan, then hands implementation to a fresh session.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Engineering</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>A spec and a plan file; backlog items on a yes</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>The spec location, when none is documented; adding to the backlog</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you want to define or plan a feature before anyone implements it, or when you invoke the spec workflow, optionally with a feature description as the argument. Say it in English or Polish:</p>
+    <ul class="chips">
+      <li class="chip">plan a new feature</li>
+      <li class="chip">write a specification</li>
+      <li class="chip" lang="pl">zaplanujmy nową funkcję</li>
+      <li class="chip" lang="pl">napisz specyfikację</li>
+      <li class="chip" lang="pl">zróbmy speca</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Interviews you.</strong> One question at a time about behavior, UX, edge cases, constraints and trade-offs, starting from the feature description when you gave one. It does not ask what the repository already answers.</li>
+      <li><strong>Inspects the code.</strong> It reads the relevant code before it locks any decision.</li>
+      <li><strong>Writes the specification.</strong> To the repository's documented specification location as <code>&lt;YYYY-MM-DD-feature&gt;-spec.md</code>; if none is documented it proposes <code>docs/specs/</code> and asks you to confirm. Never into the planning location, where a spec would be read as the active plan. It covers goals, non-goals, flows, technical design, decisions with their rejected alternatives, contracts, failure handling, acceptance criteria, tests and unresolved decisions.</li>
+      <li><strong>Writes the implementation plan.</strong> To the documented plan location as <code>&lt;YYYY-MM-DD-feature&gt;.md</code>: the goal, the decisions and a <code>Status: in progress | done</code> line, then every step as a <code>- [ ]</code> checkbox with What, Where, How, Test, a complexity (S/M/L) and a deployable invariant, ending with <code>## Open questions</code> and a <code>Next action:</code> line. plan-status and session-retro read this shape.</li>
+      <li><strong>Offers the backlog.</strong> It offers to add the plan's steps to the project backlog in the audit-to-backlog item format (next free ID; complexity becomes <code>Size</code>, the acceptance criterion <code>Done when</code>, the step's test a runnable <code>Check</code>), so implement-backlog can execute them.</li>
+      <li><strong>Hands off.</strong> It stops and gives you the plan path for a fresh session to implement from.</li>
+    </ol>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The specification and plan are written and you have answered the backlog offer. It returns both paths and the handoff prompt for a fresh session.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Implement any part of the feature.</li>
+        <li>Overwrite an existing plan or specification.</li>
+        <li>Add items to the backlog without your yes.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="implement-backlog.html">implement-backlog</a> executes the backlog items the plan became.</li>
+      <li><a href="plan-status.html">plan-status</a> counts the plan's steps and lists its open questions.</li>
+      <li><a href="audit-to-backlog.html">audit-to-backlog</a> defines the backlog item format.</li>
+      <li><a href="../docs/workflow.html#2-during-work-the-plan-lives-in-the-repository">The daily loop: the plan lives in the repository</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/spec/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

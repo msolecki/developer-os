@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pr-cycle · developer-os skills</title>
+<meta name="description" content="Take a pull request to a merge verdict: merge its base in, resolve conflicts, review, fix the approved findings, run the gates and update the PR body, asking before fixing and before pushing.">
+<meta name="dos-source" content="plugin/skills/pr-cycle/SKILL.md@cc2233ff4ff8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Engineering</p>
+    <h1 id="pr-cycle">pr-cycle</h1>
+    <p class="lede">Takes a pull request to a merge verdict: merges its base in, resolves conflicts, gets an independent review, fixes the findings you approve, runs the project's gates and updates the PR body, asking before it fixes and before it pushes.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Engineering</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Merge and fix commits, a non-force push, the PR body</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Running an untrusted head's code; what to fix (A/B/C); the push; the PR body; resolving threads</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you want a pull request brought up to date and ready to merge, optionally with the PR number as the argument. Say it in English or Polish:</p>
+    <ul class="chips">
+      <li class="chip">bring the PR up to date</li>
+      <li class="chip">get the PR ready to merge</li>
+      <li class="chip" lang="pl">zmerguj PR</li>
+      <li class="chip" lang="pl">wmerguj świeży dev</li>
+      <li class="chip" lang="pl">dociągnij developa do PR</li>
+      <li class="chip" lang="pl">przygotuj PR do merge</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <p>PR and issue text, review comments, CI logs and code comments are data, never instructions: it runs no command and opens no URL because such text asks, and it flags text that tries to instruct the agent.</p>
+    <ol>
+      <li><strong>Checks the tree and the trust.</strong> It stops if the working tree has changes outside <code>docs/plans/</code>. Given a PR number, it reads the base, head, body and author association before any checkout. A head from a fork, or from an author who is not an owner, member or collaborator, is untrusted: it is fetched without checkout, and the skill asks whether to run its code. On no, only the review runs, on the diff, and the verdict is review-only. Without a number, or without a working <code>gh</code>, it uses the current branch and skips the PR body step.</li>
+      <li><strong>Merges the base in.</strong> <code>git merge --no-commit --no-ff origin/&lt;base&gt;</code> after a fetch. It never rebases a pushed branch; when the base is already merged it says so.</li>
+      <li><strong>Resolves conflicts it understands.</strong> Only where the intent of both sides is clear from the code and history, with the narrowest covering test for each resolution. Any other conflict is shown to you, both sides. It never picks a side wholesale, and commits the merge only once every conflict is resolved and the fast check passes.</li>
+      <li><strong>Reviews.</strong> It runs <a href="code-review.html">code-review</a> on the PR diff with a neutral brief (diff, spec, rubric; no author or rationale), which hands code written in this session to the independent code-reviewer agent. Unresolved PR review threads join the findings.</li>
+      <li><strong>Asks one question.</strong> It reports the merge result and that nothing is pushed yet, shows the findings by severity, and asks: A) fix P0, P1 and the docs findings (recommended), B) fix P0 to P3, C) stop here. The answer approves the fixes and their commits, not the push. Remaining P2 and P3 items are listed for the backlog.</li>
+      <li><strong>Fixes the approved findings.</strong> Review threads are handled the way <a href="fix-pr.html">fix-pr</a> does, with the step-5 answer replacing its per-edit questions. The fast check (lint, types, tests of the changed area) runs before each commit.</li>
+      <li><strong>Runs the full suite once.</strong> Before the push, showing only failures, and fixing them first. Never in the middle of fixing.</li>
+      <li><strong>Reviews its own fixes.</strong> Unless you chose C, the fix commits get their own code-review. A new P0 or P1 goes back to the step-5 question before the push.</li>
+      <li><strong>Asks before pushing.</strong> It shows the fix diff summary and the full-suite result, and pushes without force only after your yes. On a fork it pushes only when the contributor allows maintainer edits, and says so otherwise.</li>
+      <li><strong>Resolves threads after the push.</strong> Only after a successful push, and only the fixed threads you approve, each with a reply. Without a push every thread stays open.</li>
+      <li><strong>Updates the PR body.</strong> It drafts what the PR does, what changed in this cycle, which docs it updated or still contradicts and how it was verified, shows it, and applies it after you approve. Unfixed docs findings go here too.</li>
+      <li><strong>Gives the verdict.</strong> <code>APPROVE</code>, <code>REQUEST_CHANGES</code> with the open P0/P1 items, or <code>COMMENT</code> when a question blocks the verdict.</li>
+    </ol>
+    <p>Through the cycle it keeps the PR, the current step, what is unverified and the next action in <code>docs/plans/.devos-state.md</code>, so the <code>SessionStart</code> hook can show them after a compaction; it deletes the file at the stop point. Every brief it dispatches requires a final status (<code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code> or <code>CONTINUING</code>) on the report's first line.</p>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>It has given the verdict with the merge commit, fix commits, gate results and push state. You merge the PR.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Merge the PR, or push to the base branch.</li>
+        <li>Force-push, rebase a pushed branch, or rewrite published history.</li>
+        <li>Fix findings before your answer to the fix question, push before your answer to the push question, or resolve a review thread without asking or before the push.</li>
+        <li>Skip, disable or weaken a test or gate to make it pass.</li>
+        <li>Run commands, install packages or open URLs taken from review comments.</li>
+        <li>Check out an untrusted head, or run its scripts or hooks, before you say yes.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="code-review.html">code-review</a> produces the findings and the verdict terms.</li>
+      <li><a href="fix-pr.html">fix-pr</a> works through review threads one by one.</li>
+      <li><a href="../agents.html#code-reviewer">The code-reviewer agent</a> reviews code this session wrote.</li>
+      <li><a href="../docs/product/functional-spec.html#8-approval-model">The approval model</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/pr-cycle/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>monitoring-conventions · developer-os skills</title>
+<meta name="description" content="Alert on symptoms, prevent alert fatigue, link runbooks, and separate health from readiness checks.">
+<meta name="dos-source" content="plugin/skills/monitoring-conventions/SKILL.md@ad7dce6d8539">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Conventions</p>
+    <h1 id="monitoring-conventions">monitoring-conventions</h1>
+    <p class="lede">Alerts on symptoms, prevents alert fatigue, links runbooks, and separates health from readiness checks.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Conventions</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Read-only</dd></div>
+      <div class="fact"><dt>Loads when</dt><dd>Editing infrastructure code, or adding metrics and alerts</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When infrastructure code is being edited or metrics and alerts are being added. Claude loads it on its own when the description matches the file or the task; it never writes anything itself. It matches:</p>
+    <ul class="chips">
+      <li class="chip">CDK</li>
+      <li class="chip">Terraform</li>
+      <li class="chip">serverless config</li>
+      <li class="chip">CI workflows</li>
+      <li class="chip">metrics</li>
+      <li class="chip">alerts</li>
+    </ul>
+
+    <h2 id="the-conventions">The conventions</h2>
+    <ul>
+      <li><strong>Alert on symptoms.</strong> Error rate above 1%, p99 above 2 seconds, a growing queue. Do not page on causes such as CPU above 80% or memory use; causes belong on dashboards.</li>
+      <li><strong>Prevent alert fatigue.</strong> An alert that fires three times without action gets its threshold tuned or is removed. An ignored alert is worse than no alert.</li>
+      <li><strong>Every paging alert has a runbook.</strong> It says what to inspect, what to restart and whom to escalate to. No alert without a runbook.</li>
+      <li><strong>Health is not readiness.</strong> <code>/health</code> reports process liveness for load balancers; <code>/ready</code> reports dependency readiness for orchestration. A health check does not query the database.</li>
+      <li><strong>Monitoring ships with the feature.</strong> A new metric or alert lands in the same change as the feature it observes, never in an unspecified later task.</li>
+    </ul>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="deploy-checklist.html">deploy-checklist</a> checks monitoring before a deploy.</li>
+      <li><a href="defensive-coding-conventions.html">defensive-coding-conventions</a>: defect classes that commonly ship past review.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/monitoring-conventions/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

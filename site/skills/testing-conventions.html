@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>testing-conventions · developer-os skills</title>
+<meta name="description" content="Pin the contract in tests with absolute-instant fixtures and partial module mocks.">
+<meta name="dos-source" content="plugin/skills/testing-conventions/SKILL.md@c1a04d6dcbbc">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Conventions</p>
+    <h1 id="testing-conventions">testing-conventions</h1>
+    <p class="lede">Pins the contract in tests with absolute-instant fixtures and partial module mocks.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Conventions</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Read-only</dd></div>
+      <div class="fact"><dt>Loads when</dt><dd>Writing or reviewing test files</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When test files are being written or reviewed. Claude loads it on its own when the description matches the file or the task; it never writes anything itself. It matches:</p>
+    <ul class="chips">
+      <li class="chip">*.test.*</li>
+      <li class="chip">*.spec.*</li>
+      <li class="chip">tests/</li>
+      <li class="chip">e2e/</li>
+    </ul>
+
+    <h2 id="the-conventions">The conventions</h2>
+    <ul>
+      <li><strong>Pin the contract.</strong> A test pins the contract, not current behavior. If a test passes only after you fixed the test, check that you did not encode a bug: a red test may describe the correct contract.</li>
+      <li><strong>Absolute instants.</strong> A fixture pins an absolute instant, never a local-time literal. An ambient-timezone fixture hides a contract mismatch until CI runs in a different timezone from your machine.</li>
+      <li><strong>Partial mocks.</strong> Mock a module with a partial built on the original (for example Vitest's <code>importOriginal</code>), never an exhaustive hand-written stub. A stub breaks the day the module gains an export, and one new export can break every suite that stubs it.</li>
+    </ul>
+    <pre><code>2030-01-01T08:00:00Z</code></pre>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="../agents.html#qa-expert">The qa-expert agent</a> applies these rules to every test it writes or assesses.</li>
+      <li><a href="../output-styles.html#tdd-enforcer">The tdd-enforcer output style</a>: one failing test before any code.</li>
+      <li><a href="typescript-conventions.html">typescript-conventions</a> asks for tests for every new function.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/testing-conventions/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

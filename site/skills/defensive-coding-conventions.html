@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>defensive-coding-conventions · developer-os skills</title>
+<meta name="description" content="Check a change for defect classes that commonly ship past review, from mismatched validation and persistence to silent build artifacts.">
+<meta name="dos-source" content="plugin/skills/defensive-coding-conventions/SKILL.md@b940e98e0fae">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Conventions</p>
+    <h1 id="defensive-coding-conventions">defensive-coding-conventions</h1>
+    <p class="lede">Checks a change for defect classes that commonly ship past review: mismatched persistence and validation conditions, unisolated webhook side effects, missed writers or readers of shared state, collapsed statuses, unvalidated external JSON and silent build artifacts.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Conventions</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Read-only</dd></div>
+      <div class="fact"><dt>Loads when</dt><dd>Code that handles external input, auth, money, concurrency, persistence or error paths</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When code that handles external input, authentication, money, concurrency, persistence or error paths is being written or reviewed. Each rule is a check to run against the change, not background reading. Claude loads it on its own when the description matches the file or the task; it never writes anything itself. It matches:</p>
+    <ul class="chips">
+      <li class="chip">external input</li>
+      <li class="chip">authentication</li>
+      <li class="chip">money and billing</li>
+      <li class="chip">concurrency</li>
+      <li class="chip">persistence</li>
+      <li class="chip">error paths</li>
+    </ul>
+
+    <h2 id="the-conventions">The conventions</h2>
+    <ul>
+      <li><strong>Persist under the condition you validate.</strong> If a record is stored under flag or branch X, validation must run under the same X; otherwise a validated but internally inconsistent record can be persisted.</li>
+      <li><strong>Isolate every side effect.</strong> Each webhook or event-handler side effect (email, claim, counter) gets its own try/catch. Whether a failure is retried depends on the sender, so check it, and check whether the neighbouring side effects are isolated already.</li>
+      <li><strong>Fix every writer.</strong> A state-mutation fix enumerates every writer of that state, not only the entry point in the report. Grep the field, table or flag, not the function: two disconnected write paths to the same state are the default.</li>
+      <li><strong>Fix every reader.</strong> A read-side security fix enumerates every reader of the guarded data. Grep the model, association or table name: an ORM association (<code>include: documents</code>) is a read path no route file mentions, so the query layer needs its own filter.</li>
+      <li><strong>Do not collapse a multi-valued status.</strong> A status with more than two outcomes carries more than one meaning. <code>partial</code> can mean "did not succeed" to the retry budget and "made progress" to the blocking gate; a boolean leaves the target half-updated with no retry and no alert.</li>
+      <li><strong>Validate external shape first.</strong> Check the shape of external input before computing with it; a malformed value such as <code>NaN</code> can slip past a comparison and pass the guard built to catch it.</li>
+      <li><strong>No silent default for cost.</strong> An input that drives cost or billing needs validation or an explicit, documented value.</li>
+      <li><strong>Setup lives in a script.</strong> Per-clone setup that a package manager can destroy (a synthetic package, emitted type declarations, compiled CSS) belongs in a script or hook, never in prose. If one command cannot reproduce it, it is a ritual, not setup.</li>
+      <li><strong>Verify the artifact, not the exit code.</strong> A build artifact emitted outside its package boundary ships silently degraded: the bundler drops what it cannot resolve and exits 0, for example a production build with no styles behind a green pipeline.</li>
+      <li><strong>Re-check numeric promises.</strong> After a rewrite or migration, re-verify every limit, retention period and time-handling promise the documentation makes against the new implementation.</li>
+      <li><strong>Ordering rules carry their reason.</strong> A deploy- or migration-ordering constraint in <code>CLAUDE.md</code>, <code>AGENTS.md</code> or <code>docs/</code> states its why where it is read, and lists the exact migrations that must run before the deploy.</li>
+    </ul>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="../agents.html#code-reviewer">The code-reviewer agent</a> checks these defect classes in every review.</li>
+      <li><a href="error-handling-conventions.html">error-handling-conventions</a>: cause chains, typed results and one error envelope.</li>
+      <li><a href="testing-conventions.html">testing-conventions</a>: tests that pin the contract.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/defensive-coding-conventions/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

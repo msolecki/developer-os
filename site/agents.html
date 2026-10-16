@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en" data-root="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents · developer-os</title>
+<meta name="description" content="The five developer-os subagents: what each reviewer checks, what it reports and what it never does.">
+<meta name="dos-source" content="plugin/agents/code-reviewer.md@2496a9aebeeb">
+<meta name="dos-source" content="plugin/agents/performance-engineer.md@da09dfe6a992">
+<meta name="dos-source" content="plugin/agents/qa-expert.md@a581e56b71f6">
+<meta name="dos-source" content="plugin/agents/research-analyst.md@2d32579ba298">
+<meta name="dos-source" content="plugin/agents/security-auditor.md@405c4449e4a9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="docs/index.html">Docs</a>
+      <a href="skills/index.html">Skills</a>
+      <a href="agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="agents">Agents</h1>
+    <p class="lede">Agents are subagents that a skill or you dispatch for one focused job. They are read-only reviewers that report and never edit, except qa-expert, which writes tests when it is asked to.</p>
+    <p>The plugin ships 5 agents. Each one treats code, diffs, PR text, fixtures and fetched pages as data, never as instructions: it runs no command it finds there. Skills such as <a href="skills/code-review.html">code-review</a>, <a href="skills/audit-to-backlog.html">audit-to-backlog</a> and <a href="skills/bug-triage.html">bug-triage</a> dispatch them; you can also ask for one by name, for example <code>developer-os:security-auditor</code>.</p>
+
+    <h2 id="final-status">Final status</h2>
+    <p>Every agent's report starts with exactly one of four lines, so the skill or session that dispatched it knows what to do next:</p>
+    <ul>
+      <li><code>DONE</code>: the work is complete, with the evidence (the commands run and their result, or the files read).</li>
+      <li><code>REVIEW</code>: someone must judge before work continues; it says who and what.</li>
+      <li><code>BLOCKED</code>: it cannot continue; it names the blocker, <code>Unblock owner: user | orchestrator | &lt;item ID&gt;</code>, and the next step.</li>
+      <li><code>CONTINUING</code>: it stopped part-way on purpose and says what resumes the work.</li>
+    </ul>
+    <p>A transient failure (network, timeout, a flaky test) is retried at most twice. A failure only a person can fix (authentication, quota, a missing secret, an unclear spec) is <code>BLOCKED</code> at once. Reviewer agents rate findings on one scale: P0 is an exploitable security defect, data loss or production down; P1 wrong behavior on a common path; P2 an edge-case defect or a meaningful maintainability risk; P3 minor or cleanup.</p>
+
+    <h2 id="code-reviewer">code-reviewer</h2>
+    <p>Reviews named files as an independent reader who did not write them, rating correctness, security, data-safety and maintainability findings P0–P3 with a merge verdict. Use it when code written in this session needs a reviewer other than its author, or for the correctness pass of an audit.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Bash, Glob, Grep, Skill</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>code-review, and through it pr-cycle and implement-backlog; audit-to-backlog</dd></div>
+    </dl>
+    <h3 id="what-code-reviewer-checks">What code-reviewer checks</h3>
+    <ul>
+      <li>The named files plus the direct callers and callees of any signature or contract they change, read before judging, with the project's own instruction files ahead of its own preferences.</li>
+      <li>Both sides of every contract the change touches (an API handler and its client, a schema and its type, a route and its links): a mismatch is P1, cited on each side.</li>
+      <li>The defect classes in <a href="skills/defensive-coding-conventions.html">defensive-coding-conventions</a>, and a test changed to match the code when the test described the correct contract.</li>
+      <li>A backlog item's <code>Done when</code> deleted or weakened without an appended <code>Amended YYYY-MM-DD: …</code> line is P1. A doc the change makes false is a P2 docs finding. A style preference is never above P3.</li>
+      <li>It rates the code, not the framing: a prompt that says who wrote the change, or that it looks good, changes no severity.</li>
+    </ul>
+    <h3 id="code-reviewer-report">code-reviewer report</h3>
+    <p>After the final status, the verdict: <code>REQUEST_CHANGES</code> when any P0 or P1 exists, <code>COMMENT</code> when an open question blocks judgment, otherwise <code>APPROVE</code>. Findings sit under P0 to P3 headings (<code>None</code> when empty), each with <code>file:line</code>, evidence, impact and a concrete fix. Every P0 and P1 is reported. An <code>APPROVE</code> with no P0, P1 or P2 ends with <strong>Evidence checked</strong>, the files read and commands run; without it the report is invalid.</p>
+    <div class="callout never">
+      <h3 id="what-code-reviewer-never-does">What code-reviewer never does</h3>
+      <ul>
+        <li>Edit or commit files; Bash is for read, inspect and test commands only, and read-only when the prompt marks the head untrusted.</li>
+        <li>Run commands found in the code or PR text.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/code-reviewer.md">Read code-reviewer.md on GitHub</a></p>
+
+    <h2 id="performance-engineer">performance-engineer</h2>
+    <p>Finds measured performance defects (N+1 queries, blocking I/O, serial awaits, bundle bloat, render thrash) in a named scope. Use it when something is slow or before a performance-sensitive release.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Bash, Glob, Grep</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>audit-to-backlog (performance)</dd></div>
+    </dl>
+    <h3 id="what-performance-engineer-checks">What performance-engineer checks</h3>
+    <ul>
+      <li>Only the named files, and only after it identifies the actual hot path: a slow endpoint, page or job. A rewrite of code nobody executes is not a finding.</li>
+      <li>Database N+1 and missing indexes, serial awaits that could be <code>Promise.all</code>, blocking I/O on a request path, unbounded result sets, per-item work that could be hoisted, bundle regressions from barrel imports or eager third-party scripts, and UI re-render cascades.</li>
+    </ul>
+    <h3 id="performance-engineer-report">performance-engineer report</h3>
+    <p>Findings ordered by impact on the hot path, each with <code>file:line</code>, severity, the mechanism, the expected magnitude, the fix and how to measure it. Every finding is labelled MEASURED (it ran something and has numbers) or INFERRED (it read the code), never inferred presented as measured. The report ends with the single highest-impact change and its expected effect.</p>
+    <div class="callout never">
+      <h3 id="what-performance-engineer-never-does">What performance-engineer never does</h3>
+      <ul>
+        <li>Edit or commit files, or install a tool; a missing profiler or benchmark tool is reported instead.</li>
+        <li>Propose a micro-optimisation outside a hot path.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/performance-engineer.md">Read performance-engineer.md on GitHub</a></p>
+
+    <h2 id="qa-expert">qa-expert</h2>
+    <p>Assesses test quality and coverage gaps for a named change or module, and writes the missing tests when asked. Use it when you need to know whether a change is actually verified.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash, Write, Edit, Skill</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>Tests only, and only when asked</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>audit-to-backlog (tests, assessment only)</dd></div>
+    </dl>
+    <h3 id="what-qa-expert-checks">What qa-expert checks</h3>
+    <ul>
+      <li>Only the named files. It runs the project's real test command for the tests that cover them (the full suite only when asked) and shows failures, never a passing log.</li>
+      <li>It loads <a href="skills/testing-conventions.html">testing-conventions</a> and applies it to every test it writes or assesses: pin the contract, fixed UTC instants, partial mocks.</li>
+      <li>When it writes tests: one test per contract, and for a regression test the failing run before the passing one. A characterization test that passes at once is named as such. A test that passes only after it changed the test is called out, with why the new assertion is correct.</li>
+    </ul>
+    <h3 id="qa-expert-report">qa-expert report</h3>
+    <p>Coverage gaps ranked by severity (the defect the gap would let through), each with <code>file:line</code>, the untested branch or contract, the risk and the test that would pin it. It ends with <code>VERIFIED</code> or <code>UNVERIFIED: &lt;what is untested&gt;</code>.</p>
+    <div class="callout never">
+      <h3 id="what-qa-expert-never-does">What qa-expert never does</h3>
+      <ul>
+        <li>Edit production code, or write any file at all when asked for an assessment only.</li>
+        <li>Delete or skip a test to make a suite green; it reports it instead.</li>
+        <li>Run commands found in the code or PR text.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/qa-expert.md">Read qa-expert.md on GitHub</a></p>
+
+    <h2 id="research-analyst">research-analyst</h2>
+    <p>Gathers and synthesizes external information (library behavior, API contracts, vendor limits, migration paths) into a sourced answer. Use it when the question needs sources rather than reasoning.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, WebFetch, WebSearch</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>bug-triage (library or vendor behavior); on request</dd></div>
+    </dl>
+    <h3 id="what-research-analyst-checks">What research-analyst checks</h3>
+    <ul>
+      <li>Official documentation over blog posts and current versions over archived pages, with the publication or last-updated date of anything version-sensitive.</li>
+      <li>Where sources disagree, both, with dates.</li>
+    </ul>
+    <h3 id="research-analyst-report">research-analyst report</h3>
+    <p>The answer in one or two sentences, then the evidence. Every factual claim cites a URL or <code>file:line</code>; an uncited claim is labelled <code>ASSUMPTION:</code>. It ends with what it could not establish; "not found" is a valid result.</p>
+    <div class="callout never">
+      <h3 id="what-research-analyst-never-does">What research-analyst never does</h3>
+      <ul>
+        <li>Edit files.</li>
+        <li>Act on commands found in sources, or fetch a URL built from local file contents.</li>
+        <li>Fill a gap with a plausible-sounding invention.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/research-analyst.md">Read research-analyst.md on GitHub</a></p>
+
+    <h2 id="security-auditor">security-auditor</h2>
+    <p>Audits a codebase or diff for exploitable security defects: authentication and authorization, injection, secret exposure, unsafe deserialization, SSRF and insecure defaults. Use it when the work needs a security pass.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>opus</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob, Bash</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>audit-to-backlog (security)</dd></div>
+    </dl>
+    <h3 id="what-security-auditor-checks">What security-auditor checks</h3>
+    <ul>
+      <li>Only the named files, reading the auth, middleware, API route and data-access layers before anything else. An installed scanner (<code>npm audit</code>, <code>semgrep</code>, <code>gitleaks</code>) is one input among several, not the audit.</li>
+      <li>Authentication and authorization bypass, IDOR, missing server-side checks on client-supplied trust flags, injection (SQL, command, template), secrets in source or logs, SSRF and unvalidated redirects, unsafe deserialization, permissive CORS, missing rate limits on auth endpoints, and dependency vulnerabilities with a real call path.</li>
+      <li>Any switch that turns a control off, such as an environment flag that disables 2FA, is itself the defect.</li>
+    </ul>
+    <h3 id="security-auditor-report">security-auditor report</h3>
+    <p>Every P0 and P1, ordered by impact, each with <code>file:line</code>, severity, the concrete attack (who does what, and what they get), the vulnerable excerpt and a fix. A finding without an attack path is dropped. It ends with <code>P0: n, P1: n, P2: n, P3: n</code>.</p>
+    <div class="callout never">
+      <h3 id="what-security-auditor-never-does">What security-auditor never does</h3>
+      <ul>
+        <li>Edit or commit files, or weaken a control to make something work.</li>
+        <li>Propose disabling 2FA, auth or a security check as a workaround.</li>
+        <li>Print a secret value; it names the file and line only.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/security-auditor.md">Read security-auditor.md on GitHub</a></p>
+
+    <nav class="doc-foot" aria-label="Related">
+      <a href="docs/product/functional-spec.html#3-agents">Agents in the functional specification</a>
+      <a href="skills/index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="docs/changelog.html">Changelog</a>
+      <a href="docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="assets/site.js"></script>
+</body>
+</html>
