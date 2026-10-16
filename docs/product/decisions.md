@@ -142,7 +142,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   repository's default branch. `main` is not the release channel today.
 - **Pinning:** a user holds one version by adding the marketplace at a branch or tag
   (`/plugin marketplace add msolecki/developer-os#<ref>`); no release tag exists yet.
-- **Open:** a release procedure (tags, changelog date); see [CURRENT-STATE.md](../CURRENT-STATE.md).
+- **Open:** a release procedure (tags, changelog date).
 - **Amended 2026-10-15:** `plugin.json` carries no `version`. Claude Code then versions an install by
   the commit SHA, so `claude plugin update` picks up every commit on `development`, docs-only ones
   too. The pinned `0.1.0` kept every install on its first cached copy, whatever was pushed later.

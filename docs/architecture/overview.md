@@ -44,7 +44,7 @@ What occupies the context of a session, and when:
 
 | Part | When it loads | Size today | Limit |
 |---|---|---|---|
-| `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit (figure in [CURRENT-STATE](../CURRENT-STATE.md)) | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
+| `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction or resume inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
 | Skill names and descriptions | Every session, by Claude Code's skill listing | 10065 characters for 28 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |

@@ -83,7 +83,7 @@ the Site stage names the page to refresh: update its text, then its hash
 (`sed '/^last-verified: /d' <source> | shasum -a 256 | cut -c1-12`). A new doc or skill needs a new
 page, and a new doc an entry in `NAV`. The landing page and the skills index restate many sources
 and carry no hash; update them by hand when the hooks, rules or skills they describe change.
-`CURRENT-STATE.md` and `CHANGELOG.md` change on most pull requests, so their pages usually do too.
+`CHANGELOG.md` changes on most pull requests, so its page usually does too.
 The Local paths stage scans `site/`, so a page that quotes its patterns writes the slash as `&#47;`,
 as `development.html` and `contributing.html` do. CI rejects a pull request that adds the
 gitleaks allow marker, so a page that quotes it writes its colon as `&#58;`.
