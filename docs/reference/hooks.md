@@ -73,13 +73,14 @@ answers `deny`. In `claude -p`, an `ask` resolves to a denial (per the README; n
 | Category | Asks for | Passes |
 |---|---|---|
 | Dependency install | `npm`, `pnpm`, `yarn` or `bun` (also by full path) followed by `install`, `add`, `i` or an npm alias (`in`, `inst`…, `isntall`, `it`) and then any non-dash word (`pnpm add zod`, `npm i -D vitest`, `pnpm --filter web add zod`) | `pnpm install`, `pnpm install --frozen-lockfile`, `npm ci`, `pnpm add -D` with flags only |
-| Force push | `git push` (git also by full path) with `--force`, a short-flag cluster containing `f`, or a `+refspec`, even next to `--force-with-lease` | `--force-with-lease` alone (including `=ref:sha`), `git push --delete`, `git push origin :branch`, `git push -n` |
-| Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `core.hooksPath` (with `=`, as a `git config` key or as `GIT_CONFIG_KEY_<n>=core.hooksPath`); `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`) | `git commit -am` |
+| Force push | `git push` (git also by full path) with `--force`, `--mirror`, a short-flag cluster containing `f`, or a `+refspec`, even next to `--force-with-lease` | `--force-with-lease` alone (including `=ref:sha`), `git push --delete`, `git push origin :branch`, `git push -n` |
+| Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `core.hooksPath` (with `=`, as a `git config` key, through `--config-env=` or as `GIT_CONFIG_KEY_<n>=core.hooksPath`); `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`) | `git commit -am` |
 
-**Parsing:** JSON-unescape (`\r`, `\t` become spaces), join backslash-newline continuations, drop
-all quotes, split segments on `; & | ( )` and backtick, scan words per segment. The command is
-scanned twice: once with `\n` as a command separator, once with `\n` as a space for the git checks
-only, so a newline inside a quoted `-m` message cannot hide a later `-n` or `-f`. Because quotes
+**Parsing:** JSON-unescape (`\r`, `\t` become spaces); a backslash-newline continuation and a `\n`
+inside quotes become a space, a `\n` outside quotes separates commands. Then delete all quotes and a
+backslash before a letter or digit (so `np""m` and `\git` read as `npm` and `git`), split segments on
+`; & | ( )` and backtick, and scan words per segment. A word built at run time, such as
+`$(command -v npm)`, is not resolved. Because quotes
 are dropped, a mention such as `git commit -m "pnpm add zod"` also asks; this is deliberate.
 
 **Known false positives** (an extra prompt, never a missed category): `git` stays armed for the

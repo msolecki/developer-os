@@ -73,6 +73,15 @@ check ask "$(fx 'git -c core.hooksPath=/dev/null commit -m x')"
 check ask "$(fx 'git -C dir push -f')"
 check ask "$(fx 'git config core.hooksPath /dev/null')"
 check ask "$(fx 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit')"
+# Quote- and backslash-split words, a newline inside a package argument, other bypass forms.
+check ask "$(fx 'npm install \"--message=\nx\" is-number')"
+check ask "$(fx 'np\"\"m install lodash')"
+check ask "$(fx '\\git push --force')"
+check ask "$(fx 'git commit --no-ver\"\"ify')"
+check ask "$(fx 'git config core.hooks\"\"Path /dev/null')"
+check ask "$(fx 'D=/dev/null git --config-env=core.hooksPath=D commit -m x')"
+check ask "$(fx 'git push --mirror')"
+check pass "$(fx 'git commit -m \"fix\n\nbody\"')"
 check pass '{"tool_input":{"command":"pnpm add zod"'
 check pass 'not json'
 check pass ''

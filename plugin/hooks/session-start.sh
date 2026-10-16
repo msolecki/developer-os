@@ -34,7 +34,7 @@ local_state && own=yes
 # Newest plan changed in the last 7 days; the state file's own Plan: line prints with the file.
 # Only plain names: a newline or other byte in a name could carry text into the card.
 plan=
-[ -L docs ] || [ -L docs/plans ] || plan=$(find docs/plans -maxdepth 1 -name '*.md' ! -name '.*' \
+[ -L docs ] || [ -L docs/plans ] || plan=$(LC_ALL=C find docs/plans -maxdepth 1 -name '*.md' ! -name '.*' \
   ! -name '*[!A-Za-z0-9._-]*' -mtime -7 -exec ls -t {} + 2>/dev/null | head -n 1)
 # A tracked plan came with the clone, so its name is not shown.
 git ls-files --error-unmatch "$plan" >/dev/null 2>&1 && plan=
