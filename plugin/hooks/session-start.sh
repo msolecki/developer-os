@@ -4,7 +4,7 @@
 # the summary. The rules always print first; nothing after them can fail the hook.
 
 cap=1024
-cat "$(dirname "$0")/../rules/core.md" 2>/dev/null
+cat "${CLAUDE_PLUGIN_ROOT}/rules/core.md" 2>/dev/null
 trap 'exit 0' EXIT
 
 input=$(cat 2>/dev/null | tr '\n\r' '  ') || exit 0

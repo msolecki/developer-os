@@ -4,6 +4,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Hooks for the plugin-directory validator (COMMAND_PATH_COMPUTED): `session-start.sh` reads the core
+  rules from `${CLAUDE_PLUGIN_ROOT}/rules/core.md` instead of a path built from `$0`, `guard.sh` runs its
+  word scanner from `hooks/guard.awk` instead of an inline awk program, and `capture-nudge.sh` compares
+  Monitor timestamps with `expr` instead of inline awk.
+
 ## [0.2.0] - 2026-10-16
 
 ### Added
