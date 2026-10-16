@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>audit-to-backlog · developer-os skills</title>
 <meta name="description" content="Run parallel specialist reviews of a repository, keep only findings with file-and-line evidence, and write an implementation-ready backlog.">
-<meta name="dos-source" content="plugin/skills/audit-to-backlog/SKILL.md@3dce6b14f0fe">
+<meta name="dos-source" content="plugin/skills/audit-to-backlog/SKILL.md@76dd0ca01999">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -55,7 +55,7 @@
     <ol>
       <li><strong>Establishes scope.</strong> It resolves the path or diff and the perspectives, detects the stack, the package manager from the lockfile and the real validation commands. It finds the backlog from a <code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code> line in <code>AGENTS.md</code> or <code>CLAUDE.md</code>, otherwise <code>TODO.md</code> and <code>TODO-done.md</code>, and reads it so no finding is duplicated or brought back from the done file. Before creating the files it asks which paths to use and records them as a <code>Backlog:</code> line; a git-ignored path gets a warning that worktrees cannot see its claims, and needs your confirmation. Project-specific reviewer agents are preferred when the repository defines any.</li>
       <li><strong>Delegates the perspectives in parallel.</strong> Security goes to <code>developer-os:security-auditor</code>, performance to <code>developer-os:performance-engineer</code>, tests to <code>developer-os:qa-expert</code> (assessment only, it writes nothing) and correctness to <code>developer-os:code-reviewer</code>; types, architecture and dead code, UI and accessibility run inline or in a general-purpose agent. Each reviewer returns every P0 and P1 plus at most 15 P2/P3 findings, each with an ID, <code>file:line</code>, severity, evidence from the current code, a fix, a size, a <code>Done when</code> criterion and a runnable <code>Check</code> command. Unsupported claims are rejected, and every report must open with a final status (<code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code> or <code>CONTINUING</code>).</li>
-      <li><strong>Verifies blocking findings.</strong> Every P0 and P1 goes to a fresh verifier that did not produce it (Codex when the Codex plugin is installed, otherwise the read-only verifier agent), given only the claim and asked to disprove it. Confirmed findings stay, undecided ones are marked unverified, refuted ones are left out and listed under Disputed with the verifier's evidence. While reviewers run, a short state card in <code>docs/plans/.devos-state.md</code> lets the session pick up after a compaction.</li>
+      <li><strong>Verifies blocking findings.</strong> Every P0 and P1 goes to a fresh verifier that did not produce it (Codex when the Codex plugin is installed, otherwise the read-only verifier agent, which also takes over when Codex errors or returns nothing), given only the claim and asked to disprove it. Confirmed findings stay, undecided ones are marked unverified, refuted ones are left out and listed under Disputed with the verifier's evidence. While reviewers run, a short state card in <code>docs/plans/.devos-state.md</code> lets the session pick up after a compaction.</li>
       <li><strong>Merges the backlog.</strong> Items go into P0–P3 sections followed by implementation sessions of five to seven related tasks, never mixing P0 and P3. Duplicates are merged by file and root cause, keeping the higher severity; IDs continue the existing numbering and are never reused. A <code>Done when</code> is never edited, only amended with your approval.</li>
       <li><strong>Validates and reports.</strong> It checks that every item is evidence-backed, actionable, unique and absent from the done file, then reports the counts per priority and the three highest-impact findings, using only measured metrics.</li>
     </ol>
@@ -85,7 +85,7 @@
       <ul>
         <li>Fix a finding or edit code outside the backlog files and the <code>Backlog:</code> line.</li>
         <li>Create the backlog files before you choose their paths.</li>
-        <li>Record a finding without <code>file:line</code> evidence, or bring one back from the done file.</li>
+        <li>Record an audit finding without <code>file:line</code> evidence (a <code>FEAT-</code> item from spec cites its spec section instead), or bring one back from the done file.</li>
         <li>Let a reviewer write code or tests.</li>
       </ul>
     </div>

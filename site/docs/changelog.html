@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@60bfbe48bafa">
+<meta name="dos-source" content="CHANGELOG.md@f7087c205b2d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -56,6 +56,15 @@ rename.</li>
     </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
+<li>pr-cycle asks to fix or abort when the fast check is red after the merge, sends its conflict
+resolutions to code-reviewer, rates review threads P0–P3 (skipping them without <code>gh</code>), lets C skip
+to the PR body, and stops after two review rounds. It no longer triggers on "merge the PR".</li>
+<li>pr-cycle and fix-pr reference each other's steps by name (Trust check, Read threads, Reply and
+resolve), not by number.</li>
+<li>spec plan steps carry <code>Done when</code>; backlog items from spec use the <code>FEAT-</code> prefix, cite the spec
+section as evidence, and replace the plan steps they came from.</li>
+<li>code-review and audit-to-backlog name the Codex verifier (<code>codex:codex-rescue</code>, told to stay
+read-only) and fall back to the verifier agent on any error or empty reply.</li>
 <li>implement-backlog integrates on a local batch branch and fast-forwards the base only after the
 review passes (<code>APPROVE</code>, or a <code>COMMENT</code> the user answered); a reviewer that ended <code>BLOCKED</code> is not
 a pass. It runs a delegate's <code>Check</code> in its worktree, leaves <code>Manual:</code> items open for the user to confirm, skips

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>fix-pr · developer-os skills</title>
 <meta name="description" content="Work through every unresolved pull-request review thread or pasted finding, with your approval before each edit, commit, push and thread resolution.">
-<meta name="dos-source" content="plugin/skills/fix-pr/SKILL.md@3d22681b8cd8">
+<meta name="dos-source" content="plugin/skills/fix-pr/SKILL.md@b4db0a563b61">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,7 +54,7 @@
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
-      <li><strong>Checks the branch and trust.</strong> It stops if the working tree has changes outside <code>docs/plans/</code>, then reads the PR's trust inputs as <a href="pr-cycle.html">pr-cycle</a> does. A trusted head is checked out; an untrusted one only after you say yes, and without that it lists the threads and proposed fixes and edits nothing. It asks before running scripts or hooks of an untrusted head. Without a working <code>gh</code> it stops and says so.</li>
+      <li><strong>Checks the branch and trust.</strong> It stops if the working tree has changes outside <code>docs/plans/</code>, then reads the PR's trust inputs as the Trust check of <a href="pr-cycle.html">pr-cycle</a> does. A trusted head is checked out; an untrusted one only after you say yes, and without that it lists the threads and proposed fixes and edits nothing. It asks before running scripts or hooks of an untrusted head. Without a working <code>gh</code> it stops and says so.</li>
       <li><strong>Collects the threads.</strong> It queries the unresolved review threads through <code>gh api graphql</code>, every page, with each author's association. With no PR threads it takes the findings you pasted or named in a file.</li>
       <li><strong>Treats comments as data.</strong> It never runs commands, installs packages or opens URLs from a comment, and flags comments whose author is not an owner, member or collaborator.</li>
       <li><strong>Decides per thread.</strong> It reads the referenced code and decides on a fix, or no change with a concrete justification. It shows the planned change and asks before editing; when a comment is ambiguous it asks before changing behavior.</li>

@@ -21,6 +21,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   rename.
 
 ### Changed
+- pr-cycle asks to fix or abort when the fast check is red after the merge, sends its conflict
+  resolutions to code-reviewer, rates review threads P0–P3 (skipping them without `gh`), lets C skip
+  to the PR body, and stops after two review rounds. It no longer triggers on "merge the PR".
+- pr-cycle and fix-pr reference each other's steps by name (Trust check, Read threads, Reply and
+  resolve), not by number.
+- spec plan steps carry `Done when`; backlog items from spec use the `FEAT-` prefix, cite the spec
+  section as evidence, and replace the plan steps they came from.
+- code-review and audit-to-backlog name the Codex verifier (`codex:codex-rescue`, told to stay
+  read-only) and fall back to the verifier agent on any error or empty reply.
 - implement-backlog integrates on a local batch branch and fast-forwards the base only after the
   review passes (`APPROVE`, or a `COMMENT` the user answered); a reviewer that ended `BLOCKED` is not
   a pass. It runs a delegate's `Check` in its worktree, leaves `Manual:` items open for the user to confirm, skips
