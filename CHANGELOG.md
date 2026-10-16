@@ -4,6 +4,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Setup docs: the README lists the requirements (`rg`, `jq`, `gh`, Obsidian 1.9.10 or later for
+  Bases), the vault steps say to open the folder as a vault in Obsidian, and the project templates
+  are copied from the marketplace install with `cp -Rn`. The landing page no longer says an install
+  takes the latest commit: it takes the latest release, from `main`.
+
 ## [0.2.3] - 2026-10-16
 
 ### Changed

@@ -38,7 +38,8 @@ The [README](../README.md) has the short version; this is the full one.
    line to add to `~/.codex/AGENTS.md` (see [Codex](../README.md#codex-installer-best-effort)). Brain
    skills ask once for the vault path when the line is missing, and stop if you have none; the core
    rules run brain-search only when the line exists.
-3. In Obsidian, Settings, Core plugins: enable **Bases** and **Templates**; set the Templates folder
+3. Open the vault folder in Obsidian ("Open folder as vault"; Bases needs Obsidian 1.9.10 or
+   later). In Settings, Core plugins: enable **Bases** and **Templates**; set the Templates folder
    to `templates`.
 4. Start a session and ask: "brain-search webhooks". It should find the example inbox note.
 
@@ -48,6 +49,9 @@ and `_Context.md`. `CLAUDE.md` is one line, `@AGENTS.md`, so both agents read th
 `_Context.md` carries the project's vault slug. Delete `DESIGN.md` and its line in `AGENTS.md` when
 the project has no UI. `TODO.md` shows the backlog item format with one example item to replace.
 `.gitignore` keeps `docs/plans/` out of git; merge it into an existing one.
+The marketplace install keeps the templates on disk:
+`cp -Rn ~/.claude/plugins/marketplaces/developer-os/templates/project/. /path/to/project/` copies
+them and, with `-n`, skips every file the project already has.
 `docs/` holds the index (task → doc routing), `CURRENT-STATE.md` (verified at a commit),
 `pitfalls.md`, `decisions/` and `runbooks/`. The docs-sync skill scaffolds missing pieces, refreshes
 `CURRENT-STATE.md` and reports docs-vs-code drift; project-baseline proposes missing engineering
