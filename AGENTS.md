@@ -1,7 +1,8 @@
 # developer-os
 
-A Markdown-only Claude Code plugin: core rules, skills, agents and POSIX `sh` hooks under `plugin/`,
+This repository is a Markdown-only Claude Code plugin: core rules, skills, agents and POSIX `sh` hooks under `plugin/`,
 copyable project templates under `templates/`. No runtime and no build; see [README.md](README.md).
+`CLAUDE.md` only imports this file, so this file is the authoritative source for every agent.
 
 ## Commands
 
