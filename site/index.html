@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>developer-os</title>
+<meta name="description" content="A Claude Code plugin that gives your coding agent an Obsidian vault as long-term memory, working rules for every session, and hooks that ask before risky commands.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #eef2f4;
+  --sheet: #f8fafb;
+  --ink: #1c2733;
+  --muted: #566573;
+  --rule: #c9d3da;
+  --pine: #2f6f62;
+  --marker: #f1cf63;
+  --hl: #f1cf63;
+  --code-bg: #e2e9ee;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #141b22; --sheet: #1a232c; --ink: #dce4ea; --muted: #93a3b0;
+    --rule: #2c3a46; --pine: #6cc0ac; --marker: #c9a43a; --hl: #6b5518; --code-bg: #212d38;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #141b22; --sheet: #1a232c; --ink: #dce4ea; --muted: #93a3b0;
+  --rule: #2c3a46; --pine: #6cc0ac; --marker: #c9a43a; --hl: #6b5518; --code-bg: #212d38;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 1.125rem/1.65 "Source Serif 4", Georgia, serif;
+}
+a { color: var(--pine); text-underline-offset: 0.18em; }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--pine); outline-offset: 3px; border-radius: 2px; }
+h1, h2, h3 { font-family: "Schibsted Grotesk", system-ui, sans-serif; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2.6rem, 8vw, 4.75rem); font-weight: 800; letter-spacing: -0.035em; }
+h2 { font-size: clamp(1.6rem, 4vw, 2.25rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
+h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.35rem; }
+p { margin: 0 0 1rem; }
+code, pre { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.85em; }
+code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+pre { background: var(--code-bg); padding: 1rem 1.15rem; border-radius: 8px; overflow-x: auto; margin: 0 0 1rem; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+mark { background: linear-gradient(transparent 55%, var(--hl) 55%); color: inherit; padding: 0 0.1em; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+.prose { max-width: 66ch; }
+.wrap.prose { max-width: 1080px; }
+.wrap.prose > * { max-width: 66ch; }
+section { padding: 4.5rem 0; border-top: 1px solid var(--rule); }
+
+/* Top bar */
+.top { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 0; font-family: "Schibsted Grotesk", sans-serif; font-weight: 500; font-size: 0.95rem; }
+.top nav { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+.top a { color: var(--ink); text-decoration: none; }
+.top a:hover { color: var(--pine); }
+.brand { font-weight: 800; letter-spacing: -0.02em; }
+
+/* Hero */
+.hero { padding: 3.5rem 0 4rem; }
+.lede { font-size: clamp(1.2rem, 2.4vw, 1.45rem); max-width: 40ch; margin: 1.25rem 0 2rem; color: var(--ink); }
+.install { max-width: 560px; position: relative; }
+.install pre { margin: 0; padding-right: 5.5rem; }
+.copy {
+  position: absolute; top: 0.6rem; right: 0.6rem;
+  font: 600 0.8rem "Schibsted Grotesk", sans-serif;
+  background: var(--sheet); color: var(--ink); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 0.35rem 0.7rem; cursor: pointer;
+}
+.copy:hover { border-color: var(--pine); }
+.hero-note { color: var(--muted); font-size: 0.95rem; margin-top: 0.75rem; }
+
+/* The session diagram: the one memorable element */
+.diagram { margin: 3.5rem 0 0; background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 1.75rem 1.5rem 1.5rem; }
+.diagram-title { font: 700 1rem "Schibsted Grotesk", sans-serif; margin: 0 0 1.25rem; }
+.track { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem; }
+.track::before { content: ""; position: absolute; left: 0; right: 0; top: 13px; height: 2px; background: var(--rule); }
+.stop { position: relative; }
+.dot { width: 28px; height: 28px; border-radius: 50%; background: var(--sheet); border: 2px solid var(--pine); display: grid; place-items: center; font: 700 0.8rem "Schibsted Grotesk", sans-serif; color: var(--pine); position: relative; }
+.stop.you .dot { background: var(--marker); border-color: var(--ink); color: #1c2733; }
+.stop h3 { margin-top: 0.85rem; font-size: 1rem; }
+.stop p { font-size: 0.95rem; line-height: 1.5; margin: 0; color: var(--muted); }
+.stop .by { display: block; margin-top: 0.5rem; font-size: 0.85rem; color: var(--ink); }
+.vault-strip { margin-top: 1.5rem; padding-top: 1.1rem; border-top: 1px dashed var(--rule); display: flex; gap: 0.75rem 1.5rem; flex-wrap: wrap; align-items: baseline; font-size: 0.95rem; }
+.vault-strip strong { font-family: "Schibsted Grotesk", sans-serif; }
+.legend-you { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 50%; background: var(--marker); border: 1.5px solid var(--ink); vertical-align: -0.05em; margin-right: 0.3em; }
+
+/* Three ideas */
+.ideas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.5rem; margin-top: 2rem; }
+.ideas p { font-size: 1.02rem; }
+
+/* Skills */
+.groups { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2.5rem 3rem; margin-top: 2rem; }
+.groups dl { margin: 0; }
+.groups dt { font-family: "JetBrains Mono", monospace; font-size: 0.9rem; font-weight: 500; margin-top: 0.85rem; color: var(--pine); }
+.groups dd { margin: 0.1rem 0 0; font-size: 0.98rem; line-height: 1.5; }
+.small { font-size: 0.95rem; color: var(--muted); }
+
+/* Hooks */
+.hooks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-top: 2rem; }
+.hook { background: var(--sheet); border-left: 4px solid var(--pine); padding: 1.15rem 1.25rem; border-radius: 0 10px 10px 0; }
+.hook .event { font: 500 0.85rem "JetBrains Mono", monospace; color: var(--pine); display: block; margin-bottom: 0.4rem; }
+.hook p { font-size: 0.98rem; line-height: 1.5; margin: 0; }
+
+/* Steps */
+ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 2rem 0 0; max-width: 72ch; }
+ol.steps > li { counter-increment: step; position: relative; padding-left: 3.25rem; margin-bottom: 2rem; }
+ol.steps > li::before {
+  content: counter(step); position: absolute; left: 0; top: 0.1rem;
+  width: 2.1rem; height: 2.1rem; border-radius: 50%; border: 2px solid var(--pine);
+  display: grid; place-items: center; font: 700 0.95rem "Schibsted Grotesk", sans-serif; color: var(--pine);
+}
+
+table { border-collapse: collapse; width: 100%; font-size: 0.98rem; margin-top: 1.5rem; }
+th, td { text-align: left; padding: 0.55rem 0.75rem 0.55rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: "Schibsted Grotesk", sans-serif; font-weight: 700; }
+td:first-child { white-space: nowrap; }
+
+footer { border-top: 1px solid var(--rule); padding: 2.5rem 0 3rem; color: var(--muted); font-size: 0.95rem; }
+footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+
+@media (max-width: 860px) {
+  .track { grid-template-columns: 1fr; gap: 1.5rem; }
+  .track::before { left: 13px; right: auto; top: 0; bottom: 0; width: 2px; height: auto; }
+  .stop { padding-left: 2.75rem; }
+  .stop .dot { position: absolute; left: 0; top: 0; }
+  .stop h3 { margin-top: 0.15rem; }
+  .ideas, .groups, .hooks { grid-template-columns: 1fr; gap: 1.75rem; }
+  .top nav { gap: 0.9rem; }
+  section { padding: 3.25rem 0; }
+}
+@media (max-width: 520px) {
+  .top nav a.hide-sm { display: none; }
+  td:first-child { white-space: normal; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <span class="brand">developer-os</span>
+    <nav aria-label="Page">
+      <a href="#how" class="hide-sm">How it works</a>
+      <a href="#skills" class="hide-sm">Skills</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+  </header>
+</div>
+
+<main>
+  <div class="wrap hero">
+    <h1>Your coding agent forgets. Your vault doesn't.</h1>
+    <p class="lede">developer-os is a Claude Code plugin that gives the agent an Obsidian vault as long-term memory, a short set of working rules for every session, and guard rails that ask before risky commands.</p>
+
+    <div class="install">
+      <pre tabindex="0"><code id="install-cmd">/plugin marketplace add msolecki/developer-os
+/plugin install developer-os@developer-os</code></pre>
+      <button class="copy" type="button" data-copy="install-cmd" aria-live="polite">Copy</button>
+    </div>
+    <p class="hero-note">Plain Markdown and three small shell scripts. No server, no database, nothing to run. MIT licensed.</p>
+
+    <figure class="diagram" aria-labelledby="diagram-title">
+      <figcaption class="diagram-title" id="diagram-title">One session with developer-os installed</figcaption>
+      <div class="track">
+        <div class="stop">
+          <span class="dot" aria-hidden="true">1</span>
+          <h3>Session starts</h3>
+          <p>The core rules load into context. After a compaction or resume, a short state card says which branch, plan and worktrees you were on.</p>
+          <span class="by">SessionStart hook</span>
+        </div>
+        <div class="stop">
+          <span class="dot" aria-hidden="true">2</span>
+          <h3>Look before working</h3>
+          <p>Before a large task the agent searches your vault for earlier decisions and reads the project's active plan.</p>
+          <span class="by">brain-search</span>
+        </div>
+        <div class="stop">
+          <span class="dot" aria-hidden="true">3</span>
+          <h3>Work, with guard rails</h3>
+          <p>Skills for review, specs, audits and PRs. Installs, force pushes and hook bypasses stop and ask you first.</p>
+          <span class="by">PreToolUse hook</span>
+        </div>
+        <div class="stop">
+          <span class="dot" aria-hidden="true">4</span>
+          <h3>Capture what matters</h3>
+          <p>A decision or lesson worth keeping goes into the vault's inbox as a draft note, with secrets redacted.</p>
+          <span class="by">brain-capture</span>
+        </div>
+        <div class="stop you">
+          <span class="dot" aria-hidden="true">5</span>
+          <h3>You decide</h3>
+          <p>At the end of a long session the agent proposes a wrap-up. Only the notes you approve become knowledge.</p>
+          <span class="by">session-retro, brain-review</span>
+        </div>
+      </div>
+      <div class="vault-strip">
+        <strong>The vault</strong>
+        <span>Plain Markdown files in Obsidian, read and written with the agent's own file tools.</span>
+        <span><span class="legend-you" aria-hidden="true"></span>Your approval step</span>
+      </div>
+    </figure>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="prose">
+        <h2>How it works</h2>
+        <p>Every new agent session starts from zero. What you explained yesterday, the bug you chased for an hour, the reason you picked one library over another: gone. developer-os splits what should survive into two places and keeps you in charge of both.</p>
+      </div>
+      <div class="ideas">
+        <div>
+          <h3>The vault remembers knowledge</h3>
+          <p>An Obsidian vault holds decisions, lessons and references that outlive a single task or repository. The agent searches it before large tasks and cites the notes it used.</p>
+        </div>
+        <div>
+          <h3>The repository remembers the code</h3>
+          <p>Plans, decision records and code facts stay next to the code they describe. Plans are git-ignored working files, deleted when the task is done.</p>
+        </div>
+        <div>
+          <h3>You decide what becomes knowledge</h3>
+          <p>The agent creates notes only in the vault's <code>_inbox/</code>. It edits or moves any other note only after you approve. <mark>An unreviewed agent note is a draft, not a fact.</mark></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="rules">
+    <div class="wrap prose">
+      <h2>Rules that load in every session</h2>
+      <p>Installing the plugin changes how the agent behaves everywhere, not only when you call a skill. At session start a hook prints <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md">core.md</a>, a rule file kept under 8 KB so it never crowds out your own context. A few of the rules:</p>
+      <ul>
+        <li>Run lint, types and the changed area's tests before each commit; the full suite before a push or PR.</li>
+        <li>Never delete or skip tests to make a build green.</li>
+        <li>Write a plan before changing more than 50 lines of code, and keep it updated so work survives a context reset.</li>
+        <li>Code written by an agent gets reviewed by a different, fresh agent.</li>
+        <li>"Works" and "fixed" need evidence: test output, a command result or a screenshot.</li>
+        <li>End every task with a status: Done, Not done, Needs you.</li>
+      </ul>
+      <p>Disagree with one? Override it in your own <code>~/.claude/CLAUDE.md</code>, which loads alongside the core rules.</p>
+    </div>
+  </section>
+
+  <section id="skills">
+    <div class="wrap">
+      <div class="prose">
+        <h2>Skills</h2>
+        <p>Skills are instructions the agent loads only when a task calls for them. You can name one directly or just describe the task; they also trigger on Polish phrasing.</p>
+      </div>
+      <div class="groups">
+        <div>
+          <h3>Memory</h3>
+          <dl>
+            <dt>brain-setup</dt><dd>Creates a vault from the template or connects your existing one, showing every config edit as a diff first.</dd>
+            <dt>brain-search</dt><dd>Answers "what did we decide about X?" from your notes only, citing each one.</dd>
+            <dt>brain-capture</dt><dd>Saves a decision, lesson or reference to the inbox, secrets redacted.</dd>
+            <dt>brain-review</dt><dd>Walks the inbox with you: promote, merge or reject the notes you name.</dd>
+            <dt>brain-garden</dt><dd>Health report: stale notes, broken links, bad frontmatter, likely duplicates.</dd>
+            <dt>brain-compile</dt><dd>Merges several notes on one topic into one compiled note, sources listed.</dd>
+          </dl>
+        </div>
+        <div>
+          <h3>Engineering</h3>
+          <dl>
+            <dt>spec</dt><dd>Interviews you, inspects the repo, writes a spec and plan, hands off to a fresh session.</dd>
+            <dt>code-review</dt><dd>Reviews a diff, commit or PR with P0–P3 findings and a merge verdict.</dd>
+            <dt>audit-to-backlog</dt><dd>Parallel specialist reviews with file-and-line evidence, turned into a backlog.</dd>
+            <dt>implement-backlog</dt><dd>Works through backlog items in small, validated, reviewed batches.</dd>
+            <dt>pr-cycle, fix-pr</dt><dd>Brings a PR to merge-ready, or addresses its review threads, asking before each fix and push.</dd>
+            <dt>bug-triage, deploy-checklist</dt><dd>Severity, reproduction and root cause; a GO/NO-GO list before a deploy.</dd>
+          </dl>
+        </div>
+        <div>
+          <h3>Project hygiene</h3>
+          <dl>
+            <dt>docs-sync</dt><dd>Checks docs against the code and reports drift.</dd>
+            <dt>project-baseline</dt><dd>Finds missing engineering practices and proposes them as backlog items.</dd>
+            <dt>instruction-review</dt><dd>Proposes a minimal, evidence-backed diff to your CLAUDE.md or AGENTS.md.</dd>
+            <dt>plan-status</dt><dd>Open, done and blocked counts, plus open decisions as A/B/C questions.</dd>
+          </dl>
+        </div>
+        <div>
+          <h3>Session and communication</h3>
+          <dl>
+            <dt>session-retro</dt><dd>End-of-session check for uncommitted work and running tasks, a status, and lessons worth keeping.</dd>
+            <dt>client-reply</dt><dd>Turns technical notes into a plain-language reply to a client. Drafts only, never sends.</dd>
+            <dt>skill-usage</dt><dd>How often each skill fired locally, with keep, merge or remove suggestions.</dd>
+          </dl>
+        </div>
+      </div>
+      <p class="small prose" style="margin-top:2rem">Also included: conventions skills for TypeScript, Next.js, tests, error handling, monitoring, comments and defensive coding (they load only when the task calls for them); reviewer agents for code, security, performance, QA and research; and output styles you can pick with <code>/output-style</code>.</p>
+    </div>
+  </section>
+
+  <section id="hooks">
+    <div class="wrap">
+      <div class="prose">
+        <h2>Three hooks, and they only ask</h2>
+        <p>The hooks are POSIX shell scripts with no dependencies and no network calls. They never block you outright: a guard asks for confirmation (in headless <code>claude -p</code> an ask becomes a denial), and on input it cannot parse it stays silent and the normal permission flow applies.</p>
+      </div>
+      <div class="hooks">
+        <div class="hook">
+          <span class="event">SessionStart</span>
+          <p>Loads the core rules. After a compaction or resume, adds a state card of at most 1 KB: branch, newest plan, task state, worktrees.</p>
+        </div>
+        <div class="hook">
+          <span class="event">PreToolUse on Bash</span>
+          <p>Asks before a dependency install with a package argument, a force push, or a bypass of git hooks such as <code>--no-verify</code>.</p>
+        </div>
+        <div class="hook">
+          <span class="event">Stop</span>
+          <p>Once per long session, suggests a wrap-up with session-retro. It reads tool-call counts and background-task ids, paths and times, never message content.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="prose">
+        <h2>Get started</h2>
+        <p>About five minutes, most of it in Obsidian settings.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <h3>Install the plugin in Claude Code</h3>
+          <pre tabindex="0"><code>/plugin marketplace add msolecki/developer-os
+/plugin install developer-os@developer-os</code></pre>
+          <p class="small">There is no version number: an install takes the latest commit, and <code>claude plugin update developer-os@developer-os</code> picks up later ones.</p>
+        </li>
+        <li>
+          <h3>Set up the vault</h3>
+          <p>Ask Claude Code to run <code>brain-setup</code>. It creates a vault from the template or connects yours, then shows two config edits as a diff and applies them after you approve: a <code>Brain vault: /path/to/vault</code> line in <code>~/.claude/CLAUDE.md</code>, and the vault path in <code>permissions.additionalDirectories</code>. An existing <code>.obsidian/</code> folder is never overwritten.</p>
+        </li>
+        <li>
+          <h3>Enable two Obsidian core plugins</h3>
+          <p>Settings, Core plugins: turn on <strong>Bases</strong> and <strong>Templates</strong>, and set the Templates folder to <code>templates</code>.</p>
+        </li>
+        <li>
+          <h3>Try it</h3>
+          <p>Start a session and ask: <code>brain-search webhooks</code>. It should find the example note in the inbox.</p>
+        </li>
+      </ol>
+      <div class="prose">
+        <p>For each project, copy <a href="https://github.com/msolecki/developer-os/tree/development/templates/project">templates/project/</a> into its root: an <code>AGENTS.md</code> both Claude Code and Codex read, a <code>docs/</code> skeleton, and a <code>.gitignore</code> that keeps plans out of git.</p>
+        <p>To turn everything off, disable the plugin under <code>/plugin</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="vault">
+    <div class="wrap prose">
+      <h2>What the vault looks like</h2>
+      <p>Folders by topic, one frontmatter shape for every note, and nothing is ever deleted: retired notes move to <code>_archive/</code>.</p>
+      <table>
+        <thead><tr><th scope="col">Folder</th><th scope="col">Holds</th></tr></thead>
+        <tbody>
+          <tr><td><code>_inbox/</code></td><td>New notes the agent captured, waiting for your review.</td></tr>
+          <tr><td><code>PROJECTS/</code></td><td>One hub note per project, plus notes that outlive the repository.</td></tr>
+          <tr><td><code>DEV/</code></td><td>Patterns and language or framework lessons.</td></tr>
+          <tr><td><code>TOOLS/</code></td><td>References for tools, services and APIs.</td></tr>
+          <tr><td><code>INFRA/</code></td><td>Hosting, deploys, networking, databases, CI.</td></tr>
+          <tr><td><code>QA/</code></td><td>Testing approaches and lessons from defects.</td></tr>
+          <tr><td><code>_archive/</code></td><td>Notes that are no longer true, merged or rejected.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="codex">
+    <div class="wrap prose">
+      <h2>Using Codex?</h2>
+      <p>Codex support is manual and best-effort. From a clone of the repository, <code>scripts/install-codex.sh --dry-run</code> shows what would change, and running it without the flag copies the skills and the core rules into your Codex setup. The hooks, agents and output styles have no Codex equivalent. Details are in the <a href="https://github.com/msolecki/developer-os#codex-installer-best-effort">README</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <nav aria-label="Documentation">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="https://github.com/msolecki/developer-os/blob/development/docs/workflow.md">Workflow guide</a>
+      <a href="https://github.com/msolecki/developer-os/blob/development/docs/index.md">Documentation</a>
+      <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/msolecki/developer-os/blob/development/SECURITY.md">Security</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll('[data-copy]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var text = document.getElementById(btn.dataset.copy).textContent;
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.textContent = 'Copy'; }, 1600);
+    }, function () {
+      btn.textContent = 'Select and copy';
+    });
+  });
+});
+</script>
+</body>
+</html>
