@@ -76,7 +76,7 @@ done
 [ -n "$(para plugin/skills/brain-search/SKILL.md)" ] || fail vault plugin/skills/brain-search/SKILL.md "no \"## 1. Locate the vault\" paragraph"
 
 # The plugin ships to other machines; a local path leaks the author's layout and breaks elsewhere.
-if git grep --untracked -nE '/Users/|/home/|~/www|\.claude2' -- plugin >&2; then
+if git grep --untracked -nE '/Users/|/home/|~/www|\.claude2' -- plugin site >&2; then
   fail paths plugin "local path (/Users/, /home/, ~/www or .claude2) above"
 fi
 
@@ -132,7 +132,7 @@ git diff HEAD -- plugin/SURFACE.txt |
 skills=$(surface | grep -c '^skill '); agents=$(surface | grep -c '^agent ')
 styles=$(surface | grep -c '^output-style '); hooks=$(jq '[.hooks[][].hooks[]] | length' plugin/hooks/hooks.json)
 cases=$(find evals -mindepth 2 -maxdepth 2 -name case.yaml | wc -l | tr -d ' ')
-files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md | ruby -e '
+files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md 'site/*.html' | ruby -e '
   $stdin.read.split("\0").each do |f|
     File.foreach(f).with_index(1) do |l, i|
       break if f == "CHANGELOG.md" && l.start_with?("## [") && !l.start_with?("## [Unreleased]")
@@ -190,6 +190,51 @@ files '*.md' | ruby -e '
       end
     end
   end'
+
+# The site restates the docs: every doc, root document and skill has a page under site/ that names its
+# source and that source's hash (sha256, first 12 hex digits, with any "last-verified:" line removed, so a
+# re-verification alone changes nothing), and every relative href or src in site/ resolves, with a #fragment
+# naming an id in the target page. A stale page fails here; the message names the page to refresh.
+files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
+  sha = ->(f) { Digest::SHA256.hexdigest(File.read(f).gsub(/^last-verified: .*\n/, ""))[0, 12] }
+  want = {}
+  Dir.glob("docs/**/*.md").reject { |f| f.start_with?("docs/plans/") }.each { |f| want[f] = "site/#{f.sub(/\.md\z/, ".html")}" }
+  %w[README CHANGELOG CONTRIBUTING SECURITY].each { |n| want["#{n}.md"] = "site/docs/#{n.downcase}.html" }
+  Dir.glob("plugin/skills/*/SKILL.md").each { |f| want[f] = "site/skills/#{File.basename(File.dirname(f))}.html" }
+  Dir.glob("plugin/agents/*.md").each { |f| want[f] = "site/agents.html" }
+  Dir.glob("plugin/output-styles/*.md").each { |f| want[f] = "site/output-styles.html" }
+  ids = Hash.new { |h, f| h[f] = File.read(f).scan(/\bid="([^"]+)"/).flatten }
+  named = {}
+  errs = []
+  $stdin.read.split("\0").each do |p|
+    s = File.read(p)
+    if p.end_with?(".js")
+      targets = s.scan(/\[\x27([^\x27]+\.html)\x27,/).flatten.map { |t| "../#{t}" }
+      base = "site/assets"
+    else
+      s.scan(/<meta name="dos-source" content="([^"@]+)@([^"]*)">/) do |src, h|
+        (errs << "site: #{p}: dos-source #{src} does not exist"; next) unless File.file?(src)
+        (errs << "site: #{p}: #{src} changed since the page was written (page #{h}, source #{sha[src]}); update the page, then its dos-source hash"; next) unless h == sha[src]
+        named[src] = p
+      end
+      targets = s.gsub(/<pre.*?<\/pre>/m, "").scan(/\s(?:href|src)="([^"]+)"/).flatten
+      base = File.dirname(p)
+    end
+    targets.each do |t|
+      next if t =~ /\A(?:[a-z][a-z0-9+.-]*:|\/\/)/i
+      path, frag = t.split("#", 2)
+      dest = path.empty? ? p : File.expand_path(path, base).delete_prefix("#{Dir.pwd}/")
+      dest = File.join(dest, "index.html") if File.directory?(dest)
+      (errs << "site: #{p}: #{t} does not resolve"; next) unless File.file?(dest)
+      next unless frag && !frag.empty? && dest.end_with?(".html")
+      (errs << "site: #{p}: #{t} names no id in #{dest}"; next) unless ids[dest].include?(frag)
+    end
+  end
+  want.each do |src, p|
+    next if named[src] == p
+    errs << "site: #{p}: missing, or has no dos-source meta for #{src}" + (named[src] ? " (named in #{named[src]})" : "")
+  end
+  abort errs.uniq.join("\n") unless errs.empty?'
 
 # tests/check.test.sh runs the whole check about twenty times (about 40 s), so it runs only in CI or with CI=1.
 for t in tests/*.test.sh; do
