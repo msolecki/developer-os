@@ -33,8 +33,9 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name; a line inside the frontmatter of an `evals/` file contains `---` (the eval loader ends frontmatter there) |
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
-| Skill sections | An action skill lacks `## Stop point` or `## Never` (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
+| Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden` or `brain-review` differs from `brain-search`'s |
+| Severity | A skill or agent that writes out the P0–P3 scale (inline `P0 = …` or four `- **P0:**` bullets) words it differently from the others |
 | Local paths | A file under `plugin/` or `site/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |

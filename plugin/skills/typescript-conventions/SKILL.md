@@ -7,6 +7,7 @@ compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 
 # TypeScript rules
 
+- Keep `strict` mode enabled in `tsconfig.json`; never turn it off to make a build pass.
 - Prefer composition over inheritance.
 - Give every function one purpose and keep it near 30 lines or fewer.
 - Add tests for every new function and its edge cases. See `developer-os:testing-conventions` for how to write them.

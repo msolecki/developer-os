@@ -7,7 +7,7 @@ compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 
 # Instruction review
 
-1. Read the project instruction file (`CLAUDE.md`, or `AGENTS.md` for Codex), any project context file the repository documents, the project's active plan, and recent git history and diffs.
+1. Read the project instruction file (`CLAUDE.md`, or `AGENTS.md` for Codex); when `CLAUDE.md` only imports `@AGENTS.md`, review and edit `AGENTS.md`, never add rules beside the import. Also read any project context file the repository documents, the project's active plan, and recent git history and diffs.
 2. Keep only durable instructions supported by repeated work, a concrete defect, or an explicit user correction.
 3. Exclude code-discoverable facts, one-off debugging history, rules already present in the developer-os core rules or the user's global instructions, and unsupported preferences.
    Flag existing entries that are stale or contradict the current code for removal, each with its reason. Keep the resulting file under 100 lines, the target the project templates set; when it would exceed that, propose moving the excess to project documentation with a one-line pointer.

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@01bb46fcbc47">
+<meta name="dos-source" content="CHANGELOG.md@d94cc2a87927">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -63,6 +63,13 @@ rename.</li>
     </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
+<li><code>core.md</code> drops to 7944 bytes: the hook input-normalization rule moves to
+defensive-coding-conventions and the TypeScript <code>strict</code> rule to typescript-conventions. A lesson
+goes to the vault when other projects can use it, as brain-capture and session-retro already say.</li>
+<li>instruction-review edits <code>AGENTS.md</code> when <code>CLAUDE.md</code> only imports it.</li>
+<li><code>scripts/check.sh</code> fails on an empty <code>## Never</code> or <code>## Stop point</code>, and a new Severity stage fails
+when a copy of the P0–P3 scale drifts; qa-expert and performance-engineer now use the shared
+wording. A SessionStart test pins core rules plus state card under 10,000 bytes end to end.</li>
 <li>pr-cycle asks to fix or abort when the fast check is red after the merge, sends its conflict
 resolutions to code-reviewer, rates review threads P0–P3 (skipping them without <code>gh</code>), lets C skip
 to the PR body, and stops after two review rounds. It no longer triggers on "merge the PR".</li>
