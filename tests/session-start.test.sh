@@ -69,6 +69,16 @@ card=$(( $(printf '%s\n' "$out" | wc -c) - $(wc -c < "$core") ))
 check "a 5 KB state file is cut to the cap ($card bytes)" "$r" yes
 check "a cut card ends with a whole line and a marker" "$(printf '%s\n' "$out" | tail -n 2 | head -n 1 | grep -c 'evidence$')$(printf '%s\n' "$out" | tail -n 1)" "1[state card cut at 1024 bytes]"
 
+# D10 end to end: core.md at its 8192-byte limit plus a cut card stays within Claude Code's 10,000-character
+# hook output cap. HOOK_COPY lets a test run a modified copy (e.g. a larger cap=) to prove this fails.
+mkdir -p "$tmp/plug/hooks" "$tmp/plug/rules"
+cp "${HOOK_COPY:-$hook}" "$tmp/plug/hooks/session-start.sh"
+awk 'BEGIN { for (i = 0; i < 8192; i++) printf "x" }' > "$tmp/plug/rules/core.md"
+total=$(printf '{"session_id":"s1","cwd":"%s","hook_event_name":"SessionStart","source":"compact"}' "$repo" |
+  env -i PATH="$PATH" sh "$tmp/plug/hooks/session-start.sh" 2>/dev/null | wc -c | tr -d ' ')
+[ "$total" -le 10000 ] && [ "$total" -gt 9000 ] && r=yes || r=no
+check "a full core.md and a 5 KB state file stay within 10000 bytes ($total)" "$r" yes
+
 # A cut never leaves a partial multibyte character behind: with a one-byte shift, one of two runs
 # lands inside a two-byte character of a long line.
 r=yes

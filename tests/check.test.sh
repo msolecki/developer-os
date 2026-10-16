@@ -51,6 +51,15 @@ run "--- inside an eval grader's frontmatter" fail "frontmatter: evals/injection
 echo 'See /Users/bob/x.' >> "$r/plugin/agents/qa-expert.md"
 run "a local path in an agent" fail "local path"
 
+edit plugin/agents/qa-expert.md 's/P3 = minor or cleanup\./P3 = minor./'
+run "a drifted copy of the P0-P3 scale" fail "severity: the P0-P3 scale differs"
+
+edit plugin/agents/code-reviewer.md 's/^- \*\*P3:\*\* minor or cleanup\.$/- **P3:** minor./'
+run "a drifted bullet copy of the P0-P3 scale" fail "severity: the P0-P3 scale differs"
+
+perl -0pi -e 's/^## Never\n.*\z/## Never\n/ms' "$r/plugin/skills/spec/SKILL.md"
+run "an empty Never section" fail "skill has an empty ## Never section"
+
 echo '[bad](references/none.md)' >> "$r/plugin/skills/spec/SKILL.md"
 run "a broken relative link in a skill" fail "links: plugin/skills/spec/SKILL.md"
 
@@ -66,12 +75,12 @@ run "a stale count in the Unreleased section of CHANGELOG.md" fail "counts: CHAN
 jq '.hook = {}' "$r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$r/plugin/.claude-plugin/plugin.json"
 run "a misspelled plugin.json key" fail "Unknown field 'hook'"
 
-# A validate output whose warning line lacks the usual marker still fails through the "Found N" count.
+# Any warning makes `claude plugin validate --strict` exit non-zero, and the check fails on that exit status.
 mkdir "$tmp/bin"
 printf '%s\n' '#!/bin/sh' 'case "$*" in *--strict*) printf "Found 1 warning:\n  - hook: Unknown field\n"; exit 1 ;; esac' > "$tmp/bin/claude"
 chmod +x "$tmp/bin/claude"
 runpath="$tmp/bin:$PATH"
-run "a validate warning" fail "claude plugin validate --strict failed"
+run "a validate warning fails through the --strict exit status" fail "claude plugin validate --strict failed"
 runpath=
 
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'
@@ -92,7 +101,7 @@ run "a hook target that does not exist" fail "missing target plugin/hooks/gone.s
 edit plugin/agents/qa-expert.md '/^## Final status$/d'
 run "an agent without ## Final status" fail "agents: plugin/agents/qa-expert.md: no ## Final status section"
 
-printf '%100s\n' x >> "$r/plugin/rules/core.md"
+printf '%300s\n' x >> "$r/plugin/rules/core.md"
 run "core.md over 8192 bytes" fail "size: plugin/rules/core.md"
 
 edit plugin/hooks/session-start.sh 's/^cap=.*/cap=2000/'

@@ -46,7 +46,7 @@ What occupies the context of a session, and when:
 |---|---|---|---|
 | `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit (figure in [CURRENT-STATE](../CURRENT-STATE.md)) | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction or resume inside a git repository | Up to 1024 bytes | The `cap` in `session-start.sh`; the check keeps rules plus card under 10,000 |
-| Skill names and descriptions | Every session, by Claude Code's skill listing | 10183 characters for 28 skills | 80–1024 each, 12000 total |
+| Skill names and descriptions | Every session, by Claude Code's skill listing | 10065 characters for 28 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
 | A skill's body | When the model or the user invokes it | 0.7–8.8 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
 | An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–3.9 KB per file | — |
@@ -94,6 +94,7 @@ Skills call each other by name and dispatch agents. The dependencies that exist 
 flowchart LR
   pr-cycle --> code-review
   pr-cycle --> fix-pr
+  fix-pr -. Trust check .-> pr-cycle
   code-review --> code-reviewer[[code-reviewer]]
   code-review --> verifier[[fresh verifier: Codex or the verifier agent]]
   audit-to-backlog --> security-auditor[[security-auditor]]
@@ -115,8 +116,8 @@ flowchart LR
 ```
 
 Every dispatched agent answers with a final status (`DONE`, `REVIEW`, `BLOCKED`, `CONTINUING`) that
-the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog) or an offer
-the user accepts. The backlog contract shared by audit-to-backlog, project-baseline and
+the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog), an offer
+the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). The backlog contract shared by audit-to-backlog, project-baseline and
 implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to `TODO.md` and
 `TODO-done.md` ([reference/configuration.md](../reference/configuration.md)).
 

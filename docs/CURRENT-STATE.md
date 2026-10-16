@@ -18,9 +18,9 @@ this tag, treat each line as unverified.
   release (D20): `.claude-plugin/marketplace.json` → `plugin/`.
 - 28 skills, 6 agents, 4 output styles, 3 hooks, as listed in
   [product/functional-spec.md](product/functional-spec.md).
-- Per-session cost: core rules 8144 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
+- Per-session cost: core rules 7944 of 8192 bytes; skill descriptions 10065 of 12000 characters; a
   state card of at most 1024 bytes after compaction or resume.
-- The Codex installer fits all 28 skills in 7892 bytes of descriptions, within Codex's 8000-character
+- The Codex installer fits all 28 skills in 7500 bytes of descriptions, within Codex's 8000-character
   budget (it counts bytes, which are never fewer than characters).
 - The shared "Locate the vault" paragraph is identical in brain-capture, brain-compile,
   brain-garden, brain-review and brain-search; the Vault paragraph stage of `scripts/check.sh` fails
@@ -28,7 +28,9 @@ this tag, treat each line as unverified.
 - `scripts/check.sh` enforces every rule CONTRIBUTING.md lists, in the stages listed in
   [development.md](development.md#the-check), including Stale names, link fragments and strict plugin
   validation; CI runs it on `development`, `main` and pull requests.
-- 34 eval cases with a baseline arm, run by hand. The 16 added on 2026-10-15 ran once each on
+- 34 eval cases with a baseline arm, run by hand. The Δ results below predate the English-only
+  rewrite (f1b9b148, which changed the trigger phrases); they are the pre-English baseline, not a
+  current score. The 16 added on 2026-10-15 ran once each on
   2026-10-15 (agent Sonnet 5.5, judge Opus 5.5, about 7.6 USD with two reruns after grader fixes):
   15 pass at 0.8. Δ +1.00: trigger-code-review, code-review-weakened-criterion, -boundary, -framed;
   Δ +0.67: implement-backlog-quota; Δ +0.50: injection-code-review, project-baseline-design,
@@ -65,7 +67,7 @@ audit-to-backlog, deploy-checklist, docs-sync, skill-usage and the pr-cycle fork
 order, and for the seven `*-conventions` skills and the six agents (passive reference, no gate;
 [development.md](development.md) step 6). The trigger-typescript-conventions case is not written.
 
-The findings of the follow-up audit (decisions answered 2026-10-16) are fixed on `feat/audit-fixes-2026-10-15`; what still needs
+The findings of the follow-up audit (decisions answered 2026-10-16) are fixed in #74 (rebase-merged as f01de22d); what still needs
 the user:
 
 - Eval re-runs on 2026-10-16 at `f01de22d` (agent Sonnet 5.5, judge Opus 5.5, 1.38 USD):

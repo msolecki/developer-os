@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Current state · developer-os</title>
 <meta name="description" content="What works in developer-os today, what is in progress, and what is known to be broken or missing.">
-<meta name="dos-source" content="docs/CURRENT-STATE.md@c2a6c213f1d3">
+<meta name="dos-source" content="docs/CURRENT-STATE.md@7200f629aebb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -44,9 +44,9 @@ this tag, treat each line as unverified.</p>
 release (D20): <code>.claude-plugin/marketplace.json</code> → <code>plugin/</code>.</li>
 <li>28 skills, 6 agents, 4 output styles, 3 hooks, as listed in
 <a href="product/functional-spec.html">product/functional-spec.md</a>.</li>
-<li>Per-session cost: core rules 8144 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
+<li>Per-session cost: core rules 7944 of 8192 bytes; skill descriptions 10065 of 12000 characters; a
 state card of at most 1024 bytes after compaction or resume.</li>
-<li>The Codex installer fits all 28 skills in 7892 bytes of descriptions, within Codex's 8000-character
+<li>The Codex installer fits all 28 skills in 7500 bytes of descriptions, within Codex's 8000-character
 budget (it counts bytes, which are never fewer than characters).</li>
 <li>The shared "Locate the vault" paragraph is identical in brain-capture, brain-compile,
 brain-garden, brain-review and brain-search; the Vault paragraph stage of <code>scripts/check.sh</code> fails
@@ -54,7 +54,9 @@ when the first paragraph under <code>## 1. Locate the vault</code> differs betwe
 <li><code>scripts/check.sh</code> enforces every rule CONTRIBUTING.md lists, in the stages listed in
 <a href="development.html#the-check">development.md</a>, including Stale names, link fragments and strict plugin
 validation; CI runs it on <code>development</code>, <code>main</code> and pull requests.</li>
-<li>34 eval cases with a baseline arm, run by hand. The 16 added on 2026-10-15 ran once each on
+<li>34 eval cases with a baseline arm, run by hand. The Δ results below predate the English-only
+rewrite (f1b9b148, which changed the trigger phrases); they are the pre-English baseline, not a
+current score. The 16 added on 2026-10-15 ran once each on
 2026-10-15 (agent Sonnet 5.5, judge Opus 5.5, about 7.6 USD with two reruns after grader fixes):
 15 pass at 0.8. Δ +1.00: trigger-code-review, code-review-weakened-criterion, -boundary, -framed;
 Δ +0.67: implement-backlog-quota; Δ +0.50: injection-code-review, project-baseline-design,
@@ -88,7 +90,7 @@ scan, about 0.3 s on a 52 MB transcript), and eval cases still missing for brain
 audit-to-backlog, deploy-checklist, docs-sync, skill-usage and the pr-cycle fork gate and thread
 order, and for the seven <code>*-conventions</code> skills and the six agents (passive reference, no gate;
 <a href="development.html">development.md</a> step 6). The trigger-typescript-conventions case is not written.</p>
-    <p>The findings of the follow-up audit (decisions answered 2026-10-16) are fixed on <code>feat/audit-fixes-2026-10-15</code>; what still needs
+    <p>The findings of the follow-up audit (decisions answered 2026-10-16) are fixed in #74 (rebase-merged as f01de22d); what still needs
 the user:</p>
     <ul>
 <li>Eval re-runs on 2026-10-16 at <code>f01de22d</code> (agent Sonnet 5.5, judge Opus 5.5, 1.38 USD):

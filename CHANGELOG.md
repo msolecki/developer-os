@@ -10,6 +10,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   untrusted pull-request head reaches.
 
 ### Fixed
+- The `install-codex` installer warns when a non-empty `AGENTS.override.md` would make Codex ignore
+  the installed core rules.
+- `tests/skill-usage.test.sh` fails in CI instead of skipping when `rg` is missing; CI installs
+  ripgrep. The Pages workflow deploys only from `main`.
+- The docs match the check: plugin validation fails on any `--strict` warning, Pages publishes from
+  `main`, and CURRENT-STATE carries the measured budgets. The README tells pre-release `0.1.0`
+  installs to reinstall once.
 - install-codex creates its `AGENTS.md` backup with `mktemp`, so a planted symlink at the backup name
   can no longer redirect the write.
 - The guard sees through brace expansion: `git push origin {-f,}` and `-{,f}` now ask.
@@ -21,6 +28,22 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   rename.
 
 ### Changed
+- `core.md` drops to 7944 bytes: the hook input-normalization rule moves to
+  defensive-coding-conventions and the TypeScript `strict` rule to typescript-conventions. A lesson
+  goes to the vault when other projects can use it, as brain-capture and session-retro already say.
+- instruction-review edits `AGENTS.md` when `CLAUDE.md` only imports it.
+- `scripts/check.sh` fails on an empty `## Never` or `## Stop point`, and a new Severity stage fails
+  when a copy of the P0–P3 scale drifts; qa-expert and performance-engineer now use the shared
+  wording. A SessionStart test pins core rules plus state card under 10,000 bytes end to end.
+- pr-cycle asks to fix or abort when the fast check is red after the merge, sends its conflict
+  resolutions to code-reviewer, rates review threads P0–P3 (skipping them without `gh`), lets C skip
+  to the PR body, and stops after two review rounds. It no longer triggers on "merge the PR".
+- pr-cycle and fix-pr reference each other's steps by name (Trust check, Read threads, Reply and
+  resolve), not by number.
+- spec plan steps carry `Done when`; backlog items from spec use the `FEAT-` prefix, cite the spec
+  section as evidence, and replace the plan steps they came from.
+- code-review and audit-to-backlog name the Codex verifier (`codex:codex-rescue`, told to stay
+  read-only) and fall back to the verifier agent on any error or empty reply.
 - implement-backlog integrates on a local batch branch and fast-forwards the base only after the
   review passes (`APPROVE`, or a `COMMENT` the user answered); a reviewer that ended `BLOCKED` is not
   a pass. It runs a delegate's `Check` in its worktree, leaves `Manual:` items open for the user to confirm, skips

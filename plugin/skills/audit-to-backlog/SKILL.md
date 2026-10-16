@@ -45,7 +45,7 @@ For dead code, require zero references, invariant flags, old unreferenced code, 
 
 ## Verify blocking findings
 
-Before writing the backlog, send every P0 and P1 finding to a fresh verifier that did not produce it: Codex when the Codex plugin (`openai/codex-plugin-cc`) is installed, otherwise a `developer-os:verifier` agent. Codex is optional; never install it or fail without it. Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause) and the repository path, without the reviewer's evidence or reasoning, and prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
+Before writing the backlog, send every P0 and P1 finding to a fresh verifier that did not produce it: Codex when the Codex plugin (`openai/codex-plugin-cc`) is installed, otherwise a `developer-os:verifier` agent. Detect, dispatch and fall back as in `developer-os:code-review` Verify blocking findings, including the read-only prefix and the working-tree check for Codex. Codex is optional; never install it or fail without it. Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause) and the repository path, without the reviewer's evidence or reasoning, and prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
 
 Keep CONFIRMED findings, and mark a finding unverified when the verifier cannot decide. Leave REFUTED findings out of the backlog and list them, with the verifier's evidence, under Disputed in the report.
 
@@ -67,7 +67,7 @@ While reviewers run, keep `Plan:` (the backlog path), `Agents:` (perspective →
   - Blocked by: SEC-01
 ```
 
-- **ID:** category prefix and number, unique across the todo and done files, never reused.
+- **ID:** category prefix and number, unique across the todo and done files, never reused. `FEAT-` items come from the spec skill and cite the spec path and section as `Evidence`.
 - **Size:** S, M or L, as in plan steps.
 - **Check:** a command that exits non-zero while `Done when` does not hold. `Manual: <steps> — <why no command can check it>` only when no command can.
 - **Blocked by:** optional item IDs; the item is ready when each is checked or in the done file.
@@ -89,5 +89,5 @@ Stop after the backlog is written and validated. Delete `docs/plans/.devos-state
 
 - Fix a finding or edit code outside the backlog files and the `Backlog:` line.
 - Create the backlog files before the user chooses their paths.
-- Record a finding without `file:line` evidence, or resurrect one from the done file.
+- Record an audit finding without `file:line` evidence (a `FEAT-` item from spec cites its spec section instead), or resurrect one from the done file.
 - Let a reviewer write code or tests.

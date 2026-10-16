@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pr-cycle · developer-os skills</title>
 <meta name="description" content="Take a pull request to a merge verdict: merge its base in, resolve conflicts, review, fix the approved findings, run the gates and update the PR body, asking before fixing and before pushing.">
-<meta name="dos-source" content="plugin/skills/pr-cycle/SKILL.md@1fbdb95f6c5b">
+<meta name="dos-source" content="plugin/skills/pr-cycle/SKILL.md@b411040b5847">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -46,7 +46,6 @@
     <h2 id="when-it-runs">When it runs</h2>
     <p>When you want a pull request brought up to date and ready to merge, optionally with the PR number as the argument. Say it in your own words, for example:</p>
     <ul class="chips">
-      <li class="chip">merge the PR</li>
       <li class="chip">merge fresh dev in</li>
       <li class="chip">pull development into the PR</li>
       <li class="chip">get the PR ready to merge</li>
@@ -57,12 +56,12 @@
     <ol>
       <li><strong>Checks the tree and the trust.</strong> It stops if the working tree has changes outside <code>docs/plans/</code>. Given a PR number, it reads the base, head, body and author association before any checkout. A head from a fork, or from an author who is not an owner, member or collaborator, is untrusted: it is fetched without checkout, and the skill asks whether to run its code. On no, only the review runs, on the diff, and the verdict is review-only. Without a number, or without a working <code>gh</code>, it uses the current branch and skips the PR body step.</li>
       <li><strong>Merges the base in.</strong> <code>git merge --no-commit --no-ff origin/&lt;base&gt;</code> after a fetch. It never rebases a pushed branch; when the base is already merged it says so.</li>
-      <li><strong>Resolves conflicts it understands.</strong> Only where the intent of both sides is clear from the code and history, with the narrowest covering test for each resolution. Any other conflict is shown to you, both sides. It never picks a side wholesale, and commits the merge only once every conflict is resolved and the fast check passes.</li>
-      <li><strong>Reviews.</strong> It runs <a href="code-review.html">code-review</a> on the PR diff with a neutral brief (diff, spec, rubric; no author or rationale), which hands code written in this session to the independent code-reviewer agent; with an untrusted head it reviews inline and verifies only with the read-only verifier agent. Unresolved PR review threads join the findings.</li>
-      <li><strong>Asks one question.</strong> It reports the merge result and that nothing is pushed yet, shows the findings by severity, and asks: A) fix P0, P1 and the docs findings (recommended), B) fix P0 to P3, C) stop here. The answer approves the fixes and their commits, not the push. Remaining P2 and P3 items are listed for the backlog.</li>
+      <li><strong>Resolves conflicts it understands.</strong> Only where the intent of both sides is clear from the code and history, with the narrowest covering test for each resolution. Any other conflict is shown to you, both sides. It never picks a side wholesale, and commits the merge only once every conflict is resolved and the fast check passes. When the fast check is red after the merge, it asks whether to fix the failures in the merge commit or abort the merge, which ends the cycle with no verdict.</li>
+      <li><strong>Reviews.</strong> It runs <a href="code-review.html">code-review</a> on the PR diff with a neutral brief (diff, spec, rubric; no author or rationale), which hands code written in this session to the independent code-reviewer agent; with an untrusted head it reviews inline and verifies only with the read-only verifier agent. Its conflict resolutions go to the code-reviewer agent too, since their author must not review them. Unresolved PR review threads join the findings, each rated P0–P3; without <code>gh</code> they are skipped, and it says so.</li>
+      <li><strong>Asks one question.</strong> It reports the merge result and that nothing is pushed yet, shows the findings by severity, and asks: A) fix P0, P1 and the docs findings (recommended), B) fix P0 to P3, C) stop here, which skips straight to the PR body and the verdict. The answer approves the fixes and their commits, not the push. Remaining P2 and P3 items are listed for the backlog.</li>
       <li><strong>Fixes the approved findings.</strong> Review threads are handled the way <a href="fix-pr.html">fix-pr</a> does, with the step-5 answer replacing its per-edit questions. The fast check (lint, types, tests of the changed area) runs before each commit.</li>
       <li><strong>Runs the full suite once.</strong> Before the push, showing only failures, and fixing them first. Never in the middle of fixing.</li>
-      <li><strong>Reviews its own fixes.</strong> Unless you chose C, the fix commits get their own code-review. A new P0 or P1 goes back to the step-5 question before the push.</li>
+      <li><strong>Reviews its own fixes.</strong> Unless you chose C, the fix commits get their own code-review. A new P0 or P1 goes back to the step-5 question before the push, for at most two rounds; with a P0 or P1 still open after that, the verdict is <code>REQUEST_CHANGES</code> and the fix commits stay local, unpushed.</li>
       <li><strong>Asks before pushing.</strong> It shows the fix diff summary and the full-suite result, and pushes without force only after your yes. On a fork it pushes only when the contributor allows maintainer edits, and says so otherwise.</li>
       <li><strong>Resolves threads after the push.</strong> Only after a successful push, and only the fixed threads you approve, each with a reply. Without a push every thread stays open.</li>
       <li><strong>Updates the PR body.</strong> It drafts what the PR does, what changed in this cycle, which docs it updated or still contradicts and how it was verified, shows it, and applies it after you approve. Unfixed docs findings go here too.</li>

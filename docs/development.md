@@ -33,8 +33,9 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Frontmatter | Frontmatter in `plugin/`, `templates/`, `evals/` or `docs/` Markdown does not parse; a `docs/*.md` lacks `status` (`current`, `draft`, `deprecated`), `owner` or a `last-verified` date; a skill, agent or output style lacks `name`/`description` or its `name` differs from the folder or file name; a line inside the frontmatter of an `evals/` file contains `---` (the eval loader ends frontmatter there) |
 | Skill fields | A skill lacks `license` or `compatibility`, or its name does not match `^[a-z0-9-]{1,64}$` |
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
-| Skill sections | An action skill lacks `## Stop point` or `## Never` (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
+| Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden` or `brain-review` differs from `brain-search`'s |
+| Severity | A skill or agent that writes out the P0–P3 scale (inline `P0 = …` or four `- **P0:**` bullets) words it differently from the others |
 | Local paths | A file under `plugin/` or `site/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
@@ -47,7 +48,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
 | Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page. It reports every failure at once |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
-| Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails on an error or on any warning (such as an unknown manifest key) other than a missing plugin `version`; the `Found N warnings` count must match the tolerated lines |
+| Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
 
 The file set is tracked plus untracked-not-ignored files, so a new doc is checked before it is
@@ -87,8 +88,8 @@ The Local paths stage scans `site/`, so a page that quotes its patterns writes t
 as `development.html` and `contributing.html` do. CI rejects a pull request that adds the
 gitleaks allow marker, so a page that quotes it writes its colon as `&#58;`.
 
-`.github/workflows/pages.yml` publishes `site/` to GitHub Pages on a push to `development` that
-changes it, or by hand. The repository's Pages source must be "GitHub Actions".
+`.github/workflows/pages.yml` publishes `site/` to GitHub Pages on a push to `main` that changes
+it, or by hand (dispatch it from `main` only, or it publishes unreleased docs). The repository's Pages source must be "GitHub Actions".
 
 ## Script tests
 
@@ -103,7 +104,8 @@ only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh
 idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the Codex
 budget of 8000 characters, counted in bytes); `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
-and expects one count per message; it prints SKIP when `rg` is missing.
+and expects one count per message; when `rg` is missing it prints SKIP locally and fails in CI,
+which installs ripgrep.
 After changing a hook, run its test from the repository root, for example `sh tests/guard.test.sh`,
 and add a fixture for the case you changed.
 

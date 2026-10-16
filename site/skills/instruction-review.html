@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>instruction-review · developer-os skills</title>
 <meta name="description" content="Review a project's CLAUDE.md or AGENTS.md against recent work and propose a minimal, evidence-backed diff without applying it.">
-<meta name="dos-source" content="plugin/skills/instruction-review/SKILL.md@179262f895bc">
+<meta name="dos-source" content="plugin/skills/instruction-review/SKILL.md@a8bbc9eac3f1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -53,7 +53,7 @@
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
-      <li><strong>Reads the sources:</strong> the instruction file, any project context file the repository documents, the active plan, and recent git history and diffs.</li>
+      <li><strong>Reads the sources:</strong> the instruction file (<code>AGENTS.md</code> when <code>CLAUDE.md</code> only imports <code>@AGENTS.md</code>; rules never go beside the import), any project context file the repository documents, the active plan, and recent git history and diffs.</li>
       <li><strong>Keeps only durable rules,</strong> ones supported by repeated work, a concrete defect or an explicit correction from you. It leaves out facts the code already shows, one-off debugging history, rules already in the developer-os core rules or your global instructions, and unsupported preferences.</li>
       <li><strong>Flags stale entries.</strong> Lines that are stale or contradict the code are proposed for removal, each with its reason. The file stays under 100 lines; overflow moves to project docs behind a one-line pointer.</li>
       <li><strong>Checks the history.</strong> Before proposing a line it searches the file's history for its key phrase (<code>git log -p -S</code>). A change that reverses an earlier commit shows that commit and asks whether to reverse it. A mistake made at least twice that a lint rule, test or script can catch is proposed as that check, not as a line.</li>
