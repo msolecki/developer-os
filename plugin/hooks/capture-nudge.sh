@@ -65,7 +65,8 @@ if [ -n "$monitors" ]; then
   ago=$(($(date +%s) - 1800))
   cutoff=$(date -u -r "$ago" +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -d "@$ago" +%Y-%m-%dT%H:%M:%S 2>/dev/null)
   if [ -n "$cutoff" ]; then
-    for id in $(printf '%s\n' "$monitors" | awk -v c="$cutoff" '$2 > c { print $1 }'); do
+    # ISO timestamps compare as strings; the x prefix keeps expr from comparing them as numbers.
+    for id in $(printf '%s\n' "$monitors" | while read -r id ts; do expr "x$ts" \> "x$cutoff" >/dev/null && echo "$id"; done); do
       printf '%s\n' "$finished" | grep -qxF "$id" || exit 0
     done
   fi

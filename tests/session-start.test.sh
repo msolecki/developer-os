@@ -14,7 +14,7 @@ check() {
 # run SOURCE CWD: runs the hook, sets $out (stdout) and $code.
 run() {
   out=$(printf '{"session_id":"s1","cwd":"%s","hook_event_name":"SessionStart","source":"%s"}' "$2" "$1" |
-    env -i PATH="$PATH" sh "$hook" 2>/dev/null)
+    env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT="$(pwd)/plugin" sh "$hook" 2>/dev/null)
   code=$?
 }
 
@@ -75,7 +75,7 @@ mkdir -p "$tmp/plug/hooks" "$tmp/plug/rules"
 cp "${HOOK_COPY:-$hook}" "$tmp/plug/hooks/session-start.sh"
 awk 'BEGIN { for (i = 0; i < 8192; i++) printf "x" }' > "$tmp/plug/rules/core.md"
 total=$(printf '{"session_id":"s1","cwd":"%s","hook_event_name":"SessionStart","source":"compact"}' "$repo" |
-  env -i PATH="$PATH" sh "$tmp/plug/hooks/session-start.sh" 2>/dev/null | wc -c | tr -d ' ')
+  env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT="$tmp/plug" sh "$tmp/plug/hooks/session-start.sh" 2>/dev/null | wc -c | tr -d ' ')
 [ "$total" -le 10000 ] && [ "$total" -gt 9000 ] && r=yes || r=no
 check "a full core.md and a 5 KB state file stay within 10000 bytes ($total)" "$r" yes
 
@@ -139,7 +139,7 @@ check "outside a git repository: exit 0" "$code" 0
 run compact "$tmp/missing"
 check "missing cwd: only the core rules" "$out" "$(cat "$core")"
 
-out=$(printf 'not json' | env -i PATH="$PATH" sh "$hook" 2>/dev/null); code=$?
+out=$(printf 'not json' | env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT="$(pwd)/plugin" sh "$hook" 2>/dev/null); code=$?
 check "malformed input: only the core rules" "$out" "$(cat "$core")"
 check "malformed input: exit 0" "$code" 0
 
