@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Development guide · developer-os</title>
 <meta name="description" content="How to change the developer-os plugin, check it with scripts/check.sh and ship it.">
-<meta name="dos-source" content="docs/development.md@e29d0550790d">
+<meta name="dos-source" content="docs/development.md@5c8924f55360">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -53,8 +53,9 @@
           <tr><td>Frontmatter</td><td>Frontmatter in <code>plugin/</code>, <code>templates/</code>, <code>evals/</code> or <code>docs/</code> Markdown does not parse; a <code>docs/*.md</code> lacks <code>status</code> (<code>current</code>, <code>draft</code>, <code>deprecated</code>), <code>owner</code> or a <code>last-verified</code> date; a skill, agent or output style lacks <code>name</code>/<code>description</code> or its <code>name</code> differs from the folder or file name; a line inside the frontmatter of an <code>evals/</code> file contains <code>---</code> (the eval loader ends frontmatter there)</td></tr>
           <tr><td>Skill fields</td><td>A skill lacks <code>license</code> or <code>compatibility</code>, or its name does not match <code>^[a-z0-9-]{1,64}$</code></td></tr>
           <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or all together exceed 12000</td></tr>
-          <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code> (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>)</td></tr>
+          <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>)</td></tr>
           <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>
+          <tr><td>Severity</td><td>A skill or agent that writes out the P0–P3 scale (inline <code>P0 = …</code> or four <code>- **P0:**</code> bullets) words it differently from the others</td></tr>
           <tr><td>Local paths</td><td>A file under <code>plugin/</code> or <code>site/</code> contains <code>/Users&#47;</code>, <code>/home&#47;</code>, <code>~&#47;www</code> or <code>.claude&#50;</code></td></tr>
           <tr><td>YAML</td><td>A <code>*.base</code> or <code>evals/*.yaml</code> file does not parse</td></tr>
           <tr><td>Hook targets</td><td>A <code>${CLAUDE_PLUGIN_ROOT}/…</code> path in <code>hooks.json</code> does not exist</td></tr>

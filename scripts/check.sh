@@ -21,7 +21,7 @@ done
 # docs/*.md need status (current, draft or deprecated), owner and a last-verified date; other files only need parseable frontmatter.
 # Skills also carry the portable Agent Skills fields license and compatibility, and a name matching ^[a-z0-9-]{1,64}$.
 # Skill descriptions are 80-1024 characters and together at most 12000: every description loads into every session.
-# Every skill has a ## Stop point and a ## Never section, except the read-only ones: *-conventions,
+# Every skill has a non-empty ## Stop point and a ## Never section with at least one `- ` rule, except the read-only ones: *-conventions,
 # brain-search, code-review, plan-status and skill-usage (they never write files, send anything or change git state).
 files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
   require "date"; require "yaml"
@@ -62,7 +62,11 @@ files 'plugin/*.md' 'templates/*.md' 'evals/*.md' 'docs/*.md' | ruby -e '
     total += n
     next if read_only.include?(want) || want.end_with?("-conventions")
     body = lines[close..].join("\n")
-    ["## Stop point", "## Never"].each { |h| bad.("skill has no #{h} section") unless body =~ /^#{h}$/ }
+    ["## Stop point", "## Never"].each do |h|
+      sec = body[/^#{h}$(.*?)(?=^## |\z)/m, 1]
+      bad.("skill has no #{h} section") unless sec
+      bad.("skill has an empty #{h} section") unless sec.to_s =~ (h == "## Never" ? /^- \S/ : /\S/)
+    end
   end
   abort "skills: descriptions total #{total} characters, limit 12000" if total > 12000'
 
@@ -74,6 +78,18 @@ for s in brain-capture brain-compile brain-garden brain-review; do
   fi
 done
 [ -n "$(para plugin/skills/brain-search/SKILL.md)" ] || fail vault plugin/skills/brain-search/SKILL.md "no \"## 1. Locate the vault\" paragraph"
+
+# The P0–P3 scale is written out in skills and agents, inline (`P0 = …; P3 = ….`) or as four bullets; every copy must match.
+git grep --untracked -l -E 'P0 = |^- \*\*P0:\*\* ' -- plugin | ruby -e '
+  seen = {}
+  $stdin.read.split.each do |f|
+    t = File.read(f)
+    b = t.scan(/^- \*\*(P[0-3]):\*\* (.*?)\.$/)
+    s = t[/P0 = .*?P3 = [^.]*\./] || (b.size == 4 ? b.map { |p, d| "#{p} = #{d}" }.join("; ") + "." : nil)
+    abort "severity: #{f}: no complete P0-P3 scale" unless s
+    (seen[s] ||= []) << f
+  end
+  abort "severity: the P0-P3 scale differs: " + seen.map { |s, fs| "#{fs.join(", ")} say \"#{s}\"" }.join("; ") if seen.size > 1'
 
 # The plugin ships to other machines; a local path leaks the author's layout and breaks elsewhere.
 if git grep --untracked -nE '/Users/|/home/|~/www|\.claude2' -- plugin site >&2; then

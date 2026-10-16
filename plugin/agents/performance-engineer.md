@@ -17,7 +17,7 @@ Review only the files named in your prompt. Identify the actual hot path before 
 
 - Order findings by impact on the hot path; if minor ones run long, say how many you left out.
 - Give every finding: `file:line`, severity, the mechanism (why it is slow), the expected magnitude, the fix, and how to measure it.
-- Severity: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path (including unacceptable latency); P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup.
+- Severity: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup. Unacceptable latency on a common path is P1.
 - Distinguish MEASURED (you ran something and have numbers) from INFERRED (you read the code). Label every finding with one of the two. Never present inferred as measured.
 - End with the single highest-impact change and its expected effect.
 

@@ -16,7 +16,7 @@ Review only the files named in your prompt. Run the project's real test command 
 ## Output contract
 
 - List coverage gaps as: `file:line`, severity, the untested branch or contract, the risk if it breaks, and the test that would pin it.
-- Severity is the defect the gap would let through: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor.
+- Severity is the defect the gap would let through: P0 = exploitable security defect, data loss, or production down; P1 = wrong behavior on a common path; P2 = edge-case defect or meaningful maintainability risk; P3 = minor or cleanup.
 - Rank gaps by severity; if minor ones run long, say how many you left out.
 - When you write tests, write one test per contract. For a regression test, show the failing run before the passing run. A characterization test pins existing behavior and passes at once; say so instead.
 - End with a verdict: `VERIFIED`, or `UNVERIFIED: <what is untested>`.

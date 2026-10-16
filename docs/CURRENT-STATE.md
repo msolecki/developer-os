@@ -18,7 +18,7 @@ this tag, treat each line as unverified.
   release (D20): `.claude-plugin/marketplace.json` → `plugin/`.
 - 28 skills, 6 agents, 4 output styles, 3 hooks, as listed in
   [product/functional-spec.md](product/functional-spec.md).
-- Per-session cost: core rules 8144 of 8192 bytes; skill descriptions 10065 of 12000 characters; a
+- Per-session cost: core rules 7944 of 8192 bytes; skill descriptions 10065 of 12000 characters; a
   state card of at most 1024 bytes after compaction or resume.
 - The Codex installer fits all 28 skills in 7500 bytes of descriptions, within Codex's 8000-character
   budget (it counts bytes, which are never fewer than characters).

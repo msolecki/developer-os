@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>typescript-conventions · developer-os skills</title>
 <meta name="description" content="Apply TypeScript conventions: composition, small single-purpose functions, tests for new functions, and formatter and import-alias discipline.">
-<meta name="dos-source" content="plugin/skills/typescript-conventions/SKILL.md@03911e9970e8">
+<meta name="dos-source" content="plugin/skills/typescript-conventions/SKILL.md@fdc041d436e9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -50,6 +50,7 @@
 
     <h2 id="the-conventions">The conventions</h2>
     <ul>
+      <li><strong>Strict mode stays on.</strong> Never turned off in <code>tsconfig.json</code> to make a build pass.</li>
       <li><strong>Composition over inheritance.</strong></li>
       <li><strong>Small functions.</strong> One purpose per function, near 30 lines or fewer.</li>
       <li><strong>Tests for new functions.</strong> Every new function and its edge cases, written the way testing-conventions describes.</li>

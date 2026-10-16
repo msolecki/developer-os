@@ -28,6 +28,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   rename.
 
 ### Changed
+- `core.md` drops to 7944 bytes: the hook input-normalization rule moves to
+  defensive-coding-conventions and the TypeScript `strict` rule to typescript-conventions. A lesson
+  goes to the vault when other projects can use it, as brain-capture and session-retro already say.
+- instruction-review edits `AGENTS.md` when `CLAUDE.md` only imports it.
+- `scripts/check.sh` fails on an empty `## Never` or `## Stop point`, and a new Severity stage fails
+  when a copy of the P0–P3 scale drifts; qa-expert and performance-engineer now use the shared
+  wording. A SessionStart test pins core rules plus state card under 10,000 bytes end to end.
 - pr-cycle asks to fix or abort when the fast check is red after the merge, sends its conflict
   resolutions to code-reviewer, rates review threads P0–P3 (skipping them without `gh`), lets C skip
   to the PR body, and stops after two review rounds. It no longer triggers on "merge the PR".
