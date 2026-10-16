@@ -22,6 +22,7 @@ Count, do not estimate. State the rule you used in the output.
 - **Done:** `- [x]` items, or steps the plan's status section names as done.
 - **Blocked:** open plan items or steps that say `blocked` (any case) or use a `[!]` or `[-]` box. Name each with its blocker. A backlog item's `Blocked by:` line does not count here; it decides ready or waiting below.
 - **Open:** every other `- [ ]` item or step. Blocked items are not counted again as open.
+- A plan line that only links a backlog ID (`- FEAT-03: …`) is counted in the backlog, not again in the plan.
 - A plan without checkboxes: count its steps (`### Step …` or numbered step headings) and classify each from the plan's own status text; a step with no status is open.
 - Backlog: open items per `P0`–`P3` section in the todo file; items in the done file. Count each open item in exactly one bucket, first match wins: **orphaned** (an `Owner` dated more than 7 days ago), **waiting** (a `Blocked by` ID still open), **claimed** (any other `Owner`), **ready** (the rest). The four add up to the open count. Name each orphaned item with its owner.
 

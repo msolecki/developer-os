@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Architecture overview · developer-os</title>
 <meta name="description" content="How developer-os is laid out, what Claude Code loads into a session and when, and how its hooks, skills and data flows fit together.">
-<meta name="dos-source" content="docs/architecture/overview.md@af59e644132d">
+<meta name="dos-source" content="docs/architecture/overview.md@4bef8d0b81af">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -138,6 +138,7 @@ site/                             public documentation site, published by .githu
 <defs><marker id="arch-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
 <line class="edge" x1="210" y1="77" x2="296" y2="107" marker-end="url(#arch-flow-arrow)"/>
 <line class="edge" x1="210" y1="77" x2="296" y2="27" marker-end="url(#arch-flow-arrow)"/>
+<line class="edge dash" x1="300" y1="40" x2="214" y2="88" marker-end="url(#arch-flow-arrow)"/>
 <line class="edge" x1="500" y1="107" x2="556" y2="117" marker-end="url(#arch-flow-arrow)"/>
 <line class="edge" x1="500" y1="107" x2="556" y2="197" marker-end="url(#arch-flow-arrow)"/>
 <line class="edge" x1="210" y1="337" x2="556" y2="277" marker-end="url(#arch-flow-arrow)"/>
@@ -221,8 +222,8 @@ site/                             public documentation site, published by .githu
 <text x="400" y="902" text-anchor="middle">brain-search</text>
 </svg></div>
     <p>Every dispatched agent answers with a final status (<code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code>) that
-    the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog) or an offer
-    the user accepts. The backlog contract shared by audit-to-backlog, project-baseline and
+    the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog), an offer
+    the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). The backlog contract shared by audit-to-backlog, project-baseline and
     implement-backlog is the <code>Backlog: &lt;todo path&gt;, &lt;done path&gt;</code> line, defaulting to <code>TODO.md</code> and
     <code>TODO-done.md</code> (<a href="../reference/configuration.html">reference/configuration.md</a>).</p>
     <h2 id="5-data-flows">5. Data flows</h2>

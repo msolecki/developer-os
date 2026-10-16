@@ -94,6 +94,7 @@ Skills call each other by name and dispatch agents. The dependencies that exist 
 flowchart LR
   pr-cycle --> code-review
   pr-cycle --> fix-pr
+  fix-pr -. Trust check .-> pr-cycle
   code-review --> code-reviewer[[code-reviewer]]
   code-review --> verifier[[fresh verifier: Codex or the verifier agent]]
   audit-to-backlog --> security-auditor[[security-auditor]]
@@ -115,8 +116,8 @@ flowchart LR
 ```
 
 Every dispatched agent answers with a final status (`DONE`, `REVIEW`, `BLOCKED`, `CONTINUING`) that
-the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog) or an offer
-the user accepts. The backlog contract shared by audit-to-backlog, project-baseline and
+the orchestrating skill reads before integrating. Solid arrows are invocations; dotted arrows are hand-offs through a file (the backlog), an offer
+the user accepts, or a step one skill borrows from another (fix-pr applies pr-cycle's Trust check). The backlog contract shared by audit-to-backlog, project-baseline and
 implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to `TODO.md` and
 `TODO-done.md` ([reference/configuration.md](../reference/configuration.md)).
 
