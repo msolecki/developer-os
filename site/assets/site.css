@@ -136,7 +136,6 @@ mark { background: var(--hl); color: inherit; padding: 0.05em 0.2em; border-radi
 /* Skill pages */
 .chips { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0 0 1.25rem; padding: 0; list-style: none; }
 .chip { font-size: 0.86rem; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 0.25rem 0.65rem; color: var(--ink); }
-.chip[lang="pl"] { background: var(--pine-soft); border-color: transparent; }
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0; margin: 0 0 2.25rem; border: 1px solid var(--rule); border-radius: 10px; background: var(--sheet); overflow: hidden; }
 .fact { padding: 0.8rem 1rem; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); margin-bottom: -1px; }
 .fact dt { font-size: 0.75rem; font-weight: 500; color: var(--muted); }
