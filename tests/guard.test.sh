@@ -99,6 +99,13 @@ check ask "$(fx 'git -c core\\.hooksPath=/dev/null commit')"
 check ask "$(fx 'HUSKY\\=0 git commit')"
 check ask "$(fx 'pnpm add -D \"\n\" zod')"
 check ask "$(fx 'pnpm add --filter \"web\n\" zod')"
+check ask "$(fx 'git -c alias.p='"'"'push --force'"'"' p')"
+check ask "$(fx 'git -c alias.p=\"commit -n\" p')"
+check ask "$(fx 'P='"'"'git push --force'"'"'; ${P}')"
+check ask "$(fx 'I=\"npm i zod\"; ${I}')"
+check ask "$(fx 'F='"'"'--no-verify'"'"'; git commit $F')"
+check ask "$(fx 'pnpm -C\ngit -c x.y=\"a\nb\" push --force')"
+check ask "$(fx 'pnpm test --filter\ngit commit -m \"a\n\nb\" -n')"
 check pass '{"tool_input":{"command":"pnpm add zod"'
 check pass 'not json'
 check pass ''

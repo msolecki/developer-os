@@ -80,7 +80,8 @@ answers `deny`. In `claude -p`, an `ask` resolves to a denial (per the README; n
 delete every quote, backslash and `$` (so `np""m`, `\git`, `-\-force` and `$'-f'` read as the word
 the shell runs), split segments on `; & | ( )` and backtick, and scan words per segment. Quotes are
 not tracked: the command is scanned twice, once with `\n` as a command separator and once with `\n`
-as a space, and a hit in either asks. A word built at run time, such as `$(command -v npm)`, is not
+as a space, each with quotes deleted and with quotes turned into spaces (so `alias.p='push -f'` keeps
+`push` and `-f` apart); a hit in any of the four views asks. A word built at run time, such as `$(command -v npm)`, is not
 resolved. Because quotes
 are dropped, a mention such as `git commit -m "pnpm add zod"` also asks; this is deliberate.
 

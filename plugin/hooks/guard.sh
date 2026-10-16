@@ -20,15 +20,16 @@ cmd=$(printf '%s\n' "$input" |
   sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p' 2>/dev/null)
 [ -n "$cmd" ] || exit 0
 
-# JSON-unescape, then delete every quote, backslash and `$`: the shell drops them too, so `np""m`,
-# `\git`, `-\-force` and `$'-f'` read as the word they run. The command is checked twice, with a
-# newline as `;` and as a space; a hit in either asks. Quotes are not tracked: an extra ask is the price.
+# JSON-unescape, then delete every backslash and `$`, and either delete quotes (so `np""m`, `\git`,
+# `-\-force` and `$'-f'` read as the word the shell runs) or turn them into spaces (so a quoted value
+# such as `alias.p='push -f'` keeps its words apart). Each way runs with a newline as `;` and as a
+# space: four views, and a hit in any asks. Quotes are not tracked: an extra ask is the price.
 unescape() {
   printf '%s\n' "$cmd" |
     sed -e 's/\\\\\\n/ /g' -e "s/\\\\n/$1/g" -e 's/\\[rt]/ /g' 2>/dev/null |
-    tr -d "\"'\\\\\$"
+    if [ "$2" = space ]; then tr "\"'" '  '; else tr -d "\"'"; fi | tr -d '\\$'
 }
-cmd=$(unescape ';'; unescape ' ')
+cmd=$(unescape ';'; unescape ' '; unescape ';' space; unescape ' ' space)
 
 hit=$(printf '%s\n' "$cmd" | awk '{
   gsub(/[;&|()`]/, "\n")
@@ -39,12 +40,12 @@ hit=$(printf '%s\n' "$cmd" | awk '{
     for (i = 1; i <= m; i++) {
       x = w[i]
       if (x ~ /^--no-veri(f|fy)?$/ || x == "HUSKY=0" || tolower(x) ~ /core\.hookspath(=|$)/) { print "noverify"; exit }
+      if (x ~ /(^|\/)git$/) git = 1
       if (skip) { skip = 0; continue }
       if (pm && x ~ /^(--filter|-F|--prefix|--dir|-C)$/) { skip = 1; continue }
       if (sub_ && x !~ /^-/) { print "install"; exit }
       if (pm && x ~ /^(i|in|ins|inst|insta|instal|install|isnt|isnta|isntal|isntall|it|add)$/) sub_ = 1
       if (x ~ /(^|\/)(npm|pnpm|yarn|bun)$/) pm = 1
-      if (x ~ /(^|\/)git$/) git = 1
       if (git && x == "push") push = 1
       else if (git && x == "commit") commit = 1
       else if (push && (x == "--force" || x == "--mirror" || x ~ /^-[a-zA-Z]*f[a-zA-Z]*$/ || x ~ /^\+/)) force = 1
