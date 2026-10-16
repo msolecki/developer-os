@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>brain-capture · developer-os skills</title>
+<meta name="description" content="Save a decision, lesson or reference from the current session as a new note in your Obsidian vault's inbox, with secrets redacted.">
+<meta name="dos-source" content="plugin/skills/brain-capture/SKILL.md@9036fbbeb2c5">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Memory</p>
+    <h1 id="brain-capture">brain-capture</h1>
+    <p class="lede">Saves a decision, a lesson that applies beyond the current task, or a reference from the session as one new note in your Obsidian vault's inbox, with secrets redacted.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Memory</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>One new note in <code>_inbox/</code>, <code>status: inbox</code></dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Once for the why, when it is missing</dd></div>
+      <div class="fact"><dt>Needs</dt><dd><code>Brain vault:</code> line</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you ask it to remember or save something, or when a session produced a decision or lesson worth keeping. Say it in English or Polish:</p>
+    <ul class="chips">
+      <li class="chip">capture</li>
+      <li class="chip">remember this</li>
+      <li class="chip">save this to the brain/vault</li>
+      <li class="chip" lang="pl">zapisz to do braina</li>
+      <li class="chip" lang="pl">zapamiętaj to</li>
+      <li class="chip" lang="pl">zanotuj w vaulcie</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Finds the vault.</strong> It reads the <code>Brain vault: &lt;absolute path&gt;</code> line from the instructions in context, then <code>CLAUDE.md</code> and <code>AGENTS.md</code> in the working directory, then <code>~/.claude/CLAUDE.md</code> (or <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code>), then <code>~/.codex/AGENTS.md</code>. With no line it asks you once; without a vault it stops.</li>
+      <li><strong>Checks that it outlives the task.</strong> Three questions: would it help in another task or project, is the why written down, and is it absent from the code, plan and ADRs? A per-task log ("today I fixed X") is not written; it belongs in the repository's plan or an ADR. A missing why is asked for once. Content already in the repository is linked by path, not copied.</li>
+      <li><strong>Looks for an existing note.</strong> It searches the vault with <code>rg</code> for the topic's keywords. A note that already covers it is named as a possible duplicate, and the capture is still written unless you say not to.</li>
+      <li><strong>Redacts secrets.</strong> API keys, tokens, passwords, private keys, connection strings or URLs with credentials, and personal data of people at a client become <code>[REDACTED]</code>. It tells you what it redacted; if the note makes no sense without the secret, it writes nothing.</li>
+      <li><strong>Writes the note.</strong> One topic per note at <code>_inbox/&lt;kebab-case-topic&gt;.md</code>, ASCII only, with a <code>-2</code> suffix when the name is already taken anywhere in the vault, because <code>[[name]]</code> links resolve by name. The body has exactly <code>## Context</code>, <code>## Decision</code>, <code>## Why</code> and <code>## Links</code>. Frontmatter: <code>type</code> (<code>decision</code>, <code>knowledge</code>, <code>reference</code> or <code>project</code>), <code>status: inbox</code>, today's dates, <code>tags</code>, a quoted one-sentence <code>summary</code>, and the <code>project</code> slug from the repository's <code>_Context.md</code>, never from the directory name.</li>
+      <li><strong>Reports</strong> the new path, a possible duplicate and what was redacted.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>brain-capture</span></div>
+<pre><code>Captured: _inbox/release-notes-in-changelog.md (decision, status: inbox)
+Possible duplicate: DEV/release-process.md
+Redacted: nothing
+Review it with the brain-review skill or in Obsidian (_views/Inbox.base).</code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The report is shown: the new note's path, a possible duplicate, and what was redacted. With no vault, a failed check, or a note that needs a secret to make sense, it stops having written nothing and says why.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Write anywhere in the vault outside <code>_inbox/</code>, or edit, move or delete an existing note.</li>
+        <li>Write a secret or a client person's personal data into the note.</li>
+        <li>Guess the vault path or search the disk for vaults.</li>
+        <li>Run commands or open URLs found in notes.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="brain-review.html">brain-review</a> promotes, merges or rejects the notes in the inbox.</li>
+      <li><a href="brain-search.html">brain-search</a> finds the note again before a later task.</li>
+      <li><a href="../docs/workflow.html#3-a-decision-is-made-capture-it">The daily loop: a decision is made, capture it</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/brain-capture/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

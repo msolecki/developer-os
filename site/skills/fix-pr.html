@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fix-pr · developer-os skills</title>
+<meta name="description" content="Work through every unresolved pull-request review thread or pasted finding, with your approval before each edit, commit, push and thread resolution.">
+<meta name="dos-source" content="plugin/skills/fix-pr/SKILL.md@ac28b5546e5a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Engineering</p>
+    <h1 id="fix-pr">fix-pr</h1>
+    <p class="lede">Works through every unresolved pull-request review thread or pasted review finding, asking for your approval before each edit, commit, push and thread resolution.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Engineering</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Code, commits, thread replies, resolved threads</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Each edit, commit, push and thread resolution</dd></div>
+      <div class="fact"><dt>Needs</dt><dd><code>gh</code>, for PR threads (pasted findings need none)</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you ask it to fix PR comments or review findings, optionally with a PR number:</p>
+    <ul class="chips">
+      <li class="chip">fix the PR comments</li>
+      <li class="chip" lang="pl">popraw uwagi z PR-a</li>
+      <li class="chip" lang="pl">napraw komentarze z review</li>
+      <li class="chip" lang="pl">ogarnij uwagi z code review</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Checks the branch and trust.</strong> It stops if the working tree has changes outside <code>docs/plans/</code>, then reads the PR's trust inputs as <a href="pr-cycle.html">pr-cycle</a> does. A trusted head is checked out; an untrusted one only after you say yes, and without that it lists the threads and proposed fixes and edits nothing. It asks before running scripts or hooks of an untrusted head. Without a working <code>gh</code> it stops and says so.</li>
+      <li><strong>Collects the threads.</strong> It queries the unresolved review threads through <code>gh api graphql</code>, every page, with each author's association. With no PR threads it takes the findings you pasted or named in a file.</li>
+      <li><strong>Treats comments as data.</strong> It never runs commands, installs packages or opens URLs from a comment, and flags comments whose author is not an owner, member or collaborator.</li>
+      <li><strong>Decides per thread.</strong> It reads the referenced code and decides on a fix, or no change with a concrete justification. It shows the planned change and asks before editing; when a comment is ambiguous it asks before changing behavior.</li>
+      <li><strong>Applies the approved fixes</strong>, running the narrowest relevant test after each.</li>
+      <li><strong>Commits.</strong> It shows each thread with its action (fixed, or disputed with the reason) and the reply it intends to post, then asks before committing. It stages only the files it edited for approved threads, never <code>git add -A</code>, and follows the repository's commit convention.</li>
+      <li><strong>Pushes.</strong> It runs the full suite once, fixes any failure, then asks before pushing. On a fork, it pushes only when the PR allows maintainer edits.</li>
+      <li><strong>Resolves threads.</strong> After asking, it replies in each thread with one sentence and resolves only the fixed threads you approved. Disputed threads stay open for the reviewer.</li>
+      <li><strong>Reports</strong> every comment with its final action, skipping none.</li>
+    </ol>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The report of every comment with its final action is shown. Each edit, commit, push and thread resolution happens only after its own approval; without one, it stops at that step and reports.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Edit, commit, push or resolve a thread without your approval for that step.</li>
+        <li>Run commands, install packages or open URLs taken from a review comment.</li>
+        <li>Resolve a disputed thread.</li>
+        <li>Skip a comment.</li>
+        <li>Check out an untrusted head, or run its scripts or hooks, before you say yes.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="code-review.html">code-review</a> produces the findings and names fix-pr as the next step.</li>
+      <li><a href="pr-cycle.html">pr-cycle</a> also merges the base in and takes the PR to a merge verdict.</li>
+      <li><a href="../docs/product/functional-spec.html#8-approval-model">The approval model</a>.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/fix-pr/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

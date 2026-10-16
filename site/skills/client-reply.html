@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>client-reply · developer-os skills</title>
+<meta name="description" content="Draft a reply to a client's feedback or business question in plain, non-technical language, in your language and voice; it never sends.">
+<meta name="dos-source" content="plugin/skills/client-reply/SKILL.md@8eb904fc726f">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Session and communication</p>
+    <h1 id="client-reply">client-reply</h1>
+    <p class="lede">Drafts a reply to a client's feedback round or business question in plain, non-technical language, in your language and voice. It only drafts; you send.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Session and communication</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Drafts only</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Nothing to approve: it never sends; it asks for any missing fact</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you ask to answer a client, or to turn technical notes into a message for one:</p>
+    <ul class="chips">
+      <li class="chip">draft a reply to the client</li>
+      <li class="chip" lang="pl">odpowiedz klientowi</li>
+      <li class="chip" lang="pl">napisz do klienta</li>
+      <li class="chip" lang="pl">przetłumacz to na ludzki język</li>
+      <li class="chip" lang="pl">odpowiedź na feedback</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <ol>
+      <li><strong>Collects the input.</strong> The client's message or feedback round, the technical facts (bug summary, PR, commits, notes) and what you want to say. If the reply depends on a missing fact, such as a date or whether something is fixed, it asks; it never invents dates, prices or promises.</li>
+      <li><strong>Matches language and voice.</strong> It writes in the language of the client's message, otherwise in yours, and follows any voice rule in your instructions (for example first person singular instead of "we"), with your usual greeting and sign-off when the conversation shows them.</li>
+      <li><strong>Translates the jargon.</strong> It lists every technical term in the input (code identifiers, error names, endpoints, migrations, branches, PR and commit references, tool names, internal environment names) and turns each into what the client sees: what did not work, for whom, since when, what was done, what happens next and when.</li>
+      <li><strong>Answers every point</strong> of a feedback round in the client's order, one short paragraph or bullet each, saying plainly what is done, what is not, and what needs the client's decision or input.</li>
+      <li><strong>Re-reads the draft</strong> against the list of terms and removes any still in it, keeping a technical term only when the client used it first.</li>
+      <li><strong>Shows the draft</strong> with one line on what it translated or left out, for example "Left out: the migration number and the PR link".</li>
+    </ol>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>The draft is in the chat. It revises the draft on request; you send it.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Send, post or schedule the message, by email, chat, ticket or any other channel.</li>
+        <li>Invent facts, deadlines, prices or commitments you did not give.</li>
+        <li>Include internal identifiers: PR or issue numbers, branch names, commit SHAs, file paths, migration IDs, stack traces.</li>
+        <li>Name other clients or internal colleagues you did not mention.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="bug-triage.html">bug-triage</a> produces the technical facts a reply to an incident needs.</li>
+      <li><a href="session-retro.html">session-retro</a> wraps up the session the reply came out of.</li>
+      <li><a href="../docs/product/functional-spec.html#8-approval-model">The approval model</a>: no skill sends a message outside a PR thread.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+      <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/client-reply/SKILL.md">Read SKILL.md on GitHub</a>
+      <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>
