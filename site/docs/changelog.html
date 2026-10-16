@@ -5,7 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@1d5e062712a2">
+<link rel="canonical" href="https://msolecki.github.io/developer-os/docs/changelog.html">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="developer-os">
+<meta property="og:title" content="Changelog · developer-os">
+<meta property="og:description" content="Every notable change to developer-os, in the Keep a Changelog format.">
+<meta property="og:url" content="https://msolecki.github.io/developer-os/docs/changelog.html">
+<meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/docs.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="developer-os documentation">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="dos-source" content="CHANGELOG.md@b6217cde9956">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -36,6 +49,13 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h3 id="unreleased-added">Added</h3>
+    <ul>
+<li>The documentation site has link previews and search metadata: a canonical URL, Open Graph tags and
+a 1200×630 preview card (one per section) on every page, favicons from the plugin icon,
+<code>sitemap.xml</code>, and JSON-LD on the landing page. The check's Site stage fails a page without its
+canonical URL or preview image, and a sitemap that does not match the pages.</li>
+</ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
 <li>Setup docs: the README lists the requirements (<code>rg</code>, <code>jq</code>, <code>gh</code>, Obsidian 1.9.10 or later for

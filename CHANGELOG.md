@@ -4,6 +4,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- The documentation site has link previews and search metadata: a canonical URL, Open Graph tags and
+  a 1200×630 preview card (one per section) on every page, favicons from the plugin icon,
+  `sitemap.xml`, and JSON-LD on the landing page. The check's Site stage fails a page without its
+  canonical URL or preview image, and a sitemap that does not match the pages.
+
 ### Changed
 - Setup docs: the README lists the requirements (`rg`, `jq`, `gh`, Obsidian 1.9.10 or later for
   Bases), the vault steps say to open the folder as a vault in Obsidian, and the project templates

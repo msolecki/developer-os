@@ -46,7 +46,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or `CAP` in `state-card.py` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
-| Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page. It reports every failure at once |
+| Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page; a page lacks its canonical URL or an `og:image` that exists under `site/`; `site/sitemap.xml` does not list exactly the pages' canonical URLs. It reports every failure at once |
 | Script tests | Any `tests/*.test.sh` exits non-zero; `tests/check.test.sh` runs only when `CI` is set |
 | Plugin validation | `claude plugin validate . --strict` or `claude plugin validate plugin --strict` fails when `--strict` exits non-zero, that is on any error or warning (such as an unknown manifest key) |
 | Secrets | `gitleaks dir` finds a secret in tracked or untracked-not-ignored files |
@@ -74,7 +74,17 @@ only a branch ruleset that requires review of `.github/` stops a PR that edits t
 - `docs/`, one page per `docs/*.md` at the same path, plus `readme.html`, `changelog.html`,
   `contributing.html` and `security.html` for the root documents;
 - `skills/`, an index and one page per skill; `agents.html` and `output-styles.html`;
-- `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons).
+- `assets/site.css` and `assets/site.js` (the sidebar order in `NAV`, on-page contents, copy buttons);
+- `assets/og/`, the 1200×630 link-preview cards (`home`, `docs`, `skills`, `agents`), and the favicons;
+- `sitemap.xml`, one `<loc>` per page.
+
+Every page's `<head>` carries, after its `description`, the link-preview block: `canonical` and
+`og:url` (`https://msolecki.github.io/developer-os/<path>`, a directory for an `index.html`), the
+favicon links (relative, from the page's `data-root`), `og:type`, `og:site_name`, `og:title` and
+`og:description` (the page's title and description), `og:image` (the section's card), its size and
+alt text, and `twitter:card`. A new page copies the block from a page in the same folder and adds its
+URL to `sitemap.xml`. The landing page also carries JSON-LD (`SoftwareApplication`). A project site
+has no robots.txt of its own (crawlers read only the host root), so the sitemap is submitted by hand.
 
 Each page that restates a source carries `<meta name="dos-source" content="<source>@<hash>">`: the
 first 12 hex digits of the source's SHA-256 with any `last-verified:` line removed, so re-verifying a
