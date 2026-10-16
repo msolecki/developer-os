@@ -10,6 +10,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   are copied from the marketplace install with `cp -Rn`. The landing page no longer says an install
   takes the latest commit: it takes the latest release, from `main`.
 
+### Removed
+- `docs/CURRENT-STATE.md` and its site page: the repository no longer keeps a current-state report.
+  The project template and docs-sync keep `CURRENT-STATE.md` for your own projects.
+
 ## [0.2.3] - 2026-10-16
 
 ### Changed

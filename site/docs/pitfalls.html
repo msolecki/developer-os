@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pitfalls · developer-os</title>
 <meta name="description" content="Deliberate settings in the developer-os repository that look like defects, and what breaks if they change.">
-<meta name="dos-source" content="docs/pitfalls.md@e5bd472cbaac">
+<meta name="dos-source" content="docs/pitfalls.md@9eed73d7a157">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,7 +52,7 @@
     </ul>
     <h2 id="coremd-is-at-its-size-cap"><code>core.md</code> is at its size cap</h2>
     <ul>
-      <li><strong>Where:</strong> <code>plugin/rules/core.md</code> (just under its 8192-byte cap, enforced by <code>scripts/check.sh</code>; current figure in <a href="CURRENT-STATE.html">CURRENT-STATE</a>)</li>
+      <li><strong>Where:</strong> <code>plugin/rules/core.md</code> (just under its 8192-byte cap, enforced by <code>scripts/check.sh</code>)</li>
       <li><strong>Looks like:</strong> an arbitrary limit blocking a useful rule.</li>
       <li><strong>Why it is deliberate:</strong> the file loads into every session; the cap keeps the fixed cost bounded and, with the state card, under the 10,000-character hook output limit.</li>
       <li><strong>Breaks if changed:</strong> raising the cap without a matching cut grows every session's context.</li>

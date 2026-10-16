@@ -31,7 +31,6 @@
       ['docs/security.html', 'Security'],
     ]],
     ['Status', [
-      ['docs/CURRENT-STATE.html', 'Current state'],
       ['docs/changelog.html', 'Changelog'],
     ]],
   ];

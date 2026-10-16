@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Architecture overview · developer-os</title>
 <meta name="description" content="How developer-os is laid out, what Claude Code loads into a session and when, and how its hooks, skills and data flows fit together.">
-<meta name="dos-source" content="docs/architecture/overview.md@53a68139e685">
+<meta name="dos-source" content="docs/architecture/overview.md@ba73f1fa458b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -66,7 +66,7 @@ site/                             public documentation site, published by .githu
       <table>
         <thead><tr><th scope="col">Part</th><th scope="col">When it loads</th><th scope="col">Size today</th><th scope="col">Limit</th></tr></thead>
         <tbody>
-          <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>Just under the limit (figure in <a href="../CURRENT-STATE.html">CURRENT-STATE</a>)</td><td>8192 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
+          <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>Just under the limit</td><td>8192 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
           <tr><td>State card</td><td>After a compaction or resume inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
           <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing</td><td>10065 characters for 28 skills</td><td>80–1024 each, 12000 total</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>

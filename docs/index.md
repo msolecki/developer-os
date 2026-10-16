@@ -25,7 +25,6 @@ document and the source disagree, the source wins and the document is a defect.
 | Install and use it day to day with an Obsidian vault | [workflow.md](workflow.md) (the README has the short install) |
 | Change the plugin, run the checks, run the evals, release | [development.md](development.md) |
 | A setting or pattern in this repository looks wrong | [pitfalls.md](pitfalls.md) |
-| See what works today and what is known to be missing | [CURRENT-STATE.md](CURRENT-STATE.md) |
 | Decode a term such as "action skill", "fresh verifier" or "inbox note" | [glossary.md](glossary.md) |
 
 Outside `docs/`: [README](../README.md) (install, component list, Codex setup),
