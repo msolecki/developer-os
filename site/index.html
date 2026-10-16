@@ -178,7 +178,7 @@ Which items should I apply?</code></pre></div>
   <section id="trust">
     <div class="wrap">
       <h2>It proposes. You approve. Then it acts.</h2>
-      <p class="section-copy">Every skill that changes files, git state or anything outside your machine stops at a defined point and asks. Silence or "looks good" is not approval. The full list is the <a href="docs/product/functional-spec.html#8-approval-model">approval model</a>.</p>
+      <p class="section-copy">Every skill that changes files, git state or anything outside your machine stops at a defined point and asks. Silence or "looks good" is not approval. The main rows are below; the full list is the <a href="docs/product/functional-spec.html#8-approval-model">approval model</a>.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th scope="col">Action</th><th scope="col">What happens</th></tr></thead>
@@ -186,7 +186,8 @@ Which items should I apply?</code></pre></div>
             <tr><td>Write in the vault outside <code>_inbox/</code>, move, merge or archive a note</td><td>Only for the notes you name in brain-review or brain-garden</td></tr>
             <tr><td>Delete a note</td><td>No skill deletes; notes retire to <code>_archive/</code></td></tr>
             <tr><td>Edit <code>~/.claude/CLAUDE.md</code> or <code>settings.json</code></td><td>brain-setup shows the diff first</td></tr>
-            <tr><td>Edit code for review findings, commit, push</td><td>fix-pr asks per edit and per commit; pr-cycle asks once with A/B/C options, and before pushing</td></tr>
+            <tr><td>Edit an instruction file, create backlog files or add backlog items</td><td>instruction-review and session-retro show the diff first; audit-to-backlog, project-baseline and spec write the backlog after you approve</td></tr>
+            <tr><td>Edit code for review findings, commit, push</td><td>fix-pr asks per edit, per commit and before each push; pr-cycle commits the base merge after a green fast check and fixes after one A/B/C answer, then asks before pushing; implement-backlog commits only green batch work and never pushes</td></tr>
             <tr><td>Merge a PR, push to a base branch, force-push, rebase a pushed branch</td><td>No skill does this</td></tr>
             <tr><td>Send email, chat messages or issues</td><td>No skill does this; client-reply drafts, session-retro prints a command for you</td></tr>
             <tr><td>Install a dependency</td><td>A core rule, and the guard hook asks</td></tr>
@@ -405,7 +406,7 @@ Which items should I apply?</code></pre></div>
       </details>
       <details>
         <summary>Which languages does it understand?</summary>
-        <p>Skill descriptions carry English and Polish trigger phrasings, so a skill fires however you ask in either language. The core rules keep the conversation in your language, whatever it is, and keep everything written to a repository in English unless the project says otherwise.</p>
+        <p>The brain, engineering and session skills carry English and Polish trigger phrasings in their descriptions, so they fire however you ask in either language; conventions skills load by the files you work on. The core rules keep the conversation in your language, whatever it is, and keep everything written to a repository in English unless the project says otherwise.</p>
       </details>
     </div>
   </section>
@@ -413,7 +414,7 @@ Which items should I apply?</code></pre></div>
   <section id="docs">
     <div class="wrap">
       <h2>Read the documentation.</h2>
-      <p class="section-copy">Everything on this site restates the repository's documents, and a check fails when a page falls behind its source.</p>
+      <p class="section-copy">Everything on this site restates the repository's documents. A check fails when a doc, skill, agent or output-style page falls behind its source; this landing page and the skills index are kept current by hand.</p>
       <ul class="doc-grid">
         <li><a href="docs/workflow.html"><b>How to work: brain + code</b><span>The daily loop, the vault layout, where knowledge belongs, privacy.</span></a></li>
         <li><a href="docs/product/overview.html"><b>Product overview</b><span>The problem, the principles, the scope and what is out of scope on purpose.</span></a></li>

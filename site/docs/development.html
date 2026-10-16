@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Development guide · developer-os</title>
 <meta name="description" content="How to change the developer-os plugin, check it with scripts/check.sh and ship it.">
-<meta name="dos-source" content="docs/development.md@a70c20494b47">
+<meta name="dos-source" content="docs/development.md@d903a1f82d0d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -65,7 +65,7 @@
           <tr><td>Core-rules size</td><td><code>plugin/rules/core.md</code> exceeds 8192 bytes, or the state-card cap in <code>session-start.sh</code> no longer fits under the 10,000-character hook output limit</td></tr>
           <tr><td>References</td><td>A <code>developer-os:&lt;name&gt;</code> string in <code>plugin/</code> (Markdown and hook scripts), <code>docs/</code>, <code>templates/</code>, <code>evals/</code>, <code>README.md</code>, <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code> or <code>SECURITY.md</code> names no skill, agent or output style</td></tr>
           <tr><td>Links</td><td>A relative Markdown link outside fenced or inline code does not resolve from its own file, or its <code>#fragment</code> matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, <code>-1</code>, <code>-2</code> for repeated headings)</td></tr>
-          <tr><td>Site</td><td>A doc, root document, skill, agent or output style has no page under <code>site/</code> that names it in a <code>dos-source</code> meta; a page's hash differs from its source's; a relative <code>href</code> or <code>src</code> in <code>site/</code>, or a page in <code>NAV</code> in <code>site/assets/site.js</code>, does not resolve or names no <code>id</code> in the target page. It reports every failure at once</td></tr>
+          <tr><td>Site</td><td>A doc, root document, skill, agent or output style has no page under <code>site/</code> that names it in a <code>dos-source</code> meta; a page's hash differs from its source's; a relative <code>href</code> or <code>src</code> in <code>site/</code>, or a page in <code>NAV</code> in <code>site/assets/site.js</code>, does not resolve to a file inside <code>site/</code> (in exact case) or names no <code>id</code> in the target page; a page names a source that belongs to another page. It reports every failure at once</td></tr>
           <tr><td>Script tests</td><td>Any <code>tests/*.test.sh</code> exits non-zero; <code>tests/check.test.sh</code> runs only when <code>CI</code> is set</td></tr>
           <tr><td>Plugin validation</td><td><code>claude plugin validate . --strict</code> or <code>claude plugin validate plugin --strict</code> fails on an error or on any warning (such as an unknown manifest key) other than a missing plugin <code>version</code>; the <code>Found N warnings</code> count must match the tolerated lines</td></tr>
           <tr><td>Secrets</td><td><code>gitleaks dir</code> finds a secret in tracked or untracked-not-ignored files</td></tr>

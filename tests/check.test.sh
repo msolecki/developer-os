@@ -105,10 +105,17 @@ rm "$r/site/skills/spec.html"
 run "a skill without a site page" fail "site: site/skills/spec.html: missing"
 
 edit site/docs/glossary.html 's|"../skills/index.html">Skills</a>|"../skills/nope.html">Skills</a>|'
-run "a site link to a missing page" fail "site: site/docs/glossary.html: ../skills/nope.html does not resolve"
+run "a site link to a missing page" fail "site: site/docs/glossary.html: ../skills/nope.html does not resolve inside site/"
 
 edit site/docs/glossary.html 's|"../docs/index.html">Docs</a>|"../docs/index.html#nope">Docs</a>|'
 run "a site link to a missing id" fail "names no id in site/docs/index.html"
+
+edit site/docs/glossary.html 's|"../docs/index.html">Docs</a>|"../../README.md">Docs</a>|'
+run "a site link that leaves site/" fail "../../README.md does not resolve inside site/"
+
+grep '<meta name="dos-source"' "$r/site/docs/pitfalls.html" > "$tmp/m"
+edit site/docs/glossary.html "/<meta name=\"dos-source\"/r $tmp/m"
+run "a page naming another page's source" fail "site: site/docs/glossary.html: names docs/pitfalls.md, which belongs to site/docs/pitfalls.html"
 
 edit site/index.html 's|<h2>The skill library.</h2>|<h2>The 99 skills.</h2>|'
 run "a wrong count on the site" fail "says 99 skills"

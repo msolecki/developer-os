@@ -136,6 +136,7 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
   $stdin.read.split("\0").each do |f|
     File.foreach(f).with_index(1) do |l, i|
       break if f == "CHANGELOG.md" && l.start_with?("## [") && !l.start_with?("## [Unreleased]")
+      break if f == "site/docs/changelog.html" && l =~ /<h2[^>]*>\[/ && l !~ /\[Unreleased\]/
       l.scan(/\b[0-9]+ (?:skills|agents|output styles|hooks|eval cases|cases)\b(?! of\b)/) { |m| puts "#{f}:#{i}:#{m}" }
     end
   end' |
@@ -203,7 +204,7 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
   Dir.glob("plugin/skills/*/SKILL.md").each { |f| want[f] = "site/skills/#{File.basename(File.dirname(f))}.html" }
   Dir.glob("plugin/agents/*.md").each { |f| want[f] = "site/agents.html" }
   Dir.glob("plugin/output-styles/*.md").each { |f| want[f] = "site/output-styles.html" }
-  ids = Hash.new { |h, f| h[f] = File.read(f).scan(/\bid="([^"]+)"/).flatten }
+  ids = Hash.new { |h, f| h[f] = File.read(f).scan(/\sid="([^"]+)"/).flatten }
   named = {}
   errs = []
   $stdin.read.split("\0").each do |p|
@@ -214,10 +215,10 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
     else
       s.scan(/<meta name="dos-source" content="([^"@]+)@([^"]*)">/) do |src, h|
         (errs << "site: #{p}: dos-source #{src} does not exist"; next) unless File.file?(src)
-        named[src] = p
+        (named[src] ||= []) << p
         (errs << "site: #{p}: #{src} changed since the page was written (page #{h}, source #{sha[src]}); update the page, then its dos-source hash"; next) unless h == sha[src]
       end
-      targets = s.gsub(/<pre.*?<\/pre>/m, "").scan(/\s(?:href|src)="([^"]+)"/).flatten
+      targets = s.gsub(/<pre[\s>].*?<\/pre>/m, "").scan(/\s(?:href|src)="([^"]+)"/).flatten
       base = File.dirname(p)
     end
     targets.each do |t|
@@ -225,14 +226,17 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
       path, frag = t.split("#", 2)
       dest = path.empty? ? p : File.expand_path(path, base).delete_prefix("#{Dir.pwd}/")
       dest = File.join(dest, "index.html") if File.directory?(dest)
-      (errs << "site: #{p}: #{t} does not resolve"; next) unless File.file?(dest)
+      # Exact case too: macOS resolves a wrong-case name that the Linux host serving the site does not.
+      found = dest.start_with?("site/") && File.file?(dest) && Dir.children(File.dirname(dest)).include?(File.basename(dest))
+      (errs << "site: #{p}: #{t} does not resolve inside site/"; next) unless found
       next unless frag && !frag.empty? && dest.end_with?(".html")
       (errs << "site: #{p}: #{t} names no id in #{dest}"; next) unless ids[dest].include?(frag)
     end
   end
   want.each do |src, p|
-    next if named[src] == p
-    errs << "site: #{p}: missing, or has no dos-source meta for #{src}" + (named[src] ? " (named in #{named[src]})" : "")
+    pages = named[src] || []
+    errs << "site: #{p}: missing, or has no dos-source meta for #{src}" unless pages.include?(p)
+    (pages - [p]).each { |o| errs << "site: #{o}: names #{src}, which belongs to #{p}" }
   end
   abort errs.uniq.join("\n") unless errs.empty?'
 

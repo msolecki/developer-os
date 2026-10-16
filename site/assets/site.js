@@ -81,7 +81,9 @@
   if (toc && heads.length > 1) {
     var list = '<p>On this page</p><ul>';
     heads.forEach(function (h) {
-      var text = h.firstChild ? h.childNodes[0].textContent : h.textContent;
+      var copy = h.cloneNode(true);
+      copy.querySelectorAll('.anchor').forEach(function (a) { a.remove(); });
+      var text = copy.textContent;
       list += '<li class="' + h.tagName.toLowerCase() + '"><a href="#' + h.id + '">' + text.replace(/</g, '&lt;') + '</a></li>';
     });
     toc.innerHTML = list + '</ul>';
@@ -109,6 +111,7 @@
     btn.setAttribute('aria-live', 'polite');
     btn.addEventListener('click', function () {
       var code = pre.querySelector('code') || pre;
+      if (!navigator.clipboard) { btn.textContent = 'Select and copy'; return; }
       navigator.clipboard.writeText(code.textContent.replace(/\n$/, '')).then(function () {
         btn.textContent = 'Copied';
         setTimeout(function () { btn.textContent = 'Copy'; }, 1600);
