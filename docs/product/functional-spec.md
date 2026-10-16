@@ -121,6 +121,7 @@ Dispatched by skills or by the main agent. All treat code, diffs, PR text and fe
 | [performance-engineer](../../plugin/agents/performance-engineer.md) | sonnet | Read, Bash, Glob, Grep | No | audit-to-backlog (performance) |
 | [qa-expert](../../plugin/agents/qa-expert.md) | sonnet | Read, Grep, Glob, Bash, Write, Edit, Skill | Tests only, and only when asked | audit-to-backlog (tests, assessment only) |
 | [research-analyst](../../plugin/agents/research-analyst.md) | sonnet | Read, Grep, Glob, WebFetch, WebSearch | No | bug-triage (library or vendor behaviour behind a hypothesis); on request |
+| [verifier](../../plugin/agents/verifier.md) | sonnet | Read, Grep, Glob | No | code-review and audit-to-backlog (P0/P1 verification; the only agent on an untrusted head) |
 
 Every agent starts its report with a final status: `DONE` (with evidence), `REVIEW`, `BLOCKED` (with
 `Unblock owner: user | orchestrator | <item ID>`) or `CONTINUING`; it retries transient failures at

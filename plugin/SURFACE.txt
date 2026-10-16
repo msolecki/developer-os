@@ -3,6 +3,7 @@ agent performance-engineer
 agent qa-expert
 agent research-analyst
 agent security-auditor
+agent verifier
 hook PreToolUse
 hook SessionStart
 hook Stop

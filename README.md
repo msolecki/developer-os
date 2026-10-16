@@ -85,7 +85,7 @@ or any error they exit silently and the normal permission flow applies.
   nextjs-conventions, testing-conventions, typescript-conventions.
 - **Built-in overlaps:** `/code-review`, `/security-review`, `/recap`, `/insights`, `/goal`,
   `/skill-doctor` and `/doctor` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
-- **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor.
+- **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
 - **Three hooks:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction), `Stop` suggests a session wrap-up

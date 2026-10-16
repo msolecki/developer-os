@@ -82,7 +82,8 @@ delete every quote, backslash and `$` (so `np""m`, `\git`, `-\-force` and `$'-f'
 the shell runs), split segments on `; & | ( )` and backtick, and scan words per segment. Quotes are
 not tracked: the command is scanned twice, once with `\n` as a command separator and once with `\n`
 as a space, each with quotes deleted and with quotes turned into spaces (so `alias.p='push -f'` keeps
-`push` and `-f` apart); a hit in any of the four views asks. A word built at run time, such as `$(command -v npm)`, is not
+`push` and `-f` apart). Braces are deleted and commas split words, so `{-f,}` reads `-f`; a fifth
+view deletes commas instead, so `-{,f}` reads `-f`. A hit in any of the five views asks. A word built at run time, such as `$(command -v npm)`, is not
 resolved. Because quotes
 are dropped, a mention such as `git commit -m "pnpm add zod"` also asks; this is deliberate.
 
@@ -126,7 +127,7 @@ developer-os: this session made <n> tool calls. Run the developer-os:session-ret
 
 and exits 2, which makes Claude Code feed the message back to the agent instead of stopping.
 
-**State:** one empty file per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp/<uid>}}/capture-nudge/`, created with mode 700; the hook fails open when that directory or its parent is a symlink or owned by another user.
+**State:** one empty file per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/capture-nudge/`, created with mode 700; the hook fails open when that directory or its parent is a symlink or owned by another user.
 
 **Privacy:** counts matches of one fixed string and extracts background-task and Monitor ids, output-file paths and Monitor start timestamps (to check their notifications and modification times); never reads or prints message content.
 

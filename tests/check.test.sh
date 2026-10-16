@@ -30,6 +30,18 @@ edit plugin/SURFACE.txt 's/^skill implement-backlog$/skill backlog-run/'
 LC_ALL=C sort "$r/plugin/SURFACE.txt" > "$tmp/x" && mv "$tmp/x" "$r/plugin/SURFACE.txt"
 run "a renamed skill leaves its old bare name" fail "implement-backlog was removed from plugin/SURFACE.txt"
 
+# The same rename, committed on a pull-request branch: CI sees no uncommitted diff.
+g update-ref refs/remotes/origin/development HEAD
+mv "$r/plugin/skills/implement-backlog" "$r/plugin/skills/backlog-run"
+edit plugin/skills/backlog-run/SKILL.md 's/^name: implement-backlog$/name: backlog-run/'
+edit plugin/SURFACE.txt 's/^skill implement-backlog$/skill backlog-run/'
+LC_ALL=C sort "$r/plugin/SURFACE.txt" > "$tmp/x" && mv "$tmp/x" "$r/plugin/SURFACE.txt"
+g add -A && g commit -qm rename
+out=$(cd "$r" && GITHUB_BASE_REF=development bash scripts/check.sh 2>&1) && got=pass || got=fail
+case $out in *"implement-backlog was removed from plugin/SURFACE.txt"*) ;; *) got="$got without the stale name" ;; esac
+if [ "$got" = fail ]; then echo "ok   a committed rename fails in a pull request"; else echo "FAIL a committed rename fails in a pull request: got $got" >&2; failed=1; fi
+g reset -q --hard origin/development && g update-ref -d refs/remotes/origin/development
+
 edit plugin/skills/brain-garden/SKILL.md '/^Find the line `Brain vault:/s/ once / twice /'
 run "a brain skill drifts from the shared vault paragraph" fail "vault: plugin/skills/brain-garden/SKILL.md"
 

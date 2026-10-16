@@ -145,7 +145,11 @@ transcript "$tmp/t29.jsonl" 29; transcript "$tmp/t30.jsonl" 30
 run "$(input b29 "$tmp/t29.jsonl")"; check "29 tool calls stay below the default threshold" "$code" 0
 run "$(input b30 "$tmp/t30.jsonl")"; check "30 tool calls reach the default threshold" "$code" 2
 run "$(input b31 "$tmp/t30.jsonl")" DEVELOPER_OS_CAPTURE_NUDGE_MIN=abc; check "a non-numeric threshold falls back to 30" "$code" 2
-printf '%s' "$(input b32 "$tmp/long.jsonl")" | env -i PATH="$PATH" TMPDIR="$tmp/t" sh "$hook" 2>/dev/null; [ -f "$tmp/t/capture-nudge/b32" ] && r=yes || r=no; check "without CLAUDE_PLUGIN_DATA the marker goes under TMPDIR" "$r" yes
+printf '%s' "$(input b32 "$tmp/long.jsonl")" | env -i PATH="$PATH" TMPDIR="$tmp/t" sh "$hook" 2>/dev/null; [ -f "$tmp/t/developer-os-$(id -u)/capture-nudge/b32" ] && r=yes || r=no; check "without CLAUDE_PLUGIN_DATA the marker goes under TMPDIR" "$r" yes
+sid="t$$"; m="/tmp/developer-os-$(id -u)/capture-nudge/$sid"
+printf '%s' "$(input "$sid" "$tmp/long.jsonl")" | env -i PATH="$PATH" TMPDIR=/tmp sh "$hook" 2>/dev/null; code=$?; check "TMPDIR=/tmp: fires" "$code" 2
+printf '%s' "$(input "$sid" "$tmp/long.jsonl")" | env -i PATH="$PATH" TMPDIR=/tmp sh "$hook" 2>/dev/null; code=$?; check "TMPDIR=/tmp: fires once" "$code" 0
+rm -f "$m"
 
 [ "$failed" -eq 0 ] && echo "capture-nudge: all passed"
 exit "$failed"

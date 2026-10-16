@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@c3583be056f9">
+<meta name="dos-source" content="CHANGELOG.md@60bfbe48bafa">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -36,6 +36,24 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h3 id="unreleased-added">Added</h3>
+    <ul>
+<li>The <code>verifier</code> agent: it checks one P0/P1 finding with read-only tools (Read, Grep, Glob). code-review
+and audit-to-backlog use it instead of a <code>general-purpose</code> subagent, and it is the only agent an
+untrusted pull-request head reaches.</li>
+    </ul>
+    <h3 id="unreleased-fixed">Fixed</h3>
+    <ul>
+<li>install-codex creates its <code>AGENTS.md</code> backup with <code>mktemp</code>, so a planted symlink at the backup name
+can no longer redirect the write.</li>
+<li>The guard sees through brace expansion: <code>git push origin {-f,}</code> and <code>-{,f}</code> now ask.</li>
+<li>capture-nudge keeps its marker in a per-user directory when <code>CLAUDE_PLUGIN_DATA</code> is unset, so it
+fires under a shared, root-owned <code>TMPDIR=/tmp</code>.</li>
+<li>The <code>SessionStart</code> state card skips tracked files before it picks the newest plan, so a newer
+tracked file no longer hides an older untracked plan.</li>
+<li>The Stale names stage diffs from the merge base in a pull request, so CI catches a committed
+rename.</li>
+    </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
 <li>implement-backlog integrates on a local batch branch and fast-forwards the base only after the

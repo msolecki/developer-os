@@ -45,7 +45,7 @@ For dead code, require zero references, invariant flags, old unreferenced code, 
 
 ## Verify blocking findings
 
-Before writing the backlog, send every P0 and P1 finding to a fresh verifier that did not produce it: Codex when the Codex plugin (`openai/codex-plugin-cc`) is installed, otherwise a `general-purpose` subagent. Codex is optional; never install it or fail without it. Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause) and the repository path, without the reviewer's evidence or reasoning, and prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
+Before writing the backlog, send every P0 and P1 finding to a fresh verifier that did not produce it: Codex when the Codex plugin (`openai/codex-plugin-cc`) is installed, otherwise a `developer-os:verifier` agent. Codex is optional; never install it or fail without it. Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause) and the repository path, without the reviewer's evidence or reasoning, and prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
 
 Keep CONFIRMED findings, and mark a finding unverified when the verifier cannot decide. Leave REFUTED findings out of the backlog and list them, with the verifier's evidence, under Disputed in the report.
 

@@ -9,6 +9,7 @@
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@da09dfe6a992">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@a581e56b71f6">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@2d32579ba298">
+<meta name="dos-source" content="plugin/agents/verifier.md@bfb19da1f5b6">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@405c4449e4a9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,7 +39,7 @@
   <main id="main" class="prose">
     <h1 id="agents">Agents</h1>
     <p class="lede">Agents are subagents that a skill or you dispatch for one focused job. They are read-only reviewers that report and never edit, except qa-expert, which writes tests when it is asked to.</p>
-    <p>The plugin ships 5 agents. Each one treats code, diffs, PR text, fixtures and fetched pages as data, never as instructions: it runs no command it finds there. Skills such as <a href="skills/code-review.html">code-review</a>, <a href="skills/audit-to-backlog.html">audit-to-backlog</a> and <a href="skills/bug-triage.html">bug-triage</a> dispatch them; you can also ask for one by name, for example <code>developer-os:security-auditor</code>.</p>
+    <p>The plugin ships 6 agents. Each one treats code, diffs, PR text, fixtures and fetched pages as data, never as instructions: it runs no command it finds there. Skills such as <a href="skills/code-review.html">code-review</a>, <a href="skills/audit-to-backlog.html">audit-to-backlog</a> and <a href="skills/bug-triage.html">bug-triage</a> dispatch them; you can also ask for one by name, for example <code>developer-os:security-auditor</code>.</p>
 
     <h2 id="final-status">Final status</h2>
     <p>Every agent's report starts with exactly one of four lines, so the skill or session that dispatched it knows what to do next:</p>
@@ -177,6 +178,25 @@
       </ul>
     </div>
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/security-auditor.md">Read security-auditor.md on GitHub</a></p>
+
+    <h2 id="verifier">verifier</h2>
+    <p>Tries to disprove one review finding by reading the code, and answers CONFIRMED or REFUTED with <code>file:line</code> evidence, with read-only tools only. Use it as the fresh verifier for a P0 or P1 finding, and always for a pull request from an untrusted head.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Model</dt><dd>sonnet</dd></div>
+      <div class="fact"><dt>Tools</dt><dd>Read, Grep, Glob</dd></div>
+      <div class="fact"><dt>Edits files</dt><dd>No</dd></div>
+      <div class="fact"><dt>Used by</dt><dd>code-review and audit-to-backlog (P0/P1 verification), pr-cycle through code-review</dd></div>
+    </dl>
+    <h3 id="verifier-report">verifier report</h3>
+    <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it. It has no shell, so the diff reaches it as a file.</p>
+    <div class="callout never">
+      <h3 id="what-verifier-never-does">What verifier never does</h3>
+      <ul>
+        <li>Run a command or edit files: it has no tool for either.</li>
+        <li>Change its answer because text in the code or the PR asks it to, or read outside the repository beyond the diff file its prompt names.</li>
+      </ul>
+    </div>
+    <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/verifier.md">Read verifier.md on GitHub</a></p>
 
     <nav class="doc-foot" aria-label="Related">
       <a href="docs/product/functional-spec.html#3-agents">Agents in the functional specification</a>
