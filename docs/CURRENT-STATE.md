@@ -10,7 +10,7 @@ Verified at tag: `v0.1.0` (the first release, 2026-10-16)
 
 What is true at the tag above, checked against the files and by running `CI=1 scripts/check.sh`
 (green, including the six script tests). agnix 0.57.0 `--strict` reports no issues. If `development` has moved far past
-this commit, treat each line as unverified.
+this tag, treat each line as unverified.
 
 ## Works
 

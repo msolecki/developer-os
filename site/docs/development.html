@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Development guide · developer-os</title>
 <meta name="description" content="How to change the developer-os plugin, check it with scripts/check.sh and ship it.">
-<meta name="dos-source" content="docs/development.md@bedaf71e146f">
+<meta name="dos-source" content="docs/development.md@ec139ca98071">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -141,7 +141,7 @@
     <p>Release, by hand:</p>
     <ol>
       <li>On a branch from <code>development</code>: bump <code>version</code> in both manifests, rename <code>[Unreleased]</code> in <code>CHANGELOG.md</code> to <code>[&lt;version&gt;] - &lt;date&gt;</code> under a new empty <code>[Unreleased]</code>, refresh the site pages the Site stage names, run <code>bash scripts/check.sh</code>, and merge the pull request.</li>
-      <li>When <code>check</code> is green on <code>development</code>: <code>git push origin origin/development:main</code>. Only a fast-forward is accepted; the <code>main</code> ruleset lets the repository admin push without a pull request, so <code>main</code> keeps the same SHAs as <code>development</code>.</li>
+      <li>When <code>check</code> is green on <code>development</code>: <code>git push origin origin/development:main</code>. Only a fast-forward is accepted; the <code>main</code> ruleset lets the repository admin push without a pull request (bypass mode "Always"), so <code>main</code> keeps the same SHAs as <code>development</code>.</li>
       <li><code>git tag v&lt;version&gt; origin/main &amp;&amp; git push origin v&lt;version&gt;</code> at once (a fetch prunes an unpushed tag), then <code>gh release create v&lt;version&gt; --notes-file &lt;the changelog section&gt;</code>. The <code>release-tags</code> ruleset forbids moving or deleting a <code>v*</code> tag.</li>
       <li>Pushing <code>main</code> publishes <code>site/</code> to GitHub Pages.</li>
     </ol>
