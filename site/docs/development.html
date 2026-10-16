@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Development guide · developer-os</title>
 <meta name="description" content="How to change the developer-os plugin, check it with scripts/check.sh and ship it.">
-<meta name="dos-source" content="docs/development.md@d903a1f82d0d">
+<meta name="dos-source" content="docs/development.md@40c1132a4c22">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -92,7 +92,7 @@
       <li><code>skills/</code>, an index and one page per skill; <code>agents.html</code> and <code>output-styles.html</code>;</li>
       <li><code>assets/site.css</code> and <code>assets/site.js</code> (the sidebar order in <code>NAV</code>, on-page contents, copy buttons).</li>
     </ul>
-    <p>Each page that restates a source carries <code>&lt;meta name="dos-source" content="&lt;source&gt;@&lt;hash&gt;"&gt;</code>: the first 12 hex digits of the source's SHA-256 with any <code>last-verified:</code> line removed, so re-verifying a doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style, the Site stage names the page to refresh: update its text, then its hash (<code>sed '/^last-verified: /d' &lt;source&gt; | shasum -a 256 | cut -c1-12</code>). A new doc or skill needs a new page, and a new doc an entry in <code>NAV</code>. The landing page and the skills index restate many sources and carry no hash; update them by hand when the hooks, rules or skills they describe change. <code>CURRENT-STATE.md</code> and <code>CHANGELOG.md</code> change on most pull requests, so their pages usually do too.</p>
+    <p>Each page that restates a source carries <code>&lt;meta name="dos-source" content="&lt;source&gt;@&lt;hash&gt;"&gt;</code>: the first 12 hex digits of the source's SHA-256 with any <code>last-verified:</code> line removed, so re-verifying a doc changes nothing. After you change a doc, a root document, a skill, an agent or an output style, the Site stage names the page to refresh: update its text, then its hash (<code>sed '/^last-verified: /d' &lt;source&gt; | shasum -a 256 | cut -c1-12</code>). A new doc or skill needs a new page, and a new doc an entry in <code>NAV</code>. The landing page and the skills index restate many sources and carry no hash; update them by hand when the hooks, rules or skills they describe change. <code>CURRENT-STATE.md</code> and <code>CHANGELOG.md</code> change on most pull requests, so their pages usually do too. The Local paths stage scans <code>site/</code>, so a page that quotes its patterns writes the slash as <code>&amp;#47;</code>, as <code>development.html</code> and <code>contributing.html</code> do.</p>
     <p><code>.github/workflows/pages.yml</code> publishes <code>site/</code> to GitHub Pages on a push to <code>development</code> that changes it, or by hand. The repository's Pages source must be "GitHub Actions".</p>
     <h2 id="script-tests">Script tests</h2>
     <p><code>tests/session-start.test.sh</code> runs the SessionStart hook in a temporary git repository and checks

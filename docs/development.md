@@ -83,6 +83,8 @@ the Site stage names the page to refresh: update its text, then its hash
 page, and a new doc an entry in `NAV`. The landing page and the skills index restate many sources
 and carry no hash; update them by hand when the hooks, rules or skills they describe change.
 `CURRENT-STATE.md` and `CHANGELOG.md` change on most pull requests, so their pages usually do too.
+The Local paths stage scans `site/`, so a page that quotes its patterns writes the slash as `&#47;`,
+as `development.html` and `contributing.html` do.
 
 `.github/workflows/pages.yml` publishes `site/` to GitHub Pages on a push to `development` that
 changes it, or by hand. The repository's Pages source must be "GitHub Actions".
