@@ -5,6 +5,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- A 1024×1024 plugin icon at `plugin/.claude-plugin/icon.png` for the Claude plugin directory listing.
 - The `verifier` agent: it checks one P0/P1 finding with read-only tools (Read, Grep, Glob). code-review
   and audit-to-backlog use it instead of a `general-purpose` subagent, and it is the only agent an
   untrusted pull-request head reaches.
