@@ -117,6 +117,28 @@
     pre.appendChild(btn);
   });
 
+  document.querySelectorAll('[role="tablist"]').forEach(function (list) {
+    var tabs = list.querySelectorAll('[role="tab"]');
+    function select(tab) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+      });
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener('click', function () { select(t); });
+      t.addEventListener('keydown', function (e) {
+        var k = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
+        if (!k) return;
+        e.preventDefault();
+        var next = tabs[(i + k + tabs.length) % tabs.length];
+        select(next); next.focus();
+      });
+    });
+  });
+
   var filter = document.getElementById('skill-filter');
   if (filter) {
     filter.addEventListener('input', function () {

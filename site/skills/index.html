@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills · developer-os</title>
+<meta name="description" content="Every developer-os skill, grouped by the job it does, with when it runs and what it never does.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose" style="max-width:none">
+    <h1 id="skills">Skills</h1>
+    <p class="lede">A skill is a set of instructions the agent loads only when a task calls for it. Name one, or describe the situation in English or Polish. Action skills stop at a defined point and ask; read-only skills change nothing.</p>
+    <label for="skill-filter" class="small">Filter by name, job or phrase</label><br>
+    <input id="skill-filter" class="filter" type="search" placeholder="review, vault, deploy, klient…" autocomplete="off">
+
+    <div class="lib-group">
+      <h2 id="memory">Memory</h2>
+      <p>Read and write your Obsidian vault with the agent's own file tools. New notes go only to the inbox.</p>
+      <ul class="lib">
+        <li><a href="brain-setup.html"><b>brain-setup</b><span>Create a vault from the template or connect yours, with the config edits shown as a diff first.</span><em>"skonfiguruj vault", "setup brain"</em></a></li>
+        <li><a href="brain-search.html"><b>brain-search</b><span>Answer from your notes only, citing each note's path; inbox claims marked unreviewed.</span><em>"what did we decide about X", "poszukaj w brainie"</em></a></li>
+        <li><a href="brain-capture.html"><b>brain-capture</b><span>Save a decision, lesson or reference to the inbox, secrets redacted.</span><em>"remember this", "zapamiętaj to"</em></a></li>
+        <li><a href="brain-review.html"><b>brain-review</b><span>Summarize the inbox and promote, merge or reject only the notes you name.</span><em>"przejrzyj inbox braina"</em></a></li>
+        <li><a href="brain-garden.html"><b>brain-garden</b><span>A vault health report: stale notes, broken links, bad frontmatter, duplicates, orphans.</span><em>"zrób porządki w vaulcie"</em></a></li>
+        <li><a href="brain-compile.html"><b>brain-compile</b><span>Synthesize several notes on one topic into one compiled note in the inbox, sources listed.</span></a></li>
+      </ul>
+    </div>
+
+    <div class="lib-group">
+      <h2 id="engineering">Engineering</h2>
+      <p>From a spec to a merge verdict, with evidence on every finding and an approval before every edit that matters.</p>
+      <ul class="lib">
+        <li><a href="spec.html"><b>spec</b><span>Interview you, inspect the repository, write a spec and plan, hand implementation to a fresh session.</span></a></li>
+        <li><a href="code-review.html"><b>code-review</b><span>Review a diff, commit or PR: P0–P3 findings and a merge verdict, with an independent reviewer for this session's code.</span><em>"review my changes", "zrób code review PR-a"</em></a></li>
+        <li><a href="audit-to-backlog.html"><b>audit-to-backlog</b><span>Parallel specialist reviews with file-and-line evidence, deduplicated into a backlog.</span><em>"zrób audyt tego repo"</em></a></li>
+        <li><a href="implement-backlog.html"><b>implement-backlog</b><span>Work through backlog items in small batches, validated, reviewed and committed only when green.</span><em>"zrealizuj backlog"</em></a></li>
+        <li><a href="pr-cycle.html"><b>pr-cycle</b><span>Merge the base in, resolve conflicts, review, fix approved findings, run the gates, update the PR body.</span><em>"przygotuj PR do merge"</em></a></li>
+        <li><a href="fix-pr.html"><b>fix-pr</b><span>Address every unresolved review thread, asking before each edit, commit, push and resolution.</span><em>"popraw uwagi z PR-a"</em></a></li>
+        <li><a href="bug-triage.html"><b>bug-triage</b><span>Severity, reproduction, ranked hypotheses, root cause, mitigation and a regression test.</span><em>"mamy błąd na produkcji"</em></a></li>
+        <li><a href="deploy-checklist.html"><b>deploy-checklist</b><span>A repository-specific GO/NO-GO checklist with post-deploy checks and rollback.</span><em>"czy możemy deployować"</em></a></li>
+      </ul>
+    </div>
+
+    <div class="lib-group">
+      <h2 id="project-hygiene">Project hygiene</h2>
+      <p>Keep docs, instructions and plans in step with the code.</p>
+      <ul class="lib">
+        <li><a href="docs-sync.html"><b>docs-sync</b><span>Check docs against code, scaffold missing pieces, refresh the current state, report drift.</span><em>"czy docsy są aktualne"</em></a></li>
+        <li><a href="project-baseline.html"><b>project-baseline</b><span>Check a repository against a baseline of engineering practices and propose what is missing.</span><em>"czego brakuje w repo"</em></a></li>
+        <li><a href="instruction-review.html"><b>instruction-review</b><span>Propose a minimal, evidence-backed diff to CLAUDE.md or AGENTS.md.</span><em>"popraw CLAUDE.md"</em></a></li>
+        <li><a href="plan-status.html"><b>plan-status</b><span>Measured open, done and blocked counts, and the open decisions as A/B/C questions.</span><em>"na czym stoimy"</em></a></li>
+      </ul>
+    </div>
+
+    <div class="lib-group">
+      <h2 id="session-and-communication">Session and communication</h2>
+      <p>End sessions cleanly, see what is used, talk to clients plainly.</p>
+      <ul class="lib">
+        <li><a href="session-retro.html"><b>session-retro</b><span>Check for unpushed work and running tasks, give the status block, keep a few lessons, apply only what you approve.</span><em>"podsumuj sesję", "kończymy"</em></a></li>
+        <li><a href="skill-usage.html"><b>skill-usage</b><span>How often each skill fired in local session history, with a keep, merge or remove verdict.</span><em>"które skille działają"</em></a></li>
+        <li><a href="client-reply.html"><b>client-reply</b><span>A reply to a client in plain business language, in your voice. Drafts only, never sends.</span><em>"odpowiedz klientowi"</em></a></li>
+      </ul>
+    </div>
+
+    <div class="lib-group">
+      <h2 id="conventions">Conventions</h2>
+      <p>Stack- and file-specific rules that load only when the work matches.</p>
+      <ul class="lib">
+        <li><a href="typescript-conventions.html"><b>typescript-conventions</b><span>Composition, small single-purpose functions, tests for new functions, formatter and import aliases.</span></a></li>
+        <li><a href="nextjs-conventions.html"><b>nextjs-conventions</b><span>Schema-validated input, Server Components by default, typed Server Actions, forward-only migrations.</span></a></li>
+        <li><a href="testing-conventions.html"><b>testing-conventions</b><span>Pin the contract in tests with absolute-instant fixtures and partial module mocks.</span></a></li>
+        <li><a href="error-handling-conventions.html"><b>error-handling-conventions</b><span>Cause chains, typed results, one API error envelope, no log-and-throw, no empty catch.</span></a></li>
+        <li><a href="monitoring-conventions.html"><b>monitoring-conventions</b><span>Alert on symptoms, avoid alert fatigue, link runbooks, separate health from readiness.</span></a></li>
+        <li><a href="comments-conventions.html"><b>comments-conventions</b><span>No comment by default, and the few that earn their place kept current.</span></a></li>
+        <li><a href="defensive-coding-conventions.html"><b>defensive-coding-conventions</b><span>Defect classes that ship past review: mismatched conditions, unisolated webhooks, unvalidated JSON.</span></a></li>
+      </ul>
+    </div>
+
+    <p class="small">The contract of every skill, with what it writes and where it asks, is in the <a href="../docs/product/functional-spec.html#2-skills">functional specification</a>. Agents the skills dispatch are on the <a href="../agents.html">agents page</a>.</p>
+  </main>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>
