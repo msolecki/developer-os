@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contributing · developer-os</title>
+<meta name="description" content="How to contribute to developer-os: the check, the skill evals and the repository rules.">
+<meta name="dos-source" content="CONTRIBUTING.md@d433d6ab1524">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="contributing">Contributing</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CONTRIBUTING.md">CONTRIBUTING.md</a></span></p>
+    <p>The plugin is Markdown and JSON plus three POSIX <code>sh</code> hook scripts. There is no build step and no runtime.</p>
+    <h2 id="check">Check</h2>
+    <p>Run before every commit:</p>
+    <pre><code>scripts/check.sh</code></pre>
+    <p>It is a bash script: run it directly or with <code>bash</code>, not <code>sh</code>.</p>
+    <p>It parses every JSON file and every YAML frontmatter and <code>.base</code> file, requires <code>status</code>, <code>owner</code> and
+<code>last-verified</code> frontmatter in every <code>docs/*.md</code>, validates skills (name
+matches the folder, description 80–1024 characters and at most 12000 in total, <code>## Stop point</code> and
+<code>## Never</code> in action skills), rejects local paths such as <code>/Users&#47;</code> anywhere in <code>plugin/</code>, caps
+<code>plugin/rules/core.md</code> at 8192 bytes, runs every <code>tests/*.test.sh</code> (<code>tests/check.test.sh</code> only when <code>CI</code> is set), validates the plugin and the
+marketplace with <code>--strict</code>, and scans tracked
+files for secrets. CI runs the same script.</p>
+    <p>Hook tests live in <code>tests/*.test.sh</code> and run with <code>sh</code>; after changing a hook script, run its test
+directly from the repository root, for example <code>sh tests/guard.test.sh</code>,
+<code>sh tests/capture-nudge.test.sh</code> or <code>sh tests/session-start.test.sh</code>.</p>
+    <p>Prerequisites on <code>PATH</code>:</p>
+    <ul>
+<li><code>claude</code> (Claude Code)</li>
+<li><code>jq</code></li>
+<li><code>gitleaks</code></li>
+<li><code>rsync</code></li>
+<li><code>ruby</code> (for its bundled YAML parser)</li>
+</ul>
+    <h2 id="skill-evals">Skill evals</h2>
+    <p><code>evals/</code> holds behavior checks for the skills, run with <code>claude plugin eval</code>; see
+<a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md">evals/README.md</a> for the command and the cases. Each run spends real plan usage:
+run it by hand before a release or after changing a tested skill, never in CI.</p>
+    <h2 id="rules">Rules</h2>
+    <ul>
+<li>Use synthetic examples only. Never commit a real vault note, a client name or a credential.</li>
+<li>A skill does one job, says when to use it in its <code>description</code>, and fits on one screen where possible.</li>
+<li>Every skill ends with <code>## Stop point</code> (where it stops, what it returns) and <code>## Never</code> (forbidden
+side effects), except the read-only ones in the <code>read_only</code> list in <code>scripts/check.sh</code> and the
+<code>*-conventions</code> skills; <code>scripts/check.sh</code> fails otherwise.</li>
+<li>This repository keeps its plans local: <code>docs/plans/</code> is gitignored.</li>
+<li>Test a changed skill by running it: <code>claude --plugin-dir plugin</code>, then invoke it on a scratch vault.</li>
+</ul>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="../docs/pitfalls.html">Pitfalls</a>
+      <a href="../docs/security.html">Security</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security policy · developer-os</title>
+<meta name="description" content="The developer-os security policy: supported versions, how to report a vulnerability, and the plugin&#x27;s scope.">
+<meta name="dos-source" content="SECURITY.md@0e6da3ddcb20">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="security-policy">Security policy</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/SECURITY.md">SECURITY.md</a></span></p>
+    <h2 id="supported-versions">Supported versions</h2>
+    <p>There are no numbered releases. <code>plugin/.claude-plugin/plugin.json</code> has no <code>version</code>, so Claude Code
+versions an install by its commit of <code>development</code>. Only the latest commit receives security fixes.</p>
+    <h2 id="reporting-a-vulnerability">Reporting a vulnerability</h2>
+    <p>Report privately through GitHub security advisories:
+<a href="https://github.com/msolecki/developer-os/security/advisories/new">https://github.com/msolecki/developer-os/security/advisories/new</a></p>
+    <p>Never report a vulnerability in a public issue.</p>
+    <p>Include:</p>
+    <ul>
+<li>the installed version, a 12-character commit SHA (<code>version</code> of <code>developer-os@developer-os</code> in
+<code>~/.claude/plugins/installed_plugins.json</code>),</li>
+<li>the steps that reproduce the problem,</li>
+<li>the expected result and the actual result.</li>
+</ul>
+    <p>Never include the content of a vault or a secret. Describe it instead.</p>
+    <h2 id="scope">Scope</h2>
+    <ul>
+<li>The plugin is Markdown (skills, agents, output styles, rules) plus three hooks in
+<code>plugin/hooks/hooks.json</code>: <code>SessionStart</code> runs <code>session-start.sh</code>, which prints <code>plugin/rules/core.md</code> and, after a
+compaction or resume, the git branch, newest plan, <code>docs/plans/.devos-state.md</code> and worktrees of the
+working directory; <code>Stop</code> runs
+<code>capture-nudge.sh</code>, which counts <code>tool_use</code> entries in the session transcript and reads only
+background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; <code>PreToolUse</code> runs <code>guard.sh</code> on Bash commands and can only ask for confirmation.
+The three scripts are POSIX <code>sh</code> (plus <code>grep -o</code> and <code>head -c</code>), make no network calls and fail open. The plugin ships no binary,
+server or network code.</li>
+<li>Updates come from this Git repository through the Claude Code plugin marketplace: each update
+installs the latest commit of <code>development</code>. An update can change <code>plugin/hooks/hooks.json</code> and the
+hook scripts, which run in every session. Review the diff from your installed commit to
+<code>development</code> before you update (<code>git diff &lt;installed-sha&gt;..development</code> in a clone); auto-update
+is off for this marketplace unless you turn it on.</li>
+<li>The skills treat vault notes, pull request comments, diffs and fetched web pages as data, never as
+instructions.</li>
+<li>What the agent reads from the vault goes to your model provider as session context, like any other
+file. An agent with web access could also send it elsewhere; the plugin cannot prevent that.</li>
+</ul>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="../docs/contributing.html">Contributing</a>
+      <a href="../docs/CURRENT-STATE.html">Current state</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>
