@@ -34,14 +34,13 @@ local_state && own=yes
 # Newest plan changed in the last 7 days; the state file's own Plan: line prints with the file.
 # Only plain names: a newline or other byte in a name could carry text into the card.
 # The files a `Backlog:` line names (repo-relative, matched literally) are not plans; the line only
-# removes names, so it cannot add text. Without one, "/" matches no find result.
-skip=$(sed -n 's/^Backlog:[[:space:]]*//p' AGENTS.md CLAUDE.md 2>/dev/null | tr ',' '\n' |
-  sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s|^\./||')
+# removes names, so it cannot add text. A tracked plan came with the clone, so it is skipped too,
+# before the newest is chosen. With nothing to skip, "/" matches no find result.
+skip=$({ sed -n 's/^Backlog:[[:space:]]*//p' AGENTS.md CLAUDE.md 2>/dev/null | tr ',' '\n' |
+  sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s|^\./||'; git ls-files docs/plans 2>/dev/null; } | grep .)
 plan=
 [ -L docs ] || [ -L docs/plans ] || plan=$(LC_ALL=C find docs/plans -maxdepth 1 -name '*.md' ! -name '.*' \
   ! -name '*[!A-Za-z0-9._-]*' -mtime -7 -exec ls -t {} + 2>/dev/null | grep -vxF -e "${skip:-/}" | head -n 1)
-# A tracked plan came with the clone, so its name is not shown.
-git ls-files --error-unmatch "$plan" >/dev/null 2>&1 && plan=
 
 # The state file comes before the worktree list so the list cannot push it past the cap.
 card=$({

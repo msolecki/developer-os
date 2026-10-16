@@ -22,7 +22,7 @@ plugin/                           the installed payload
   hooks/guard.sh                  PreToolUse guard for Bash
   hooks/capture-nudge.sh          Stop hook: session wrap-up nudge
   skills/<name>/SKILL.md          28 skills
-  agents/<name>.md                5 agents
+  agents/<name>.md                6 agents
   output-styles/<name>.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
@@ -81,7 +81,7 @@ sequenceDiagram
   `"type":"tool_use"` occurrences in the transcript file with `grep`, defers while a background task
   launched in the session has no `<task-notification>` and a fresh output file under a `tasks/`
   directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session
-  marker in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp/<uid>}}/capture-nudge/` so it fires once. Markers older than
+  marker in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/capture-nudge/` so it fires once. Markers older than
   7 days are removed.
 
 Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
@@ -95,7 +95,7 @@ flowchart LR
   pr-cycle --> code-review
   pr-cycle --> fix-pr
   code-review --> code-reviewer[[code-reviewer]]
-  code-review --> verifier[[fresh verifier: Codex or subagent]]
+  code-review --> verifier[[fresh verifier: Codex or the verifier agent]]
   audit-to-backlog --> security-auditor[[security-auditor]]
   audit-to-backlog --> performance-engineer[[performance-engineer]]
   audit-to-backlog --> qa-expert[[qa-expert]]

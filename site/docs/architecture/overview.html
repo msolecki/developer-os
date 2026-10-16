@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Architecture overview · developer-os</title>
 <meta name="description" content="How developer-os is laid out, what Claude Code loads into a session and when, and how its hooks, skills and data flows fit together.">
-<meta name="dos-source" content="docs/architecture/overview.md@f9101a20a349">
+<meta name="dos-source" content="docs/architecture/overview.md@af59e644132d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -47,7 +47,7 @@ plugin/                           the installed payload
   hooks/guard.sh                  PreToolUse guard for Bash
   hooks/capture-nudge.sh          Stop hook: session wrap-up nudge
   skills/&lt;name&gt;/SKILL.md          28 skills
-  agents/&lt;name&gt;.md                5 agents
+  agents/&lt;name&gt;.md                6 agents
   output-styles/&lt;name&gt;.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
@@ -128,7 +128,7 @@ site/                             public documentation site, published by .githu
     <ul>
       <li><code>session-start.sh</code> prints <code>core.md</code>, then, for <code>source</code> <code>compact</code> or <code>resume</code> inside a git repository, the branch, the newest plan, <code>docs/plans/.devos-state.md</code> (skipped when older than 7 days) and the worktrees, cut to whole lines within 1024 bytes.</li>
       <li><code>guard.sh</code> extracts <code>tool_input.command</code> with <code>sed</code>, unescapes JSON, joins line continuations, drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans each segment with <code>awk</code>. Quotes are stripped on purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.</li>
-      <li><code>capture-nudge.sh</code> reads <code>session_id</code> and <code>transcript_path</code> from the input, counts <code>"type":"tool_use"</code> occurrences in the transcript file with <code>grep</code>, defers while a background task launched in the session has no <code>&lt;task-notification&gt;</code> and a fresh output file under a <code>tasks/</code> directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp/&lt;uid&gt;}}/capture-nudge/</code> so it fires once. Markers older than 7 days are removed.</li>
+      <li><code>capture-nudge.sh</code> reads <code>session_id</code> and <code>transcript_path</code> from the input, counts <code>"type":"tool_use"</code> occurrences in the transcript file with <code>grep</code>, defers while a background task launched in the session has no <code>&lt;task-notification&gt;</code> and a fresh output file under a <code>tasks/</code> directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/capture-nudge/</code> so it fires once. Markers older than 7 days are removed.</li>
     </ul>
     <p>Exact inputs, outputs and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
     <h2 id="4-skill-composition">4. Skill composition</h2>
@@ -190,7 +190,7 @@ site/                             public documentation site, published by .githu
 <rect class="agent" x="560" y="175" width="200" height="44" rx="2"/>
 <line class="agent" x1="569" y1="175" x2="569" y2="219"/><line class="agent" x1="751" y1="175" x2="751" y2="219"/>
 <text x="660" y="193" text-anchor="middle">fresh verifier:</text>
-<text x="660" y="209" text-anchor="middle">Codex or subagent</text>
+<text x="660" y="209" text-anchor="middle">Codex or verifier agent</text>
 <rect class="agent" x="560" y="260" width="200" height="34" rx="2"/>
 <line class="agent" x1="569" y1="260" x2="569" y2="294"/><line class="agent" x1="751" y1="260" x2="751" y2="294"/>
 <text x="660" y="282" text-anchor="middle">security-auditor</text>

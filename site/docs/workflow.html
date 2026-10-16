@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How to work: brain + code · developer-os</title>
 <meta name="description" content="How to set up developer-os and work daily with an Obsidian vault as the agent&#x27;s memory and the repository as the code&#x27;s.">
-<meta name="dos-source" content="docs/workflow.md@1ae3f17634c2">
+<meta name="dos-source" content="docs/workflow.md@ec85a147c828">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -341,7 +341,7 @@ manager, entry X"), never to its value.</li>
     <p>The full list of skills, agents and output styles, and the Codex installer, are in the
 <a href="readme.html#whats-inside">README</a>.</p>
     <p>code-review and audit-to-backlog send every P0/P1 finding to a fresh verifier that sees only the
-claim (Codex when its plugin is installed, otherwise a Claude subagent); refuted findings move to a
+claim (Codex when its plugin is installed, otherwise the read-only <code>verifier</code> agent); refuted findings move to a
 Disputed list and do not block the verdict or enter the backlog.</p>
     <p>Run <code>instruction-review --prune</code> when the default model changes and every six months: it gives each
 line DELETE/KEEP/REWRITE with a source, flags hedges and contradictions, never cuts truthfulness
@@ -374,7 +374,7 @@ do not:</p>
 <tr><td><code>SessionStart</code> hook</td><td>loads <code>plugin/rules/core.md</code> every session</td><td>no</td><td><code>scripts/install-codex.sh</code> keeps it in a marked block of <code>~/.codex/AGENTS.md</code> (D19)</td></tr>
 <tr><td><code>Stop</code> hook</td><td>offers session-retro once per long session</td><td>no</td><td>run session-retro by hand at the end</td></tr>
 <tr><td><code>PreToolUse</code> guard</td><td>asks before installs (also <code>npm</code> aliases such as <code>in</code>, and full paths), force pushes, hook bypasses (<code>--no-verify</code> and its abbreviations, <code>commit -n</code>, <code>HUSKY=0</code>, <code>core.hooksPath</code> (any form))</td><td>no</td><td>none</td></tr>
-<tr><td>Agents (<code>plugin/agents/</code>)</td><td>code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog)</td><td>no</td><td>none</td></tr>
+<tr><td>Agents (<code>plugin/agents/</code>)</td><td>code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog), verifier (code-review, audit-to-backlog)</td><td>no</td><td>none</td></tr>
 <tr><td>Output styles</td><td><code>/output-style</code></td><td>no</td><td>none</td></tr>
 <tr><td><code>Skill</code> tool</td><td>the agent loads a skill by name</td><td>no</td><td><code>scripts/install-codex.sh</code> writes a Codex copy of each skill to <code>~/.agents/skills/</code></td></tr>
 </tbody>

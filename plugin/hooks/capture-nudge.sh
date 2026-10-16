@@ -26,7 +26,9 @@ case $sid in '' | *[!A-Za-z0-9_-]*) exit 0 ;; esac
 transcript=$(field transcript_path)
 [ -f "$transcript" ] || exit 0
 
-dir="${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp/$(id -u)}}/capture-nudge"
+# Without plugin data the marker sits in a per-user directory, so its parent is ours even when TMPDIR is
+# a shared, root-owned /tmp.
+dir="${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-$(id -u)}/capture-nudge"
 [ -e "$dir/$sid" ] && exit 0
 
 min=${DEVELOPER_OS_CAPTURE_NUDGE_MIN:-30}

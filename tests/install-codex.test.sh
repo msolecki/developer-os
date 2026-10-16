@@ -93,6 +93,17 @@ check "--project exits 0" "$code" 0
 grep -qx 'Brain vault: /vaults/flag' "$tmp/proj2/AGENTS.md" && r=yes || r=no
 check "--project writes the block with the --vault line" "$r" yes
 check "--project names the backup it leaves in the project" "$(grep -c '^backup: .*proj2/AGENTS.md.bak-' "$tmp/out")" 1
+# A backup name the repository planted as a symlink must not carry the write to its target.
+printf 'export SAFE=1\n' > "$tmp/canary"
+mkdir -p "$tmp/proj3"
+for try in 1 2 3; do
+  printf 'Project rule %s.\n' "$try" > "$tmp/proj3/AGENTS.md"
+  ts=$(date +%Y%m%d%H%M%S)
+  ln -sf "$tmp/canary" "$tmp/proj3/AGENTS.md.bak-$ts"
+  run --project "$tmp/proj3"
+  [ "$(date +%Y%m%d%H%M%S)" = "$ts" ] && break
+done
+check "a planted backup symlink leaves its target unchanged" "$(cat "$tmp/canary")" "export SAFE=1"
 run --project "$tmp/proj2"
 grep -qx 'Brain vault: /vaults/flag' "$tmp/proj2/AGENTS.md" && r=yes || r=no
 check "a re-run without --vault keeps the --vault line" "$r" yes

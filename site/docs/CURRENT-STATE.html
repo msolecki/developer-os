@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Current state · developer-os</title>
 <meta name="description" content="What works in developer-os today, what is in progress, and what is known to be broken or missing.">
-<meta name="dos-source" content="docs/CURRENT-STATE.md@590820a7f321">
+<meta name="dos-source" content="docs/CURRENT-STATE.md@c2a6c213f1d3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -42,7 +42,7 @@ this tag, treat each line as unverified.</p>
     <ul>
 <li>Release <code>0.1.0</code>, tagged <code>v0.1.0</code>. Install from the marketplace on <code>main</code>, which moves only on a
 release (D20): <code>.claude-plugin/marketplace.json</code> → <code>plugin/</code>.</li>
-<li>28 skills, 5 agents, 4 output styles, 3 hooks, as listed in
+<li>28 skills, 6 agents, 4 output styles, 3 hooks, as listed in
 <a href="product/functional-spec.html">product/functional-spec.md</a>.</li>
 <li>Per-session cost: core rules 8144 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
 state card of at most 1024 bytes after compaction or resume.</li>
@@ -86,7 +86,7 @@ on awesome-claude-code (its issue form, 14 days after the first commit) and agen
 done: #23 (qa-expert's assessment mode stays prose-only), #49 (capture-nudge keeps its transcript
 scan, about 0.3 s on a 52 MB transcript), and eval cases still missing for brain-setup,
 audit-to-backlog, deploy-checklist, docs-sync, skill-usage and the pr-cycle fork gate and thread
-order, and for the seven <code>*-conventions</code> skills and the five agents (passive reference, no gate;
+order, and for the seven <code>*-conventions</code> skills and the six agents (passive reference, no gate;
 <a href="development.html">development.md</a> step 6). The trigger-typescript-conventions case is not written.</p>
     <p>The findings of the follow-up audit (decisions answered 2026-10-16) are fixed on <code>feat/audit-fixes-2026-10-15</code>; what still needs
 the user:</p>

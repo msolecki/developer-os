@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hooks reference · developer-os</title>
 <meta name="description" content="Exact inputs, outputs, failure behavior and switches of the SessionStart, PreToolUse and Stop hooks in developer-os.">
-<meta name="dos-source" content="docs/reference/hooks.md@765bd0735ca8">
+<meta name="dos-source" content="docs/reference/hooks.md@6d3f1e5acb91">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -100,7 +100,8 @@ Worktrees:
     the shell runs), split segments on <code>; &amp; | ( )</code> and backtick, and scan words per segment. Quotes are
     not tracked: the command is scanned twice, once with <code>\n</code> as a command separator and once with <code>\n</code>
     as a space, each with quotes deleted and with quotes turned into spaces (so <code>alias.p='push -f'</code> keeps
-    <code>push</code> and <code>-f</code> apart); a hit in any of the four views asks. A word built at run time, such as <code>$(command -v npm)</code>, is not
+    <code>push</code> and <code>-f</code> apart). Braces are deleted and commas split words, so <code>{-f,}</code> reads <code>-f</code>; a fifth
+    view deletes commas instead, so <code>-{,f}</code> reads <code>-f</code>. A hit in any of the five views asks. A word built at run time, such as <code>$(command -v npm)</code>, is not
     resolved. Because quotes
     are dropped, a mention such as <code>git commit -m "pnpm add zod"</code> also asks; this is deliberate.</p>
     <p><strong>Known false positives</strong> (an extra prompt, never a missed category): a command on the line after
@@ -137,7 +138,7 @@ Worktrees:
     <p><strong>Otherwise:</strong> writes the marker, removes markers older than 7 days, prints to stderr</p>
 <pre><code>developer-os: this session made &lt;n&gt; tool calls. Run the developer-os:session-retro skill: propose the wrap-up to the user and apply only what they approve. If nothing qualifies, end your turn with no output.</code></pre>
     <p>and exits 2, which makes Claude Code feed the message back to the agent instead of stopping.</p>
-    <p><strong>State:</strong> one empty file per session in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp/&lt;uid&gt;}}/capture-nudge/</code>, created with mode 700; the hook fails open when that directory or its parent is a symlink or owned by another user.</p>
+    <p><strong>State:</strong> one empty file per session in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/capture-nudge/</code>, created with mode 700; the hook fails open when that directory or its parent is a symlink or owned by another user.</p>
     <p><strong>Privacy:</strong> counts matches of one fixed string and extracts background-task and Monitor ids, output-file paths and Monitor start timestamps (to check their notifications and modification times); never reads or prints message content.</p>
     <p>The output path comes from tool output that anything can print, so it is never trusted as is: a
     relative path or an option such as <code>-delete</code> never reaches <code>find</code>, and a path outside <code>tasks/</code> such as

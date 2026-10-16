@@ -119,8 +119,9 @@ else
   if [ "$dry" -eq 0 ]; then
     mkdir -p "$(dirname "$agents_md")"
     if [ -f "$agents_md" ]; then
-      bak="$agents_md.bak-$(date +%Y%m%d%H%M%S)"
-      cp "$agents_md" "$bak"
+      # mktemp creates a new file, so a planted symlink at a guessable backup name is never followed.
+      bak=$(mktemp "$agents_md.bak-$(date +%Y%m%d%H%M%S)-XXXXXX") && cat "$agents_md" > "$bak" ||
+        { echo "error: cannot create a backup of $agents_md. Nothing was changed." >&2; exit 1; }
       [ "$project" -eq 0 ] || echo "backup: $bak (inside the project; delete it or git-ignore it)"
     fi
     cat "$tmp/agents" > "$agents_md"

@@ -4,6 +4,22 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- The `verifier` agent: it checks one P0/P1 finding with read-only tools (Read, Grep, Glob). code-review
+  and audit-to-backlog use it instead of a `general-purpose` subagent, and it is the only agent an
+  untrusted pull-request head reaches.
+
+### Fixed
+- install-codex creates its `AGENTS.md` backup with `mktemp`, so a planted symlink at the backup name
+  can no longer redirect the write.
+- The guard sees through brace expansion: `git push origin {-f,}` and `-{,f}` now ask.
+- capture-nudge keeps its marker in a per-user directory when `CLAUDE_PLUGIN_DATA` is unset, so it
+  fires under a shared, root-owned `TMPDIR=/tmp`.
+- The `SessionStart` state card skips tracked files before it picks the newest plan, so a newer
+  tracked file no longer hides an older untracked plan.
+- The Stale names stage diffs from the merge base in a pull request, so CI catches a committed
+  rename.
+
 ### Changed
 - implement-backlog integrates on a local batch branch and fast-forwards the base only after the
   review passes (`APPROVE`, or a `COMMENT` the user answered); a reviewer that ended `BLOCKED` is not

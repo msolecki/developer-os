@@ -16,7 +16,7 @@ this tag, treat each line as unverified.
 
 - Release `0.1.0`, tagged `v0.1.0`. Install from the marketplace on `main`, which moves only on a
   release (D20): `.claude-plugin/marketplace.json` → `plugin/`.
-- 28 skills, 5 agents, 4 output styles, 3 hooks, as listed in
+- 28 skills, 6 agents, 4 output styles, 3 hooks, as listed in
   [product/functional-spec.md](product/functional-spec.md).
 - Per-session cost: core rules 8144 of 8192 bytes; skill descriptions 10183 of 12000 characters; a
   state card of at most 1024 bytes after compaction or resume.
@@ -62,7 +62,7 @@ The findings of the 2026-10-15 audit are fixed in #72, except what was deliberat
 done: #23 (qa-expert's assessment mode stays prose-only), #49 (capture-nudge keeps its transcript
 scan, about 0.3 s on a 52 MB transcript), and eval cases still missing for brain-setup,
 audit-to-backlog, deploy-checklist, docs-sync, skill-usage and the pr-cycle fork gate and thread
-order, and for the seven `*-conventions` skills and the five agents (passive reference, no gate;
+order, and for the seven `*-conventions` skills and the six agents (passive reference, no gate;
 [development.md](development.md) step 6). The trigger-typescript-conventions case is not written.
 
 The findings of the follow-up audit (decisions answered 2026-10-16) are fixed on `feat/audit-fixes-2026-10-15`; what still needs

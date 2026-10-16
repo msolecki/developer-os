@@ -22,14 +22,16 @@ cmd=$(printf '%s\n' "$input" |
 
 # JSON-unescape, then delete every backslash and `$`, and either delete quotes (so `np""m`, `\git`,
 # `-\-force` and `$'-f'` read as the word the shell runs) or turn them into spaces (so a quoted value
-# such as `alias.p='push -f'` keeps its words apart). Each way runs with a newline as `;` and as a
-# space: four views, and a hit in any asks. Quotes are not tracked: an extra ask is the price.
+# such as `alias.p='push -f'` keeps its words apart). Braces go and commas split words, so a brace
+# expansion such as `{-f,}` shows the words it expands to; a fifth view drops commas, so `-{,f}` reads
+# `-f`. Each way runs with a newline as `;` and as a space: five views, and a hit in any asks. Quotes are not tracked: an extra ask is the price.
 unescape() {
   printf '%s\n' "$cmd" |
     sed -e 's/\\\\\\n/ /g' -e "s/\\\\n/$1/g" -e 's/\\[rt]/ /g' 2>/dev/null |
-    if [ "$2" = space ]; then tr "\"'" '  '; else tr -d "\"'"; fi | tr -d '\\$'
+    if [ "$2" = space ]; then tr "\"'" '  '; else tr -d "\"'"; fi | tr -d '\\${}' |
+    if [ "$3" = join ]; then tr -d ','; else tr ',' ' '; fi
 }
-cmd=$(unescape ';'; unescape ' '; unescape ';' space; unescape ' ' space)
+cmd=$(unescape ';'; unescape ' '; unescape ';' space; unescape ' ' space; unescape ' ' '' join)
 
 hit=$(printf '%s\n' "$cmd" | awk '{
   gsub(/[;&|()`]/, "\n")

@@ -40,7 +40,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
-| Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
+| Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff (in a pull request, since the merge base with `origin/$GITHUB_BASE_REF`) still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
 | Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` or a page under `site/` ("N skills", "N eval cases"; not "N cases of") differs from the disk |
 | Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or the state-card cap in `session-start.sh` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |

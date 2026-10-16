@@ -114,7 +114,11 @@ fi
 
 # A name removed from SURFACE.txt in the uncommitted diff must not survive in what ships as a bare word
 # (the prefixed form fails in References), so a rename cannot leave the rules or a skill pointing at a missing skill.
-git diff HEAD -- plugin/SURFACE.txt |
+# In a pull request (GITHUB_BASE_REF) the diff starts at the merge base, so a committed rename is caught too.
+base=HEAD
+[ -z "${GITHUB_BASE_REF:-}" ] || base=$(git merge-base "origin/$GITHUB_BASE_REF" HEAD 2>/dev/null) ||
+  { echo "warning: no merge base with origin/$GITHUB_BASE_REF; Stale names checks only the uncommitted diff" >&2; base=HEAD; }
+git diff "$base" -- plugin/SURFACE.txt |
   sed -nE 's/^-(skill|agent|output-style) //p' | LC_ALL=C sort -u |
   { files 'plugin' README.md 'templates/*.md'; printf '\n'; cat; } | ruby -e '
   files, gone = $stdin.read.split("\n", 2)

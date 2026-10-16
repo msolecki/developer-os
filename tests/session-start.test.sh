@@ -37,6 +37,9 @@ printf '%s' "$out" | grep -q '^Newest plan: docs/plans/2026-10-15-checkout-retry
 check "card names the newest plan" "$r" yes
 mkdir -p "$repo/src"; run compact "$repo/src"; printf '%s' "$out" | grep -q '^Newest plan: docs/plans/2026-10-15-checkout-retry.md$' && r=yes || r=no; check "a session in a subdirectory reads the root's docs/plans" "$r" yes
 git -C "$repo" add -f docs/plans/2026-10-15-checkout-retry.md 2>/dev/null; run compact "$repo"; printf '%s' "$out" | grep -q '^Newest plan: none found$' && r=yes || r=no; check "a tracked plan is not named" "$r" yes; git -C "$repo" rm -q --cached docs/plans/2026-10-15-checkout-retry.md 2>/dev/null
+printf '# Shipped\n' > "$repo/docs/plans/shipped.md"; touch -t 209901010000 "$repo/docs/plans/shipped.md"; git -C "$repo" add -f docs/plans/shipped.md 2>/dev/null
+run compact "$repo"; printf '%s' "$out" | grep -q '^Newest plan: docs/plans/2026-10-15-checkout-retry.md$' && r=yes || r=no; check "a newer tracked file does not hide an older untracked plan" "$r" yes
+git -C "$repo" rm -q --cached docs/plans/shipped.md 2>/dev/null; rm "$repo/docs/plans/shipped.md"
 printf 'Backlog: docs/plans/backlog.md, ./docs/plans/backlog-done.md\n' > "$repo/AGENTS.md"
 : > "$repo/docs/plans/backlog-done.md"; : > "$repo/docs/plans/backlog.md"; touch -t 209901010000 "$repo/docs/plans/backlog.md"
 run compact "$repo"; printf '%s' "$out" | grep -q '^Newest plan: docs/plans/2026-10-15-checkout-retry.md$' && r=yes || r=no

@@ -357,7 +357,7 @@ The full list of skills, agents and output styles, and the Codex installer, are 
 [README](../README.md#whats-inside).
 
 code-review and audit-to-backlog send every P0/P1 finding to a fresh verifier that sees only the
-claim (Codex when its plugin is installed, otherwise a Claude subagent); refuted findings move to a
+claim (Codex when its plugin is installed, otherwise the read-only `verifier` agent); refuted findings move to a
 Disputed list and do not block the verdict or enter the backlog.
 
 Run `instruction-review --prune` when the default model changes and every six months: it gives each
@@ -390,6 +390,6 @@ do not:
 | `SessionStart` hook | loads `plugin/rules/core.md` every session | no | `scripts/install-codex.sh` keeps it in a marked block of `~/.codex/AGENTS.md` (D19) |
 | `Stop` hook | offers session-retro once per long session | no | run session-retro by hand at the end |
 | `PreToolUse` guard | asks before installs (also `npm` aliases such as `in`, and full paths), force pushes, hook bypasses (`--no-verify` and its abbreviations, `commit -n`, `HUSKY=0`, `core.hooksPath` (any form)) | no | none |
-| Agents (`plugin/agents/`) | code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog) | no | none |
+| Agents (`plugin/agents/`) | code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog), verifier (code-review, audit-to-backlog) | no | none |
 | Output styles | `/output-style` | no | none |
 | `Skill` tool | the agent loads a skill by name | no | `scripts/install-codex.sh` writes a Codex copy of each skill to `~/.agents/skills/` |

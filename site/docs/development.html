@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Development guide · developer-os</title>
 <meta name="description" content="How to change the developer-os plugin, check it with scripts/check.sh and ship it.">
-<meta name="dos-source" content="docs/development.md@ec139ca98071">
+<meta name="dos-source" content="docs/development.md@ae4ea316eda8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -60,7 +60,7 @@
           <tr><td>Hook targets</td><td>A <code>${CLAUDE_PLUGIN_ROOT}/…</code> path in <code>hooks.json</code> does not exist</td></tr>
           <tr><td>Agents</td><td>An agent lacks <code>## Final status</code> or one of <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code></td></tr>
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>
-          <tr><td>Stale names</td><td>A skill, agent or output-style name removed from <code>plugin/SURFACE.txt</code> in the uncommitted diff still appears as a bare word (the prefixed form fails in References) in <code>plugin/</code>, <code>templates/</code> or <code>README.md</code>; the check runs before the rename is committed</td></tr>
+          <tr><td>Stale names</td><td>A skill, agent or output-style name removed from <code>plugin/SURFACE.txt</code> in the uncommitted diff (in a pull request, since the merge base with <code>origin/$GITHUB_BASE_REF</code>) still appears as a bare word (the prefixed form fails in References) in <code>plugin/</code>, <code>templates/</code> or <code>README.md</code>; the check runs before the rename is committed</td></tr>
           <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code> or a page under <code>site/</code> ("N skills", "N eval cases"; not "N cases of") differs from the disk</td></tr>
           <tr><td>Core-rules size</td><td><code>plugin/rules/core.md</code> exceeds 8192 bytes, or the state-card cap in <code>session-start.sh</code> no longer fits under the 10,000-character hook output limit</td></tr>
           <tr><td>References</td><td>A <code>developer-os:&lt;name&gt;</code> string in <code>plugin/</code> (Markdown and hook scripts), <code>docs/</code>, <code>templates/</code>, <code>evals/</code>, <code>README.md</code>, <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code> or <code>SECURITY.md</code> names no skill, agent or output style</td></tr>
