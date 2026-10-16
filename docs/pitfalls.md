@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-15
+last-verified: 2026-10-16
 ---
 
 # Pitfalls
@@ -11,16 +11,15 @@ promise it makes.
 
 ## Hooks fail open
 
-- **Where:** `plugin/hooks/guard.sh`, `plugin/hooks/capture-nudge.sh`
+- **Where:** `plugin/hooks/guard.py`, `plugin/hooks/capture-nudge.py`, `plugin/hooks/state-card.py`
 - **Looks like:** a guard that silently lets through anything it cannot parse.
 - **Why it is deliberate:** the hooks run in every session of every user; a parse bug must never
   block work. The guard is a reminder, not a security boundary ([decisions D6](product/decisions.md#d6-hooks-ask-never-deny-and-fail-open)).
-- **Breaks if changed:** a malformed hook input or a `sed` difference on one platform blocks every
-  Bash call.
+- **Breaks if changed:** a malformed hook input or an unexpected exception blocks every Bash call.
 
 ## The guard strips quotes before matching
 
-- **Where:** `plugin/hooks/guard.sh`, the unescape step
+- **Where:** `plugin/hooks/guard.py`, the `view` step
 - **Looks like:** a false positive when a commit message mentions `pnpm add`.
 - **Why it is deliberate:** without it, `sh -c "pnpm add zod"` would pass. An extra prompt costs one
   click; a missed install rewrites the lockfile.

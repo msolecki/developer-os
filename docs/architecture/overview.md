@@ -15,12 +15,12 @@ the agent then reads and writes on the user's behalf.
 .claude-plugin/marketplace.json   marketplace: one plugin, source ./plugin
 plugin/                           the installed payload
   .claude-plugin/plugin.json      name, version, description, license, keywords
-  rules/core.md                   core rules, printed by the SessionStart hook
+  rules/core.md                   core rules, printed by a SessionStart cat hook
   SURFACE.txt                     public names, checked against the disk
-  hooks/hooks.json                three hooks, 10-second timeouts
-  hooks/session-start.sh          SessionStart: core rules, state card after compaction
-  hooks/guard.sh                  PreToolUse guard for Bash
-  hooks/capture-nudge.sh          Stop hook: session wrap-up nudge
+  hooks/hooks.json                4 hooks, 10-second timeouts
+  hooks/state-card.py             SessionStart: state card after compaction or resume
+  hooks/guard.py                  PreToolUse guard for Bash
+  hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/<name>/SKILL.md          28 skills
   agents/<name>.md                6 agents
   output-styles/<name>.md         4 output styles
@@ -45,7 +45,7 @@ What occupies the context of a session, and when:
 | Part | When it loads | Size today | Limit |
 |---|---|---|---|
 | `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit (figure in [CURRENT-STATE](../CURRENT-STATE.md)) | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
-| State card | After a compaction or resume inside a git repository | Up to 1024 bytes | The `cap` in `session-start.sh`; the check keeps rules plus card under 10,000 |
+| State card | After a compaction or resume inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
 | Skill names and descriptions | Every session, by Claude Code's skill listing | 10065 characters for 28 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
 | A skill's body | When the model or the user invokes it | 0.7–8.8 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
@@ -60,31 +60,34 @@ use, which is why conventions live in skills and not in the core rules.
 ```mermaid
 sequenceDiagram
   participant CC as Claude Code
-  participant SS as SessionStart: session-start.sh
-  participant G as PreToolUse: guard.sh
-  participant N as Stop: capture-nudge.sh
-  CC->>SS: session starts / resumes / compacts
-  SS-->>CC: stdout = core rules, plus a state card after compact/resume
+  participant R as SessionStart: cat core.md
+  participant SS as SessionStart: state-card.py
+  participant G as PreToolUse: guard.py
+  participant N as Stop: capture-nudge.py
+  CC->>R: session starts / resumes / compacts
+  R-->>CC: stdout = core rules
+  CC->>SS: resumes / compacts
+  SS-->>CC: stdout = state card
   CC->>G: every Bash call, JSON on stdin
   G-->>CC: nothing (allow normal flow) or {"permissionDecision":"ask", reason}
   CC->>N: agent finishes a turn, JSON on stdin
   N-->>CC: exit 0 (nothing) or exit 2 + stderr "Run the developer-os:session-retro skill..."
 ```
 
-- `session-start.sh` prints `core.md`, then, for `source` `compact` or `resume` inside a git
-  repository, the branch, the newest plan, `docs/plans/.devos-state.md` (skipped when older than
+- A `cat` hook prints `core.md` on every source, without Python. `state-card.py`, for `source`
+  `compact` or `resume` inside a git repository, prints the branch, the newest plan, `docs/plans/.devos-state.md` (skipped when older than
   7 days) and the worktrees, cut to whole lines within 1024 bytes.
-- `guard.sh` extracts `tool_input.command` with `sed`, unescapes JSON, joins line continuations,
-  drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans each segment with `awk`. Quotes are stripped on
+- `guard.py` extracts `tool_input.command` with a regular expression, unescapes JSON, joins line continuations,
+  drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
   purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.
-- `capture-nudge.sh` reads `session_id` and `transcript_path` from the input, counts
-  `"type":"tool_use"` occurrences in the transcript file with `grep`, defers while a background task
+- `capture-nudge.py` reads `session_id` and `transcript_path` from the input, counts
+  `"type":"tool_use"` occurrences in the transcript file, defers while a background task
   launched in the session has no `<task-notification>` and a fresh output file under a `tasks/`
   directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session
   marker in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/capture-nudge/` so it fires once. Markers older than
   7 days are removed.
 
-Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
+The three scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
 
 ## 4. Skill composition
 

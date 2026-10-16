@@ -122,7 +122,7 @@ surface() {
   for f in plugin/agents/*.md; do f=${f##*/}; echo "agent ${f%.md}"; done
   for f in plugin/output-styles/*.md; do f=${f##*/}; echo "output-style ${f%.md}"; done
   jq -r '.hooks | keys[] | "hook " + .' plugin/hooks/hooks.json
-  for f in plugin/hooks/*.sh; do echo "hook-script ${f##*/}"; done
+  for f in plugin/hooks/*.py; do echo "hook-script ${f##*/}"; done
 }
 if ! surface | LC_ALL=C sort | diff -u plugin/SURFACE.txt - >&2; then
   fail surface plugin/SURFACE.txt "differs from the plugin above; update SURFACE.txt and CHANGELOG.md"
@@ -169,13 +169,14 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
     [ "$n" = "$want" ] || fail counts "${hit%:*}" "says $n $kind, the repository has $want"
   done
 
-# SessionStart hook output is capped at 10,000 characters: the core rules plus the state card must fit.
+# Claude Code caps hook output at 10,000 characters; the core rules and the state card land in the same context, so
+# together they must fit.
 size=$(wc -c < plugin/rules/core.md | tr -d " ")
 [ "$size" -le 8192 ] || fail size plugin/rules/core.md "$size bytes, limit 8192"
-cap=$(sed -n 's/^cap=//p' plugin/hooks/session-start.sh)
-[ -n "$cap" ] && [ $((8192 + cap + 64)) -le 10000 ] || fail size plugin/hooks/session-start.sh "state card cap ${cap:-unset} leaves no room under 10000"
+cap=$(sed -n 's/^CAP = //p' plugin/hooks/state-card.py)
+[ -n "$cap" ] && [ $((8192 + cap + 64)) -le 10000 ] || fail size plugin/hooks/state-card.py "state card cap ${cap:-unset} leaves no room under 10000"
 
-files 'plugin/*.md' 'plugin/*.sh' 'docs/*.md' README.md 'templates/*.md' 'evals/*' CHANGELOG.md CONTRIBUTING.md SECURITY.md | ruby -e '
+files 'plugin/*.md' 'plugin/*.py' 'docs/*.md' README.md 'templates/*.md' 'evals/*' CHANGELOG.md CONTRIBUTING.md SECURITY.md | ruby -e '
   $stdin.read.split("\0").each do |f|
     File.read(f).scan(/developer-os:([A-Za-z0-9_-]+)/).flatten.uniq.each do |n|
       next if ["plugin/skills/#{n}/SKILL.md", "plugin/agents/#{n}.md", "plugin/output-styles/#{n}.md"].any? { |p| File.exist?(p) }

@@ -16,7 +16,7 @@ this tag, treat each line as unverified.
 
 - Release `0.2.2`, tagged `v0.2.2`. Install from the marketplace on `main`, which moves only on a
   release (D20): `.claude-plugin/marketplace.json` → `plugin/`.
-- 28 skills, 6 agents, 4 output styles, 3 hooks, as listed in
+- 28 skills, 6 agents, 4 output styles, 4 hooks, as listed in
   [product/functional-spec.md](product/functional-spec.md).
 - Per-session cost: core rules 7944 of 8192 bytes; skill descriptions 10065 of 12000 characters; a
   state card of at most 1024 bytes after compaction or resume.
@@ -80,8 +80,8 @@ the user:
 
 | ID | Sev | Where | Problem |
 |---|---|---|---|
-| R1 | P3 | `plugin/hooks/guard.sh` | Accepted (D6): a command on the line after an install without a package asks, because the guard also reads newlines as spaces so a quoted multi-line argument cannot hide a flag or a package. |
-| R13 | P3 | `plugin/hooks/guard.sh` | Lockfile-changing `update`/`remove` stay outside the guard's categories, by decision (Q3 A); the normal permission flow still applies. Known silent passes, all present before the 2026-10-16 fixes too: a word built at run time (`$(command -v npm) install x`), JSON `\u` escapes and ANSI-C escapes (`$'\x2d\x2dforce'`), digits in a flag cluster (`-4f`), abbreviated `--mirr`, a force refspec from config (`remote.origin.push=+main`), unquoted or environment-defined git aliases, and install aliases outside the list (`bun a`, `npm install-test`). The guard is a first prompt, not a sandbox. |
+| R1 | P3 | `plugin/hooks/guard.py` | Accepted (D6): a command on the line after an install without a package asks, because the guard also reads newlines as spaces so a quoted multi-line argument cannot hide a flag or a package. |
+| R13 | P3 | `plugin/hooks/guard.py` | Lockfile-changing `update`/`remove` stay outside the guard's categories, by decision (Q3 A); the normal permission flow still applies. Known silent passes, all present before the 2026-10-16 fixes too: a word built at run time (`$(command -v npm) install x`), JSON `\u` escapes and ANSI-C escapes (`$'\x2d\x2dforce'`), digits in a flag cluster (`-4f`), abbreviated `--mirr`, a force refspec from config (`remote.origin.push=+main`), unquoted or environment-defined git aliases, and install aliases outside the list (`bun a`, `npm install-test`). The guard is a first prompt, not a sandbox. |
 | R15 | P3 | `.github/workflows/check.yml` | Fixed and confirmed in the #76 CI run: the pinned Claude Code installs with `--ignore-scripts`, then runs only its own `install.cjs`; `claude --version` prints `2.1.300`. |
 | R16 | P3 | `.github/workflows/check.yml` | Fixed and confirmed in the #78 pull-request CI run: the step "gitleaks over the pull request's commits" passed. |
 | R17 | P3 | README | The claim that an `ask` becomes a denial in `claude -p` was not re-verified; proving it needs a live `claude -p` run. |

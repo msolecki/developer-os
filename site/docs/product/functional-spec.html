@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Functional specification · developer-os</title>
 <meta name="description" content="What each part of the developer-os plugin does, what it may change, and where it stops.">
-<meta name="dos-source" content="docs/product/functional-spec.md@3fdeb82122b1">
+<meta name="dos-source" content="docs/product/functional-spec.md@45d859983bfd">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -149,13 +149,14 @@
 <table>
 <thead><tr><th scope="col">Event</th><th scope="col">Script</th><th scope="col">Effect</th></tr></thead>
 <tbody>
-<tr><td><code>SessionStart</code> (all sources)</td><td><code>hooks/session-start.sh</code></td><td>Core rules become session context; after a compaction or resume in a git repository, a state card of at most 1 KB follows</td></tr>
-<tr><td><code>Stop</code></td><td><code>hooks/capture-nudge.sh</code></td><td>Once per interactive session, after 30 tool calls, asks the agent to run session-retro</td></tr>
-<tr><td><code>PreToolUse</code> on Bash</td><td><code>hooks/guard.sh</code></td><td>Asks for confirmation before a dependency install with a package argument (<code>npm</code>, <code>pnpm</code>, <code>yarn</code> or <code>bun</code>, also by full path, with <code>install</code>, <code>add</code>, <code>i</code> or an npm alias), a force push (<code>--force</code>, <code>-f</code> or a <code>+refspec</code>, even next to <code>--force-with-lease</code>; a lone <code>--force-with-lease</code> passes; git also by full path), or a hook bypass (<code>--no-verify</code> and its prefixes <code>--no-veri</code>/<code>--no-verif</code>, <code>git commit -n</code>, <code>HUSKY=0</code>, <code>core.hooksPath</code> (any form)); never denies</td></tr>
+<tr><td><code>SessionStart</code> (all sources)</td><td><code>cat rules/core.md</code></td><td>Core rules become session context</td></tr>
+<tr><td><code>SessionStart</code> (<code>compact</code>, <code>resume</code>)</td><td><code>hooks/state-card.py</code></td><td>In a git repository, a state card of at most 1 KB</td></tr>
+<tr><td><code>Stop</code></td><td><code>hooks/capture-nudge.py</code></td><td>Once per interactive session, after 30 tool calls, asks the agent to run session-retro</td></tr>
+<tr><td><code>PreToolUse</code> on Bash</td><td><code>hooks/guard.py</code></td><td>Asks for confirmation before a dependency install with a package argument (<code>npm</code>, <code>pnpm</code>, <code>yarn</code> or <code>bun</code>, also by full path, with <code>install</code>, <code>add</code>, <code>i</code> or an npm alias), a force push (<code>--force</code>, <code>-f</code> or a <code>+refspec</code>, even next to <code>--force-with-lease</code>; a lone <code>--force-with-lease</code> passes; git also by full path), or a hook bypass (<code>--no-verify</code> and its prefixes <code>--no-veri</code>/<code>--no-verif</code>, <code>git commit -n</code>, <code>HUSKY=0</code>, <code>core.hooksPath</code> (any form)); never denies</td></tr>
 </tbody>
 </table>
 </div>
-<p>Inputs, outputs, exit codes and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
+<p>The scripts are Python 3 (standard library only) and need <code>python3</code> on <code>PATH</code>; without it they fail open and the core rules still load. Inputs, outputs, exit codes and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
 <h2 id="6-templates">6. Templates</h2>
 <ul>
 <li><strong>Vault template</strong> (<code>plugin/vault-template/</code>): folders, the note template, three Bases views, property types and a <code>.gitignore</code>. Shipped inside the plugin so brain-setup can copy it. Layout and note format: <a href="../workflow.html#vault-layout">workflow.md, Vault layout</a>.</li>

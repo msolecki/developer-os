@@ -1,10 +1,10 @@
 #!/bin/sh
-# Fixtures for plugin/hooks/guard.sh. Run: sh tests/guard.test.sh
-guard="$(dirname "$0")/../plugin/hooks/guard.sh"
+# Fixtures for plugin/hooks/guard.py. Run: sh tests/guard.test.sh
+guard="$(dirname "$0")/../plugin/hooks/guard.py"
 fail=0
 
 check() { # expected (ask|pass), stdin
-  out=$(printf '%s' "$2" | CLAUDE_PLUGIN_ROOT="$(dirname "$guard")/.." sh "$guard"); code=$?
+  out=$(printf '%s' "$2" | python3 "$guard"); code=$?
   case $1 in
     ask) printf '%s' "$out" | grep -q '"permissionDecision":"ask"' && [ $code -eq 0 ] && return ;;
     pass) [ -z "$out" ] && [ $code -eq 0 ] && return ;;

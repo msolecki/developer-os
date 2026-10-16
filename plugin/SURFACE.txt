@@ -7,9 +7,9 @@ agent verifier
 hook PreToolUse
 hook SessionStart
 hook Stop
-hook-script capture-nudge.sh
-hook-script guard.sh
-hook-script session-start.sh
+hook-script capture-nudge.py
+hook-script guard.py
+hook-script state-card.py
 output-style architect
 output-style debug
 output-style direct-objective

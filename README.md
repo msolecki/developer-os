@@ -4,8 +4,8 @@ A Claude Code plugin for working with an AI coding agent and an Obsidian vault a
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
-agents, output styles and rules) plus three small POSIX `sh` hook scripts, with no server, no database and
-no runtime to install. Codex
+agents, output styles and rules) plus three small Python 3 hook scripts (standard library only), with no server, no database and
+nothing to install beyond `python3`. Codex
 support is manual and best-effort.
 
 ## Install (Claude Code)
@@ -39,10 +39,10 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 
 ## What the hooks do
 
-The plugin has three hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
-every project, it runs [`plugin/hooks/session-start.sh`](plugin/hooks/session-start.sh), which prints
-[`plugin/rules/core.md`](plugin/rules/core.md); the output becomes session context. After a compaction
-or a resume inside a git repository it adds a state card of at most 1 KB: the branch, a
+The plugin has 4 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
+every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
+session context. After a compaction or a resume inside a git repository, a second `SessionStart` hook,
+[`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
 `Newest plan:` line, `docs/plans/.devos-state.md` (the task state that implement-backlog, pr-cycle
 and audit-to-backlog keep there; hidden once it is older than 7 days), then up to 10 worktrees. A
 longer card is cut at a whole line and ends with a cut marker. Installing the plugin therefore changes how the agent behaves everywhere, not only
@@ -52,22 +52,23 @@ To turn it off, disable the plugin (`/plugin`, then disable developer-os). To ke
 change a rule, override it explicitly in your user-level `~/.claude/CLAUDE.md` (for example, "Ignore
 the developer-os rule on plan files"); that file loads alongside the core rules in every session.
 
-A `Stop` hook ([`plugin/hooks/capture-nudge.sh`](plugin/hooks/capture-nudge.sh)) counts tool calls
+A `Stop` hook ([`plugin/hooks/capture-nudge.py`](plugin/hooks/capture-nudge.py)) counts tool calls
 in the session transcript and reads only background-task and Monitor ids, output-file paths and
 Monitor start times from it, never message content. Once per session, after 30 tool calls, and not
 while a background agent, command or Monitor it can see is still running, it asks the agent to run the session-retro skill, which proposes a wrap-up and applies only what you
 approve. Set `DEVELOPER_OS_CAPTURE_NUDGE=off` to turn it off, or `DEVELOPER_OS_CAPTURE_NUDGE_MIN=<n>`
 to change the threshold.
 
-A `PreToolUse` hook on Bash ([`plugin/hooks/guard.sh`](plugin/hooks/guard.sh)) asks for confirmation
+A `PreToolUse` hook on Bash ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) asks for confirmation
 (it never blocks) before a dependency install with a package argument
 (`npm|pnpm|yarn|bun install|add|i <pkg>`, an npm alias such as `npm in`, or the binary by full path), a
 `git push` with `--force`, `-f` or a `+refspec` (even next to `--force-with-lease`; a lone
 `--force-with-lease` passes; git also by full path), and a hook bypass: `--no-verify` or a prefix of it
 such as `--no-veri`, `git commit -n`, `HUSKY=0` or `core.hooksPath` in any form. In `claude -p` an ask resolves to a denial.
 
-All three are POSIX `sh` (plus `grep -o` and `head -c`, which macOS and Linux provide), need no `jq`, make no network calls and fail open: on input they cannot parse
-or any error they exit silently and the normal permission flow applies.
+The three scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
+or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;
+without it the core rules still load and the other hooks do not run.
 
 ## What's inside
 

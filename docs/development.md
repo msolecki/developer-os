@@ -11,7 +11,7 @@ How to change the plugin, check it and ship it. The rules for contributions are 
 
 ## Setup
 
-Prerequisites on `PATH`: `claude` (Claude Code), `jq`, `gitleaks`, `rsync`, `ruby` (for its YAML
+Prerequisites on `PATH`: `claude` (Claude Code), `python3` (3.8+, for the hooks and their tests), `jq`, `gitleaks`, `rsync`, `ruby` (for its YAML
 parser), `rg` for the skills' own commands. No install step and no build.
 
 Run the plugin from the working tree without installing it:
@@ -43,7 +43,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
 | Stale names | A skill, agent or output-style name removed from `plugin/SURFACE.txt` in the uncommitted diff (in a pull request, since the merge base with `origin/$GITHUB_BASE_REF`) still appears as a bare word (the prefixed form fails in References) in `plugin/`, `templates/` or `README.md`; the check runs before the rename is committed |
 | Counts | A count written as digits in the README, `docs/`, `evals/README.md`, the `[Unreleased]` section of `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` or a page under `site/` ("N skills", "N eval cases"; not "N cases of") differs from the disk |
-| Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or the state-card cap in `session-start.sh` no longer fits under the 10,000-character hook output limit |
+| Core-rules size | `plugin/rules/core.md` exceeds 8192 bytes, or `CAP` in `state-card.py` no longer fits under the 10,000-character hook output limit |
 | References | A `developer-os:<name>` string in `plugin/` (Markdown and hook scripts), `docs/`, `templates/`, `evals/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` or `SECURITY.md` names no skill, agent or output style |
 | Links | A relative Markdown link outside fenced or inline code does not resolve from its own file, or its `#fragment` matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, `-1`, `-2` for repeated headings) |
 | Site | A doc, root document, skill, agent or output style has no page under `site/` that names it in a `dos-source` meta; a page's hash differs from its source's; a relative `href` or `src` in `site/`, or a page in `NAV` in `site/assets/site.js`, does not resolve to a file inside `site/` (in exact case) or names no `id` in the target page; a page names a source that belongs to another page. It reports every failure at once |
@@ -93,9 +93,9 @@ it, or by hand (dispatch it from `main` only, or it publishes unreleased docs). 
 
 ## Script tests
 
-`tests/session-start.test.sh` runs the SessionStart hook in a temporary git repository and checks
-that the rules come first, the card appears only after `compact`/`resume`, and the card is cut to its
-cap; `tests/guard.test.sh` feeds command fixtures to `guard.sh` and expects `ask` or silence;
+`tests/state-card.test.sh` runs `state-card.py` in a temporary git repository and checks that it
+prints nothing outside `compact`/`resume`, that the card holds the plan and state file only when they are
+safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds command fixtures to `guard.py` and expects `ask` or silence;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code and message;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
 stage's message; it runs the whole check about twenty times (around 40 s), so `scripts/check.sh` runs it

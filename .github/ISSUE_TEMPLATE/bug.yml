@@ -12,7 +12,7 @@ body:
     id: component
     attributes:
       label: Which skill, agent, hook or rule
-      placeholder: "e.g. brain-capture, guard.sh, core rules"
+      placeholder: "e.g. brain-capture, guard.py, core rules"
     validations:
       required: true
   - type: input

@@ -1,6 +1,6 @@
 # developer-os
 
-This repository is a Markdown-only Claude Code plugin: core rules, skills, agents and POSIX `sh` hooks under `plugin/`,
+This repository is a Markdown-only Claude Code plugin: core rules, skills, agents and Python 3 hooks under `plugin/`,
 copyable project templates under `templates/`. No runtime and no build; see [README.md](README.md).
 `CLAUDE.md` only imports this file, so this file is the authoritative source for every agent.
 
@@ -18,7 +18,7 @@ copyable project templates under `templates/`. No runtime and no build; see [REA
 
 ## Invariants
 
-- D2, hook scripts in POSIX `sh` without `jq` or network: Script tests stage.
+- D2, hook scripts in Python 3 with the standard library only and no network: Script tests stage.
 - D6, hooks ask, never deny, and fail open: Script tests stage (`tests/guard.test.sh`).
 - D9, action skills end with `## Stop point` and `## Never`: Skill sections stage.
 - D10, the per-session budget: Core-rules size and Skill descriptions stages.

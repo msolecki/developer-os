@@ -5,7 +5,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\"",
+            "command": "cat \"${CLAUDE_PLUGIN_ROOT}/rules/core.md\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "compact|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/state-card.py\"",
             "timeout": 10
           }
         ]
@@ -17,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh\"",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.py\"",
             "timeout": 10
           }
         ]
@@ -28,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/capture-nudge.sh\"",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/capture-nudge.py\"",
             "timeout": 10
           }
         ]

@@ -1,8 +1,7 @@
 #!/bin/sh
-# Tests for plugin/hooks/session-start.sh with synthetic hook input.
-# Run from the repository root: sh tests/session-start.test.sh
-hook="$(pwd)/plugin/hooks/session-start.sh"
-core="$(pwd)/plugin/rules/core.md"
+# Tests for plugin/hooks/state-card.py with synthetic hook input.
+# Run from the repository root: sh tests/state-card.test.sh
+hook="$(pwd)/plugin/hooks/state-card.py"
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
 failed=0
@@ -14,7 +13,7 @@ check() {
 # run SOURCE CWD: runs the hook, sets $out (stdout) and $code.
 run() {
   out=$(printf '{"session_id":"s1","cwd":"%s","hook_event_name":"SessionStart","source":"%s"}' "$2" "$1" |
-    env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT="$(pwd)/plugin" sh "$hook" 2>/dev/null)
+    env -i PATH="$PATH" python3 "$hook" 2>/dev/null)
   code=$?
 }
 
@@ -26,11 +25,11 @@ printf 'docs/plans/\n' > "$repo/.gitignore"
 printf '# Checkout retry\n' > "$repo/docs/plans/2026-10-15-checkout-retry.md"
 
 run startup "$repo"
-check "startup prints only the core rules" "$out" "$(cat "$core")"
+check "startup prints nothing" "$out" ""
 check "startup exits 0" "$code" 0
 
 run compact "$repo"
-check "compact keeps the core rules first" "$(printf '%s\n' "$out" | head -n 1)" "$(head -n 1 "$core")"
+check "compact starts with the card heading" "$(printf '%s\n' "$out" | head -n 1)" "## developer-os state card"
 printf '%s' "$out" | grep -q '^## developer-os state card$' && r=yes || r=no
 check "compact adds the state card" "$r" yes
 printf '%s' "$out" | grep -q '^Newest plan: docs/plans/2026-10-15-checkout-retry.md$' && r=yes || r=no
@@ -64,20 +63,10 @@ touch "$repo/docs/plans/.devos-state.md"
 
 awk 'BEGIN { for (i = 0; i < 200; i++) print "Unverified: claim number " i " still needs its evidence" }' >> "$repo/docs/plans/.devos-state.md"
 run compact "$repo"
-card=$(( $(printf '%s\n' "$out" | wc -c) - $(wc -c < "$core") ))
-[ "$card" -le 1026 ] && r=yes || r=no
+card=$(printf '%s\n' "$out" | wc -c | tr -d ' ')
+[ "$card" -le 1024 ] && r=yes || r=no
 check "a 5 KB state file is cut to the cap ($card bytes)" "$r" yes
 check "a cut card ends with a whole line and a marker" "$(printf '%s\n' "$out" | tail -n 2 | head -n 1 | grep -c 'evidence$')$(printf '%s\n' "$out" | tail -n 1)" "1[state card cut at 1024 bytes]"
-
-# D10 end to end: core.md at its 8192-byte limit plus a cut card stays within Claude Code's 10,000-character
-# hook output cap. HOOK_COPY lets a test run a modified copy (e.g. a larger cap=) to prove this fails.
-mkdir -p "$tmp/plug/hooks" "$tmp/plug/rules"
-cp "${HOOK_COPY:-$hook}" "$tmp/plug/hooks/session-start.sh"
-awk 'BEGIN { for (i = 0; i < 8192; i++) printf "x" }' > "$tmp/plug/rules/core.md"
-total=$(printf '{"session_id":"s1","cwd":"%s","hook_event_name":"SessionStart","source":"compact"}' "$repo" |
-  env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT="$tmp/plug" sh "$tmp/plug/hooks/session-start.sh" 2>/dev/null | wc -c | tr -d ' ')
-[ "$total" -le 10000 ] && [ "$total" -gt 9000 ] && r=yes || r=no
-check "a full core.md and a 5 KB state file stay within 10000 bytes ($total)" "$r" yes
 
 # A cut never leaves a partial multibyte character behind: with a one-byte shift, one of two runs
 # lands inside a two-byte character of a long line.
@@ -133,15 +122,15 @@ check "control characters are stripped" "$r" yes
 
 mkdir -p "$tmp/plain"
 run compact "$tmp/plain"
-check "outside a git repository: only the core rules" "$out" "$(cat "$core")"
+check "outside a git repository: nothing" "$out" ""
 check "outside a git repository: exit 0" "$code" 0
 
 run compact "$tmp/missing"
-check "missing cwd: only the core rules" "$out" "$(cat "$core")"
+check "missing cwd: nothing" "$out" ""
 
-out=$(printf 'not json' | env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT="$(pwd)/plugin" sh "$hook" 2>/dev/null); code=$?
-check "malformed input: only the core rules" "$out" "$(cat "$core")"
+out=$(printf 'not json' | env -i PATH="$PATH" python3 "$hook" 2>/dev/null); code=$?
+check "malformed input: nothing" "$out" ""
 check "malformed input: exit 0" "$code" 0
 
-[ "$failed" -eq 0 ] && echo "session-start: all passed"
+[ "$failed" -eq 0 ] && echo "state-card: all passed"
 exit "$failed"
