@@ -107,7 +107,7 @@ progress and what is known to be missing.
 | Risk | Effect | Mitigation today |
 |---|---|---|
 | Rules and descriptions grow until they crowd the context | Every session pays for them | Byte and character caps in `scripts/check.sh` |
-| A skill's description does not match how the user asks | The skill never fires | Polish trigger phrases in descriptions, `trigger-*` evals, the `skill-usage` report |
+| A skill's description does not match how the user asks | The skill never fires | Trigger phrases in descriptions, `trigger-*` evals, the `skill-usage` report |
 | An update changes the hooks, which run in every session | Unreviewed code runs in the user's shell | Hooks are short POSIX `sh` with tests; `SECURITY.md` asks users to review each update's diff |
 | An unreviewed agent note is treated as fact | Wrong knowledge spreads | `status: inbox` until approved; brain-search marks inbox claims as unreviewed |
 | Vault content reaches the model provider | Client context leaves the disk | Redaction in brain-capture; privacy rules in [workflow.md](../workflow.md#privacy) |

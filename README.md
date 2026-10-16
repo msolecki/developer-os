@@ -89,7 +89,7 @@ or any error they exit silently and the normal permission flow applies.
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
 - **Three hooks:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction), `Stop` suggests a session wrap-up
   once per long session, `PreToolUse` asks before installs, force pushes and hook bypasses (see above).
-- **Evals:** behavior checks for the brain skills, code-review, session-retro and the Polish
+- **Evals:** behavior checks for the brain skills, code-review, session-retro and the skill
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
   plugin payload.
 

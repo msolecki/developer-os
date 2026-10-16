@@ -116,7 +116,7 @@ the README lists the mutation checks that prove it.
 ## Adding or changing a skill
 
 1. `plugin/skills/<name>/SKILL.md` with `name: <name>` and a `description` that says what it does
-   and when to use it, including the Polish phrases the user would type. Keep within the
+   and when to use it, including the phrases the user would type. Keep within the
    description budget; `scripts/check.sh` prints the total when it fails.
 2. If it can write, send or change git state, end with `## Stop point` and `## Never`. If it is
    read-only and should be exempt, add it to `read_only` in `scripts/check.sh`.

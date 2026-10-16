@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Product overview · developer-os</title>
 <meta name="description" content="What developer-os is, who it is for, its principles, scope, distribution, status and primary risks.">
-<meta name="dos-source" content="docs/product/overview.md@aadf9fe38234">
+<meta name="dos-source" content="docs/product/overview.md@c1f4666b814e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -101,7 +101,7 @@
 <thead><tr><th scope="col">Risk</th><th scope="col">Effect</th><th scope="col">Mitigation today</th></tr></thead>
 <tbody>
 <tr><td>Rules and descriptions grow until they crowd the context</td><td>Every session pays for them</td><td>Byte and character caps in <code>scripts/check.sh</code></td></tr>
-<tr><td>A skill's description does not match how the user asks</td><td>The skill never fires</td><td>Polish trigger phrases in descriptions, <code>trigger-*</code> evals, the <code>skill-usage</code> report</td></tr>
+<tr><td>A skill's description does not match how the user asks</td><td>The skill never fires</td><td>Trigger phrases in descriptions, <code>trigger-*</code> evals, the <code>skill-usage</code> report</td></tr>
 <tr><td>An update changes the hooks, which run in every session</td><td>Unreviewed code runs in the user's shell</td><td>Hooks are short POSIX <code>sh</code> with tests; <code>SECURITY.md</code> asks users to review each update's diff</td></tr>
 <tr><td>An unreviewed agent note is treated as fact</td><td>Wrong knowledge spreads</td><td><code>status: inbox</code> until approved; brain-search marks inbox claims as unreviewed</td></tr>
 <tr><td>Vault content reaches the model provider</td><td>Client context leaves the disk</td><td>Redaction in brain-capture; privacy rules in <a href="../workflow.html#privacy">workflow.md</a></td></tr>

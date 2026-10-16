@@ -144,8 +144,11 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Date:** 2026-10-14
 - **Decision:** the agent converses in the user's language and keeps it after English input,
   subagent reports and compaction; everything that lands in a repository is English unless the
-  project says otherwise. Skill descriptions carry Polish trigger phrases next to English ones.
-- **Why:** the primary user works in Polish; repositories and the public plugin are English.
+  project says otherwise. Skill descriptions, examples and evals are English only.
+- **Why:** repositories and the public plugin are English, and a public plugin should not depend on
+  one user's language to fire.
+- **Amended 2026-10-16:** the non-English trigger phrases in skill descriptions, skill examples and
+  evals were replaced with English ones; the conversation rule is unchanged.
 
 ## D16. Task state survives compaction in the plans directory
 

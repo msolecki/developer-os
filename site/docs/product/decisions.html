@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Decisions · developer-os</title>
 <meta name="description" content="The register of developer-os plugin-era decisions, with dates, reasons, commits and the rules history.">
-<meta name="dos-source" content="docs/product/decisions.md@d7bc40498174">
+<meta name="dos-source" content="docs/product/decisions.md@a06067b11294">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -127,8 +127,9 @@
 <h2 id="d15-language-split">D15. Language split</h2>
 <ul>
 <li><strong>Date:</strong> 2026-10-14</li>
-<li><strong>Decision:</strong> the agent converses in the user's language and keeps it after English input, subagent reports and compaction; everything that lands in a repository is English unless the project says otherwise. Skill descriptions carry Polish trigger phrases next to English ones.</li>
-<li><strong>Why:</strong> the primary user works in Polish; repositories and the public plugin are English.</li>
+<li><strong>Decision:</strong> the agent converses in the user's language and keeps it after English input, subagent reports and compaction; everything that lands in a repository is English unless the project says otherwise. Skill descriptions, examples and evals are English only.</li>
+<li><strong>Why:</strong> repositories and the public plugin are English, and a public plugin should not depend on one user's language to fire.</li>
+<li><strong>Amended 2026-10-16:</strong> the non-English trigger phrases in skill descriptions, skill examples and evals were replaced with English ones; the conversation rule is unchanged.</li>
 </ul>
 <h2 id="d16-task-state-survives-compaction-in-the-plans-directory">D16. Task state survives compaction in the plans directory</h2>
 <ul>

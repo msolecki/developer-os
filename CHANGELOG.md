@@ -76,6 +76,8 @@ released; the CLI history is archived at the git tag `archive/cli-v0`.
   is caught; `tests/skill-usage.test.sh` tests the skill-usage counting block.
 
 ### Changed
+- English only: skill descriptions, skill examples, evals and test data no longer carry non-English
+  trigger phrases or text (D15, amended 2026-10-16). The site uses a single light theme.
 - code-review and code-reviewer rate a doc the diff makes false as a P2 docs finding; pr-cycle fixes
   docs findings under its recommended answer and reports any left in the PR body; implement-backlog
   fixes them in the batch commit.
