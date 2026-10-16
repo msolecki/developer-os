@@ -32,6 +32,7 @@ tests/*.test.sh                   hook tests
 .agnix.toml                       agnix lint settings for CI
 scripts/check.sh                  the repository suite, also run by CI
 docs/                             this documentation; docs/plans/ is git-ignored
+site/index.html                   public landing page, published by .github/workflows/pages.yml
 ```
 
 Only `plugin/` reaches a user's machine through the marketplace. `templates/` and `evals/` stay in

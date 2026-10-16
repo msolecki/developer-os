@@ -64,6 +64,10 @@ removed inside one PR still fails. The same step fails a PR that changes `.gitle
 `.gitleaksignore` or adds a `gitleaks:allow` marker; the workflow file itself comes from the PR, so
 only a branch ruleset that requires review of `.github/` stops a PR that edits the step away.
 
+`.github/workflows/pages.yml` publishes `site/` to GitHub Pages on a push to `development` that
+changes it, or by hand. The repository's Pages source must be "GitHub Actions". The page restates
+the README, so a change to the hooks, rules or skills it describes updates `site/index.html` too.
+
 ## Script tests
 
 `tests/session-start.test.sh` runs the SessionStart hook in a temporary git repository and checks

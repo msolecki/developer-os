@@ -9,6 +9,8 @@ this repository as a plugin marketplace. It replaces the earlier Homebrew CLI, w
 released; the CLI history is archived at the git tag `archive/cli-v0`.
 
 ### Added
+- A public landing page, `site/index.html`, published to GitHub Pages by
+  `.github/workflows/pages.yml`.
 - Brain skills that read and write an Obsidian vault with the agent's own file tools: brain-setup,
   brain-search, brain-capture, brain-review, brain-garden and brain-compile. brain-setup creates a
   vault from the template or connects an existing one, and adds the `Brain vault:` line and the
