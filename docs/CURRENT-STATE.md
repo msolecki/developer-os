@@ -6,7 +6,7 @@ last-verified: 2026-10-16
 
 # Current state
 
-Verified at commit: `8bcfc06b` (branch `feat/audit-fixes-2026-10-15`, the audit fixes of 2026-10-16 before the orchestrator docs pass)
+Verified at commit: `a4c66e96` (branch `feat/audit-fixes-2026-10-15`, the audit fixes of 2026-10-16 after the independent and security reviews)
 
 What is true at the commit above, checked against the files and by running `CI=1 scripts/check.sh`
 (green, including the six script tests). agnix 0.57.0 `--strict` reports no issues (CC-PL-004, the missing `version`, is disabled for plugin.json with its reason). If `development` has moved far past
