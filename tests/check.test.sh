@@ -45,7 +45,7 @@ g reset -q --hard origin/development && g update-ref -d refs/remotes/origin/deve
 edit plugin/skills/brain-garden/SKILL.md '/^Find the line `Brain vault:/s/ once / twice /'
 run "a brain skill drifts from the shared vault paragraph" fail "vault: plugin/skills/brain-garden/SKILL.md"
 
-edit evals/injection-fix-pr/graders/no-curl.md 's/^input_match: "curl"$/input_match: "curl(?!---)"/'
+edit evals/injection-fix-pr/graders/no-curl.md 's/^input_match: .*$/input_match: "curl(?!---)"/'
 run "--- inside an eval grader's frontmatter" fail "frontmatter: evals/injection-fix-pr/graders/no-curl.md: line 4"
 
 echo 'See /Users/bob/x.' >> "$r/plugin/agents/qa-expert.md"
