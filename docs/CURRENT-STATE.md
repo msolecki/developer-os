@@ -74,8 +74,8 @@ the user:
   trigger-plan-status passes, 1.00 against 0.67 (Δ +0.33, one run); implement-backlog-owner scored
   0.50 in both runs: the Owner lines were written (one run made the claim commit, both worktrees, a
   review and the merge), but its `distinct-owners` judge read only the final reply. That grader now
-  reads the trace; one more by-hand run of implement-backlog-owner is pending, and
-  code-review-clean-diff once is optional.
+  reads the trace, and a run at `e8da1f7b` passes: 1.00 with the plugin against 0.00 without
+  (Δ +1.00, one run, 1.06 USD). code-review-clean-diff once is optional.
 - A pull-request CI run to confirm R15 and R16 (below).
 
 | ID | Sev | Where | Problem |
@@ -86,4 +86,3 @@ the user:
 | R15 | P3 | `.github/workflows/check.yml` | Fixed, not yet confirmed: the pinned Claude Code installs with `--ignore-scripts`. Until a pull-request CI run shows `claude --version` printing, it is unverified; if it fails, revert and accept the fresh dependency resolution. |
 | R16 | P3 | `.github/workflows/check.yml` | Fixed, not yet confirmed: a gitleaks step scans the pull request's commits, so a secret added and removed within one PR fails CI. It has run only locally. |
 | R17 | P3 | README | The claim that an `ask` becomes a denial in `claude -p` was not re-verified; proving it needs a live `claude -p` run. |
-| R18 | P2 | Eval `implement-backlog-owner` | The skill now claims the batch (`Owner` lines, one commit) before writing any brief, and the eval scaffold gives delegates an ignored `.worktrees/` inside the workspace. In the 2026-10-16 runs both wrote the Owner lines; the `distinct-owners` judge failed because it read only the final reply, and now reads the trace. One by-hand re-run is pending. |
