@@ -66,12 +66,12 @@ run "a stale count in the Unreleased section of CHANGELOG.md" fail "counts: CHAN
 jq '.hook = {}' "$r/plugin/.claude-plugin/plugin.json" > "$tmp/x" && mv "$tmp/x" "$r/plugin/.claude-plugin/plugin.json"
 run "a misspelled plugin.json key" fail "Unknown field 'hook'"
 
-# A validate output whose warning line lacks the usual marker still fails through the "Found N" count.
+# Any warning makes `claude plugin validate --strict` exit non-zero, and the check fails on that exit status.
 mkdir "$tmp/bin"
 printf '%s\n' '#!/bin/sh' 'case "$*" in *--strict*) printf "Found 1 warning:\n  - hook: Unknown field\n"; exit 1 ;; esac' > "$tmp/bin/claude"
 chmod +x "$tmp/bin/claude"
 runpath="$tmp/bin:$PATH"
-run "a validate warning" fail "claude plugin validate --strict failed"
+run "a validate warning fails through the --strict exit status" fail "claude plugin validate --strict failed"
 runpath=
 
 edit plugin/skills/spec/SKILL.md '/^## Never$/d'

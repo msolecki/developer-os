@@ -20,6 +20,10 @@ developer-os@developer-os` installs the next one. Releases are listed in [CHANGE
 Auto-update is off for this marketplace unless you turn it on under `/plugin` → Marketplaces. To hold
 one release, add the marketplace at its tag: `/plugin marketplace add msolecki/developer-os#v0.1.0`.
 
+Installed before 2026-10-16? Those installs already say `0.1.0` but hold pre-release content, and
+`claude plugin update` keeps them, because Claude Code caches an install by version. Uninstall and
+reinstall once: `/plugin uninstall developer-os@developer-os`, then `/plugin install developer-os@developer-os`.
+
 ## Set up the vault
 
 Run the `brain-setup` skill in Claude Code: it copies [`plugin/vault-template/`](plugin/vault-template/)

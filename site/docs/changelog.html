@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog · developer-os</title>
 <meta name="description" content="Every notable change to developer-os, in the Keep a Changelog format.">
-<meta name="dos-source" content="CHANGELOG.md@f7087c205b2d">
+<meta name="dos-source" content="CHANGELOG.md@01bb46fcbc47">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -44,6 +44,13 @@ untrusted pull-request head reaches.</li>
     </ul>
     <h3 id="unreleased-fixed">Fixed</h3>
     <ul>
+<li>The <code>install-codex</code> installer warns when a non-empty <code>AGENTS.override.md</code> would make Codex ignore
+the installed core rules.</li>
+<li><code>tests/skill-usage.test.sh</code> fails in CI instead of skipping when <code>rg</code> is missing; CI installs
+ripgrep. The Pages workflow deploys only from <code>main</code>.</li>
+<li>The docs match the check: plugin validation fails on any <code>--strict</code> warning, Pages publishes from
+<code>main</code>, and CURRENT-STATE carries the measured budgets. The README tells pre-release <code>0.1.0</code>
+installs to reinstall once.</li>
 <li>install-codex creates its <code>AGENTS.md</code> backup with <code>mktemp</code>, so a planted symlink at the backup name
 can no longer redirect the write.</li>
 <li>The guard sees through brace expansion: <code>git push origin {-f,}</code> and <code>-{,f}</code> now ask.</li>
