@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Development guide · developer-os</title>
 <meta name="description" content="How to change the developer-os plugin, check it with scripts/check.sh and ship it.">
-<meta name="dos-source" content="docs/development.md@9a67a2803c26">
+<meta name="dos-source" content="docs/development.md@f1de7d0137fb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -115,7 +115,7 @@
     the README lists the mutation checks that prove it.</p>
     <h2 id="adding-or-changing-a-skill">Adding or changing a skill</h2>
     <ol>
-      <li><code>plugin/skills/&lt;name&gt;/SKILL.md</code> with <code>name: &lt;name&gt;</code> and a <code>description</code> that says what it does and when to use it, including the Polish phrases the user would type. Keep within the description budget; <code>scripts/check.sh</code> prints the total when it fails.</li>
+      <li><code>plugin/skills/&lt;name&gt;/SKILL.md</code> with <code>name: &lt;name&gt;</code> and a <code>description</code> that says what it does and when to use it, including the phrases the user would type. Keep within the description budget; <code>scripts/check.sh</code> prints the total when it fails.</li>
       <li>If it can write, send or change git state, end with <code>## Stop point</code> and <code>## Never</code>. If it is read-only and should be exempt, add it to <code>read_only</code> in <code>scripts/check.sh</code>.</li>
       <li>Use synthetic examples only; no local paths, client names or real vault notes.</li>
       <li>Reference other parts as <code>developer-os:&lt;name&gt;</code>; the check resolves them. A bare name in <code>plugin/</code> is checked only during a rename: the Stale names stage fails, before the rename is committed, on any name removed from <code>SURFACE.txt</code>.</li>

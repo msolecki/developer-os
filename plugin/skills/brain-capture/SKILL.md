@@ -1,6 +1,6 @@
 ---
 name: brain-capture
-description: Save a decision, a lesson that applies beyond the current task, or a reference from the current session as a new note in the inbox of the user's Obsidian knowledge vault, with secrets redacted. Use when the user says "capture", "remember this", "save this to the brain/vault", "zapisz to do braina", "zapamiętaj to", "zanotuj w vaulcie", or when a session produced a decision or lesson worth keeping.
+description: Save a decision, a lesson that applies beyond the current task, or a reference from the current session as a new note in the inbox of the user's Obsidian knowledge vault, with secrets redacted. Use when the user says "capture", "remember this", "save this to the brain/vault", or when a session produced a decision or lesson worth keeping.
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
@@ -42,7 +42,7 @@ Before writing, replace with `[REDACTED]`: API keys, tokens, passwords, private 
 
 ## 5. Write the note
 
-Path: `<vault>/_inbox/<kebab-case-topic>.md`, ASCII only (`[a-z0-9-]`, no diacritics: "zażółć" becomes `zazolc`), the rule brain-review checks before a move. Note names must be unique across the whole vault, because `[[name]]` links resolve by name. If the name is taken anywhere (`find "$V" -name '<name>.md' -not -path '*/templates/*'`), add a suffix (`-2`). One topic per note. The body uses exactly these headings, in this order: `## Context`, `## Decision`, `## Why`, `## Links`. For a lesson, the `## Decision` section states the lesson. Link related notes as `[[note-name]]` under `## Links`.
+Path: `<vault>/_inbox/<kebab-case-topic>.md`, ASCII only (`[a-z0-9-]`, no diacritics: "café" becomes `cafe`), the rule brain-review checks before a move. Note names must be unique across the whole vault, because `[[name]]` links resolve by name. If the name is taken anywhere (`find "$V" -name '<name>.md' -not -path '*/templates/*'`), add a suffix (`-2`). One topic per note. The body uses exactly these headings, in this order: `## Context`, `## Decision`, `## Why`, `## Links`. For a lesson, the `## Decision` section states the lesson. Link related notes as `[[note-name]]` under `## Links`.
 
 ```markdown
 ---

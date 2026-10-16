@@ -1,6 +1,6 @@
 ---
 name: instruction-review
-description: Review a project's instruction file (CLAUDE.md or AGENTS.md) against recent work and propose a minimal evidence-backed diff without applying it. Use when the user asks to improve or review project instructions or invokes instruction-review, for example "popraw CLAUDE.md", "przejrzyj instrukcje projektu", "co dodać do CLAUDE.md".
+description: Review a project's instruction file (CLAUDE.md or AGENTS.md) against recent work and propose a minimal evidence-backed diff without applying it. Use when the user asks to improve or review project instructions or invokes instruction-review, for example "improve CLAUDE.md", "review the project instructions", "what should go in CLAUDE.md".
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---

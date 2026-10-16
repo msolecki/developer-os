@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>session-retro · developer-os skills</title>
 <meta name="description" content="Wrap up a session: check git state and running tasks, give a Done / Not done / Needs you status, and propose a few lessons, rules or skill ideas, applying only what you approve.">
-<meta name="dos-source" content="plugin/skills/session-retro/SKILL.md@30fb2046071a">
+<meta name="dos-source" content="plugin/skills/session-retro/SKILL.md@5ec16b6675b7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -44,14 +44,12 @@
     </dl>
 
     <h2 id="when-it-runs">When it runs</h2>
-    <p>At the end of a session, when the <code>Stop</code> hook asks for it, or when you ask to wrap up. Unlike the built-in <code>/recap</code> one-line summary, it checks git state and routes each lesson to where it belongs. Say it in English or Polish:</p>
+    <p>At the end of a session, when the <code>Stop</code> hook asks for it, or when you ask to wrap up. Unlike the built-in <code>/recap</code> one-line summary, it checks git state and routes each lesson to where it belongs. Say it in your own words, for example:</p>
     <ul class="chips">
       <li class="chip">wrap up the session</li>
       <li class="chip">is everything done</li>
-      <li class="chip" lang="pl">podsumuj sesję</li>
-      <li class="chip" lang="pl">czy wszystko zrobione</li>
-      <li class="chip" lang="pl">posprzątaj</li>
-      <li class="chip" lang="pl">kończymy</li>
+      <li class="chip">clean up</li>
+      <li class="chip">we are done</li>
     </ul>
 
     <h2 id="what-it-does">What it does</h2>
@@ -68,7 +66,7 @@
           <li><strong>Plan update</strong>: delete a finished plan and move its open items to the backlog, or a new status line and a <code>Next session: 3 notes</code> action.</li>
           <li><strong>Docs</strong>: doc edits for this session's unreviewed commits that made a doc false, and an offer of docs-sync when the state docs predate them.</li>
           <li><strong>developer-os feedback</strong>: a misfiring skill, hook or rule as a drafted issue, without client or project names, with the <code>gh issue create</code> command for you to run.</li>
-          <li><strong>Skill or hook candidates</strong>: a request you made at least twice, with a name, trigger phrases (including your Polish wording) and the type.</li>
+          <li><strong>Skill or hook candidates</strong>: a request you made at least twice, with a name, trigger phrases (in your own wording) and the type.</li>
         </ul>
       </li>
       <li><strong>Applies what you choose.</strong> You answer by number. Lessons go through brain-capture, rule and plan changes as a shown diff, auto-memory as one fact per file. Where the repository keeps a rules history table, each approved rule change gets a row.</li>

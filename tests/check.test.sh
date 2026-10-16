@@ -126,13 +126,13 @@ cat >> "$r/docs/development.md" <<'EOF'
 
 Only 3 cases of failure.
 
-## Zażółć gęślą jaźń
+## Café naïve résumé
 
 ## Setup
 
 ## See [the guide](development.md) now
 
-[a](#zażółć-gęślą-jaźń) [b](#setup-1) [c](#see-the-guide-now)
+[a](#café-naïve-résumé) [b](#setup-1) [c](#see-the-guide-now)
 EOF
 rehash CHANGELOG.md site/docs/changelog.html
 rehash docs/development.md site/docs/development.html

@@ -4,4 +4,4 @@ timeout_seconds: 400
 allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Skill]
 ---
 
-zróbmy speca: kody rabatowe w koszyku, chcę to szybko wdrożyć
+let's write a spec: discount codes in the cart, I want to ship it fast

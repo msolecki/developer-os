@@ -1,6 +1,6 @@
 ---
 name: project-baseline
-description: Check a repository against a baseline of engineering practices (validated env module, secret deny-list and scanning, coverage ratchet, migration and boundary guards, real-database tests, safe error responses, changelog, docs consistency, design system file, gate exit codes) and propose each missing one as a backlog item in the audit-to-backlog format, after approval. Use when starting work in a repository or when the user asks what the project is missing; for example "czego brakuje w repo", "sprawdź standard projektu", "baseline projektu".
+description: Check a repository against a baseline of engineering practices (validated env module, secret deny-list and scanning, coverage ratchet, migration and boundary guards, real-database tests, safe error responses, changelog, docs consistency, design system file, gate exit codes) and propose each missing one as a backlog item in the audit-to-backlog format, after approval. Use when starting work in a repository or when the user asks what the project is missing; for example "what is the repo missing", "check the project standard", "project baseline".
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---

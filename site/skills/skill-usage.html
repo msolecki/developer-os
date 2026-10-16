@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>skill-usage · developer-os skills</title>
 <meta name="description" content="Report how often each developer-os skill fired in your local Claude Code history, with a keep, merge, rewrite-description or remove verdict per skill. Read-only.">
-<meta name="dos-source" content="plugin/skills/skill-usage/SKILL.md@d65ebbba3749">
+<meta name="dos-source" content="plugin/skills/skill-usage/SKILL.md@3261a9592916">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -44,20 +44,18 @@
     </dl>
 
     <h2 id="when-it-runs">When it runs</h2>
-    <p>When you ask which skills you use or which never trigger, or before adding or pruning skills. For what each skill costs in context, use the built-in <code>/skill-doctor</code> instead. Say it in English or Polish:</p>
+    <p>When you ask which skills you use or which never trigger, or before adding or pruning skills. For what each skill costs in context, use the built-in <code>/skill-doctor</code> instead. Say it in your own words, for example:</p>
     <ul class="chips">
-      <li class="chip">which skills do I use</li>
-      <li class="chip">which skills never trigger</li>
-      <li class="chip" lang="pl">ile razy użyłem skilli</li>
-      <li class="chip" lang="pl">które skille działają</li>
-      <li class="chip" lang="pl">statystyki skilli</li>
+      <li class="chip">how often have I used the skills</li>
+      <li class="chip">which skills work</li>
+      <li class="chip">skill stats</li>
     </ul>
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
       <li><strong>Lists the skills.</strong> From the plugin's own <code>skills/</code> directory, so a skill with zero calls still appears.</li>
       <li><strong>Counts calls.</strong> It searches the <code>*.jsonl</code> transcripts under your Claude config directory's <code>projects</code> folder (subagent transcripts included, plus the <code>projects</code> folder of any extra config directory you name) for model-invoked <code>developer-os:&lt;name&gt;</code> Skill calls and typed <code>/developer-os:&lt;name&gt;</code> commands. It counts calls in the last 30 days and ever, with the last date, drops lines a resumed or forked transcript repeats, and never prints file names, which encode local paths. If reading the transcripts is denied, it asks you to grant access or to run the command and paste the output.</li>
-      <li><strong>Reports with a verdict.</strong> One row per skill, fewest calls first. The verdicts are suggestions, not actions: <code>keep</code> (called in the last 30 days), <code>rewrite-description</code> (not called in 30 days; the description likely misses how you ask, for example Polish phrases), <code>merge</code> (two skills cover the same request, named as a pair) and <code>remove</code> (never called, and another skill does the job). Below the table it lists names found that are no longer skills and the date range covered.</li>
+      <li><strong>Reports with a verdict.</strong> One row per skill, fewest calls first. The verdicts are suggestions, not actions: <code>keep</code> (called in the last 30 days), <code>rewrite-description</code> (not called in 30 days; the description likely misses how you ask), <code>merge</code> (two skills cover the same request, named as a pair) and <code>remove</code> (never called, and another skill does the job). Below the table it lists names found that are no longer skills and the date range covered.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>

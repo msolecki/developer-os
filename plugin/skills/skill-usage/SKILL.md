@@ -1,6 +1,6 @@
 ---
 name: skill-usage
-description: Report how often each developer-os skill has fired in local Claude Code session history (calls in the last 30 days, last use) with a keep/merge/rewrite-description/remove verdict per skill. Read-only; changes nothing. Use when the user asks which skills are used, which never trigger, or before adding or pruning skills ("ile razy użyłem skilli", "które skille działają", "statystyki skilli"). For the context cost of each skill, use the built-in /skill-doctor.
+description: Report how often each developer-os skill has fired in local Claude Code session history (calls in the last 30 days, last use) with a keep/merge/rewrite-description/remove verdict per skill. Read-only; changes nothing. Use when the user asks which skills are used, which never trigger, or before adding or pruning skills ("how often have I used the skills", "which skills work", "skill stats"). For the context cost of each skill, use the built-in /skill-doctor.
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
@@ -39,7 +39,7 @@ spec  | 0         | 0          | never     | rewrite-description
 
 Verdicts are suggestions, not actions:
 - `keep`: called (by the model or typed) in the last 30 days.
-- `rewrite-description`: never called, or not in the last 30 days; the description likely does not match how the user asks (check for missing Polish trigger phrases).
+- `rewrite-description`: never called, or not in the last 30 days; the description likely does not match how the user asks (check for trigger phrases the user types that the description lacks).
 - `merge`: two skills cover the same request; name the pair.
 - `remove`: never called and another skill already does the job; name it.
 

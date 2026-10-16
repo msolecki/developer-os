@@ -33,22 +33,6 @@
   --grid: rgba(15, 23, 42, 0.06);
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #0a0f1c; --sheet: #111827; --sheet-2: #0f1626; --ink: #e5eaf3; --ink-2: #c3ccda; --muted: #8b97aa;
-    --rule: #1f2a3d; --rule-strong: #2c3a52; --pine: #7d9bff; --pine-soft: #18233f; --pine-ink: #0a0f1c;
-    --ok: #34d399; --ok-soft: #0f2a22; --ask: #f5b451; --ask-soft: #2e2312; --never: #f87171; --never-soft: #2d1517;
-    --hl: #1f2d55; --code-bg: #0f1a2b; --term-bg: #070b14; --term-bar: #0d1424; --term-line: #1a2538; --grid: rgba(229, 234, 243, 0.05);
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --paper: #0a0f1c; --sheet: #111827; --sheet-2: #0f1626; --ink: #e5eaf3; --ink-2: #c3ccda; --muted: #8b97aa;
-  --rule: #1f2a3d; --rule-strong: #2c3a52; --pine: #7d9bff; --pine-soft: #18233f; --pine-ink: #0a0f1c;
-  --ok: #34d399; --ok-soft: #0f2a22; --ask: #f5b451; --ask-soft: #2e2312; --never: #f87171; --never-soft: #2d1517;
-  --hl: #1f2d55; --code-bg: #0f1a2b; --term-bg: #070b14; --term-bar: #0d1424; --term-line: #1a2538; --grid: rgba(229, 234, 243, 0.05);
-  color-scheme: dark;
-}
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -152,7 +136,6 @@ mark { background: var(--hl); color: inherit; padding: 0.05em 0.2em; border-radi
 /* Skill pages */
 .chips { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0 0 1.25rem; padding: 0; list-style: none; }
 .chip { font-size: 0.86rem; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 0.25rem 0.65rem; color: var(--ink); }
-.chip[lang="pl"] { background: var(--pine-soft); border-color: transparent; }
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0; margin: 0 0 2.25rem; border: 1px solid var(--rule); border-radius: 10px; background: var(--sheet); overflow: hidden; }
 .fact { padding: 0.8rem 1rem; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); margin-bottom: -1px; }
 .fact dt { font-size: 0.75rem; font-weight: 500; color: var(--muted); }

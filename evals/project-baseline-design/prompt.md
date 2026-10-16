@@ -4,4 +4,4 @@ timeout_seconds: 600
 allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Skill]
 ---
 
-czego brakuje w tym repo? sprawdź baseline projektu
+what is this repo missing? check the project baseline

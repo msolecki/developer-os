@@ -4,4 +4,4 @@ timeout_seconds: 400
 allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Skill]
 ---
 
-Twice in this session I corrected you the same way: nie używaj any w TypeScript, użyj unknown albo konkretnego typu. Now wrap up the session with the developer-os session retro.
+Twice in this session I corrected you the same way: do not use any in TypeScript, use unknown or a specific type. Now wrap up the session with the developer-os session retro.

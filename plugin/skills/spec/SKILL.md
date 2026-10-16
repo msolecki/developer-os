@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Interview the user, inspect the repository, write a feature specification and implementation plan, then hand implementation to a fresh session. Use when the user asks to define or plan a feature before implementation or invokes the spec workflow, for example "zaplanujmy nową funkcję", "napisz specyfikację", "zróbmy speca".
+description: Interview the user, inspect the repository, write a feature specification and implementation plan, then hand implementation to a fresh session. Use when the user asks to define or plan a feature before implementation or invokes the spec workflow, for example "plan a new feature with me", "write a spec", "spec this feature".
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 argument-hint: "[feature description]"

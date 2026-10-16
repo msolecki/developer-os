@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review a pull request, diff, commit, or working-tree change against the project's conventions and rate findings P0–P3 with a merge verdict, handing code written in this session to an independent reviewer agent. Use when the user asks to review code, a PR, a diff, the last commit, or their changes, for example "review the last commit", "review my changes", "zrób review ostatniego commita", "przejrzyj moje zmiany", "zrób code review PR-a". Prefer it over the built-in /code-review when the project's conventions, the P0–P3 scale and an independent reviewer matter.
+description: Review a pull request, diff, commit, or working-tree change against the project's conventions and rate findings P0–P3 with a merge verdict, handing code written in this session to an independent reviewer agent. Use when the user asks to review code, a PR, a diff, the last commit, or their changes, for example "review the last commit", "review my changes". Prefer it over the built-in /code-review when the project's conventions, the P0–P3 scale and an independent reviewer matter.
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
