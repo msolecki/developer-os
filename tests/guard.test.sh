@@ -56,7 +56,7 @@ check ask "$(fx 'npm it zod')"
 check ask "$(fx 'yarn workspace web add zod')"
 # R1: a JSON newline separates commands.
 check ask "$(fx 'ls\npnpm add zod')"
-check pass "$(fx 'pnpm install\ngit status')"
+check ask "$(fx 'pnpm install\ngit status')"
 # A newline inside a quoted argument does not end the git command.
 check ask "$(fx 'git commit -m \"a\nb\" -n')"
 check ask "$(fx 'git push origin \"a\nb\" -f')"
@@ -82,6 +82,23 @@ check ask "$(fx 'git config core.hooks\"\"Path /dev/null')"
 check ask "$(fx 'D=/dev/null git --config-env=core.hooksPath=D commit -m x')"
 check ask "$(fx 'git push --mirror')"
 check pass "$(fx 'git commit -m \"fix\n\nbody\"')"
+# Forms from the 2026-10-16 reviews: $-quoting, escaped quotes, stray apostrophes, backslashes.
+check ask "$(fx 'git push $'"'"'-f'"'"' origin main')"
+check ask "$(fx 'git push origin $'"'"'+main'"'"'')"
+check ask "$(fx 'git commit $'"'"'--no-verify'"'"' -m x')"
+check ask "$(fx 'git commit $'"'"'-n'"'"' -m x')"
+check ask "$(fx 'git push $\"--force\"')"
+check ask "$(fx 'git commit -m \"Quote \\\" char\nbody\" -n')"
+check ask "$(fx 'git -c x.y=\"\\\"\n\" push --force origin main')"
+check ask "$(fx '# it'"'"'s fine\npnpm --filter\ngit push --force')"
+check ask "$(fx 'GIT_CONFIG_PARAMETERS=\"'"'"'core.hooksPath=/dev/null'"'"'\" git commit -m x')"
+check ask "$(fx 'git push origin \\+main')"
+check ask "$(fx 'git push -\\-force')"
+check ask "$(fx 'git commit --no\\-verify')"
+check ask "$(fx 'git -c core\\.hooksPath=/dev/null commit')"
+check ask "$(fx 'HUSKY\\=0 git commit')"
+check ask "$(fx 'pnpm add -D \"\n\" zod')"
+check ask "$(fx 'pnpm add --filter \"web\n\" zod')"
 check pass '{"tool_input":{"command":"pnpm add zod"'
 check pass 'not json'
 check pass ''

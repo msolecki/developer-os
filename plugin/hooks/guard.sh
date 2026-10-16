@@ -2,7 +2,7 @@
 # PreToolUse guard for Bash. Answers "ask" (never "deny") before a dependency
 # install with a package argument, a force push (--force, -f or a +refspec; a
 # --force-with-lease alone passes), `git commit -n`, or any --no-verify, HUSKY=0 or
-# core.hooksPath. A newline outside quotes separates commands like `;`. Branch deletion
+# core.hooksPath in any form. Branch deletion
 # (`git push --delete`, `git push origin :branch`) passes. Fail-open: anything it
 # cannot parse produces no output and exit 0, so the normal permission flow applies.
 #
@@ -20,27 +20,15 @@ cmd=$(printf '%s\n' "$input" |
   sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p' 2>/dev/null)
 [ -n "$cmd" ] || exit 0
 
-# JSON-unescape: a backslash-newline continuation and a newline inside quotes become a space, a newline
-# outside quotes becomes `;`. Then drop quotes and a backslash before a letter or digit, so `np""m` and
-# `\git` read as the word they run.
-cmd=$(printf '%s\n' "$cmd" | awk '{
-  s = $0; out = ""; q = ""; n = length(s)
-  for (i = 1; i <= n; i++) {
-    c = substr(s, i, 1)
-    if (c == "\\") {
-      d = substr(s, i + 1, 1)
-      if (d == "\\" && substr(s, i + 2, 2) == "\\n") { out = out " "; i += 3; continue }
-      if (d == "n") { out = out (q == "" ? ";" : " "); i++; continue }
-      if (d == "\"") { if (q == "") q = "\""; else if (q == "\"") q = ""; out = out "\""; i++; continue }
-      out = out c d; i++; continue
-    }
-    if (c == "\047") { if (q == "") q = "\047"; else if (q == "\047") q = "" }
-    out = out c
-  }
-  print out
-}' 2>/dev/null |
-  sed -e 's/\\[rt]/ /g' -e 's/\\\\/\\/g' -e 's/\\ / /g' -e 's/\\\([A-Za-z0-9]\)/\1/g' 2>/dev/null |
-  tr -d "\"'")
+# JSON-unescape, then delete every quote, backslash and `$`: the shell drops them too, so `np""m`,
+# `\git`, `-\-force` and `$'-f'` read as the word they run. The command is checked twice, with a
+# newline as `;` and as a space; a hit in either asks. Quotes are not tracked: an extra ask is the price.
+unescape() {
+  printf '%s\n' "$cmd" |
+    sed -e 's/\\\\\\n/ /g' -e "s/\\\\n/$1/g" -e 's/\\[rt]/ /g' 2>/dev/null |
+    tr -d "\"'\\\\\$"
+}
+cmd=$(unescape ';'; unescape ' ')
 
 hit=$(printf '%s\n' "$cmd" | awk '{
   gsub(/[;&|()`]/, "\n")
@@ -50,7 +38,7 @@ hit=$(printf '%s\n' "$cmd" | awk '{
     pm = 0; sub_ = 0; git = 0; push = 0; commit = 0; force = 0; skip = 0
     for (i = 1; i <= m; i++) {
       x = w[i]
-      if (x ~ /^--no-veri(f|fy)?$/ || x == "HUSKY=0" || tolower(x) ~ /^(--config-env=|git_config_key_[0-9]+=)?core\.hookspath(=|$)/) { print "noverify"; exit }
+      if (x ~ /^--no-veri(f|fy)?$/ || x == "HUSKY=0" || tolower(x) ~ /core\.hookspath(=|$)/) { print "noverify"; exit }
       if (skip) { skip = 0; continue }
       if (pm && x ~ /^(--filter|-F|--prefix|--dir|-C)$/) { skip = 1; continue }
       if (sub_ && x !~ /^-/) { print "install"; exit }
