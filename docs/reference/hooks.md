@@ -126,13 +126,14 @@ output.
 | A Monitor started in the last 30 minutes has no terminal `<task-notification>` (one carrying its `<tool-use-id>`; event notices carry only `<task-id>`) | The turn ended to wait for it; the marker stays unspent. The 30-minute bound also covers a Monitor that expires without a notice |
 | The marker cannot be written | Fail open |
 
-**Otherwise:** writes the marker, removes markers older than 7 days, prints to stderr
+**Otherwise:** writes the marker, removes markers older than 7 days, prints to stdout
 
-```
-developer-os: this session made <n> tool calls. Run the developer-os:session-retro skill: propose the wrap-up to the user and apply only what they approve. If nothing qualifies, end your turn with no output.
+```json
+{"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": "developer-os: this session made <n> tool calls. Run the developer-os:session-retro skill: propose the wrap-up to the user and apply only what they approve. If nothing qualifies, end your turn with no output."}}
 ```
 
-and exits 2, which makes Claude Code feed the message back to the agent instead of stopping.
+and exits 0. Claude Code feeds the message back to the agent instead of stopping and labels it `Stop hook feedback`;
+exit 2 or `decision: "block"` would show the same reminder as a hook error.
 
 **State:** one empty file per session in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/capture-nudge/`, created with mode 700; the hook fails open when that directory or its parent is a symlink or owned by another user.
 

@@ -71,7 +71,7 @@ sequenceDiagram
   CC->>G: every Bash call, JSON on stdin
   G-->>CC: nothing (allow normal flow) or {"permissionDecision":"ask", reason}
   CC->>N: agent finishes a turn, JSON on stdin
-  N-->>CC: exit 0 (nothing) or exit 2 + stderr "Run the developer-os:session-retro skill..."
+  N-->>CC: exit 0, nothing or additionalContext "Run the developer-os:session-retro skill..."
 ```
 
 - A `cat` hook prints `core.md` on every source, without Python. `state-card.py`, for `source`

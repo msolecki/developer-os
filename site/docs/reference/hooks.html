@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@93df3a72a5c8">
+<meta name="dos-source" content="docs/reference/hooks.md@fdae0b21e615">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -154,9 +154,10 @@ Worktrees:
         </tbody>
       </table>
     </div>
-    <p><strong>Otherwise:</strong> writes the marker, removes markers older than 7 days, prints to stderr</p>
-<pre><code>developer-os: this session made &lt;n&gt; tool calls. Run the developer-os:session-retro skill: propose the wrap-up to the user and apply only what they approve. If nothing qualifies, end your turn with no output.</code></pre>
-    <p>and exits 2, which makes Claude Code feed the message back to the agent instead of stopping.</p>
+    <p><strong>Otherwise:</strong> writes the marker, removes markers older than 7 days, prints to stdout</p>
+<pre><code>{"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": "developer-os: this session made &lt;n&gt; tool calls. Run the developer-os:session-retro skill: propose the wrap-up to the user and apply only what they approve. If nothing qualifies, end your turn with no output."}}</code></pre>
+    <p>and exits 0. Claude Code feeds the message back to the agent instead of stopping and labels it <code>Stop hook feedback</code>;
+    exit 2 or <code>decision: "block"</code> would show the same reminder as a hook error.</p>
     <p><strong>State:</strong> one empty file per session in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/capture-nudge/</code>, created with mode 700; the hook fails open when that directory or its parent is a symlink or owned by another user.</p>
     <p><strong>Privacy:</strong> counts matches of one fixed string and extracts background-task and Monitor ids, output-file paths and Monitor start timestamps (to check their notifications and modification times); never reads or prints message content.</p>
     <p>The output path comes from tool output that anything can print, so it is never trusted as is: a
