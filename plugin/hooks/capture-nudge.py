@@ -7,6 +7,7 @@ Skips headless and SDK runs (claude -p sets CLAUDE_CODE_ENTRYPOINT=sdk-cli): nob
 and the hook input itself carries no non-interactive signal. CLAUDE_CODE_ENTRYPOINT is undocumented; if a
 release drops it, a headless run gets one extra turn (stop_hook_active stops a second), not a loop.
 """
+import json
 import os
 import re
 import sys
@@ -116,10 +117,12 @@ def main():
         except OSError:
             pass
 
-    sys.stderr.write("developer-os: this session made %d tool calls. Run the developer-os:session-retro skill: "
-                     "propose the wrap-up to the user and apply only what they approve. If nothing qualifies, "
-                     "end your turn with no output.\n" % n)
-    return 2
+    # additionalContext, unlike exit 2 or decision "block", continues the turn without a hook error label.
+    msg = ("developer-os: this session made %d tool calls. Run the developer-os:session-retro skill: "
+           "propose the wrap-up to the user and apply only what they approve. If nothing qualifies, "
+           "end your turn with no output." % n)
+    sys.stdout.write(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": msg}}))
+    return 0
 
 
 if __name__ == "__main__":

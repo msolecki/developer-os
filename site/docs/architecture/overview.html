@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@ba73f1fa458b">
+<meta name="dos-source" content="docs/architecture/overview.md@2c448311b2f7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -136,7 +136,7 @@ site/                             public documentation site, published by .githu
 <text class="sm" x="460" y="357" text-anchor="middle">agent finishes a turn, JSON on stdin</text>
 <line class="edge dash" x1="820" y1="425" x2="104" y2="425" marker-end="url(#arch-seq-arrow)"/>
 <text class="sm" x="460" y="417" text-anchor="middle">"Run the developer-os:session-retro skill..."</text>
-<text class="sm" x="460" y="401" text-anchor="middle">exit 0 (nothing) or exit 2 + stderr</text>
+<text class="sm" x="460" y="401" text-anchor="middle">exit 0, nothing or additionalContext</text>
 </svg></div>
     <ul>
       <li>A <code>cat</code> hook prints <code>core.md</code> on every source, without Python. <code>state-card.py</code>, for <code>source</code> <code>compact</code> or <code>resume</code> inside a git repository, prints the branch, the newest plan, <code>docs/plans/.devos-state.md</code> (skipped when older than 7 days) and the worktrees, cut to whole lines within 1024 bytes.</li>
