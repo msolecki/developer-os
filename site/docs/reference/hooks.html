@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@fdae0b21e615">
+<meta name="dos-source" content="docs/reference/hooks.md@f854b5e5e2df">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -147,7 +147,7 @@ Worktrees:
           <tr><td><code>session_id</code> is empty or has characters other than <code>A-Z a-z 0-9 _ -</code></td><td>It becomes a file name</td></tr>
           <tr><td><code>transcript_path</code> is not a file</td><td>Nothing to count</td></tr>
           <tr><td>A marker for this <code>session_id</code> exists</td><td>Already nudged in this session</td></tr>
-          <tr><td>Fewer than <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code> (default 30) <code>"type":"tool_use"</code> entries</td><td>Short session</td></tr>
+          <tr><td>Fewer than <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code> (default 30) <code>"type":"tool_use"</code> entries, not counting <code>api-request-blob</code> lines (stored request bodies that repeat earlier turns)</td><td>Short session</td></tr>
           <tr><td>A background agent or command launched in this session has no <code>&lt;task-notification&gt;</code> yet and its output file changed in the last 30 minutes; only an absolute output path under a <code>tasks/</code> directory counts</td><td>The turn ended to wait for it; the marker stays unspent, so the nudge comes later</td></tr>
           <tr><td>A Monitor started in the last 30 minutes has no terminal <code>&lt;task-notification&gt;</code> (one carrying its <code>&lt;tool-use-id&gt;</code>; event notices carry only <code>&lt;task-id&gt;</code>)</td><td>The turn ended to wait for it; the marker stays unspent. The 30-minute bound also covers a Monitor that expires without a notice</td></tr>
           <tr><td>The marker cannot be written</td><td>Fail open</td></tr>

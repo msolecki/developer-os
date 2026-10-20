@@ -121,7 +121,7 @@ output.
 | `session_id` is empty or has characters other than `A-Z a-z 0-9 _ -` | It becomes a file name |
 | `transcript_path` is not a file | Nothing to count |
 | A marker for this `session_id` exists | Already nudged in this session |
-| Fewer than `DEVELOPER_OS_CAPTURE_NUDGE_MIN` (default 30) `"type":"tool_use"` entries | Short session |
+| Fewer than `DEVELOPER_OS_CAPTURE_NUDGE_MIN` (default 30) `"type":"tool_use"` entries, not counting `api-request-blob` lines (stored request bodies that repeat earlier turns) | Short session |
 | A background agent or command launched in this session has no `<task-notification>` yet and its output file changed in the last 30 minutes; only an absolute output path under a `tasks/` directory counts | The turn ended to wait for it; the marker stays unspent, so the nudge comes later |
 | A Monitor started in the last 30 minutes has no terminal `<task-notification>` (one carrying its `<tool-use-id>`; event notices carry only `<task-id>`) | The turn ended to wait for it; the marker stays unspent. The 30-minute bound also covers a Monitor that expires without a notice |
 | The marker cannot be written | Fail open |

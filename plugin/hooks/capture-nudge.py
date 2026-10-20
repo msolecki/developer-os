@@ -64,6 +64,9 @@ def main():
     finished, launches, monitors = set(), [], []
     with open(transcript, encoding="utf-8", errors="replace", newline="\n") as f:
         for line in f:
+            # An api-request-blob line stores a request body: copies of earlier turns, which would count twice.
+            if line.startswith('{"type":"api-request-blob"'):
+                continue
             n += line.count('"type":"tool_use"')
             finished.update(re.findall(r"<tool-use-id>([A-Za-z0-9_]+)</tool-use-id>", line))
             launches.extend(LAUNCH.findall(line))
