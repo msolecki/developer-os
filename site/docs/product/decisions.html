@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@993637d13590">
+<meta name="dos-source" content="docs/product/decisions.md@398f178591cb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -202,6 +202,8 @@
 <tr><td>2026-10-16</td><td>session-retro proposes the docs findings of this session's unreviewed commits and offers docs-sync when <code>CURRENT-STATE.md</code> is older than them</td><td><code>session-retro</code></td><td>Docs changed without review drifted until someone ran docs-sync</td></tr>
 <tr><td>2026-10-16</td><td>pr-cycle and fix-pr read a PR's trust inputs before checkout and never check out an untrusted head before the user approves running its code; without approval the cycle reviews the fetched ref only; code-review passes the <code>Untrusted head</code> line to verifiers and inline review</td><td><code>pr-cycle</code>, <code>fix-pr</code>, <code>code-review</code></td><td>A checked-out head runs its own hooks, tracked git config and LFS settings; turning hooks off did not cover config pulled in by <code>include.path</code> (security reviews of the audit fixes)</td></tr>
 <tr><td>2026-10-16</td><td>The hook input-normalization rule moves to defensive-coding-conventions and the TypeScript <code>strict</code> rule to typescript-conventions; a lesson goes to the vault when other projects can use it</td><td><code>core.md</code>, <code>defensive-coding-conventions</code>, <code>typescript-conventions</code></td><td>core.md had 48 bytes left and held two stack-specific rules it says belong in skills; "project history" sent repository facts to the vault, against brain-capture and session-retro</td></tr>
+<tr><td>2026-10-20</td><td>docs-sync writes <code>Reason not recorded</code> for a decision whose reason is in neither history nor docs, and reports conflicting decision records as drift before a broad change; ADRs gain Status and Revisit when</td><td><code>docs-sync</code></td><td>An agent reconstructing a rationale from the code records a guess as a decision (flaviocopes.com/project-decisions)</td></tr>
+<tr><td>2026-10-20</td><td>A regression test is seen red before the fix; the boundary that could be wrong is not faked; failure messages show the missing record or response, and retries never hide a flaky test</td><td><code>testing-conventions</code></td><td>A test seen only green, a fake database or a raised retry count each lets a fix ship unverified (flaviocopes.com/fast-tests-for-agents)</td></tr>
 </tbody>
 </table>
 </div>

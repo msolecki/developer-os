@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/testing-conventions/SKILL.md@c1a04d6dcbbc">
+<meta name="dos-source" content="plugin/skills/testing-conventions/SKILL.md@588986ea470f">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -69,6 +69,9 @@
       <li><strong>Pin the contract.</strong> A test pins the contract, not current behavior. If a test passes only after you fixed the test, check that you did not encode a bug: a red test may describe the correct contract.</li>
       <li><strong>Absolute instants.</strong> A fixture pins an absolute instant, never a local-time literal. An ambient-timezone fixture hides a contract mismatch until CI runs in a different timezone from your machine.</li>
       <li><strong>Partial mocks.</strong> Mock a module with a partial built on the original (for example Vitest's <code>importOriginal</code>), never an exhaustive hand-written stub. A stub breaks the day the module gains an export, and one new export can break every suite that stubs it.</li>
+      <li><strong>Red before the fix.</strong> A regression test must fail on the unfixed code: run it before the fix and see it red. A test only ever seen green may not exercise the bug at all.</li>
+      <li><strong>Real boundaries.</strong> Do not fake the boundary that could be wrong. A fake database that returns ready records hides a broken query; test that path against a real test database or the real call.</li>
+      <li><strong>Telling failures.</strong> A failure message names the missing record or shows the actual response. Never raise retries or timeouts to hide a flaky test; find the race instead.</li>
     </ul>
     <pre><code>2030-01-01T08:00:00Z</code></pre>
 

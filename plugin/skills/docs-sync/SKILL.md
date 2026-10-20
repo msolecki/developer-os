@@ -21,7 +21,7 @@ The developer-os repository keeps copyable versions in `templates/project/`; the
 - `docs/index.md`: a `| Task | Read first |` table routing each common task to one doc.
 - `docs/CURRENT-STATE.md`: a `Verified at commit: <short sha>` line, then `## Works` (with entry points as `path:line`), `## In progress`, `## Known broken or missing`.
 - `docs/pitfalls.md`: deliberate settings that look like defects; per entry Where, Looks like, Why it is deliberate, Breaks if changed.
-- `docs/decisions/NNNN-slug.md`, numbered from `0001`: Date, Context, Decision, Consequences, Alternatives rejected. The template's `0001-template.md` is a copy source, not a decision; it is never kept. One decision register with IDs is an accepted alternative.
+- `docs/decisions/NNNN-slug.md`, numbered from `0001`: Date, Status (`proposed`, `accepted`, or `superseded by NNNN`), Context, Decision, Consequences, Alternatives rejected, Revisit when. The template's `0001-template.md` is a copy source, not a decision; it is never kept. One decision register with IDs is an accepted alternative. When scaffolding a decision whose reason is in neither the git history nor the docs, write `Reason not recorded` in Context and list it under open questions; never infer a rationale from the code.
 - `docs/runbooks/`: deploy, rollback, incident procedures.
 
 Propose only pieces that would carry real content now; say which you skip as empty.
@@ -45,6 +45,7 @@ Check claims against the code. Each finding names the doc `path:line`, the claim
 - `docs/CURRENT-STATE.md`: its commit is not an ancestor of HEAD (`git merge-base --is-ancestor`), or more than 50 commits behind; claims under "Works" whose entry point is gone.
 - `_Context.md` "State as of" date older than the last commit touching the code it describes.
 - Docs whose `last-verified` is older than the last change to the code they cite.
+- Decision records that contradict each other or the code, or one whose Status is `accepted` although a later record replaces it. Report these before proposing any broad change, since the change may rest on either side.
 - `DESIGN.md` older than the last change to the styling sources (`tailwind.config.*`, global stylesheets such as `globals.css`, theme files): the tokens may no longer match the code.
 
 Report only what you checked; say which probes did not apply.

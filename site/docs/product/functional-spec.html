@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/functional-spec.md@45d859983bfd">
+<meta name="dos-source" content="docs/product/functional-spec.md@40a387170d7b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -95,7 +95,7 @@
 <tr><td><a href="../../skills/instruction-review.html">instruction-review</a></td><td>Minimal evidence-backed diff for <code>CLAUDE.md</code>/<code>AGENTS.md</code>; shows the commit a change would reverse; proposes a check instead of a line for a repeated mechanical mistake; <code>--prune</code> gives each line DELETE/KEEP/REWRITE with a source and never deletes truthfulness rules</td><td>The instruction file</td><td>The diff</td><td>The diff, the prune table, or <code>NO CHANGES</code></td></tr>
 <tr><td><a href="../../skills/plan-status.html">plan-status</a></td><td>Counts done/open/blocked in the active plan and backlog by a stated rule, and ready/waiting/claimed/orphaned backlog items (one bucket per open item, first match wins in the order orphaned, waiting, claimed, ready, so the four add up to the open count); open decisions as numbered A/B/C questions</td><td>Nothing</td><td>—</td><td>Counts, next action, questions answerable as "1A 2B"</td></tr>
 <tr><td><a href="../../skills/client-reply.html">client-reply</a></td><td>Turns technical facts into a plain-language reply in the client's language and the user's voice; strips internal identifiers</td><td>Nothing</td><td>—</td><td>The draft in chat; the user sends it</td></tr>
-<tr><td><a href="../../skills/docs-sync.html">docs-sync</a></td><td>Checks a repository's docs against its code and the docs standard: missing pieces, drift (including <code>DESIGN.md</code> older than the styling sources), a refreshed <code>CURRENT-STATE.md</code>, "Likely agent mistakes" from git history</td><td>Approved doc edits</td><td>A numbered list, A/B/C</td><td><code>git diff --stat</code>; the user commits</td></tr>
+<tr><td><a href="../../skills/docs-sync.html">docs-sync</a></td><td>Checks a repository's docs against its code and the docs standard: missing pieces, drift (including <code>DESIGN.md</code> older than the styling sources and conflicting decision records), a refreshed <code>CURRENT-STATE.md</code>, "Likely agent mistakes" from git history</td><td>Approved doc edits</td><td>A numbered list, A/B/C</td><td><code>git diff --stat</code>; the user commits</td></tr>
 <tr><td><a href="../../skills/project-baseline.html">project-baseline</a></td><td>Probes 12 engineering practices (env module, secret deny-list, secret scanning, coverage floor, migration guard, boundaries, real-DB tests, safe errors, changelog, docs check, design system file, gate exit codes); missing ones become <code>BASE-NN</code> backlog items</td><td>Approved items in the backlog</td><td>Write the items; decisions it never defaults (package manager, test runner, auth library, monitoring, commit language)</td><td><code>git diff --stat</code></td></tr>
 </tbody>
 </table>
