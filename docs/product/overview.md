@@ -99,7 +99,7 @@ Out of scope, on purpose:
 
 ## Status
 
-Release 0.2.3; installs follow `main`, which moves only on a release. See [CHANGELOG.md](../../CHANGELOG.md) for what each
+Release 0.2.4; installs follow `main`, which moves only on a release. See [CHANGELOG.md](../../CHANGELOG.md) for what each
 release changed.
 
 ## Primary risks
