@@ -53,6 +53,15 @@ check "second call in the same session" "$code" silent
 run "$(input s2 "$tmp/short.jsonl")"
 check "below threshold" "$code" silent
 
+transcript "$tmp/blob.jsonl" 20
+i=0
+while [ "$i" -lt 20 ]; do
+  printf '{"type":"api-request-blob","message":{"content":[{"type":"tool_use","id":"t%s","name":"Read"}]}}\n' "$i" >> "$tmp/blob.jsonl"
+  i=$((i + 1))
+done
+run "$(input s2b "$tmp/blob.jsonl")"
+check "api-request-blob copies not counted" "$code" silent
+
 run "$(input s3 "$tmp/short.jsonl")" DEVELOPER_OS_CAPTURE_NUDGE_MIN=3
 check "custom threshold" "$code" fire
 
