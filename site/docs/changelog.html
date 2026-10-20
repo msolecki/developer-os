@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@b6217cde9956">
+<meta name="dos-source" content="CHANGELOG.md@5b4040c2e11a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -49,24 +49,39 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
-    <h3 id="unreleased-added">Added</h3>
+    <h2 id="024---2026-10-20">[0.2.4] - 2026-10-20</h2>
+    <h3 id="024-added">Added</h3>
     <ul>
 <li>The documentation site has link previews and search metadata: a canonical URL, Open Graph tags and
 a 1200×630 preview card (one per section) on every page, favicons from the plugin icon,
 <code>sitemap.xml</code>, and JSON-LD on the landing page. The check's Site stage fails a page without its
 canonical URL or preview image, and a sitemap that does not match the pages.</li>
 </ul>
-    <h3 id="unreleased-changed">Changed</h3>
+    <h3 id="024-changed">Changed</h3>
     <ul>
 <li>Setup docs: the README lists the requirements (<code>rg</code>, <code>jq</code>, <code>gh</code>, Obsidian 1.9.10 or later for
 Bases), the vault steps say to open the folder as a vault in Obsidian, and the project templates
 are copied from the marketplace install with <code>cp -Rn</code>. The landing page no longer says an install
 takes the latest commit: it takes the latest release, from <code>main</code>.</li>
+<li>docs-sync writes <code>Reason not recorded</code> for a decision whose reason is in neither the history nor
+the docs, instead of inferring one from the code, and reports conflicting decision records as
+drift before any broad change. The ADR template has a <code>Status</code> line (<code>proposed</code>, <code>accepted</code>,
+<code>superseded by NNNN</code>) and a <code>Revisit when</code> section.</li>
+<li>testing-conventions has three more rules: a regression test is seen red before the fix, the
+boundary that could be wrong is not faked, and a failure message shows the missing record or
+response instead of retries hiding a flaky test.</li>
 </ul>
-    <h3 id="unreleased-removed">Removed</h3>
+    <h3 id="024-removed">Removed</h3>
     <ul>
 <li><code>docs/CURRENT-STATE.md</code> and its site page: the repository no longer keeps a current-state report.
 The project template and docs-sync keep <code>CURRENT-STATE.md</code> for your own projects.</li>
+</ul>
+    <h3 id="024-fixed">Fixed</h3>
+    <ul>
+<li>The session-retro nudge is <code>Stop</code> feedback (exit 0 with <code>additionalContext</code>), no longer shown as a
+hook error.</li>
+<li>The nudge counted each tool call about twice, because <code>api-request-blob</code> transcript lines repeat
+earlier turns, so it fired after about 15 tool calls instead of 30. Those lines are skipped now.</li>
 </ul>
     <h2 id="023---2026-10-16">[0.2.3] - 2026-10-16</h2>
     <h3 id="023-changed">Changed</h3>

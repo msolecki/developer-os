@@ -4,6 +4,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-20
+
 ### Added
 - The documentation site has link previews and search metadata: a canonical URL, Open Graph tags and
   a 1200×630 preview card (one per section) on every page, favicons from the plugin icon,
@@ -15,10 +17,23 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Bases), the vault steps say to open the folder as a vault in Obsidian, and the project templates
   are copied from the marketplace install with `cp -Rn`. The landing page no longer says an install
   takes the latest commit: it takes the latest release, from `main`.
+- docs-sync writes `Reason not recorded` for a decision whose reason is in neither the history nor
+  the docs, instead of inferring one from the code, and reports conflicting decision records as
+  drift before any broad change. The ADR template has a `Status` line (`proposed`, `accepted`,
+  `superseded by NNNN`) and a `Revisit when` section.
+- testing-conventions has three more rules: a regression test is seen red before the fix, the
+  boundary that could be wrong is not faked, and a failure message shows the missing record or
+  response instead of retries hiding a flaky test.
 
 ### Removed
 - `docs/CURRENT-STATE.md` and its site page: the repository no longer keeps a current-state report.
   The project template and docs-sync keep `CURRENT-STATE.md` for your own projects.
+
+### Fixed
+- The session-retro nudge is `Stop` feedback (exit 0 with `additionalContext`), no longer shown as a
+  hook error.
+- The nudge counted each tool call about twice, because `api-request-blob` transcript lines repeat
+  earlier turns, so it fired after about 15 tool calls instead of 30. Those lines are skipped now.
 
 ## [0.2.3] - 2026-10-16
 
