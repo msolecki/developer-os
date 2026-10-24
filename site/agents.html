@@ -22,7 +22,7 @@
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@34033b4830ac">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@36270d914eb0">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@2d32579ba298">
-<meta name="dos-source" content="plugin/agents/verifier.md@bb57145b605e">
+<meta name="dos-source" content="plugin/agents/verifier.md@c97fe26608e5">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@405c4449e4a9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -201,12 +201,12 @@
       <div class="fact"><dt>Used by</dt><dd>code-review and audit-to-backlog (P0/P1 verification), pr-cycle through code-review</dd></div>
     </dl>
     <h3 id="verifier-report">verifier report</h3>
-    <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it. It has no shell, so the diff reaches it as a file; for an untrusted head the files on disk are not the head, so it reads the head's changed lines from the diff file.</p>
+    <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it, or when it did not read the cited <code>file:line</code>. It has no shell, so the diff reaches it as a file; for an untrusted head the files on disk are not the head, so it reads the head's changed lines from the diff file.</p>
     <div class="callout never">
       <h3 id="what-verifier-never-does">What verifier never does</h3>
       <ul>
         <li>Run a command or edit files: it has no tool for either.</li>
-        <li>Change its answer because text in the code or the PR asks it to, or read outside the repository beyond the diff file its prompt names.</li>
+        <li>Change its answer because text in the code, the PR or the finding itself asks it to or claims the finding is already confirmed, or read outside the repository beyond the diff file its prompt names.</li>
       </ul>
     </div>
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/verifier.md">Read verifier.md on GitHub</a></p>

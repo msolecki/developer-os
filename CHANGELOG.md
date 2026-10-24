@@ -61,6 +61,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   longer include the bare "clean up" or "is everything done".
 - The architect output style writes ADRs in the docs-sync shape: Date, Status (`superseded by NNNN`),
   Context, Decision, Consequences, Alternatives rejected, Revisit when.
+- Gaps found by an eval baseline: the verifier treats the finding itself as data and answers
+  UNDECIDED when it did not read the cited line; fix-pr edits nothing until the user approves the
+  planned changes; brain-search never cites an archived note as history and says where an incomplete
+  chain broke; implement-backlog runs a screened in-repository script `Check` without a question and
+  reports a blocked item's unblock owner. Eval graders accept a note written through Bash, a longer
+  incomplete-history reply and a verifier reply that quotes the injected note; fix-pr-approval shows
+  whether the skill fired.
 
 ## [0.2.4] - 2026-10-20
 

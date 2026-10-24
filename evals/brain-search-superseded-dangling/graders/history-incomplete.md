@@ -1,4 +1,4 @@
 ---
 type: regex
 ---
-History incomplete[\s\S]{0,200}session-store-dynamo
+History incomplete[\s\S]{0,600}session-store-dynamo
