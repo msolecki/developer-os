@@ -33,7 +33,7 @@ rg -l '^status: archived' -g '*.md' -g '!_archive/'
 
 Rank higher: a match in `summary`, `tags`, or the file name; a `project` equal to the current project's slug (the `Vault project slug:` line in `_Context.md` at the repository root; read the file if the line is not in your context); more distinct keywords matched; `status: active` over `inbox`; a newer `updated`. Keep the top 5.
 
-A note with `status: superseded` was replaced: follow its `superseded_by: "[[note]]"` chain (targets resolve by note name, case-insensitively, also in `_archive/`) to a note that is neither superseded nor archived, and treat that note as the match, even if it matched no keyword. Stop the walk when the field is missing, its target does not exist or is archived, or a note repeats (A → B → A); the history is then incomplete.
+A note with `status: superseded` was replaced: follow its `superseded_by: "[[note]]"` chain (targets resolve by note name, case-insensitively, also in `_archive/`) to a note that is neither superseded nor archived, and treat that note as the match in the superseded note's place in the top 5, even if it matched no keyword. Stop the walk when the field is missing, its target does not exist or is archived, or a note repeats (A → B → A); the history is then incomplete.
 
 ## 4. Read and answer
 
