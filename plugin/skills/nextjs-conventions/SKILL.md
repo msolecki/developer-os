@@ -2,7 +2,7 @@
 name: nextjs-conventions
 description: Apply Next.js conventions for schema-validated input, Server Components by default, Server Actions with typed results, forward-only migrations, and consented analytics. Use when writing or reviewing Next.js app code or next.config files.
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Shared Next.js and web conventions

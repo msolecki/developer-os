@@ -9,6 +9,7 @@ hook SessionStart
 hook Stop
 hook-script capture-nudge.py
 hook-script guard.py
+hook-script notices.py
 hook-script state-card.py
 output-style architect
 output-style debug
@@ -37,6 +38,7 @@ skill nextjs-conventions
 skill plan-status
 skill pr-cycle
 skill project-baseline
+skill project-init
 skill session-retro
 skill skill-usage
 skill spec

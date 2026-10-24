@@ -2,7 +2,7 @@
 name: fix-pr
 description: Address every unresolved pull-request review thread, pasted review finding, or findings file, with the user's approval before each edit, commit, push, and thread resolution. Use when the user asks to fix PR comments or review findings or invokes the fix-pr workflow, for example "fix the PR comments", "fix the code review findings", "address the review comments", "handle the code review feedback".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 argument-hint: "[PR number]"
 ---
 

@@ -2,7 +2,7 @@
 name: brain-search
 description: Search the user's Obsidian knowledge vault for earlier decisions, lessons, and references on a topic, and answer only from the notes found, citing each note's vault-relative path. Use before a large task when a `Brain vault:` line is configured (otherwise skip), when the user asks "what did we decide about X", or when the user asks you to search the brain, vault, or knowledge base, for example "what do we know about X?", "what did we agree on X", "search the brain".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Brain search
@@ -11,7 +11,7 @@ Read-only. Answer from the vault, never from general knowledge.
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. Search content and frontmatter
 
@@ -33,7 +33,7 @@ rg -l '^status: archived' -g '*.md' -g '!_archive/'
 
 Rank higher: a match in `summary`, `tags`, or the file name; a `project` equal to the current project's slug (the `Vault project slug:` line in `_Context.md` at the repository root; read the file if the line is not in your context); more distinct keywords matched; `status: active` over `inbox`; a newer `updated`. Keep the top 5.
 
-A note with `status: superseded` was replaced: follow its `superseded_by: "[[note]]"` chain (targets resolve by note name, case-insensitively, also in `_archive/`) to a note that is neither superseded nor archived, and treat that note as the match in the superseded note's place in the top 5, even if it matched no keyword. Stop the walk when the field is missing, its target does not exist or is archived, or a note repeats (A → B → A); the history is then incomplete.
+A note with `status: superseded` was replaced: follow its `superseded_by: "[[note]]"` chain (targets resolve by note name, case-insensitively, also in `_archive/`) to a note that is neither superseded nor archived, and treat that note as the match in the superseded note's place in the top 5, even if it matched no keyword; a note already in the top 5 counts once. Stop the walk when the field is missing, its target does not exist or is archived, or a note repeats (A → B → A); the history is then incomplete.
 
 ## 4. Read and answer
 

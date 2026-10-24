@@ -34,14 +34,14 @@ The [README](../README.md) has the short version; this is the full one.
 2. Ask Claude Code to run `brain-setup`; it creates or connects the vault and, after your approval,
    adds the `Brain vault:` line to `~/.claude/CLAUDE.md` and the vault path to
    `permissions.additionalDirectories` in `~/.claude/settings.json`. Connecting an existing vault adds
-   only the missing pieces and never overwrites your `.obsidian/` folder. For Codex it prints the
-   line to add to `~/.codex/AGENTS.md` (see [Codex](../README.md#codex-installer-best-effort)). Brain
-   skills ask once for the vault path when the line is missing, and stop if you have none; the core
+   only the missing pieces and never overwrites your `.obsidian/` folder. Brain skills ask once for the vault path when the line is missing, and stop if you have none; the core
    rules run brain-search only when the line exists.
 3. Open the vault folder in Obsidian ("Open folder as vault"; Bases needs Obsidian 1.9.10 or
    later). In Settings, Core plugins: enable **Bases** and **Templates**; set the Templates folder
    to `templates`.
 4. Start a session and ask: "brain-search webhooks". It should find the example inbox note.
+5. Put review and garden in your calendar, or rely on the reminders: nothing in the vault is
+   maintained on its own (see [The daily loop](#the-daily-loop)).
 
 For each project repository, copy the whole of `templates/project/` (`AGENTS.md`, `CLAUDE.md`,
 `_Context.md`, `DESIGN.md`, `TODO.md`, `.gitignore`, `docs/`) into its root and fill in `AGENTS.md`
@@ -108,6 +108,14 @@ headings.
 
 ## The daily loop
 
+Nothing in this loop runs on its own: you start every skill below. Vault upkeep (step 5 weekly, step 6
+monthly) is yours to schedule. The plugin only reminds you: at the start of a new session, when inbox
+notes are older than 7 days (at most once a week) or brain-garden has not run for 30 days (at most
+once a month), a one-line notice suggests the skill. After an install or update, the same hook shows the
+version and a link to the [changelog](https://msolecki.github.io/developer-os/docs/changelog.html).
+Turn the notices off with `DEVELOPER_OS_NOTICES=off`; details in
+[hooks.md](reference/hooks.md#sessionstart-on-startup--noticespy).
+
 ### 1. Start a task: search first
 
 Before planning anything non-trivial, ask the agent to run **brain-search** with the topic, the
@@ -169,11 +177,11 @@ vault trustworthy, so it stays human.
 
 ### 6. Monthly: garden
 
-Ask for **brain-garden**. It reports stale notes (also visible in `_views/Stale.base`: active notes
+Ask for **brain-garden**; the startup notice reminds you when the last run in `_reports/garden-log.md` is 30 days old. It reports stale notes (also visible in `_views/Stale.base`: active notes
 not updated in 180 days), `_inbox/` notes older than 7 days, notes whose folder and `status`
-disagree, broken links, duplicates, notes without a summary, and superseded notes whose
-`superseded_by` is missing, points nowhere or loops. It proposes changes and applies
-them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
+disagree, broken links, duplicates, rules restated across several notes, notes without a summary,
+and superseded notes whose `superseded_by` is missing, points nowhere or loops. It proposes changes
+and applies them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
 bumping `updated`.
 
 Links resolve by note name, case-insensitively. A link to an archived note (in `_archive/` or with
@@ -187,14 +195,18 @@ only one by one. With your consent, brain-garden appends one line per run to
 `_reports/garden-log.md`: `YYYY-MM-DD notes N, orphans X (Y%), inbox Z`.
 
 When several notes circle the same topic, **brain-compile** drafts one consolidated note from them,
-also into the inbox for your review. Only `active` notes are sources; the compiled note lists them in
-`sources:` as quoted links (`"[[note-name]]"`).
+also into the inbox for your review. brain-garden proposes it for a rule that three or more notes,
+or two or more hubs, restate; once the compiled note is active, the next garden run proposes linking
+it from the hubs that still restate the rule. Only `active` notes are sources; the compiled note
+lists them in `sources:` as quoted links (`"[[note-name]]"`).
 
 ## Away from the desk (optional)
 
 Two Claude Code [routines](https://code.claude.com/docs/en/routines) extend the loop: a note
 dictated on your phone lands in `_inbox/`, and a weekly brief tells you how the vault is doing.
-Nothing in the plugin calls the network; you set both up in the web UI.
+Nothing in the plugin calls the network or creates a routine; you set both up in the web UI. Neither
+maintains the vault: a cloud session does not load the plugin, so brain-review and brain-garden still
+run at your desk.
 
 Before you start:
 
@@ -282,7 +294,7 @@ Review these notes with brain-review like any other capture.
 
 3. Click **Run now** once: the issue gets one comment with the four numbers.
 
-The brief always posts, so a week without a comment means the routine did not run. The last
+The brief is a report and a reminder, not a garden run: it changes nothing. It always posts, so a week without a comment means the routine did not run. The last
 garden-log line (written by brain-garden with your consent) shows the orphan trend between briefs.
 
 ## Vault or repository?
@@ -367,11 +379,11 @@ Link from the vault to the repository by path or URL; do not copy repository con
 
 ## What else the plugin ships
 
-The full list of skills, agents and output styles, and the Codex installer, are in the
+The full list of skills, agents and output styles is in the
 [README](../README.md#whats-inside).
 
 code-review and audit-to-backlog send every P0/P1 finding to a fresh verifier that sees only the
-claim (Codex when its plugin is installed, otherwise the read-only `verifier` agent); refuted findings move to a
+claim (the read-only `verifier` agent); refuted findings move to a
 Disputed list and do not block the verdict or enter the backlog.
 
 Run `instruction-review --prune` when the default model changes and every six months: it gives each
@@ -392,18 +404,5 @@ Claude Code ships commands that overlap with some developer-os skills. The names
 | `/insights` | HTML report on recent sessions | skill-usage | You want call counts for developer-os skills and keep/merge/remove suggestions |
 | `/goal` | Keeps working across turns until a condition holds | implement-backlog | The work is a backlog of evidence-backed items with per-item checks, worktrees and review |
 | `/skill-doctor` | Context cost and usage of every skill | skill-usage | You want the developer-os verdicts; use `/skill-doctor` for the context cost |
+| `/init` | Writes a `CLAUDE.md` from the codebase | project-init | You want the repository checked against the baseline, the docs standard, its instructions and the conventions, with one approval for every change |
 | `/doctor` | Checks installation, settings and `CLAUDE.md` | instruction-review | You want an evidence-backed diff or a line-by-line prune of a project's instruction file |
-
-## Claude-only features
-
-The skills work in Codex through an installer (see [Codex](../README.md#codex-installer-best-effort)); these parts
-do not:
-
-| Feature | Claude Code | Codex | Equivalent |
-|---|---|---|---|
-| `SessionStart` hook | loads `plugin/rules/core.md` every session | no | `scripts/install-codex.sh` keeps it in a marked block of `~/.codex/AGENTS.md` (D19) |
-| `Stop` hook | offers session-retro once per long session | no | run session-retro by hand at the end |
-| `PreToolUse` guard | asks before installs, updates and removals (also aliases such as `npm in` and `bun a`, and full paths), force pushes, hook bypasses (`--no-verify` and its abbreviations, `commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=`, `core.hooksPath` (any form)) | no | none |
-| Agents (`plugin/agents/`) | code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog), verifier (code-review, audit-to-backlog) | no | none |
-| Output styles | `/output-style` | no | none |
-| `Skill` tool | the agent loads a skill by name | no | `scripts/install-codex.sh` writes a Codex copy of each skill to `~/.agents/skills/` |

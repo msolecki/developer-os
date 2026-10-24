@@ -2,7 +2,7 @@
 name: code-review
 description: Review a pull request, diff, commit, or working-tree change against the project's conventions and rate findings P0–P3 with a merge verdict, handing code written in this session to an independent reviewer agent. Use when the user asks to review code, a PR, a diff, the last commit, or their changes, for example "review the last commit", "review my changes". Prefer it over the built-in /code-review when the project's conventions, the P0–P3 scale and an independent reviewer matter.
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Code review
@@ -44,7 +44,7 @@ For tests, cover happy path, edge cases, and failure path; reject flaky or over-
 
 Before the output, send every P0 and P1 finding, including those relayed from `developer-os:code-reviewer`, to a fresh verifier that did not produce it, one finding per verifier, in parallel when there are several.
 
-- Verifier: with an `Untrusted head` line, only a fresh `developer-os:verifier` agent (read-only). Otherwise Codex when the Codex plugin (`openai/codex-plugin-cc`) is installed, else `developer-os:verifier`. Codex is installed when the `codex:codex-rescue` agent type is listed in this session; dispatch it with the prompt below, prefixed with "Read-only, diagnosis only; do not write." (it writes by default). Record `git rev-parse HEAD`, `git status --porcelain` and `git diff` before and after: if Codex changed any of them, report the change and discard its verdict. On that, any error, an empty reply, or a reply without CONFIRMED or REFUTED, fall back to `developer-os:verifier`. Codex is optional; never install it or fail without it.
+- Verifier: a fresh `developer-os:verifier` agent (read-only). On an error, an empty reply, or a reply without CONFIRMED or REFUTED, dispatch a new one once; if that one also fails, the finding is unverified.
 - Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause), the path of a diff file you write outside the repository (`git diff <base>...<head ref>`, e.g. `refs/remotes/pr/<n>`; the verifier cannot run git, and an untrusted head's files are not on disk), the repository path, and the `Untrusted head` line when the caller gave one. Leave out the reviewer's evidence and reasoning.
 - Prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
 - Keep CONFIRMED findings at their severity. Move REFUTED findings to a Disputed list with the verifier's evidence. When the verifier cannot decide, keep the finding and say it is unverified.

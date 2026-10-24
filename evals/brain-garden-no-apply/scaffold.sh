@@ -1,7 +1,7 @@
 #!/bin/sh
 # The fixture vault plus garden-only defects: a stale note, an old inbox note, a link to an archived
 # note, a likely duplicate, a quoted recent date, a link whose case differs from the file name, a note
-# with an upper-case .MD extension and an inline-code example link.
+# with an upper-case .MD extension, an inline-code example link and one rule stated by three notes.
 # They live here, not in fixtures/vault/, so the brain-search and brain-review cases stay unchanged.
 set -eu
 d=${1:-$PWD}
@@ -20,5 +20,8 @@ note TOOLS/rsync-flags.md knowledge active 2026-09-01 2026-09-01 "rsync -a --del
 printf '\nExample syntax: `[[not-a-link]]`\n' >> "$v/TOOLS/rsync-flags.md"
 note TOOLS/Git-Hooks.MD knowledge active 2026-09-01 2026-09-01 "Shared git hooks live in .githooks; enable them with core.hooksPath." rsync-flags
 note TOOLS/jq-one-liners.md knowledge active 2026-09-05 2026-09-05 "Recurring jq one-liners for API responses." Rsync-Flags make-targets
+note TOOLS/shell-strict-mode.md knowledge active 2026-09-10 2026-09-10 "Shell scripts start with set -eu so errors and unset variables stop them." ci-job-scripts
+note TOOLS/ci-job-scripts.md knowledge active 2026-09-10 2026-09-10 "CI job scripts begin with set -eu: a failed step must fail the job." deploy-hooks
+note TOOLS/deploy-hooks.md knowledge active 2026-09-10 2026-09-10 "Deploy hooks run under set -eu, so an unset variable aborts the deploy." shell-strict-mode
 note _inbox/npm-audit-flags.md knowledge inbox 2020-01-01 2020-01-01 "npm audit --omit=dev skips dev dependencies."
 note _inbox/curl-retry-flags.md knowledge inbox "\"$yesterday\"" "\"$yesterday\"" "curl --retry 3 retries transient failures."

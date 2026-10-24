@@ -2,7 +2,7 @@
 name: audit-to-backlog
 description: Run parallel specialist reviews of a repository, require file-and-line evidence, deduplicate findings, and write an implementation-ready backlog. Use when the user invokes audit-to-backlog or asks for a broad codebase audit that should produce a task backlog, for example "audit this repo", "audit the code", "scan the repo and build a backlog".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 argument-hint: "[path | --diff <ref>] [--perspectives security,correctness,types,performance,tests,arch,ui,a11y]"
 ---
 
@@ -45,7 +45,7 @@ For dead code, require zero references, invariant flags, old unreferenced code, 
 
 ## Verify blocking findings
 
-Before writing the backlog, send every P0 and P1 finding to a fresh verifier that did not produce it: Codex when the Codex plugin (`openai/codex-plugin-cc`) is installed, otherwise a `developer-os:verifier` agent. Detect, dispatch and fall back as in `developer-os:code-review` Verify blocking findings, including the read-only prefix and the working-tree check for Codex. Codex is optional; never install it or fail without it. Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause) and the repository path, without the reviewer's evidence or reasoning, and prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
+Before writing the backlog, send every P0 and P1 finding to a fresh `developer-os:verifier` agent that did not produce it, retried as in `developer-os:code-review` Verify blocking findings. Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause) and the repository path, without the reviewer's evidence or reasoning, and prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
 
 Keep CONFIRMED findings, and mark a finding unverified when the verifier cannot decide. Leave REFUTED findings out of the backlog and list them, with the verifier's evidence, under Disputed in the report.
 

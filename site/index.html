@@ -89,7 +89,7 @@
       <figure class="sysmap" aria-labelledby="sysmap-title">
         <figcaption class="sysmap-head"><b id="sysmap-title">How a session runs with developer-os</b><span>each step links to its reference</span></figcaption>
         <ol class="lanes">
-          <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>under 8 KB; a state card after compaction, resume or fork</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
+          <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>under 8 KB; a state card after compaction, resume or fork; version and upkeep notices on a new session</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
           <li class="lane"><span class="when">before a task</span><span class="what">Search the vault, read the plan<small>answers cite a note path for every claim</small></span><a class="badge info" href="skills/brain-search.html">skill</a></li>
           <li class="lane"><span class="when">during work</span><span class="what">Specs, reviews, audits, PR cycles<small>evidence on every finding; a fresh agent reviews</small></span><a class="badge info" href="skills/index.html">skills</a></li>
           <li class="lane is-ask"><span class="when">risky command</span><span class="what">Installs, force pushes, hook bypasses<small>the guard asks; it never blocks on its own</small></span><span class="badge ask">asks you</span></li>
@@ -121,16 +121,16 @@
           <p>Core rules in every session, workflow skills that stop at defined points, conventions that load only for matching files, and specialist agents for independent passes.</p>
           <ul>
             <li><span>Core rules</span><span>&lt; 8 KB per session</span></li>
-            <li><span>Skills, all groups</span><span>28</span></li>
+            <li><span>Skills, all groups</span><span>29</span></li>
             <li><span>Agents, output styles</span><span>6, 4</span></li>
           </ul>
         </article>
         <article class="layer">
           <span class="k">guard rails</span>
           <h3>Hooks that ask, never deny</h3>
-          <p>Four small hooks: two load the rules and, after a compaction, the state card, one asks before risky commands, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
+          <p>Five small hooks: two load the rules and, after a compaction, the state card, one shows version and vault-upkeep notices on a new session, one asks before risky commands, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
           <ul>
-            <li><span>Hooks</span><span>4</span></li>
+            <li><span>Hooks</span><span>5</span></li>
             <li><span>Network calls</span><span>none</span></li>
             <li><span>On a parse error</span><span>exit silently</span></li>
           </ul>
@@ -236,7 +236,7 @@ Which items should I apply?</code></pre></div>
   <section id="trust">
     <div class="wrap">
       <h2>It proposes. You approve. Then it acts.</h2>
-      <p class="section-copy">Every skill that changes files, git state or anything outside your machine stops at a defined point and asks. Silence or "looks good" is not approval. The main rows are below; the full list is the <a href="docs/product/functional-spec.html#8-approval-model">approval model</a>.</p>
+      <p class="section-copy">Every skill that changes files, git state or anything outside your machine stops at a defined point and asks. Silence or "looks good" is not approval. The main rows are below; the full list is the <a href="docs/product/functional-spec.html#7-approval-model">approval model</a>.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th scope="col">Action</th><th scope="col">Policy</th><th scope="col">Where it is enforced</th></tr></thead>
@@ -244,7 +244,7 @@ Which items should I apply?</code></pre></div>
             <tr><td>Write in the vault outside <code>_inbox/</code>, move, merge or archive a note</td><td><span class="badge ok">only what you name</span></td><td>brain-review, brain-garden</td></tr>
             <tr><td>Delete a note</td><td><span class="badge never">never</span></td><td>No skill deletes; notes retire to <code>_archive/</code></td></tr>
             <tr><td>Edit <code>~/.claude/CLAUDE.md</code> or <code>settings.json</code></td><td><span class="badge ok">diff first</span></td><td>brain-setup</td></tr>
-            <tr><td>Edit an instruction file, create backlog files or add backlog items</td><td><span class="badge ok">after approval</span></td><td>instruction-review and session-retro show the diff; audit-to-backlog, project-baseline and spec write the backlog</td></tr>
+            <tr><td>Edit an instruction file, create backlog files or add backlog items</td><td><span class="badge ok">after approval</span></td><td>instruction-review and session-retro show the diff; audit-to-backlog, project-baseline, project-init and spec write the backlog</td></tr>
             <tr><td>Edit code for review findings, commit, push</td><td><span class="badge ask">asks you</span></td><td>fix-pr asks per edit, per commit and before each push; pr-cycle commits the base merge after a green fast check and fixes after one A/B/C answer, then asks before pushing; implement-backlog commits only green batch work and never pushes</td></tr>
             <tr><td>Merge a PR, push to a base branch, force-push, rebase a pushed branch</td><td><span class="badge never">never</span></td><td>No skill does this</td></tr>
             <tr><td>Send email, chat messages or issues</td><td><span class="badge never">never</span></td><td>client-reply drafts; session-retro prints a command for you</td></tr>
@@ -257,7 +257,7 @@ Which items should I apply?</code></pre></div>
         <div class="hook"><span class="event">PreToolUse · Bash <span class="badge ask">asks</span></span><p>Asks before installs with a package argument, force pushes and git-hook bypasses. It never denies; in headless <code>claude -p</code> an ask becomes a denial.</p></div>
         <div class="hook"><span class="event">Stop <span class="badge info">suggests</span></span><p>Once per long session, suggests session-retro. Reads tool-call counts and background-task ids, paths and times, never message content.</p></div>
       </div>
-      <p class="small" style="margin-top:1.25rem">The rules load with a plain <code>cat</code>; the other three are Python 3 scripts with the standard library only and no network calls, and they fail open: on an error they exit silently and the normal permission flow applies. <a href="docs/reference/hooks.html">Hooks reference</a>, <a href="docs/workflow.html#privacy">privacy</a>, <a href="docs/security.html">security policy</a>.</p>
+      <p class="small" style="margin-top:1.25rem">The rules load with a plain <code>cat</code>; the other four are Python 3 scripts with the standard library only and no network calls, and they fail open: on an error they exit silently and the normal permission flow applies. <a href="docs/reference/hooks.html">Hooks reference</a>, <a href="docs/workflow.html#privacy">privacy</a>, <a href="docs/security.html">security policy</a>.</p>
     </div>
   </section>
 
@@ -312,7 +312,7 @@ Which items should I apply?</code></pre></div>
           <li><a href="skills/brain-search.html"><b>brain-search</b><span>Answer from your notes only, citing each one.</span></a></li>
           <li><a href="skills/brain-capture.html"><b>brain-capture</b><span>Save a decision, lesson or reference to the inbox, secrets redacted.</span></a></li>
           <li><a href="skills/brain-review.html"><b>brain-review</b><span>Walk the inbox: promote, merge or reject the notes you name.</span></a></li>
-          <li><a href="skills/brain-garden.html"><b>brain-garden</b><span>Vault health report: stale notes, broken links, duplicates, orphans.</span></a></li>
+          <li><a href="skills/brain-garden.html"><b>brain-garden</b><span>Vault health report: stale notes, broken links, duplicates, shared rules, orphans.</span></a></li>
           <li><a href="skills/brain-compile.html"><b>brain-compile</b><span>Synthesize several notes on one topic into one compiled draft.</span></a></li>
         </ul>
       </div>
@@ -335,6 +335,7 @@ Which items should I apply?</code></pre></div>
         <p>Keep docs, instructions and plans honest; end sessions cleanly; talk to clients plainly.</p>
         <ul class="lib">
           <li><a href="skills/docs-sync.html"><b>docs-sync</b><span>Docs against code: scaffold, refresh the current state, report drift.</span></a></li>
+          <li><a href="skills/project-init.html"><b>project-init</b><span>Adopt developer-os in a repository in one pass.</span></a></li>
           <li><a href="skills/project-baseline.html"><b>project-baseline</b><span>Missing engineering practices, proposed as backlog items.</span></a></li>
           <li><a href="skills/instruction-review.html"><b>instruction-review</b><span>A minimal, evidence-backed diff to CLAUDE.md or AGENTS.md.</span></a></li>
           <li><a href="skills/plan-status.html"><b>plan-status</b><span>Measured open, done and blocked counts, and open A/B/C decisions.</span></a></li>
@@ -384,6 +385,7 @@ Which items should I apply?</code></pre></div>
           </tbody>
         </table>
       </div>
+      <p class="small">You start each of these; none runs on its own. A one-line notice at the start of a new session reminds you when inbox notes are older than a week or brain-garden has not run for a month. <a href="docs/workflow.html#the-daily-loop">The daily loop</a></p>
     </div>
   </section>
 
@@ -406,7 +408,7 @@ Which items should I apply?</code></pre></div>
             <li>you want memory that writes itself with no review: approval is the point;</li>
             <li>you need a server, a search index or a shared team knowledge base: there is no runtime;</li>
             <li>you want agents to merge, push to a base branch or send messages on their own: no skill does;</li>
-            <li>you work mainly in Codex: support there is a best-effort installer without hooks, agents or output styles.</li>
+            <li>you work mainly in another agent than Claude Code: developer-os supports Claude Code only.</li>
           </ul>
         </div>
       </div>
@@ -456,8 +458,6 @@ Which items should I apply?</code></pre></div>
             </tbody>
           </table>
         </div>
-        <h3 style="margin-top:1.75rem">Using Codex?</h3>
-        <p class="small">From a clone, <code>scripts/install-codex.sh --dry-run</code> shows what would change; without the flag it copies the skills and the core rules into your Codex setup. Best-effort and untested on releases. <a href="docs/readme.html#codex-installer-best-effort">Details</a></p>
       </div>
     </div>
   </section>

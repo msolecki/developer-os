@@ -2,7 +2,7 @@
 name: skill-usage
 description: Report how often each developer-os skill has fired in local Claude Code session history (calls in the last 30 days, last use) with a keep/merge/rewrite-description/remove verdict per skill. Read-only; changes nothing. Use when the user asks which skills are used, which never trigger, or before adding or pruning skills ("how often have I used the skills", "which skills work", "skill stats"). For the context cost of each skill, use the built-in /skill-doctor.
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Skill usage

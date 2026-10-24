@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="SECURITY.md@c213a2cea14b">
+<meta name="dos-source" content="SECURITY.md@46460eefd762">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -64,13 +64,15 @@ from <code>main</code>. Only the latest release receives security fixes.</p>
     <p>Never include the content of a vault or a secret. Describe it instead.</p>
     <h2 id="scope">Scope</h2>
     <ul>
-<li>The plugin is Markdown (skills, agents, output styles, rules) plus 4 hooks in
+<li>The plugin is Markdown (skills, agents, output styles, rules) plus 5 hooks in
 <code>plugin/hooks/hooks.json</code>: <code>SessionStart</code> runs <code>cat</code> on <code>plugin/rules/core.md</code> and, after a
 compaction, resume or fork, <code>state-card.py</code>, which prints the git branch, newest plan, <code>docs/plans/.devos-state.md</code> and worktrees of the
-working directory; <code>Stop</code> runs
+working directory, and on a new session <code>notices.py</code>, which reads the plugin version, the <code>Brain vault:</code>
+line of the user-level <code>CLAUDE.md</code>, the first 2 KB of <code>_inbox/</code> notes and the last line of
+<code>_reports/garden-log.md</code>, and shows counts and dates, never note names; <code>Stop</code> runs
 <code>capture-nudge.py</code>, which counts <code>tool_use</code> entries in the session transcript and reads only
 background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; <code>PreToolUse</code> runs <code>guard.py</code> on Bash commands and can only ask for confirmation.
-The three scripts are Python 3 with the standard library only, make no network calls and fail open. The plugin ships no binary,
+The four scripts are Python 3 with the standard library only, make no network calls and fail open. The plugin ships no binary,
 server or network code.</li>
 <li>Updates come from this Git repository through the Claude Code plugin marketplace: each update
 installs the latest release from <code>main</code>. An update can change <code>plugin/hooks/hooks.json</code> and the

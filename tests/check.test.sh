@@ -177,6 +177,15 @@ run "a page naming another page's source" fail "site: site/docs/glossary.html: n
 edit site/index.html 's|<h2>The skill library.</h2>|<h2>The 99 skills.</h2>|'
 run "a wrong count on the site" fail "says 99 skills"
 
+edit site/index.html 's|<li><span>Agents, output styles</span><span>[0-9]*, |<li><span>Agents, output styles</span><span>99, |'
+run "a wrong count in a landing-page fact row" fail "says 99 agents"
+
+edit site/index.html 's|<li><span>Brain skills</span><span>[0-9]*</span>|<li><span>Brain skills</span><span>99</span>|'
+run "a wrong brain-skill count in a landing-page fact row" fail "says 99 brain skills"
+
+edit site/index.html 's|<li><span>Hooks</span>|<li><span>Hook scripts</span>|'
+run "a renamed landing-page fact row" fail "unknown label: Hook scripts"
+
 printf '\n## [0.0.1]\n\nShips 99 skills.\n' >> "$r/CHANGELOG.md"
 cat >> "$r/docs/development.md" <<'EOF'
 

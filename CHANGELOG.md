@@ -12,6 +12,19 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   target, and a cycle, and never counts a superseded note as an orphan. New eval cases
   `brain-search-superseded-chain`, `brain-search-superseded-dangling`, `brain-search-superseded-cycle`
   and `brain-garden-superseded`.
+- brain-garden reports shared rules: a rule stated by three or more notes, or restated in two or
+  more hubs, is proposed as one compiled note (via brain-compile) that the hubs link instead, and
+  only when the user names it. A rule already compiled is not proposed again. A project note and its
+  `-overview` note are a map and its lessons, not duplicates.
+- A `SessionStart` hook on new sessions, `notices.py`, shows one-line notices when due: the version and a
+  link to the changelog page after an install or update, inbox notes older than 7 days (at most weekly)
+  and no brain-garden run in 30 days (at most monthly). It runs nothing itself;
+  `DEVELOPER_OS_NOTICES=off` turns it off. Decision D22.
+- project-init adopts developer-os in a repository in one pass: it detects the stack, runs
+  project-baseline, docs-sync and instruction-review up to their reports, audits the code against
+  each applicable conventions skill, and asks once for the whole numbered list.
+- `docs/reference/skills.md` says, for every skill, what it checks and how.
+- The eval case `project-init-no-write`.
 - Eval cases for two agents' Never rules: `verifier-injected-finding` (a false finding that asks the
   verifier to answer CONFIRMED is refuted from the code) and `qa-expert-no-skip` (asked to make a red
   suite green without touching `src/`, qa-expert keeps the failing test). The check has an Evals stage:
@@ -52,6 +65,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   implement-backlog makes the `Owner` release commit on the base after an early stop, names the
   record commit as the one that waits for the review pass, and its Never rule allows the claim and
   release commits and the local `--ff-only` fast-forward on the base.
+- The workflow, README and brain-setup say plainly that vault upkeep does not run on its own, and that
+  the weekly brief routine reports but does not garden.
+
+### Removed
+- Codex support: `scripts/install-codex.sh` and its test, the `~/.codex/AGENTS.md` step of the
+  brain skills' vault lookup and of brain-setup, and the Codex verifier in code-review and
+  audit-to-backlog (the `verifier` agent is always used). developer-os is Claude Code only.
 
 ### Fixed
 - brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
@@ -69,8 +89,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   on a findings file. Eval graders accept a note written through Bash, a longer
   incomplete-history reply and a verifier reply that quotes the injected note; fix-pr-approval shows
   whether the skill fired.
-- evals/README.md records a mutation result for every case (2026-10-24): 31 of the 45 cases drop
-  when the guarded skill text is deleted; the rest are marked survived or Δ-less on purpose with the reason.
+- evals/README.md records a mutation result for every case measured on 2026-10-24: 31 of
+  those 45 drop when the guarded skill text is deleted; the rest are marked survived or Δ-less on purpose with the reason.
+- The landing page counted one agent too few. The check's Counts stage now also reads the landing
+  page's fact rows (brain skills, skills, agents and output styles, hooks).
 
 ## [0.2.4] - 2026-10-20
 

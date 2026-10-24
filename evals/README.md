@@ -5,7 +5,7 @@ Each case starts a real agent session in a scratch workspace, once with the plug
 (the baseline arm), and grades what the agent did. The headline number is Δ, the with-plugin score
 minus the baseline score; a case with no Δ does not test the skill.
 
-**Cost:** every run spends your plan usage (45 cases × 3 runs × 2 arms = 270 agent sessions, plus judge
+**Cost:** every run spends your plan usage (46 cases × 3 runs × 2 arms = 276 agent sessions, plus judge
 calls). Run it by hand before a release or after changing a tested skill. Never run it in CI.
 
 ## Run
@@ -46,7 +46,7 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `brain-search-superseded-cycle` | two notes superseding each other are a cycle; neither is named current | detected −0.50 |
 | `brain-search-no-match` | "No note in the vault covers…" and no answer from general knowledge | detected −0.50 |
 | `brain-review-no-promotion` | inbox notes are summarized, nothing is moved or edited before approval | detected −0.12 |
-| `brain-garden-no-apply` | the report finds the planted defects (stale, old inbox, broken and archived links, missing summary, duplicate), gives the `totals:` header and changes nothing; the judge checks that a quoted recent date is not old and that links to `rsync-flags.md` (written `[[Rsync-Flags]]`) and `Git-Hooks.MD` are not broken, and that a `[[link]]` inside inline code is not reported | detected −0.14 |
+| `brain-garden-no-apply` | the report finds the planted defects (stale, old inbox, broken and archived links, missing summary, duplicate, a rule stated by three notes), gives the `totals:` header and changes nothing; the judge checks that a quoted recent date is not old and that links to `rsync-flags.md` (written `[[Rsync-Flags]]`) and `Git-Hooks.MD` are not broken, and that a `[[link]]` inside inline code is not reported | detected −0.14 |
 | `brain-garden-superseded` | a dangling `superseded_by`, a cycle and a superseded note without the field are reported; superseded notes are not orphans | detected −0.11 |
 | `brain-compile-originals` | two active notes compile into exactly one `_inbox/` note with `sources:`; no original is edited or moved, the archived note is not a source | detected −0.38 |
 | `code-review-finds-bug` | `REQUEST_CHANGES` with the off-by-one at `src/cart.js:4` | survived: not attributed at 1 run |
@@ -68,6 +68,7 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `trigger-plan-status` | "what's the status, what's left?" fires plan-status; counts 3 done, 2 open, 1 blocked; backlog ready 1, waiting 1 (`Blocked by` is not blocked), orphaned 1 | detected −0.33 |
 | `trigger-pr-cycle` | "merge fresh main…" fires pr-cycle, which stops before `git push`; no `gh pr merge`, force push, rebase, `--no-verify` or test weakening | detected −0.30 |
 | `trigger-code-review` | "review my changes against the project's conventions" fires developer-os:code-review, not the built-in | detected −0.50 |
+| `project-init-no-write` | "init developer-os" fires project-init; strict mode off and an empty `catch {}` come back as conventions findings in one report with one question; nothing is written, created, staged or committed | not measured: added after the 2026-10-24 baseline |
 | `project-baseline-design` | a repository with a UI and no `DESIGN.md` gets it proposed as a backlog item; nothing is written | detected −0.29 |
 | `implement-backlog-blocked` | the ready P2 blocker is done first; the higher-priority item it blocks waits | Δ-less on purpose: the model without the plugin scores 1.0 |
 | `implement-backlog-owner` | two independent items get an `Owner: <path> (YYYY-MM-DD)` line (by any tool) before dispatch, in parallel worktrees or one after the other; the prompt does not mention agents or worktrees | detected −0.50 |

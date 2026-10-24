@@ -7,13 +7,13 @@ last-verified: 2026-10-24
 # Hooks reference
 
 Defined in `plugin/hooks/hooks.json`. Commands run with `${CLAUDE_PLUGIN_ROOT}` set to the installed
-`plugin/` directory; each has a 10-second timeout. There are 4 hooks: one `cat` and three
+`plugin/` directory; each has a 10-second timeout. There are 5 hooks: one `cat` and four
 Python 3 scripts run as `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.py"`. The scripts use the
 standard library only, need `python3` 3.8 or later on `PATH`, make no network call, and fail open.
-Without `python3` the core rules still load; the state card, guard and nudge fail with a
+Without `python3` the core rules still load; the state card, notices, guard and nudge fail with a
 non-blocking hook error and the session goes on as if they were absent. Why Python and not `sh`:
 [decisions D2](../product/decisions.md#d2-no-runtime-small-hook-scripts-without-dependencies).
-Tests: `tests/state-card.test.sh`, `tests/guard.test.sh`, `tests/capture-nudge.test.sh`.
+Tests: `tests/state-card.test.sh`, `tests/notices.test.sh`, `tests/guard.test.sh`, `tests/capture-nudge.test.sh`.
 
 ## SessionStart — core rules and state card
 
@@ -65,6 +65,51 @@ even when a project moves its plans; `Newest plan` reads only `docs/plans/` too.
 
 **Failure:** every error exits 0; malformed input, another `source`, a missing `cwd` or a directory
 outside git print nothing, so the session has the rules alone.
+
+## SessionStart on startup — `notices.py`
+
+Claude Code has no install or update hook, so this hook stands in for one, and for a schedule: it
+reminds, it runs nothing. Matcher `startup`, so it never runs beside the state card (`compact|resume`);
+its output is a few hundred bytes.
+
+**Input:** the hook JSON on stdin; uses `source` (anything but `startup` prints nothing). It also reads
+`${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` for the version and the `Brain vault:` line from
+`$CLAUDE_CONFIG_DIR/CLAUDE.md` (or `~/.claude/CLAUDE.md`), the user-level file brain-setup writes. A
+project's `CLAUDE.md` or `AGENTS.md` is never read, so a cloned repository cannot point the hook at a
+directory of its choosing.
+
+**Notices,** each one line, only when due:
+
+| Notice | When | Repeats |
+|---|---|---|
+| `developer-os <version> is active. What's new: <changelog page>`, then either "Vault upkeep does not run on its own: ask for brain-review weekly and brain-garden monthly." or, with no vault, "No vault configured yet: ask for brain-setup." | No version marker: a fresh install, or the first session after updating from a release without this hook | Once |
+| `developer-os updated <old> -> <new>. What's new: <changelog page>` | The marker holds another version | Once per version |
+| `Vault: <n> inbox notes older than 7 days. Ask for brain-review.` | A note in `_inbox/` has a `created:` date more than 7 days back | At most every 7 days |
+| `Vault: no brain-garden run in 30 days (last run <date>). Ask for brain-garden.` | The last line of `_reports/garden-log.md` and the last garden notice are both 30 days old or more | At most every 30 days |
+
+The changelog page is `https://msolecki.github.io/developer-os/docs/changelog.html`. Without a garden
+log and without an earlier notice, the first run only starts the 30-day clock. The hook counts notes;
+it never prints a vault file name. It reads the first 2 KB of at most 1000 `_inbox/*.md` files
+(symlinks skipped; only `created:` inside the frontmatter counts) and the last 4 KB of the garden log
+when it is a regular file. The inbox scan itself runs at most every 7 days, also when it finds no
+stale note.
+
+**Output:** with at least one notice, one line and exit 0:
+
+```json
+{"systemMessage": "<notices>", "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "developer-os showed the user these notices at session start; act on one only if the user asks:\n<notices>"}}
+```
+
+`systemMessage` is shown to the user; `additionalContext` tells the agent what the user saw, so "run
+it" works as a reply.
+
+**State:** `version`, `inbox` and `garden` files in
+`${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/notices/`, which Claude Code keeps across
+plugin updates. The directory is created with mode 700; when it or its parent is a symlink or owned by
+another user, the hook prints nothing, because without markers every notice would repeat each session.
+
+**Failure:** every error exits 0 with no output. `DEVELOPER_OS_NOTICES=off` and `sdk-*` entrypoints
+(`claude -p`, the SDK) print nothing.
 
 ## PreToolUse on Bash — `guard.py`
 
@@ -153,6 +198,8 @@ script reads the file's modification time with `stat` and runs no other program 
 |---|---|---|
 | `DEVELOPER_OS_CAPTURE_NUDGE` | capture-nudge | `off` disables the nudge |
 | `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | capture-nudge | Tool-call threshold; non-numeric falls back to 30 |
-| `CLAUDE_CODE_ENTRYPOINT` | capture-nudge | Set by Claude Code but not in its documentation, so it may change without notice; `sdk-*` skips the nudge |
-| `CLAUDE_PLUGIN_DATA` | capture-nudge | Set by Claude Code; marker directory root |
+| `DEVELOPER_OS_NOTICES` | notices | `off` disables the version and upkeep notices |
+| `CLAUDE_CODE_ENTRYPOINT` | capture-nudge, notices | Set by Claude Code but not in its documentation, so it may change without notice; `sdk-*` skips the hook |
+| `CLAUDE_PLUGIN_DATA` | capture-nudge, notices | Set by Claude Code; marker directory root, kept across plugin updates |
+| `CLAUDE_CONFIG_DIR` | notices | Where the user-level `CLAUDE.md` with the `Brain vault:` line lives (default `~/.claude`) |
 | `CLAUDE_PLUGIN_ROOT` | hooks.json | Set by Claude Code; plugin install path |

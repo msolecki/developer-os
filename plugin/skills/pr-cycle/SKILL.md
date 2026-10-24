@@ -2,7 +2,7 @@
 name: pr-cycle
 description: Take a pull request to a merge verdict by merging its base in, resolving conflicts, getting an independent review, fixing the approved findings, running the project's gates, and updating the PR body, asking before fixing and before pushing. Use when the user asks to bring a PR up to date and ready to merge, for example "merge fresh dev in", "pull development into the PR", "get the PR ready to merge".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 argument-hint: "[PR number]"
 ---
 

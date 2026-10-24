@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@c10449ec8e18">
+<meta name="dos-source" content="docs/reference/hooks.md@cdb1d3c5d6c6">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -48,13 +48,13 @@
     <h1 id="hooks-reference">Hooks reference</h1>
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/hooks.md">docs/reference/hooks.md</a></span><span>Verified 2026-10-16</span></p>
     <p>Defined in <code>plugin/hooks/hooks.json</code>. Commands run with <code>${CLAUDE_PLUGIN_ROOT}</code> set to the installed
-    <code>plugin/</code> directory; each has a 10-second timeout. There are 4 hooks: one <code>cat</code> and three
+    <code>plugin/</code> directory; each has a 10-second timeout. There are 5 hooks: one <code>cat</code> and four
     Python 3 scripts run as <code>python3 "${CLAUDE_PLUGIN_ROOT}/hooks/&lt;script&gt;.py"</code>. The scripts use the
     standard library only, need <code>python3</code> 3.8 or later on <code>PATH</code>, make no network call, and fail open.
-    Without <code>python3</code> the core rules still load; the state card, guard and nudge fail with a
+    Without <code>python3</code> the core rules still load; the state card, notices, guard and nudge fail with a
     non-blocking hook error and the session goes on as if they were absent. Why Python and not <code>sh</code>:
     <a href="../product/decisions.html#d2-no-runtime-small-hook-scripts-without-dependencies">decisions D2</a>.
-    Tests: <code>tests/state-card.test.sh</code>, <code>tests/guard.test.sh</code>, <code>tests/capture-nudge.test.sh</code>.</p>
+    Tests: <code>tests/state-card.test.sh</code>, <code>tests/notices.test.sh</code>, <code>tests/guard.test.sh</code>, <code>tests/capture-nudge.test.sh</code>.</p>
     <h2 id="sessionstart--core-rules-and-state-card">SessionStart — core rules and state card</h2>
     <p>Two hooks on the same event, run independently, so the card is not guaranteed to follow the rules.</p>
     <div class="table-wrap">
@@ -99,6 +99,43 @@ Worktrees:
     even when a project moves its plans; <code>Newest plan</code> reads only <code>docs/plans/</code> too.</p>
     <p><strong>Failure:</strong> every error exits 0; malformed input, another <code>source</code>, a missing <code>cwd</code> or a directory
     outside git print nothing, so the session has the rules alone.</p>
+    <h2 id="sessionstart-on-startup--noticespy">SessionStart on startup — <code>notices.py</code></h2>
+    <p>Claude Code has no install or update hook, so this hook stands in for one, and for a schedule: it
+    reminds, it runs nothing. Matcher <code>startup</code>, so it never runs beside the state card (<code>compact|resume</code>);
+    its output is a few hundred bytes.</p>
+    <p><strong>Input:</strong> the hook JSON on stdin; uses <code>source</code> (anything but <code>startup</code> prints nothing). It also reads
+    <code>${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json</code> for the version and the <code>Brain vault:</code> line from
+    <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code> (or <code>~/.claude/CLAUDE.md</code>), the user-level file brain-setup writes. A
+    project's <code>CLAUDE.md</code> or <code>AGENTS.md</code> is never read, so a cloned repository cannot point the hook at a
+    directory of its choosing.</p>
+    <p><strong>Notices,</strong> each one line, only when due:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Notice</th><th scope="col">When</th><th scope="col">Repeats</th></tr></thead>
+        <tbody>
+          <tr><td><code>developer-os &lt;version&gt; is active. What's new: &lt;changelog page&gt;</code>, then either "Vault upkeep does not run on its own: ask for brain-review weekly and brain-garden monthly." or, with no vault, "No vault configured yet: ask for brain-setup."</td><td>No version marker: a fresh install, or the first session after updating from a release without this hook</td><td>Once</td></tr>
+          <tr><td><code>developer-os updated &lt;old&gt; -&gt; &lt;new&gt;. What's new: &lt;changelog page&gt;</code></td><td>The marker holds another version</td><td>Once per version</td></tr>
+          <tr><td><code>Vault: &lt;n&gt; inbox notes older than 7 days. Ask for brain-review.</code></td><td>A note in <code>_inbox/</code> has a <code>created:</code> date more than 7 days back</td><td>At most every 7 days</td></tr>
+          <tr><td><code>Vault: no brain-garden run in 30 days (last run &lt;date&gt;). Ask for brain-garden.</code></td><td>The last line of <code>_reports/garden-log.md</code> and the last garden notice are both 30 days old or more</td><td>At most every 30 days</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The changelog page is <code>https://msolecki.github.io/developer-os/docs/changelog.html</code>. Without a garden
+    log and without an earlier notice, the first run only starts the 30-day clock. The hook counts notes;
+    it never prints a vault file name. It reads the first 2 KB of at most 1000 <code>_inbox/*.md</code> files
+    (symlinks skipped; only <code>created:</code> inside the frontmatter counts) and the last 4 KB of the garden log
+    when it is a regular file. The inbox scan itself runs at most every 7 days, also when it finds no
+    stale note.</p>
+    <p><strong>Output:</strong> with at least one notice, one line and exit 0:</p>
+<pre><code>{"systemMessage": "&lt;notices&gt;", "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "developer-os showed the user these notices at session start; act on one only if the user asks:\n&lt;notices&gt;"}}</code></pre>
+    <p><code>systemMessage</code> is shown to the user; <code>additionalContext</code> tells the agent what the user saw, so "run
+    it" works as a reply.</p>
+    <p><strong>State:</strong> <code>version</code>, <code>inbox</code> and <code>garden</code> files in
+    <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/notices/</code>, which Claude Code keeps across
+    plugin updates. The directory is created with mode 700; when it or its parent is a symlink or owned by
+    another user, the hook prints nothing, because without markers every notice would repeat each session.</p>
+    <p><strong>Failure:</strong> every error exits 0 with no output. <code>DEVELOPER_OS_NOTICES=off</code> and <code>sdk-*</code> entrypoints
+    (<code>claude -p</code>, the SDK) print nothing.</p>
     <h2 id="pretooluse-on-bash--guardpy">PreToolUse on Bash — <code>guard.py</code></h2>
     <p><strong>Input:</strong> the hook JSON on stdin; only <code>tool_input.command</code> is used.</p>
     <p><strong>Decision:</strong> prints one line and exits 0:</p>
@@ -174,8 +211,10 @@ Worktrees:
         <tbody>
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE</code></td><td>capture-nudge</td><td><code>off</code> disables the nudge</td></tr>
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code></td><td>capture-nudge</td><td>Tool-call threshold; non-numeric falls back to 30</td></tr>
-          <tr><td><code>CLAUDE_CODE_ENTRYPOINT</code></td><td>capture-nudge</td><td>Set by Claude Code but not in its documentation, so it may change without notice; <code>sdk-*</code> skips the nudge</td></tr>
-          <tr><td><code>CLAUDE_PLUGIN_DATA</code></td><td>capture-nudge</td><td>Set by Claude Code; marker directory root</td></tr>
+          <tr><td><code>DEVELOPER_OS_NOTICES</code></td><td>notices</td><td><code>off</code> disables the version and upkeep notices</td></tr>
+          <tr><td><code>CLAUDE_CODE_ENTRYPOINT</code></td><td>capture-nudge, notices</td><td>Set by Claude Code but not in its documentation, so it may change without notice; <code>sdk-*</code> skips the hook</td></tr>
+          <tr><td><code>CLAUDE_PLUGIN_DATA</code></td><td>capture-nudge, notices</td><td>Set by Claude Code; marker directory root, kept across plugin updates</td></tr>
+          <tr><td><code>CLAUDE_CONFIG_DIR</code></td><td>notices</td><td>Where the user-level <code>CLAUDE.md</code> with the <code>Brain vault:</code> line lives (default <code>~/.claude</code>)</td></tr>
           <tr><td><code>CLAUDE_PLUGIN_ROOT</code></td><td>hooks.json</td><td>Set by Claude Code; plugin install path</td></tr>
         </tbody>
       </table>

@@ -2,7 +2,7 @@
 name: comments-conventions
 description: Write no comment by default, and keep the few that earn their place current. Use when writing or reviewing code comments in TypeScript, JavaScript, Python, or shell files.
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Comments — last resort only

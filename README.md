@@ -1,12 +1,14 @@
 # developer-os
 
+<a href="https://www.producthunt.com/products/developer-os-2?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-developer-os-2" target="_blank" rel="noopener noreferrer"><img alt="Developer OS - Long-term memory and engineering rules for Claude Code | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1286380&amp;theme=light&amp;t=1792582595920"></a>
+
+
 A Claude Code plugin for working with an AI coding agent and an Obsidian vault as its long-term
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
 agents, output styles and rules) plus three small Python 3 hook scripts (standard library only), with no server, no database and
-nothing to install beyond `python3`. Codex
-support is manual and best-effort.
+nothing to install beyond `python3`.
 
 ## Install (Claude Code)
 
@@ -57,7 +59,7 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 
 ## What the hooks do
 
-The plugin has 4 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
+The plugin has 5 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
 session context. After a compaction, a resume or a fork inside a git repository, a second `SessionStart` hook,
 [`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
@@ -69,6 +71,14 @@ when you call a skill; read [`core.md`](plugin/rules/core.md) for the rules them
 To turn it off, disable the plugin (`/plugin`, then disable developer-os). To keep the plugin but
 change a rule, override it explicitly in your user-level `~/.claude/CLAUDE.md` (for example, "Ignore
 the developer-os rule on plan files"); that file loads alongside the core rules in every session.
+
+On a new session (`startup`), [`plugin/hooks/notices.py`](plugin/hooks/notices.py) shows you up to
+three one-line notices: after an install or update, the version and a link to the
+[changelog](https://msolecki.github.io/developer-os/docs/changelog.html); when inbox notes are older
+than 7 days, a brain-review reminder (at most weekly); when brain-garden has not run for 30 days, a
+garden reminder (at most monthly). Vault upkeep never runs on its own: the hook only reminds. It reads
+the vault path from your user-level `CLAUDE.md` only and prints counts, never note names. Set
+`DEVELOPER_OS_NOTICES=off` to turn it off.
 
 A `Stop` hook ([`plugin/hooks/capture-nudge.py`](plugin/hooks/capture-nudge.py)) counts tool calls
 in the session transcript and reads only background-task and Monitor ids, output-file paths and
@@ -86,7 +96,7 @@ also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `
 `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form. `$IFS`,
 `${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
 
-The three scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
+The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;
 without it the core rules still load and the other hooks do not run.
 
@@ -96,7 +106,8 @@ without it the core rules still load and the other hooks do not run.
   brain-compile. They read and write the vault with the agent's own file tools.
 - **Engineering skills:** code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
   bug-triage, deploy-checklist, instruction-review (add `--prune` for a periodic cut), plan-status,
-  client-reply, docs-sync, project-baseline.
+  client-reply, docs-sync, project-baseline, project-init (adopt developer-os in a repository in one
+  pass).
 - **Session skills:** session-retro (end-of-session wrap-up: state check, cleanup proposals,
   Done / Not done / Needs you, plan update or close, approval-gated capture) and skill-usage
   (read-only report of how often each developer-os skill fired locally, with
@@ -105,43 +116,15 @@ without it the core rules still load and the other hooks do not run.
   error-handling-conventions, defensive-coding-conventions, monitoring-conventions,
   nextjs-conventions, testing-conventions, typescript-conventions.
 - **Built-in overlaps:** `/code-review`, `/security-review`, `/recap`, `/insights`, `/goal`,
-  `/skill-doctor` and `/doctor` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
+  `/skill-doctor`, `/doctor` and `/init` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
-- **Four hooks on three events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork), `Stop` suggests a session wrap-up
+- **Five hooks on three events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
   once per long session, `PreToolUse` asks before installs, force pushes and hook bypasses (see above).
 - **Evals:** behavior checks for the brain skills, code-review, session-retro and the skill
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
   plugin payload.
-
-## Codex (installer, best-effort)
-
-There is no Codex manifest. From a clone of this repository (or the marketplace copy in
-`~/.claude/plugins/marketplaces/developer-os`), run:
-
-```sh
-scripts/install-codex.sh --dry-run   # show what would change
-scripts/install-codex.sh             # install or update
-```
-
-- It writes a Codex copy of every skill to `~/.agents/skills/<name>` (set `CODEX_SKILLS_DIR` for
-  another location, such as `~/.codex/skills/` on older Codex versions). Each copy keeps only `name`
-  and a short description (the first sentence and the quoted trigger phrases, or the "Use when"
-  sentence when there are none), so all of them fit Codex's 8000-character skill list, and has its
-  Claude-only references rewritten. A skill `description` must be one plain line; the installer
-  refuses any other form before it writes anything.
-- It puts `plugin/rules/core.md` and your `Brain vault:` line (`--vault <path>`, else the line already in the
-  block, else `~/.claude/CLAUDE.md`; pass `--vault` again to change it) between `developer-os-core` markers in `~/.codex/AGENTS.md` (`$CODEX_HOME/AGENTS.md`
-  when `CODEX_HOME` is set; `--project <dir>` for a project's `AGENTS.md`). Text outside the markers
-  stays; a changed file is backed up first.
-- Run it again after each plugin update. An untouched copy of a skill the plugin no longer has, made from this checkout, is removed. `--uninstall` removes only what it installed;
-  `--project <dir> --uninstall` removes only that project's block and keeps the skills. A skill
-  directory it did not create, including an older hand-made symlink into another clone, is skipped
-  and reported; remove it first to let the installer manage it.
-
-This setup is not tested on releases. The hooks, agents and output styles have no Codex equivalent;
-see [Claude-only features](docs/workflow.md#claude-only-features).
 
 ## Documentation
 
