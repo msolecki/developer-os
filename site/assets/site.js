@@ -17,6 +17,7 @@
       ['docs/architecture/overview.html', 'Architecture overview'],
       ['docs/reference/hooks.html', 'Hooks reference'],
       ['docs/reference/configuration.html', 'Configuration reference'],
+      ['docs/reference/skills.html', 'Skills reference'],
       ['docs/glossary.html', 'Glossary'],
     ]],
     ['Components', [

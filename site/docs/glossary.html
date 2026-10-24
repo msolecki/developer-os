@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/glossary.md@eb40296c6624">
+<meta name="dos-source" content="docs/glossary.md@4cd0a7747861">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,7 +68,7 @@
           <tr><td>Vault project slug</td><td>The <code>project:</code> value for a repository's notes, recorded in its <code>_Context.md</code>.</td></tr>
           <tr><td>P0–P3</td><td>The single severity scale: P0 exploitable security defect, data loss or production down; P1 wrong behavior on a common path; P2 edge case or meaningful maintainability risk; P3 minor.</td></tr>
           <tr><td>Verdict</td><td><code>APPROVE</code>, <code>COMMENT</code> (an open question decides P0/P1) or <code>REQUEST_CHANGES</code> (an open P0/P1).</td></tr>
-          <tr><td>Fresh verifier</td><td>An agent that did not produce a P0/P1 finding and sees only the claim, asked to disprove it. Codex when installed, otherwise the read-only <code>verifier</code> agent, which is also the only choice for an untrusted head.</td></tr>
+          <tr><td>Fresh verifier</td><td>An agent that did not produce a P0/P1 finding and sees only the claim, asked to disprove it: the read-only <code>verifier</code> agent.</td></tr>
           <tr><td>Disputed</td><td>A finding the verifier refuted; listed with evidence, does not block the verdict or enter the backlog.</td></tr>
           <tr><td>Fast check</td><td>Lint, types and tests of the changed area, run before every commit.</td></tr>
           <tr><td>Full suite</td><td>The project's complete validation, run once before a push or PR.</td></tr>

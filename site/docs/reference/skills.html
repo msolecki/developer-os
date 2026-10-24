@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en" data-root="../../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills reference · developer-os</title>
+<meta name="description" content="What each developer-os skill checks and how: the probes, rules and steps behind every /developer-os command.">
+<link rel="canonical" href="https://msolecki.github.io/developer-os/docs/reference/skills.html">
+<link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
+<link rel="apple-touch-icon" href="../../assets/apple-touch-icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="developer-os">
+<meta property="og:title" content="Skills reference · developer-os">
+<meta property="og:description" content="What each developer-os skill checks and how: the probes, rules and steps behind every /developer-os command.">
+<meta property="og:url" content="https://msolecki.github.io/developer-os/docs/reference/skills.html">
+<meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/docs.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="developer-os documentation">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="dos-source" content="docs/reference/skills.md@57b27e9f4962">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../../docs/index.html">Docs</a>
+      <a href="../../skills/index.html">Skills</a>
+      <a href="../../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <h1 id="skills-reference">Skills reference</h1>
+    <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/reference/skills.md">docs/reference/skills.md</a></span><span>Verified 2026-10-24</span></p>
+    <p>What each skill checks and how, one entry per skill, invoked as <code>/developer-os:&lt;name&gt;</code>. What a
+skill may write, what needs your answer first and where it stops are in the
+<a href="../product/functional-spec.html#2-skills">functional specification</a>; this page does not repeat them.
+Each entry links its <code>SKILL.md</code>, which owns the exact steps: when the two disagree, the <code>SKILL.md</code>
+wins and this page is a defect.</p>
+    <p>New to developer-os in a repository? Start with <a href="#project-init">project-init</a>: it runs the setup
+and audit skills below in one pass.</p>
+    <h2 id="setup-and-audit">Setup and audit</h2>
+    <h3 id="project-init">project-init</h3>
+    <p><a href="../../skills/project-init.html">Source</a>. Adopts developer-os in a repository in one pass.</p>
+    <ul>
+<li><strong>Stack:</strong> reads the manifests and config on disk: the lockfile, <code>tsconfig.json</code>, <code>next.config.*</code>,
+test files and runner, CI workflows, infrastructure code, API routes or handlers, a database and
+migrations, a UI. It runs nothing to find them.</li>
+<li><strong>Which skills apply:</strong> project-baseline and docs-sync always; instruction-review when a
+<code>CLAUDE.md</code>/<code>AGENTS.md</code> exists; each conventions skill when its stack is present (typescript:
+<code>tsconfig.json</code> or <code>*.ts</code>; nextjs: <code>next.config.*</code> or a <code>next</code> dependency; testing: test files;
+error-handling: TypeScript server code; monitoring: infrastructure, CI workflows, alerts or health endpoints;
+defensive-coding: external input, authentication, money, concurrency,
+persistence or error paths).
+comments-conventions is never audited, since it governs only comments an agent adds;
+deploy-checklist is never run, since it runs the project's gates and belongs to a release.</li>
+<li><strong>Process skills:</strong> runs project-baseline, docs-sync and instruction-review up to their reports
+and collects their items instead of asking their questions one by one.</li>
+<li><strong>Conventions audit:</strong> for each applicable conventions skill, one probe per rule (<code>rg</code> or a
+config read, for example <code>"strict": true</code>, empty <code>catch {}</code>, date fixtures without <code>Z</code>, mock
+factories that do not spread the original module, a <code>/health</code> handler that queries the
+database). Judgment rules (function size, composition) are sampled: at most five <code>file:line</code>
+cases per rule plus the total. Unsure is a question, not a finding; each P0 and P1 goes to a
+fresh verifier, as in audit-to-backlog. Findings become <code>CONV-NN</code>
+backlog items with a <code>Check</code> that fails while the violation is there.</li>
+<li><strong>Backlog paths:</strong> without a <code>Backlog:</code> line and default files, the paths are a decision for
+you, and the <code>Backlog:</code> line is a numbered item like the rest.</li>
+<li><strong>Deliberate choices:</strong> a practice the project's <code>AGENTS.md</code>, <code>docs/pitfalls.md</code> or decision
+records reject on purpose is reported as <code>deliberate</code>, never proposed.</li>
+<li><strong>Output:</strong> the stack, which skills applied, one numbered list across all of them, and one
+A/B/C question.</li>
+    </ul>
+    <h3 id="project-baseline">project-baseline</h3>
+    <p><a href="../../skills/project-baseline.html">Source</a>. A presence check for 12 engineering
+practices; each one has a probe, and a missing one becomes a <code>BASE-NN</code> backlog item.</p>
+    <div class="table-wrap">
+<table>
+<thead><tr><th>Practice</th><th>Present when</th></tr></thead>
+<tbody>
+<tr><td>Env through one validated module</td><td>one module parses <code>process.env</code> with a schema, and <code>rg</code> finds no direct env reads elsewhere</td></tr>
+<tr><td>Agent deny-list for secrets</td><td><code>.claude/settings.json</code> <code>permissions.deny</code> covers <code>.env*</code>, <code>*.pem</code>, <code>*.key</code></td></tr>
+<tr><td>Secret scanning in CI</td><td>a CI step runs gitleaks, trufflehog or the host's scanning</td></tr>
+<tr><td>Coverage floor that only rises</td><td>the test config sets thresholds and CI enforces them</td></tr>
+<tr><td>Additive-only migration guard</td><td>CI fails on a destructive migration without a marker (skipped without a database)</td></tr>
+<tr><td>Dependency/boundary rules</td><td>dependency-cruiser, eslint boundaries or a layer test fails CI</td></tr>
+<tr><td>Real-database test tier</td><td>tests run against a real database (skipped without a database)</td></tr>
+<tr><td>Safe error responses</td><td>one error envelope, no stack traces or internal fields (skipped without an API)</td></tr>
+<tr><td>CHANGELOG</td><td><code>CHANGELOG.md</code> in Keep a Changelog format</td></tr>
+<tr><td>Docs-vs-code check</td><td>a script or CI step checks docs against code</td></tr>
+<tr><td>Design system file</td><td>a UI project has a root <code>DESIGN.md</code> (skipped without a UI)</td></tr>
+<tr><td>Gate verdict in the exit code</td><td>no <code>|| true</code> or <code>continue-on-error</code> on a gate</td></tr>
+</tbody>
+</table>
+    </div>
+    <p>It never picks a default for the package manager, test runner, auth library, monitoring stack or
+commit language: inconsistent evidence becomes a question.</p>
+    <h3 id="docs-sync">docs-sync</h3>
+    <p><a href="../../skills/docs-sync.html">Source</a>. Checks the docs against the code and the docs
+standard.</p>
+    <ul>
+<li><strong>Missing pieces:</strong> root <code>AGENTS.md</code> (under 100 lines, with <code>## Likely agent mistakes here</code> and
+<code>## Invariants</code>), a one-line <code>CLAUDE.md</code>, <code>_Context.md</code>, <code>DESIGN.md</code> for a UI, the git-ignored
+state file (<code>git check-ignore -q docs/plans/.devos-state.md</code>), frontmatter on every doc,
+<code>docs/index.md</code>, <code>docs/CURRENT-STATE.md</code>, <code>docs/pitfalls.md</code>, decision records, runbooks. It
+proposes only pieces that would carry real content now.</li>
+<li><strong>Drift:</strong> commands in <code>AGENTS.md</code>/<code>CLAUDE.md</code>/README that are not in the manifest or <code>Makefile</code>;
+paths and <code>path:line</code> references that no longer exist (<code>git ls-files</code>, <code>rg</code>); stack versions
+that differ from the lockfile; a <code>CURRENT-STATE.md</code> commit that is not an ancestor of HEAD or is
+more than 50 commits behind; stale <code>last-verified</code> dates and <code>_Context.md</code> "State as of";
+decision records that contradict each other or the code; <code>DESIGN.md</code> older than the styling
+sources.</li>
+<li><strong>CURRENT-STATE refresh:</strong> re-verifies each line and adds the work shipped since the recorded
+commit, as a diff.</li>
+<li><strong>Likely agent mistakes:</strong> at most three, from reverts and repeated fix commits in git history
+and from corrections in the current conversation, each with a commit or session as evidence.</li>
+    </ul>
+    <h3 id="instruction-review">instruction-review</h3>
+    <p><a href="../../skills/instruction-review.html">Source</a>. Reviews <code>CLAUDE.md</code>/<code>AGENTS.md</code> (the
+<code>AGENTS.md</code> when <code>CLAUDE.md</code> only imports it) against recent work.</p>
+    <ul>
+<li><strong>Keeps</strong> only durable instructions backed by repeated work, a concrete defect or a user
+correction; <strong>excludes</strong> what the code shows, one-off debugging, and rules already in the core
+rules or global instructions; flags stale or contradicted lines; keeps the file under 100 lines.</li>
+<li><strong>History:</strong> <code>git log -p -S '&lt;phrase&gt;'</code> for each proposed line, and shows the commit a change
+would reverse.</li>
+<li><strong>Repeated mechanical mistake:</strong> proposes a lint rule, test or script instead of a line.</li>
+<li>**<code>--prune</code>:** a DELETE/KEEP/REWRITE verdict for every line, each with its source; never deletes
+a truthfulness rule; lists every check it did not run under <code>NOT RUN</code>.</li>
+    </ul>
+    <h3 id="audit-to-backlog">audit-to-backlog</h3>
+    <p><a href="../../skills/audit-to-backlog.html">Source</a>. A broad code audit by parallel
+specialists: security (<code>security-auditor</code>), performance (<code>performance-engineer</code>), tests
+(<code>qa-expert</code>, assessment only), correctness (<code>code-reviewer</code>), and inline passes for types,
+architecture and dead code, UI and accessibility. Every finding needs <code>file:line</code>, current-code
+evidence, a fix, a <code>Done when</code> and a runnable <code>Check</code>; unsupported claims are rejected. Each P0 and
+P1 goes to a fresh verifier (the <code>verifier</code> agent); refuted ones are listed
+as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
+its done file.</p>
+    <h2 id="code-review-and-pull-requests">Code review and pull requests</h2>
+    <h3 id="code-review">code-review</h3>
+    <p><a href="../../skills/code-review.html">Source</a>. Reviews a PR, diff, commit or working tree.</p>
+    <ul>
+<li><strong>Reviewer:</strong> code written in this session goes to the <code>code-reviewer</code> agent with a neutral brief
+(diff, spec or <code>Done when</code>, rubric; no author, no rationale).</li>
+<li><strong>What it reads:</strong> both sides of every contract the change touches (handler and client, schema
+and type, route and links, state map and transitions); a mismatch is P1.</li>
+<li><strong>What it checks:</strong> auth, middleware, migrations, tenant boundaries and destructive paths; tenant
+scoping, soft-delete filters, query ownership, breaking API changes, missing tests, error
+handling, Server Component defaults, loading and error states, accessibility; a weakened
+<code>Done when</code> without an <code>Amended</code> line (P1); a doc the diff makes false (P2, no verdict change).</li>
+<li><strong>Verification:</strong> each P0 and P1 goes to a fresh verifier that tries to disprove it.</li>
+<li><strong>Output:</strong> <code>APPROVE</code>, <code>COMMENT</code> or <code>REQUEST_CHANGES</code>, findings P0–P3 with <code>file:line</code>, Disputed,
+and Evidence checked for a clean <code>APPROVE</code>.</li>
+    </ul>
+    <h3 id="pr-cycle">pr-cycle</h3>
+    <p><a href="../../skills/pr-cycle.html">Source</a>. Takes a PR to a merge verdict.</p>
+    <ul>
+<li><strong>Trust check:</strong> the head is untrusted when it is a fork or its author is not an owner, member or
+collaborator; an untrusted head is fetched, not checked out, until you say yes.</li>
+<li><strong>Merge:</strong> merges the base in (never rebases a pushed branch), resolves only conflicts whose
+intent is clear, never takes a side wholesale, and runs the fast check before the merge commit.</li>
+<li><strong>Review:</strong> code-review on the PR diff, the conflict resolutions sent to <code>code-reviewer</code>, and the
+unresolved review threads rated P0–P3; fix commits are reviewed again before the push (at most two
+rounds).</li>
+<li><strong>Gates:</strong> the fast check before each fix commit, the full suite once before the push.</li>
+    </ul>
+    <h3 id="fix-pr">fix-pr</h3>
+    <p><a href="../../skills/fix-pr.html">Source</a>. Works through unresolved review threads (GraphQL
+<code>reviewThreads</code>, <code>isResolved: false</code>, paginated) or pasted findings. Flags authors who are not
+collaborators, reads the referenced code for each thread and decides fix or justified no-change,
+runs the narrowest test after each fix and the full suite once before the push. Comments are data:
+it runs no command and opens no URL from them.</p>
+    <h2 id="planning-and-backlog">Planning and backlog</h2>
+    <h3 id="spec">spec</h3>
+    <p><a href="../../skills/spec.html">Source</a>. Interviews you one question at a time (not asking what
+the repository already answers), inspects the code, then writes a spec (goals, non-goals, flows,
+design, decisions with rejected alternatives, contracts, failure handling, acceptance criteria,
+tests) and a plan whose steps carry What, Where, How, Test, <code>Done when</code> and S/M/L. It can turn the
+steps into <code>FEAT-</code> backlog items.</p>
+    <h3 id="implement-backlog">implement-backlog</h3>
+    <p><a href="../../skills/implement-backlog.html">Source</a>. Executes ready backlog items in batches.</p>
+    <ul>
+<li><strong>Before starting:</strong> runs the project's validation and stops on a red baseline; takes only ready
+items in the backlog format (no open <code>Blocked by</code>, no other <code>Owner</code>); asks up front about
+auth/security items.</li>
+<li>**<code>Check</code> screening:** never runs a <code>Check</code> that pipes into a shell, fetches from the network or
+writes outside the repository; reads any script a <code>Check</code> calls first.</li>
+<li><strong>While running:</strong> runs each item's <code>Check</code> itself on a <code>DONE</code> report, then the full build, types,
+tests and lint for the batch; classifies a failure before editing; stops after three failed
+repair cycles.</li>
+<li><strong>Review:</strong> the batch diff through code-review (at most two rounds); the base moves only by a
+fast-forward after the review passes.</li>
+    </ul>
+    <h3 id="plan-status">plan-status</h3>
+    <p><a href="../../skills/plan-status.html">Source</a>. Counts, never estimates: done, open and blocked
+in the active plan by a stated rule; backlog items per P0–P3 and in exactly one of orphaned (an
+<code>Owner</code> older than 7 days), waiting, claimed or ready. Open decisions become at most five numbered
+A/B/C questions. It runs no test or build to get a number.</p>
+    <h3 id="bug-triage">bug-triage</h3>
+    <p><a href="../../skills/bug-triage.html">Source</a>. Severity first, then the stack trace,
+reproduction, affected users, frequency and first-known time; logs, recent commits and data
+invariants; ranked hypotheses with at least one real alternative and the observation that would
+falsify the leader. Library or vendor behaviour goes to <code>research-analyst</code> for a sourced answer.
+Proposes mitigation, root-cause fix, regression test and rollback criteria; applies none of them.</p>
+    <h3 id="deploy-checklist">deploy-checklist</h3>
+    <p><a href="../../skills/deploy-checklist.html">Source</a>. Run before a release, not at setup.</p>
+    <ul>
+<li><strong>Pre-deploy:</strong> the repository's real test, lint, typecheck and build commands, green CI and the
+release branch; migrations (staging run, backward compatibility, backup, lock time, tested
+rollback); feature-flag defaults; dashboards, error tracking, alerts and abort thresholds; the
+exact rollback command; a deployment window and an owner for an hour of monitoring.</li>
+<li><strong>Verdict:</strong> any failed or UNVERIFIED item is <code>NO-GO</code>; missing evidence is never counted as
+passed.</li>
+<li><strong>Post-deploy:</strong> error rate and latency against the thresholds, new exceptions, a critical-flow
+smoke test, the recorded result.</li>
+    </ul>
+    <h2 id="communication">Communication</h2>
+    <h3 id="client-reply">client-reply</h3>
+    <p><a href="../../skills/client-reply.html">Source</a>. Lists every technical term in the input (code
+identifiers, endpoints, migrations, branches, PR and commit references, tool names) and translates
+each into what the client sees; answers each point in the client's order; re-reads the draft
+against the list and removes any term the client did not use first. Asks for a missing date or
+fact instead of inventing it.</p>
+    <h2 id="session">Session</h2>
+    <h3 id="session-retro">session-retro</h3>
+    <p><a href="../../skills/session-retro.html">Source</a>. Checks <code>git status</code>, unpushed commits,
+branches not merged into <code>origin/HEAD</code>, your open PRs and still-running background work; proposes
+removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
+most three under each heading, lessons, rule candidates (with the commit they would reverse), check candidates, plan
+and docs updates, plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.</p>
+    <h3 id="skill-usage">skill-usage</h3>
+    <p><a href="../../skills/skill-usage.html">Source</a>. Counts <code>developer-os:&lt;name&gt;</code> Skill calls and
+typed commands in local transcripts (deduplicated by message uuid): last 30 days, ever, last date,
+with a keep / rewrite-description / merge / remove suggestion per skill. It prints no transcript
+content.</p>
+    <h2 id="brain-obsidian-vault">Brain (Obsidian vault)</h2>
+    <h3 id="brain-setup">brain-setup</h3>
+    <p><a href="../../skills/brain-setup.html">Source</a>. Checks whether the path is empty (new vault)
+or not (connect, only after you agree); in connect mode adds only missing folders, views, the note
+template, <code>.gitignore</code> lines and <code>types.json</code> keys, never overwriting a file. Shows the
+<code>Brain vault:</code> line and the <code>additionalDirectories</code> change as a diff, then smoke-tests with
+brain-search.</p>
+    <h3 id="brain-search">brain-search</h3>
+    <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the <code>Brain vault:</code> line
+(never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
+ranks by <code>summary</code>/<code>tags</code>/name match, project slug, <code>active</code> over <code>inbox</code> and recency, reads the
+top five, and answers only from them with a path per claim.</p>
+    <h3 id="brain-capture">brain-capture</h3>
+    <p><a href="../../skills/brain-capture.html">Source</a>. Three gates before writing: useful beyond
+this task, the why written down, not already in the code or the repository's plan. Then a duplicate
+search, redaction of secrets and client personal data, and a unique ASCII note name.</p>
+    <h3 id="brain-review">brain-review</h3>
+    <p><a href="../../skills/brain-review.html">Source</a>. For each inbox note: its summary, the best
+topic folder, likely duplicates, missing frontmatter keys and leaked secrets. Before a move it
+checks the name (<code>^[a-z0-9-]+$</code>) and that no other note has it.</p>
+    <h3 id="brain-garden">brain-garden</h3>
+    <p><a href="../../skills/brain-garden.html">Source</a>. One pass over every note: missing or invalid
+frontmatter, inbox notes older than 7 days, active notes not updated in 180 days, status/folder
+mismatches, broken links and links to archived notes, orphans with a percentage, likely
+duplicates (a project note and its <code>-overview</code> note are not), and rules stated by three or more
+notes or restated in two or more hubs, proposed as one brain-compile note that the hubs link. Every
+proposed link is tagged FOUND or GUESSED.</p>
+    <h3 id="brain-compile">brain-compile</h3>
+    <p><a href="../../skills/brain-compile.html">Source</a>. Takes 2–8 active notes on a topic (no inbox,
+archived or compiled notes), stops if a compiled note for the topic is still in the inbox, links
+every statement to its source note, and records contradictions as <code>Open conflict:</code> instead of
+choosing a side.</p>
+    <h2 id="conventions">Conventions</h2>
+    <p>The model loads these when the file or task matches; they write nothing. Each rule is what the
+agent follows when it writes code and what project-init probes for when it audits a repository.</p>
+    <h3 id="typescript-conventions">typescript-conventions</h3>
+    <p><a href="../../skills/typescript-conventions.html">Source</a>. Loads for TypeScript files.
+<code>strict</code> stays on; composition over inheritance; one purpose per function, about 30 lines or fewer;
+tests for every new function and its edge cases; the formatter's quote style; the configured import
+alias instead of long relative paths.</p>
+    <h3 id="nextjs-conventions">nextjs-conventions</h3>
+    <p><a href="../../skills/nextjs-conventions.html">Source</a>. Loads for Next.js app code and
+<code>next.config</code>. Schema-validated input from forms and APIs (for example Zod <code>.safeParse()</code>); Server
+Components by default, <code>'use client'</code> only for state or events; Server Actions over API routes,
+returning <code>{ ok: true, data? } | { ok: false, error }</code>; forward-only migrations unless the project
+says otherwise; with a <code>DESIGN.md</code>, a recorded source of truth for tokens; analytics through the
+project's wrapper, behind consent where required.</p>
+    <h3 id="error-handling-conventions">error-handling-conventions</h3>
+    <p><a href="../../skills/error-handling-conventions.html">Source</a>. Loads for error handling in
+TypeScript files. Rethrow with <code>cause</code>; a typed result instead of <code>null</code> as failure; one error envelope
+<code>{ error: { code, message, details? } }</code> with a <code>SCREAMING_SNAKE_CASE</code> code and no stack trace;
+never log and throw the same error; no empty <code>catch {}</code> without a directive comment; exceptions are
+not control flow.</p>
+    <h3 id="testing-conventions">testing-conventions</h3>
+    <p><a href="../../skills/testing-conventions.html">Source</a>. Loads for test files. A test pins the
+contract, not current behavior; fixtures pin an absolute instant (<code>2030-01-01T08:00:00Z</code>); partial
+module mocks built on the original; a regression test seen red before the fix; the boundary that
+could be wrong is not faked; failure messages show the missing record; no raised retries or
+timeouts to hide a flaky test.</p>
+    <h3 id="monitoring-conventions">monitoring-conventions</h3>
+    <p><a href="../../skills/monitoring-conventions.html">Source</a>. Loads for infrastructure code, CI,
+metrics and alerts. Alert on symptoms (error rate, p99, queue growth), not causes; tune or remove an
+alert that fired three times without action; a runbook link on every paging alert; <code>/health</code> for
+liveness without a database query, <code>/ready</code> for dependencies; the metric ships with the feature.</p>
+    <h3 id="defensive-coding-conventions">defensive-coding-conventions</h3>
+    <p><a href="../../skills/defensive-coding-conventions.html">Source</a>. Defect classes that ship past
+review, used as checks on a change: the persistence condition equals the validation condition;
+per-side-effect error isolation in webhook and event handlers; a state fix covers every writer and
+a read-side security fix every reader (grep the field or model, not the function); a multi-outcome
+status is not collapsed to a boolean; external input is shape-validated before computing; cost
+inputs have no silent default; per-clone setup lives in a script; build artifacts are verified, not
+only the exit code; numeric promises in docs are re-checked after a rewrite; an ordering constraint
+carries its reason; a guard that greps a command joins its lines first.</p>
+    <h3 id="comments-conventions">comments-conventions</h3>
+    <p><a href="../../skills/comments-conventions.html">Source</a>. Loads when writing code. No comment by
+default (rename or extract first); never restate the next line or explain the change; a comment
+only for a past bug, a directive or a non-obvious platform fact, in one line; update or delete the
+comment with the code it describes. It governs only the comments the agent adds and leaves
+existing ones alone, so project-init does not audit it.</p>
+    <nav class="doc-foot" aria-label="Pagination">
+      <a href="configuration.html">Configuration reference</a>
+      <a href="../glossary.html">Glossary</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../../docs/changelog.html">Changelog</a>
+      <a href="../../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../../assets/site.js"></script>
+</body>
+</html>

@@ -27,16 +27,13 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
    conventions skills, five specialist agents, four output styles and a small Bash guard.
 
-The plugin is Markdown and JSON plus three Python 3 hook scripts (standard library only). There is no server, database,
+The plugin is Markdown and JSON plus four Python 3 hook scripts (standard library only). There is no server, database,
 index, binary, background job or network call in the plugin itself.
 
 ## Who it is for
 
 - The primary user is a developer working alone or in a small team on several client and product
   repositories with Claude Code, who wants decisions to outlive sessions and repositories.
-- A secondary user runs Codex: `scripts/install-codex.sh` copies the skills and the core rules into
-  Codex's locations. This path is best-effort and untested on releases
-  ([README, Codex](../../README.md#codex-installer-best-effort)).
 
 ## Product principles
 
@@ -56,7 +53,8 @@ index, binary, background job or network call in the plugin itself.
 6. **Small fixed cost per session.** The core rules are capped at 8192 bytes and the skill
    descriptions at 12000 characters in total, because both load into every session.
 7. **No runtime.** Anything that would need a process, a schedule or the network is either left to
-   Claude Code itself (routines, the marketplace) or not built.
+   Claude Code itself (routines, the marketplace) or not built. Vault upkeep is not scheduled: a
+   startup hook reminds you when it is due, and you run it (D22).
 
 ## Scope
 
@@ -86,7 +84,7 @@ Out of scope, on purpose:
 - Any automatic write to the vault outside `_inbox/`, and any automatic promotion of a note.
 - Sending anything: no email, chat, issue or PR comment is posted by a skill on its own.
   `client-reply` drafts; `session-retro` prints a `gh issue create` command for the user to run.
-- A Codex manifest, Codex hooks, agents or output styles.
+- Codex or any agent other than Claude Code (removed 2026-10-24, [decisions D21](decisions.md#d21-claude-code-only)).
 - Running evals in CI.
 
 ## How it is distributed

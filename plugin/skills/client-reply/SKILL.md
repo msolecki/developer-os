@@ -2,7 +2,7 @@
 name: client-reply
 description: Draft a reply to a client's feedback round or business question in plain, non-technical business language, in the user's language and voice. Drafts only and never sends. Use when the user asks to answer a client or turn technical notes into a message for one, for example "reply to the client", "write to the client", "put this in plain language", "answer the feedback".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Client reply

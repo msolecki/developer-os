@@ -2,7 +2,7 @@
 name: monitoring-conventions
 description: Alert on symptoms, prevent alert fatigue, link runbooks, and separate health from readiness checks. Use when editing infrastructure code (CDK, Terraform, serverless config, CI workflows) or adding metrics and alerts.
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Monitoring and alerting rules

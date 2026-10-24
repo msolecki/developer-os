@@ -11,7 +11,7 @@ promise it makes.
 
 ## Hooks fail open
 
-- **Where:** `plugin/hooks/guard.py`, `plugin/hooks/capture-nudge.py`, `plugin/hooks/state-card.py`
+- **Where:** `plugin/hooks/guard.py`, `plugin/hooks/capture-nudge.py`, `plugin/hooks/state-card.py`, `plugin/hooks/notices.py`
 - **Looks like:** a guard that silently lets through anything it cannot parse.
 - **Why it is deliberate:** the hooks run in every session of every user; a parse bug must never
   block work. The guard is a reminder, not a security boundary ([decisions D6](product/decisions.md#d6-hooks-ask-never-deny-and-fail-open)).
@@ -57,15 +57,6 @@ promise it makes.
 - **Why it is deliberate:** `${CLAUDE_PLUGIN_ROOT}` may be substituted in the skill text, but it is
   not set in the Bash environment, so commands must use an absolute path.
 - **Breaks if changed:** `cp -R "$CLAUDE_PLUGIN_ROOT/vault-template/."` copies from `/vault-template`.
-
-## The Codex installer copies skills instead of symlinking them
-
-- **Where:** `scripts/install-codex.sh`
-- **Looks like:** stale copies that a symlink would avoid.
-- **Why it is deliberate:** Codex lists skills within 8000 characters by default and the full
-  descriptions are over 10,000; a copy carries a short description, a symlink cannot
-  ([decisions D19](product/decisions.md#d19-a-codex-installer-that-copies-not-symlinks)).
-- **Breaks if changed:** some skills silently drop out of Codex's skill list.
 
 ## Eval fixtures switch off the global excludes file
 
