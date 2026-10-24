@@ -109,7 +109,7 @@ without it the core rules still load and the other hooks do not run.
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
-- **Three hooks:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction), `Stop` suggests a session wrap-up
+- **Four hooks on three events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction), `Stop` suggests a session wrap-up
   once per long session, `PreToolUse` asks before installs, force pushes and hook bypasses (see above).
 - **Evals:** behavior checks for the brain skills, code-review, session-retro and the skill
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
@@ -147,7 +147,7 @@ see [Claude-only features](docs/workflow.md#claude-only-features).
 
 - [Landing page](https://msolecki.github.io/developer-os/): the public documentation site ([source](site/index.html)), published to GitHub Pages by `.github/workflows/pages.yml`.
 - [Documentation index](docs/index.md): product overview, functional specification, decisions,
-  architecture, hooks and configuration reference, development guide, pitfalls, current state.
+  architecture, hooks and configuration reference, development guide, pitfalls, glossary.
 - [How to work: brain + code](docs/workflow.md): the workflow, the vault layout, privacy.
 - [Away from the desk](docs/workflow.md#away-from-the-desk-optional): capture from your phone and a
   weekly vault brief with Claude Code routines.

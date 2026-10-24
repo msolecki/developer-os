@@ -77,7 +77,8 @@ outside git print nothing, so the session has the rules alone.
 ```
 
 or prints nothing and exits 0, which leaves Claude Code's normal permission flow in charge. It never
-answers `deny`. In `claude -p`, an `ask` resolves to a denial (per the README; not re-verified in the 2026-10-15 review).
+answers `deny`. In `claude -p`, an `ask` resolves to a denial: the call is listed under `permission_denials` and the
+command does not run, even when `--allowedTools Bash` allows it.
 
 | Category | Asks for | Passes |
 |---|---|---|

@@ -28,7 +28,7 @@ plugin/                           the installed payload
 templates/project/                project template (not installed)
 scripts/install-codex.sh          Codex installer, run by hand (not installed)
 evals/                            claude plugin eval cases (not installed)
-tests/*.test.sh                   hook tests
+tests/*.test.sh                   script tests: hooks, check.sh, Codex installer, skill-usage block
 .agnix.toml                       agnix lint settings for CI
 scripts/check.sh                  the repository suite, also run by CI
 docs/                             this documentation; docs/plans/ is git-ignored
@@ -46,11 +46,11 @@ What occupies the context of a session, and when:
 |---|---|---|---|
 | `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
-| Skill names and descriptions | Every session, by Claude Code's skill listing | 10065 characters for 28 skills | 80–1024 each, 12000 total |
+| Skill names and descriptions | Every session, by Claude Code's skill listing | 10062 characters for 28 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
-| A skill's body | When the model or the user invokes it | 0.7–8.8 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
-| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–3.9 KB per file | — |
-| An output style | When selected; replaces the default style but keeps coding instructions | 0.6–1.8 KB | — |
+| A skill's body | When the model or the user invokes it | 0.8–10.8 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
+| An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 1.9–4.0 KB per file | — |
+| An output style | When selected; replaces the default style but keeps coding instructions | 0.6–2.0 KB | — |
 
 The fixed cost per session is the core rules plus the listings. Everything else is paid only on
 use, which is why conventions live in skills and not in the core rules.

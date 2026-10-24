@@ -110,7 +110,7 @@ prints nothing outside `compact`/`resume`/`fork`, that the card holds the plan a
 safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds command fixtures to `guard.py` and expects `ask` or silence;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code, the JSON output and the message;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
-stage's message; it runs the whole check about twenty times (around 40 s), so `scripts/check.sh` runs it
+stage's message; it runs the whole check about forty times (around two minutes), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
 `tests/install-codex.test.sh` runs the Codex installer against a temporary `HOME` (dry run,
 idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the Codex

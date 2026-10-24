@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@bb84b62afc59">
+<meta name="dos-source" content="docs/reference/hooks.md@94c4972e3f3e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -104,7 +104,8 @@ Worktrees:
     <p><strong>Decision:</strong> prints one line and exits 0:</p>
 <pre><code>{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"&lt;reason&gt;"}}</code></pre>
     <p>or prints nothing and exits 0, which leaves Claude Code's normal permission flow in charge. It never
-    answers <code>deny</code>. In <code>claude -p</code>, an <code>ask</code> resolves to a denial (per the README; not re-verified in the 2026-10-15 review).</p>
+    answers <code>deny</code>. In <code>claude -p</code>, an <code>ask</code> resolves to a denial: the call is listed under <code>permission_denials</code> and the
+    command does not run, even when <code>--allowedTools Bash</code> allows it.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th scope="col">Category</th><th scope="col">Asks for</th><th scope="col">Passes</th></tr></thead>

@@ -313,7 +313,7 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
   sitemap.tally.each { |u, n| errs << "site: site/sitemap.xml: #{u} is listed #{n} times" if n > 1 }
   abort errs.uniq.join("\n") unless errs.empty?'
 
-# tests/check.test.sh runs the whole check about twenty times (about 40 s), so it runs only in CI or with CI=1.
+# tests/check.test.sh runs the whole check about forty times (about two minutes), so it runs only in CI or with CI=1.
 for t in tests/*.test.sh; do
   [ -e "$t" ] || continue
   [ "$t" != tests/check.test.sh ] || [ -n "${CI:-}" ] || continue

@@ -7,8 +7,7 @@ last-verified: 2026-10-15
 # developer-os — documentation index
 
 developer-os is a Markdown-only Claude Code plugin. These documents describe the plugin as it is in
-this repository; they replace the documentation of the earlier CLI product, which was removed on
-2026-10-14 (history at the git tag `archive/cli-v0`).
+this repository.
 
 Each row routes a task to the one document to read first. Documents link to the source file that
 owns a behavior (a `SKILL.md`, a hook script, `scripts/check.sh`) instead of restating it; when a

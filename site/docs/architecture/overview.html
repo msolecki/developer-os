@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@681892228c80">
+<meta name="dos-source" content="docs/architecture/overview.md@630545cd1117">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -66,7 +66,7 @@ plugin/                           the installed payload
 templates/project/                project template (not installed)
 scripts/install-codex.sh          Codex installer, run by hand (not installed)
 evals/                            claude plugin eval cases (not installed)
-tests/*.test.sh                   hook tests
+tests/*.test.sh                   script tests: hooks, check.sh, Codex installer, skill-usage block
 .agnix.toml                       agnix lint settings for CI
 scripts/check.sh                  the repository suite, also run by CI
 docs/                             this documentation; docs/plans/ is git-ignored
@@ -81,11 +81,11 @@ site/                             public documentation site, published by .githu
         <tbody>
           <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>Just under the limit</td><td>8192 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
           <tr><td>State card</td><td>After a compaction, resume or fork inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
-          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing</td><td>10065 characters for 28 skills</td><td>80–1024 each, 12000 total</td></tr>
+          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing</td><td>10062 characters for 28 skills</td><td>80–1024 each, 12000 total</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
-          <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.7–8.8 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
-          <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–3.9 KB per file</td><td>—</td></tr>
-          <tr><td>An output style</td><td>When selected; replaces the default style but keeps coding instructions</td><td>0.6–1.8 KB</td><td>—</td></tr>
+          <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.8–10.8 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
+          <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>1.9–4.0 KB per file</td><td>—</td></tr>
+          <tr><td>An output style</td><td>When selected; replaces the default style but keeps coding instructions</td><td>0.6–2.0 KB</td><td>—</td></tr>
         </tbody>
       </table>
     </div>

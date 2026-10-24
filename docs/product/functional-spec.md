@@ -18,10 +18,10 @@ card ([reference/hooks.md](../reference/hooks.md#sessionstart--core-rules-and-st
 
 | Section | What it governs |
 |---|---|
-| Security and change constraints | No auth/middleware change unless asked; ask before dependency installs; never delete or skip tests to pass; two validation tiers (fast check before each commit, full suite before push/PR); verify subagent work with `git status`/`git diff`; first-session procedure for external repositories; newline normalization in hooks you write |
+| Security and change constraints | No auth/middleware change unless asked; ask before dependency installs; never delete or skip tests to pass; two validation tiers (fast check before each commit, full suite before push/PR); verify subagent work with `git status`/`git diff`; first-session procedure for external repositories |
 | Workflow | Stop condition; A/B/C questions for open decisions; a plan for changes over 50 lines (git-ignored, default `docs/plans/<YYYY-MM-DD-task>.md`, deleted when done); What/Where/How/Test plan steps; reviewer differs from author; handoff contents; brain-search before large tasks when a `Brain vault:` line exists; compaction preserves files, test commands, objective and language, and task state lives in `docs/plans/.devos-state.md`; evidence for "works"; one worktree per parallel agent; conventions live in skills |
 | Communication | User's language in conversation, English in the repository; plain language for clients; Problem → Cause → Solution → Test; closing **Done / Not done / Needs you** block; ASAP mode; self-correction signals; boundaries |
-| Stack preferences | Lockfile's package manager; existing stack; TypeScript `strict`. Meant to be overridden in the user's own `CLAUDE.md` |
+| Stack preferences | Lockfile's package manager; existing stack; existing test runner. Meant to be overridden in the user's own `CLAUDE.md` |
 
 A user overrides any rule by stating the override in `~/.claude/CLAUDE.md`, which loads alongside.
 

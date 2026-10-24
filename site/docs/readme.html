@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@c8da994db42f">
+<meta name="dos-source" content="README.md@c8c9ac881dff">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -133,7 +133,7 @@ nextjs-conventions, testing-conventions, typescript-conventions.</li>
 <li><strong>Agents:</strong> code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.</li>
 <li><strong>Output styles:</strong> architect, debug, direct-objective, tdd-enforcer. Select one with
 <code>/output-style</code>, or set <code>"outputStyle": "developer-os:architect"</code> in settings (the plugin prefix is required).</li>
-<li><strong>Three hooks:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction), <code>Stop</code> suggests a session wrap-up
+<li><strong>Four hooks on three events:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction), <code>Stop</code> suggests a session wrap-up
 once per long session, <code>PreToolUse</code> asks before installs, force pushes and hook bypasses (see above).</li>
 <li><strong>Evals:</strong> behavior checks for the brain skills, code-review, session-retro and the skill
 triggers in <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md"><code>evals/</code></a>, run by hand with <code>claude plugin eval</code>. Not part of the
@@ -166,7 +166,7 @@ see <a href="workflow.html#claude-only-features">Claude-only features</a>.</p>
     <ul>
 <li><a href="https://msolecki.github.io/developer-os/">Landing page</a>: the public documentation site (<a href="https://github.com/msolecki/developer-os/blob/development/site/index.html">source</a>), published to GitHub Pages by <code>.github/workflows/pages.yml</code>.</li>
 <li><a href="index.html">Documentation index</a>: product overview, functional specification, decisions,
-architecture, hooks and configuration reference, development guide, pitfalls, current state.</li>
+architecture, hooks and configuration reference, development guide, pitfalls, glossary.</li>
 <li><a href="workflow.html">How to work: brain + code</a>: the workflow, the vault layout, privacy.</li>
 <li><a href="workflow.html#away-from-the-desk-optional">Away from the desk</a>: capture from your phone and a
 weekly vault brief with Claude Code routines.</li>
