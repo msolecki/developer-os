@@ -171,8 +171,8 @@ vault trustworthy, so it stays human.
 
 Ask for **brain-garden**; the startup notice reminds you when the last run in `_reports/garden-log.md` is 30 days old. It reports stale notes (also visible in `_views/Stale.base`: active notes
 not updated in 180 days), `_inbox/` notes older than 7 days, notes whose folder and `status`
-disagree, broken links, duplicates and notes without a summary. It proposes changes and applies
-them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
+disagree, broken links, duplicates, rules restated across several notes and notes without a
+summary. It proposes changes and applies them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
 bumping `updated`.
 
 Links resolve by note name, case-insensitively. A link to an archived note (in `_archive/` or with
@@ -186,8 +186,10 @@ only one by one. With your consent, brain-garden appends one line per run to
 `_reports/garden-log.md`: `YYYY-MM-DD notes N, orphans X (Y%), inbox Z`.
 
 When several notes circle the same topic, **brain-compile** drafts one consolidated note from them,
-also into the inbox for your review. Only `active` notes are sources; the compiled note lists them in
-`sources:` as quoted links (`"[[note-name]]"`).
+also into the inbox for your review. brain-garden proposes it for a rule that three or more notes,
+or two or more hubs, restate; once the compiled note is active, the next garden run proposes linking
+it from the hubs that still restate the rule. Only `active` notes are sources; the compiled note
+lists them in `sources:` as quoted links (`"[[note-name]]"`).
 
 ## Away from the desk (optional)
 

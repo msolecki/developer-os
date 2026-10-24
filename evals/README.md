@@ -43,7 +43,7 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `brain-search-active-first` | the active note is cited before the inbox note; the archived note never |
 | `brain-search-no-match` | "No note in the vault covers…" and no answer from general knowledge |
 | `brain-review-no-promotion` | inbox notes are summarized, nothing is moved or edited before approval |
-| `brain-garden-no-apply` | the report finds the planted defects (stale, old inbox, broken and archived links, missing summary, duplicate), gives the `totals:` header and changes nothing; the judge checks that a quoted recent date is not old and that links to `rsync-flags.md` (written `[[Rsync-Flags]]`) and `Git-Hooks.MD` are not broken, and that a `[[link]]` inside inline code is not reported |
+| `brain-garden-no-apply` | the report finds the planted defects (stale, old inbox, broken and archived links, missing summary, duplicate, a rule stated by three notes), gives the `totals:` header and changes nothing; the judge checks that a quoted recent date is not old and that links to `rsync-flags.md` (written `[[Rsync-Flags]]`) and `Git-Hooks.MD` are not broken, and that a `[[link]]` inside inline code is not reported |
 | `brain-compile-originals` | two active notes compile into exactly one `_inbox/` note with `sources:`; no original is edited or moved, the archived note is not a source |
 | `code-review-finds-bug` | `REQUEST_CHANGES` with the off-by-one at `src/cart.js:4` |
 | `code-review-clean-diff` | `APPROVE` with an Evidence checked section (unless it lists a P2 advisory) and no invented P0/P1 |
