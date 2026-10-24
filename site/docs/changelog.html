@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@282170f2fe3b">
+<meta name="dos-source" content="CHANGELOG.md@6d1720d3471c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -51,11 +51,20 @@
     <h2 id="unreleased">[Unreleased]</h2>
     <h3 id="unreleased-added">Added</h3>
     <ul>
+<li>A <code>SessionStart</code> hook on new sessions, <code>notices.py</code>, shows one-line notices when due: the version and a
+link to the changelog page after an install or update, inbox notes older than 7 days (at most weekly)
+and no brain-garden run in 30 days (at most monthly). It runs nothing itself;
+<code>DEVELOPER_OS_NOTICES=off</code> turns it off. Decision D22.</li>
 <li>project-init adopts developer-os in a repository in one pass: it detects the stack, runs
 project-baseline, docs-sync and instruction-review up to their reports, audits the code against
 each applicable conventions skill, and asks once for the whole numbered list.</li>
 <li><code>docs/reference/skills.md</code> says, for every skill, what it checks and how.</li>
 <li>The eval case <code>project-init-no-write</code>.</li>
+    </ul>
+    <h3 id="unreleased-changed">Changed</h3>
+    <ul>
+<li>The workflow, README and brain-setup say plainly that vault upkeep does not run on its own, and that
+the weekly brief routine reports but does not garden.</li>
     </ul>
     <h3 id="unreleased-removed">Removed</h3>
     <ul>

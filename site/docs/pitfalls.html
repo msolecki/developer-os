@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/pitfalls.md@a49fd5be4fd6">
+<meta name="dos-source" content="docs/pitfalls.md@824a389c943b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -51,7 +51,7 @@
     promise it makes.</p>
     <h2 id="hooks-fail-open">Hooks fail open</h2>
     <ul>
-      <li><strong>Where:</strong> <code>plugin/hooks/guard.py</code>, <code>plugin/hooks/capture-nudge.py</code>, <code>plugin/hooks/state-card.py</code></li>
+      <li><strong>Where:</strong> <code>plugin/hooks/guard.py</code>, <code>plugin/hooks/capture-nudge.py</code>, <code>plugin/hooks/state-card.py</code>, <code>plugin/hooks/notices.py</code></li>
       <li><strong>Looks like:</strong> a guard that silently lets through anything it cannot parse.</li>
       <li><strong>Why it is deliberate:</strong> the hooks run in every session of every user; a parse bug must never block work. The guard is a reminder, not a security boundary (<a href="product/decisions.html#d6-hooks-ask-never-deny-and-fail-open">decisions D6</a>).</li>
       <li><strong>Breaks if changed:</strong> a malformed hook input or an unexpected exception blocks every Bash call.</li>

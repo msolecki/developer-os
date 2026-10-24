@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@07a98ad30e38">
+<meta name="dos-source" content="docs/development.md@0d74c8536689">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -116,6 +116,7 @@
     prints nothing outside <code>compact</code>/<code>resume</code>, that the card holds the plan and state file only when they are
     safe to show, and that the card is cut to its cap; <code>tests/guard.test.sh</code> feeds command fixtures to <code>guard.py</code> and expects <code>ask</code> or silence;
     <code>tests/capture-nudge.test.sh</code> builds synthetic transcripts and checks the exit code, the JSON output and the message;
+    <code>tests/notices.test.sh</code> runs <code>notices.py</code> with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's <code>CLAUDE.md</code> is ignored and that no note name is printed;
     <code>tests/check.test.sh</code> breaks a copy of the repository once per stage it covers and expects that
     stage's message; it runs the whole check about twenty times (around 40 s), so <code>scripts/check.sh</code> runs it
     only when <code>CI</code> is set (GitHub Actions sets it): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;

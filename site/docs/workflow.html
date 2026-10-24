@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@d10d9124f608">
+<meta name="dos-source" content="docs/workflow.md@4b48b1ad10bb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -78,6 +78,8 @@ rules run brain-search only when the line exists.</li>
 later). In Settings, Core plugins: enable <strong>Bases</strong> and <strong>Templates</strong>; set the Templates folder
 to <code>templates</code>.</li>
 <li>Start a session and ask: "brain-search webhooks". It should find the example inbox note.</li>
+<li>Put review and garden in your calendar, or rely on the reminders: nothing in the vault is
+maintained on its own (see <a href="#the-daily-loop">The daily loop</a>).</li>
 </ol>
     <p>For each project repository, copy the whole of <code>templates/project/</code> (<code>AGENTS.md</code>, <code>CLAUDE.md</code>,
 <code>_Context.md</code>, <code>DESIGN.md</code>, <code>TODO.md</code>, <code>.gitignore</code>, <code>docs/</code>) into its root and fill in <code>AGENTS.md</code>
@@ -134,6 +136,13 @@ template defaults to <code>status: active</code> for notes you write yourself; t
 <code>## Decision</code> is what you chose; in a lesson, it states the lesson. Compiled notes use the same four
 headings.</p>
     <h2 id="the-daily-loop">The daily loop</h2>
+    <p>Nothing in this loop runs on its own: you start every skill below. Vault upkeep (step 5 weekly, step 6
+monthly) is yours to schedule. The plugin only reminds you: at the start of a new session, when inbox
+notes are older than 7 days (at most once a week) or brain-garden has not run for 30 days (at most
+once a month), a one-line notice suggests the skill. After an install or update, the same hook shows the
+version and a link to the <a href="changelog.html">changelog</a>.
+Turn the notices off with <code>DEVELOPER_OS_NOTICES=off</code>; details in
+<a href="reference/hooks.html#sessionstart-on-startup--noticespy">hooks.md</a>.</p>
     <h3 id="1-start-a-task-search-first">1. Start a task: search first</h3>
     <p>Before planning anything non-trivial, ask the agent to run <strong>brain-search</strong> with the topic, the
 project slug, or the error message. It reads <code>active</code> notes first and tells you when a hit is still
@@ -178,7 +187,7 @@ and the views, but recoverable. brain-garden follows the same rule.</p>
     <p>brain-review proposes; it never promotes a note without you. Approval is the one step that keeps the
 vault trustworthy, so it stays human.</p>
     <h3 id="6-monthly-garden">6. Monthly: garden</h3>
-    <p>Ask for <strong>brain-garden</strong>. It reports stale notes (also visible in <code>_views/Stale.base</code>: active notes
+    <p>Ask for <strong>brain-garden</strong>; the startup notice reminds you when the last run in <code>_reports/garden-log.md</code> is 30 days old. It reports stale notes (also visible in <code>_views/Stale.base</code>: active notes
 not updated in 180 days), <code>_inbox/</code> notes older than 7 days, notes whose folder and <code>status</code>
 disagree, broken links, duplicates and notes without a summary. It proposes changes and applies
 them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
@@ -197,7 +206,9 @@ also into the inbox for your review. Only <code>active</code> notes are sources;
     <h2 id="away-from-the-desk-optional">Away from the desk (optional)</h2>
     <p>Two Claude Code <a href="https://code.claude.com/docs/en/routines">routines</a> extend the loop: a note
 dictated on your phone lands in <code>_inbox/</code>, and a weekly brief tells you how the vault is doing.
-Nothing in the plugin calls the network; you set both up in the web UI.</p>
+Nothing in the plugin calls the network or creates a routine; you set both up in the web UI. Neither
+maintains the vault: a cloud session does not load the plugin, so brain-review and brain-garden still
+run at your desk.</p>
     <p>Before you start:</p>
     <ul>
 <li>The vault is a <strong>private</strong> GitHub repository, with the vault at its root or in a folder such as
@@ -271,7 +282,7 @@ is zero. If posting fails, write the same text to _reports/brief.md, commit it a
 the default branch.</code></pre></li>
 <li><p>Click <strong>Run now</strong> once: the issue gets one comment with the four numbers.</p></li>
 </ol>
-    <p>The brief always posts, so a week without a comment means the routine did not run. The last
+    <p>The brief is a report and a reminder, not a garden run: it changes nothing. It always posts, so a week without a comment means the routine did not run. The last
 garden-log line (written by brain-garden with your consent) shows the orphan trend between briefs.</p>
     <h2 id="vault-or-repository">Vault or repository?</h2>
     <div class="table-wrap">

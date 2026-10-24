@@ -38,6 +38,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `cwd`, the transcript, a temporary directory). Scripts in other languages are held for a human
   reviewer instead of refused. The core rules load through a literal `cat` hook again, so they never
   depend on Python; without `python3` the other three hooks fail open.
+- **Amended 2026-10-24:** a fourth script, `notices.py`, on `SessionStart` `startup` (D22).
 
 ## D3. The vault is read and written with the agent's own file tools
 
@@ -242,6 +243,23 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   removed, the brain skills no longer read `~/.codex/AGENTS.md`, and code-review and
   audit-to-backlog always use the `verifier` agent instead of the Codex plugin. Supersedes D19.
 - **Why:** the maintainer's decision; reason not recorded.
+
+## D22. Version and upkeep notices instead of a schedule
+
+- **Date:** 2026-10-24
+- **Decision:** a `SessionStart` hook on `startup`, `notices.py`, shows the user one-line notices: the
+  version and a link to the changelog page on the first session after an install or update (a version
+  marker in `${CLAUDE_PLUGIN_DATA}`), inbox notes older than 7 days (at most weekly) and no brain-garden
+  run in 30 days (at most monthly). It runs no skill and creates no routine; the docs say plainly that
+  vault upkeep does not run on its own. The vault path comes from the user-level `CLAUDE.md` only, and
+  the notices carry counts and dates, never note names.
+- **Why:** users could not tell whether review and garden happen by themselves. Claude Code has no
+  install or update hook, a plugin cannot create a routine, and a cloud routine does not load the
+  plugin's skills, so a reminder where the user already works is the only mechanism inside the plugin
+  (D2: no runtime, no network). Claude Code shows nothing from a plugin's changelog on update.
+- **Alternatives:** docs only (users still miss it); creating a routine at setup (not possible from a
+  hook, and it would act without asking, against D6); printing changelog entries in the terminal
+  (needs a copy of `CHANGELOG.md` inside `plugin/` on every release; a link is enough).
 
 ## Rules history
 

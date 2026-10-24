@@ -5,11 +5,19 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- A `SessionStart` hook on new sessions, `notices.py`, shows one-line notices when due: the version and a
+  link to the changelog page after an install or update, inbox notes older than 7 days (at most weekly)
+  and no brain-garden run in 30 days (at most monthly). It runs nothing itself;
+  `DEVELOPER_OS_NOTICES=off` turns it off. Decision D22.
 - project-init adopts developer-os in a repository in one pass: it detects the stack, runs
   project-baseline, docs-sync and instruction-review up to their reports, audits the code against
   each applicable conventions skill, and asks once for the whole numbered list.
 - `docs/reference/skills.md` says, for every skill, what it checks and how.
 - The eval case `project-init-no-write`.
+
+### Changed
+- The workflow, README and brain-setup say plainly that vault upkeep does not run on its own, and that
+  the weekly brief routine reports but does not garden.
 
 ### Removed
 - Codex support: `scripts/install-codex.sh` and its test, the `~/.codex/AGENTS.md` step of the

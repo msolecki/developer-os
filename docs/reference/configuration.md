@@ -13,11 +13,12 @@ the user already has, which the skills read. This page lists every one of them.
 
 | Setting | Where | Read by | Written by |
 |---|---|---|---|
-| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`/`AGENTS.md`) | All brain skills; the core rule that runs brain-search before large tasks | brain-setup, after approval |
+| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`/`AGENTS.md`) | All brain skills; the core rule that runs brain-search before large tasks; the notices hook, from the user-level file only | brain-setup, after approval |
 | Vault in `permissions.additionalDirectories` | `~/.claude/settings.json` | Claude Code, so the vault can be read from any project | brain-setup, after approval |
 | `"outputStyle": "developer-os:<name>"` | Claude Code settings | Claude Code; a bare name silently falls back to the default style | The user |
 | Rule overrides | `~/.claude/CLAUDE.md` | The model, alongside the core rules | The user |
 | `DEVELOPER_OS_CAPTURE_NUDGE`, `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | Shell environment | The `Stop` hook ([hooks.md](hooks.md#environment-variables)) | The user |
+| `DEVELOPER_OS_NOTICES` | Shell environment | The `SessionStart` notices hook; `off` disables the version and upkeep notices ([hooks.md](hooks.md#sessionstart-on-startup--noticespy)) | The user |
 
 brain-setup and the brain skills' vault lookup resolve the config directory
 as `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`; brain-setup edits files in place, so symlinked config files
@@ -44,7 +45,7 @@ stay symlinks.
 | `_inbox/` | The only folder agents create notes in |
 | `_archive/` | Retired notes, `status: archived` |
 | `_views/*.base` | Obsidian Bases views: Inbox, Stale (active, `updated` older than 180 days), By project |
-| `_reports/garden-log.md` | One line per brain-garden run, appended with consent |
+| `_reports/garden-log.md` | One line per brain-garden run, appended with consent; the notices hook reads its last line |
 | `templates/note.md` | The note template (`status: active` for notes the user writes) |
 | `.obsidian/types.json` | Property types: `created`, `updated` as date, `tags` as tags, `sources` as multitext |
 
