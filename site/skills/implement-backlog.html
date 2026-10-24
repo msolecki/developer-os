@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/implement-backlog/SKILL.md@7c5f6282adaf">
+<meta name="dos-source" content="plugin/skills/implement-backlog/SKILL.md@69488eebcc9c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -75,7 +75,7 @@
       <li><strong>Delegates.</strong> Independent tasks with disjoint files run in parallel, each in its own git worktree; otherwise they run one after another. Everything is integrated on a local batch branch, and the base branch gets it only by a fast-forward after the review passes; if the base moved, both branches are left for you. The brief grows with the item's size: S gets the objective, location and <code>Check</code>; M also the <code>Done when</code> and files not to touch; L only writes a plan and stops for approval. Every report opens with <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code> or <code>CONTINUING</code>; transient failures are retried at most twice. While delegates run, it only orchestrates.</li>
       <li><strong>Reads the reports.</strong> On <code>DONE</code> it runs the <code>Check</code> itself in the delegate's worktree, then again after integrating (a sequential item once, in the current checkout); a <code>Manual:</code> item is committed but stays open without its <code>Owner</code>, with steps for you to confirm; <code>REVIEW</code> means approving or rejecting a plan; <code>BLOCKED</code> on you goes under Needs you; <code>CONTINUING</code> is dispatched again. A report without a status goes back once.</li>
       <li><strong>Validates.</strong> The item's <code>Check</code> after every item, then the full build, type check, tests and lint for the batch, showing only failures. Test failures are classified before editing; assertions change only for a contract that changed. A wrong <code>Done when</code> gets a proposed <code>Amended</code> line, never an edit. Three failed repair cycles stop the run in a deployable state. A short state card in <code>docs/plans/.devos-state.md</code> survives a context compaction.</li>
-      <li><strong>Reviews and records.</strong> The batch diff goes through <a href="code-review.html">code-review</a> and the independent reviewer agent. It fixes confirmed P0/P1 and docs findings itself, for at most two review rounds. The review passes on <code>APPROVE</code>, or on a <code>COMMENT</code> whose question you answered; without a pass the base branch gets nothing and the batch branch is left for you. Other findings are proposed as backlog items for your approval; done items move to the done file with their <code>Check</code> result. It stages only batch files and commits only when everything passes, then reports one line per item and the next batch.</li>
+      <li><strong>Reviews and records.</strong> The batch diff goes through <a href="code-review.html">code-review</a> and the independent reviewer agent. It fixes confirmed P0/P1 and docs findings itself, for at most two review rounds. The review passes on <code>APPROVE</code>, or on a <code>COMMENT</code> whose question you answered; without a pass the base branch gets nothing and the batch branch is left for you. Other findings are proposed as backlog items for your approval; done items move to the done file with their <code>Check</code> result. It stages only batch files; the record commit (backlog, done file, plan) waits until everything passes, then reports one line per item and the next batch.</li>
     </ol>
 
     <h2 id="example-output">Example output</h2>
@@ -91,12 +91,12 @@ Next: &lt;one line&gt;</code></pre>
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>The batch is committed locally, or earlier at a red baseline, after three failed repair cycles, or after two review rounds without a pass. It deletes the state card and returns the validation evidence, the review additions and the next batch. Claimed items still open lose their <code>Owner</code> line, so the next run can take them.</p>
+      <p>The batch is committed locally, or earlier at a red baseline, after three failed repair cycles, or after two review rounds without a pass. It deletes the state card and returns the validation evidence, the review additions and the next batch. Claimed items still open lose their <code>Owner</code> line in a release commit on the base, so the next run can take them.</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>
       <ul>
-        <li>Push or force-push, merge or rebase a shared branch, or open a PR.</li>
+        <li>Push or force-push, rebase a shared branch or merge into one other than by <code>--ff-only</code>, or open a PR; the only writes to the base are the claim and release commits and the local <code>git merge --ff-only</code> of the batch branch after the review passes.</li>
         <li>Include authentication or security items you did not approve up front.</li>
         <li>Delete or skip tests, or change assertions for a contract that did not change.</li>
         <li>Commit red work or files outside the batch, other than the docs a docs finding named and the <code>Owner</code> claim and release commits, which touch only the backlog file.</li>

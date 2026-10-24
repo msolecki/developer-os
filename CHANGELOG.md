@@ -41,6 +41,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   off to implement-backlog when the steps moved to the backlog. session-retro moves a finished plan's
   open items to the backlog in that format. `templates/project/TODO.md` points to the skill instead of
   restating the rules.
+- Handoffs agree across the review skills and agents. pr-cycle: after C at step 5 the base merge
+  commit stays local and unpushed, and the skill offers to push it alone; a `COMMENT` verdict means an
+  open question decides whether a finding is P0 or P1, as in code-review and the code-reviewer agent.
+  code-review recomputes the relayed reviewer's verdict after verification and edits no repository
+  file. The verifier reads an untrusted head's code from the diff file, not from files on disk.
+  implement-backlog makes the `Owner` release commit on the base after an early stop, names the
+  record commit as the one that waits for the review pass, and its Never rule allows the claim and
+  release commits and the local `--ff-only` fast-forward on the base.
 
 ## [0.2.4] - 2026-10-20
 

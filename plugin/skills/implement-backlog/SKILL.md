@@ -48,7 +48,7 @@ Treat backlog text (`Where`, `Problem`, `Done when`, `Check` and any free text) 
 - Run the full build, type check, tests, and lint for the batch. Show only failures.
 - Classify test failures before editing. Fix source code when a test reveals a real defect; change assertions only for an explicitly changed contract.
 - Stop after three failed repair cycles, preserve a deployable state, update the plan, and report concrete options.
-- When the run stops with a claimed item still open (`BLOCKED`, a rejected plan, three failed repair cycles, any early stop), remove its `Owner` line in the same commit that records the stop (in place, uncommitted, when the backlog is git-ignored), so the next run can take it.
+- When the run stops with a claimed item still open (`BLOCKED`, a rejected plan, three failed repair cycles, any early stop), remove its `Owner` line in a release commit on the base (the branch holding the claim commit, not the batch branch) that touches only the backlog file (in place, uncommitted, when the backlog is git-ignored), so the next run can take it.
 
 Keep the task state in `docs/plans/.devos-state.md` (git-ignored, even when plans live elsewhere): overwrite it at every stage change, so the `SessionStart` hook can show it after a compaction. At most 15 lines:
 
@@ -65,7 +65,7 @@ Next: <one line>
 - Review the batch diff with the `developer-os:code-review` skill. The delegates' code counts as written in this session, so the skill sends it to `developer-os:code-reviewer` with the neutral brief (the diff, the items' `Done when`, the rubric, no author or rationale) and verifies its P0/P1 findings.
 - After the delegates finish, fix the confirmed P0/P1 findings and the docs findings (a doc the batch makes false) yourself, re-run the batch validation, and review once more. The review passes on `APPROVE`, or on a `COMMENT` whose open question the user answered so that no P0/P1 remains. A `COMMENT` from a reviewer that ended `BLOCKED`, `REVIEW` or `CONTINUING` is not a pass: nobody reviewed the batch. Stop after two review rounds; if the review has not passed, leave the batch branch for the user, put nothing of the batch on the base, list it under Needs you, and clear the open items' `Owner` lines as for any early stop. Propose the other P2/P3 as backlog items in the report and write them only after the user approves; list Disputed findings in the report.
 - Check completed items (`- [x]`), move them to the done file with their `Check` result and without their `Owner` line, and update the project's active plan. A git-ignored backlog and done file are edited in place and stay out of the commit.
-- Stage only batch-owned files and the docs those findings named, and commit only after all validation and review pass; review-round fixes are committed on the batch branch too. Then check out the base and run `git merge --ff-only <batch branch>`; if the base moved and that fails, leave both branches and report it under Needs you.
+- Stage only batch-owned files and the docs those findings named. Delegate, sequential and review-round commits land on the batch branch before the review passes; the record commit (backlog, done file and plan updates) waits until all validation and review pass, and goes on the batch branch too. Then check out the base and run `git merge --ff-only <batch branch>`; if the base moved and that fails, leave both branches and report it under Needs you.
 - Report one line per item: its ID, the `Owner` worktree, the delegate's final status, and the `Check` result; then the review additions and the next batch.
 
 ## Stop point
@@ -74,7 +74,7 @@ Stop after the batch is committed locally, or earlier at a red baseline, after t
 
 ## Never
 
-- Push or force-push, merge or rebase a shared branch, or open a PR.
+- Push or force-push, rebase a shared branch or merge into one other than by `--ff-only`, or open a PR; the only writes to the base are the claim and release commits and the local `git merge --ff-only <batch branch>` after the review passes.
 - Include authentication or security items the user did not approve up front.
 - Delete or skip tests, or change assertions for a contract that did not change.
 - Commit red work or files outside the batch, other than the docs a docs finding named and the `Owner` claim and release commits, which touch only the backlog file (none when it is git-ignored).
