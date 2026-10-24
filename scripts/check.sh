@@ -148,8 +148,8 @@ git diff "$base" -- plugin/SURFACE.txt |
   end'
 
 # Counts written as digits in the README and docs ("28 skills", "13 eval cases") must match the disk;
-# "3 cases of" and "2 hooks of" are prose, not counts.
-skills=$(surface | grep -c '^skill '); agents=$(surface | grep -c '^agent ')
+# "3 cases of" and "2 hooks of" are prose, not counts. The landing page's fact rows count too.
+skills=$(surface | grep -c '^skill '); brain=$(surface | grep -c '^skill brain-'); agents=$(surface | grep -c '^agent ')
 styles=$(surface | grep -c '^output-style '); hooks=$(jq '[.hooks[][].hooks[]] | length' plugin/hooks/hooks.json)
 cases=$(find evals -mindepth 2 -maxdepth 2 -name case.yaml | wc -l | tr -d ' ')
 files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md 'site/*.html' | ruby -e '
@@ -158,12 +158,20 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
       break if f == "CHANGELOG.md" && l.start_with?("## [") && !l.start_with?("## [Unreleased]")
       break if f == "site/docs/changelog.html" && l =~ /<h2[^>]*>\[/ && l !~ /\[Unreleased\]/
       l.scan(/\b[0-9]+ (?:skills|agents|output styles|hooks|eval cases|cases)\b(?! of\b)/) { |m| puts "#{f}:#{i}:#{m}" }
+      # The landing page states counts as fact rows: <li><span>Label</span><span>N</span></li>.
+      if f == "site/index.html"
+        l.scan(%r{<li><span>([^<]+)</span><span>([0-9]+)(?:, ([0-9]+))?</span></li>}) do |label, n, m|
+          kinds = { "Brain skills" => ["brain skills"], "Skills, all groups" => ["skills"],
+                    "Agents, output styles" => ["agents", "output styles"], "Hooks" => ["hooks"] }[label] or next
+          [n, m].compact.zip(kinds).each { |c, k| puts "#{f}:#{i}:#{c} #{k}" }
+        end
+      end
     end
   end' |
   while IFS= read -r hit; do
     n=${hit##*:}; kind=${n#* }; n=${n%% *}
     case $kind in
-      skills) want=$skills ;; agents) want=$agents ;; "output styles") want=$styles ;;
+      skills) want=$skills ;; "brain skills") want=$brain ;; agents) want=$agents ;; "output styles") want=$styles ;;
       hooks) want=$hooks ;; *cases) want=$cases ;;
     esac
     [ "$n" = "$want" ] || fail counts "${hit%:*}" "says $n $kind, the repository has $want"
