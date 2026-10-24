@@ -17,9 +17,10 @@ last-verified: 2026-10-15
 | Inbox note | A note an agent created in `_inbox/` with `status: inbox`; unreviewed, a draft rather than a fact. |
 | Promote | Move an approved inbox note to a topic folder and set `status: active` (brain-review). |
 | Archive | Move a note to `_archive/` with `status: archived`. The plugin's replacement for deletion. |
+| Superseded note | A note replaced by a newer one: `status: superseded` and `superseded_by: "[[note]]"`, kept in its topic folder as history. |
 | Compiled note | A brain-compile note synthesized from at least two active notes, with a `sources:` list and the `compiled` tag. |
 | Stale note | An active note whose `updated` is more than 180 days old. |
-| Orphan | A note outside `_inbox/` and `_archive/` that no wiki link targets. |
+| Orphan | A note outside `_inbox/` and `_archive/`, not superseded, that no wiki link targets. |
 | FOUND / GUESSED | brain-garden's tag on a proposed link: stated in both notes, or inferred. "Apply all" covers only FOUND. |
 | Vault project slug | The `project:` value for a repository's notes, recorded in its `_Context.md`. |
 | P0–P3 | The single severity scale: P0 exploitable security defect, data loss or production down; P1 wrong behavior on a common path; P2 edge case or meaningful maintainability risk; P3 minor. |

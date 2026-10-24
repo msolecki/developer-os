@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/glossary.md@5317b7ec7848">
+<meta name="dos-source" content="docs/glossary.md@eb40296c6624">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -60,9 +60,10 @@
           <tr><td>Inbox note</td><td>A note an agent created in <code>_inbox/</code> with <code>status: inbox</code>; unreviewed, a draft rather than a fact.</td></tr>
           <tr><td>Promote</td><td>Move an approved inbox note to a topic folder and set <code>status: active</code> (brain-review).</td></tr>
           <tr><td>Archive</td><td>Move a note to <code>_archive/</code> with <code>status: archived</code>. The plugin's replacement for deletion.</td></tr>
+          <tr><td>Superseded note</td><td>A note replaced by a newer one: <code>status: superseded</code> and <code>superseded_by: "[[note]]"</code>, kept in its topic folder as history.</td></tr>
           <tr><td>Compiled note</td><td>A brain-compile note synthesized from at least two active notes, with a <code>sources:</code> list and the <code>compiled</code> tag.</td></tr>
           <tr><td>Stale note</td><td>An active note whose <code>updated</code> is more than 180 days old.</td></tr>
-          <tr><td>Orphan</td><td>A note outside <code>_inbox/</code> and <code>_archive/</code> that no wiki link targets.</td></tr>
+          <tr><td>Orphan</td><td>A note outside <code>_inbox/</code> and <code>_archive/</code>, not superseded, that no wiki link targets.</td></tr>
           <tr><td>FOUND / GUESSED</td><td>brain-garden's tag on a proposed link: stated in both notes, or inferred. "Apply all" covers only FOUND.</td></tr>
           <tr><td>Vault project slug</td><td>The <code>project:</code> value for a repository's notes, recorded in its <code>_Context.md</code>.</td></tr>
           <tr><td>P0–P3</td><td>The single severity scale: P0 exploitable security defect, data loss or production down; P1 wrong behavior on a common path; P2 edge case or meaningful maintainability risk; P3 minor.</td></tr>
