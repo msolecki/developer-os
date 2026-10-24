@@ -4,6 +4,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- brain-garden reports shared rules: a rule stated by three or more notes, or restated in two or
+  more hubs, is proposed as one compiled note (via brain-compile) that the hubs link instead. A
+  project note and its `-overview` note are a map and its lessons, not duplicates.
+
 ## [0.2.4] - 2026-10-20
 
 ### Added
