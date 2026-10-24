@@ -15,7 +15,7 @@ Find the line `Brain vault: <absolute path>`. Look in this order and stop at the
 
 ## 2. Run the checks
 
-Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Note names, link targets and the `.md` extension match case-insensitively, as in Obsidian. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance: they are exempt from the archived-link info line, but a missing source is still `no such note`. A superseded note (`status: superseded`) stays in its topic folder, is never stale or an orphan, and must name its replacement in `superseded_by: "[[note]]"`; the script reports a missing field, a target that is missing or archived, and a cycle (A → B → A). Links inside fenced code blocks are ignored. The script prints only offending files, then one `totals:` line for the report header.
+Scope: every `.md` outside `templates/`, `_views/`, `_reports/`, and `.obsidian/`, except the vault-root `README.md`. Notes in `_archive/` are checked only for `status: archived`. Note names, link targets and the `.md` extension match case-insensitively, as in Obsidian. A link to an archived note (only in `_archive/`, or `status: archived`) is an info line, not a broken link: archiving keeps the name on purpose. Links in a note's `sources:` frontmatter and in the `## Links` section of a compiled note are provenance: they are exempt from the archived-link info line, but a missing source is still `no such note`. A superseded note (`status: superseded`) stays in its topic folder, is never stale or an orphan, and must name its replacement in `superseded_by: "[[note]]"`; the script reports a missing field, a target that is missing or archived, a cycle (A → B → A), and a chain that leads into one; a `superseded_by` on a note that is not superseded is checked as an ordinary link. Links inside fenced code blocks are ignored. The script prints only offending files, then one `totals:` line for the report header.
 
 ```bash
 V="/path/to/vault"
@@ -29,7 +29,7 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
 {
   f = $0; name = f; sub(/.*\//, "", name); sub(/\.[mM][dD]$/, "", name); k = tolower(name)
   if (f ~ /^\.\/(_views|_reports)\//) { live[k] = 1; next }   # link targets only
-  fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; sb = ""; key = ""; comp = 0; sec = ""; ln = 0; code = 0
+  nl0 = nl; fm = 0; nfm = 0; split("", has); st = ""; ty = ""; cr = ""; up = ""; sm = ""; sb = ""; key = ""; comp = 0; sec = ""; ln = 0; code = 0
   while ((getline line < f) > 0) {
     ln++; sub(/\r$/, "", line)
     if (ln == 1 && line == "---") { fm = 1; continue }
@@ -60,6 +60,7 @@ function val(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+$/, "", s); gsub(/^["\
     }
   }
   close(f)
+  if (st != "superseded") for (x = nl0 + 1; x <= nl; x++) lq[x] = 0   # superseded_by elsewhere is a plain link
   if (f == "./README.md") { live[k] = 1; next }   # a link source and target, not a note
   if (f ~ /^\.\/_archive\//) { arch[k] = 1; if (st != "archived") print f ": status: " st " in _archive/"; next }
   if (st == "archived") arch[k] = 1; else live[k] = 1
@@ -85,10 +86,12 @@ END {
     if (t in arch) { if (!lp[x]) print src[x] " → [[" lt[x] "]]: links to archived note (info)" }
     else if (lt[x] !~ /\./) print src[x] " → [[" lt[x] "]]: no such note"   # a dotted name with no note is an attachment
   }
-  for (n in sbt) { t = sbt[n]
-    if (!(t in live)) { print sbf[n] ": superseded_by [[" t "]]: " ((t in arch) ? "archived note" : "no such note"); continue }
-    x = t; for (h = 0; (x in sbt) && h < 1000; h++) if ((x = sbt[x]) == n) { print sbf[n] ": superseded_by cycle"; break }
+  for (n in sbt) { t = sbt[n]   # for-in order is random, so these lines go through sort
+    if (!(t in live)) { print sbf[n] ": superseded_by [[" t "]]: " ((t in arch) ? "archived note" : "no such note") | "sort"; continue }
+    x = t; cyc = 0; for (h = 0; (x in sbt) && h < 1000; h++) if ((x = sbt[x]) == n) { cyc = 1; break }
+    if (cyc) print sbf[n] ": superseded_by cycle" | "sort"; else if (x in sbt) print sbf[n] ": superseded_by leads into a cycle" | "sort"
   }
+  fflush(); close("sort")   # earlier lines first
   for (x = 1; x <= nn; x++) if (!(nk[x] in tgt) && !(nk[x] in sup)) { print notes[x] ": orphan"; o++ }   # a superseded note is history
   printf "totals: notes %d, orphans %d (%d%%), inbox %d\n", nn, o, (nn ? int(o * 100 / nn) : 0), inbox
 }'

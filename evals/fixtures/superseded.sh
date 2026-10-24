@@ -10,8 +10,9 @@ set -eu
 d=$1; shift
 sh "$(dirname "$0")/vault.sh" "$d"
 v="$d/vault"
+recent=$(date -v-30d +%F 2>/dev/null || date -d '30 days ago' +%F)   # never stale
 note() { # note <name> <status> <superseded_by or -> <summary> <why>
-  { printf -- '---\ntype: decision\nstatus: %s\ncreated: 2026-05-04\nupdated: 2026-09-10\nproject: sample-shop\n' "$2"
+  { printf -- '---\ntype: decision\nstatus: %s\ncreated: %s\nupdated: %s\nproject: sample-shop\n' "$2" "$recent" "$recent"
     [ "$3" = - ] || printf 'superseded_by: "[[%s]]"\n' "$3"
     printf 'tags: [architecture]\nsummary: "%s"\n---\n\n## Context\n\nSynthetic superseded fixture.\n\n' "$4"
     printf '## Decision\n\n%s\n\n## Why\n\n%s\n\n## Links\n\n- [[webhook-event-id-dedupe]]\n' "$4" "$5"; } > "$v/DEV/$1.md"
