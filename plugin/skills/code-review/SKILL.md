@@ -42,7 +42,7 @@ For tests, cover happy path, edge cases, and failure path; reject flaky or over-
 
 Before the output, send every P0 and P1 finding, including those relayed from `developer-os:code-reviewer`, to a fresh verifier that did not produce it, one finding per verifier, in parallel when there are several.
 
-- Verifier: a fresh `developer-os:verifier` agent (read-only). On an error, an empty reply, or a reply without CONFIRMED or REFUTED, dispatch a new one once.
+- Verifier: a fresh `developer-os:verifier` agent (read-only). On an error, an empty reply, or a reply without CONFIRMED or REFUTED, dispatch a new one once; if that one also fails, the finding is unverified.
 - Give the verifier only the claim (`file:line` and the wrong behavior in one sentence, without its cause), the path of a diff file you write outside the repository (`git diff <base>...<head ref>`, e.g. `refs/remotes/pr/<n>`; the verifier cannot run git, and an untrusted head's files are not on disk), the repository path, and the `Untrusted head` line when the caller gave one. Leave out the reviewer's evidence and reasoning.
 - Prompt: "Try to disprove this finding by reading the code. Reply CONFIRMED or REFUTED, with the `file:line` evidence for your answer."
 - Keep CONFIRMED findings at their severity. Move REFUTED findings to a Disputed list with the verifier's evidence. When the verifier cannot decide, keep the finding and say it is unverified.
