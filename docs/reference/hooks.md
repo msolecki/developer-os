@@ -90,7 +90,8 @@ The changelog page is `https://msolecki.github.io/developer-os/docs/changelog.ht
 log and without an earlier notice, the first run only starts the 30-day clock. The hook counts notes;
 it never prints a vault file name. It reads the first 2 KB of at most 1000 `_inbox/*.md` files
 (symlinks skipped; only `created:` inside the frontmatter counts) and the last 4 KB of the garden log
-when it is a regular file.
+when it is a regular file. The inbox scan itself runs at most every 7 days, also when it finds no
+stale note.
 
 **Output:** with at least one notice, one line and exit 0:
 

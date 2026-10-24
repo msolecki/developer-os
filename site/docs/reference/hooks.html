@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/hooks.md@ec51d5483d3a">
+<meta name="dos-source" content="docs/reference/hooks.md@0052bf5ef34a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -123,7 +123,8 @@ Worktrees:
     log and without an earlier notice, the first run only starts the 30-day clock. The hook counts notes;
     it never prints a vault file name. It reads the first 2 KB of at most 1000 <code>_inbox/*.md</code> files
     (symlinks skipped; only <code>created:</code> inside the frontmatter counts) and the last 4 KB of the garden log
-    when it is a regular file.</p>
+    when it is a regular file. The inbox scan itself runs at most every 7 days, also when it finds no
+    stale note.</p>
     <p><strong>Output:</strong> with at least one notice, one line and exit 0:</p>
 <pre><code>{"systemMessage": "&lt;notices&gt;", "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "developer-os showed the user these notices at session start; act on one only if the user asks:\n&lt;notices&gt;"}}</code></pre>
     <p><code>systemMessage</code> is shown to the user; <code>additionalContext</code> tells the agent what the user saw, so "run

@@ -34,6 +34,9 @@ check "first run shows the version and changelog link" "$(has 'developer-os 9.9.
 check "first run without a vault suggests brain-setup" "$(has brain-setup)" yes
 check "output is a systemMessage" "$(has '"systemMessage": "')" yes
 check "the agent gets the same notices as context" "$(has '"hookEventName": "SessionStart", "additionalContext": "')" yes
+check "output parses as SessionStart JSON with the notices in both fields" "$(python3 -c 'import json, sys
+d = json.loads(sys.argv[1]); h = d["hookSpecificOutput"]
+print(h["hookEventName"], h["additionalContext"].endswith("\n" + d["systemMessage"]))' "$out")" "SessionStart True"
 check "version marker written" "$(cat "$tmp/data/notices/version")" 9.9.9
 
 run
@@ -87,6 +90,11 @@ ago 40 > "$tmp/data/notices/garden"
 run
 check "recent garden log line: no notice" "$(has brain-garden)" no
 
+printf 'not a dated line\n' >> "$tmp/vault/_reports/garden-log.md"
+ago 31 > "$tmp/data/notices/garden"
+run
+check "undated last garden log line counts as no run" "$(has 'no brain-garden run in 30 days. Ask for brain-garden.')" yes
+
 mkdir -p "$tmp/vault/_inbox/x"
 printf 'created: %s\n' "$(ago 20)" > "$tmp/vault/_inbox/no-frontmatter.md"
 rm -f "$tmp/vault/_reports/garden-log.md"
@@ -106,6 +114,20 @@ mkdir -p "$tmp/t"
 out=$(printf '{"source":"startup"}' | env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT="$tmp/root" TMPDIR="$tmp/t" CLAUDE_CONFIG_DIR="$tmp/config" python3 "$hook" 2>/dev/null)
 [ -f "$tmp/t/developer-os-$(id -u)/notices/version" ] && r=yes || r=no
 check "without plugin data the markers go to TMPDIR/developer-os-<uid>" "$r" yes
+
+# Without CLAUDE_CONFIG_DIR the vault line comes from ~/.claude/CLAUDE.md, and ~ expands.
+mkdir -p "$tmp/home/.claude" "$tmp/home/v"
+printf 'Brain vault: ~/v\n' > "$tmp/home/.claude/CLAUDE.md"
+rm -rf "$tmp/data"
+out=$(printf '{"source":"startup"}' | env -i PATH="$PATH" HOME="$tmp/home" CLAUDE_PLUGIN_ROOT="$tmp/root" CLAUDE_PLUGIN_DATA="$tmp/data" python3 "$hook" 2>/dev/null)
+check "default config dir and a ~ vault path are read" "$(has 'does not run on its own')" yes
+
+for v in "vault" "$tmp/missing"; do
+  printf 'Brain vault: %s\n' "$v" > "$tmp/config/CLAUDE.md"
+  rm -rf "$tmp/data"
+  run
+  check "vault path '$v' (relative or missing) counts as no vault" "$(has brain-setup)" yes
+done
 
 rm -rf "$tmp/data"
 run startup DEVELOPER_OS_NOTICES=off

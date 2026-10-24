@@ -149,7 +149,8 @@ def main():
             if n:
                 notes.append("Vault: %d inbox note%s older than %d days. Ask for brain-review."
                              % (n, "" if n == 1 else "s", INBOX_DAYS))
-                writes["inbox"] = today.isoformat()
+            # Throttle the scan itself, not only the notice: a clean inbox is not reread every session.
+            writes["inbox"] = today.isoformat()
 
         garden = last_garden(vault)
         reminded = day(marker(marker_dir + "/garden"))
@@ -162,16 +163,17 @@ def main():
             notes.append("Vault: no brain-garden run in %d days%s. Ask for brain-garden." % (GARDEN_DAYS, since))
             writes["garden"] = today.isoformat()
 
+    if notes:
+        msg = "\n".join(notes)
+        context = ("developer-os showed the user these notices at session start; act on one only if the user "
+                   "asks:\n" + msg)
+        sys.stdout.write(json.dumps({"systemMessage": msg,
+                                     "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}}))
+        sys.stdout.flush()
+    # Markers last: a notice that failed to print is not throttled away.
     for name, value in writes.items():
         with open(marker_dir + "/" + name, "w", encoding="utf-8") as f:
             f.write(value + "\n")
-    if not notes:
-        return 0
-    msg = "\n".join(notes)
-    context = ("developer-os showed the user these notices at session start; act on one only if the user "
-               "asks:\n" + msg)
-    sys.stdout.write(json.dumps({"systemMessage": msg,
-                                 "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}}))
     return 0
 
 
