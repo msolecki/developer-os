@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@4f710a83450c">
+<meta name="dos-source" content="CHANGELOG.md@6d1720d3471c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,12 +54,28 @@
 <li>A <code>SessionStart</code> hook on new sessions, <code>notices.py</code>, shows one-line notices when due: the version and a
 link to the changelog page after an install or update, inbox notes older than 7 days (at most weekly)
 and no brain-garden run in 30 days (at most monthly). It runs nothing itself;
-<code>DEVELOPER_OS_NOTICES=off</code> turns it off. Decision D21.</li>
+<code>DEVELOPER_OS_NOTICES=off</code> turns it off. Decision D22.</li>
+<li>project-init adopts developer-os in a repository in one pass: it detects the stack, runs
+project-baseline, docs-sync and instruction-review up to their reports, audits the code against
+each applicable conventions skill, and asks once for the whole numbered list.</li>
+<li><code>docs/reference/skills.md</code> says, for every skill, what it checks and how.</li>
+<li>The eval case <code>project-init-no-write</code>.</li>
     </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
 <li>The workflow, README and brain-setup say plainly that vault upkeep does not run on its own, and that
 the weekly brief routine reports but does not garden.</li>
+    </ul>
+    <h3 id="unreleased-removed">Removed</h3>
+    <ul>
+<li>Codex support: <code>scripts/install-codex.sh</code> and its test, the <code>~/.codex/AGENTS.md</code> step of the
+brain skills' vault lookup and of brain-setup, and the Codex verifier in code-review and
+audit-to-backlog (the <code>verifier</code> agent is always used). developer-os is Claude Code only.</li>
+    </ul>
+    <h3 id="unreleased-fixed">Fixed</h3>
+    <ul>
+<li>The landing page counted one agent too few. The check's Counts stage now also reads the landing
+page's fact rows (brain skills, skills, agents and output styles, hooks).</li>
     </ul>
     <h2 id="024---2026-10-20">[0.2.4] - 2026-10-20</h2>
     <h3 id="024-added">Added</h3>

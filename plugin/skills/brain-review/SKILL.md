@@ -2,7 +2,7 @@
 name: brain-review
 description: Review the inbox of the user's Obsidian knowledge vault — summarize each captured note, suggest a topic folder and duplicates, and promote, merge, or reject only the notes the user names. Use when the user asks to review or triage the brain/vault inbox or captured notes, for example "review the brain inbox", "what is in the inbox", "sort the inbox notes".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Brain review
@@ -11,7 +11,7 @@ Proposes first; moves a note only after the user names it.
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. List the inbox
 

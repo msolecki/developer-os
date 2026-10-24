@@ -1,12 +1,14 @@
 # developer-os
 
+<a href="https://www.producthunt.com/products/developer-os-2?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-developer-os-2" target="_blank" rel="noopener noreferrer"><img alt="Developer OS - Long-term memory and engineering rules for Claude Code | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1286380&amp;theme=light&amp;t=1792582595920"></a>
+
+
 A Claude Code plugin for working with an AI coding agent and an Obsidian vault as its long-term
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
 agents, output styles and rules) plus three small Python 3 hook scripts (standard library only), with no server, no database and
-nothing to install beyond `python3`. Codex
-support is manual and best-effort.
+nothing to install beyond `python3`.
 
 ## Install (Claude Code)
 
@@ -102,7 +104,8 @@ without it the core rules still load and the other hooks do not run.
   brain-compile. They read and write the vault with the agent's own file tools.
 - **Engineering skills:** code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
   bug-triage, deploy-checklist, instruction-review (add `--prune` for a periodic cut), plan-status,
-  client-reply, docs-sync, project-baseline.
+  client-reply, docs-sync, project-baseline, project-init (adopt developer-os in a repository in one
+  pass).
 - **Session skills:** session-retro (end-of-session wrap-up: state check, cleanup proposals,
   Done / Not done / Needs you, plan update or close, approval-gated capture) and skill-usage
   (read-only report of how often each developer-os skill fired locally, with
@@ -111,7 +114,7 @@ without it the core rules still load and the other hooks do not run.
   error-handling-conventions, defensive-coding-conventions, monitoring-conventions,
   nextjs-conventions, testing-conventions, typescript-conventions.
 - **Built-in overlaps:** `/code-review`, `/security-review`, `/recap`, `/insights`, `/goal`,
-  `/skill-doctor` and `/doctor` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
+  `/skill-doctor`, `/doctor` and `/init` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
@@ -120,34 +123,6 @@ without it the core rules still load and the other hooks do not run.
 - **Evals:** behavior checks for the brain skills, code-review, session-retro and the skill
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
   plugin payload.
-
-## Codex (installer, best-effort)
-
-There is no Codex manifest. From a clone of this repository (or the marketplace copy in
-`~/.claude/plugins/marketplaces/developer-os`), run:
-
-```sh
-scripts/install-codex.sh --dry-run   # show what would change
-scripts/install-codex.sh             # install or update
-```
-
-- It writes a Codex copy of every skill to `~/.agents/skills/<name>` (set `CODEX_SKILLS_DIR` for
-  another location, such as `~/.codex/skills/` on older Codex versions). Each copy keeps only `name`
-  and a short description (the first sentence and the quoted trigger phrases, or the "Use when"
-  sentence when there are none), so all of them fit Codex's 8000-character skill list, and has its
-  Claude-only references rewritten. A skill `description` must be one plain line; the installer
-  refuses any other form before it writes anything.
-- It puts `plugin/rules/core.md` and your `Brain vault:` line (`--vault <path>`, else the line already in the
-  block, else `~/.claude/CLAUDE.md`; pass `--vault` again to change it) between `developer-os-core` markers in `~/.codex/AGENTS.md` (`$CODEX_HOME/AGENTS.md`
-  when `CODEX_HOME` is set; `--project <dir>` for a project's `AGENTS.md`). Text outside the markers
-  stays; a changed file is backed up first.
-- Run it again after each plugin update. An untouched copy of a skill the plugin no longer has, made from this checkout, is removed. `--uninstall` removes only what it installed;
-  `--project <dir> --uninstall` removes only that project's block and keeps the skills. A skill
-  directory it did not create, including an older hand-made symlink into another clone, is skipped
-  and reported; remove it first to let the installer manage it.
-
-This setup is not tested on releases. The hooks, agents and output styles have no Codex equivalent;
-see [Claude-only features](docs/workflow.md#claude-only-features).
 
 ## Documentation
 

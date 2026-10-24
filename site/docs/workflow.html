@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@f182fe37364c">
+<meta name="dos-source" content="docs/workflow.md@4b48b1ad10bb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -71,8 +71,7 @@ review it and set <code>status: active</code>. An unreviewed agent note is a dra
 <li>Ask Claude Code to run <code>brain-setup</code>; it creates or connects the vault and, after your approval,
 adds the <code>Brain vault:</code> line to <code>~/.claude/CLAUDE.md</code> and the vault path to
 <code>permissions.additionalDirectories</code> in <code>~/.claude/settings.json</code>. Connecting an existing vault adds
-only the missing pieces and never overwrites your <code>.obsidian/</code> folder. For Codex it prints the
-line to add to <code>~/.codex/AGENTS.md</code> (see <a href="readme.html#codex-installer-best-effort">Codex</a>). Brain
+only the missing pieces and never overwrites your <code>.obsidian/</code> folder. Brain
 skills ask once for the vault path when the line is missing, and stop if you have none; the core
 rules run brain-search only when the line exists.</li>
 <li>Open the vault folder in Obsidian (&ldquo;Open folder as vault&rdquo;; Bases needs Obsidian 1.9.10 or
@@ -366,10 +365,10 @@ manager, entry X"), never to its value.</li>
 <li>Anything you paste into a note can come back in a later session. Write as if the agent will quote it.</li>
 </ul>
     <h2 id="what-else-the-plugin-ships">What else the plugin ships</h2>
-    <p>The full list of skills, agents and output styles, and the Codex installer, are in the
+    <p>The full list of skills, agents and output styles is in the
 <a href="readme.html#whats-inside">README</a>.</p>
     <p>code-review and audit-to-backlog send every P0/P1 finding to a fresh verifier that sees only the
-claim (Codex when its plugin is installed, otherwise the read-only <code>verifier</code> agent); refuted findings move to a
+claim (the read-only <code>verifier</code> agent); refuted findings move to a
 Disputed list and do not block the verdict or enter the backlog.</p>
     <p>Run <code>instruction-review --prune</code> when the default model changes and every six months: it gives each
 line DELETE/KEEP/REWRITE with a source, flags hedges and contradictions, never cuts truthfulness
@@ -388,23 +387,8 @@ repository it also reviews <code>plugin/rules/core.md</code>.</p>
 <tr><td><code>/insights</code></td><td>HTML report on recent sessions</td><td>skill-usage</td><td>You want call counts for developer-os skills and keep/merge/remove suggestions</td></tr>
 <tr><td><code>/goal</code></td><td>Keeps working across turns until a condition holds</td><td>implement-backlog</td><td>The work is a backlog of evidence-backed items with per-item checks, worktrees and review</td></tr>
 <tr><td><code>/skill-doctor</code></td><td>Context cost and usage of every skill</td><td>skill-usage</td><td>You want the developer-os verdicts; use <code>/skill-doctor</code> for the context cost</td></tr>
+<tr><td><code>/init</code></td><td>Writes a <code>CLAUDE.md</code> from the codebase</td><td>project-init</td><td>You want the repository checked against the baseline, the docs standard, its instructions and the conventions, with one approval for every change</td></tr>
 <tr><td><code>/doctor</code></td><td>Checks installation, settings and <code>CLAUDE.md</code></td><td>instruction-review</td><td>You want an evidence-backed diff or a line-by-line prune of a project's instruction file</td></tr>
-</tbody>
-</table>
-</div>
-    <h2 id="claude-only-features">Claude-only features</h2>
-    <p>The skills work in Codex through an installer (see <a href="readme.html#codex-installer-best-effort">Codex</a>); these parts
-do not:</p>
-    <div class="table-wrap">
-<table>
-<thead><tr><th scope="col">Feature</th><th scope="col">Claude Code</th><th scope="col">Codex</th><th scope="col">Equivalent</th></tr></thead>
-<tbody>
-<tr><td><code>SessionStart</code> hook</td><td>loads <code>plugin/rules/core.md</code> every session</td><td>no</td><td><code>scripts/install-codex.sh</code> keeps it in a marked block of <code>~/.codex/AGENTS.md</code> (D19)</td></tr>
-<tr><td><code>Stop</code> hook</td><td>offers session-retro once per long session</td><td>no</td><td>run session-retro by hand at the end</td></tr>
-<tr><td><code>PreToolUse</code> guard</td><td>asks before installs (also <code>npm</code> aliases such as <code>in</code>, and full paths), force pushes, hook bypasses (<code>--no-verify</code> and its abbreviations, <code>commit -n</code>, <code>HUSKY=0</code>, <code>core.hooksPath</code> (any form))</td><td>no</td><td>none</td></tr>
-<tr><td>Agents (<code>plugin/agents/</code>)</td><td>code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog), verifier (code-review, audit-to-backlog)</td><td>no</td><td>none</td></tr>
-<tr><td>Output styles</td><td><code>/output-style</code></td><td>no</td><td>none</td></tr>
-<tr><td><code>Skill</code> tool</td><td>the agent loads a skill by name</td><td>no</td><td><code>scripts/install-codex.sh</code> writes a Codex copy of each skill to <code>~/.agents/skills/</code></td></tr>
 </tbody>
 </table>
 </div>

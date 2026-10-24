@@ -22,12 +22,11 @@ plugin/                           the installed payload
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
   hooks/guard.py                  PreToolUse guard for Bash
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/<name>/SKILL.md          28 skills
+  skills/<name>/SKILL.md          29 skills
   agents/<name>.md                6 agents
   output-styles/<name>.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
-scripts/install-codex.sh          Codex installer, run by hand (not installed)
 evals/                            claude plugin eval cases (not installed)
 tests/*.test.sh                   hook tests
 .agnix.toml                       agnix lint settings for CI
@@ -47,7 +46,7 @@ What occupies the context of a session, and when:
 |---|---|---|---|
 | `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
 | State card | After a compaction or resume inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
-| Skill names and descriptions | Every session, by Claude Code's skill listing | 10065 characters for 28 skills | 80–1024 each, 12000 total |
+| Skill names and descriptions | Every session, by Claude Code's skill listing | 10493 characters for 29 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
 | A skill's body | When the model or the user invokes it | 0.7–8.8 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
 | An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 2.0–3.9 KB per file | — |
@@ -108,7 +107,7 @@ flowchart LR
   pr-cycle --> fix-pr
   fix-pr -. Trust check .-> pr-cycle
   code-review --> code-reviewer[[code-reviewer]]
-  code-review --> verifier[[fresh verifier: Codex or the verifier agent]]
+  code-review --> verifier[[fresh verifier agent]]
   audit-to-backlog --> security-auditor[[security-auditor]]
   audit-to-backlog --> performance-engineer[[performance-engineer]]
   audit-to-backlog --> qa-expert[[qa-expert]]
@@ -147,8 +146,7 @@ implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to
 | Skill usage | `~/.claude/projects/**/*.jsonl` (counts only, `--no-filename`) | — | Counts only, as context |
 | Session retro | `git`, `gh pr list` (read-only) | Approved items only | `gh` queries GitHub |
 | PR skills | `git`, `gh` | Commits, pushes, PR body, thread replies after approval | Yes, to GitHub, after approval |
-| Verifier | The claim and the repository path | — | To Codex's provider when the Codex plugin is used |
-| Codex installer (by hand) | `plugin/skills/`, `core.md`, `~/.claude/CLAUDE.md` | `~/.agents/skills/<name>`, a marked block in `~/.codex/AGENTS.md` and its backup | No |
+| Verifier | The claim and the repository path | — | No |
 | Routines (optional, user-built) | The vault repository in Anthropic's cloud | `_inbox/` notes, an issue comment | Yes; see [workflow.md](../workflow.md#away-from-the-desk-optional) |
 
 The plugin makes no network call itself. What the agent reads becomes model context; an agent with

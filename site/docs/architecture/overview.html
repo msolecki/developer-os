@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@a873a96d5108">
+<meta name="dos-source" content="docs/architecture/overview.md@0a93b269c853">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -60,12 +60,11 @@ plugin/                           the installed payload
   hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
   hooks/guard.py                  PreToolUse guard for Bash
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/&lt;name&gt;/SKILL.md          28 skills
+  skills/&lt;name&gt;/SKILL.md          29 skills
   agents/&lt;name&gt;.md                6 agents
   output-styles/&lt;name&gt;.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
-scripts/install-codex.sh          Codex installer, run by hand (not installed)
 evals/                            claude plugin eval cases (not installed)
 tests/*.test.sh                   hook tests
 .agnix.toml                       agnix lint settings for CI
@@ -82,7 +81,7 @@ site/                             public documentation site, published by .githu
         <tbody>
           <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>Just under the limit</td><td>8192 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
           <tr><td>State card</td><td>After a compaction or resume inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
-          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing</td><td>10065 characters for 28 skills</td><td>80–1024 each, 12000 total</td></tr>
+          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing</td><td>10493 characters for 29 skills</td><td>80–1024 each, 12000 total</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
           <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.7–8.8 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
           <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–3.9 KB per file</td><td>—</td></tr>
@@ -205,8 +204,8 @@ site/                             public documentation site, published by .githu
 <text x="660" y="122" text-anchor="middle">code-reviewer</text>
 <rect class="agent" x="560" y="175" width="200" height="44" rx="2"/>
 <line class="agent" x1="569" y1="175" x2="569" y2="219"/><line class="agent" x1="751" y1="175" x2="751" y2="219"/>
-<text x="660" y="193" text-anchor="middle">fresh verifier:</text>
-<text x="660" y="209" text-anchor="middle">Codex or verifier agent</text>
+<text x="660" y="193" text-anchor="middle">fresh verifier</text>
+<text x="660" y="209" text-anchor="middle">agent</text>
 <rect class="agent" x="560" y="260" width="200" height="34" rx="2"/>
 <line class="agent" x1="569" y1="260" x2="569" y2="294"/><line class="agent" x1="751" y1="260" x2="751" y2="294"/>
 <text x="660" y="282" text-anchor="middle">security-auditor</text>
@@ -256,8 +255,7 @@ site/                             public documentation site, published by .githu
           <tr><td>Skill usage</td><td><code>~/.claude/projects/**/*.jsonl</code> (counts only, <code>--no-filename</code>)</td><td>—</td><td>Counts only, as context</td></tr>
           <tr><td>Session retro</td><td><code>git</code>, <code>gh pr list</code> (read-only)</td><td>Approved items only</td><td><code>gh</code> queries GitHub</td></tr>
           <tr><td>PR skills</td><td><code>git</code>, <code>gh</code></td><td>Commits, pushes, PR body, thread replies after approval</td><td>Yes, to GitHub, after approval</td></tr>
-          <tr><td>Verifier</td><td>The claim and the repository path</td><td>—</td><td>To Codex's provider when the Codex plugin is used</td></tr>
-          <tr><td>Codex installer (by hand)</td><td><code>plugin/skills/</code>, <code>core.md</code>, <code>~/.claude/CLAUDE.md</code></td><td><code>~/.agents/skills/&lt;name&gt;</code>, a marked block in <code>~/.codex/AGENTS.md</code> and its backup</td><td>No</td></tr>
+          <tr><td>Verifier</td><td>The claim and the repository path</td><td>—</td><td>No</td></tr>
           <tr><td>Routines (optional, user-built)</td><td>The vault repository in Anthropic's cloud</td><td><code>_inbox/</code> notes, an issue comment</td><td>Yes; see <a href="../workflow.html#away-from-the-desk-optional">workflow.md</a></td></tr>
         </tbody>
       </table>

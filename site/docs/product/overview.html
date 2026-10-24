@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/overview.md@93b8fec962e4">
+<meta name="dos-source" content="docs/product/overview.md@577e4469e305">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -59,7 +59,6 @@
 <h2 id="who-it-is-for">Who it is for</h2>
 <ul>
 <li>The primary user is a developer working alone or in a small team on several client and product repositories with Claude Code, who wants decisions to outlive sessions and repositories.</li>
-<li>A secondary user runs Codex: <code>scripts/install-codex.sh</code> copies the skills and the core rules into Codex's locations. This path is best-effort and untested on releases (<a href="../readme.html#codex-installer-best-effort">README, Codex</a>).</li>
 </ul>
 <h2 id="product-principles">Product principles</h2>
 <ol>
@@ -69,7 +68,7 @@
 <li><strong>Evidence over declaration.</strong> Findings carry a file and line, reviews rate on one P0–P3 scale, blocking findings go to a fresh verifier, and "works" needs test output.</li>
 <li><strong>One fact in one place.</strong> Code facts and plans stay in the repository; lessons that outlive a repository go to the vault; user preferences go to auto-memory or <code>~/.claude/CLAUDE.md</code> (<a href="../workflow.html#where-knowledge-belongs">workflow.md, Where knowledge belongs</a>).</li>
 <li><strong>Small fixed cost per session.</strong> The core rules are capped at 8192 bytes and the skill descriptions at 12000 characters in total, because both load into every session.</li>
-<li><strong>No runtime.</strong> Anything that would need a process, a schedule or the network is either left to Claude Code itself (routines, the marketplace) or not built. Vault upkeep is not scheduled: a startup hook reminds you when it is due, and you run it (D21).</li>
+<li><strong>No runtime.</strong> Anything that would need a process, a schedule or the network is either left to Claude Code itself (routines, the marketplace) or not built. Vault upkeep is not scheduled: a startup hook reminds you when it is due, and you run it (D22).</li>
 </ol>
 <h2 id="scope">Scope</h2>
 <p>In scope for the first release:</p>
@@ -97,7 +96,7 @@
 <li>A CLI, installer, updater, daemon, index or search engine. The earlier CLI was removed on 2026-10-14 (<a href="decisions.html#d1-plugin-only">decisions D1</a>).</li>
 <li>Any automatic write to the vault outside <code>_inbox/</code>, and any automatic promotion of a note.</li>
 <li>Sending anything: no email, chat, issue or PR comment is posted by a skill on its own. <code>client-reply</code> drafts; <code>session-retro</code> prints a <code>gh issue create</code> command for the user to run.</li>
-<li>A Codex manifest, Codex hooks, agents or output styles.</li>
+<li>Codex or any agent other than Claude Code (removed 2026-10-24, <a href="decisions.html#d21-claude-code-only">decisions D21</a>).</li>
 <li>Running evals in CI.</li>
 </ul>
 <h2 id="how-it-is-distributed">How it is distributed</h2>

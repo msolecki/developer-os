@@ -13,16 +13,14 @@ the user already has, which the skills read. This page lists every one of them.
 
 | Setting | Where | Read by | Written by |
 |---|---|---|---|
-| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`/`AGENTS.md`; `~/.codex/AGENTS.md` for Codex) | All brain skills; the core rule that runs brain-search before large tasks; the notices hook, from the user-level file only | brain-setup, after approval (Claude Code only; for Codex it prints the line) |
+| `Brain vault: <absolute path>` | `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`/`AGENTS.md`) | All brain skills; the core rule that runs brain-search before large tasks; the notices hook, from the user-level file only | brain-setup, after approval |
 | Vault in `permissions.additionalDirectories` | `~/.claude/settings.json` | Claude Code, so the vault can be read from any project | brain-setup, after approval |
 | `"outputStyle": "developer-os:<name>"` | Claude Code settings | Claude Code; a bare name silently falls back to the default style | The user |
 | Rule overrides | `~/.claude/CLAUDE.md` | The model, alongside the core rules | The user |
 | `DEVELOPER_OS_CAPTURE_NUDGE`, `DEVELOPER_OS_CAPTURE_NUDGE_MIN` | Shell environment | The `Stop` hook ([hooks.md](hooks.md#environment-variables)) | The user |
 | `DEVELOPER_OS_NOTICES` | Shell environment | The `SessionStart` notices hook; `off` disables the version and upkeep notices ([hooks.md](hooks.md#sessionstart-on-startup--noticespy)) | The user |
-| `CODEX_SKILLS_DIR` | Shell environment | `scripts/install-codex.sh` (default `~/.agents/skills`) | The user |
-| `CODEX_HOME` | Shell environment | `scripts/install-codex.sh`, which writes `$CODEX_HOME/AGENTS.md` (default `~/.codex`) | The user |
 
-brain-setup, the brain skills' vault lookup and `scripts/install-codex.sh` resolve the config directory
+brain-setup and the brain skills' vault lookup resolve the config directory
 as `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`; brain-setup edits files in place, so symlinked config files
 stay symlinks.
 
@@ -52,10 +50,3 @@ stay symlinks.
 | `.obsidian/types.json` | Property types: `created`, `updated` as date, `tags` as tags, `sources` as multitext |
 
 Note frontmatter, folders and the four body headings: [workflow.md, Vault layout](../workflow.md#vault-layout).
-
-## Codex
-
-No manifest. `scripts/install-codex.sh` (run by hand, `--dry-run` first) writes a Codex copy of each skill
-to `${CODEX_SKILLS_DIR:-~/.agents/skills}` with a `.developer-os-codex` marker, and puts the core rules and
-the `Brain vault:` line between `developer-os-core` markers in `${CODEX_HOME:-~/.codex}/AGENTS.md`
-([README](../../README.md#codex-installer-best-effort)).
