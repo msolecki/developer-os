@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@96145e7de26a">
+<meta name="dos-source" content="CHANGELOG.md@46d934da306e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,8 +52,9 @@
     <h3 id="unreleased-added">Added</h3>
     <ul>
 <li>brain-garden reports shared rules: a rule stated by three or more notes, or restated in two or
-more hubs, is proposed as one compiled note (via brain-compile) that the hubs link instead. A
-project note and its <code>-overview</code> note are a map and its lessons, not duplicates.</li>
+more hubs, is proposed as one compiled note (via brain-compile) that the hubs link instead, and
+only when the user names it. A rule already compiled is not proposed again. A project note and its
+<code>-overview</code> note are a map and its lessons, not duplicates.</li>
 <li>A <code>SessionStart</code> hook on new sessions, <code>notices.py</code>, shows one-line notices when due: the version and a
 link to the changelog page after an install or update, inbox notes older than 7 days (at most weekly)
 and no brain-garden run in 30 days (at most monthly). It runs nothing itself;

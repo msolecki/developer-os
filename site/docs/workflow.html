@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@4b48b1ad10bb">
+<meta name="dos-source" content="docs/workflow.md@55888a25b18c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -189,8 +189,8 @@ vault trustworthy, so it stays human.</p>
     <h3 id="6-monthly-garden">6. Monthly: garden</h3>
     <p>Ask for <strong>brain-garden</strong>; the startup notice reminds you when the last run in <code>_reports/garden-log.md</code> is 30 days old. It reports stale notes (also visible in <code>_views/Stale.base</code>: active notes
 not updated in 180 days), <code>_inbox/</code> notes older than 7 days, notes whose folder and <code>status</code>
-disagree, broken links, duplicates and notes without a summary. It proposes changes and applies
-them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
+disagree, broken links, duplicates, rules restated across several notes and notes without a
+summary. It proposes changes and applies them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
 bumping <code>updated</code>.</p>
     <p>Links resolve by note name, case-insensitively. A link to an archived note (in <code>_archive/</code> or with
 <code>status: archived</code>) is an info line with no fix: archiving keeps the name on purpose. Links in a
@@ -201,8 +201,10 @@ is tagged FOUND (both notes state the connection) or GUESSED (inferred); GUESSED
 only one by one. With your consent, brain-garden appends one line per run to
 <code>_reports/garden-log.md</code>: <code>YYYY-MM-DD notes N, orphans X (Y%), inbox Z</code>.</p>
     <p>When several notes circle the same topic, <strong>brain-compile</strong> drafts one consolidated note from them,
-also into the inbox for your review. Only <code>active</code> notes are sources; the compiled note lists them in
-<code>sources:</code> as quoted links (<code>"[[note-name]]"</code>).</p>
+also into the inbox for your review. brain-garden proposes it for a rule that three or more notes,
+or two or more hubs, restate; once the compiled note is active, the next garden run proposes linking
+it from the hubs that still restate the rule. Only <code>active</code> notes are sources; the compiled note
+lists them in <code>sources:</code> as quoted links (<code>"[[note-name]]"</code>).</p>
     <h2 id="away-from-the-desk-optional">Away from the desk (optional)</h2>
     <p>Two Claude Code <a href="https://code.claude.com/docs/en/routines">routines</a> extend the loop: a note
 dictated on your phone lands in <code>_inbox/</code>, and a weekly brief tells you how the vault is doing.

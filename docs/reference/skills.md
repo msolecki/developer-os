@@ -269,8 +269,10 @@ checks the name (`^[a-z0-9-]+$`) and that no other note has it.
 
 [Source](../../plugin/skills/brain-garden/SKILL.md). One pass over every note: missing or invalid
 frontmatter, inbox notes older than 7 days, active notes not updated in 180 days, status/folder
-mismatches, broken links and links to archived notes, orphans with a percentage, and likely
-duplicates. Every proposed link is tagged FOUND or GUESSED.
+mismatches, broken links and links to archived notes, orphans with a percentage, likely
+duplicates (a project note and its `-overview` note are not), and rules stated by three or more
+notes or restated in two or more hubs, proposed as one brain-compile note that the hubs link. Every
+proposed link is tagged FOUND or GUESSED.
 
 ### brain-compile
 

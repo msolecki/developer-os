@@ -6,8 +6,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - brain-garden reports shared rules: a rule stated by three or more notes, or restated in two or
-  more hubs, is proposed as one compiled note (via brain-compile) that the hubs link instead. A
-  project note and its `-overview` note are a map and its lessons, not duplicates.
+  more hubs, is proposed as one compiled note (via brain-compile) that the hubs link instead, and
+  only when the user names it. A rule already compiled is not proposed again. A project note and its
+  `-overview` note are a map and its lessons, not duplicates.
 - A `SessionStart` hook on new sessions, `notices.py`, shows one-line notices when due: the version and a
   link to the changelog page after an install or update, inbox notes older than 7 days (at most weekly)
   and no brain-garden run in 30 days (at most monthly). It runs nothing itself;
