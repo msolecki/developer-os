@@ -2,7 +2,7 @@
 name: brain-setup
 description: Create the user's Obsidian knowledge vault from the developer-os template, or connect an existing vault by adding only the missing pieces, then point Claude Code at it (`Brain vault:` line and `permissions.additionalDirectories`) after the user approves the diff. Use when the user sets up developer-os, has no `Brain vault:` line yet, or says "set up the vault", "create a vault", "connect my vault", "setup brain".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Brain setup
@@ -68,19 +68,16 @@ On decline: `rm "$S.brain-setup"`.
 
 If `jq` is missing or `settings.json` is not valid JSON, remove `$S.brain-setup`, change nothing else, and show the user the key to add by hand.
 
-Codex: if the user uses Codex, print the line `Brain vault: <V>` for `~/.codex/AGENTS.md` and let them add it.
-
 ## 4. Smoke test
 
 Run the `developer-os:brain-search` skill and give it the vault path `<V>` explicitly (the line just written is not in this session's context): in a new vault search for "webhooks" (it must find `_inbox/process-webhooks-once-per-event-id.md`); in a connected vault search for the topic of one existing note. Then tell the user to open the vault in Obsidian and enable the **Bases** and **Templates** core plugins, with `templates` as the Templates folder.
 
 ## Stop point
 
-Stop after the smoke test. Report the mode, the vault path, what was created or appended, which config edits were applied or declined, the old vault path still in `permissions.additionalDirectories` (if the path changed; the user removes it by hand), the Codex line if printed, and the smoke-test result.
+Stop after the smoke test. Report the mode, the vault path, what was created or appended, which config edits were applied or declined, the old vault path still in `permissions.additionalDirectories` (if the path changed; the user removes it by hand) and the smoke-test result.
 
 ## Never
 
 - Copy into a non-empty directory in new-vault mode, or overwrite any existing file in the vault (`.obsidian/`, notes, `.gitignore`, `.base` views).
 - Edit `CLAUDE.md` or `settings.json` before the user approves the diff, rewrite `settings.json` by hand, or replace either file with `mv`.
-- Edit `~/.codex/AGENTS.md`.
 - Search the disk for vaults or read notes beyond the smoke test.

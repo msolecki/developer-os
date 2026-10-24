@@ -11,6 +11,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `docs/reference/skills.md` says, for every skill, what it checks and how.
 - The eval case `project-init-no-write`.
 
+### Removed
+- Codex support: `scripts/install-codex.sh` and its test, the `~/.codex/AGENTS.md` step of the
+  brain skills' vault lookup and of brain-setup, and the Codex verifier in code-review and
+  audit-to-backlog (the `verifier` agent is always used). developer-os is Claude Code only.
+
 ### Fixed
 - The landing page counted one agent too few. The check's Counts stage now also reads the landing
   page's fact rows (brain skills, skills, agents and output styles, hooks).

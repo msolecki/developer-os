@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@d4ad397d936b">
+<meta name="dos-source" content="docs/development.md@07a98ad30e38">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -119,9 +119,7 @@
     <code>tests/check.test.sh</code> breaks a copy of the repository once per stage it covers and expects that
     stage's message; it runs the whole check about twenty times (around 40 s), so <code>scripts/check.sh</code> runs it
     only when <code>CI</code> is set (GitHub Actions sets it): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;
-    <code>tests/install-codex.test.sh</code> runs the Codex installer against a temporary <code>HOME</code> (dry run,
-    idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the Codex
-    budget of 8000 characters, counted in bytes); <code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
+    <code>tests/skill-usage.test.sh</code> runs the counting block from the skill-usage skill against synthetic
     transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
     and expects one count per message; when <code>rg</code> is missing it prints SKIP locally and fails in CI, which installs ripgrep.
     After changing a hook, run its test from the repository root, for example <code>sh tests/guard.test.sh</code>,
@@ -142,12 +140,6 @@
     </ol>
     <p>Changing <code>plugin/rules/core.md</code>: it sits just under the 8192-byte cap (<code>wc -c &lt; plugin/rules/core.md</code>).
     Every added line must replace or shorten another; run <code>instruction-review --prune</code> on it inside this repository.</p>
-    <h2 id="codex-installer">Codex installer</h2>
-    <p><code>scripts/install-codex.sh</code> is not part of the plugin; users run it from a clone. After changing a skill
-    in a way that adds a Claude-only reference (a new <code>${CLAUDE_*}</code> variable, a new agent dispatch), check
-    that the rewrite in the script still covers it: <code>sh tests/install-codex.test.sh</code> greps the copies.
-    A skill <code>description</code> must be one plain line: no <code>&gt;</code> or <code>|</code> block scalar, no quotes, no continuation
-    line; the script refuses any other form.</p>
     <h2 id="branches-and-releases">Branches and releases</h2>
     <ul>
       <li><code>main</code> is the default branch and what the marketplace installs; it moves only on a release (D20).</li>

@@ -34,9 +34,7 @@ The [README](../README.md) has the short version; this is the full one.
 2. Ask Claude Code to run `brain-setup`; it creates or connects the vault and, after your approval,
    adds the `Brain vault:` line to `~/.claude/CLAUDE.md` and the vault path to
    `permissions.additionalDirectories` in `~/.claude/settings.json`. Connecting an existing vault adds
-   only the missing pieces and never overwrites your `.obsidian/` folder. For Codex it prints the
-   line to add to `~/.codex/AGENTS.md` (see [Codex](../README.md#codex-installer-best-effort)). Brain
-   skills ask once for the vault path when the line is missing, and stop if you have none; the core
+   only the missing pieces and never overwrites your `.obsidian/` folder. Brain skills ask once for the vault path when the line is missing, and stop if you have none; the core
    rules run brain-search only when the line exists.
 3. Open the vault folder in Obsidian ("Open folder as vault"; Bases needs Obsidian 1.9.10 or
    later). In Settings, Core plugins: enable **Bases** and **Templates**; set the Templates folder
@@ -357,11 +355,11 @@ Link from the vault to the repository by path or URL; do not copy repository con
 
 ## What else the plugin ships
 
-The full list of skills, agents and output styles, and the Codex installer, are in the
+The full list of skills, agents and output styles is in the
 [README](../README.md#whats-inside).
 
 code-review and audit-to-backlog send every P0/P1 finding to a fresh verifier that sees only the
-claim (Codex when its plugin is installed, otherwise the read-only `verifier` agent); refuted findings move to a
+claim (the read-only `verifier` agent); refuted findings move to a
 Disputed list and do not block the verdict or enter the backlog.
 
 Run `instruction-review --prune` when the default model changes and every six months: it gives each
@@ -384,17 +382,3 @@ Claude Code ships commands that overlap with some developer-os skills. The names
 | `/skill-doctor` | Context cost and usage of every skill | skill-usage | You want the developer-os verdicts; use `/skill-doctor` for the context cost |
 | `/init` | Writes a `CLAUDE.md` from the codebase | project-init | You want the repository checked against the baseline, the docs standard, its instructions and the conventions, with one approval for every change |
 | `/doctor` | Checks installation, settings and `CLAUDE.md` | instruction-review | You want an evidence-backed diff or a line-by-line prune of a project's instruction file |
-
-## Claude-only features
-
-The skills work in Codex through an installer (see [Codex](../README.md#codex-installer-best-effort)); these parts
-do not:
-
-| Feature | Claude Code | Codex | Equivalent |
-|---|---|---|---|
-| `SessionStart` hook | loads `plugin/rules/core.md` every session | no | `scripts/install-codex.sh` keeps it in a marked block of `~/.codex/AGENTS.md` (D19) |
-| `Stop` hook | offers session-retro once per long session | no | run session-retro by hand at the end |
-| `PreToolUse` guard | asks before installs (also `npm` aliases such as `in`, and full paths), force pushes, hook bypasses (`--no-verify` and its abbreviations, `commit -n`, `HUSKY=0`, `core.hooksPath` (any form)) | no | none |
-| Agents (`plugin/agents/`) | code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog), verifier (code-review, audit-to-backlog) | no | none |
-| Output styles | `/output-style` | no | none |
-| `Skill` tool | the agent loads a skill by name | no | `scripts/install-codex.sh` writes a Codex copy of each skill to `~/.agents/skills/` |

@@ -29,6 +29,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 
 - **Amended 2026-10-15:** a third script, `session-start.sh`, replaces the inline `cat` (D16), and
   `scripts/install-codex.sh` runs only by hand, outside the plugin (D19).
+- **Amended 2026-10-24:** `scripts/install-codex.sh` is removed (D21).
 - **Amended 2026-10-16:** the hook scripts are Python 3 (3.8+, standard library only, no network):
   `state-card.py`, `guard.py` and `capture-nudge.py` replace the `sh` scripts and `guard.awk`. The
   Claude plugin directory's validator reads the shell scripts a hook runs and refuses any command
@@ -62,6 +63,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   `AGENTS.md`. Skills look in context, the working directory, `~/.claude/CLAUDE.md` and
   `~/.codex/AGENTS.md`, ask once if it is missing, and never search the disk.
 - **Why:** works identically in Claude Code and Codex with no plugin configuration mechanism.
+- **Amended 2026-10-24:** the lookup no longer reads `~/.codex/AGENTS.md` (D21).
 - **Open:** replacing the line with the plugin's `userConfig` is under consideration (a local,
   git-ignored proposal, not in the repository).
 
@@ -94,6 +96,8 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   plugin is installed, otherwise a fresh subagent); refuted findings move to a Disputed list.
 - **Why:** one scale makes findings comparable across skills; a verifier without the reviewer's
   reasoning catches confident false positives before they block a merge.
+
+- **Amended 2026-10-24:** the verifier is always a fresh `verifier` agent; the Codex option is removed (D21).
 
 ## D9. Action skills declare where they stop and what they never do
 
@@ -205,7 +209,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   workflow because the action's own checksum file comes from the same release and proves nothing
   if the release is replaced.
 
-## D19. A Codex installer that copies, not symlinks
+## D19. A Codex installer that copies, not symlinks (superseded by D21)
 
 - **Date:** 2026-10-15 · Sources proposal #15, Q13
 - **Decision:** `scripts/install-codex.sh`, run by hand, writes a Codex copy of every skill (name and
@@ -230,6 +234,14 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
   docs commit; the cached-copy problem of D14 is the intended behaviour once `main` moves only on a
   release. Anthropic's plugin directory warns on a missing `version`. Same model as founder-os.
 - **Alternatives:** a tag on `development` without a `version` (installs keep tracking every commit).
+
+## D21. Claude Code only
+
+- **Date:** 2026-10-24
+- **Decision:** developer-os supports Claude Code only. `scripts/install-codex.sh` and its test are
+  removed, the brain skills no longer read `~/.codex/AGENTS.md`, and code-review and
+  audit-to-backlog always use the `verifier` agent instead of the Codex plugin. Supersedes D19.
+- **Why:** the maintainer's decision; reason not recorded.
 
 ## Rules history
 

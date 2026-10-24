@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Configuration reference · developer-os</title>
-<meta name="description" content="Every line, key and environment variable that configures developer-os at user, project, vault and Codex level.">
+<meta name="description" content="Every line, key and environment variable that configures developer-os at user, project and vault level.">
 <link rel="canonical" href="https://msolecki.github.io/developer-os/docs/reference/configuration.html">
 <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
 <link rel="apple-touch-icon" href="../../assets/apple-touch-icon.png">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="developer-os">
 <meta property="og:title" content="Configuration reference · developer-os">
-<meta property="og:description" content="Every line, key and environment variable that configures developer-os at user, project, vault and Codex level.">
+<meta property="og:description" content="Every line, key and environment variable that configures developer-os at user, project and vault level.">
 <meta property="og:url" content="https://msolecki.github.io/developer-os/docs/reference/configuration.html">
 <meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/docs.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/configuration.md@c3c0a900ac4c">
+<meta name="dos-source" content="docs/reference/configuration.md@80925db03d12">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,17 +54,15 @@
       <table>
         <thead><tr><th scope="col">Setting</th><th scope="col">Where</th><th scope="col">Read by</th><th scope="col">Written by</th></tr></thead>
         <tbody>
-          <tr><td><code>Brain vault: &lt;absolute path&gt;</code></td><td><code>~/.claude/CLAUDE.md</code> (or a project's <code>CLAUDE.md</code>/<code>AGENTS.md</code>; <code>~/.codex/AGENTS.md</code> for Codex)</td><td>All brain skills; the core rule that runs brain-search before large tasks</td><td>brain-setup, after approval (Claude Code only; for Codex it prints the line)</td></tr>
+          <tr><td><code>Brain vault: &lt;absolute path&gt;</code></td><td><code>~/.claude/CLAUDE.md</code> (or a project's <code>CLAUDE.md</code>/<code>AGENTS.md</code>)</td><td>All brain skills; the core rule that runs brain-search before large tasks</td><td>brain-setup, after approval</td></tr>
           <tr><td>Vault in <code>permissions.additionalDirectories</code></td><td><code>~/.claude/settings.json</code></td><td>Claude Code, so the vault can be read from any project</td><td>brain-setup, after approval</td></tr>
           <tr><td><code>"outputStyle": "developer-os:&lt;name&gt;"</code></td><td>Claude Code settings</td><td>Claude Code; a bare name silently falls back to the default style</td><td>The user</td></tr>
           <tr><td>Rule overrides</td><td><code>~/.claude/CLAUDE.md</code></td><td>The model, alongside the core rules</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code></td><td>Shell environment</td><td>The <code>Stop</code> hook (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
-          <tr><td><code>CODEX_SKILLS_DIR</code></td><td>Shell environment</td><td><code>scripts/install-codex.sh</code> (default <code>~/.agents/skills</code>)</td><td>The user</td></tr>
-          <tr><td><code>CODEX_HOME</code></td><td>Shell environment</td><td><code>scripts/install-codex.sh</code>, which writes <code>$CODEX_HOME/AGENTS.md</code> (default <code>~/.codex</code>)</td><td>The user</td></tr>
         </tbody>
       </table>
     </div>
-    <p>brain-setup, the brain skills' vault lookup and <code>scripts/install-codex.sh</code> resolve the config directory
+    <p>brain-setup and the brain skills' vault lookup resolve the config directory
     as <code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}</code>; brain-setup edits files in place, so symlinked config files
     stay symlinks.</p>
     <h2 id="project-level">Project level</h2>
@@ -99,11 +97,6 @@
       </table>
     </div>
     <p>Note frontmatter, folders and the four body headings: <a href="../workflow.html#vault-layout">workflow.md, Vault layout</a>.</p>
-    <h2 id="codex">Codex</h2>
-    <p>No manifest. <code>scripts/install-codex.sh</code> (run by hand, <code>--dry-run</code> first) writes a Codex copy of each skill
-    to <code>${CODEX_SKILLS_DIR:-~/.agents/skills}</code> with a <code>.developer-os-codex</code> marker, and puts the core rules and
-    the <code>Brain vault:</code> line between <code>developer-os-core</code> markers in <code>${CODEX_HOME:-~/.codex}/AGENTS.md</code>
-    (<a href="../readme.html#codex-installer-best-effort">README</a>).</p>
     <nav class="doc-foot" aria-label="Pagination">
       <a href="hooks.html">Hooks reference</a>
       <a href="../glossary.html">Glossary</a>

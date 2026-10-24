@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-search/SKILL.md@4981e9cc5397">
+<meta name="dos-source" content="plugin/skills/brain-search/SKILL.md@efb6341a4938">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -67,7 +67,7 @@
 
     <h2 id="what-it-does">What it does</h2>
     <ol>
-      <li><strong>Finds the vault.</strong> It looks for the <code>Brain vault: &lt;absolute path&gt;</code> line in the instructions already in context, then <code>CLAUDE.md</code> and <code>AGENTS.md</code> in the working directory, then <code>~/.claude/CLAUDE.md</code> (or <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code>), then <code>~/.codex/AGENTS.md</code>. With no line it asks you once; it never guesses or searches the disk for vaults.</li>
+      <li><strong>Finds the vault.</strong> It looks for the <code>Brain vault: &lt;absolute path&gt;</code> line in the instructions already in context, then <code>CLAUDE.md</code> and <code>AGENTS.md</code> in the working directory, then <code>~/.claude/CLAUDE.md</code> (or <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code>). With no line it asks you once; it never guesses or searches the disk for vaults.</li>
       <li><strong>Searches content and frontmatter.</strong> It picks two to four keywords and synonyms and searches case-insensitively with <code>rg</code>, skipping <code>_archive/</code>, <code>templates/</code>, <code>_views/</code>, <code>_reports/</code> and the vault's <code>README.md</code>. Archived notes are dropped unless you ask for them.</li>
       <li><strong>Ranks.</strong> A match in <code>summary</code>, <code>tags</code> or the file name, a <code>project</code> equal to the current repository's slug (from <code>_Context.md</code>), more distinct keywords, <code>status: active</code> over <code>inbox</code>, and a newer <code>updated</code> rank higher. It keeps the top five.</li>
       <li><strong>Reads and answers.</strong> It reads those notes in full and attaches the vault-relative path to every claim. Claims from <code>_inbox/</code> notes are marked unreviewed. If nothing matches it says <em>No note in the vault covers &lt;topic&gt;.</em> and stops, without filling the gap from general knowledge.</li>

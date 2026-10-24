@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@42f591a6ce14">
+<meta name="dos-source" content="CHANGELOG.md@282170f2fe3b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -56,6 +56,12 @@ project-baseline, docs-sync and instruction-review up to their reports, audits t
 each applicable conventions skill, and asks once for the whole numbered list.</li>
 <li><code>docs/reference/skills.md</code> says, for every skill, what it checks and how.</li>
 <li>The eval case <code>project-init-no-write</code>.</li>
+    </ul>
+    <h3 id="unreleased-removed">Removed</h3>
+    <ul>
+<li>Codex support: <code>scripts/install-codex.sh</code> and its test, the <code>~/.codex/AGENTS.md</code> step of the
+brain skills' vault lookup and of brain-setup, and the Codex verifier in code-review and
+audit-to-backlog (the <code>verifier</code> agent is always used). developer-os is Claude Code only.</li>
     </ul>
     <h3 id="unreleased-fixed">Fixed</h3>
     <ul>

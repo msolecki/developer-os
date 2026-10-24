@@ -113,7 +113,7 @@ specialists: security (`security-auditor`), performance (`performance-engineer`)
 (`qa-expert`, assessment only), correctness (`code-reviewer`), and inline passes for types,
 architecture and dead code, UI and accessibility. Every finding needs `file:line`, current-code
 evidence, a fix, a `Done when` and a runnable `Check`; unsupported claims are rejected. Each P0 and
-P1 goes to a fresh verifier (Codex when installed, otherwise `verifier`); refuted ones are listed
+P1 goes to a fresh verifier (the `verifier` agent); refuted ones are listed
 as Disputed, not written. Findings are deduplicated by file and root cause against the backlog and
 its done file.
 

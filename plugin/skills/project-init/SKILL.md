@@ -2,7 +2,7 @@
 name: project-init
 description: Adopt developer-os in a repository in one pass — detect the stack, pick the skills that apply, run project-baseline, docs-sync and instruction-review, audit the code against each applicable conventions skill, then give one report and one approval, writing nothing before it. Use when starting with developer-os in a repository, for example "init developer-os here", "check the whole project", "set the repo up for developer-os".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Project init
