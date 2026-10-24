@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@c8c9ac881dff">
+<meta name="dos-source" content="README.md@acdb24a38bc0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -133,7 +133,7 @@ nextjs-conventions, testing-conventions, typescript-conventions.</li>
 <li><strong>Agents:</strong> code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.</li>
 <li><strong>Output styles:</strong> architect, debug, direct-objective, tdd-enforcer. Select one with
 <code>/output-style</code>, or set <code>"outputStyle": "developer-os:architect"</code> in settings (the plugin prefix is required).</li>
-<li><strong>Four hooks on three events:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction), <code>Stop</code> suggests a session wrap-up
+<li><strong>Four hooks on three events:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction, resume or fork), <code>Stop</code> suggests a session wrap-up
 once per long session, <code>PreToolUse</code> asks before installs, force pushes and hook bypasses (see above).</li>
 <li><strong>Evals:</strong> behavior checks for the brain skills, code-review, session-retro and the skill
 triggers in <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md"><code>evals/</code></a>, run by hand with <code>claude plugin eval</code>. Not part of the

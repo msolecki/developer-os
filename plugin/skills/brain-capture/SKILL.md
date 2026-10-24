@@ -45,12 +45,12 @@ Before writing, replace with `[REDACTED]`: API keys, tokens, passwords, private 
 Scan the redacted note, exactly as you will write it, in one Bash call:
 
 ```bash
-grep -nE -- '-----BEGIN|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}|xox[baprs]-|://[^/[:space:]]+:[^@[:space:]]+@' <<'NOTE'
+grep -nE -- '-----BEGIN|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}|xox[baprs]-|://[^/[:space:]]+:[^@[:space:]]+@' <<'END_OF_NOTE_7f3a'
 <the full note>
-NOTE
+END_OF_NOTE_7f3a
 ```
 
-A hit means a secret survived step 4: write nothing, name the line and the pattern, and ask the user how to redact it.
+Exit 1 (no output) means no hit: the note is clean. A hit means a secret survived step 4: write nothing, name the line and the pattern, and ask the user how to redact it.
 
 When you started the capture yourself (the user did not ask for it: no "capture", "remember this", or a yes to an offered capture), show the final note text and ask for approval before writing. Write it only after a yes.
 

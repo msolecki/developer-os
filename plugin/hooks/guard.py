@@ -70,7 +70,9 @@ def scan(line):
                 continue
             if sub and (not x.startswith("-") or x == "--latest"):
                 return "install"
-            if pm and x in INSTALL:
+            # A word right after `run`, `exec` or `dlx` names a script or binary (`npm run up`), unless that
+            # word follows a flag and may be its value (`yarn --cwd exec add zod`).
+            if pm and x in INSTALL and not (i > 1 and words[i - 1] in ("run", "exec", "dlx") and not words[i - 2].startswith("-")):
                 sub = True
             if re.search(r"(^|/)(npm|pnpm|yarn|bun)$", x):
                 pm = True

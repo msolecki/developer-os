@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/implement-backlog/SKILL.md@69488eebcc9c">
+<meta name="dos-source" content="plugin/skills/implement-backlog/SKILL.md@4fdf25ac9bb4">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -91,7 +91,7 @@ Next: &lt;one line&gt;</code></pre>
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>The batch is committed locally, or earlier at a red baseline, after three failed repair cycles, or after two review rounds without a pass. It deletes the state card and returns the validation evidence, the review additions and the next batch. Claimed items still open lose their <code>Owner</code> line in a release commit on the base, so the next run can take them.</p>
+      <p>The batch is committed locally, or earlier at a red baseline, after three failed repair cycles, or after two review rounds without a pass. It deletes the state card and returns the validation evidence, the review additions and the next batch. Claimed items still open lose their <code>Owner</code> line in a release commit on the base, made from a clean checkout of the base while the batch branch stays untouched for you, so the next run can take them.</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>

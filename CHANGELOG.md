@@ -19,6 +19,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   known type with at least one deterministic grader, and a row in `evals/README.md`.
 - The check has a Docs standard stage: the ADR, pitfalls and CURRENT-STATE headings and fields of
   `templates/project/` must appear in docs-sync's standard list.
+
 ### Changed
 - The state card also follows a forked session (`SessionStart` source `fork`: `--fork-session`,
   `/branch`, `/fork`), which carries the earlier task context like a resume. `plugin.json` declares
@@ -26,7 +27,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The `PreToolUse` guard asks in more cases: bun's `a` alias; `update`, `up`, `upgrade`, `remove`,
   `rm`, `uninstall` and `un` with a package argument or `--latest`; `LEFTHOOK=0` and pre-commit's
   `SKIP=`; `-c remote.<name>.push=+…`; and words hidden behind `$IFS`, `${X:-word}` or a `$'\x66'`
-  escape. `git stash push -f` no longer asks as a force push. The tests now pin which reason fires.
+  escape. `git stash push -f` no longer asks as a force push, nor does a script or binary named like
+  a subcommand right after `run`, `exec` or `dlx` (`npm run up foo`). The tests now pin which reason fires.
 - session-retro ties every check result to the commit it ran on: Done and the plan update list each
   check as `<command>: <result> at <short SHA>`, plus `+ uncommitted: <changed files>` when the tree
   was dirty, so a later commit visibly outdates a saved "tests pass". New eval case
@@ -50,6 +52,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   implement-backlog makes the `Owner` release commit on the base after an early stop, names the
   record commit as the one that waits for the review pass, and its Never rule allows the claim and
   release commits and the local `--ff-only` fast-forward on the base.
+
+### Fixed
+- brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
+  match. A capture the agent started on its own shows the note text and waits for a yes.
+- session-retro sets `base` again in its cleanup command, because Bash calls do not keep variables;
+  it routes user preferences to `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md`; and its triggers no
+  longer include the bare "clean up" or "is everything done".
+- The architect output style writes ADRs in the docs-sync shape: Date, Status (`superseded by NNNN`),
+  Context, Decision, Consequences, Alternatives rejected, Revisit when.
 
 ## [0.2.4] - 2026-10-20
 
@@ -81,13 +92,6 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   hook error.
 - The nudge counted each tool call about twice, because `api-request-blob` transcript lines repeat
   earlier turns, so it fired after about 15 tool calls instead of 30. Those lines are skipped now.
-- brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
-  match. A capture the agent started on its own shows the note text and waits for a yes.
-- session-retro sets `base` again in its cleanup command, because Bash calls do not keep variables;
-  it routes user preferences to `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md`; and its triggers no
-  longer include the bare "clean up" or "is everything done".
-- The architect output style writes ADRs in the docs-sync shape: Date, Status (`superseded by NNNN`),
-  Context, Decision, Consequences, Alternatives rejected, Revisit when.
 
 ## [0.2.3] - 2026-10-16
 

@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@0cb1f33f8e54">
+<meta name="dos-source" content="CHANGELOG.md@204345110498">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -74,7 +74,8 @@ the plugin icon for the directory listing.</li>
 <li>The <code>PreToolUse</code> guard asks in more cases: bun's <code>a</code> alias; <code>update</code>, <code>up</code>, <code>upgrade</code>, <code>remove</code>,
 <code>rm</code>, <code>uninstall</code> and <code>un</code> with a package argument or <code>--latest</code>; <code>LEFTHOOK=0</code> and pre-commit's
 <code>SKIP=</code>; <code>-c remote.&lt;name&gt;.push=+…</code>; and words hidden behind <code>$IFS</code>, <code>${X:-word}</code> or a <code>$'\x66'</code>
-escape. <code>git stash push -f</code> no longer asks as a force push. The tests now pin which reason fires.</li>
+escape. <code>git stash push -f</code> no longer asks as a force push, nor does a script or binary named like
+a subcommand right after <code>run</code>, <code>exec</code> or <code>dlx</code> (<code>npm run up foo</code>). The tests now pin which reason fires.</li>
 <li>session-retro ties every check result to the commit it ran on: Done and the plan update list each
 check as <code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus <code>+ uncommitted: &lt;changed files&gt;</code> when the tree
 was dirty, so a later commit visibly outdates a saved "tests pass". New eval case
@@ -98,6 +99,16 @@ file. The verifier reads an untrusted head's code from the diff file, not from f
 implement-backlog makes the <code>Owner</code> release commit on the base after an early stop, names the
 record commit as the one that waits for the review pass, and its Never rule allows the claim and
 release commits and the local <code>--ff-only</code> fast-forward on the base.</li>
+</ul>
+    <h3 id="unreleased-fixed">Fixed</h3>
+    <ul>
+<li>brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
+match. A capture the agent started on its own shows the note text and waits for a yes.</li>
+<li>session-retro sets <code>base</code> again in its cleanup command, because Bash calls do not keep variables;
+it routes user preferences to <code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md</code>; and its triggers no
+longer include the bare "clean up" or "is everything done".</li>
+<li>The architect output style writes ADRs in the docs-sync shape: Date, Status (<code>superseded by NNNN</code>),
+Context, Decision, Consequences, Alternatives rejected, Revisit when.</li>
 </ul>
     <h2 id="024---2026-10-20">[0.2.4] - 2026-10-20</h2>
     <h3 id="024-added">Added</h3>
@@ -132,13 +143,6 @@ The project template and docs-sync keep <code>CURRENT-STATE.md</code> for your o
 hook error.</li>
 <li>The nudge counted each tool call about twice, because <code>api-request-blob</code> transcript lines repeat
 earlier turns, so it fired after about 15 tool calls instead of 30. Those lines are skipped now.</li>
-<li>brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
-match. A capture the agent started on its own shows the note text and waits for a yes.</li>
-<li>session-retro sets <code>base</code> again in its cleanup command, because Bash calls do not keep variables;
-it routes user preferences to <code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md</code>; and its triggers no
-longer include the bare "clean up" or "is everything done".</li>
-<li>The architect output style writes ADRs in the docs-sync shape: Date, Status (<code>superseded by NNNN</code>),
-Context, Decision, Consequences, Alternatives rejected, Revisit when.</li>
 </ul>
     <h2 id="023---2026-10-16">[0.2.3] - 2026-10-16</h2>
     <h3 id="023-changed">Changed</h3>

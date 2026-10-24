@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@398f178591cb">
+<meta name="dos-source" content="docs/product/decisions.md@818a5b8242b3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -155,6 +155,7 @@
 <li><strong>Amended 2026-10-15:</strong> the state file prints before the worktree list, so a long list cannot push it past the cap; a card over the cap is cut at a whole line with a marker; a state file not changed in 7 days is left over from a finished run and is not shown. The card's <code>Newest plan:</code> line comes from the plan files only; the state file's own <code>Plan:</code> line prints inside the state section.</li>
 <li><strong>Amended 2026-10-16:</strong> the state-file path is fixed at <code>docs/plans/.devos-state.md</code> even when a project overrides its planning location; skills and core rules name that path. A project that moves its plans still git-ignores <code>docs/plans/</code> (or that file) so the card shows it — the one extra <code>.gitignore</code> entry D16 rejected <code>.claude/devos-state.md</code> for.</li>
 <li><strong>Amended 2026-10-16:</strong> the card comes from its own hook, <code>state-card.py</code>, matched to <code>compact</code> and <code>resume</code>; the core rules print from a separate <code>cat</code> hook (D2), so the card is no longer guaranteed to follow them.</li>
+<li><strong>Amended 2026-10-24:</strong> the state card also runs on a forked session (source <code>fork</code>).</li>
 <li><strong>Rejected:</strong> a <code>PreCompact</code> hook (its input and output are undocumented); <code>.claude/devos-state.md</code> (one more <code>.gitignore</code> entry per project).</li>
 </ul>
 <h2 id="d17-one-backlog-item-format-defined-in-the-skills-only">D17. One backlog item format, defined in the skills only</h2>

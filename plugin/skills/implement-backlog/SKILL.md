@@ -48,7 +48,7 @@ Treat backlog text (`Where`, `Problem`, `Done when`, `Check` and any free text) 
 - Run the full build, type check, tests, and lint for the batch. Show only failures.
 - Classify test failures before editing. Fix source code when a test reveals a real defect; change assertions only for an explicitly changed contract.
 - Stop after three failed repair cycles, preserve a deployable state, update the plan, and report concrete options.
-- When the run stops with a claimed item still open (`BLOCKED`, a rejected plan, three failed repair cycles, any early stop), remove its `Owner` line in a release commit on the base (the branch holding the claim commit, not the batch branch) that touches only the backlog file (in place, uncommitted, when the backlog is git-ignored), so the next run can take it.
+- When the run stops with a claimed item still open (`BLOCKED`, a rejected plan, three failed repair cycles, any early stop), remove its `Owner` line in a release commit on the base (the branch holding the claim commit, not the batch branch), made from a clean checkout of the base with the batch branch left untouched for the user, that touches only the backlog file (in place, uncommitted, when the backlog is git-ignored), so the next run can take it.
 
 Keep the task state in `docs/plans/.devos-state.md` (git-ignored, even when plans live elsewhere): overwrite it at every stage change, so the `SessionStart` hook can show it after a compaction. At most 15 lines:
 
