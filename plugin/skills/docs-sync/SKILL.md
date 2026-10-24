@@ -2,7 +2,7 @@
 name: docs-sync
 description: Check a repository's docs against its code and the project docs standard — scaffold missing pieces, refresh docs/CURRENT-STATE.md, report docs-vs-code drift, and propose the "Likely agent mistakes here" section from git history — writing nothing until the user approves. Use when docs may be stale, after a large change, or when setting up docs in a project; for example "refresh the docs", "are the docs up to date", "sync the docs with the code".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Docs sync

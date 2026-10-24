@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@2c448311b2f7">
+<meta name="dos-source" content="docs/architecture/overview.md@0a93b269c853">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -55,16 +55,16 @@ plugin/                           the installed payload
   .claude-plugin/plugin.json      name, version, description, license, keywords
   rules/core.md                   core rules, printed by a SessionStart cat hook
   SURFACE.txt                     public names, checked against the disk
-  hooks/hooks.json                4 hooks, 10-second timeouts
+  hooks/hooks.json                5 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction or resume
+  hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
   hooks/guard.py                  PreToolUse guard for Bash
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
-  skills/&lt;name&gt;/SKILL.md          28 skills
+  skills/&lt;name&gt;/SKILL.md          29 skills
   agents/&lt;name&gt;.md                6 agents
   output-styles/&lt;name&gt;.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
-scripts/install-codex.sh          Codex installer, run by hand (not installed)
 evals/                            claude plugin eval cases (not installed)
 tests/*.test.sh                   hook tests
 .agnix.toml                       agnix lint settings for CI
@@ -81,7 +81,7 @@ site/                             public documentation site, published by .githu
         <tbody>
           <tr><td><code>rules/core.md</code></td><td>Every <code>SessionStart</code>: startup, resume, <code>/clear</code>, compaction, fork</td><td>Just under the limit</td><td>8192 bytes (<code>scripts/check.sh</code>); Claude Code caps hook output at 10,000 characters</td></tr>
           <tr><td>State card</td><td>After a compaction or resume inside a git repository</td><td>Up to 1024 bytes</td><td>The <code>CAP</code> in <code>state-card.py</code>; the check keeps rules plus card under 10,000</td></tr>
-          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing</td><td>10065 characters for 28 skills</td><td>80–1024 each, 12000 total</td></tr>
+          <tr><td>Skill names and descriptions</td><td>Every session, by Claude Code's skill listing</td><td>10493 characters for 29 skills</td><td>80–1024 each, 12000 total</td></tr>
           <tr><td>Agent and output-style descriptions</td><td>Every session, by Claude Code's listings</td><td>Small</td><td>None in <code>check.sh</code></td></tr>
           <tr><td>A skill's body</td><td>When the model or the user invokes it</td><td>0.7–8.8 KB per <code>SKILL.md</code> file</td><td>One screen where possible (CONTRIBUTING)</td></tr>
           <tr><td>An agent's body</td><td>When a skill or the main agent dispatches it, in the subagent's own context</td><td>2.0–3.9 KB per file</td><td>—</td></tr>
@@ -105,7 +105,7 @@ site/                             public documentation site, published by .githu
       .arch-svg .sm { font-size: 12px; }
     </style>
 <div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-seq-title" viewBox="0 0 920 460" style="display:block;width:100%;min-width:720px;height:auto">
-<title id="arch-seq-title">Hook pipeline: Claude Code runs cat core.md and, after compact or resume, state-card.py on SessionStart, guard.py on PreToolUse for every Bash call, and capture-nudge.py on Stop</title>
+<title id="arch-seq-title">Hook pipeline: Claude Code runs cat core.md, after compact or resume state-card.py, and on startup notices.py on SessionStart, guard.py on PreToolUse for every Bash call, and capture-nudge.py on Stop</title>
 <defs><marker id="arch-seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
 <line class="life" x1="100" y1="64" x2="100" y2="450"/>
 <rect class="box" x="5" y="14" width="190" height="50" rx="6"/>
@@ -113,7 +113,7 @@ site/                             public documentation site, published by .githu
 <line class="life" x1="340" y1="64" x2="340" y2="450"/>
 <rect class="box" x="245" y="14" width="190" height="50" rx="6"/>
 <text x="340" y="35" text-anchor="middle">SessionStart:</text>
-<text x="340" y="53" text-anchor="middle">cat core.md, state-card.py</text>
+<text x="340" y="53" text-anchor="middle">core.md, state-card, notices</text>
 <line class="life" x1="580" y1="64" x2="580" y2="450"/>
 <rect class="box" x="485" y="14" width="190" height="50" rx="6"/>
 <text x="580" y="35" text-anchor="middle">PreToolUse:</text>
@@ -125,7 +125,7 @@ site/                             public documentation site, published by .githu
 <line class="edge" x1="100" y1="125" x2="336" y2="125" marker-end="url(#arch-seq-arrow)"/>
 <text class="sm" x="220" y="117" text-anchor="middle">session starts / resumes / compacts</text>
 <line class="edge dash" x1="340" y1="185" x2="104" y2="185" marker-end="url(#arch-seq-arrow)"/>
-<text class="sm" x="220" y="177" text-anchor="middle">after compact/resume</text>
+<text class="sm" x="220" y="177" text-anchor="middle">card after compact/resume; notices on startup</text>
 <text class="sm" x="220" y="161" text-anchor="middle">stdout = core rules, plus a state card</text>
 <line class="edge" x1="100" y1="245" x2="576" y2="245" marker-end="url(#arch-seq-arrow)"/>
 <text class="sm" x="340" y="237" text-anchor="middle">every Bash call, JSON on stdin</text>
@@ -140,10 +140,11 @@ site/                             public documentation site, published by .githu
 </svg></div>
     <ul>
       <li>A <code>cat</code> hook prints <code>core.md</code> on every source, without Python. <code>state-card.py</code>, for <code>source</code> <code>compact</code> or <code>resume</code> inside a git repository, prints the branch, the newest plan, <code>docs/plans/.devos-state.md</code> (skipped when older than 7 days) and the worktrees, cut to whole lines within 1024 bytes.</li>
+      <li><code>notices.py</code>, for <code>source</code> <code>startup</code>, compares the plugin version with a marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/notices/</code> (Claude Code has no install or update hook) and, when the user-level <code>CLAUDE.md</code> names a vault, counts <code>_inbox/</code> notes older than 7 days and reads the last line of <code>_reports/garden-log.md</code>. It shows due notices to the user as a <code>systemMessage</code>, each throttled by its own marker.</li>
       <li><code>guard.py</code> extracts <code>tool_input.command</code> with a regular expression, unescapes JSON, joins line continuations, drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.</li>
       <li><code>capture-nudge.py</code> reads <code>session_id</code> and <code>transcript_path</code> from the input, counts <code>"type":"tool_use"</code> occurrences in the transcript file, defers while a background task launched in the session has no <code>&lt;task-notification&gt;</code> and a fresh output file under a <code>tasks/</code> directory, or while a Monitor started in the last 30 minutes has no terminal notice, and records a per-session marker in <code>${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-&lt;uid&gt;}/capture-nudge/</code> so it fires once. Markers older than 7 days are removed.</li>
     </ul>
-    <p>The three scripts are Python 3, standard library only; without <code>python3</code> they fail open. Exact inputs, outputs and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
+    <p>The four scripts are Python 3, standard library only; without <code>python3</code> they fail open. Exact inputs, outputs and switches: <a href="../reference/hooks.html">reference/hooks.md</a>.</p>
     <h2 id="4-skill-composition">4. Skill composition</h2>
     <p>Skills call each other by name and dispatch agents. The dependencies that exist today:</p>
     <div class="table-wrap"><svg class="arch-svg" role="img" aria-labelledby="arch-flow-title" viewBox="0 0 1040 940" style="display:block;width:100%;min-width:860px;height:auto">
@@ -203,8 +204,8 @@ site/                             public documentation site, published by .githu
 <text x="660" y="122" text-anchor="middle">code-reviewer</text>
 <rect class="agent" x="560" y="175" width="200" height="44" rx="2"/>
 <line class="agent" x1="569" y1="175" x2="569" y2="219"/><line class="agent" x1="751" y1="175" x2="751" y2="219"/>
-<text x="660" y="193" text-anchor="middle">fresh verifier:</text>
-<text x="660" y="209" text-anchor="middle">Codex or verifier agent</text>
+<text x="660" y="193" text-anchor="middle">fresh verifier</text>
+<text x="660" y="209" text-anchor="middle">agent</text>
 <rect class="agent" x="560" y="260" width="200" height="34" rx="2"/>
 <line class="agent" x1="569" y1="260" x2="569" y2="294"/><line class="agent" x1="751" y1="260" x2="751" y2="294"/>
 <text x="660" y="282" text-anchor="middle">security-auditor</text>
@@ -249,12 +250,12 @@ site/                             public documentation site, published by .githu
           <tr><td>Brain search</td><td>Vault Markdown (<code>rg</code>), skipping <code>_archive/</code>, <code>templates/</code>, <code>_views/</code></td><td>—</td><td>Notes read go to the model provider</td></tr>
           <tr><td>Capture / compile</td><td>Session context; vault for duplicates</td><td>One file in <code>_inbox/</code></td><td>Only as context</td></tr>
           <tr><td>Review / garden</td><td>Vault</td><td>Named moves and edits; <code>_reports/garden-log.md</code></td><td>Only as context</td></tr>
+          <tr><td>Notices hook</td><td><code>plugin.json</code>, the user-level <code>CLAUDE.md</code>, <code>_inbox/*.md</code> (first 2 KB), <code>_reports/garden-log.md</code> (last 4 KB)</td><td>Markers in the plugin data directory</td><td>Counts and dates only, to the user and as context</td></tr>
           <tr><td>Setup</td><td><code>vault-template/</code>, <code>~/.claude/CLAUDE.md</code>, <code>~/.claude/settings.json</code></td><td>Vault files; the two config edits</td><td>No</td></tr>
           <tr><td>Skill usage</td><td><code>~/.claude/projects/**/*.jsonl</code> (counts only, <code>--no-filename</code>)</td><td>—</td><td>Counts only, as context</td></tr>
           <tr><td>Session retro</td><td><code>git</code>, <code>gh pr list</code> (read-only)</td><td>Approved items only</td><td><code>gh</code> queries GitHub</td></tr>
           <tr><td>PR skills</td><td><code>git</code>, <code>gh</code></td><td>Commits, pushes, PR body, thread replies after approval</td><td>Yes, to GitHub, after approval</td></tr>
-          <tr><td>Verifier</td><td>The claim and the repository path</td><td>—</td><td>To Codex's provider when the Codex plugin is used</td></tr>
-          <tr><td>Codex installer (by hand)</td><td><code>plugin/skills/</code>, <code>core.md</code>, <code>~/.claude/CLAUDE.md</code></td><td><code>~/.agents/skills/&lt;name&gt;</code>, a marked block in <code>~/.codex/AGENTS.md</code> and its backup</td><td>No</td></tr>
+          <tr><td>Verifier</td><td>The claim and the repository path</td><td>—</td><td>No</td></tr>
           <tr><td>Routines (optional, user-built)</td><td>The vault repository in Anthropic's cloud</td><td><code>_inbox/</code> notes, an issue comment</td><td>Yes; see <a href="../workflow.html#away-from-the-desk-optional">workflow.md</a></td></tr>
         </tbody>
       </table>
@@ -272,6 +273,7 @@ site/                             public documentation site, published by .githu
           <tr><td>External repositories</td><td><code>.claude/settings.json</code>, hooks, <code>.mcp.json</code> of a client or OSS repo</td><td>Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread</td></tr>
           <tr><td>Subagent output</td><td>A delegate's edits</td><td>Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare <code>git status</code> and <code>git diff</code></td></tr>
           <tr><td>Plugin updates</td><td>A new commit's hooks and rules</td><td><code>SECURITY.md</code>: review the diff from the installed commit before updating; auto-update is off by default</td></tr>
+          <tr><td>Project instructions</td><td>A cloned repository's <code>CLAUDE.md</code> naming a vault</td><td>The notices hook reads the <code>Brain vault:</code> line from the user-level <code>CLAUDE.md</code> only and prints counts, never note names</td></tr>
           <tr><td>Session transcripts</td><td>Past conversations</td><td>Only skill-usage reads them, and only counts; session-retro and docs-sync never open them</td></tr>
         </tbody>
       </table>

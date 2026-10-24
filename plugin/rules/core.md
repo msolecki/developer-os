@@ -20,7 +20,7 @@
 
 - Before the first session in an external repository, read its `.claude/settings.json`, `.claude/hooks/`, and `.mcp.json` (and the equivalents for any other agent). Its hooks run in your shell, and its MCP servers run once you approve them.
 - Use a sandbox or a plan-only permission mode for the first session in an external repository. Inspect first, then grant permissions.
-- Never copy configuration or hooks from an external repository into your user-level agent configuration (`~/.claude`, `~/.codex`) without reading every line.
+- Never copy configuration or hooks from an external repository into your user-level agent configuration (`~/.claude`) without reading every line.
 
 ## Workflow
 

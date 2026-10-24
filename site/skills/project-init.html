@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>project-init · developer-os skills</title>
+<meta name="description" content="Adopts developer-os in a repository in one pass: detects the stack, runs the setup skills and a conventions audit, and asks once for every change.">
+<link rel="canonical" href="https://msolecki.github.io/developer-os/skills/project-init.html">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="developer-os">
+<meta property="og:title" content="project-init · developer-os skills">
+<meta property="og:description" content="Adopts developer-os in a repository in one pass: detects the stack, runs the setup skills and a conventions audit, and asks once for every change.">
+<meta property="og:url" content="https://msolecki.github.io/developer-os/skills/project-init.html">
+<meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/skills.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The developer-os skill library">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="dos-source" content="plugin/skills/project-init/SKILL.md@074ece04b03d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true"></span>developer-os</a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="../docs/index.html">Docs</a>
+      <a href="../skills/index.html">Skills</a>
+      <a href="../agents.html" class="hide-sm">Agents</a>
+      <a href="https://github.com/msolecki/developer-os">GitHub</a>
+    </nav>
+    <a class="btn btn-solid" href="../index.html#install">Install</a>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="sidebar" aria-label="Documentation">
+    <details><summary>Documentation menu</summary><nav id="sidebar-nav"><a href="../docs/index.html">Documentation index</a></nav></details>
+  </aside>
+
+  <main id="main" class="prose">
+    <p class="breadcrumb"><a href="index.html">Skills</a> / Project hygiene</p>
+    <h1 id="project-init">project-init</h1>
+    <p class="lede">Adopts developer-os in a repository in one pass: it detects the stack, picks the skills that apply, runs the setup skills and a conventions audit, and gives one report with one question. Nothing is written before you answer it.</p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Group</dt><dd>Project hygiene</dd></div>
+      <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
+      <div class="fact"><dt>Writes</dt><dd>Approved items only: backlog items, doc edits, the instruction-file diff</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Applying any item; it never picks a default for a decision</dd></div>
+    </dl>
+
+    <h2 id="when-it-runs">When it runs</h2>
+    <p>When you start using developer-os in a repository, or want the whole project checked at once. Say it in your own words, for example:</p>
+    <ul class="chips">
+      <li class="chip">init developer-os here</li>
+      <li class="chip">check the whole project</li>
+      <li class="chip">set the repo up for developer-os</li>
+    </ul>
+
+    <h2 id="what-it-does">What it does</h2>
+    <p>It is an orchestrator: each skill it runs keeps its own steps and its own rules, and their results are merged into one numbered list.</p>
+    <ol>
+      <li><strong>Reads the context.</strong> The stack from the manifests and config on disk (lockfile, <code>tsconfig.json</code>, <code>next.config.*</code>, test files, CI, infrastructure code, API routes, a database and migrations, a UI), the backlog files (without them, their paths are a decision for you, and the <code>Backlog:</code> line is a numbered item), and the project's <code>AGENTS.md</code>, <code>docs/pitfalls.md</code> and decision records: anything the project rejected on purpose is reported as <code>deliberate</code>.</li>
+      <li><strong>Picks the skills.</strong> project-baseline and docs-sync always; instruction-review when a <code>CLAUDE.md</code> or <code>AGENTS.md</code> exists; each conventions skill when its stack is present. comments-conventions is never audited (it governs only comments an agent adds); deploy-checklist is never run (it runs the project's gates and belongs to a release).</li>
+      <li><strong>Runs the process skills.</strong> <a href="project-baseline.html">project-baseline</a>, <a href="docs-sync.html">docs-sync</a> and <a href="instruction-review.html">instruction-review</a>, each up to its report, collecting their items instead of asking their questions one by one.</li>
+      <li><strong>Audits the conventions.</strong> One probe per rule, such as <code>"strict": true</code> in <code>tsconfig.json</code>, an empty <code>catch {}</code>, date fixtures without <code>Z</code>, mock factories that do not spread the original module, or a <code>/health</code> handler that queries the database. Rules that need judgment are sampled: at most five <code>file:line</code> cases per rule. Each P0 and P1 finding goes to a fresh verifier, as in audit-to-backlog. Findings become <code>CONV-NN</code> backlog items; an unsure result is a question.</li>
+      <li><strong>Reports and asks once.</strong> The stack, which skills applied and which did not, one numbered list across all of them, and one A/B/C question.</li>
+    </ol>
+
+    <h2 id="example-output">Example output</h2>
+    <div class="terminal">
+      <div class="terminal-bar"><i></i><i></i><i></i><span>project-init</span></div>
+    <pre><code>Project init — &lt;repo&gt; at &lt;short sha&gt;
+Stack: TypeScript, Next.js 15, Vitest, GitHub Actions, Postgres (Prisma)
+Applies: project-baseline, docs-sync, instruction-review, typescript, nextjs, testing, error-handling, defensive-coding
+Not applicable: monitoring-conventions (no infrastructure code)   Not run: deploy-checklist (run it before the next release)
+Baseline: missing 4   Docs: missing 3, drift 5   Instructions: 2 proposals   Conventions: 6 findings
+Needs your decision: test runner — package.json has both jest and vitest
+
+1. [baseline] BASE-01 · P1 · Secret scanning in CI
+2. [docs] drift — AGENTS.md:24 says `npm run test:e2e`; package.json has no such script
+3. [instructions] AGENTS.md: replace line 22 "Use pnpm." with "Use pnpm (pnpm-lock.yaml)."
+4. [conventions] CONV-01 · P2 · Empty catch in src/webhooks/deliver.ts:40
+
+<span class="t-acc">Apply which? A: all (recommended)  B: list numbers  C: none</span></code></pre>
+    </div>
+
+    <h2 id="boundaries">Boundaries</h2>
+    <div class="callout">
+      <h3 id="stops-when">Stops when</h3>
+      <p>It has shown the report and asked its question. After your approval it applies exactly the approved items the way the owning skill applies them, shows <code>git diff --stat</code> and stops; fixing the findings is implement-backlog's job, and you commit.</p>
+    </div>
+    <div class="callout never">
+      <h3 id="never">Never</h3>
+      <ul>
+        <li>Write, create or delete any file before you approve the numbered items.</li>
+        <li>Change application code, tests, configuration or existing comments.</li>
+        <li>Run the project's scripts, tests or builds, install dependencies, or run deploy-checklist.</li>
+        <li>Pick a default for a "needs your decision" item, or propose something the project rejected on purpose.</li>
+        <li>Commit, push or open a pull request.</li>
+      </ul>
+    </div>
+
+    <h2 id="related">Related</h2>
+    <ul>
+      <li><a href="implement-backlog.html">implement-backlog</a> fixes the <code>BASE</code> and <code>CONV</code> items once they are in the backlog.</li>
+      <li><a href="deploy-checklist.html">deploy-checklist</a> runs before a release.</li>
+      <li><a href="../docs/reference/skills.html">The skills reference</a>: what every skill checks and how.</li>
+    </ul>
+
+    <nav class="doc-foot" aria-label="Source">
+    <a href="https://github.com/msolecki/developer-os/blob/development/plugin/skills/project-init/SKILL.md">Read SKILL.md on GitHub</a>
+    <a href="index.html">All skills</a>
+    </nav>
+  </main>
+
+  <aside id="toc" class="toc" aria-label="On this page"></aside>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Footer">
+      <a href="https://github.com/msolecki/developer-os">Repository</a>
+      <a href="../docs/changelog.html">Changelog</a>
+      <a href="../docs/security.html">Security</a>
+      <a href="https://github.com/msolecki/developer-os/issues">Issues</a>
+    </nav>
+    <p>MIT License. Made by Mateusz Solecki.</p>
+  </div>
+</footer>
+<script src="../assets/site.js"></script>
+</body>
+</html>

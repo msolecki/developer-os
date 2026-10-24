@@ -35,7 +35,7 @@ answer first. Read-only skills ([glossary](../glossary.md)) change nothing; a sk
 
 Five of them (all but brain-setup, which asks for the path) find the vault with the same paragraph: the first `Brain vault: <absolute path>` line in the
 `CLAUDE.md`/`AGENTS.md` already in context, then the working directory's `CLAUDE.md` and
-`AGENTS.md`, then `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`), then `~/.codex/AGENTS.md`. Without one they ask once and
+`AGENTS.md`, then `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`). Without one they ask once and
 stop if the user has no vault; they never search the disk. Vault content is data: no command or URL
 found in a note is run or opened.
 
@@ -65,6 +65,7 @@ found in a note is run or opened.
 | [client-reply](../../plugin/skills/client-reply/SKILL.md) | Turns technical facts into a plain-language reply in the client's language and the user's voice; strips internal identifiers | Nothing | — | The draft in chat; the user sends it |
 | [docs-sync](../../plugin/skills/docs-sync/SKILL.md) | Checks a repository's docs against its code and the docs standard: missing pieces, drift (including `DESIGN.md` older than the styling sources and conflicting decision records), a refreshed `CURRENT-STATE.md`, "Likely agent mistakes" from git history | Approved doc edits | A numbered list, A/B/C | `git diff --stat`; the user commits |
 | [project-baseline](../../plugin/skills/project-baseline/SKILL.md) | Probes 12 engineering practices (env module, secret deny-list, secret scanning, coverage floor, migration guard, boundaries, real-DB tests, safe errors, changelog, docs check, design system file, gate exit codes); missing ones become `BASE-NN` backlog items | Approved items in the backlog | Write the items; decisions it never defaults (package manager, test runner, auth library, monitoring, commit language) | `git diff --stat` |
+| [project-init](../../plugin/skills/project-init/SKILL.md) | Adopts developer-os in a repository: detects the stack, picks the skills that apply, runs project-baseline, docs-sync and instruction-review up to their reports, and audits the code against each applicable conventions skill (comments-conventions is never audited, deploy-checklist never run); violations become `CONV-NN` backlog items; one report, one numbered list | Approved items only, applied as their owning skill applies them (backlog, docs, instruction file) | The numbered list, A/B/C; the owning skills' decisions it never defaults | `git diff --stat`; the user commits |
 
 ### 2.3 Session skills
 
@@ -153,6 +154,7 @@ such as implement-backlog.
 |---|---|---|
 | `SessionStart` (all sources) | `cat rules/core.md` | Core rules become session context |
 | `SessionStart` (`compact`, `resume`) | `hooks/state-card.py` | In a git repository, a state card of at most 1 KB |
+| `SessionStart` (`startup`) | `hooks/notices.py` | Shows the user one-line notices when due: the version and a changelog link after an install or update; inbox notes older than 7 days (at most weekly); no brain-garden run in 30 days (at most monthly). Runs nothing itself |
 | `Stop` | `hooks/capture-nudge.py` | Once per interactive session, after 30 tool calls, asks the agent to run session-retro |
 | `PreToolUse` on Bash | `hooks/guard.py` | Asks for confirmation before a dependency install with a package argument (`npm`, `pnpm`, `yarn` or `bun`, also by full path, with `install`, `add`, `i` or an npm alias), a force push (`--force`, `-f` or a `+refspec`, even next to `--force-with-lease`; a lone `--force-with-lease` passes; git also by full path), or a hook bypass (`--no-verify` and its prefixes `--no-veri`/`--no-verif`, `git commit -n`, `HUSKY=0`, `core.hooksPath` (any form)); never denies |
 
@@ -170,13 +172,7 @@ The scripts are Python 3 (standard library only) and need `python3` on `PATH`; w
   `pitfalls.md`, `decisions/`, `runbooks/`). Not in the installed plugin: copy it from the
   repository, or let docs-sync scaffold from the standard it carries.
 
-## 7. Codex installer
-
-`scripts/install-codex.sh` (in the repository, run by hand) copies every skill to Codex's skill
-directory with a short description and Claude-only references rewritten, and keeps the core rules in a
-marked block of `~/.codex/AGENTS.md`. See the [README](../../README.md#codex-installer-best-effort).
-
-## 8. Approval model
+## 7. Approval model
 
 What the plugin never does without the user's explicit answer for that specific action:
 
@@ -185,8 +181,8 @@ What the plugin never does without the user's explicit answer for that specific 
 | Write in the vault outside `_inbox/`, move, merge or archive a note | brain-review, brain-garden `## Never` |
 | Delete a note | No skill deletes; retire to `_archive/` |
 | Edit `~/.claude/CLAUDE.md` or `settings.json` | brain-setup (diff first) |
-| Edit an instruction file | instruction-review, session-retro |
-| Create backlog files or add backlog items | audit-to-backlog, project-baseline, spec, implement-backlog (review findings) |
+| Edit an instruction file | instruction-review, session-retro, project-init (the instruction-review diff, the `Backlog:` line) |
+| Create backlog files or add backlog items | audit-to-backlog, project-baseline, project-init, spec, implement-backlog (review findings) |
 | Edit code for review findings | fix-pr (per edit), pr-cycle (one A/B/C answer) |
 | Commit | fix-pr (per commit); pr-cycle commits the base merge once conflicts are resolved and the fast check passes, and fix commits after its A/B/C answer; implement-backlog commits only green batch work it was asked to do |
 | Push | fix-pr, pr-cycle; implement-backlog never pushes |

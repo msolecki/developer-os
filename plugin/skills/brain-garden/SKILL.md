@@ -2,7 +2,7 @@
 name: brain-garden
 description: Produce a health report for the user's Obsidian knowledge vault — stale notes, old inbox notes, broken or archived wiki links, missing or invalid frontmatter, likely duplicates, and orphan notes — with proposed fixes, changing nothing without approval. Use when the user asks to garden, lint, audit, or check the health of the brain/vault, for example "check the health of the brain", "clean up the vault", "find broken links in the brain".
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Brain garden
@@ -11,7 +11,7 @@ Report and propose; apply only the fixes the user names.
 
 ## 1. Locate the vault
 
-Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty; `~/.codex/AGENTS.md`. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
+Find the line `Brain vault: <absolute path>`. Look in this order and stop at the first hit: the `CLAUDE.md` or `AGENTS.md` content already in your context; `CLAUDE.md` and `AGENTS.md` in the current working directory (read them); `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md` when `CLAUDE_CONFIG_DIR` is unset or empty. A missing file or a denied read moves on to the next place, it does not end the lookup. If none has the line, ask the user once for the path and tell them to add that line; if they have no vault, stop and do not ask again. Never guess and never search the disk for vaults. If reading the vault is denied, tell the user to grant access (Claude Code: `--add-dir <vault>` or `permissions.additionalDirectories`).
 
 ## 2. Run the checks
 

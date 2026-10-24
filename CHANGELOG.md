@@ -8,6 +8,28 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - brain-garden reports shared rules: a rule stated by three or more notes, or restated in two or
   more hubs, is proposed as one compiled note (via brain-compile) that the hubs link instead. A
   project note and its `-overview` note are a map and its lessons, not duplicates.
+- A `SessionStart` hook on new sessions, `notices.py`, shows one-line notices when due: the version and a
+  link to the changelog page after an install or update, inbox notes older than 7 days (at most weekly)
+  and no brain-garden run in 30 days (at most monthly). It runs nothing itself;
+  `DEVELOPER_OS_NOTICES=off` turns it off. Decision D22.
+- project-init adopts developer-os in a repository in one pass: it detects the stack, runs
+  project-baseline, docs-sync and instruction-review up to their reports, audits the code against
+  each applicable conventions skill, and asks once for the whole numbered list.
+- `docs/reference/skills.md` says, for every skill, what it checks and how.
+- The eval case `project-init-no-write`.
+
+### Changed
+- The workflow, README and brain-setup say plainly that vault upkeep does not run on its own, and that
+  the weekly brief routine reports but does not garden.
+
+### Removed
+- Codex support: `scripts/install-codex.sh` and its test, the `~/.codex/AGENTS.md` step of the
+  brain skills' vault lookup and of brain-setup, and the Codex verifier in code-review and
+  audit-to-backlog (the `verifier` agent is always used). developer-os is Claude Code only.
+
+### Fixed
+- The landing page counted one agent too few. The check's Counts stage now also reads the landing
+  page's fact rows (brain skills, skills, agents and output styles, hooks).
 
 ## [0.2.4] - 2026-10-20
 
