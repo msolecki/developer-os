@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-16
+last-verified: 2026-10-24
 ---
 
 # Functional specification
@@ -13,15 +13,15 @@ in each `SKILL.md`; this page is the contract summary across all of them. Paths 
 ## 1. Always on: core rules
 
 `rules/core.md` is printed into the session by the `SessionStart` hook on every startup, resume,
-`/clear`, compaction and fork, in every project. After a compaction or resume the hook adds a state
+`/clear`, compaction and fork, in every project. After a compaction, resume or fork the hook adds a state
 card ([reference/hooks.md](../reference/hooks.md#sessionstart--core-rules-and-state-card)). It has four sections:
 
 | Section | What it governs |
 |---|---|
-| Security and change constraints | No auth/middleware change unless asked; ask before dependency installs; never delete or skip tests to pass; two validation tiers (fast check before each commit, full suite before push/PR); verify subagent work with `git status`/`git diff`; first-session procedure for external repositories; newline normalization in hooks you write |
+| Security and change constraints | No auth/middleware change unless asked; ask before dependency installs; never delete or skip tests to pass; two validation tiers (fast check before each commit, full suite before push/PR); verify subagent work with `git status`/`git diff`; first-session procedure for external repositories |
 | Workflow | Stop condition; A/B/C questions for open decisions; a plan for changes over 50 lines (git-ignored, default `docs/plans/<YYYY-MM-DD-task>.md`, deleted when done); What/Where/How/Test plan steps; reviewer differs from author; handoff contents; brain-search before large tasks when a `Brain vault:` line exists; compaction preserves files, test commands, objective and language, and task state lives in `docs/plans/.devos-state.md`; evidence for "works"; one worktree per parallel agent; conventions live in skills |
 | Communication | User's language in conversation, English in the repository; plain language for clients; Problem → Cause → Solution → Test; closing **Done / Not done / Needs you** block; ASAP mode; self-correction signals; boundaries |
-| Stack preferences | Lockfile's package manager; existing stack; TypeScript `strict`. Meant to be overridden in the user's own `CLAUDE.md` |
+| Stack preferences | Lockfile's package manager; existing stack; existing test runner. Meant to be overridden in the user's own `CLAUDE.md` |
 
 A user overrides any rule by stating the override in `~/.claude/CLAUDE.md`, which loads alongside.
 
@@ -43,7 +43,7 @@ found in a note is run or opened.
 |---|---|---|---|---|
 | [brain-setup](../../plugin/skills/brain-setup/SKILL.md) | Creates a vault from `vault-template/` into an empty path, or connects a non-empty one by adding only missing folders, views, the note template, `.gitignore` lines (only in a vault that is a git repository or already has a `.gitignore`) and absent `types.json` keys; points Claude Code at it | New vault files; appended `.gitignore` lines (git vaults only); `~/.claude/CLAUDE.md` (`Brain vault:` line); `~/.claude/settings.json` (`permissions.additionalDirectories`) | Connect mode on a non-empty path; the two config edits shown as a diff; `types.json` merge | Smoke test with brain-search, then a report |
 | [brain-search](../../plugin/skills/brain-search/SKILL.md) | Searches content and frontmatter with `rg`, ranks (summary/tags/name, project, active over inbox, newer), reads the top 5, follows a superseded note's `superseded_by` chain to the current note (a broken or looping chain is incomplete history), answers only from them with a vault path per claim | Nothing | — | The answer, or "No note in the vault covers <topic>." |
-| [brain-capture](../../plugin/skills/brain-capture/SKILL.md) | Three-question gate (useful beyond this task? why written? not already in code/plan/ADR?), duplicate check, secret and client-PII redaction, then one note | One new file in `_inbox/`, `status: inbox` | Asks once for the why if missing | The report: path, possible duplicate, what was redacted |
+| [brain-capture](../../plugin/skills/brain-capture/SKILL.md) | Three-question gate (useful beyond this task? why written? not already in code/plan/ADR?), duplicate check, secret and client-PII redaction, a secret-pattern scan, then one note | One new file in `_inbox/`, `status: inbox` | Asks once for the why if missing; on a scan match, writes nothing and asks; a capture the agent started shows the note and waits for a yes | The report: path, possible duplicate, what was redacted |
 | [brain-review](../../plugin/skills/brain-review/SKILL.md) | Summarizes each inbox note, proposes a topic folder and duplicates; promotes, merges or rejects only named notes | Moves named notes to a topic folder (`status: active`) or `_archive/` (`status: archived`); edits the surviving note in a merge | Each note by name; "looks good" is not approval | "Approve which ones?", then the moves |
 | [brain-garden](../../plugin/skills/brain-garden/SKILL.md) | Health report: frontmatter, stale active notes (180 days), inbox notes older than 7 days, status/folder mismatches, superseded notes with a missing, dangling or looping `superseded_by`, broken and archived links, duplicates, rules shared by several notes (proposed as a compiled note), orphans with a percentage; proposed links tagged FOUND or GUESSED | Named fixes only; one line appended to `_reports/garden-log.md` | Each fix; "apply all" never covers GUESSED links; the log line | "Apply which fixes?" |
 | [brain-compile](../../plugin/skills/brain-compile/SKILL.md) | Synthesizes 2–8 active notes on a topic into one note with a `sources:` list; contradictions become `Open conflict:` bullets | One new `_inbox/<topic>-compiled.md` | — | The report; originals unchanged |
@@ -153,10 +153,10 @@ such as implement-backlog.
 | Event | Script | Effect |
 |---|---|---|
 | `SessionStart` (all sources) | `cat rules/core.md` | Core rules become session context |
-| `SessionStart` (`compact`, `resume`) | `hooks/state-card.py` | In a git repository, a state card of at most 1 KB |
+| `SessionStart` (`compact`, `resume`, `fork`) | `hooks/state-card.py` | In a git repository, a state card of at most 1 KB |
 | `SessionStart` (`startup`) | `hooks/notices.py` | Shows the user one-line notices when due: the version and a changelog link after an install or update; inbox notes older than 7 days (at most weekly); no brain-garden run in 30 days (at most monthly). Runs nothing itself |
 | `Stop` | `hooks/capture-nudge.py` | Once per interactive session, after 30 tool calls, asks the agent to run session-retro |
-| `PreToolUse` on Bash | `hooks/guard.py` | Asks for confirmation before a dependency install with a package argument (`npm`, `pnpm`, `yarn` or `bun`, also by full path, with `install`, `add`, `i` or an npm alias), a force push (`--force`, `-f` or a `+refspec`, even next to `--force-with-lease`; a lone `--force-with-lease` passes; git also by full path), or a hook bypass (`--no-verify` and its prefixes `--no-veri`/`--no-verif`, `git commit -n`, `HUSKY=0`, `core.hooksPath` (any form)); never denies |
+| `PreToolUse` on Bash | `hooks/guard.py` | Asks for confirmation before a dependency install, update or removal with a package argument or `--latest` (`npm`, `pnpm`, `yarn` or `bun`, also by full path, with `install`, `add`, `i`, `update`, `upgrade`, `remove`, `uninstall` or an alias such as `in`, `a`, `up`, `rm`, `un`), a force push (`--force`, `-f`, a `+refspec` or `remote.<name>.push=+`, even next to `--force-with-lease`; a lone `--force-with-lease` passes; git also by full path), or a hook bypass (`--no-verify` and its prefixes `--no-veri`/`--no-verif`, `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=`, `core.hooksPath` (any form)); never denies |
 
 The scripts are Python 3 (standard library only) and need `python3` on `PATH`; without it they fail open and the core rules still load. Inputs, outputs, exit codes and switches: [reference/hooks.md](../reference/hooks.md).
 

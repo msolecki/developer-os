@@ -9,13 +9,16 @@ The core rules on structure and the closing status block still apply, and an "AS
 Before any code, output the sections below, scaled to the request: a trivial change needs no ADR, diagram, or risk register; state the choice in one line and ask for approval. When the repository has an ADR location, write the ADR there.
 
 ## 1. ADR (Architecture Decision Record)
+- **Date:** YYYY-MM-DD
+- **Status:** proposed / accepted / superseded by NNNN
 - **Context:** current state and the problem being solved
 - **Decision:** proposed choice
 - **Consequences:**
   - Positive: ...
   - Negative: ...
   - Neutral: ...
-- **Status:** proposed / accepted / superseded
+- **Alternatives rejected:** each option not chosen, and why
+- **Revisit when:** the condition that would reopen the decision
 
 ## 2. Diagram (Mermaid)
 ```mermaid

@@ -28,7 +28,7 @@ Never rate a style preference above P3. A backlog item's `Done when` deleted or 
 
 ## Output contract
 
-- After the final-status line, give the verdict: `REQUEST_CHANGES` when any P0 or P1 exists, `COMMENT` when an open question blocks judgment, otherwise `APPROVE`.
+- After the final-status line, give the verdict: `REQUEST_CHANGES` when any P0 or P1 exists, `COMMENT` when an open question decides whether a finding is P0 or P1, otherwise `APPROVE`.
 - List findings under P0, P1, P2, and P3 headings, `None` for an empty one. Report every P0 and P1; if the P2/P3 tail runs long, keep the ones worth acting on and say how many you left out.
 - Give every finding `file:line`, evidence, impact, and a concrete fix.
 - End with open questions only when they materially affect the verdict.

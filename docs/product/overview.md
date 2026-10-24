@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-15
+last-verified: 2026-10-24
 ---
 
 # Product overview
@@ -25,7 +25,7 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    reads and writes it with its own file tools. The user approves everything that becomes knowledge.
 2. **An engineering operating model.** Core rules loaded into every session, workflow skills
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
-   conventions skills, five specialist agents, four output styles and a small Bash guard.
+   conventions skills, six agents (five specialists and a verifier), four output styles and a small Bash guard.
 
 The plugin is Markdown and JSON plus four Python 3 hook scripts (standard library only). There is no server, database,
 index, binary, background job or network call in the plugin itself.
@@ -66,9 +66,9 @@ In scope for the first release:
 | Engineering skills | 13 | `plugin/skills/` |
 | Session skills | 2 (session-retro, skill-usage) | `plugin/skills/` |
 | Conventions skills | 7 (`*-conventions`) | `plugin/skills/` |
-| Agents | 5 | `plugin/agents/` |
+| Agents | 6 | `plugin/agents/` |
 | Output styles | 4 | `plugin/output-styles/` |
-| Hooks | 3 (`SessionStart`, `Stop`, `PreToolUse` on Bash) | `plugin/hooks/hooks.json` |
+| Hooks | 4 (two on `SessionStart`, one on `Stop`, one on `PreToolUse` for Bash) | `plugin/hooks/hooks.json` |
 | Core rules | 1 file | `plugin/rules/core.md` |
 | Vault template | 1 | `plugin/vault-template/` |
 | Project template | 1 | `templates/project/` (in the repository, not in the installed plugin) |
@@ -79,8 +79,7 @@ The README lists every component by name ([What's inside](../../README.md#whats-
 
 Out of scope, on purpose:
 
-- A CLI, installer, updater, daemon, index or search engine. The earlier CLI was removed on
-  2026-10-14 ([decisions D1](decisions.md#d1-plugin-only)).
+- A CLI, installer, updater, daemon, index or search engine ([decisions D1](decisions.md#d1-plugin-only)).
 - Any automatic write to the vault outside `_inbox/`, and any automatic promotion of a note.
 - Sending anything: no email, chat, issue or PR comment is posted by a skill on its own.
   `client-reply` drafts; `session-retro` prints a `gh issue create` command for the user to run.

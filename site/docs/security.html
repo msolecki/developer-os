@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="SECURITY.md@49f77b277583">
+<meta name="dos-source" content="SECURITY.md@46460eefd762">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -66,7 +66,7 @@ from <code>main</code>. Only the latest release receives security fixes.</p>
     <ul>
 <li>The plugin is Markdown (skills, agents, output styles, rules) plus 5 hooks in
 <code>plugin/hooks/hooks.json</code>: <code>SessionStart</code> runs <code>cat</code> on <code>plugin/rules/core.md</code> and, after a
-compaction or resume, <code>state-card.py</code>, which prints the git branch, newest plan, <code>docs/plans/.devos-state.md</code> and worktrees of the
+compaction, resume or fork, <code>state-card.py</code>, which prints the git branch, newest plan, <code>docs/plans/.devos-state.md</code> and worktrees of the
 working directory, and on a new session <code>notices.py</code>, which reads the plugin version, the <code>Brain vault:</code>
 line of the user-level <code>CLAUDE.md</code>, the first 2 KB of <code>_inbox/</code> notes and the last line of
 <code>_reports/garden-log.md</code>, and shows counts and dates, never note names; <code>Stop</code> runs

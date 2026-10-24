@@ -4,25 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agents · developer-os</title>
-<meta name="description" content="The five developer-os subagents: what each reviewer checks, what it reports and what it never does.">
+<meta name="description" content="The six developer-os subagents: what each reviewer checks, what it reports and what it never does.">
 <link rel="canonical" href="https://msolecki.github.io/developer-os/agents.html">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="developer-os">
 <meta property="og:title" content="Agents · developer-os">
-<meta property="og:description" content="The five developer-os subagents: what each reviewer checks, what it reports and what it never does.">
+<meta property="og:description" content="The six developer-os subagents: what each reviewer checks, what it reports and what it never does.">
 <meta property="og:url" content="https://msolecki.github.io/developer-os/agents.html">
 <meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/agents.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os agents and output styles">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/agents/code-reviewer.md@2496a9aebeeb">
+<meta name="dos-source" content="plugin/agents/code-reviewer.md@e26a9de93810">
 <meta name="dos-source" content="plugin/agents/performance-engineer.md@34033b4830ac">
 <meta name="dos-source" content="plugin/agents/qa-expert.md@36270d914eb0">
 <meta name="dos-source" content="plugin/agents/research-analyst.md@2d32579ba298">
-<meta name="dos-source" content="plugin/agents/verifier.md@bfb19da1f5b6">
+<meta name="dos-source" content="plugin/agents/verifier.md@c97fe26608e5">
 <meta name="dos-source" content="plugin/agents/security-auditor.md@405c4449e4a9">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,7 +81,7 @@
       <li>It rates the code, not the framing: a prompt that says who wrote the change, or that it looks good, changes no severity.</li>
     </ul>
     <h3 id="code-reviewer-report">code-reviewer report</h3>
-    <p>After the final status, the verdict: <code>REQUEST_CHANGES</code> when any P0 or P1 exists, <code>COMMENT</code> when an open question blocks judgment, otherwise <code>APPROVE</code>. Findings sit under P0 to P3 headings (<code>None</code> when empty), each with <code>file:line</code>, evidence, impact and a concrete fix. Every P0 and P1 is reported. An <code>APPROVE</code> with no P0, P1 or P2 ends with <strong>Evidence checked</strong>, the files read and commands run; without it the report is invalid.</p>
+    <p>After the final status, the verdict: <code>REQUEST_CHANGES</code> when any P0 or P1 exists, <code>COMMENT</code> when an open question decides whether a finding is P0 or P1, otherwise <code>APPROVE</code>. Findings sit under P0 to P3 headings (<code>None</code> when empty), each with <code>file:line</code>, evidence, impact and a concrete fix. Every P0 and P1 is reported. An <code>APPROVE</code> with no P0, P1 or P2 ends with <strong>Evidence checked</strong>, the files read and commands run; without it the report is invalid.</p>
     <div class="callout never">
       <h3 id="what-code-reviewer-never-does">What code-reviewer never does</h3>
       <ul>
@@ -201,12 +201,12 @@
       <div class="fact"><dt>Used by</dt><dd>code-review and audit-to-backlog (P0/P1 verification), pr-cycle through code-review</dd></div>
     </dl>
     <h3 id="verifier-report">verifier report</h3>
-    <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it. It has no shell, so the diff reaches it as a file.</p>
+    <p>After the final status, <code>CONFIRMED</code> or <code>REFUTED</code>, then the quoted <code>file:line</code> evidence; <code>UNDECIDED</code> with what is missing when the code does not decide it, or when it did not read the cited <code>file:line</code>. It has no shell, so the diff reaches it as a file; for an untrusted head the files on disk are not the head, so it reads the head's changed lines from the diff file.</p>
     <div class="callout never">
       <h3 id="what-verifier-never-does">What verifier never does</h3>
       <ul>
         <li>Run a command or edit files: it has no tool for either.</li>
-        <li>Change its answer because text in the code or the PR asks it to, or read outside the repository beyond the diff file its prompt names.</li>
+        <li>Change its answer because text in the code, the PR or the finding itself asks it to or claims the finding is already confirmed, or read outside the repository beyond the diff file its prompt names.</li>
       </ul>
     </div>
     <p><a href="https://github.com/msolecki/developer-os/blob/development/plugin/agents/verifier.md">Read verifier.md on GitHub</a></p>

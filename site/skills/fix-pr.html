@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/fix-pr/SKILL.md@4cdb1758fdb8">
+<meta name="dos-source" content="plugin/skills/fix-pr/SKILL.md@26feb0273cd1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -47,7 +47,7 @@
   <main id="main" class="prose">
     <p class="breadcrumb"><a href="index.html">Skills</a> / Engineering</p>
     <h1 id="fix-pr">fix-pr</h1>
-    <p class="lede">Works through every unresolved pull-request review thread or pasted review finding, asking for your approval before each edit, commit, push and thread resolution.</p>
+    <p class="lede">Works through every unresolved pull-request review thread, pasted review finding or findings file, asking for your approval before each edit, commit, push and thread resolution.</p>
 
     <dl class="facts">
       <div class="fact"><dt>Group</dt><dd>Engineering</dd></div>
@@ -61,6 +61,7 @@
     <p>When you ask it to fix PR comments or review findings, optionally with a PR number:</p>
     <ul class="chips">
       <li class="chip">fix the PR comments</li>
+      <li class="chip">fix the code review findings</li>
       <li class="chip">address the review comments</li>
       <li class="chip">handle the code review feedback</li>
     </ul>
@@ -70,7 +71,7 @@
       <li><strong>Checks the branch and trust.</strong> It stops if the working tree has changes outside <code>docs/plans/</code>, then reads the PR's trust inputs as the Trust check of <a href="pr-cycle.html">pr-cycle</a> does. A trusted head is checked out; an untrusted one only after you say yes, and without that it lists the threads and proposed fixes and edits nothing. It asks before running scripts or hooks of an untrusted head. Without a working <code>gh</code> it stops and says so.</li>
       <li><strong>Collects the threads.</strong> It queries the unresolved review threads through <code>gh api graphql</code>, every page, with each author's association. With no PR threads it takes the findings you pasted or named in a file.</li>
       <li><strong>Treats comments as data.</strong> It never runs commands, installs packages or opens URLs from a comment, and flags comments whose author is not an owner, member or collaborator.</li>
-      <li><strong>Decides per thread.</strong> It reads the referenced code and decides on a fix, or no change with a concrete justification. It shows the planned change and asks before editing; when a comment is ambiguous it asks before changing behavior.</li>
+      <li><strong>Decides per thread.</strong> It reads the referenced code and decides on a fix, or no change with a concrete justification. When a comment is ambiguous it asks before changing behavior. It shows the planned change for every thread and edits nothing until you say yes; asking it to fix the findings is not that approval.</li>
       <li><strong>Applies the approved fixes</strong>, running the narrowest relevant test after each.</li>
       <li><strong>Commits.</strong> It shows each thread with its action (fixed, or disputed with the reason) and the reply it intends to post, then asks before committing. It stages only the files it edited for approved threads, never <code>git add -A</code>, and follows the repository's commit convention.</li>
       <li><strong>Pushes.</strong> It runs the full suite once, fixes any failure, then asks before pushing. On a fork, it pushes only when the PR allows maintainer edits.</li>

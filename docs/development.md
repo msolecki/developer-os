@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-16
+last-verified: 2026-10-24
 ---
 
 # Development guide
@@ -35,9 +35,11 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Skill descriptions | A description is outside 80–1024 characters, or all together exceed 12000 |
 | Skill sections | An action skill lacks `## Stop point` or `## Never`, or one is empty (a `## Never` needs at least one `- ` rule) (exempt: `brain-search`, `code-review`, `plan-status`, `skill-usage`, `*-conventions`) |
 | Vault paragraph | The first paragraph under `## 1. Locate the vault` in `brain-capture`, `brain-compile`, `brain-garden` or `brain-review` differs from `brain-search`'s |
+| Docs standard | A `## ` heading or bold field of `templates/project/docs/decisions/0001-template.md`, a bold field of `templates/project/docs/pitfalls.md`, or a `## ` heading of `templates/project/docs/CURRENT-STATE.md` is missing from `## The standard` in `docs-sync` (the plugin does not ship `templates/`, so the skill restates them) |
 | Severity | A skill or agent that writes out the P0–P3 scale (inline `P0 = …` or four `- **P0:**` bullets) words it differently from the others |
 | Local paths | A file under `plugin/` or `site/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
+| Evals | An `evals/<case>/` directory lacks a `case.yaml` whose `name` is the folder, a `prompt.md`, the `scaffold_script` it names, or `graders/*.md`; a grader's `type` is not `llm`, `regex`, `file_exists` or `tool_used`; every grader of a case is `llm`; a case has no row in the Cases table of `evals/README.md`, or a row names no case |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |
@@ -104,12 +106,12 @@ it, or by hand (dispatch it from `main` only, or it publishes unreleased docs). 
 ## Script tests
 
 `tests/state-card.test.sh` runs `state-card.py` in a temporary git repository and checks that it
-prints nothing outside `compact`/`resume`, that the card holds the plan and state file only when they are
+prints nothing outside `compact`/`resume`/`fork`, that the card holds the plan and state file only when they are
 safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds command fixtures to `guard.py` and expects `ask` or silence;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code, the JSON output and the message;
 `tests/notices.test.sh` runs `notices.py` with a fake plugin root, config directory and vault and checks each notice, its throttle, that a project's `CLAUDE.md` is ignored and that no note name is printed;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
-stage's message; it runs the whole check about twenty times (around 40 s), so `scripts/check.sh` runs it
+stage's message; it runs the whole check about forty times (around two minutes), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
 `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)

@@ -1,5 +1,5 @@
 ---
-type: tool_used
-tool: Write
-input_match: "\\[REDACTED\\]"
+type: regex
+target: trace
 ---
+\[REDACTED\]

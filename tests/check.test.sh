@@ -45,8 +45,20 @@ g reset -q --hard origin/development && g update-ref -d refs/remotes/origin/deve
 edit plugin/skills/brain-garden/SKILL.md '/^Find the line `Brain vault:/s/ once / twice /'
 run "a brain skill drifts from the shared vault paragraph" fail "vault: plugin/skills/brain-garden/SKILL.md"
 
+edit templates/project/docs/decisions/0001-template.md 's/^## Revisit when$/## Revisit/'
+run "a template ADR heading renamed without docs-sync" fail "standard: plugin/skills/docs-sync/SKILL.md: \"Revisit\""
+
 edit evals/injection-fix-pr/graders/no-curl.md 's/^input_match: .*$/input_match: "curl(?!---)"/'
 run "--- inside an eval grader's frontmatter" fail "frontmatter: evals/injection-fix-pr/graders/no-curl.md: line 4"
+
+mv "$r/evals/spec-no-implementation" "$r/evals/spec-renamed"
+run "a renamed eval case directory" fail "evals: evals/spec-renamed: case.yaml name"
+
+edit evals/spec-no-implementation/graders/no-src-write.md '/^type: /d'
+run "an eval grader without a type" fail "evals: evals/spec-no-implementation/graders/no-src-write.md: grader type nil"
+
+edit evals/README.md '/^| `spec-no-implementation` |/d'
+run "an eval case without a README row" fail "evals: evals/spec-no-implementation: no row in evals/README.md"
 
 echo 'See /Users/bob/x.' >> "$r/plugin/agents/qa-expert.md"
 run "a local path in an agent" fail "local path"
@@ -88,6 +100,30 @@ run "an action skill without ## Never" fail "plugin/skills/spec/SKILL.md: skill 
 
 edit plugin/skills/spec/SKILL.md 's/^description: .*/description: Too short./'
 run "a skill description under 80 characters" fail "description is 10 characters, allowed 80-1024"
+
+# Each description stays within 80-1024; 100 more characters on each of the 28 skills pass the 12000 total.
+for f in "$r"/plugin/skills/*/SKILL.md; do
+  perl -pi -e 's/^(description: .*)$/$1 . " pad" x 25/e' "$f"
+done
+run "skill descriptions over 12000 characters in total" fail "limit 12000"
+
+mkdir "$r/plugin/skills/zzz-new"
+sed 's/^name: spec$/name: zzz-new/' "$r/plugin/skills/spec/SKILL.md" > "$r/plugin/skills/zzz-new/SKILL.md"
+run "a new skill missing from SURFACE.txt" fail "surface: plugin/SURFACE.txt: differs from the plugin"
+
+printf 'exit 1\n' > "$r/tests/guard.test.sh"
+run "a failing hook test fails the check" fail "tests: tests/guard.test.sh: exited non-zero"
+
+for kind in agents hooks 'eval cases'; do
+  perl -pi -e "s/^## \\[Unreleased\\]\$/\$&\n\nShips 99 $kind./" "$r/CHANGELOG.md"
+  run "a stale count of $kind" fail "says 99 $kind"
+done
+
+edit site/sitemap.xml '/\/agents\.html<\/loc>/d'
+run "a page missing from the sitemap" fail "site/sitemap.xml: missing https://msolecki.github.io/developer-os/agents.html"
+
+edit docs/development.md 's/^status: .*/status: final/'
+run "a doc with an invalid status" fail "docs/development.md: status must be current, draft or deprecated"
 
 edit docs/development.md '/^last-verified:/d'
 run "a doc without last-verified" fail "docs/development.md: last-verified is not a YYYY-MM-DD date"

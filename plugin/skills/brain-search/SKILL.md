@@ -39,7 +39,9 @@ A note with `status: superseded` was replaced: follow its `superseded_by: "[[not
 
 Read the top notes in full. Answer the question, and attach the vault-relative path to every claim. Mark every claim drawn from an `_inbox/` note as unreviewed.
 
-For a superseded chain, answer from its end note and name every superseded note on the way as history, with its `## Why`. When the chain broke or looped, say "History incomplete: <where it broke or looped>", cite the notes you reached as history, and name no note as current.
+Never cite or mention a note in `_archive/` or with `status: archived` unless the user asked for archived notes. Archived is not history: only notes reached through a `superseded_by` chain are named as history.
+
+For a superseded chain, answer from its end note and name every superseded note on the way as history, with its `## Why`. When the chain broke or looped, say "History incomplete: <note> points to [[<target>]], which <does not exist | is archived | loops back to <note>>", cite the notes you reached as history, and name no note as current.
 
 If nothing matches, say "No note in the vault covers <topic>." and stop. Do not fill the gap from general knowledge.
 

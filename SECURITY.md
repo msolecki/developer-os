@@ -25,7 +25,7 @@ Never include the content of a vault or a secret. Describe it instead.
 
 - The plugin is Markdown (skills, agents, output styles, rules) plus 5 hooks in
   `plugin/hooks/hooks.json`: `SessionStart` runs `cat` on `plugin/rules/core.md` and, after a
-  compaction or resume, `state-card.py`, which prints the git branch, newest plan, `docs/plans/.devos-state.md` and worktrees of the
+  compaction, resume or fork, `state-card.py`, which prints the git branch, newest plan, `docs/plans/.devos-state.md` and worktrees of the
   working directory, and on a new session `notices.py`, which reads the plugin version, the `Brain vault:`
   line of the user-level `CLAUDE.md`, the first 2 KB of `_inbox/` notes and the last line of
   `_reports/garden-log.md`, and shows counts and dates, never note names; `Stop` runs

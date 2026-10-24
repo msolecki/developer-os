@@ -11,7 +11,7 @@
         ]
       },
       {
-        "matcher": "compact|resume",
+        "matcher": "compact|resume|fork",
         "hooks": [
           {
             "type": "command",

@@ -61,7 +61,7 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 
 The plugin has 5 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
-session context. After a compaction or a resume inside a git repository, a second `SessionStart` hook,
+session context. After a compaction, a resume or a fork inside a git repository, a second `SessionStart` hook,
 [`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
 `Newest plan:` line, `docs/plans/.devos-state.md` (the task state that implement-backlog, pr-cycle
 and audit-to-backlog keep there; hidden once it is older than 7 days), then up to 10 worktrees. A
@@ -88,11 +88,13 @@ approve. Set `DEVELOPER_OS_CAPTURE_NUDGE=off` to turn it off, or `DEVELOPER_OS_C
 to change the threshold.
 
 A `PreToolUse` hook on Bash ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) asks for confirmation
-(it never blocks) before a dependency install with a package argument
-(`npm|pnpm|yarn|bun install|add|i <pkg>`, an npm alias such as `npm in`, or the binary by full path), a
-`git push` with `--force`, `-f` or a `+refspec` (even next to `--force-with-lease`; a lone
-`--force-with-lease` passes; git also by full path), and a hook bypass: `--no-verify` or a prefix of it
-such as `--no-veri`, `git commit -n`, `HUSKY=0` or `core.hooksPath` in any form. In `claude -p` an ask resolves to a denial.
+(it never blocks) before a dependency install, update or removal with a package argument
+(`npm|pnpm|yarn|bun install|add|i|update|remove <pkg>`, an alias such as `npm in`, `npm un` or `bun a`,
+`update --latest`, or the binary by full path), a `git push` with `--force`, `-f`, a `+refspec` or
+`-c remote.<name>.push=+…` (even next to `--force-with-lease`; a lone `--force-with-lease` passes; git
+also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `--no-veri`,
+`git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form. `$IFS`
+(also with an empty `$9` glued on), `${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
 
 The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;
@@ -118,7 +120,7 @@ without it the core rules still load and the other hooks do not run.
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
-- **Five hooks:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
+- **Five hooks on three events:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, resume or fork, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
   once per long session, `PreToolUse` asks before installs, force pushes and hook bypasses (see above).
 - **Evals:** behavior checks for the brain skills, code-review, session-retro and the skill
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the
@@ -128,7 +130,7 @@ without it the core rules still load and the other hooks do not run.
 
 - [Landing page](https://msolecki.github.io/developer-os/): the public documentation site ([source](site/index.html)), published to GitHub Pages by `.github/workflows/pages.yml`.
 - [Documentation index](docs/index.md): product overview, functional specification, decisions,
-  architecture, hooks and configuration reference, development guide, pitfalls, current state.
+  architecture, hooks and configuration reference, development guide, pitfalls, glossary.
 - [How to work: brain + code](docs/workflow.md): the workflow, the vault layout, privacy.
 - [Away from the desk](docs/workflow.md#away-from-the-desk-optional): capture from your phone and a
   weekly vault brief with Claude Code routines.

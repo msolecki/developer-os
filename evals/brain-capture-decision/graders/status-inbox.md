@@ -1,5 +1,5 @@
 ---
-type: tool_used
-tool: Write
-input_match: "status: inbox"
+type: regex
+target: trace
 ---
+status: inbox

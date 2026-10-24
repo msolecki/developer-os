@@ -79,6 +79,19 @@ for s in brain-capture brain-compile brain-garden brain-review; do
 done
 [ -n "$(para plugin/skills/brain-search/SKILL.md)" ] || fail vault plugin/skills/brain-search/SKILL.md "no \"## 1. Locate the vault\" paragraph"
 
+# The plugin does not ship templates/project/, so docs-sync restates its standard. Each ADR heading and field, pitfalls
+# field and CURRENT-STATE heading of the template must appear, whole, under docs-sync's "## The standard".
+# The AGENTS.md sections are paraphrased there, so they are not compared.
+std=$(awk '/^## The standard$/ { f = 1; next } f && /^## / { exit } f' plugin/skills/docs-sync/SKILL.md)
+t=templates/project/docs
+{ sed -nE 's/^## (.*)/\1/p; s/^\*\*([^*:]+):\*\*.*/\1/p' "$t/decisions/0001-template.md"
+  sed -nE 's/^- \*\*([^*:]+):\*\*.*/\1/p' "$t/pitfalls.md"
+  sed -nE 's/^(## .*)/\1/p' "$t/CURRENT-STATE.md"
+} | while IFS= read -r h; do
+  printf '%s\n' "$std" | grep -qE -- "(^|[^A-Za-z_])$h([,.\`]| \(|\$)" ||
+    fail standard plugin/skills/docs-sync/SKILL.md "\"$h\" from templates/project/ is missing from \"## The standard\""
+done
+
 # The P0–P3 scale is written out in skills and agents, inline (`P0 = …; P3 = ….`) or as four bullets; every copy must match.
 git grep --untracked -l -E 'P0 = |^- \*\*P0:\*\* ' -- plugin | ruby -e '
   seen = {}
@@ -100,6 +113,33 @@ files '*.base' 'evals/*.yaml' | while IFS= read -r -d '' f; do
   ruby -e 'require "date"; require "yaml"; YAML.safe_load($stdin.read, permitted_classes: [Date], aliases: true)' < "$f" \
     || fail yaml "$f" "invalid YAML"
 done
+
+# Every eval case directory has a case.yaml whose name is the folder, a prompt.md, the scaffold_script it names,
+# graders/*.md of a known type with at least one deterministic (non-llm) grader, and its own row in evals/README.md.
+# A mistyped grader or a renamed case would otherwise fail only in a paid eval run.
+files 'evals/*' | ruby -e '
+  require "yaml"
+  types = %w[llm regex file_exists tool_used]
+  readme = File.read("evals/README.md").scan(/^\| `([^`]+)` \|/).flatten
+  cases = $stdin.read.split("\0").map { |f| f.split("/") }.select { |p| p.size > 2 && p[1] != "fixtures" }.map { |p| p[1] }.uniq
+  cases.each do |c|
+    d = "evals/#{c}"
+    bad = ->(why) { abort "evals: #{d}: #{why}" }
+    y = File.file?("#{d}/case.yaml") ? YAML.safe_load(File.read("#{d}/case.yaml")) : bad.("no case.yaml")
+    bad.("case.yaml name #{y["name"].inspect} is not the folder name") unless y.is_a?(Hash) && y["name"] == c
+    bad.("no prompt.md") unless File.file?("#{d}/prompt.md")
+    s = y.dig("context", "scaffold_script")
+    bad.("scaffold_script #{s} does not exist") if s && !File.file?("#{d}/#{s}")
+    graders = Dir.glob("#{d}/graders/*.md").sort
+    bad.("no graders/*.md") if graders.empty?
+    kinds = graders.map do |g|
+      t = File.read(g)[/\A---\n(.*?)^---$/m, 1].then { |fm| fm && YAML.safe_load(fm)["type"] rescue nil }
+      types.include?(t) ? t : abort("evals: #{g}: grader type #{t.inspect} is not one of #{types.join(", ")}")
+    end
+    bad.("no deterministic grader (regex, file_exists or tool_used)") if kinds.all?("llm")
+    bad.("no row in evals/README.md") unless readme.include?(c)
+  end
+  (readme - cases).each { |c| abort "evals: evals/README.md: row #{c} names no case" }'
 
 targets=$(grep -o '\${CLAUDE_PLUGIN_ROOT}/[^"\\[:space:]]*' plugin/hooks/hooks.json | sed 's|^\${CLAUDE_PLUGIN_ROOT}/||') || true
 [ -n "$targets" ] || fail hooks plugin/hooks/hooks.json "no \${CLAUDE_PLUGIN_ROOT} target"
@@ -283,7 +323,7 @@ files 'site/*.html' 'site/*.js' | ruby -rdigest -e '
   sitemap.tally.each { |u, n| errs << "site: site/sitemap.xml: #{u} is listed #{n} times" if n > 1 }
   abort errs.uniq.join("\n") unless errs.empty?'
 
-# tests/check.test.sh runs the whole check about twenty times (about 40 s), so it runs only in CI or with CI=1.
+# tests/check.test.sh runs the whole check about forty times (about two minutes), so it runs only in CI or with CI=1.
 for t in tests/*.test.sh; do
   [ -e "$t" ] || continue
   [ "$t" != tests/check.test.sh ] || [ -n "${CI:-}" ] || continue
