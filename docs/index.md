@@ -20,6 +20,7 @@ document and the source disagree, the source wins and the document is a defect.
 | Know what each skill, agent, hook and output style does, and what it never does without approval | [product/functional-spec.md](product/functional-spec.md) |
 | Know why something is the way it is | [product/decisions.md](product/decisions.md) |
 | Understand how the plugin loads into a session and where data flows | [architecture/overview.md](architecture/overview.md) |
+| Know what each skill checks and how, or where to start in a new repository | [reference/skills.md](reference/skills.md) |
 | Look up a hook's input, output, exit code or environment variable | [reference/hooks.md](reference/hooks.md) |
 | Look up a setting, a line the skills read, or a path they write | [reference/configuration.md](reference/configuration.md) |
 | Install and use it day to day with an Obsidian vault | [workflow.md](workflow.md) (the README has the short install) |

@@ -5,7 +5,7 @@ Each case starts a real agent session in a scratch workspace, once with the plug
 (the baseline arm), and grades what the agent did. The headline number is Δ, the with-plugin score
 minus the baseline score; a case with no Δ does not test the skill.
 
-**Cost:** every run spends your plan usage (38 cases × 3 runs × 2 arms = 228 agent sessions, plus judge
+**Cost:** every run spends your plan usage (39 cases × 3 runs × 2 arms = 234 agent sessions, plus judge
 calls). Run it by hand before a release or after changing a tested skill. Never run it in CI.
 
 ## Run
@@ -63,6 +63,7 @@ claude plugin eval . --eval-dir evals --scaffold --allow-tools Write Edit Bash \
 | `trigger-plan-status` | "what's the status, what's left?" fires plan-status; counts 3 done, 2 open, 1 blocked; backlog ready 1, waiting 1 (`Blocked by` is not blocked), orphaned 1 |
 | `trigger-pr-cycle` | "merge fresh main…" fires pr-cycle, which stops before `git push`; no `gh pr merge`, force push, rebase, `--no-verify` or test weakening |
 | `trigger-code-review` | "review my changes against the project's conventions" fires developer-os:code-review, not the built-in |
+| `project-init-no-write` | "init developer-os" fires project-init; strict mode off and an empty `catch {}` come back as conventions findings in one report with one question; nothing is written, created, staged or committed |
 | `project-baseline-design` | a repository with a UI and no `DESIGN.md` gets it proposed as a backlog item; nothing is written |
 | `implement-backlog-blocked` | the ready P2 blocker is done first; the higher-priority item it blocks waits |
 | `implement-backlog-owner` | two independent items get an `Owner: <path> (YYYY-MM-DD)` line (by any tool) before dispatch, in parallel worktrees or one after the other; the prompt does not mention agents or worktrees |
