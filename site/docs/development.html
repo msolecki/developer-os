@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@bd8fd2ea91a1">
+<meta name="dos-source" content="docs/development.md@d4ad397d936b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -75,7 +75,7 @@
           <tr><td>Agents</td><td>An agent lacks <code>## Final status</code> or one of <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code></td></tr>
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>
           <tr><td>Stale names</td><td>A skill, agent or output-style name removed from <code>plugin/SURFACE.txt</code> in the uncommitted diff (in a pull request, since the merge base with <code>origin/$GITHUB_BASE_REF</code>) still appears as a bare word (the prefixed form fails in References) in <code>plugin/</code>, <code>templates/</code> or <code>README.md</code>; the check runs before the rename is committed</td></tr>
-          <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code> or a page under <code>site/</code> ("N skills", "N eval cases"; not "N cases of") differs from the disk</td></tr>
+          <tr><td>Counts</td><td>A count written as digits in the README, <code>docs/</code>, <code>evals/README.md</code>, the <code>[Unreleased]</code> section of <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code>, <code>SECURITY.md</code> or a page under <code>site/</code> ("N skills", "N eval cases"; not "N cases of"), or a fact row on the landing page (brain skills, skills, agents and output styles, hooks), differs from the disk</td></tr>
           <tr><td>Core-rules size</td><td><code>plugin/rules/core.md</code> exceeds 8192 bytes, or <code>CAP</code> in <code>state-card.py</code> no longer fits under the 10,000-character hook output limit</td></tr>
           <tr><td>References</td><td>A <code>developer-os:&lt;name&gt;</code> string in <code>plugin/</code> (Markdown and hook scripts), <code>docs/</code>, <code>templates/</code>, <code>evals/</code>, <code>README.md</code>, <code>CHANGELOG.md</code>, <code>CONTRIBUTING.md</code> or <code>SECURITY.md</code> names no skill, agent or output style</td></tr>
           <tr><td>Links</td><td>A relative Markdown link outside fenced or inline code does not resolve from its own file, or its <code>#fragment</code> matches no GitHub heading slug in the target Markdown file (letters of any script, link text only, <code>-1</code>, <code>-2</code> for repeated headings)</td></tr>

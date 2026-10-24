@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/functional-spec.md@40a387170d7b">
+<meta name="dos-source" content="docs/product/functional-spec.md@b6551c365020">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -97,6 +97,7 @@
 <tr><td><a href="../../skills/client-reply.html">client-reply</a></td><td>Turns technical facts into a plain-language reply in the client's language and the user's voice; strips internal identifiers</td><td>Nothing</td><td>—</td><td>The draft in chat; the user sends it</td></tr>
 <tr><td><a href="../../skills/docs-sync.html">docs-sync</a></td><td>Checks a repository's docs against its code and the docs standard: missing pieces, drift (including <code>DESIGN.md</code> older than the styling sources and conflicting decision records), a refreshed <code>CURRENT-STATE.md</code>, "Likely agent mistakes" from git history</td><td>Approved doc edits</td><td>A numbered list, A/B/C</td><td><code>git diff --stat</code>; the user commits</td></tr>
 <tr><td><a href="../../skills/project-baseline.html">project-baseline</a></td><td>Probes 12 engineering practices (env module, secret deny-list, secret scanning, coverage floor, migration guard, boundaries, real-DB tests, safe errors, changelog, docs check, design system file, gate exit codes); missing ones become <code>BASE-NN</code> backlog items</td><td>Approved items in the backlog</td><td>Write the items; decisions it never defaults (package manager, test runner, auth library, monitoring, commit language)</td><td><code>git diff --stat</code></td></tr>
+<tr><td><a href="../../skills/project-init.html">project-init</a></td><td>Adopts developer-os in a repository: detects the stack, picks the skills that apply, runs project-baseline, docs-sync and instruction-review up to their reports, and audits the code against each applicable conventions skill (comments-conventions is never audited, deploy-checklist never run); violations become <code>CONV-NN</code> backlog items; one report, one numbered list</td><td>Approved items only, applied as their owning skill applies them (backlog, docs, instruction file)</td><td>The numbered list, A/B/C; the owning skills' decisions it never defaults</td><td><code>git diff --stat</code>; the user commits</td></tr>
 </tbody>
 </table>
 </div>
@@ -186,8 +187,8 @@
 <tr><td>Write in the vault outside <code>_inbox/</code>, move, merge or archive a note</td><td>brain-review, brain-garden <code>## Never</code></td></tr>
 <tr><td>Delete a note</td><td>No skill deletes; retire to <code>_archive/</code></td></tr>
 <tr><td>Edit <code>~/.claude/CLAUDE.md</code> or <code>settings.json</code></td><td>brain-setup (diff first)</td></tr>
-<tr><td>Edit an instruction file</td><td>instruction-review, session-retro</td></tr>
-<tr><td>Create backlog files or add backlog items</td><td>audit-to-backlog, project-baseline, spec, implement-backlog (review findings)</td></tr>
+<tr><td>Edit an instruction file</td><td>instruction-review, session-retro, project-init (the instruction-review diff, the <code>Backlog:</code> line)</td></tr>
+<tr><td>Create backlog files or add backlog items</td><td>audit-to-backlog, project-baseline, project-init, spec, implement-backlog (review findings)</td></tr>
 <tr><td>Edit code for review findings</td><td>fix-pr (per edit), pr-cycle (one A/B/C answer)</td></tr>
 <tr><td>Commit</td><td>fix-pr (per commit); pr-cycle commits the base merge once conflicts are resolved and the fast check passes, and fix commits after its A/B/C answer; implement-backlog commits only green batch work it was asked to do</td></tr>
 <tr><td>Push</td><td>fix-pr, pr-cycle; implement-backlog never pushes</td></tr>

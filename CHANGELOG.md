@@ -4,6 +4,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- project-init adopts developer-os in a repository in one pass: it detects the stack, runs
+  project-baseline, docs-sync and instruction-review up to their reports, audits the code against
+  each applicable conventions skill, and asks once for the whole numbered list.
+- `docs/reference/skills.md` says, for every skill, what it checks and how.
+- The eval case `project-init-no-write`.
+
+### Fixed
+- The landing page counted one agent too few. The check's Counts stage now also reads the landing
+  page's fact rows (brain skills, skills, agents and output styles, hooks).
+
 ## [0.2.4] - 2026-10-20
 
 ### Added

@@ -121,8 +121,8 @@
           <p>Core rules in every session, workflow skills that stop at defined points, conventions that load only for matching files, and specialist agents for independent passes.</p>
           <ul>
             <li><span>Core rules</span><span>&lt; 8 KB per session</span></li>
-            <li><span>Skills, all groups</span><span>28</span></li>
-            <li><span>Agents, output styles</span><span>5, 4</span></li>
+            <li><span>Skills, all groups</span><span>29</span></li>
+            <li><span>Agents, output styles</span><span>6, 4</span></li>
           </ul>
         </article>
         <article class="layer">
@@ -244,7 +244,7 @@ Which items should I apply?</code></pre></div>
             <tr><td>Write in the vault outside <code>_inbox/</code>, move, merge or archive a note</td><td><span class="badge ok">only what you name</span></td><td>brain-review, brain-garden</td></tr>
             <tr><td>Delete a note</td><td><span class="badge never">never</span></td><td>No skill deletes; notes retire to <code>_archive/</code></td></tr>
             <tr><td>Edit <code>~/.claude/CLAUDE.md</code> or <code>settings.json</code></td><td><span class="badge ok">diff first</span></td><td>brain-setup</td></tr>
-            <tr><td>Edit an instruction file, create backlog files or add backlog items</td><td><span class="badge ok">after approval</span></td><td>instruction-review and session-retro show the diff; audit-to-backlog, project-baseline and spec write the backlog</td></tr>
+            <tr><td>Edit an instruction file, create backlog files or add backlog items</td><td><span class="badge ok">after approval</span></td><td>instruction-review and session-retro show the diff; audit-to-backlog, project-baseline, project-init and spec write the backlog</td></tr>
             <tr><td>Edit code for review findings, commit, push</td><td><span class="badge ask">asks you</span></td><td>fix-pr asks per edit, per commit and before each push; pr-cycle commits the base merge after a green fast check and fixes after one A/B/C answer, then asks before pushing; implement-backlog commits only green batch work and never pushes</td></tr>
             <tr><td>Merge a PR, push to a base branch, force-push, rebase a pushed branch</td><td><span class="badge never">never</span></td><td>No skill does this</td></tr>
             <tr><td>Send email, chat messages or issues</td><td><span class="badge never">never</span></td><td>client-reply drafts; session-retro prints a command for you</td></tr>
@@ -335,6 +335,7 @@ Which items should I apply?</code></pre></div>
         <p>Keep docs, instructions and plans honest; end sessions cleanly; talk to clients plainly.</p>
         <ul class="lib">
           <li><a href="skills/docs-sync.html"><b>docs-sync</b><span>Docs against code: scaffold, refresh the current state, report drift.</span></a></li>
+          <li><a href="skills/project-init.html"><b>project-init</b><span>Adopt developer-os in a repository in one pass.</span></a></li>
           <li><a href="skills/project-baseline.html"><b>project-baseline</b><span>Missing engineering practices, proposed as backlog items.</span></a></li>
           <li><a href="skills/instruction-review.html"><b>instruction-review</b><span>A minimal, evidence-backed diff to CLAUDE.md or AGENTS.md.</span></a></li>
           <li><a href="skills/plan-status.html"><b>plan-status</b><span>Measured open, done and blocked counts, and open A/B/C decisions.</span></a></li>
