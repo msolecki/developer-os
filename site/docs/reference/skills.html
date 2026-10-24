@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/skills.md@57b27e9f4962">
+<meta name="dos-source" content="docs/reference/skills.md@b5a3d9fe7430">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -242,7 +242,9 @@ fact instead of inventing it.</p>
 branches not merged into <code>origin/HEAD</code>, your open PRs and still-running background work; proposes
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
 most three under each heading, lessons, rule candidates (with the commit they would reverse), check candidates, plan
-and docs updates, plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.</p>
+and docs updates, plugin feedback and skill candidates, each labeled <code>persistent</code> or <code>this-task</code>.
+Every check result names the commit it ran on (<code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus
+<code>+ uncommitted: &lt;changed files&gt;</code> on a dirty tree).</p>
     <h3 id="skill-usage">skill-usage</h3>
     <p><a href="../../skills/skill-usage.html">Source</a>. Counts <code>developer-os:&lt;name&gt;</code> Skill calls and
 typed commands in local transcripts (deduplicated by message uuid): last 30 days, ever, last date,
@@ -259,7 +261,9 @@ brain-search.</p>
     <p><a href="../../skills/brain-search.html">Source</a>. Finds the vault from the <code>Brain vault:</code> line
 (never by searching the disk), searches content and frontmatter with <code>rg</code>, drops archived notes,
 ranks by <code>summary</code>/<code>tags</code>/name match, project slug, <code>active</code> over <code>inbox</code> and recency, reads the
-top five, and answers only from them with a path per claim.</p>
+top five, follows a superseded note's <code>superseded_by</code> chain to the current note (a broken or looping
+chain is incomplete history, with no note named current), and answers only from them with a path
+per claim.</p>
     <h3 id="brain-capture">brain-capture</h3>
     <p><a href="../../skills/brain-capture.html">Source</a>. Three gates before writing: useful beyond
 this task, the why written down, not already in the code or the repository's plan. Then a duplicate
@@ -271,7 +275,8 @@ checks the name (<code>^[a-z0-9-]+$</code>) and that no other note has it.</p>
     <h3 id="brain-garden">brain-garden</h3>
     <p><a href="../../skills/brain-garden.html">Source</a>. One pass over every note: missing or invalid
 frontmatter, inbox notes older than 7 days, active notes not updated in 180 days, status/folder
-mismatches, broken links and links to archived notes, orphans with a percentage, likely
+mismatches, broken links and links to archived notes, superseded notes whose <code>superseded_by</code> is
+missing, dangling or looping, orphans with a percentage (a superseded note is never one), likely
 duplicates (a project note and its <code>-overview</code> note are not), and rules stated by three or more
 notes or restated in two or more hubs, proposed as one brain-compile note that the hubs link. Every
 proposed link is tagged FOUND or GUESSED.</p>

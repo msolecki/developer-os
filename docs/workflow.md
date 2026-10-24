@@ -77,7 +77,8 @@ Every note starts with the same frontmatter. The Brain skills rely on it, so do 
 ```yaml
 ---
 type: decision | knowledge | reference | project
-status: inbox | active | archived
+status: inbox | active | superseded | archived
+superseded_by: "[[note]]"  # superseded notes only
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 project: <project slug or empty>
@@ -90,6 +91,11 @@ sources: []  # optional, compiled notes only
 `summary` is always double-quoted, so a colon in the sentence does not break the YAML. The note
 template defaults to `status: active` for notes you write yourself; the agent's notes start as
 `status: inbox`.
+
+When a newer note replaces a decision, set the old note to `status: superseded` with
+`superseded_by: "[[new-note]]"` and leave it in its topic folder. brain-search follows the chain to
+the current note and cites the old ones as history; a chain that breaks or loops is reported as
+incomplete history, with no note named as current.
 
 - `decision`: something you chose, with the reason and the rejected alternatives.
 - `knowledge`: something you learned that will be true next time.
@@ -171,8 +177,9 @@ vault trustworthy, so it stays human.
 
 Ask for **brain-garden**; the startup notice reminds you when the last run in `_reports/garden-log.md` is 30 days old. It reports stale notes (also visible in `_views/Stale.base`: active notes
 not updated in 180 days), `_inbox/` notes older than 7 days, notes whose folder and `status`
-disagree, broken links, duplicates, rules restated across several notes and notes without a
-summary. It proposes changes and applies them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
+disagree, broken links, duplicates, rules restated across several notes, notes without a summary,
+and superseded notes whose `superseded_by` is missing, points nowhere or loops. It proposes changes
+and applies them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
 bumping `updated`.
 
 Links resolve by note name, case-insensitively. A link to an archived note (in `_archive/` or with

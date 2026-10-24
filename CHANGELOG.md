@@ -5,6 +5,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Superseded vault notes: a note replaced by a newer one gets `status: superseded` and
+  `superseded_by: "[[note]]"` and stays in its topic folder. brain-search follows the chain to the
+  current note and cites the old ones as history; a chain that breaks or loops is incomplete history,
+  with no note named as current. brain-garden reports a missing `superseded_by`, a missing or archived
+  target, and a cycle, and never counts a superseded note as an orphan. New eval cases
+  `brain-search-superseded-chain`, `brain-search-superseded-dangling`, `brain-search-superseded-cycle`
+  and `brain-garden-superseded`.
 - brain-garden reports shared rules: a rule stated by three or more notes, or restated in two or
   more hubs, is proposed as one compiled note (via brain-compile) that the hubs link instead, and
   only when the user names it. A rule already compiled is not proposed again. A project note and its
@@ -20,6 +27,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The eval case `project-init-no-write`.
 
 ### Changed
+- session-retro ties every check result to the commit it ran on: Done and the plan update list each
+  check as `<command>: <result> at <short SHA>`, plus `+ uncommitted: <changed files>` when the tree
+  was dirty, so a later commit visibly outdates a saved "tests pass". New eval case
+  `session-retro-check-sha`.
 - The workflow, README and brain-setup say plainly that vault upkeep does not run on its own, and that
   the weekly brief routine reports but does not garden.
 

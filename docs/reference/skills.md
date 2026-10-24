@@ -228,6 +228,8 @@ branches not merged into `origin/HEAD`, your open PRs and still-running backgrou
 removing merged worktrees and branches; prints the Done / Not done / Needs you block; proposes, at
 most three under each heading, lessons, rule candidates (with the commit they would reverse), check candidates, plan
 and docs updates, plugin feedback and skill candidates, each labeled `persistent` or `this-task`.
+Every check result names the commit it ran on (`<command>: <result> at <short SHA>`, plus
+`+ uncommitted: <changed files>` on a dirty tree).
 
 ### skill-usage
 
@@ -251,7 +253,9 @@ brain-search.
 [Source](../../plugin/skills/brain-search/SKILL.md). Finds the vault from the `Brain vault:` line
 (never by searching the disk), searches content and frontmatter with `rg`, drops archived notes,
 ranks by `summary`/`tags`/name match, project slug, `active` over `inbox` and recency, reads the
-top five, and answers only from them with a path per claim.
+top five, follows a superseded note's `superseded_by` chain to the current note (a broken or looping
+chain is incomplete history, with no note named current), and answers only from them with a path
+per claim.
 
 ### brain-capture
 
@@ -269,7 +273,8 @@ checks the name (`^[a-z0-9-]+$`) and that no other note has it.
 
 [Source](../../plugin/skills/brain-garden/SKILL.md). One pass over every note: missing or invalid
 frontmatter, inbox notes older than 7 days, active notes not updated in 180 days, status/folder
-mismatches, broken links and links to archived notes, orphans with a percentage, likely
+mismatches, broken links and links to archived notes, superseded notes whose `superseded_by` is
+missing, dangling or looping, orphans with a percentage (a superseded note is never one), likely
 duplicates (a project note and its `-overview` note are not), and rules stated by three or more
 notes or restated in two or more hubs, proposed as one brain-compile note that the hubs link. Every
 proposed link is tagged FOUND or GUESSED.

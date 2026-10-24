@@ -33,9 +33,13 @@ rg -l '^status: archived' -g '*.md' -g '!_archive/'
 
 Rank higher: a match in `summary`, `tags`, or the file name; a `project` equal to the current project's slug (the `Vault project slug:` line in `_Context.md` at the repository root; read the file if the line is not in your context); more distinct keywords matched; `status: active` over `inbox`; a newer `updated`. Keep the top 5.
 
+A note with `status: superseded` was replaced: follow its `superseded_by: "[[note]]"` chain (targets resolve by note name, case-insensitively, also in `_archive/`) to a note that is neither superseded nor archived, and treat that note as the match in the superseded note's place in the top 5, even if it matched no keyword; a note already in the top 5 counts once. Stop the walk when the field is missing, its target does not exist or is archived, or a note repeats (A → B → A); the history is then incomplete.
+
 ## 4. Read and answer
 
 Read the top notes in full. Answer the question, and attach the vault-relative path to every claim. Mark every claim drawn from an `_inbox/` note as unreviewed.
+
+For a superseded chain, answer from its end note and name every superseded note on the way as history, with its `## Why`. When the chain broke or looped, say "History incomplete: <where it broke or looped>", cite the notes you reached as history, and name no note as current.
 
 If nothing matches, say "No note in the vault covers <topic>." and stop. Do not fill the gap from general knowledge.
 
@@ -48,4 +52,6 @@ Release notes live in CHANGELOG.md at the repository root, one section per versi
   — DEV/release-notes-location.md (active, updated 2026-09-02)
 Each entry links the PR that introduced it.
   — _inbox/changelog-pr-links.md (inbox, unreviewed)
+Until 2026-08, release notes were kept in GitHub releases only, because no file had to be maintained.
+  — DEV/release-notes-in-github.md (superseded by DEV/release-notes-location.md, history)
 ```
