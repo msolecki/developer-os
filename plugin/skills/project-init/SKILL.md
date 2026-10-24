@@ -12,7 +12,7 @@ An orchestrator: it runs other skills up to their reports, adds a conventions au
 ## 1. Context
 
 - Detect the stack from the manifests and config on disk: the lockfile-selected package manager, `tsconfig.json`, `next.config.*`, the test runner and test files, CI workflows, infrastructure code (CDK, Terraform, serverless config), API routes or handlers, a database and its migrations, a UI.
-- Find the backlog paths exactly as `developer-os:project-baseline` does. When no `Backlog:` line exists and the default files are absent, the paths are a "needs your decision" item (default `TODO.md`, `TODO-done.md`, warning when `git check-ignore` matches one), and the `Backlog:` line becomes a numbered item, merged with any instruction-file diff to the same file. Read the project's `AGENTS.md`/`CLAUDE.md`, `docs/pitfalls.md` and decision records: a practice or convention the project rejected on purpose is reported as `deliberate`, never proposed.
+- Find the backlog paths exactly as `developer-os:project-baseline` does. When no `Backlog:` line exists and the default files are absent, the paths are a "needs your decision" item (default `TODO.md`, `TODO-done.md`, warning when `git check-ignore` matches one), and the `Backlog:` line becomes a numbered item, merged with any instruction-file diff to the same file or, when neither `AGENTS.md` nor `CLAUDE.md` exists, with the docs-sync item that creates `AGENTS.md`, so one item creates it. Read the project's `AGENTS.md`/`CLAUDE.md`, `docs/pitfalls.md` and decision records: a practice or convention the project rejected on purpose is reported as `deliberate`, never proposed.
 - Read `git rev-parse --short HEAD`.
 
 ## 2. Pick the skills
@@ -26,8 +26,8 @@ An orchestrator: it runs other skills up to their reports, adds a conventions au
 | `developer-os:nextjs-conventions` | `next.config.*` or a `next` dependency | not applicable |
 | `developer-os:testing-conventions` | test files exist | not applicable; baseline covers the missing tests |
 | `developer-os:error-handling-conventions` | TypeScript server code, API routes or handlers | not applicable |
-| `developer-os:monitoring-conventions` | infrastructure code, alert definitions or health endpoints | not applicable |
-| `developer-os:defensive-coding-conventions` | webhooks, event handlers, migrations, billing inputs or hook scripts | not applicable |
+| `developer-os:monitoring-conventions` | infrastructure code, CI workflows, alert definitions or health endpoints | not applicable |
+| `developer-os:defensive-coding-conventions` | code that handles external input, authentication, money, concurrency, persistence or error paths: webhooks, event handlers, migrations, billing inputs, hook scripts | not applicable |
 | `developer-os:comments-conventions` | never audited | it governs only comments an agent adds and leaves existing ones alone |
 | `developer-os:deploy-checklist` | never run here | it runs the project's gates and belongs to a release; recommend it before the next deploy |
 
@@ -41,7 +41,7 @@ Load each applicable conventions skill and probe the repository for each of its 
 
 | Skill | Probe |
 |---|---|
-| typescript | `"strict": true` in `tsconfig.json`; a configured import alias, and `rg -n "from '(\.\./){3,}"` for deep relative imports |
+| typescript | `"strict": true` in `tsconfig.json`; a configured import alias, and `rg -n "from ['\"](\.\./){3,}"` for deep relative imports |
 | nextjs | route handlers and Server Actions that read input without a schema parse; `'use client'` files with no state or event handler |
 | error-handling | empty `catch {}` without a directive comment; `throw new Error(` inside a `catch` without `cause`; `.stack` or raw errors in API responses; more than one error-response shape |
 | testing | date fixtures without an offset or `Z`; `vi.mock`/`jest.mock` factories that do not spread the original module; raised `retries` or timeouts in test config |
