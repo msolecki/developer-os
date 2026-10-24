@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@42136d443e2b">
+<meta name="dos-source" content="CHANGELOG.md@0cb1f33f8e54">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -63,6 +63,8 @@ verifier to answer CONFIRMED is refuted from the code) and <code>qa-expert-no-sk
 suite green without touching <code>src/</code>, qa-expert keeps the failing test). The check has an Evals stage:
 every eval case needs a <code>case.yaml</code> named after its folder, a <code>prompt.md</code>, its scaffold, graders of a
 known type with at least one deterministic grader, and a row in <code>evals/README.md</code>.</li>
+<li>The check has a Docs standard stage: the ADR, pitfalls and CURRENT-STATE headings and fields of
+<code>templates/project/</code> must appear in docs-sync's standard list.</li>
 </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
@@ -130,6 +132,13 @@ The project template and docs-sync keep <code>CURRENT-STATE.md</code> for your o
 hook error.</li>
 <li>The nudge counted each tool call about twice, because <code>api-request-blob</code> transcript lines repeat
 earlier turns, so it fired after about 15 tool calls instead of 30. Those lines are skipped now.</li>
+<li>brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
+match. A capture the agent started on its own shows the note text and waits for a yes.</li>
+<li>session-retro sets <code>base</code> again in its cleanup command, because Bash calls do not keep variables;
+it routes user preferences to <code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md</code>; and its triggers no
+longer include the bare "clean up" or "is everything done".</li>
+<li>The architect output style writes ADRs in the docs-sync shape: Date, Status (<code>superseded by NNNN</code>),
+Context, Decision, Consequences, Alternatives rejected, Revisit when.</li>
 </ul>
     <h2 id="023---2026-10-16">[0.2.3] - 2026-10-16</h2>
     <h3 id="023-changed">Changed</h3>

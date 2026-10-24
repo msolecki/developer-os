@@ -79,6 +79,19 @@ for s in brain-capture brain-compile brain-garden brain-review; do
 done
 [ -n "$(para plugin/skills/brain-search/SKILL.md)" ] || fail vault plugin/skills/brain-search/SKILL.md "no \"## 1. Locate the vault\" paragraph"
 
+# The plugin does not ship templates/project/, so docs-sync restates its standard. Each ADR heading and field, pitfalls
+# field and CURRENT-STATE heading of the template must appear, whole, under docs-sync's "## The standard".
+# The AGENTS.md sections are paraphrased there, so they are not compared.
+std=$(awk '/^## The standard$/ { f = 1; next } f && /^## / { exit } f' plugin/skills/docs-sync/SKILL.md)
+t=templates/project/docs
+{ sed -nE 's/^## (.*)/\1/p; s/^\*\*([^*:]+):\*\*.*/\1/p' "$t/decisions/0001-template.md"
+  sed -nE 's/^- \*\*([^*:]+):\*\*.*/\1/p' "$t/pitfalls.md"
+  sed -nE 's/^(## .*)/\1/p' "$t/CURRENT-STATE.md"
+} | while IFS= read -r h; do
+  printf '%s\n' "$std" | grep -qE -- "(^|[^A-Za-z_])$h([,.\`]| \(|\$)" ||
+    fail standard plugin/skills/docs-sync/SKILL.md "\"$h\" from templates/project/ is missing from \"## The standard\""
+done
+
 # The P0–P3 scale is written out in skills and agents, inline (`P0 = …; P3 = ….`) or as four bullets; every copy must match.
 git grep --untracked -l -E 'P0 = |^- \*\*P0:\*\* ' -- plugin | ruby -e '
   seen = {}

@@ -17,7 +17,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   suite green without touching `src/`, qa-expert keeps the failing test). The check has an Evals stage:
   every eval case needs a `case.yaml` named after its folder, a `prompt.md`, its scaffold, graders of a
   known type with at least one deterministic grader, and a row in `evals/README.md`.
-
+- The check has a Docs standard stage: the ADR, pitfalls and CURRENT-STATE headings and fields of
+  `templates/project/` must appear in docs-sync's standard list.
 ### Changed
 - The state card also follows a forked session (`SessionStart` source `fork`: `--fork-session`,
   `/branch`, `/fork`), which carries the earlier task context like a resume. `plugin.json` declares
@@ -80,6 +81,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   hook error.
 - The nudge counted each tool call about twice, because `api-request-blob` transcript lines repeat
   earlier turns, so it fired after about 15 tool calls instead of 30. Those lines are skipped now.
+- brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
+  match. A capture the agent started on its own shows the note text and waits for a yes.
+- session-retro sets `base` again in its cleanup command, because Bash calls do not keep variables;
+  it routes user preferences to `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md`; and its triggers no
+  longer include the bare "clean up" or "is everything done".
+- The architect output style writes ADRs in the docs-sync shape: Date, Status (`superseded by NNNN`),
+  Context, Decision, Consequences, Alternatives rejected, Revisit when.
 
 ## [0.2.3] - 2026-10-16
 

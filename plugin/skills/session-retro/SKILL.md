@@ -1,6 +1,6 @@
 ---
 name: session-retro
-description: Wrap up a session - check for uncommitted, unpushed or unmerged work, open PRs and running background tasks, propose cleanup, give a Done / Not done / Needs you status, update or close the plan, and propose at most a few lessons, rules or skill ideas to keep, applying only what the user approves. Use at the end of a session, when the Stop hook asks for it, or when the user says "wrap up the session", "is everything done", "clean up", "we are done". Unlike the built-in /recap one-line summary, it checks git state and routes lessons to their destination.
+description: Wrap up a session - check for uncommitted, unpushed or unmerged work, open PRs and running background tasks, propose cleanup, give a Done / Not done / Needs you status, update or close the plan, and propose at most a few lessons, rules or skill ideas to keep, applying only what the user approves. Use at the end of a session, when the Stop hook asks for it, or when the user says "wrap up the session", "clean up after the session", "we are done for today". Unlike the built-in /recap summary, it checks git state and routes lessons to their destination.
 license: MIT
 compatibility: "Claude Code; Codex via scripts/install-codex.sh"
 ---
@@ -24,7 +24,13 @@ If `gh` is missing or unauthenticated, say the PR check was skipped. List backgr
 
 ## 2. Cleanup proposals
 
-From `git worktree list`, `git branch --merged "$base"` and `git stash list`, propose removing worktrees and branches whose work is merged into the base branch, and stashes this session created. Never propose the current branch or the local branch behind `$base` (`${base#origin/}`), and name the base you compared against. A bare `git branch --merged` compares against HEAD and lists an unmerged parent branch; when `origin/HEAD` is unset (`$base` empty), say so, suggest `git remote set-head origin -a`, and propose no branch removal. Proposals only; show the exact commands.
+Bash calls do not keep variables, so set `base` again in the same call:
+
+```bash
+base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null); echo "base: ${base:-unset}"; git worktree list; git stash list; [ -z "$base" ] || git branch --merged "$base"
+```
+
+From that output, propose removing worktrees and branches whose work is merged into the base branch, and stashes this session created. Never propose the current branch or the local branch behind `$base` (`${base#origin/}`), and name the base you compared against. A bare `git branch --merged` compares against HEAD and lists an unmerged parent branch; when `origin/HEAD` is unset (`base: unset`), say so, suggest `git remote set-head origin -a`, and propose no branch removal. Proposals only; show the exact commands.
 
 ## 3. Status block
 
@@ -46,7 +52,7 @@ Route each item by this table:
 
 | What | Where |
 |---|---|
-| user preferences and style corrections | auto-memory or `~/.claude/CLAUDE.md` |
+| user preferences and style corrections | auto-memory or `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md` |
 | lessons and decisions that apply beyond this project | vault, via brain-capture |
 | facts about this project (commands, stack, conventions) | the project's `AGENTS.md`/`CLAUDE.md` or an ADR |
 
