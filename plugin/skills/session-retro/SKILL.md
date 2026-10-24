@@ -34,6 +34,8 @@ Not done: <what remains, and why>
 Needs you: <decisions, credentials, manual steps, approvals>
 ```
 
+In Done, write each check that ran as `<command>: <result> at <short SHA>`, the commit it ran on. When `git status --porcelain` was not empty at run time, append `+ uncommitted: <changed files>`: the SHA alone does not describe the files actually tested. A check whose SHA or tree state you do not know is unverified; say so instead of reusing an earlier result.
+
 ## 4. Findings
 
 At most 3 items per heading; omit empty headings.
@@ -51,7 +53,7 @@ Route each item by this table:
 - **Lessons**: a decision or lesson that outlives the task, with its destination.
 - **Rule candidates**: a correction the user made (e.g. "no, use pnpm"), as a minimal diff to the destination file in instruction-review style. Before proposing one, search the destination's history for its key phrase (`git log -p -S '<phrase>' -- <file>`; in the developer-os repository, `plugin/rules` and `plugin/skills`). If the change reverses an earlier commit, show that commit and ask whether to reverse it.
 - **Check candidates**: the same mistake made at least twice that a lint rule, a test, a `check.sh`-style script or a hook can detect. Propose the check, not a rule; prose does not stop a repeated mechanical mistake.
-- **Plan update**: for the active plan (declared planning location, default `docs/plans/`; the `Backlog:` files are not plans). Finished: propose deleting it and `docs/plans/.devos-state.md`, and moving open items to the backlog (the todo path of the project's `Backlog:` line, default `TODO.md`). Not finished: the new status line and a Next action ending with `Next session: 3 notes` (what to do first, what to avoid, what is still unverified).
+- **Plan update**: for the active plan (declared planning location, default `docs/plans/`; the `Backlog:` files are not plans). Finished: propose deleting it and `docs/plans/.devos-state.md`, and moving open items to the backlog (the todo path of the project's `Backlog:` line, default `TODO.md`). Not finished: the new status line and a Next action ending with `Next session: 3 notes` (what to do first, what to avoid, what is still unverified), and each check that ran in the Done format, so a later commit or edit visibly outdates it.
 - **Docs**: for this session's commits that pr-cycle or implement-backlog did not review, the docs findings `developer-os:code-review` defines (a doc the diff makes false), each as a doc edit; when `docs/CURRENT-STATE.md` `Verified at commit:` or `_Context.md` "State as of" predates them, offer `developer-os:docs-sync`.
 - **developer-os feedback**: a skill, hook or rule of this plugin that misfired. Draft the issue title and body without client or project names, and the command for the user to run: `gh issue create --repo msolecki/developer-os --title "…" --body-file <file>`.
 - **Skill / hook candidates**: a request the user made at least twice, in this session or across sessions you know of. Give a proposed name, the trigger phrases (in the user's own wording), and the type (skill or hook).

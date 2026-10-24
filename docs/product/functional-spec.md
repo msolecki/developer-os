@@ -70,7 +70,7 @@ found in a note is run or opened.
 
 | Skill | Does | Writes | Gate | Stops at |
 |---|---|---|---|---|
-| [session-retro](../../plugin/skills/session-retro/SKILL.md) | Checks uncommitted, unpushed and unmerged work, open PRs and running tasks; proposes cleanup; prints the status block; proposes at most three lessons, rule candidates, check candidates, plan updates, docs updates, plugin feedback and skill candidates, each labeled `persistent` or `this-task` and routed to its destination; shows the commit a rule change would reverse | Approved items only (brain-capture, rule diffs, plan, auto-memory) | Each item by number | "Which items should I apply?"; with the Stop hook and nothing to report, no output |
+| [session-retro](../../plugin/skills/session-retro/SKILL.md) | Checks uncommitted, unpushed and unmerged work, open PRs and running tasks; proposes cleanup; prints the status block, each check with the commit it ran on and any uncommitted files; proposes at most three lessons, rule candidates, check candidates, plan updates, docs updates, plugin feedback and skill candidates, each labeled `persistent` or `this-task` and routed to its destination; shows the commit a rule change would reverse | Approved items only (brain-capture, rule diffs, plan, auto-memory) | Each item by number | "Which items should I apply?"; with the Stop hook and nothing to report, no output |
 | [skill-usage](../../plugin/skills/skill-usage/SKILL.md) | Counts `developer-os:<name>` Skill calls in local transcripts (last 30 days, ever, last date) and suggests keep / rewrite-description / merge / remove; points to the built-in `/skill-doctor` for context cost | Nothing | — | The table and "Nothing was changed." |
 
 ### 2.4 Backlog item format

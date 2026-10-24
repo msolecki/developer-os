@@ -4,6 +4,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- session-retro ties every check result to the commit it ran on: Done and the plan update list each
+  check as `<command>: <result> at <short SHA>`, plus `+ uncommitted: <changed files>` when the tree
+  was dirty, so a later commit visibly outdates a saved "tests pass". New eval case
+  `session-retro-check-sha`.
+
 ## [0.2.4] - 2026-10-20
 
 ### Added
