@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/architecture/overview.md@19456cf3eda7">
+<meta name="dos-source" content="docs/architecture/overview.md@2729b7059448">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -64,7 +64,6 @@ plugin/                           the installed payload
   output-styles/&lt;name&gt;.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
-scripts/install-codex.sh          Codex installer, run by hand (not installed)
 evals/                            claude plugin eval cases (not installed)
 tests/*.test.sh                   hook tests
 .agnix.toml                       agnix lint settings for CI
@@ -203,8 +202,8 @@ site/                             public documentation site, published by .githu
 <text x="660" y="122" text-anchor="middle">code-reviewer</text>
 <rect class="agent" x="560" y="175" width="200" height="44" rx="2"/>
 <line class="agent" x1="569" y1="175" x2="569" y2="219"/><line class="agent" x1="751" y1="175" x2="751" y2="219"/>
-<text x="660" y="193" text-anchor="middle">fresh verifier:</text>
-<text x="660" y="209" text-anchor="middle">Codex or verifier agent</text>
+<text x="660" y="193" text-anchor="middle">fresh verifier</text>
+<text x="660" y="209" text-anchor="middle">agent</text>
 <rect class="agent" x="560" y="260" width="200" height="34" rx="2"/>
 <line class="agent" x1="569" y1="260" x2="569" y2="294"/><line class="agent" x1="751" y1="260" x2="751" y2="294"/>
 <text x="660" y="282" text-anchor="middle">security-auditor</text>
@@ -253,8 +252,7 @@ site/                             public documentation site, published by .githu
           <tr><td>Skill usage</td><td><code>~/.claude/projects/**/*.jsonl</code> (counts only, <code>--no-filename</code>)</td><td>—</td><td>Counts only, as context</td></tr>
           <tr><td>Session retro</td><td><code>git</code>, <code>gh pr list</code> (read-only)</td><td>Approved items only</td><td><code>gh</code> queries GitHub</td></tr>
           <tr><td>PR skills</td><td><code>git</code>, <code>gh</code></td><td>Commits, pushes, PR body, thread replies after approval</td><td>Yes, to GitHub, after approval</td></tr>
-          <tr><td>Verifier</td><td>The claim and the repository path</td><td>—</td><td>To Codex's provider when the Codex plugin is used</td></tr>
-          <tr><td>Codex installer (by hand)</td><td><code>plugin/skills/</code>, <code>core.md</code>, <code>~/.claude/CLAUDE.md</code></td><td><code>~/.agents/skills/&lt;name&gt;</code>, a marked block in <code>~/.codex/AGENTS.md</code> and its backup</td><td>No</td></tr>
+          <tr><td>Verifier</td><td>The claim and the repository path</td><td>—</td><td>No</td></tr>
           <tr><td>Routines (optional, user-built)</td><td>The vault repository in Anthropic's cloud</td><td><code>_inbox/</code> notes, an issue comment</td><td>Yes; see <a href="../workflow.html#away-from-the-desk-optional">workflow.md</a></td></tr>
         </tbody>
       </table>

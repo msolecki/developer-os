@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/overview.md@fbd1bb62413f">
+<meta name="dos-source" content="docs/product/overview.md@f499c67b789c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -59,7 +59,6 @@
 <h2 id="who-it-is-for">Who it is for</h2>
 <ul>
 <li>The primary user is a developer working alone or in a small team on several client and product repositories with Claude Code, who wants decisions to outlive sessions and repositories.</li>
-<li>A secondary user runs Codex: <code>scripts/install-codex.sh</code> copies the skills and the core rules into Codex's locations. This path is best-effort and untested on releases (<a href="../readme.html#codex-installer-best-effort">README, Codex</a>).</li>
 </ul>
 <h2 id="product-principles">Product principles</h2>
 <ol>
@@ -97,7 +96,7 @@
 <li>A CLI, installer, updater, daemon, index or search engine. The earlier CLI was removed on 2026-10-14 (<a href="decisions.html#d1-plugin-only">decisions D1</a>).</li>
 <li>Any automatic write to the vault outside <code>_inbox/</code>, and any automatic promotion of a note.</li>
 <li>Sending anything: no email, chat, issue or PR comment is posted by a skill on its own. <code>client-reply</code> drafts; <code>session-retro</code> prints a <code>gh issue create</code> command for the user to run.</li>
-<li>A Codex manifest, Codex hooks, agents or output styles.</li>
+<li>Codex or any agent other than Claude Code (removed 2026-10-24, <a href="decisions.html#d21-claude-code-only">decisions D21</a>).</li>
 <li>Running evals in CI.</li>
 </ul>
 <h2 id="how-it-is-distributed">How it is distributed</h2>

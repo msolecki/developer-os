@@ -58,15 +58,6 @@ promise it makes.
   not set in the Bash environment, so commands must use an absolute path.
 - **Breaks if changed:** `cp -R "$CLAUDE_PLUGIN_ROOT/vault-template/."` copies from `/vault-template`.
 
-## The Codex installer copies skills instead of symlinking them
-
-- **Where:** `scripts/install-codex.sh`
-- **Looks like:** stale copies that a symlink would avoid.
-- **Why it is deliberate:** Codex lists skills within 8000 characters by default and the full
-  descriptions are over 10,000; a copy carries a short description, a symlink cannot
-  ([decisions D19](product/decisions.md#d19-a-codex-installer-that-copies-not-symlinks)).
-- **Breaks if changed:** some skills silently drop out of Codex's skill list.
-
 ## Eval fixtures switch off the global excludes file
 
 - **Where:** `evals/fixtures/backlog.sh`

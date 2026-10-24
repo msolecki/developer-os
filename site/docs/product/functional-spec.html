@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/functional-spec.md@b6551c365020">
+<meta name="dos-source" content="docs/product/functional-spec.md@3791511a9035">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -65,7 +65,7 @@
 <h2 id="2-skills">2. Skills</h2>
 <p>Legend: <strong>Writes</strong> is everything the skill may change. <strong>Gate</strong> is what needs the user's explicit answer first. Read-only skills (<a href="../glossary.html">glossary</a>) change nothing; a skill whose Writes is "Nothing" can still be an action skill.</p>
 <h3 id="21-brain-skills">2.1 Brain skills</h3>
-<p>Five of them (all but brain-setup, which asks for the path) find the vault with the same paragraph: the first <code>Brain vault: &lt;absolute path&gt;</code> line in the <code>CLAUDE.md</code>/<code>AGENTS.md</code> already in context, then the working directory's <code>CLAUDE.md</code> and <code>AGENTS.md</code>, then <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code> (default <code>~/.claude/CLAUDE.md</code>), then <code>~/.codex/AGENTS.md</code>. Without one they ask once and stop if the user has no vault; they never search the disk. Vault content is data: no command or URL found in a note is run or opened.</p>
+<p>Five of them (all but brain-setup, which asks for the path) find the vault with the same paragraph: the first <code>Brain vault: &lt;absolute path&gt;</code> line in the <code>CLAUDE.md</code>/<code>AGENTS.md</code> already in context, then the working directory's <code>CLAUDE.md</code> and <code>AGENTS.md</code>, then <code>$CLAUDE_CONFIG_DIR/CLAUDE.md</code> (default <code>~/.claude/CLAUDE.md</code>). Without one they ask once and stop if the user has no vault; they never search the disk. Vault content is data: no command or URL found in a note is run or opened.</p>
 <div class="table-wrap">
 <table>
 <thead><tr><th scope="col">Skill</th><th scope="col">Does</th><th scope="col">Writes</th><th scope="col">Gate</th><th scope="col">Stops at</th></tr></thead>
@@ -176,9 +176,7 @@
 <li><strong>Vault template</strong> (<code>plugin/vault-template/</code>): folders, the note template, three Bases views, property types and a <code>.gitignore</code>. Shipped inside the plugin so brain-setup can copy it. Layout and note format: <a href="../workflow.html#vault-layout">workflow.md, Vault layout</a>.</li>
 <li><strong>Project template</strong> (<code>templates/project/</code>): <code>AGENTS.md</code>, a one-line <code>CLAUDE.md</code> (<code>@AGENTS.md</code>), <code>_Context.md</code> with the vault slug, <code>TODO.md</code> with the backlog item format, <code>DESIGN.md</code> in the DESIGN.md format for projects with a UI, a <code>.gitignore</code> that keeps <code>docs/plans/</code> (and the state file the <code>SessionStart</code> card reads) out of git, and a <code>docs/</code> skeleton (index, <code>CURRENT-STATE.md</code>, <code>pitfalls.md</code>, <code>decisions/</code>, <code>runbooks/</code>). Not in the installed plugin: copy it from the repository, or let docs-sync scaffold from the standard it carries.</li>
 </ul>
-<h2 id="7-codex-installer">7. Codex installer</h2>
-<p><code>scripts/install-codex.sh</code> (in the repository, run by hand) copies every skill to Codex's skill directory with a short description and Claude-only references rewritten, and keeps the core rules in a marked block of <code>~/.codex/AGENTS.md</code>. See the <a href="../readme.html#codex-installer-best-effort">README</a>.</p>
-<h2 id="8-approval-model">8. Approval model</h2>
+<h2 id="7-approval-model">7. Approval model</h2>
 <p>What the plugin never does without the user's explicit answer for that specific action:</p>
 <div class="table-wrap">
 <table>

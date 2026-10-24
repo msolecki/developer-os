@@ -26,7 +26,6 @@ plugin/                           the installed payload
   output-styles/<name>.md         4 output styles
   vault-template/                 copied by brain-setup
 templates/project/                project template (not installed)
-scripts/install-codex.sh          Codex installer, run by hand (not installed)
 evals/                            claude plugin eval cases (not installed)
 tests/*.test.sh                   hook tests
 .agnix.toml                       agnix lint settings for CI
@@ -99,7 +98,7 @@ flowchart LR
   pr-cycle --> fix-pr
   fix-pr -. Trust check .-> pr-cycle
   code-review --> code-reviewer[[code-reviewer]]
-  code-review --> verifier[[fresh verifier: Codex or the verifier agent]]
+  code-review --> verifier[[fresh verifier agent]]
   audit-to-backlog --> security-auditor[[security-auditor]]
   audit-to-backlog --> performance-engineer[[performance-engineer]]
   audit-to-backlog --> qa-expert[[qa-expert]]
@@ -137,8 +136,7 @@ implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to
 | Skill usage | `~/.claude/projects/**/*.jsonl` (counts only, `--no-filename`) | — | Counts only, as context |
 | Session retro | `git`, `gh pr list` (read-only) | Approved items only | `gh` queries GitHub |
 | PR skills | `git`, `gh` | Commits, pushes, PR body, thread replies after approval | Yes, to GitHub, after approval |
-| Verifier | The claim and the repository path | — | To Codex's provider when the Codex plugin is used |
-| Codex installer (by hand) | `plugin/skills/`, `core.md`, `~/.claude/CLAUDE.md` | `~/.agents/skills/<name>`, a marked block in `~/.codex/AGENTS.md` and its backup | No |
+| Verifier | The claim and the repository path | — | No |
 | Routines (optional, user-built) | The vault repository in Anthropic's cloud | `_inbox/` notes, an issue comment | Yes; see [workflow.md](../workflow.md#away-from-the-desk-optional) |
 
 The plugin makes no network call itself. What the agent reads becomes model context; an agent with

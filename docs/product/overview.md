@@ -34,9 +34,6 @@ index, binary, background job or network call in the plugin itself.
 
 - The primary user is a developer working alone or in a small team on several client and product
   repositories with Claude Code, who wants decisions to outlive sessions and repositories.
-- A secondary user runs Codex: `scripts/install-codex.sh` copies the skills and the core rules into
-  Codex's locations. This path is best-effort and untested on releases
-  ([README, Codex](../../README.md#codex-installer-best-effort)).
 
 ## Product principles
 
@@ -86,7 +83,7 @@ Out of scope, on purpose:
 - Any automatic write to the vault outside `_inbox/`, and any automatic promotion of a note.
 - Sending anything: no email, chat, issue or PR comment is posted by a skill on its own.
   `client-reply` drafts; `session-retro` prints a `gh issue create` command for the user to run.
-- A Codex manifest, Codex hooks, agents or output styles.
+- Codex or any agent other than Claude Code (removed 2026-10-24, [decisions D21](decisions.md#d21-claude-code-only)).
 - Running evals in CI.
 
 ## How it is distributed

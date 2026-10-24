@@ -28,7 +28,7 @@ document and the source disagree, the source wins and the document is a defect.
 | A setting or pattern in this repository looks wrong | [pitfalls.md](pitfalls.md) |
 | Decode a term such as "action skill", "fresh verifier" or "inbox note" | [glossary.md](glossary.md) |
 
-Outside `docs/`: [README](../README.md) (install, component list, Codex setup),
+Outside `docs/`: [README](../README.md) (install, component list),
 [CONTRIBUTING](../CONTRIBUTING.md), [SECURITY](../SECURITY.md), [CHANGELOG](../CHANGELOG.md),
 [evals/README.md](../evals/README.md).
 

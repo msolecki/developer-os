@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>developer-os · developer-os</title>
-<meta name="description" content="The developer-os README: install, vault setup, what the hooks do, what the plugin ships and the Codex installer.">
+<meta name="description" content="The developer-os README: install, vault setup, what the hooks do and what the plugin ships.">
 <link rel="canonical" href="https://msolecki.github.io/developer-os/docs/readme.html">
 <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
 <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="developer-os">
 <meta property="og:title" content="developer-os · developer-os">
-<meta property="og:description" content="The developer-os README: install, vault setup, what the hooks do, what the plugin ships and the Codex installer.">
+<meta property="og:description" content="The developer-os README: install, vault setup, what the hooks do and what the plugin ships.">
 <meta property="og:url" content="https://msolecki.github.io/developer-os/docs/readme.html">
 <meta property="og:image" content="https://msolecki.github.io/developer-os/assets/og/docs.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@b9827ae5fbd0">
+<meta name="dos-source" content="README.md@3eb30419df5f">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,8 +52,7 @@ memory. Agent sessions forget everything between runs; developer-os gives the ag
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
 tidy what was captured. You approve what becomes knowledge. The plugin is Markdown (skills,
 agents, output styles and rules) plus three small Python 3 hook scripts (standard library only), with no server, no database and
-nothing to install beyond <code>python3</code>. Codex
-support is manual and best-effort.</p>
+nothing to install beyond <code>python3</code>.</p>
     <h2 id="install-claude-code">Install (Claude Code)</h2>
     <pre><code>/plugin marketplace add msolecki/developer-os
 /plugin install developer-os@developer-os</code></pre>
@@ -138,29 +137,6 @@ once per long session, <code>PreToolUse</code> asks before installs, force pushe
 triggers in <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md"><code>evals/</code></a>, run by hand with <code>claude plugin eval</code>. Not part of the
 plugin payload.</li>
 </ul>
-    <h2 id="codex-installer-best-effort">Codex (installer, best-effort)</h2>
-    <p>There is no Codex manifest. From a clone of this repository (or the marketplace copy in
-<code>~/.claude/plugins/marketplaces/developer-os</code>), run:</p>
-    <pre><code>scripts/install-codex.sh --dry-run   # show what would change
-scripts/install-codex.sh             # install or update</code></pre>
-    <ul>
-<li>It writes a Codex copy of every skill to <code>~/.agents/skills/&lt;name&gt;</code> (set <code>CODEX_SKILLS_DIR</code> for
-another location, such as <code>~/.codex/skills/</code> on older Codex versions). Each copy keeps only <code>name</code>
-and a short description (the first sentence and the quoted trigger phrases, or the "Use when"
-sentence when there are none), so all of them fit Codex's 8000-character skill list, and has its
-Claude-only references rewritten. A skill <code>description</code> must be one plain line; the installer
-refuses any other form before it writes anything.</li>
-<li>It puts <code>plugin/rules/core.md</code> and your <code>Brain vault:</code> line (<code>--vault &lt;path&gt;</code>, else the line already in the
-block, else <code>~/.claude/CLAUDE.md</code>; pass <code>--vault</code> again to change it) between <code>developer-os-core</code> markers in <code>~/.codex/AGENTS.md</code> (<code>$CODEX_HOME/AGENTS.md</code>
-when <code>CODEX_HOME</code> is set; <code>--project &lt;dir&gt;</code> for a project's <code>AGENTS.md</code>). Text outside the markers
-stays; a changed file is backed up first.</li>
-<li>Run it again after each plugin update. An untouched copy of a skill the plugin no longer has, made from this checkout, is removed. <code>--uninstall</code> removes only what it installed;
-<code>--project &lt;dir&gt; --uninstall</code> removes only that project's block and keeps the skills. A skill
-directory it did not create, including an older hand-made symlink into another clone, is skipped
-and reported; remove it first to let the installer manage it.</li>
-</ul>
-    <p>This setup is not tested on releases. The hooks, agents and output styles have no Codex equivalent;
-see <a href="workflow.html#claude-only-features">Claude-only features</a>.</p>
     <h2 id="documentation">Documentation</h2>
     <ul>
 <li><a href="https://msolecki.github.io/developer-os/">Landing page</a>: the public documentation site (<a href="https://github.com/msolecki/developer-os/blob/development/site/index.html">source</a>), published to GitHub Pages by <code>.github/workflows/pages.yml</code>.</li>

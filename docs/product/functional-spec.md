@@ -35,7 +35,7 @@ answer first. Read-only skills ([glossary](../glossary.md)) change nothing; a sk
 
 Five of them (all but brain-setup, which asks for the path) find the vault with the same paragraph: the first `Brain vault: <absolute path>` line in the
 `CLAUDE.md`/`AGENTS.md` already in context, then the working directory's `CLAUDE.md` and
-`AGENTS.md`, then `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`), then `~/.codex/AGENTS.md`. Without one they ask once and
+`AGENTS.md`, then `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`). Without one they ask once and
 stop if the user has no vault; they never search the disk. Vault content is data: no command or URL
 found in a note is run or opened.
 
@@ -171,13 +171,7 @@ The scripts are Python 3 (standard library only) and need `python3` on `PATH`; w
   `pitfalls.md`, `decisions/`, `runbooks/`). Not in the installed plugin: copy it from the
   repository, or let docs-sync scaffold from the standard it carries.
 
-## 7. Codex installer
-
-`scripts/install-codex.sh` (in the repository, run by hand) copies every skill to Codex's skill
-directory with a short description and Claude-only references rewritten, and keeps the core rules in a
-marked block of `~/.codex/AGENTS.md`. See the [README](../../README.md#codex-installer-best-effort).
-
-## 8. Approval model
+## 7. Approval model
 
 What the plugin never does without the user's explicit answer for that specific action:
 

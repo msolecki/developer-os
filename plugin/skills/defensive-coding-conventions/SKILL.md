@@ -2,7 +2,7 @@
 name: defensive-coding-conventions
 description: Check a change for defect classes that commonly ship past review, such as mismatched persistence and validation conditions, unisolated webhook side effects, missed writers or readers of shared state, collapsed multi-valued statuses, unvalidated external JSON, and silent build artifacts. Use when writing or reviewing code that handles external input, authentication, money, concurrency, persistence, or error paths.
 license: MIT
-compatibility: "Claude Code; Codex via scripts/install-codex.sh"
+compatibility: "Claude Code"
 ---
 
 # Defensive coding — defect classes to check

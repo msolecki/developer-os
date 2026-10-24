@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/decisions.md@398f178591cb">
+<meta name="dos-source" content="docs/product/decisions.md@7f197f464082">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -60,6 +60,7 @@
 <li><strong>Decision:</strong> the only executable code is the hook layer: <code>cat</code> of the core rules, plus <code>capture-nudge.sh</code> and <code>guard.sh</code> in POSIX <code>sh</code>, without <code>jq</code>, without network calls.</li>
 <li><strong>Why:</strong> anything that runs in every session of every user must be small enough to read in full and must not add dependencies.</li>
 <li><strong>Amended 2026-10-15:</strong> a third script, <code>session-start.sh</code>, replaces the inline <code>cat</code> (D16), and <code>scripts/install-codex.sh</code> runs only by hand, outside the plugin (D19).</li>
+<li><strong>Amended 2026-10-24:</strong> <code>scripts/install-codex.sh</code> is removed (D21).</li>
 <li><strong>Amended 2026-10-16:</strong> the hook scripts are Python 3 (3.8+, standard library only, no network): <code>state-card.py</code>, <code>guard.py</code> and <code>capture-nudge.py</code> replace the <code>sh</code> scripts and <code>guard.awk</code>. The Claude plugin directory's validator reads the shell scripts a hook runs and refuses any command whose path the shell computes (a variable other than <code>${CLAUDE_PLUGIN_ROOT}</code>, a command substitution, a glob) or any inline program; the hooks need paths outside the plugin (the project's <code>cwd</code>, the transcript, a temporary directory). Scripts in other languages are held for a human reviewer instead of refused. The core rules load through a literal <code>cat</code> hook again, so they never depend on Python; without <code>python3</code> the other three hooks fail open.</li>
 </ul>
 <h2 id="d3-the-vault-is-read-and-written-with-the-agents-own-file-tools">D3. The vault is read and written with the agent's own file tools</h2>
@@ -79,6 +80,7 @@
 <li><strong>Date:</strong> 2026-10-14, lookup order extended 2026-10-15 · <strong>Commits:</strong> <code>255c798e</code>, <code>f8c6eac3</code></li>
 <li><strong>Decision:</strong> the vault path is one line, <code>Brain vault: &lt;absolute path&gt;</code>, in a <code>CLAUDE.md</code> or <code>AGENTS.md</code>. Skills look in context, the working directory, <code>~/.claude/CLAUDE.md</code> and <code>~/.codex/AGENTS.md</code>, ask once if it is missing, and never search the disk.</li>
 <li><strong>Why:</strong> works identically in Claude Code and Codex with no plugin configuration mechanism.</li>
+<li><strong>Amended 2026-10-24:</strong> the lookup no longer reads <code>~/.codex/AGENTS.md</code> (D21).</li>
 <li><strong>Open:</strong> replacing the line with the plugin's <code>userConfig</code> is under consideration (a local, git-ignored proposal, not in the repository).</li>
 </ul>
 <h2 id="d6-hooks-ask-never-deny-and-fail-open">D6. Hooks ask, never deny, and fail open</h2>
@@ -99,6 +101,7 @@
 <li><strong>Date:</strong> 2026-10-15 · <strong>Commit:</strong> <code>9d4319d8</code></li>
 <li><strong>Decision:</strong> every review, audit and triage skill and every reviewer agent rates P0–P3 with the same definitions; verdicts are <code>APPROVE</code>, <code>COMMENT</code>, <code>REQUEST_CHANGES</code>. code-review and audit-to-backlog send each P0/P1 finding to a verifier that sees only the claim (Codex when its plugin is installed, otherwise a fresh subagent); refuted findings move to a Disputed list.</li>
 <li><strong>Why:</strong> one scale makes findings comparable across skills; a verifier without the reviewer's reasoning catches confident false positives before they block a merge.</li>
+<li><strong>Amended 2026-10-24:</strong> the verifier is always a fresh <code>verifier</code> agent; the Codex option is removed (D21).</li>
 </ul>
 <h2 id="d9-action-skills-declare-where-they-stop-and-what-they-never-do">D9. Action skills declare where they stop and what they never do</h2>
 <ul>
@@ -169,7 +172,7 @@
 <li><strong>Decision:</strong> CI downloads the <code>agent-sh/agnix</code> v0.57.0 release binary, checks it against a SHA-256 in the workflow, and runs it strict, with suppressions in <code>.agnix.toml</code>, each with its reason. <code>scripts/check.sh</code> adds <code>plugin/SURFACE.txt</code> and digit-count checks, which need no new tool.</li>
 <li><strong>Why:</strong> a local agnix would need an install on every contributor's machine. The hash lives in the workflow because the action's own checksum file comes from the same release and proves nothing if the release is replaced.</li>
 </ul>
-<h2 id="d19-a-codex-installer-that-copies-not-symlinks">D19. A Codex installer that copies, not symlinks</h2>
+<h2 id="d19-a-codex-installer-that-copies-not-symlinks-superseded-by-d21">D19. A Codex installer that copies, not symlinks (superseded by D21)</h2>
 <ul>
 <li><strong>Date:</strong> 2026-10-15 · Sources proposal #15, Q13</li>
 <li><strong>Decision:</strong> <code>scripts/install-codex.sh</code>, run by hand, writes a Codex copy of every skill (name and a short description only, Claude-only references rewritten, a <code>.developer-os-codex</code> marker) and keeps the core rules and the <code>Brain vault:</code> line between markers in <code>~/.codex/AGENTS.md</code>. No Codex hooks.</li>
@@ -182,6 +185,12 @@
 <li><strong>Decision:</strong> <code>main</code> is the default branch and the marketplace channel; it moves only on a release, a fast-forward from <code>development</code>. Both manifests carry the same <code>version</code>, bumped on every release and tagged <code>v&lt;version&gt;</code>. The first release is <code>0.1.0</code>.</li>
 <li><strong>Why:</strong> with the public launch, an install should change only when a release does, not on every docs commit; the cached-copy problem of D14 is the intended behaviour once <code>main</code> moves only on a release. Anthropic's plugin directory warns on a missing <code>version</code>. Same model as founder-os.</li>
 <li><strong>Alternatives:</strong> a tag on <code>development</code> without a <code>version</code> (installs keep tracking every commit).</li>
+</ul>
+<h2 id="d21-claude-code-only">D21. Claude Code only</h2>
+<ul>
+<li><strong>Date:</strong> 2026-10-24</li>
+<li><strong>Decision:</strong> developer-os supports Claude Code only. <code>scripts/install-codex.sh</code> and its test are removed, the brain skills no longer read <code>~/.codex/AGENTS.md</code>, and code-review and audit-to-backlog always use the <code>verifier</code> agent instead of the Codex plugin. Supersedes D19.</li>
+<li><strong>Why:</strong> the maintainer's decision; reason not recorded.</li>
 </ul>
 <h2 id="rules-history">Rules history</h2>
 <p>One row per approved change to <code>plugin/rules/core.md</code> or a skill's rules, added with the change (session-retro and instruction-review do this). Check here before reversing a rule.</p>

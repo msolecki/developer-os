@@ -110,9 +110,7 @@ safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds c
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that
 stage's message; it runs the whole check about twenty times (around 40 s), so `scripts/check.sh` runs it
 only when `CI` is set (GitHub Actions sets it): after changing `scripts/check.sh`, run `sh tests/check.test.sh` yourself;
-`tests/install-codex.test.sh` runs the Codex installer against a temporary `HOME` (dry run,
-idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the Codex
-budget of 8000 characters, counted in bytes); `tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
+`tests/skill-usage.test.sh` runs the counting block from the skill-usage skill against synthetic
 transcripts (a model call, the same call repeated with its uuid, a typed command, a quoted pattern)
 and expects one count per message; when `rg` is missing it prints SKIP locally and fails in CI,
 which installs ripgrep.
@@ -145,14 +143,6 @@ the README lists the mutation checks that prove it.
 
 Changing `plugin/rules/core.md`: it sits just under the 8192-byte cap (`wc -c < plugin/rules/core.md`).
 Every added line must replace or shorten another; run `instruction-review --prune` on it inside this repository.
-
-## Codex installer
-
-`scripts/install-codex.sh` is not part of the plugin; users run it from a clone. After changing a skill
-in a way that adds a Claude-only reference (a new `${CLAUDE_*}` variable, a new agent dispatch), check
-that the rewrite in the script still covers it: `sh tests/install-codex.test.sh` greps the copies.
-A skill `description` must be one plain line: no `>` or `|` block scalar, no quotes, no continuation
-line; the script refuses any other form.
 
 ## Branches and releases
 
