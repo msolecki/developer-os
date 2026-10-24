@@ -101,6 +101,33 @@ files '*.base' 'evals/*.yaml' | while IFS= read -r -d '' f; do
     || fail yaml "$f" "invalid YAML"
 done
 
+# Every eval case directory has a case.yaml whose name is the folder, a prompt.md, the scaffold_script it names,
+# graders/*.md of a known type with at least one deterministic (non-llm) grader, and its own row in evals/README.md.
+# A mistyped grader or a renamed case would otherwise fail only in a paid eval run.
+files 'evals/*' | ruby -e '
+  require "yaml"
+  types = %w[llm regex file_exists tool_used]
+  readme = File.read("evals/README.md").scan(/^\| `([^`]+)` \|/).flatten
+  cases = $stdin.read.split("\0").map { |f| f.split("/") }.select { |p| p.size > 2 && p[1] != "fixtures" }.map { |p| p[1] }.uniq
+  cases.each do |c|
+    d = "evals/#{c}"
+    bad = ->(why) { abort "evals: #{d}: #{why}" }
+    y = File.file?("#{d}/case.yaml") ? YAML.safe_load(File.read("#{d}/case.yaml")) : bad.("no case.yaml")
+    bad.("case.yaml name #{y["name"].inspect} is not the folder name") unless y.is_a?(Hash) && y["name"] == c
+    bad.("no prompt.md") unless File.file?("#{d}/prompt.md")
+    s = y.dig("context", "scaffold_script")
+    bad.("scaffold_script #{s} does not exist") if s && !File.file?("#{d}/#{s}")
+    graders = Dir.glob("#{d}/graders/*.md").sort
+    bad.("no graders/*.md") if graders.empty?
+    kinds = graders.map do |g|
+      t = File.read(g)[/\A---\n(.*?)^---$/m, 1].then { |fm| fm && YAML.safe_load(fm)["type"] rescue nil }
+      types.include?(t) ? t : abort("evals: #{g}: grader type #{t.inspect} is not one of #{types.join(", ")}")
+    end
+    bad.("no deterministic grader (regex, file_exists or tool_used)") if kinds.all?("llm")
+    bad.("no row in evals/README.md") unless readme.include?(c)
+  end
+  (readme - cases).each { |c| abort "evals: evals/README.md: row #{c} names no case" }'
+
 targets=$(grep -o '\${CLAUDE_PLUGIN_ROOT}/[^"\\[:space:]]*' plugin/hooks/hooks.json | sed 's|^\${CLAUDE_PLUGIN_ROOT}/||') || true
 [ -n "$targets" ] || fail hooks plugin/hooks/hooks.json "no \${CLAUDE_PLUGIN_ROOT} target"
 for p in $targets; do

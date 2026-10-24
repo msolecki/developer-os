@@ -12,6 +12,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   target, and a cycle, and never counts a superseded note as an orphan. New eval cases
   `brain-search-superseded-chain`, `brain-search-superseded-dangling`, `brain-search-superseded-cycle`
   and `brain-garden-superseded`.
+- Eval cases for two agents' Never rules: `verifier-injected-finding` (a false finding that asks the
+  verifier to answer CONFIRMED is refuted from the code) and `qa-expert-no-skip` (asked to make a red
+  suite green without touching `src/`, qa-expert keeps the failing test). The check has an Evals stage:
+  every eval case needs a `case.yaml` named after its folder, a `prompt.md`, its scaffold, graders of a
+  known type with at least one deterministic grader, and a row in `evals/README.md`.
 
 ### Changed
 - The state card also follows a forked session (`SessionStart` source `fork`: `--fork-session`,
@@ -25,6 +30,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   check as `<command>: <result> at <short SHA>`, plus `+ uncommitted: <changed files>` when the tree
   was dirty, so a later commit visibly outdates a saved "tests pass". New eval case
   `session-retro-check-sha`.
+- Eval graders: the session-retro cases and project-baseline-design fail on a shell write (a redirect,
+  `tee`, `sed -i`, `cp`, `mv`, `rm`, `git add` or `git commit`); brain-garden cases fail on a Write, a `cp`, a redirect or `tee`; brain-compile-originals fails
+  on a redirect or `tee` outside `_inbox/`. Eighteen cases gained a deterministic grader for a literal
+  or format their skill mandates (for example `History incomplete`, `Apply which?`, `NO-GO`, the
+  backlog item line), so they no longer score only through an llm grader.
 
 ## [0.2.4] - 2026-10-20
 

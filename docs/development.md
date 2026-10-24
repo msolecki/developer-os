@@ -38,6 +38,7 @@ and point a `Brain vault:` line in that directory's `CLAUDE.md` at it.
 | Severity | A skill or agent that writes out the P0–P3 scale (inline `P0 = …` or four `- **P0:**` bullets) words it differently from the others |
 | Local paths | A file under `plugin/` or `site/` contains `/Users/`, `/home/`, `~/www` or `.claude2` |
 | YAML | A `*.base` or `evals/*.yaml` file does not parse |
+| Evals | An `evals/<case>/` directory lacks a `case.yaml` whose `name` is the folder, a `prompt.md`, the `scaffold_script` it names, or `graders/*.md`; a grader's `type` is not `llm`, `regex`, `file_exists` or `tool_used`; every grader of a case is `llm`; a case has no row in the Cases table of `evals/README.md`, or a row names no case |
 | Hook targets | A `${CLAUDE_PLUGIN_ROOT}/…` path in `hooks.json` does not exist |
 | Agents | An agent lacks `## Final status` or one of `DONE`, `REVIEW`, `BLOCKED`, `CONTINUING` |
 | Surface | `plugin/SURFACE.txt` differs from the skills, agents, output styles, hook events and hook scripts on disk |

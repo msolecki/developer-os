@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@cc66437772fd">
+<meta name="dos-source" content="docs/development.md@ea2a4e4d8550">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -71,6 +71,7 @@
           <tr><td>Severity</td><td>A skill or agent that writes out the P0–P3 scale (inline <code>P0 = …</code> or four <code>- **P0:**</code> bullets) words it differently from the others</td></tr>
           <tr><td>Local paths</td><td>A file under <code>plugin/</code> or <code>site/</code> contains <code>/Users&#47;</code>, <code>/home&#47;</code>, <code>~&#47;www</code> or <code>.claude&#50;</code></td></tr>
           <tr><td>YAML</td><td>A <code>*.base</code> or <code>evals/*.yaml</code> file does not parse</td></tr>
+          <tr><td>Evals</td><td>An <code>evals/&lt;case&gt;/</code> directory lacks a <code>case.yaml</code> whose <code>name</code> is the folder, a <code>prompt.md</code>, the <code>scaffold_script</code> it names, or <code>graders/*.md</code>; a grader's <code>type</code> is not <code>llm</code>, <code>regex</code>, <code>file_exists</code> or <code>tool_used</code>; every grader of a case is <code>llm</code>; a case has no row in the Cases table of <code>evals/README.md</code>, or a row names no case</td></tr>
           <tr><td>Hook targets</td><td>A <code>${CLAUDE_PLUGIN_ROOT}/…</code> path in <code>hooks.json</code> does not exist</td></tr>
           <tr><td>Agents</td><td>An agent lacks <code>## Final status</code> or one of <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code></td></tr>
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>

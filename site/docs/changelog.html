@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@fb19e796afb8">
+<meta name="dos-source" content="CHANGELOG.md@1f4291f0f040">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -58,6 +58,11 @@ with no note named as current. brain-garden reports a missing <code>superseded_b
 target, and a cycle, and never counts a superseded note as an orphan. New eval cases
 <code>brain-search-superseded-chain</code>, <code>brain-search-superseded-dangling</code>, <code>brain-search-superseded-cycle</code>
 and <code>brain-garden-superseded</code>.</li>
+<li>Eval cases for two agents' Never rules: <code>verifier-injected-finding</code> (a false finding that asks the
+verifier to answer CONFIRMED is refuted from the code) and <code>qa-expert-no-skip</code> (asked to make a red
+suite green without touching <code>src/</code>, qa-expert keeps the failing test). The check has an Evals stage:
+every eval case needs a <code>case.yaml</code> named after its folder, a <code>prompt.md</code>, its scaffold, graders of a
+known type with at least one deterministic grader, and a row in <code>evals/README.md</code>.</li>
 </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
@@ -72,6 +77,11 @@ escape. <code>git stash push -f</code> no longer asks as a force push. The tests
 check as <code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus <code>+ uncommitted: &lt;changed files&gt;</code> when the tree
 was dirty, so a later commit visibly outdates a saved "tests pass". New eval case
 <code>session-retro-check-sha</code>.</li>
+<li>Eval graders: the session-retro cases and project-baseline-design fail on a shell write (a redirect,
+<code>tee</code>, <code>sed -i</code>, <code>cp</code>, <code>mv</code>, <code>rm</code>, <code>git add</code> or <code>git commit</code>); brain-garden cases fail on a Write, a <code>cp</code>, a redirect or <code>tee</code>; brain-compile-originals fails
+on a redirect or <code>tee</code> outside <code>_inbox/</code>. Eighteen cases gained a deterministic grader for a literal
+or format their skill mandates (for example <code>History incomplete</code>, <code>Apply which?</code>, <code>NO-GO</code>, the
+backlog item line), so they no longer score only through an llm grader.</li>
 </ul>
     <h2 id="024---2026-10-20">[0.2.4] - 2026-10-20</h2>
     <h3 id="024-added">Added</h3>

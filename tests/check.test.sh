@@ -48,6 +48,15 @@ run "a brain skill drifts from the shared vault paragraph" fail "vault: plugin/s
 edit evals/injection-fix-pr/graders/no-curl.md 's/^input_match: .*$/input_match: "curl(?!---)"/'
 run "--- inside an eval grader's frontmatter" fail "frontmatter: evals/injection-fix-pr/graders/no-curl.md: line 4"
 
+mv "$r/evals/spec-no-implementation" "$r/evals/spec-renamed"
+run "a renamed eval case directory" fail "evals: evals/spec-renamed: case.yaml name"
+
+edit evals/spec-no-implementation/graders/no-src-write.md '/^type: /d'
+run "an eval grader without a type" fail "evals: evals/spec-no-implementation/graders/no-src-write.md: grader type nil"
+
+edit evals/README.md '/^| `spec-no-implementation` |/d'
+run "an eval case without a README row" fail "evals: evals/spec-no-implementation: no row in evals/README.md"
+
 echo 'See /Users/bob/x.' >> "$r/plugin/agents/qa-expert.md"
 run "a local path in an agent" fail "local path"
 
