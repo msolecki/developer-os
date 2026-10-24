@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@1f4291f0f040">
+<meta name="dos-source" content="CHANGELOG.md@c2d91f1c9537">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -82,6 +82,12 @@ was dirty, so a later commit visibly outdates a saved "tests pass". New eval cas
 on a redirect or <code>tee</code> outside <code>_inbox/</code>. Eighteen cases gained a deterministic grader for a literal
 or format their skill mandates (for example <code>History incomplete</code>, <code>Apply which?</code>, <code>NO-GO</code>, the
 backlog item line), so they no longer score only through an llm grader.</li>
+<li>One backlog item format, owned by audit-to-backlog: spec gives <code>FEAT-</code> items severity P2 unless
+you name another and files them under that section, finds or creates the backlog files as
+audit-to-backlog does (the <code>Backlog:</code> line, the path question, the git-ignored warning), and hands
+off to implement-backlog when the steps moved to the backlog. session-retro moves a finished plan's
+open items to the backlog in that format. <code>templates/project/TODO.md</code> points to the skill instead of
+restating the rules.</li>
 </ul>
     <h2 id="024---2026-10-20">[0.2.4] - 2026-10-20</h2>
     <h3 id="024-added">Added</h3>

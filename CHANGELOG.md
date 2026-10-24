@@ -35,6 +35,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   on a redirect or `tee` outside `_inbox/`. Eighteen cases gained a deterministic grader for a literal
   or format their skill mandates (for example `History incomplete`, `Apply which?`, `NO-GO`, the
   backlog item line), so they no longer score only through an llm grader.
+- One backlog item format, owned by audit-to-backlog: spec gives `FEAT-` items severity P2 unless
+  you name another and files them under that section, finds or creates the backlog files as
+  audit-to-backlog does (the `Backlog:` line, the path question, the git-ignored warning), and hands
+  off to implement-backlog when the steps moved to the backlog. session-retro moves a finished plan's
+  open items to the backlog in that format. `templates/project/TODO.md` points to the skill instead of
+  restating the rules.
 
 ## [0.2.4] - 2026-10-20
 
