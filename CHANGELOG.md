@@ -69,6 +69,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   on a findings file. Eval graders accept a note written through Bash, a longer
   incomplete-history reply and a verifier reply that quotes the injected note; fix-pr-approval shows
   whether the skill fired.
+- evals/README.md records a mutation result for every case (2026-10-24): 31 of the 45 cases drop
+  when the guarded skill text is deleted; the rest are marked survived or Δ-less on purpose with the reason.
 
 ## [0.2.4] - 2026-10-20
 
