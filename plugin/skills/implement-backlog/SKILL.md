@@ -70,7 +70,7 @@ Next: <one line>
 
 ## Stop point
 
-Stop after the batch is committed locally, or earlier at a red baseline, after three failed repair cycles, or after two review rounds without a pass. Delete `docs/plans/.devos-state.md`. Return the validation evidence, review additions, and the next batch.
+Stop after the batch is committed locally, or earlier at a red baseline, after three failed repair cycles, or after two review rounds without a pass. Delete `docs/plans/.devos-state.md`. Return the validation evidence, review additions, and the next batch. On any stop, also before claiming or dispatching, report each item you found blocked as `<ID> · BLOCKED · Unblock owner: user | orchestrator | <item ID>`, followed by the command and output that show the block.
 
 ## Never
 

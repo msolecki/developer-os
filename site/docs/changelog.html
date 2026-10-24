@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@1e78d3d84d93">
+<meta name="dos-source" content="CHANGELOG.md@26fd76af1db8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -113,7 +113,7 @@ Context, Decision, Consequences, Alternatives rejected, Revisit when.</li>
 UNDECIDED when it did not read the cited line; fix-pr edits nothing until the user approves the
 planned changes; brain-search never cites an archived note as history and says where an incomplete
 chain broke; implement-backlog runs a screened in-repository script <code>Check</code> without a question and
-reports a blocked item's unblock owner. Eval graders accept a note written through Bash, a longer
+reports every blocked item as <code>&lt;ID&gt; · BLOCKED · Unblock owner: …</code> on any stop; fix-pr also triggers on a findings file. Eval graders accept a note written through Bash, a longer
 incomplete-history reply and a verifier reply that quotes the injected note; fix-pr-approval shows
 whether the skill fired.</li>
 </ul>

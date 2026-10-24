@@ -65,7 +65,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   UNDECIDED when it did not read the cited line; fix-pr edits nothing until the user approves the
   planned changes; brain-search never cites an archived note as history and says where an incomplete
   chain broke; implement-backlog runs a screened in-repository script `Check` without a question and
-  reports a blocked item's unblock owner. Eval graders accept a note written through Bash, a longer
+  reports every blocked item as `<ID> · BLOCKED · Unblock owner: …` on any stop; fix-pr also triggers
+  on a findings file. Eval graders accept a note written through Bash, a longer
   incomplete-history reply and a verifier reply that quotes the injected note; fix-pr-approval shows
   whether the skill fired.
 
