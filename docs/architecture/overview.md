@@ -17,8 +17,9 @@ plugin/                           the installed payload
   .claude-plugin/plugin.json      name, version, description, license, keywords
   rules/core.md                   core rules, printed by a SessionStart cat hook
   SURFACE.txt                     public names, checked against the disk
-  hooks/hooks.json                4 hooks, 10-second timeouts
+  hooks/hooks.json                5 hooks, 10-second timeouts
   hooks/state-card.py             SessionStart: state card after compaction or resume
+  hooks/notices.py                SessionStart: version and vault-upkeep notices on startup
   hooks/guard.py                  PreToolUse guard for Bash
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/<name>/SKILL.md          28 skills
@@ -62,12 +63,15 @@ sequenceDiagram
   participant CC as Claude Code
   participant R as SessionStart: cat core.md
   participant SS as SessionStart: state-card.py
+  participant NO as SessionStart: notices.py
   participant G as PreToolUse: guard.py
   participant N as Stop: capture-nudge.py
   CC->>R: session starts / resumes / compacts
   R-->>CC: stdout = core rules
   CC->>SS: resumes / compacts
   SS-->>CC: stdout = state card
+  CC->>NO: new session (startup)
+  NO-->>CC: nothing or systemMessage (user) + additionalContext (agent)
   CC->>G: every Bash call, JSON on stdin
   G-->>CC: nothing (allow normal flow) or {"permissionDecision":"ask", reason}
   CC->>N: agent finishes a turn, JSON on stdin
@@ -77,6 +81,11 @@ sequenceDiagram
 - A `cat` hook prints `core.md` on every source, without Python. `state-card.py`, for `source`
   `compact` or `resume` inside a git repository, prints the branch, the newest plan, `docs/plans/.devos-state.md` (skipped when older than
   7 days) and the worktrees, cut to whole lines within 1024 bytes.
+- `notices.py`, for `source` `startup`, compares the plugin version with a marker in
+  `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/notices/` (Claude Code has no install or
+  update hook) and, when the user-level `CLAUDE.md` names a vault, counts `_inbox/` notes older than 7
+  days and reads the last line of `_reports/garden-log.md`. It shows due notices to the user as a
+  `systemMessage`, each throttled by its own marker.
 - `guard.py` extracts `tool_input.command` with a regular expression, unescapes JSON, joins line continuations,
   drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
   purpose, so a mention inside a commit message also asks. Any parse failure prints nothing.
@@ -87,7 +96,7 @@ sequenceDiagram
   marker in `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}/developer-os-<uid>}/capture-nudge/` so it fires once. Markers older than
   7 days are removed.
 
-The three scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
+The four scripts are Python 3, standard library only; without `python3` they fail open. Exact inputs, outputs and switches: [reference/hooks.md](../reference/hooks.md).
 
 ## 4. Skill composition
 
@@ -133,6 +142,7 @@ implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to
 | Brain search | Vault Markdown (`rg`), skipping `_archive/`, `templates/`, `_views/` | — | Notes read go to the model provider |
 | Capture / compile | Session context; vault for duplicates | One file in `_inbox/` | Only as context |
 | Review / garden | Vault | Named moves and edits; `_reports/garden-log.md` | Only as context |
+| Notices hook | `plugin.json`, the user-level `CLAUDE.md`, `_inbox/*.md` (first 2 KB), `_reports/garden-log.md` (last 4 KB) | Markers in the plugin data directory | Counts and dates only, to the user and as context |
 | Setup | `vault-template/`, `~/.claude/CLAUDE.md`, `~/.claude/settings.json` | Vault files; the two config edits | No |
 | Skill usage | `~/.claude/projects/**/*.jsonl` (counts only, `--no-filename`) | — | Counts only, as context |
 | Session retro | `git`, `gh pr list` (read-only) | Approved items only | `gh` queries GitHub |
@@ -154,6 +164,7 @@ web tools could send it further, which the plugin cannot prevent ([SECURITY.md](
 | External repositories | `.claude/settings.json`, hooks, `.mcp.json` of a client or OSS repo | Core rule: read them before the first session, use a sandbox or plan mode, never copy them into user config unread |
 | Subagent output | A delegate's edits | Core rule: auth/2FA/security changes from a subagent are unauthorized until reviewed; compare `git status` and `git diff` |
 | Plugin updates | A new commit's hooks and rules | `SECURITY.md`: review the diff from the installed commit before updating; auto-update is off by default |
+| Project instructions | A cloned repository's `CLAUDE.md` naming a vault | The notices hook reads the `Brain vault:` line from the user-level `CLAUDE.md` only and prints counts, never note names |
 | Session transcripts | Past conversations | Only skill-usage reads them, and only counts; session-retro and docs-sync never open them |
 
 ## 7. Validation

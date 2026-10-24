@@ -42,6 +42,8 @@ The [README](../README.md) has the short version; this is the full one.
    later). In Settings, Core plugins: enable **Bases** and **Templates**; set the Templates folder
    to `templates`.
 4. Start a session and ask: "brain-search webhooks". It should find the example inbox note.
+5. Put review and garden in your calendar, or rely on the reminders: nothing in the vault is
+   maintained on its own (see [The daily loop](#the-daily-loop)).
 
 For each project repository, copy the whole of `templates/project/` (`AGENTS.md`, `CLAUDE.md`,
 `_Context.md`, `DESIGN.md`, `TODO.md`, `.gitignore`, `docs/`) into its root and fill in `AGENTS.md`
@@ -102,6 +104,14 @@ headings.
 
 ## The daily loop
 
+Nothing in this loop runs on its own: you start every skill below. Vault upkeep (step 5 weekly, step 6
+monthly) is yours to schedule. The plugin only reminds you: at the start of a new session, when inbox
+notes are older than 7 days (at most once a week) or brain-garden has not run for 30 days (at most
+once a month), a one-line notice suggests the skill. After an install or update, the same hook shows the
+version and a link to the [changelog](https://msolecki.github.io/developer-os/docs/changelog.html).
+Turn the notices off with `DEVELOPER_OS_NOTICES=off`; details in
+[hooks.md](reference/hooks.md#sessionstart-on-startup--noticespy).
+
 ### 1. Start a task: search first
 
 Before planning anything non-trivial, ask the agent to run **brain-search** with the topic, the
@@ -161,7 +171,7 @@ vault trustworthy, so it stays human.
 
 ### 6. Monthly: garden
 
-Ask for **brain-garden**. It reports stale notes (also visible in `_views/Stale.base`: active notes
+Ask for **brain-garden**; the startup notice reminds you when the last run in `_reports/garden-log.md` is 30 days old. It reports stale notes (also visible in `_views/Stale.base`: active notes
 not updated in 180 days), `_inbox/` notes older than 7 days, notes whose folder and `status`
 disagree, broken links, duplicates and notes without a summary. It proposes changes and applies
 them only after you approve. A stale note gets re-read and then updated, archived, or confirmed by
@@ -185,7 +195,9 @@ also into the inbox for your review. Only `active` notes are sources; the compil
 
 Two Claude Code [routines](https://code.claude.com/docs/en/routines) extend the loop: a note
 dictated on your phone lands in `_inbox/`, and a weekly brief tells you how the vault is doing.
-Nothing in the plugin calls the network; you set both up in the web UI.
+Nothing in the plugin calls the network or creates a routine; you set both up in the web UI. Neither
+maintains the vault: a cloud session does not load the plugin, so brain-review and brain-garden still
+run at your desk.
 
 Before you start:
 
@@ -273,7 +285,7 @@ Review these notes with brain-review like any other capture.
 
 3. Click **Run now** once: the issue gets one comment with the four numbers.
 
-The brief always posts, so a week without a comment means the routine did not run. The last
+The brief is a report and a reminder, not a garden run: it changes nothing. It always posts, so a week without a comment means the routine did not run. The last
 garden-log line (written by brain-garden with your consent) shows the orphan trend between briefs.
 
 ## Vault or repository?

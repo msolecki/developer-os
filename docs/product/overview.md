@@ -27,7 +27,7 @@ A Claude Code plugin, installed from this repository as a plugin marketplace, th
    (review, spec, audit, backlog, PR cycle, triage, deploy checklist, docs sync, session wrap-up),
    conventions skills, five specialist agents, four output styles and a small Bash guard.
 
-The plugin is Markdown and JSON plus three Python 3 hook scripts (standard library only). There is no server, database,
+The plugin is Markdown and JSON plus four Python 3 hook scripts (standard library only). There is no server, database,
 index, binary, background job or network call in the plugin itself.
 
 ## Who it is for
@@ -56,7 +56,8 @@ index, binary, background job or network call in the plugin itself.
 6. **Small fixed cost per session.** The core rules are capped at 8192 bytes and the skill
    descriptions at 12000 characters in total, because both load into every session.
 7. **No runtime.** Anything that would need a process, a schedule or the network is either left to
-   Claude Code itself (routines, the marketplace) or not built.
+   Claude Code itself (routines, the marketplace) or not built. Vault upkeep is not scheduled: a
+   startup hook reminds you when it is due, and you run it (D21).
 
 ## Scope
 

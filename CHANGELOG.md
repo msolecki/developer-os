@@ -4,6 +4,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- A `SessionStart` hook on new sessions, `notices.py`, shows one-line notices when due: the version and a
+  link to the changelog page after an install or update, inbox notes older than 7 days (at most weekly)
+  and no brain-garden run in 30 days (at most monthly). It runs nothing itself;
+  `DEVELOPER_OS_NOTICES=off` turns it off. Decision D21.
+
+### Changed
+- The workflow, README and brain-setup say plainly that vault upkeep does not run on its own, and that
+  the weekly brief routine reports but does not garden.
+
 ## [0.2.4] - 2026-10-20
 
 ### Added

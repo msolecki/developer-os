@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CONTRIBUTING.md@c42c9dc91d01">
+<meta name="dos-source" content="CONTRIBUTING.md@cb086ae9a413">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -47,7 +47,7 @@
   <main id="main" class="prose">
     <h1 id="contributing">Contributing</h1>
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CONTRIBUTING.md">CONTRIBUTING.md</a></span></p>
-    <p>The plugin is Markdown and JSON plus three Python 3 hook scripts (standard library only). There is no build step and no runtime.</p>
+    <p>The plugin is Markdown and JSON plus four Python 3 hook scripts (standard library only). There is no build step and no runtime.</p>
     <h2 id="check">Check</h2>
     <p>Run before every commit:</p>
     <pre><code>scripts/check.sh</code></pre>
@@ -61,7 +61,7 @@ marketplace with <code>--strict</code>, and scans tracked
 files for secrets. CI runs the same script.</p>
     <p>Hook tests live in <code>tests/*.test.sh</code> and run with <code>sh</code> (they call <code>python3</code>); after changing a hook script, run its test
 directly from the repository root, for example <code>sh tests/guard.test.sh</code>,
-<code>sh tests/capture-nudge.test.sh</code> or <code>sh tests/state-card.test.sh</code>.</p>
+<code>sh tests/capture-nudge.test.sh</code>, <code>sh tests/notices.test.sh</code> or <code>sh tests/state-card.test.sh</code>.</p>
     <p>Prerequisites on <code>PATH</code>:</p>
     <ul>
 <li><code>claude</code> (Claude Code)</li>

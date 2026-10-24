@@ -57,7 +57,7 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 
 ## What the hooks do
 
-The plugin has 4 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
+The plugin has 5 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
 session context. After a compaction or a resume inside a git repository, a second `SessionStart` hook,
 [`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
@@ -69,6 +69,14 @@ when you call a skill; read [`core.md`](plugin/rules/core.md) for the rules them
 To turn it off, disable the plugin (`/plugin`, then disable developer-os). To keep the plugin but
 change a rule, override it explicitly in your user-level `~/.claude/CLAUDE.md` (for example, "Ignore
 the developer-os rule on plan files"); that file loads alongside the core rules in every session.
+
+On a new session (`startup`), [`plugin/hooks/notices.py`](plugin/hooks/notices.py) shows you up to
+three one-line notices: after an install or update, the version and a link to the
+[changelog](https://msolecki.github.io/developer-os/docs/changelog.html); when inbox notes are older
+than 7 days, a brain-review reminder (at most weekly); when brain-garden has not run for 30 days, a
+garden reminder (at most monthly). Vault upkeep never runs on its own: the hook only reminds. It reads
+the vault path from your user-level `CLAUDE.md` only and prints counts, never note names. Set
+`DEVELOPER_OS_NOTICES=off` to turn it off.
 
 A `Stop` hook ([`plugin/hooks/capture-nudge.py`](plugin/hooks/capture-nudge.py)) counts tool calls
 in the session transcript and reads only background-task and Monitor ids, output-file paths and
@@ -84,7 +92,7 @@ A `PreToolUse` hook on Bash ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) a
 `--force-with-lease` passes; git also by full path), and a hook bypass: `--no-verify` or a prefix of it
 such as `--no-veri`, `git commit -n`, `HUSKY=0` or `core.hooksPath` in any form. In `claude -p` an ask resolves to a denial.
 
-The three scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
+The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;
 without it the core rules still load and the other hooks do not run.
 
@@ -107,7 +115,7 @@ without it the core rules still load and the other hooks do not run.
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
-- **Three hooks:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction), `Stop` suggests a session wrap-up
+- **Five hooks:** `SessionStart` loads `plugin/rules/core.md` (plus a state card after compaction, and version and vault-upkeep notices on a new session), `Stop` suggests a session wrap-up
   once per long session, `PreToolUse` asks before installs, force pushes and hook bypasses (see above).
 - **Evals:** behavior checks for the brain skills, code-review, session-retro and the skill
   triggers in [`evals/`](evals/README.md), run by hand with `claude plugin eval`. Not part of the

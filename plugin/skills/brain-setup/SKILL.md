@@ -72,11 +72,11 @@ Codex: if the user uses Codex, print the line `Brain vault: <V>` for `~/.codex/A
 
 ## 4. Smoke test
 
-Run the `developer-os:brain-search` skill and give it the vault path `<V>` explicitly (the line just written is not in this session's context): in a new vault search for "webhooks" (it must find `_inbox/process-webhooks-once-per-event-id.md`); in a connected vault search for the topic of one existing note. Then tell the user to open the vault in Obsidian and enable the **Bases** and **Templates** core plugins, with `templates` as the Templates folder.
+Run the `developer-os:brain-search` skill and give it the vault path `<V>` explicitly (the line just written is not in this session's context): in a new vault search for "webhooks" (it must find `_inbox/process-webhooks-once-per-event-id.md`); in a connected vault search for the topic of one existing note. Then tell the user to open the vault in Obsidian and enable the **Bases** and **Templates** core plugins, with `templates` as the Templates folder. Tell them too that vault upkeep does not run on its own: they run brain-review weekly and brain-garden monthly, and a one-line notice at the start of a new session reminds them when either is due (`DEVELOPER_OS_NOTICES=off` turns it off).
 
 ## Stop point
 
-Stop after the smoke test. Report the mode, the vault path, what was created or appended, which config edits were applied or declined, the old vault path still in `permissions.additionalDirectories` (if the path changed; the user removes it by hand), the Codex line if printed, and the smoke-test result.
+Stop after the smoke test. Report the mode, the vault path, what was created or appended, which config edits were applied or declined, the old vault path still in `permissions.additionalDirectories` (if the path changed; the user removes it by hand), the Codex line if printed, the smoke-test result, and the upkeep cadence.
 
 ## Never
 
