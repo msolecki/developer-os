@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@e11523f5d1c7">
+<meta name="dos-source" content="README.md@cf162d053adf">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -115,8 +115,8 @@ to change the threshold.</p>
 <code>update --latest</code>, or the binary by full path), a <code>git push</code> with <code>--force</code>, <code>-f</code>, a <code>+refspec</code> or
 <code>-c remote.&lt;name&gt;.push=+…</code> (even next to <code>--force-with-lease</code>; a lone <code>--force-with-lease</code> passes; git
 also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of it such as <code>--no-veri</code>,
-<code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form. <code>$IFS</code>,
-<code>${X:-word}</code> and <code>$'\x66'</code> escapes are expanded before the scan. In <code>claude -p</code> an ask resolves to a denial.</p>
+<code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form. <code>$IFS</code>
+(also with an empty <code>$9</code> glued on), <code>${X:-word}</code> and <code>$'\x66'</code> escapes are expanded before the scan. In <code>claude -p</code> an ask resolves to a denial.</p>
     <p>The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need <code>python3</code> on <code>PATH</code>;
 without it the core rules still load and the other hooks do not run.</p>

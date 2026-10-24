@@ -39,8 +39,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the plugin icon for the directory listing.
 - The `PreToolUse` guard asks in more cases: bun's `a` alias; `update`, `up`, `upgrade`, `remove`,
   `rm`, `uninstall` and `un` with a package argument or `--latest`; `LEFTHOOK=0` and pre-commit's
-  `SKIP=`; `-c remote.<name>.push=+…`; and words hidden behind `$IFS`, `${X:-word}` or a `$'\x66'`
-  escape. `git stash push -f` no longer asks as a force push, nor does a script or binary named like
+  `SKIP=`; `-c remote.<name>.push=+…`; and words hidden behind `$IFS` or `${IFS…}` (also with an empty `$1`–`$9`, `$@` or `$*`
+  glued on, as in `npm$IFS$9i`), `${X:-word}` or a `$'\x66'` escape. `git stash push -f` no longer asks as a force push, nor does a script or binary named like
   a subcommand right after `run`, `exec` or `dlx` (`npm run up foo`). The tests now pin which reason fires.
 - session-retro ties every check result to the commit it ran on: Done and the plan update list each
   check as `<command>: <result> at <short SHA>`, plus `+ uncommitted: <changed files>` when the tree
@@ -75,7 +75,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
-  match. A capture the agent started on its own shows the note text and waits for a yes.
+  match (a backstop list: private keys, AWS, GitHub, Slack, Stripe, Google and `sk-` keys, JWTs,
+  `password=`-style assignments, credentials in URLs). A capture the agent started on its own shows the note text and waits for a yes.
 - session-retro sets `base` again in its cleanup command, because Bash calls do not keep variables;
   it routes user preferences to `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md`; and its triggers no
   longer include the bare "clean up" or "is everything done".

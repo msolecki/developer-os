@@ -93,8 +93,8 @@ A `PreToolUse` hook on Bash ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) a
 `update --latest`, or the binary by full path), a `git push` with `--force`, `-f`, a `+refspec` or
 `-c remote.<name>.push=+…` (even next to `--force-with-lease`; a lone `--force-with-lease` passes; git
 also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `--no-veri`,
-`git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form. `$IFS`,
-`${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
+`git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form. `$IFS`
+(also with an empty `$9` glued on), `${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
 
 The four scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;

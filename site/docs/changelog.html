@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@e5b3689bb539">
+<meta name="dos-source" content="CHANGELOG.md@1857cf1badb3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -86,8 +86,8 @@ known type with at least one deterministic grader, and a row in <code>evals/READ
 the plugin icon for the directory listing.</li>
 <li>The <code>PreToolUse</code> guard asks in more cases: bun's <code>a</code> alias; <code>update</code>, <code>up</code>, <code>upgrade</code>, <code>remove</code>,
 <code>rm</code>, <code>uninstall</code> and <code>un</code> with a package argument or <code>--latest</code>; <code>LEFTHOOK=0</code> and pre-commit's
-<code>SKIP=</code>; <code>-c remote.&lt;name&gt;.push=+…</code>; and words hidden behind <code>$IFS</code>, <code>${X:-word}</code> or a <code>$'\x66'</code>
-escape. <code>git stash push -f</code> no longer asks as a force push, nor does a script or binary named like
+<code>SKIP=</code>; <code>-c remote.&lt;name&gt;.push=+…</code>; and words hidden behind <code>$IFS</code> or <code>${IFS…}</code> (also with an empty <code>$1</code>–<code>$9</code>, <code>$@</code> or <code>$*</code>
+glued on, as in <code>npm$IFS$9i</code>), <code>${X:-word}</code> or a <code>$'\x66'</code> escape. <code>git stash push -f</code> no longer asks as a force push, nor does a script or binary named like
 a subcommand right after <code>run</code>, <code>exec</code> or <code>dlx</code> (<code>npm run up foo</code>). The tests now pin which reason fires.</li>
 <li>session-retro ties every check result to the commit it ran on: Done and the plan update list each
 check as <code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus <code>+ uncommitted: &lt;changed files&gt;</code> when the tree
@@ -124,7 +124,8 @@ audit-to-backlog (the <code>verifier</code> agent is always used). developer-os 
     <h3 id="unreleased-fixed">Fixed</h3>
     <ul>
 <li>brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
-match. A capture the agent started on its own shows the note text and waits for a yes.</li>
+match (a backstop list: private keys, AWS, GitHub, Slack, Stripe, Google and <code>sk-</code> keys, JWTs,
+<code>password=</code>-style assignments, credentials in URLs). A capture the agent started on its own shows the note text and waits for a yes.</li>
 <li>session-retro sets <code>base</code> again in its cleanup command, because Bash calls do not keep variables;
 it routes user preferences to <code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md</code>; and its triggers no
 longer include the bare "clean up" or "is everything done".</li>

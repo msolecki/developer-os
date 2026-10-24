@@ -38,10 +38,12 @@ def view(cmd, newline, quotes_to_space=False, join_commas=False):
     `-\\-force` and `$'-f'` read as the word the shell runs) or turn them into spaces (so a quoted value
     such as `alias.p='push -f'` keeps its words apart). Braces go and commas split words, so a brace
     expansion such as `{-f,}` shows the words it expands to; join_commas drops commas, so `-{,f}` reads `-f`.
-    First `$IFS` becomes a space, `${X:-word}` its word and `\\x66` or `\\146` inside `$'...'` its character,
-    so `npm${IFS}i`, `np${X:-m}` and `$'-\\x66'` read `npm i`, `npm` and `-f`."""
-    s = re.sub(r"\$\{?IFS\}?", " ", cmd)
+    First `$IFS` and any `${IFS...}` become a space, `${X:-word}` its word, the positional parameters
+    `$1`-`$9`, `$@` and `$*` (empty in a tool call) nothing, and `\\x66` or `\\146` inside `$'...'` its
+    character, so `npm${IFS}i`, `npm$IFS$9i`, `np${X:-m}` and `$'-\\x66'` read `npm i`, `npm i`, `npm` and `-f`."""
+    s = re.sub(r"\$\{IFS[^}]*\}|\$IFS", " ", cmd)
     s = re.sub(r"\$\{\w+:?[-+=?]([^}]*)\}", r"\1", s)
+    s = re.sub(r"\$(?:[1-9@*]|\{[1-9@*]\})", "", s)
     s = re.sub(r"\$'[^']*'", lambda m: re.sub(r"\\\\(?:x([0-9a-fA-F]{1,2})|([0-7]{1,3}))",
                lambda e: chr(int(e.group(1), 16) if e.group(1) else int(e.group(2), 8)), m.group(0)), s)
     s = re.sub(r"\\\\\\n", " ", s)

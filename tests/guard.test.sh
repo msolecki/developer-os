@@ -134,6 +134,10 @@ check ask "$(fx 'pnpm remove zod')" 'Dependency install'
 check pass "$(fx 'npm update')"
 # SEC-03: $IFS, ${X:-word}, ANSI-C escapes and a forced push refspec in config.
 check ask "$(fx 'npm${IFS}i${IFS}zod')" 'Dependency install'
+check ask "$(fx 'npm$IFS$9i$IFS$9zod')" 'Dependency install'
+check ask "$(fx 'npm${IFS%?}i${IFS%?}zod')" 'Dependency install'
+check ask "$(fx 'git push$IFS$9-f')" 'Force push'
+check ask "$(fx 'git push origin -${@}f')" 'Force push'
 check ask "$(fx 'git ${X:-push} origin main -f')" 'Force push'
 check ask "$(fx 'np${X:-m} i zod')" 'Dependency install'
 check ask "$(fx 'git push origin main $'"'"'-\\x66'"'"'')" 'Force push'

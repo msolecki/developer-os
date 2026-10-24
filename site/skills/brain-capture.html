@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-capture/SKILL.md@4eb953cec778">
+<meta name="dos-source" content="plugin/skills/brain-capture/SKILL.md@67bd2bfdd362">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -71,7 +71,7 @@
       <li><strong>Checks that it outlives the task.</strong> Three questions: would it help in another task or project, is the why written down, and is it absent from the code, plan and ADRs? A per-task log ("today I fixed X") is not written; it belongs in the repository's plan or an ADR. A missing why is asked for once. Content already in the repository is linked by path, not copied.</li>
       <li><strong>Looks for an existing note.</strong> It searches the vault with <code>rg</code> for the topic's keywords. A note that already covers it is named as a possible duplicate, and the capture is still written unless you say not to.</li>
       <li><strong>Redacts secrets.</strong> API keys, tokens, passwords, private keys, connection strings or URLs with credentials, and personal data of people at a client become <code>[REDACTED]</code>. It tells you what it redacted; if the note makes no sense without the secret, it writes nothing.</li>
-      <li><strong>Checks before writing.</strong> It scans the redacted note with a fixed <code>grep</code> for secret patterns (private key headers, AWS, GitHub, Slack and <code>sk-</code> keys, credentials in URLs). A match means nothing is written: it names the line and asks you how to redact it. When it started the capture on its own, not on your request, it shows you the final note and writes it only after your yes.</li>
+      <li><strong>Checks before writing.</strong> It scans the redacted note with a fixed <code>grep</code> for secret patterns (private key headers, AWS, GitHub, Slack, Stripe, Google and <code>sk-</code> keys, JWTs, <code>password=</code>-style assignments, credentials in URLs). The list is a backstop for the redaction, not complete. A match means nothing is written: it names the line and asks you how to redact it. When it started the capture on its own, not on your request, it shows you the final note and writes it only after your yes.</li>
       <li><strong>Writes the note.</strong> One topic per note at <code>_inbox/&lt;kebab-case-topic&gt;.md</code>, ASCII only, with a <code>-2</code> suffix when the name is already taken anywhere in the vault, because <code>[[name]]</code> links resolve by name. The body has exactly <code>## Context</code>, <code>## Decision</code>, <code>## Why</code> and <code>## Links</code>. Frontmatter: <code>type</code> (<code>decision</code>, <code>knowledge</code>, <code>reference</code> or <code>project</code>), <code>status: inbox</code>, today's dates, <code>tags</code>, a quoted one-sentence <code>summary</code>, and the <code>project</code> slug from the repository's <code>_Context.md</code>, never from the directory name.</li>
       <li><strong>Reports</strong> the new path, a possible duplicate and what was redacted.</li>
     </ol>

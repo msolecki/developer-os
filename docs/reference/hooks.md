@@ -127,12 +127,12 @@ command does not run, even when `--allowedTools Bash` allows it.
 
 | Category | Asks for | Passes |
 |---|---|---|
-| Dependency install, update or removal | `npm`, `pnpm`, `yarn` or `bun` (also by full path) followed by `install`, `add`, `i`, an alias (`in`, `inst`…, `isntall`, `it`, bun's `a`), or `update`, `up`, `upgrade`, `remove`, `rm`, `uninstall`, `un`, and then any non-dash word or `--latest` (`pnpm add zod`, `npm i -D vitest`, `pnpm --filter web add zod`, `npm uninstall zod`, `pnpm update --latest`) | `pnpm install`, `pnpm install --frozen-lockfile`, `npm ci`, `npm update`, `pnpm add -D` with flags only, a script or binary named like a subcommand after `run`, `exec` or `dlx` (`npm run up foo`) |
+| Dependency install, update or removal | `npm`, `pnpm`, `yarn` or `bun` (also by full path) followed by `install`, `add`, `i`, an alias (`in`, `inst`…, `isntall`, `it`, bun's `a`), or `update`, `up`, `upgrade`, `remove`, `rm`, `uninstall`, `un`, and then any non-dash word or `--latest` (`pnpm add zod`, `npm i -D vitest`, `pnpm --filter web add zod`, `npm uninstall zod`, `pnpm update --latest`) | `pnpm install`, `pnpm install --frozen-lockfile`, `npm ci`, `npm update`, `pnpm add -D` with flags only, a script or binary named like a subcommand immediately after `run`, `exec` or `dlx` (`npm run up foo`) |
 | Force push | `git push` (git also by full path) with `--force`, `--mirror`, a short-flag cluster containing `f`, or a `+refspec`, even next to `--force-with-lease`; `remote.<name>.push=+…` in a git word | `--force-with-lease` alone (including `=ref:sha`), `git push --delete`, `git push origin :branch`, `git push -n`, `git stash push -f` |
 | Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `LEFTHOOK=0`, a word starting `SKIP=` (pre-commit), `core.hooksPath` anywhere in a word (`-c core.hooksPath=…`, `git config core.hooksPath`, `--config-env=`, `GIT_CONFIG_KEY_<n>=`, `GIT_CONFIG_PARAMETERS=`); `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`) | `git commit -am` |
 
-**Parsing:** first `$IFS` and `${IFS}` become a space, `${X:-word}` (also `-`, `+`, `=`, `?`) becomes
-`word`, and a `\xHH` or octal escape inside `$'...'` becomes its character, so `npm${IFS}i${IFS}zod`,
+**Parsing:** first `$IFS` and any `${IFS…}` (such as `${IFS%?}`) become a space, `${X:-word}` (also `-`, `+`, `=`, `?`) becomes
+`word`, the positional parameters `$1`–`$9`, `$@` and `$*` (empty in a tool call) are dropped, and a `\xHH` or octal escape inside `$'...'` becomes its character, so `npm${IFS}i${IFS}zod`, `npm$IFS$9i$IFS$9zod`,
 `np${X:-m} i zod` and `$'-\x66'` read as `npm i zod` and `-f`. Then JSON-unescape (`\r`, `\t` and a backslash-newline continuation become spaces), then
 delete every quote, backslash and `$` (so `np""m`, `\git`, `-\-force` and `$'-f'` read as the word
 the shell runs), split segments on `; & | ( )` and backtick, and scan words per segment. Quotes are
