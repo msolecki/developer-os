@@ -158,6 +158,20 @@ run "$(input s9 "$tmp/long.jsonl")"
 [ -e "$tmp/data/capture-nudge/old" ] && r=yes || r=no
 check "markers older than 7 days removed" "$r" no
 
+# A marker dir that is a link (planted by another local user) is refused: no marker, no cleanup through it.
+# The foreign-owner half of the check needs a second uid (root to set up), so only the link is tested.
+mkdir -p "$tmp/data2" "$tmp/target"; touch -t 202001010000 "$tmp/target/old"
+ln -s "$tmp/target" "$tmp/data2/capture-nudge"
+run "$(input s18 "$tmp/long.jsonl")" CLAUDE_PLUGIN_DATA="$tmp/data2"
+check "symlinked marker dir: silent" "$code" silent
+[ -e "$tmp/target/s18" ] && r=yes || r=no; check "symlinked marker dir: no marker in the link target" "$r" no
+[ -e "$tmp/target/old" ] && r=yes || r=no; check "symlinked marker dir: old file in the target kept" "$r" yes
+
+mkdir -p "$tmp/real3"; ln -s "$tmp/real3" "$tmp/data3"
+run "$(input s19 "$tmp/long.jsonl")" CLAUDE_PLUGIN_DATA="$tmp/data3"
+check "symlinked marker parent: silent" "$code" silent
+[ -e "$tmp/real3/capture-nudge/s19" ] && r=yes || r=no; check "symlinked marker parent: no marker" "$r" no
+
 transcript "$tmp/t29.jsonl" 29; transcript "$tmp/t30.jsonl" 30
 run "$(input b29 "$tmp/t29.jsonl")"; check "29 tool calls stay below the default threshold" "$code" silent
 run "$(input b30 "$tmp/t30.jsonl")"; check "30 tool calls reach the default threshold" "$code" fire

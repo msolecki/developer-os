@@ -14,6 +14,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `brain-garden-superseded`.
 
 ### Changed
+- The state card also follows a forked session (`SessionStart` source `fork`: `--fork-session`,
+  `/branch`, `/fork`), which carries the earlier task context like a resume. `plugin.json` declares
+  the plugin icon for the directory listing.
 - The `PreToolUse` guard asks in more cases: bun's `a` alias; `update`, `up`, `upgrade`, `remove`,
   `rm`, `uninstall` and `un` with a package argument or `--latest`; `LEFTHOOK=0` and pre-commit's
   `SKIP=`; `-c remote.<name>.push=+…`; and words hidden behind `$IFS`, `${X:-word}` or a `$'\x66'`

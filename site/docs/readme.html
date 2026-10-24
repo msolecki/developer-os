@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@3be3d60518a5">
+<meta name="dos-source" content="README.md@c8da994db42f">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -88,7 +88,7 @@ full setup, with Obsidian settings and a first test, is in <a href="workflow.htm
     <h2 id="what-the-hooks-do">What the hooks do</h2>
     <p>The plugin has 4 hooks. On every <code>SessionStart</code> (startup, resume, <code>/clear</code>, compaction and fork), in
 every project, it prints <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md"><code>plugin/rules/core.md</code></a> with <code>cat</code>; the output becomes
-session context. After a compaction or a resume inside a git repository, a second <code>SessionStart</code> hook,
+session context. After a compaction, a resume or a fork inside a git repository, a second <code>SessionStart</code> hook,
 <a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/state-card.py"><code>plugin/hooks/state-card.py</code></a>, adds a state card of at most 1 KB: the branch, a
 <code>Newest plan:</code> line, <code>docs/plans/.devos-state.md</code> (the task state that implement-backlog, pr-cycle
 and audit-to-backlog keep there; hidden once it is older than 7 days), then up to 10 worktrees. A

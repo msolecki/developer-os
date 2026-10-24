@@ -104,7 +104,7 @@ it, or by hand (dispatch it from `main` only, or it publishes unreleased docs). 
 ## Script tests
 
 `tests/state-card.test.sh` runs `state-card.py` in a temporary git repository and checks that it
-prints nothing outside `compact`/`resume`, that the card holds the plan and state file only when they are
+prints nothing outside `compact`/`resume`/`fork`, that the card holds the plan and state file only when they are
 safe to show, and that the card is cut to its cap; `tests/guard.test.sh` feeds command fixtures to `guard.py` and expects `ask` or silence;
 `tests/capture-nudge.test.sh` builds synthetic transcripts and checks the exit code, the JSON output and the message;
 `tests/check.test.sh` breaks a copy of the repository once per stage it covers and expects that

@@ -18,7 +18,7 @@ plugin/                           the installed payload
   rules/core.md                   core rules, printed by a SessionStart cat hook
   SURFACE.txt                     public names, checked against the disk
   hooks/hooks.json                4 hooks, 10-second timeouts
-  hooks/state-card.py             SessionStart: state card after compaction or resume
+  hooks/state-card.py             SessionStart: state card after compaction, resume or fork
   hooks/guard.py                  PreToolUse guard for Bash
   hooks/capture-nudge.py          Stop hook: session wrap-up nudge
   skills/<name>/SKILL.md          28 skills
@@ -45,7 +45,7 @@ What occupies the context of a session, and when:
 | Part | When it loads | Size today | Limit |
 |---|---|---|---|
 | `rules/core.md` | Every `SessionStart`: startup, resume, `/clear`, compaction, fork | Just under the limit | 8192 bytes (`scripts/check.sh`); Claude Code caps hook output at 10,000 characters |
-| State card | After a compaction or resume inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
+| State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
 | Skill names and descriptions | Every session, by Claude Code's skill listing | 10065 characters for 28 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
 | A skill's body | When the model or the user invokes it | 0.7–8.8 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
@@ -75,7 +75,7 @@ sequenceDiagram
 ```
 
 - A `cat` hook prints `core.md` on every source, without Python. `state-card.py`, for `source`
-  `compact` or `resume` inside a git repository, prints the branch, the newest plan, `docs/plans/.devos-state.md` (skipped when older than
+  `compact`, `resume` or `fork` inside a git repository, prints the branch, the newest plan, `docs/plans/.devos-state.md` (skipped when older than
   7 days) and the worktrees, cut to whole lines within 1024 bytes.
 - `guard.py` extracts `tool_input.command` with a regular expression, unescapes JSON, joins line continuations,
   drops quotes, splits on semicolons, newlines, ampersands, pipes, parentheses and backticks, and scans the words of each segment. Quotes are stripped on
@@ -128,7 +128,7 @@ implement-backlog is the `Backlog: <todo path>, <done path>` line, defaulting to
 
 | Flow | Reads | Writes | Leaves the machine? |
 |---|---|---|---|
-| Session start | `rules/core.md`; after compaction or resume, `git` state and `docs/plans/.devos-state.md` of the repository root | — | As context to the model provider |
+| Session start | `rules/core.md`; after compaction, resume or fork, `git` state and `docs/plans/.devos-state.md` of the repository root | — | As context to the model provider |
 | Task state | — | `docs/plans/.devos-state.md` (implement-backlog, pr-cycle, audit-to-backlog) | No |
 | Brain search | Vault Markdown (`rg`), skipping `_archive/`, `templates/`, `_views/` | — | Notes read go to the model provider |
 | Capture / compile | Session context; vault for duplicates | One file in `_inbox/` | Only as context |

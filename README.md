@@ -59,7 +59,7 @@ full setup, with Obsidian settings and a first test, is in [docs/workflow.md](do
 
 The plugin has 4 hooks. On every `SessionStart` (startup, resume, `/clear`, compaction and fork), in
 every project, it prints [`plugin/rules/core.md`](plugin/rules/core.md) with `cat`; the output becomes
-session context. After a compaction or a resume inside a git repository, a second `SessionStart` hook,
+session context. After a compaction, a resume or a fork inside a git repository, a second `SessionStart` hook,
 [`plugin/hooks/state-card.py`](plugin/hooks/state-card.py), adds a state card of at most 1 KB: the branch, a
 `Newest plan:` line, `docs/plans/.devos-state.md` (the task state that implement-backlog, pr-cycle
 and audit-to-backlog keep there; hidden once it is older than 7 days), then up to 10 worktrees. A

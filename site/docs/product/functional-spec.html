@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/product/functional-spec.md@44cb2d8eba67">
+<meta name="dos-source" content="docs/product/functional-spec.md@0eb8398f97a3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -49,7 +49,7 @@
 <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/docs/product/functional-spec.md">docs/product/functional-spec.md</a></span><span>Verified 2026-10-16</span></p>
 <p>What each part of the plugin does, what it may change, and where it stops. The steps themselves live in each <code>SKILL.md</code>; this page is the contract summary across all of them. Paths are relative to <code>plugin/</code>.</p>
 <h2 id="1-always-on-core-rules">1. Always on: core rules</h2>
-<p><code>rules/core.md</code> is printed into the session by the <code>SessionStart</code> hook on every startup, resume, <code>/clear</code>, compaction and fork, in every project. After a compaction or resume the hook adds a state card (<a href="../reference/hooks.html#sessionstart--core-rules-and-state-card">reference/hooks.md</a>). It has four sections:</p>
+<p><code>rules/core.md</code> is printed into the session by the <code>SessionStart</code> hook on every startup, resume, <code>/clear</code>, compaction and fork, in every project. After a compaction, resume or fork the hook adds a state card (<a href="../reference/hooks.html#sessionstart--core-rules-and-state-card">reference/hooks.md</a>). It has four sections:</p>
 <div class="table-wrap">
 <table>
 <thead><tr><th scope="col">Section</th><th scope="col">What it governs</th></tr></thead>
@@ -163,7 +163,7 @@
 <thead><tr><th scope="col">Event</th><th scope="col">Script</th><th scope="col">Effect</th></tr></thead>
 <tbody>
 <tr><td><code>SessionStart</code> (all sources)</td><td><code>cat rules/core.md</code></td><td>Core rules become session context</td></tr>
-<tr><td><code>SessionStart</code> (<code>compact</code>, <code>resume</code>)</td><td><code>hooks/state-card.py</code></td><td>In a git repository, a state card of at most 1 KB</td></tr>
+<tr><td><code>SessionStart</code> (<code>compact</code>, <code>resume</code>, <code>fork</code>)</td><td><code>hooks/state-card.py</code></td><td>In a git repository, a state card of at most 1 KB</td></tr>
 <tr><td><code>Stop</code></td><td><code>hooks/capture-nudge.py</code></td><td>Once per interactive session, after 30 tool calls, asks the agent to run session-retro</td></tr>
 <tr><td><code>PreToolUse</code> on Bash</td><td><code>hooks/guard.py</code></td><td>Asks for confirmation before a dependency install, update or removal with a package argument or <code>--latest</code> (<code>npm</code>, <code>pnpm</code>, <code>yarn</code> or <code>bun</code>, also by full path, with <code>install</code>, <code>add</code>, <code>i</code>, <code>update</code>, <code>upgrade</code>, <code>remove</code>, <code>uninstall</code> or an alias such as <code>in</code>, <code>a</code>, <code>up</code>, <code>rm</code>, <code>un</code>), a force push (<code>--force</code>, <code>-f</code>, a <code>+refspec</code> or <code>remote.&lt;name&gt;.push=+</code>, even next to <code>--force-with-lease</code>; a lone <code>--force-with-lease</code> passes; git also by full path), or a hook bypass (<code>--no-verify</code> and its prefixes <code>--no-veri</code>/<code>--no-verif</code>, <code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=</code>, <code>core.hooksPath</code> (any form)); never denies</td></tr>
 </tbody>

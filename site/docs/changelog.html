@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@252cf13aa668">
+<meta name="dos-source" content="CHANGELOG.md@fb19e796afb8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -61,6 +61,9 @@ and <code>brain-garden-superseded</code>.</li>
 </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
+<li>The state card also follows a forked session (<code>SessionStart</code> source <code>fork</code>: <code>--fork-session</code>,
+<code>/branch</code>, <code>/fork</code>), which carries the earlier task context like a resume. <code>plugin.json</code> declares
+the plugin icon for the directory listing.</li>
 <li>The <code>PreToolUse</code> guard asks in more cases: bun's <code>a</code> alias; <code>update</code>, <code>up</code>, <code>upgrade</code>, <code>remove</code>,
 <code>rm</code>, <code>uninstall</code> and <code>un</code> with a package argument or <code>--latest</code>; <code>LEFTHOOK=0</code> and pre-commit's
 <code>SKIP=</code>; <code>-c remote.&lt;name&gt;.push=+…</code>; and words hidden behind <code>$IFS</code>, <code>${X:-word}</code> or a <code>$'\x66'</code>

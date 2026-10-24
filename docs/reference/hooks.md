@@ -21,7 +21,7 @@ Two hooks on the same event, run independently, so the card is not guaranteed to
 
 | | Core rules | State card |
 |---|---|---|
-| Matcher | none: every source (startup, resume, clear, compact, fork) | `compact\|resume` |
+| Matcher | none: every source (startup, resume, clear, compact, fork) | `compact\|resume\|fork` |
 | Command | `cat "${CLAUDE_PLUGIN_ROOT}/rules/core.md"`, timeout 10 s | `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state-card.py"`, timeout 10 s |
 | Input | none | the hook JSON on stdin; uses `source` and `cwd` |
 | Output | stdout becomes session context | stdout becomes session context |
@@ -30,7 +30,8 @@ Two hooks on the same event, run independently, so the card is not guaranteed to
 
 **Core rules:** prints `plugin/rules/core.md` on every source; it does not depend on Python.
 
-**State card:** for `source` `compact` or `resume`, when `cwd` is inside a git repository,
+**State card:** for `source` `compact`, `resume` or `fork` (a forked session carries the earlier task
+context too), when `cwd` is inside a git repository,
 `state-card.py` reads from the repository root and prints a state card of at most 1024 bytes:
 
 ```
