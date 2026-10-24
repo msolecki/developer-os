@@ -154,7 +154,7 @@ such as implement-backlog.
 | `SessionStart` (all sources) | `cat rules/core.md` | Core rules become session context |
 | `SessionStart` (`compact`, `resume`) | `hooks/state-card.py` | In a git repository, a state card of at most 1 KB |
 | `Stop` | `hooks/capture-nudge.py` | Once per interactive session, after 30 tool calls, asks the agent to run session-retro |
-| `PreToolUse` on Bash | `hooks/guard.py` | Asks for confirmation before a dependency install with a package argument (`npm`, `pnpm`, `yarn` or `bun`, also by full path, with `install`, `add`, `i` or an npm alias), a force push (`--force`, `-f` or a `+refspec`, even next to `--force-with-lease`; a lone `--force-with-lease` passes; git also by full path), or a hook bypass (`--no-verify` and its prefixes `--no-veri`/`--no-verif`, `git commit -n`, `HUSKY=0`, `core.hooksPath` (any form)); never denies |
+| `PreToolUse` on Bash | `hooks/guard.py` | Asks for confirmation before a dependency install, update or removal with a package argument or `--latest` (`npm`, `pnpm`, `yarn` or `bun`, also by full path, with `install`, `add`, `i`, `update`, `upgrade`, `remove`, `uninstall` or an alias such as `in`, `a`, `up`, `rm`, `un`), a force push (`--force`, `-f`, a `+refspec` or `remote.<name>.push=+`, even next to `--force-with-lease`; a lone `--force-with-lease` passes; git also by full path), or a hook bypass (`--no-verify` and its prefixes `--no-veri`/`--no-verif`, `git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=`, `core.hooksPath` (any form)); never denies |
 
 The scripts are Python 3 (standard library only) and need `python3` on `PATH`; without it they fail open and the core rules still load. Inputs, outputs, exit codes and switches: [reference/hooks.md](../reference/hooks.md).
 

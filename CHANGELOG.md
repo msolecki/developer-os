@@ -14,6 +14,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `brain-garden-superseded`.
 
 ### Changed
+- The `PreToolUse` guard asks in more cases: bun's `a` alias; `update`, `up`, `upgrade`, `remove`,
+  `rm`, `uninstall` and `un` with a package argument or `--latest`; `LEFTHOOK=0` and pre-commit's
+  `SKIP=`; `-c remote.<name>.push=+…`; and words hidden behind `$IFS`, `${X:-word}` or a `$'\x66'`
+  escape. `git stash push -f` no longer asks as a force push. The tests now pin which reason fires.
 - session-retro ties every check result to the commit it ran on: Done and the plan update list each
   check as `<command>: <result> at <short SHA>`, plus `+ uncommitted: <changed files>` when the tree
   was dirty, so a later commit visibly outdates a saved "tests pass". New eval case

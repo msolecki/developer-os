@@ -3,10 +3,11 @@
 guard="$(dirname "$0")/../plugin/hooks/guard.py"
 fail=0
 
-check() { # expected (ask|pass), stdin
+check() { # expected (ask|pass), stdin, optional reason substring
   out=$(printf '%s' "$2" | python3 "$guard"); code=$?
   case $1 in
-    ask) printf '%s' "$out" | grep -q '"permissionDecision":"ask"' && [ $code -eq 0 ] && return ;;
+    ask) printf '%s' "$out" | grep -q '"permissionDecision":"ask"' && [ $code -eq 0 ] &&
+      { [ -z "$3" ] || printf '%s' "$out" | grep -qF "$3"; } && return ;;
     pass) [ -z "$out" ] && [ $code -eq 0 ] && return ;;
   esac
   fail=1; echo "FAIL: expected $1 (exit $code) for: $2"
@@ -110,6 +111,36 @@ check ask "$(fx 'I=\"npm i zod\"; ${I}')"
 check ask "$(fx 'F='"'"'--no-verify'"'"'; git commit $F')"
 check ask "$(fx 'pnpm -C\ngit -c x.y=\"a\nb\" push --force')"
 check ask "$(fx 'pnpm test --filter\ngit commit -m \"a\n\nb\" -n')"
+# The reason names the category that fired.
+check ask "$(fx 'pnpm add zod')" 'Dependency install'
+check ask "$(fx 'git push -f origin x')" 'Force push'
+check ask "$(fx 'git commit --no-verify -m x')" 'skips the repository'
+# COR-01, COR-02, SEC-02, SEC-04: bun's alias, stash push, other hook managers, updates and removals.
+check ask "$(fx 'bun a zod')" 'Dependency install'
+check pass "$(fx 'git stash push -f')"
+check pass "$(fx 'git stash push -f -m wip')"
+check ask "$(fx 'LEFTHOOK=0 git commit -m x')" 'skips the repository'
+check ask "$(fx 'SKIP=eslint git commit -m x')" 'skips the repository'
+check ask "$(fx 'pnpm update zod --latest')" 'Dependency install'
+check ask "$(fx 'pnpm update --latest')" 'Dependency install'
+check ask "$(fx 'npm uninstall zod')" 'Dependency install'
+check ask "$(fx 'yarn upgrade zod')" 'Dependency install'
+check ask "$(fx 'pnpm remove zod')" 'Dependency install'
+check pass "$(fx 'npm update')"
+# SEC-03: $IFS, ${X:-word}, ANSI-C escapes and a forced push refspec in config.
+check ask "$(fx 'npm${IFS}i${IFS}zod')" 'Dependency install'
+check ask "$(fx 'git ${X:-push} origin main -f')" 'Force push'
+check ask "$(fx 'np${X:-m} i zod')" 'Dependency install'
+check ask "$(fx 'git push origin main $'"'"'-\\x66'"'"'')" 'Force push'
+check ask "$(fx 'git push origin main $'"'"'-\\146'"'"'')" 'Force push'
+check ask "$(fx 'git -c remote.origin.push=+refs/heads/main:refs/heads/main push')" 'Force push'
+check pass "$(fx 'echo ${HOME:-x} $IFS')"
+check pass "$(fx 'git commit -m \"$MSG\"')"
+# TEST-08: the other package-manager option values, and input that is not valid UTF-8.
+check pass "$(fx 'pnpm install -F web')"
+check pass "$(fx 'pnpm install --dir x')"
+check pass "$(fx 'pnpm install -C x')"
+check pass "$(printf '{"tool_input":{"command":"ls \377"}}')"
 check pass '{"tool_input":{"command":"pnpm add zod"'
 check pass 'not json'
 check pass ''

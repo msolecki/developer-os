@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@ae09f9d9a609">
+<meta name="dos-source" content="docs/workflow.md@db0d0d27a906">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -396,7 +396,7 @@ do not:</p>
 <tbody>
 <tr><td><code>SessionStart</code> hook</td><td>loads <code>plugin/rules/core.md</code> every session</td><td>no</td><td><code>scripts/install-codex.sh</code> keeps it in a marked block of <code>~/.codex/AGENTS.md</code> (D19)</td></tr>
 <tr><td><code>Stop</code> hook</td><td>offers session-retro once per long session</td><td>no</td><td>run session-retro by hand at the end</td></tr>
-<tr><td><code>PreToolUse</code> guard</td><td>asks before installs (also <code>npm</code> aliases such as <code>in</code>, and full paths), force pushes, hook bypasses (<code>--no-verify</code> and its abbreviations, <code>commit -n</code>, <code>HUSKY=0</code>, <code>core.hooksPath</code> (any form))</td><td>no</td><td>none</td></tr>
+<tr><td><code>PreToolUse</code> guard</td><td>asks before installs, updates and removals (also aliases such as <code>npm in</code> and <code>bun a</code>, and full paths), force pushes, hook bypasses (<code>--no-verify</code> and its abbreviations, <code>commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=</code>, <code>core.hooksPath</code> (any form))</td><td>no</td><td>none</td></tr>
 <tr><td>Agents (<code>plugin/agents/</code>)</td><td>code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog), verifier (code-review, audit-to-backlog)</td><td>no</td><td>none</td></tr>
 <tr><td>Output styles</td><td><code>/output-style</code></td><td>no</td><td>none</td></tr>
 <tr><td><code>Skill</code> tool</td><td>the agent loads a skill by name</td><td>no</td><td><code>scripts/install-codex.sh</code> writes a Codex copy of each skill to <code>~/.agents/skills/</code></td></tr>

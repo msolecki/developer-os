@@ -80,11 +80,13 @@ answers `deny`. In `claude -p`, an `ask` resolves to a denial (per the README; n
 
 | Category | Asks for | Passes |
 |---|---|---|
-| Dependency install | `npm`, `pnpm`, `yarn` or `bun` (also by full path) followed by `install`, `add`, `i` or an npm alias (`in`, `inst`…, `isntall`, `it`) and then any non-dash word (`pnpm add zod`, `npm i -D vitest`, `pnpm --filter web add zod`) | `pnpm install`, `pnpm install --frozen-lockfile`, `npm ci`, `pnpm add -D` with flags only |
-| Force push | `git push` (git also by full path) with `--force`, `--mirror`, a short-flag cluster containing `f`, or a `+refspec`, even next to `--force-with-lease` | `--force-with-lease` alone (including `=ref:sha`), `git push --delete`, `git push origin :branch`, `git push -n` |
-| Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `core.hooksPath` anywhere in a word (`-c core.hooksPath=…`, `git config core.hooksPath`, `--config-env=`, `GIT_CONFIG_KEY_<n>=`, `GIT_CONFIG_PARAMETERS=`); `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`) | `git commit -am` |
+| Dependency install, update or removal | `npm`, `pnpm`, `yarn` or `bun` (also by full path) followed by `install`, `add`, `i`, an alias (`in`, `inst`…, `isntall`, `it`, bun's `a`), or `update`, `up`, `upgrade`, `remove`, `rm`, `uninstall`, `un`, and then any non-dash word or `--latest` (`pnpm add zod`, `npm i -D vitest`, `pnpm --filter web add zod`, `npm uninstall zod`, `pnpm update --latest`) | `pnpm install`, `pnpm install --frozen-lockfile`, `npm ci`, `npm update`, `pnpm add -D` with flags only |
+| Force push | `git push` (git also by full path) with `--force`, `--mirror`, a short-flag cluster containing `f`, or a `+refspec`, even next to `--force-with-lease`; `remote.<name>.push=+…` in a git word | `--force-with-lease` alone (including `=ref:sha`), `git push --delete`, `git push origin :branch`, `git push -n`, `git stash push -f` |
+| Hook bypass | `--no-verify` or `--no-veri`/`--no-verif` anywhere in a segment, `HUSKY=0`, `LEFTHOOK=0`, a word starting `SKIP=` (pre-commit), `core.hooksPath` anywhere in a word (`-c core.hooksPath=…`, `git config core.hooksPath`, `--config-env=`, `GIT_CONFIG_KEY_<n>=`, `GIT_CONFIG_PARAMETERS=`); `git commit` with a short-flag cluster containing `n` (`-n`, `-anm`) | `git commit -am` |
 
-**Parsing:** JSON-unescape (`\r`, `\t` and a backslash-newline continuation become spaces), then
+**Parsing:** first `$IFS` and `${IFS}` become a space, `${X:-word}` (also `-`, `+`, `=`, `?`) becomes
+`word`, and a `\xHH` or octal escape inside `$'...'` becomes its character, so `npm${IFS}i${IFS}zod`,
+`np${X:-m} i zod` and `$'-\x66'` read as `npm i zod` and `-f`. Then JSON-unescape (`\r`, `\t` and a backslash-newline continuation become spaces), then
 delete every quote, backslash and `$` (so `np""m`, `\git`, `-\-force` and `$'-f'` read as the word
 the shell runs), split segments on `; & | ( )` and backtick, and scan words per segment. Quotes are
 not tracked: the command is scanned twice, once with `\n` as a command separator and once with `\n`

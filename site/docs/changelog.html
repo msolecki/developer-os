@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@509fcb75e0af">
+<meta name="dos-source" content="CHANGELOG.md@252cf13aa668">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -61,6 +61,10 @@ and <code>brain-garden-superseded</code>.</li>
 </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
+<li>The <code>PreToolUse</code> guard asks in more cases: bun's <code>a</code> alias; <code>update</code>, <code>up</code>, <code>upgrade</code>, <code>remove</code>,
+<code>rm</code>, <code>uninstall</code> and <code>un</code> with a package argument or <code>--latest</code>; <code>LEFTHOOK=0</code> and pre-commit's
+<code>SKIP=</code>; <code>-c remote.&lt;name&gt;.push=+…</code>; and words hidden behind <code>$IFS</code>, <code>${X:-word}</code> or a <code>$'\x66'</code>
+escape. <code>git stash push -f</code> no longer asks as a force push. The tests now pin which reason fires.</li>
 <li>session-retro ties every check result to the commit it ran on: Done and the plan update list each
 check as <code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus <code>+ uncommitted: &lt;changed files&gt;</code> when the tree
 was dirty, so a later commit visibly outdates a saved "tests pass". New eval case

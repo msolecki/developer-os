@@ -78,11 +78,13 @@ approve. Set `DEVELOPER_OS_CAPTURE_NUDGE=off` to turn it off, or `DEVELOPER_OS_C
 to change the threshold.
 
 A `PreToolUse` hook on Bash ([`plugin/hooks/guard.py`](plugin/hooks/guard.py)) asks for confirmation
-(it never blocks) before a dependency install with a package argument
-(`npm|pnpm|yarn|bun install|add|i <pkg>`, an npm alias such as `npm in`, or the binary by full path), a
-`git push` with `--force`, `-f` or a `+refspec` (even next to `--force-with-lease`; a lone
-`--force-with-lease` passes; git also by full path), and a hook bypass: `--no-verify` or a prefix of it
-such as `--no-veri`, `git commit -n`, `HUSKY=0` or `core.hooksPath` in any form. In `claude -p` an ask resolves to a denial.
+(it never blocks) before a dependency install, update or removal with a package argument
+(`npm|pnpm|yarn|bun install|add|i|update|remove <pkg>`, an alias such as `npm in`, `npm un` or `bun a`,
+`update --latest`, or the binary by full path), a `git push` with `--force`, `-f`, a `+refspec` or
+`-c remote.<name>.push=+…` (even next to `--force-with-lease`; a lone `--force-with-lease` passes; git
+also by full path), and a hook bypass: `--no-verify` or a prefix of it such as `--no-veri`,
+`git commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=<hook>` or `core.hooksPath` in any form. `$IFS`,
+`${X:-word}` and `$'\x66'` escapes are expanded before the scan. In `claude -p` an ask resolves to a denial.
 
 The three scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need `python3` on `PATH`;
