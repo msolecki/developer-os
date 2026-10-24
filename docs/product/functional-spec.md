@@ -65,6 +65,7 @@ found in a note is run or opened.
 | [client-reply](../../plugin/skills/client-reply/SKILL.md) | Turns technical facts into a plain-language reply in the client's language and the user's voice; strips internal identifiers | Nothing | — | The draft in chat; the user sends it |
 | [docs-sync](../../plugin/skills/docs-sync/SKILL.md) | Checks a repository's docs against its code and the docs standard: missing pieces, drift (including `DESIGN.md` older than the styling sources and conflicting decision records), a refreshed `CURRENT-STATE.md`, "Likely agent mistakes" from git history | Approved doc edits | A numbered list, A/B/C | `git diff --stat`; the user commits |
 | [project-baseline](../../plugin/skills/project-baseline/SKILL.md) | Probes 12 engineering practices (env module, secret deny-list, secret scanning, coverage floor, migration guard, boundaries, real-DB tests, safe errors, changelog, docs check, design system file, gate exit codes); missing ones become `BASE-NN` backlog items | Approved items in the backlog | Write the items; decisions it never defaults (package manager, test runner, auth library, monitoring, commit language) | `git diff --stat` |
+| [project-init](../../plugin/skills/project-init/SKILL.md) | Adopts developer-os in a repository: detects the stack, picks the skills that apply, runs project-baseline, docs-sync and instruction-review up to their reports, and audits the code against each applicable conventions skill (comments-conventions is never audited, deploy-checklist never run); violations become `CONV-NN` backlog items; one report, one numbered list | Approved items only, applied as their owning skill applies them (backlog, docs, instruction file) | The numbered list, A/B/C; the owning skills' decisions it never defaults | `git diff --stat`; the user commits |
 
 ### 2.3 Session skills
 
@@ -185,8 +186,8 @@ What the plugin never does without the user's explicit answer for that specific 
 | Write in the vault outside `_inbox/`, move, merge or archive a note | brain-review, brain-garden `## Never` |
 | Delete a note | No skill deletes; retire to `_archive/` |
 | Edit `~/.claude/CLAUDE.md` or `settings.json` | brain-setup (diff first) |
-| Edit an instruction file | instruction-review, session-retro |
-| Create backlog files or add backlog items | audit-to-backlog, project-baseline, spec, implement-backlog (review findings) |
+| Edit an instruction file | instruction-review, session-retro, project-init (the instruction-review diff, the `Backlog:` line) |
+| Create backlog files or add backlog items | audit-to-backlog, project-baseline, project-init, spec, implement-backlog (review findings) |
 | Edit code for review findings | fix-pr (per edit), pr-cycle (one A/B/C answer) |
 | Commit | fix-pr (per commit); pr-cycle commits the base merge once conflicts are resolved and the fast check passes, and fix commits after its A/B/C answer; implement-backlog commits only green batch work it was asked to do |
 | Push | fix-pr, pr-cycle; implement-backlog never pushes |

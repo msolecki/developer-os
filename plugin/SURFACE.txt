@@ -37,6 +37,7 @@ skill nextjs-conventions
 skill plan-status
 skill pr-cycle
 skill project-baseline
+skill project-init
 skill session-retro
 skill skill-usage
 skill spec

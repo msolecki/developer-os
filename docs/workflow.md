@@ -382,6 +382,7 @@ Claude Code ships commands that overlap with some developer-os skills. The names
 | `/insights` | HTML report on recent sessions | skill-usage | You want call counts for developer-os skills and keep/merge/remove suggestions |
 | `/goal` | Keeps working across turns until a condition holds | implement-backlog | The work is a backlog of evidence-backed items with per-item checks, worktrees and review |
 | `/skill-doctor` | Context cost and usage of every skill | skill-usage | You want the developer-os verdicts; use `/skill-doctor` for the context cost |
+| `/init` | Writes a `CLAUDE.md` from the codebase | project-init | You want the repository checked against the baseline, the docs standard, its instructions and the conventions, with one approval for every change |
 | `/doctor` | Checks installation, settings and `CLAUDE.md` | instruction-review | You want an evidence-backed diff or a line-by-line prune of a project's instruction file |
 
 ## Claude-only features

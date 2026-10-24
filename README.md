@@ -1,5 +1,8 @@
 # developer-os
 
+<a href="https://www.producthunt.com/products/developer-os-2?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-developer-os-2" target="_blank" rel="noopener noreferrer"><img alt="Developer OS - Long-term memory and engineering rules for Claude Code | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1286380&amp;theme=light&amp;t=1792582595920"></a>
+
+
 A Claude Code plugin for working with an AI coding agent and an Obsidian vault as its long-term
 memory. Agent sessions forget everything between runs; developer-os gives the agent skills to search
 your vault before it starts, capture decisions into an inbox while it works, and help you review and
@@ -94,7 +97,8 @@ without it the core rules still load and the other hooks do not run.
   brain-compile. They read and write the vault with the agent's own file tools.
 - **Engineering skills:** code-review, spec, audit-to-backlog, implement-backlog, fix-pr, pr-cycle,
   bug-triage, deploy-checklist, instruction-review (add `--prune` for a periodic cut), plan-status,
-  client-reply, docs-sync, project-baseline.
+  client-reply, docs-sync, project-baseline, project-init (adopt developer-os in a repository in one
+  pass).
 - **Session skills:** session-retro (end-of-session wrap-up: state check, cleanup proposals,
   Done / Not done / Needs you, plan update or close, approval-gated capture) and skill-usage
   (read-only report of how often each developer-os skill fired locally, with
@@ -103,7 +107,7 @@ without it the core rules still load and the other hooks do not run.
   error-handling-conventions, defensive-coding-conventions, monitoring-conventions,
   nextjs-conventions, testing-conventions, typescript-conventions.
 - **Built-in overlaps:** `/code-review`, `/security-review`, `/recap`, `/insights`, `/goal`,
-  `/skill-doctor` and `/doctor` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
+  `/skill-doctor`, `/doctor` and `/init` cover similar ground; [when to use which](docs/workflow.md#built-in-commands-with-similar-names).
 - **Agents:** code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.
 - **Output styles:** architect, debug, direct-objective, tdd-enforcer. Select one with
   `/output-style`, or set `"outputStyle": "developer-os:architect"` in settings (the plugin prefix is required).
