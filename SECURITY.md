@@ -25,7 +25,7 @@ Never include the content of a vault or a secret. Describe it instead.
 
 - The plugin is Markdown (skills, agents, output styles, rules) plus 4 hooks in
   `plugin/hooks/hooks.json`: `SessionStart` runs `cat` on `plugin/rules/core.md` and, after a
-  compaction or resume, `state-card.py`, which prints the git branch, newest plan, `docs/plans/.devos-state.md` and worktrees of the
+  compaction, resume or fork, `state-card.py`, which prints the git branch, newest plan, `docs/plans/.devos-state.md` and worktrees of the
   working directory; `Stop` runs
   `capture-nudge.py`, which counts `tool_use` entries in the session transcript and reads only
   background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; `PreToolUse` runs `guard.py` on Bash commands and can only ask for confirmation.

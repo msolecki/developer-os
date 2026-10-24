@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-16
+last-verified: 2026-10-24
 ---
 
 # How to work: brain + code
@@ -136,7 +136,9 @@ Do not write the plan in the vault. A plan in the vault drifts away from the cod
 When you settle something that you, or another project, will want to know again, ask for
 **brain-capture**: "capture the decision about webhook idempotency". The agent writes one note to
 `_inbox/` with `status: inbox`, the right `type` and `project`, a one-line `summary`, and the why.
-It redacts secrets before writing.
+It redacts secrets, then scans the note for secret patterns and writes nothing on a match.
+When the agent starts a capture you did not ask for, it shows you the note and writes only after
+your yes.
 
 Capture at the moment of the decision, not at the end of the day. The reasons are sharpest when the
 rejected options are still on screen.
@@ -312,7 +314,7 @@ Claude Code also keeps its own auto-memory. To keep one fact in one place:
 
 | What | Where |
 |---|---|
-| user preferences and style corrections | auto-memory or `~/.claude/CLAUDE.md` |
+| user preferences and style corrections | auto-memory or `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md` |
 | lessons and decisions that apply beyond this project | vault, via brain-capture |
 | facts about this project (commands, stack, conventions) | the project's `AGENTS.md`/`CLAUDE.md` or an ADR |
 
@@ -355,7 +357,8 @@ Link from the vault to the repository by path or URL; do not copy repository con
   vault holds client context and decisions you would not publish. The template's `.gitignore` keeps
   Obsidian's UI state (`workspace.json`, `workspace-mobile.json`, `graph.json`, `.trash/`) out of
   commits; `brain-setup` appends missing lines to an existing vault's `.gitignore`.
-- brain-capture redacts secrets (tokens, passwords, keys, connection strings) before writing. Review
+- brain-capture redacts secrets (tokens, passwords, keys, connection strings) and scans for secret
+  patterns before writing. Review
   still matters: check inbox notes for client names, personal data and internal URLs before you set
   `status: active`.
 - Keep credentials out of the vault entirely. Refer to where a secret lives ("in the password
@@ -400,7 +403,7 @@ do not:
 |---|---|---|---|
 | `SessionStart` hook | loads `plugin/rules/core.md` every session | no | `scripts/install-codex.sh` keeps it in a marked block of `~/.codex/AGENTS.md` (D19) |
 | `Stop` hook | offers session-retro once per long session | no | run session-retro by hand at the end |
-| `PreToolUse` guard | asks before installs (also `npm` aliases such as `in`, and full paths), force pushes, hook bypasses (`--no-verify` and its abbreviations, `commit -n`, `HUSKY=0`, `core.hooksPath` (any form)) | no | none |
+| `PreToolUse` guard | asks before installs, updates and removals (also aliases such as `npm in` and `bun a`, and full paths), force pushes, hook bypasses (`--no-verify` and its abbreviations, `commit -n`, `HUSKY=0`, `LEFTHOOK=0`, `SKIP=`, `core.hooksPath` (any form)) | no | none |
 | Agents (`plugin/agents/`) | code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog), verifier (code-review, audit-to-backlog) | no | none |
 | Output styles | `/output-style` | no | none |
 | `Skill` tool | the agent loads a skill by name | no | `scripts/install-codex.sh` writes a Codex copy of each skill to `~/.agents/skills/` |

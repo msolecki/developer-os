@@ -8,6 +8,7 @@
   "homepage": "https://github.com/msolecki/developer-os",
   "repository": "https://github.com/msolecki/developer-os",
   "license": "MIT",
+  "icon": "./.claude-plugin/icon.png",
   "keywords": [
     "obsidian",
     "memory",

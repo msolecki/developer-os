@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-15
+last-verified: 2026-10-24
 ---
 
 # Glossary
@@ -39,7 +39,7 @@ last-verified: 2026-10-15
 | Ready / waiting / claimed / orphaned | An open backlog item's one bucket, checked orphaned, waiting, claimed, ready: no open blocker and no owner / an open `Blocked by` / an owner of 7 days or less / an owner older than 7 days. |
 | Final status | The first line of every agent report: `DONE`, `REVIEW`, `BLOCKED` (with an unblock owner) or `CONTINUING`. |
 | Evidence checked | The files read and commands run that a reviewer lists under an `APPROVE` with no P0–P2. |
-| State card | The task state the `SessionStart` hook prints after a compaction or resume, from `docs/plans/.devos-state.md` and git. |
+| State card | The task state the `SessionStart` hook prints after a compaction, resume or fork, from `docs/plans/.devos-state.md` and git. |
 | Surface | The public names in `plugin/SURFACE.txt`: skills, agents, output styles, hook events and scripts. |
 | Active plan | The most recently updated plan in the planning location whose task is not done. |
 | Nudge | The `Stop` hook's one-time request to run session-retro after 30 tool calls. |

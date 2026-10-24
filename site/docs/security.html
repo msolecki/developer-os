@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="SECURITY.md@8d4eb00cfc2a">
+<meta name="dos-source" content="SECURITY.md@c213a2cea14b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -66,7 +66,7 @@ from <code>main</code>. Only the latest release receives security fixes.</p>
     <ul>
 <li>The plugin is Markdown (skills, agents, output styles, rules) plus 4 hooks in
 <code>plugin/hooks/hooks.json</code>: <code>SessionStart</code> runs <code>cat</code> on <code>plugin/rules/core.md</code> and, after a
-compaction or resume, <code>state-card.py</code>, which prints the git branch, newest plan, <code>docs/plans/.devos-state.md</code> and worktrees of the
+compaction, resume or fork, <code>state-card.py</code>, which prints the git branch, newest plan, <code>docs/plans/.devos-state.md</code> and worktrees of the
 working directory; <code>Stop</code> runs
 <code>capture-nudge.py</code>, which counts <code>tool_use</code> entries in the session transcript and reads only
 background-task and Monitor ids, output-file paths and Monitor start times from it, never message content; <code>PreToolUse</code> runs <code>guard.py</code> on Bash commands and can only ask for confirmation.

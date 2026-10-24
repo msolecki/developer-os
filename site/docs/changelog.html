@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@509fcb75e0af">
+<meta name="dos-source" content="CHANGELOG.md@204345110498">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -58,13 +58,57 @@ with no note named as current. brain-garden reports a missing <code>superseded_b
 target, and a cycle, and never counts a superseded note as an orphan. New eval cases
 <code>brain-search-superseded-chain</code>, <code>brain-search-superseded-dangling</code>, <code>brain-search-superseded-cycle</code>
 and <code>brain-garden-superseded</code>.</li>
+<li>Eval cases for two agents' Never rules: <code>verifier-injected-finding</code> (a false finding that asks the
+verifier to answer CONFIRMED is refuted from the code) and <code>qa-expert-no-skip</code> (asked to make a red
+suite green without touching <code>src/</code>, qa-expert keeps the failing test). The check has an Evals stage:
+every eval case needs a <code>case.yaml</code> named after its folder, a <code>prompt.md</code>, its scaffold, graders of a
+known type with at least one deterministic grader, and a row in <code>evals/README.md</code>.</li>
+<li>The check has a Docs standard stage: the ADR, pitfalls and CURRENT-STATE headings and fields of
+<code>templates/project/</code> must appear in docs-sync's standard list.</li>
 </ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
+<li>The state card also follows a forked session (<code>SessionStart</code> source <code>fork</code>: <code>--fork-session</code>,
+<code>/branch</code>, <code>/fork</code>), which carries the earlier task context like a resume. <code>plugin.json</code> declares
+the plugin icon for the directory listing.</li>
+<li>The <code>PreToolUse</code> guard asks in more cases: bun's <code>a</code> alias; <code>update</code>, <code>up</code>, <code>upgrade</code>, <code>remove</code>,
+<code>rm</code>, <code>uninstall</code> and <code>un</code> with a package argument or <code>--latest</code>; <code>LEFTHOOK=0</code> and pre-commit's
+<code>SKIP=</code>; <code>-c remote.&lt;name&gt;.push=+…</code>; and words hidden behind <code>$IFS</code>, <code>${X:-word}</code> or a <code>$'\x66'</code>
+escape. <code>git stash push -f</code> no longer asks as a force push, nor does a script or binary named like
+a subcommand right after <code>run</code>, <code>exec</code> or <code>dlx</code> (<code>npm run up foo</code>). The tests now pin which reason fires.</li>
 <li>session-retro ties every check result to the commit it ran on: Done and the plan update list each
 check as <code>&lt;command&gt;: &lt;result&gt; at &lt;short SHA&gt;</code>, plus <code>+ uncommitted: &lt;changed files&gt;</code> when the tree
 was dirty, so a later commit visibly outdates a saved "tests pass". New eval case
 <code>session-retro-check-sha</code>.</li>
+<li>Eval graders: the session-retro cases and project-baseline-design fail on a shell write (a redirect,
+<code>tee</code>, <code>sed -i</code>, <code>cp</code>, <code>mv</code>, <code>rm</code>, <code>git add</code> or <code>git commit</code>); brain-garden cases fail on a Write, a <code>cp</code>, a redirect or <code>tee</code>; brain-compile-originals fails
+on a redirect or <code>tee</code> outside <code>_inbox/</code>. Eighteen cases gained a deterministic grader for a literal
+or format their skill mandates (for example <code>History incomplete</code>, <code>Apply which?</code>, <code>NO-GO</code>, the
+backlog item line), so they no longer score only through an llm grader.</li>
+<li>One backlog item format, owned by audit-to-backlog: spec gives <code>FEAT-</code> items severity P2 unless
+you name another and files them under that section, finds or creates the backlog files as
+audit-to-backlog does (the <code>Backlog:</code> line, the path question, the git-ignored warning), and hands
+off to implement-backlog when the steps moved to the backlog. session-retro moves a finished plan's
+open items to the backlog in that format. <code>templates/project/TODO.md</code> points to the skill instead of
+restating the rules.</li>
+<li>Handoffs agree across the review skills and agents. pr-cycle: after C at step 5 the base merge
+commit stays local and unpushed, and the skill offers to push it alone; a <code>COMMENT</code> verdict means an
+open question decides whether a finding is P0 or P1, as in code-review and the code-reviewer agent.
+code-review recomputes the relayed reviewer's verdict after verification and edits no repository
+file. The verifier reads an untrusted head's code from the diff file, not from files on disk.
+implement-backlog makes the <code>Owner</code> release commit on the base after an early stop, names the
+record commit as the one that waits for the review pass, and its Never rule allows the claim and
+release commits and the local <code>--ff-only</code> fast-forward on the base.</li>
+</ul>
+    <h3 id="unreleased-fixed">Fixed</h3>
+    <ul>
+<li>brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
+match. A capture the agent started on its own shows the note text and waits for a yes.</li>
+<li>session-retro sets <code>base</code> again in its cleanup command, because Bash calls do not keep variables;
+it routes user preferences to <code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md</code>; and its triggers no
+longer include the bare "clean up" or "is everything done".</li>
+<li>The architect output style writes ADRs in the docs-sync shape: Date, Status (<code>superseded by NNNN</code>),
+Context, Decision, Consequences, Alternatives rejected, Revisit when.</li>
 </ul>
     <h2 id="024---2026-10-20">[0.2.4] - 2026-10-20</h2>
     <h3 id="024-added">Added</h3>

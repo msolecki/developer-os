@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SessionStart hook after a compaction or resume: prints a state card of at most CAP bytes (branch, newest
+"""SessionStart hook after a compaction, resume or fork: prints a state card of at most CAP bytes (branch, newest
 plan, docs/plans/.devos-state.md, worktrees) so task state outlives the summary. The core rules print from
 a separate `cat` hook, so they load even when this script cannot run. Every error exits 0.
 """
@@ -68,7 +68,7 @@ def newest_plan():
 
 def main():
     text = sys.stdin.buffer.read().decode("utf-8", "replace").replace("\n", " ").replace("\r", " ")
-    if field(text, "source") not in ("compact", "resume"):
+    if field(text, "source") not in ("compact", "resume", "fork"):
         return
     try:
         os.chdir(field(text, "cwd"))

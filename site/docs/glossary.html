@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/glossary.md@eb40296c6624">
+<meta name="dos-source" content="docs/glossary.md@dfc50f1fc27d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -82,7 +82,7 @@
           <tr><td>Ready / waiting / claimed / orphaned</td><td>An open backlog item's one bucket, checked orphaned, waiting, claimed, ready: no open blocker and no owner / an open <code>Blocked by</code> / an owner of 7 days or less / an owner older than 7 days.</td></tr>
           <tr><td>Final status</td><td>The first line of every agent report: <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code> (with an unblock owner) or <code>CONTINUING</code>.</td></tr>
           <tr><td>Evidence checked</td><td>The files read and commands run that a reviewer lists under an <code>APPROVE</code> with no P0–P2.</td></tr>
-          <tr><td>State card</td><td>The task state the <code>SessionStart</code> hook prints after a compaction or resume, from <code>docs/plans/.devos-state.md</code> and git.</td></tr>
+          <tr><td>State card</td><td>The task state the <code>SessionStart</code> hook prints after a compaction, resume or fork, from <code>docs/plans/.devos-state.md</code> and git.</td></tr>
           <tr><td>Surface</td><td>The public names in <code>plugin/SURFACE.txt</code>: skills, agents, output styles, hook events and scripts.</td></tr>
           <tr><td>Active plan</td><td>The most recently updated plan in the planning location whose task is not done.</td></tr>
           <tr><td>Nudge</td><td>The <code>Stop</code> hook's one-time request to run session-retro after 30 tool calls.</td></tr>

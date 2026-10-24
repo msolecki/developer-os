@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/development.md@bd8fd2ea91a1">
+<meta name="dos-source" content="docs/development.md@15020cfcba43">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,9 +68,11 @@
           <tr><td>Skill descriptions</td><td>A description is outside 80–1024 characters, or all together exceed 12000</td></tr>
           <tr><td>Skill sections</td><td>An action skill lacks <code>## Stop point</code> or <code>## Never</code>, or one is empty (a <code>## Never</code> needs at least one <code>- </code> rule) (exempt: <code>brain-search</code>, <code>code-review</code>, <code>plan-status</code>, <code>skill-usage</code>, <code>*-conventions</code>)</td></tr>
           <tr><td>Vault paragraph</td><td>The first paragraph under <code>## 1. Locate the vault</code> in <code>brain-capture</code>, <code>brain-compile</code>, <code>brain-garden</code> or <code>brain-review</code> differs from <code>brain-search</code>'s</td></tr>
+          <tr><td>Docs standard</td><td>A <code>## </code> heading or bold field of <code>templates/project/docs/decisions/0001-template.md</code>, a bold field of <code>templates/project/docs/pitfalls.md</code>, or a <code>## </code> heading of <code>templates/project/docs/CURRENT-STATE.md</code> is missing from <code>## The standard</code> in <code>docs-sync</code> (the plugin does not ship <code>templates/</code>, so the skill restates them)</td></tr>
           <tr><td>Severity</td><td>A skill or agent that writes out the P0–P3 scale (inline <code>P0 = …</code> or four <code>- **P0:**</code> bullets) words it differently from the others</td></tr>
           <tr><td>Local paths</td><td>A file under <code>plugin/</code> or <code>site/</code> contains <code>/Users&#47;</code>, <code>/home&#47;</code>, <code>~&#47;www</code> or <code>.claude&#50;</code></td></tr>
           <tr><td>YAML</td><td>A <code>*.base</code> or <code>evals/*.yaml</code> file does not parse</td></tr>
+          <tr><td>Evals</td><td>An <code>evals/&lt;case&gt;/</code> directory lacks a <code>case.yaml</code> whose <code>name</code> is the folder, a <code>prompt.md</code>, the <code>scaffold_script</code> it names, or <code>graders/*.md</code>; a grader's <code>type</code> is not <code>llm</code>, <code>regex</code>, <code>file_exists</code> or <code>tool_used</code>; every grader of a case is <code>llm</code>; a case has no row in the Cases table of <code>evals/README.md</code>, or a row names no case</td></tr>
           <tr><td>Hook targets</td><td>A <code>${CLAUDE_PLUGIN_ROOT}/…</code> path in <code>hooks.json</code> does not exist</td></tr>
           <tr><td>Agents</td><td>An agent lacks <code>## Final status</code> or one of <code>DONE</code>, <code>REVIEW</code>, <code>BLOCKED</code>, <code>CONTINUING</code></td></tr>
           <tr><td>Surface</td><td><code>plugin/SURFACE.txt</code> differs from the skills, agents, output styles, hook events and hook scripts on disk</td></tr>
@@ -113,11 +115,11 @@
     <p><code>.github/workflows/pages.yml</code> publishes <code>site/</code> to GitHub Pages on a push to <code>main</code> that changes it, or by hand (dispatch it from <code>main</code> only, or it publishes unreleased docs). The repository's Pages source must be "GitHub Actions".</p>
     <h2 id="script-tests">Script tests</h2>
     <p><code>tests/state-card.test.sh</code> runs <code>state-card.py</code> in a temporary git repository and checks that it
-    prints nothing outside <code>compact</code>/<code>resume</code>, that the card holds the plan and state file only when they are
+    prints nothing outside <code>compact</code>/<code>resume</code>/<code>fork</code>, that the card holds the plan and state file only when they are
     safe to show, and that the card is cut to its cap; <code>tests/guard.test.sh</code> feeds command fixtures to <code>guard.py</code> and expects <code>ask</code> or silence;
     <code>tests/capture-nudge.test.sh</code> builds synthetic transcripts and checks the exit code, the JSON output and the message;
     <code>tests/check.test.sh</code> breaks a copy of the repository once per stage it covers and expects that
-    stage's message; it runs the whole check about twenty times (around 40 s), so <code>scripts/check.sh</code> runs it
+    stage's message; it runs the whole check about forty times (around two minutes), so <code>scripts/check.sh</code> runs it
     only when <code>CI</code> is set (GitHub Actions sets it): after changing <code>scripts/check.sh</code>, run <code>sh tests/check.test.sh</code> yourself;
     <code>tests/install-codex.test.sh</code> runs the Codex installer against a temporary <code>HOME</code> (dry run,
     idempotent second run, kept user text, unbalanced markers, foreign skills, uninstall, the Codex

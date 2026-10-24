@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="README.md@96c7b4b574d4">
+<meta name="dos-source" content="README.md@acdb24a38bc0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -88,7 +88,7 @@ full setup, with Obsidian settings and a first test, is in <a href="workflow.htm
     <h2 id="what-the-hooks-do">What the hooks do</h2>
     <p>The plugin has 4 hooks. On every <code>SessionStart</code> (startup, resume, <code>/clear</code>, compaction and fork), in
 every project, it prints <a href="https://github.com/msolecki/developer-os/blob/development/plugin/rules/core.md"><code>plugin/rules/core.md</code></a> with <code>cat</code>; the output becomes
-session context. After a compaction or a resume inside a git repository, a second <code>SessionStart</code> hook,
+session context. After a compaction, a resume or a fork inside a git repository, a second <code>SessionStart</code> hook,
 <a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/state-card.py"><code>plugin/hooks/state-card.py</code></a>, adds a state card of at most 1 KB: the branch, a
 <code>Newest plan:</code> line, <code>docs/plans/.devos-state.md</code> (the task state that implement-backlog, pr-cycle
 and audit-to-backlog keep there; hidden once it is older than 7 days), then up to 10 worktrees. A
@@ -104,11 +104,13 @@ while a background agent, command or Monitor it can see is still running, it ask
 approve. Set <code>DEVELOPER_OS_CAPTURE_NUDGE=off</code> to turn it off, or <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN=&lt;n&gt;</code>
 to change the threshold.</p>
     <p>A <code>PreToolUse</code> hook on Bash (<a href="https://github.com/msolecki/developer-os/blob/development/plugin/hooks/guard.py"><code>plugin/hooks/guard.py</code></a>) asks for confirmation
-(it never blocks) before a dependency install with a package argument
-(<code>npm|pnpm|yarn|bun install|add|i &lt;pkg&gt;</code>, an npm alias such as <code>npm in</code>, or the binary by full path), a
-<code>git push</code> with <code>--force</code>, <code>-f</code> or a <code>+refspec</code> (even next to <code>--force-with-lease</code>; a lone
-<code>--force-with-lease</code> passes; git also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of it
-such as <code>--no-veri</code>, <code>git commit -n</code>, <code>HUSKY=0</code> or <code>core.hooksPath</code> in any form. In <code>claude -p</code> an ask resolves to a denial.</p>
+(it never blocks) before a dependency install, update or removal with a package argument
+(<code>npm|pnpm|yarn|bun install|add|i|update|remove &lt;pkg&gt;</code>, an alias such as <code>npm in</code>, <code>npm un</code> or <code>bun a</code>,
+<code>update --latest</code>, or the binary by full path), a <code>git push</code> with <code>--force</code>, <code>-f</code>, a <code>+refspec</code> or
+<code>-c remote.&lt;name&gt;.push=+…</code> (even next to <code>--force-with-lease</code>; a lone <code>--force-with-lease</code> passes; git
+also by full path), and a hook bypass: <code>--no-verify</code> or a prefix of it such as <code>--no-veri</code>,
+<code>git commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=&lt;hook&gt;</code> or <code>core.hooksPath</code> in any form. <code>$IFS</code>,
+<code>${X:-word}</code> and <code>$'\x66'</code> escapes are expanded before the scan. In <code>claude -p</code> an ask resolves to a denial.</p>
     <p>The three scripts are Python 3 (3.8+, standard library only), make no network calls and fail open: on input they cannot parse
 or any error they exit silently and the normal permission flow applies. They need <code>python3</code> on <code>PATH</code>;
 without it the core rules still load and the other hooks do not run.</p>
@@ -131,7 +133,7 @@ nextjs-conventions, testing-conventions, typescript-conventions.</li>
 <li><strong>Agents:</strong> code-reviewer, performance-engineer, qa-expert, research-analyst, security-auditor, verifier.</li>
 <li><strong>Output styles:</strong> architect, debug, direct-objective, tdd-enforcer. Select one with
 <code>/output-style</code>, or set <code>"outputStyle": "developer-os:architect"</code> in settings (the plugin prefix is required).</li>
-<li><strong>Three hooks:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction), <code>Stop</code> suggests a session wrap-up
+<li><strong>Four hooks on three events:</strong> <code>SessionStart</code> loads <code>plugin/rules/core.md</code> (plus a state card after compaction, resume or fork), <code>Stop</code> suggests a session wrap-up
 once per long session, <code>PreToolUse</code> asks before installs, force pushes and hook bypasses (see above).</li>
 <li><strong>Evals:</strong> behavior checks for the brain skills, code-review, session-retro and the skill
 triggers in <a href="https://github.com/msolecki/developer-os/blob/development/evals/README.md"><code>evals/</code></a>, run by hand with <code>claude plugin eval</code>. Not part of the
@@ -164,7 +166,7 @@ see <a href="workflow.html#claude-only-features">Claude-only features</a>.</p>
     <ul>
 <li><a href="https://msolecki.github.io/developer-os/">Landing page</a>: the public documentation site (<a href="https://github.com/msolecki/developer-os/blob/development/site/index.html">source</a>), published to GitHub Pages by <code>.github/workflows/pages.yml</code>.</li>
 <li><a href="index.html">Documentation index</a>: product overview, functional specification, decisions,
-architecture, hooks and configuration reference, development guide, pitfalls, current state.</li>
+architecture, hooks and configuration reference, development guide, pitfalls, glossary.</li>
 <li><a href="workflow.html">How to work: brain + code</a>: the workflow, the vault layout, privacy.</li>
 <li><a href="workflow.html#away-from-the-desk-optional">Away from the desk</a>: capture from your phone and a
 weekly vault brief with Claude Code routines.</li>

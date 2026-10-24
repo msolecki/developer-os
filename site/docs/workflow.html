@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/workflow.md@ae09f9d9a609">
+<meta name="dos-source" content="docs/workflow.md@89540f7dc3dd">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -161,7 +161,9 @@ leaves the backlog items to the agents.</p>
     <p>When you settle something that you, or another project, will want to know again, ask for
 <strong>brain-capture</strong>: "capture the decision about webhook idempotency". The agent writes one note to
 <code>_inbox/</code> with <code>status: inbox</code>, the right <code>type</code> and <code>project</code>, a one-line <code>summary</code>, and the why.
-It redacts secrets before writing.</p>
+It redacts secrets, then scans the note for secret patterns and writes nothing on a match.
+When the agent starts a capture you did not ask for, it shows you the note and writes only after
+your yes.</p>
     <p>Capture at the moment of the decision, not at the end of the day. The reasons are sharpest when the
 rejected options are still on screen.</p>
     <h3 id="4-end-of-session-wrap-up">4. End of session: wrap up</h3>
@@ -310,7 +312,7 @@ not already in the code or the repository's plan or ADR?</p>
 <table>
 <thead><tr><th scope="col">What</th><th scope="col">Where</th></tr></thead>
 <tbody>
-<tr><td>user preferences and style corrections</td><td>auto-memory or <code>~/.claude/CLAUDE.md</code></td></tr>
+<tr><td>user preferences and style corrections</td><td>auto-memory or <code>${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md</code></td></tr>
 <tr><td>lessons and decisions that apply beyond this project</td><td>vault, via brain-capture</td></tr>
 <tr><td>facts about this project (commands, stack, conventions)</td><td>the project's <code>AGENTS.md</code>/<code>CLAUDE.md</code> or an ADR</td></tr>
 </tbody>
@@ -353,7 +355,8 @@ reads. An agent with web access could also send it elsewhere.</li>
 vault holds client context and decisions you would not publish. The template's <code>.gitignore</code> keeps
 Obsidian's UI state (<code>workspace.json</code>, <code>workspace-mobile.json</code>, <code>graph.json</code>, <code>.trash/</code>) out of
 commits; <code>brain-setup</code> appends missing lines to an existing vault's <code>.gitignore</code>.</li>
-<li>brain-capture redacts secrets (tokens, passwords, keys, connection strings) before writing. Review
+<li>brain-capture redacts secrets (tokens, passwords, keys, connection strings) and scans for secret
+patterns before writing. Review
 still matters: check inbox notes for client names, personal data and internal URLs before you set
 <code>status: active</code>.</li>
 <li>Keep credentials out of the vault entirely. Refer to where a secret lives ("in the password
@@ -396,7 +399,7 @@ do not:</p>
 <tbody>
 <tr><td><code>SessionStart</code> hook</td><td>loads <code>plugin/rules/core.md</code> every session</td><td>no</td><td><code>scripts/install-codex.sh</code> keeps it in a marked block of <code>~/.codex/AGENTS.md</code> (D19)</td></tr>
 <tr><td><code>Stop</code> hook</td><td>offers session-retro once per long session</td><td>no</td><td>run session-retro by hand at the end</td></tr>
-<tr><td><code>PreToolUse</code> guard</td><td>asks before installs (also <code>npm</code> aliases such as <code>in</code>, and full paths), force pushes, hook bypasses (<code>--no-verify</code> and its abbreviations, <code>commit -n</code>, <code>HUSKY=0</code>, <code>core.hooksPath</code> (any form))</td><td>no</td><td>none</td></tr>
+<tr><td><code>PreToolUse</code> guard</td><td>asks before installs, updates and removals (also aliases such as <code>npm in</code> and <code>bun a</code>, and full paths), force pushes, hook bypasses (<code>--no-verify</code> and its abbreviations, <code>commit -n</code>, <code>HUSKY=0</code>, <code>LEFTHOOK=0</code>, <code>SKIP=</code>, <code>core.hooksPath</code> (any form))</td><td>no</td><td>none</td></tr>
 <tr><td>Agents (<code>plugin/agents/</code>)</td><td>code-reviewer (code-review, implement-backlog, pr-cycle, audit-to-backlog), research-analyst (bug-triage), security-auditor, performance-engineer and qa-expert (audit-to-backlog), verifier (code-review, audit-to-backlog)</td><td>no</td><td>none</td></tr>
 <tr><td>Output styles</td><td><code>/output-style</code></td><td>no</td><td>none</td></tr>
 <tr><td><code>Skill</code> tool</td><td>the agent loads a skill by name</td><td>no</td><td><code>scripts/install-codex.sh</code> writes a Codex copy of each skill to <code>~/.agents/skills/</code></td></tr>

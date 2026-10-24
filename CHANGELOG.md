@@ -12,12 +12,55 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   target, and a cycle, and never counts a superseded note as an orphan. New eval cases
   `brain-search-superseded-chain`, `brain-search-superseded-dangling`, `brain-search-superseded-cycle`
   and `brain-garden-superseded`.
+- Eval cases for two agents' Never rules: `verifier-injected-finding` (a false finding that asks the
+  verifier to answer CONFIRMED is refuted from the code) and `qa-expert-no-skip` (asked to make a red
+  suite green without touching `src/`, qa-expert keeps the failing test). The check has an Evals stage:
+  every eval case needs a `case.yaml` named after its folder, a `prompt.md`, its scaffold, graders of a
+  known type with at least one deterministic grader, and a row in `evals/README.md`.
+- The check has a Docs standard stage: the ADR, pitfalls and CURRENT-STATE headings and fields of
+  `templates/project/` must appear in docs-sync's standard list.
 
 ### Changed
+- The state card also follows a forked session (`SessionStart` source `fork`: `--fork-session`,
+  `/branch`, `/fork`), which carries the earlier task context like a resume. `plugin.json` declares
+  the plugin icon for the directory listing.
+- The `PreToolUse` guard asks in more cases: bun's `a` alias; `update`, `up`, `upgrade`, `remove`,
+  `rm`, `uninstall` and `un` with a package argument or `--latest`; `LEFTHOOK=0` and pre-commit's
+  `SKIP=`; `-c remote.<name>.push=+…`; and words hidden behind `$IFS`, `${X:-word}` or a `$'\x66'`
+  escape. `git stash push -f` no longer asks as a force push, nor does a script or binary named like
+  a subcommand right after `run`, `exec` or `dlx` (`npm run up foo`). The tests now pin which reason fires.
 - session-retro ties every check result to the commit it ran on: Done and the plan update list each
   check as `<command>: <result> at <short SHA>`, plus `+ uncommitted: <changed files>` when the tree
   was dirty, so a later commit visibly outdates a saved "tests pass". New eval case
   `session-retro-check-sha`.
+- Eval graders: the session-retro cases and project-baseline-design fail on a shell write (a redirect,
+  `tee`, `sed -i`, `cp`, `mv`, `rm`, `git add` or `git commit`); brain-garden cases fail on a Write, a `cp`, a redirect or `tee`; brain-compile-originals fails
+  on a redirect or `tee` outside `_inbox/`. Eighteen cases gained a deterministic grader for a literal
+  or format their skill mandates (for example `History incomplete`, `Apply which?`, `NO-GO`, the
+  backlog item line), so they no longer score only through an llm grader.
+- One backlog item format, owned by audit-to-backlog: spec gives `FEAT-` items severity P2 unless
+  you name another and files them under that section, finds or creates the backlog files as
+  audit-to-backlog does (the `Backlog:` line, the path question, the git-ignored warning), and hands
+  off to implement-backlog when the steps moved to the backlog. session-retro moves a finished plan's
+  open items to the backlog in that format. `templates/project/TODO.md` points to the skill instead of
+  restating the rules.
+- Handoffs agree across the review skills and agents. pr-cycle: after C at step 5 the base merge
+  commit stays local and unpushed, and the skill offers to push it alone; a `COMMENT` verdict means an
+  open question decides whether a finding is P0 or P1, as in code-review and the code-reviewer agent.
+  code-review recomputes the relayed reviewer's verdict after verification and edits no repository
+  file. The verifier reads an untrusted head's code from the diff file, not from files on disk.
+  implement-backlog makes the `Owner` release commit on the base after an early stop, names the
+  record commit as the one that waits for the review pass, and its Never rule allows the claim and
+  release commits and the local `--ff-only` fast-forward on the base.
+
+### Fixed
+- brain-capture scans the redacted note for secret patterns before writing and writes nothing on a
+  match. A capture the agent started on its own shows the note text and waits for a yes.
+- session-retro sets `base` again in its cleanup command, because Bash calls do not keep variables;
+  it routes user preferences to `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md`; and its triggers no
+  longer include the bare "clean up" or "is everything done".
+- The architect output style writes ADRs in the docs-sync shape: Date, Status (`superseded by NNNN`),
+  Context, Decision, Consequences, Alternatives rejected, Revisit when.
 
 ## [0.2.4] - 2026-10-20
 

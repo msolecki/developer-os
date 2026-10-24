@@ -1,7 +1,7 @@
 ---
 status: current
 owner: Mateusz Solecki
-last-verified: 2026-10-16
+last-verified: 2026-10-24
 ---
 
 # Decisions
@@ -182,6 +182,7 @@ add a new entry. Decisions of the CLI era are not carried over; their history is
 - **Amended 2026-10-16:** the card comes from its own hook, `state-card.py`, matched to `compact` and
   `resume`; the core rules print from a separate `cat` hook (D2), so the card is no longer guaranteed
   to follow them.
+- **Amended 2026-10-24:** the state card also runs on a forked session (source `fork`).
 - **Rejected:** a `PreCompact` hook (its input and output are undocumented); `.claude/devos-state.md`
   (one more `.gitignore` entry per project).
 

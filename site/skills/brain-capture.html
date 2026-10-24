@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-capture/SKILL.md@ff57c665eed3">
+<meta name="dos-source" content="plugin/skills/brain-capture/SKILL.md@6306c0ba1942">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -53,7 +53,7 @@
       <div class="fact"><dt>Group</dt><dd>Memory</dd></div>
       <div class="fact"><dt>Kind</dt><dd>Action</dd></div>
       <div class="fact"><dt>Writes</dt><dd>One new note in <code>_inbox/</code>, <code>status: inbox</code></dd></div>
-      <div class="fact"><dt>Asks before</dt><dd>Once for the why, when it is missing</dd></div>
+      <div class="fact"><dt>Asks before</dt><dd>Once for the why, when it is missing; writing a capture it started on its own</dd></div>
       <div class="fact"><dt>Needs</dt><dd><code>Brain vault:</code> line</dd></div>
     </dl>
 
@@ -71,6 +71,7 @@
       <li><strong>Checks that it outlives the task.</strong> Three questions: would it help in another task or project, is the why written down, and is it absent from the code, plan and ADRs? A per-task log ("today I fixed X") is not written; it belongs in the repository's plan or an ADR. A missing why is asked for once. Content already in the repository is linked by path, not copied.</li>
       <li><strong>Looks for an existing note.</strong> It searches the vault with <code>rg</code> for the topic's keywords. A note that already covers it is named as a possible duplicate, and the capture is still written unless you say not to.</li>
       <li><strong>Redacts secrets.</strong> API keys, tokens, passwords, private keys, connection strings or URLs with credentials, and personal data of people at a client become <code>[REDACTED]</code>. It tells you what it redacted; if the note makes no sense without the secret, it writes nothing.</li>
+      <li><strong>Checks before writing.</strong> It scans the redacted note with a fixed <code>grep</code> for secret patterns (private key headers, AWS, GitHub, Slack and <code>sk-</code> keys, credentials in URLs). A match means nothing is written: it names the line and asks you how to redact it. When it started the capture on its own, not on your request, it shows you the final note and writes it only after your yes.</li>
       <li><strong>Writes the note.</strong> One topic per note at <code>_inbox/&lt;kebab-case-topic&gt;.md</code>, ASCII only, with a <code>-2</code> suffix when the name is already taken anywhere in the vault, because <code>[[name]]</code> links resolve by name. The body has exactly <code>## Context</code>, <code>## Decision</code>, <code>## Why</code> and <code>## Links</code>. Frontmatter: <code>type</code> (<code>decision</code>, <code>knowledge</code>, <code>reference</code> or <code>project</code>), <code>status: inbox</code>, today's dates, <code>tags</code>, a quoted one-sentence <code>summary</code>, and the <code>project</code> slug from the repository's <code>_Context.md</code>, never from the directory name.</li>
       <li><strong>Reports</strong> the new path, a possible duplicate and what was redacted.</li>
     </ol>
@@ -87,13 +88,14 @@ Review it with the brain-review skill or in Obsidian (_views/Inbox.base).</code>
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>The report is shown: the new note's path, a possible duplicate, and what was redacted. With no vault, a failed check, or a note that needs a secret to make sense, it stops having written nothing and says why.</p>
+      <p>The report is shown: the new note's path, a possible duplicate, and what was redacted. With no vault, a failed check, a secret-scan match, or a note that needs a secret to make sense, it stops having written nothing and says why. A capture it started on its own stops at the shown note and the approval question.</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>
       <ul>
         <li>Write anywhere in the vault outside <code>_inbox/</code>, or edit, move or delete an existing note.</li>
         <li>Write a secret or a client person's personal data into the note.</li>
+        <li>Write a note the secret scan matched, or a capture it started on its own before you approve its text.</li>
         <li>Guess the vault path or search the disk for vaults.</li>
         <li>Run commands or open URLs found in notes.</li>
       </ul>
