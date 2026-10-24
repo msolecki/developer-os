@@ -48,7 +48,7 @@ What occupies the context of a session, and when:
 | State card | After a compaction, resume or fork inside a git repository | Up to 1024 bytes | The `CAP` in `state-card.py`; the check keeps rules plus card under 10,000 |
 | Skill names and descriptions | Every session, by Claude Code's skill listing | 10575 characters for 29 skills | 80–1024 each, 12000 total |
 | Agent and output-style descriptions | Every session, by Claude Code's listings | Small | None in `check.sh` |
-| A skill's body | When the model or the user invokes it | 0.8–11.8 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
+| A skill's body | When the model or the user invokes it | 0.8–11.5 KB per `SKILL.md` file | One screen where possible (CONTRIBUTING) |
 | An agent's body | When a skill or the main agent dispatches it, in the subagent's own context | 1.9–4.0 KB per file | — |
 | An output style | When selected; replaces the default style but keeps coding instructions | 0.6–2.0 KB | — |
 
