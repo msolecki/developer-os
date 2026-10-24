@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="CHANGELOG.md@1b69044db70b">
+<meta name="dos-source" content="CHANGELOG.md@509fcb75e0af">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -49,6 +49,16 @@
     <p class="doc-meta"><span>Source: <a href="https://github.com/msolecki/developer-os/blob/development/CHANGELOG.md">CHANGELOG.md</a></span></p>
     <p>This project follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>.</p>
     <h2 id="unreleased">[Unreleased]</h2>
+    <h3 id="unreleased-added">Added</h3>
+    <ul>
+<li>Superseded vault notes: a note replaced by a newer one gets <code>status: superseded</code> and
+<code>superseded_by: "[[note]]"</code> and stays in its topic folder. brain-search follows the chain to the
+current note and cites the old ones as history; a chain that breaks or loops is incomplete history,
+with no note named as current. brain-garden reports a missing <code>superseded_by</code>, a missing or archived
+target, and a cycle, and never counts a superseded note as an orphan. New eval cases
+<code>brain-search-superseded-chain</code>, <code>brain-search-superseded-dangling</code>, <code>brain-search-superseded-cycle</code>
+and <code>brain-garden-superseded</code>.</li>
+</ul>
     <h3 id="unreleased-changed">Changed</h3>
     <ul>
 <li>session-retro ties every check result to the commit it ran on: Done and the plan update list each
