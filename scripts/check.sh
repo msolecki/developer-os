@@ -162,7 +162,8 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
       if f == "site/index.html"
         l.scan(%r{<li><span>([^<]+)</span><span>([0-9]+)(?:, ([0-9]+))?</span></li>}) do |label, n, m|
           kinds = { "Brain skills" => ["brain skills"], "Skills, all groups" => ["skills"],
-                    "Agents, output styles" => ["agents", "output styles"], "Hooks" => ["hooks"] }[label] or next
+                    "Agents, output styles" => ["agents", "output styles"], "Hooks" => ["hooks"] }[label]
+          (puts "#{f}:#{i}:#{n} fact row #{label}"; next) unless kinds
           [n, m].compact.zip(kinds).each { |c, k| puts "#{f}:#{i}:#{c} #{k}" }
         end
       end
@@ -173,6 +174,7 @@ files README.md 'docs/*.md' evals/README.md CHANGELOG.md CONTRIBUTING.md SECURIT
     case $kind in
       skills) want=$skills ;; "brain skills") want=$brain ;; agents) want=$agents ;; "output styles") want=$styles ;;
       hooks) want=$hooks ;; *cases) want=$cases ;;
+      "fact row "*) fail counts "${hit%:*}" "a fact row with a count has an unknown label: ${kind#fact row }" ;;
     esac
     [ "$n" = "$want" ] || fail counts "${hit%:*}" "says $n $kind, the repository has $want"
   done

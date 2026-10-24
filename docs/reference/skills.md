@@ -27,8 +27,9 @@ and audit skills below in one pass.
 - **Which skills apply:** project-baseline and docs-sync always; instruction-review when a
   `CLAUDE.md`/`AGENTS.md` exists; each conventions skill when its stack is present (typescript:
   `tsconfig.json` or `*.ts`; nextjs: `next.config.*` or a `next` dependency; testing: test files;
-  error-handling: TypeScript server code; monitoring: infrastructure, alerts or health endpoints;
-  defensive-coding: webhooks, event handlers, migrations, billing inputs or hook scripts).
+  error-handling: TypeScript server code; monitoring: infrastructure, CI workflows, alerts or health endpoints;
+  defensive-coding: external input, authentication, money, concurrency,
+  persistence or error paths).
   comments-conventions is never audited, since it governs only comments an agent adds;
   deploy-checklist is never run, since it runs the project's gates and belongs to a release.
 - **Process skills:** runs project-baseline, docs-sync and instruction-review up to their reports

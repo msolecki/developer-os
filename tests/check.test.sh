@@ -147,6 +147,9 @@ run "a wrong count in a landing-page fact row" fail "says 99 agents"
 edit site/index.html 's|<li><span>Brain skills</span><span>[0-9]*</span>|<li><span>Brain skills</span><span>99</span>|'
 run "a wrong brain-skill count in a landing-page fact row" fail "says 99 brain skills"
 
+edit site/index.html 's|<li><span>Hooks</span>|<li><span>Hook scripts</span>|'
+run "a renamed landing-page fact row" fail "unknown label: Hook scripts"
+
 printf '\n## [0.0.1]\n\nShips 99 skills.\n' >> "$r/CHANGELOG.md"
 cat >> "$r/docs/development.md" <<'EOF'
 
