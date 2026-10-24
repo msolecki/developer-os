@@ -11,7 +11,7 @@ promise it makes.
 
 ## Hooks fail open
 
-- **Where:** `plugin/hooks/guard.py`, `plugin/hooks/capture-nudge.py`, `plugin/hooks/state-card.py`
+- **Where:** `plugin/hooks/guard.py`, `plugin/hooks/capture-nudge.py`, `plugin/hooks/state-card.py`, `plugin/hooks/notices.py`
 - **Looks like:** a guard that silently lets through anything it cannot parse.
 - **Why it is deliberate:** the hooks run in every session of every user; a parse bug must never
   block work. The guard is a reminder, not a security boundary ([decisions D6](product/decisions.md#d6-hooks-ask-never-deny-and-fail-open)).

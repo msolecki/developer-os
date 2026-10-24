@@ -89,7 +89,7 @@
       <figure class="sysmap" aria-labelledby="sysmap-title">
         <figcaption class="sysmap-head"><b id="sysmap-title">How a session runs with developer-os</b><span>each step links to its reference</span></figcaption>
         <ol class="lanes">
-          <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>under 8 KB; a state card after compaction or resume</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
+          <li class="lane"><span class="when">session start</span><span class="what">Core rules load<small>under 8 KB; a state card after compaction or resume; version and upkeep notices on a new session</small></span><a class="badge info" href="docs/reference/hooks.html">hook</a></li>
           <li class="lane"><span class="when">before a task</span><span class="what">Search the vault, read the plan<small>answers cite a note path for every claim</small></span><a class="badge info" href="skills/brain-search.html">skill</a></li>
           <li class="lane"><span class="when">during work</span><span class="what">Specs, reviews, audits, PR cycles<small>evidence on every finding; a fresh agent reviews</small></span><a class="badge info" href="skills/index.html">skills</a></li>
           <li class="lane is-ask"><span class="when">risky command</span><span class="what">Installs, force pushes, hook bypasses<small>the guard asks; it never blocks on its own</small></span><span class="badge ask">asks you</span></li>
@@ -128,9 +128,9 @@
         <article class="layer">
           <span class="k">guard rails</span>
           <h3>Hooks that ask, never deny</h3>
-          <p>Four small hooks: two load the rules and, after a compaction, the state card, one asks before risky commands, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
+          <p>Five small hooks: two load the rules and, after a compaction, the state card, one shows version and vault-upkeep notices on a new session, one asks before risky commands, one suggests a wrap-up after a long session. They make no network calls and fail open.</p>
           <ul>
-            <li><span>Hooks</span><span>4</span></li>
+            <li><span>Hooks</span><span>5</span></li>
             <li><span>Network calls</span><span>none</span></li>
             <li><span>On a parse error</span><span>exit silently</span></li>
           </ul>
@@ -384,6 +384,7 @@ Which items should I apply?</code></pre></div>
           </tbody>
         </table>
       </div>
+      <p class="small">You start each of these; none runs on its own. A one-line notice at the start of a new session reminds you when inbox notes are older than a week or brain-garden has not run for a month. <a href="docs/workflow.html#the-daily-loop">The daily loop</a></p>
     </div>
   </section>
 

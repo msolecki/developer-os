@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The developer-os skill library">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="plugin/skills/brain-setup/SKILL.md@febe6fb2b882">
+<meta name="dos-source" content="plugin/skills/brain-setup/SKILL.md@82bfc68ac522">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -71,13 +71,13 @@
       <li><strong>New vault.</strong> It copies the plugin's vault template into the path: topic folders, inbox, archive, views, the note template and example notes.</li>
       <li><strong>Connect an existing vault.</strong> It adds only what is missing and never overwrites, moves or deletes a file: the folders <code>DEV</code>, <code>INFRA</code>, <code>PROJECTS</code>, <code>QA</code>, <code>TOOLS</code>, <code>_archive</code>, <code>_inbox</code>, <code>_views</code> and <code>templates</code>, the missing <code>.base</code> views and <code>templates/note.md</code>. <code>.gitignore</code> lines are added only to a vault that is a git repository or already has a <code>.gitignore</code>. Example notes are not copied. In <code>.obsidian/types.json</code> it adds only absent keys, after showing the change and asking you to close Obsidian; without <code>jq</code> it tells you to set the property types in Obsidian instead.</li>
       <li><strong>Points Claude Code at the vault.</strong> It shows a diff of two edits in your Claude config directory (<code>$CLAUDE_CONFIG_DIR</code>, default <code>~/.claude</code>): a <code>Brain vault: &lt;path&gt;</code> line in <code>CLAUDE.md</code> and the path in <code>permissions.additionalDirectories</code> in <code>settings.json</code>. It applies them in place only after you approve; if <code>jq</code> is missing or <code>settings.json</code> is not valid JSON, it changes nothing and shows you the key to add by hand. For Codex it prints the line for <code>~/.codex/AGENTS.md</code> for you to add.</li>
-      <li><strong>Runs a smoke test.</strong> It runs <a href="brain-search.html">brain-search</a> on the new path: in a new vault a search for "webhooks" must find the example note <code>_inbox/process-webhooks-once-per-event-id.md</code>; in a connected vault it searches for the topic of one existing note. Then it tells you to enable the <strong>Bases</strong> and <strong>Templates</strong> core plugins in Obsidian, with <code>templates</code> as the Templates folder.</li>
+      <li><strong>Runs a smoke test.</strong> It runs <a href="brain-search.html">brain-search</a> on the new path: in a new vault a search for "webhooks" must find the example note <code>_inbox/process-webhooks-once-per-event-id.md</code>; in a connected vault it searches for the topic of one existing note. Then it tells you to enable the <strong>Bases</strong> and <strong>Templates</strong> core plugins in Obsidian, with <code>templates</code> as the Templates folder. It also tells you that vault upkeep does not run on its own: you run brain-review weekly and brain-garden monthly, and a one-line notice at the start of a new session reminds you when either is due (<code>DEVELOPER_OS_NOTICES=off</code> turns it off).</li>
     </ol>
 
     <h2 id="boundaries">Boundaries</h2>
     <div class="callout">
       <h3 id="stops-when">Stops when</h3>
-      <p>The smoke test is done. The report gives the mode, the vault path, what was created or appended, which config edits were applied or declined, an old vault path still in <code>permissions.additionalDirectories</code> if the path changed (you remove it by hand), the Codex line if printed, and the smoke-test result.</p>
+      <p>The smoke test is done. The report gives the mode, the vault path, what was created or appended, which config edits were applied or declined, an old vault path still in <code>permissions.additionalDirectories</code> if the path changed (you remove it by hand), the Codex line if printed, the smoke-test result, and the upkeep cadence.</p>
     </div>
     <div class="callout never">
       <h3 id="never">Never</h3>

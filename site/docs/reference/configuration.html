@@ -18,7 +18,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="developer-os documentation">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="dos-source" content="docs/reference/configuration.md@c3c0a900ac4c">
+<meta name="dos-source" content="docs/reference/configuration.md@81fe928e522e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,11 +54,12 @@
       <table>
         <thead><tr><th scope="col">Setting</th><th scope="col">Where</th><th scope="col">Read by</th><th scope="col">Written by</th></tr></thead>
         <tbody>
-          <tr><td><code>Brain vault: &lt;absolute path&gt;</code></td><td><code>~/.claude/CLAUDE.md</code> (or a project's <code>CLAUDE.md</code>/<code>AGENTS.md</code>; <code>~/.codex/AGENTS.md</code> for Codex)</td><td>All brain skills; the core rule that runs brain-search before large tasks</td><td>brain-setup, after approval (Claude Code only; for Codex it prints the line)</td></tr>
+          <tr><td><code>Brain vault: &lt;absolute path&gt;</code></td><td><code>~/.claude/CLAUDE.md</code> (or a project's <code>CLAUDE.md</code>/<code>AGENTS.md</code>; <code>~/.codex/AGENTS.md</code> for Codex)</td><td>All brain skills; the core rule that runs brain-search before large tasks; the notices hook, from the user-level file only</td><td>brain-setup, after approval (Claude Code only; for Codex it prints the line)</td></tr>
           <tr><td>Vault in <code>permissions.additionalDirectories</code></td><td><code>~/.claude/settings.json</code></td><td>Claude Code, so the vault can be read from any project</td><td>brain-setup, after approval</td></tr>
           <tr><td><code>"outputStyle": "developer-os:&lt;name&gt;"</code></td><td>Claude Code settings</td><td>Claude Code; a bare name silently falls back to the default style</td><td>The user</td></tr>
           <tr><td>Rule overrides</td><td><code>~/.claude/CLAUDE.md</code></td><td>The model, alongside the core rules</td><td>The user</td></tr>
           <tr><td><code>DEVELOPER_OS_CAPTURE_NUDGE</code>, <code>DEVELOPER_OS_CAPTURE_NUDGE_MIN</code></td><td>Shell environment</td><td>The <code>Stop</code> hook (<a href="hooks.html#environment-variables">hooks.md</a>)</td><td>The user</td></tr>
+          <tr><td><code>DEVELOPER_OS_NOTICES</code></td><td>Shell environment</td><td>The <code>SessionStart</code> notices hook; <code>off</code> disables the version and upkeep notices (<a href="hooks.html#sessionstart-on-startup--noticespy">hooks.md</a>)</td><td>The user</td></tr>
           <tr><td><code>CODEX_SKILLS_DIR</code></td><td>Shell environment</td><td><code>scripts/install-codex.sh</code> (default <code>~/.agents/skills</code>)</td><td>The user</td></tr>
           <tr><td><code>CODEX_HOME</code></td><td>Shell environment</td><td><code>scripts/install-codex.sh</code>, which writes <code>$CODEX_HOME/AGENTS.md</code> (default <code>~/.codex</code>)</td><td>The user</td></tr>
         </tbody>
@@ -92,7 +93,7 @@
           <tr><td><code>_inbox/</code></td><td>The only folder agents create notes in</td></tr>
           <tr><td><code>_archive/</code></td><td>Retired notes, <code>status: archived</code></td></tr>
           <tr><td><code>_views/*.base</code></td><td>Obsidian Bases views: Inbox, Stale (active, <code>updated</code> older than 180 days), By project</td></tr>
-          <tr><td><code>_reports/garden-log.md</code></td><td>One line per brain-garden run, appended with consent</td></tr>
+          <tr><td><code>_reports/garden-log.md</code></td><td>One line per brain-garden run, appended with consent; the notices hook reads its last line</td></tr>
           <tr><td><code>templates/note.md</code></td><td>The note template (<code>status: active</code> for notes the user writes)</td></tr>
           <tr><td><code>.obsidian/types.json</code></td><td>Property types: <code>created</code>, <code>updated</code> as date, <code>tags</code> as tags, <code>sources</code> as multitext</td></tr>
         </tbody>
