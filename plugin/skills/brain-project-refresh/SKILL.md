@@ -19,7 +19,7 @@ The slug comes from the `Vault project slug:` line in `_Context.md` at the repos
 
 ```bash
 V="/path/to/vault"; slug="my-app"
-rg -l0 -g '*.md' -g '!templates/' -g '!_archive/' -g '!_reports/' "^project:[[:space:]]*\"?$slug\"?[[:space:]]*$" "$V" | xargs -0 -r rg -l '^type:[[:space:]]*project'
+rg -l0 -g '*.md' -g '!templates/' -g '!_archive/' -g '!_reports/' "^project:[[:space:]]*\"?$slug\"?[[:space:]]*$" "$V" | xargs -0 -r rg -l '^type:[[:space:]]*"?project"?[[:space:]]*$'
 ```
 
 - One hit: that note is the hub, wherever it lives.
